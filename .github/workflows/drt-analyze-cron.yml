@@ -1,0 +1,115 @@
+# DRT Cluster Health Analysis (Scheduled)
+#
+# Runs the drt-analyze agent every 4 hours against configured DRT clusters
+# and posts the health report to Slack.
+#
+# Configuration (repo secrets required):
+#   - DD_API_KEY: Datadog API key for cluster metrics/logs access
+#   - DD_APP_KEY: Datadog application key for cluster metrics/logs access
+#   - DRT_SLACK_BOT_TOKEN: Slack bot OAuth token (chat:write, files:write scopes)
+#   - Manual runs: use workflow_dispatch to analyze any cluster on demand
+
+name: DRT Health Analysis
+
+on:
+  schedule:
+    - cron: '0 */4 * * *'  # Every 4 hours: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC
+  workflow_dispatch:
+    inputs:
+      cluster_name:
+        description: 'DRT cluster name (e.g., drt-chaos-aws)'
+        required: false
+        default: 'drt-chaos-aws'
+        type: string
+      time_range:
+        description: 'Lookback period (e.g., now-4h, now-12h)'
+        required: false
+        default: 'now-4h'
+        type: string
+      slack_channel_override:
+        description: 'Override Slack channel ID (leave empty for default)'
+        required: false
+        type: string
+
+env:
+  DEFAULT_CLUSTER: 'drt-chaos-aws'
+  SLACK_CHANNEL_ID: 'C078ZG5EC30'
+  SLACK_CHANNEL_NAME: '#drt-cluster-notifications'
+
+jobs:
+  analyze:
+    uses: cockroachlabs/roachdev/.github/workflows/roachdev-agent.yml@shailendra/gitub-datadog-env-var
+    secrets: inherit
+    with:
+      agent_name: drt-analyze
+      prompt: |
+        Analyze the DRT cluster and produce a health report.
+
+        Cluster: ${{ inputs.cluster_name || 'drt-chaos-aws' }}
+        Time range: from ${{ inputs.time_range || 'now-4h' }} to now
+
+        Run: /drt-analyze cluster:${{ inputs.cluster_name || 'drt-chaos-aws' }} from:${{ inputs.time_range || 'now-4h' }}
+      timeout_minutes: 45
+      extra_agent_flags: '--max-budget-usd 5'
+
+  # Post the health report to Slack. Posts a short header message, then
+  # uploads the full report as a file snippet in a thread reply (no size limit).
+  notify:
+    if: always()
+    needs: analyze
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write report to file
+        env:
+          REPORT: ${{ needs.analyze.outputs.agent_output }}
+        run: |
+          if [ -z "$REPORT" ]; then
+            echo "Analysis produced no output." > report.md
+          else
+            echo "$REPORT" > report.md
+          fi
+
+      - name: Post header to Slack
+        id: header
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.DRT_SLACK_BOT_TOKEN }}
+          payload: |
+            {
+              "channel": "${{ inputs.slack_channel_override || env.SLACK_CHANNEL_ID }}",
+              "text": "DRT Health Report: ${{ inputs.cluster_name || env.DEFAULT_CLUSTER }}",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "DRT Health Report: ${{ inputs.cluster_name || env.DEFAULT_CLUSTER }}"
+                  }
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Workflow Run> | Full report in thread :thread:"
+                    }
+                  ]
+                }
+              ]
+            }
+
+      - name: Upload report as thread reply
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          method: filesUploadV2
+          token: ${{ secrets.DRT_SLACK_BOT_TOKEN }}
+          payload: |
+            {
+              "channel_id": "${{ inputs.slack_channel_override || env.SLACK_CHANNEL_ID }}",
+              "thread_ts": "${{ steps.header.outputs.ts }}",
+              "filename": "drt-health-report.md",
+              "title": "DRT Health Report — ${{ inputs.cluster_name || env.DEFAULT_CLUSTER }}",
+              "filetype": "markdown",
+              "file": "report.md"
+            }
