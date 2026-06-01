@@ -733,6 +733,12 @@ var mathBuiltins = map[string]builtinDefinition{
 						"lower and upper bounds must be finite",
 					)
 				}
+				if b1 == b2 {
+					return nil, pgerror.New(
+						pgcode.InvalidArgumentForWidthBucketFunction,
+						"lower bound cannot equal upper bound",
+					)
+				}
 				if math.IsInf(operand, 1) {
 					return tree.NewDInt(tree.DInt(count + 1)), nil
 				}
@@ -754,6 +760,12 @@ var mathBuiltins = map[string]builtinDefinition{
 				b1 := float64(tree.MustBeDInt(args[1]))
 				b2 := float64(tree.MustBeDInt(args[2]))
 				count := int(tree.MustBeDInt(args[3]))
+				if b1 == b2 {
+					return nil, pgerror.New(
+						pgcode.InvalidArgumentForWidthBucketFunction,
+						"lower bound cannot equal upper bound",
+					)
+				}
 				return tree.NewDInt(tree.DInt(widthBucket(operand, b1, b2, count))), nil
 			},
 			Info: "return the bucket number to which operand would be assigned in a histogram having count " +

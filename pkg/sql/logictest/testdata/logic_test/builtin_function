@@ -2979,6 +2979,28 @@ SELECT width_bucket('-Infinity'::numeric, 1, 10, 10);
 statement error pgcode 2201G pq: operand, lower bound, and upper bound cannot be NaN
 SELECT width_bucket('NaN', 3.0, 4.0, 888);
 
+# Match PostgreSQL's "lower bound cannot equal upper bound" rejection
+# for both overloads, across operand positions (above, below, at the
+# degenerate point). Without the guard, the helper divides by zero
+# and casts +/-Inf or NaN to int, producing INT64_MAX, INT64_MIN, or 0.
+statement error pgcode 2201G pq: lower bound cannot equal upper bound
+SELECT width_bucket(7::numeric, 5::numeric, 5::numeric, 10::int)
+
+statement error pgcode 2201G pq: lower bound cannot equal upper bound
+SELECT width_bucket(3::numeric, 5::numeric, 5::numeric, 10::int)
+
+statement error pgcode 2201G pq: lower bound cannot equal upper bound
+SELECT width_bucket(5::numeric, 5::numeric, 5::numeric, 10::int)
+
+statement error pgcode 2201G pq: lower bound cannot equal upper bound
+SELECT width_bucket(7, 5, 5, 10)
+
+statement error pgcode 2201G pq: lower bound cannot equal upper bound
+SELECT width_bucket(3, 5, 5, 10)
+
+statement error pgcode 2201G pq: lower bound cannot equal upper bound
+SELECT width_bucket(5, 5, 5, 10)
+
 
 # Sanity check pg_type_is_visible.
 query BBB
