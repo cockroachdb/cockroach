@@ -168,9 +168,11 @@ func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.De
 			return row.Deleter{}, err
 		}
 
-		cols, err := writeableColunms(ctx, tu.leased.descriptor.Underlying().(catalog.TableDescriptor))
-		if err != nil {
-			return row.Deleter{}, err
+		table := tu.leased.descriptor.Underlying().(catalog.TableDescriptor)
+		schema := getColumnSchema(table)
+		cols := make([]catalog.Column, len(schema))
+		for i, cs := range schema {
+			cols[i] = cs.column
 		}
 
 		tu.leased.deleter = row.MakeDeleter(tu.codec, tu.leased.descriptor.Underlying().(catalog.TableDescriptor), nil /* lockedIndexes */, cols, tu.sd, &tu.settings.SV, nil /* metrics */)
