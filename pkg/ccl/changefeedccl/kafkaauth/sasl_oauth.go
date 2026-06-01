@@ -20,19 +20,21 @@ import (
 
 type saslOAuthBearerBuilder struct{}
 
-// name implements authMechanismBuilder.
+// name implements saslMechanismBuilder.
 func (s saslOAuthBearerBuilder) name() string {
 	return sarama.SASLTypeOAuth
 }
 
-// validateParams implements authMechanismBuilder.
+// validateParams implements saslMechanismBuilder.
 func (s saslOAuthBearerBuilder) validateParams(u *changefeedbase.SinkURL) error {
 	requiredParams := []string{changefeedbase.SinkParamSASLClientID, changefeedbase.SinkParamSASLClientSecret, changefeedbase.SinkParamSASLTokenURL}
 	return peekAndRequireParams(sarama.SASLTypeOAuth, u, requiredParams)
 }
 
-// build implements authMechanismBuilder.
-func (s saslOAuthBearerBuilder) build(u *changefeedbase.SinkURL) (SASLMechanism, error) {
+// build implements saslMechanismBuilder.
+func (s saslOAuthBearerBuilder) build(
+	u *changefeedbase.SinkURL, _ SASLConfig,
+) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
 	if err != nil {
 		return nil, err
@@ -62,7 +64,7 @@ type saslOAuthBearer struct {
 	handshake    bool
 }
 
-// ApplySarama implements AuthMechanism.
+// ApplySarama implements SASLMechanism.
 func (s *saslOAuthBearer) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
 	tp, err := s.newSaramaTokenProvider(ctx)
 	if err != nil {
@@ -73,7 +75,7 @@ func (s *saslOAuthBearer) ApplySarama(ctx context.Context, cfg *sarama.Config) e
 	return nil
 }
 
-// KgoOpts implements AuthMechanism.
+// KgoOpts implements SASLMechanism.
 func (s *saslOAuthBearer) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 	tp, err := s.newKgoTokenProvider(ctx)
 	if err != nil {

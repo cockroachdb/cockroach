@@ -17,19 +17,19 @@ import (
 
 type saslMSKBuilder struct{}
 
-// name implements authMechanismBuilder.
+// name implements saslMechanismBuilder.
 func (s saslMSKBuilder) name() string {
 	return "AWS_MSK_IAM"
 }
 
-// validateParams implements authMechanismBuilder.
+// validateParams implements saslMechanismBuilder.
 func (s saslMSKBuilder) validateParams(u *changefeedbase.SinkURL) error {
 	requiredParams := []string{changefeedbase.SinkParamSASLAwsRegion, changefeedbase.SinkParamSASLAwsIAMRoleArn, changefeedbase.SinkParamSASLAwsIAMSessionName}
 	return peekAndRequireParams(s.name(), u, requiredParams)
 }
 
-// build implements authMechanismBuilder.
-func (s saslMSKBuilder) build(u *changefeedbase.SinkURL) (SASLMechanism, error) {
+// build implements saslMechanismBuilder.
+func (s saslMSKBuilder) build(u *changefeedbase.SinkURL, _ SASLConfig) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
 	if err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ type saslMSK struct {
 	handshake                    bool
 }
 
-// ApplySarama implements AuthMechanism.
+// ApplySarama implements SASLMechanism.
 func (s *saslMSK) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
 	tp, err := s.newSaramaTokenProvider(ctx)
 	if err != nil {
@@ -60,7 +60,7 @@ func (s *saslMSK) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
 	return nil
 }
 
-// KgoOpts implements AuthMechanism.
+// KgoOpts implements SASLMechanism.
 func (s *saslMSK) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 	tp, err := s.newKgoTokenProvider(ctx)
 	if err != nil {
