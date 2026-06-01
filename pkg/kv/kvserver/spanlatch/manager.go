@@ -505,21 +505,6 @@ func ignoreNothing(ts, other hlc.Timestamp) bool { return false }
 // wait waits for all interfering latches in the provided snapshot to complete
 // before returning.
 func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
-	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
-	var info ash.WorkloadInfo
-	if lg.ba != nil {
-		info = ash.WorkloadInfo{
-			WorkloadID:    lg.ba.WorkloadID,
-			AppNameID:     lg.ba.AppNameID,
-			GatewayNodeID: lg.ba.GatewayNodeID,
-			WorkloadType:  workloadid.WorkloadType(lg.ba.WorkloadType),
-		}
-	}
-	cleanup := ash.SetWorkState(
-		tenantID, info,
-		ash.WorkLock, "LatchWait")
-	defer cleanup()
-
 	var timer timeutil.Timer
 	defer timer.Stop()
 
@@ -534,7 +519,7 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 					// Wait for writes at equal or lower timestamps.
 					a2 := spanset.SpanReadWrite
 					it := tr[a2].MakeIter()
-					if err := m.iterAndWait(ctx, &timer, &it, lg.pp, a, a2, latch, ignoreLater); err != nil {
+					if err := m.iterAndWait(ctx, &timer, &it, lg, a, a2, latch, ignoreLater); err != nil {
 						return err
 					}
 				case spanset.SpanReadWrite:
@@ -546,13 +531,13 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 					// to release their latches, so we wait on them first.
 					a2 := spanset.SpanReadWrite
 					it := tr[a2].MakeIter()
-					if err := m.iterAndWait(ctx, &timer, &it, lg.pp, a, a2, latch, ignoreNothing); err != nil {
+					if err := m.iterAndWait(ctx, &timer, &it, lg, a, a2, latch, ignoreNothing); err != nil {
 						return err
 					}
 					// Wait for reads at equal or higher timestamps.
 					a2 = spanset.SpanReadOnly
 					it = tr[a2].MakeIter()
-					if err := m.iterAndWait(ctx, &timer, &it, lg.pp, a, a2, latch, ignoreEarlier); err != nil {
+					if err := m.iterAndWait(ctx, &timer, &it, lg, a, a2, latch, ignoreEarlier); err != nil {
 						return err
 					}
 				default:
@@ -572,11 +557,21 @@ func (m *Manager) iterAndWait(
 	ctx context.Context,
 	t *timeutil.Timer,
 	it *iterator,
-	pp poison.Policy,
+	lg *Guard,
 	waitType, heldType spanset.SpanAccess,
 	wait *latch,
 	ignore ignoreFn,
 ) error {
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+	var info ash.WorkloadInfo
+	if lg.ba != nil {
+		info = ash.WorkloadInfo{
+			WorkloadID:    lg.ba.WorkloadID,
+			AppNameID:     lg.ba.AppNameID,
+			GatewayNodeID: lg.ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(lg.ba.WorkloadType),
+		}
+	}
 	for it.FirstOverlap(wait); it.Valid(); it.NextOverlap(wait) {
 		held := it.Cur()
 		if held.g.done.signaled() {
@@ -585,7 +580,12 @@ func (m *Manager) iterAndWait(
 		if ignore(wait.ts, held.ts) {
 			continue
 		}
-		if err := m.waitForSignal(ctx, t, pp, waitType, heldType, wait, held); err != nil {
+		cleanup := ash.SetWorkState(
+			tenantID, info,
+			ash.WorkLock, "LatchWait")
+		err := m.waitForSignal(ctx, t, lg.pp, waitType, heldType, wait, held)
+		cleanup()
+		if err != nil {
 			return err
 		}
 	}
