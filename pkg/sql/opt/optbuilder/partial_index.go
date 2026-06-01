@@ -184,6 +184,14 @@ func (b *Builder) buildPartialIndexPredicate(
 		filters,
 	)
 
+	for {
+		s, ok := selExpr.(*memo.ProjectExpr)
+		if !ok {
+			break
+		}
+		selExpr = s.Input
+	}
+
 	switch t := selExpr.(type) {
 	case *memo.SelectExpr:
 		// If the expression remains a Select, return the normalized filters.
