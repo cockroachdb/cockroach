@@ -164,6 +164,12 @@ type ServerConfig struct {
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
 
+	// SecretDirectory is the local file path under which sink credential
+	// files (e.g. the JWT client assertion referenced by a changefeed via
+	// sasl_proprietary_client_assertion_location) may be read. Empty disables
+	// file-based credential references.
+	SecretDirectory string
+
 	// ProtectedTimestampProvider maintains the state of the protected timestamp
 	// subsystem. It is queried during the GC process.
 	ProtectedTimestampProvider protectedts.Provider

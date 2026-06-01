@@ -371,6 +371,7 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.ExternalIODirConfig = kvServerCfg.BaseConfig.ExternalIODirConfig
 
 	baseCfg.ExternalIODir = kvServerCfg.BaseConfig.ExternalIODir
+	baseCfg.SecretDirectory = kvServerCfg.BaseConfig.SecretDirectory
 
 	// Use the internal connector instead of the network.
 	// See: https://github.com/cockroachdb/cockroach/issues/84591

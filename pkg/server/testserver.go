@@ -195,6 +195,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
 	cfg.DisableSQLServer = params.DisableSQLServer
 	cfg.ExternalIODir = params.ExternalIODir
+	cfg.SecretDirectory = params.SecretDirectory
 	if params.TraceDir != "" {
 		if err := initTraceDir(params.TraceDir); err == nil {
 			cfg.InflightTraceDirName = params.TraceDir
@@ -665,6 +666,7 @@ func (ts *testServer) startDefaultTestTenant(
 		TempStorageConfig:          &tempStorageConfig,
 		Locality:                   ts.params.Locality,
 		ExternalIODir:              ts.params.ExternalIODir,
+		SecretDirectory:            ts.params.SecretDirectory,
 		ExternalIODirConfig:        ts.params.ExternalIODirConfig,
 		ForceInsecure:              ts.Insecure(),
 		UseDatabase:                ts.params.UseDatabase,
@@ -1830,6 +1832,7 @@ func (ts *testServer) StartTenant(
 	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 	baseCfg.ExternalIODirConfig = params.ExternalIODirConfig
 	baseCfg.ExternalIODir = params.ExternalIODir
+	baseCfg.SecretDirectory = params.SecretDirectory
 	baseCfg.UseDRPC = ts.Cfg.UseDRPC
 
 	// Grant the tenant the default capabilities.
