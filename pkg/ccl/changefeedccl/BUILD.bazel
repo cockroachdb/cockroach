@@ -264,6 +264,7 @@ go_test(
         "//pkg/ccl/changefeedccl/cdctest",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/changefeedpb",
+        "//pkg/ccl/changefeedccl/kafkaauth",
         "//pkg/ccl/changefeedccl/kcjsonschema",
         "//pkg/ccl/changefeedccl/kvevent",
         "//pkg/ccl/changefeedccl/mocks",
