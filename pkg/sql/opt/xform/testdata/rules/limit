@@ -87,6 +87,46 @@ CREATE TABLE partial_index_const
 )
 ----
 
+exec-ddl
+CREATE TABLE hash_sharded_tab (
+    k INT PRIMARY KEY,
+    a INT,
+    b INT,
+    shard INT NOT NULL,
+    CHECK (shard IN (0, 1, 2, 3)),
+    INDEX (shard, a, k)
+)
+----
+
+exec-ddl
+ALTER TABLE hash_sharded_tab INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["shard"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 4
+  }
+]'
+----
+
 # Insert statistics for index_tab. Histogram buckets are included for the
 # latitude column in order to make the optimizer choose specific plans for
 # SplitLimitedScanIntoUnionScans tests.
@@ -2003,6 +2043,174 @@ scalar-group-by
  └── aggregations
       └── max [as=max:15, outer=(6)]
            └── data1:6
+
+# Non-covering hash-sharded index: the GenerateIndexScans exception for
+# check-constrained first columns allows SplitLimitedScanIntoUnionScans to
+# generate a union-all plan via IndexJoin(Limit(UnionAll(Scans))).
+opt expect=SplitLimitedScanIntoUnionScans
+SELECT * FROM hash_sharded_tab ORDER BY a LIMIT 10
+----
+index-join hash_sharded_tab
+ ├── columns: k:1!null a:2 b:3 shard:4!null
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +2
+ └── limit
+      ├── columns: k:1!null a:2 shard:4!null
+      ├── internal-ordering: +2
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
+      ├── ordering: +2
+      ├── union-all
+      │    ├── columns: k:1!null a:2 shard:4!null
+      │    ├── left columns: k:31 a:32 shard:34
+      │    ├── right columns: k:37 a:38 shard:40
+      │    ├── cardinality: [0 - 40]
+      │    ├── ordering: +2
+      │    ├── limit hint: 10.00
+      │    ├── union-all
+      │    │    ├── columns: k:31!null a:32 shard:34!null
+      │    │    ├── left columns: k:7 a:8 shard:10
+      │    │    ├── right columns: k:13 a:14 shard:16
+      │    │    ├── cardinality: [0 - 20]
+      │    │    ├── ordering: +32
+      │    │    ├── limit hint: 10.00
+      │    │    ├── scan hash_sharded_tab@hash_sharded_tab_shard_a_k_idx
+      │    │    │    ├── columns: k:7!null a:8 shard:10!null
+      │    │    │    ├── constraint: /10/8/7: [/0 - /0]
+      │    │    │    ├── limit: 10
+      │    │    │    ├── key: (7)
+      │    │    │    ├── fd: ()-->(10), (7)-->(8)
+      │    │    │    ├── ordering: +8 opt(10) [actual: +8]
+      │    │    │    └── limit hint: 10.00
+      │    │    └── scan hash_sharded_tab@hash_sharded_tab_shard_a_k_idx
+      │    │         ├── columns: k:13!null a:14 shard:16!null
+      │    │         ├── constraint: /16/14/13: [/1 - /1]
+      │    │         ├── limit: 10
+      │    │         ├── key: (13)
+      │    │         ├── fd: ()-->(16), (13)-->(14)
+      │    │         ├── ordering: +14 opt(16) [actual: +14]
+      │    │         └── limit hint: 10.00
+      │    └── union-all
+      │         ├── columns: k:37!null a:38 shard:40!null
+      │         ├── left columns: k:19 a:20 shard:22
+      │         ├── right columns: k:25 a:26 shard:28
+      │         ├── cardinality: [0 - 20]
+      │         ├── ordering: +38
+      │         ├── limit hint: 10.00
+      │         ├── scan hash_sharded_tab@hash_sharded_tab_shard_a_k_idx
+      │         │    ├── columns: k:19!null a:20 shard:22!null
+      │         │    ├── constraint: /22/20/19: [/2 - /2]
+      │         │    ├── limit: 10
+      │         │    ├── key: (19)
+      │         │    ├── fd: ()-->(22), (19)-->(20)
+      │         │    ├── ordering: +20 opt(22) [actual: +20]
+      │         │    └── limit hint: 10.00
+      │         └── scan hash_sharded_tab@hash_sharded_tab_shard_a_k_idx
+      │              ├── columns: k:25!null a:26 shard:28!null
+      │              ├── constraint: /28/26/25: [/3 - /3]
+      │              ├── limit: 10
+      │              ├── key: (25)
+      │              ├── fd: ()-->(28), (25)-->(26)
+      │              ├── ordering: +26 opt(28) [actual: +26]
+      │              └── limit hint: 10.00
+      └── 10
+
+# Covering case on the same hash-sharded index (sanity check).
+opt expect=SplitLimitedScanIntoUnionScans
+SELECT k, a FROM hash_sharded_tab ORDER BY a LIMIT 10
+----
+limit
+ ├── columns: k:1!null a:2
+ ├── internal-ordering: +2
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── ordering: +2
+ ├── union-all
+ │    ├── columns: k:1!null a:2
+ │    ├── left columns: k:31 a:32
+ │    ├── right columns: k:37 a:38
+ │    ├── cardinality: [0 - 40]
+ │    ├── ordering: +2
+ │    ├── limit hint: 10.00
+ │    ├── union-all
+ │    │    ├── columns: k:31!null a:32
+ │    │    ├── left columns: k:7 a:8
+ │    │    ├── right columns: k:13 a:14
+ │    │    ├── cardinality: [0 - 20]
+ │    │    ├── ordering: +32
+ │    │    ├── limit hint: 10.00
+ │    │    ├── scan hash_sharded_tab@hash_sharded_tab_shard_a_k_idx
+ │    │    │    ├── columns: k:7!null a:8
+ │    │    │    ├── constraint: /10/8/7: [/0 - /0]
+ │    │    │    ├── limit: 10
+ │    │    │    ├── key: (7)
+ │    │    │    ├── fd: (7)-->(8)
+ │    │    │    ├── ordering: +8
+ │    │    │    └── limit hint: 10.00
+ │    │    └── scan hash_sharded_tab@hash_sharded_tab_shard_a_k_idx
+ │    │         ├── columns: k:13!null a:14
+ │    │         ├── constraint: /16/14/13: [/1 - /1]
+ │    │         ├── limit: 10
+ │    │         ├── key: (13)
+ │    │         ├── fd: (13)-->(14)
+ │    │         ├── ordering: +14
+ │    │         └── limit hint: 10.00
+ │    └── union-all
+ │         ├── columns: k:37!null a:38
+ │         ├── left columns: k:19 a:20
+ │         ├── right columns: k:25 a:26
+ │         ├── cardinality: [0 - 20]
+ │         ├── ordering: +38
+ │         ├── limit hint: 10.00
+ │         ├── scan hash_sharded_tab@hash_sharded_tab_shard_a_k_idx
+ │         │    ├── columns: k:19!null a:20
+ │         │    ├── constraint: /22/20/19: [/2 - /2]
+ │         │    ├── limit: 10
+ │         │    ├── key: (19)
+ │         │    ├── fd: (19)-->(20)
+ │         │    ├── ordering: +20
+ │         │    └── limit hint: 10.00
+ │         └── scan hash_sharded_tab@hash_sharded_tab_shard_a_k_idx
+ │              ├── columns: k:25!null a:26
+ │              ├── constraint: /28/26/25: [/3 - /3]
+ │              ├── limit: 10
+ │              ├── key: (25)
+ │              ├── fd: (25)-->(26)
+ │              ├── ordering: +26
+ │              └── limit hint: 10.00
+ └── 10
+
+# Regression: non-covering index scan is in the memo for hash-sharded indexes,
+# but without a LIMIT, the optimizer should choose a full table scan + sort.
+opt expect-not=SplitLimitedScanIntoUnionScans
+SELECT * FROM hash_sharded_tab ORDER BY a
+----
+sort
+ ├── columns: k:1!null a:2 b:3 shard:4!null
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +2
+ └── scan hash_sharded_tab
+      ├── columns: k:1!null a:2 b:3 shard:4!null
+      ├── check constraint expressions
+      │    └── shard:4 IN (0, 1, 2, 3) [outer=(4), constraints=(/4: [/0 - /0] [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+      ├── key: (1)
+      └── fd: (1)-->(2-4)
+
+# Regression: without an ordering requirement aligned with the index, the split
+# rule has no ordering to preserve.
+opt expect-not=SplitLimitedScanIntoUnionScans
+SELECT * FROM hash_sharded_tab LIMIT 10
+----
+scan hash_sharded_tab
+ ├── columns: k:1!null a:2 b:3 shard:4!null
+ ├── limit: 10
+ ├── key: (1)
+ └── fd: (1)-->(2-4)
 
 # ---------------------------------------------------
 # GenerateTopK
