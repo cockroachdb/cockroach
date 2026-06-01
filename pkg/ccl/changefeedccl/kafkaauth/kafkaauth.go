@@ -19,13 +19,10 @@ import (
 
 // BuildContext is an extension point on saslMechanismBuilder for passing
 // resources beyond URI params, letting individual mechanisms pull their own
-// dependencies without dispatcher-level special-casing. Most builders ignore
-// it.
+// dependencies without dispatcher-level special-casing.
 type BuildContext struct {
 	// SecretReader exposes credential files from the directory configured by
-	// the --secret-directory node flag. nil when the flag is unset; builders
-	// that need file access are responsible for surfacing a clear error in
-	// that case.
+	// the --secret-directory node flag. nil when the flag is unset.
 	SecretReader *secretdir.Reader
 }
 
@@ -93,9 +90,7 @@ func (r saslMechanismRegistry) pick(
 		return nil, false, errors.Newf("param sasl_mechanism must be one of %s", r.allMechanismNames())
 	}
 
-	// Return slightly nicer errors for these common cases. Without these, a
-	// mechanism-mismatched param would slip through to RemainingQueryParams
-	// in the kafka sink and surface as a generic "unknown query params" error.
+	// Return slightly nicer errors for these common cases.
 	if b.name() != sarama.SASLTypeOAuth && b.name() != proprietaryOAuthName {
 		if err := validateNoOAuthOnlyParams(u); err != nil {
 			return nil, false, err
@@ -220,6 +215,7 @@ func validateNoProprietaryOnlyParams(u *changefeedbase.SinkURL) error {
 	proprietaryOnlyParams := []string{
 		changefeedbase.SinkParamSASLProprietaryResource,
 		changefeedbase.SinkParamSASLProprietaryClientAssertion,
+		changefeedbase.SinkParamSASLProprietaryClientAssertionLocation,
 		changefeedbase.SinkParamSASLProprietaryClientAssertionType,
 	}
 

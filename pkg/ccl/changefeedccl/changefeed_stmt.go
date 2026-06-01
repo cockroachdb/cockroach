@@ -49,11 +49,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -907,6 +909,10 @@ func createChangefeedJobRecord(
 		p.BufferClientNotice(ctx, pgnotice.Newf(`%[1]s is no longer experimental, use %[1]s://`,
 			newScheme),
 		)
+	}
+
+	if err := checkSinkFileBasedCredentialGates(ctx, p, parsedSink); err != nil {
+		return nil, changefeedbase.Targets{}, err
 	}
 
 	if err = validateDetailsAndOptions(details, opts, p.ExecCfg().Settings); err != nil {
@@ -2542,4 +2548,54 @@ func buildTableToDatabaseAndSchemaLookup(
 		}
 	}
 	return tableToSchema, tableToDatabase
+}
+
+// checkSinkFileBasedCredentialGates resolves parsedSink (loading an EC if
+// the URI is external://ec). The version gate guards against mixed-version
+// breakage: a job descriptor created on an upgraded node can later be picked
+// up by a not-yet-upgraded node during distSQL processor placement, and that
+// node's PROPRIETARY_OAUTH builder would reject the unknown URI param and
+// fail the job.
+func checkSinkFileBasedCredentialGates(
+	ctx context.Context, p sql.PlanHookState, parsedSink *url.URL,
+) error {
+	uri := parsedSink
+	if parsedSink.Scheme == "external" {
+		if parsedSink.Host == "" {
+			return errors.Newf("host component of an external URI must refer to an "+
+				"existing External Connection object: %s", parsedSink.String())
+		}
+		resolved, err := makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB).lookup(parsedSink.Host)
+		if err != nil {
+			return err
+		}
+		uri, err = url.Parse(resolved)
+		if err != nil {
+			return errors.Wrap(err, "parsing resolved external connection URI")
+		}
+	}
+	if uri.Query().Get(changefeedbase.SinkParamSASLProprietaryClientAssertionLocation) == "" {
+		return nil
+	}
+	if !p.ExecCfg().Settings.Version.IsActive(
+		ctx, clusterversion.V26_3_ChangefeedFileBasedClientAssertion,
+	) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"%s requires the cluster to be fully upgraded to %s",
+			changefeedbase.SinkParamSASLProprietaryClientAssertionLocation,
+			clusterversion.V26_3_ChangefeedFileBasedClientAssertion)
+	}
+
+	ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject,
+		privilege.EXTERNALIOIMPLICITACCESS, p.User())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"only users with the admin role or the EXTERNALIOIMPLICITACCESS "+
+				"system privilege may use %s",
+			changefeedbase.SinkParamSASLProprietaryClientAssertionLocation)
+	}
+	return nil
 }

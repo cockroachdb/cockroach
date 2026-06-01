@@ -303,6 +303,10 @@ const (
 	// V26_3_AddVcpuUsageTable adds the system.vcpu_usage table for
 	// tracking vCPU consumption per node per audit interval for license auditing.
 	V26_3_AddVcpuUsageTable
+	// V26_3_ChangefeedFileBasedClientAssertion gates the
+	// sasl_proprietary_client_assertion_location URI param for Kafka
+	// changefeeds, which references a per-node JWT file on disk.
+	V26_3_ChangefeedFileBasedClientAssertion
 
 	// *************************************************
 	// Step (1) Add new versions above this comment.
@@ -400,6 +404,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_GrantReferencesToUsersWithCreate: {Major: 26, Minor: 2, Internal: 14},
 
 	V26_3_AddVcpuUsageTable: {Major: 26, Minor: 2, Internal: 16},
+
+	V26_3_ChangefeedFileBasedClientAssertion: {Major: 26, Minor: 2, Internal: 18},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

@@ -46,6 +46,7 @@ func makeExternalConnectionSink(
 	// Replace the external connection URI in the `feedCfg` with the URI of the
 	// underlying resource.
 	feedCfg.SinkURI = uri
+
 	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets, false /* initialValidation */)
 }
 
