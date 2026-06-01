@@ -851,10 +851,16 @@ https://www.postgresql.org/docs/18/catalog-pg-auth-members.html`,
 					h.RoleMembershipOid(roleName, memberName), // oid
 					h.UserOid(roleName),                       // roleid
 					h.UserOid(memberName),                     // member
-					tree.DNull,                                // grantor
-					tree.MakeDBool(tree.DBool(isAdmin)),       // admin_option
-					tree.MakeDBool(tree.DBool(true)),          // inherit_option
-					tree.MakeDBool(tree.DBool(true)),          // set_option
+					// CockroachDB does not track the grantor of a role
+					// membership, so the admin role is reported as a stand-in. A
+					// real, non-droppable grantor is required for tools like
+					// pg_dumpall to emit the membership rather than treating it
+					// as orphaned and silently dropping it. See
+					// https://github.com/cockroachdb/cockroach/issues/67442.
+					adminOID,                            // grantor
+					tree.MakeDBool(tree.DBool(isAdmin)), // admin_option
+					tree.MakeDBool(tree.DBool(true)),    // inherit_option
+					tree.MakeDBool(tree.DBool(true)),    // set_option
 				)
 			},
 		)
