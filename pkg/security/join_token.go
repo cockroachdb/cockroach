@@ -8,16 +8,14 @@ package security
 import (
 	"bytes"
 	"crypto/hmac"
+	crypto_rand "crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"hash/crc32"
 	"io"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -56,8 +54,10 @@ func GenerateJoinToken(cm *CertificateManager) (JoinToken, error) {
 	var jt JoinToken
 
 	jt.TokenID = uuid.MakeV4()
-	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	jt.SharedSecret = randutil.RandBytes(r, joinTokenSecretLen)
+	jt.SharedSecret = make([]byte, joinTokenSecretLen)
+	if _, err := crypto_rand.Read(jt.SharedSecret); err != nil {
+		return jt, err
+	}
 	jt.sign(cm.CACert().FileContents)
 	return jt, nil
 }
