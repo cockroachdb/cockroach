@@ -1333,6 +1333,9 @@ func (b *Builder) buildSelectClause(
 	b.validateLockingInFrom(sel, lockCtx.locking, fromScope)
 
 	if preProjectionScope != nil {
+		if lockScope != nil {
+			preProjectionScope.addExtraColumns(lockScope.cols)
+		}
 		// Construct the pre-projection for the ordering expressions.
 		b.constructProjectForScope(outScope, preProjectionScope)
 		outScope.expr = preProjectionScope.expr
