@@ -392,7 +392,7 @@ true
 
 rollback x
 ----
-0 <noignore>
+1 [0-0]
 
 subtest end
 
@@ -419,7 +419,7 @@ true
 
 rollback x
 ----
-1 <noignore>
+2 [0-1]
 
 subtest end
 
@@ -456,7 +456,7 @@ true
 
 rollback x
 ----
-0 <noignore>
+1 [0-0]
 
 put conflict-key b nowait
 ----
@@ -468,7 +468,7 @@ true
 
 rollback x
 ----
-1 <noignore>
+3 [0-2]
 
 subtest end
 
@@ -505,7 +505,7 @@ true
 
 rollback x
 ----
-0 <noignore>
+1 [0-0]
 
 put conflict-key-2 b lock-timeout
 ----
@@ -517,7 +517,7 @@ true
 
 rollback x
 ----
-1 <noignore>
+3 [0-2]
 
 subtest end
 
@@ -584,7 +584,7 @@ true
 
 rollback x
 ----
-0 <noignore>
+1 [0-0]
 
 subtest end
 
