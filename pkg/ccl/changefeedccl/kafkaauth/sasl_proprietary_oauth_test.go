@@ -91,7 +91,7 @@ func TestProprietaryOAuthRegistration(t *testing.T) {
 	u, err := url.Parse(`kafka://idk?sasl_enabled=true&sasl_mechanism=PROPRIETARY_OAUTH&sasl_client_id=cl&sasl_token_url=localhost&sasl_proprietary_resource=r&sasl_proprietary_client_assertion_type=at&sasl_proprietary_client_assertion=as`)
 	require.NoError(t, err)
 	su := &changefeedbase.SinkURL{URL: u}
-	mech, ok, err := Pick(su)
+	mech, ok, err := Pick(su, nil)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.NotNil(t, mech)

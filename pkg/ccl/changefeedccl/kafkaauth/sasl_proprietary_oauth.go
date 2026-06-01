@@ -45,7 +45,9 @@ func (s saslProprietaryOAuthBuilder) validateParams(u *changefeedbase.SinkURL) e
 }
 
 // build implements authMechanismBuilder.
-func (s saslProprietaryOAuthBuilder) build(u *changefeedbase.SinkURL) (SASLMechanism, error) {
+func (s saslProprietaryOAuthBuilder) build(
+	u *changefeedbase.SinkURL, _ BuildContext,
+) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
 	if err != nil {
 		return nil, err
