@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "kvtenant",
     srcs = [
+        "branch_sender.go",
         "connector.go",
         "connector_factory.go",
         "setting_overrides.go",
@@ -30,6 +31,7 @@ go_library(
         "//pkg/settings",
         "//pkg/spanconfig",
         "//pkg/sql/isql",
+        "//pkg/storage/mvccencoding",
         "//pkg/ts/tspb",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",

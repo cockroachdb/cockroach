@@ -232,6 +232,14 @@ message GetRequest {
   // lock should have prevented. If such a write is found an
   // ExclusionViolationError is returned.
   util.hlc.Timestamp expect_exclusion_since = 6 [(gogoproto.nullable) = false];
+
+  // IncludeTombstones, if true, instructs the read to surface MVCC deletion
+  // tombstones to the caller (as a value with empty bytes) rather than
+  // suppressing them. This is used by branch tenants to distinguish a
+  // "branch deleted this key" from "branch never wrote this key", so that
+  // the branchSender can avoid falling through to the parent for keys the
+  // branch has tombstoned. See pkg/kv/kvclient/kvtenant/branch_sender.go.
+  bool include_tombstones = 7;
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -678,6 +686,11 @@ message ScanRequest {
   // This option is not compatible for reads over inline values (see
   // https://github.com/cockroachdb/cockroach/issues/131667)
   bool return_raw_mvcc_values = 7 [(gogoproto.customname) = "ReturnRawMVCCValues"];
+
+  // IncludeTombstones, if true, instructs the scan to surface MVCC deletion
+  // tombstones to the caller (as rows with empty values) rather than
+  // suppressing them. See the IncludeTombstones field on GetRequest.
+  bool include_tombstones = 8;
 }
 
 // A ScanResponse is the return value from the Scan() method.

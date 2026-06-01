@@ -329,8 +329,20 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 	tcf *TxnCoordSenderFactory, txn *roachpb.Transaction, typ kv.TxnType,
 ) {
 	var riGen rangeIteratorFactory
-	if ds, ok := tcf.wrapped.(*DistSender); ok {
-		riGen.ds = ds
+	// Walk through any wrapping senders (e.g. a branch tenant's BranchSender)
+	// to find the underlying DistSender. The condensableSpanSet uses this
+	// factory to walk ranges when the txn's tracked span set grows large
+	// enough to need condensing; if it isn't wired up, condensing panics.
+	for s := tcf.wrapped; s != nil; {
+		if ds, ok := s.(*DistSender); ok {
+			riGen.ds = ds
+			break
+		}
+		u, ok := s.(interface{ Unwrap() kv.Sender })
+		if !ok {
+			break
+		}
+		s = u.Unwrap()
 	}
 	tc.interceptorAlloc.txnWriteBuffer = txnWriteBuffer{
 		st:         tcf.st,

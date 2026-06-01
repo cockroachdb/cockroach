@@ -1,0 +1,42 @@
+# Reads against a branch are pinned to the fork timestamp: writes the
+# parent makes after the branch is created must not leak into the branch.
+# This is what the protected-timestamp record on the parent enforces.
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER prod;
+ALTER VIRTUAL CLUSTER prod START SERVICE SHARED;
+----
+
+exec-sql tenant=prod
+CREATE TABLE accounts (id INT PRIMARY KEY, balance INT);
+INSERT INTO accounts VALUES (1, 100), (2, 200), (3, 300);
+----
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER dev BRANCH FROM prod;
+ALTER VIRTUAL CLUSTER dev START SERVICE SHARED;
+----
+
+# After the fork, the parent inserts a new row and updates an existing row.
+exec-sql tenant=prod
+INSERT INTO accounts VALUES (10, 1000);
+UPDATE accounts SET balance = 9999 WHERE id = 1;
+----
+
+# The parent reflects the post-fork changes.
+query-sql tenant=prod
+SELECT * FROM accounts ORDER BY id
+----
+1 9999
+2 200
+3 300
+10 1000
+
+# The branch must not see post-fork parent changes: row 10 is invisible
+# and row 1 still shows the pre-fork balance of 100.
+query-sql tenant=dev
+SELECT * FROM accounts ORDER BY id
+----
+1 100
+2 200
+3 300

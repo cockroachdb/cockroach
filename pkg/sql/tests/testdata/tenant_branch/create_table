@@ -1,0 +1,63 @@
+# Branches must be able to CREATE TABLE on top of the parent's catalog
+# without colliding with parent descriptor IDs. CREATE TABLE allocates a
+# fresh ID via an Increment on the descriptor-ID sequence; that key lives
+# in the tenant's keyspace and is empty on a fresh branch. Without the
+# branch sender's increment-seeding fixup, the branch would restart the
+# counter at zero and reuse parent descriptor IDs.
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER prod;
+ALTER VIRTUAL CLUSTER prod START SERVICE SHARED;
+----
+
+exec-sql tenant=prod
+CREATE TABLE existing (id INT PRIMARY KEY, label STRING);
+INSERT INTO existing VALUES (1, 'parent-1'), (2, 'parent-2');
+----
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER dev BRANCH FROM prod;
+ALTER VIRTUAL CLUSTER dev START SERVICE SHARED;
+----
+
+# Sanity check: the branch sees the parent's pre-fork data.
+query-sql tenant=dev
+SELECT id, label FROM existing ORDER BY id
+----
+1 parent-1
+2 parent-2
+
+# Create a brand-new table on the branch. This exercises descriptor-ID
+# allocation: the increment must be seeded with the parent's current
+# sequence value so the new descriptor ID does not collide.
+exec-sql tenant=dev
+CREATE TABLE branch_only (id INT PRIMARY KEY, note STRING);
+INSERT INTO branch_only VALUES (10, 'b-ten'), (20, 'b-twenty');
+----
+
+query-sql tenant=dev
+SELECT id, note FROM branch_only ORDER BY id
+----
+10 b-ten
+20 b-twenty
+
+# The branch's new table must have a strictly larger descriptor ID than
+# the parent's most recent table. Same query against both clusters; on
+# the parent we expect the inherited table only, on the branch we expect
+# the inherited table plus the new one with a higher ID.
+query-sql tenant=prod
+SELECT name FROM system.namespace WHERE name = 'branch_only'
+----
+
+query-sql tenant=dev
+SELECT name FROM system.namespace WHERE name IN ('existing', 'branch_only') ORDER BY name
+----
+branch_only
+existing
+
+# Parent stays oblivious to the branch's new table.
+query-sql tenant=prod
+SELECT id, label FROM existing ORDER BY id
+----
+1 parent-1
+2 parent-2
