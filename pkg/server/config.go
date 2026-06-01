@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security/externalcreds"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -272,6 +273,12 @@ type BaseConfig struct {
 	// operations that can specify node-local I/O paths (such as BACKUP, RESTORE
 	// or IMPORT) can access files.
 	ExternalIODir string
+
+	// ExternalCredentialsDir is the local directory under which sink
+	// credential files (e.g. the JWT client assertion referenced by a
+	// changefeed via sasl_proprietary_client_assertion_location) may be
+	// read. The zero value disables file-based credential references.
+	ExternalCredentialsDir externalcreds.Dir
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.

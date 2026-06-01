@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
+	"github.com/cockroachdb/cockroach/pkg/security/externalcreds"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/profiler"
@@ -605,6 +606,9 @@ func runStartInternal(
 
 	// Derive temporary/auxiliary directory specifications.
 	serverCfg.ExternalIODir = startCtx.externalIODir
+	if serverCfg.ExternalCredentialsDir, err = externalcreds.NewDir(startCtx.externalCredentialsDir); err != nil {
+		return err
+	}
 
 	st := serverCfg.BaseConfig.Settings
 	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(

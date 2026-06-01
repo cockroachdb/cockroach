@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/externalcreds"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -97,6 +98,10 @@ type TestServerArgs struct {
 	// ExternalIODir is used to initialize the same-named field on
 	// the server.Config struct.
 	ExternalIODir string
+
+	// ExternalCredentialsDir is used to initialize the same-named field on
+	// the server.Config struct.
+	ExternalCredentialsDir externalcreds.Dir
 
 	// Fields copied to the server.Config.
 	Insecure                    bool
@@ -679,6 +684,10 @@ type TestTenantArgs struct {
 	// ExternalIODir is used to initialize the same-named field on
 	// the server.Config struct.
 	ExternalIODir string
+
+	// ExternalCredentialsDir is used to initialize the same-named field on
+	// the server.Config struct.
+	ExternalCredentialsDir externalcreds.Dir
 
 	// If set, this will be appended to the Postgres URL by functions that
 	// automatically open a connection to the server. That's equivalent to running

@@ -344,6 +344,11 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.ExternalIODirConfig = kvServerCfg.BaseConfig.ExternalIODirConfig
 
 	baseCfg.ExternalIODir = kvServerCfg.BaseConfig.ExternalIODir
+	// TODO(KeithCh): in shared multi-process tenant deployments, slice this
+	// by tenant via a capability that pins a path prefix (e.g.
+	// "/<tenant_name>/"), rather than handing the full directory to every
+	// tenant.
+	baseCfg.ExternalCredentialsDir = kvServerCfg.BaseConfig.ExternalCredentialsDir
 
 	// Use the internal connector instead of the network.
 	// See: https://github.com/cockroachdb/cockroach/issues/84591
