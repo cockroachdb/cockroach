@@ -418,7 +418,16 @@ type storeRequester interface {
 type elasticCPULimiter interface {
 	getUtilizationLimit() float64
 	setUtilizationLimit(limit float64)
-	hasWaitingRequests() bool
+	// hasOrHadRecentWaitingRequests returns true if there are any waiting
+	// requests right now, OR if any work was enqueued since the previous call
+	// to this method. The "had recent" component is needed because the elastic
+	// CPU granter's tryGrant loop drains the queue as soon as tokens refill,
+	// so the queue spends most of its time empty even under sustained
+	// throttling; without this, the polling caller (the scheduler-latency
+	// listener, ticking at ~1Hz) would frequently observe an empty queue and
+	// incorrectly conclude there is no demand for elastic CPU. The "had
+	// recent" bit is consumed (cleared) by each call.
+	hasOrHadRecentWaitingRequests() bool
 	computeUtilizationMetric()
 }
 

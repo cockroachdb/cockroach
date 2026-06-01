@@ -6,6 +6,7 @@
 package admission
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -14,10 +15,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/guptarohit/asciigraph"
 	"github.com/stretchr/testify/require"
 )
@@ -347,7 +355,7 @@ func (t *testElasticCPUUtilizationLimiter) getUtilization() float64 {
 	return t.utilization
 }
 
-func (t *testElasticCPUUtilizationLimiter) hasWaitingRequests() bool {
+func (t *testElasticCPUUtilizationLimiter) hasOrHadRecentWaitingRequests() bool {
 	return t.hasWaitingRequestsVal
 }
 
@@ -360,6 +368,149 @@ func (t *testElasticCPUUtilizationLimiter) setHasWaitingRequests(hasWaitingReque
 }
 
 func (t *testElasticCPUUtilizationLimiter) computeUtilizationMetric() {}
+
+// TestSchedulerLatencyListenerObservesTransientWaiters demonstrates the bug
+// fix for #170400: under sustained throttling, work briefly queues between
+// scheduler-latency listener ticks but is drained by the elastic CPU
+// granter's tryGrant loop almost immediately, so a point-sample of
+// hasWaitingRequests() at tick time would frequently report no waiters and
+// cause the controller to decay the limit toward inactive_point. The fix is
+// for WorkQueue to set a sticky "had recent waiters" bit on every Admit
+// enqueue, which the listener atomically reads-and-clears each tick via
+// elasticCPUGranter.hasOrHadRecentWaitingRequests.
+func TestSchedulerLatencyListenerObservesTransientWaiters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Build a real WorkQueue hooked up to a real elasticCPUGranter.
+	st := cluster.MakeTestingClusterSettings()
+	ambientCtx := log.MakeTestingAmbientContext(tracing.NewTracer())
+	registry := metric.NewRegistry()
+	wqMetrics := makeWorkQueueMetrics("test-elastic-cpu", registry)
+	granterMetrics := makeElasticCPUGranterMetrics()
+	granter := newElasticCPUGranter(ambientCtx, st, granterMetrics)
+
+	wq := &WorkQueue{}
+	// Disable the fast path so Admit always pushes to the heap, and pin the
+	// utilization limit at 0 so the granter's tryGrant cannot drain the
+	// queue. Together these guarantee the request stays parked until the
+	// test cancels it.
+	initWorkQueue(wq, ambientCtx, KVWork, "test-elastic-cpu-queue", granter, st, wqMetrics,
+		workQueueOptions{
+			mode:                         usesTokens,
+			disableEpochClosingGoroutine: true,
+			disableGCGroupsAndResetUsed:  true,
+		}, &TestingKnobs{DisableWorkQueueFastPath: true})
+	defer wq.close()
+	granter.setRequester(wq)
+	granter.setUtilizationLimit(0)
+
+	// Sanity: with no work admitted, the new method returns false.
+	require.False(t, granter.hasOrHadRecentWaitingRequests(),
+		"expected no waiters initially")
+
+	// Submit one Admit in a goroutine with a cancelable context.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	admitDone := make(chan struct{})
+	go func() {
+		defer close(admitDone)
+		_, _ = wq.Admit(ctx, WorkInfo{
+			TenantID:       roachpb.SystemTenantID,
+			Priority:       admissionpb.NormalPri,
+			RequestedCount: 1,
+		})
+	}()
+
+	// Wait until Admit has finished pushing the work onto the heap and set
+	// the sticky bit. Looking at hadWaitingRequests directly (not via the
+	// public Swap-clearing method) so this synchronization step does not
+	// consume the bit we want to observe below.
+	testutils.SucceedsSoon(t, func() error {
+		if !wq.hadWaitingRequests.Load() {
+			return errors.New("waiting for Admit to enqueue and set sticky bit")
+		}
+		return nil
+	})
+
+	// Cancel the in-flight Admit and let its goroutine drain so the queue
+	// returns to empty -- this models the production scenario where tryGrant
+	// has just drained the queue between two listener ticks.
+	cancel()
+	<-admitDone
+	hasWaiting, _ := wq.hasWaitingRequests()
+	require.False(t, hasWaiting,
+		"queue should be empty after Admit returns; otherwise the test does not "+
+			"actually exercise the sticky-bit path")
+
+	// First poll observes the recent-waiter bit even though the queue is now
+	// empty. This is the behavior the bug fix introduces: a point-sample of
+	// hasWaitingRequests would have returned false here.
+	require.True(t, granter.hasOrHadRecentWaitingRequests(),
+		"expected sticky bit to surface the recent enqueue")
+
+	// Second poll consumes nothing (Swap cleared the bit and the queue is
+	// still empty), so it returns false.
+	require.False(t, granter.hasOrHadRecentWaitingRequests(),
+		"sticky bit should have been cleared by the previous read")
+}
+
+// TestElasticCPUGranterHasOrHadRecentWaitingRequestsORs verifies that
+// elasticCPUGranter.hasOrHadRecentWaitingRequests ORs the instantaneous
+// hasWaitingRequests signal with the WorkQueue's sticky "had recent waiters"
+// bit. Both inputs surface as true; the read clears only the sticky bit.
+func TestElasticCPUGranterHasOrHadRecentWaitingRequestsORs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	ambientCtx := log.MakeTestingAmbientContext(tracing.NewTracer())
+	registry := metric.NewRegistry()
+	wqMetrics := makeWorkQueueMetrics("test-elastic-cpu-or", registry)
+	granterMetrics := makeElasticCPUGranterMetrics()
+	granter := newElasticCPUGranter(ambientCtx, st, granterMetrics)
+
+	wq := &WorkQueue{}
+	initWorkQueue(wq, ambientCtx, KVWork, "test-elastic-cpu-or-queue", granter, st, wqMetrics,
+		workQueueOptions{
+			mode:                         usesTokens,
+			disableEpochClosingGoroutine: true,
+			disableGCGroupsAndResetUsed:  true,
+		}, &TestingKnobs{DisableWorkQueueFastPath: true})
+	defer wq.close()
+	granter.setRequester(wq)
+	granter.setUtilizationLimit(0)
+
+	// Submit an Admit that stays parked in the queue. Use a context tied to
+	// the test lifetime; we cancel it at the end to release the goroutine.
+	ctx, cancel := context.WithCancel(context.Background())
+	admitDone := make(chan struct{})
+	go func() {
+		defer close(admitDone)
+		_, _ = wq.Admit(ctx, WorkInfo{
+			TenantID:       roachpb.SystemTenantID,
+			Priority:       admissionpb.NormalPri,
+			RequestedCount: 1,
+		})
+	}()
+	defer func() {
+		cancel()
+		<-admitDone
+	}()
+
+	// Wait for the request to land in the heap (and set the sticky bit).
+	testutils.SucceedsSoon(t, func() error {
+		hasWaiting, _ := wq.hasWaitingRequests()
+		if !hasWaiting {
+			return errors.New("waiting for Admit to enqueue")
+		}
+		return nil
+	})
+
+	// First call: both signals true; method returns true and clears sticky.
+	require.True(t, granter.hasOrHadRecentWaitingRequests())
+	// Sticky bit is cleared, but the request is still queued, so the
+	// instantaneous hasWaitingRequests path still surfaces true.
+	require.True(t, granter.hasOrHadRecentWaitingRequests())
+}
 
 func (p schedulerLatencyListenerParams) String() string {
 	inactiveUtilizationLimit := p.minUtilization +
