@@ -640,3 +640,56 @@ RESET optimizer_use_lock_op_for_serializable
 
 statement ok
 RESET enable_durable_locking_for_serializable
+
+subtest skip_locked_ordered_limit
+
+# Regression test: the optimizer used to pick TopK (or Sort) directly above a Lock
+# for "ORDER BY <unindexed col> LIMIT k FOR UPDATE SKIP LOCKED" queries. That
+# shape locks every input row only to discard all but k, which under SKIP
+# LOCKED starves concurrent sessions: with N eligible rows the first session
+# locks all N, and subsequent sessions skip all N and return zero rows. Costing
+# the Lock operator (proportional to the rows it locks, respecting the limit
+# hint) makes the optimizer push the Sort below the Lock so only ~k rows are
+# locked.
+
+statement ok
+CREATE TABLE skl (k INT PRIMARY KEY, v INT, FAMILY (k, v))
+
+statement ok
+GRANT ALL ON skl TO testuser
+
+statement ok
+INSERT INTO skl VALUES (1, 1), (2, 2), (3, 3), (4, 4)
+
+user testuser
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+# Session A locks the smallest-v row. If the planner had picked Sort/TopK
+# above Lock, all four rows would be locked here, starving session B.
+query I
+SELECT k FROM skl WHERE v > 0 ORDER BY v LIMIT 1 FOR UPDATE SKIP LOCKED
+----
+1
+
+user root
+
+# Session B runs concurrently (session A's txn is still open). It must see
+# the next row, not zero rows.
+query I
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT k FROM skl WHERE v > 0 ORDER BY v LIMIT 1 FOR UPDATE SKIP LOCKED;
+COMMIT;
+----
+2
+
+user testuser
+
+statement ok
+COMMIT
+
+user root
+
+statement ok
+DROP TABLE skl
