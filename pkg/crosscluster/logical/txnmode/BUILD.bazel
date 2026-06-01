@@ -73,6 +73,7 @@ go_test(
         "txnmode_test.go",
     ],
     embed = [":txnmode"],
+    shard_count = 4,
     deps = [
         "//pkg/base",
         "//pkg/ccl",
