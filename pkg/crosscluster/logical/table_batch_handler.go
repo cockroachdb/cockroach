@@ -133,7 +133,7 @@ func newTableHandler(
 		return nil, err
 	}
 
-	tombstoneUpdater := sqlwriter.NewTombstoneUpdater(codec, db.KV(), leaseMgr, tableID, sd, settings)
+	tombstoneUpdater := sqlwriter.NewTombstoneUpdater(codec, leaseMgr, tableID, sd, settings)
 
 	return &tableHandler{
 		sqlReader:        reader,
@@ -186,22 +186,20 @@ func (t *tableHandler) attemptBatch(
 				}
 			case event.IsTombstoneUpdate():
 				stats.tombstoneUpdates++
-				// Use a KV savepoint so that a LWW-loser ConditionFailedError
-				// on one tombstone does not abort the surrounding transaction.
+				// Use a KV savepoint so that a ConditionFailedError on one
+				// tombstone does not abort the surrounding transaction.
+				var lwwLoss bool
 				err := t.session.KVSavepoint(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					batch := txn.NewBatch()
-					batch.Header.WriteOptions = sqlwriter.OriginID1Options
-					if err := t.tombstoneUpdater.AddToBatch(ctx, txn, batch, event.RowTimestamp, event.Row); err != nil {
-						return err
-					}
-					return txn.Run(ctx, batch)
+					var err error
+					lwwLoss, err = t.tombstoneUpdater.UpdateTombstone(ctx, txn, event.RowTimestamp, event.Row)
+					return err
 				})
 				if err != nil {
-					if isLwwLoser(err) {
-						stats.kvLwwLosers++
-						continue
-					}
 					return err
+				}
+				if lwwLoss {
+					stats.kvLwwLosers++
+					continue
 				}
 			case event.IsInsertRow():
 				stats.inserts++

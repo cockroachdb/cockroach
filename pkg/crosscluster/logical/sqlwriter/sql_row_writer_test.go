@@ -138,6 +138,22 @@ func TestSQLRowWriter(t *testing.T) {
 	})
 	require.ErrorIs(t, err, ErrStalePreviousValue)
 
+	// Test InsertRow with a newer origin timestamp against an existing row.
+	// The insert wins LWW but the row already exists, so the MVCC layer sets
+	// HadNewerOriginTimestamp. InsertRow converts this to ErrStalePreviousValue
+	// so the caller can refresh and retry as an update.
+	duplicateRow := makeTestRow(t, desc, 20, "duplicate")
+	firstTS := s.Clock().Now()
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return writer.InsertRow(ctx, firstTS, duplicateRow)
+	})
+	require.NoError(t, err)
+	newerTS := s.Clock().Now()
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return writer.InsertRow(ctx, newerTS, makeTestRow(t, desc, 20, "newer"))
+	})
+	require.ErrorIs(t, err, ErrStalePreviousValue)
+
 	// Test InsertRow LWW failure against existing row: inserting with an older
 	// timestamp than the existing row should return a ConditionFailedError.
 	existingRow := makeTestRow(t, desc, 10, "existing")
