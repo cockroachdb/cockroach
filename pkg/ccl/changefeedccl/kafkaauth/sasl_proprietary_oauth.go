@@ -27,12 +27,12 @@ const proprietaryOAuthName = "PROPRIETARY_OAUTH"
 
 type saslProprietaryOAuthBuilder struct{}
 
-// name implements authMechanismBuilder.
+// name implements saslMechanismBuilder.
 func (s saslProprietaryOAuthBuilder) name() string {
 	return proprietaryOAuthName
 }
 
-// validateParams implements authMechanismBuilder.
+// validateParams implements saslMechanismBuilder.
 func (s saslProprietaryOAuthBuilder) validateParams(u *changefeedbase.SinkURL) error {
 	requiredParams := []string{
 		changefeedbase.SinkParamSASLClientID,
@@ -44,8 +44,10 @@ func (s saslProprietaryOAuthBuilder) validateParams(u *changefeedbase.SinkURL) e
 	return peekAndRequireParams(s.name(), u, requiredParams)
 }
 
-// build implements authMechanismBuilder.
-func (s saslProprietaryOAuthBuilder) build(u *changefeedbase.SinkURL) (SASLMechanism, error) {
+// build implements saslMechanismBuilder.
+func (s saslProprietaryOAuthBuilder) build(
+	u *changefeedbase.SinkURL, _ SASLConfig,
+) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
 	if err != nil {
 		return nil, err
@@ -68,7 +70,7 @@ type saslProprietaryOAuth struct {
 	handshake bool
 }
 
-// ApplySarama implements AuthMechanism.
+// ApplySarama implements SASLMechanism.
 func (s *saslProprietaryOAuth) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
 	tp, err := s.newSaramaTokenProvider(ctx)
 	if err != nil {
@@ -79,7 +81,7 @@ func (s *saslProprietaryOAuth) ApplySarama(ctx context.Context, cfg *sarama.Conf
 	return nil
 }
 
-// KgoOpts implements AuthMechanism.
+// KgoOpts implements SASLMechanism.
 func (s *saslProprietaryOAuth) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 	tp, err := s.newKgoTokenProvider(ctx)
 	if err != nil {
