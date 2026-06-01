@@ -81,6 +81,8 @@ func (r *Replica) checkConsistencyImpl(
 		return kvpb.CheckConsistencyResponse{}, kvpb.NewError(err)
 	}
 
+	log.KvExec.Infof(ctx, "REPRO: cons checker res: %+v", results)
+
 	res := kvpb.CheckConsistencyResponse_Result{RangeID: r.RangeID}
 
 	shaToIdxs := map[string][]int{}
