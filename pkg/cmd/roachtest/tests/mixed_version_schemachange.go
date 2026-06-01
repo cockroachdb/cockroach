@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 func registerSchemaChangeMixedVersions(r registry.Registry) {
@@ -45,6 +46,9 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 				// When runtime assertions are enabled, produce fewer operations
 				// to avoid risk of timeouts.
 				maxOps = maxOps / 4
+			}
+			if c.Architecture() == vm.ArchARM64 {
+				maxOps = maxOps * 3 / 4
 			}
 			runSchemaChangeMixedVersions(ctx, t, c, maxOps, concurrency)
 		},
