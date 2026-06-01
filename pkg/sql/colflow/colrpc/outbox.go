@@ -353,7 +353,7 @@ func (o *Outbox) sendBatches(
 					o.tenantID(),
 					ash.WorkloadInfo{
 						WorkloadID:    o.workloadID(),
-						AppNameID:     o.appNameID(),
+						EnrichmentID:  o.appNameID(),
 						GatewayNodeID: o.gatewayNodeID(),
 						WorkloadType:  o.workloadType(),
 					},
@@ -403,7 +403,7 @@ func (o *Outbox) sendBatches(
 				o.tenantID(),
 				ash.WorkloadInfo{
 					WorkloadID:    o.workloadID(),
-					AppNameID:     o.appNameID(),
+					EnrichmentID:  o.appNameID(),
 					GatewayNodeID: o.gatewayNodeID(),
 					WorkloadType:  o.workloadType(),
 				},

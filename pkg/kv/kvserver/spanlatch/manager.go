@@ -510,7 +510,7 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 	if lg.ba != nil {
 		info = ash.WorkloadInfo{
 			WorkloadID:    lg.ba.WorkloadID,
-			AppNameID:     lg.ba.AppNameID,
+			EnrichmentID:  lg.ba.AppNameID,
 			GatewayNodeID: lg.ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(lg.ba.WorkloadType),
 		}

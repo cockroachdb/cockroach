@@ -83,13 +83,9 @@ type Txn struct {
 	// It will be attached to all requests sent through this transaction.
 	gatewayNodeID roachpb.NodeID
 
-	// appNameID, if != 0, is the hash of the application name for
-	// ASH sampling. Propagated alongside workloadID to all BatchRequests.
-	// Set when the workload is from SQL execution.
-	// Note(alyshan): This will eventually be replaced by a general
-	// enrichment_id field which will enable the ASH sampler to
-	// enrich samples with more workload context.
-	appNameID uint64
+	// enrichmentID, if != 0, is the enrichment cache key for ASH
+	// sampling. Propagated alongside workloadID to all BatchRequests.
+	enrichmentID uint64
 
 	// workloadID, if != 0, is the identifier for the workload that is using
 	// this transaction (e.g., statement fingerprint ID, job ID). It will be
@@ -463,14 +459,14 @@ func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
-// SetWorkloadInfo sets the workload ID, app name ID, and workload
+// SetWorkloadInfo sets the workload ID, enrichment ID, and workload
 // type for ASH sampling. All three are automatically propagated to
 // all BatchRequests sent through this transaction.
 func (txn *Txn) SetWorkloadInfo(
-	workloadID, appNameID uint64, workloadType workloadid.WorkloadType,
+	workloadID, enrichmentID uint64, workloadType workloadid.WorkloadType,
 ) {
 	txn.workloadID = workloadID
-	txn.appNameID = appNameID
+	txn.enrichmentID = enrichmentID
 	txn.workloadType = workloadType
 }
 
@@ -1390,8 +1386,8 @@ func (txn *Txn) Send(
 		ba.Header.WorkloadID = txn.workloadID
 	}
 
-	if txn.appNameID != 0 && ba.Header.AppNameID == 0 {
-		ba.Header.AppNameID = txn.appNameID
+	if txn.enrichmentID != 0 && ba.Header.AppNameID == 0 {
+		ba.Header.AppNameID = txn.enrichmentID
 	}
 
 	if txn.workloadType != workloadid.WorkloadTypeUnknown && ba.Header.WorkloadType == 0 {

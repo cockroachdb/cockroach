@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -490,27 +489,43 @@ func TestInitGlobalSampler(t *testing.T) {
 	require.Equal(t, tenantID, samples[0].TenantID)
 }
 
-func TestSamplerAppName(t *testing.T) {
-	// setup creates a Sampler with sampling enabled, cleaned up via
-	// t.Cleanup. All subtests share this common initialization.
-	setup := func(t *testing.T) *Sampler {
+func TestSamplerEnrichment(t *testing.T) {
+	setup := func(t *testing.T) (*Sampler, *EnrichmentCache) {
 		t.Helper()
 		s, stopper := newTestSampler()
 		t.Cleanup(func() { stopper.Stop(context.Background()) })
 		enabled.Store(true)
 		t.Cleanup(func() { enabled.Store(false) })
-		t.Cleanup(func() { s.resolver.Store(nil) })
-		return s
+
+		ec := NewEnrichmentCache(10000)
+		require.NoError(t, ec.Start(context.Background(), stopper))
+		s.enrichmentCache = ec
+		return s, ec
 	}
 
 	tenantID := roachpb.MustMakeTenantID(5)
 
-	t.Run("local cache hit", func(t *testing.T) {
-		s := setup(t)
-		appName := "myapp"
-		appID := GetOrStoreAppNameID(appName)
+	t.Run("enrichment cache hit", func(t *testing.T) {
+		s, ec := setup(t)
+		eid := NextEnrichmentID()
+		ec.Record(EnrichmentEntry{
+			EnrichmentID: eid,
+			EnrichmentData: EnrichmentData{
+				AppName:  "myapp",
+				User:     "testuser",
+				Database: "testdb",
+			},
+		})
+		ec.DrainWriteBuffer()
+		// Allow ingestion goroutine to process the block.
+		testutils.SucceedsSoon(t, func() error {
+			if _, ok := ec.Lookup(eid); !ok {
+				return errors.New("entry not yet ingested")
+			}
+			return nil
+		})
 
-		info := WorkloadInfo{WorkloadID: 42, AppNameID: appID}
+		info := WorkloadInfo{WorkloadID: 42, EnrichmentID: eid}
 		cleanup := SetWorkState(tenantID, info, WorkCPU, "Optimize")
 		defer cleanup()
 
@@ -518,14 +533,79 @@ func TestSamplerAppName(t *testing.T) {
 
 		samples := s.GetSamples(nil)
 		require.Len(t, samples, 1)
-		require.Equal(t, appName, samples[0].AppName)
+		require.Equal(t, "myapp", samples[0].AppName)
+		require.Equal(t, "testuser", samples[0].User)
+		require.Equal(t, "testdb", samples[0].Database)
 	})
 
-	t.Run("local cache miss", func(t *testing.T) {
-		s := setup(t)
-		// Use an app name ID without storing it in the cache.
-		info := WorkloadInfo{WorkloadID: 42, AppNameID: 12345}
-		cleanup := SetWorkState(tenantID, info, WorkCPU, "Optimize")
+	t.Run("enrichment cache miss with retry", func(t *testing.T) {
+		s, ec := setup(t)
+		eid := NextEnrichmentID()
+
+		info := WorkloadInfo{WorkloadID: 42, EnrichmentID: eid}
+		cleanup := SetWorkState(tenantID, info, WorkCPU, "Retry")
+		defer cleanup()
+
+		// First tick: cache miss → sample goes to pending.
+		s.takeSample(context.Background())
+		samples := s.GetSamples(nil)
+		require.Len(t, samples, 0)
+		require.Len(t, s.pendingEnrichment, 1)
+
+		// Record enrichment data and drain.
+		ec.Record(EnrichmentEntry{
+			EnrichmentID:   eid,
+			EnrichmentData: EnrichmentData{AppName: "delayed-app"},
+		})
+		ec.DrainWriteBuffer()
+		testutils.SucceedsSoon(t, func() error {
+			if _, ok := ec.Lookup(eid); !ok {
+				return errors.New("entry not yet ingested")
+			}
+			return nil
+		})
+
+		// Second tick: retry succeeds → sample emitted.
+		cleanup()
+		s.takeSample(context.Background())
+		samples = s.GetSamples(nil)
+		require.Len(t, samples, 1)
+		require.Equal(t, "delayed-app", samples[0].AppName)
+		require.Len(t, s.pendingEnrichment, 0)
+	})
+
+	t.Run("enrichment max retries exceeded", func(t *testing.T) {
+		s, _ := setup(t)
+		MaxEnrichmentRetries.Override(context.Background(), &s.st.SV, 2)
+		eid := NextEnrichmentID()
+
+		info := WorkloadInfo{WorkloadID: 42, EnrichmentID: eid}
+		cleanup := SetWorkState(tenantID, info, WorkCPU, "MaxRetry")
+		defer cleanup()
+
+		// Tick 1: miss → pending (retryCount will be 0 in pending list).
+		s.takeSample(context.Background())
+		require.Len(t, s.pendingEnrichment, 1)
+		cleanup()
+
+		// Tick 2: retry fails, retryCount 1 → still pending.
+		s.takeSample(context.Background())
+		require.Len(t, s.pendingEnrichment, 1)
+
+		// Tick 3: retry fails, retryCount 2 == maxRetries → emitted
+		// with empty enrichment.
+		s.takeSample(context.Background())
+		require.Len(t, s.pendingEnrichment, 0)
+		samples := s.GetSamples(nil)
+		require.Len(t, samples, 1)
+		require.Equal(t, "", samples[0].AppName)
+	})
+
+	t.Run("no enrichment ID", func(t *testing.T) {
+		s, _ := setup(t)
+
+		info := WorkloadInfo{WorkloadID: 42}
+		cleanup := SetWorkState(tenantID, info, WorkCPU, "NoEnrichment")
 		defer cleanup()
 
 		s.takeSample(context.Background())
@@ -536,23 +616,26 @@ func TestSamplerAppName(t *testing.T) {
 	})
 
 	t.Run("remote resolution", func(t *testing.T) {
-		s := setup(t)
-		const unknownAppID uint64 = 99999
+		s, _ := setup(t)
+		eid := NextEnrichmentID()
 		const remoteNodeID roachpb.NodeID = 10
+
 		info := WorkloadInfo{
 			WorkloadID:    42,
-			AppNameID:     unknownAppID,
+			EnrichmentID:  eid,
 			GatewayNodeID: remoteNodeID,
 		}
 		cleanup := SetWorkState(tenantID, info, WorkCPU, "RemoteResolve")
 		defer cleanup()
 
-		s.SetAppNameResolver(func(
-			ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
-		) (map[uint64]string, error) {
+		s.SetEnrichmentResolver(func(
+			_ context.Context, nodeID roachpb.NodeID, ids []uint64,
+		) (map[uint64]EnrichmentData, error) {
 			require.Equal(t, remoteNodeID, nodeID)
-			require.Contains(t, ids, unknownAppID)
-			return map[uint64]string{unknownAppID: "remote-app"}, nil
+			require.Contains(t, ids, eid)
+			return map[uint64]EnrichmentData{
+				eid: {AppName: "remote-app", User: "remoteuser"},
+			}, nil
 		})
 
 		s.takeSample(context.Background())
@@ -560,130 +643,33 @@ func TestSamplerAppName(t *testing.T) {
 		samples := s.GetSamples(nil)
 		require.Len(t, samples, 1)
 		require.Equal(t, "remote-app", samples[0].AppName)
+		require.Equal(t, "remoteuser", samples[0].User)
 	})
 
-	t.Run("skips local node", func(t *testing.T) {
-		s := setup(t)
-		// Gateway node ID matches the sampler's own node ID (1).
+	t.Run("remote resolver error leaves sample for retry", func(t *testing.T) {
+		s, _ := setup(t)
+		eid := NextEnrichmentID()
+
 		info := WorkloadInfo{
 			WorkloadID:    42,
-			AppNameID:     55555,
-			GatewayNodeID: 1,
-		}
-		cleanup := SetWorkState(tenantID, info, WorkCPU, "LocalSkip")
-		defer cleanup()
-
-		var called atomic.Bool
-		s.SetAppNameResolver(func(
-			ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
-		) (map[uint64]string, error) {
-			called.Store(true)
-			return nil, nil
-		})
-
-		s.takeSample(context.Background())
-
-		require.False(t, called.Load())
-		samples := s.GetSamples(nil)
-		require.Len(t, samples, 1)
-		require.Equal(t, "", samples[0].AppName)
-	})
-
-	t.Run("resolver error", func(t *testing.T) {
-		s := setup(t)
-		info := WorkloadInfo{
-			WorkloadID:    42,
-			AppNameID:     66666,
+			EnrichmentID:  eid,
 			GatewayNodeID: 20,
 		}
 		cleanup := SetWorkState(tenantID, info, WorkCPU, "ErrorCase")
 		defer cleanup()
 
-		s.SetAppNameResolver(func(
-			ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
-		) (map[uint64]string, error) {
+		s.SetEnrichmentResolver(func(
+			_ context.Context, _ roachpb.NodeID, _ []uint64,
+		) (map[uint64]EnrichmentData, error) {
 			return nil, errors.New("connection refused")
 		})
 
 		s.takeSample(context.Background())
 
+		// Sample goes to pending due to failed remote resolution.
+		require.Len(t, s.pendingEnrichment, 1)
 		samples := s.GetSamples(nil)
-		require.Len(t, samples, 1)
-		require.Equal(t, "", samples[0].AppName)
-	})
-
-	t.Run("nil resolver", func(t *testing.T) {
-		s := setup(t)
-		// No resolver set — cache miss should leave app name empty.
-		info := WorkloadInfo{
-			WorkloadID:    42,
-			AppNameID:     44444,
-			GatewayNodeID: 30,
-		}
-		cleanup := SetWorkState(tenantID, info, WorkCPU, "NilResolver")
-		defer cleanup()
-
-		s.takeSample(context.Background())
-
-		samples := s.GetSamples(nil)
-		require.Len(t, samples, 1)
-		require.Equal(t, "", samples[0].AppName)
-	})
-
-	t.Run("deduplicates resolver calls", func(t *testing.T) {
-		s := setup(t)
-		const remoteNodeID roachpb.NodeID = 10
-
-		// Two work states with different unknown app name IDs but the
-		// same gateway node ID.
-		ready := make(chan struct{}, 2)
-		release := make(chan struct{})
-		var wg sync.WaitGroup
-		wg.Add(2)
-		for _, appID := range []uint64{77777, 88888} {
-			go func(id uint64) {
-				defer wg.Done()
-				info := WorkloadInfo{
-					WorkloadID:    1,
-					AppNameID:     id,
-					GatewayNodeID: remoteNodeID,
-				}
-				cl := SetWorkState(tenantID, info, WorkCPU, "Dedup")
-				ready <- struct{}{}
-				<-release
-				cl()
-			}(appID)
-		}
-		<-ready
-		<-ready
-
-		var callCount atomic.Int32
-		s.SetAppNameResolver(func(
-			ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
-		) (map[uint64]string, error) {
-			callCount.Add(1)
-			return map[uint64]string{
-				77777: "app-a",
-				88888: "app-b",
-			}, nil
-		})
-
-		s.takeSample(context.Background())
-		close(release)
-		wg.Wait()
-
-		// The resolver should have been called exactly once for the
-		// single remote gateway node.
-		require.Equal(t, int32(1), callCount.Load())
-
-		samples := s.GetSamples(nil)
-		require.Len(t, samples, 2)
-		appNames := map[string]struct{}{}
-		for _, sample := range samples {
-			appNames[sample.AppName] = struct{}{}
-		}
-		require.Contains(t, appNames, "app-a")
-		require.Contains(t, appNames, "app-b")
+		require.Len(t, samples, 0)
 	})
 }
 

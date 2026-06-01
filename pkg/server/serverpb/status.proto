@@ -1247,6 +1247,16 @@ message ASHSample {
   // WorkloadType distinguishes the kind of workload (e.g., "STATEMENT",
   // "JOB", "SYSTEM", "UNKNOWN").
   string workload_type = 9;
+  // User is the SQL user that initiated the workload.
+  string user = 10;
+  // Database is the current database context.
+  string database = 11;
+  // SessionID is the cluster-unique session identifier.
+  string session_id = 12 [(gogoproto.customname) = "SessionID"];
+  // TxnID is the transaction UUID.
+  string txn_id = 13 [(gogoproto.customname) = "TxnID"];
+  // PlanHash is the hash of the query plan gist.
+  uint64 plan_hash = 14;
 }
 
 // An error wrapper for ListActiveSessionHistory fan-out.

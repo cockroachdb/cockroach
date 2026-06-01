@@ -944,7 +944,7 @@ func (pb *ProcessorBaseNoHelper) StartInternal(
 			pb.FlowCtx.Codec().TenantID,
 			ash.WorkloadInfo{
 				WorkloadID:    pb.FlowCtx.EvalCtx.WorkloadID,
-				AppNameID:     pb.FlowCtx.EvalCtx.AppNameID,
+				EnrichmentID:  pb.FlowCtx.EvalCtx.AppNameID,
 				GatewayNodeID: gatewayNodeID,
 				WorkloadType:  pb.FlowCtx.EvalCtx.WorkloadType,
 			},

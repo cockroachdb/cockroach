@@ -114,7 +114,7 @@ func (r *Replica) SendWithWorkStats(
 	cleanup := ash.SetWorkState(
 		tenantIDOrZero, ash.WorkloadInfo{
 			WorkloadID:    ba.WorkloadID,
-			AppNameID:     ba.AppNameID,
+			EnrichmentID:  ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 		},
@@ -314,7 +314,7 @@ func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
 	cleanup := ash.SetWorkState(
 		tenantID, ash.WorkloadInfo{
 			WorkloadID:    ba.WorkloadID,
-			AppNameID:     ba.AppNameID,
+			EnrichmentID:  ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 		},
@@ -882,7 +882,7 @@ func (r *Replica) handleInvalidLeaseError(ctx context.Context, ba *kvpb.BatchReq
 	_, pErr := r.redirectOnOrAcquireLeaseForRequest(
 		ctx, ba.Timestamp, r.signallerForBatch(ba), tenantIDOrZero, ash.WorkloadInfo{
 			WorkloadID:    ba.WorkloadID,
-			AppNameID:     ba.AppNameID,
+			EnrichmentID:  ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 		},
@@ -977,7 +977,7 @@ func (r *Replica) executeAdminBatch(
 			_, pErr := r.redirectOnOrAcquireLeaseForRequest(
 				ctx, ba.Timestamp, r.signallerForBatch(ba), tenantIDOrZero, ash.WorkloadInfo{
 					WorkloadID:    ba.WorkloadID,
-					AppNameID:     ba.AppNameID,
+					EnrichmentID:  ba.AppNameID,
 					GatewayNodeID: ba.GatewayNodeID,
 					WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 				},
