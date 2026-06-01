@@ -409,6 +409,20 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 	}
 }
 
+func TestKafkaSinkClientV2_MaxInflightProduceRequestsPerBrokerSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	fx := newKafkaSinkV2Fx(t, withRealClient(), withSettings(func(s *cluster.Settings) {
+		changefeedbase.KafkaV2MaxInflightProduceRequestsPerBroker.Override(ctx, &s.SV, 17)
+	}))
+	defer fx.close()
+
+	client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
+	require.Equal(t, 17, client.OptValue("MaxProduceRequestsInflightPerBroker"))
+}
+
 func shallowMerge(a, b map[string]any) map[string]any {
 	res := make(map[string]any, len(a))
 	for k, v := range a {
