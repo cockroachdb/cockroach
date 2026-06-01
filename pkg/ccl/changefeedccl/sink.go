@@ -266,7 +266,10 @@ func getSink(
 				if err != nil {
 					return nil, err
 				}
-				cfg := kafkaauth.SASLConfig{ExternalCredentialsDir: serverCfg.ExternalCredentialsDir}
+				cfg := kafkaauth.SASLConfig{
+					ExternalCredentialsDir: serverCfg.ExternalCredentialsDir,
+					SQLInstanceID:          serverCfg.NodeID.SQLInstanceID(),
+				}
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
 					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts,
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
