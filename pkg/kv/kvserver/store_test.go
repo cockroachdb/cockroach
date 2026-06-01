@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -532,7 +533,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		memMS := repl.GetMVCCStats()
 		// Stats should agree with a recomputation.
 		now := store.Clock().Now()
-		diskMS, err := rditer.ComputeStatsForRange(ctx, repl.Desc(), store.TODOEngine(), now.WallTime)
+		diskMS, err := rditer.ComputeStatsForRange(ctx, repl.Desc(), store.TODOEngine(),
+			fs.UnknownReadCategory, now.WallTime)
 		require.NoError(t, err)
 		memMS.AgeTo(diskMS.LastUpdateNanos)
 		require.Equal(t, memMS, diskMS)

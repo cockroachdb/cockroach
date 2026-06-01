@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -36,11 +37,11 @@ func TestComputeStats(t *testing.T) {
 	createRangeData(t, eng, desc)
 	nowNanos := time.Now().UnixNano()
 
-	userOnly, err := ComputeStatsForRangeUserOnly(context.Background(), &desc, eng, nowNanos)
+	userOnly, err := ComputeStatsForRangeUserOnly(context.Background(), &desc, eng, fs.UnknownReadCategory, nowNanos)
 	require.NoError(t, err)
-	nonUserOnly, err := ComputeStatsForRangeExcludingUser(context.Background(), &desc, eng, nowNanos)
+	nonUserOnly, err := ComputeStatsForRangeExcludingUser(context.Background(), &desc, eng, fs.UnknownReadCategory, nowNanos)
 	require.NoError(t, err)
-	all, err := ComputeStatsForRange(context.Background(), &desc, eng, nowNanos)
+	all, err := ComputeStatsForRange(context.Background(), &desc, eng, fs.UnknownReadCategory, nowNanos)
 	require.NoError(t, err)
 
 	userPlusNonUser := userOnly

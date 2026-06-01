@@ -7235,9 +7235,13 @@ func willOverflow(a, b int64) bool {
 // specifies the wall time in nanoseconds since the epoch and is used to compute
 // age-related stats quantities.
 func ComputeStats(
-	ctx context.Context, r Reader, start, end roachpb.Key, nowNanos int64,
+	ctx context.Context,
+	r Reader,
+	readCategory fs.ReadCategory,
+	start, end roachpb.Key,
+	nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	return ComputeStatsWithVisitors(ctx, r, start, end, nowNanos, ComputeStatsVisitors{})
+	return ComputeStatsWithVisitors(ctx, r, readCategory, start, end, nowNanos, ComputeStatsVisitors{})
 }
 
 // ComputeStatsVisitors holds a set of callbacks that are invoked on each key
@@ -7253,6 +7257,7 @@ type ComputeStatsVisitors struct {
 func ComputeStatsWithVisitors(
 	ctx context.Context,
 	r Reader,
+	readCategory fs.ReadCategory,
 	start, end roachpb.Key,
 	nowNanos int64,
 	visitors ComputeStatsVisitors,
@@ -7260,13 +7265,14 @@ func ComputeStatsWithVisitors(
 	ctx, sp := tracing.ChildSpan(ctx, "ComputeStatsWithVisitors")
 	defer sp.Finish()
 	if isLockTableKey(start) {
-		return computeLockTableStatsWithVisitors(ctx, r, start, end, nowNanos, visitors.LockTableKey)
+		return computeLockTableStatsWithVisitors(ctx, r, readCategory, start, end, nowNanos, visitors.LockTableKey)
 	}
 
 	iter, err := r.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
-		KeyTypes:   IterKeyTypePointsAndRanges,
-		LowerBound: start,
-		UpperBound: end,
+		KeyTypes:     IterKeyTypePointsAndRanges,
+		LowerBound:   start,
+		UpperBound:   end,
+		ReadCategory: readCategory,
 	})
 	if err != nil {
 		return enginepb.MVCCStats{}, err
@@ -7604,14 +7610,16 @@ func computeStatsForIterWithVisitors(
 func computeLockTableStatsWithVisitors(
 	ctx context.Context,
 	r Reader,
+	readCategory fs.ReadCategory,
 	start, end roachpb.Key,
 	nowNanos int64,
 	lockTableKeyVisitor func(LockTableKey, []byte) error,
 ) (enginepb.MVCCStats, error) {
 	iter, err := NewLockTableIterator(ctx, r, LockTableIteratorOptions{
-		LowerBound:  start,
-		UpperBound:  end,
-		MatchMinStr: lock.Shared, // all locks
+		LowerBound:   start,
+		UpperBound:   end,
+		MatchMinStr:  lock.Shared, // all locks
+		ReadCategory: readCategory,
 	})
 	if err != nil {
 		return enginepb.MVCCStats{}, err

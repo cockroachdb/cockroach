@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -407,7 +408,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 		return err
 	}
-	if err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, rditer.SelectOpts{
+	if err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, fs.RangeSnapshotReadCategory, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
 			SystemKeys: true,
 			LockTable:  true,
@@ -539,7 +540,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			//
 			// See: https://github.com/cockroachdb/cockroach/issues/142673
 			transitionFromSharedToRegularReplicate = true
-			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, rditer.SelectOpts{
+			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, fs.RangeSnapshotReadCategory, rditer.SelectOpts{
 				Ranged: rditer.SelectRangedOptions{
 					UserKeys: true,
 				},

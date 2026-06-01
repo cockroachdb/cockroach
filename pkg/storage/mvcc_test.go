@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -2314,7 +2315,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 	ms.AgeTo(2000)
 
 	// Sanity check starting stats.
-	msComputed, err := ComputeStats(ctx, e, localMax, keyMax, 2000)
+	msComputed, err := ComputeStats(ctx, e, fs.UnknownReadCategory, localMax, keyMax, 2000)
 	require.NoError(t, err)
 	require.Equal(t, msComputed, ms)
 
@@ -2352,7 +2353,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 				batch.Close()
 			}
 
-			msComputed, err := ComputeStats(ctx, e, localMax, keyMax, 2000)
+			msComputed, err := ComputeStats(ctx, e, fs.UnknownReadCategory, localMax, keyMax, 2000)
 			require.NoError(t, err)
 			require.Equal(t, msComputed, ms)
 			// Scanning at "now" post-revert should yield the same result as scanning
@@ -5839,7 +5840,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				"not all range tombstone expectations were consumed")
 
 			ms.AgeTo(tsMax.WallTime)
-			expMs, err := ComputeStats(ctx, engine, d.rangeStart, d.rangeEnd, tsMax.WallTime)
+			expMs, err := ComputeStats(ctx, engine, fs.UnknownReadCategory, d.rangeStart, d.rangeEnd, tsMax.WallTime)
 			require.NoError(t, err, "failed to compute stats for range")
 			require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
 
@@ -6169,7 +6170,7 @@ func TestMVCCGarbageCollectClearPointsInRange(t *testing.T) {
 	require.EqualValues(t, expKs, ks)
 
 	ms.AgeTo(tsMax.WallTime)
-	expMs, err := ComputeStats(ctx, engine, rangeStart, rangeEnd, tsMax.WallTime)
+	expMs, err := ComputeStats(ctx, engine, fs.UnknownReadCategory, rangeStart, rangeEnd, tsMax.WallTime)
 	require.NoError(t, err, "failed to compute stats for range")
 	require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
 
