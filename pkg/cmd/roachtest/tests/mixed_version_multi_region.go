@@ -94,7 +94,7 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 				ExtraSetupArgs:         partitionConfig,
 				ExtraRunArgs:           "--tolerate-errors " + partitionConfig,
 				ExpectedDeaths:         10000, // we don't want the internal monitor to fail
-				Start:                  func(_ context.Context, t test.Test, c cluster.Cluster) {},
+				Start:                  func(_ context.Context, t test.Test, c cluster.Cluster) error { return nil },
 				SetupType:              usingInit,
 				SkipPostRunCheck:       true,
 				DisablePrometheus:      true,
@@ -106,7 +106,7 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 				Warehouses:             len(regions) * mixedVersionWarehousesPerRegion,
 				ExtraSetupArgs:         partitionConfig,
 				ExtraRunArgs:           partitionConfig,
-				Start:                  func(_ context.Context, t test.Test, c cluster.Cluster) {},
+				Start:                  func(_ context.Context, t test.Test, c cluster.Cluster) error { return nil },
 				SetupType:              usingInit,
 				Duration:               10 * time.Minute,
 				ExpensiveChecks:        true,
@@ -120,19 +120,23 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 				"setup tpcc",
 				func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 					if err := enableTenantSplitScatter(l, rng, h); err != nil {
-						return err
+						return mixedversion.ErrorWithIssueTitleComponent(err, "enable tenant split scatter")
 					}
 					if err := enableTenantMultiRegion(l, rng, h); err != nil {
-						return err
+						return mixedversion.ErrorWithIssueTitleComponent(err, "enable tenant multi-region")
 					}
 
-					setupTPCC(ctx, t, l, c, backgroundTPCCOpts)
+					if err := setupTPCCE(ctx, t, l, c, backgroundTPCCOpts); err != nil {
+						return mixedversion.ErrorWithIssueTitleComponent(err, "setup background TPCC")
+					}
 					// Update the `SetupType` so that the corresponding
 					// `runTPCC` calls don't attempt to import data again.
 					backgroundTPCCOpts.SetupType = usingExistingData
 					close(backgroundTPCCSetupDone)
 
-					setupTPCC(ctx, t, l, c, mixedVersionTPCCOpts)
+					if err := setupTPCCE(ctx, t, l, c, mixedVersionTPCCOpts); err != nil {
+						return mixedversion.ErrorWithIssueTitleComponent(err, "setup mixed-version TPCC")
+					}
 					mixedVersionTPCCOpts.SetupType = usingExistingData
 
 					return nil
@@ -145,24 +149,21 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 					l.Printf("waiting for setup to finish")
 					<-backgroundTPCCSetupDone
 
-					runTPCC(ctx, t, l, c, backgroundTPCCOpts)
-					return nil
+					return runTPCCE(ctx, t, l, c, backgroundTPCCOpts)
 				},
 			)
 
 			mvt.InMixedVersion(
 				"run tpcc",
 				func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-					runTPCC(ctx, t, l, c, mixedVersionTPCCOpts)
-					return nil
+					return runTPCCE(ctx, t, l, c, mixedVersionTPCCOpts)
 				},
 			)
 
 			mvt.AfterUpgradeFinalized(
 				"run tpcc",
 				func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-					runTPCC(ctx, t, l, c, mixedVersionTPCCOpts)
-					return nil
+					return runTPCCE(ctx, t, l, c, mixedVersionTPCCOpts)
 				},
 			)
 

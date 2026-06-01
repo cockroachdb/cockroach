@@ -121,6 +121,15 @@ func failuresAsErrorWithOwnership(failures []failure) *registry.ErrorWithOwnersh
 	return nil
 }
 
+func failuresAsIssueTitleOverride(failures []failure) *registry.IssueTitleOverride {
+	var issueTitleOverride registry.IssueTitleOverride
+	if failuresMatchingError(failures, &issueTitleOverride) {
+		return &issueTitleOverride
+	}
+
+	return nil
+}
+
 func failuresAsNonReportableError(failures []failure) *registry.NonReportableError {
 	var nonReportable registry.NonReportableError
 	if failuresMatchingError(failures, &nonReportable) {
@@ -216,6 +225,14 @@ func (g *githubIssues) createPostRequest(
 		infraFlake    bool
 	)
 
+	overrideIssueName := func(title string) {
+		if title == "" {
+			return
+		}
+		issueName = title
+		messagePrefix = fmt.Sprintf("test %s failed: ", testName)
+	}
+
 	// handleErrorWithOwnership updates the local variables in this
 	// function that contain the name of the issue being created,
 	// message prefix, and team that will own it.
@@ -224,8 +241,7 @@ func (g *githubIssues) createPostRequest(
 		infraFlake = err.InfraFlake
 
 		if err.TitleOverride != "" {
-			issueName = err.TitleOverride
-			messagePrefix = fmt.Sprintf("test %s failed: ", testName)
+			overrideIssueName(err.TitleOverride)
 		}
 	}
 
@@ -239,6 +255,11 @@ func (g *githubIssues) createPostRequest(
 	}
 	if errWithOwner != nil {
 		handleErrorWithOwnership(*errWithOwner)
+	}
+	if issueName == testName {
+		if titleOverride := failuresAsIssueTitleOverride(failures); titleOverride != nil {
+			overrideIssueName(titleOverride.TitleOverride)
+		}
 	}
 
 	// Issues posted from roachtest are identifiable as such, and they are also release blockers

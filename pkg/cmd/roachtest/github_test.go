@@ -97,6 +97,92 @@ func TestShouldPost(t *testing.T) {
 	}
 }
 
+func TestCreatePostRequestIssueTitleOverride(t *testing.T) {
+	reg := makeTestRegistry()
+	testSpec := &registry.TestSpec{
+		Name:    "multi-region/mixed-version",
+		Owner:   OwnerUnitTest,
+		Cluster: reg.MakeClusterSpec(1),
+	}
+
+	const titleOverride = "multi-region/mixed-version/on-startup/setup-tpcc"
+	github := &githubIssues{teamLoader: validTeamsFn}
+	baseErr := errors.New("oops")
+
+	for _, tc := range []struct {
+		name             string
+		refErr           error
+		expectedTestName string
+		expectedLabels   []string
+	}{
+		{
+			name:             "title override only",
+			refErr:           registry.ErrorWithIssueTitleOverride(baseErr, titleOverride),
+			expectedTestName: titleOverride,
+		},
+		{
+			name: "title override composes with owner",
+			refErr: registry.ErrorWithIssueTitleOverride(
+				registry.ErrorWithOwner(registry.OwnerSQLFoundations, baseErr),
+				titleOverride,
+			),
+			expectedTestName: titleOverride,
+			expectedLabels:   []string{"T-sql-foundations"},
+		},
+		{
+			name: "owner title takes precedence",
+			refErr: registry.ErrorWithIssueTitleOverride(
+				registry.ErrorWithOwner(
+					registry.OwnerSQLFoundations, baseErr,
+					registry.WithTitleOverride("schema_change_workload_failure"),
+				),
+				titleOverride,
+			),
+			expectedTestName: "schema_change_workload_failure",
+			expectedLabels:   []string{"T-sql-foundations"},
+		},
+		{
+			name: "typed transient title takes precedence",
+			refErr: registry.ErrorWithIssueTitleOverride(
+				rperrors.TransientFailure(baseErr, "typed_transient_problem"),
+				titleOverride,
+			),
+			expectedTestName: "typed_transient_problem",
+			expectedLabels:   []string{"T-testeng", "X-infra-flake"},
+		},
+		{
+			name: "string transient fallback title takes precedence",
+			refErr: registry.ErrorWithIssueTitleOverride(
+				errors.New("Received unexpected error:\nTRANSIENT_ERROR(fallback_transient_problem)"),
+				titleOverride,
+			),
+			expectedTestName: "fallback_transient_problem",
+			expectedLabels:   []string{"T-testeng", "X-infra-flake"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := github.createPostRequest(
+				testSpec.Name,
+				time.Time{},
+				time.Time{},
+				testSpec,
+				[]failure{{squashedErr: tc.refErr}},
+				tc.refErr.Error(),
+				false, /* runtimeAssertionsBuild */
+				false, /* coverageBuild */
+				nil,   /* params */
+				&githubIssueInfo{},
+			)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedTestName, req.TestName)
+			require.Equal(t, fmt.Sprintf("test %s failed: %s", testSpec.Name, tc.refErr.Error()), req.Message)
+			for _, label := range tc.expectedLabels {
+				require.Contains(t, req.Labels, label)
+			}
+		})
+	}
+}
+
 func TestGenerateHelpCommand(t *testing.T) {
 	start := time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC)
 	end := time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC)

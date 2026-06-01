@@ -60,6 +60,29 @@ func Test_runSingleStep(t *testing.T) {
 	require.Contains(t, err.Error(), "panic (stack trace above): runtime error: index out of range [0] with length 0")
 }
 
+func Test_failureIssueTitle(t *testing.T) {
+	tr := testTestRunner()
+	tr.testName = "multi-region/mixed-version"
+
+	initialVersion := clusterupgrade.MustParseVersion(predecessorVersion)
+	testContext := newInitialContext(initialVersion, nodes, nil)
+	testContext.System.Stage = OnStartupStage
+	step := newSingleStep(
+		testContext,
+		runHookStep{hook: versionUpgradeHook{name: "setup TPCC"}},
+		newRand(),
+	)
+
+	require.Equal(
+		t,
+		"multi-region/mixed-version/on-startup/setup-tpcc/replica-gc-threshold",
+		tr.failureIssueTitle(
+			step,
+			ErrorWithIssueTitleComponent(errors.New("oops"), "replica GC threshold"),
+		),
+	)
+}
+
 // Test_run verifies that the test runner's `run` function is able to
 // appropriately change ownership to Test Eng when no user provided
 // functions have run at the time the failure happened.
@@ -157,6 +180,7 @@ func testTestRunner() *testRunner {
 		cancel:         cancel,
 		logger:         nilLogger,
 		systemService:  newServiceRuntime(systemDescriptor),
+		testName:       "mixed-version-test",
 		background:     task.NewManager(runnerCtx, nilLogger),
 		ranUserHooks:   &ranUserHooks,
 		plan:           &TestPlan{seed: seed},

@@ -153,55 +153,80 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 					),
 				}
 				if dbListType == inactiveDbListType {
-					options.Start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					options.Start = func(ctx context.Context, t test.Test, c cluster.Cluster) error {
+						return nil
 					}
 				} else {
-					options.Start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					options.Start = func(ctx context.Context, t test.Test, c cluster.Cluster) error {
 						settings := install.MakeClusterSettings()
 						startOpts := option.DefaultStartOpts()
 						startOpts.RoachprodOpts.ScheduleBackups = false
-						c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
-						conn := c.Conn(ctx, t.L(), 1)
+						if err := c.StartE(ctx, t.L(), startOpts, settings, c.CRDBNodes()); err != nil {
+							return err
+						}
+						conn, err := c.ConnE(ctx, t.L(), 1)
+						if err != nil {
+							return err
+						}
 						defer conn.Close()
 						// Disable autocommit before DDL since we need to batch statements
 						// in a single transaction for them to complete in a reasonable amount
 						// of time. In multi-region this latency can be substantial.
-						_, err := conn.Exec("SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'")
-						require.NoError(t, err)
+						_, err = conn.Exec("SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'")
+						if err != nil {
+							return errors.Wrap(err, "setting sql.defaults.autocommit_before_ddl.enabled")
+						}
 						// Allow optimizations to use leased descriptors when querying
 						// pg_catalog and information_schema.
 						_, err = conn.Exec("SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = 'true'")
-						require.NoError(t, err)
+						if err != nil {
+							return errors.Wrap(err, "setting sql.catalog.allow_leased_descriptors.enabled")
+						}
 						// Enabled locked descriptor leasing for correctness.
 						_, err = conn.Exec("SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled = 'true'")
-						require.NoError(t, err)
+						if err != nil {
+							return errors.Wrap(err, "setting sql.catalog.descriptor_lease.use_locked_timestamps.enabled")
+						}
 						// Since we will be making a large number of databases / tables
 						// quickly,on MR the job retention can slow things down. Let's
 						// minimize how long jobs are kept, so that the creation / ingest
 						// completes in a reasonable amount of time.
 						_, err = conn.Exec("SET CLUSTER SETTING jobs.retention_time='1h'")
-						require.NoError(t, err)
+						if err != nil {
+							return errors.Wrap(err, "setting jobs.retention_time")
+						}
 						// Use a higher number of retries, since we hit retry errors on importing
 						// a large number of tables
 						_, err = conn.Exec("SET CLUSTER SETTING kv.transaction.internal.max_auto_retries=500")
-						require.NoError(t, err)
+						if err != nil {
+							return errors.Wrap(err, "setting kv.transaction.internal.max_auto_retries")
+						}
 						// Disable the schema object count limit to allow creating 40,000+
 						// tables. This is a guardrail that prevents unbounded growth of the
 						// descriptor table, but for this benchmark we intentionally want to
 						// test with a large number of tables.
 						_, err = conn.Exec("SET CLUSTER SETTING sql.schema.approx_max_object_count = 0")
-						require.NoError(t, err)
+						if err != nil {
+							return errors.Wrap(err, "setting sql.schema.approx_max_object_count")
+						}
 						// Disable the automatic INSPECT job that runs after each
 						// IMPORT. With high-concurrency imports of many tables, the
 						// INSPECT jobs exhaust the memory budget.
 						_, err = conn.Exec("SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'")
-						require.NoError(t, err)
+						if err != nil {
+							return errors.Wrap(err, "setting bulkio.import.row_count_validation.mode")
+						}
 						// Create a user that will be used for authentication for the REST
 						// API calls.
 						_, err = conn.Exec("CREATE USER roachadmin password 'roacher'")
-						require.NoError(t, err)
+						if err != nil {
+							return errors.Wrap(err, "creating roachadmin user")
+						}
 						_, err = conn.Exec("GRANT ADMIN to roachadmin")
-						require.NoError(t, err)
+						if err != nil {
+							return errors.Wrap(err, "granting admin to roachadmin")
+						}
+						return nil
 					}
 				}
 				err := c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.WorkloadNode())
@@ -449,8 +474,9 @@ func runLargeSchemaIntrospectionBenchmark(
 		),
 		// Use all CRDB nodes for init to distribute table creation load.
 		InitNodes: c.CRDBNodes(),
-		Start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+		Start: func(ctx context.Context, t test.Test, c cluster.Cluster) error {
 			// Cluster is already started, this is a no-op.
+			return nil
 		},
 	}
 	setupTPCC(ctx, t, t.L(), c, options)

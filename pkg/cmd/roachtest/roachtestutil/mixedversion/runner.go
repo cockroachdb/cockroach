@@ -36,6 +36,11 @@ import (
 )
 
 type (
+	issueTitleComponentError struct {
+		component string
+		err       error
+	}
+
 	serviceRuntime struct {
 		descriptor      *ServiceDescriptor
 		binaryVersions  *atomic.Value
@@ -51,6 +56,7 @@ type (
 		ctx           context.Context
 		cancel        context.CancelFunc
 		plan          *TestPlan
+		testName      string
 		tag           string
 		cluster       cluster.Cluster
 		systemService *serviceRuntime
@@ -70,6 +76,32 @@ type (
 		_addAnnotation func() error
 	}
 )
+
+func (e issueTitleComponentError) Error() string {
+	return e.err.Error()
+}
+
+func (e issueTitleComponentError) Is(target error) bool {
+	return errors.Is(e.err, target)
+}
+
+func (e issueTitleComponentError) Unwrap() error {
+	return e.err
+}
+
+func (e issueTitleComponentError) As(reference interface{}) bool {
+	return errors.As(e.err, reference)
+}
+
+// ErrorWithIssueTitleComponent appends component to the mixed-version issue
+// title generated when err fails a test step. Use this when a hook can
+// identify a root-cause bucket that is more specific than the hook name.
+func ErrorWithIssueTitleComponent(err error, component string) error {
+	if err == nil {
+		return nil
+	}
+	return issueTitleComponentError{err: err, component: component}
+}
 
 var (
 	// everything that is not an alphanum or a few special characters
@@ -123,6 +155,7 @@ func newTestRunner(
 		ctx:           ctx,
 		cancel:        cancel,
 		plan:          plan,
+		testName:      rt.Name(),
 		tag:           tag,
 		logger:        l,
 		systemService: systemService,
@@ -318,7 +351,59 @@ func (tr *testRunner) stepError(
 		step.ID, step.impl.Description(false),
 	)
 
-	return tr.testFailure(ctx, stepErr, l, &step.context)
+	failureErr := tr.testFailure(ctx, stepErr, l, &step.context)
+	if title := tr.failureIssueTitle(step, err); title != "" {
+		failureErr = registry.ErrorWithIssueTitleOverride(failureErr, title)
+	}
+	return failureErr
+}
+
+func (tr *testRunner) failureIssueTitle(step *singleStep, err error) string {
+	if tr.testName == "" {
+		return ""
+	}
+
+	parts := []string{tr.testName}
+	if stage := step.context.DefaultService().Stage.String(); stage != "" {
+		parts = append(parts, stage)
+	}
+	if stepTitle := stepIssueTitleComponent(step); stepTitle != "" {
+		parts = append(parts, stepTitle)
+	}
+	if failureTitle := failureIssueTitleComponent(err); failureTitle != "" {
+		parts = append(parts, failureTitle)
+	}
+	return strings.Join(parts, "/")
+}
+
+func stepIssueTitleComponent(step *singleStep) string {
+	if hookStep, ok := step.impl.(runHookStep); ok && hookStep.hook.name != "" {
+		return issueTitleComponent(hookStep.hook.name)
+	}
+	return issueTitleComponent(step.impl.Description(false))
+}
+
+func failureIssueTitleComponent(err error) string {
+	var component issueTitleComponentError
+	if errors.As(err, &component) {
+		return issueTitleComponent(component.component)
+	}
+	return ""
+}
+
+func issueTitleComponent(s string) string {
+	var b strings.Builder
+	lastWasSeparator := true
+	for _, r := range strings.ToLower(s) {
+		if ('a' <= r && r <= 'z') || ('0' <= r && r <= '9') {
+			b.WriteRune(r)
+			lastWasSeparator = false
+		} else if !lastWasSeparator {
+			b.WriteByte('-')
+			lastWasSeparator = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // testFailure generates a `testFailure` for failures that happened
