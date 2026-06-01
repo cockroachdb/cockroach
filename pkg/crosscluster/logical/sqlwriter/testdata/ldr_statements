@@ -202,3 +202,33 @@ DELETE FROM [113 AS replication_target] WHERE ((arr_col = $1::INT8[]) AND (name 
 show-point-select table=array_pk_table
 ----
 SELECT replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.arr_col, replication_target.name, replication_target.value FROM [113 AS replication_target] WHERE replication_target.arr_col = $1::INT8[]
+
+# Test a table with a stored computed column in a unique constraint but not
+# in the primary key. The column is read back via SELECT but skipped in
+# INSERT/UPDATE/WHERE since the database computes it.
+exec
+CREATE TABLE stored_uc (
+  id INT PRIMARY KEY,
+  sum_ab INT AS (a + b) STORED,
+  a INT NOT NULL,
+  b INT NOT NULL,
+  UNIQUE (sum_ab)
+);
+----
+ok
+
+show-insert table=stored_uc
+----
+INSERT INTO [114 AS replication_target](id, a, b) VALUES ($1::INT8, $3::INT8, $4::INT8)
+
+show-update table=stored_uc
+----
+UPDATE [114 AS replication_target] SET id = $5::INT8, a = $7::INT8, b = $8::INT8 WHERE ((id = $1::INT8) AND (a IS NOT DISTINCT FROM $3::INT8)) AND (b IS NOT DISTINCT FROM $4::INT8)
+
+show-delete table=stored_uc
+----
+DELETE FROM [114 AS replication_target] WHERE ((id = $1::INT8) AND (a IS NOT DISTINCT FROM $3::INT8)) AND (b IS NOT DISTINCT FROM $4::INT8) RETURNING *
+
+show-select table=stored_uc
+----
+SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.id, replication_target.sum_ab, replication_target.a, replication_target.b FROM ROWS FROM (unnest($1::INT8[])) WITH ORDINALITY AS key_list (key1, index) INNER LOOKUP JOIN [114 AS replication_target] ON replication_target.id = key_list.key1

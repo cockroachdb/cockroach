@@ -29,16 +29,17 @@ type ColumnSchema struct {
 // around a tree.Datums for each row where column[i] is the column definition
 // for datums[i].
 //
-// A column is decoded by crud LDR writer if either are true:
+// A column is decoded by the crud LDR writer if any are true:
 //  1. The column is part of the primary key. Every primary key column is needed
 //     to perform read refreshes.
-//  2. The column is not a computed column. If a column is not computed, it must
-//     be included in update and insert statements.
+//  2. The column is not computed. If a column is not computed,
+//     it must be included in update and insert statements
+//  3. The column is a stored computed column. These can participate in a unique
+//     or foreign key constraint, so lock synthesis may need to hash its value.
 //
-// Notably, this excludes computed columns that are not part of the primary key
+// Notably, this excludes virtual columns that are not part of the primary key
 // and system columns like crdb_internal_mvcc_timestamp.
 func GetColumnSchema(table catalog.TableDescriptor) []ColumnSchema {
-	// Create a map of column ID to column for fast lookup
 	primaryIdx := table.GetPrimaryIndex()
 	isPrimaryKey := make(map[catid.ColumnID]bool)
 	for _, col := range primaryIdx.IndexDesc().KeyColumnIDs {
@@ -51,9 +52,7 @@ func GetColumnSchema(table catalog.TableDescriptor) []ColumnSchema {
 		if col.IsSystemColumn() {
 			continue
 		}
-
-		isComputed := col.IsComputed()
-		if isComputed && !isPrimaryKey[col.GetID()] {
+		if col.IsVirtual() && !isPrimaryKey[col.GetID()] {
 			continue
 		}
 
@@ -61,7 +60,7 @@ func GetColumnSchema(table catalog.TableDescriptor) []ColumnSchema {
 			Column:       col,
 			ColumnType:   col.GetType().Canonical(),
 			IsPrimaryKey: isPrimaryKey[col.GetID()],
-			IsComputed:   isComputed,
+			IsComputed:   col.IsComputed(),
 		})
 	}
 
