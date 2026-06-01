@@ -154,6 +154,7 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 			return ctx.Err()
 		case <-p.timer.Ch():
 			p.timer.Reset(crosscluster.StreamReplicationStreamLivenessTrackFrequency.Get(execCfg.SV()))
+
 			progress, err := replicationutils.LoadReplicationProgress(ctx, execCfg.InternalDB, p.job.ID())
 			if knobs := execCfg.StreamingTestingKnobs; knobs != nil && knobs.AfterResumerJobLoad != nil {
 				err = knobs.AfterResumerJobLoad(err)
@@ -189,6 +190,20 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 				log.VEventf(ctx, 1, "checking if stream replication expiration %s timed out", expiration)
 				if expiration.Before(p.timeSource.Now()) {
 					return errors.Errorf("replication stream %d timed out", p.job.ID())
+				}
+
+				details := p.job.Details().(jobspb.StreamReplicationDetails)
+				if details.TenantID.IsSet() {
+					isLive, err := checkTenantLiveness(ctx, execCfg, details)
+					if err != nil {
+						log.Dev.Errorf(ctx,
+							"replication stream %d failed checking tenant liveness (retrying): %v",
+							p.job.ID(), err)
+						continue
+					}
+					if !isLive {
+						return errors.Newf("source tenant %d is no longer online", details.TenantID)
+					}
 				}
 			default:
 				return errors.New("unrecognized stream ingestion status")
@@ -256,6 +271,60 @@ func (p *producerJobResumer) removeJobFromTenantRecord(
 // CollectProfile implements jobs.Resumer interface
 func (p *producerJobResumer) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
+}
+
+// checkTenantLiveness validates that the tenant this producer is streaming is currently online.
+//
+// TODO(art):
+//
+// This current approach of checking the liveness within the producer job's poller has some core
+// correctness issues that are non-trivial to address. The crux of the problem is that this approach
+// leaves a window of time where the rangefeeds in the producer's underlying event streams can emit
+// non MVCC-compliant values while the tenant is offline, but before the poller calling this
+// function notices. This leaves open the possibility that a cutover could happen against a resolved
+// timestamp which includes these non-compliant values, putting us in the relm of undefined behavior.
+// In practice, at present, the non-compliant values we would see will be the result of revert
+// range commands driven by cutover events.
+//
+// We additionally considered using an additional rangefeed in EventStream which watches the tenant
+// record span, and tears down the stream when a tenant goes offline. This is essentially just a faster
+// version of the current approach. While it would mitigate the probability that we have issues by
+// making the producer-side reaction happen within a smaller window, it is not fundamentally
+// more correct.
+//
+// For a more robust approach, we considered two options:
+//
+//  1. Make rangefeeds trustworthy.
+//     Currently, rangefeeds are not robust enough in their reporting of non-MVCC compliant values.
+//     While in theory, we could use the knowledge that we have seen non-MVCC compliant values to
+//     avoid cutting over to an invalid checkpoint, the reporting we currently get from rangefeeds
+//     is not robust enough to be viable. Namely, seeing this information requires a happy path
+//     connected rangefeed, and we can potentially lose this knowledge during, for example, a
+//     spurious network blip. We can also lose this knowlege in cases where we need to do a catchup
+//     scan after a non-MVCC compliant value has been emitted.
+//
+//  2. Disallow rangefeeds on offline tenants.
+//     Conceptually this approach is relatively straightforward. We are essentially moving the logic
+//     we have here currently to within rangefeeds, namely to avoid non-MVCC compliance in the first
+//     place. To pull this off we would need an additional mechanism. We considered using leases, or
+//     potentially having a registry of active rangefeeds which can control such feeds during a
+//     tenant transitioning it's liveness.
+func checkTenantLiveness(
+	ctx context.Context, execCfg *sql.ExecutorConfig, details jobspb.StreamReplicationDetails,
+) (bool, error) {
+	var tenantInfo *mtinfopb.TenantInfo
+	err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+		var err error
+		tenantInfo, err = sql.GetTenantRecordByID(ctx, t, details.TenantID, execCfg.Settings)
+		return err
+	})
+	if err != nil {
+		return false, err
+	} else if tenantInfo.ServiceMode == mtinfopb.ServiceModeNone ||
+		tenantInfo.ServiceMode == mtinfopb.ServiceModeStopping {
+		return false, nil
+	}
+	return true, nil
 }
 
 func init() {
