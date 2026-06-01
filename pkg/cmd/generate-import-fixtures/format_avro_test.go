@@ -42,7 +42,7 @@ func TestAvroRoundTrip(t *testing.T) {
 	require.NoError(t, w.Close())
 
 	// Read back the OCF file and verify.
-	ocfPath := filepath.Join(dir, "roundtrip.1.ocf")
+	ocfPath := filepath.Join(dir, "roundtrip.ocf.1")
 	ocfFile, err := os.Open(ocfPath)
 	require.NoError(t, err)
 	defer ocfFile.Close()

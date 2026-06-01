@@ -54,6 +54,12 @@ type dataset interface {
 
 	// getDataFormat() returns the SQL data format keyword (e.g. "CSV", "PARQUET").
 	getDataFormat() string
+
+	// getImportOptions() returns format-specific options to append to the
+	// IMPORT INTO ... WITH clause (e.g. "delimiter='|'" for CSV, "schema_uri='...'"
+	// for AVRO binary records). The "detached" option is added separately by the
+	// statement formatter when needed.
+	getImportOptions() []string
 }
 
 // staticDataset represents a statically created dataset stored in external
@@ -66,6 +72,8 @@ type staticDataset struct {
 	dataURLs        []string
 	fingerprint     map[string]string
 	dataFormat      string
+	// importOptions are format-specific WITH-clause options. May be nil.
+	importOptions []string
 }
 
 func (sd *staticDataset) init(_ context.Context, _ cluster.Cluster, _ *logger.Logger) error {
@@ -76,22 +84,34 @@ func (sd staticDataset) getCreateTableStmt() string        { return sd.createTab
 func (sd staticDataset) getDataURLs() []string             { return sd.dataURLs }
 func (sd staticDataset) getFingerprint() map[string]string { return sd.fingerprint }
 func (sd staticDataset) getDataFormat() string             { return sd.dataFormat }
+func (sd staticDataset) getImportOptions() []string        { return sd.importOptions }
 
 // tpchDataset represents a TPC-H dataset stored on external storage. The
-// format field determines whether data files are CSV or Parquet; schemas and
-// fingerprints are always read from the CSV bucket (the calibration master).
+// format field determines whether data files are CSV, Parquet, or AVRO;
+// schemas and fingerprints are always read from the CSV bucket (the
+// calibration master).
 type tpchDataset struct {
 	staticDataset
 	// dataBaseURL is the GCS bucket prefix where data files are stored.
 	dataBaseURL string
-	// fileExt is the data file extension (e.g. "tbl" for CSV, "parquet").
+	// fileExt is the data file extension (e.g. "tbl" for CSV, "parquet",
+	// "ocf", "bin").
 	fileExt string
 }
 
 const (
 	tpchCSVBaseURL     = "gs://cockroach-fixtures-us-east1/tpch-csv/"
 	tpchParquetBaseURL = "gs://cockroach-fixtures-us-east1/tpch-parquet/"
+	tpchAvroBaseURL    = "gs://cockroach-fixtures-us-east1/tpch-avro/"
 )
+
+// tpchAvroSchemaURL returns the GCS URL for a table's AVRO schema (.avsc) file.
+// AVRO schemas are scale-independent and live in a single per-bucket schema
+// directory, mirroring the layout written by generate-import-fixtures.
+func tpchAvroSchemaURL(tableName string) string {
+	return fmt.Sprintf("%sschema/%s.avsc?AUTH=implicit",
+		tpchAvroBaseURL, tableName)
+}
 
 // tpchFingerprintURL returns the GCS URL for a table's fingerprint file.
 // Fingerprints are always stored in the CSV bucket, which is the calibration
@@ -165,8 +185,9 @@ func (tpch *tpchDataset) init(
 func newTPCHCSVDataset(name string) *tpchDataset {
 	return &tpchDataset{
 		staticDataset: staticDataset{
-			tableName:  name,
-			dataFormat: "CSV",
+			tableName:     name,
+			dataFormat:    "CSV",
+			importOptions: []string{"delimiter='|'"},
 		},
 		dataBaseURL: tpchCSVBaseURL,
 		fileExt:     "tbl",
@@ -185,6 +206,46 @@ func newTPCHParquetDataset(name string) *tpchDataset {
 	}
 }
 
+// newTPCHAvroOCFDataset creates a TPC-H dataset backed by AVRO Object
+// Container Format (OCF) files. Each OCF file embeds its own schema, so no
+// extra IMPORT options are required.
+func newTPCHAvroOCFDataset(name string) *tpchDataset {
+	return &tpchDataset{
+		staticDataset: staticDataset{
+			tableName:  name,
+			dataFormat: "AVRO",
+		},
+		dataBaseURL: tpchAvroBaseURL,
+		fileExt:     "ocf",
+	}
+}
+
+// newTPCHAvroBinDataset creates a TPC-H dataset backed by AVRO binary records
+// files (concatenated records with no separator) plus a sibling .avsc schema.
+// IMPORT INTO needs three WITH-clause options to read this format:
+//   - data_as_binary_records: tells IMPORT the file holds raw binary records
+//     rather than OCF.
+//   - records_terminated_by set to the empty string: overrides the default
+//     newline separator; the converter writes records back-to-back with no
+//     terminator.
+//   - schema_uri='...': points at the .avsc schema written alongside the
+//     data files, since binary records are not self-describing.
+func newTPCHAvroBinDataset(name string) *tpchDataset {
+	return &tpchDataset{
+		staticDataset: staticDataset{
+			tableName:  name,
+			dataFormat: "AVRO",
+			importOptions: []string{
+				"data_as_binary_records",
+				"records_terminated_by=''",
+				fmt.Sprintf("schema_uri='%s'", tpchAvroSchemaURL(name)),
+			},
+		},
+		dataBaseURL: tpchAvroBaseURL,
+		fileExt:     "bin",
+	}
+}
+
 // datasets is the set of all known datasets to test with.
 var datasets = map[string]dataset{
 	"tpch/customer": newTPCHCSVDataset("customer"),
@@ -200,6 +261,20 @@ var datasets = map[string]dataset{
 	"tpch-parquet/part":     newTPCHParquetDataset("part"),
 	"tpch-parquet/partsupp": newTPCHParquetDataset("partsupp"),
 	"tpch-parquet/supplier": newTPCHParquetDataset("supplier"),
+
+	"tpch-avro-ocf/customer": newTPCHAvroOCFDataset("customer"),
+	"tpch-avro-ocf/lineitem": newTPCHAvroOCFDataset("lineitem"),
+	"tpch-avro-ocf/orders":   newTPCHAvroOCFDataset("orders"),
+	"tpch-avro-ocf/part":     newTPCHAvroOCFDataset("part"),
+	"tpch-avro-ocf/partsupp": newTPCHAvroOCFDataset("partsupp"),
+	"tpch-avro-ocf/supplier": newTPCHAvroOCFDataset("supplier"),
+
+	"tpch-avro-bin/customer": newTPCHAvroBinDataset("customer"),
+	"tpch-avro-bin/lineitem": newTPCHAvroBinDataset("lineitem"),
+	"tpch-avro-bin/orders":   newTPCHAvroBinDataset("orders"),
+	"tpch-avro-bin/part":     newTPCHAvroBinDataset("part"),
+	"tpch-avro-bin/partsupp": newTPCHAvroBinDataset("partsupp"),
+	"tpch-avro-bin/supplier": newTPCHAvroBinDataset("supplier"),
 }
 
 // readFileFromFixture() reads a URI by routing through the read_file() internal
@@ -228,16 +303,16 @@ type FromFunc func(rng *rand.Rand) []string
 func (f FromFunc) Strings(rng *rand.Rand) []string { return f(rng) }
 
 // allDatasets returns the names of all registered datasets, regardless of
-// format. Tests that use this pool exercise both CSV and Parquet paths via
-// randomization.
+// format. Tests that use this pool exercise CSV, Parquet, and both AVRO
+// variants via randomization.
 func allDatasets(_ *rand.Rand) []string {
 	return slices.Collect(maps.Keys(datasets))
 }
 
 // nDatasets returns n randomly chosen dataset names with distinct table names.
 // This prevents conflicts when multiple datasets are imported concurrently
-// into the same database (e.g. both tpch/orders and tpch-parquet/orders
-// target import_test.orders).
+// into the same database (e.g. tpch/orders, tpch-parquet/orders, and
+// tpch-avro-ocf/orders all target import_test.orders).
 func nDatasets(rng *rand.Rand, n int) []string {
 	all := allDatasets(rng)
 	rng.Shuffle(len(all), func(i, j int) {
@@ -376,8 +451,9 @@ var tests = []importTestSpec{
 		manualOnly:   true,
 		datasetNames: One("tpch/supplier"),
 	},
-	// Basic test w/o injected failures. Draws from all formats so that both
-	// CSV and Parquet paths are exercised via randomization.
+	// Basic test w/o injected failures. Draws from all formats so that
+	// CSV, Parquet, and AVRO (OCF and binary records) paths are exercised
+	// via randomization.
 	{
 		subtestName:  "basic",
 		nodes:        []int{4},
@@ -391,7 +467,7 @@ var tests = []importTestSpec{
 		datasetNames: One("tpch/lineitem"),
 	},
 	// Basic test importing three datasets concurrently. Draws from all
-	// formats so that both CSV and Parquet paths are exercised.
+	// formats so that CSV, Parquet, and AVRO paths are exercised.
 	{
 		subtestName:  "concurrency",
 		nodes:        []int{4},
@@ -493,6 +569,34 @@ var tests = []importTestSpec{
 		datasetNames: One("tpch-parquet/lineitem"),
 		// Encryption disabled due to timeouts (#170044).
 		disableEncryption: true,
+	},
+	// AVRO OCF import: small dataset for quick iteration.
+	{
+		subtestName:  "avro-ocf/smoke",
+		nodes:        []int{4},
+		manualOnly:   true,
+		datasetNames: One("tpch-avro-ocf/supplier"),
+	},
+	// AVRO OCF import: benchmarking with AVRO OCF-specific dataset.
+	{
+		subtestName:  "avro-ocf/benchmark",
+		benchmark:    true,
+		nodes:        []int{4},
+		datasetNames: One("tpch-avro-ocf/lineitem"),
+	},
+	// AVRO binary records import: small dataset for quick iteration.
+	{
+		subtestName:  "avro-bin/smoke",
+		nodes:        []int{4},
+		manualOnly:   true,
+		datasetNames: One("tpch-avro-bin/supplier"),
+	},
+	// AVRO binary records import: benchmarking with AVRO bin-specific dataset.
+	{
+		subtestName:  "avro-bin/benchmark",
+		benchmark:    true,
+		nodes:        []int{4},
+		datasetNames: One("tpch-avro-bin/lineitem"),
 	},
 }
 
@@ -865,7 +969,8 @@ func importCancellationRunner(
 		}
 
 		var jobID jobspb.JobID
-		jobID, err = runRawAsyncImportJob(ctx, conn, ds.getTableName(), urls, ds.getDataFormat())
+		jobID, err = runRawAsyncImportJob(
+			ctx, conn, ds.getTableName(), urls, ds.getDataFormat(), ds.getImportOptions())
 		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
@@ -1078,7 +1183,8 @@ func splitImportRunner(
 
 	t.WorkerStatus(fmt.Sprintf("importing first batch (%d files) of %s",
 		len(first), ds.getTableName()))
-	importStmt := formatImportStmt(ds.getTableName(), first, ds.getDataFormat(), false)
+	importStmt := formatImportStmt(
+		ds.getTableName(), first, ds.getDataFormat(), ds.getImportOptions(), false)
 	l.Printf("first import: %s", importStmt)
 	if _, err := conn.ExecContext(ctx, importStmt); err != nil {
 		return errors.Wrapf(err, "%s", importStmt)
@@ -1086,7 +1192,8 @@ func splitImportRunner(
 
 	t.WorkerStatus(fmt.Sprintf("importing second batch (%d files) of %s",
 		len(second), ds.getTableName()))
-	importStmt = formatImportStmt(ds.getTableName(), second, ds.getDataFormat(), false)
+	importStmt = formatImportStmt(
+		ds.getTableName(), second, ds.getDataFormat(), ds.getImportOptions(), false)
 	l.Printf("second import: %s", importStmt)
 	if _, err := conn.ExecContext(ctx, importStmt); err != nil {
 		return errors.Wrapf(err, "%s", importStmt)
@@ -1143,7 +1250,7 @@ func makeColumnFamilies(ctx context.Context, t test.Test, c cluster.Cluster, rng
 // runSyncImportJob runs an import job and waits for it to complete.
 func runSyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
 	importStmt := formatImportStmt(
-		ds.getTableName(), ds.getDataURLs(), ds.getDataFormat(), false)
+		ds.getTableName(), ds.getDataURLs(), ds.getDataFormat(), ds.getImportOptions(), false)
 	_, err := conn.ExecContext(ctx, importStmt)
 	if err != nil {
 		err = errors.Wrapf(err, "%s", importStmt)
@@ -1154,15 +1261,22 @@ func runSyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
 // runAsyncImportJob runs an import job and returns the job id immediately.
 func runAsyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) (jobspb.JobID, error) {
 	return runRawAsyncImportJob(
-		ctx, conn, ds.getTableName(), ds.getDataURLs(), ds.getDataFormat())
+		ctx, conn, ds.getTableName(), ds.getDataURLs(), ds.getDataFormat(), ds.getImportOptions())
 }
 
 // runRawAsyncImportJob runs an import job using the table name and files
-// provided. The format parameter determines the SQL data format keyword.
+// provided. The format parameter determines the SQL data format keyword and
+// options are format-specific WITH-clause options ("detached" is appended
+// automatically).
 func runRawAsyncImportJob(
-	ctx context.Context, conn *gosql.DB, tableName string, urls []string, format string,
+	ctx context.Context,
+	conn *gosql.DB,
+	tableName string,
+	urls []string,
+	format string,
+	options []string,
 ) (jobspb.JobID, error) {
-	importStmt := formatImportStmt(tableName, urls, format, true)
+	importStmt := formatImportStmt(tableName, urls, format, options, true)
 
 	var jobID jobspb.JobID
 	err := conn.QueryRowContext(ctx, importStmt).Scan(&jobID)
@@ -1173,17 +1287,17 @@ func runRawAsyncImportJob(
 	return jobID, err
 }
 
-// formatImportStmt builds a SQL IMPORT INTO statement for the given format.
-// CSV imports include a delimiter option; other formats do not.
-func formatImportStmt(tableName string, urls []string, format string, detached bool) string {
+// formatImportStmt builds a SQL IMPORT INTO statement. options are
+// format-specific WITH-clause options supplied by the dataset (e.g.
+// "delimiter='|'" for CSV, "schema_uri='...'" for AVRO binary records).
+// "detached" is appended when detached is true.
+func formatImportStmt(
+	tableName string, urls []string, format string, options []string, detached bool,
+) string {
 	var stmt strings.Builder
 	fmt.Fprintf(&stmt, `IMPORT INTO import_test.%s %s DATA ('%s')`,
 		tableName, format, strings.Join(urls, "', '"))
 
-	var options []string
-	if format == "CSV" {
-		options = append(options, "delimiter='|'")
-	}
 	if detached {
 		options = append(options, "detached")
 	}
