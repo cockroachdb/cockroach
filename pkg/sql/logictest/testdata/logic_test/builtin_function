@@ -2979,6 +2979,26 @@ SELECT width_bucket('-Infinity'::numeric, 1, 10, 10);
 statement error pgcode 2201G pq: operand, lower bound, and upper bound cannot be NaN
 SELECT width_bucket('NaN', 3.0, 4.0, 888);
 
+statement error pgcode 2201G pq: count must be greater than zero
+SELECT width_bucket(5::numeric, 1::numeric, 10::numeric, 0::int)
+
+statement error pgcode 2201G pq: count must be greater than zero
+SELECT width_bucket(5::numeric, 1::numeric, 10::numeric, -1::int)
+
+statement error pgcode 2201G pq: count must be greater than zero
+SELECT width_bucket(5, 1, 10, 0)
+
+statement error pgcode 2201G pq: count must be greater than zero
+SELECT width_bucket(5, 1, 10, -1)
+
+# count must be validated even when operand is +/-Infinity (otherwise the
+# numeric overload's Infinity shortcut would mask the invalid count).
+statement error pgcode 2201G pq: count must be greater than zero
+SELECT width_bucket('Infinity'::numeric, 1, 10, 0)
+
+statement error pgcode 2201G pq: count must be greater than zero
+SELECT width_bucket('-Infinity'::numeric, 1, 10, -1)
+
 
 # Sanity check pg_type_is_visible.
 query BBB
