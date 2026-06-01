@@ -1420,6 +1420,13 @@ func tupleEquals(ctx context.Context, expected Tuple, actual Tuple, evalCtx *eva
 			}
 			// Special case for decimals.
 			if d1, ok := actual[i].(apd.Decimal); ok {
+				if d2, ok := expected[i].(apd.Decimal); ok {
+					if d1.Cmp(&d2) == 0 {
+						continue
+					} else {
+						return false
+					}
+				}
 				if f2, ok := expected[i].(float64); ok {
 					d2, _, err := apd.NewFromString(fmt.Sprintf("%f", f2))
 					if err == nil && d1.Cmp(d2) == 0 {

@@ -656,7 +656,7 @@ SELECT jsonb_agg(s) FROM kv WHERE s IS NULL
 query RRRR
 SELECT avg(k), avg(v), sum(k), sum(v) FROM kv
 ----
-5.0000000000000000000  2.8000000000000000000  30  14
+5.0000000000000000000000000000000000000  2.8000000000000000000000000000000000000  30  14
 
 query TTTT
 SELECT min(i), avg(i), max(i), sum(i) FROM kv
@@ -666,24 +666,24 @@ SELECT min(i), avg(i), max(i), sum(i) FROM kv
 query RRRR
 SELECT avg(k::decimal), avg(v::decimal), sum(k::decimal), sum(v::decimal) FROM kv
 ----
-5.0000000000000000000  2.8000000000000000000  30  14
+5.0000000000000000000000000000000000000  2.8000000000000000000000000000000000000  30  14
 
 query RRRR
 SELECT avg(DISTINCT k), avg(DISTINCT v), sum(DISTINCT k), sum(DISTINCT v) FROM kv
 ----
-5.0000000000000000000  3.0000000000000000000  30  6
+5.0000000000000000000000000000000000000  3.0000000000000000000000000000000000000  30  6
 
 query R
 SELECT avg(k) * 2.0 + max(v)::DECIMAL FROM kv
 ----
-14.00000000000000000000
+14.00000000000000000000000000000000000000
 
 # Verify things work with distsql when some of the nodes emit no results in the
 # local stage.
 query R
 SELECT avg(k) * 2.0 + max(v)::DECIMAL FROM kv WHERE w*2 = k
 ----
-14.00000000000000000000
+14.00000000000000000000000000000000000000
 
 # Grouping columns can be eliminated, but should still return zero rows (i.e.
 # shouldn't use scalar GroupBy).
@@ -721,7 +721,7 @@ two 2 true 5
 query RRRR
 SELECT avg(b), sum(b), avg(d), sum(d) FROM abc
 ----
-1.75  3.5  3.0500000000000000000  6.1
+1.75  3.5  3.0500000000000000000000000000000000000  6.1
 
 # Verify summing of intervals
 statement ok
@@ -908,7 +908,7 @@ SELECT var_pop(x) FROM xyz WHERE x = 1
 query RRR
 SELECT stddev_samp(x), stddev(y::decimal), round(stddev_samp(z), 14) FROM xyz
 ----
-3.0000000000000000000  2.1213203435596425732  2.51661147842358
+3.0000000000000000000000000000000000000  2.1213203435596425732025330863145471179  2.51661147842358
 
 query R
 SELECT stddev(x) FROM xyz WHERE x = 1
@@ -918,7 +918,7 @@ NULL
 query RRR
 SELECT stddev_pop(x), stddev_pop(y::decimal), round(stddev_pop(z), 14) FROM xyz
 ----
-2.4494897427831780982  1.5000000000000000000  2.05480466765633
+2.4494897427831780981972840747058913920  1.5000000000000000000000000000000000000  2.05480466765633
 
 query R
 SELECT stddev_pop(x) FROM xyz WHERE x = 1
@@ -4034,3 +4034,43 @@ query R
 SELECT percentile_cont(ARRAY[.4::FLOAT]) WITHIN GROUP (ORDER BY i::FLOAT4) FROM t90519;
 ----
 {2.2}
+
+subtest regression_168373
+
+# Regression test for #168373. A manually-expanded VAR_POP formula over
+# constant values in a cross join must return 0. Previously, DECIMAL division
+# used a precision of only 20 significant digits, which silently rounded
+# intermediate results when the numerator exceeded 20 digits, producing
+# incorrect non-zero results like -1/N where N is one table's cardinality.
+
+statement ok
+CREATE TABLE t168373_0 (c0 TIMESTAMP);
+CREATE TABLE t168373_1 (c0 BIGINT UNIQUE);
+CREATE TABLE t168373_2 (c0 INT NOT NULL);
+
+statement ok
+INSERT INTO t168373_0 VALUES
+  ('1969-12-08 19:18:57'), ('1970-01-09 09:36:22'),
+  ('1970-01-20 09:32:22'), ('1970-01-11 00:06:06');
+INSERT INTO t168373_1 VALUES (424210762), (NULL), (-766426769);
+INSERT INTO t168373_2 VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11);
+
+# Variance of a constant is always zero.
+query RR rowsort
+SELECT
+  (sum((-1737664727)*(-1737664727)) - sum(-1737664727)*sum(-1737664727)/count(-1737664727)) / count(-1737664727),
+  (sum((2030393942)*(2030393942)) - sum(2030393942)*sum(2030393942)/count(2030393942)) / count(2030393942)
+FROM t168373_1, t168373_0, t168373_2
+GROUP BY t168373_1.c0
+----
+0.00000000000000000  0.00000000000000000
+0.00000000000000000  0.00000000000000000
+0.00000000000000000  0.00000000000000000
+
+# Verify DECIMAL division preserves >20 significant digits.
+query R
+SELECT 5845710769898530048144::DECIMAL / 44
+----
+132857062952239319276.00000000000000000
+
+subtest end

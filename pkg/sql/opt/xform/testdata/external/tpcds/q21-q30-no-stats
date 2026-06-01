@@ -140,8 +140,8 @@ top-k
       │         └── sum [as=sum:80, outer=(79)]
       │              └── column79:79
       └── filters
-           ├── CASE WHEN sum:78 > 0 THEN sum:80 / sum:78 ELSE CAST(NULL AS DECIMAL) END >= 0.66666666666666666667 [outer=(78,80), immutable]
-           └── CASE WHEN sum:78 > 0 THEN sum:80 / sum:78 ELSE CAST(NULL AS DECIMAL) END <= 1.5000000000000000000 [outer=(78,80), immutable]
+           ├── CASE WHEN sum:78 > 0 THEN sum:80 / sum:78 ELSE CAST(NULL AS DECIMAL) END >= 0.66666666666666666666666666666666666667 [outer=(78,80), immutable]
+           └── CASE WHEN sum:78 > 0 THEN sum:80 / sum:78 ELSE CAST(NULL AS DECIMAL) END <= 1.5000000000000000000000000000000000000 [outer=(78,80), immutable]
 
 # --------------------------------------------------
 # Q22
@@ -439,7 +439,7 @@ with &1 (frequent_ss_items)
       │                   │         │              └── sum:158
       │                   │         └── projections
       │                   │              └── max:159 [as=tpcds_cmax:207, outer=(159)]
-      │                   └── 0.95000000000000000000
+      │                   └── 0.95000000000000000000000000000000000000
       └── scalar-group-by
            ├── columns: sum:359
            ├── cardinality: [1 - 1]
@@ -820,7 +820,7 @@ with &1 (frequent_ss_items)
       │                   │         │              └── sum:158
       │                   │         └── projections
       │                   │              └── max:159 [as=tpcds_cmax:207, outer=(159)]
-      │                   └── 0.95000000000000000000
+      │                   └── 0.95000000000000000000000000000000000000
       └── limit
            ├── columns: c_last_name:400 c_first_name:401 sales:402
            ├── internal-ordering: +400,+401,+402

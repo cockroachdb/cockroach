@@ -13832,7 +13832,7 @@ project
       │    └── fd: (2)-->(1)
       └── filters
            ├── rowid:2 = CASE WHEN (rowid:2 IS NOT DISTINCT FROM CAST(NULL AS INT8)) AND CAST(NULL AS BOOL) THEN rowid:2 ELSE 1 END [outer=(2), constraints=(/2: (/NULL - ])]
-           └── rowid:2 = 1.5000000000000000000 [outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
+           └── rowid:2 = 1.5000000000000000000000000000000000000 [outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
 
 # Inlining of INT2 constant 2 as INT column rowid is allowed.
 opt expect=InlineConstVar

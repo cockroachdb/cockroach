@@ -9,37 +9,37 @@
 query R
 SELECT (1.4238790346995263e-40::DECIMAL / 6.011482313728436e+41::DECIMAL)
 ----
-2.3685988919035999994E-82
+2.3685988919035999994261829962100379156E-82
 
 # inf returns -108.4851126682386588
 query R
 SELECT ln(7.682705743584112e-48::DECIMAL)
 ----
--108.48511266823882051
+-108.48511266823882051052421569640542851
 
 # inf returns 0
 query R
 SELECT sqrt(9.789765531128956e-34::DECIMAL)
 ----
-3.1288601009199749773E-17
+3.1288601009199749773333818985835198355E-17
 
 # inf returns 0.1547300000000000
 query R
 SELECT pow(4.727998800941528e-14::DECIMAL, 0.06081860494226844::DECIMAL)
 ----
-0.15472926640705911955
+0.15472926640705911954813027417556453295
 
 # inf returns 0, 0
 query RR
 SELECT pow(sqrt(1e-10::DECIMAL), 2), sqrt(pow(1e-5::DECIMAL, 2))
 ----
-1.0000000000000000000E-10  0.000010000000000000000000
+1.0000000000000000000000000000000000000E-10  0.000010000000000000000000000000000000000000
 
 # inf returns 1e-16, 0, 2e-16
 query RRR
 SELECT 1e-16::DECIMAL / 2, 1e-16::DECIMAL / 3, 1e-16::DECIMAL / 2 * 2
 ----
-5.0000000000000000000E-17  3.3333333333333333333E-17  1.00000000000000000000E-16
+5.0000000000000000000000000000000000000E-17  3.3333333333333333333333333333333333333E-17  1.00000000000000000000000000000000000000E-16
 
 # inf returns 1e-8, 0, 0, 0
 query RRRR
@@ -479,48 +479,48 @@ SELECT x1, x2,
 FROM v AS v1(id1, x1), v AS v2(id2, x2) WHERE x2 != 0
 ORDER BY id1, id2
 ----
-0          1          0                        0     0
-0          -1         -0                       0     -0
-0          4.2        0E+1                     0.0   0
-0          Infinity   0                        0     0
-0          -Infinity  0                        0     -0
-0          NaN        NaN                      NaN   NaN
-1          1          1.0000000000000000000    0     1
-1          -1         -1.0000000000000000000   0     -1
-1          4.2        0.23809523809523809524   1.0   0
-1          Infinity   0                        1     0
-1          -Infinity  0                        1     -0
-1          NaN        NaN                      NaN   NaN
--1         1          -1.0000000000000000000   -0    -1
--1         -1         1.0000000000000000000    -0    1
--1         4.2        -0.23809523809523809524  -1.0  -0
--1         Infinity   0                        -1    -0
--1         -Infinity  0                        -1    0
--1         NaN        NaN                      NaN   NaN
-4.2        1          4.2000000000000000000    0.2   4
-4.2        -1         -4.2000000000000000000   0.2   -4
-4.2        4.2        1.0000000000000000000    0.0   1
-4.2        Infinity   0                        4.2   0
-4.2        -Infinity  0                        4.2   -0
-4.2        NaN        NaN                      NaN   NaN
-Infinity   1          Infinity                 NaN   Infinity
-Infinity   -1         -Infinity                NaN   -Infinity
-Infinity   4.2        Infinity                 NaN   Infinity
-Infinity   Infinity   NaN                      NaN   NaN
-Infinity   -Infinity  NaN                      NaN   NaN
-Infinity   NaN        NaN                      NaN   NaN
--Infinity  1          -Infinity                NaN   -Infinity
--Infinity  -1         Infinity                 NaN   Infinity
--Infinity  4.2        -Infinity                NaN   -Infinity
--Infinity  Infinity   NaN                      NaN   NaN
--Infinity  -Infinity  NaN                      NaN   NaN
--Infinity  NaN        NaN                      NaN   NaN
-NaN        1          NaN                      NaN   NaN
-NaN        -1         NaN                      NaN   NaN
-NaN        4.2        NaN                      NaN   NaN
-NaN        Infinity   NaN                      NaN   NaN
-NaN        -Infinity  NaN                      NaN   NaN
-NaN        NaN        NaN                      NaN   NaN
+0          1          0                                          0     0
+0          -1         -0                                         0     -0
+0          4.2        0E+1                                       0.0   0
+0          Infinity   0                                          0     0
+0          -Infinity  0                                          0     -0
+0          NaN        NaN                                        NaN   NaN
+1          1          1.0000000000000000000000000000000000000    0     1
+1          -1         -1.0000000000000000000000000000000000000   0     -1
+1          4.2        0.23809523809523809523809523809523809524   1.0   0
+1          Infinity   0                                          1     0
+1          -Infinity  0                                          1     -0
+1          NaN        NaN                                        NaN   NaN
+-1         1          -1.0000000000000000000000000000000000000   -0    -1
+-1         -1         1.0000000000000000000000000000000000000    -0    1
+-1         4.2        -0.23809523809523809523809523809523809524  -1.0  -0
+-1         Infinity   0                                          -1    -0
+-1         -Infinity  0                                          -1    0
+-1         NaN        NaN                                        NaN   NaN
+4.2        1          4.2000000000000000000000000000000000000    0.2   4
+4.2        -1         -4.2000000000000000000000000000000000000   0.2   -4
+4.2        4.2        1.0000000000000000000000000000000000000    0.0   1
+4.2        Infinity   0                                          4.2   0
+4.2        -Infinity  0                                          4.2   -0
+4.2        NaN        NaN                                        NaN   NaN
+Infinity   1          Infinity                                   NaN   Infinity
+Infinity   -1         -Infinity                                  NaN   -Infinity
+Infinity   4.2        Infinity                                   NaN   Infinity
+Infinity   Infinity   NaN                                        NaN   NaN
+Infinity   -Infinity  NaN                                        NaN   NaN
+Infinity   NaN        NaN                                        NaN   NaN
+-Infinity  1          -Infinity                                  NaN   -Infinity
+-Infinity  -1         Infinity                                   NaN   Infinity
+-Infinity  4.2        -Infinity                                  NaN   -Infinity
+-Infinity  Infinity   NaN                                        NaN   NaN
+-Infinity  -Infinity  NaN                                        NaN   NaN
+-Infinity  NaN        NaN                                        NaN   NaN
+NaN        1          NaN                                        NaN   NaN
+NaN        -1         NaN                                        NaN   NaN
+NaN        4.2        NaN                                        NaN   NaN
+NaN        Infinity   NaN                                        NaN   NaN
+NaN        -Infinity  NaN                                        NaN   NaN
+NaN        NaN        NaN                                        NaN   NaN
 
 statement error division by zero
 SELECT 'inf'::numeric / '0'

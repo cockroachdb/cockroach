@@ -20,7 +20,11 @@ var (
 	// postgres binary decimal format in the wire protocol, which uses an
 	// int16. See pgwire/types.go.
 	DecimalCtx = &apd.Context{
-		Precision:   20,
+		// 38 digits matches the precision of Oracle and SQL Server; Postgres'
+		// NUMERIC type has effectively unlimited precision. MySQL and DB2
+		// support 65 and 31 digits respectively.
+		// A 128-bit integer can represent up to 38 digits hence the convention.
+		Precision:   38,
 		Rounding:    apd.RoundHalfUp,
 		MaxExponent: 2000,
 		MinExponent: -2000,
