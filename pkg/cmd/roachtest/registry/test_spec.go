@@ -205,6 +205,10 @@ type TestSpec struct {
 	// PostProcessPerfMetrics can be used to custom aggregated metrics
 	// from the histogram metrics that are emitted by the roachtest
 	PostProcessPerfMetrics func(string, *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error)
+
+	// SkipDRPC opts this test out of metamorphic DRPC enablement. The test
+	// will always run with gRPC unless --force-drpc is set.
+	SkipDRPC bool
 }
 
 // SetStats sets the stats for the test
