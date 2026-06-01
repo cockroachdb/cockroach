@@ -1,0 +1,76 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package dlq
+
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+// Entry is the JSON-serializable record persisted to GCS when a GitHub
+// issue post fails. It captures all the data needed to reconstruct the
+// issues.PostRequest and issues.Options for replay.
+//
+// This struct's schema must remain compatible across all active release
+// branches, since entries written by one branch may be replayed by a
+// replay tool built from another. Only add new fields; do not remove
+// or change the semantics of existing ones.
+type Entry struct {
+	FailedAt     time.Time `json:"failed_at"`
+	FailureError string    `json:"failure_error"`
+
+	// PostRequest fields. HelpCommand is captured separately as a
+	// pre-rendered string (see RenderedHelpCommand).
+	PackageName             string            `json:"package_name"`
+	TestName                string            `json:"test_name"`
+	Labels                  []string          `json:"labels"`
+	AdoptIssueLabelMatchSet []string          `json:"adopt_issue_label_match_set"`
+	TopLevelNotes           []string          `json:"top_level_notes,omitempty"`
+	Message                 string            `json:"message"`
+	ExtraParams             map[string]string `json:"extra_params,omitempty"`
+	Artifacts               string            `json:"artifacts,omitempty"`
+	MentionOnCreate         []string          `json:"mention_on_create,omitempty"`
+
+	// RenderedHelpCommand is the output of running PostRequest.HelpCommand
+	// against an issues.Renderer at write time. At replay time we wrap it
+	// back into a closure that emits the same text via Renderer.Raw, so
+	// the replayed issue body is identical to what would have been posted
+	// originally.
+	//
+	// Alternative considered: capture HelpCommand inputs (cluster name,
+	// cloud, start, end, runID) and rebuild the closure at replay using
+	// issues.HelpCommandAsLink. Pre-rendering keeps the replay tool dumb
+	// and avoids splitting help-link construction logic across write- and
+	// replay-time.
+	RenderedHelpCommand string `json:"rendered_help_command,omitempty"`
+
+	// Options fields (token excluded — read from env at replay time).
+	Org           string `json:"org"`
+	Repo          string `json:"repo"`
+	SHA           string `json:"sha,omitempty"`
+	Branch        string `json:"branch"`
+	BinaryVersion string `json:"binary_version,omitempty"`
+
+	// TeamCity CI options (populated when the original run was on TeamCity).
+	TeamCityBuildTypeID string `json:"tc_build_type_id,omitempty"`
+	TeamCityBuildID     string `json:"tc_build_id,omitempty"`
+	TeamCityServerURL   string `json:"tc_server_url,omitempty"`
+	TeamCityTags        string `json:"tc_tags,omitempty"`
+	TeamCityGoflags     string `json:"tc_goflags,omitempty"`
+}
+
+// ObjectKey returns the GCS object key for this entry.
+// Format: failed/{branch}/{YYYYMMDD}/{testName}-{unix_nanos}.json
+func ObjectKey(entry *Entry) string {
+	sanitized := strings.ReplaceAll(entry.TestName, "/", "_")
+	return fmt.Sprintf("failed/%s/%s/%s-%d.json",
+		entry.Branch,
+		entry.FailedAt.Format("20060102"),
+		sanitized,
+		entry.FailedAt.UnixNano(),
+	)
+}
