@@ -1,0 +1,138 @@
+# End-to-end test for a partial-commit failure that exists only under separated
+# engines: the log engine commit succeeds but the state engine commit fails.
+
+require-separated
+----
+ok
+
+replication-data
+- NodeID: 1
+  StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}  # Designated replica in this store
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- NodeID: 1
+  StoreID: 2
+  RangeID: 2
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 2, ReplicaID: 2}  # Designated replica in this store
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+Replica updates:
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 16
+  NextReplicaID: 17
+- RangeID: 2
+  StartKey: /Table/1
+  OldReplicaID: 2
+  NewReplica:
+    NodeID: 1
+    StoreID: 2
+    ReplicaID: 16
+  NextReplicaID: 17
+Decommissioned nodes:
+[n4, n5]
+
+# Inject a State-engine commit failure on s2.
+apply-plan stores=(1,2) fail_commit_state=(2)
+----
+ERROR: failed to commit update to one or more stores: failed to update store s2: injected commit failure on s2
+
+# On-disk state: s1 has the rewritten descriptor; s2 still has the original
+# three-replica descriptor because its State-engine batch was discarded.
+dump-store stores=(1,2)
+----
+- NodeID: 1
+  StoreID: 1
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 16}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 16
+- NodeID: 1
+  StoreID: 2
+  Descriptors:
+  - RangeID: 2
+    StartKey: /Table/1
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 2, ReplicaID: 2}
+    - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 5}
+  LocalData:
+  - RangeID: 2
+    RaftReplicaID: 2
+
+# Audit records: s1's record from its successful commit, AND s2's record
+# because s2's log-engine batch (which holds the audit-record write) was
+# committed even though the state-engine batch failed.
+dump-events stores=(1,2)
+----
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16
+updated range r2, Key:/Table/1, Store:s2 ReplicaID:16
+
+# Operator re-runs apply-plan. For s2, the state-engine descriptor is
+# still old, so the full sequence runs again.
+apply-plan stores=(1,2) counts=true
+----
+updated=1 skipped=1 missing=0
+
+# Final state: both stores recovered.
+dump-store stores=(1,2)
+----
+- NodeID: 1
+  StoreID: 1
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 16}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 16
+- NodeID: 1
+  StoreID: 2
+  Descriptors:
+  - RangeID: 2
+    StartKey: /Table/1
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 2, ReplicaID: 16}
+  LocalData:
+  - RangeID: 2
+    RaftReplicaID: 16
+
+# s2 now has TWO audit records for r2: the witness from the failed first
+# attempt and the fresh one from the successful retry.
+dump-events stores=(1,2)
+----
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16
+updated range r2, Key:/Table/1, Store:s2 ReplicaID:16
+updated range r2, Key:/Table/1, Store:s2 ReplicaID:16
