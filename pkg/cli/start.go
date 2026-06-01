@@ -622,6 +622,7 @@ func runStartInternal(
 
 	// Derive temporary/auxiliary directory specifications.
 	serverCfg.ExternalIODir = startCtx.externalIODir
+	serverCfg.SecretDirectory = startCtx.secretDirectory
 
 	st := serverCfg.BaseConfig.Settings
 	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(

@@ -1304,6 +1304,24 @@ The value "disabled" will disable all local file I/O.
 `,
 	}
 
+	SecretDirectory = FlagInfo{
+		Name: "secret-directory",
+		Description: `
+The local file path under which sink credential files (e.g. the JWT client
+assertion referenced by a changefeed via
+sasl_proprietary_client_assertion_location) may be read. Paths in sink
+parameters must be absolute and contained within this directory; paths that
+escape the directory after "../" cleanup are rejected. Following symlinks _is_
+allowed, so operators may extend the directory to other mount points (e.g. a
+Kubernetes projected volume) by placing symlinks inside it.
+<PRE>
+
+</PRE>
+If left empty, sink parameters that reference credential files are rejected
+with a clear error.
+`,
+	}
+
 	URL = FlagInfo{
 		Name:   "url",
 		EnvVar: "COCKROACH_URL",

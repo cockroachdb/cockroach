@@ -98,6 +98,10 @@ type TestServerArgs struct {
 	// the server.Config struct.
 	ExternalIODir string
 
+	// SecretDirectory is used to initialize the same-named field on
+	// the server.Config struct.
+	SecretDirectory string
+
 	// Fields copied to the server.Config.
 	Insecure                    bool
 	RetryOptions                retry.Options // TODO(tbg): make testing knob.
@@ -746,6 +750,10 @@ type TestTenantArgs struct {
 	// ExternalIODir is used to initialize the same-named field on
 	// the server.Config struct.
 	ExternalIODir string
+
+	// SecretDirectory is used to initialize the same-named field on
+	// the server.Config struct.
+	SecretDirectory string
 
 	// If set, this will be appended to the Postgres URL by functions that
 	// automatically open a connection to the server. That's equivalent to running

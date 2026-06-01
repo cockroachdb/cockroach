@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "secretdir",
+    srcs = ["secretdir.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/secretdir",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/fileutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "secretdir_test",
+    srcs = ["secretdir_test.go"],
+    embed = [":secretdir"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

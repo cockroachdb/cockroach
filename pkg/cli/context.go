@@ -515,6 +515,12 @@ var startCtx struct {
 	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
 	externalIODir string
 
+	// directory under which sink credential files (e.g. the JWT client
+	// assertion referenced by a changefeed via
+	// sasl_proprietary_client_assertion_location) may be read. Empty
+	// disables file-based credential references.
+	secretDirectory string
+
 	// inBackground is set to true when restarting in the
 	// background after --background was processed.
 	inBackground bool
@@ -561,6 +567,7 @@ func setStartContextDefaults() {
 	startCtx.unencryptedLocalhostHTTP = false
 	startCtx.tempDir = ""
 	startCtx.externalIODir = ""
+	startCtx.secretDirectory = ""
 	startCtx.listeningURLFile = ""
 	startCtx.pidFile = ""
 	startCtx.inBackground = false

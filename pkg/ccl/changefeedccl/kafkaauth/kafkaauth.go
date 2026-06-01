@@ -12,14 +12,24 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/security/secretdir"
 	"github.com/cockroachdb/errors"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+// BuildContext carries node-level resources that mechanism builders need
+// beyond what is encoded in the URI. Threading it through the interface keeps
+// mechanism-specific wiring out of the generic registry dispatcher.
+type BuildContext struct {
+	// SecretReader resolves credential files under the node's
+	// --secret-directory. nil when the flag is unset.
+	SecretReader *secretdir.Reader
+}
+
 type saslMechanismBuilder interface {
 	name() string
 	validateParams(u *changefeedbase.SinkURL) error
-	build(u *changefeedbase.SinkURL) (SASLMechanism, error)
+	build(u *changefeedbase.SinkURL, bc BuildContext) (SASLMechanism, error)
 }
 
 // SASLMechanism is an interface for SASL mechanism instances, built from URLs,
@@ -48,13 +58,18 @@ func (r saslMechanismRegistry) register(b saslMechanismBuilder) {
 
 // Pick wraps registry.pick() which returns a saslMechanism for the given sink
 // URL, or ok=false if none is specified. It consumes all relevant query
-// parameters from `u`.
-func Pick(u *changefeedbase.SinkURL) (_ SASLMechanism, ok bool, _ error) {
-	return registry.pick(u)
+// parameters from `u`. secretReader resolves credential files under the
+// node's --secret-directory; nil if the flag is unset.
+func Pick(
+	u *changefeedbase.SinkURL, secretReader *secretdir.Reader,
+) (_ SASLMechanism, ok bool, _ error) {
+	return registry.pick(u, BuildContext{SecretReader: secretReader})
 }
 
 // pick returns a saslMechanism for the given sink URL, or ok=false if none is specified.
-func (r saslMechanismRegistry) pick(u *changefeedbase.SinkURL) (_ SASLMechanism, ok bool, _ error) {
+func (r saslMechanismRegistry) pick(
+	u *changefeedbase.SinkURL, bc BuildContext,
+) (_ SASLMechanism, ok bool, _ error) {
 	if u == nil {
 		return nil, false, errors.AssertionFailedf("sink url is nil")
 	}
@@ -85,7 +100,7 @@ func (r saslMechanismRegistry) pick(u *changefeedbase.SinkURL) (_ SASLMechanism,
 	if err := b.validateParams(u); err != nil {
 		return nil, false, err
 	}
-	mech, err := b.build(u)
+	mech, err := b.build(u, bc)
 	if err != nil {
 		return nil, false, err
 	}

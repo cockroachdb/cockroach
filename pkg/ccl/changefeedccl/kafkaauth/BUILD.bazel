@@ -16,6 +16,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/security/secretdir",
         "//pkg/util/timeutil",
         "@com_github_aws_aws_msk_iam_sasl_signer_go//signer",
         "@com_github_cockroachdb_errors//:errors",
@@ -37,6 +38,7 @@ go_test(
     embed = [":kafkaauth"],
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/security/secretdir",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_stretchr_testify//assert",

@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -16,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
@@ -46,6 +49,13 @@ func makeExternalConnectionSink(
 	// Replace the external connection URI in the `feedCfg` with the URI of the
 	// underlying resource.
 	feedCfg.SinkURI = uri
+
+	// Check the privilege against the resolved URI so an EC can't be used as
+	// a back door for a user lacking EXTERNALIOIMPLICITACCESS.
+	if err := checkFileBasedCredentialPrivilegesViaIsql(ctx, serverCfg.DB, user, uri); err != nil {
+		return nil, err
+	}
+
 	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets, false /* initialValidation */)
 }
 
@@ -172,4 +182,36 @@ func (p *isqlExternalConnectionProvider) lookup(name string) (string, error) {
 	default:
 		return "", errors.Newf("cannot connect to %T; unsupported resource for a changefeed connection", d)
 	}
+}
+
+// checkFileBasedCredentialPrivilegesViaIsql restricts
+// sasl_proprietary_client_assertion_location use to admins and holders of
+// EXTERNALIOIMPLICITACCESS.
+func checkFileBasedCredentialPrivilegesViaIsql(
+	ctx context.Context, db isql.DB, user username.SQLUsername, uri string,
+) error {
+	parsedSink, err := url.Parse(uri)
+	if err != nil {
+		return errors.Wrap(err, "parsing sink URI")
+	}
+	if parsedSink.Query().Get(changefeedbase.SinkParamSASLProprietaryClientAssertionLocation) == "" {
+		return nil
+	}
+	return checkFileBasedCredentialPrivilege(func() (bool, error) {
+		row, err := db.Executor().QueryRowEx(
+			ctx, "changefeed-check-external-io-implicit-access", nil, /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			"SELECT has_system_privilege($1, 'EXTERNALIOIMPLICITACCESS')",
+			user.Normalized(),
+		)
+		if err != nil {
+			return false, err
+		}
+		hasPriv, ok := row[0].(*tree.DBool)
+		if !ok {
+			return false, errors.AssertionFailedf(
+				"has_system_privilege returned %T, expected *tree.DBool", row[0])
+		}
+		return bool(*hasPriv), nil
+	})
 }

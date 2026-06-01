@@ -289,6 +289,12 @@ type BaseConfig struct {
 	// operations that can specify node-local I/O paths (such as BACKUP, RESTORE
 	// or IMPORT) can access files.
 	ExternalIODir string
+
+	// SecretDirectory is the local file path under which sink credential files
+	// (e.g. the JWT client assertion referenced by a changefeed via
+	// sasl_proprietary_client_assertion_location) may be read. Empty disables
+	// file-based credential references.
+	SecretDirectory string
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
