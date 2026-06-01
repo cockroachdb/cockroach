@@ -1246,12 +1246,6 @@ func (s *Server) newConnExecutor(
 		MaxHist:  s.cfg.DistSQLSrv.Metrics.MaxBytesHist,
 		Settings: s.cfg.Settings,
 	})
-	ppExecMon := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("exec-pausable-portal"),
-		CurCount: s.cfg.DistSQLSrv.Metrics.CurBytesCount,
-		MaxHist:  s.cfg.DistSQLSrv.Metrics.MaxBytesHist,
-		Settings: s.cfg.Settings,
-	})
 	txnFingerprintIDCacheAcc := sessionMon.MakeBoundAccount()
 
 	nodeIDOrZero, _ := s.cfg.NodeInfo.NodeID.OptionalNodeID()
@@ -1263,7 +1257,6 @@ func (s *Server) newConnExecutor(
 		mon:                 sessionRootMon,
 		sessionMon:          sessionMon,
 		execMon:             execMon,
-		ppExecMon:           ppExecMon,
 		sessionPreparedMon:  sessionPreparedMon,
 		sessionDataStack:    sdMutIterator.Sds,
 		dataMutatorIterator: sdMutIterator,
@@ -1536,14 +1529,12 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.execMon.Stop(ctx)
 		ex.state.txnMon.Stop(ctx)
 		ex.sessionPreparedMon.Stop(ctx)
-		ex.ppExecMon.Stop(ctx)
 		ex.sessionMon.Stop(ctx)
 		ex.mon.Stop(ctx)
 	} else {
 		ex.execMon.EmergencyStop(ctx)
 		ex.state.txnMon.EmergencyStop(ctx)
 		ex.sessionPreparedMon.EmergencyStop(ctx)
-		ex.ppExecMon.EmergencyStop(ctx)
 		ex.sessionMon.EmergencyStop(ctx)
 		ex.mon.EmergencyStop(ctx)
 	}
@@ -1603,13 +1594,6 @@ type connExecutor struct {
 	// TODO(yuzefovich): consider storing monitors by value to reduce the number
 	// of allocations.
 	execMon *mon.BytesMonitor
-
-	// ppExecMon is the pausable portal model exec monitor.
-	// TODO(yuzefovich): we need to have this monitor separate from execMon
-	// because it appears that we have the wrong order of txn shutdown vs
-	// pausable portals being closed. Think about changing the order to
-	// guarantee that portals close before finishTxn is called.
-	ppExecMon *mon.BytesMonitor
 
 	// sessionPreparedMon tracks memory usage by prepared statements.
 	sessionPreparedMon *mon.BytesMonitor
@@ -2360,7 +2344,6 @@ func (ex *connExecutor) activate(
 	// single threaded, and the point of buffering is just to avoid contention.
 	ex.mon.Start(ctx, parentMon, reserved)
 	ex.sessionMon.StartNoReserved(ctx, ex.mon)
-	ex.ppExecMon.StartNoReserved(ctx, parentMon)
 	ex.sessionPreparedMon.StartNoReserved(ctx, ex.sessionMon)
 
 	ex.activated = true
