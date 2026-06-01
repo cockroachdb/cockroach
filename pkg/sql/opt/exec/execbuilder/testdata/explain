@@ -2379,11 +2379,17 @@ distribution: local
 statement ok
 PREPARE prep AS SELECT $1 + 1
 
-statement error EXPLAIN EXECUTE is not supported
+query T
 EXPLAIN EXECUTE prep(1)
+----
+distribution: local
+·
+• values
+  size: 1 column, 1 row
 
-statement error EXPLAIN EXECUTE is not supported
-SELECT 1 FROM [ EXPLAIN EXECUTE prep(1) ]
+# EXPLAIN EXECUTE is not supported in a subquery context.
+statement error EXPLAIN EXECUTE cannot be used in a subquery
+SELECT count(*) FROM [ EXPLAIN EXECUTE prep(1) ]
 
 query T
 EXPLAIN ANALYZE EXECUTE prep(1)
@@ -2400,6 +2406,192 @@ regions: <hidden>
   execution time: 0µs
   actual row count: 1
   size: 1 column, 1 row
+
+# Test for #161889: EXPLAIN EXECUTE shows the query plan for a prepared
+# statement without executing it.
+
+statement ok
+CREATE TABLE t_ee (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  s STRING,
+  INDEX (a),
+  INDEX (s)
+)
+
+statement ok
+CREATE TABLE c_ee (
+  k INT PRIMARY KEY,
+  a INT,
+  INDEX (a)
+)
+
+statement ok
+INSERT INTO t_ee SELECT i, i % 10, i * 2, 'str' || i::STRING FROM generate_series(1, 100) AS g(i)
+
+statement ok
+INSERT INTO c_ee SELECT i, i % 5 FROM generate_series(1, 50) AS g(i)
+
+# Point lookup on primary key uses the primary index.
+statement ok
+PREPARE ee_point AS SELECT * FROM t_ee WHERE k = $1
+
+query T
+EXPLAIN EXECUTE ee_point(42)
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t_ee@t_ee_pkey
+  spans: [/42 - /42]
+
+# Lookup by secondary index column uses the index.
+statement ok
+PREPARE ee_idx AS SELECT k, a FROM t_ee WHERE a = $1
+
+query T
+EXPLAIN EXECUTE ee_idx(5)
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t_ee@t_ee_a_idx
+  spans: [/5 - /5]
+
+# Two-table join shows the join strategy.
+statement ok
+PREPARE ee_join AS SELECT t_ee.k, c_ee.k FROM t_ee JOIN c_ee ON t_ee.a = c_ee.a WHERE t_ee.a = $1
+
+query T
+EXPLAIN EXECUTE ee_join(3)
+----
+distribution: local
+·
+• merge join
+│ equality: (a) = (a)
+│
+├── • scan
+│     missing stats
+│     table: t_ee@t_ee_a_idx
+│     spans: [/3 - /3]
+│
+└── • scan
+      missing stats
+      table: c_ee@c_ee_a_idx
+      spans: [/3 - /3]
+
+# INSERT: shows the mutation plan without executing.
+statement ok
+PREPARE ee_ins AS INSERT INTO t_ee VALUES ($1, $2, $3, $4)
+
+query T
+EXPLAIN EXECUTE ee_ins(999, 1, 2, 'new')
+----
+distribution: local
+·
+• insert fast path
+  into: t_ee(k, a, b, s)
+  auto commit
+  size: 4 columns, 1 row
+
+# Verify the INSERT was NOT executed.
+query I
+SELECT count(*) FROM t_ee WHERE k = 999
+----
+0
+
+# UPDATE: shows the mutation plan without executing.
+statement ok
+PREPARE ee_upd AS UPDATE t_ee SET b = $2 WHERE k = $1
+
+query T
+EXPLAIN EXECUTE ee_upd(1, 100)
+----
+distribution: local
+·
+• update
+│ table: t_ee
+│ set: b
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: t_ee@t_ee_pkey
+          spans: [/1 - /1]
+          locking strength: for update
+
+# Verify the UPDATE was NOT executed.
+query I
+SELECT b FROM t_ee WHERE k = 1
+----
+2
+
+# DELETE: shows the mutation plan without executing.
+statement ok
+PREPARE ee_del AS DELETE FROM t_ee WHERE k = $1
+
+query T
+EXPLAIN EXECUTE ee_del(1)
+----
+distribution: local
+·
+• delete
+│ from: t_ee
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: t_ee@t_ee_pkey
+      spans: [/1 - /1]
+      locking strength: for update
+
+# Verify the DELETE was NOT executed.
+query I
+SELECT count(*) FROM t_ee WHERE k = 1
+----
+1
+
+# No parameters: prepared statement without placeholders.
+statement ok
+PREPARE ee_noparam AS SELECT count(*) FROM t_ee
+
+query T
+EXPLAIN EXECUTE ee_noparam
+----
+distribution: local
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: t_ee@t_ee_a_idx
+      spans: FULL SCAN
+
+# Error: nonexistent prepared statement.
+statement error prepared statement \"nonexistent\" does not exist
+EXPLAIN EXECUTE nonexistent
+
+# Error: wrong number of parameters.
+statement error expected 1, got 2
+EXPLAIN EXECUTE ee_point(1, 2)
+
+statement error expected 1, got 0
+EXPLAIN EXECUTE ee_point
+
+# Cleanup.
+statement ok
+DEALLOCATE ALL
+
+statement ok
+DROP TABLE t_ee
+
+statement ok
+DROP TABLE c_ee
 
 # Tests for EXPLAIN (OPT, MEMO).
 query T

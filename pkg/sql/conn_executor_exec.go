@@ -401,6 +401,27 @@ func (ex *connExecutor) maybeReparsePrepStmt(
 	return nil
 }
 
+// resolveExecute looks up the prepared statement for an EXECUTE node, reparses
+// it if needed, and fills in placeholder values. It returns the prepared
+// statement and PlaceholderInfo, or an error.
+func (ex *connExecutor) resolveExecute(
+	ctx context.Context, e *tree.Execute,
+) (*prep.Statement, *tree.PlaceholderInfo, error) {
+	name := e.Name.String()
+	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
+	if !ok {
+		return nil, nil, newPreparedStmtDNEError(ex.sessionData(), name)
+	}
+	if err := ex.maybeReparsePrepStmt(ctx, ps, name); err != nil {
+		return nil, nil, err
+	}
+	pinfo, err := ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ps, pinfo, nil
+}
+
 // execStmtInOpenState executes one statement in the context of the session's
 // current transaction.
 // It handles statements that affect the transaction state (BEGIN, COMMIT)
@@ -603,27 +624,33 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.ExpectedTypes = nil
 	}
 
+	// Special top-level handling for EXPLAIN wrapping EXECUTE. Resolve the
+	// prepared statement so the optimizer sees the actual statement instead of
+	// the EXECUTE node. Skip FINGERPRINT mode, which handles EXECUTE directly
+	// in the optbuilder without needing resolution.
+	if expl, ok := ast.(*tree.Explain); ok {
+		if e, ok := expl.Statement.(*tree.Execute); ok && expl.Mode != tree.ExplainFingerprint {
+			ps, pi, err := ex.resolveExecute(ctx, e)
+			if err != nil {
+				return makeErrEvent(err)
+			}
+			pinfo = pi
+			expl.Statement = ps.Statement.AST
+			stmt.Prepared = ps
+		}
+	}
+
 	// Special top-level handling for EXECUTE. This must happen after the handling
 	// for EXPLAIN ANALYZE (in order to support EXPLAIN ANALYZE EXECUTE) but
 	// before setting up the instrumentation helper.
 	if e, ok := ast.(*tree.Execute); ok {
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution.
-		name := e.Name.String()
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
-		if !ok {
-			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
-		}
-
-		if err := ex.maybeReparsePrepStmt(ctx, ps, name); err != nil {
-			return makeErrEvent(err)
-		}
-
-		var err error
-		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
+		ps, pi, err := ex.resolveExecute(ctx, e)
 		if err != nil {
 			return makeErrEvent(err)
 		}
+		pinfo = pi
 
 		// TODO(radu): what about .SQL, .NumAnnotations, .NumPlaceholders?
 		stmt.Statement = ps.Statement
@@ -1485,27 +1512,33 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		vars.stmt.ExpectedTypes = nil
 	}
 
+	// Special top-level handling for EXPLAIN wrapping EXECUTE. Resolve the
+	// prepared statement so the optimizer sees the actual statement instead of
+	// the EXECUTE node. Skip FINGERPRINT mode, which handles EXECUTE directly
+	// in the optbuilder without needing resolution.
+	if expl, ok := vars.ast.(*tree.Explain); ok {
+		if e, ok := expl.Statement.(*tree.Execute); ok && expl.Mode != tree.ExplainFingerprint {
+			ps, pi, err := ex.resolveExecute(ctx, e)
+			if err != nil {
+				return makeErrEvent(err)
+			}
+			pinfo = pi
+			expl.Statement = ps.Statement.AST
+			vars.stmt.Prepared = ps
+		}
+	}
+
 	// Special top-level handling for EXECUTE. This must happen after the handling
 	// for EXPLAIN ANALYZE (in order to support EXPLAIN ANALYZE EXECUTE) but
 	// before setting up the instrumentation helper.
 	if e, ok := vars.ast.(*tree.Execute); ok {
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution.
-		name := e.Name.String()
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
-		if !ok {
-			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
-		}
-
-		if err := ex.maybeReparsePrepStmt(ctx, ps, name); err != nil {
-			return makeErrEvent(err)
-		}
-
-		var err error
-		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
+		ps, pi, err := ex.resolveExecute(ctx, e)
 		if err != nil {
 			return makeErrEvent(err)
 		}
+		pinfo = pi
 
 		// TODO(radu): what about .SQL, .NumAnnotations, .NumPlaceholders?
 		vars.stmt.Statement = ps.Statement
