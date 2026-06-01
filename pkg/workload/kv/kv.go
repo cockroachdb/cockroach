@@ -582,7 +582,10 @@ func (w *kv) Ops(
 			numEmptyResults: &numEmptyResults,
 		}
 		op.readStmt = op.sr.Define(readStmtStr)
-		op.followerReadStmt = op.sr.Define(followerReadStmtStr)
+		// Skip when unused to avoid startup AOST prepare churn.
+		if w.followerReadPercent > 0 {
+			op.followerReadStmt = op.sr.Define(followerReadStmtStr)
+		}
 		if !op.config.prepareReadOnly {
 			op.writeStmt = op.sr.Define(writeStmtStr)
 		}
