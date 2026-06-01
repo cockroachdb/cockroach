@@ -34,10 +34,6 @@ import (
 func TestClusterMetricsCheckpointLag_SetAndDelete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Cluster metric constructors panic in test builds when called
-	// outside an init() function
-	defer cmmetrics.TestingAllowNonInitConstruction()()
-
 	cm := &ClusterMetrics{
 		CheckpointLag: cmmetrics.NewWriteStopwatchVec(
 			metaCheckpointLag, timeutil.DefaultTimeSource{}, "job_id", "scope",
