@@ -17,6 +17,7 @@ go_library(
         "disk_stall.go",
         "grant_revoke_all.go",
         "grant_role.go",
+        "hold_connection.go",
         "inspect.go",
         "license_throttle.go",
         "manual_compaction.go",
