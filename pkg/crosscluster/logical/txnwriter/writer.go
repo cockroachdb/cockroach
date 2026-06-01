@@ -119,7 +119,7 @@ func (tw *transactionWriter) initTable(ctx context.Context, tableID descpb.ID) e
 	tw.tableWriters[tableID] = writer
 	tw.tableReaders[tableID] = reader
 	tw.tombstoneUpdaters[tableID] = sqlwriter.NewTombstoneUpdater(
-		tw.codec, tw.db.KV(), tw.leaseMgr, tableID, tw.sd, tw.settings,
+		tw.codec, tw.leaseMgr, tableID, tw.sd, tw.settings,
 	)
 	return nil
 }
