@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2 !local-prepared
+# LogicTest: !local-mixed-26.1 !local-mixed-26.2 !local-prepared
 # knob-opt: allow-unsafe
 #
 # local-prepared is excluded because the routine-context DDL isolation

@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant-default-configs !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
+# LogicTest: !3node-tenant-default-configs !local-mixed-26.1 !local-mixed-26.2
 
 # crdb_internal.tsdb_query is a privilege-gated generator that returns
 # raw per-source datapoints from the in-cluster TSDB. The asserts below

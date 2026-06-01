@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.4 !local-mixed-26.1
+# LogicTest: !local-mixed-26.1
 
 subtest canary_window_notice
 

@@ -6,15 +6,15 @@ CREATE TABLE ref_test (id INT PRIMARY KEY)
 statement ok
 CREATE USER ref_user
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 GRANT REFERENCES ON ref_test TO ref_user
 
-onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+onlyif config local-mixed-26.1 local-mixed-26.2
 statement error REFERENCES privilege is not available until upgrade to 26.3 is finalized
 GRANT REFERENCES ON ref_test TO ref_user
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 query TTTTTB colnames,rowsort
 SHOW GRANTS ON ref_test
 ----
@@ -23,7 +23,7 @@ test           public       ref_test    admin     ALL             true
 test           public       ref_test    ref_user  REFERENCES      false
 test           public       ref_test    root      ALL             true
 
-onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+onlyif config local-mixed-26.1 local-mixed-26.2
 query TTTTTB colnames,rowsort
 SHOW GRANTS ON ref_test
 ----
@@ -85,25 +85,25 @@ ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
 statement ok
 SET ROLE fk_user
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement error does not have REFERENCES privilege on relation parent
 ALTER TABLE child ADD CONSTRAINT fk1 FOREIGN KEY (parent_id) REFERENCES parent(id)
 
-onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+onlyif config local-mixed-26.1 local-mixed-26.2
 statement error must be owner of table parent or have CREATE privilege on table parent
 ALTER TABLE child ADD CONSTRAINT fk1 FOREIGN KEY (parent_id) REFERENCES parent(id)
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement error does not have REFERENCES privilege on relation parent
 ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
 
-onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+onlyif config local-mixed-26.1 local-mixed-26.2
 statement error must be owner of table parent or have CREATE privilege on table parent
 ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
 
 user root
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 GRANT REFERENCES ON parent TO fk_user
 
@@ -114,19 +114,19 @@ user testuser
 statement ok
 SET ROLE fk_user
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 ALTER TABLE child ADD CONSTRAINT fk1 FOREIGN KEY (parent_id) REFERENCES parent(id)
 
-onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+onlyif config local-mixed-26.1 local-mixed-26.2
 statement error must be owner of table parent or have CREATE privilege on table parent
 ALTER TABLE child ADD CONSTRAINT fk1 FOREIGN KEY (parent_id) REFERENCES parent(id)
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
 
-onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+onlyif config local-mixed-26.1 local-mixed-26.2
 statement error must be owner of table parent or have CREATE privilege on table parent
 ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
 
@@ -143,19 +143,19 @@ user testuser
 statement ok
 SET ROLE fk_user
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement error does not have REFERENCES privilege on relation parent
 ALTER TABLE child ADD CONSTRAINT fk2 FOREIGN KEY (parent_id) REFERENCES parent(id)
 
-onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+onlyif config local-mixed-26.1 local-mixed-26.2
 statement ok
 ALTER TABLE child ADD CONSTRAINT fk22 FOREIGN KEY (parent_id) REFERENCES parent(id)
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement error does not have REFERENCES privilege on relation parent
 ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
 
-onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+onlyif config local-mixed-26.1 local-mixed-26.2
 statement ok
 ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
 
@@ -194,17 +194,17 @@ statement ok
 SET ROLE self_ref_user
 
 # User has CREATE on the table but not REFERENCES; self-referential FK should fail.
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement error does not have REFERENCES privilege on relation self_ref
 ALTER TABLE self_ref ADD CONSTRAINT fk_self FOREIGN KEY (parent_id) REFERENCES self_ref(id)
 
-onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+onlyif config local-mixed-26.1 local-mixed-26.2
 statement ok
 ALTER TABLE self_ref ADD CONSTRAINT fk_self FOREIGN KEY (parent_id) REFERENCES self_ref(id)
 
 user root
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 GRANT REFERENCES ON self_ref TO self_ref_user
 
@@ -214,7 +214,7 @@ statement ok
 SET ROLE self_ref_user
 
 # User now has both CREATE and REFERENCES on the same table; self-referential FK should succeed.
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 ALTER TABLE self_ref ADD CONSTRAINT fk_self FOREIGN KEY (parent_id) REFERENCES self_ref(id)
 
@@ -334,18 +334,18 @@ statement ok
 SET ROLE fk_user
 
 # Creating a table with an FK reference should fail without REFERENCES on parent.
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement error user fk_user does not have REFERENCES privilege on relation parent
 CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))
 
-onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+onlyif config local-mixed-26.1 local-mixed-26.2
 statement ok
 CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))
 
 user root
 
 # Grant REFERENCES on parent.
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 GRANT REFERENCES ON parent TO fk_user
 
@@ -355,7 +355,7 @@ statement ok
 SET ROLE fk_user
 
 # Now CREATE TABLE with FK should succeed.
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))
 
@@ -444,18 +444,18 @@ CREATE USER priv_user
 statement ok
 GRANT priv_user TO testuser
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 GRANT REFERENCES ON priv_test TO priv_user
 
 user testuser
 
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 statement ok
 SET ROLE priv_user
 
 # has_table_privilege should return true for REFERENCES but false for SELECT.
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 query BBBB
 SELECT has_table_privilege('priv_test', 'REFERENCES'),
        has_table_privilege('priv_test', 'REFERENCES WITH GRANT OPTION'),
@@ -465,7 +465,7 @@ SELECT has_table_privilege('priv_test', 'REFERENCES'),
 true  false  false  false
 
 # has_column_privilege should return true for REFERENCES but false for SELECT.
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 query BBBB
 SELECT has_column_privilege('priv_test', 'id', 'REFERENCES'),
        has_column_privilege('priv_test', 'id', 'REFERENCES WITH GRANT OPTION'),
@@ -475,7 +475,7 @@ SELECT has_column_privilege('priv_test', 'id', 'REFERENCES'),
 true  false  false  false
 
 # has_any_column_privilege should return true for REFERENCES but false for SELECT.
-skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+skipif config local-mixed-26.1 local-mixed-26.2
 query BB
 SELECT has_any_column_privilege('priv_test', 'REFERENCES'),
        has_any_column_privilege('priv_test', 'SELECT')

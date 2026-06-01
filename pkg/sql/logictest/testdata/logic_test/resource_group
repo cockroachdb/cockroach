@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
+# LogicTest: !local-mixed-26.1 !local-mixed-26.2
 
 # Tests for the CREATE/ALTER/DROP/SHOW RESOURCE GROUP statements added for
 # the in-development resource manager. The whole feature is hidden behind

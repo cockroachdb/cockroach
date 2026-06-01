@@ -1848,7 +1848,7 @@ ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) WITH (bucket_count=
 statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
 ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: skip_unique_checks can only be set on implicitly partitioned indexes
 ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) WITH (skip_unique_checks = true);
 

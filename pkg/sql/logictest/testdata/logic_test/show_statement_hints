@@ -103,7 +103,7 @@ SELECT crdb_internal.inject_hint(
   'test'
 );
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TTBT colnames
 SELECT fingerprint, hint_type, enabled, database
 FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM ab WHERE b = 10'];

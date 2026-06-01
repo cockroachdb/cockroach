@@ -16,7 +16,6 @@ public  descriptor_id_seq    sequence  node  NULL
 public  locations            table     node  NULL
 public  span_configurations  table     node  NULL
 
-skipif config local-mixed-25.4
 skipif config local-mixed-26.1
 skipif config local-mixed-26.2
 query I rowsort
@@ -36,7 +35,6 @@ SELECT count(id) FROM system.descriptor
 ----
 74
 
-onlyif config local-mixed-25.4
 query I rowsort
 SELECT count(id) FROM system.descriptor
 ----
@@ -492,13 +490,13 @@ user root
 
 subtest statement_hints_table
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query IITTTTTBT
 SELECT hash, row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
 FROM system.statement_hints ORDER BY row_id
 ----
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement ok
 INSERT INTO system.statement_hints (row_id, fingerprint, hint, created_at, hint_type, hint_name, database)
 (VALUES
@@ -507,7 +505,7 @@ INSERT INTO system.statement_hints (row_id, fingerprint, hint, created_at, hint_
   (300, 'baz', 'BEADFEED', '2018-01-03 1:00:00.00000+00:00', 'rewrite_inline_hints', NULL, 'defaultdb')
 )
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query IITTTTTBT
 SELECT hash, row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
 FROM system.statement_hints ORDER BY row_id
@@ -516,31 +514,31 @@ FROM system.statement_hints ORDER BY row_id
 -2821042167266592640  200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC  pin_plan              bar_hint  true  NULL
 -2821042167266592632  300  baz  BEADFEED  2018-01-03 01:00:00 +0000 UTC  rewrite_inline_hints  NULL      true  defaultdb
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query ITTTTTBT
 SELECT row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
 FROM system.statement_hints WHERE fingerprint = 'foo' ORDER BY row_id
 ----
 100  foo  DEADBEEF  2018-01-01 01:00:00 +0000 UTC  rewrite_inline_hints  foo_hint  true  test
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query ITTTTTBT
 SELECT row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
 FROM system.statement_hints WHERE fingerprint = 'bar' ORDER BY row_id
 ----
 200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC  pin_plan  bar_hint  true  NULL
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query ITTT
 SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints WHERE fingerprint = 'baz' ORDER BY row_id
 ----
 300  baz  BEADFEED  2018-01-03 01:00:00 +0000 UTC
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement count 1
 DELETE FROM system.statement_hints WHERE fingerprint = 'foo'
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query ITTTTTBT
 SELECT row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
 FROM system.statement_hints ORDER BY row_id

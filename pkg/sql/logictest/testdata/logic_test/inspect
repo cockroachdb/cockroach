@@ -288,32 +288,32 @@ SELECT * FROM last_inspect_job;
 ----
 succeeded  2
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: no supported checks for index "t2_pkey" on table "t2" \(cannot check primary index consistency against itself; uniqueness: check only supported on REGIONAL BY ROW tables\)
 INSPECT TABLE t2 WITH OPTIONS INDEX (t2@t2_pkey);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: no supported checks for index "hash_idx" on table "t2" \(hash-sharded index; uniqueness: check only valid on primary index\)
 INSPECT TABLE t2 WITH OPTIONS INDEX (hash_idx);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: no supported checks for index "expr_idx" on table "t2" \(expression index; uniqueness: check only valid on primary index\)
 INSPECT TABLE t2 WITH OPTIONS INDEX (expr_idx);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: no supported checks for index "vector_idx" on table "t2" \(VECTOR; uniqueness: check only valid on primary index\)
 INSPECT TABLE t2 WITH OPTIONS INDEX (vector_idx);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: no supported checks for index "partial_idx" on table "t2" \(partial index; uniqueness: check only valid on primary index\)
 INSPECT TABLE t2 WITH OPTIONS INDEX (partial_idx);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: no supported checks for index "inverted_idx" on table "t2" \(INVERTED; uniqueness: check only valid on primary index\)
 INSPECT TABLE t2 WITH OPTIONS INDEX (inverted_idx);
 
 # Confirm no jobs were run.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TI
 SELECT * FROM last_inspect_job;
 ----
@@ -352,7 +352,7 @@ SELECT * FROM last_inspect_job;
 succeeded  1
 
 # Explicitly specifying the virtual column index should fail.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: no supported checks for index "idx_c2" on table "t_virtual" \(index on virtual column; uniqueness: check only valid on primary index\)
 INSPECT TABLE t_virtual WITH OPTIONS INDEX (idx_c2);
 
@@ -389,7 +389,7 @@ SELECT * FROM last_inspect_job;
 succeeded  1
 
 # Explicitly specifying the index with virtual columns should fail.
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: no supported checks for index "idx_virtual_combo" on table "t_multi_virtual" \(index on virtual column; uniqueness: check only valid on primary index\)
 INSPECT TABLE t_multi_virtual WITH OPTIONS INDEX (idx_virtual_combo);
 
@@ -818,7 +818,7 @@ INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us
 statement ok
 INSPECT TABLE uniqueness_check_complex;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: no supported checks for index "uniqueness_check_complex_pkey" on table "uniqueness_check_complex" \(cannot check primary index consistency against itself; uniqueness: complex key layout requires the cluster setting to opt in to \(expensive\) validation\)
 INSPECT TABLE uniqueness_check_complex WITH OPTIONS INDEX (uniqueness_check_complex_pkey);
 
@@ -827,17 +827,17 @@ INSPECT TABLE uniqueness_check_complex WITH OPTIONS INDEX (uniqueness_check_comp
 statement ok
 SET CLUSTER SETTING sql.inspect.uniqueness_check.complex_keys.enabled = true;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: INSPECT found inconsistencies
 INSPECT TABLE uniqueness_check_complex;
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TI retry
 SELECT * FROM last_inspect_job
 ----
 failed  1
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TTTTTT nosort
 SELECT * FROM last_inspect_errors
 ----
@@ -867,17 +867,17 @@ duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-west1\',
                                                                                                          ]
                                                                                                      }
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 statement error pq: INSPECT found inconsistencies
 INSPECT TABLE uniqueness_check_complex WITH OPTIONS INDEX (uniqueness_check_complex_pkey);
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TI retry
 SELECT * FROM last_inspect_job
 ----
 failed  1
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-26.1
 query TTTTTT nosort
 SELECT * FROM last_inspect_errors
 ----
