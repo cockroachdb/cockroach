@@ -195,6 +195,37 @@ fi
 EOF
 write_teamcity_config
 
+# By default docker and containerd uses the system default LimitNOFile of 1024.
+# This causes issues in the managed-service tests because Cockroach Cloud
+# configurs the CRDB container to explicitly set the soft limit to 1048576
+cat > /etc/docker/daemon.json <<EOF
+{
+  "default-ulimits": {
+    "nofile": {
+      "Name": "nofile",
+      "Hard": 1048576,
+      "Soft": 1048576
+    }
+  }
+}
+EOF
+
+sudo mkdir -p /etc/systemd/system/docker.service.d
+cat > /etc/systemd/system/docker.service.d/override.conf <<EOF
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=infinity
+EOF
+
+# This is normally set to 128, which have been observed to cause issues with
+# the k3d integration test not being able to start containers due to cAdvisor
+# exausting the open file limit
+cat > /etc/sysctl.d/99-k3d-inotify.conf <<EOF
+fs.inotify.max_user_instances = 256
+EOF
+
+sudo sysctl --system
+
 # Configure the Teamcity agent to start when the server starts.
 #
 # systemd will nuke the auto-upgrade process unless we mark the service as
