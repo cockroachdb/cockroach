@@ -305,16 +305,14 @@ func remapSchemas(
 	intoDB string,
 	restoreDBNames map[string]catalog.DatabaseDescriptor,
 	// Outputs
-	databasesWithDeprecatedPrivileges map[string]struct{},
 	descriptorRewrites jobspb.DescRewriteMap,
-) (bool, error) {
+) error {
 
 	txn := p.InternalSQLTxn()
 	if txn == nil {
-		return false, errors.AssertionFailedf("remapSchemas: planner has no active transaction")
+		return errors.AssertionFailedf("remapSchemas: planner has no active transaction")
 	}
 	col := txn.Descriptors()
-	shouldBufferDeprecatedPrivilegeNotice := false
 
 	for _, sc := range schemasByID {
 		if _, ok := descriptorRewrites[sc.ID]; ok {
@@ -323,7 +321,7 @@ func remapSchemas(
 
 		targetDB, err := resolveTargetDB(databasesByID, intoDB, descriptorCoverage, sc)
 		if err != nil {
-			return false, err
+			return err
 		}
 
 		if _, ok := restoreDBNames[targetDB]; ok {
@@ -333,19 +331,16 @@ func remapSchemas(
 		// Look up the parent database's ID.
 		parentID, parentDB, err := getDatabaseIDAndDesc(ctx, txn.KV(), col, targetDB)
 		if err != nil {
-			return false, err
+			return err
 		}
-		if usesDeprecatedPrivileges, err := checkRestorePrivilegesOnDatabase(ctx, p, parentDB); err != nil {
-			return false, err
-		} else if usesDeprecatedPrivileges {
-			shouldBufferDeprecatedPrivilegeNotice = true
-			databasesWithDeprecatedPrivileges[parentDB.GetName()] = struct{}{}
+		if err := checkRestorePrivilegesOnDatabase(ctx, p, parentDB); err != nil {
+			return err
 		}
 
 		// See if there is an existing schema with the same name.
 		id, err := col.LookupSchemaID(ctx, txn.KV(), parentID, sc.Name)
 		if err != nil {
-			return false, err
+			return err
 		}
 		if id == descpb.InvalidID {
 			// If we didn't find a matching schema, then we'll restore this schema.
@@ -355,7 +350,7 @@ func remapSchemas(
 			// to this schema to the existing one.
 			desc, err := col.ByIDWithoutLeased(txn.KV()).Get().Schema(ctx, id)
 			if err != nil {
-				return false, err
+				return err
 			}
 			descriptorRewrites[sc.ID] = &jobspb.DescriptorRewrite{
 				ParentID:   desc.GetParentID(),
@@ -365,7 +360,7 @@ func remapSchemas(
 		}
 	}
 
-	return shouldBufferDeprecatedPrivilegeNotice, nil
+	return nil
 }
 
 func remapTables(
@@ -378,16 +373,14 @@ func remapTables(
 	intoDB string,
 	restoreDBNames map[string]catalog.DatabaseDescriptor,
 	// Outputs
-	databasesWithDeprecatedPrivileges map[string]struct{},
 	descriptorRewrites jobspb.DescRewriteMap,
-) (bool, error) {
+) error {
 
 	txn := p.InternalSQLTxn()
 	if txn == nil {
-		return false, errors.AssertionFailedf("remapTables: planner has no active transaction")
+		return errors.AssertionFailedf("remapTables: planner has no active transaction")
 	}
 	col := txn.Descriptors()
-	shouldBufferDeprecatedPrivilegeNotice := false
 
 	for _, table := range tablesByID {
 		// If a descriptor has already been assigned a rewrite, then move on.
@@ -397,7 +390,7 @@ func remapTables(
 
 		targetDB, err := resolveTargetDB(databasesByID, intoDB, descriptorCoverage, table)
 		if err != nil {
-			return false, err
+			return err
 		}
 
 		if _, ok := restoreDBNames[targetDB]; ok {
@@ -408,10 +401,10 @@ func remapTables(
 		{
 			newParentID, err := col.LookupDatabaseID(ctx, txn.KV(), targetDB)
 			if err != nil {
-				return false, err
+				return err
 			}
 			if newParentID == descpb.InvalidID {
-				return false, errors.Errorf("a database named %q needs to exist to restore table %q",
+				return errors.Errorf("a database named %q needs to exist to restore table %q",
 					targetDB, table.Name)
 			}
 			parentID = newParentID
@@ -441,28 +434,25 @@ func remapTables(
 			tableName := tree.NewUnqualifiedTableName(tree.Name(table.GetName()))
 			err := descs.CheckObjectNameCollision(ctx, col, txn.KV(), parentID, schemaID, tableName)
 			if err != nil {
-				return false, err
+				return err
 			}
 		}
 
 		// Check privileges.
 		parentDB, err := col.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, parentID)
 		if err != nil {
-			return false, errors.Wrapf(err,
+			return errors.Wrapf(err,
 				"failed to lookup parent DB %d", errors.Safe(parentID))
 		}
-		if usesDeprecatedPrivileges, err := checkRestorePrivilegesOnDatabase(ctx, p, parentDB); err != nil {
-			return false, err
-		} else if usesDeprecatedPrivileges {
-			shouldBufferDeprecatedPrivilegeNotice = true
-			databasesWithDeprecatedPrivileges[parentDB.GetName()] = struct{}{}
+		if err := checkRestorePrivilegesOnDatabase(ctx, p, parentDB); err != nil {
+			return err
 		}
 
 		// We're restoring a table and not its parent database. We may block
 		// restoring multi-region tables to multi-region databases since
 		// regions may mismatch.
 		if err := checkMultiRegionCompatible(ctx, txn.KV(), col, table, parentDB); err != nil {
-			return false, pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
+			return pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
 		}
 
 		// Must run before the table's own rewrite is recorded below: any region
@@ -472,7 +462,7 @@ func remapTables(
 		if err := maybeAddRegionEnumRewriteForSchemaChangeState(
 			ctx, txn, table, parentDB, typesByID, descriptorRewrites,
 		); err != nil {
-			return false, err
+			return err
 		}
 
 		// Create the table rewrite with the new parent ID. We've done all the
@@ -488,7 +478,7 @@ func remapTables(
 			descriptorRewrites[table.ID].ParentSchemaID = publicSchemaID
 		}
 	}
-	return shouldBufferDeprecatedPrivilegeNotice, nil
+	return nil
 }
 
 // maybeAddRegionEnumRewriteForSchemaChangeState records ToExisting rewrites
@@ -617,16 +607,14 @@ func remapTypes(
 	intoDB string,
 	restoreDBNames map[string]catalog.DatabaseDescriptor,
 	// Outputs
-	databasesWithDeprecatedPrivileges map[string]struct{},
 	descriptorRewrites jobspb.DescRewriteMap,
-) (bool, error) {
+) error {
 
 	txn := p.InternalSQLTxn()
 	if txn == nil {
-		return false, errors.AssertionFailedf("remapTypes: planner has no active transaction")
+		return errors.AssertionFailedf("remapTypes: planner has no active transaction")
 	}
 	col := txn.Descriptors()
-	shouldBufferDeprecatedPrivilegeNotice := false
 
 	// Iterate through typesByID to construct a remapping entry for each type.
 	for _, typ := range typesByID {
@@ -637,7 +625,7 @@ func remapTypes(
 
 		targetDB, err := resolveTargetDB(databasesByID, intoDB, descriptorCoverage, typ)
 		if err != nil {
-			return false, err
+			return err
 		}
 
 		if _, ok := restoreDBNames[targetDB]; ok {
@@ -653,16 +641,16 @@ func remapTypes(
 		// Look up the parent database's ID.
 		parentID, err := col.LookupDatabaseID(ctx, txn.KV(), targetDB)
 		if err != nil {
-			return false, err
+			return err
 		}
 		if parentID == descpb.InvalidID {
-			return false, errors.Errorf("a database named %q needs to exist to restore type %q",
+			return errors.Errorf("a database named %q needs to exist to restore type %q",
 				targetDB, typ.Name)
 		}
 		// Check privileges on the parent DB.
 		parentDB, err := col.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, parentID)
 		if err != nil {
-			return false, errors.Wrapf(err,
+			return errors.Wrapf(err,
 				"failed to lookup parent DB %d", errors.Safe(parentID))
 		}
 
@@ -685,7 +673,7 @@ func remapTypes(
 				typ.Name,
 			)
 			if err != nil {
-				return false, err
+				return err
 			}
 
 			if desc == nil {
@@ -696,7 +684,7 @@ func remapTypes(
 				typeName := tree.NewUnqualifiedTypeName(arrTyp.GetName())
 				err = descs.CheckObjectNameCollision(ctx, col, txn.KV(), parentID, rewrite.ID, typeName)
 				if err != nil {
-					return false, errors.Wrapf(err, "name collision for %q's array type", typ.Name)
+					return errors.Wrapf(err, "name collision for %q's array type", typ.Name)
 				}
 			}
 		}
@@ -706,11 +694,8 @@ func remapTypes(
 			// need to create the type.
 
 			// Ensure that the user has the correct privilege to create types.
-			if usesDeprecatedPrivileges, err := checkRestorePrivilegesOnDatabase(ctx, p, parentDB); err != nil {
-				return false, err
-			} else if usesDeprecatedPrivileges {
-				shouldBufferDeprecatedPrivilegeNotice = true
-				databasesWithDeprecatedPrivileges[parentDB.GetName()] = struct{}{}
+			if err := checkRestorePrivilegesOnDatabase(ctx, p, parentDB); err != nil {
+				return err
 			}
 
 			// Create a rewrite entry for the type.
@@ -726,12 +711,12 @@ func remapTypes(
 			// If the collided object isn't a type, then error out.
 			existingType, isType := desc.(catalog.TypeDescriptor)
 			if !isType {
-				return false, sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), typ.Name)
+				return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), typ.Name)
 			}
 
 			// Check if the collided type is compatible to be remapped to.
 			if err := typ.IsCompatibleWith(existingType); err != nil {
-				return false, errors.Wrapf(
+				return errors.Wrapf(
 					err,
 					"%q is not compatible with type %q existing in cluster",
 					existingType.GetName(),
@@ -762,7 +747,7 @@ func remapTypes(
 			descriptorRewrites[typ.ArrayTypeID].ParentSchemaID = publicSchemaID
 		}
 	}
-	return shouldBufferDeprecatedPrivilegeNotice, nil
+	return nil
 }
 
 func remapFunctions(
@@ -774,7 +759,6 @@ func remapFunctions(
 	intoDB string,
 	restoreDBNames map[string]catalog.DatabaseDescriptor,
 	// Outputs
-	databasesWithDeprecatedPrivileges map[string]struct{},
 	descriptorRewrites jobspb.DescRewriteMap,
 ) error {
 	txn := p.InternalSQLTxn()
@@ -819,10 +803,8 @@ func remapFunctions(
 			return errors.Wrapf(err,
 				"failed to lookup parent DB %d", errors.Safe(parentID))
 		}
-		if usesDeprecatedPrivileges, err := checkRestorePrivilegesOnDatabase(ctx, p, parentDB); err != nil {
+		if err := checkRestorePrivilegesOnDatabase(ctx, p, parentDB); err != nil {
 			return err
-		} else if usesDeprecatedPrivileges {
-			databasesWithDeprecatedPrivileges[parentDB.GetName()] = struct{}{}
 		}
 
 		// If restoring into an existing schema, check for function name
@@ -1139,53 +1121,31 @@ func allocateDescriptorRewrites(
 		remapSystemDBDescsToTempDB(schemasByID, tablesByID, typesByID, functionsByID, tempSysDBID, descriptorRewrites)
 	}
 
-	var shouldBufferDeprecatedPrivilegeNotice bool
-	databasesWithDeprecatedPrivileges := make(map[string]struct{})
-
-	if b, err := remapSchemas(
-		ctx, p, databasesByID, schemasByID, descriptorCoverage, intoDB, restoreDBNames,
-		databasesWithDeprecatedPrivileges, descriptorRewrites,
+	if err := remapSchemas(
+		ctx, p, databasesByID, schemasByID, descriptorCoverage, intoDB, restoreDBNames, descriptorRewrites,
 	); err != nil {
 		return nil, 0, err
-	} else {
-		shouldBufferDeprecatedPrivilegeNotice = b || shouldBufferDeprecatedPrivilegeNotice
 	}
 
-	if b, err := remapTables(
-		ctx, p, databasesByID, tablesByID, typesByID, descriptorCoverage, intoDB, restoreDBNames,
-		databasesWithDeprecatedPrivileges, descriptorRewrites,
+	if err := remapTables(
+		ctx, p, databasesByID, tablesByID, typesByID, descriptorCoverage, intoDB, restoreDBNames, descriptorRewrites,
 	); err != nil {
 		return nil, 0, err
-	} else {
-		shouldBufferDeprecatedPrivilegeNotice = b || shouldBufferDeprecatedPrivilegeNotice
 	}
 
-	if b, err := remapTypes(
-		ctx, p, databasesByID, typesByID, descriptorCoverage, intoDB, restoreDBNames,
-		databasesWithDeprecatedPrivileges, descriptorRewrites,
+	if err := remapTypes(
+		ctx, p, databasesByID, typesByID, descriptorCoverage, intoDB, restoreDBNames, descriptorRewrites,
 	); err != nil {
 		return nil, 0, err
-	} else {
-		shouldBufferDeprecatedPrivilegeNotice = b || shouldBufferDeprecatedPrivilegeNotice
 	}
 
 	if err := remapFunctions(
-		ctx, p, databasesByID, functionsByID, descriptorCoverage, intoDB, restoreDBNames,
-		databasesWithDeprecatedPrivileges, descriptorRewrites,
+		ctx, p, databasesByID, functionsByID, descriptorCoverage, intoDB, restoreDBNames, descriptorRewrites,
 	); err != nil {
 		return nil, 0, err
 	}
 
 	remapDatabases(restoreDBs, newDBName, descriptorRewrites)
-
-	if shouldBufferDeprecatedPrivilegeNotice {
-		dbNames := make([]string, 0, len(databasesWithDeprecatedPrivileges))
-		for dbName := range databasesWithDeprecatedPrivileges {
-			dbNames = append(dbNames, dbName)
-		}
-		p.BufferClientNotice(ctx, pgnotice.Newf("%s RESTORE TABLE, user %s will exclusively require the RESTORE privilege on databases %s",
-			deprecatedPrivilegesRestorePreamble, p.User(), strings.Join(dbNames, ", ")))
-	}
 
 	if err := allocateIDs(
 		ctx,
@@ -1681,7 +1641,7 @@ func restorePlanHook(
 			return errors.Errorf("RESTORE cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 
-		if err := checkPrivilegesForRestore(ctx, restoreStmt, p, from); err != nil {
+		if err := checkSystemPrivilegesForRestore(ctx, restoreStmt, p, from); err != nil {
 			return err
 		}
 
@@ -1724,31 +1684,20 @@ func checkRestoreDestinationPrivileges(
 // used to check the privileges required for a `RESTORE TABLE`.
 func checkRestorePrivilegesOnDatabase(
 	ctx context.Context, p sql.PlanHookState, parentDB catalog.DatabaseDescriptor,
-) (shouldBufferNotice bool, err error) {
-	if ok, err := p.HasPrivilege(ctx, parentDB, privilege.RESTORE, p.User()); err != nil {
-		return false, err
-	} else if ok {
-		return false, nil
-	}
-
-	if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
-		notice := fmt.Sprintf("%s RESTORE TABLE, user %s will exclusively require the "+
-			"RESTORE privilege on database %s.", deprecatedPrivilegesRestorePreamble, p.User().Normalized(), parentDB.GetName())
-		p.BufferClientNotice(ctx, pgnotice.Newf("%s", notice))
-		return false, errors.WithHint(err, notice)
-	}
-
-	return true, nil
+) error {
+	return p.CheckPrivilegeForUser(
+		ctx, parentDB, privilege.RESTORE, p.User(),
+	)
 }
 
-// checkPrivilegesForRestore checks that the user has sufficient privileges to
-// run a cluster or a database restore. A table restore requires us to know the
-// parent database we will be writing to and so that happens at a later stage of
-// restore planning.
+// checkSystemPrivilegesForRestore checks that the user has sufficient
+// privileges to run a cluster or a database restore. A table restore requires
+// us to know the parent database we will be writing to and so that happens at a
+// later stage of restore planning.
 //
 // This method is also responsible for checking the privileges on the
 // destination URIs the restore is reading from.
-func checkPrivilegesForRestore(
+func checkSystemPrivilegesForRestore(
 	ctx context.Context, restoreStmt *tree.Restore, p sql.PlanHookState, from []string,
 ) error {
 	// If the user is admin no further checks need to be performed.
@@ -1760,69 +1709,30 @@ func checkPrivilegesForRestore(
 		return nil
 	}
 
-	{
-		// Cluster and tenant restores require the `RESTORE` system privilege for
-		// non-admin users.
-		requiresRestoreSystemPrivilege := restoreStmt.DescriptorCoverage != tree.RequestedDescriptors ||
-			restoreStmt.Targets.TenantID.IsSet()
+	requiresSystemPrivilege := restoreStmt.DescriptorCoverage != tree.RequestedDescriptors ||
+		restoreStmt.Targets.TenantID.IsSet() ||
+		len(restoreStmt.Targets.Databases) > 0
 
-		if requiresRestoreSystemPrivilege {
-			if err := p.CheckPrivilegeForUser(
-				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.RESTORE, p.User(),
-			); err != nil {
-				return pgerror.Wrapf(
-					err,
-					pgcode.InsufficientPrivilege,
-					"only users with the admin role or the RESTORE system privilege are allowed to perform"+
-						" a cluster restore")
+	if !requiresSystemPrivilege {
+		return checkRestoreDestinationPrivileges(ctx, p, from)
+	}
+	err = p.CheckPrivilegeForUser(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.RESTORE, p.User(),
+	)
+	if err != nil {
+		if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+			restoreScope := "cluster"
+			if len(restoreStmt.Targets.Databases) > 0 {
+				restoreScope = "database"
 			}
-			return checkRestoreDestinationPrivileges(ctx, p, from)
+			return errors.Wrapf(
+				err,
+				"only users with the admin role or the RESTORE system privilege are allowed to perform a %s restore",
+				redact.SafeString(restoreScope),
+			)
 		}
+		return err
 	}
-
-	// If running a database restore, check that the user has the `RESTORE` system
-	// privilege.
-	//
-	// TODO(adityamaru): In 23.1 a missing `RESTORE` privilege should return an
-	// error. In 22.2 we continue to check for old style privileges and role
-	// options.
-	if len(restoreStmt.Targets.Databases) > 0 {
-		var hasRestoreSystemPrivilege bool
-		if ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.RESTORE, p.User()); err != nil {
-			return err
-		} else {
-			hasRestoreSystemPrivilege = ok
-		}
-		if hasRestoreSystemPrivilege {
-			return checkRestoreDestinationPrivileges(ctx, p, from)
-		}
-	}
-
-	// The following checks are to maintain compatability with pre-22.2 privilege
-	// requirements to run the backup. If we have failed to find the appropriate
-	// `RESTORE` privileges, we default to our old-style privilege checks and
-	// buffer a notice urging users to switch to `RESTORE` privileges.
-	//
-	// TODO(adityamaru): Delete deprecated privilege checks in 23.1. Users will be
-	// required to have the appropriate `RESTORE` privilege instead.
-	//
-	// Database restores require the CREATEDB privileges.
-	if len(restoreStmt.Targets.Databases) > 0 {
-		notice := fmt.Sprintf("%s RESTORE DATABASE, user %s will exclusively require the "+
-			"RESTORE system privilege.", deprecatedPrivilegesRestorePreamble, p.User().Normalized())
-		p.BufferClientNotice(ctx, pgnotice.Newf("%s", notice))
-
-		hasCreateDB, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEDB)
-		if err != nil {
-			return err
-		}
-		if !hasCreateDB {
-			return errors.WithHint(pgerror.Newf(
-				pgcode.InsufficientPrivilege,
-				"only users with the CREATEDB privilege can restore databases"), notice)
-		}
-	}
-
 	return checkRestoreDestinationPrivileges(ctx, p, from)
 }
 
