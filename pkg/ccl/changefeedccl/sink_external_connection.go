@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -14,8 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
@@ -46,6 +50,13 @@ func makeExternalConnectionSink(
 	// Replace the external connection URI in the `feedCfg` with the URI of the
 	// underlying resource.
 	feedCfg.SinkURI = uri
+
+	if err := checkFileBasedCredentialGatesForResolvedURI(
+		ctx, serverCfg.Settings, serverCfg.DB, user, uri,
+	); err != nil {
+		return nil, err
+	}
+
 	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets, false /* initialValidation */)
 }
 
@@ -172,4 +183,52 @@ func (p *isqlExternalConnectionProvider) lookup(name string) (string, error) {
 	default:
 		return "", errors.Newf("cannot connect to %T; unsupported resource for a changefeed connection", d)
 	}
+}
+
+// checkFileBasedCredentialGatesForResolvedURI runs the cluster-version and
+// EXTERNALIOIMPLICITACCESS gates against the EC's resolved underlying URI.
+// The planning-time gates in changefeed_stmt.go can only see external://ec
+// and don't know which URI it wraps, so without these the EC would be a
+// back door past either check. Each gate is a no-op if the resolved URI
+// does not reference a file-based credential.
+func checkFileBasedCredentialGatesForResolvedURI(
+	ctx context.Context,
+	settings *cluster.Settings,
+	db isql.DB,
+	user username.SQLUsername,
+	uri string,
+) error {
+	parsedSink, err := url.Parse(uri)
+	if err != nil {
+		return errors.Wrap(err, "parsing sink URI")
+	}
+	if parsedSink.Query().Get(changefeedbase.SinkParamSASLProprietaryClientAssertionLocation) == "" {
+		return nil
+	}
+	if err := checkProprietaryOauthFileBasedCredentialVersion(ctx, settings); err != nil {
+		return err
+	}
+	// The user we run as (node) is separate from the user whose privilege
+	// we're checking, which is $1: the changefeed caller.
+	override := sessiondata.NodeUserSessionDataOverride
+	// has_system_privilege lives in pg_catalog and won't resolve without a
+	// current database.
+	override.Database = "system"
+	return checkFileBasedCredentialPrivilege(func() (bool, error) {
+		row, err := db.Executor().QueryRowEx(
+			ctx, "changefeed-check-external-io-implicit-access", nil, /* txn */
+			override,
+			"SELECT has_system_privilege($1, 'EXTERNALIOIMPLICITACCESS')",
+			user.Normalized(),
+		)
+		if err != nil {
+			return false, err
+		}
+		hasPriv, ok := row[0].(*tree.DBool)
+		if !ok {
+			return false, errors.AssertionFailedf(
+				"has_system_privilege returned %T, expected *tree.DBool", row[0])
+		}
+		return bool(*hasPriv), nil
+	})
 }

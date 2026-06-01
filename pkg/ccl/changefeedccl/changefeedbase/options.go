@@ -267,9 +267,10 @@ const (
 
 	// These are custom fields required for proprietary oauth. They should not
 	// be documented.
-	SinkParamSASLProprietaryResource            = `sasl_proprietary_resource`
-	SinkParamSASLProprietaryClientAssertionType = `sasl_proprietary_client_assertion_type`
-	SinkParamSASLProprietaryClientAssertion     = `sasl_proprietary_client_assertion`
+	SinkParamSASLProprietaryResource                = `sasl_proprietary_resource`
+	SinkParamSASLProprietaryClientAssertionType     = `sasl_proprietary_client_assertion_type`
+	SinkParamSASLProprietaryClientAssertion         = `sasl_proprietary_client_assertion`
+	SinkParamSASLProprietaryClientAssertionLocation = `sasl_proprietary_client_assertion_location`
 
 	SinkSchemeConfluentKafka    = `confluent-cloud`
 	SinkParamConfluentAPIKey    = `api_key`

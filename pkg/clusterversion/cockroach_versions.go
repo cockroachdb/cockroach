@@ -300,6 +300,11 @@ const (
 	// to requiring REFERENCES on both the origin and referenced tables.
 	V26_3_GrantReferencesToUsersWithCreate
 
+	// V26_3_ChangefeedFileBasedClientAssertion gates the
+	// sasl_proprietary_client_assertion_location URI param for Kafka
+	// changefeeds, which references a per-node JWT file on disk.
+	V26_3_ChangefeedFileBasedClientAssertion
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -394,6 +399,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_CrdbInternalTSDB: {Major: 26, Minor: 2, Internal: 12},
 
 	V26_3_GrantReferencesToUsersWithCreate: {Major: 26, Minor: 2, Internal: 14},
+
+	V26_3_ChangefeedFileBasedClientAssertion: {Major: 26, Minor: 2, Internal: 16},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************
