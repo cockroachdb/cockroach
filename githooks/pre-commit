@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+set +e
+
+if ! command -v crlfmt &>/dev/null; then
+  exit 0
+fi
+
+mapfile -t files < <(
+  git diff --cached --name-only --diff-filter=ACM -- '*.go' |
+    grep -v -E '(^|/)generated[^/]*\.go$' |
+    grep -v -E '(^|/)[^/]*generated\.go$' || true
+)
+
+if [[ ${#files[@]} -eq 0 ]]; then
+  exit 0
+fi
+
+needs_fmt=()
+for f in "${files[@]}"; do
+  if [[ -f "$f" ]] && [[ -n "$(crlfmt -tab 2 "$f")" ]]; then
+    needs_fmt+=("$f")
+  fi
+done
+
+if [[ ${#needs_fmt[@]} -gt 0 ]]; then
+  echo "crlfmt: formatted and re-staged ${#needs_fmt[@]} file(s):"
+  for f in "${needs_fmt[@]}"; do
+    crlfmt -w -tab 2 "$f"
+    git add "$f"
+    echo "  $f"
+  done
+fi
