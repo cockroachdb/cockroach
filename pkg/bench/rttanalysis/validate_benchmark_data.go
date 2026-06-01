@@ -7,6 +7,7 @@ package rttanalysis
 
 import (
 	"cmp"
+	"context"
 	"encoding/csv"
 	"flag"
 	"os"
@@ -84,12 +85,15 @@ func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
 		wg.Add(1)
 		go func(b string, cases []RoundTripBenchTestCase) {
 			defer wg.Done()
+			alloc, err := limiter.Acquire(context.Background(), 1)
+			require.NoError(t, err)
+			defer alloc.Release()
 			t.Run(b, func(t *testing.T) {
 				runs := 1
 				if isRewrite {
 					runs = *rewriteIterations
 				}
-				runRoundTripBenchmarkTest(t, scope, &results, cases, r.cc, runs, limiter)
+				runRoundTripBenchmarkTest(t, scope, &results, cases, r.cc, runs)
 			})
 		}(b, cases)
 	}
