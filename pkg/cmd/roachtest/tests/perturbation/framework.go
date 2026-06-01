@@ -419,7 +419,6 @@ func register(r registry.Registry, p perturbation, skipReason string) {
 
 func RegisterTests(r registry.Registry) {
 	const notSkipped = ""
-	const skippedByBankruptcy = "#149662"
 
 	register(r, restart{}, notSkipped)
 	addLong(r, restart{})
@@ -431,17 +430,13 @@ func RegisterTests(r registry.Registry) {
 	for _, asleep := range []bool{true, false} {
 		register(r, splits{asleep: asleep}, notSkipped)
 	}
-
-	// TODO(ssd): We skipped the majority of these tests so that we can focus on
-	// one at a time. These are vaguely ordered by their previous pass rate
-	// (highest first).
-	register(r, intents{}, skippedByBankruptcy)
-	register(r, decommission{}, skippedByBankruptcy)
-	register(r, elasticWorkload{}, skippedByBankruptcy)
-	register(r, partition{}, skippedByBankruptcy)
+	register(r, intents{}, notSkipped)
+	register(r, decommission{}, notSkipped)
+	register(r, elasticWorkload{}, notSkipped)
+	register(r, partition{}, notSkipped)
 	register(r, backfill{}, notSkipped)
-	register(r, &slowDisk{}, skippedByBankruptcy)
-	register(r, addNode{}, skippedByBankruptcy)
+	register(r, &slowDisk{}, notSkipped)
+	register(r, addNode{}, notSkipped)
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
