@@ -1761,6 +1761,11 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
+	// Dropping a column can trigger a primary index rebuild, and concurrent
+	// DML may cause duplicate values in the new index during backfill
+	// validation.
+	og.potentialCommitErrors.add(pgcode.UniqueViolation)
+
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInAddingOrDroppingIndex},
