@@ -508,6 +508,27 @@ SELECT
 ----
 12345  12345  12345  12345  12345
 
+# Regression test for #171257. A built-in function OID that names a "private"
+# helper function (defined via makePrivate, e.g. the regression-aggregate final
+# functions) must cast to its bare pg_catalog name -- not a spuriously
+# "pg_catalog."-qualified name, and never the bare numeric OID. These helpers are
+# excluded from builtins.AllBuiltinNames, so the by-name pg_catalog.pg_proc
+# population omits them; the visibility lookup therefore found no match and
+# wrongly schema-qualified them (or, with no database in scope, errored and let
+# the OID render as a number). OID 56 is final_regr_syy; see
+# pkg/sql/sem/builtins/fixed_oids.go.
+query TTT
+SELECT 56::REGPROC::STRING, 56::REGPROCEDURE::STRING, 56::OID::REGPROC::STRING
+----
+final_regr_syy  final_regr_syy  final_regr_syy
+
+# The 'name'::reg* parse path must agree with the OID cast path: the optimizer
+# interns DOids by OID alone, so divergent names would corrupt round-trips.
+query TT
+SELECT 'final_regr_syy'::REGPROC::STRING, 'final_regr_syy'::REGPROC::OID::REGPROC::STRING
+----
+final_regr_syy  final_regr_syy
+
 query T
 PREPARE regression_56193 AS SELECT $1::regclass;
 EXECUTE regression_56193('regression_53686"'::regclass)
