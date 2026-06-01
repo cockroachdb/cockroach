@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrsettings"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/metrics"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -262,7 +263,7 @@ func loadOnlineReplicatedTime(
 type rowHandler struct {
 	replicatedTimeAtStart hlc.Timestamp
 	frontier              span.Frontier
-	metrics               *Metrics
+	metrics               *metrics.Metrics
 	settings              *settings.Values
 	job                   *jobs.Job
 	frontierUpdates       chan hlc.Timestamp
@@ -547,7 +548,7 @@ func geURIFromLoadedJobDetails(details jobspb.Details) string {
 }
 
 func init() {
-	m := MakeMetrics(base.DefaultHistogramWindowInterval())
+	m := metrics.MakeMetrics(base.DefaultHistogramWindowInterval())
 	jobs.RegisterConstructor(
 		jobspb.TypeLogicalReplication,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
@@ -562,7 +563,7 @@ func init() {
 			}
 		},
 		jobs.WithJobMetrics(m),
-		jobs.WithResolvedMetric(m.(*Metrics).ReplicatedTimeSeconds),
+		jobs.WithResolvedMetric(m.(*metrics.Metrics).ReplicatedTimeSeconds),
 		jobs.UsesTenantCostControl,
 	)
 }

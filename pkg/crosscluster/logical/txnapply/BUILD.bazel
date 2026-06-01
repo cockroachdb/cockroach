@@ -14,6 +14,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/crosscluster/logical/ldrdecoder",
+        "//pkg/crosscluster/logical/metrics",
         "//pkg/crosscluster/logical/txnpb",
         "//pkg/crosscluster/logical/txnwriter",
         "//pkg/settings",
@@ -25,6 +26,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/ring",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//proto",
@@ -40,6 +42,7 @@ go_test(
     embed = [":txnapply"],
     deps = [
         "//pkg/crosscluster/logical/ldrdecoder",
+        "//pkg/crosscluster/logical/metrics",
         "//pkg/crosscluster/logical/txnwriter",
         "//pkg/settings/cluster",
         "//pkg/util/admission",
@@ -48,6 +51,7 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
+        "//pkg/util/ring",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

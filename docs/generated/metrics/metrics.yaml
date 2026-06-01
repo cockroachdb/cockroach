@@ -8450,6 +8450,24 @@ layers:
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/cdc
+    - name: logical_replication.txn_applier.blocked_txns
+      exported_name: logical_replication_txn_applier_blocked_txns
+      description: Number of transactions the applier has received but not yet written, blocked on either a txn dependency or the event horizon
+      y_axis_label: Transactions
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/cdc
+    - name: logical_replication.txn_applier.ready_txns
+      exported_name: logical_replication_txn_applier_ready_txns
+      description: Number of transactions that the applier has received and are ready to be committed or are being committed
+      y_axis_label: Transactions
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/cdc
     - name: obs.clustermetrics.flush.count
       exported_name: obs_clustermetrics_flush_count
       description: Number of cluster metrics flush operations

@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package logical
+package metrics
 
 import (
 	"time"
@@ -200,7 +200,7 @@ var (
 		Measurement: "Seconds",
 		Unit:        metric.Unit_SECONDS,
 	}
-	metaLabeledEventsIngetsted = metric.Metadata{
+	metaLabeledEventsIngested = metric.Metadata{
 		Name:        "logical_replication.events_ingested_by_label",
 		Help:        "Events ingested by all replication jobs by label",
 		Measurement: "Events",
@@ -222,6 +222,22 @@ var (
 		Name:        "logical_replication.catchup_ranges_by_label",
 		Help:        "Source side ranges undergoing catch up scans",
 		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	// Txn-mode applier metrics.
+	metaTxnApplierBlockedTxns = metric.Metadata{
+		Name: "logical_replication.txn_applier.blocked_txns",
+		Help: "Number of transactions the applier has received but not yet " +
+			"written, blocked on either a txn dependency or the event horizon",
+		Measurement: "Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTxnApplierReadyTxns = metric.Metadata{
+		Name: "logical_replication.txn_applier.ready_txns",
+		Help: "Number of transactions that the applier has received and " +
+			"are ready to be committed or are being committed",
+		Measurement: "Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
 )
@@ -268,6 +284,10 @@ type Metrics struct {
 	LabeledEventsDLQed    *metric.CounterVec
 	LabeledScanningRanges *metric.GaugeVec
 	LabeledCatchupRanges  *metric.GaugeVec
+
+	// Txn-mode applier metrics. The applier updates these directly.
+	TxnApplierBlockedTxns *metric.Gauge
+	TxnApplierReadyTxns   *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -313,9 +333,12 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 
 		// Labeled export-only metrics.
 		LabeledReplicatedTime: metric.NewExportedGaugeVec(metaLabeledReplicatedTime, []string{"label"}),
-		LabeledEventsIngested: metric.NewExportedCounterVec(metaLabeledEventsIngetsted, []string{"label"}),
+		LabeledEventsIngested: metric.NewExportedCounterVec(metaLabeledEventsIngested, []string{"label"}),
 		LabeledEventsDLQed:    metric.NewExportedCounterVec(metaLabeledEventsDLQed, []string{"label"}),
 		LabeledScanningRanges: metric.NewExportedGaugeVec(metaLabeledScanningRanges, []string{"label"}),
 		LabeledCatchupRanges:  metric.NewExportedGaugeVec(metaLabeledCatchupRanges, []string{"label"}),
+
+		TxnApplierBlockedTxns: metric.NewGauge(metaTxnApplierBlockedTxns),
+		TxnApplierReadyTxns:   metric.NewGauge(metaTxnApplierReadyTxns),
 	}
 }
