@@ -391,7 +391,7 @@ func (p *peer[Conn]) run(ctx context.Context, report func(error), done func()) {
 }
 
 func (p *peer[Conn]) runOnce(ctx context.Context, report func(error)) error {
-	cc, err := p.connOptions.dial(ctx, p.k.TargetAddr, p.k.Class)
+	cc, err := p.connOptions.dial(ctx, p.k.TargetAddr, p.k.NodeID, p.k.Class)
 	if err != nil {
 		return err
 	}

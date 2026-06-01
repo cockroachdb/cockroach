@@ -245,7 +245,10 @@ func TestDialDRPC_InterceptorsAreSet(t *testing.T) {
 		},
 	}
 	getConn := rpc.DialDRPC(rpcCtx, nil)
-	conn, err := getConn(ctx, rpcAddr, rpcbase.DefaultClass)
+	// nodeID 0 disables the server-side node-ID check in the dial-time
+	// identity handshake, since this minimal client setup does not bind
+	// to a specific peer node.
+	conn, err := getConn(ctx, rpcAddr, 0 /* nodeID */, rpcbase.DefaultClass)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, conn.Close()) }()
 	desc := c.LookupRangeOrFatal(t, c.ScratchRange(t))

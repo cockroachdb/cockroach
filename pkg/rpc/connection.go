@@ -10,6 +10,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -25,9 +26,11 @@ type rpcConn io.Closer
 
 // dialFunc is a generic function type used to establish an RPC connection.
 // It takes a context for cancellation/timeouts, a target string (e.g., address),
-// and a ConnectionClass to categorize the connection's purpose or priority.
-// It returns the established connection (of type Conn) or an error if dialing fails.
-type dialFunc[Conn rpcConn] func(ctx context.Context, target string, class rpcbase.ConnectionClass) (Conn, error)
+// the expected NodeID at the target (used by transports that perform a
+// dial-time identity handshake), and a ConnectionClass to categorize the
+// connection's purpose or priority. It returns the established connection
+// (of type Conn) or an error if dialing fails.
+type dialFunc[Conn rpcConn] func(ctx context.Context, target string, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (Conn, error)
 
 // heartbeatClientConstructor is a function type that creates a HeartbeatClient
 // for a given rpc connection. This allows us to use different implementations of
