@@ -13,10 +13,45 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
+
+// VisitInlined iterates raft entries in [lo, hi) for rangeID, inlining any
+// sideloaded payloads before yielding each fat entry to fn. Pass nil for
+// entryCache when no cache is available (the inline path then falls through
+// to sideloaded storage).
+//
+// Used by standalone log replay. LoadEntries does equivalent work inline but
+// can't share this helper because its gap check must run before any inline
+// read — see the TODO there.
+func VisitInlined(
+	ctx context.Context,
+	reader storage.Reader,
+	rangeID roachpb.RangeID,
+	sideloaded SideloadStorage,
+	entryCache *raftentry.Cache,
+	lo, hi kvpb.RaftIndex,
+	fn func(raftpb.Entry) error,
+) error {
+	return raftlog.Visit(ctx, reader, rangeID, lo, hi, func(ent raftpb.Entry) error {
+		typ, _, err := raftlog.EncodingOf(ent)
+		if err != nil {
+			return err
+		}
+		if typ.IsSideloaded() {
+			ent, err = MaybeInlineSideloadedRaftCommand(
+				ctx, rangeID, ent, sideloaded, entryCache,
+			)
+			if err != nil {
+				return err
+			}
+		}
+		return fn(ent)
+	})
+}
 
 var errSideloadedFileNotFound = errors.New("sideloaded file not found")
 
@@ -148,8 +183,10 @@ func MaybeSideloadEntries(
 
 // MaybeInlineSideloadedRaftCommand takes an entry and inspects it. If its
 // command encoding version indicates a sideloaded entry, it uses the entryCache
-// or SideloadStorage to inline the payload, and returns a new entry (which must
-// be treated as immutable by the caller).
+// (if non-nil) or SideloadStorage to inline the payload, and returns a new
+// entry (which must be treated as immutable by the caller). Callers without
+// an entry cache (e.g. standalone log replay) may pass nil; the payload will
+// then always be read from sideloaded storage.
 //
 // If a payload is missing, returns an error whose Cause() is
 // errSideloadedFileNotFound.
@@ -167,9 +204,11 @@ func MaybeInlineSideloadedRaftCommand(
 	log.Event(ctx, "inlining sideloaded SSTable")
 	// We could unmarshal this yet again, but if it's committed we are very likely
 	// to have appended it recently, in which case we can save work.
-	if entry, hit := entryCache.Get(rangeID, kvpb.RaftIndex(ent.Index)); hit {
-		log.Event(ctx, "using cache hit")
-		return entry, nil
+	if entryCache != nil {
+		if entry, hit := entryCache.Get(rangeID, kvpb.RaftIndex(ent.Index)); hit {
+			log.Event(ctx, "using cache hit")
+			return entry, nil
+		}
 	}
 
 	log.Event(ctx, "inlined entry not cached")

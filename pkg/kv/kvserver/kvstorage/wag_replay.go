@@ -12,7 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -92,12 +92,24 @@ type raftCatchUpTarget struct {
 // their writes. The caller must call Close when done, whether or not Commit
 // was called.
 type ReplayBatch interface {
-	// ApplyEntry applies a single raft entry. Returns whether the entry had
-	// only trivial side effects (no lease change, GC threshold bump, etc.).
-	ApplyEntry(context.Context, raftpb.Entry) (trivial bool, _ error)
+	// ApplyEntry applies a single raft entry. The entry's sideloaded payload
+	// (if any) must already be inlined; the replay driver uses Sideloaded()
+	// to do this before calling ApplyEntry.
+	//
+	// needsReload=true signals that the caller should commit the batch and
+	// reload state before applying further entries. It is returned both when
+	// a non-trivial entry has been applied (state may have changed in ways
+	// subsequent entries need to see) and when a non-trivial entry could not
+	// be applied to this batch because it already contains staged writes
+	// from preceding trivial entries.
+	ApplyEntry(context.Context, raftpb.Entry) (needsReload bool, _ error)
 	// AppliedIndex returns the raft applied index after the last ApplyEntry,
 	// or the initial applied index if no entries have been applied yet.
 	AppliedIndex() kvpb.RaftIndex
+	// Sideloaded returns the sideloaded storage for the range this batch
+	// applies to. The replay driver inlines sideloaded payloads using it
+	// before yielding entries to ApplyEntry.
+	Sideloaded() logstore.SideloadStorage
 	// Commit writes the applied state and commits the batch.
 	Commit(context.Context) error
 	// Close releases batch resources. Safe to call after Commit.
@@ -279,9 +291,10 @@ func ReplayWAG(
 
 // replayRaftLog replays raft log entries for a range from its current applied
 // index up to the target index. It creates a ReplayBatch, iterates entries via
-// raftlog.Visit, and applies each one. Non-trivial entries (lease changes, GC
-// threshold bumps, etc.) trigger a batch flush and state reload so that
-// subsequent entries are checked against up-to-date state.
+// logstore.VisitInlined (so any sideloaded payloads are inlined), and applies
+// each one. Non-trivial entries (lease changes, GC threshold bumps, etc.)
+// trigger a batch flush and state reload so that subsequent entries are
+// checked against up-to-date state.
 func replayRaftLog(
 	ctx context.Context, raftRO RaftRO, target raftCatchUpTarget, newBatch NewReplayBatchFn,
 ) error {
@@ -323,21 +336,21 @@ func replayRaftLogBatch(
 	// TODO(mira): Add a max batch size policy to bound memory usage. Large
 	// ranges with many entries could produce an oversized batch here.
 	var needsReload bool
-	// NB: Visit uses [start, end) semantics.
-	err = raftlog.Visit(ctx, raftRO, target.rangeID, lo+1, hi+1, func(ent raftpb.Entry) error {
-		trivial, err := rb.ApplyEntry(ctx, ent)
-		if err != nil {
-			return err
-		}
-		if !trivial {
-			// Non-trivial entries may change state (lease, GC threshold)
-			// that affects accept/reject decisions for subsequent entries.
-			// Stop iteration so the caller can flush and reload.
-			needsReload = true
-			return iterutil.StopIteration()
-		}
-		return nil
-	})
+	// NB: VisitInlined uses [start, end) semantics. Standalone replay has no
+	// raft entry cache, so inlined reads always fall through to sideloaded
+	// storage.
+	err = logstore.VisitInlined(
+		ctx, raftRO, target.rangeID, rb.Sideloaded(), nil, /* entryCache */
+		lo+1, hi+1, func(ent raftpb.Entry) error {
+			var err error
+			if needsReload, err = rb.ApplyEntry(ctx, ent); err != nil {
+				return err
+			} else if needsReload {
+				return iterutil.StopIteration()
+			}
+			return nil
+		},
+	)
 	if err = iterutil.Map(err); err != nil {
 		return false, err
 	}
