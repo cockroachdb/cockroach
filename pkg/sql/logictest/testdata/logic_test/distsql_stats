@@ -2984,7 +2984,7 @@ upper_bound   range_rows  distinct_range_rows  equal_rows
 query T
 EXPLAIN SELECT * FROM t68254 WHERE e IN ('{"baz": 2}', '{"baz": 3}', '{"baz": 4}')
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • render
 │
@@ -3000,7 +3000,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM t68254 WHERE f IN ('{"baz": 2}', '{"baz": 3}', '{"baz": 4}')
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • render
 │
@@ -3016,7 +3016,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM t68254 WHERE c->'foo'->'bar' > '{"baz": 0}'
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • render
 │

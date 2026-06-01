@@ -333,7 +333,7 @@ func runPlanInsidePlan(
 		}
 	}
 
-	distributePlan, blockers := plannerCopy.getPlanDistribution(ctx, plan.main, notPostquery)
+	distributePlan, blockers, _ := plannerCopy.getPlanDistribution(ctx, plan.main, notPostquery)
 	distributeType := DistributionType(LocalDistribution)
 	if distributePlan.WillDistribute() {
 		distributeType = FullDistribution

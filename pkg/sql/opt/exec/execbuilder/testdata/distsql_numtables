@@ -51,7 +51,7 @@ start_key           end_key       replicas  lease_holder
 query T
 EXPLAIN (DISTSQL) SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • render
 │
@@ -90,7 +90,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lm1r2z4Uxd__P
 query T
 EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y < 10 AND str LIKE '%e%' ORDER BY y
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • filter
 │ filter: str LIKE '%e%'
@@ -273,7 +273,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lm9vqkgUxt_vp
 query T
 EXPLAIN (DISTSQL) SELECT y FROM NumToStr LIMIT 5
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
@@ -286,7 +286,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUE2L2zAQvfdXi
 query T
 EXPLAIN (DISTSQL) SELECT y FROM NumToStr ORDER BY y LIMIT 5
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
@@ -313,7 +313,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUVFv0zAQfudXn
 query T
 EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • scan
@@ -327,7 +327,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
@@ -387,7 +387,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT count(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • group (scalar)
 │

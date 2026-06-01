@@ -160,7 +160,7 @@ ALTER TABLE system.statement_statistics INJECT STATISTICS '[
 explain-sql-activity-select-all-transactions aggTs=(2023-04-10 16:00:00)
 ----
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 
 • render
@@ -215,7 +215,7 @@ vectorized: true
 explain-sql-activity-select-top-transactions aggTs=(2023-04-10 16:00:00)
 ----
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 
 • render
@@ -335,7 +335,7 @@ vectorized: true
 explain-sql-activity-select-all-statements aggTs=(2023-04-10 16:00:00)
 ----
 ----
-distribution: local
+distribution: local (auto, no recommendation)
 vectorized: true
 
 • render
@@ -499,7 +499,7 @@ vectorized: true
 explain-sql-activity-select-top-statements aggTs=(2023-04-10 16:00:00)
 ----
 ----
-distribution: local
+distribution: local (auto, no recommendation)
 vectorized: true
 
 • render

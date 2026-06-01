@@ -258,7 +258,7 @@ SELECT count(*), (SELECT count(*) FROM q) FROM (
   LEFT JOIN rtable ON ST_Intersects(q.geom1, rtable.geom)
 ) GROUP BY lk
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │

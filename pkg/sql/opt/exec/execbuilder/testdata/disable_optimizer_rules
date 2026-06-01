@@ -10,7 +10,7 @@ CREATE TABLE t (a INT, b INT, c INT, INDEX (b))
 query T
 EXPLAIN SELECT * FROM t WHERE b = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: t@t_pkey
@@ -28,7 +28,7 @@ SET disable_optimizer_rules = 'PushFilterIntoJoinLeft'
 query T
 EXPLAIN SELECT * FROM t WHERE b = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: t@t_pkey
@@ -46,7 +46,7 @@ SET disable_optimizer_rules = 'GenerateConstrainedScans'
 query T
 EXPLAIN SELECT * FROM t WHERE b = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b = 1
@@ -69,7 +69,7 @@ GenerateConstrainedScans, PushFilterIntoJoinLeft
 query T
 EXPLAIN SELECT * FROM t WHERE b = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b = 1
@@ -95,7 +95,7 @@ generateConstrainedScans
 query T
 EXPLAIN SELECT * FROM t WHERE b = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b = 1
@@ -113,7 +113,7 @@ RESET disable_optimizer_rules
 query T
 EXPLAIN SELECT * FROM t WHERE b = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: t@t_pkey

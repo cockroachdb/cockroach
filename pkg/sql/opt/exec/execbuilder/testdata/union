@@ -9,7 +9,7 @@ CREATE TABLE uniontest (
 query T
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • union
 │
@@ -26,7 +26,7 @@ distribution: local
 query T
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • union all
 │
@@ -44,7 +44,7 @@ distribution: local
 query T
 EXPLAIN SELECT node_id FROM crdb_internal.node_build_info UNION VALUES(123)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • union
 │
@@ -60,7 +60,7 @@ CREATE TABLE abc (a INT, b INT, c INT)
 query T
 EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc ORDER BY c) ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -94,7 +94,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM ((SELECT '' AS a , '') EXCEPT ALL (SELECT '', ''))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -124,7 +124,7 @@ query T
 EXPLAIN (VERBOSE) ((SELECT '', '', 'x' WHERE false))
 UNION ALL ((SELECT * FROM (VALUES ('', '', 'x'), ('', '', 'x'))) EXCEPT (VALUES ('', '', 'x')))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -158,7 +158,7 @@ query T
 EXPLAIN (VERBOSE)
 SELECT 1 FROM (SELECT k FROM uniontest WHERE k > 3 UNION ALL SELECT k FROM uniontest)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -200,7 +200,7 @@ CREATE TABLE xy (x INT NOT NULL, y INT, INDEX(x, y), INDEX (y, x))
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT a FROM ab UNION SELECT x AS a FROM xy ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union
@@ -227,7 +227,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckVFvmzAUhd_3K
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT a, b FROM ab UNION SELECT x AS a, y AS b FROM xy ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union
@@ -254,7 +254,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckd9umzAUxu_3F
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT a, b FROM ab UNION ALL SELECT x AS a, y AS b FROM xy ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union all
@@ -285,7 +285,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckUFvnDAQhe_9F
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT a, b FROM ab INTERSECT SELECT x AS a, y AS b FROM xy ORDER BY b, a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • intersect
@@ -312,7 +312,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk9Fvmz4Qx99_f
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT b FROM ab INTERSECT ALL SELECT x AS b FROM xy ORDER BY b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • intersect all
@@ -339,7 +339,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFr2zAQx9_3K
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT b, a FROM ab INTERSECT ALL SELECT y AS b, x AS a FROM xy ORDER BY b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • intersect all
@@ -366,7 +366,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFr2zAUhd_3K
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT b, a FROM ab EXCEPT SELECT y AS b, x AS a FROM xy ORDER BY b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • except
@@ -393,7 +393,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk1Fro0AQgN_vV
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT a, b FROM ab EXCEPT ALL SELECT x AS a, y AS b FROM xy ORDER BY b, a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • except all
@@ -423,7 +423,7 @@ CREATE TABLE abcde (a INT PRIMARY KEY, b INT, c INT, d INT, e INT, INDEX (b, c, 
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT a, b, c, d, e FROM abcde UNION SELECT a, c, b, d, e FROM abcde) WHERE c = 1 AND d = e ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union
@@ -465,7 +465,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck11v4jwQhe_fX
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT a, b, c, d, e FROM abcde UNION SELECT  a, c, b, d, e FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e, a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union
@@ -504,7 +504,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk29v2jAQh9_vU
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde UNION ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union all
@@ -543,7 +543,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k29r4kAQh9_fp
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde UNION ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e, a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union all
@@ -582,7 +582,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k11r2zwUx--fT
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT b, c, d, e FROM (SELECT b, c, d, e FROM abcde INTERSECT SELECT b, c, d, e FROM abcde) WHERE c = 1 AND d = e ORDER BY b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • intersect
@@ -621,7 +621,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lN1u2jAYhs93F
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT b, c, d, e FROM (SELECT b, c, d, e FROM abcde EXCEPT SELECT b, c, d, e FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • except
@@ -660,7 +660,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lF1v2jwYhs_fX
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde EXCEPT ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • except all
@@ -699,7 +699,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k29r2zAQh9_vU
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde INTERSECT ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e, a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • intersect all
@@ -746,7 +746,7 @@ EXPLAIN (DISTSQL,VERBOSE) WITH q (x, y) AS (
 SELECT 'e', y FROM q
 ORDER BY x
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -792,7 +792,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckl9vmzAQwN_3K
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT a, b, c FROM abcde UNION SELECT b, c, d FROM abcde
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union
@@ -819,7 +819,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycktFr2zAQxt_3V
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT a, b, c FROM abcde INTERSECT SELECT b, c, d FROM abcde
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • intersect all
@@ -846,7 +846,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckt9r2zAQx9_3V
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT b, c, d FROM abcde INTERSECT ALL SELECT b, c, d FROM abcde
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • intersect all
@@ -873,7 +873,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0Ut9r2zAQft9fI
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT b, c, d FROM abcde EXCEPT SELECT a, d, e FROM abcde
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • except
@@ -900,7 +900,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck1Fr4kAQgN_vV
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT a, b, c FROM abcde EXCEPT ALL SELECT b, c, d FROM abcde
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • except all
@@ -927,7 +927,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFr2zAQx9_3K
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT a, b, c FROM abcde UNION ALL SELECT b, c, d FROM abcde
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union all
@@ -960,7 +960,7 @@ CREATE TABLE def (d INT PRIMARY KEY, e INT, f INT);
 query T
 EXPLAIN (VERBOSE, DISTSQL) SELECT d, e, f FROM def EXCEPT SELECT a, b, c FROM abc ORDER by d, e
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • except all
@@ -992,7 +992,7 @@ CREATE TABLE efgh (e INT PRIMARY KEY, f INT, g INT, h INT)
 query T
 EXPLAIN (VERBOSE, DISTSQL) SELECT e, f, g, h FROM efgh EXCEPT SELECT a, b, c, d FROM abcd ORDER by e, f
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • except all
@@ -1031,7 +1031,7 @@ query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT tableoid AS col1, tableoid AS col2, k AS col3 FROM t68702
 EXCEPT ALL SELECT * FROM (VALUES (NULL, 2505326470:::OID, (-1643624263):::INT8))
 ----
-distribution: local
+distribution: local (oidProhibited, castToOidProhibited)
 vectorized: true
 ·
 • except all
@@ -1061,7 +1061,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUm1r2zwU_f78C
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT a, b AS b1, b AS b2 FROM abc EXCEPT SELECT a, b, c FROM abc ORDER by a, b1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • except
@@ -1092,7 +1092,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck1Fr2zAQgN_3K
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT a, b AS b1, b AS b2 FROM abc INTERSECT SELECT a, c, b FROM abc ORDER by a, b2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • intersect

@@ -191,7 +191,7 @@ scan g
 query T
 EXPLAIN (REDACT) INSERT INTO a VALUES (1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: a(a, rowid)
@@ -201,7 +201,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) INSERT INTO a VALUES (1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -308,7 +308,7 @@ insert a
 query T
 EXPLAIN (REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • upsert
 │ into: bc(b, c)
@@ -343,7 +343,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -879,7 +879,7 @@ upsert bc
 query T
 EXPLAIN (REDACT) UPSERT INTO d VALUES (7.7)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • upsert
 │ into: d(d)
@@ -891,7 +891,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) UPSERT INTO d VALUES (7.7)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -1001,7 +1001,7 @@ upsert d
 query T
 EXPLAIN (REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: ab
@@ -1019,7 +1019,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -1193,7 +1193,7 @@ update ab
 query T
 EXPLAIN (REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: e
@@ -1213,7 +1213,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • update
@@ -1439,7 +1439,7 @@ update e
 query T
 EXPLAIN (REDACT) DELETE FROM f WHERE f = 8.5
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • delete
 │ from: f
@@ -1456,7 +1456,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) DELETE FROM f WHERE f = 8.5
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • delete
@@ -1626,7 +1626,7 @@ delete f
 query T
 EXPLAIN (REDACT) SELECT * FROM bc WHERE b >= 1.0 AND b < 2.0
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • render
 │
@@ -1638,7 +1638,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM bc WHERE b >= 1.0 AND b < 2.0
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -1760,7 +1760,7 @@ project
 query T
 EXPLAIN (REDACT) SELECT * FROM g WHERE (g || 'abc') LIKE '%ggg%'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (g || ‹×›) LIKE ‹×›
@@ -1776,7 +1776,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM g WHERE (g || 'abc') LIKE '%ggg%'
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1923,7 +1923,7 @@ select
 query T
 EXPLAIN (REDACT) SELECT a FROM a WHERE a % 8 > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (a % ‹×›) > ‹×›
@@ -1936,7 +1936,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT a FROM a WHERE a % 8 > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -2040,7 +2040,7 @@ select
 query T
 EXPLAIN (REDACT) SELECT 100, if(e != '', 12.0, 13.0), 'abc', coalesce(e, 'eee'), row(e, e || 'a', now()), 'POINT (1 1)'::GEOMETRY, '[true]'::JSON, false, NULL, e FROM e
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • render
 │
@@ -2052,7 +2052,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT 100, if(e != '', 12.0, 13.0), 'abc', coalesce(e, 'eee'), row(e, e || 'a', now()), 'POINT (1 1)'::GEOMETRY, '[true]'::JSON, false, NULL, e FROM e
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -2242,7 +2242,7 @@ project
 query T
 EXPLAIN (REDACT) SELECT * FROM bc JOIN f ON b = f + 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • hash join
 │ equality: (b) = (column13)
@@ -2265,7 +2265,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -2595,7 +2595,7 @@ project
 query T
 EXPLAIN (REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • render
 │
@@ -2626,7 +2626,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • render
@@ -3034,7 +3034,7 @@ project
 query T
 EXPLAIN (REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • apply join (anti)
 │ pred: (a <= "?column?") IS NOT ‹×›
@@ -3060,7 +3060,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • apply join (anti)
@@ -3310,7 +3310,7 @@ anti-join-apply
 query T
 EXPLAIN (REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: a IN (‹×›, ‹×›, ‹×›)
@@ -3323,7 +3323,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -3428,7 +3428,7 @@ select
 query T
 EXPLAIN (REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • top-k
 │ order: +column8
@@ -3444,7 +3444,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -3627,7 +3627,7 @@ top-k
 query T
 EXPLAIN (REDACT) SELECT covar_pop(d, d + 1) FROM d
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (scalar)
 │
@@ -3641,7 +3641,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT covar_pop(d, d + 1) FROM d
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -3814,7 +3814,7 @@ scalar-group-by
 query T
 EXPLAIN (REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • window
 │
@@ -3828,7 +3828,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project

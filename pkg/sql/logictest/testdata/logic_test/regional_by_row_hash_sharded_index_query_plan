@@ -41,7 +41,7 @@ CREATE TABLE t_child_regional (
 query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_child VALUES (123, 321)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -102,7 +102,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_child_regional VALUES (123, 321)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -199,7 +199,7 @@ CREATE TABLE t_gen_random_uuid (
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_gen_random_uuid (val) VALUES (4321);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -234,7 +234,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_gen_random_uuid (val) VALUES (4321) ON CONFLICT DO NOTHING;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • insert
@@ -290,7 +290,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_gen_random_uuid (val) VALUES (4321), (8765) ON CONFLICT DO NOTHING;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • insert
@@ -364,7 +364,7 @@ CREATE TABLE t_unique_hash_pk (
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -383,7 +383,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321) ON CONFLICT DO NOTHING;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • insert
@@ -433,7 +433,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321), (8765) ON CONFLICT DO NOTHING;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • insert
@@ -486,7 +486,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321) ON CONFLICT (id) DO NOTHING;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • insert
@@ -536,7 +536,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321), (8765) ON CONFLICT (id) DO NOTHING;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • insert
@@ -589,7 +589,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321) ON CONFLICT (id) DO UPDATE SET id = excluded.id
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root
@@ -695,7 +695,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321), (8765) ON CONFLICT (id) DO UPDATE SET id = excluded.id
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root
@@ -798,7 +798,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_unique_hash_pk (id) VALUES (4321);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • upsert
@@ -849,7 +849,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_unique_hash_pk (id) VALUES (4321), (8765);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • upsert
@@ -897,7 +897,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t_unique_hash_pk SET id = 1234 WHERE id = 4321;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root
@@ -988,7 +988,7 @@ CREATE UNIQUE INDEX idx_uniq_hash_email ON t_unique_hash_sec_key (email) USING H
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email');
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -1009,7 +1009,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email') ON CONFLICT DO NOTHING;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • insert
@@ -1091,7 +1091,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email'), (8765, 'another_email') ON CONFLICT DO NOTHING;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • insert
@@ -1164,7 +1164,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email') ON CONFLICT (email) DO NOTHING;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root
@@ -1245,7 +1245,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email'), (8765, 'another_email') ON CONFLICT (email) DO NOTHING;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root
@@ -1331,7 +1331,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email') ON CONFLICT (email) DO UPDATE SET email = 'bad_email';
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root
@@ -1478,7 +1478,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email'), (8765, 'another_email') ON CONFLICT (email) DO UPDATE SET email = 'bad_email';
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root
@@ -1631,7 +1631,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_unique_hash_sec_key VALUES (1, 'email1');
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root
@@ -1737,7 +1737,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_unique_hash_sec_key VALUES (1, 'email1'), (8765, 'email2');
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root
@@ -1842,7 +1842,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t_unique_hash_sec_key SET email = 'email1' WHERE id = 2;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root

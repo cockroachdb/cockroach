@@ -38,7 +38,7 @@ CREATE TABLE child (
 query T retry
 EXPLAIN INSERT INTO child (id, p_id) VALUES (1, 10), (2, 150)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -264,7 +264,7 @@ INTO
 VALUES
   (2057, 4, 3, 4, 3, 2100.9, '2021-04-15 15:22:14', '9    zmssaF9m')
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -349,7 +349,7 @@ FROM
 WHERE
     order_id = '94e4b847-8f2f-4ac5-83f1-641d6e3df727'
 ----
-distribution: local
+distribution: local (localityOptimizedOpProhibited)
 ·
 • render
 │
@@ -382,7 +382,7 @@ FROM
 WHERE
     order_id = '94e4b847-8f2f-4ac5-83f1-641d6e3df727'
 ----
-distribution: local
+distribution: local (localityOptimizedOpProhibited)
 ·
 • render
 │
@@ -437,7 +437,7 @@ CREATE TABLE t85043 (
 query T
 EXPLAIN UPDATE t85043 SET ts = '2022-08-01 18:07:07' WHERE id = 'ab020c49-ba5e-4800-8000-00000000014e'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: t85043

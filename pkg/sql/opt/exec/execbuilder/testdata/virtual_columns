@@ -81,7 +81,7 @@ project
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -99,7 +99,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t_idx WHERE a+b=1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -111,7 +111,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t_idx WHERE v=1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -124,7 +124,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a, v FROM t_idx WHERE v=1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -149,7 +149,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT v, x FROM (VALUES (1), (10), (5)) AS u(x) INNER JOIN t_idx ON u.x = t_idx.v
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • lookup join (inner)
@@ -169,7 +169,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a, b, v, x FROM (VALUES (1), (10), (5)) AS u(x) INNER JOIN t_idx ON u.x = t_idx.v
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • lookup join (inner)
@@ -199,7 +199,7 @@ subtest Insert
 query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -215,7 +215,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 1) RETURNING v
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • project
@@ -234,7 +234,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (1, 1, 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -254,7 +254,7 @@ subtest Delete
 query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a > 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • delete range
@@ -266,7 +266,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a > 1 RETURNING v
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -293,7 +293,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE v = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • delete
@@ -319,7 +319,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a > 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • delete
@@ -344,7 +344,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a > 1 RETURNING v
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -372,7 +372,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE v = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • delete
@@ -405,7 +405,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a + b = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • delete
@@ -440,7 +440,7 @@ subtest Update
 query T
 EXPLAIN (VERBOSE) UPDATE t SET a=a+1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -475,7 +475,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t SET b=b+1 WHERE v=45 RETURNING a,b,v
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • update
@@ -514,7 +514,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET a=a+1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -553,7 +553,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING v, w
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -593,7 +593,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 WHERE v=45 RETURNING v, w
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -641,7 +641,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET c=6 WHERE a=2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -669,7 +669,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET a=a+1 RETURNING a,v,w
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -708,7 +708,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING w
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -750,7 +750,7 @@ subtest Upsert
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t VALUES (1, 10), (2, 20), (3, 30), (4, 40)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -783,7 +783,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (5, 51), (6, 60) ON CONFLICT DO NOTHING RETURNING v
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • project
@@ -821,7 +821,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (4, 100), (6, 100), (7, 100) ON CONFLICT (a) DO UPDATE SET b = t.v
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -882,7 +882,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (2, 100), (5, 100), (8, 100) ON CONFLICT (a) DO UPDATE SET b = excluded.v
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -943,7 +943,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_idx VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300), (4, 40, 400)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -1005,7 +1005,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_idx VALUES (3, 31, 301), (5, 50, 500) RETURNING a, v, w
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -1075,7 +1075,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 41, 301), (6, 60, 600), (7, 70, 100) ON CONFLICT DO NOTHING RETURNING w
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • project
@@ -1134,7 +1134,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = 0
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -1204,7 +1204,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = t_idx.w RETURNING a, b, c, v, w
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -1281,7 +1281,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (8, 80, 800), (10, 100, 700) ON CONFLICT (w) DO UPDATE SET a = excluded.a, c = excluded.v
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -1369,7 +1369,7 @@ CREATE TABLE checks (
 query T
 EXPLAIN (VERBOSE) SELECT a FROM checks WHERE b BETWEEN 10 and 15
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1400,7 +1400,7 @@ CREATE TABLE inv (
 query T
 EXPLAIN (VERBOSE) SELECT k FROM inv WHERE jv @> '{"a": "b"}'
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1413,7 +1413,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM inv WHERE i IN (10, 20, 30) AND jv @> '{"a": "b"}'
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1426,7 +1426,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM inv WHERE iv IN (10, 20, 30) AND j @> '{"a": "b"}'
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1442,7 +1442,7 @@ DROP INDEX inv@iv_j_idx
 query T
 EXPLAIN (VERBOSE) SELECT k FROM inv WHERE iv IN (10, 20, 30) AND jv @> '{"a": "b"}'
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1466,7 +1466,7 @@ CREATE TABLE t65343 (
 query T
 EXPLAIN SELECT * FROM t65343 WHERE s COLLATE en_US = 'foo' COLLATE en_US
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • render
 │
@@ -1481,7 +1481,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_US" = 'foo' COLLATE en_US
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • render
 │
@@ -1496,7 +1496,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_us" = 'foo' COLLATE en_US
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • render
 │
@@ -1511,7 +1511,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en-US" = 'foo' COLLATE en_US
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • render
 │

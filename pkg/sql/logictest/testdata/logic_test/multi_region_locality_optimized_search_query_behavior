@@ -61,7 +61,7 @@ EXPLAIN SELECT 1 FROM users@home_region_and_address
 WHERE home_region IN ('ap':::STRING, 'ca':::STRING, 'us':::STRING)
   AND address = '221B Baker Street';
 ----
-distribution: local
+distribution: local (auto, no recommendation)
 ·
 • render
 │
@@ -77,7 +77,7 @@ EXPLAIN SELECT 1 FROM users@home_region_and_address
 WHERE home_region IN ('ap':::STRING, 'ca':::STRING, 'us':::STRING)
   AND address = '221B Baker Street' LIMIT 1;
 ----
-distribution: local
+distribution: local (localityOptimizedOpProhibited)
 ·
 • render
 │
@@ -103,7 +103,7 @@ EXPLAIN SELECT 1 FROM users@home_region_and_address
 WHERE home_region IN ('ap':::STRING, 'ca':::STRING, 'us':::STRING)
   AND address = '221B Baker Street' LIMIT 2;
 ----
-distribution: local
+distribution: local (auto, no recommendation)
 ·
 • render
 │
@@ -124,7 +124,7 @@ EXPLAIN SELECT 1 FROM users@home_region_and_address
 WHERE home_region IN ('ap':::STRING, 'ca':::STRING, 'us':::STRING)
   AND address = '221B Baker Street';
 ----
-distribution: local
+distribution: local (localityOptimizedOpProhibited)
 ·
 • render
 │

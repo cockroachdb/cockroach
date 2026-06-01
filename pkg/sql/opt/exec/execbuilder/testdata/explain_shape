@@ -8,7 +8,7 @@ CREATE TABLE a (a INT PRIMARY KEY, b INT)
 query T
 EXPLAIN (SHAPE) SELECT b FROM a WHERE a = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   table: a@a_pkey

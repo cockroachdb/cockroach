@@ -115,7 +115,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 33
@@ -146,7 +146,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +value
@@ -175,7 +175,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 33
@@ -206,7 +206,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +value
@@ -234,7 +234,7 @@ WHERE
   time < '2020-01-01 00:00:00+00:00' AND
   name='cpu'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ estimated row count: 33
@@ -260,7 +260,7 @@ WHERE
   time < '2020-01-01 00:00:00+00:00' AND
   name='cpu'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: metric_values_desc@metric_values_desc_pkey
@@ -286,7 +286,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 33
@@ -317,7 +317,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +value
@@ -346,7 +346,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 33
@@ -377,7 +377,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +value
@@ -406,7 +406,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 11
@@ -437,7 +437,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +value
@@ -466,7 +466,7 @@ AND time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00'
 AND name='cpu'
 ORDER BY value, id
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 11
@@ -491,7 +491,7 @@ FROM metrics m
 WHERE EXISTS (SELECT * FROM metric_values mv WHERE mv.metric_id = m.id AND time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00')
 ORDER BY m.id
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join (semi)
 │ estimated row count: 10
@@ -516,7 +516,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 3
@@ -554,7 +554,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 1
@@ -592,7 +592,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 1
@@ -630,7 +630,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 1
@@ -669,7 +669,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 1
@@ -707,7 +707,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 1
@@ -746,7 +746,7 @@ WHERE
   v.nullable = m.nullable
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 3
@@ -786,7 +786,7 @@ WHERE
   v.nullable = 1
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 1
@@ -826,7 +826,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 33
@@ -864,7 +864,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 33
@@ -902,7 +902,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 33
@@ -941,7 +941,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 33
@@ -979,7 +979,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 33
@@ -1037,7 +1037,7 @@ FROM
 WHERE
   ol_o_id BETWEEN 20 AND 100
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1065,7 +1065,7 @@ FROM
 WHERE
   ol_o_id IN (19, 20, 21) AND ol_o_id >= 20
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project

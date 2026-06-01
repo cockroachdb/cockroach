@@ -236,7 +236,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysl19v8jYUxu_3K
 query T
 EXPLAIN (DISTSQL) VALUES (1), (2) UNION VALUES (2), (3)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • union
 │ estimated row count: 4

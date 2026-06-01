@@ -195,7 +195,7 @@ output row: [2]
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b = '3'
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -283,7 +283,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 query T
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • norows
 
@@ -451,21 +451,21 @@ output row: [3 4]
 query T
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • norows
 
 query T
 EXPLAIN SELECT * FROM t WHERE a = 1 AND NULL
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • norows
 
 query T
 EXPLAIN SELECT * FROM t WHERE a = NULL AND a != NULL
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • norows
 
@@ -487,7 +487,7 @@ CREATE TABLE t (
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -507,7 +507,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c < 1 AND b < 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -527,7 +527,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1.0
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -547,7 +547,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c < 1.0
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -567,7 +567,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1.0 AND b < 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -587,7 +587,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE b < 5.0 AND c < 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -607,7 +607,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5, 1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -622,7 +622,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5.0, 1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -637,7 +637,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5.1, 1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -658,7 +658,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE b IN (5.0, 1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -685,7 +685,7 @@ CREATE TABLE abcd (
 query T
 EXPLAIN (VERBOSE) SELECT b FROM abcd WHERE (a, b) = (1, 4)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -700,7 +700,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -721,7 +721,7 @@ CREATE TABLE ab (
 query T
 EXPLAIN (VERBOSE) SELECT i, s FROM ab WHERE (i, s) < (1, 'c')
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -741,7 +741,7 @@ CREATE INDEX baz ON ab (i, s)
 query T
 EXPLAIN (VERBOSE) SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -771,7 +771,7 @@ abz  abz_pkey     false  3  c  c  N/A   true   false  true  1
 query T
 EXPLAIN (VERBOSE) SELECT a FROM abz ORDER BY a DESC LIMIT 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -784,7 +784,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT c FROM abz ORDER BY c DESC LIMIT 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -806,7 +806,7 @@ CREATE TABLE tab0(
 query T
 EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -841,7 +841,7 @@ INSERT INTO test2(k)
 query T
 EXPLAIN (VERBOSE) SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • index join
@@ -907,7 +907,7 @@ AND   f1.resource_key IN ('ts', 'ts2', 'ts3')
 GROUP BY resource_key
 ORDER BY total DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: -count_rows
@@ -943,7 +943,7 @@ ts3 1
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b > 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -955,7 +955,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b < 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -967,7 +967,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL ORDER BY b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -980,7 +980,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -998,7 +998,7 @@ CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY(a,b), INDEX(c))
 query T
 EXPLAIN (VERBOSE) SELECT c FROM abc WHERE c = 1 and a = 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1018,7 +1018,7 @@ CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY(d,e), UNIQUE INDEX(f))
 query T
 EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1046,7 +1046,7 @@ CREATE TABLE def (d INT, e INT, f INT NOT NULL, PRIMARY KEY(d,e), UNIQUE INDEX(f
 query T
 EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1067,7 +1067,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a, b FROM abc WHERE (a, b) BETWEEN (1, 2) AND (3, 4)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1083,7 +1083,7 @@ CREATE TABLE str (k INT PRIMARY KEY, v STRING, INDEX(v))
 query T
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v LIKE 'ABC%'
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1095,7 +1095,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v LIKE 'ABC%Z'
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1112,7 +1112,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v SIMILAR TO 'ABC_*'
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1129,7 +1129,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v ~ '^ABC'
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1145,7 +1145,7 @@ CREATE TABLE xy (x INT, y INT, INDEX (y))
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM NULL
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • index join
@@ -1164,7 +1164,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM 4
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • index join
@@ -1183,7 +1183,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT x FROM xy WHERE y > 0 AND y < 2 ORDER BY y
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1205,7 +1205,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1222,7 +1222,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM 4
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1246,7 +1246,7 @@ INSERT INTO xy VALUES (NULL, NULL), (1, NULL), (NULL, 1), (1, 1)
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE x IN (NULL, 1, 2)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1258,7 +1258,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1290,7 +1290,7 @@ INSERT INTO noncover VALUES (1, 2, 3, 4), (5, 6, 7, 8)
 query T
 EXPLAIN SELECT * FROM noncover WHERE b = 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: noncover@noncover_pkey
@@ -1326,7 +1326,7 @@ Scan /Table/120/1/{1-2}
 query T
 EXPLAIN SELECT * FROM noncover WHERE c = 6
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: noncover@noncover_pkey
@@ -1354,7 +1354,7 @@ output row: [5 6 7 8]
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -1376,7 +1376,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -1398,7 +1398,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 AND d = 8
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1418,7 +1418,7 @@ vectorized: true
 query T
 EXPLAIN SELECT * FROM noncover ORDER BY c
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +c
@@ -1431,7 +1431,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM noncover ORDER BY c LIMIT 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: noncover@noncover_pkey
@@ -1445,7 +1445,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c OFFSET 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • limit
@@ -1466,7 +1466,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 5 OFFSET 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • index join
@@ -1492,7 +1492,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 1000000
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • index join
@@ -1555,7 +1555,7 @@ ALTER TABLE t2 INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • index join
@@ -1597,7 +1597,7 @@ output row: [5 2 2 '22']
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c != b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • index join
@@ -1711,7 +1711,7 @@ output row: [9 3 3 '33']
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1729,7 +1729,7 @@ CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
 query T
 EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 10 ORDER BY v
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1777,7 +1777,7 @@ INSERT INTO t4 VALUES (10, 20, 30, 40, 50)
 query T
 EXPLAIN SELECT c FROM t4 WHERE a = 10 and b = 20
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1800,7 +1800,7 @@ output row: [30]
 query T
 EXPLAIN SELECT d FROM t4 WHERE a = 10 and b = 20
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1824,7 +1824,7 @@ output row: [40]
 query T
 EXPLAIN SELECT d, e FROM t4 WHERE a = 10 and b = 20
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1835,7 +1835,7 @@ distribution: local
 query T
 EXPLAIN UPDATE t4 SET c = 30 WHERE a = 10 and b = 20
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: t4
@@ -1854,7 +1854,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM t4 WHERE a = 10 and b = 20
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete range
   from: t4
@@ -1865,7 +1865,7 @@ distribution: local
 query T
 EXPLAIN SELECT c FROM t4 WHERE a = 10 and b >= 20 and b < 22
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1876,7 +1876,7 @@ distribution: local
 query T
 EXPLAIN SELECT c FROM t4 WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1888,7 +1888,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM t4 WHERE a in (1, 5) and b in (1, 5)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1909,7 +1909,7 @@ CREATE INDEX t5_a_idx ON t5 (a)
 query T
 EXPLAIN SELECT a FROM t5 WHERE a @> 'A.B.C'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1919,7 +1919,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM t5 WHERE a <@ 'A.B.C'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats

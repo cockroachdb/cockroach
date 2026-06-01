@@ -23,7 +23,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT lk, rk1 FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -45,7 +45,7 @@ query T
 EXPLAIN SELECT lk, rk1, rk2, rtable.geom
 FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -65,7 +65,7 @@ query T
 EXPLAIN SELECT lk, rk1, rk2, rtable.geom
 FROM ltable JOIN rtable@geom_index ON ST_DWithin(ltable.geom1, rtable.geom, 5)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -86,7 +86,7 @@ EXPLAIN (VERBOSE)
 SELECT lk, rk1 FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -136,7 +136,7 @@ EXPLAIN (VERBOSE)
 SELECT lk, rk1 FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -187,7 +187,7 @@ SELECT lk, rk1 FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_Covers(ltable.geom2, rtable.geom)
 AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0 1.0)', rtable.geom))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -226,7 +226,7 @@ query T
 EXPLAIN (VERBOSE)
 SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -264,7 +264,7 @@ query T
 EXPLAIN (VERBOSE)
 SELECT lk, rk1 FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -401,7 +401,7 @@ query T
 EXPLAIN (VERBOSE)
 SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -441,7 +441,7 @@ WHERE NOT EXISTS (
   SELECT * FROM rtable WHERE ST_Covers(ltable.geom1, rtable.geom) AND lk > 5 AND rk1 > 12
 )
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -483,7 +483,7 @@ query T
 EXPLAIN (VERBOSE)
 SELECT lk, rk1, rk2 FROM ltable JOIN rtable@geom_index ON ltable.geom1 ~ rtable.geom
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -520,7 +520,7 @@ query T
 EXPLAIN (VERBOSE)
 SELECT lk, rk1, rk2 FROM ltable JOIN rtable@geom_index ON rtable.geom ~ ltable.geom1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -557,7 +557,7 @@ query T
 EXPLAIN (VERBOSE)
 SELECT lk, rk1, rk2 FROM ltable JOIN rtable@geom_index ON rtable.geom && ltable.geom1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -603,7 +603,7 @@ CREATE INVERTED INDEX foo_inv ON g(geom)
 query T
 EXPLAIN SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +k,+k
@@ -626,7 +626,7 @@ distribution: local
 query T
 EXPLAIN SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +k,+k
@@ -652,7 +652,7 @@ WHERE ST_Contains(g1.geom, g2.geom)
   AND g2.k < 20
 ORDER BY g1.k, g2.k
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +k,+k
@@ -679,7 +679,7 @@ WHERE ST_Contains(g1.geom, g2.geom)
   AND g2.k < 20
 ORDER BY g1.k, g2.k
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +k,+k

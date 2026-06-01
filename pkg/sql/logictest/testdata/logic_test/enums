@@ -1247,7 +1247,7 @@ INSERT INTO local_table VALUES (1), (2)
 query T
 SELECT * FROM [EXPLAIN SELECT * FROM local_table] LIMIT 1
 ----
-distribution: local
+distribution: local (uncommitted descriptors)
 
 statement ok
 ROLLBACK
@@ -1262,7 +1262,7 @@ INSERT INTO local_table VALUES (1), (2)
 query T
 SELECT * FROM [EXPLAIN SELECT * FROM local_table] LIMIT 1
 ----
-distribution: local
+distribution: local (uncommitted descriptors)
 
 statement ok
 ROLLBACK

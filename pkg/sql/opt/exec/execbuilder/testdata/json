@@ -8,7 +8,7 @@ CREATE TABLE t (x JSONB PRIMARY KEY)
 query T
 EXPLAIN SELECT x FROM t WHERE x = 'null'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -18,7 +18,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x = '"a"'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -28,7 +28,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x = '1'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -38,7 +38,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x = 'false'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -48,7 +48,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x = 'true'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -58,7 +58,7 @@ distribution: local
 query T
 EXPLAIN SELECT x from t WHERE x = '[1, 2, 3]'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -69,7 +69,7 @@ distribution: local
 query T
 EXPLAIN SELECT x from t WHERE x = '{"a": [1, 2, 3], "b": [1, 2]}'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -80,7 +80,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x < '1'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -90,7 +90,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x < '"ABCD"'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -100,7 +100,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x < '[1, 2, 3]'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -110,7 +110,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x <= '[]'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -120,7 +120,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x > '{"a": "b"}'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -130,7 +130,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x > '{"a": "b"}'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -140,14 +140,14 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x > '{"a": "b"}'::JSONB AND x < '[1, 2, 3]'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • norows
 
 query T
 EXPLAIN SELECT x FROM t WHERE x <= '{"a": "b"}'::JSONB AND x >= '[1, 2, 3]'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -157,7 +157,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x <= '"a"'::JSONB OR x >= 'null'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (x <= '"a"') OR (x >= 'null')
@@ -172,7 +172,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x IN ('1', '"a"', '[1, 2, 3]', '{"a": "b"}')
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -182,7 +182,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM t WHERE x IN ('null', '{}', '[]', '""')
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -198,7 +198,7 @@ CREATE TABLE s (x INT, y JSONB, z INT, INDEX i (x, y, z))
 query T
 EXPLAIN SELECT x, y, z FROM s WHERE x = 2 AND y < '[1, 2, 3]'::JSONB AND z = 100
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: z = 100
@@ -211,7 +211,7 @@ distribution: local
 query T
 EXPLAIN SELECT x, y, z FROM s WHERE y >= '"a"'::JSONB
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: y >= '"a"'
@@ -276,7 +276,7 @@ INSERT INTO d VALUES
 query T
 EXPLAIN SELECT j from d where j->'a' = '"b"'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: d@d_pkey
@@ -290,7 +290,7 @@ distribution: local
 query T
 EXPLAIN SELECT j from d where j->'a' = '"b"' OR j->'a' = '"bye"'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: d@d_pkey
@@ -304,7 +304,7 @@ distribution: local
 query T
 EXPLAIN SELECT j from d where j > '{"a":"b"}'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: j > '{"a": "b"}'
@@ -317,7 +317,7 @@ distribution: local
 query T
 EXPLAIN SELECT j from d where j->'a' = '1'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: d@d_pkey
@@ -330,7 +330,7 @@ distribution: local
 query T
 EXPLAIN SELECT j from d where j->'a' = 'null'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: d@d_pkey
@@ -354,7 +354,7 @@ CREATE INVERTED INDEX json_inv on d ((j->'a'), j)
 query T
 EXPLAIN SELECT j from d where j->'a' = '"forward"' AND j->'json' = '"inverted"'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: d@d_pkey
@@ -367,7 +367,7 @@ distribution: local
 query T
 EXPLAIN SELECT j from d where j->'a' = '[1, 2, 3]' AND j->'json' = '{}'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (j->'json') = '{}'

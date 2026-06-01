@@ -423,7 +423,7 @@ SET canary_stats_mode = force_canary;
 query T
 EXPLAIN (VERBOSE) SELECT * FROM canary_table
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: canary
 ·
@@ -439,7 +439,7 @@ SET canary_stats_mode = force_stable;
 query T
 EXPLAIN (VERBOSE) SELECT * FROM canary_table
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: stable
 ·
@@ -1365,7 +1365,7 @@ SET canary_stats_mode = force_canary
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: canary
 ·
@@ -1388,7 +1388,7 @@ SET canary_stats_mode = force_stable
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: stable
 ·
@@ -1484,7 +1484,7 @@ SET canary_stats_mode = force_canary
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: canary
 ·
@@ -1510,7 +1510,7 @@ SET canary_stats_mode = force_stable
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: stable
 ·
@@ -1550,7 +1550,7 @@ SET canary_stats_mode = force_canary
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: canary
 ·
@@ -1574,7 +1574,7 @@ SET canary_stats_mode = force_stable
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: stable
 ·
@@ -1734,7 +1734,7 @@ SET canary_stats_mode = force_canary
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: canary
 ·
@@ -1756,7 +1756,7 @@ SET canary_stats_mode = force_stable
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: stable
 ·
@@ -1823,7 +1823,7 @@ SET canary_stats_mode = force_canary
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: canary
 ·
@@ -1846,7 +1846,7 @@ SET canary_stats_mode = force_stable
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: stable
 ·
@@ -1919,7 +1919,7 @@ SET canary_stats_mode = force_canary
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: canary
 ·
@@ -1942,7 +1942,7 @@ SET canary_stats_mode = force_stable
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: stable
 ·
@@ -1997,7 +1997,7 @@ SET TRACING = on
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: stable
 ·
@@ -2312,7 +2312,7 @@ SET canary_stats_mode = force_canary
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t_canary JOIN t_normal ON t_canary.k = t_normal.k;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: canary
 ·
@@ -2346,7 +2346,7 @@ SET canary_stats_mode = force_stable
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t_canary JOIN t_normal ON t_canary.k = t_normal.k;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 table stats mode: stable
 ·

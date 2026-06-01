@@ -27,7 +27,49 @@ ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]
 query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/10 - /10]
+
+query T retry
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
+ ├── FAMILY fam_0_k_v (k, v)
+ ├── PRIMARY INDEX t_pkey
+ │    └── k int not null
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    └── v string (storing)
+ └── INDEX tertiary
+      ├── k int not null
+      └── v string (storing)
+scan t
+
+# ------------------------------------------------------------------------------
+# Move secondary to dc3 and put tertiary in dc1 and ensure that gateway matches
+# tertiary instead of secondary. Regression for #35546.
+# ------------------------------------------------------------------------------
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc3]'
+
+statement ok
+ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
+
+query T retry
+EXPLAIN SELECT * FROM t WHERE k=10
+----
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
@@ -62,54 +104,6 @@ TABLE t
 scan t@secondary
 
 # ------------------------------------------------------------------------------
-# Move secondary to dc3 and put tertiary in dc1 and ensure that gateway matches
-# tertiary instead of secondary. Regression for #35546.
-# ------------------------------------------------------------------------------
-
-statement ok
-ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc3]'
-
-statement ok
-ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
-
-query T retry
-EXPLAIN SELECT * FROM t WHERE k=10
-----
-distribution: local
-·
-• scan
-  missing stats
-  table: t@tertiary
-  spans: [/10 - /10]
-
-query T retry
-EXPLAIN (OPT, CATALOG) SELECT * FROM t
-----
-TABLE t
- ├── k int not null
- ├── v string
- ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── tableoid oid [hidden] [system]
- ├── crdb_internal_origin_id int4 [hidden] [system]
- ├── crdb_internal_origin_timestamp decimal [hidden] [system]
- ├── FAMILY fam_0_k_v (k, v)
- ├── PRIMARY INDEX t_pkey
- │    ├── k int not null
- │    └── ZONE
- │         └── constraints: [+region=test,+dc=dc2]
- ├── INDEX secondary
- │    ├── k int not null
- │    ├── v string (storing)
- │    └── ZONE
- │         └── constraints: [+region=test,+dc=dc3]
- └── INDEX tertiary
-      ├── k int not null
-      ├── v string (storing)
-      └── ZONE
-           └── constraints: [+region=test,+dc=dc1]
-scan t@tertiary
-
-# ------------------------------------------------------------------------------
 # Swap secondary and tertiary localities and ensure invalidation occurs.
 # Regression for #35546.
 # ------------------------------------------------------------------------------
@@ -123,11 +117,11 @@ ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc3]'
 query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
-  table: t@secondary
+  table: t@tertiary
   spans: [/10 - /10]
 
 # ------------------------------------------------------------------------------
@@ -144,11 +138,11 @@ ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]
 query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
-  table: t@t_pkey
+  table: t@secondary
   spans: [/10 - /10]
 
 query T retry
@@ -189,7 +183,7 @@ PREPARE p AS SELECT * FROM [EXPLAIN SELECT k, v FROM t WHERE k=10]
 query T retry,nosort
 EXECUTE p
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
@@ -205,11 +199,11 @@ ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]
 query T retry,nosort
 EXECUTE p
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
-  table: t@secondary
+  table: t@t_pkey
   spans: [/10 - /10]
 
 statement ok
@@ -231,7 +225,7 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
 query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
@@ -254,7 +248,65 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
 query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
+·
+• scan
+  missing stats
+  table: t@secondary
+  spans: [/10 - /10]
+
+query T retry
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
+ ├── FAMILY fam_0_k_v (k, v)
+ ├── PRIMARY INDEX t_pkey
+ │    ├── k int not null
+ │    └── ZONE
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc2]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc1]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           ├── constraints: [+region=test,+dc=dc3]
+           └── lease preference: [+region=test,+dc=dc2]
+scan t@secondary
+
+# ------------------------------------------------------------------------------
+# Ensure that an index constrained to a region is preferred over an index that
+# merely has a lease preference in that region (since lease preferences can
+# move, whereas constraints are fixed).
+# ------------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE
+USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE
+USING constraints='[+region=test,+dc=dc1]'
+
+statement ok
+ALTER INDEX t@tertiary CONFIGURE ZONE
+USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
+
+query T retry
+EXPLAIN SELECT * FROM t WHERE k=10
+----
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
@@ -292,64 +344,6 @@ TABLE t
 scan t@tertiary
 
 # ------------------------------------------------------------------------------
-# Ensure that an index constrained to a region is preferred over an index that
-# merely has a lease preference in that region (since lease preferences can
-# move, whereas constraints are fixed).
-# ------------------------------------------------------------------------------
-
-statement ok
-ALTER TABLE t CONFIGURE ZONE
-USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
-
-statement ok
-ALTER INDEX t@secondary CONFIGURE ZONE
-USING constraints='[+region=test,+dc=dc1]'
-
-statement ok
-ALTER INDEX t@tertiary CONFIGURE ZONE
-USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
-
-query T retry
-EXPLAIN SELECT * FROM t WHERE k=10
-----
-distribution: local
-·
-• scan
-  missing stats
-  table: t@secondary
-  spans: [/10 - /10]
-
-query T retry
-EXPLAIN (OPT, CATALOG) SELECT * FROM t
-----
-TABLE t
- ├── k int not null
- ├── v string
- ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── tableoid oid [hidden] [system]
- ├── crdb_internal_origin_id int4 [hidden] [system]
- ├── crdb_internal_origin_timestamp decimal [hidden] [system]
- ├── FAMILY fam_0_k_v (k, v)
- ├── PRIMARY INDEX t_pkey
- │    ├── k int not null
- │    └── ZONE
- │         ├── constraints: [+region=test]
- │         └── lease preference: [+region=test,+dc=dc1]
- ├── INDEX secondary
- │    ├── k int not null
- │    ├── v string (storing)
- │    └── ZONE
- │         ├── constraints: [+region=test,+dc=dc1]
- │         └── lease preference: [+region=test,+dc=dc3]
- └── INDEX tertiary
-      ├── k int not null
-      ├── v string (storing)
-      └── ZONE
-           ├── constraints: [+region=test]
-           └── lease preference: [+region=test,+dc=dc1]
-scan t@secondary
-
-# ------------------------------------------------------------------------------
 # Use PREPARE to make sure that the prepared plan is invalidated when the
 # secondary index's lease preferences change.
 # ------------------------------------------------------------------------------
@@ -360,7 +354,7 @@ PREPARE p AS SELECT * FROM [EXPLAIN SELECT k, v FROM t WHERE k=10]
 query T retry,nosort
 EXECUTE p
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
@@ -374,11 +368,11 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc2]]'
 query T retry,nosort
 EXECUTE p
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
-  table: t@t_pkey
+  table: t@secondary
   spans: [/10 - /10]
 
 statement ok
@@ -405,11 +399,11 @@ ALTER INDEX t36642@secondary CONFIGURE ZONE USING constraints='[+region=test]', 
 query T retry
 EXPLAIN SELECT * FROM t36642 WHERE k=10
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
-  table: t36642@secondary
+  table: t36642@t36642_pkey
   spans: [/10 - /10]
 
 statement ok
@@ -421,11 +415,11 @@ ALTER INDEX t36642@secondary CONFIGURE ZONE USING constraints='[+region=test]', 
 query T retry
 EXPLAIN SELECT * FROM t36642 WHERE k=10
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
-  table: t36642@tertiary
+  table: t36642@secondary
   spans: [/10 - /10]
 
 query T retry
@@ -480,11 +474,11 @@ CONFIGURE ZONE USING constraints='[+region=test]', lease_preferences='[[+dc=dc1]
 query T retry
 EXPLAIN SELECT * FROM t36644 WHERE k=10
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
-  table: t36644@secondary
+  table: t36644@t36644_pkey
   spans: [/10 - /10]
 
 statement ok
@@ -497,11 +491,11 @@ CONFIGURE ZONE USING constraints='[+region=test]', lease_preferences='[[+dc=dc1]
 query T retry
 EXPLAIN SELECT * FROM t36644 WHERE k=10
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • scan
   missing stats
-  table: t36644@tertiary
+  table: t36644@secondary
   spans: [/10 - /10]
 
 subtest regression_35756

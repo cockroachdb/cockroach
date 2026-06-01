@@ -11,7 +11,7 @@ PREPARE change_index AS SELECT * FROM [EXPLAIN SELECT * FROM ab WHERE b=10]
 query T nosort
 EXECUTE change_index
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b = 10
@@ -27,7 +27,7 @@ CREATE INDEX bindex ON ab (b)
 query T nosort
 EXECUTE change_index
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -40,7 +40,7 @@ DROP INDEX bindex
 query T nosort
 EXECUTE change_index
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b = 10
@@ -60,7 +60,7 @@ PREPARE change_stats AS SELECT * FROM [EXPLAIN SELECT * FROM ab JOIN cd ON a=c]
 query T nosort
 EXECUTE change_stats
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • merge join
 │ equality: (a) = (c)
@@ -86,7 +86,7 @@ CREATE STATISTICS s FROM ab
 query T retry,nosort
 EXECUTE change_stats
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: cd@cd_pkey
