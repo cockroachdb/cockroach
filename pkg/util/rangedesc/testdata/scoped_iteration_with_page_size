@@ -84,18 +84,19 @@ scan page-size=3
 - r82:/Table/{79-80}
 - r83:/Table/8{0-1}
 - r84:/Table/8{1-2}
-- r85:/{Table/82-Max}
-scan through /M{in-ax} (page-size=3) found 85/85 descriptors
+- r85:/Table/8{2-3}
+- r86:/{Table/83-Max}
+scan through /M{in-ax} (page-size=3) found 86/86 descriptors
 
 scan scope=1 page-size=5
 ----
 - r3:/System/NodeLiveness{-Max}
-scan through /System/NodeLiveness{-Max} (page-size=5) found 1/85 descriptors
+scan through /System/NodeLiveness{-Max} (page-size=5) found 1/86 descriptors
 
 scan scope=1 page-size=500
 ----
 - r3:/System/NodeLiveness{-Max}
-scan through /System/NodeLiveness{-Max} (page-size=500) found 1/85 descriptors
+scan through /System/NodeLiveness{-Max} (page-size=500) found 1/86 descriptors
 
 scan scope=6 page-size=4
 ----
@@ -109,4 +110,4 @@ scan scope=6 page-size=4
 - r49:/Table/4{5-6}
 - r50:/Table/4{6-7}
 - r51:/Table/4{7-8}
-scan through /Table/{38-48} (page-size=4) found 10/85 descriptors
+scan through /Table/{38-48} (page-size=4) found 10/86 descriptors

@@ -300,6 +300,10 @@ const (
 	// to requiring REFERENCES on both the origin and referenced tables.
 	V26_3_GrantReferencesToUsersWithCreate
 
+	// V26_3_AddVcpuUsageTable adds the system.vcpu_usage table for
+	// tracking vCPU consumption per node per audit interval for license auditing.
+	V26_3_AddVcpuUsageTable
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -394,6 +398,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_CrdbInternalTSDB: {Major: 26, Minor: 2, Internal: 12},
 
 	V26_3_GrantReferencesToUsersWithCreate: {Major: 26, Minor: 2, Internal: 14},
+
+	V26_3_AddVcpuUsageTable: {Major: 26, Minor: 2, Internal: 16},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

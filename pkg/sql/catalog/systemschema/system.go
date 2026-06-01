@@ -1438,6 +1438,26 @@ CREATE TABLE system.resource_groups (
 	// fall in the reserved range.
 	ResourceGroupIDSequenceSchema = `
 CREATE SEQUENCE system.resource_group_id_seq START 16 MINVALUE 16 MAXVALUE 9223372036854775807;`
+
+	// VcpuUsageTableSchema defines the schema for the system.vcpu_usage table,
+	// which stores per-node vCPU consumption data for license auditing.
+	//
+	// * node_id: the ID of the node reporting vCPU usage.
+	// * license_id: the license ID under which vCPUs are consumed. Use an empty
+	//   string as a sentinel when no license is installed.
+	// * period_start: the truncated start of the audit interval this measurement
+	//   is attributed to. The interval length is determined by the audit job.
+	// * vcpus: the number of vCPUs observed on the node during the interval.
+	//   Stored as FLOAT to accommodate fractional values from cgroup CPU quotas.
+	VcpuUsageTableSchema = `
+CREATE TABLE system.vcpu_usage (
+    node_id        INT8 NOT NULL,
+    license_id     STRING NOT NULL,
+    period_start   TIMESTAMPTZ NOT NULL,
+    vcpus          FLOAT NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (node_id, license_id, period_start),
+    FAMILY "primary" (node_id, license_id, period_start, vcpus)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1482,7 +1502,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_3_GrantReferencesToUsersWithCreate.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_3_AddVcpuUsageTable.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1688,6 +1708,7 @@ func MakeSystemTables() []SystemTable {
 		StatementsTable,
 		ResourceGroupsTable,
 		ResourceGroupIDSequence,
+		VcpuUsageTable,
 	}
 }
 
@@ -5677,6 +5698,37 @@ var (
 			tbl.NextConstraintID = 0
 			tbl.PrimaryIndex.ConstraintID = 0
 		},
+	)
+
+	VcpuUsageTable = makeSystemTable(
+		VcpuUsageTableSchema,
+		systemTable(
+			catconstants.VcpuUsageTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "node_id", ID: 1, Type: types.Int},
+				{Name: "license_id", ID: 2, Type: types.String},
+				{Name: "period_start", ID: 3, Type: types.TimestampTZ},
+				{Name: "vcpus", ID: 4, Type: types.Float},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"node_id", "license_id", "period_start", "vcpus"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
+					DefaultColumnID: 4,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"node_id", "license_id", "period_start"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
+			},
+		),
 	)
 )
 

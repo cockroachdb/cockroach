@@ -277,5 +277,5 @@ SELECT table_name, table_id, index_name, start_key, end_key
 ORDER BY start_key
 ----
 table_name  table_id  index_name                start_key  end_key
-t_presplit  112       t_presplit_pkey           /Table/82  /Max
-t_presplit  112       t_presplit_idx_member_id  /Table/82  /Max
+t_presplit  112       t_presplit_pkey           /Table/83  /Max
+t_presplit  112       t_presplit_idx_member_id  /Table/83  /Max
