@@ -992,6 +992,14 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 
 	// Collect the baseline after the workload has stabilized.
 	baselineInterval := intervalSince(v.validationDuration / 2)
+
+	// Let any in-flight rebalancing settle before perturbing. The fill phase
+	// can leave per-store range counts noticeably skewed: when the perturbed
+	// node returns and the cluster tries to re-balance to its underfull
+	// stores, the snapshot storm concentrates on one store and can push it
+	// into a Pebble write stall.
+	v.waitForRebalanceToStop(ctx, t)
+
 	// Now start the perturbation.
 	t.Status("T3: inducing perturbation")
 	perturbationDuration := v.perturbation.startPerturbation(ctx, t, v)
