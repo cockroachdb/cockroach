@@ -257,7 +257,7 @@ func makeInspectThroughputTest(
 				before := timeutil.Now()
 
 				inspectSQL := fmt.Sprintf("INSPECT TABLE bulkingest.bulkingest WITH OPTIONS INDEX (%s), DETACHED", cfg.indexListSQL)
-				jobID := runInspectInBackground(ctx, t, db, inspectSQL)
+				jobID := runInspectInBackground(ctx, t, db, inspectSQL, false /* expectIssue */)
 
 				// Tick after INSPECT completes to capture elapsed time for this specific metric.
 				tickHistogram(cfg.metricName)
@@ -461,6 +461,33 @@ func makeInspectMultiRegionThroughputTest(
 				t.Fatal(err)
 			}
 
+			// Introduce test uniqueness violations
+			t.L().Printf("Introducing test uniqueness violations")
+
+			// Sample a unique_val from the first region
+			var sampleUniqueVal int64
+			err := bulkDB.QueryRow(`
+					SELECT unique_val FROM bulkingest
+					WHERE crdb_region = (SELECT min(crdb_region) FROM bulkingest)
+					LIMIT 1
+				`).Scan(&sampleUniqueVal)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Duplicate it to another region
+			_, err = bulkDB.Exec(`
+					UPDATE bulkingest
+					SET unique_val = $1
+					WHERE crdb_region > (SELECT min(crdb_region) FROM bulkingest)
+					LIMIT 1
+				`, sampleUniqueVal)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			t.L().Printf("Introduced violation with unique_val=%d", sampleUniqueVal)
+
 			if complexKey {
 				enableComplexKeyUniquenessValidation(t, bulkDB)
 			}
@@ -490,13 +517,28 @@ func makeInspectMultiRegionThroughputTest(
 			tickHistogram(metricName)
 			before := timeutil.Now()
 
-			jobID := runInspectInBackground(ctx, t, bulkDB, inspectSQL)
+			jobID := runInspectInBackground(ctx, t, bulkDB, inspectSQL, true /* expectIssue */)
 
 			tickHistogram(metricName)
 			duration := timeutil.Since(before)
 			t.L().Printf("INSPECT on multi-region cluster took %v\n", duration)
 
 			logInspectJobStats(t, bulkDB, jobID, 0 /* numChecks */, numCRDBNodes*numCPUs)
+
+			// Verify that INSPECT found the introduced uniqueness violation.
+			var issueCount int
+			err = bulkDB.QueryRow(`
+					SELECT count(*)
+					FROM system.inspect_errors
+					WHERE job_id = $1 AND error_type = 'duplicate_unique_value'
+				`, jobID).Scan(&issueCount)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if issueCount != 1 {
+				t.Fatalf("Expected INSPECT to find one duplicate_unique_value issue, but found %d", issueCount)
+			}
+			t.L().Printf("INSPECT found %d duplicate_unique_value issue(s) as expected", issueCount)
 		},
 	}
 }
@@ -566,7 +608,7 @@ func enableComplexKeyUniquenessValidation(t test.Test, db *gosql.DB) {
 // and polls until completion, reporting progress at 10% intervals. Returns the
 // job ID.
 func runInspectInBackground(
-	ctx context.Context, t test.Test, db *gosql.DB, inspectSQL string,
+	ctx context.Context, t test.Test, db *gosql.DB, inspectSQL string, expectIssue bool,
 ) (jobID int64) {
 	// INSPECT ... DETACHED starts the job in the background and returns
 	// immediately, avoiding the need for a statement timeout hack.
@@ -620,6 +662,10 @@ func runInspectInBackground(
 				t.L().Printf("INSPECT job %d: 100%% complete (succeeded)", jobID)
 				return jobID
 			case jobs.StateFailed, jobs.StateCanceled:
+				if status == jobs.StateFailed && expectIssue {
+					t.L().Printf("INSPECT job %d finished with status: %s (expected)", jobID, status)
+					return jobID
+				}
 				t.Fatalf("INSPECT job %d finished with status: %s", jobID, status)
 			}
 		}
