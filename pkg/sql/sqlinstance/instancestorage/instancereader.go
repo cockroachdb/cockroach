@@ -263,8 +263,15 @@ func (r *Reader) GetAllInstances(ctx context.Context) ([]sqlinstance.InstanceInf
 	return makeInstanceInfos(liveInstances), nil
 }
 
-// selectDistinctLiveRows modifies the given slice in-place and returns
-// the selected rows.
+// selectDistinctLiveRows returns the subset of rows whose sqlliveness session
+// is live, deduplicated by rpcAddr. When multiple live rows share an rpcAddr,
+// the row with the highest timestamp is kept.
+//
+// Deduplication handles the transient overlap in external-process multi-tenant
+// deployments where a SQL pod crashes and a new pod starts at the same rpcAddr
+// with a fresh instance ID before the dead pod's session expires.
+//
+// The input slice is mutated in place and is no longer valid after the call.
 func selectDistinctLiveRows(
 	ctx context.Context, slReader sqlliveness.Reader, rows []instancerow,
 ) ([]instancerow, error) {
@@ -287,16 +294,18 @@ func selectDistinctLiveRows(
 		rows = truncated
 	}
 	sort.Slice(rows, func(idx1, idx2 int) bool {
-		if rows[idx1].sqlAddr == rows[idx2].sqlAddr {
+		if rows[idx1].rpcAddr == rows[idx2].rpcAddr {
 			return !rows[idx1].timestamp.Less(rows[idx2].timestamp) // decreasing timestamp order
 		}
-		return rows[idx1].sqlAddr < rows[idx2].sqlAddr
+		return rows[idx1].rpcAddr < rows[idx2].rpcAddr
 	})
-	// Only provide the latest entry for a given address.
+	// Keep only the newest row per rpcAddr. Older rows for the same rpcAddr
+	// are stale entries from a previous instance that crashed and was
+	// restarted at the same address with a new instance ID.
 	{
 		truncated := rows[:0]
 		for i := 0; i < len(rows); i++ {
-			if i == 0 || rows[i].sqlAddr != rows[i-1].sqlAddr {
+			if i == 0 || rows[i].rpcAddr != rows[i-1].rpcAddr {
 				truncated = append(truncated, rows[i])
 			}
 		}
