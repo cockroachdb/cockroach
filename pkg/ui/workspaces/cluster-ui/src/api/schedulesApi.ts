@@ -6,27 +6,25 @@
 import Long from "long";
 import moment from "moment-timezone";
 
-import { RequestError } from "../util";
+import { fetchDataJSON } from "./fetchData";
 
-import {
-  executeInternalSql,
-  LARGE_RESULT_SIZE,
-  SqlExecutionRequest,
-  sqlResultsAreEmpty,
-} from "./sqlApi";
-
-type ScheduleColumns = {
+// BFF response types (private, match the Go BFF handler structs).
+interface BffScheduleInfo {
   id: string;
   label: string;
-  schedule_status: string;
+  status: string;
   next_run: string;
   state: string;
   recurrence: string;
-  jobsrunning: number;
+  jobs_running: number;
   owner: string;
   created: string;
   command: string;
-};
+}
+
+interface BffSchedulesListResponse {
+  schedules: BffScheduleInfo[];
+}
 
 export type Schedule = {
   id: Long;
@@ -43,106 +41,54 @@ export type Schedule = {
 
 export type Schedules = Schedule[];
 
+function prettyJson(s: string): string {
+  try {
+    return JSON.stringify(JSON.parse(s), null, 2);
+  } catch {
+    return s;
+  }
+}
+
+function bffScheduleToSchedule(bff: BffScheduleInfo): Schedule {
+  return {
+    id: Long.fromString(bff.id),
+    label: bff.label,
+    status: bff.status,
+    nextRun: bff.next_run ? moment.utc(bff.next_run) : null,
+    state: bff.state,
+    recurrence: bff.recurrence,
+    jobsRunning: bff.jobs_running,
+    owner: bff.owner,
+    created: moment.utc(bff.created),
+    command: bff.command ? prettyJson(bff.command) : "",
+  };
+}
+
 export function getSchedules(req: {
   status: string;
   limit: number;
 }): Promise<Schedules> {
-  // Cast int64 to string, since otherwise it gets truncated.
-  // Likewise, prettify `command` on the server since contained int64s
-  // may also be truncated.
-  let stmt = `
-    WITH schedules AS (SHOW SCHEDULES)
-    SELECT id::string, label, schedule_status, next_run,
-           state, recurrence, jobsrunning, owner,
-           created, jsonb_pretty(command) as command
-    FROM schedules
-  `;
-  const args = [];
+  const params = new URLSearchParams();
   if (req.status) {
-    stmt += " WHERE schedule_status = $" + (args.length + 1);
-    args.push(req.status);
+    params.set("status", req.status);
   }
-  stmt += " ORDER BY created DESC";
   if (req.limit) {
-    stmt += " LIMIT $" + (args.length + 1);
-    args.push(req.limit.toString());
+    params.set("limit", req.limit.toString());
   }
-  const request: SqlExecutionRequest = {
-    statements: [
-      {
-        sql: stmt,
-        arguments: args,
-      },
-    ],
-    max_result_size: LARGE_RESULT_SIZE,
-    execute: true,
-  };
-  return executeInternalSql<ScheduleColumns>(request).then(result => {
-    const txnResults = result.execution.txn_results;
-    if (sqlResultsAreEmpty(result)) {
-      // No data.
+  const queryStr = params.toString();
+  const path = queryStr
+    ? `api/v2/dbconsole/schedules/?${queryStr}`
+    : "api/v2/dbconsole/schedules/";
+  return fetchDataJSON<BffSchedulesListResponse, void>(path).then(resp => {
+    if (!resp.schedules || resp.schedules.length === 0) {
       return [];
     }
-
-    return txnResults[0].rows.map(row => {
-      return {
-        id: Long.fromString(row.id),
-        label: row.label,
-        status: row.schedule_status,
-        nextRun: row.next_run ? moment.utc(row.next_run) : null,
-        state: row.state,
-        recurrence: row.recurrence,
-        jobsRunning: row.jobsrunning,
-        owner: row.owner,
-        created: moment.utc(row.created),
-        command: JSON.parse(row.command),
-      };
-    });
+    return resp.schedules.map(bffScheduleToSchedule);
   });
 }
 
 export function getSchedule(id: Long): Promise<Schedule> {
-  const request: SqlExecutionRequest = {
-    statements: [
-      {
-        // Cast int64 to string, since otherwise it gets truncated.
-        // Likewise, prettify `command` on the server since contained int64s
-        // may also be truncated.
-        sql: `
-          WITH schedules AS (SHOW SCHEDULES)
-          SELECT id::string, label, schedule_status, next_run,
-                 state, recurrence, jobsrunning, owner,
-                 created, jsonb_pretty(command) as command
-          FROM schedules
-          WHERE ID = $1::int64
-        `,
-        arguments: [id.toString()],
-      },
-    ],
-    execute: true,
-  };
-  return executeInternalSql<ScheduleColumns>(request).then(result => {
-    const txnResults = result.execution.txn_results;
-    if (txnResults.length === 0 || !txnResults[0].rows) {
-      // No data.
-      throw new RequestError(400, "No schedule found with this ID.");
-    }
-
-    if (txnResults[0].rows.length > 1) {
-      throw new RequestError(500, "Multiple schedules found for ID.");
-    }
-    const row = txnResults[0].rows[0];
-    return {
-      id: Long.fromString(row.id),
-      label: row.label,
-      status: row.schedule_status,
-      nextRun: row.next_run ? moment.utc(row.next_run) : null,
-      state: row.state,
-      recurrence: row.recurrence,
-      jobsRunning: row.jobsrunning,
-      owner: row.owner,
-      created: moment.utc(row.created),
-      command: row.command,
-    };
-  });
+  return fetchDataJSON<BffScheduleInfo, void>(
+    `api/v2/dbconsole/schedules/${id.toString()}/`,
+  ).then(bffScheduleToSchedule);
 }

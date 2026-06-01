@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "dbconsole",
-    srcs = ["dbconsole.go"],
+    srcs = [
+        "dbconsole.go",
+        "schedules.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/dbconsole",
     visibility = ["//visibility:public"],
     deps = [
@@ -12,20 +15,31 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/server/srverrors",
         "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/safesql",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gorilla_mux//:mux",
     ],
 )
 
 go_test(
     name = "dbconsole_test",
-    srcs = ["dbconsole_test.go"],
+    srcs = [
+        "dbconsole_test.go",
+        "schedules_test.go",
+    ],
     embed = [":dbconsole"],
     deps = [
         "//pkg/build",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/server/serverpb",
+        "//pkg/sql/sem/tree",
         "//pkg/util",
+        "//pkg/util/json",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gorilla_mux//:mux",
         "@com_github_stretchr_testify//require",
     ],
 )

@@ -39,6 +39,109 @@
                     }
                 }
             }
+        },
+        "/schedules": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns schedule information, optionally filtered by status.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Schedules"
+                ],
+                "summary": "List schedules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by status (ACTIVE or PAUSED)",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of schedules to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Schedule list",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.SchedulesListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid limit",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/schedules/{schedule_id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns information for a single schedule by ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Schedules"
+                ],
+                "summary": "Get schedule",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Schedule ID",
+                        "name": "schedule_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Schedule info",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ScheduleInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid schedule ID",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Schedule not found",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -112,6 +215,64 @@
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dbconsole.NodeInfo"
+                    }
+                }
+            }
+        },
+        "dbconsole.ScheduleInfo": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "description": "Command is the JSON representation of the schedule's execution arguments.",
+                    "type": "string"
+                },
+                "created": {
+                    "description": "Created is the schedule creation time in ISO 8601 format.",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID is the unique identifier for the schedule. Serialized as a string to\navoid JavaScript integer precision loss for values exceeding 2^53.",
+                    "type": "string",
+                    "example": "0"
+                },
+                "jobs_running": {
+                    "description": "JobsRunning is the number of currently running jobs for this schedule.",
+                    "type": "integer"
+                },
+                "label": {
+                    "description": "Label is the name of the schedule.",
+                    "type": "string"
+                },
+                "next_run": {
+                    "description": "NextRun is the next scheduled run time in ISO 8601 format, empty if paused.",
+                    "type": "string"
+                },
+                "owner": {
+                    "description": "Owner is the user who owns this schedule.",
+                    "type": "string"
+                },
+                "recurrence": {
+                    "description": "Recurrence is the cron expression or NEVER.",
+                    "type": "string"
+                },
+                "state": {
+                    "description": "State is the schedule state from the schedule_state protobuf.",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status is the schedule status (ACTIVE or PAUSED).",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.SchedulesListResponse": {
+            "type": "object",
+            "properties": {
+                "schedules": {
+                    "description": "Schedules contains information for all matching schedules.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.ScheduleInfo"
                     }
                 }
             }
