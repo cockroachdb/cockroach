@@ -89,10 +89,13 @@ jobs:
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/set-bazel-storage-access-token.sh
+      - uses: ./.github/actions/setup-private-go-modules
       - name: check generated code
         run: ./build/github/check-generated-code.sh
       - name: clean up
-        run: ./build/github/cleanup-engflow-keys.sh
+        run: |
+          ./build/github/cleanup-engflow-keys.sh
+          ./build/github/cleanup-go-module-auth.sh
         if: always()
   docker_image_amd64:
     runs-on: [self-hosted, ubuntu_2404]
@@ -164,6 +167,7 @@ jobs:
       - run: git fetch --depth 1 origin cd6f4f263bd42688096064825dfa668bde2d3720
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/set-bazel-storage-access-token.sh
+      - uses: ./.github/actions/setup-private-go-modules
       - run: ./build/github/prepare-summarize-build.sh
       - name: run lint tests
         run: ./build/github/lint.sh
@@ -173,7 +177,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: clean up
-        run: ./build/github/cleanup-engflow-keys.sh
+        run: |
+          ./build/github/cleanup-engflow-keys.sh
+          ./build/github/cleanup-go-module-auth.sh
         if: always()
   local_roachtest:
     runs-on: [self-hosted, ubuntu_big_2404]
