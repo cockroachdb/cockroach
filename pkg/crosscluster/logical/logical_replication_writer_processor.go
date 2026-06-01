@@ -864,6 +864,8 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	// the multi metric allocator assumes non-gateway sql cpu usage will
 	// follow the leaseholder when the leaseholder moves. LDR work is
 	// not collocated with leaseholders in the destination cluster.
+	//
+	// TODO(wenyi): plumb ResourceGroupID once LDR has a resource-group source.
 	handle := lrw.FlowCtx.Cfg.SQLCPUProvider.GetHandle(admission.WorkInfo{
 		TenantID:   lrw.FlowCtx.Codec().TenantID,
 		Priority:   admissionpb.LowPri,

@@ -175,6 +175,7 @@ func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 	p.applier, err = txnapply.NewApplier(
 		ctx, applierID, p.FlowCtx.Cfg.Settings, writers, p.depResolver, p.spec.AllApplierIds,
 		func() *admission.SQLCPUHandle {
+			// TODO(wenyi): plumb ResourceGroupID once LDR has a resource-group source.
 			return p.FlowCtx.Cfg.SQLCPUProvider.GetHandle(admission.WorkInfo{
 				TenantID:   p.FlowCtx.Codec().TenantID,
 				Priority:   admissionpb.LowPri,

@@ -783,21 +783,30 @@ func MakeCPUHandle(
 ) (context.Context, *admission.SQLCPUHandle, *admission.GoroutineCPUHandle, error) {
 	var priority admissionpb.WorkPriority
 	var createTime int64
+	var resourceGroupID admissionpb.ResourceGroupID
 	if txn == nil {
+		// Defensive: today's callers (dispatchToExecutionEngine on the
+		// gateway, the remote DistSQL flow setup) always pass a non-nil txn,
+		// since both are only reached after a txn has been created. The
+		// branch is here so future callers that may drive a handle without
+		// a txn still produce a usable WorkInfo.
+		// TODO(wenyihu6): double check this and potentially assert on this
 		priority = admissionpb.NormalPri
 		createTime = timeutil.Now().UnixNano()
 	} else {
 		h := txn.AdmissionHeader()
 		priority = admissionpb.WorkPriority(h.Priority)
 		createTime = h.CreateTime
+		resourceGroupID = admissionpb.ResourceGroupID(h.ResourceGroupID)
 	}
 	cpuHandle := provider.GetHandle(admission.WorkInfo{
-		TenantID:      tenantID,
-		Priority:      priority,
-		CreateTime:    createTime,
-		WorkloadID:    workloadID,
-		AppNameID:     appNameID,
-		GatewayNodeID: gatewayNodeID,
+		TenantID:        tenantID,
+		Priority:        priority,
+		CreateTime:      createTime,
+		WorkloadID:      workloadID,
+		AppNameID:       appNameID,
+		GatewayNodeID:   gatewayNodeID,
+		ResourceGroupID: resourceGroupID,
 	}, atGateway)
 	newCtx := admission.ContextWithSQLCPUHandle(ctx, cpuHandle)
 	gh := cpuHandle.RegisterGoroutine()
