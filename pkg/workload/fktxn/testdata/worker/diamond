@@ -1,0 +1,30 @@
+# Visualize the worker against the diamond schema (orgs <- depts/teams,
+# both -> projects). Shows AssignPKs propagating shared org_id from the
+# orgs row down through depts, teams, and projects.
+
+schema diamond
+----
+loaded schema "diamond": 4 table(s), 1 FK graph(s)
+
+run seed=5 chains=1 max-events=3 mix=80/20
+----
+chain 1:
+  pkIdx=2 pks: orgs=[4253551980340525677] depts=[4253551980340525677, 4423251457820034327] teams=[4253551980340525677, -5031575764250285903]
+  txn 1: state=Unknown event=Upsert
+  UPSERT INTO orgs (org_id) VALUES ($1)  args=[4253551980340525677]
+  UPSERT INTO depts (org_id, dept_id) VALUES ($1, $2)  args=[4253551980340525677, 4423251457820034327]
+  UPSERT INTO teams (org_id, team_id) VALUES ($1, $2)  args=[4253551980340525677, -5031575764250285903]
+    -> committed (state=Exists)
+  txn 2: state=Exists event=Delete
+  SELECT 1 FROM orgs WHERE org_id = $1 FOR UPDATE  args=[4253551980340525677]
+  SELECT 1 FROM depts WHERE org_id = $1 AND dept_id = $2 FOR UPDATE  args=[4253551980340525677, 4423251457820034327]
+  SELECT 1 FROM teams WHERE org_id = $1 AND team_id = $2 FOR UPDATE  args=[4253551980340525677, -5031575764250285903]
+  DELETE FROM teams WHERE org_id = $1 AND team_id = $2  args=[4253551980340525677, -5031575764250285903]
+  DELETE FROM depts WHERE org_id = $1 AND dept_id = $2  args=[4253551980340525677, 4423251457820034327]
+  DELETE FROM orgs WHERE org_id = $1  args=[4253551980340525677]
+    -> committed (state=None)
+  txn 3: state=None event=Upsert
+  UPSERT INTO orgs (org_id) VALUES ($1)  args=[4253551980340525677]
+  UPSERT INTO depts (org_id, dept_id) VALUES ($1, $2)  args=[4253551980340525677, 4423251457820034327]
+  UPSERT INTO teams (org_id, team_id) VALUES ($1, $2)  args=[4253551980340525677, -5031575764250285903]
+    -> committed (state=Exists)
