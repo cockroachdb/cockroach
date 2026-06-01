@@ -72,7 +72,10 @@ const (
 	// DataStateAdd indicates tenant data is being added. Not available
 	// for SQL sessions.
 	DataStateAdd TenantDataState = 0
-	// DataStateReady indicates data is ready and SQL servers can access it.
+	// DataStateReady indicates that the tenant keyspace is eligible for
+	// tenant-server startup/bootstrap. It does not imply that any particular SQL
+	// server instance has completed runtime initialization or is routable for
+	// queries.
 	DataStateReady TenantDataState = 1
 	// DataStateDrop indicates tenant data is being deleted. Not
 	// available for SQL sessions.

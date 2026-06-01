@@ -121,9 +121,24 @@ func (c *serverController) shouldWaitForTenantServer(name roachpb.TenantName) bo
 	return multitenant.WaitForClusterStartTimeout.Get(&c.st.SV) > 0
 }
 
+type tenantServerWaitTimeout struct{}
+
+func (tenantServerWaitTimeout) Error() string { return "tenant server wait timeout" }
+
+var errTenantServerWaitTimeout error = tenantServerWaitTimeout{}
+
 func (c *serverController) waitForTenantServer(
 	ctx context.Context, name roachpb.TenantName,
 ) (onDemandServer, error) {
+	if release, ok := c.tryAdmitTenantServerWaiter(ctx, name); ok {
+		defer release()
+	} else {
+		return nil, errors.Mark(
+			errors.Newf("server for tenant %q is starting; too many clients are already waiting", name),
+			errNoTenantServerRunning,
+		)
+	}
+
 	// Note that requests that come in after the first request may time out
 	// in less time than the WaitForClusterStartTimeout. This seems fine for
 	// now since cluster startup should be relatively quick and if it isn't,
@@ -142,16 +157,51 @@ func (c *serverController) waitForTenantServer(
 			select {
 			case <-waitCh:
 			case <-t.C:
-				log.Dev.Infof(ctx, "timed out waiting for server for %s to become available", name)
-				return nil, err
+				if c.muxTimeoutEvery.ShouldLog() {
+					log.Dev.Infof(ctx, "timed out waiting for server for %s to become available", name)
+				}
+				return nil, errors.Mark(err, errTenantServerWaitTimeout)
 			}
 		}
 	})
 	res := futureRes.WaitForResult(ctx)
 	if res.Err != nil {
+		switch {
+		case ctx.Err() != nil:
+			c.metrics.Canceled.Inc(1)
+		case errors.Is(res.Err, errTenantServerWaitTimeout):
+			c.metrics.Timeout.Inc(1)
+		}
 		return nil, res.Err
 	}
+	c.metrics.Success.Inc(1)
 	return res.Val.(onDemandServer), nil
+}
+
+func (c *serverController) tryAdmitTenantServerWaiter(
+	ctx context.Context, name roachpb.TenantName,
+) (release func(), ok bool) {
+	limit := multitenant.WaitForClusterStartMaxConcurrent.Get(&c.st.SV)
+	for {
+		cur := c.muxWaiters.Load()
+		if cur >= limit {
+			c.metrics.Rejected.Inc(1)
+			if c.muxRejectEvery.ShouldLog() {
+				log.Dev.Infof(ctx,
+					"rejecting SQL connection for tenant %s; %d clients are already waiting for startup (limit %d)",
+					name, cur, limit)
+			}
+			return nil, false
+		}
+		if c.muxWaiters.CompareAndSwap(cur, cur+1) {
+			c.metrics.Admitted.Inc(1)
+			c.metrics.Waiters.Inc(1)
+			return func() {
+				c.muxWaiters.Add(-1)
+				c.metrics.Waiters.Dec(1)
+			}, true
+		}
+	}
 }
 
 func (t *systemServerWrapper) handleCancel(

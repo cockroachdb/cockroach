@@ -80,7 +80,11 @@ type serverState struct {
 
 		// server is the server that is being controlled.
 		// This is only set when the corresponding orchestratedServer
-		// instance is ready.
+		// instance is ready to accept SQL traffic. For tenant servers, this is
+		// the runtime routable boundary: startControlledServer only publishes the
+		// server here after preStart() and acceptClients() have both succeeded.
+		// Durable tenant state such as data_state=ready only makes a tenant
+		// eligible for startup; it does not populate this field.
 		server orchestratedServer
 	}
 
@@ -390,6 +394,10 @@ func (o *channelOrchestrator) startControlledServer(
 					return nil, errors.Wrap(err, "while starting graceful drain propagation task")
 				}
 
+				// Publishing into state.startedMu.server below is the routing
+				// boundary. Keep acceptClients before that publication so SQL
+				// routing cannot observe a tenant server until it is actually
+				// ready to serve client connections.
 				return s, errors.Wrap(s.acceptClients(startCtx), "while accepting clients")
 			}()
 			if err != nil {
