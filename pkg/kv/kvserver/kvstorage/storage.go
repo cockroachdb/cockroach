@@ -428,7 +428,15 @@ func (b *Batch[B]) Commit(sync bool) error {
 			return err
 		}
 	}
-	return b.state.Commit(false /* sync */)
+	// HACK(sep-raft-log): in the production sep-raft-log design, the log
+	// engine's sync above is sufficient for state-machine durability because
+	// state writes are reconstructed from the WAG on restart. That recovery
+	// path does not yet exist. Until it does, an asynchronous state commit
+	// here means crash-recovery tests that use fs.UseStrictMemFS lose any
+	// state-engine writes that have not been independently flushed by the
+	// time the test takes a CrashClone. Honor the caller's sync request on
+	// the state side too. Remove this once WAG replay lands.
+	return b.state.Commit(sync)
 }
 
 // Close closes the batch. It is idempotent, but the batch must not be used
