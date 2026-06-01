@@ -117,7 +117,7 @@ create)
 		--boot-disk-device-name "${NAME}" \
 		--service-account "cockroach-worker@cockroach-workers.iam.gserviceaccount.com" \
 		--scopes "cloud-platform" \
-		--labels "created-by=${gsuite_account_for_label:0:63}" \
+		--labels "created-by=${gsuite_account_for_label:0:63},created-with=gceworker" \
 		--metadata enable-oslogin=TRUE,block-project-ssh-keys=TRUE
 
 	grant_ssh_access
