@@ -46,6 +46,11 @@ const (
 	// created due to errors during cloud hardware allocation.
 	ExitCodeClusterProvisioningFailed = 11
 
+	// ExitCodeStorageInvariantViolation is the exit code indicating that a
+	// storage invariant violation (e.g., raft log corruption, Pebble checksum
+	// mismatch) was detected during a roachtest run.
+	ExitCodeStorageInvariantViolation = 13
+
 	// runnerLogsDir is the dir under the artifacts root where the test runner log
 	// and other runner-related logs (i.e. cluster creation logs) will be written.
 	runnerLogsDir = "_runner-logs"
@@ -240,7 +245,9 @@ Check --parallelism, --run-forever and --wait-before-next-execution flags`,
 
 	if err := rootCmd.Execute(); err != nil {
 		code := 1
-		if errors.Is(err, errTestsFailed) {
+		if errors.Is(err, errStorageInvariantViolation) {
+			code = ExitCodeStorageInvariantViolation
+		} else if errors.Is(err, errTestsFailed) {
 			code = ExitCodeTestsFailed
 		}
 		if errors.Is(err, errSomeClusterProvisioningFailed) {
