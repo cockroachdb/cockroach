@@ -1245,7 +1245,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		checkBundle(
 			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
 				if name == "schema.sql" {
-					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(.*\@primary.*\n.*crdb_rewrite_inline_hints.*\@xy161829.*\n.*crdb_rewrite_inline_hints.*\@y161829`)
+					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(.*\@"primary".*\n.*crdb_rewrite_inline_hints.*\@xy161829.*\n.*crdb_rewrite_inline_hints.*\@y161829`)
 					if reg.FindString(contents) == "" {
 						return errors.Errorf("could not find full crdb_rewrite_inline_hints in schema.sql")
 					}
@@ -1260,7 +1260,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		checkBundle(
 			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
 				if name == "schema.sql" {
-					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(.*\@primary.*\n.*crdb_rewrite_inline_hints.*\@xy161829.*\n.*crdb_rewrite_inline_hints.*\@y161829`)
+					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(.*\@"primary".*\n.*crdb_rewrite_inline_hints.*\@xy161829.*\n.*crdb_rewrite_inline_hints.*\@y161829`)
 					if reg.FindString(contents) == "" {
 						return errors.Errorf("could not find full crdb_rewrite_inline_hints in schema.sql")
 					}
