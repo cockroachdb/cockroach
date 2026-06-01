@@ -185,14 +185,15 @@ func (s *Store) tryGetOrCreateReplica(
 	// Replica for this rangeID, and that's us.
 
 	// Use a read-write batch (not a write-only batch) because
-	// CreateUninitializedReplica needs to read back the RaftReplicaID it writes
-	// as part of its LoadReplicaState verification step.
+	// CreateUninitializedReplica reads the ReplicaMark before writing.
 	b := s.batchFactory.NewBatch()
 	defer b.Close()
 	if err := kvstorage.CreateUninitializedReplica(
-		ctx, kvstorage.WrapState(b.State()),
-		kvstorage.RaftRO(s.LogEngine()),
-		b.WagWriter(), s.StoreID(), id,
+		ctx, kvstorage.ReadWriter{
+			State: kvstorage.WrapState(b.State()),
+			Raft:  kvstorage.Raft{RO: kvstorage.RaftRO(s.LogEngine()), WO: kvstorage.RaftWO(b.Raft())},
+		},
+		b.WagWriter(), id,
 	); err != nil {
 		return nil, false, err
 	}

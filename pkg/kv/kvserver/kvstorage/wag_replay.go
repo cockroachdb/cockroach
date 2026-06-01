@@ -10,6 +10,7 @@ import (
 	"iter"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -184,6 +185,39 @@ func (s persistedRangeState) canApply(e wagpb.Event) (apply bool) {
 	return apply
 }
 
+// advance returns the speculative persistedRangeState after the given event is
+// applied. This is used to check subsequent events for the same RangeID within
+// a single WAG node.
+func (s persistedRangeState) advance(e wagpb.Event) persistedRangeState {
+	switch e.Type {
+	case wagpb.EventCreate:
+		return persistedRangeState{
+			mark: ReplicaMark{
+				RaftReplicaID:  kvserverpb.RaftReplicaID{ReplicaID: e.Addr.ReplicaID},
+				RangeTombstone: s.mark.RangeTombstone,
+			},
+			appliedIndex: 0,
+		}
+	case wagpb.EventInit, wagpb.EventApply, wagpb.EventSplit, wagpb.EventMerge:
+		return persistedRangeState{
+			mark:         s.mark,
+			appliedIndex: e.Addr.Index,
+		}
+	case wagpb.EventDestroy, wagpb.EventSubsume:
+		// After destruction, ReplicaID is cleared and the tombstone is bumped above
+		// ReplicaID. We don't know the exact NextReplicaID here, but it's ok to
+		// speculate and assume the conservative ReplicaID+1.
+		next := max(s.mark.NextReplicaID, e.Addr.ReplicaID+1)
+		return persistedRangeState{
+			mark: ReplicaMark{
+				RangeTombstone: kvserverpb.RangeTombstone{NextReplicaID: next},
+			},
+		}
+	default:
+		panic(errors.AssertionFailedf("unexpected event type %d", e.Type))
+	}
+}
+
 // raftCatchUp returns the raft index the replica must be caught up to before
 // this WAG event can be applied. Zero means no catch-up is needed.
 func raftCatchUp(e wagpb.Event) kvpb.RaftIndex {
@@ -208,16 +242,27 @@ func raftCatchUp(e wagpb.Event) kvpb.RaftIndex {
 // range state to decide if the node still needs applying.
 //
 // All events in a node are expected to agree on whether they need applying,
-// since they are written and applied atomically.
+// since they are written and applied atomically. A RangeID may appear in
+// multiple events (e.g. destroy old replica + create new one); when this
+// happens, the speculative post-event metadata is computed so that subsequent
+// events for the same RangeID are verified incrementally.
 func canApplyWAGNode(ctx context.Context, node wagpb.Node, stateRO StateRO) (bool, error) {
 	var apply bool
+	// states caches per-RangeID state so that subsequent events for the same
+	// RangeID are checked against the expected post-event state.
+	//
+	// TODO(pav-kv): can avoid this map if all events pertaining to one RangeID
+	// are guaranteed to be placed densely, not interleaved by other range IDs.
+	states := make(map[roachpb.RangeID]persistedRangeState, len(node.Events))
+
 	for i, e := range node.Events {
-		s, err := loadPersistedRangeState(ctx, stateRO, e.Addr.RangeID)
-		if err != nil {
-			return false, errors.Wrapf(err, "loading state for r%d", e.Addr.RangeID)
+		s, ok := states[e.Addr.RangeID]
+		if !ok {
+			var err error
+			if s, err = loadPersistedRangeState(ctx, stateRO, e.Addr.RangeID); err != nil {
+				return false, errors.Wrapf(err, "loading state for r%d", e.Addr.RangeID)
+			}
 		}
-		// A given RangeID appears at most once in the events list, so the decision
-		// of whether an event can be applied is independent for each event.
 		if evApply := s.canApply(e); i == 0 {
 			apply = evApply
 		} else if evApply != apply {
@@ -225,6 +270,9 @@ func canApplyWAGNode(ctx context.Context, node wagpb.Node, stateRO StateRO) (boo
 				"partial apply: event[0]=%s (apply=%t), event[%d]=%s (apply=%t)",
 				node.Events[0], apply, i, e, evApply,
 			)
+		}
+		if apply {
+			states[e.Addr.RangeID] = s.advance(e)
 		}
 	}
 	return apply, nil

@@ -102,8 +102,12 @@ message Addr {
 // a Split event that both initializes the RHS and narrows the LHS.
 message Node {
   // Events contains the replica lifecycle events that this node encompasses.
-  // Each event affects a single replica, identified by its Addr. A given
-  // RangeID must appear at most once in this list.
+  // Each event affects a single replica, identified by its Addr.
+  //
+  // A RangeID may appear in multiple events when one operation encompasses
+  // multiple lifecycle transitions for the same range (e.g. destroying an old
+  // replica and creating a new one). When a RangeID appears multiple times, its
+  // events must be ordered by occurrence (earlier transitions first).
   //
   // Each EventType implicitly carries dependency semantics. For example, a
   // Split event at raft index I implies the replica must be caught up to I-1
