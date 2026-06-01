@@ -99,7 +99,7 @@ CREATE TABLE public.t (
 query TTBTTTB colnames
 SELECT * FROM [SHOW COLUMNS FROM t] ORDER BY column_name
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices                                                           is_hidden
+column_name  data_type  is_nullable  column_default  generation_expression  indexes                                                           is_hidden
 a            INT8       true         NULL            ·                      {t_pkey,t_vec}                                                    false
 b            INT8       true         NULL            ·                      {t_b_j_a_asc,t_pkey}                                              false
 c            STRING     true         NULL            ·                      {t_pkey}                                                          false
