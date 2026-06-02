@@ -275,6 +275,23 @@ func descRefsFromFunctionDescs(descs []*descpb.FunctionDescriptor) []backuppb.Re
 	return out
 }
 
+// restoredTableDescs returns the table descriptors from offlineDescs, the
+// catalog hoisted into doResume right after createImportingDescriptors, in
+// stable ID order. The order matches the historical iteration over
+// details.TableDescs closely enough for the consumers that walk the result
+// today (rekey list, pkIDs, missing-stats warning), none of which rely on
+// a specific order.
+func restoredTableDescs(offlineDescs nstree.Catalog) []catalog.TableDescriptor {
+	all := offlineDescs.OrderedDescriptors()
+	tables := make([]catalog.TableDescriptor, 0, len(all))
+	for _, desc := range all {
+		if table, ok := desc.(catalog.TableDescriptor); ok {
+			tables = append(tables, table)
+		}
+	}
+	return tables
+}
+
 // tableDescRefs returns (ID, Version) tuples for tables this restore job is
 // materializing. Prefers the dedicated info-key row; falls back to the legacy
 // details.TableDescs slice for jobs created before info-key writes existed.
@@ -1188,7 +1205,7 @@ func remapAndFilterRelevantStatistics(
 	ctx context.Context,
 	tableStatistics []*stats.TableStatisticProto,
 	descriptorRewrites jobspb.DescRewriteMap,
-	tableDescs []*descpb.TableDescriptor,
+	tables []catalog.TableDescriptor,
 ) []*stats.TableStatisticProto {
 	relevantTableStatistics := make([]*stats.TableStatisticProto, 0, len(tableStatistics))
 
@@ -1218,11 +1235,11 @@ func remapAndFilterRelevantStatistics(
 	// Check if we are missing stats for any table that is being restored. This
 	// could be because we ran into an error when computing stats during the
 	// backup.
-	for _, desc := range tableDescs {
-		if _, ok := tableHasStatsInBackup[desc.GetID()]; !ok {
+	for _, table := range tables {
+		if _, ok := tableHasStatsInBackup[table.GetID()]; !ok {
 			log.Dev.Warningf(ctx, "statistics for table: %s, table ID: %d not found in the backup. "+
 				"Query performance on this table could suffer until statistics are recomputed.",
-				desc.GetName(), desc.GetID())
+				table.GetName(), table.GetID())
 		}
 	}
 
@@ -1638,7 +1655,11 @@ func synthesizeZoneConfigsForPartialRestore(
 //     restore targets. This flow should get executed last and should contain the
 //     bulk of the work, as it is used for job progress tracking.
 func createRestoreFlows(
-	ctx context.Context, r *restoreResumer, backupCodec keys.SQLCodec, sqlDescs []catalog.Descriptor,
+	ctx context.Context,
+	r *restoreResumer,
+	backupCodec keys.SQLCodec,
+	sqlDescs []catalog.Descriptor,
+	offlineDescs nstree.Catalog,
 ) (preRestore restorationData, preValid restorationData, mainRestore restorationData, err error) {
 
 	details := r.job.Details().(jobspb.RestoreDetails)
@@ -1726,23 +1747,22 @@ func createRestoreFlows(
 
 	var rekeys []execinfrapb.TableRekey
 	var systemTables []catalog.TableDescriptor
-	for i := range details.TableDescs {
-		desc := tabledesc.NewBuilder(details.TableDescs[i]).BuildImmutableTable()
+	for _, table := range restoredTableDescs(offlineDescs) {
 		// Skip rekeys for revlog-added tables — no backup data to rekey.
-		if _, ok := revlogNewPostIDs[desc.GetID()]; ok {
+		if _, ok := revlogNewPostIDs[table.GetID()]; ok {
 			continue
 		}
-		newDescBytes, err := protoutil.Marshal(desc.DescriptorProto())
+		newDescBytes, err := protoutil.Marshal(table.DescriptorProto())
 		if err != nil {
 			return nil, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"marshaling descriptor")
 		}
 		rekeys = append(rekeys, execinfrapb.TableRekey{
-			OldID:   uint32(newIDToOldID[desc.GetID()]),
+			OldID:   uint32(newIDToOldID[table.GetID()]),
 			NewDesc: newDescBytes,
 		})
-		if desc.GetParentID() == tempSystemDBID {
-			systemTables = append(systemTables, desc)
+		if table.GetParentID() == tempSystemDBID {
+			systemTables = append(systemTables, table)
 		}
 	}
 
@@ -1781,8 +1801,8 @@ func createRestoreFlows(
 	}
 
 	pkIDs := make(map[uint64]bool)
-	for _, tbl := range details.TableDescs {
-		pkIDs[kvpb.BulkOpSummaryID(uint64(tbl.GetID()), uint64(tbl.GetPrimaryIndex().ID))] = true
+	for _, table := range restoredTableDescs(offlineDescs) {
+		pkIDs[kvpb.BulkOpSummaryID(uint64(table.GetID()), uint64(table.GetPrimaryIndex().GetID()))] = true
 	}
 
 	dataToPreRestore := &restorationDataBase{
@@ -2606,7 +2626,31 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err := createImportingDescriptors(ctx, p, backupDescs, r); err != nil {
 		return err
 	}
-	preData, preValidateData, mainData, err := createRestoreFlows(ctx, r, backupCodec, backupDescs)
+
+	// Refresh the job details since createImportingDescriptors may have
+	// updated them.
+	details = r.job.Details().(jobspb.RestoreDetails)
+
+	// Fetch the freshly written OFFLINE descriptors once and reuse the
+	// resulting catalog across the readers that follow. This avoids each
+	// reader having to round-trip its own KV fetch, and is the source of
+	// descriptor bodies after we stop persisting the full descriptors
+	// onto RestoreDetails. publishDescriptors keeps its own fresh fetch
+	// because it needs txn-bound mutable copies to write back.
+	var offlineDescs nstree.Catalog
+	if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
+	) error {
+		var err error
+		offlineDescs, err = prefetchDescriptors(ctx, txn.KV(), txn.Descriptors(), details)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	preData, preValidateData, mainData, err := createRestoreFlows(
+		ctx, r, backupCodec, backupDescs, offlineDescs,
+	)
 	if err != nil {
 		return err
 	}
@@ -2624,11 +2668,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		if err := r.job.DeprecatedNoTxn().SetDetails(ctx, details); err != nil {
 			return errors.Wrap(err, "updating job details with download spans")
 		}
+		// Refresh the local copy again after the in-band SetDetails write.
+		details = r.job.Details().(jobspb.RestoreDetails)
 	}
-
-	// Refresh the job details since they may have been updated when creating the
-	// importing descriptors.
-	details = r.job.Details().(jobspb.RestoreDetails)
 
 	if fn := r.testingKnobs.afterOfflineTableCreation; fn != nil {
 		if err := fn(); err != nil {
@@ -2639,8 +2681,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	backupStats, err := backupinfo.GetStatisticsFromBackup(ctx, defaultStore, details.Encryption,
 		&kmsEnv, latestBackupManifest)
 	if err == nil {
-		remappedStats = remapAndFilterRelevantStatistics(ctx, backupStats, details.DescriptorRewrites,
-			details.TableDescs)
+		remappedStats = remapAndFilterRelevantStatistics(
+			ctx, backupStats, details.DescriptorRewrites, restoredTableDescs(offlineDescs),
+		)
 	} else {
 		// We don't want to fail the restore if we are unable to resolve statistics
 		// from the backup, since they can be recomputed after the restore has
@@ -2918,7 +2961,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		log.Dev.Errorf(ctx, "failed to release protected timestamp: %v", err)
 	}
 	if !details.OnlineImpl() {
-		r.notifyStatsRefresherOfNewTables(ctx)
+		r.notifyStatsRefresherOfNewTables(ctx, offlineDescs)
 	}
 
 	r.restoreStats = resTotal
@@ -3038,12 +3081,15 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 // Initiate a run of CREATE STATISTICS. We don't know the actual number of
 // rows affected per table, so we use a large number because we want to make
 // sure that stats always get created/refreshed here.
-func (r *restoreResumer) notifyStatsRefresherOfNewTables(ctx context.Context) {
-	details := r.job.Details().(jobspb.RestoreDetails)
-	for i := range details.TableDescs {
-		desc := tabledesc.NewBuilder(details.TableDescs[i]).BuildImmutableTable()
-		r.execCfg.StatsRefresher.NotifyMutation(ctx, desc, math.MaxInt32 /* rowsAffected */)
-	}
+func (r *restoreResumer) notifyStatsRefresherOfNewTables(
+	ctx context.Context, offlineDescs nstree.Catalog,
+) {
+	_ = offlineDescs.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if table, ok := desc.(catalog.TableDescriptor); ok {
+			r.execCfg.StatsRefresher.NotifyMutation(ctx, table, math.MaxInt32 /* rowsAffected */)
+		}
+		return nil
+	})
 }
 
 func waitForSpanConfigReconciliationCheckpoint(

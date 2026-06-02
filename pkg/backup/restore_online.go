@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -853,7 +854,20 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		r.downloadJobProg = fractionComplete
 
 		if remaining == 0 {
-			r.notifyStatsRefresherOfNewTables(ctx)
+			var publishedDescs nstree.Catalog
+			if err := execCtx.ExecCfg().InternalDB.DescsTxn(ctx, func(
+				ctx context.Context, txn descs.Txn,
+			) error {
+				var err error
+				publishedDescs, err = prefetchDescriptors(
+					ctx, txn.KV(), txn.Descriptors(),
+					r.job.Details().(jobspb.RestoreDetails),
+				)
+				return err
+			}); err != nil {
+				return err
+			}
+			r.notifyStatsRefresherOfNewTables(ctx, publishedDescs)
 			close(done)
 			return nil
 		}
