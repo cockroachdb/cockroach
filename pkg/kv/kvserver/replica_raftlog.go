@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -166,8 +167,10 @@ func (r *replicaLogStorage) entriesLocked(
 	//
 	// TODO(pav-kv): we need better safety guardrails here. The log storage type
 	// can remember the readable bounds, and assert that reads do not cross them.
+	reader := r.ls.Engine.NewReader(storage.StandardDurability)
+	defer reader.Close()
 	entries, _, loadedSize, err := logstore.LoadEntries(
-		r.ctx, r.ls.Engine, r.ls.RangeID, r.cache, r.ls.Sideload,
+		r.ctx, reader, r.ls.RangeID, r.cache, r.ls.Sideload,
 		lo, hi, maxBytes,
 		nil, // bytesAccount is not used when reading under Replica.mu
 	)
@@ -345,8 +348,10 @@ func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
 	if lo <= r.shMu.trunc.Index {
 		return nil, raft.ErrCompacted
 	}
+	reader := r.ls.Engine.NewReader(storage.StandardDurability)
+	defer reader.Close()
 	entries, _, loadedSize, err := logstore.LoadEntries(
-		r.ctx, r.ls.Engine, r.ls.RangeID, r.cache, r.ls.Sideload,
+		r.ctx, reader, r.ls.RangeID, r.cache, r.ls.Sideload,
 		lo, hi, maxBytes,
 		&r.raftMu.bytesAccount,
 	)

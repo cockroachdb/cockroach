@@ -798,9 +798,10 @@ func LoadEntry(
 }
 
 // LoadEntries loads a slice of consecutive log entries in [lo, hi), starting
-// from lo. It inlines the sideloaded entries, and caches all the loaded
-// entries. The size of the returned entries does not exceed maxSize, unless the
-// first entry exceeds the limit (in which case it is returned regardless).
+// from lo. It inlines the sideloaded entries, and (when eCache is non-nil)
+// caches all the loaded entries. The size of the returned entries does not
+// exceed maxSize, unless the first entry exceeds the limit (in which case it
+// is returned regardless).
 //
 // The valid range for lo/hi is: Compacted < lo <= hi <= LastIndex+1. The caller
 // should check the bounds before making this call.
@@ -810,13 +811,14 @@ func LoadEntry(
 // error is generally unexpected and means something bad.
 //
 // The bytesAccount is used to account for and limit the loaded bytes. It can be
-// nil when the accounting / limiting is not needed.
+// nil when the accounting / limiting is not needed. Pass nil for eCache when
+// no cache is available (e.g. standalone log replay).
 //
 // TODO(pavelkalinnikov): return all entries we've read, consider maxSize a
 // target size. Currently we may read one extra entry and drop it.
 func LoadEntries(
 	ctx context.Context,
-	eng storage.Engine,
+	reader storage.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache, // TODO(#145562): this should be the caller's concern
 	sideloaded SideloadStorage,
@@ -829,7 +831,10 @@ func LoadEntries(
 	}
 
 	ents := make([]raftpb.Entry, 0, min(hi-lo, 100))
-	ents, _, hitIndex, _ := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
+	hitIndex := lo
+	if eCache != nil {
+		ents, _, hitIndex, _ = eCache.Scan(ents, rangeID, lo, hi, maxBytes)
+	}
 
 	// TODO(pav-kv): pass the sizeHelper to eCache.Scan above, to avoid scanning
 	// the same entries twice, and computing their sizes.
@@ -856,12 +861,6 @@ func LoadEntries(
 	// stopping once we have enough.
 	expectedIndex := hitIndex
 
-	// TODO(mira): Consider refactoring this to use logstore.VisitInlined. The
-	// challenge is that LoadEntries gates iteration on a gap check that must
-	// run before sideloaded payload inlining (so a truncation that races a
-	// disk read doesn't trigger a wasted sideloaded read, or surface a
-	// spurious errSideloadedFileNotFound on the boundary entry). VisitInlined
-	// inlines before yielding, which inverts that order.
 	scanFunc := func(ent raftpb.Entry) error {
 		// Exit early if we have any gaps or it has been compacted.
 		if kvpb.RaftIndex(ent.Index) != expectedIndex {
@@ -888,12 +887,12 @@ func LoadEntries(
 		return nil
 	}
 
-	reader := eng.NewReader(storage.StandardDurability)
-	defer reader.Close()
 	if err := raftlog.Visit(ctx, reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, 0, 0, err
 	}
-	eCache.Add(rangeID, ents, false /* truncate */)
+	if eCache != nil {
+		eCache.Add(rangeID, ents, false /* truncate */)
+	}
 
 	// Did the correct number of results come back? If so, we're all good.
 	// Did we hit the size limits? If so, return what we have.

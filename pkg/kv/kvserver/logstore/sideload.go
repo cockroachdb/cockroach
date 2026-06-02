@@ -13,45 +13,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
-
-// VisitInlined iterates raft entries in [lo, hi) for rangeID, inlining any
-// sideloaded payloads before yielding each fat entry to fn. Pass nil for
-// entryCache when no cache is available (the inline path then falls through
-// to sideloaded storage).
-//
-// Used by standalone log replay. LoadEntries does equivalent work inline but
-// can't share this helper because its gap check must run before any inline
-// read — see the TODO there.
-func VisitInlined(
-	ctx context.Context,
-	reader storage.Reader,
-	rangeID roachpb.RangeID,
-	sideloaded SideloadStorage,
-	entryCache *raftentry.Cache,
-	lo, hi kvpb.RaftIndex,
-	fn func(raftpb.Entry) error,
-) error {
-	return raftlog.Visit(ctx, reader, rangeID, lo, hi, func(ent raftpb.Entry) error {
-		typ, _, err := raftlog.EncodingOf(ent)
-		if err != nil {
-			return err
-		}
-		if typ.IsSideloaded() {
-			ent, err = MaybeInlineSideloadedRaftCommand(
-				ctx, rangeID, ent, sideloaded, entryCache,
-			)
-			if err != nil {
-				return err
-			}
-		}
-		return fn(ent)
-	})
-}
 
 var errSideloadedFileNotFound = errors.New("sideloaded file not found")
 

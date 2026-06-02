@@ -1065,7 +1065,12 @@ func (b *testReplayBatch) AppliedIndex() kvpb.RaftIndex {
 
 func (b *testReplayBatch) ApplyEntry(_ context.Context, ent raftpb.Entry) (bool, error) {
 	b.as.RaftAppliedIndex = kvpb.RaftIndex(ent.Index)
-	return true, nil
+	return false /* needsReload */, nil
+}
+
+// Sideloaded returns nil — this test batch doesn't apply sideloaded entries.
+func (b *testReplayBatch) Sideloaded() logstore.SideloadStorage {
+	return nil
 }
 
 func (b *testReplayBatch) Commit(ctx context.Context) error {
