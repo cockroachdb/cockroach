@@ -995,6 +995,7 @@ func (w *walkCtx) walkTrigger(tbl catalog.TableDescriptor, t *descpb.TriggerDesc
 		FuncID:    t.FuncID,
 		FuncBody:  string(t.FuncBody),
 		FuncArgs:  t.FuncArgs,
+		CanMutate: t.CanMutate,
 	})
 	w.ev(scpb.Status_PUBLIC, &scpb.TriggerDeps{
 		TableID:        tbl.GetID(),

@@ -252,6 +252,11 @@ func (b *Builder) buildFunctionForTrigger(
 		)
 		funcScope = plBuilder.buildRootBlock(stmt.AST, funcScope, triggerFuncParams)
 	})
+	// Derive whether the trigger function body can mutate from the freshly
+	// built body and record it on the AST node, so the schema changer can
+	// persist it on the trigger descriptor. This mirrors buildTriggerFunction,
+	// which derives the same value from the body when the trigger fires.
+	ct.CanMutate = tree.RoutineCanMutateFromBool(funcScope.expr.Relational().CanMutate)
 	var vol tree.RoutineVolatility
 	switch o.Volatility {
 	case volatility.Leakproof, volatility.Immutable:

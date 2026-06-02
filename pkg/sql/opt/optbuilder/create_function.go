@@ -405,6 +405,12 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	// TODO(janexing): consider interaction with late binding, where the body
 	// is not resolved at CREATE time and canMutate should stay Unknown.
 	var canMutate tree.RoutineCanMutate
+
+	// Analysis of SQL expressions for trigger functions must be deferred
+	// until the function is bound to a trigger. Consequently, the `CanMutate`
+	// of a trigger function is also deferred till the binding trigger is created.
+	isTriggerFn := funcReturnType.Identical(types.Trigger)
+
 	switch language {
 	case tree.RoutineLangSQL:
 		// Parse the function body. lateBinding cannot be true here: it requires
@@ -501,8 +507,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 
 		// Special handling for trigger functions and late-bound procedures.
-		var skipSQL, isTriggerFn bool
-		if funcReturnType.Identical(types.Trigger) {
+		var skipSQL bool
+		if isTriggerFn {
 			// Trigger functions cannot have user-defined parameters. However, they do
 			// have a set of implicitly defined parameters.
 			for i := range createTriggerFuncParams {
@@ -520,9 +526,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			// placeholder type.
 			funcReturnType = types.Unknown
 
-			// Analysis of SQL expressions for trigger functions must be deferred
-			// until the function is bound to a trigger.
-			isTriggerFn = true
 			skipSQL = true
 		} else if lateBinding {
 			// Under late binding the body is stored verbatim and references
@@ -572,7 +575,13 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	if canMutate == tree.RoutineCanMutateUnknown {
 		canMutate = tree.RoutineDoesNotMutate
 	}
-	cf.CanMutate = canMutate
+
+	// For trigger function, the setting of CanMutate is deferred till the
+	// CREATE TRIGGER time.
+	if !isTriggerFn {
+		cf.CanMutate = canMutate
+	}
+
 	if !lateBinding {
 		if stmtScope != nil && (language != tree.RoutineLangPLpgSQL || !isSetReturning) {
 			// Validate that the result type of the last statement matches the

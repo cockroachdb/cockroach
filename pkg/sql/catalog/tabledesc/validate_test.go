@@ -371,6 +371,7 @@ var validationMap = []struct {
 			"DependsOn":          {status: iSolemnlySwearThisFieldIsValidated},
 			"DependsOnTypes":     {status: iSolemnlySwearThisFieldIsValidated},
 			"DependsOnRoutines":  {status: iSolemnlySwearThisFieldIsValidated},
+			"CanMutate":          {status: thisFieldReferencesNoObjects},
 		},
 	},
 }
