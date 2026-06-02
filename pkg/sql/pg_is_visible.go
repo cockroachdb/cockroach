@@ -216,30 +216,65 @@ func (p *planner) relNameAndSchemaForVisibility(
 	return desc.GetName(), sc.GetName(), true, nil
 }
 
-// relNameAndSchemaFromPGClass resolves a pg_class OID that is not a directly
-// resolvable table descriptor — a composite type or an index entry, both of
-// which have hashed OIDs — by reading pg_class. Any other OID has no pg_class
-// row. This path is rarely exercised (e.g. \di over indexes) and is allowed to
-// fall back to the slower virtual-table scan.
+// pgClassNameAndSchema holds a relation's name and schema name as exposed by
+// pg_class / pg_namespace. It is the value type of planner.pgClassOIDCache.
+type pgClassNameAndSchema struct {
+	relName string
+	scName  string
+}
+
+// relNameAndSchemaFromPGClass resolves a pg_class OID whose value is a hashed OID
+// rather than a descriptor ID — a composite type or an index entry — to its
+// relation name and schema name. These OIDs cannot be reversed to a descriptor,
+// so they are resolved by consulting pg_class, which generates them during
+// population.
+//
+// Because these builtins are evaluated once per row, resolving each OID with its
+// own internal query is O(rows) internal queries (and re-leases descriptors on
+// every call). Instead, the full pg_class→schema mapping is materialized once per
+// statement into planner.pgClassOIDCache and reused. A miss means the OID has no
+// pg_class row (e.g. it belongs to another database), which is reported as NULL by
+// the callers.
 func (p *planner) relNameAndSchemaFromPGClass(
 	ctx context.Context, o oid.Oid,
 ) (relName, scName string, ok bool, err error) {
-	if !oidext.IsMaybeHashedOid(o) {
+	if p.pgClassOIDCache == nil {
+		if err := p.buildPGClassOIDCache(ctx); err != nil {
+			return "", "", false, err
+		}
+	}
+	entry, found := p.pgClassOIDCache[o]
+	if !found {
 		return "", "", false, nil
 	}
-	row, err := p.QueryRowEx(ctx, "pg_table_is_visible", sessiondata.NoSessionDataOverride,
-		`SELECT c.relname, n.nspname
+	return entry.relName, entry.scName, true, nil
+}
+
+// buildPGClassOIDCache populates planner.pgClassOIDCache with a single scan of
+// pg_class joined to pg_namespace. Only hashed OIDs (composite types and index
+// entries) are stored, since those are the only OIDs that reach
+// relNameAndSchemaFromPGClass. pg_class is scoped to the current database, so the
+// cache naturally excludes objects in other databases.
+func (p *planner) buildPGClassOIDCache(ctx context.Context) error {
+	p.pgClassOIDCache = make(map[oid.Oid]pgClassNameAndSchema)
+	rows, err := p.QueryBufferedEx(ctx, "pg_is_visible-pg_class", sessiondata.NoSessionDataOverride,
+		`SELECT c.oid, c.relname, n.nspname
 		 FROM pg_catalog.pg_class c
-		 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-		 WHERE c.oid = $1`,
-		tree.NewDOid(o))
+		 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid`)
 	if err != nil {
-		return "", "", false, err
+		return err
 	}
-	if row == nil {
-		return "", "", false, nil
+	for _, row := range rows {
+		classOID := tree.MustBeDOid(row[0]).Oid
+		if !oidext.IsMaybeHashedOid(classOID) {
+			continue
+		}
+		p.pgClassOIDCache[classOID] = pgClassNameAndSchema{
+			relName: string(tree.MustBeDString(row[1])),
+			scName:  string(tree.MustBeDString(row[2])),
+		}
 	}
-	return string(tree.MustBeDString(row[0])), string(tree.MustBeDString(row[1])), true, nil
+	return nil
 }
 
 // relationExistsInSchema reports whether a relation named relName exists in the
