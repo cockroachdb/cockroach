@@ -1757,22 +1757,22 @@ FROM defaults_parsed
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Body: `SELECT (SELECT n2.nspname
-                       FROM pg_catalog.pg_proc p2
-                       JOIN pg_catalog.pg_namespace n2 ON p2.pronamespace = n2.oid
-                       WHERE p2.proname = p.proname
-                         AND p2.proargtypes = p.proargtypes
-                         AND n2.nspname = ANY current_schemas(true)
-                       ORDER BY array_position(current_schemas(true), n2.nspname)
-                       LIMIT 1) IS NOT DISTINCT FROM
-                    (SELECT n.nspname FROM pg_catalog.pg_namespace n WHERE n.oid = p.pronamespace)
-             FROM pg_catalog.pg_proc p
-             WHERE p.oid = $1
-             LIMIT 1`,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				res, err := evalCtx.Planner.PGFunctionIsVisible(ctx, tree.MustBeDOid(args[0]).Oid)
+				if err != nil {
+					return nil, err
+				}
+				if res == nil {
+					return tree.DNull, nil
+				}
+				return res, nil
+			},
 			CalledOnNullInput: true,
 			Info:              "Returns whether the function with the given OID is visible in the search path (its schema is on the search path and no function with the same name and signature shadows it from an earlier schema).",
 			Volatility:        volatility.Stable,
-			Language:          tree.RoutineLangSQL,
 		},
 	),
 	// pg_table_is_visible returns true iff the table with the given OID is
@@ -1784,21 +1784,22 @@ FROM defaults_parsed
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Body: `SELECT (SELECT n2.nspname
-                       FROM pg_catalog.pg_class c2
-                       JOIN pg_catalog.pg_namespace n2 ON c2.relnamespace = n2.oid
-                       WHERE c2.relname = c.relname
-                         AND n2.nspname = ANY current_schemas(true)
-                       ORDER BY array_position(current_schemas(true), n2.nspname)
-                       LIMIT 1) IS NOT DISTINCT FROM
-                    (SELECT n.nspname FROM pg_catalog.pg_namespace n WHERE n.oid = c.relnamespace)
-             FROM pg_catalog.pg_class c
-             WHERE c.oid = $1
-             LIMIT 1`,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				res, err := evalCtx.Planner.PGTableIsVisible(ctx, tree.MustBeDOid(args[0]).Oid)
+				if err != nil {
+					return nil, err
+				}
+				if res == nil {
+					return tree.DNull, nil
+				}
+				return res, nil
+			},
 			CalledOnNullInput: true,
 			Info:              "Returns whether the table with the given OID is visible in the search path (its schema is on the search path and no table with the same name shadows it from an earlier schema).",
 			Volatility:        volatility.Stable,
-			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -1811,21 +1812,22 @@ FROM defaults_parsed
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Body: `SELECT (SELECT n2.nspname
-                       FROM pg_catalog.pg_type t2
-                       JOIN pg_catalog.pg_namespace n2 ON t2.typnamespace = n2.oid
-                       WHERE t2.typname = t.typname
-                         AND n2.nspname = ANY current_schemas(true)
-                       ORDER BY array_position(current_schemas(true), n2.nspname)
-                       LIMIT 1) IS NOT DISTINCT FROM
-                    (SELECT n.nspname FROM pg_catalog.pg_namespace n WHERE n.oid = t.typnamespace)
-             FROM pg_catalog.pg_type t
-             WHERE t.oid = $1
-             LIMIT 1`,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				res, err := evalCtx.Planner.PGTypeIsVisible(ctx, tree.MustBeDOid(args[0]).Oid)
+				if err != nil {
+					return nil, err
+				}
+				if res == nil {
+					return tree.DNull, nil
+				}
+				return res, nil
+			},
 			CalledOnNullInput: true,
 			Info:              "Returns whether the type with the given OID is visible in the search path (its schema is on the search path and no type with the same name shadows it from an earlier schema).",
 			Volatility:        volatility.Stable,
-			Language:          tree.RoutineLangSQL,
 		},
 	),
 

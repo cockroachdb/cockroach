@@ -176,6 +176,7 @@ go_library(
         "partition_utils.go",
         "pg_catalog.go",
         "pg_extension.go",
+        "pg_is_visible.go",
         "pg_metadata_diff.go",
         "plan.go",
         "plan_columns.go",
