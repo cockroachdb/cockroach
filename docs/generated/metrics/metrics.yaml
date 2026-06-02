@@ -2705,6 +2705,24 @@ layers:
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/sql-queries
+    - name: sql.udf.count
+      exported_name: sql_udf_count
+      description: Number of SQL statements that invoked a user-defined function
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.udf.count.internal
+      exported_name: sql_udf_count_internal
+      description: Number of SQL statements that invoked a user-defined function (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
     - name: sql.update.count
       exported_name: sql_update_count
       labeled_name: 'sql.count{query_type: update}'

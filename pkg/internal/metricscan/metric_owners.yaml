@@ -1148,6 +1148,7 @@ owners:
   sql_txn_rollback_started_count: cockroachdb/sql-queries
   sql_txn_upgraded_iso_level_count: cockroachdb/sql-queries
   sql_txns_open: cockroachdb/sql-queries
+  sql_udf_count: cockroachdb/sql-queries
   sql_update_count: cockroachdb/sql-queries
   sql_update_started_count: cockroachdb/sql-queries
   sql_vecindex_pending_splits_merges: cockroachdb/specialized-indexing

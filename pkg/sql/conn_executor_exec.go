@@ -3540,6 +3540,10 @@ func (ex *connExecutor) makeExecPlan(
 		ex.metrics.EngineMetrics.RLSPoliciesAppliedCount.Inc(1)
 	}
 
+	if flags.IsSet(planFlagContainsUDF) {
+		ex.metrics.EngineMetrics.UDFCallCount.Inc(1)
+	}
+
 	// TODO(knz): Remove this accounting if/when savepoint rollbacks
 	// support rolling back over DDL.
 	if flags.IsSet(planFlagIsDDL) {

@@ -1001,6 +1001,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	if udf.Def == nil {
 		return nil, errors.AssertionFailedf("expected non-nil UDF definition")
 	}
+	b.flags.Set(exec.PlanFlagContainsUDF)
 
 	// Build the argument expressions.
 	args, err := b.buildRoutineArgs(ctx, udf.Args)
