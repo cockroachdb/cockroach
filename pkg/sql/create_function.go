@@ -388,7 +388,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 			)
 		}
 		fnID := funcdesc.UserDefinedFunctionOIDToID(existing.Oid)
-		fnDesc, err = params.p.checkPrivilegesForDropFunction(params.ctx, fnID)
+		fnDesc, err = params.p.checkPrivilegesForReplaceFunction(params.ctx, fnID)
 		if err != nil {
 			return nil, nil, err
 		}
