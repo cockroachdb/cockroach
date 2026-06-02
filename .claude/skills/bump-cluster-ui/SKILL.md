@@ -63,8 +63,8 @@ Get explicit confirmation before proceeding.
 
 ### Step 5: Identify Fork Remote
 
-The `cockroachdb/cockroach` repo restricts branch creation, so branches must be
-pushed to the user's personal fork. Identify the fork remote:
+The `cockroachdb/cockroach-private` repo restricts branch creation, so branches
+must be pushed to the user's personal fork. Identify the fork remote:
 
 ```bash
 git remote -v
@@ -100,7 +100,7 @@ Push to the fork and create the PR:
 
 ```bash
 git push -u {fork} bump-cluster-ui-{version}
-gh pr create -R cockroachdb/cockroach \
+gh pr create -R cockroachdb/cockroach-private \
   --head {fork_owner}:bump-cluster-ui-{version} \
   --base release-{version} \
   --title "ui: bump cluster-ui to {version}.0" \
@@ -143,7 +143,7 @@ Push to the fork and create the PR:
 
 ```bash
 git push -u {fork} bump-cluster-ui-{next_version}-prerelease
-gh pr create -R cockroachdb/cockroach \
+gh pr create -R cockroachdb/cockroach-private \
   --head {fork_owner}:bump-cluster-ui-{next_version}-prerelease \
   --base master \
   --title "ui: bump cluster-ui version to {next_version}.0-prerelease.0" \
