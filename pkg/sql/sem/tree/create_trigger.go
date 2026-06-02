@@ -30,6 +30,14 @@ type CreateTrigger struct {
 	// the new function body can be analyzed in each dependent trigger's table
 	// context to capture the correct dependencies.
 	FuncBodyOverride string
+
+	// CanMutate is set by the opt builder to indicate whether the trigger
+	// function body can perform mutations, including direct DML, mutations
+	// inside CTEs or subqueries, and calls to other mutating routines. It is
+	// derived from the trigger function body built in the trigger's table
+	// context (see buildFunctionForTrigger) and persisted on the trigger
+	// descriptor.
+	CanMutate RoutineCanMutate
 }
 
 var _ Statement = &CreateTrigger{}
