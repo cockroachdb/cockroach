@@ -777,9 +777,50 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 		if _, err := execConfig.JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, downloadJobID, txn); err != nil {
 			return err
 		}
+		// Copy the descriptor-ref info-key rows from the link job to the
+		// download job so that OnFailOrCancel cleanup on the download job can
+		// resolve the descriptor set without depending on the legacy
+		// RestoreDetails.{Type,Table,Schema,Database,Function}Descs slices,
+		// which are not populated once the cluster has crossed the
+		// V26_3_DescriptorIDsInRestoreDetails gate.
+		//
+		// TODO (kev-cao): remove this copy and rely on the link job's
+		// info-key rows directly in 27.1+.
+		if err := copyRestoreDescRefs(ctx, txn, r.job.ID(), downloadJobID); err != nil {
+			return errors.Wrap(err, "copying restore desc refs to download job")
+		}
 		r.downloadJobID = downloadJobID
 		return nil
 	})
+}
+
+// copyRestoreDescRefs copies the five restore_*_desc_refs info-key rows from
+// srcJobID to dstJobID.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func copyRestoreDescRefs(ctx context.Context, txn isql.Txn, srcJobID, dstJobID jobspb.JobID) error {
+	keys := []string{
+		restoreTableDescRefsKey,
+		restoreTypeDescRefsKey,
+		restoreSchemaDescRefsKey,
+		restoreDatabaseDescRefsKey,
+		restoreFunctionDescRefsKey,
+	}
+	src := jobs.InfoStorageForJob(txn, srcJobID)
+	dst := jobs.InfoStorageForJob(txn, dstJobID)
+	for _, k := range keys {
+		raw, ok, err := src.Get(ctx, "restore-desc-refs", k)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		if err := dst.Write(ctx, k, raw); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // waitForDownloadToComplete polls until there are no more ExternalFileBytes

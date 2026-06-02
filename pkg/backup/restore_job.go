@@ -2367,49 +2367,59 @@ func createImportingDescriptors(
 		}
 
 		details.PrepareCompleted = true
-		details.DatabaseDescs = databaseDescs
-		details.TableDescs = tableDescs
-		details.TypeDescs = make([]*descpb.TypeDescriptor, len(typesToWrite))
+
+		newTypeDescs := make([]*descpb.TypeDescriptor, len(typesToWrite))
 		for i := range typesToWrite {
-			details.TypeDescs[i] = typesToWrite[i].TypeDesc()
+			newTypeDescs[i] = typesToWrite[i].TypeDesc()
 		}
-		details.SchemaDescs = make([]*descpb.SchemaDescriptor, len(schemasToWrite))
+		newSchemaDescs := make([]*descpb.SchemaDescriptor, len(schemasToWrite))
 		for i := range schemasToWrite {
-			details.SchemaDescs[i] = schemasToWrite[i].SchemaDesc()
+			newSchemaDescs[i] = schemasToWrite[i].SchemaDesc()
 		}
-		details.FunctionDescs = make([]*descpb.FunctionDescriptor, len(functionsToWrite))
+		newFunctionDescs := make([]*descpb.FunctionDescriptor, len(functionsToWrite))
 		for i, fn := range functionsToWrite {
-			details.FunctionDescs[i] = fn.FuncDesc()
+			newFunctionDescs[i] = fn.FuncDesc()
 		}
 
-		// Dual-write each descriptor type's (ID, Version) tuples to a
-		// dedicated system.job_info row alongside the legacy slice
-		// population above. The info-key rows are the long-term source of
-		// truth — later phases of the restore fetch descriptor bodies from
-		// KV by ID rather than relying on the full payloads on
-		// RestoreDetails — but the legacy slices remain populated here for
-		// mixed-version compatibility. A later commit gates the legacy
-		// writes off once the cluster has crossed the corresponding
-		// cluster version.
+		// Write each descriptor type's (ID, Version) tuples to a dedicated
+		// system.job_info row. The info-key rows are the source of truth
+		// for the restore's descriptor set; subsequent phases fetch
+		// descriptor bodies from KV by ID. Below, the legacy slices on
+		// RestoreDetails are dual-written when the cluster has not yet
+		// crossed the gate, so that nodes still running the prior binary
+		// can drive the job.
 		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTableDescRefsKey,
-			descRefsFromTableDescs(details.TableDescs)); err != nil {
+			descRefsFromTableDescs(tableDescs)); err != nil {
 			return err
 		}
 		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTypeDescRefsKey,
-			descRefsFromTypeDescs(details.TypeDescs)); err != nil {
+			descRefsFromTypeDescs(newTypeDescs)); err != nil {
 			return err
 		}
 		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreSchemaDescRefsKey,
-			descRefsFromSchemaDescs(details.SchemaDescs)); err != nil {
+			descRefsFromSchemaDescs(newSchemaDescs)); err != nil {
 			return err
 		}
 		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreDatabaseDescRefsKey,
-			descRefsFromDatabaseDescs(details.DatabaseDescs)); err != nil {
+			descRefsFromDatabaseDescs(databaseDescs)); err != nil {
 			return err
 		}
 		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreFunctionDescRefsKey,
-			descRefsFromFunctionDescs(details.FunctionDescs)); err != nil {
+			descRefsFromFunctionDescs(newFunctionDescs)); err != nil {
 			return err
+		}
+
+		// TODO (kev-cao): drop this dual-write in 27.1+ once
+		// V26_3_DescriptorIDsInRestoreDetails is the minimum supported
+		// version.
+		if !p.ExecCfg().Settings.Version.ActiveVersion(ctx).AtLeast(
+			clusterversion.V26_3_DescriptorIDsInRestoreDetails.Version(),
+		) {
+			details.DatabaseDescs = databaseDescs
+			details.TableDescs = tableDescs
+			details.TypeDescs = newTypeDescs
+			details.SchemaDescs = newSchemaDescs
+			details.FunctionDescs = newFunctionDescs
 		}
 
 		// Update the job once all descs have been prepared for ingestion.
@@ -3699,19 +3709,24 @@ func (r *restoreResumer) publishDescriptors(
 
 	// Update and persist the state of the job.
 	details.DescriptorsPublished = true
-	details.TableDescs = newTables
-	details.TypeDescs = newTypes
-	details.SchemaDescs = newSchemas
-	details.DatabaseDescs = newDBs
-	details.FunctionDescs = newFunctions
+	// Always write the (ID, Version) tuples to the dedicated info-key rows;
+	// these are the source of truth on the new code path. The legacy
+	// descriptor slices on RestoreDetails are only populated for mixed-version
+	// clusters where an older binary might still drive the job.
+	// TODO (kev-cao): drop this dual-write in 27.1+ once
+	// V26_3_DescriptorIDsInRestoreDetails is the minimum supported version.
+	if !r.execCfg.Settings.Version.ActiveVersion(ctx).AtLeast(
+		clusterversion.V26_3_DescriptorIDsInRestoreDetails.Version(),
+	) {
+		details.TableDescs = newTables
+		details.TypeDescs = newTypes
+		details.SchemaDescs = newSchemas
+		details.DatabaseDescs = newDBs
+		details.FunctionDescs = newFunctions
+	}
 	if details.OnlineImpl() {
 		details.PostDownloadTableAutoStatsSettings = tableAutoStatsSettings
 	}
-	// Dual-write the published (ID, Version) tuples to the dedicated
-	// info-key rows alongside the legacy slice updates above. See the
-	// matching block in createImportingDescriptors for the rationale; a
-	// later commit gates the legacy writes off once the cluster has
-	// crossed the corresponding cluster version.
 	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTableDescRefsKey,
 		descRefsFromTableDescs(newTables)); err != nil {
 		return err
