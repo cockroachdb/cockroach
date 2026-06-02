@@ -672,7 +672,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgservicefile/com_github_jackc_pgservicefile-v0.0.0-20240606120523-5a60cdf6a761.zip": "c9e31c91aebf96eb246bd410d1849cc7666d955a1e20ca2eba1c30b4eb89335f",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgtype/com_github_jackc_pgtype-v1.14.3.zip": "24eb1112e74a18ba22ef7b47f59808060ddef00b98c2ade780d81b283e40f676",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgx/v4/com_github_jackc_pgx_v4-v4.18.3.zip": "1d5955dc65b8de8f72f9856865b33dcd9a2238f7cf9b1f2a00f1558e7d4965da",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgx/v5/com_github_jackc_pgx_v5-v5.7.2.zip": "c4b5a22a3f3db2e764f5b4df65ad1b2550d4587b3640f73ab27b868136ef9018",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgx/v5/com_github_jackc_pgx_v5-v5.9.2.zip": "0e8e8456630e580729cd1b06bf402cc6b98b57ec3a867df0e89e6ff27aa361c9",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/puddle/com_github_jackc_puddle-v1.3.0.zip": "b1eb42bb3cf9a430146af79cb183860b9dddfca51844c2d4b447dc2f43becc55",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/puddle/v2/com_github_jackc_puddle_v2-v2.2.2.zip": "f1f0789098a0bcb5ff3c7024f9ee387a6748446e1bc6713b13a63d763a9fb11e",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jaegertracing/jaeger/com_github_jaegertracing_jaeger-v1.18.1.zip": "256a95b2a52a66494aca6d354224bb450ff38ce3ea1890af46a7c8dc39203891",
