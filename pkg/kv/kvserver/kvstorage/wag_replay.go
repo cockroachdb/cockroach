@@ -8,6 +8,7 @@ package kvstorage
 import (
 	"context"
 	"iter"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
@@ -15,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -290,8 +290,8 @@ func ReplayWAG(
 }
 
 // replayRaftLog replays raft log entries for a range from its current applied
-// index up to the target index. It creates a ReplayBatch, iterates entries via
-// logstore.VisitInlined (so any sideloaded payloads are inlined), and applies
+// index up to the target index. It creates a ReplayBatch, loads entries via
+// logstore.LoadEntries (so any sideloaded payloads are inlined), and applies
 // each one. Non-trivial entries (lease changes, GC threshold bumps, etc.)
 // trigger a batch flush and state reload so that subsequent entries are
 // checked against up-to-date state.
@@ -335,24 +335,20 @@ func replayRaftLogBatch(
 
 	// TODO(mira): Add a max batch size policy to bound memory usage. Large
 	// ranges with many entries could produce an oversized batch here.
-	var needsReload bool
-	// NB: VisitInlined uses [start, end) semantics. Standalone replay has no
-	// raft entry cache, so inlined reads always fall through to sideloaded
-	// storage.
-	err = logstore.VisitInlined(
-		ctx, raftRO, target.rangeID, rb.Sideloaded(), nil, /* entryCache */
-		lo+1, hi+1, func(ent raftpb.Entry) error {
-			var err error
-			if needsReload, err = rb.ApplyEntry(ctx, ent); err != nil {
-				return err
-			} else if needsReload {
-				return iterutil.StopIteration()
-			}
-			return nil
-		},
+	ents, _, _, err := logstore.LoadEntries(
+		ctx, raftRO, target.rangeID, nil, /* eCache */
+		rb.Sideloaded(), lo+1, hi+1, math.MaxUint64, nil, /* bytesAccount */
 	)
-	if err = iterutil.Map(err); err != nil {
+	if err != nil {
 		return false, err
+	}
+	var needsReload bool
+	for _, ent := range ents {
+		if needsReload, err = rb.ApplyEntry(ctx, ent); err != nil {
+			return false, err
+		} else if needsReload {
+			break
+		}
 	}
 	if err := rb.Commit(ctx); err != nil {
 		return false, err
