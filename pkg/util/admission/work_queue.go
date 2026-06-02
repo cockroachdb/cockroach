@@ -1606,7 +1606,7 @@ const defaultGroupWeight = 1
 func (q *WorkQueue) getGroupConfigLocked(
 	gKey groupKey,
 ) (weight uint32, burstFrac float64, maxCPU bool) {
-	cfg := q.configHolder.Snapshot().Groups().GetOrDefault(gKey)
+	cfg := q.configHolder.Snapshot().GetOrDefault(gKey)
 	return cfg.Weight, cfg.BurstFrac, cfg.MaxCPU
 }
 

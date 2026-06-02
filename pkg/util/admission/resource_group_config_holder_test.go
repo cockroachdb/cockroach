@@ -43,23 +43,23 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 	t.Run("get_or_default_unknown_rg", func(t *testing.T) {
 		h := testHolder()
 		require.Equal(t, defaultRGGroupConfig,
-			h.Snapshot().Groups().GetOrDefault(rgGroupKey(0, 9999)))
+			h.Snapshot().GetOrDefault(rgGroupKey(0, 9999)))
 	})
 
 	t.Run("get_or_default_unknown_tenant", func(t *testing.T) {
 		h := testHolder()
 		require.Equal(t, defaultTenantGroupConfig,
-			h.Snapshot().Groups().GetOrDefault(tenantGroupKey(9999)))
+			h.Snapshot().GetOrDefault(tenantGroupKey(9999)))
 	})
 
 	t.Run("default_configs_have_burst_frac", func(t *testing.T) {
 		h := testHolder()
 		snap := h.Snapshot()
-		highCfg := snap.Groups().GetOrDefault(highResourceGroupKey)
+		highCfg := snap.GetOrDefault(highResourceGroupKey)
 		require.Equal(t, float64(0.8), highCfg.BurstFrac)
-		lowCfg := snap.Groups().GetOrDefault(lowResourceGroupKey)
+		lowCfg := snap.GetOrDefault(lowResourceGroupKey)
 		require.Equal(t, float64(0.2), lowCfg.BurstFrac)
-		tenantCfg := snap.Groups().GetOrDefault(tenantGroupKey(9999))
+		tenantCfg := snap.GetOrDefault(tenantGroupKey(9999))
 		require.Equal(t, float64(0.20), tenantCfg.BurstFrac)
 	})
 }
@@ -115,7 +115,7 @@ func TestResourceGroupConfigHolderGet(t *testing.T) {
 	})
 	require.Equal(t,
 		ResourceGroupConfig{Weight: 75, MaxCPU: true},
-		h.Snapshot().Groups().GetOrDefault(rgGroupKey(0, 42)))
+		h.Snapshot().GetOrDefault(rgGroupKey(0, 42)))
 }
 
 // TestResourceGroupConfigHolderSnapshot verifies Snapshot's contract:

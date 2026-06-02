@@ -61,27 +61,6 @@ func (s ResourceGroupConfigSet) String() string {
 	return redact.StringWithoutMarkers(s)
 }
 
-// GetOrDefault returns the config for k if installed, otherwise a
-// fallback: resource groups (tenantID==0) get defaultRGGroupConfig;
-// tenant groups (groupID==0) get defaultTenantGroupConfig. Used by
-// WorkQueue's lazy group creation: an Admit for a key without a
-// corresponding groupInfo consults the set to populate weight and
-// maxCPU on the new groupInfo.
-//
-// TODO(wenyihu6): collapse to a single fallback once we can align the
-// rg and tenant defaults.
-func (s ResourceGroupConfigSet) GetOrDefault(k groupKey) ResourceGroupConfig {
-	if cfg, ok := s[k]; ok {
-		return cfg
-	}
-	if k.groupID == 0 {
-		// Tenant group (tenantID is set, groupID is zero).
-		return defaultTenantGroupConfig
-	}
-	// Resource group (groupID is set).
-	return defaultRGGroupConfig
-}
-
 // defaultRGGroupConfig is the safety fallback returned by GetOrDefault
 // for resource group keys (groupID != 0) not in the installed
 // configuration. In steady state this is unreachable: the built-in
@@ -130,6 +109,32 @@ type ConfigSnapshot struct {
 	groups      ResourceGroupConfigSet
 	noBurstFrac float64
 	burstDelta  float64
+	// defaultRG is the fallback config returned by GetOrDefault for a
+	// resource-group key that is absent from groups. Cached at snapshot
+	// time so the per-Admit fallback path doesn't re-read package state.
+	defaultRG ResourceGroupConfig
+}
+
+// GetOrDefault returns the config for k. If k is installed in the
+// snapshot's groups map, that config is returned. Otherwise, the
+// snapshot's cached fallbacks apply: resource-group keys (groupID != 0)
+// get defaultRG; tenant-group keys (groupID == 0) get
+// defaultTenantGroupConfig. Used by WorkQueue's lazy group creation:
+// an Admit for a key without a corresponding groupInfo consults the
+// snapshot to populate weight and maxCPU on the new groupInfo.
+//
+// TODO(wenyihu6): collapse to a single fallback once we can align the
+// rg and tenant defaults.
+func (s ConfigSnapshot) GetOrDefault(k groupKey) ResourceGroupConfig {
+	if cfg, ok := s.groups[k]; ok {
+		return cfg
+	}
+	if k.groupID == 0 {
+		// Tenant group (tenantID is set, groupID is zero).
+		return defaultTenantGroupConfig
+	}
+	// Resource group (groupID is set).
+	return s.defaultRG
 }
 
 // Groups returns the per-group config set (built-ins + caller-provided).
@@ -212,5 +217,6 @@ func (h *ResourceGroupConfigHolder) Snapshot() ConfigSnapshot {
 		groups:      groups,
 		noBurstFrac: KVCPUTimeUtilGoal.Get(h.sv),
 		burstDelta:  KVCPUTimeUtilBurstDelta.Get(h.sv),
+		defaultRG:   defaultRGGroupConfig,
 	}
 }
