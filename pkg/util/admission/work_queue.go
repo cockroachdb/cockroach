@@ -333,14 +333,12 @@ type WorkQueue struct {
 		maxQueueDelayToSwitchToLifo time.Duration
 		// Only used if mode == usesCPUTimeTokens.
 		defaultCPUTimeTokenEstimator cpuTimeTokenEstimator
-		// burstBucketCapacity is the (tokens, capacity) seed used when a
-		// new groupInfo is created via Admit lazy-create or
-		// applyConfigLocked pre-create. Both fields take this value, so
-		// new groups start full and can burst immediately.
-		//
-		// Refreshed every 1ms by refillGroupBurstBuckets to
-		// int64(cap * defaultTenantGroupConfig.BurstFrac).
-		burstBucketCapacity int64
+		// unscaledBurstBucketCapacity is the 100%-CPU per-tick bucket
+		// capacity from the most recent refillGroupBurstBuckets call
+		// (zero before the first refill). A new group scales it by its
+		// own BurstFrac to seed its burst bucket at the per-group
+		// capacity refill would set.
+		unscaledBurstBucketCapacity float64
 		// overrideAllToBypassAdmission, when true, causes all work to bypass
 		// admission control. Used by CPU time token AC.
 		overrideAllToBypassAdmission bool
@@ -862,7 +860,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		weight, burstFrac, maxCPU := q.getGroupConfigLocked(gKey)
 		group = newGroupInfo(gKey, weight, burstFrac,
 			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
-			q.mu.burstBucketCapacity, maxCPU, q.perGroupAggMetrics)
+			q.mu.unscaledBurstBucketCapacity, maxCPU, q.perGroupAggMetrics)
 		q.mu.groups[gKey] = group
 	}
 	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
@@ -1017,7 +1015,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 			weight, burstFrac, maxCPU := q.getGroupConfigLocked(gKey)
 			group = newGroupInfo(gKey, weight, burstFrac,
 				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
-				q.mu.burstBucketCapacity, maxCPU, q.perGroupAggMetrics)
+				q.mu.unscaledBurstBucketCapacity, maxCPU, q.perGroupAggMetrics)
 			q.mu.groups[gKey] = group
 		}
 		q.adjustGroupUsedLocked(group, -info.RequestedCount)
@@ -1482,8 +1480,9 @@ func (q *WorkQueue) AdmittedSQLWorkDone(gKey groupKey, remaining int64) {
 // CPU) per-tick refill rate and bucket capacity; per-group amounts are
 // scaled by group.burstFrac.
 //
-// burstBucketCapacity is set to int64(cap * defaultTenantGroupConfig.BurstFrac)
-// so that lazily created tenant groups start with the correct capacity.
+// The unscaled capacity is stashed on q.mu so subsequently lazy-created
+// groups can seed their bucket as int64(unscaledCap * burstFrac) — i.e.
+// exactly what the next refill tick would set for that group.
 //
 // Holding q.mu once (instead of acquiring per group) costs one lock
 // acquire instead of N+1 and makes the refill atomic across groups: no
@@ -1491,7 +1490,7 @@ func (q *WorkQueue) AdmittedSQLWorkDone(gKey groupKey, remaining int64) {
 func (q *WorkQueue) refillGroupBurstBuckets(rate, capacity float64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.mu.burstBucketCapacity = int64(capacity * defaultTenantGroupConfig.BurstFrac)
+	q.mu.unscaledBurstBucketCapacity = capacity
 	for _, group := range q.mu.groups {
 		toAdd := int64(rate * group.burstFrac)
 		groupCap := int64(capacity * group.burstFrac)
@@ -1642,20 +1641,19 @@ func (q *WorkQueue) refreshResourceGroupConfig() {
 // change.
 //
 // New-vs-existing asymmetry: a freshly pre-created groupInfo seeds
-// cpuTimeTokenEstimator and cpuTimeBurstBucket.capacity from package
-// state (defaultCPUTimeTokenEstimator, q.mu.burstBucketCapacity)
-// rather than the snapshot, so the estimator seed and bucket
-// capacity stick at their first-creation values. The bucket capacity
-// catches up on the next refillGroupBurstBuckets tick (within 1ms);
-// a Set that changes MaxCPU lands instantly while the implied bucket
-// capacity trails briefly.
+// cpuTimeTokenEstimator from package state
+// (defaultCPUTimeTokenEstimator), so the estimator seed sticks at its
+// first-creation value. The bucket capacity is seeded from
+// q.mu.unscaledBurstBucketCapacity scaled by d.BurstFrac — i.e. the
+// value the next refill tick would set — so a Set lands the bucket
+// capacity instantly alongside MaxCPU.
 func (q *WorkQueue) applyConfigLocked(config ResourceGroupConfigSet) {
 	for k, d := range config {
 		group, ok := q.mu.groups[k]
 		if !ok {
 			group = newGroupInfo(k, d.Weight, d.BurstFrac, q.mode,
 				q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
-				q.mu.burstBucketCapacity, d.MaxCPU, q.perGroupAggMetrics)
+				q.mu.unscaledBurstBucketCapacity, d.MaxCPU, q.perGroupAggMetrics)
 			q.mu.groups[k] = group
 			continue
 		}
@@ -1954,7 +1952,7 @@ func newGroupInfo(
 	burstFrac float64,
 	mode workQueueMode,
 	cpuTimeTokenEstimate int64,
-	burstBucketCapacity int64,
+	unscaledBurstBucketCapacity float64,
 	maxCPU bool,
 	aggMetrics *groupAggMetrics,
 ) *groupInfo {
@@ -1975,7 +1973,8 @@ func newGroupInfo(
 	// always returns noBurst. This effectively disables the
 	// burstQualification functionality.
 	ti.cpuTimeBurstBucket.init(
-		burstBucketCapacity, mode != usesCPUTimeTokens /* disable */, maxCPU)
+		int64(unscaledBurstBucketCapacity*burstFrac),
+		mode != usesCPUTimeTokens /* disable */, maxCPU)
 	if aggMetrics != nil {
 		if aggMetrics.primary != nil {
 			// Primary family: every group feeds it, labeled

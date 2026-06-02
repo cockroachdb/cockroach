@@ -553,11 +553,13 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				d.ScanArgs(t, "to-add", &toAdd)
 				d.ScanArgs(t, "capacity", &capacity)
 				// Test helper: apply uniform (toAdd, capacity) to every
-				// group, bypassing burstFrac scaling. This keeps testdata
-				// files unchanged. Production code uses
-				// refillGroupBurstBuckets which scales per group.
+				// existing group, bypassing burstFrac scaling. This keeps
+				// testdata files unchanged. Production code uses
+				// refillGroupBurstBuckets which scales per group. The
+				// unscaled cap is also stashed so any subsequent
+				// lazy-create gets seeded as int64(capacity * burstFrac).
 				q.mu.Lock()
-				q.mu.burstBucketCapacity = capacity
+				q.mu.unscaledBurstBucketCapacity = float64(capacity)
 				for _, group := range q.mu.groups {
 					q.refillBurstBucketLocked(group, toAdd, capacity)
 				}

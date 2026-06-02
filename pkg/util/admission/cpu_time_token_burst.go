@@ -57,7 +57,7 @@ type cpuTimeBurstBucket struct {
 // Serverless mode seeds with the uniform per-tenant capacity, so a new
 // tenant starts full and can burst immediately.
 //
-// RM mode seeds with zero (see WorkQueue.burstBucketCapacity for why).
+// RM mode seeds with zero (see WorkQueue.unscaledBurstBucketCapacity for why).
 // The cold-start sequence is:
 //
 //   - The first admission drives tokens negative; adjust has no floor,
