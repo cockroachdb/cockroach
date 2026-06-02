@@ -42,7 +42,7 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 
 	t.Run("get_or_default_unknown_rg", func(t *testing.T) {
 		h := testHolder()
-		require.Equal(t, defaultRGGroupConfig,
+		require.Equal(t, defaultRGGroupConfigFor(h.sv),
 			h.Snapshot().GetOrDefault(rgGroupKey(0, 9999)))
 	})
 

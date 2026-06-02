@@ -61,18 +61,36 @@ func (s ResourceGroupConfigSet) String() string {
 	return redact.StringWithoutMarkers(s)
 }
 
-// defaultRGGroupConfig is the safety fallback returned by GetOrDefault
-// for resource group keys (groupID != 0) not in the installed
-// configuration. In steady state this is unreachable: the built-in
-// configs cover high/low. It exists to keep Admit's lazy-create path
-// total — if a caller installs a config that omits a known group ID,
-// Admit gets a usable weight rather than a zero-weight group.
-// Weight=20 mirrors the low default; MaxCPU=false keeps an
-// unconfigured group from bypassing the burst-fullness gate.
+// DefaultRGBurstFrac is the BurstFrac assigned to a resource group whose
+// id has no installed config. The setting is consulted at Snapshot time;
+// see defaultRGGroupConfigFor and ConfigSnapshot.GetOrDefault.
+var DefaultRGBurstFrac = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"admission.cpu_time_tokens.default_rg_burst_frac",
+	"BurstFrac assigned to a resource group whose id has no installed config; "+
+		"applies only to lazy group creation in resource manager mode",
+	0.2,
+	settings.Fraction)
+
+// defaultRGGroupConfigFor returns the safety fallback used by
+// ConfigSnapshot.GetOrDefault for resource group keys (groupID != 0)
+// not in the installed configuration. In steady state this is
+// unreachable: the built-in configs cover high/low. It exists to keep
+// Admit's lazy-create path total — if a caller installs a config that
+// omits a known group ID, Admit gets a usable weight rather than a
+// zero-weight group. Weight=20 mirrors the low default; MaxCPU=false
+// keeps an unconfigured group from bypassing the burst-fullness gate.
+// BurstFrac comes from the DefaultRGBurstFrac cluster setting.
 //
 // TODO(wenyihu6): once SQL DDL (CREATE/ALTER RESOURCE GROUP) is wired
 // through, decide whether unknown group IDs should be a hard error.
-var defaultRGGroupConfig = ResourceGroupConfig{Weight: 20, BurstFrac: 0.2, MaxCPU: false}
+func defaultRGGroupConfigFor(sv *settings.Values) ResourceGroupConfig {
+	return ResourceGroupConfig{
+		Weight:    20,
+		BurstFrac: DefaultRGBurstFrac.Get(sv),
+		MaxCPU:    false,
+	}
+}
 
 // defaultTenantGroupConfig is the fallback for tenant group keys
 // (groupID == 0): every tenant gets defaultGroupWeight, since
@@ -111,17 +129,19 @@ type ConfigSnapshot struct {
 	burstDelta  float64
 	// defaultRG is the fallback config returned by GetOrDefault for a
 	// resource-group key that is absent from groups. Cached at snapshot
-	// time so the per-Admit fallback path doesn't re-read package state.
+	// time so the per-Admit fallback path doesn't re-read cluster
+	// settings.
 	defaultRG ResourceGroupConfig
 }
 
 // GetOrDefault returns the config for k. If k is installed in the
 // snapshot's groups map, that config is returned. Otherwise, the
 // snapshot's cached fallbacks apply: resource-group keys (groupID != 0)
-// get defaultRG; tenant-group keys (groupID == 0) get
-// defaultTenantGroupConfig. Used by WorkQueue's lazy group creation:
-// an Admit for a key without a corresponding groupInfo consults the
-// snapshot to populate weight and maxCPU on the new groupInfo.
+// get defaultRG (BurstFrac sourced from the DefaultRGBurstFrac cluster
+// setting); tenant-group keys (groupID == 0) get defaultTenantGroupConfig.
+// Used by WorkQueue's lazy group creation: an Admit for a key without a
+// corresponding groupInfo consults the snapshot to populate weight and
+// maxCPU on the new groupInfo.
 //
 // TODO(wenyihu6): collapse to a single fallback once we can align the
 // rg and tenant defaults.
@@ -217,6 +237,6 @@ func (h *ResourceGroupConfigHolder) Snapshot() ConfigSnapshot {
 		groups:      groups,
 		noBurstFrac: KVCPUTimeUtilGoal.Get(h.sv),
 		burstDelta:  KVCPUTimeUtilBurstDelta.Get(h.sv),
-		defaultRG:   defaultRGGroupConfig,
+		defaultRG:   defaultRGGroupConfigFor(h.sv),
 	}
 }
