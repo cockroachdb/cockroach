@@ -15,7 +15,8 @@ jobs:
   code-cover-publish:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
+      id-token: write   # mint the OIDC token for WIF auth to GCP
+      actions: read     # list/download the coverage artifact from the triggering run
       contents: read
     if: >
       github.event.workflow_run.event == 'pull_request' &&
