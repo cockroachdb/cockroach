@@ -11,5 +11,18 @@
             "Bash(git log *)",
             "Bash(git status *)"
         ]
+    },
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/pre-push-generate.sh"
+                    }
+                ]
+            }
+        ]
     }
 }

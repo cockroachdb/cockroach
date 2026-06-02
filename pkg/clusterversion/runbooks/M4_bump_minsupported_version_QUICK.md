@@ -248,20 +248,13 @@ rm -rf pkg/sql/sqlitelogictest/tests/local-mixed-25.2/
 ### Step 4: Update Logic Test Files
 
 ```bash
-# Remove from dedicated directive lines
+# Remove all references (# LogicTest: headers, skipif, onlyif — plain and negated)
 find pkg/sql/logictest/testdata/logic_test/ \
      -type f -exec grep -l "local-mixed-25\.2" {} \; | while read file; do
   sed -i '' \
     -e '/^# LogicTest:/s/ !*local-mixed-25\.2//g' \
     -e '/^skipif config local-mixed-25\.2$/d' \
     -e '/^onlyif config local-mixed-25\.2$/d' \
-    "$file"
-done
-
-# Remove from multi-config lines
-find pkg/sql/logictest/testdata/logic_test/ \
-     -type f -exec grep -l "local-mixed-25\.2" {} \; | while read file; do
-  sed -i '' \
     -e '/^onlyif config/s/ local-mixed-25\.2//g' \
     -e '/^skipif config/s/ local-mixed-25\.2//g' \
     "$file"
@@ -273,11 +266,21 @@ sed -i '' '/^# LogicTest:$/d' pkg/sql/logictest/testdata/logic_test/* 2>/dev/nul
 
 **⚠️ IMPORTANT:** After sed, manually check files with `onlyif` directives - you may need to remove guarded statements. See full runbook for details.
 
-### Step 5: Regenerate Bazel
+**⚠️ REBASE NOTE:** If you rebase this branch onto master later, new files from master may silently reintroduce `local-mixed-OLD` references via auto-merge. After every rebase, re-run the grep and sed above before pushing.
+
+### Step 5: Regenerate Bazel and Validate
 
 ```bash
 ./dev gen bazel
 ```
+
+**Verify generate succeeds and workspace is clean before committing:**
+
+```bash
+git diff --name-only  # should show only expected files (testdata, testdirs, logictestbase, nightly script)
+```
+
+If `./dev gen bazel` fails or leaves unexpected dirty files, fix before committing. Pushing with dirty generated files will fail `check_generated_code` in CI.
 
 ### Commit
 
@@ -373,7 +376,7 @@ Before creating PR, verify these files were updated:
 |-------|-----------|
 | `TestMinimumSupportedFormatVersion` fails | Check `pkg/storage/pebble.go` MinimumSupportedFormatVersion matches pebbleFormatVersionMap |
 | Nightly build fails "nonexistent local-mixed" | Update `sqllogic_corpus_nightly_impl.sh` |
-| `panic: unknown config name` | Logic test files still reference old config - run sed commands again |
+| `panic: unknown config name` | Logic test files still reference old config - run sed commands again. Common after a rebase: auto-merge can reintroduce references from new master commits. |
 | `empty LogicTest directive` | Remove with `sed -i '' '/^# LogicTest:$/d' <file>` |
 | Duplicate statement errors | Manually review files with `onlyif` - see full runbook |
 
