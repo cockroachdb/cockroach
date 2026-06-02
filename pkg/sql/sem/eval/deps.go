@@ -240,6 +240,26 @@ type Planner interface {
 	// `INT(13)`, `mytype`, `"mytype"`, `pg_catalog.int4` or `"public".mytype`.
 	GetTypeFromValidSQLSyntax(ctx context.Context, sql string) (*types.T, error)
 
+	// PGFunctionIsVisible returns whether the function with the given OID is
+	// visible in the current search path: its schema is on the path and no
+	// function with the same name and argument types shadows it from an earlier
+	// schema. Returns NULL if no function with the OID exists. Implements
+	// pg_catalog.pg_function_is_visible.
+	PGFunctionIsVisible(ctx context.Context, oid oid.Oid) (*tree.DBool, error)
+
+	// PGTableIsVisible returns whether the relation with the given OID is
+	// visible in the current search path: its schema is on the path and no
+	// relation with the same name shadows it from an earlier schema. Returns
+	// NULL if no relation with the OID exists. Implements
+	// pg_catalog.pg_table_is_visible.
+	PGTableIsVisible(ctx context.Context, oid oid.Oid) (*tree.DBool, error)
+
+	// PGTypeIsVisible returns whether the type with the given OID is visible in
+	// the current search path: its schema is on the path and no type with the
+	// same name shadows it from an earlier schema. Returns NULL if no type with
+	// the OID exists. Implements pg_catalog.pg_type_is_visible.
+	PGTypeIsVisible(ctx context.Context, oid oid.Oid) (*tree.DBool, error)
+
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *tree.Subquery) (tree.Datum, error)
 

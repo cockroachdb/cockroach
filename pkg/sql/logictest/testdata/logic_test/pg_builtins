@@ -542,6 +542,39 @@ SELECT pg_type_is_visible(NULL)
 ----
 NULL
 
+# A predefined (pg_catalog) type is hidden when an earlier schema on the search
+# path defines a type of the same name. This exercises the case-sensitive name
+# lookups behind the shadowing check: the builtin's name must be compared in its
+# lowercase form (e.g. "inet"), matching how user-defined types are stored.
+let $builtin_inet_oid
+SELECT 'pg_catalog.inet'::regtype::oid::int
+
+statement ok
+CREATE TYPE inet AS ENUM ('x')
+
+statement ok
+SET search_path = public, pg_catalog
+
+query B
+SELECT pg_type_is_visible($builtin_inet_oid::oid)
+----
+false
+
+# With pg_catalog ahead of the shadowing schema, the builtin is visible again.
+statement ok
+SET search_path = pg_catalog, public
+
+query B
+SELECT pg_type_is_visible($builtin_inet_oid::oid)
+----
+true
+
+statement ok
+RESET search_path
+
+statement ok
+DROP TYPE public.inet
+
 query TB rowsort
 SELECT p.proname, pg_function_is_visible(p.oid)
 FROM pg_proc p
