@@ -33,7 +33,7 @@ before and how this commit solves it.
 Include context about alternate approaches considered and
 any side effects or consequences.
 
-Resolves: #123
+Resolves: cockroachdb/cockroach#123
 Epic: CRDB-357
 
 Release note (category): Description of user-facing change
@@ -103,9 +103,17 @@ a much shorter window than the previous 48 seconds.
 ```
 
 ## Issue References
-- `Resolves: #123` - Auto-closes issue on PR merge
-- `See also: #456, #789` - Cross-references issues
-- `Epic: CRDB-357` - Links to epic
+
+Development happens in the private `cockroachdb/cockroach-private` repo, but
+issues are still tracked in the public `cockroachdb/cockroach` repo. Always
+fully qualify GitHub issue references with the `cockroachdb/cockroach#` prefix
+(not a bare `#NNN`), otherwise GitHub resolves the number against the private
+repo and links to the wrong issue (or nothing). This applies to `Resolves`,
+`Fixes`, `Closes`, `See also`, and any other issue-referencing keyword.
+
+- `Resolves: cockroachdb/cockroach#123` - Auto-closes issue on PR merge
+- `See also: cockroachdb/cockroach#456, cockroachdb/cockroach#789` - Cross-references issues
+- `Epic: CRDB-357` - Links to epic (Jira key, not a GitHub issue — no prefix)
 
 ## How to Avoid Common Pitfalls
 - Always include a release note annotation (even "Release note: None")
@@ -117,6 +125,6 @@ a much shorter window than the previous 48 seconds.
 - Explain the "why" behind changes, not just the "what"
 
 ## Pull Request Guidelines
-- **Create PRs from your personal fork**, not directly on cockroachdb/cockroach
+- **Create PRs from your personal fork**, not directly on cockroachdb/cockroach-private
 - **Single-commit PRs**: PR title should match commit title, PR body should match commit body
 - **Multi-commit PRs**: The body should summarize the end goal that the set of commits achieves and give the reader the context necessary to review the PR commit by commit (for example, the first commits might get refactors out of the way so that the last commit can hook everything up). When there isn't an overarching connection between the commits (maybe the PR groups a few mechanical changes that are not related) it is fine to say that the individual commits speak for themselves.

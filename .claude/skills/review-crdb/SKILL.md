@@ -195,7 +195,7 @@ Build the JSON payload with this structure:
   suggestions, missing version gating). Commit structure and brief PR
   description feedback belong here. Don't paste rewritten descriptions — just
   note what's missing or misleading. End the body with a footer line:
-  `\n\n---\n*(made with [/review-crdb](https://github.com/cockroachdb/cockroach/blob/master/.claude/skills/review-crdb/SKILL.md))*`
+  `\n\n---\n*(made with [/review-crdb](https://github.com/cockroachdb/cockroach-private/blob/master/.claude/skills/review-crdb/SKILL.md))*`
 - **`comments`**: one entry per finding that has a specific file and line. Use
   `line` (the actual line number in the file) and `side: "RIGHT"` (commenting
   on the new code). Start each comment body with `/review-crdb(<severity>): `

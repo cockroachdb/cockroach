@@ -87,7 +87,7 @@ Brief description of what needs investigation.
 - Finding 2
 
 **Code References:**
-- [file.go:123](https://github.com/cockroachdb/cockroach/blob/master/pkg/path/file.go#L123)
+- [file.go:123](https://github.com/cockroachdb/cockroach-private/blob/master/pkg/path/file.go#L123)
 
 **Next Steps:**
 - [ ] Action item 1
@@ -127,7 +127,7 @@ associated with that epic. Ask the user if there's a relevant epic to link.
 
 ## Best Practices
 
-- **Code references**: Use GitHub URLs with line numbers: `[file.go:123](https://github.com/cockroachdb/cockroach/blob/master/pkg/path/file.go#L123)`
+- **Code references**: Use GitHub URLs with line numbers: `[file.go:123](https://github.com/cockroachdb/cockroach-private/blob/master/pkg/path/file.go#L123)`
 - **Stable references**: Include commit SHA in URLs when line numbers may shift.
 - **Correlation evidence**: Include timestamped logs for performance issues. Paste excerpts inline.
 - **Content**: Use markdown. Be specific about versions, configs, environments. Include repro steps.

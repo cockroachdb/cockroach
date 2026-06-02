@@ -111,7 +111,7 @@ Release justification: <justification>
 **Example `gh pr create` invocation:**
 ```bash
 gh pr create \
-  --repo cockroachdb/cockroach \
+  --repo cockroachdb/cockroach-private \
   --base release-24.3 \
   --head <user>:backport24.3-<pr-number> \
   --title "release-24.3: <original title>" \
