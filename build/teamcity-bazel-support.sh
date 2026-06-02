@@ -90,6 +90,46 @@ run_bazel_github() {
     return $exit_status
 }
 
+# configure_bazel_storage_access_token mints a short-lived GCS access token
+# from the service-account key in $GOOGLE_EPHEMERAL_CREDENTIALS and exports it
+# as $BAZEL_STORAGE_ACCESS_TOKEN. build/bazelutil/credential-helper (wired into
+# .bazelrc) reads this token to authenticate Bazel's downloads of Go module
+# dependencies from the private cockroach-godeps GCS bucket.
+#
+# This is opt-in: only the nightly configurations that build or test via Bazel
+# call it, so the rest of CI keeps using run_bazel unchanged. Callers that build
+# inside the builder container (run_bazel) must also forward the variable into
+# the container by adding `-e BAZEL_STORAGE_ACCESS_TOKEN` to
+# $BAZEL_SUPPORT_EXTRA_DOCKER_ARGS. Callers that invoke Bazel directly on the
+# agent need only call this function; the bazel process inherits the exported
+# variable.
+#
+# Minting on the agent (rather than inside the container) keeps the long-lived
+# key out of the container: only the ~1h token crosses the boundary. That TTL
+# comfortably covers the dependency-fetch phase of a build; the credential
+# helper is not consulted again once the external repositories have been
+# materialized. The token is minted under an isolated CLOUDSDK_CONFIG so the
+# agent's default gcloud account, which other build steps rely on, is untouched.
+configure_bazel_storage_access_token() {
+  : "${GOOGLE_EPHEMERAL_CREDENTIALS:?must be set to authenticate to the private cockroach-godeps bucket}"
+  # Disable xtrace while the key and token are in flight; some callers run with
+  # `set -x`, which would otherwise echo the credential to the build log.
+  local xtrace_was_on=0
+  case "$-" in *x*) xtrace_was_on=1; set +x;; esac
+  local keyfile sdkconfig
+  keyfile=$(mktemp)
+  sdkconfig=$(mktemp -d)
+  printf '%s' "${GOOGLE_EPHEMERAL_CREDENTIALS}" > "${keyfile}"
+  CLOUDSDK_CONFIG="${sdkconfig}" gcloud auth activate-service-account \
+    --key-file="${keyfile}" >/dev/null 2>&1
+  export BAZEL_STORAGE_ACCESS_TOKEN
+  BAZEL_STORAGE_ACCESS_TOKEN=$(CLOUDSDK_CONFIG="${sdkconfig}" gcloud auth print-access-token)
+  rm -f "${keyfile}"
+  rm -rf "${sdkconfig}"
+  [[ "${xtrace_was_on}" == 1 ]] && set -x
+  return 0
+}
+
 # local copy of _tc_build_branch from teamcity-support.sh to avoid imports.
 _tc_build_branch() {
     echo "${TC_BUILD_BRANCH#refs/heads/}"

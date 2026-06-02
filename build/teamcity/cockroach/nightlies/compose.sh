@@ -12,6 +12,11 @@ dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 source "$dir/teamcity-support.sh"
 source "$dir/teamcity-bazel-support.sh"
 
+# This script runs Bazel directly on the agent (no run_bazel/container), so
+# exporting the token here is enough for the bazel processes below to fetch
+# private Go module dependencies from the cockroach-godeps bucket.
+configure_bazel_storage_access_token
+
 tc_start_block "Run compose tests"
 
 bazel build //pkg/cmd/bazci
