@@ -243,6 +243,25 @@ message BackupProgressTraceEvent {
   util.hlc.Timestamp revision_start_time = 3 [(gogoproto.nullable) = false];
 }
 
+// RestoreDescRef is an (ID, Version) tuple identifying a descriptor that a
+// RESTORE job has materialized in OFFLINE state. The descriptor body is
+// fetched from KV when needed; persisting only the reference avoids
+// embedding the full descriptor in the job's RestoreDetails payload, which
+// can exceed the per-row raft command size limit at large descriptor counts.
+message RestoreDescRef {
+  uint32 id      = 1 [(gogoproto.customname) = "ID",
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  uint32 version = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.DescriptorVersion"];
+}
+
+// RestoreDescRefs is the value stored under each per-type info-key
+// (restoreTableDescRefsKey, etc.) in system.job_info during a RESTORE.
+// One row per descriptor type keeps individual rows well under the raft
+// command size limit even at multi-million-descriptor scale.
+message RestoreDescRefs {
+  repeated RestoreDescRef refs = 1 [(gogoproto.nullable) = false];
+}
+
 // ExportStats is a message containing information about each
 // Export{Request,Response}.
 message ExportStats {
