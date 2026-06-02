@@ -2386,10 +2386,14 @@ func doRestorePlan(
 
 	// Validate that revision log rekeys can be built from the
 	// restore details. This catches errors during planning rather
-	// than during job execution.
+	// than during job execution. Planning does not have access to
+	// the materialized table descriptors (those are created during
+	// job execution), so this validation only exercises rekey
+	// construction with no tables; it remains useful as a sanity
+	// check on details.DescriptorRewrites and execCfg.
 	if !revisionLogTimestamp.IsEmpty() {
 		if _, _, err := restorerevlog.BuildRekeys(
-			restoreDetails, p.ExecCfg(),
+			nil /* tables */, restoreDetails, p.ExecCfg(),
 		); err != nil {
 			return errors.Wrap(err, "validating revision log rekeys")
 		}

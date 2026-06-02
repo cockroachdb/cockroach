@@ -300,6 +300,13 @@ const (
 	// to requiring REFERENCES on both the origin and referenced tables.
 	V26_3_GrantReferencesToUsersWithCreate
 
+	// V26_3_DescriptorIDsInRestoreDetails gates RESTORE's transition from
+	// embedding full descriptor payloads in RestoreDetails to persisting
+	// (ID, Version) tuples in dedicated system.job_info rows. Once a cluster
+	// is at this version, new RESTORE jobs only write the info-key rows and
+	// leave the legacy descriptor slices on RestoreDetails empty.
+	V26_3_DescriptorIDsInRestoreDetails
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -394,6 +401,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_CrdbInternalTSDB: {Major: 26, Minor: 2, Internal: 12},
 
 	V26_3_GrantReferencesToUsersWithCreate: {Major: 26, Minor: 2, Internal: 14},
+
+	V26_3_DescriptorIDsInRestoreDetails: {Major: 26, Minor: 2, Internal: 16},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

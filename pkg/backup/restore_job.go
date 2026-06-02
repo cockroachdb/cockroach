@@ -138,6 +138,17 @@ const (
 	// restoreTempSystemDBPrefix is the prefix used for the temporary system
 	// database created during restore.
 	restoreTempSystemDBPrefix = "crdb_temp_system"
+
+	// Per-type info-keys used by RESTORE to persist (ID, Version) tuples for
+	// every descriptor materialized in OFFLINE state. The descriptor body is
+	// fetched from KV when needed; persisting only references keeps the
+	// per-row size well under the raft command size limit at multi-million
+	// descriptor scale. See backuppb.RestoreDescRefs for the value shape.
+	restoreTableDescRefsKey    = "restore_table_desc_refs"
+	restoreTypeDescRefsKey     = "restore_type_desc_refs"
+	restoreSchemaDescRefsKey   = "restore_schema_desc_refs"
+	restoreDatabaseDescRefsKey = "restore_database_desc_refs"
+	restoreFunctionDescRefsKey = "restore_function_desc_refs"
 )
 
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
@@ -167,6 +178,295 @@ func restoreTempSystemName(
 }
 
 var laggingRestoreProcErr = errors.New("try re-planning due to lagging restore processors")
+
+// getDescRefs reads the RestoreDescRefs proto stored at the given info-key for
+// the given restore job. Returns (nil, false, nil) when the key is absent.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func getDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, infoKey string,
+) ([]backuppb.RestoreDescRef, bool, error) {
+	raw, ok, err := jobs.InfoStorageForJob(txn, jobID).Get(ctx, "restore-desc-refs", infoKey)
+	if err != nil || !ok {
+		return nil, false, err
+	}
+	var msg backuppb.RestoreDescRefs
+	if err := protoutil.Unmarshal(raw, &msg); err != nil {
+		return nil, false, errors.Wrap(err, "decoding restore desc refs")
+	}
+	return msg.Refs, true, nil
+}
+
+// writeDescRefs marshals refs as a RestoreDescRefs proto and writes it to the
+// given info-key for the restore job.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func writeDescRefs(
+	ctx context.Context,
+	txn isql.Txn,
+	jobID jobspb.JobID,
+	infoKey string,
+	refs []backuppb.RestoreDescRef,
+) error {
+	bytes, err := protoutil.Marshal(&backuppb.RestoreDescRefs{Refs: refs})
+	if err != nil {
+		return errors.Wrap(err, "encoding restore desc refs")
+	}
+	return jobs.InfoStorageForJob(txn, jobID).Write(ctx, infoKey, bytes)
+}
+
+// descRefsFromTableDescs extracts (ID, Version) tuples from a table-descriptor
+// slice for persisting via writeDescRefs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromTableDescs(descs []*descpb.TableDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// descRefsFromTypeDescs is the type-descriptor analog of
+// descRefsFromTableDescs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromTypeDescs(descs []*descpb.TypeDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// descRefsFromSchemaDescs is the schema-descriptor analog of
+// descRefsFromTableDescs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromSchemaDescs(descs []*descpb.SchemaDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// descRefsFromDatabaseDescs is the database-descriptor analog of
+// descRefsFromTableDescs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromDatabaseDescs(descs []*descpb.DatabaseDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// descRefsFromFunctionDescs is the function-descriptor analog of
+// descRefsFromTableDescs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromFunctionDescs(descs []*descpb.FunctionDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// restoredTableDescs returns the table descriptors from offlineDescs, the
+// catalog hoisted into doResume right after createImportingDescriptors, in
+// stable ID order. The order matches the historical iteration over
+// details.TableDescs closely enough for the consumers that walk the result
+// today (rekey list, pkIDs, missing-stats warning), none of which rely on
+// a specific order.
+func restoredTableDescs(offlineDescs nstree.Catalog) []catalog.TableDescriptor {
+	all := offlineDescs.OrderedDescriptors()
+	tables := make([]catalog.TableDescriptor, 0, len(all))
+	for _, desc := range all {
+		if table, ok := desc.(catalog.TableDescriptor); ok {
+			tables = append(tables, table)
+		}
+	}
+	return tables
+}
+
+// restoredTableIDs returns the IDs of all table descriptors in offlineDescs.
+func restoredTableIDs(offlineDescs nstree.Catalog) []descpb.ID {
+	tables := restoredTableDescs(offlineDescs)
+	ids := make([]descpb.ID, 0, len(tables))
+	for _, table := range tables {
+		ids = append(ids, table.GetID())
+	}
+	return ids
+}
+
+// restoredDatabaseIDs returns the IDs of all database descriptors in
+// offlineDescs.
+func restoredDatabaseIDs(offlineDescs nstree.Catalog) []descpb.ID {
+	all := offlineDescs.OrderedDescriptors()
+	ids := make([]descpb.ID, 0, len(all))
+	for _, desc := range all {
+		if _, ok := desc.(catalog.DatabaseDescriptor); ok {
+			ids = append(ids, desc.GetID())
+		}
+	}
+	return ids
+}
+
+// hasRestoredDatabases reports whether offlineDescs contains any database
+// descriptors.
+func hasRestoredDatabases(offlineDescs nstree.Catalog) bool {
+	found := false
+	_ = offlineDescs.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if _, ok := desc.(catalog.DatabaseDescriptor); ok {
+			found = true
+		}
+		return nil
+	})
+	return found
+}
+
+// tableDescRefs returns (ID, Version) tuples for tables this restore job is
+// materializing. Prefers the dedicated info-key row; falls back to the legacy
+// details.TableDescs slice for jobs created before info-key writes existed.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func tableDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
+) ([]backuppb.RestoreDescRef, error) {
+	refs, ok, err := getDescRefs(ctx, txn, jobID, restoreTableDescRefsKey)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return refs, nil
+	}
+	out := make([]backuppb.RestoreDescRef, len(details.TableDescs))
+	for i, d := range details.TableDescs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out, nil
+}
+
+// typeDescRefs is the type-descriptor analog of tableDescRefs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func typeDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
+) ([]backuppb.RestoreDescRef, error) {
+	refs, ok, err := getDescRefs(ctx, txn, jobID, restoreTypeDescRefsKey)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return refs, nil
+	}
+	out := make([]backuppb.RestoreDescRef, len(details.TypeDescs))
+	for i, d := range details.TypeDescs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out, nil
+}
+
+// schemaDescRefs is the schema-descriptor analog of tableDescRefs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func schemaDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
+) ([]backuppb.RestoreDescRef, error) {
+	refs, ok, err := getDescRefs(ctx, txn, jobID, restoreSchemaDescRefsKey)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return refs, nil
+	}
+	out := make([]backuppb.RestoreDescRef, len(details.SchemaDescs))
+	for i, d := range details.SchemaDescs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out, nil
+}
+
+// databaseDescRefs is the database-descriptor analog of tableDescRefs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func databaseDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
+) ([]backuppb.RestoreDescRef, error) {
+	refs, ok, err := getDescRefs(ctx, txn, jobID, restoreDatabaseDescRefsKey)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return refs, nil
+	}
+	out := make([]backuppb.RestoreDescRef, len(details.DatabaseDescs))
+	for i, d := range details.DatabaseDescs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out, nil
+}
+
+// functionDescRefs is the function-descriptor analog of tableDescRefs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func functionDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
+) ([]backuppb.RestoreDescRef, error) {
+	refs, ok, err := getDescRefs(ctx, txn, jobID, restoreFunctionDescRefsKey)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return refs, nil
+	}
+	out := make([]backuppb.RestoreDescRef, len(details.FunctionDescs))
+	for i, d := range details.FunctionDescs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out, nil
+}
+
+// allDescRefs returns (ID, Version) tuples for every descriptor this restore
+// job is materializing — tables, types, schemas, databases, and functions —
+// suitable for a single batched MutableByID().Descs fetch.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func allDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
+) ([]backuppb.RestoreDescRef, error) {
+	tables, err := tableDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return nil, err
+	}
+	types, err := typeDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return nil, err
+	}
+	schemas, err := schemaDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return nil, err
+	}
+	databases, err := databaseDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return nil, err
+	}
+	functions, err := functionDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]backuppb.RestoreDescRef, 0,
+		len(tables)+len(types)+len(schemas)+len(databases)+len(functions))
+	out = append(out, tables...)
+	out = append(out, types...)
+	out = append(out, schemas...)
+	out = append(out, databases...)
+	out = append(out, functions...)
+	return out, nil
+}
 
 // rewriteBackupSpanKey rewrites a backup span start key for the purposes of
 // splitting up the target key-space to send out the actual work of restoring.
@@ -941,7 +1241,7 @@ func remapAndFilterRelevantStatistics(
 	ctx context.Context,
 	tableStatistics []*stats.TableStatisticProto,
 	descriptorRewrites jobspb.DescRewriteMap,
-	tableDescs []*descpb.TableDescriptor,
+	tables []catalog.TableDescriptor,
 ) []*stats.TableStatisticProto {
 	relevantTableStatistics := make([]*stats.TableStatisticProto, 0, len(tableStatistics))
 
@@ -971,11 +1271,11 @@ func remapAndFilterRelevantStatistics(
 	// Check if we are missing stats for any table that is being restored. This
 	// could be because we ran into an error when computing stats during the
 	// backup.
-	for _, desc := range tableDescs {
-		if _, ok := tableHasStatsInBackup[desc.GetID()]; !ok {
+	for _, table := range tables {
+		if _, ok := tableHasStatsInBackup[table.GetID()]; !ok {
 			log.Dev.Warningf(ctx, "statistics for table: %s, table ID: %d not found in the backup. "+
 				"Query performance on this table could suffer until statistics are recomputed.",
-				desc.GetName(), desc.GetID())
+				table.GetName(), table.GetID())
 		}
 	}
 
@@ -1391,7 +1691,11 @@ func synthesizeZoneConfigsForPartialRestore(
 //     restore targets. This flow should get executed last and should contain the
 //     bulk of the work, as it is used for job progress tracking.
 func createRestoreFlows(
-	ctx context.Context, r *restoreResumer, backupCodec keys.SQLCodec, sqlDescs []catalog.Descriptor,
+	ctx context.Context,
+	r *restoreResumer,
+	backupCodec keys.SQLCodec,
+	sqlDescs []catalog.Descriptor,
+	offlineDescs nstree.Catalog,
 ) (preRestore restorationData, preValid restorationData, mainRestore restorationData, err error) {
 
 	details := r.job.Details().(jobspb.RestoreDetails)
@@ -1479,23 +1783,22 @@ func createRestoreFlows(
 
 	var rekeys []execinfrapb.TableRekey
 	var systemTables []catalog.TableDescriptor
-	for i := range details.TableDescs {
-		desc := tabledesc.NewBuilder(details.TableDescs[i]).BuildImmutableTable()
+	for _, table := range restoredTableDescs(offlineDescs) {
 		// Skip rekeys for revlog-added tables — no backup data to rekey.
-		if _, ok := revlogNewPostIDs[desc.GetID()]; ok {
+		if _, ok := revlogNewPostIDs[table.GetID()]; ok {
 			continue
 		}
-		newDescBytes, err := protoutil.Marshal(desc.DescriptorProto())
+		newDescBytes, err := protoutil.Marshal(table.DescriptorProto())
 		if err != nil {
 			return nil, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"marshaling descriptor")
 		}
 		rekeys = append(rekeys, execinfrapb.TableRekey{
-			OldID:   uint32(newIDToOldID[desc.GetID()]),
+			OldID:   uint32(newIDToOldID[table.GetID()]),
 			NewDesc: newDescBytes,
 		})
-		if desc.GetParentID() == tempSystemDBID {
-			systemTables = append(systemTables, desc)
+		if table.GetParentID() == tempSystemDBID {
+			systemTables = append(systemTables, table)
 		}
 	}
 
@@ -1534,8 +1837,8 @@ func createRestoreFlows(
 	}
 
 	pkIDs := make(map[uint64]bool)
-	for _, tbl := range details.TableDescs {
-		pkIDs[kvpb.BulkOpSummaryID(uint64(tbl.GetID()), uint64(tbl.GetPrimaryIndex().ID))] = true
+	for _, table := range restoredTableDescs(offlineDescs) {
+		pkIDs[kvpb.BulkOpSummaryID(uint64(table.GetID()), uint64(table.GetPrimaryIndex().GetID()))] = true
 	}
 
 	dataToPreRestore := &restorationDataBase{
@@ -2064,19 +2367,59 @@ func createImportingDescriptors(
 		}
 
 		details.PrepareCompleted = true
-		details.DatabaseDescs = databaseDescs
-		details.TableDescs = tableDescs
-		details.TypeDescs = make([]*descpb.TypeDescriptor, len(typesToWrite))
+
+		newTypeDescs := make([]*descpb.TypeDescriptor, len(typesToWrite))
 		for i := range typesToWrite {
-			details.TypeDescs[i] = typesToWrite[i].TypeDesc()
+			newTypeDescs[i] = typesToWrite[i].TypeDesc()
 		}
-		details.SchemaDescs = make([]*descpb.SchemaDescriptor, len(schemasToWrite))
+		newSchemaDescs := make([]*descpb.SchemaDescriptor, len(schemasToWrite))
 		for i := range schemasToWrite {
-			details.SchemaDescs[i] = schemasToWrite[i].SchemaDesc()
+			newSchemaDescs[i] = schemasToWrite[i].SchemaDesc()
 		}
-		details.FunctionDescs = make([]*descpb.FunctionDescriptor, len(functionsToWrite))
+		newFunctionDescs := make([]*descpb.FunctionDescriptor, len(functionsToWrite))
 		for i, fn := range functionsToWrite {
-			details.FunctionDescs[i] = fn.FuncDesc()
+			newFunctionDescs[i] = fn.FuncDesc()
+		}
+
+		// Write each descriptor type's (ID, Version) tuples to a dedicated
+		// system.job_info row. The info-key rows are the source of truth
+		// for the restore's descriptor set; subsequent phases fetch
+		// descriptor bodies from KV by ID. Below, the legacy slices on
+		// RestoreDetails are dual-written when the cluster has not yet
+		// crossed the gate, so that nodes still running the prior binary
+		// can drive the job.
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTableDescRefsKey,
+			descRefsFromTableDescs(tableDescs)); err != nil {
+			return err
+		}
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTypeDescRefsKey,
+			descRefsFromTypeDescs(newTypeDescs)); err != nil {
+			return err
+		}
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreSchemaDescRefsKey,
+			descRefsFromSchemaDescs(newSchemaDescs)); err != nil {
+			return err
+		}
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreDatabaseDescRefsKey,
+			descRefsFromDatabaseDescs(databaseDescs)); err != nil {
+			return err
+		}
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreFunctionDescRefsKey,
+			descRefsFromFunctionDescs(newFunctionDescs)); err != nil {
+			return err
+		}
+
+		// TODO (kev-cao): drop this dual-write in 27.1+ once
+		// V26_3_DescriptorIDsInRestoreDetails is the minimum supported
+		// version.
+		if !p.ExecCfg().Settings.Version.ActiveVersion(ctx).AtLeast(
+			clusterversion.V26_3_DescriptorIDsInRestoreDetails.Version(),
+		) {
+			details.DatabaseDescs = databaseDescs
+			details.TableDescs = tableDescs
+			details.TypeDescs = newTypeDescs
+			details.SchemaDescs = newSchemaDescs
+			details.FunctionDescs = newFunctionDescs
 		}
 
 		// Update the job once all descs have been prepared for ingestion.
@@ -2152,6 +2495,7 @@ func protectRestoreTargets(
 	execCfg *sql.ExecutorConfig,
 	job *jobs.Job,
 	details jobspb.RestoreDetails,
+	offlineDescs nstree.Catalog,
 	tenantRekeys []execinfrapb.TenantRekey,
 ) (jobsprotectedts.Cleaner, error) {
 	if details.ProtectedTimestampRecord != nil {
@@ -2176,20 +2520,12 @@ func protectRestoreTargets(
 			tenantIDs = append(tenantIDs, tenant.NewID)
 		}
 		target = ptpb.MakeTenantsTarget(tenantIDs)
-	case len(details.DatabaseDescs) > 0:
+	case hasRestoredDatabases(offlineDescs):
 		// During database restores, protect whole databases.
-		databaseIDs := make([]descpb.ID, 0, len(details.DatabaseDescs))
-		for i := range details.DatabaseDescs {
-			databaseIDs = append(databaseIDs, details.DatabaseDescs[i].GetID())
-		}
-		target = ptpb.MakeSchemaObjectsTarget(databaseIDs)
+		target = ptpb.MakeSchemaObjectsTarget(restoredDatabaseIDs(offlineDescs))
 	default:
 		// Else, protect individual tables.
-		tableIDs := make([]descpb.ID, 0, len(details.TableDescs))
-		for i := range details.TableDescs {
-			tableIDs = append(tableIDs, details.TableDescs[i].GetID())
-		}
-		target = ptpb.MakeSchemaObjectsTarget(tableIDs)
+		target = ptpb.MakeSchemaObjectsTarget(restoredTableIDs(offlineDescs))
 	}
 	// Set the PTS with a timestamp less than any upcoming batch request
 	// timestamps from future addSSTable requests. This ensures that a target's
@@ -2329,7 +2665,31 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err := createImportingDescriptors(ctx, p, backupDescs, r); err != nil {
 		return err
 	}
-	preData, preValidateData, mainData, err := createRestoreFlows(ctx, r, backupCodec, backupDescs)
+
+	// Refresh the job details since createImportingDescriptors may have
+	// updated them.
+	details = r.job.Details().(jobspb.RestoreDetails)
+
+	// Fetch the freshly written OFFLINE descriptors once and reuse the
+	// resulting catalog across the readers that follow. This avoids each
+	// reader having to round-trip its own KV fetch, and is the source of
+	// descriptor bodies after we stop persisting the full descriptors
+	// onto RestoreDetails. publishDescriptors keeps its own fresh fetch
+	// because it needs txn-bound mutable copies to write back.
+	var offlineDescs nstree.Catalog
+	if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
+	) error {
+		var err error
+		offlineDescs, err = prefetchDescriptors(ctx, txn, r.job.ID(), details)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	preData, preValidateData, mainData, err := createRestoreFlows(
+		ctx, r, backupCodec, backupDescs, offlineDescs,
+	)
 	if err != nil {
 		return err
 	}
@@ -2347,11 +2707,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		if err := r.job.DeprecatedNoTxn().SetDetails(ctx, details); err != nil {
 			return errors.Wrap(err, "updating job details with download spans")
 		}
+		// Refresh the local copy again after the in-band SetDetails write.
+		details = r.job.Details().(jobspb.RestoreDetails)
 	}
-
-	// Refresh the job details since they may have been updated when creating the
-	// importing descriptors.
-	details = r.job.Details().(jobspb.RestoreDetails)
 
 	if fn := r.testingKnobs.afterOfflineTableCreation; fn != nil {
 		if err := fn(); err != nil {
@@ -2362,8 +2720,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	backupStats, err := backupinfo.GetStatisticsFromBackup(ctx, defaultStore, details.Encryption,
 		&kmsEnv, latestBackupManifest)
 	if err == nil {
-		remappedStats = remapAndFilterRelevantStatistics(ctx, backupStats, details.DescriptorRewrites,
-			details.TableDescs)
+		remappedStats = remapAndFilterRelevantStatistics(
+			ctx, backupStats, details.DescriptorRewrites, restoredTableDescs(offlineDescs),
+		)
 	} else {
 		// We don't want to fail the restore if we are unable to resolve statistics
 		// from the backup, since they can be recomputed after the restore has
@@ -2372,7 +2731,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			err.Error())
 	}
 
-	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 {
+	if len(restoredTableDescs(offlineDescs)) == 0 && len(details.Tenants) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
 		// Since we have already created any new databases that we needed,
 		// we can return without importing any data.
@@ -2404,7 +2763,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return nil
 	}
 
-	_, err = protectRestoreTargets(ctx, p.ExecCfg(), r.job, details, mainData.getTenantRekeys())
+	_, err = protectRestoreTargets(
+		ctx, p.ExecCfg(), r.job, details, offlineDescs, mainData.getTenantRekeys(),
+	)
 	if err != nil {
 		return err
 	}
@@ -2557,7 +2918,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 	if !build.IsRelease() && !details.RevisionLogTimestamp.IsEmpty() {
 		if err := restorerevlog.RestoreFromRevisionLog(
-			ctx, p, r.job, r.execCfg,
+			ctx, p, r.job, r.execCfg, restoredTableDescs(offlineDescs),
 		); err != nil {
 			return errors.Wrap(err, "restoring from revision log")
 		}
@@ -2641,7 +3002,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		log.Dev.Errorf(ctx, "failed to release protected timestamp: %v", err)
 	}
 	if !details.OnlineImpl() {
-		r.notifyStatsRefresherOfNewTables(ctx)
+		r.notifyStatsRefresherOfNewTables(ctx, offlineDescs)
 	}
 
 	r.restoreStats = resTotal
@@ -2732,15 +3093,28 @@ func isSystemUserRestore(details jobspb.RestoreDetails) bool {
 
 // ReportResults implements JobResultsReporter interface.
 func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
+	var numTables int
+	if details.OnlineImpl() {
+		if err := r.execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			refs, err := tableDescRefs(ctx, txn, r.job.ID(), details)
+			if err != nil {
+				return err
+			}
+			numTables = len(refs)
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case resultsCh <- func() tree.Datums {
-		details := r.job.Details().(jobspb.RestoreDetails)
 		if details.OnlineImpl() {
 			return tree.Datums{
 				tree.NewDInt(tree.DInt(r.job.ID())),
-				tree.NewDInt(tree.DInt(len(details.TableDescs))),
+				tree.NewDInt(tree.DInt(numTables)),
 				tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
 				tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
 				tree.NewDInt(tree.DInt(r.downloadJobID)),
@@ -2761,12 +3135,15 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 // Initiate a run of CREATE STATISTICS. We don't know the actual number of
 // rows affected per table, so we use a large number because we want to make
 // sure that stats always get created/refreshed here.
-func (r *restoreResumer) notifyStatsRefresherOfNewTables(ctx context.Context) {
-	details := r.job.Details().(jobspb.RestoreDetails)
-	for i := range details.TableDescs {
-		desc := tabledesc.NewBuilder(details.TableDescs[i]).BuildImmutableTable()
-		r.execCfg.StatsRefresher.NotifyMutation(ctx, desc, math.MaxInt32 /* rowsAffected */)
-	}
+func (r *restoreResumer) notifyStatsRefresherOfNewTables(
+	ctx context.Context, offlineDescs nstree.Catalog,
+) {
+	_ = offlineDescs.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if table, ok := desc.(catalog.TableDescriptor); ok {
+			r.execCfg.StatsRefresher.NotifyMutation(ctx, table, math.MaxInt32 /* rowsAffected */)
+		}
+		return nil
+	})
 }
 
 func waitForSpanConfigReconciliationCheckpoint(
@@ -3100,7 +3477,7 @@ func (r *restoreResumer) publishDescriptors(
 
 	// Pre-fetch all the descriptors into the collection to avoid doing
 	// round-trips per descriptor.
-	all, err := prefetchDescriptors(ctx, txn.KV(), txn.Descriptors(), details)
+	all, err := prefetchDescriptors(ctx, txn, r.job.ID(), details)
 	if err != nil {
 		return err
 	}
@@ -3113,12 +3490,33 @@ func (r *restoreResumer) publishDescriptors(
 		return err
 	}
 
+	tableRefs, err := tableDescRefs(ctx, txn, r.job.ID(), details)
+	if err != nil {
+		return err
+	}
+	typeRefs, err := typeDescRefs(ctx, txn, r.job.ID(), details)
+	if err != nil {
+		return err
+	}
+	schemaRefs, err := schemaDescRefs(ctx, txn, r.job.ID(), details)
+	if err != nil {
+		return err
+	}
+	databaseRefs, err := databaseDescRefs(ctx, txn, r.job.ID(), details)
+	if err != nil {
+		return err
+	}
+	functionRefs, err := functionDescRefs(ctx, txn, r.job.ID(), details)
+	if err != nil {
+		return err
+	}
+
 	// Create slices of raw descriptors for the restore job details.
-	newTables := make([]*descpb.TableDescriptor, 0, len(details.TableDescs))
-	newTypes := make([]*descpb.TypeDescriptor, 0, len(details.TypeDescs))
-	newSchemas := make([]*descpb.SchemaDescriptor, 0, len(details.SchemaDescs))
-	newDBs := make([]*descpb.DatabaseDescriptor, 0, len(details.DatabaseDescs))
-	newFunctions := make([]*descpb.FunctionDescriptor, 0, len(details.FunctionDescs))
+	newTables := make([]*descpb.TableDescriptor, 0, len(tableRefs))
+	newTypes := make([]*descpb.TypeDescriptor, 0, len(typeRefs))
+	newSchemas := make([]*descpb.SchemaDescriptor, 0, len(schemaRefs))
+	newDBs := make([]*descpb.DatabaseDescriptor, 0, len(databaseRefs))
+	newFunctions := make([]*descpb.FunctionDescriptor, 0, len(functionRefs))
 
 	// Go through the descriptors and find any declarative schema change jobs
 	// affecting them.
@@ -3130,23 +3528,24 @@ func (r *restoreResumer) publishDescriptors(
 
 	var tableAutoStatsSettings map[uint32]*catpb.AutoStatsSettings
 	if details.ExperimentalOnline {
-		tableAutoStatsSettings = make(map[uint32]*catpb.AutoStatsSettings, len(details.TableDescs))
+		tableAutoStatsSettings = make(map[uint32]*catpb.AutoStatsSettings, len(tableRefs))
 	}
 
 	// Write the new TableDescriptors and flip state over to public so they can be
 	// accessed.
-	for i := range details.TableDescs {
-		desc := all.LookupDescriptor(details.TableDescs[i].GetID())
+	for _, ref := range tableRefs {
+		desc := all.LookupDescriptor(ref.ID)
 		mutTable := desc.(*tabledesc.Mutable)
 
 		if details.ExperimentalOnline && mutTable.IsTable() {
+			// Preserve the backed up table stats so the download job re-enables
+			// them; do this before clobbering mutTable.AutoStatsSettings below.
+			tableAutoStatsSettings[uint32(ref.ID)] = mutTable.AutoStatsSettings
+
 			// We disable automatic stats refresh on all restored tables until the
 			// download job finishes.
 			boolean := false
 			mutTable.AutoStatsSettings = &catpb.AutoStatsSettings{Enabled: &boolean}
-
-			// Preserve the backed up table stats so the download job re-enables them
-			tableAutoStatsSettings[uint32(details.TableDescs[i].ID)] = details.TableDescs[i].AutoStatsSettings
 		}
 
 		// Note that we don't need to worry about the re-validated indexes for descriptors
@@ -3201,8 +3600,8 @@ func (r *restoreResumer) publishDescriptors(
 	}
 	// For all of the newly created types, make type schema change jobs for any
 	// type descriptors that were backed up in the middle of a type schema change.
-	for i := range details.TypeDescs {
-		typ := all.LookupDescriptor(details.TypeDescs[i].GetID()).(catalog.TypeDescriptor)
+	for _, ref := range typeRefs {
+		typ := all.LookupDescriptor(ref.ID).(catalog.TypeDescriptor)
 		newTypes = append(newTypes, typ.TypeDesc())
 		if typ.GetDeclarativeSchemaChangerState() == nil &&
 			typ.HasPendingSchemaChanges() {
@@ -3213,16 +3612,16 @@ func (r *restoreResumer) publishDescriptors(
 			}
 		}
 	}
-	for i := range details.SchemaDescs {
-		sc := all.LookupDescriptor(details.SchemaDescs[i].GetID()).(catalog.SchemaDescriptor)
+	for _, ref := range schemaRefs {
+		sc := all.LookupDescriptor(ref.ID).(catalog.SchemaDescriptor)
 		newSchemas = append(newSchemas, sc.SchemaDesc())
 	}
-	for i := range details.DatabaseDescs {
-		db := all.LookupDescriptor(details.DatabaseDescs[i].GetID()).(catalog.DatabaseDescriptor)
+	for _, ref := range databaseRefs {
+		db := all.LookupDescriptor(ref.ID).(catalog.DatabaseDescriptor)
 		newDBs = append(newDBs, db.DatabaseDesc())
 	}
-	for i := range details.FunctionDescs {
-		fn := all.LookupDescriptor(details.FunctionDescs[i].GetID()).(catalog.FunctionDescriptor)
+	for _, ref := range functionRefs {
+		fn := all.LookupDescriptor(ref.ID).(catalog.FunctionDescriptor)
 		newFunctions = append(newFunctions, fn.FuncDesc())
 	}
 
@@ -3310,13 +3709,43 @@ func (r *restoreResumer) publishDescriptors(
 
 	// Update and persist the state of the job.
 	details.DescriptorsPublished = true
-	details.TableDescs = newTables
-	details.TypeDescs = newTypes
-	details.SchemaDescs = newSchemas
-	details.DatabaseDescs = newDBs
-	details.FunctionDescs = newFunctions
+	// Always write the (ID, Version) tuples to the dedicated info-key rows;
+	// these are the source of truth on the new code path. The legacy
+	// descriptor slices on RestoreDetails are only populated for mixed-version
+	// clusters where an older binary might still drive the job.
+	// TODO (kev-cao): drop this dual-write in 27.1+ once
+	// V26_3_DescriptorIDsInRestoreDetails is the minimum supported version.
+	if !r.execCfg.Settings.Version.ActiveVersion(ctx).AtLeast(
+		clusterversion.V26_3_DescriptorIDsInRestoreDetails.Version(),
+	) {
+		details.TableDescs = newTables
+		details.TypeDescs = newTypes
+		details.SchemaDescs = newSchemas
+		details.DatabaseDescs = newDBs
+		details.FunctionDescs = newFunctions
+	}
 	if details.OnlineImpl() {
 		details.PostDownloadTableAutoStatsSettings = tableAutoStatsSettings
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTableDescRefsKey,
+		descRefsFromTableDescs(newTables)); err != nil {
+		return err
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTypeDescRefsKey,
+		descRefsFromTypeDescs(newTypes)); err != nil {
+		return err
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreSchemaDescRefsKey,
+		descRefsFromSchemaDescs(newSchemas)); err != nil {
+		return err
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreDatabaseDescRefsKey,
+		descRefsFromDatabaseDescs(newDBs)); err != nil {
+		return err
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreFunctionDescRefsKey,
+		descRefsFromFunctionDescs(newFunctions)); err != nil {
+		return err
 	}
 	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
 	if err := r.job.DeprecatedWithTxn(txn).SetDetails(ctx, details); err != nil {
@@ -3334,38 +3763,25 @@ func (r *restoreResumer) publishDescriptors(
 // This function also takes care of asserting that the retrieved version
 // matches the expectation.
 func prefetchDescriptors(
-	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, details jobspb.RestoreDetails,
+	ctx context.Context, txn descs.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
 ) (_ nstree.Catalog, _ error) {
+	refs, err := allDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
 	var all nstree.MutableCatalog
 	var allDescIDs catalog.DescriptorIDSet
 	expVersion := map[descpb.ID]descpb.DescriptorVersion{}
-	for i := range details.TableDescs {
-		expVersion[details.TableDescs[i].GetID()] = details.TableDescs[i].GetVersion()
-		allDescIDs.Add(details.TableDescs[i].GetID())
-	}
-	for i := range details.TypeDescs {
-		expVersion[details.TypeDescs[i].GetID()] = details.TypeDescs[i].GetVersion()
-		allDescIDs.Add(details.TypeDescs[i].GetID())
-	}
-	for i := range details.SchemaDescs {
-		expVersion[details.SchemaDescs[i].GetID()] = details.SchemaDescs[i].GetVersion()
-		allDescIDs.Add(details.SchemaDescs[i].GetID())
-	}
-	for i := range details.DatabaseDescs {
-		expVersion[details.DatabaseDescs[i].GetID()] = details.DatabaseDescs[i].GetVersion()
-		allDescIDs.Add(details.DatabaseDescs[i].GetID())
-	}
-	for i := range details.FunctionDescs {
-		expVersion[details.FunctionDescs[i].GetID()] = details.FunctionDescs[i].GetVersion()
-		allDescIDs.Add(details.FunctionDescs[i].GetID())
+	for _, ref := range refs {
+		expVersion[ref.ID] = ref.Version
+		allDescIDs.Add(ref.ID)
 	}
 	// Note that no maximum size is put on the batch here because,
-	// in general, we assume that we can fit all of the descriptors
-	// in RAM (we have them in RAM as part of the details object,
-	// and we're going to write them to KV very soon as part of a
-	// single batch).
+	// in general, we assume that we can fit all of the descriptors in
+	// RAM. We have them in RAM as part of building the catalog, and
+	// we're about to write them to KV in a single batch.
 	ids := allDescIDs.Ordered()
-	got, err := descsCol.MutableByID(txn).Descs(ctx, ids)
+	got, err := txn.Descriptors().MutableByID(txn.KV()).Descs(ctx, ids)
 	if err != nil {
 		return nstree.Catalog{}, errors.Wrap(err, "prefetch descriptors")
 	}
@@ -3589,11 +4005,36 @@ func (r *restoreResumer) dropDescriptors(
 		return nil
 	}
 
+	tableRefs, err := tableDescRefs(ctx, txn, r.job.ID(), details)
+	if err != nil {
+		return err
+	}
+	typeRefs, err := typeDescRefs(ctx, txn, r.job.ID(), details)
+	if err != nil {
+		return err
+	}
+	schemaRefs, err := schemaDescRefs(ctx, txn, r.job.ID(), details)
+	if err != nil {
+		return err
+	}
+	databaseRefs, err := databaseDescRefs(ctx, txn, r.job.ID(), details)
+	if err != nil {
+		return err
+	}
+	functionRefs, err := functionDescRefs(ctx, txn, r.job.ID(), details)
+	if err != nil {
+		return err
+	}
+	restoredTypeIDs := make(map[descpb.ID]struct{}, len(typeRefs))
+	for _, ref := range typeRefs {
+		restoredTypeIDs[ref.ID] = struct{}{}
+	}
+
 	b := txn.KV().NewBatch()
 	const kvTrace = false
 	// Collect the tables into mutable versions.
 	mutableTables, err := getUndroppedTablesFromRestore(
-		ctx, txn.KV(), details, descsCol,
+		ctx, txn.KV(), tableRefs, descsCol,
 	)
 	if err != nil {
 		return errors.Wrap(err, "getting mutable tables from restore")
@@ -3603,20 +4044,20 @@ func (r *restoreResumer) dropDescriptors(
 	// descriptors have already been published, then there's nothing to fuss
 	// about so we only do this check if they have not been published.
 	if !details.DescriptorsPublished {
-		if err := checkRestoredTableDescriptorVersions(details, mutableTables); err != nil {
+		if err := checkRestoredTableDescriptorVersions(tableRefs, mutableTables); err != nil {
 			log.Dev.Errorf(ctx, "table version mismatch during drop: %v", err)
 		}
 	}
 
 	// Remove any back references installed from existing types to tables being restored.
 	if err := r.removeExistingTypeBackReferences(
-		ctx, txn.KV(), descsCol, b, mutableTables, &details,
+		ctx, txn.KV(), descsCol, b, mutableTables, restoredTypeIDs,
 	); err != nil {
 		return err
 	}
 
 	// Drop the table descriptors that were created at the start of the restore.
-	tablesToGC := make([]descpb.ID, 0, len(details.TableDescs))
+	tablesToGC := make([]descpb.ID, 0, len(tableRefs))
 	// Set the drop time as 1 (ns in Unix time), so that the table gets GC'd
 	// immediately.
 	dropTime := int64(1)
@@ -3676,11 +4117,10 @@ func (r *restoreResumer) dropDescriptors(
 	}
 
 	// Drop the type descriptors that this restore created.
-	for i := range details.TypeDescs {
+	for _, ref := range typeRefs {
 		// TypeDescriptors don't have a GC job process, so we can just write them
 		// as dropped here.
-		typDesc := details.TypeDescs[i]
-		mutType, err := descsCol.MutableByID(txn.KV()).Desc(ctx, typDesc.ID)
+		mutType, err := descsCol.MutableByID(txn.KV()).Desc(ctx, ref.ID)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				continue
@@ -3696,21 +4136,20 @@ func (r *restoreResumer) dropDescriptors(
 			ctx,
 			kvTrace,
 			b,
-			catalogkeys.MakeCommentKey(uint32(typDesc.ID), 0, catalogkeys.TypeCommentType)); err != nil {
+			catalogkeys.MakeCommentKey(uint32(ref.ID), 0, catalogkeys.TypeCommentType)); err != nil {
 			return err
 		}
 
-		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, typDesc, b); err != nil {
+		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, mutType, b); err != nil {
 			return err
 		}
-		if err := descsCol.DeleteDescToBatch(ctx, kvTrace, typDesc.GetID(), b); err != nil {
+		if err := descsCol.DeleteDescToBatch(ctx, kvTrace, ref.ID, b); err != nil {
 			return err
 		}
 	}
 
-	for i := range details.FunctionDescs {
-		fnDesc := details.FunctionDescs[i]
-		mutFn, err := descsCol.MutableByID(txn.KV()).Desc(ctx, fnDesc.ID)
+	for _, ref := range functionRefs {
+		mutFn, err := descsCol.MutableByID(txn.KV()).Desc(ctx, ref.ID)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				continue
@@ -3721,7 +4160,7 @@ func (r *restoreResumer) dropDescriptors(
 			continue
 		}
 		mutFn.SetDropped()
-		if err := descsCol.DeleteDescToBatch(ctx, kvTrace, fnDesc.ID, b); err != nil {
+		if err := descsCol.DeleteDescToBatch(ctx, kvTrace, ref.ID, b); err != nil {
 			return err
 		}
 	}
@@ -3750,17 +4189,17 @@ func (r *restoreResumer) dropDescriptors(
 	// the restore if they are now empty (i.e. no user created a table, etc. in
 	// the database or schema during the restore).
 	ignoredChildDescIDs := make(map[descpb.ID]struct{})
-	for _, table := range details.TableDescs {
-		ignoredChildDescIDs[table.ID] = struct{}{}
+	for _, ref := range tableRefs {
+		ignoredChildDescIDs[ref.ID] = struct{}{}
 	}
-	for _, typ := range details.TypeDescs {
-		ignoredChildDescIDs[typ.ID] = struct{}{}
+	for _, ref := range typeRefs {
+		ignoredChildDescIDs[ref.ID] = struct{}{}
 	}
-	for _, schema := range details.SchemaDescs {
-		ignoredChildDescIDs[schema.ID] = struct{}{}
+	for _, ref := range schemaRefs {
+		ignoredChildDescIDs[ref.ID] = struct{}{}
 	}
-	for _, fn := range details.FunctionDescs {
-		ignoredChildDescIDs[fn.ID] = struct{}{}
+	for _, ref := range functionRefs {
+		ignoredChildDescIDs[ref.ID] = struct{}{}
 	}
 	all, err := descsCol.GetAllDescriptors(ctx, txn.KV())
 	if err != nil {
@@ -3776,19 +4215,19 @@ func (r *restoreResumer) dropDescriptors(
 	}
 
 	dbsWithDeletedSchemas := make(map[descpb.ID]dbWithDeletedSchemas)
-	for _, schemaDesc := range details.SchemaDescs {
+	for _, ref := range schemaRefs {
 		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
-		isSchemaEmpty, err := isSchemaEmpty(ctx, txn.KV(), schemaDesc.GetID(), allDescs, ignoredChildDescIDs)
+		isSchemaEmpty, err := isSchemaEmpty(ctx, txn.KV(), ref.ID, allDescs, ignoredChildDescIDs)
 		if err != nil {
-			return errors.Wrapf(err, "checking if schema %s is empty during restore cleanup", schemaDesc.GetName())
+			return errors.Wrapf(err, "checking if schema %d is empty during restore cleanup", ref.ID)
 		}
 
 		if !isSchemaEmpty {
-			log.Dev.Warningf(ctx, "preserving schema %s on restore failure because it contains new child objects", schemaDesc.GetName())
+			log.Dev.Warningf(ctx, "preserving schema %d on restore failure because it contains new child objects", ref.ID)
 			continue
 		}
 
-		mutSchema, err := descsCol.MutableByID(txn.KV()).Desc(ctx, schemaDesc.GetID())
+		mutSchema, err := descsCol.MutableByID(txn.KV()).Desc(ctx, ref.ID)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				continue
@@ -3798,9 +4237,9 @@ func (r *restoreResumer) dropDescriptors(
 		if mutSchema.Dropped() {
 			continue
 		}
-		entry, hasEntry := dbsWithDeletedSchemas[schemaDesc.GetParentID()]
+		entry, hasEntry := dbsWithDeletedSchemas[mutSchema.GetParentID()]
 		if !hasEntry {
-			mutParent, err := descsCol.MutableByID(txn.KV()).Desc(ctx, schemaDesc.GetParentID())
+			mutParent, err := descsCol.MutableByID(txn.KV()).Desc(ctx, mutSchema.GetParentID())
 			if err != nil {
 				return err
 			}
@@ -3811,7 +4250,7 @@ func (r *restoreResumer) dropDescriptors(
 			ctx,
 			kvTrace,
 			b,
-			catalogkeys.MakeCommentKey(uint32(schemaDesc.GetID()), 0, catalogkeys.SchemaCommentType)); err != nil {
+			catalogkeys.MakeCommentKey(uint32(ref.ID), 0, catalogkeys.SchemaCommentType)); err != nil {
 			return err
 		}
 
@@ -3830,14 +4269,14 @@ func (r *restoreResumer) dropDescriptors(
 		}
 
 		// Remove the back-reference to the deleted schema in the parent database.
-		if schemaInfo, ok := entry.db.Schemas[schemaDesc.GetName()]; !ok {
+		if schemaInfo, ok := entry.db.Schemas[mutSchema.GetName()]; !ok {
 			log.Dev.Warningf(ctx, "unexpected missing schema entry for %s from db %d; skipping deletion",
-				schemaDesc.GetName(), entry.db.GetID())
-		} else if schemaInfo.ID != schemaDesc.GetID() {
+				mutSchema.GetName(), entry.db.GetID())
+		} else if schemaInfo.ID != mutSchema.GetID() {
 			log.Dev.Warningf(ctx, "unexpected schema entry %d for %s from db %d, expecting %d; skipping deletion",
-				schemaInfo.ID, schemaDesc.GetName(), entry.db.GetID(), schemaDesc.GetID())
+				schemaInfo.ID, mutSchema.GetName(), entry.db.GetID(), mutSchema.GetID())
 		} else {
-			delete(entry.db.Schemas, schemaDesc.GetName())
+			delete(entry.db.Schemas, mutSchema.GetName())
 		}
 
 		entry.schemas = append(entry.schemas, mutSchema)
@@ -3867,19 +4306,19 @@ func (r *restoreResumer) dropDescriptors(
 	// that no batch requests are queued after the `b.Del` to delete the dropped
 	// database descriptor.
 	deletedDBs := make(map[descpb.ID]struct{})
-	for _, dbDesc := range details.DatabaseDescs {
+	for _, ref := range databaseRefs {
 
 		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
-		isDBEmpty, err := isDatabaseEmpty(ctx, txn.KV(), dbDesc.GetID(), allDescs, ignoredChildDescIDs)
+		isDBEmpty, err := isDatabaseEmpty(ctx, txn.KV(), ref.ID, allDescs, ignoredChildDescIDs)
 		if err != nil {
-			return errors.Wrapf(err, "checking if database %s is empty during restore cleanup", dbDesc.GetName())
+			return errors.Wrapf(err, "checking if database %d is empty during restore cleanup", ref.ID)
 		}
 		if !isDBEmpty {
-			log.Dev.Warningf(ctx, "preserving database %s on restore failure because it contains new child objects or schemas", dbDesc.GetName())
+			log.Dev.Warningf(ctx, "preserving database %d on restore failure because it contains new child objects or schemas", ref.ID)
 			continue
 		}
 
-		db, err := descsCol.MutableByID(txn.KV()).Desc(ctx, dbDesc.GetID())
+		db, err := descsCol.MutableByID(txn.KV()).Desc(ctx, ref.ID)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				continue
@@ -3908,7 +4347,7 @@ func (r *restoreResumer) dropDescriptors(
 			ctx,
 			kvTrace,
 			b,
-			catalogkeys.MakeCommentKey(uint32(dbDesc.GetID()), 0, catalogkeys.DatabaseCommentType)); err != nil {
+			catalogkeys.MakeCommentKey(uint32(ref.ID), 0, catalogkeys.DatabaseCommentType)); err != nil {
 			return err
 		}
 
@@ -3949,28 +4388,18 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 	descsCol *descs.Collection,
 	b *kv.Batch,
 	restoredTables []*tabledesc.Mutable,
-	details *jobspb.RestoreDetails,
+	restoredTypeIDs map[descpb.ID]struct{},
 ) error {
-	// We first collect the restored types to be addressable by ID.
-	restoredTypes := make(map[descpb.ID]catalog.TypeDescriptor)
 	existingTypes := make(map[descpb.ID]*typedesc.Mutable)
-	for i := range details.TypeDescs {
-		typ := details.TypeDescs[i]
-		restoredTypes[typ.ID] = typedesc.NewBuilder(typ).BuildImmutableType()
-	}
 	for _, tbl := range restoredTables {
 		lookup := func(id descpb.ID) (catalog.TypeDescriptor, error) {
-			// First see if the type was restored.
-			restored, ok := restoredTypes[id]
-			if ok {
-				return restored, nil
-			}
-			// Finally, look it up using the transaction.
 			typ, err := descsCol.MutableByID(txn).Type(ctx, id)
 			if err != nil {
 				return nil, err
 			}
-			existingTypes[typ.GetID()] = typ
+			if _, restored := restoredTypeIDs[id]; !restored {
+				existingTypes[typ.GetID()] = typ
+			}
 			return typ, nil
 		}
 
@@ -3987,16 +4416,16 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 
 		// For each type that is existing, remove the backreference from tbl.
 		for _, id := range referencedTypes {
-			_, restored := restoredTypes[id]
-			if !restored {
-				desc, err := lookup(id)
-				if err != nil {
-					return err
-				}
-				existing := desc.(*typedesc.Mutable)
-				existing.MaybeIncrementVersion()
-				_ = existing.RemoveReferencingDescriptorID(tbl.ID)
+			if _, restored := restoredTypeIDs[id]; restored {
+				continue
 			}
+			desc, err := lookup(id)
+			if err != nil {
+				return err
+			}
+			existing := desc.(*typedesc.Mutable)
+			existing.MaybeIncrementVersion()
+			_ = existing.RemoveReferencingDescriptorID(tbl.ID)
 		}
 	}
 
@@ -4277,11 +4706,11 @@ func (r *restoreResumer) maybeCleanupTempSystemDB(ctx context.Context) error {
 // database and dropped but attempting to load those temporary tables again
 // would result in an error.
 func getUndroppedTablesFromRestore(
-	ctx context.Context, txn *kv.Txn, details jobspb.RestoreDetails, descCol *descs.Collection,
+	ctx context.Context, txn *kv.Txn, tableRefs []backuppb.RestoreDescRef, descCol *descs.Collection,
 ) ([]*tabledesc.Mutable, error) {
 	var tables []*tabledesc.Mutable
-	for _, desc := range details.TableDescs {
-		mutableTable, err := descCol.MutableByID(txn).Table(ctx, desc.ID)
+	for _, ref := range tableRefs {
+		mutableTable, err := descCol.MutableByID(txn).Table(ctx, ref.ID)
 		if err != nil {
 			if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
 				continue
@@ -4301,11 +4730,11 @@ func getUndroppedTablesFromRestore(
 // error if any of the restored tables have a version that does not match the
 // version that was recorded at the time of restore in the job details.
 func checkRestoredTableDescriptorVersions(
-	details jobspb.RestoreDetails, restoredTables []*tabledesc.Mutable,
+	tableRefs []backuppb.RestoreDescRef, restoredTables []*tabledesc.Mutable,
 ) error {
 	versionsAtRestoreTime := make(map[descpb.ID]descpb.DescriptorVersion)
-	for _, desc := range details.TableDescs {
-		versionsAtRestoreTime[desc.ID] = desc.Version
+	for _, ref := range tableRefs {
+		versionsAtRestoreTime[ref.ID] = ref.Version
 	}
 	for _, table := range restoredTables {
 		if expVersion, ok := versionsAtRestoreTime[table.GetID()]; ok {

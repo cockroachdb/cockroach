@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -776,9 +777,50 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 		if _, err := execConfig.JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, downloadJobID, txn); err != nil {
 			return err
 		}
+		// Copy the descriptor-ref info-key rows from the link job to the
+		// download job so that OnFailOrCancel cleanup on the download job can
+		// resolve the descriptor set without depending on the legacy
+		// RestoreDetails.{Type,Table,Schema,Database,Function}Descs slices,
+		// which are not populated once the cluster has crossed the
+		// V26_3_DescriptorIDsInRestoreDetails gate.
+		//
+		// TODO (kev-cao): remove this copy and rely on the link job's
+		// info-key rows directly in 27.1+.
+		if err := copyRestoreDescRefs(ctx, txn, r.job.ID(), downloadJobID); err != nil {
+			return errors.Wrap(err, "copying restore desc refs to download job")
+		}
 		r.downloadJobID = downloadJobID
 		return nil
 	})
+}
+
+// copyRestoreDescRefs copies the five restore_*_desc_refs info-key rows from
+// srcJobID to dstJobID.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func copyRestoreDescRefs(ctx context.Context, txn isql.Txn, srcJobID, dstJobID jobspb.JobID) error {
+	keys := []string{
+		restoreTableDescRefsKey,
+		restoreTypeDescRefsKey,
+		restoreSchemaDescRefsKey,
+		restoreDatabaseDescRefsKey,
+		restoreFunctionDescRefsKey,
+	}
+	src := jobs.InfoStorageForJob(txn, srcJobID)
+	dst := jobs.InfoStorageForJob(txn, dstJobID)
+	for _, k := range keys {
+		raw, ok, err := src.Get(ctx, "restore-desc-refs", k)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		if err := dst.Write(ctx, k, raw); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // waitForDownloadToComplete polls until there are no more ExternalFileBytes
@@ -853,7 +895,20 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		r.downloadJobProg = fractionComplete
 
 		if remaining == 0 {
-			r.notifyStatsRefresherOfNewTables(ctx)
+			var publishedDescs nstree.Catalog
+			if err := execCtx.ExecCfg().InternalDB.DescsTxn(ctx, func(
+				ctx context.Context, txn descs.Txn,
+			) error {
+				var err error
+				publishedDescs, err = prefetchDescriptors(
+					ctx, txn, r.job.ID(),
+					r.job.Details().(jobspb.RestoreDetails),
+				)
+				return err
+			}); err != nil {
+				return err
+			}
+			r.notifyStatsRefresherOfNewTables(ctx, publishedDescs)
 			close(done)
 			return nil
 		}
@@ -1034,7 +1089,7 @@ func createImportRollbackJob(
 
 // setDescriptorsOffline sets the state of all online descriptors in the details to offline.
 func setDescriptorsOffline(
-	ctx context.Context, txn descs.Txn, details jobspb.RestoreDetails,
+	ctx context.Context, txn descs.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
 ) error {
 	descCol := txn.Descriptors()
 	b := txn.KV().NewBatch()
@@ -1051,24 +1106,13 @@ func setDescriptorsOffline(
 		return nil
 	}
 
-	var descIDs []descpb.ID
-	for _, desc := range details.TableDescs {
-		descIDs = append(descIDs, desc.ID)
-	}
-	for i := range details.FunctionDescs {
-		descIDs = append(descIDs, details.FunctionDescs[i].ID)
-	}
-	for i := range details.DatabaseDescs {
-		descIDs = append(descIDs, details.DatabaseDescs[i].ID)
-	}
-	for i := range details.TypeDescs {
-		descIDs = append(descIDs, details.TypeDescs[i].ID)
-	}
-	for i := range details.SchemaDescs {
-		descIDs = append(descIDs, details.SchemaDescs[i].ID)
+	refs, err := allDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return err
 	}
 
-	for _, id := range descIDs {
+	for _, ref := range refs {
+		id := ref.ID
 		// We use Desc over the type-specific lookups because the latter replaces
 		// the shared catalog.ErrDescriptorNotFound with a more specific pgcode.
 		// Uinsg the former allows us to match on one error type for all
@@ -1111,7 +1155,7 @@ func (r *restoreResumer) maybeCleanupFailedOnlineRestore(
 	// If the descriptors are online, flip them off before excising to ensure no
 	// foreground workload can run when we clobber the key space.
 	if err := r.execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		return setDescriptorsOffline(ctx, txn, details)
+		return setDescriptorsOffline(ctx, txn, r.job.ID(), details)
 	}); err != nil {
 		return err
 	}
