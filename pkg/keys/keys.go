@@ -410,6 +410,24 @@ func RangeVersionKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeVersionKey()
 }
 
+// RangeFileNumAllocKey returns a replicated range-ID local key for the file
+// number allocation state for a range's range-shared LSM.
+func RangeFileNumAllocKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeFileNumAllocKey()
+}
+
+// RangeFlushGenerationKey returns a replicated range-ID local key for
+// the flush generation state.
+func RangeFlushGenerationKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeFlushGenerationKey()
+}
+
+// RangeSharedManifestNumKey returns a replicated range-ID local key for the
+// range-shared engine manifest number.
+func RangeSharedManifestNumKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeSharedManifestNumKey()
+}
+
 // MakeRangeIDUnreplicatedPrefix creates a range-local key prefix from
 // rangeID for all unreplicated data.
 func MakeRangeIDUnreplicatedPrefix(rangeID roachpb.RangeID) roachpb.Key {
@@ -1289,6 +1307,24 @@ func (b RangeIDPrefixBuf) RangeVersionKey() roachpb.Key {
 // RangeTombstoneKey returns a system-local key for a range tombstone.
 func (b RangeIDPrefixBuf) RangeTombstoneKey() roachpb.Key {
 	return append(b.UnreplicatedPrefix(), LocalRangeTombstoneSuffix...)
+}
+
+// RangeFileNumAllocKey returns a replicated range-ID local key for the file
+// number allocation state for a range's range-shared LSM.
+func (b RangeIDPrefixBuf) RangeFileNumAllocKey() roachpb.Key {
+	return append(b.ReplicatedPrefix(), LocalRangeFileNumAllocSuffix...)
+}
+
+// RangeFlushGenerationKey returns a replicated range-ID local key for
+// the flush generation state.
+func (b RangeIDPrefixBuf) RangeFlushGenerationKey() roachpb.Key {
+	return append(b.ReplicatedPrefix(), LocalRangeFlushGenerationSuffix...)
+}
+
+// RangeSharedManifestNumKey returns a replicated range-ID local key for the
+// range-shared engine manifest number.
+func (b RangeIDPrefixBuf) RangeSharedManifestNumKey() roachpb.Key {
+	return append(b.ReplicatedPrefix(), LocalRangeSharedManifestNumSuffix...)
 }
 
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.

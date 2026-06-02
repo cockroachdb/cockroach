@@ -1,0 +1,510 @@
+# Very basic operations and delegation to innerRSEngine.
+init start-file-num=100
+----
+
+state
+----
+rsEngineContainer{active=0, pending=(eng:false,prep:false), quiesced=0, refs=0, closing=false}
+
+compaction-toggle enable=true
+----
+ok
+
+op-log
+----
+CompactionToggle(true)
+
+snapshot
+----
+snap-0 manifest-num=0
+
+close-snapshot name=snap-0
+----
+ok
+
+close
+----
+ok
+
+# Ref/Unref and clean close.
+init start-file-num=100
+----
+
+ref
+----
+ok
+
+ref
+----
+ok
+
+state
+----
+rsEngineContainer{active=0, pending=(eng:false,prep:false), quiesced=0, refs=2, closing=false}
+
+unref
+----
+ok
+
+unref
+----
+ok
+
+close
+----
+ok
+
+# Ref blocks close.
+init start-file-num=100
+----
+
+ref
+----
+ok
+
+async-close
+----
+blocked
+
+unref
+----
+ok
+
+wait-close
+----
+ok
+
+# Unref panics on negative.
+init start-file-num=100
+----
+
+unref
+----
+panic: rsEngineContainer: externalRefs went negative
+
+close
+----
+ok
+
+# Prepare + Install lifecycle:
+# Flush creates manifest 159 (start=100, GetFileNums(60) => [100,160), manifest=159).
+# After prepare (slow path), active is still 0 but pending engine exists.
+# After install, active becomes 159, old engine goes to quiesced.
+# After quiesced drains, enableUnreferencedFileDeletion is called on the new active.
+# Also tests that snapshots before and after swap see the correct manifest.
+init start-file-num=100
+----
+
+# Take snapshot before swap (on initial engine, manifest=0).
+snapshot
+----
+snap-0 manifest-num=0
+
+flush file=flush1.sst
+----
+GetFileNums(60) => [100, 160)
+InstallNewManifest(current=0, new=MANIFEST-000159/159, files=[{000158.sst 158}])
+
+# Active manifest is still 0 (flush doesn't update in-place).
+state
+----
+rsEngineContainer{active=0, pending=(eng:false,prep:false), quiesced=0, refs=0, closing=false}
+
+prepare manifest-num=159
+----
+ok
+
+state
+----
+rsEngineContainer{active=0, pending=(eng:true,prep:false), quiesced=0, refs=0, closing=false}
+
+install manifest-num=159
+----
+ok
+
+state
+----
+rsEngineContainer{active=159, pending=(eng:false,prep:false), quiesced=1, refs=0, closing=false}
+
+# Snapshot after swap should see new manifest.
+snapshot
+----
+snap-1 manifest-num=159
+
+# Close the pre-swap snapshot. It was on the old engine, which is now quiesced.
+# The quiesced engine's closeInner blocks until this snapshot is closed.
+close-snapshot name=snap-0
+----
+ok
+
+wait-quiesced
+----
+ok
+
+state
+----
+rsEngineContainer{active=159, pending=(eng:false,prep:false), quiesced=0, refs=0, closing=false}
+
+op-log
+----
+EnableUnreferencedFileDeletion
+
+close-snapshot name=snap-1
+----
+ok
+
+close
+----
+ok
+
+# Multiple prepare+install.
+init start-file-num=100
+----
+
+flush file=flush1.sst
+----
+GetFileNums(60) => [100, 160)
+InstallNewManifest(current=0, new=MANIFEST-000159/159, files=[{000158.sst 158}])
+
+prepare manifest-num=159
+----
+ok
+
+install manifest-num=159
+----
+ok
+
+wait-quiesced
+----
+ok
+
+state
+----
+rsEngineContainer{active=159, pending=(eng:false,prep:false), quiesced=0, refs=0, closing=false}
+
+op-log
+----
+EnableUnreferencedFileDeletion
+
+# Second swap: flush on new engine creates manifest 219.
+flush file=flush2.sst
+----
+GetFileNums(60) => [160, 220)
+InstallNewManifest(current=159, new=MANIFEST-000219/219, files=[{000218.sst 218}])
+
+prepare manifest-num=219
+----
+ok
+
+install manifest-num=219
+----
+ok
+
+wait-quiesced
+----
+ok
+
+state
+----
+rsEngineContainer{active=219, pending=(eng:false,prep:false), quiesced=0, refs=0, closing=false}
+
+op-log
+----
+EnableUnreferencedFileDeletion
+
+close
+----
+ok
+
+# Ref-inner delays quiesced close.
+#
+# Holds a ref on the active inner engine before swap. After install, the old
+# engine goes to quiesced but cannot close because ref is held.
+init start-file-num=100
+----
+
+ref-inner
+----
+ok
+
+flush file=flush1.sst
+----
+GetFileNums(60) => [100, 160)
+InstallNewManifest(current=0, new=MANIFEST-000159/159, files=[{000158.sst 158}])
+
+prepare manifest-num=159
+----
+ok
+
+install manifest-num=159
+----
+ok
+
+# Quiesced engine can't close yet (ref held).
+state
+----
+rsEngineContainer{active=159, pending=(eng:false,prep:false), quiesced=1, refs=0, closing=false}
+
+# Release the inner ref, allowing quiesced close.
+unref-inner
+----
+ok
+
+wait-quiesced
+----
+ok
+
+state
+----
+rsEngineContainer{active=159, pending=(eng:false,prep:false), quiesced=0, refs=0, closing=false}
+
+op-log
+----
+EnableUnreferencedFileDeletion
+
+close
+----
+ok
+
+# Multiple quiesced engines.
+#
+# Holds refs on two consecutive active engines that are replaced. Both old
+# engines go to quiesced but can't close. Releases in LIFO order and verifies
+# EnableUnreferencedFileDeletion is called once (when quiesced list empties).
+init start-file-num=100
+----
+
+# Hold ref on engine-0.
+ref-inner
+----
+ok
+
+flush file=flush1.sst
+----
+GetFileNums(60) => [100, 160)
+InstallNewManifest(current=0, new=MANIFEST-000159/159, files=[{000158.sst 158}])
+
+prepare manifest-num=159
+----
+ok
+
+install manifest-num=159
+----
+ok
+
+# engine-0 is quiesced, engine-159 is active.
+state
+----
+rsEngineContainer{active=159, pending=(eng:false,prep:false), quiesced=1, refs=0, closing=false}
+
+# Hold ref on engine-159.
+ref-inner
+----
+ok
+
+flush file=flush2.sst
+----
+GetFileNums(60) => [160, 220)
+InstallNewManifest(current=159, new=MANIFEST-000219/219, files=[{000218.sst 218}])
+
+prepare manifest-num=219
+----
+ok
+
+install manifest-num=219
+----
+ok
+
+# Both engine-0 and engine-159 are quiesced.
+state
+----
+rsEngineContainer{active=219, pending=(eng:false,prep:false), quiesced=2, refs=0, closing=false}
+
+# Release engine-159 ref (LIFO order).
+unref-inner
+----
+ok
+
+# Release engine-0 ref.
+unref-inner
+----
+ok
+
+wait-quiesced
+----
+ok
+
+state
+----
+rsEngineContainer{active=219, pending=(eng:false,prep:false), quiesced=0, refs=0, closing=false}
+
+# Only one EnableUnreferencedFileDeletion (when quiesced list empties).
+op-log
+----
+EnableUnreferencedFileDeletion
+
+close
+----
+ok
+
+# Double prepare panics.
+init start-file-num=100
+----
+
+flush file=flush1.sst
+----
+GetFileNums(60) => [100, 160)
+InstallNewManifest(current=0, new=MANIFEST-000159/159, files=[{000158.sst 158}])
+
+prepare manifest-num=159
+----
+ok
+
+prepare manifest-num=159
+----
+panic: rsEngineContainer: PrepareExternalManifest called with pending
+
+install manifest-num=159
+----
+ok
+
+wait-quiesced
+----
+ok
+
+close
+----
+ok
+
+# Install without prepare panics.
+init start-file-num=100
+----
+
+install manifest-num=42
+----
+panic: rsEngineContainer: InstallPreparedManifest called without pending
+
+close
+----
+ok
+
+# Close with pending engine (no install).
+#
+# Prepare creates a pending engine, then close cleans up both active and pending.
+init start-file-num=100
+----
+
+flush file=flush1.sst
+----
+GetFileNums(60) => [100, 160)
+InstallNewManifest(current=0, new=MANIFEST-000159/159, files=[{000158.sst 158}])
+
+prepare manifest-num=159
+----
+ok
+
+state
+----
+rsEngineContainer{active=0, pending=(eng:true,prep:false), quiesced=0, refs=0, closing=false}
+
+close
+----
+ok
+
+# Flush between prepare and install.
+#
+# After prepare (slow path), the active engine is quiesced. Flushing through the
+# container routes to the quiesced active engine, which rejects the operation.
+init start-file-num=100
+----
+
+flush file=flush1.sst
+----
+GetFileNums(60) => [100, 160)
+InstallNewManifest(current=0, new=MANIFEST-000159/159, files=[{000158.sst 158}])
+
+prepare manifest-num=159
+----
+ok
+
+state
+----
+rsEngineContainer{active=0, pending=(eng:true,prep:false), quiesced=0, refs=0, closing=false}
+
+flush file=flush2.sst
+----
+error: engine is closed
+
+install manifest-num=159
+----
+ok
+
+wait-quiesced
+----
+ok
+
+state
+----
+rsEngineContainer{active=159, pending=(eng:false,prep:false), quiesced=0, refs=0, closing=false}
+
+op-log
+----
+EnableUnreferencedFileDeletion
+
+close
+----
+ok
+
+# Ref after close started panics.
+#
+# Start close (blocked on ref), then attempt another Ref which should panic
+# because closing flag is set.
+init start-file-num=100
+----
+
+ref
+----
+ok
+
+async-close
+----
+blocked
+
+ref
+----
+panic: Ref called after Close has started
+
+unref
+----
+ok
+
+wait-close
+----
+ok
+
+# Prepare after close started returns error.
+#
+# Start close (blocked on ref), then attempt PrepareExternalManifest which
+# should return an error because closing flag is set.
+init start-file-num=100
+----
+
+ref
+----
+ok
+
+async-close
+----
+blocked
+
+prepare manifest-num=42
+----
+error: PrepareExternalManifest called after Close has started
+
+unref
+----
+ok
+
+wait-close
+----
+ok

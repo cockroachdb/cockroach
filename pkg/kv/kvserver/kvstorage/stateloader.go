@@ -72,6 +72,10 @@ func (s StateLoader) Load(
 		return kvserverpb.ReplicaState{}, err
 	}
 
+	if r.FlushGeneration, err = s.LoadRangeFlushGeneration(ctx, stateRO); err != nil {
+		return kvserverpb.ReplicaState{}, err
+	}
+
 	as, err := s.LoadRangeAppliedState(ctx, stateRO)
 	if err != nil {
 		return kvserverpb.ReplicaState{}, err
@@ -82,6 +86,7 @@ func (s StateLoader) Load(
 	ms := as.RangeStats.ToStats()
 	r.Stats = &ms
 	r.RaftClosedTimestamp = as.RaftClosedTimestamp
+	r.ApproxStoreLocalBytes = as.ApproxStoreLocalBytes
 
 	// Invariant: TruncatedState == nil. The field is being phased out. The
 	// RaftTruncatedState must be loaded separately.
@@ -124,6 +129,11 @@ func (s StateLoader) Save(
 	}
 	if state.Version != nil {
 		if err := s.SetVersion(ctx, stateRW, ms, state.Version); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+	}
+	if state.FlushGeneration != 0 {
+		if err := s.SetRangeFlushGeneration(ctx, stateRW, ms, state.FlushGeneration); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
 	}
@@ -366,6 +376,28 @@ func (s StateLoader) SetRangeTombstone(
 	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(ctx, stateWO, s.RangeTombstoneKey(),
 		hlc.Timestamp{}, &ts, storage.MVCCWriteOptions{})
+}
+
+// LoadRangeFlushGeneration loads the flush generation.
+// Returns 0 if the key doesn't exist.
+func (s StateLoader) LoadRangeFlushGeneration(
+	ctx context.Context, stateRO StateRO,
+) (roachpb.FlushGeneration, error) {
+	var state kvserverpb.RangeFlushGenerationState
+	_, err := storage.MVCCGetProto(
+		ctx, stateRO, s.RangeFlushGenerationKey(), hlc.Timestamp{}, &state,
+		storage.MVCCGetOptions{},
+	)
+	return state.Generation, err
+}
+
+// SetRangeFlushGeneration writes the flush generation.
+func (s StateLoader) SetRangeFlushGeneration(
+	ctx context.Context, stateRW StateRW, ms *enginepb.MVCCStats, gen roachpb.FlushGeneration,
+) error {
+	state := kvserverpb.RangeFlushGenerationState{Generation: gen}
+	return storage.MVCCPutProto(ctx, stateRW, s.RangeFlushGenerationKey(),
+		hlc.Timestamp{}, &state, storage.MVCCWriteOptions{Stats: ms})
 }
 
 // UninitializedReplicaState returns the ReplicaState of an uninitialized

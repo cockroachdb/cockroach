@@ -303,6 +303,14 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		if q.Replicated.State.ForceFlushIndex != (roachpb.ForceFlushIndex{}) {
 			return errors.AssertionFailedf("must not specify ForceFlushIndex")
 		}
+
+		if p.Replicated.State.FlushGeneration == 0 {
+			p.Replicated.State.FlushGeneration = q.Replicated.State.FlushGeneration
+		} else if q.Replicated.State.FlushGeneration != 0 {
+			return errors.AssertionFailedf("conflicting FlushGeneration")
+		}
+		q.Replicated.State.FlushGeneration = 0
+
 		if (*q.Replicated.State != kvserverpb.ReplicaState{}) {
 			log.KvExec.Fatalf(context.TODO(), "unhandled EvalResult: %s",
 				pretty.Diff(*q.Replicated.State, kvserverpb.ReplicaState{}))

@@ -63,6 +63,7 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	// DoTimelyApplicationToAllReplicas is trivial. It has been consumed in
 	// apply.Batch.Stage.
 	r.DoTimelyApplicationToAllReplicas = false
+	r.ApproxStoreLocalBytesDelta = 0
 }
 
 // prepareLocalResult is performed after the command has been committed to the
@@ -635,6 +636,12 @@ func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Times
 func (r *Replica) handleGCHintResult(ctx context.Context, hint *roachpb.GCHint) {
 	r.mu.Lock()
 	r.shMu.state.GCHint = hint
+	r.mu.Unlock()
+}
+
+func (r *Replica) handleFlushGenerationResult(ctx context.Context, gen roachpb.FlushGeneration) {
+	r.mu.Lock()
+	r.shMu.state.FlushGeneration = gen
 	r.mu.Unlock()
 }
 

@@ -82,6 +82,14 @@ var (
 	LocalRangeAppliedStateSuffix = []byte("rask")
 	// LocalRangeForceFlushSuffix is the suffix for the range force flush key.
 	LocalRangeForceFlushSuffix = []byte("rffk")
+	// LocalRangeFlushGenerationSuffix is the suffix for the flush generation
+	// state. This tracks the flush generation for a range, incremented on
+	// each flush prepare.
+	LocalRangeFlushGenerationSuffix = []byte("rfgn")
+	// LocalRangeFileNumAllocSuffix is the suffix for the file number allocation
+	// state for a range's range-shared LSM. This tracks the next available file
+	// number that can be allocated for files in the RSEngine.
+	LocalRangeFileNumAllocSuffix = []byte("rfna")
 	// This was previously used for the replicated RaftTruncatedState. It is no
 	// longer used and this key has been removed via a migration. See
 	// LocalRaftTruncatedStateSuffix for the corresponding unreplicated
@@ -94,6 +102,10 @@ var (
 	// LocalRangePriorReadSummarySuffix is the suffix for a range's prior read
 	// summary.
 	LocalRangePriorReadSummarySuffix = []byte("rprs")
+	// LocalRangeSharedManifestNumSuffix is the suffix for the range-shared
+	// engine manifest number. This stores the DiskFileNum of the current
+	// MANIFEST for a range's range-shared engine (RSEngine).
+	LocalRangeSharedManifestNumSuffix = []byte("rsmn")
 	// LocalRangeVersionSuffix is the suffix for the range version.
 	LocalRangeVersionSuffix = []byte("rver")
 	// LocalRangeStatsLegacySuffix is the suffix for range statistics.

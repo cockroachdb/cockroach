@@ -183,9 +183,12 @@ var schema = [...]interface{}{
 	RangeGCThresholdKey,                         // "lgc-"
 	RangeAppliedStateKey,                        // "rask"
 	RangeForceFlushKey,                          // "rffk"
+	RangeFlushGenerationKey,                     // "rfgn"
+	RangeFileNumAllocKey,                        // "rfna"
 	RangeLeaseKey,                               // "rll-"
 	RangePriorReadSummaryKey,                    // "rprs"
 	ReplicatedSharedLocksTransactionLatchingKey, // "rsl-"
+	RangeSharedManifestNumKey,                   // "rsmn"
 	RangeVersionKey,                             // "rver"
 
 	//   2. Unreplicated range-ID local keys: These contain metadata that

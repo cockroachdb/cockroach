@@ -291,6 +291,12 @@ message ReplicatedEvalResult {
   // replicated range-id local key.
   bool do_timely_application_to_all_replicas = 29;
 
+  // ApproxStoreLocalBytesDelta is the approximate number of bytes written
+  // to the store-local engine by this command (WriteBatch + AddSSTable
+  // size). It is accumulated into RangeAppliedState.ApproxStoreLocalBytes
+  // at application time.
+  int64 approx_store_local_bytes_delta = 31;
+
   reserved 1, 5, 7, 9, 10, 14, 15, 16, 19, 10001 to 10013;
 }
 

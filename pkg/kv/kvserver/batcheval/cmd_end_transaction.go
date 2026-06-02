@@ -1550,9 +1550,26 @@ func splitTriggerHelper(
 		// HardState via a call to synthesizeRaftState. Here, we only call
 		// writeInitialReplicaState which essentially writes a ReplicaState
 		// only.
+
+		// Load the LHS RangeAppliedState and FlushGeneration so we can
+		// propagate them to the RHS.
+		lhsSL := kvstorage.MakeStateLoader(split.LeftDesc.RangeID)
+		lhsAS, err := lhsSL.LoadRangeAppliedState(ctx, batch)
+		if err != nil {
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "loading LHS RangeAppliedState for split")
+		}
+		lhsFG, err := lhsSL.LoadRangeFlushGeneration(ctx, batch)
+		if err != nil {
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "loading LHS FlushGeneration for split")
+		}
+
+		// Halve ApproxStoreLocalBytes for the RHS; the LHS is halved at
+		// application time in splitPreApply. The halving is approximate, but
+		// any inaccuracy is corrected by the next range flush.
 		if *h.AbsPostSplitRight(), err = kvstorage.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
 			*in.GCThreshold, *in.GCHint, in.ReplicaVersion,
+			lhsAS.ApproxStoreLocalBytes/2, lhsFG,
 		); err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
 		}
@@ -1675,16 +1692,17 @@ func mergeTrigger(
 	// complete the merge story and finish the merge on all replicas.
 	pd.Replicated.DoTimelyApplicationToAllReplicas = true
 
+	lhsLoader := MakeStateLoader(rec)
+	rhsLoader := kvstorage.MakeStateLoader(merge.RightDesc.RangeID)
+
 	{
 		// If we have GC hints populated that means we are trying to perform
 		// optimized garbage removal in future.
 		// We will try to merge both hints if possible and set new hint on LHS.
-		lhsLoader := MakeStateLoader(rec)
 		lhsHint, err := lhsLoader.LoadGCHint(ctx, batch)
 		if err != nil {
 			return result.Result{}, err
 		}
-		rhsLoader := kvstorage.MakeStateLoader(merge.RightDesc.RangeID)
 		rhsHint, err := rhsLoader.LoadGCHint(ctx, batch)
 		if err != nil {
 			return result.Result{}, err
@@ -1698,6 +1716,26 @@ func mergeTrigger(
 			}
 		}
 	}
+
+	// Set the LHS FlushGeneration to max(LHS, RHS). See the comment on
+	// RangeFlushGenerationState for why this is needed. Only update when the
+	// RHS exceeds the LHS; otherwise the LHS already holds the max.
+	if rhsFG, err := rhsLoader.LoadRangeFlushGeneration(ctx, batch); err != nil {
+		return result.Result{}, err
+	} else if rhsFG > 0 {
+		if lhsFG, err := lhsLoader.LoadRangeFlushGeneration(ctx, batch); err != nil {
+			return result.Result{}, err
+		} else if rhsFG > lhsFG {
+			if err := lhsLoader.SetRangeFlushGeneration(ctx, batch, ms, rhsFG); err != nil {
+				return result.Result{}, err
+			}
+			if pd.Replicated.State == nil {
+				pd.Replicated.State = &kvserverpb.ReplicaState{}
+			}
+			pd.Replicated.State.FlushGeneration = rhsFG
+		}
+	}
+
 	return pd, nil
 }
 

@@ -2227,6 +2227,16 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	require.NoError(t, err)
 	err = sl.SetVersion(ctx, batch, nil, &version)
 	require.NoError(t, err)
+	// Write a LHS RangeAppliedState with a non-zero ApproxStoreLocalBytes so
+	// we can verify the RHS gets half after the split.
+	lhsAppliedState := kvserverpb.RangeAppliedState{
+		ApproxStoreLocalBytes: 1000,
+	}
+	err = sl.SetRangeAppliedState(ctx, batch, &lhsAppliedState)
+	require.NoError(t, err)
+	// Write a non-zero FlushGeneration on the LHS so we can verify the RHS
+	// inherits it.
+	require.NoError(t, sl.SetRangeFlushGeneration(ctx, batch, nil, 7))
 
 	in := SplitTriggerHelperInput{
 		LeftLease:      lease,
@@ -2276,13 +2286,101 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, version, loadedVersion)
 	expAppliedState := kvserverpb.RangeAppliedState{
-		RaftAppliedIndexTerm: kvstorage.RaftInitialLogTerm,
-		RaftAppliedIndex:     kvstorage.RaftInitialLogIndex,
-		LeaseAppliedIndex:    kvstorage.InitialLeaseAppliedIndex,
+		RaftAppliedIndexTerm:  kvstorage.RaftInitialLogTerm,
+		RaftAppliedIndex:      kvstorage.RaftInitialLogIndex,
+		LeaseAppliedIndex:     kvstorage.InitialLeaseAppliedIndex,
+		ApproxStoreLocalBytes: 500, // half of LHS's 1000
 	}
 	loadedAppliedState, err := slRight.LoadRangeAppliedState(ctx, batch)
 	require.NoError(t, err)
 	require.NotNil(t, loadedAppliedState)
 	loadedAppliedState.RangeStats = kvserverpb.MVCCPersistentStats{} // ignore
 	require.Equal(t, &expAppliedState, loadedAppliedState)
+
+	// The FlushGeneration should have been propagated from LHS to RHS.
+	loadedFG, err := slRight.LoadRangeFlushGeneration(ctx, batch)
+	require.NoError(t, err)
+	require.Equal(t, roachpb.FlushGeneration(7), loadedFG)
+}
+
+// TestMergeTriggerFlushGeneration verifies that mergeTrigger takes the max
+// of the LHS and RHS FlushGeneration and propagates it in the result.
+func TestMergeTriggerFlushGeneration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	db := storage.NewDefaultInMemForTesting()
+	defer db.Close()
+
+	lhsDesc := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("c"),
+	}
+	rhsDesc := roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: roachpb.RKey("c"),
+		EndKey:   roachpb.RKey("e"),
+	}
+
+	for _, tc := range []struct {
+		name           string
+		lhsFG          roachpb.FlushGeneration
+		rhsFG          roachpb.FlushGeneration
+		expectedResult roachpb.FlushGeneration // pd.Replicated.State.FlushGeneration
+		expectedOnDisk roachpb.FlushGeneration // on-disk LHS value after merge
+	}{
+		{"rhs higher", 3, 7, 7, 7},
+		{"lhs higher", 10, 2, 0, 10},
+		{"both zero", 0, 0, 0, 0},
+		{"equal", 5, 5, 0, 5},
+		{"lhs nonzero rhs zero", 5, 0, 0, 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			batch := db.NewBatch()
+			defer batch.Close()
+
+			lhsSL := kvstorage.MakeStateLoader(lhsDesc.RangeID)
+			rhsSL := kvstorage.MakeStateLoader(rhsDesc.RangeID)
+
+			if tc.lhsFG > 0 {
+				require.NoError(t, lhsSL.SetRangeFlushGeneration(ctx, batch, nil, tc.lhsFG))
+			}
+			if tc.rhsFG > 0 {
+				require.NoError(t, rhsSL.SetRangeFlushGeneration(ctx, batch, nil, tc.rhsFG))
+			}
+
+			// The merge trigger's LeftDesc is the post-merge descriptor
+			// (with the RHS's EndKey).
+			mergedDesc := lhsDesc
+			mergedDesc.EndKey = rhsDesc.EndKey
+			merge := roachpb.MergeTrigger{
+				LeftDesc:  mergedDesc,
+				RightDesc: rhsDesc,
+			}
+			rec := (&MockEvalCtx{
+				ClusterSettings: st,
+				Desc:            &lhsDesc,
+				Stats:           enginepb.MVCCStats{},
+			}).EvalContext()
+
+			var ms enginepb.MVCCStats
+			pd, err := mergeTrigger(ctx, rec, batch, &ms, &merge, hlc.Timestamp{})
+			require.NoError(t, err)
+
+			var gotFG roachpb.FlushGeneration
+			if pd.Replicated.State != nil {
+				gotFG = pd.Replicated.State.FlushGeneration
+			}
+			require.Equal(t, tc.expectedResult, gotFG)
+
+			// Verify the on-disk LHS key.
+			loadedFG, err := lhsSL.LoadRangeFlushGeneration(ctx, batch)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedOnDisk, loadedFG)
+		})
+	}
 }

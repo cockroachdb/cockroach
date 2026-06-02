@@ -79,7 +79,7 @@ func TestSchemaIsStable(t *testing.T) {
 
 	// The replicated RangeID-local keys section.
 	// WARNING: if this line fails, don't just fix it, read the test comment.
-	section(string(LocalRangeIDReplicatedInfix), string(localRangeIDUnreplicatedInfix), 8)
+	section(string(LocalRangeIDReplicatedInfix), string(localRangeIDUnreplicatedInfix), 11)
 	// The unreplicated RangeID-local keys section.
 	// WARNING: if this line fails, don't just fix it, read the test comment.
 	section(string(localRangeIDUnreplicatedInfix), string(LocalRangePrefix), 6)

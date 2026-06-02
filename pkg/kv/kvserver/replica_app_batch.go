@@ -328,6 +328,10 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// here, and can instead just have an AddEvent method on the type instead.
 		splitPreApply(ctx, kvstorage.StateRW(b.batch.State()), b.RaftRW(), b.batch.WagWriter(), in)
 
+		// Halve the LHS ApproxStoreLocalBytes; the RHS was initialized with
+		// the other half in splitTriggerHelper.
+		b.state.ApproxStoreLocalBytes /= 2
+
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations
 		// need to retry.
@@ -364,6 +368,15 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			destroyReasonRemoved)
 		rhsRepl.mu.Unlock()
 		rhsRepl.readOnlyCmdMu.Unlock()
+
+		// Absorb the RHS ApproxStoreLocalBytes into the LHS before
+		// SubsumeReplica deletes the RHS state.
+		rhsSL := kvstorage.MakeStateLoader(merge.RightDesc.RangeID)
+		rhsAS, err := rhsSL.LoadRangeAppliedState(ctx, b.batch.State())
+		if err != nil {
+			return errors.Wrapf(err, "loading RHS RangeAppliedState for merge")
+		}
+		b.state.ApproxStoreLocalBytes += rhsAS.ApproxStoreLocalBytes
 
 		if err := mergePreApply(ctx, b.ReadWriter(), b.batch.WagWriter(), mergePreApplyInput{
 			lhsID:          b.r.ID(),
@@ -658,6 +671,8 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	}
 	r.raftMu.closedTimestampSetter = b.closedTimestampSetter
 	closedTimestampUpdated := r.shMu.state.RaftClosedTimestamp.Forward(b.state.RaftClosedTimestamp)
+
+	r.shMu.state.ApproxStoreLocalBytes = b.state.ApproxStoreLocalBytes
 
 	if b.state.ForceFlushIndex != r.shMu.state.ForceFlushIndex {
 		r.shMu.state.ForceFlushIndex = b.state.ForceFlushIndex

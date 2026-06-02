@@ -92,4 +92,18 @@ func TestMergeAndDestroy(t *testing.T) {
 	require.False(t, r0.Replicated.DoTimelyApplicationToAllReplicas)
 	require.NoError(t, r0.MergeAndDestroy(r4))
 	require.True(t, r0.Replicated.DoTimelyApplicationToAllReplicas)
+
+	var r5 Result
+	r5.Replicated.State = &kvserverpb.ReplicaState{
+		FlushGeneration: 5,
+	}
+	require.NoError(t, r0.MergeAndDestroy(r5))
+	require.NotNil(t, r0.Replicated.State)
+	require.Equal(t, roachpb.FlushGeneration(5), r0.Replicated.State.FlushGeneration)
+
+	var r6 Result
+	r6.Replicated.State = &kvserverpb.ReplicaState{
+		FlushGeneration: 10,
+	}
+	require.ErrorContains(t, r0.MergeAndDestroy(r6), "conflicting FlushGeneration")
 }

@@ -1023,3 +1023,19 @@ func (r RangeDescriptorsByStartKey) Swap(i, j int) {
 	r[i] = r[j]
 	r[j] = tmp
 }
+
+// FlushGeneration is a custom type for a range-shared LSM's flush generation.
+// Flush generation counter is incremented every time a leaseholder performs
+// the PrepareRangeFlush request and is checked when SetRangeSharedManifest
+// request is executed to ensure that no other PrepareRangeFlush intervened.
+//
+// See the comment on kvserverpb.RangeFlushGenerationState for more details.
+type FlushGeneration uint64
+
+// String implements the fmt.Stringer interface.
+func (g FlushGeneration) String() string {
+	return strconv.FormatUint(uint64(g), 10)
+}
+
+// SafeValue implements the redact.SafeValue interface.
+func (g FlushGeneration) SafeValue() {}

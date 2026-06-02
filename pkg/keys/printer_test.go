@@ -245,6 +245,9 @@ func TestPrettyPrint(t *testing.T) {
 		{keys.RangeGCThresholdKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeGCThreshold", revertSupportUnknown},
 		{keys.RangeVersionKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeVersion", revertSupportUnknown},
 		{keys.RangeGCHintKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeGCHint", revertSupportUnknown},
+		{keys.RangeFileNumAllocKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeFileNumAlloc", revertSupportUnknown},
+		{keys.RangeFlushGenerationKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeFlushGeneration", revertSupportUnknown},
+		{keys.RangeSharedManifestNumKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeSharedManifestNum", revertSupportUnknown},
 
 		{keys.RaftHardStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/u/RaftHardState", revertSupportUnknown},
 		{keys.RangeTombstoneKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/u/RangeTombstone", revertSupportUnknown},

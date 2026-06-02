@@ -159,6 +159,18 @@ message ReplicaState {
   // the RangeForceFlushKey.
   roachpb.ForceFlushIndex force_flush_index = 16 [(gogoproto.nullable) = false];
 
+  // ApproxStoreLocalBytes is an estimate of bytes written to the store-local
+  // engine for this range. It increases with each applied write and decreases
+  // on flush commit (when data moves to the range-shared engine). Derived from
+  // RangeAppliedState.ApproxStoreLocalBytes.
+  int64 approx_store_local_bytes = 17;
+
+  // FlushGeneration mirrors the on-disk RangeFlushGenerationKey in memory.
+  // It is updated during application from the value in ReplicatedEvalResult,
+  // so that no engine reads are needed during application. See
+  // RangeFlushGenerationState for the full protocol description.
+  uint64 flush_generation = 18 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.FlushGeneration"];
+
   reserved 8, 9, 10;
 }
 
@@ -260,6 +272,59 @@ message RangeAppliedState {
   // want a mixed version cluster (v21.2 and v22.1) to have divergent replica
   // state simply because we have introduced this field.
   uint64 raft_applied_index_term = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftTerm"];
+
+  // ApproxStoreLocalBytes is a monotonically increasing estimate of bytes
+  // accumulated in the store-local engine for this range since the last range
+  // flush. On each applied command, WriteBatch size + ingested SST size is
+  // added; the counter is never decremented by normal writes.
+  //
+  // Monotonic increase avoids the "barrier problem" at RANGEDEL_OFF
+  // boundaries. Example: SET foo#90 writes b1 bytes before RANGEDEL_OFF, then
+  // DEL foo#110 writes b2 bytes after RANGEDEL_OFF. If we tracked net bytes,
+  // the DEL would subtract b1, but those bytes are already "claimed" by the
+  // flush prepare snapshot. Monotonic increase counts b1+b2, and flush commit
+  // subtracts the value captured at flush prepare.
+  //
+  // The value is approximate: it starts at zero on replica initialization
+  // during the cluster boostrap and is halved on splits, so it may over- or
+  // underestimate the actual store-local bytes. Any inaccuracy is corrected by
+  // the next range flush, which subtracts the value captured during flush
+  // prepare.
+  //
+  // This field lives in RangeAppliedState rather than MVCCStats to avoid
+  // interaction with the consistency checker, which can't recompute a
+  // monotonically-increasing counter from a scan.
+  //
+  // In proto3, value 0 is not serialized, so adding this field is safe for
+  // mixed-version clusters as long as it remains 0 until all replicas
+  // understand it (same pattern as RaftAppliedIndexTerm).
+  int64 approx_store_local_bytes = 6;
+}
+
+// RangeFlushGenerationState tracks the flush generation for a range. Stored
+// in its own replicated range-ID local key (RangeFlushGenerationKey). It also
+// serves as a unique identifier for scratch file naming during flushes.
+//
+// Flush prepare increments the generation and records the new value. Flush
+// commit validates that the current generation matches the value recorded at
+// prepare time. If they differ, a concurrent flush prepare has occurred and
+// the commit is rejected. There are two situations where this can happen:
+//
+// Lease transfer: if the lease transfers and the new leaseholder runs its
+// own flush prepare, the generation increments. When the old leaseholder's
+// commit checks the generation, it sees the mismatch and is rejected.
+//
+// Split/merge: on split, the RHS inherits the LHS generation. On merge,
+// the LHS takes max(LHS, RHS). If either side ran a flush prepare between
+// the original prepare and the merge, the generation will have incremented
+// on that sub-range. The merge propagates it via max, so the merged
+// range's generation will be higher than what the original prepare
+// recorded, and the commit will be rejected.
+message RangeFlushGenerationState {
+  option (gogoproto.equal) = true;
+
+  // generation is the flush generation (incremented on each flush prepare).
+  uint64 generation = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.FlushGeneration"];
 }
 
 // MVCCPersistentStats is convertible to MVCCStats, but uses signed variable
