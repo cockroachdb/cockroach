@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/tls"
 	gosql "database/sql"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
@@ -438,7 +439,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 					"Expected the connection to eventually fail",
 				)
 				require.Error(t, err)
-				require.Regexp(t, "connection reset by peer|unexpected EOF", err.Error())
+				require.Regexp(t, "connection reset by peer|unexpected EOF|conn closed", err.Error())
 				require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
 			},
 		)
@@ -568,7 +569,7 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 				time.Second, 5*time.Millisecond,
 				"Expected the connection to eventually fail",
 			)
-			require.Regexp(t, "connection reset by peer|unexpected EOF", err.Error())
+			require.Regexp(t, "connection reset by peer|unexpected EOF|conn closed", err.Error())
 			require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
 		})
 	})
@@ -1700,7 +1701,7 @@ func TestCancelQuery(t *testing.T) {
 		cancelFn = func() {
 			cancelRequest := proxyCancelRequest{
 				ProxyIP:   net.IP{},
-				SecretKey: conn.PgConn().SecretKey(),
+				SecretKey: binary.BigEndian.Uint32(conn.PgConn().SecretKey()),
 				ClientIP:  net.IP{127, 0, 0, 1},
 			}
 			u := "http://" + addrs.httpAddr + "/_status/cancel/"
@@ -1730,7 +1731,7 @@ func TestCancelQuery(t *testing.T) {
 			_ = conn.PgConn().CancelRequest(ctx)
 		}
 		defer testutils.TestingHook(&defaultTransferTimeout, 3*time.Minute)()
-		origCancelInfo, found := proxy.handler.cancelInfoMap.getCancelInfo(conn.PgConn().SecretKey())
+		origCancelInfo, found := proxy.handler.cancelInfoMap.getCancelInfo(binary.BigEndian.Uint32(conn.PgConn().SecretKey()))
 		require.True(t, found)
 		b := tds.DrainPod(tenantID, tenants[0].SQLAddr())
 		require.True(t, b)
@@ -1753,7 +1754,7 @@ func TestCancelQuery(t *testing.T) {
 		timeSource.Advance(2 * time.Minute)
 		proxy.handler.balancer.RebalanceTenant(ctx, tenantID)
 		testutils.SucceedsSoon(t, func() error {
-			newCancelInfo, found := proxy.handler.cancelInfoMap.getCancelInfo(conn.PgConn().SecretKey())
+			newCancelInfo, found := proxy.handler.cancelInfoMap.getCancelInfo(binary.BigEndian.Uint32(conn.PgConn().SecretKey()))
 			if !found {
 				return errors.New("expected to find cancel info")
 			}
@@ -1775,7 +1776,7 @@ func TestCancelQuery(t *testing.T) {
 		snapshot := snapshotMetrics()
 		cancelRequest := proxyCancelRequest{
 			ProxyIP:   net.IP{},
-			SecretKey: conn.PgConn().SecretKey(),
+			SecretKey: binary.BigEndian.Uint32(conn.PgConn().SecretKey()),
 			ClientIP:  net.IP{210, 1, 2, 3},
 		}
 		u := "http://" + addrs.httpAddr + "/_status/cancel/"
@@ -1812,7 +1813,7 @@ func TestCancelQuery(t *testing.T) {
 		})()
 		crdbRequest := &pgproto3.CancelRequest{
 			ProcessID: 1,
-			SecretKey: conn.PgConn().SecretKey() + 1,
+			SecretKey: binary.BigEndian.Uint32(conn.PgConn().SecretKey()) + 1,
 		}
 		buf, err := crdbRequest.Encode(nil /* buf */)
 		require.NoError(t, err)
@@ -1829,7 +1830,7 @@ func TestCancelQuery(t *testing.T) {
 		require.Equal(t, "http://0.0.0.1:8080/_status/cancel/", forwardedTo)
 		expectedReq := proxyCancelRequest{
 			ProxyIP:   net.IP{0, 0, 0, 1},
-			SecretKey: conn.PgConn().SecretKey() + 1,
+			SecretKey: binary.BigEndian.Uint32(conn.PgConn().SecretKey()) + 1,
 			ClientIP:  net.IP{127, 0, 0, 1},
 		}
 		require.Equal(t, expectedReq, forwardedReq)
@@ -1840,7 +1841,7 @@ func TestCancelQuery(t *testing.T) {
 		snapshot := snapshotMetrics()
 		cancelRequest := proxyCancelRequest{
 			ProxyIP:   net.IP{},
-			SecretKey: conn.PgConn().SecretKey() + 1,
+			SecretKey: binary.BigEndian.Uint32(conn.PgConn().SecretKey()) + 1,
 			ClientIP:  net.IP{127, 0, 0, 1},
 		}
 		u := "http://" + addrs.httpAddr + "/_status/cancel/"
