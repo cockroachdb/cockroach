@@ -860,7 +860,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 			) error {
 				var err error
 				publishedDescs, err = prefetchDescriptors(
-					ctx, txn.KV(), txn.Descriptors(),
+					ctx, txn, r.job.ID(),
 					r.job.Details().(jobspb.RestoreDetails),
 				)
 				return err
@@ -1048,7 +1048,7 @@ func createImportRollbackJob(
 
 // setDescriptorsOffline sets the state of all online descriptors in the details to offline.
 func setDescriptorsOffline(
-	ctx context.Context, txn descs.Txn, details jobspb.RestoreDetails,
+	ctx context.Context, txn descs.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
 ) error {
 	descCol := txn.Descriptors()
 	b := txn.KV().NewBatch()
@@ -1065,24 +1065,13 @@ func setDescriptorsOffline(
 		return nil
 	}
 
-	var descIDs []descpb.ID
-	for _, desc := range details.TableDescs {
-		descIDs = append(descIDs, desc.ID)
-	}
-	for i := range details.FunctionDescs {
-		descIDs = append(descIDs, details.FunctionDescs[i].ID)
-	}
-	for i := range details.DatabaseDescs {
-		descIDs = append(descIDs, details.DatabaseDescs[i].ID)
-	}
-	for i := range details.TypeDescs {
-		descIDs = append(descIDs, details.TypeDescs[i].ID)
-	}
-	for i := range details.SchemaDescs {
-		descIDs = append(descIDs, details.SchemaDescs[i].ID)
+	refs, err := allDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return err
 	}
 
-	for _, id := range descIDs {
+	for _, ref := range refs {
+		id := ref.ID
 		// We use Desc over the type-specific lookups because the latter replaces
 		// the shared catalog.ErrDescriptorNotFound with a more specific pgcode.
 		// Uinsg the former allows us to match on one error type for all
@@ -1125,7 +1114,7 @@ func (r *restoreResumer) maybeCleanupFailedOnlineRestore(
 	// If the descriptors are online, flip them off before excising to ensure no
 	// foreground workload can run when we clobber the key space.
 	if err := r.execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		return setDescriptorsOffline(ctx, txn, details)
+		return setDescriptorsOffline(ctx, txn, r.job.ID(), details)
 	}); err != nil {
 		return err
 	}
