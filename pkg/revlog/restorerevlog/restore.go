@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -149,7 +148,11 @@ func AssignTicksToNodes(ticks []revlogpb.Manifest, numNodes int) [][]revlogpb.Ma
 // can resume after a transient failure without replaying all ticks
 // from scratch.
 func RestoreFromRevisionLog(
-	ctx context.Context, execCtx sql.JobExecContext, job *jobs.Job, execCfg *sql.ExecutorConfig,
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	job *jobs.Job,
+	execCfg *sql.ExecutorConfig,
+	tables []catalog.TableDescriptor,
 ) error {
 	details := job.Details().(jobspb.RestoreDetails)
 
@@ -201,7 +204,7 @@ func RestoreFromRevisionLog(
 	assignments := AssignTicksToNodes(manifests, len(sqlInstanceIDs))
 
 	// Build table rekeys from the restore details.
-	tableRekeys, tenantRekeys, err := BuildRekeys(details, execCfg)
+	tableRekeys, tenantRekeys, err := BuildRekeys(tables, details, execCfg)
 	if err != nil {
 		return errors.Wrap(err, "building rekeys for revlog restore")
 	}
@@ -294,7 +297,7 @@ func RestoreFromRevisionLog(
 
 	// Split/scatter spans for new tables.
 	if err := SplitAndScatterRevlogSpans(
-		ctx, execCtx, details, allManifests,
+		ctx, execCtx, tables, details, allManifests,
 	); err != nil {
 		return errors.Wrap(err, "split/scatter for revlog new tables")
 	}
@@ -303,7 +306,7 @@ func RestoreFromRevisionLog(
 
 	// Ingest via bulkmerge.Merge.
 	if err := RunRevlogFinalMerge(
-		ctx, execCtx, jobID, details, allManifests,
+		ctx, execCtx, jobID, tables, allManifests,
 	); err != nil {
 		return errors.Wrap(err, "revlog final merge")
 	}
@@ -432,11 +435,13 @@ func ApplyDescriptorChanges(
 	return result, newDescIDs, nil
 }
 
-// BuildRekeys constructs table and tenant rekeys from the restore
-// details. This mirrors the rekey construction in createRestoreFlows
-// (restore_job.go).
+// BuildRekeys constructs table and tenant rekeys from the supplied
+// table descriptors and the restore details. This mirrors the rekey
+// construction in createRestoreFlows (restore_job.go). The descriptors
+// are sourced from the catalog the restore job has already fetched
+// from KV after createImportingDescriptors commits.
 func BuildRekeys(
-	details jobspb.RestoreDetails, execCfg *sql.ExecutorConfig,
+	tables []catalog.TableDescriptor, details jobspb.RestoreDetails, execCfg *sql.ExecutorConfig,
 ) ([]execinfrapb.TableRekey, []execinfrapb.TenantRekey, error) {
 	newIDToOldID := make(map[descpb.ID]descpb.ID)
 	for oldID, rewrite := range details.DescriptorRewrites {
@@ -444,9 +449,7 @@ func BuildRekeys(
 	}
 
 	var tableRekeys []execinfrapb.TableRekey
-	for i := range details.TableDescs {
-		desc := tabledesc.NewBuilder(details.TableDescs[i]).
-			BuildImmutableTable()
+	for _, desc := range tables {
 		newDescBytes, err := protoutil.Marshal(desc.DescriptorProto())
 		if err != nil {
 			return nil, nil, errors.NewAssertionErrorWithWrappedErrf(
@@ -479,6 +482,7 @@ func BuildRekeys(
 func SplitAndScatterRevlogSpans(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
+	tables []catalog.TableDescriptor,
 	details jobspb.RestoreDetails,
 	allManifests []jobspb.BulkSSTManifest,
 ) error {
@@ -496,9 +500,7 @@ func SplitAndScatterRevlogSpans(
 
 	// Compute spans for new tables.
 	var newSpans []roachpb.Span
-	for i := range details.TableDescs {
-		td := tabledesc.NewBuilder(details.TableDescs[i]).
-			BuildImmutableTable()
+	for _, td := range tables {
 		if _, ok := newIDSet[td.GetID()]; !ok {
 			continue
 		}
@@ -583,7 +585,7 @@ func RunRevlogFinalMerge(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
-	details jobspb.RestoreDetails,
+	tables []catalog.TableDescriptor,
 	allManifests []jobspb.BulkSSTManifest,
 ) error {
 	codec := execCtx.ExecCfg().Codec
@@ -594,9 +596,7 @@ func RunRevlogFinalMerge(
 	// Compute sorted, non-overlapping schema spans from all table
 	// descriptors in the restore.
 	var schemaSpans []roachpb.Span
-	for i := range details.TableDescs {
-		td := tabledesc.NewBuilder(details.TableDescs[i]).
-			BuildImmutableTable()
+	for _, td := range tables {
 		schemaSpans = append(schemaSpans, td.TableSpan(codec))
 	}
 	slices.SortFunc(schemaSpans, func(a, b roachpb.Span) int {

@@ -9716,6 +9716,24 @@ func TestProtectRestoreTargets(t *testing.T) {
 			restoreDetails := jobutils.GetJobPayload(t, sqlDB, jobId).GetRestore()
 			require.NotNil(t, restoreDetails.ProtectedTimestampRecord)
 
+			// Resolve the descriptor IDs the restore is materializing via
+			// the new info-key rows in system.job_info; the legacy
+			// RestoreDetails.{Database,Table}Descs slices are only
+			// populated under mixed-version clusters and the helpers
+			// transparently fall back to them.
+			s := tc.ApplicationLayer(0)
+			idb := s.InternalDB().(isql.DB)
+			var dbRefs, tableRefs []backuppb.RestoreDescRef
+			require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				var err error
+				dbRefs, err = databaseDescRefs(ctx, txn, jobId, *restoreDetails)
+				if err != nil {
+					return err
+				}
+				tableRefs, err = tableDescRefs(ctx, txn, jobId, *restoreDetails)
+				return err
+			}))
+
 			target := ptutil.GetPTSTarget(t, sqlDB, restoreDetails.ProtectedTimestampRecord)
 			switch subtest.name {
 			case "cluster":
@@ -9730,10 +9748,10 @@ func TestProtectRestoreTargets(t *testing.T) {
 				require.Equal(t, roachpb.TenantID{InternalValue: 20}, targetIDs.IDs[0])
 			case "database":
 				targetIDs := target.GetSchemaObjects()
-				require.Equal(t, restoreDetails.DatabaseDescs[0].GetID(), targetIDs.IDs[0])
+				require.Equal(t, dbRefs[0].ID, targetIDs.IDs[0])
 			case "table":
 				targetIDs := target.GetSchemaObjects()
-				require.Equal(t, restoreDetails.TableDescs[0].GetID(), targetIDs.IDs[0])
+				require.Equal(t, tableRefs[0].ID, targetIDs.IDs[0])
 			}
 			// Finish the restore and ensure the PTS record was removed
 			sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)

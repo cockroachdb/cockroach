@@ -206,6 +206,7 @@ go_test(
         "main_test.go",
         "partitioned_backup_test.go",
         "restore_data_processor_test.go",
+        "restore_desc_refs_test.go",
         "restore_multiregion_rbr_test.go",
         "restore_online_distflow_test.go",
         "restore_online_test.go",
