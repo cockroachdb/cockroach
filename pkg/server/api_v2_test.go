@@ -365,6 +365,7 @@ func TestCheckRestartSafe_Criticality(t *testing.T) {
 
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(ctx)
+	require.NoError(t, testCluster.WaitForFullReplication())
 
 	ts1 := testCluster.Server(0)
 
@@ -376,7 +377,6 @@ func TestCheckRestartSafe_Criticality(t *testing.T) {
 	require.Greater(t, res.RaftLeadershipOnNodeCount, int32(0))
 	require.Equal(t, int32(1), res.StoreNotDrainingCount)
 
-	require.Equal(t, int32(0), res.UnderreplicatedRangeCount)
 	require.Equal(t, int32(0), res.UnderreplicatedRangeCount)
 
 	err = drain(ctx, ts1, t)
