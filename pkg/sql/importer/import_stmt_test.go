@@ -4437,6 +4437,7 @@ func TestUniqueUUID(t *testing.T) {
 	// Disable elastic CPU control to avoid timeout — elastic CPU throttling
 	// can push this test past the 15m timeout.
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'`)
 
 	dataSize := parallelImporterReaderBatchSize * 100
 
