@@ -224,7 +224,7 @@ func NewMultiConnPool(
 				minConns = numConns
 			}
 			poolCfg.MinConns = int32(minConns)
-			poolCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
+			poolCfg.PrepareConn = func(ctx context.Context, conn *pgx.Conn) (bool, error) {
 				m.mu.RLock()
 				defer m.mu.RUnlock()
 				for name, sql := range m.mu.preparedStatements {
@@ -233,10 +233,10 @@ func NewMultiConnPool(
 					// communication to the server.
 					if _, err := conn.Prepare(ctx, name, sql); err != nil {
 						log.Dev.Warningf(ctx, "error preparing statement. name=%s sql=%s %v", name, sql, err)
-						return false
+						return false, nil
 					}
 				}
-				return true
+				return true, nil
 			}
 
 			// Attach the supplied tracer to the ConnConfig.
