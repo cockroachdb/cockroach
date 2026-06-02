@@ -2294,11 +2294,12 @@ func (m *Manager) maybeAddObserverEvent(
 		defer t.mu.Unlock()
 		// If the version hasn't changed, then nothing needs to be emitted, unless
 		// it's a drop event.
-		if !dropped && version <= t.mu.maxVersionNotified {
+		if !dropped && version <= t.mu.notifiedVersion.version {
 			return false
 		}
 		if !dropped {
-			t.mu.maxVersionNotified = version
+			t.mu.notifiedVersion.version = version
+			t.mu.notifiedVersion.modTime = modificationTime
 		}
 		return true
 	}()

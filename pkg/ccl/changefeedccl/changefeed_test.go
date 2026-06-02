@@ -3171,6 +3171,7 @@ WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan, cursor=$
 func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	testutils.SetVModule(t, "schema_feed=2") // might help #170357 if it comes up again
 
 	rnd, seed := randutil.NewPseudoRand()
 	t.Logf("random seed: %d", seed)

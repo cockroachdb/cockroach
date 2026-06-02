@@ -2175,8 +2175,9 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Set verbose log to confirm whether or not we hit the same nil row issue as in #140669
-	testutils.SetVModule(t, "kv_feed=2,changefeed_processors=2")
+	// Set verbose log to confirm whether or not we hit the same nil row issue
+	// as in #140669 (and schema_feed=2 helps #169505 if it comes up again).
+	testutils.SetVModule(t, "kv_feed=2,changefeed_processors=2,schema_feed=2")
 
 	rnd, seed := randutil.NewPseudoRand()
 	t.Logf("random seed: %d", seed)

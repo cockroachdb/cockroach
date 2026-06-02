@@ -4634,7 +4634,7 @@ func TestObserverNotificationFromRangefeed(t *testing.T) {
 		lease:     ld,
 		startTime: nodes.Server(1).Clock().Now(),
 	}
-	_ = lm1.RegisterLeaseObserver(obs)
+	_ = lm1.RegisterLeaseObserver(ctx, obs)
 	// Run schema change on Node 0 in a goroutine because it will block
 	// on the two-version invariant waiting for Node 1 to release version 1.
 	errCh := make(chan error, 1)
