@@ -311,3 +311,54 @@ UNION
 SELECT id FROM secret_data;
 
 subtest end
+
+subtest pg_proc_prosecdef
+
+user root
+
+statement ok
+CREATE FUNCTION secdef_test_fn() RETURNS INT LANGUAGE SQL SECURITY DEFINER AS $$ SELECT 1 $$;
+
+# prosecdef should be true for SECURITY DEFINER functions.
+query TB
+SELECT proname, prosecdef FROM pg_proc WHERE proname = 'secdef_test_fn';
+----
+secdef_test_fn  true
+
+# information_schema should also reflect DEFINER.
+query TT
+SELECT routine_name, security_type FROM information_schema.routines
+WHERE routine_name = 'secdef_test_fn';
+----
+secdef_test_fn  DEFINER
+
+# A regular function should show false / INVOKER.
+statement ok
+CREATE FUNCTION invoker_test_fn() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query TB
+SELECT proname, prosecdef FROM pg_proc WHERE proname = 'invoker_test_fn';
+----
+invoker_test_fn  false
+
+query TT
+SELECT routine_name, security_type FROM information_schema.routines
+WHERE routine_name = 'invoker_test_fn';
+----
+invoker_test_fn  INVOKER
+
+# Changing security mode should update prosecdef.
+statement ok
+ALTER FUNCTION secdef_test_fn() SECURITY INVOKER;
+
+query TB
+SELECT proname, prosecdef FROM pg_proc WHERE proname = 'secdef_test_fn';
+----
+secdef_test_fn  false
+
+# Clean up.
+statement ok
+DROP FUNCTION secdef_test_fn;
+DROP FUNCTION invoker_test_fn;
+
+subtest end

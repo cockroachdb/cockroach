@@ -3657,10 +3657,10 @@ func addPgProcUDFRow(
 		lang,                // prolang
 		tree.NewDFloat(100), // procost
 		defaultProrows(fnDesc.GetReturnType().ReturnSet), // prorows
-		oidZero,         // provariadic // TODO(88947): this might need an adjustment.
-		regprocZero,     // prosupport
-		kind,            // prokind
-		tree.DBoolFalse, // prosecdef
+		oidZero,     // provariadic // TODO(88947): this might need an adjustment.
+		regprocZero, // prosupport
+		kind,        // prokind
+		tree.MakeDBool(tree.DBool(fnDesc.GetSecurity() == catpb.Function_DEFINER)),           // prosecdef
 		tree.MakeDBool(tree.DBool(fnDesc.GetLeakProof())),                                    // proleakproof
 		tree.MakeDBool(fnDesc.GetNullInputBehavior() != catpb.Function_CALLED_ON_NULL_INPUT), // proisstrict
 		tree.MakeDBool(tree.DBool(fnDesc.GetReturnType().ReturnSet)),                         // proretset
