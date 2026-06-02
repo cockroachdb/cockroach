@@ -108,6 +108,6 @@ EOF
 
 if [[ -n "${is_customized_build}" ]] ; then
   tc_start_block "Delete custombuild tag"
-  git_wrapped push ssh://git@github.com/cockroachdb/cockroach.git --delete "${TC_BUILD_BRANCH}"
+  git_wrapped push ssh://git@github.com/cockroachdb/cockroach-private.git --delete "${TC_BUILD_BRANCH}"
   tc_end_block "Delete custombuild tag"
 fi

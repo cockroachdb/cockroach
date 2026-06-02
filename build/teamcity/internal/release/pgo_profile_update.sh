@@ -201,8 +201,8 @@ set +x
 # based on current upstream master to a stale fork can trigger GitHub's workflow
 # scope requirement for any .github/workflows/ files that diverged since the
 # fork was last synced.
-gh repo sync "$gh_username/cockroach" --source cockroachdb/cockroach --force
-git push "https://$gh_username:$GH_TOKEN@github.com/$gh_username/cockroach.git" "$branch_name"
+gh repo sync "$gh_username/cockroach-private" --source cockroachdb/cockroach-private --force
+git push "https://$gh_username:$GH_TOKEN@github.com/$gh_username/cockroach-private.git" "$branch_name"
 set -x
 
 # Create PR using gh CLI
@@ -218,6 +218,7 @@ Epic: none
 Release note: none"
 
 gh pr create \
+    --repo cockroachdb/cockroach-private \
     --head "$gh_username:$branch_name" \
     --title "build: update PGO profile" \
     --body "$pr_body" \

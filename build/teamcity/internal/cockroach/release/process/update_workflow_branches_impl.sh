@@ -83,11 +83,11 @@ Release note: None
 Release justification: non-production (release infra) change."
 
 # Push the branch to cockroach-teamcity fork (like update_releases.yaml workflow does)
-git push "https://oauth2:${GH_TOKEN}@github.com/cockroach-teamcity/cockroach" "$BRANCH_NAME"
+git push "https://oauth2:${GH_TOKEN}@github.com/cockroach-teamcity/cockroach-private" "$BRANCH_NAME"
 
 # Create the pull request from the fork
 gh pr create \
-  --repo cockroachdb/cockroach \
+  --repo cockroachdb/cockroach-private \
   --base master \
   --head "cockroach-teamcity:$BRANCH_NAME" \
   --title "workflows: run \`update_releases\` on \`$RELEASE_BRANCH\`" \
