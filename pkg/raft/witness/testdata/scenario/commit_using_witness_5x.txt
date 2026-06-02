@@ -1,0 +1,243 @@
+# Explore 5x setup (four voters, one witness). The voters should be thought
+# of as being spread over two availability zones.
+setup
+v1: [a1]
+v2: [a1]
+v3: [a1]
+v4: [a1]
+w
+----
+v1: [a1] term=a
+v2: [a1] term=a
+v3: [a1] term=a
+v4: [a1] term=a
+
+# Initially, all is well and v1 wins leadership. The witness votes too, though
+# not strictly required.
+campaign v1
+----
+v1 campaigns at term b
+v1: yes (self)
+v2:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes (term a->b, voted v1)
+v3:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes (term a->b, voted v1)
+v4:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes (term a->b, voted v1)
+w:
+  - granted vote for v1 at term b, hi carried as 0
+  yes (term 0->b, voted v1)
+outcome: won
+
+# v4 goes dark.
+set-avail down=(v4)
+----
+ok
+
+# v1 proposes an entry and appends. v4 (which is down) is not required for
+# quorum.
+propose v1
+----
+v1: [a1 b2 b3] term=b leader
+v2: [a1] term=b
+v3: [a1] term=b
+v4: [a1] term=b
+
+append v1
+----
+v1 appends through b3
+v2:
+  - accepted append through b3 (ok)
+  ok (log=[a1 | b2 b3])
+v3:
+  - accepted append through b3 (ok)
+  ok (log=[a1 | b2 b3])
+v4: (dropped)
+v1: [a1 b2 b3] term=b committed=b3 leader
+v2: [a1 b2 b3] term=b
+v3: [a1 b2 b3] term=b
+v4: [a1] term=b
+
+# v1 proposes a second entry.
+propose v1
+----
+v1: [a1 b2 b3 b4] term=b committed=b3 leader
+v2: [a1 b2 b3] term=b
+v3: [a1 b2 b3] term=b
+v4: [a1] term=b
+
+# Now v3 is down too (AZ outage, for example).
+set-avail down=(v3)
+----
+ok
+
+# Quorum can't be reached, only v2 is around to ack.
+append v1
+----
+v1 appends through b4
+v2:
+  - accepted append through b4 (ok)
+  ok (log=[... b3 | b4])
+v3: (dropped)
+v4: (dropped)
+v1: [a1 b2 b3 b4] term=b committed=b3 leader
+v2: [a1 b2 b3 b4] term=b
+v3: [a1 b2 b3] term=b
+v4: [a1] term=b
+
+# Realizing this, the leader can engage the witness.
+engage v1
+----
+w:
+  - engaged at b4
+  ok (hi 0->b4, engaged)
+w:  vote=(b, v1) acked=(b4, engaged)
+v1: [a1 b2 b3 b4] term=b committed=b4 leader
+
+# If v2 were to campaign, v1 would vote for it (log is up to date),
+# but the witness wouldn't. Since v3 and v4 are down, v2 can't win
+# an election at this point - the witness would need to be released
+# first.
+prevote v2
+----
+v2 prevotes at term c
+v2: yes (self)
+v1:
+  - term advance b -> c
+  - stepped down as leader
+  - granted vote for v2 at term c
+  yes (prevote, no state change)
+v3: (dropped)
+v4: (dropped)
+w:
+  - engaged: effectiveHi inflated to b∞
+  - rejected vote for v2: log not up to date (effectiveHi b∞ > lm b4)
+  no
+outcome: lost
+
+# Another entry on v1, now v2 is not up to date with it any longer.
+propose v1
+----
+v1: [a1 b2 b3 b4 b5] term=b committed=b4 leader
+v2: [a1 b2 b3 b4] term=b
+v3: [a1 b2 b3] term=b
+v4: [a1] term=b
+
+# Correspondingly, v2's pre-vote now gets rejected even by v1.
+prevote v2
+----
+v2 prevotes at term c
+v2: yes (self)
+v1:
+  - term advance b -> c
+  - stepped down as leader
+  - rejected vote for v2: log not up to date (b5 > b4)
+  no, log not up to date (b5 > b4)
+v3: (dropped)
+v4: (dropped)
+w:
+  - engaged: effectiveHi inflated to b∞
+  - rejected vote for v2: log not up to date (effectiveHi b∞ > lm b4)
+  no
+outcome: lost
+
+# v1 goes down. v3 comes up in its stead, but this is not enough.
+set-avail down=(v1) up=(v3)
+----
+ok
+
+# The best candidate is v2, but even it can't win because the witness
+# is still engaged at the previous term.
+prevote v2
+----
+v2 prevotes at term c
+v2: yes (self)
+v1: (dropped)
+v3:
+  - term advance b -> c
+  - granted vote for v2 at term c
+  yes (prevote, no state change)
+v4: (dropped)
+w:
+  - engaged: effectiveHi inflated to b∞
+  - rejected vote for v2: log not up to date (effectiveHi b∞ > lm b4)
+  no
+outcome: lost
+
+# We need a traditional quorum to forcibly release the witness.
+set-avail up=(v4)
+----
+ok
+
+# v2 can win, though the witness rejected the vote (as it should) and remains
+# engaged at the old term.
+campaign v2
+----
+v2 campaigns at term c
+v2: yes (self)
+v1: (dropped)
+v3:
+  - term advance b -> c
+  - granted vote for v2 at term c
+  yes (term b->c, voted v2)
+v4:
+  - term advance b -> c
+  - granted vote for v2 at term c
+  yes (term b->c, voted v2)
+w:
+  - engaged: effectiveHi inflated to b∞
+  - rejected vote for v2: log not up to date (effectiveHi b∞ > lm b4)
+  no
+outcome: won
+
+# v2 could release the witness (engaging it would also work), but instead we
+# demonstrate that this is not necessary in future steps. That is, in production
+# we likely don't need code that proactively makes sure that the witness is
+# released following a successful campaign.
+#
+# v2 just won a traditional-quorum election, so sensibly it tries to append to
+# the followers that voted for it.
+# In doing so, everybody now has a log entry whose LogTerm is newer than the
+# witness's engaged term. This means they can get votes from the witness
+# and break the engagement in the process.
+append v2
+----
+v2 appends through c5
+v1: (dropped)
+v3:
+  - accepted append through c5 (ok)
+  ok (log=[... b3 | b4 c5])
+v4:
+  - accepted append through c5 (ok)
+  ok (log=[a1 | b2 b3 b4 c5])
+v1: [a1 b2 b3 b4 b5] term=b committed=b4 leader
+v2: [a1 b2 b3 b4 c5] term=c leader
+v3: [a1 b2 b3 b4 c5] term=c
+v4: [a1 b2 b3 b4 c5] term=c
+
+# Pre-vote succeeds, note that the witness would vote and release the engagement.
+prevote v4
+----
+v4 prevotes at term d
+v4: yes (self)
+v1: (dropped)
+v2:
+  - term advance c -> d
+  - stepped down as leader
+  - granted vote for v4 at term d
+  yes (prevote, no state change)
+v3:
+  - term advance c -> d
+  - granted vote for v4 at term d
+  yes (prevote, no state change)
+w:
+  - engaged: effectiveHi inflated to b∞
+  - granted vote for v4 at term d, hi carried as b∞
+  yes (prevote, no state change)
+outcome: won

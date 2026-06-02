@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Witness Test: testdata/basic/raft_reject_stale_append.txt</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "SF Mono", "Menlo", "Consolas", monospace; font-size: 13px; background: #fafafa; color: #222; padding: 20px; }
+h1 { font-size: 14px; color: #888; margin-bottom: 12px; font-weight: normal; }
+h1 a { color: #888; text-decoration: none; }
+h1 a:hover { text-decoration: underline; }
+.nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.nav button { background: #fff; border: 1px solid #ccc; color: #333; padding: 4px 12px; cursor: pointer; border-radius: 3px; font-family: inherit; }
+.nav button:hover { background: #eef; }
+.nav button:disabled { opacity: 0.4; cursor: default; }
+.step-info { color: #666; }
+.command { color: #1f6feb; font-weight: bold; }
+.comment { color: #2a7a3a; margin-bottom: 12px; white-space: pre-wrap; }
+.board { margin-bottom: 16px; }
+.row { display: flex; align-items: center; padding: 6px 0; gap: 12px; min-height: 38px; }
+.row.down { opacity: 0.45; }
+.row.down .label::after { content: ' \00D7'; color: #c0392b; font-weight: bold; }
+.row.leader .label::after { content: ' \2655'; color: #c89400; }
+.row.stale-leader .label::after { content: ' \2655'; color: #c0392b; }
+.row .label { width: 80px; flex-shrink: 0; color: #1f6feb; font-weight: bold; }
+.row .label.witness { color: #7d4ec9; }
+.row .log { display: flex; gap: 2px; flex-shrink: 0; }
+.row .state { margin-left: auto; color: #555; text-align: right; }
+.row .state .item { display: inline-block; margin: 0 4px; }
+.row .state .sep { color: #bbb; }
+.row .state .item.changed { background: #fff4b8; padding: 1px 5px; border-radius: 2px; }
+.row .state .key { color: #888; }
+.row .state .val { color: #222; }
+.row .state .item.changed .key { color: #8a6d00; }
+.row .state .item.changed .val { color: #5c4900; font-weight: 600; }
+.cell { min-width: 32px; height: 28px; padding: 0 4px; display: flex; align-items: center; justify-content: center;
+        border-radius: 3px; font-size: 12px; font-weight: 400; color: #222;
+        border: 1px solid rgba(0,0,0,0.12); }
+.cell.changed { font-weight: 800; box-shadow: 0 0 0 2px #d4a800; }
+.cell.empty { background: transparent; color: #bbb; border: 1px dashed #ccc; }
+.cell.synthetic { font-style: italic; }
+.output { background: #f4f4f4; border: 1px solid #ddd; border-radius: 4px; padding: 10px; white-space: pre-wrap; color: #2c2c2c; margin-top: 8px; }
+.output-label { color: #888; font-size: 11px; margin-top: 12px; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<h1><a href=".././">testdata</a> / <a href="./">basic</a> / raft_reject_stale_append.txt</h1>
+<div id="app"></div>
+<script>
+const TRACE = {"testFile":"testdata/basic/raft_reject_stale_append.txt","steps":[{"index":0,"command":"setup","input":"v1: [a1]\nv2: [a1]\nv3: [a1]","comment":"A stale leader's append is rejected by followers who have moved to a higher\nterm.\n\nThree voters, no witness. Quorum = 2.","output":"v1: [a1] term=a\nv2: [a1] term=a\nv3: [a1] term=a","voters":{"v1":{"log":[{"term":"a","index":"1"}],"term":"a","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2 v3)","matchIndex":0,"down":false},"v2":{"log":[{"term":"a","index":"1"}],"term":"a","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2 v3)","matchIndex":0,"down":false},"v3":{"log":[{"term":"a","index":"1"}],"term":"a","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2 v3)","matchIndex":0,"down":false}}},{"index":1,"command":"campaign v1","comment":"v1 wins election.","output":"v1 campaigns at term b\nv1: yes (self)\nv2:\n  - term advance a -\u003e b\n  - granted vote for v1 at term b\n  yes (term a-\u003eb, voted v1)\nv3:\n  - term advance a -\u003e b\n  - granted vote for v1 at term b\n  yes (term a-\u003eb, voted v1)\noutcome: won","voters":{"v1":{"log":[{"term":"a","index":"1"},{"term":"b","index":"2"}],"term":"b","votedFor":"v1","leader":true,"matchIndex":2},"v2":{"term":"b","votedFor":"v1"},"v3":{"term":"b","votedFor":"v1"}},"messages":[{"from":"v1","to":"v2","type":"VoteReq","label":"VoteReq(term=b, log=a1)"},{"from":"v2","to":"v1","type":"VoteResp","label":"yes","trace":["term advance a -\u003e b","granted vote for v1 at term b"]},{"from":"v1","to":"v3","type":"VoteReq","label":"VoteReq(term=b, log=a1)"},{"from":"v3","to":"v1","type":"VoteResp","label":"yes","trace":["term advance a -\u003e b","granted vote for v1 at term b"]}]},{"index":2,"command":"propose v1","output":"v1: [a1 b2 b3] term=b leader\nv2: [a1] term=b\nv3: [a1] term=b","voters":{"v1":{"log":[{"term":"a","index":"1"},{"term":"b","index":"2"},{"term":"b","index":"3"}],"matchIndex":3}}},{"index":3,"command":"campaign v2 drop=(v1)","comment":"v2 campaigns with v1 partitioned away. v2 wins with v2+v3.\nv1 still thinks it's leader at term b.","output":"v2 campaigns at term c\nv2: yes (self)\nv1: (dropped)\nv3:\n  - term advance b -\u003e c\n  - granted vote for v2 at term c\n  yes (term b-\u003ec, voted v2)\noutcome: won","voters":{"v2":{"log":[{"term":"a","index":"1"},{"term":"c","index":"2"}],"term":"c","votedFor":"v2","leader":true,"matchIndex":2},"v3":{"term":"c","votedFor":"v2"}},"messages":[{"from":"v2","to":"v1","type":"VoteReq","label":"VoteReq(term=c, log=a1)"},{"from":"v1","to":"v2","type":"Dropped","label":"(dropped)","dropped":true},{"from":"v2","to":"v3","type":"VoteReq","label":"VoteReq(term=c, log=a1)"},{"from":"v3","to":"v2","type":"VoteResp","label":"yes","trace":["term advance b -\u003e c","granted vote for v2 at term c"]}]},{"index":4,"command":"append v1","comment":"v1 (stale leader at term b) tries to append. v2 and v3 reject because\nthey're at term c \u003e b.","output":"v1 appends through b3\nv2:\n  - rejected, stale leader term b \u003c c\n  rejected, stale leader term b \u003c c\nv3:\n  - rejected, stale leader term b \u003c c\n  rejected, stale leader term b \u003c c\nv1: [a1 b2 b3] term=b leader\nv2: [a1 c2] term=c leader\nv3: [a1] term=c","messages":[{"from":"v1","to":"v2","type":"AppendReq","label":"AppendReq([... b3])"},{"from":"v2","to":"v1","type":"AppendResp","label":"rejected, stale leader term b \u003c c","trace":["rejected, stale leader term b \u003c c"]},{"from":"v1","to":"v3","type":"AppendReq","label":"AppendReq([... b3])"},{"from":"v3","to":"v1","type":"AppendResp","label":"rejected, stale leader term b \u003c c","trace":["rejected, stale leader term b \u003c c"]}]}]};
+
+let currentStep = 0;
+
+const MAX_CELLS = 10;
+
+function computeState(upTo) {
+  const state = { voters: {}, witness: null };
+  for (let i = 0; i <= upTo; i++) {
+    const step = TRACE.steps[i];
+    if (step.voters) {
+      for (const [id, delta] of Object.entries(step.voters)) {
+        if (!state.voters[id]) state.voters[id] = {};
+        for (const [k, v] of Object.entries(delta)) {
+          state.voters[id][k] = v;
+        }
+      }
+    }
+    if (step.witness) {
+      if (!state.witness) state.witness = { vote: {}, acked: {} };
+      if (step.witness.vote) {
+        for (const [k, v] of Object.entries(step.witness.vote)) {
+          state.witness.vote[k] = v;
+        }
+      }
+      if (step.witness.acked) {
+        for (const [k, v] of Object.entries(step.witness.acked)) {
+          state.witness.acked[k] = v;
+        }
+      }
+      if (step.witness.down !== undefined) {
+        state.witness.down = step.witness.down;
+      }
+    }
+  }
+  return state;
+}
+
+
+
+
+function termBg(t) {
+  if (!t || t === '-') return '#e8e8ec';
+  let ord = 0;
+  if (t.length === 1 && t >= 'a' && t <= 'z') ord = t.charCodeAt(0) - 97;
+  else ord = parseInt(t, 10) || 0;
+  const hue = (ord * 53) % 360;
+  return 'hsl(' + hue + ', 65%, 75%)';
+}
+
+function termOrd(t) {
+  if (!t || t === '-') return 0;
+  if (t.length === 1 && t >= 'a' && t <= 'z') return t.charCodeAt(0) - 96;
+  return parseInt(t, 10) || 0;
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+
+
+function renderVoterLog(log, prevLog, initial) {
+  let html = '<div class="log">';
+  if (!log || log.length === 0) {
+    html += '<div class="cell empty">·</div>';
+  } else {
+    for (let i = 0; i < log.length; i++) {
+      const e = log[i];
+      const prev = prevLog && prevLog[i];
+      const changed = !initial && (!prev || prev.term !== e.term || prev.index !== e.index);
+      const cls = 'cell' + (changed ? ' changed' : '');
+      html += '<div class="' + cls + '" style="background:' + termBg(e.term) + '">' +
+        escHtml(e.term) + escHtml(e.index) + '</div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+
+
+
+
+
+
+
+function renderWitnessLog(witness, prevWitness, initial) {
+  const hi = witness && witness.acked && witness.acked.hi;
+  const engaged = witness && witness.acked && witness.acked.engaged;
+  const term = hi ? hi.term : null;
+  const idx = hi ? parseInt(hi.index, 10) : 0;
+
+  const prevHi = prevWitness && prevWitness.acked && prevWitness.acked.hi;
+  const prevEngaged = prevWitness && prevWitness.acked && prevWitness.acked.engaged;
+  const prevTerm = prevHi ? prevHi.term : null;
+  const prevIdx = prevHi ? parseInt(prevHi.index, 10) : 0;
+
+  
+  const cellChanged = (i) => {
+    if (initial) return false;
+    if (term !== prevTerm) return true; 
+    if (engaged && !prevEngaged) {
+      
+      return i > prevIdx;
+    }
+    if (!engaged && prevEngaged) return true; 
+    return i > prevIdx;
+  };
+
+  let html = '<div class="log">';
+  if (!hi && !engaged) {
+    html += '<div class="cell empty">·</div></div>';
+    return html;
+  }
+  const bg = termBg(term);
+  const lbl = escHtml(term || '');
+  if (engaged) {
+    for (let i = 1; i <= 8; i++) {
+      const cls = 'cell' + (cellChanged(i) ? ' changed' : '');
+      html += '<div class="' + cls + '" style="background:' + bg + '">' + lbl + i + '</div>';
+    }
+    const tailCls = (!initial && engaged && !prevEngaged) ? ' changed' : '';
+    html += '<div class="cell synthetic' + tailCls + '" style="background:' + bg + '">' + lbl + '…</div>';
+    html += '<div class="cell synthetic' + tailCls + '" style="background:' + bg + '">' + lbl + '∞</div>';
+  } else {
+    for (let i = 1; i <= idx; i++) {
+      const cls = 'cell' + (cellChanged(i) ? ' changed' : '');
+      html += '<div class="' + cls + '" style="background:' + bg + '">' + lbl + i + '</div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+
+function voterStateItems(id, voter, step) {
+  const items = [];
+  const push = (key, val, changed) => items.push({ key, val, changed });
+  push('term', voter.term || '-', isVoterChanged(step, id, 'term'));
+  if (voter.votedFor && voter.votedFor !== '-') {
+    push('votedFor', voter.votedFor, isVoterChanged(step, id, 'votedFor'));
+  } else if (isVoterChanged(step, id, 'votedFor')) {
+    push('votedFor', '-', true);
+  }
+  if ((voter.committed || 0) > 0 || isVoterChanged(step, id, 'committed')) {
+    push('committed', voter.committed || 0, isVoterChanged(step, id, 'committed'));
+  }
+  if (voter.witnessEngaged) {
+    push('witnessEngaged', 'yes', isVoterChanged(step, id, 'witnessEngaged'));
+  } else if (isVoterChanged(step, id, 'witnessEngaged')) {
+    push('witnessEngaged', 'no', true);
+  }
+  return items;
+}
+
+function witnessStateItems(witness, step) {
+  const items = [];
+  const initial = currentStep === 0;
+  const voteTermChanged = !initial && step.witness && step.witness.vote && step.witness.vote.term !== undefined;
+  const voteForChanged = !initial && step.witness && step.witness.vote && step.witness.vote.votedFor !== undefined;
+  const hiChanged = !initial && step.witness && step.witness.acked && step.witness.acked.hi !== undefined;
+  const engagedChanged = !initial && step.witness && step.witness.acked && step.witness.acked.engaged !== undefined;
+
+  items.push({
+    key: 'voteTerm', val: witness.vote.term || '-', changed: !!voteTermChanged,
+  });
+  items.push({
+    key: 'votedFor', val: witness.vote.votedFor || '-', changed: !!voteForChanged,
+  });
+  if (witness.acked.hi) {
+    items.push({
+      key: 'hi', val: witness.acked.hi.term + witness.acked.hi.index, changed: !!hiChanged,
+    });
+  }
+  items.push({
+    key: 'engaged', val: witness.acked.engaged ? 'yes' : 'no', changed: !!engagedChanged,
+  });
+  return items;
+}
+
+function fmtStateItems(items) {
+  return items.map(it => {
+    const cls = 'item' + (it.changed ? ' changed' : '');
+    return '<span class="' + cls + '"><span class="key">' + escHtml(it.key) + '=</span>' +
+      '<span class="val">' + escHtml(it.val) + '</span></span>';
+  }).join('<span class="sep">,</span>');
+}
+
+function isVoterChanged(step, id, field) {
+  if (currentStep === 0) return false; 
+  return step.voters && step.voters[id] && step.voters[id][field] !== undefined;
+}
+
+function renderVoterRow(id, voter, step, prevVoter, allVoters) {
+  let cls = 'row';
+  if (voter.down) cls += ' down';
+  if (voter.leader) {
+    const stale = Object.values(allVoters).some(
+      v => v !== voter && termOrd(v.term) > termOrd(voter.term)
+    );
+    cls += stale ? ' stale-leader' : ' leader';
+  }
+  let html = '<div class="' + cls + '" data-id="' + id + '">';
+  html += '<div class="label">' + escHtml(id) + '</div>';
+  html += renderVoterLog(voter.log, prevVoter ? prevVoter.log : null, currentStep === 0);
+  html += '<div class="state">' + fmtStateItems(voterStateItems(id, voter, step)) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderWitnessRow(witness, step, prevWitness) {
+  let cls = 'row';
+  if (witness.down) cls += ' down';
+  let html = '<div class="' + cls + '" data-id="w">';
+  html += '<div class="label witness">w</div>';
+  html += renderWitnessLog(witness, prevWitness, currentStep === 0);
+  html += '<div class="state">' + fmtStateItems(witnessStateItems(witness, step)) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+function render() {
+  const step = TRACE.steps[currentStep];
+  const state = computeState(currentStep);
+  const prevState = currentStep > 0 ? computeState(currentStep - 1) : null;
+
+  let html = '';
+
+  
+  html += '<div class="nav">';
+  html += '<button onclick="go(-1)" id="btn-prev">&larr;</button>';
+  html += '<span class="step-info">Step ' + (currentStep + 1) + '/' + TRACE.steps.length + '</span>';
+  html += '<button onclick="go(1)" id="btn-next">&rarr;</button>';
+  html += '<span class="command">' + escHtml(step.command) + '</span>';
+  html += '</div>';
+
+  
+  html += '<div class="board">';
+  const voterIds = Object.keys(state.voters).sort();
+  for (const id of voterIds) {
+    const prev = prevState && prevState.voters[id];
+    html += renderVoterRow(id, state.voters[id], step, prev, state.voters);
+  }
+  if (state.witness) {
+    html += renderWitnessRow(state.witness, step, prevState && prevState.witness);
+  }
+  html += '</div>';
+
+  
+  if (step.comment) {
+    html += '<div class="comment">' + escHtml(step.comment) + '</div>';
+  }
+
+  
+  html += '<div class="output-label">input</div>';
+  let inputText = step.command;
+  if (step.input) inputText += '\n' + step.input;
+  html += '<div class="output">' + escHtml(inputText) + '</div>';
+
+  
+  html += '<div class="output-label">output</div>';
+  html += '<div class="output">' + escHtml(step.output) + '</div>';
+
+  document.getElementById('app').innerHTML = html;
+  document.getElementById('btn-prev').disabled = currentStep === 0;
+  document.getElementById('btn-next').disabled = currentStep === TRACE.steps.length - 1;
+}
+
+function go(delta) {
+  const next = currentStep + delta;
+  if (next >= 0 && next < TRACE.steps.length) {
+    currentStep = next;
+    location.hash = currentStep;
+    render();
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') go(-1);
+  if (e.key === 'ArrowRight') go(1);
+});
+
+
+const hashStep = parseInt(location.hash.slice(1), 10);
+if (hashStep >= 0 && hashStep < TRACE.steps.length) currentStep = hashStep;
+render();
+</script>
+</body>
+</html>

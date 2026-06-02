@@ -1,0 +1,199 @@
+# The tricky case: voting while engaged. The witness must not grant a vote
+# that could allow a candidate to become leader without the entries the
+# witness helped commit.
+
+# Set up: engaged in term a at a5.
+set
+term=a voted-for=v1 hi=a5 engaged=true
+----
+w:  vote=(a, v1) acked=(a5, engaged)
+
+# Candidate at term b with log ending at a5: rejected.
+# The candidate's last log term (a) is not ahead of our vote term (a), so
+# we can't prove a proper election happened without us. The old leader may
+# have relied on us to commit entries beyond a5.
+vote from=v2 term=b lm=a5
+----
+w:
+  - engaged: effectiveHi inflated to a∞
+  - rejected vote for v2: log not up to date (effectiveHi a∞ > lm a5)
+  no
+w:  vote=(a, v1) acked=(a5, engaged)
+
+# Candidate at term b with log ending at a100: still rejected.
+# Even though the candidate has more entries, they're all from term a.
+# The old leader could have committed with our help up to any index.
+vote from=v2 term=b lm=a100
+----
+w:
+  - engaged: effectiveHi inflated to a∞
+  - rejected vote for v2: log not up to date (effectiveHi a∞ > lm a100)
+  no
+w:  vote=(a, v1) acked=(a5, engaged)
+
+# Candidate at term b with log ending at b1: accepted!
+# The candidate has an entry from term b > our vote term a. This proves
+# a proper leader election happened for some term > a without the witness,
+# meaning a traditional quorum elected that leader, and the candidate's
+# log is up to date with anything committed.
+vote from=v2 term=b lm=b1
+----
+w:
+  - engaged: effectiveHi inflated to a∞
+  - granted vote for v2 at term b, hi carried as a∞
+  yes (term a->b, voted v2, hi a5->a∞, released)
+w:  vote=(b, v2) acked=(a∞, released)
+
+# Same scenario but candidate is from a much higher term.
+set
+term=a voted-for=v1 hi=a5 engaged=true
+----
+w:  vote=(a, v1) acked=(a5, engaged)
+
+# Candidate from term e with log at c3: accepted.
+# Log term c > vote term a proves disengagement is safe.
+vote from=v3 term=e lm=c3
+----
+w:
+  - engaged: effectiveHi inflated to a∞
+  - granted vote for v3 at term e, hi carried as a∞
+  yes (term a->e, voted v3, hi a5->a∞, released)
+w:  vote=(e, v3) acked=(a∞, released)
+
+# Engagement was released (not engaged), candidate log behind hi: rejected
+# on log-up-to-date check, not engagement.
+set
+term=a voted-for=v1 hi=a5 engaged=false
+----
+w:  vote=(a, v1) acked=(a5, released)
+
+vote from=v2 term=b lm=a4
+----
+w:
+  - rejected vote for v2: log not up to date (effectiveHi a5 > lm a4)
+  no
+w:  vote=(a, v1) acked=(a5, released)
+
+# Same but candidate log at a5: accepted (log is up to date with hi).
+vote from=v2 term=b lm=a5
+----
+w:
+  - granted vote for v2 at term b, hi carried as a5
+  yes (term a->b, voted v2)
+w:  vote=(b, v2) acked=(a5, released)
+
+# Witness learns of term b through an engage, then the leader requests a
+# vote in that same term. The witness hasn't voted for anyone in term b yet,
+# so this should succeed.
+set
+term=a voted-for=v1
+----
+w:  vote=(a, v1) acked=none
+
+engage from=v1 term=b lm=b1
+----
+w:
+  - term advance a -> b (leader v1)
+  - engaged at b1
+  ok (term a->b, hi 0->b1, engaged)
+w:  vote=(b, v1) acked=(b1, engaged)
+
+# Leader now asks for our vote in term b. We haven't voted yet in this term,
+# so this is granted, preserving the existing acked state.
+vote from=v1 term=b lm=b1
+----
+w:
+  - granted vote for v1 at term b (same-term)
+  yes
+w:  vote=(b, v1) acked=(b1, engaged)
+
+# Engage populates VotedFor when it was previously unset. Even when the
+# witness learned about the term through some other path (e.g. maybeBumpTerm
+# from a different message), an engage from a leader records the leader's
+# identity.
+set
+term=b
+----
+w:  vote=(b, -) acked=none
+
+engage from=v1 term=b lm=b5
+----
+w:
+  - recorded leader v1 for term b
+  - engaged at b5
+  ok (voted v1, hi 0->b5, engaged)
+w:  vote=(b, v1) acked=(b5, engaged)
+
+# Engaged leader re-campaigns at a higher term. Even though the witness is
+# still engaged and the candidate's last log term (b) is not strictly ahead
+# of the engagement term (b), the candidate IS the leader we supported, so
+# the witness grants the vote. The leader's log is by definition at least
+# as up-to-date as what the witness helped commit.
+# Note that acked becomes b∞: the witness is no longer engaged, but preserves
+# a high water mark reflecting that it may have helped commit anything in term b.
+# It has slightly better information here - we just learned the old leader's
+# actual last log index. We don't exploit this case since there's no benefit
+# and the vote code would be more complex; a new engagement can be granted
+# for term c only anyway at this point.
+vote from=v1 term=c lm=b5
+----
+w:
+  - engaged: effectiveHi inflated to b∞
+  - engaged leader v1 re-campaigning: skipping log check
+  - granted vote for v1 at term c, hi carried as b∞
+  yes (term b->c, hi b5->b∞, released)
+w:  vote=(c, v1) acked=(b∞, released)
+
+# Contrast: a *different* candidate at the same term is still rejected.
+set
+term=b voted-for=v1 hi=b5 engaged=true
+----
+w:  vote=(b, v1) acked=(b5, engaged)
+
+vote from=v2 term=c lm=b5
+----
+w:
+  - engaged: effectiveHi inflated to b∞
+  - rejected vote for v2: log not up to date (effectiveHi b∞ > lm b5)
+  no
+w:  vote=(b, v1) acked=(b5, engaged)
+
+# Engagement unwound by a competing candidate whose log proves a post-engagement
+# election (log term c > engagement term b). The witness votes for v2, and the
+# engagement winds down to b∞.
+set
+term=b voted-for=v1 hi=b5 engaged=true
+----
+w:  vote=(b, v1) acked=(b5, engaged)
+
+vote from=v2 term=c lm=c3
+----
+w:
+  - engaged: effectiveHi inflated to b∞
+  - granted vote for v2 at term c, hi carried as b∞
+  yes (term b->c, voted v2, hi b5->b∞, released)
+w:  vote=(c, v2) acked=(b∞, released)
+
+# The old leader tries to campaign. Its log is still at term b, which can't
+# satisfy b∞. Without prevote, this is a real availability loss — the old leader
+# can't win despite its log being authoritative for term b, which it would have
+# been able to had there not be the failed campaign attempt by the other candidate
+# which effectively disabled the "exception" we have for re-electing the old
+# leader. This could be improved, but pre-vote exists, so not worth it.
+vote from=v1 term=d lm=b10
+----
+w:
+  - rejected vote for v1: log not up to date (effectiveHi b∞ > lm b10)
+  no
+w:  vote=(c, v2) acked=(b∞, released)
+
+# A candidate with entries from term > b can satisfy b∞. The b∞ high water
+# mark is carried forward — Hi is monotonically non-decreasing. This is safe
+# because any future engagement must be at [newTerm, X] or later, which is
+# strictly up to date with any older promises we made.
+vote from=v1 term=d lm=c1
+----
+w:
+  - granted vote for v1 at term d, hi carried as b∞
+  yes (term c->d, voted v1)
+w:  vote=(d, v1) acked=(b∞, released)

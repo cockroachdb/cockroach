@@ -1,0 +1,44 @@
+# Vote rejection due to diverged logs. Two voters, no witness.
+#
+# v1 and v2 start with diverged logs: v1 has an extra entry from term b,
+# while v2 has entries from a later term c. v2's log is more up-to-date
+# (higher term), so v1 cannot win an election.
+
+setup
+v1: [a1 b2]
+v2: [a1 c2]
+----
+v1: [a1 b2] term=b
+v2: [a1 c2] term=c
+
+# v1 campaigns. v2 rejects: its log term (c) beats v1's (b).
+campaign v1
+----
+v1 campaigns at term c
+v1: yes (self)
+v2:
+  - rejected vote for v1: log not up to date (c2 > b2)
+  no, log not up to date (c2 > b2)
+outcome: lost
+
+# v2 campaigns. v1 grants: v2's log term (c) is ahead.
+campaign v2
+----
+v2 campaigns at term d
+v2: yes (self)
+v1:
+  - term advance c -> d
+  - granted vote for v2 at term d
+  yes (term c->d, voted v2)
+outcome: won
+
+# v2 replicates to v1. v1's divergent entry b2 is replaced by c2, plus the
+# new entries from v2's leadership term.
+append v2
+----
+v2 appends through d3
+v1:
+  - accepted append through d3 (ok, replaced 1 entries)
+  ok, replaced 1 entries (log=[a1 | c2 d3])
+v1: [a1 c2 d3] term=d
+v2: [a1 c2 d3] term=d committed=d3 leader
