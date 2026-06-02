@@ -1997,32 +1997,21 @@ func TestChangefeedLaggingRangesMetrics(t *testing.T) {
 		numRanges := 10
 		numRangesToSkip := int64(4)
 		var stopSkip atomic.Bool
-		// `shouldSkip` continuously skips checkpoints for the first `numRangesToSkip` ranges it sees.
-		// skipping is disabled by setting `stopSkip` to true.
-		shouldSkip := func(event *kvpb.RangeFeedEvent) bool {
+		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+
+		knobs.FeedKnobs.ShouldSkipCheckpoint = func(checkpoint *kvpb.RangeFeedCheckpoint) bool {
 			if stopSkip.Load() {
 				return false
 			}
-			switch event.GetValue().(type) {
-			case *kvpb.RangeFeedCheckpoint:
-				sp := event.Checkpoint.Span
-				skipMu.Lock()
-				defer skipMu.Unlock()
-				if _, ok := skippedRanges[sp.String()]; ok || int64(len(skippedRanges)) < numRangesToSkip {
-					skippedRanges[sp.String()] = struct{}{}
-					return true
-				}
+			skipMu.Lock()
+			defer skipMu.Unlock()
+			sp := checkpoint.Span
+			if _, ok := skippedRanges[sp.String()]; ok || int64(len(skippedRanges)) < numRangesToSkip {
+				skippedRanges[sp.String()] = struct{}{}
+				return true
 			}
 			return false
 		}
-
-		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
-
-		knobs.FeedKnobs.RangefeedOptions = append(knobs.FeedKnobs.RangefeedOptions, kvcoord.TestingWithOnRangefeedEvent(
-			func(ctx context.Context, s roachpb.Span, _ int64, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
-				return shouldSkip(event), nil
-			}),
-		)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		sli1, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics("t1")

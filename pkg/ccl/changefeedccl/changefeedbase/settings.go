@@ -236,13 +236,17 @@ var ProtectTimestampLag = settings.RegisterDurationSetting(
 	10*time.Minute,
 	settings.PositiveDuration)
 
-// BulkDelivery enables bulk delivery of rangefeed events, which can improve performance during catchup scans.
+// BulkDelivery was a temporary opt-out introduced while we evaluated the
+// performance impact of bulk delivery of rangefeed events during catchup scans.
+// The new rangefeed client always delivers events in bulk, so this is no
+// longer a supported option.
 var BulkDelivery = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"changefeed.bulk_delivery.enabled",
 	"if true, rangefeed events are delivered in bulk during catchup scans; "+
 		"if false, rangefeed events are delivered individually",
-	metamorphic.ConstantWithTestBool("changefeed.bulk_delivery.enabled", true))
+	metamorphic.ConstantWithTestBool("changefeed.bulk_delivery.enabled", true),
+	settings.Retired)
 
 // MaxProtectedTimestampAge controls the frequency of protected timestamp record updates
 var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
