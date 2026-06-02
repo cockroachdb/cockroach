@@ -2235,7 +2235,7 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`,
 		})
 		defer func() {
 			closeFeed(t, testFeed)
-			_ = g.Wait()
+			t.Logf("g.Wait error: %v", g.Wait())
 		}()
 
 		// Ensure initial backfill completes
