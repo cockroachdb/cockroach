@@ -1753,22 +1753,36 @@ FROM defaults_parsed
 	// same-named functions in different schemas with disjoint argument
 	// lists do not shadow each other.
 	// https://www.postgresql.org/docs/current/functions-info.html
+	//
+	// The shadow check must match p2 by name against a scalar value, not by
+	// correlating with an outer pg_proc relation (e.g. p2.proname = p.proname).
+	// A correlated equality gets decorrelated into a hash join that fully
+	// populates pg_proc on every call; comparing p2.proname against a scalar
+	// instead lets the optimizer drive a lookup join into
+	// pg_proc@pg_proc_proname_idx. The target row's proname/proargtypes/
+	// pronamespace are read once into the `target` CTE via the oid index. The
+	// CASE guard makes the function return NULL (not true) for an OID that does
+	// not exist, since a CTE-only query would otherwise always return one row.
 	"pg_function_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Body: `SELECT (SELECT n2.nspname
-                       FROM pg_catalog.pg_proc p2
-                       JOIN pg_catalog.pg_namespace n2 ON p2.pronamespace = n2.oid
-                       WHERE p2.proname = p.proname
-                         AND p2.proargtypes = p.proargtypes
-                         AND n2.nspname = ANY current_schemas(true)
-                       ORDER BY array_position(current_schemas(true), n2.nspname)
-                       LIMIT 1) IS NOT DISTINCT FROM
-                    (SELECT n.nspname FROM pg_catalog.pg_namespace n WHERE n.oid = p.pronamespace)
-             FROM pg_catalog.pg_proc p
-             WHERE p.oid = $1
-             LIMIT 1`,
+			Body: `WITH target AS (
+               SELECT proname, proargtypes, pronamespace
+               FROM pg_catalog.pg_proc WHERE oid = $1
+             )
+             SELECT CASE WHEN (SELECT proname FROM target) IS NOT NULL THEN
+                 (SELECT n2.nspname
+                  FROM pg_catalog.pg_proc p2
+                  JOIN pg_catalog.pg_namespace n2 ON p2.pronamespace = n2.oid
+                  WHERE p2.proname = (SELECT proname FROM target)
+                    AND p2.proargtypes = (SELECT proargtypes FROM target)
+                    AND n2.nspname = ANY current_schemas(true)
+                  ORDER BY array_position(current_schemas(true), n2.nspname)
+                  LIMIT 1) IS NOT DISTINCT FROM
+                 (SELECT n.nspname FROM pg_catalog.pg_namespace n
+                  WHERE n.oid = (SELECT pronamespace FROM target))
+             END`,
 			CalledOnNullInput: true,
 			Info:              "Returns whether the function with the given OID is visible in the search path (its schema is on the search path and no function with the same name and signature shadows it from an earlier schema).",
 			Volatility:        volatility.Stable,

@@ -3786,6 +3786,81 @@ https://www.postgresql.org/docs/16/catalog-pg-proc.html`,
 				}
 			},
 		},
+		{
+			// Index on proname. This reproduces exactly the rows that the full
+			// populate above would emit for a single proname value, so that
+			// correlated lookups by name — most notably the shadow check in
+			// pg_function_is_visible's `WHERE p2.proname = p.proname` — become a
+			// single-key index scan instead of a full populate of pg_proc.
+			incomplete: false,
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, dbContext catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error) (bool, error) {
+				h := makeOidHasher()
+				name := string(tree.MustBeDString(unwrappedConstraint))
+				var matched bool
+
+				// Builtins. The proname column always holds the bare name, but a
+				// builtin's registry key may be schema-qualified (e.g.
+				// "crdb_internal.foo"). addPgProcBuiltinRow strips the prefix to
+				// derive proname and the namespace, so to find every builtin whose
+				// proname equals name we must probe all three schemas it knows how
+				// to attribute. The uppercase-name and pg_dump_compatibility skips
+				// mirror the filters the full populate applies.
+				var first rune
+				for _, c := range name {
+					first = c
+					break
+				}
+				if !unicode.IsUpper(first) {
+					pgDumpCompat := sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility)
+					for _, key := range []string{
+						name,
+						catconstants.CRDBInternalSchemaName + "." + name,
+						catconstants.InformationSchemaName + "." + name,
+					} {
+						if pgDumpCompat &&
+							(strings.HasPrefix(key, catconstants.CRDBInternalSchemaName+".") ||
+								strings.HasPrefix(key, catconstants.InformationSchemaName+".")) {
+							continue
+						}
+						if _, overloads := builtinsregistry.GetBuiltinProperties(key); len(overloads) == 0 {
+							continue
+						}
+						if err := addPgProcBuiltinRow(key, addRow); err != nil {
+							return false, err
+						}
+						matched = true
+					}
+				}
+
+				// User-defined functions named name, looked up per schema in the
+				// current database.
+				if err := forEachSchema(ctx, p, dbContext, true /* requiresPrivileges */, false, /* includeMetadata */
+					func(ctx context.Context, scDesc catalog.SchemaDescriptor) error {
+						fn, found := scDesc.GetFunction(name)
+						if !found {
+							return nil
+						}
+						for _, sig := range fn.Signatures {
+							fnDesc, err := descs.GetCatalogDescriptorGetter(
+								ctx, p.Descriptors(), p.Txn(), p.EvalContext().Settings,
+							).WithoutNonPublic().Get().Function(ctx, sig.ID)
+							if err != nil {
+								return err
+							}
+							if err := addPgProcUDFRow(h, scDesc, fnDesc, addRow); err != nil {
+								return err
+							}
+							matched = true
+						}
+						return nil
+					}); err != nil {
+					return false, err
+				}
+
+				return matched, nil
+			},
+		},
 	},
 }
 

@@ -646,7 +646,8 @@ CREATE TABLE pg_catalog.pg_proc (
 	prosqlbody STRING,
 	proconfig STRING[],
 	proacl STRING[],
-	INDEX(oid)
+	INDEX(oid),
+	INDEX(proname)
 )`
 
 // PGCatalogRange describes the schema of the pg_catalog.pg_range table.

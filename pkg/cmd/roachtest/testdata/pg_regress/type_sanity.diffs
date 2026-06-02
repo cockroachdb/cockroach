@@ -807,9 +807,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
 +  440301044 | pg_namespace_oid_idx
 + 4215795806 | pg_policy_polrelid_idx
 +  225076140 | pg_proc_oid_idx
++  225076141 | pg_proc_proname_idx
 + 2989383775 | pg_timezone_names_name_idx
 +  818702295 | pg_type_oid_idx
-+(30 rows)
++(31 rows)
  
  -- Cross-check against pg_type entry
  -- NOTE: we allow attstorage to be 'plain' even when typstorage is not;
