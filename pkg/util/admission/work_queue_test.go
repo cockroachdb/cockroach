@@ -612,16 +612,6 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				}
 				return ""
 
-			case "refill-burst-bucket-for-group":
-				var group int
-				var toAdd int64
-				var capacity int64
-				d.ScanArgs(t, "group", &group)
-				d.ScanArgs(t, "to-add", &toAdd)
-				d.ScanArgs(t, "capacity", &capacity)
-				q.refillBurstBucketForGroup(rgGroupKey(0, uint64(group)), toAdd, capacity)
-				return ""
-
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}

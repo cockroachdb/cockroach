@@ -1498,25 +1498,6 @@ func (q *WorkQueue) refillGroupBurstBuckets(rate, capacity float64) {
 	}
 }
 
-// refillBurstBucketForGroup refills a single resource group's burst
-// bucket. Test-only: production refills go through
-// refillGroupBurstBuckets, which iterates all groups under one q.mu
-// critical section. This entry point exists for datadriven tests that
-// need to drive one group's bucket to a specific (toAdd, capacity)
-// without running the full filler.
-//
-// If the refill flips the group's burst qualification, its groupHeap
-// position is fixed.
-func (q *WorkQueue) refillBurstBucketForGroup(gKey groupKey, toAdd int64, capacity int64) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	group, ok := q.mu.groups[gKey]
-	if !ok {
-		return
-	}
-	q.refillBurstBucketLocked(group, toAdd, capacity)
-}
-
 // refillBurstBucketLocked refills a group's burst bucket and fixes its
 // heap position if the burst qualification changed. q.mu must be held.
 func (q *WorkQueue) refillBurstBucketLocked(group *groupInfo, toAdd int64, capacity int64) {
