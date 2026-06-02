@@ -215,6 +215,66 @@ func writeDescRefs(
 	return jobs.InfoStorageForJob(txn, jobID).Write(ctx, infoKey, bytes)
 }
 
+// descRefsFromTableDescs extracts (ID, Version) tuples from a table-descriptor
+// slice for persisting via writeDescRefs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromTableDescs(descs []*descpb.TableDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// descRefsFromTypeDescs is the type-descriptor analog of
+// descRefsFromTableDescs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromTypeDescs(descs []*descpb.TypeDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// descRefsFromSchemaDescs is the schema-descriptor analog of
+// descRefsFromTableDescs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromSchemaDescs(descs []*descpb.SchemaDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// descRefsFromDatabaseDescs is the database-descriptor analog of
+// descRefsFromTableDescs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromDatabaseDescs(descs []*descpb.DatabaseDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// descRefsFromFunctionDescs is the function-descriptor analog of
+// descRefsFromTableDescs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromFunctionDescs(descs []*descpb.FunctionDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
 // tableDescRefs returns (ID, Version) tuples for tables this restore job is
 // materializing. Prefers the dedicated info-key row; falls back to the legacy
 // details.TableDescs slice for jobs created before info-key writes existed.
@@ -2266,6 +2326,36 @@ func createImportingDescriptors(
 			details.FunctionDescs[i] = fn.FuncDesc()
 		}
 
+		// Dual-write each descriptor type's (ID, Version) tuples to a
+		// dedicated system.job_info row alongside the legacy slice
+		// population above. The info-key rows are the long-term source of
+		// truth — later phases of the restore fetch descriptor bodies from
+		// KV by ID rather than relying on the full payloads on
+		// RestoreDetails — but the legacy slices remain populated here for
+		// mixed-version compatibility. A later commit gates the legacy
+		// writes off once the cluster has crossed the corresponding
+		// cluster version.
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTableDescRefsKey,
+			descRefsFromTableDescs(details.TableDescs)); err != nil {
+			return err
+		}
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTypeDescRefsKey,
+			descRefsFromTypeDescs(details.TypeDescs)); err != nil {
+			return err
+		}
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreSchemaDescRefsKey,
+			descRefsFromSchemaDescs(details.SchemaDescs)); err != nil {
+			return err
+		}
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreDatabaseDescRefsKey,
+			descRefsFromDatabaseDescs(details.DatabaseDescs)); err != nil {
+			return err
+		}
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreFunctionDescRefsKey,
+			descRefsFromFunctionDescs(details.FunctionDescs)); err != nil {
+			return err
+		}
+
 		// Update the job once all descs have been prepared for ingestion.
 		//
 		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
@@ -3504,6 +3594,31 @@ func (r *restoreResumer) publishDescriptors(
 	details.FunctionDescs = newFunctions
 	if details.OnlineImpl() {
 		details.PostDownloadTableAutoStatsSettings = tableAutoStatsSettings
+	}
+	// Dual-write the published (ID, Version) tuples to the dedicated
+	// info-key rows alongside the legacy slice updates above. See the
+	// matching block in createImportingDescriptors for the rationale; a
+	// later commit gates the legacy writes off once the cluster has
+	// crossed the corresponding cluster version.
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTableDescRefsKey,
+		descRefsFromTableDescs(newTables)); err != nil {
+		return err
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTypeDescRefsKey,
+		descRefsFromTypeDescs(newTypes)); err != nil {
+		return err
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreSchemaDescRefsKey,
+		descRefsFromSchemaDescs(newSchemas)); err != nil {
+		return err
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreDatabaseDescRefsKey,
+		descRefsFromDatabaseDescs(newDBs)); err != nil {
+		return err
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreFunctionDescRefsKey,
+		descRefsFromFunctionDescs(newFunctions)); err != nil {
+		return err
 	}
 	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
 	if err := r.job.DeprecatedWithTxn(txn).SetDetails(ctx, details); err != nil {
