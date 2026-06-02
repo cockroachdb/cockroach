@@ -1,9 +1,13 @@
 /* setup */
 CREATE DOMAIN salmon AS INT DEFAULT 0;
+CREATE TABLE t (c salmon);
+CREATE VIEW v AS SELECT c FROM t;
 ----
 ...
 +object {100 101 salmon} -> 104
 +object {100 101 _salmon} -> 105
++object {100 101 t} -> 106
++object {100 101 v} -> 107
 
 /* test */
 ALTER DOMAIN salmon RENAME TO trout;
@@ -34,10 +38,10 @@ upsert descriptor #104
      parentId: 100
      parentSchemaId: 101
   ...
-         withGrantOption: "2"
-       version: 3
-  -  version: "1"
-  +  version: "2"
+     - 106
+     - 107
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #105
   ...
      kind: ALIAS
@@ -47,10 +51,10 @@ upsert descriptor #105
      parentId: 100
      parentSchemaId: 101
   ...
-     referencingDescriptorIds:
      - 104
-  -  version: "1"
-  +  version: "2"
+     - 106
+  -  version: "2"
+  +  version: "3"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
@@ -70,10 +74,10 @@ upsert descriptor #104
      parentId: 100
      parentSchemaId: 101
   ...
-         withGrantOption: "2"
-       version: 3
-  -  version: "1"
-  +  version: "2"
+     - 106
+     - 107
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #105
   ...
      kind: ALIAS
@@ -83,10 +87,10 @@ upsert descriptor #105
      parentId: 100
      parentSchemaId: 101
   ...
-     referencingDescriptorIds:
      - 104
-  -  version: "1"
-  +  version: "2"
+     - 106
+  -  version: "2"
+  +  version: "3"
 persist all catalog changes to storage
 # end PreCommitPhase
 commit transaction #1

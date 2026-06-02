@@ -125,7 +125,7 @@ func (lu *ldapUtil) ListGroups(
 	return ldapGroupsDN, nil
 }
 
-// ILDAPUtil is an interface for the `ldapauthccl` library to wrap various LDAP
+// ILDAPUtil is an interface for the `ldapauth` library to wrap various LDAP
 // functionalities exposed by `go-ldap` library as part of CRDB modules for
 // authN and authZ.
 type ILDAPUtil interface {

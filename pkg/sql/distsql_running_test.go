@@ -1114,7 +1114,7 @@ func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
 
 	// Now sanity check the contents of the stmt bundle that was collected when
 	// retry-as-local mechanism kicked in.
-	baseFiles := `env.sql opt-v.txt opt-vv.txt opt.txt plan.txt schema.sql statement.sql stats-test.public.foo.sql trace-jaeger.json trace.json trace.txt`
+	baseFiles := `descriptors.json env.sql opt-v.txt opt-vv.txt opt.txt plan.txt schema.sql schema_changes.txt statement.sql stats-test.public.foo.sql trace-jaeger.json trace.json trace.txt`
 	distributedRunFiles := `distsql-1-main-query.html vec-1-main-query-v.txt vec-1-main-query.txt`
 	localRunFiles := `distsql-2-main-query.html vec-2-main-query-v.txt vec-2-main-query.txt`
 	checkBundle(

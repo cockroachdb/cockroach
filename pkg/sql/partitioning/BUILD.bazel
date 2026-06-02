@@ -37,7 +37,6 @@ go_test(
     ],
     deps = [
         "//pkg/base",
-        "//pkg/ccl/testutilsccl",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/jobs",
@@ -61,6 +60,7 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltestutils",
         "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/testutils",

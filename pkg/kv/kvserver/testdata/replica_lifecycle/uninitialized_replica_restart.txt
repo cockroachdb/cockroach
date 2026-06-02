@@ -24,7 +24,7 @@ range desc: r1:{a-d} [(n1,s1):5, (n2,s2):6, (n3,s3):7, next=8, gen=0]
 
 restart
 ----
-ok
+skipping already-applied WAG node 1: [(r1/5:0,EventCreate)]
 
 # After restart, the uninitialized replica for r1 is not loaded.
 print-range-state
@@ -44,7 +44,7 @@ range desc: r1:{a-d} [(n1,s1):5, (n2,s2):6, (n3,s3):7, next=8, gen=0]
 
 restart
 ----
-ok
+skipping already-applied WAG node 1: [(r1/5:0,EventCreate)]
 
 create-replica range-id=1 replica-id=10
 ----

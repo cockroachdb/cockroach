@@ -57,6 +57,7 @@ go_test(
         "//pkg/ccl",
         "//pkg/ccl/changefeedccl/cdctest",
         "//pkg/crosscluster/ldrrandgen",
+        "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

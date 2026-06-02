@@ -528,34 +528,37 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		} else if desc.Domain.BaseType == nil {
 			vea.Report(errors.AssertionFailedf("DOMAIN type desc has nil base type"))
 		} else {
-			if desc.Domain.NotNull {
+			hasNotNull := desc.Domain.NotNullState != descpb.TypeDescriptor_Domain_NONE
+			if hasNotNull {
 				if desc.Domain.NotNullConstraintName == "" {
 					vea.Report(errors.AssertionFailedf(
-						"DOMAIN type desc has NotNull but no NOT NULL constraint name",
+						"DOMAIN type desc has NotNullState %s but no NOT NULL constraint name",
+						desc.Domain.NotNullState,
 					))
 				}
 				if desc.Domain.NotNullConstraintID == 0 {
 					vea.Report(errors.AssertionFailedf(
-						"DOMAIN type desc has NotNull but no NOT NULL constraint ID",
+						"DOMAIN type desc has NotNullState %s but no NOT NULL constraint ID",
+						desc.Domain.NotNullState,
 					))
 				}
 			} else {
 				if desc.Domain.NotNullConstraintName != "" {
 					vea.Report(errors.AssertionFailedf(
-						"DOMAIN type desc has NOT NULL constraint name %q but NotNull is false",
+						"DOMAIN type desc has NOT NULL constraint name %q but NotNullState is NONE",
 						desc.Domain.NotNullConstraintName,
 					))
 				}
 				if desc.Domain.NotNullConstraintID != 0 {
 					vea.Report(errors.AssertionFailedf(
-						"DOMAIN type desc has NOT NULL constraint ID %d but NotNull is false",
+						"DOMAIN type desc has NOT NULL constraint ID %d but NotNullState is NONE",
 						desc.Domain.NotNullConstraintID,
 					))
 				}
 			}
 			constraintNames := make(map[string]struct{})
 			constraintIDs := make(map[descpb.ConstraintID]struct{})
-			if desc.Domain.NotNull {
+			if hasNotNull {
 				constraintNames[desc.Domain.NotNullConstraintName] = struct{}{}
 				constraintIDs[desc.Domain.NotNullConstraintID] = struct{}{}
 			}
@@ -1169,7 +1172,12 @@ func (desc *immutable) GetBaseType() *types.T {
 
 // IsNotNull implements the catalog.DomainTypeDescriptor interface.
 func (desc *immutable) IsNotNull() bool {
-	return desc.Domain.NotNull
+	return desc.Domain.NotNullState != descpb.TypeDescriptor_Domain_NONE
+}
+
+// IsNotNullValidated implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) IsNotNullValidated() bool {
+	return desc.Domain.NotNullState == descpb.TypeDescriptor_Domain_ENFORCING
 }
 
 // GetNotNullConstraintName implements the catalog.DomainTypeDescriptor interface.
@@ -1180,6 +1188,11 @@ func (desc *immutable) GetNotNullConstraintName() string {
 // GetNotNullConstraintID implements the catalog.DomainTypeDescriptor interface.
 func (desc *immutable) GetNotNullConstraintID() descpb.ConstraintID {
 	return desc.Domain.NotNullConstraintID
+}
+
+// GetNextConstraintID implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetNextConstraintID() descpb.ConstraintID {
+	return desc.Domain.NextConstraintID
 }
 
 // GetDefaultExpr implements the catalog.DomainTypeDescriptor interface.

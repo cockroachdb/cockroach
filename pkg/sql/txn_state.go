@@ -196,6 +196,9 @@ const (
 //
 // qualityOfService: If txn is nil, the QoSLevel/WorkPriority to assign the new
 // transaction for use in admission queues.
+//
+// resourceGroupID: If txn is nil, the resource group id to bind the new
+// transaction to for admission control. Zero means unbound.
 func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
 	txnType txnType,
@@ -206,6 +209,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	txn *kv.Txn,
 	tranCtx transitionCtx,
 	qualityOfService sessiondatapb.QoSLevel,
+	resourceGroupID uint64,
 	isoLevel isolation.Level,
 	omitInRangefeeds bool,
 	bufferedWritesEnabled bool,
@@ -260,6 +264,11 @@ func (ts *txnState) resetForNewSQLTxn(
 		if txn == nil {
 			ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero, qualityOfService)
 			ts.mu.txn.SetDebugName(opName)
+			// Bind the txn to the session's resource group, if any. Like
+			// qualityOfService, this is captured once at txn creation and is
+			// stable for the life of the txn; a zero id leaves the txn on the
+			// server's default admission routing.
+			ts.mu.txn.SetResourceGroup(resourceGroupID)
 			if omitInRangefeeds {
 				ts.mu.txn.SetOmitInRangefeeds()
 			}

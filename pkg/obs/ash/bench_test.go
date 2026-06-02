@@ -6,6 +6,7 @@
 package ash
 
 import (
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -15,16 +16,9 @@ import (
 // SetWorkState + clearWorkState cycle — the pair of calls every
 // registered goroutine makes on the ASH hot path.
 //
-// activeWorkStates is a global syncutil.Map. On high-core machines,
-// concurrent Stores from different cores cause cache-line
-// invalidations on the map's internal mutex and dirty-map pointer,
-// degrading throughput as core count grows. This benchmark
-// quantifies that degradation by varying GOMAXPROCS via -test.cpu.
-// RunParallel spawns one goroutine per core, which is the right
-// model: contention scales with cores executing simultaneously,
-// not goroutines queued in the scheduler.
-//
-// See #168289 for the sharded-map proposal to address this.
+// Use this benchmark with varying GOMAXPROCS (test.cpu). This excercises
+// the performance of concurrent access to the underlying activeWorkStates
+// data structure.
 //
 // Example:
 //
@@ -44,5 +38,49 @@ func BenchmarkSetWorkState(b *testing.B) {
 	})
 
 	// Drain retired states so subsequent benchmarks start clean.
+	reclaimRetiredWorkStates()
+}
+
+// BenchmarkSetWorkStateWithRange measures Set+Clear throughput under
+// continuous rangeWorkStates pressure, using fresh goroutines per
+// iteration to simulate CockroachDB's real access pattern: each
+// incoming BatchRequest spawns a new goroutine with a unique,
+// never-reused goroutine ID.
+//
+// Example:
+//
+//	./dev bench pkg/obs/ash -f BenchmarkSetWorkStateWithRange --test-args='-test.benchtime=5000x -test.count=10'
+func BenchmarkSetWorkStateWithRange(b *testing.B) {
+	enabled.Store(true)
+	defer enabled.Store(false)
+
+	tenantID := roachpb.MustMakeTenantID(5)
+	info := WorkloadInfo{WorkloadID: 12345}
+
+	var stop atomic.Bool
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for !stop.Load() {
+			rangeWorkStates(func(gid int64, state WorkState) bool {
+				return true
+			})
+		}
+	}()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			ch := make(chan struct{})
+			go func() {
+				clear := SetWorkState(tenantID, info, WorkCPU, "BenchmarkOp")
+				clear()
+				close(ch)
+			}()
+			<-ch
+		}
+	})
+
+	stop.Store(true)
+	<-done
 	reclaimRetiredWorkStates()
 }

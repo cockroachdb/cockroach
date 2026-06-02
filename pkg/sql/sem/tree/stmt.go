@@ -100,6 +100,7 @@ const (
 	CreateTriggerTag       = "CREATE TRIGGER"
 	CreateSchemaTag        = "CREATE SCHEMA"
 	CreateSequenceTag      = "CREATE SEQUENCE"
+	CreateTableTag         = "CREATE TABLE"
 	CreateDatabaseTag      = "CREATE DATABASE"
 	CreatePolicyTag        = "CREATE POLICY"
 	CommentOnColumnTag     = "COMMENT ON COLUMN"

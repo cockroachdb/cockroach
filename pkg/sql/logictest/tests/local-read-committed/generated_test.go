@@ -519,6 +519,13 @@ func TestLogic_crdb_internal_default_privileges(
 	runLogicTest(t, "crdb_internal_default_privileges")
 }
 
+func TestLogic_crdb_internal_tsdb_query(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "crdb_internal_tsdb_query")
+}
+
 func TestLogic_create_as(
 	t *testing.T,
 ) {
@@ -1805,6 +1812,13 @@ func TestLogic_refcursor(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "refcursor")
+}
+
+func TestLogic_references_privilege(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "references_privilege")
 }
 
 func TestLogic_rename_atomic(

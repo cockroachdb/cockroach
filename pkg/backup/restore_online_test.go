@@ -635,41 +635,45 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	})
 }
 
+// TestOnlineRestoreRetryingDownloadRequests exercises the two terminal
+// behaviors of the download phase's retry loops end to end. The transient
+// subtest verifies that a bounded run of injected sendDownloadSpan failures
+// is absorbed and the job still succeeds; the permanent subtest verifies
+// that an unrecoverable failure exhausts the retry budget and pauses the
+// job. The retry budget is controlled via the
+// backup.restore.online_download_retry_max_duration cluster setting so each
+// subtest can use a duration appropriate to its expected outcome.
 func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	AllowORDownloadBestEffortFailures(t)
 	backuptestutils.EnableFastRestoreForTest(t)
 
-	rng, seed := randutil.NewPseudoRand()
-	t.Logf("random seed: %d", seed)
-
-	const maxDownloadAttempts = 5
-	downloadRetryPolicy := &retry.Options{
-		InitialBackoff: time.Millisecond * 100,
-		MaxBackoff:     time.Second,
-		MaxRetries:     maxDownloadAttempts - 1,
-	}
-
-	alwaysFail := rng.Intn(2) == 0
-	t.Logf("always fail download requests: %t", alwaysFail)
-	totalFailures := int32(rng.Intn(maxDownloadAttempts-1) + 1)
-	var currentFailures atomic.Int32
+	var (
+		// failuresLeft is decremented on each call; while non-negative the
+		// hook injects a transient failure.
+		failuresLeft atomic.Int32
+		// failuresFired counts injected transient failures so the test can
+		// assert the retry path actually ran.
+		failuresFired atomic.Int32
+		// failPermanent, when set, makes every call inject a failure.
+		failPermanent atomic.Bool
+	)
 
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				BackupRestore: &sql.BackupRestoreTestingKnobs{
-					DownloadPhaseRetryPolicy: downloadRetryPolicy,
 					RunBeforeSendingDownloadSpan: func() error {
-						if alwaysFail {
-							return errors.Newf("always fail download request")
+						if failPermanent.Load() {
+							return errors.Newf("injected permanent download failure")
 						}
-						if currentFailures.Load() >= totalFailures {
-							return nil
+						if failuresLeft.Add(-1) >= 0 {
+							failuresFired.Add(1)
+							return errors.Newf("injected transient download failure")
 						}
-						currentFailures.Add(1)
-						return errors.Newf("injected download request failure")
+						return nil
 					},
 				},
 			},
@@ -682,85 +686,131 @@ func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 	)
 	defer cleanupFn()
 
-	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
-	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
-	sqlDB.Exec(
-		t,
-		fmt.Sprintf(`
-		RESTORE DATABASE data FROM LATEST IN '%s'
-		WITH EXPERIMENTAL DEFERRED COPY, new_db_name=data2
-		`, externalStorage),
+	externalStorage := backuptestutils.GetExternalStorageURI(
+		t, "nodelocal://1/backup", "backup", sqlDB,
 	)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 
-	var downloadJobID jobspb.JobID
-	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
-	if alwaysFail {
-		jobutils.WaitForJobToPause(t, sqlDB, downloadJobID)
-	} else {
-		jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
+	runRestoreAndGetDownloadJob := func(t *testing.T, dbName string) jobspb.JobID {
+		sqlDB.Exec(t, fmt.Sprintf(`
+			RESTORE DATABASE data FROM LATEST IN '%s'
+			WITH EXPERIMENTAL DEFERRED COPY, new_db_name=%s
+		`, externalStorage, dbName))
+		var jobID jobspb.JobID
+		sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&jobID)
+		return jobID
 	}
+
+	t.Run("transient failures succeed", func(t *testing.T) {
+		const want = 4
+		failuresLeft.Store(want)
+		failuresFired.Store(0)
+		failPermanent.Store(false)
+		// Generous duration so the observer's no-progress watchdog has
+		// headroom for the injected failures to clear and bytes to drop,
+		// even when the test runs under --stress.
+		sqlDB.Exec(t,
+			"SET CLUSTER SETTING backup.restore.online_download_retry_max_duration = '60s'")
+
+		jobID := runRestoreAndGetDownloadJob(t, "data_transient")
+		jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
+		require.Equal(t, int32(want), failuresFired.Load())
+	})
+
+	t.Run("permanent failures pause", func(t *testing.T) {
+		failuresLeft.Store(0)
+		failuresFired.Store(0)
+		failPermanent.Store(true)
+		// Short duration so retry exhaustion (and the resulting pause)
+		// happens quickly.
+		sqlDB.Exec(t,
+			"SET CLUSTER SETTING backup.restore.online_download_retry_max_duration = '5s'")
+
+		jobID := runRestoreAndGetDownloadJob(t, "data_permanent")
+		jobutils.WaitForJobToPause(t, sqlDB, jobID)
+	})
 }
 
+// TestOnlineRestoreDownloadRetryReset verifies that both retry loops in
+// the download phase reset their counters on forward progress. The
+// dispatch worker calls rt.Reset after each successful sendDownloadSpan;
+// the observer calls rt.Reset whenever the remaining-bytes count drops.
+// Both must reset for the job to complete under tight budgets — removing
+// either rt.Reset call will fail this test.
+//
+// The worker is driven through "success, fail*maxRetries, repeat" via
+// RunBeforeSendingDownloadSpan: without the reset on the leading
+// success, the first 5 attempts (one success plus four failures) consume
+// the budget ending on a failure, and the worker returns the last error.
+//
+// The observer is driven through "stuck for maxRetries polls, then
+// decrease, repeat" via OverrideRemainingBytesFn: without the reset on
+// each decrease, the observer exhausts its budget during a stuck
+// stretch and returns "no observable progress within retry budget".
 func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	backuptestutils.EnableFastRestoreForTest(t)
 
-	const maxDownloadAttempts = 5
+	const maxRetries = 4
+	const totalProgressSteps = 5
 
-	var attemptCount int
+	var (
+		observerCalls atomic.Int32
+		workerCalls   atomic.Int32
+	)
+
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				BackupRestore: &sql.BackupRestoreTestingKnobs{
 					DownloadPhaseRetryPolicy: &retry.Options{
-						InitialBackoff: time.Millisecond * 100,
-						MaxBackoff:     time.Second,
-						MaxRetries:     maxDownloadAttempts - 1,
+						InitialBackoff: time.Millisecond,
+						MaxBackoff:     5 * time.Millisecond,
+						MaxRetries:     maxRetries,
 					},
-					// We want the retry loop to fail until its final attempt, and then
-					// succeed on the last attempt. This will allow the download job to
-					// make progress, in which case the retry loop _should_ reset. Then
-					// we continue allowing the retry loop to fail until its last
-					// attempt, in which case it will succeed again.
 					RunBeforeSendingDownloadSpan: func() error {
-						attemptCount++
-						if attemptCount < maxDownloadAttempts {
-							return errors.Newf("injected download request failure")
+						n := workerCalls.Add(1)
+						if n%(maxRetries+1) == 1 {
+							return nil
 						}
-						return nil
+						return errors.Newf("injected worker failure %d", n)
 					},
-					RunBeforeDownloadCleanup: func() error {
-						if attemptCount < maxDownloadAttempts*2 {
-							return errors.Newf("injected download cleanup failure")
+					OverrideRemainingBytesFn: func() uint64 {
+						n := int(observerCalls.Add(1))
+						step := (n - 1) / (maxRetries + 1)
+						if step >= totalProgressSteps {
+							return 0
 						}
-						return nil
+						return uint64(totalProgressSteps - step)
 					},
 				},
 			},
 		},
 	}
-	const numAccounts = 2
+
+	// numAccounts needs to be large enough that maybeCalculateTotalDownloadSpans
+	// observes non-zero external bytes when the observer starts; otherwise the
+	// observer short-circuits and the loops never engage.
+	const numAccounts = 1000
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
 		t, singleNode, numAccounts, InitManualReplication, clusterArgs,
 	)
 	defer cleanupFn()
 
-	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
+	externalStorage := backuptestutils.GetExternalStorageURI(
+		t, "nodelocal://1/backup", "backup", sqlDB,
+	)
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
-	sqlDB.Exec(
-		t,
-		fmt.Sprintf(`
+	sqlDB.Exec(t, fmt.Sprintf(`
 		RESTORE DATABASE data FROM LATEST IN '%s'
 		WITH EXPERIMENTAL DEFERRED COPY, new_db_name=data2
-		`, externalStorage),
-	)
+	`, externalStorage))
 
 	var downloadJobID jobspb.JobID
 	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
 	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
-	require.Equal(t, maxDownloadAttempts*2, attemptCount)
 }
 
 func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
@@ -1634,4 +1684,72 @@ func TestOnlineRestoreStatusMessages(t *testing.T) {
 	var restoreRowCount int
 	rSQLDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
 	require.Equal(t, numAccounts, restoreRowCount)
+}
+
+// TestOnlineRestoreDownloadSurvivesSendError injects a failure into
+// sendDownloadSpan after the underlying RPC has run, then verifies that
+// the download job still persists progress before the injection is
+// removed and the job completes cleanly.
+func TestOnlineRestoreDownloadSurvivesSendError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	AllowORDownloadBestEffortFailures(t)
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	var forceError atomic.Bool
+	forceError.Store(true)
+
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				BackupRestore: &sql.BackupRestoreTestingKnobs{
+					RunAfterSendingDownloadSpan: func() error {
+						if forceError.Load() {
+							return errors.New("injected sendDownloadSpan failure")
+						}
+						return nil
+					},
+				},
+			},
+		},
+	}
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
+		t, 1 /* numNodes */, 1000 /* numAccounts */, InitManualReplication, args,
+	)
+	defer cleanupFn()
+
+	// Cap the retry budget so that if this regresses, the job pauses and
+	// the test fails quickly instead of waiting out the 72h default.
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_download_retry_max_duration = '1m'")
+
+	externalStorage := backuptestutils.GetExternalStorageURI(
+		t, "nodelocal://1/backup", "backup", sqlDB,
+	)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+
+	var linkJobID jobspb.JobID
+	sqlDB.QueryRow(t, fmt.Sprintf(
+		`RESTORE DATABASE data FROM LATEST IN '%s'
+		 WITH EXPERIMENTAL DEFERRED COPY, new_db_name=data2, detached`, externalStorage,
+	)).Scan(&linkJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, linkJobID)
+
+	var downloadJobID jobspb.JobID
+	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
+
+	testutils.SucceedsWithin(t, func() error {
+		var fraction float64
+		sqlDB.QueryRow(t,
+			`SELECT fraction_completed FROM [SHOW JOB $1]`, downloadJobID,
+		).Scan(&fraction)
+		if fraction == 0 {
+			return errors.New("fraction_completed is still zero")
+		}
+		return nil
+	}, 30*time.Second)
+
+	forceError.Store(false)
+	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
+	sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
 }

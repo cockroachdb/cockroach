@@ -3151,6 +3151,15 @@ message AdmissionHeader {
   // already been accounted for, and can start reserving more only when it
   // exceeds.
   bool no_memory_reserved_at_source = 5;
+
+  // ResourceGroupID identifies the resource group that the originating SQL
+  // session bound itself to via SET resource_group. It is resolved from the
+  // group name on the gateway and carried here so the server can route the
+  // request's admission work to that group. Zero means "no opinion": the
+  // server falls back to its existing routing (priority- or tenant-derived).
+  // Old servers ignore this field; new servers treat zero as unset, so the
+  // field is safe to set in a mixed-version cluster.
+  uint64 resource_group_id = 6 [(gogoproto.customname) = "ResourceGroupID"];
 }
 
 // A BatchRequest contains one or more requests to be executed in

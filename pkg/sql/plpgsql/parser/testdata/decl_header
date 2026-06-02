@@ -123,7 +123,6 @@ DECLARE
 BEGIN
 END
 ----
-----
 at or near ";": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 DECLARE
@@ -131,17 +130,7 @@ DECLARE
   var2 ALIAS FOR quantity;
                          ^
 HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+See: https://go.crdb.dev/issue-v/169572/
 
 parse
 DECLARE
@@ -176,24 +165,13 @@ DECLARE
 BEGIN
 END
 ----
-----
 at or near "(": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 DECLARE
   var1 NO SCROLL CURSOR (arg1 INTEGER) FOR SELECT * FROM t1 WHERE id = arg1;
                         ^
 HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+See: https://go.crdb.dev/issue-v/117746/
 
 # Correctly handle parsing errors for variable types.
 error

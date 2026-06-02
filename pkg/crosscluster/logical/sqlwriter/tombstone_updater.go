@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -32,7 +31,6 @@ var OriginID1Options = &kvpb.WriteOptions{OriginID: 1}
 // table. The lease should be released by calling ReleaseLeases.
 type TombstoneUpdater struct {
 	codec    keys.SQLCodec
-	db       *kv.DB
 	leaseMgr *lease.Manager
 	sd       *sessiondata.SessionData
 	settings *cluster.Settings
@@ -63,7 +61,6 @@ func (c *TombstoneUpdater) ReleaseLeases(ctx context.Context) {
 
 func NewTombstoneUpdater(
 	codec keys.SQLCodec,
-	db *kv.DB,
 	leaseMgr *lease.Manager,
 	descID descpb.ID,
 	sd *sessiondata.SessionData,
@@ -71,7 +68,6 @@ func NewTombstoneUpdater(
 ) *TombstoneUpdater {
 	return &TombstoneUpdater{
 		codec:    codec,
-		db:       db,
 		leaseMgr: leaseMgr,
 		descID:   descID,
 		sd:       sd,
@@ -82,7 +78,7 @@ func NewTombstoneUpdater(
 // UpdateTombstoneAny is an UpdateTombstone wrapper that accepts the []any
 // datum slice from the original sql writer's datum builder.
 func (tu *TombstoneUpdater) UpdateTombstoneAny(
-	ctx context.Context, txn isql.Txn, mvccTimestamp hlc.Timestamp, datums []any,
+	ctx context.Context, txn *kv.Txn, mvccTimestamp hlc.Timestamp, datums []any,
 ) (bool, error) {
 	tu.scratch = tu.scratch[:0]
 	for _, datum := range datums {
@@ -91,66 +87,25 @@ func (tu *TombstoneUpdater) UpdateTombstoneAny(
 	return tu.UpdateTombstone(ctx, txn, mvccTimestamp, tu.scratch)
 }
 
-// UpdateTombstone attempts to update the tombstone for the given row. This is
-// expected to always succeed. The delete will only return zero rows if the
-// operation loses LWW or the row does not exist. So if the cput fails on a
-// condition, it should also fail on LWW, which is treated as a success.
-//
-// It returns true if the update lost LWW (i.e. the local tombstone was already
-// newer).
+// UpdateTombstone attempts to update the tombstone for the given row. It
+// returns true if the update lost LWW (i.e. the local tombstone was already
+// newer). It returns ErrStalePreviousValue if a live row exists at the key
+// instead of a tombstone and the incoming origin timestamp is newer, meaning
+// the caller should refresh its local state and retry.
 func (tu *TombstoneUpdater) UpdateTombstone(
-	ctx context.Context, txn isql.Txn, mvccTimestamp hlc.Timestamp, afterRow []tree.Datum,
+	ctx context.Context, txn *kv.Txn, mvccTimestamp hlc.Timestamp, afterRow []tree.Datum,
 ) (bool, error) {
-	err := func() error {
-		if txn != nil {
-			// If UpdateTombstone is called in a transaction, create and run a
-			// batch in the transaction.
-			batch := txn.KV().NewBatch()
-			batch.Header.WriteOptions = OriginID1Options
-			if err := tu.AddToBatch(ctx, txn.KV(), batch, mvccTimestamp, afterRow); err != nil {
-				return err
-			}
-			return txn.KV().Run(ctx, batch)
-		}
-		// If UpdateTombstone is called outside of a transaction, create and
-		// run a 1pc transaction.
-		return tu.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			batch := txn.NewBatch()
-			batch.Header.WriteOptions = OriginID1Options
-			if err := tu.AddToBatch(ctx, txn, batch, mvccTimestamp, afterRow); err != nil {
-				return err
-			}
-			return txn.CommitInBatch(ctx, batch)
-		})
-	}()
-	if err != nil {
-		if IsLwwLoser(err) {
-			return true, nil
-		}
-		return false, err
-	}
-	return false, nil
-}
-
-// AddToBatch adds a tombstone delete operation to the given KV batch. The
-// caller is responsible for setting the batch's WriteOptions and running the
-// batch.
-func (tu *TombstoneUpdater) AddToBatch(
-	ctx context.Context,
-	txn *kv.Txn,
-	batch *kv.Batch,
-	mvccTimestamp hlc.Timestamp,
-	afterRow []tree.Datum,
-) error {
 	deleter, err := tu.getDeleter(ctx, txn)
 	if err != nil {
-		return err
+		return false, err
 	}
+
+	batch := txn.NewBatch()
+	batch.Header.WriteOptions = OriginID1Options
 
 	var ph row.PartialIndexUpdateHelper
 	var vh row.VectorIndexUpdateHelper
-
-	return deleter.DeleteRow(
+	if err := deleter.DeleteRow(
 		ctx,
 		batch,
 		afterRow,
@@ -162,7 +117,20 @@ func (tu *TombstoneUpdater) AddToBatch(
 		},
 		false, /* mustValidateOldPKValues */
 		false, /* traceKV */
-	)
+	); err != nil {
+		return false, err
+	}
+
+	if err := txn.Run(ctx, batch); err != nil {
+		if IsLwwLoser(err) {
+			return true, nil
+		}
+		if HasStalePreviousValue(err) {
+			return false, ErrStalePreviousValue
+		}
+		return false, err
+	}
+	return false, nil
 }
 
 func (tu *TombstoneUpdater) hasValidLease(ctx context.Context, now hlc.Timestamp) bool {

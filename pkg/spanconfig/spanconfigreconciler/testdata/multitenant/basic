@@ -58,6 +58,7 @@ state offset=48
 /Table/8{0-1}                              database system (host)
 /Table/8{1-2}                              database system (host)
 /Table/8{2-3}                              database system (host)
+/Table/8{3-4}                              database system (host)
 /Tenant/10{-\x00}                          database system (tenant)
 /Tenant/11{-\x00}                          database system (tenant)
 /Tenant/12{-\x00}                          database system (tenant)
@@ -141,6 +142,7 @@ upsert /Tenant/10/Table/{79-80}            database system (tenant)
 upsert /Tenant/10/Table/8{0-1}             database system (tenant)
 upsert /Tenant/10/Table/8{1-2}             database system (tenant)
 upsert /Tenant/10/Table/8{2-3}             database system (tenant)
+upsert /Tenant/10/Table/8{3-4}             database system (tenant)
 
 state offset=48
 ----
@@ -181,6 +183,7 @@ state offset=48
 /Table/8{0-1}                              database system (host)
 /Table/8{1-2}                              database system (host)
 /Table/8{2-3}                              database system (host)
+/Table/8{3-4}                              database system (host)
 /Tenant/10{-/Table/4}                      database system (tenant)
 /Tenant/10/Table/{4-5}                     database system (tenant)
 /Tenant/10/Table/{5-6}                     database system (tenant)
@@ -253,6 +256,7 @@ state offset=48
 /Tenant/10/Table/8{0-1}                    database system (tenant)
 /Tenant/10/Table/8{1-2}                    database system (tenant)
 /Tenant/10/Table/8{2-3}                    database system (tenant)
+/Tenant/10/Table/8{3-4}                    database system (tenant)
 /Tenant/11{-\x00}                          database system (tenant)
 /Tenant/12{-\x00}                          database system (tenant)
 
@@ -279,6 +283,7 @@ state offset=82
 ...
 /Table/8{1-2}                              database system (host)
 /Table/8{2-3}                              database system (host)
+/Table/8{3-4}                              database system (host)
 /Tenant/10{-/Table/4}                      database system (tenant)
 /Tenant/10/Table/{4-5}                     database system (tenant)
 /Tenant/10/Table/{5-6}                     database system (tenant)
@@ -351,6 +356,7 @@ state offset=82
 /Tenant/10/Table/8{0-1}                    database system (tenant)
 /Tenant/10/Table/8{1-2}                    database system (tenant)
 /Tenant/10/Table/8{2-3}                    database system (tenant)
+/Tenant/10/Table/8{3-4}                    database system (tenant)
 /Tenant/10/Table/10{6-7}                   rangefeed_enabled=true
 /Tenant/10/Table/10{7-8}                   rangefeed_enabled=true
 /Tenant/10/Table/11{2-3}                   rangefeed_enabled=true

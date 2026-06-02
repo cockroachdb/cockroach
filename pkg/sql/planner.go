@@ -778,7 +778,7 @@ func (p *planner) regionsProvider() *regions.Provider {
 }
 
 func (p *planner) User() username.SQLUsername {
-	return p.SessionData().User()
+	return p.EvalContext().EffectiveUser()
 }
 
 // TemporarySchemaName implements scbuildstmt.TemporarySchemaProvider.
@@ -916,6 +916,11 @@ func (p *planner) Ann() *tree.Annotations {
 // ExecutorConfig implements Planner interface.
 func (p *planner) ExecutorConfig() interface{} {
 	return p.execCfg
+}
+
+// TimeSeriesQuerier implements the eval.Planner interface.
+func (p *planner) TimeSeriesQuerier() eval.TimeSeriesQuerier {
+	return p.execCfg.TimeSeriesQuerier
 }
 
 // statementPreparer is an interface used when deserializing a session in order

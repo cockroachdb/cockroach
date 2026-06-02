@@ -45,6 +45,16 @@ func IsLwwLoser(err error) bool {
 	return false
 }
 
+// HasStalePreviousValue returns true if the error is a ConditionFailedError
+// with HadNewerOriginTimestamp set, indicating the write won the origin
+// timestamp comparison but the expected previous value was wrong.
+func HasStalePreviousValue(err error) bool {
+	if condErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &condErr) {
+		return condErr.HadNewerOriginTimestamp
+	}
+	return false
+}
+
 // CanDLQError returns nil if the error should send a row to the DLQ. It
 // returns a non-nil error if the error should not be DLQ'd, for example
 // because it indicates an internal or retryable problem. The idea is it is

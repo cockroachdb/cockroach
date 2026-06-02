@@ -58,6 +58,7 @@ go_test(
     embed = [":debug"],
     deps = [
         "//pkg/base",
+        "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -65,6 +66,8 @@ go_test(
         "//pkg/server/srvtestutils",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",

@@ -392,6 +392,11 @@ func newCheckpointHandler(
 func (ch *checkpointHandler) handleMeta(
 	ctx context.Context, meta *execinfrapb.ProducerMetadata,
 ) error {
+	if meta.Err != nil {
+		ch.cancelFlow()
+		return nil
+	}
+
 	if meta.BulkProcessorProgress == nil ||
 		len(meta.BulkProcessorProgress.ProgressMessage) == 0 {
 		return nil
@@ -417,10 +422,11 @@ func (ch *checkpointHandler) handleMeta(
 		return nil
 	}
 
-	reachedEndTime := !replicatedTime.Less(ch.endTime.Prev())
-	if replicatedTime.LessEq(ch.replicatedTime) && !reachedEndTime {
+	if replicatedTime.LessEq(ch.replicatedTime) {
 		return nil
 	}
+
+	reachedEndTime := ch.endTime.LessEq(replicatedTime)
 	updateFreq := ldrsettings.JobCheckpointFrequency.Get(ch.sv)
 	if !reachedEndTime && (updateFreq == 0 || timeutil.Since(ch.lastPersistenceTime) < updateFreq) {
 		return nil

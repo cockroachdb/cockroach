@@ -821,6 +821,7 @@ CREATE TABLE delrng1 (
   data INT,
   FAMILY (p, data)
 );
+INSERT INTO delrng1 VALUES (1, 1), (15, 15);
 CREATE TABLE delrng2 (
   p INT,
   q INT,

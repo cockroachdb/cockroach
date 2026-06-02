@@ -582,7 +582,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				for gk, gc := range groups {
 					fresh[gk] = gc
 				}
-				k := rgGroupKey(uint64(group))
+				k := rgGroupKey(0, uint64(group))
 				cur := fresh[k]
 				cur.MaxCPU = v
 				if cur.Weight == 0 {
@@ -617,7 +617,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				d.ScanArgs(t, "group", &group)
 				d.ScanArgs(t, "to-add", &toAdd)
 				d.ScanArgs(t, "capacity", &capacity)
-				q.refillBurstBucketForGroup(rgGroupKey(uint64(group)), toAdd, capacity)
+				q.refillBurstBucketForGroup(rgGroupKey(0, uint64(group)), toAdd, capacity)
 				return ""
 
 			default:
@@ -1326,8 +1326,8 @@ func TestApplyConfigLockedMaterializesGroups(t *testing.T) {
 	defer cleanup()
 
 	// Pre-condition: no rg containers exist yet (we're in serverless mode).
-	require.Nil(t, getGroupLocked(q, rgGroupKey(highResourceGroupID)))
-	require.Nil(t, getGroupLocked(q, rgGroupKey(lowResourceGroupID)))
+	require.Nil(t, getGroupLocked(q, highResourceGroupKey))
+	require.Nil(t, getGroupLocked(q, lowResourceGroupKey))
 
 	// Switch to RM mode and apply the config.
 	ctx := context.Background()
@@ -1336,11 +1336,11 @@ func TestApplyConfigLockedMaterializesGroups(t *testing.T) {
 
 	// Post-condition: both built-in rg containers pre-created with
 	// their configured weight/maxCPU.
-	high := getGroupLocked(q, rgGroupKey(highResourceGroupID))
+	high := getGroupLocked(q, highResourceGroupKey)
 	require.NotNil(t, high, "high rg container should be pre-created by apply")
 	require.Equal(t, uint32(80), high.weight)
 	require.True(t, high.cpuTimeBurstBucket.maxCPU)
-	low := getGroupLocked(q, rgGroupKey(lowResourceGroupID))
+	low := getGroupLocked(q, lowResourceGroupKey)
 	require.NotNil(t, low, "low rg container should be pre-created by apply")
 	require.Equal(t, uint32(20), low.weight)
 	require.False(t, low.cpuTimeBurstBucket.maxCPU)
@@ -1360,16 +1360,16 @@ func TestRefreshResourceGroupConfigInServerlessIsNoOp(t *testing.T) {
 	// Stay in serverless mode (default).
 
 	q.configHolder.Set(ResourceGroupConfigSet{
-		rgGroupKey(42): {Weight: 60, MaxCPU: true},
+		rgGroupKey(0, 42): {Weight: 60, MaxCPU: true},
 	})
 	q.refreshResourceGroupConfig()
 
 	// rg containers must NOT have been pre-created.
-	require.Nil(t, getGroupLocked(q, rgGroupKey(42)),
+	require.Nil(t, getGroupLocked(q, rgGroupKey(0, 42)),
 		"refresh in serverless mode must not pre-create rg containers")
 
 	// But the holder DID record the change (it's caller-side state).
-	cfg := q.configHolder.Snapshot().Groups().GetOrDefault(rgGroupKey(42))
+	cfg := q.configHolder.Snapshot().Groups().GetOrDefault(rgGroupKey(0, 42))
 	require.Equal(t, uint32(60), cfg.Weight)
 	require.True(t, cfg.MaxCPU)
 }
@@ -1389,15 +1389,15 @@ func TestGCExemptsBuiltins(t *testing.T) {
 	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
 	q.refreshResourceGroupConfig()
 
-	high := getGroupLocked(q, rgGroupKey(highResourceGroupID))
+	high := getGroupLocked(q, highResourceGroupKey)
 	require.NotNil(t, high)
-	require.True(t, rgGroupKey(highResourceGroupID).isBuiltin())
+	require.True(t, highResourceGroupKey.isBuiltin())
 	withGroupLocked(q, func() { high.used = 0 })
 	t0 := time.Now()
 	q.gcGroupsResetUsedAndUpdateEstimators(t0)
 	q.gcGroupsResetUsedAndUpdateEstimators(t0.Add(groupGCIdleThreshold + time.Second))
 
-	require.NotNil(t, getGroupLocked(q, rgGroupKey(highResourceGroupID)),
+	require.NotNil(t, getGroupLocked(q, highResourceGroupKey),
 		"built-in group must survive GC")
 }
 
@@ -1488,10 +1488,80 @@ func TestGroupKeyForWorkInfoSelection(t *testing.T) {
 
 			cttKey := cpuTimeTokenGroupKeyForWorkInfo(info, &st.SV)
 			if tc.mode == resourceManagerMode {
-				require.Equal(t, rgGroupKey(highResourceGroupID), cttKey)
+				require.Equal(t, highResourceGroupKey, cttKey)
 			} else {
 				require.Equal(t, tenantGroupKey(5), cttKey)
 			}
+		})
+	}
+}
+
+// TestCPUTimeTokenGroupKeyResourceGroupRouting verifies that in
+// resourceManagerMode cpuTimeTokenGroupKeyForWorkInfo routes work to
+// the built-in resource group named by WorkInfo.ResourceGroupID. An
+// unset id (0) falls through to the priority-derived group, a
+// non-built-in id is keyed by (tenant, group), and outside
+// resourceManagerMode the id is ignored entirely.
+func TestCPUTimeTokenGroupKeyResourceGroupRouting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
+	const tenantID = 5
+
+	for _, tc := range []struct {
+		name            string
+		mode            cpuTimeTokenMode
+		resourceGroupID admissionpb.ResourceGroupID
+		priority        admissionpb.WorkPriority
+		expected        groupKey
+	}{
+		{
+			name:     "RM mode, unset id, falls back to priority",
+			mode:     resourceManagerMode,
+			priority: admissionpb.NormalPri,
+			expected: highResourceGroupKey,
+		},
+		{
+			name:            "RM mode, high id",
+			mode:            resourceManagerMode,
+			resourceGroupID: admissionpb.HighResourceGroupID,
+			// Low priority to prove the id, not the priority, picks the group.
+			priority: admissionpb.UserLowPri,
+			expected: highResourceGroupKey,
+		},
+		{
+			name:            "RM mode, low id",
+			mode:            resourceManagerMode,
+			resourceGroupID: admissionpb.LowResourceGroupID,
+			// High priority to prove the id, not the priority, picks the group.
+			priority: admissionpb.NormalPri,
+			expected: lowResourceGroupKey,
+		},
+		{
+			name:            "RM mode, non-built-in id, keyed by tenant and group",
+			mode:            resourceManagerMode,
+			resourceGroupID: 99,
+			priority:        admissionpb.UserLowPri,
+			expected:        rgGroupKey(tenantID, 99),
+		},
+		{
+			name:            "non-RM mode ignores id",
+			mode:            offMode,
+			resourceGroupID: admissionpb.LowResourceGroupID,
+			priority:        admissionpb.NormalPri,
+			expected:        tenantGroupKey(tenantID),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cpuTimeTokenACMode.Override(ctx, &st.SV, tc.mode)
+			info := WorkInfo{
+				TenantID:        roachpb.MustMakeTenantID(tenantID),
+				ResourceGroupID: tc.resourceGroupID,
+				Priority:        tc.priority,
+			}
+			require.Equal(t, tc.expected, cpuTimeTokenGroupKeyForWorkInfo(info, &st.SV))
 		})
 	}
 }

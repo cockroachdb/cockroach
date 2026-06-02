@@ -2358,7 +2358,7 @@ func registerCDC(r registry.Registry) {
 		// the bulk oracle.
 		Name:             "cdc/multi-region-execution-locality-tpcc",
 		Owner:            registry.OwnerCDC,
-		Cluster:          r.MakeClusterSpec(7, spec.Geo(), spec.GatherCores(), spec.GCEZones("us-east1-b,us-west1-b")),
+		Cluster:          r.MakeClusterSpec(7, spec.Geo(), spec.GatherCores(), spec.GCEZones("us-east1-b,us-west1-c")),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -2366,9 +2366,9 @@ func registerCDC(r registry.Registry) {
 				0: "us-east1-b",
 				1: "us-east1-b",
 				2: "us-east1-b",
-				3: "us-west1-b",
-				4: "us-west1-b",
-				5: "us-west1-b",
+				3: "us-west1-c",
+				4: "us-west1-c",
+				5: "us-west1-c",
 			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -2382,8 +2382,8 @@ CONFIGURE ZONE USING
 	lease_preferences = '[[+region=us-west1]]', num_replicas = 3`)
 			require.NoError(t, err)
 
-			// Verify lease holders are in us-west1-b.
-			verifyLeaseHolderLocality(ct.DB(), t, "cloud=gce,region=us-west1,zone=us-west1-b")
+			// Verify lease holders are in us-west1-c.
+			verifyLeaseHolderLocality(ct.DB(), t, "cloud=gce,region=us-west1,zone=us-west1-c")
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: cloudStorageSink,

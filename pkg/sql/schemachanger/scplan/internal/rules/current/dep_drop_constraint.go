@@ -25,7 +25,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant),
-				to.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithoutIndexName)),
+				to.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintName)),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},
@@ -38,7 +38,7 @@ func init() {
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithoutIndexName)),
+				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintName)),
 				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
@@ -57,7 +57,7 @@ func init() {
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithoutIndexName)),
+				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintName)),
 				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, Not(isSubjectTo2VersionInvariant)),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
@@ -73,7 +73,7 @@ func init() {
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.ConstraintWithoutIndexName)(nil)),
+				from.TypeFilter(rulesVersionKey, isConstraintName),
 				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
@@ -89,7 +89,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint),
-				to.Type((*scpb.ConstraintWithoutIndexName)(nil)),
+				to.TypeFilter(rulesVersionKey, isConstraintName),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},

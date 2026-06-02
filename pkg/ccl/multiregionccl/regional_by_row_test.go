@@ -13,9 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -49,12 +47,12 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCases := []testutilsccl.AlterPrimaryKeyCorrectZoneConfigTestCase{
+	testCases := []sqltestutils.AlterPrimaryKeyCorrectZoneConfigTestCase{
 		{
 			Desc:       "REGIONAL BY TABLE to REGIONAL BY ROW",
 			SetupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY TABLE`,
 			AlterQuery: `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
-			ExpectedIntermediateZoneConfigs: []testutilsccl.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
+			ExpectedIntermediateZoneConfigs: []sqltestutils.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
 				{
 					ShowConfigStatement: `SHOW ZONE CONFIGURATION FOR TABLE t.test`,
 					ExpectedTarget:      `DATABASE t`,
@@ -87,7 +85,7 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 			Desc:       "GLOBAL to REGIONAL BY ROW",
 			SetupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY GLOBAL`,
 			AlterQuery: `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
-			ExpectedIntermediateZoneConfigs: []testutilsccl.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
+			ExpectedIntermediateZoneConfigs: []sqltestutils.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
 				{
 					ShowConfigStatement: `SHOW ZONE CONFIGURATION FOR TABLE t.test`,
 					ExpectedTarget:      `TABLE t.public.test`,
@@ -122,7 +120,7 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 			Desc:       "REGIONAL BY ROW to REGIONAL BY TABLE",
 			SetupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			AlterQuery: `ALTER TABLE t.test SET LOCALITY REGIONAL BY TABLE`,
-			ExpectedIntermediateZoneConfigs: []testutilsccl.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
+			ExpectedIntermediateZoneConfigs: []sqltestutils.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
 				{
 					ShowConfigStatement: `SHOW ZONE CONFIGURATION FOR TABLE t.test`,
 					ExpectedTarget:      `DATABASE t`,
@@ -142,7 +140,7 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 			Desc:       "REGIONAL BY ROW to GLOBAL",
 			SetupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			AlterQuery: `ALTER TABLE t.test SET LOCALITY GLOBAL`,
-			ExpectedIntermediateZoneConfigs: []testutilsccl.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
+			ExpectedIntermediateZoneConfigs: []sqltestutils.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
 				{
 					ShowConfigStatement: `SHOW ZONE CONFIGURATION FOR TABLE t.test`,
 					ExpectedTarget:      `DATABASE t`,
@@ -159,7 +157,7 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 			},
 		},
 	}
-	testutilsccl.AlterPrimaryKeyCorrectZoneConfigTest(
+	sqltestutils.AlterPrimaryKeyCorrectZoneConfigTest(
 		t,
 		`CREATE DATABASE t PRIMARY REGION "ajstorm-1"`,
 		testCases,
@@ -1081,7 +1079,6 @@ USE t;
 func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	c, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /* numServers */, base.TestingKnobs{},

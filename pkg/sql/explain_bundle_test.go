@@ -59,7 +59,7 @@ func TestExplainAnalyzeDebugWithTxnRetries(t *testing.T) {
 CREATE SCHEMA s;
 CREATE TABLE s.a (a INT PRIMARY KEY);`)
 
-	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql"
+	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql descriptors.json schema_changes.txt"
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
 
 	// Set a small chunk size to test splitting into chunks. The bundle files are
@@ -92,7 +92,7 @@ CREATE USER testuser;
 GRANT ALL ON abc TO testuser;`)
 	testuserR := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t, serverutils.User("testuser")))
 
-	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql"
+	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql descriptors.json schema_changes.txt"
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
 
 	// Set a small chunk size to test splitting into chunks. The bundle files are
@@ -115,6 +115,42 @@ GRANT ALL ON abc TO testuser;`)
 		checkBundle(
 			t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
+		)
+	})
+
+	// descriptors.json should contain the descriptor JSON for each schema
+	// object used by the statement, and schema_changes.txt should list
+	// recent schema-change jobs against those descriptors. ALTER TABLE
+	// and CREATE INDEX both go through the declarative schema changer,
+	// which drains payload.DescriptorIDs on completion - so this test
+	// also exercises PrintSchemaChanges's description-text fallback.
+	t.Run("descriptors and schema changes", func(t *testing.T) {
+		r.Exec(t, `CREATE TABLE abc_descs (a INT PRIMARY KEY, b INT);
+ALTER TABLE abc_descs ADD COLUMN c STRING DEFAULT 'x';
+CREATE INDEX abc_descs_c_idx ON abc_descs (c);`)
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc_descs WHERE c = 'x'")
+		contentCheck := func(name, contents string) error {
+			switch name {
+			case "descriptors.json":
+				if !strings.Contains(contents, `"name": "abc_descs"`) {
+					return errors.Errorf(
+						"descriptors.json missing abc_descs descriptor, got:\n%s", contents)
+				}
+			case "schema_changes.txt":
+				if !strings.Contains(contents, "ADD COLUMN") {
+					return errors.Errorf(
+						"schema_changes.txt missing ADD COLUMN entry, got:\n%s", contents)
+				}
+				if !strings.Contains(contents, "abc_descs_c_idx") {
+					return errors.Errorf(
+						"schema_changes.txt missing CREATE INDEX entry, got:\n%s", contents)
+				}
+			}
+			return nil
+		}
+		checkBundle(
+			t, fmt.Sprint(rows), "public.abc_descs", contentCheck, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.abc_descs.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
 
@@ -718,7 +754,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 						}
 						return nil
 					}, false, /* expectErrors */
-					plans, "statement.sql stats-defaultdb.public.pterosaur.sql env.sql vec.txt vec-v.txt",
+					plans, "statement.sql stats-defaultdb.public.pterosaur.sql env.sql vec.txt vec-v.txt descriptors.json schema_changes.txt",
 				)
 			})
 		}
@@ -869,7 +905,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				}
 				return nil
 			}, false, /* expectErrors */
-			plans, "statement.sql stats-defaultdb.public.trigger_redact_t1.sql stats-defaultdb.public.trigger_redact_t2.sql env.sql vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
+			plans, "statement.sql stats-defaultdb.public.trigger_redact_t1.sql stats-defaultdb.public.trigger_redact_t2.sql env.sql vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt descriptors.json schema_changes.txt",
 		)
 	})
 

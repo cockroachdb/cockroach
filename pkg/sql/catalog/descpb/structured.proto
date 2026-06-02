@@ -1766,10 +1766,27 @@ message TypeDescriptor {
   message Domain {
     option (gogoproto.equal) = true;
 
+    // NotNullState describes how strictly a domain's NOT NULL constraint is
+    // enforced.
+    enum NotNullState {
+      // NONE indicates the domain has no NOT NULL constraint.
+      NONE = 0;
+      // ENFORCING indicates the constraint is fully enforced; existing rows
+      // have been validated.
+      ENFORCING = 1;
+      // VALIDATING indicates the constraint is being added: Writes check it but
+      // existing rows have not yet been validated.
+      VALIDATING = 2;
+      // DROPPING indicates the constraint is being removed: Writes continue to
+      // check it until the drop is complete.
+      DROPPING = 3;
+    }
+
     // BaseType is the underlying type this domain is built on.
     optional sql.sem.types.T base_type = 1;
-    // NotNull is true if the domain has a NOT NULL constraint.
-    optional bool not_null = 2 [(gogoproto.nullable) = false];
+    // NotNullState describes the domain's NOT NULL constraint and its
+    // enforcement state. NONE means no NOT NULL constraint.
+    optional NotNullState not_null_state = 2 [(gogoproto.nullable) = false];
     // DefaultExpr is the default expression for the domain, serialized as a
     // string. Empty if no default is specified.
     optional string default_expr = 3 [(gogoproto.nullable) = false];
@@ -1791,13 +1808,18 @@ message TypeDescriptor {
     // CheckConstraints is the list of CHECK constraints on this domain.
     repeated CheckConstraint check_constraints = 4 [(gogoproto.nullable) = false];
 
-    // NotNullConstraintName is the name of the NOT NULL constraint. Empty if
-    // there is no NOT NULL constraint.
+    // NotNullConstraintName is the name of the NOT NULL constraint. Empty when
+    // NotNullState is NONE.
     optional string not_null_constraint_name = 5 [(gogoproto.nullable) = false];
     // NotNullConstraintID uniquely identifies the NOT NULL constraint within
     // the domain. Zero if there is no NOT NULL constraint.
     optional uint32 not_null_constraint_id = 6 [(gogoproto.customname) = "NotNullConstraintID",
       (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+
+    // NextConstraintID is the next available constraint ID for this domain.
+    // It is bumped whenever a NOT NULL or CHECK constraint is added.
+    optional uint32 next_constraint_id = 7 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextConstraintID", (gogoproto.casttype) = "ConstraintID"];
   }
 
   // Domain is the domain definition if this is a domain type.

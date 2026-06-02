@@ -157,6 +157,7 @@ SHOW application_name;
 <tr><td><code>optimizer_enable_lock_elision</code></td><td>Controls whether the optimizer can eliminate unnecessary locking operations.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer_hoist_uncorrelated_equality_subqueries</code></td><td>Controls whether the optimizer hoists uncorrelated subqueries in equality expressions with columns, potentially producing more efficient plans.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer_inline_any_unnest_subquery</code></td><td>Controls whether the optimizer inlines subqueries containing ANY expressions combined with UNNEST.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
+<tr><td><code>optimizer_inline_placeholder_equalities</code></td><td>Controls whether the optimizer inlines placeholder equalities in the InlineConstVar normalization rule.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer_merge_joins_enabled</code></td><td>Controls whether the optimizer should explore query plans with merge joins.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer_min_row_count</code></td><td>Sets a lower bound on row count estimates during query planning, except for expressions with zero cardinality.</td><td><code>1</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer_plan_lookup_joins_with_reverse_scans</code></td><td>Controls whether the optimizer can plan lookup joins using reverse index scans.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
@@ -211,6 +212,7 @@ SHOW application_name;
 <tr><td><code>register_latch_wait_contention_events</code></td><td>Controls whether contention events are registered for latch wait operations.</td><td><code>off</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>reorder_joins_limit</code></td><td>Sets the number of joins at which the optimizer should stop attempting to reorder.</td><td><code>8</code></td><td>No</td><td><code>sql.defaults.reorder_joins_limit</code></td></tr>
 <tr><td><code>require_explicit_primary_keys</code></td><td>Controls whether CREATE TABLE statements should error out if no primary key is provided.</td><td><code>off</code></td><td>No</td><td><code>sql.defaults.require_explicit_primary_keys.enabled</code></td></tr>
+<tr><td><code>resource_group</code></td><td>Binds the session's KV work to a named resource group for admission control. Only honored when admission.cpu_time_tokens.mode is set to resource_manager. The empty string (the default) leaves the session unbound.</td><td><code>-</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>results_buffer_size</code></td><td>Specifies the size at which the pgwire results buffer will self-flush.</td><td><code>-</code></td><td>Yes</td><td>-</td></tr>
 <tr><td><code>role</code></td><td>The current role for the session.</td><td><code>none</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>row_security</code></td><td>Controls whether row level security is enabled.</td><td><code>on</code></td><td>No</td><td>-</td></tr>

@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-configs
+# LogicTest: cockroach-go-testserver-25.4 cockroach-go-testserver-26.1
 
 # Verify that session setting hints cannot be used until after the cluster
 # upgrade is fully finalized (requires V26_2_StatementHintsTypeColumnBackfilled).

@@ -30,8 +30,8 @@ import (
 // encountered). This guarantees that a transaction is never split across
 // batches.
 //
-// The merge feed only emits events with timestamp strictly less than endTime.
-// After encountering the first event at or beyond endTime, it flushes any
+// The merge feed only emits events with timestamp less than or equal to endTime.
+// After encountering the first event beyond endTime, it flushes any
 // buffered KVs and emits a synthetic checkpoint at endTime.Prev(). For all
 // remaining events, it continues normal heap processing but only ever emits
 // the synthetic checkpoint (deduplicated by maybeEmitCheckpoint) until every
@@ -113,7 +113,7 @@ func (m *MergeFeed) mergeLoop(ctx context.Context) error {
 	for h.len() != 0 {
 		entry := h.pop()
 
-		if m.endTime.LessEq(entry.peekTS) {
+		if m.endTime.Less(entry.peekTS) {
 			if err := m.processPastEndTime(ctx, entry, h); err != nil {
 				return err
 			}
@@ -204,14 +204,14 @@ func (m *MergeFeed) initHeap(ctx context.Context) (*mergeHeap, error) {
 	return h, nil
 }
 
-// processPastEndTime drains an entry whose timestamp is at or beyond endTime.
-// It flushes any buffered KVs, emits a synthetic checkpoint at endTime.Prev(),
-// and advances the entry without processing it.
+// processPastEndTime drains an entry whose timestamp is past endTime.
+// It flushes any buffered KVs, emits a synthetic checkpoint at endTime, and
+// advances the entry without processing it.
 func (m *MergeFeed) processPastEndTime(ctx context.Context, entry *mergeEntry, h *mergeHeap) error {
 	if err := m.flushScratch(ctx); err != nil {
 		return err
 	}
-	if err := m.emitCheckpoint(ctx, m.endTime.Prev()); err != nil {
+	if err := m.emitCheckpoint(ctx, m.endTime); err != nil {
 		return err
 	}
 	var closed bool

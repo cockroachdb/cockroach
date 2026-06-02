@@ -40,7 +40,7 @@ func (b *bubblineReader) init(
 	b.ins.Reflow = sqlS.reflow
 	b.ins.AutoComplete = b.getCompletions
 	b.ins.CheckInputComplete = b.checkInputComplete
-	b.ins.SetExternalEditorEnabled(true, "sql")
+	b.ins.SetExternalEditorEnabled(sqlS.externalEditorAllowed(), "sql")
 	b.ins.NextPrompt = "-> "
 
 	// We override the style because at this time we don't know how to

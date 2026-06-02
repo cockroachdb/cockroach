@@ -1388,3 +1388,52 @@ type RemoveEnumTypeValue struct {
 	PhysicalRepresentation []byte
 	LogicalRepresentation  string
 }
+
+// AddDomainNotNull installs a NOT NULL constraint on a domain type descriptor
+// in the VALIDATING state.
+type AddDomainNotNull struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// MakeValidatedDomainNotNullPublic transitions a domain's NOT NULL constraint
+// from VALIDATING to ENFORCING.
+type MakeValidatedDomainNotNullPublic struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// MakePublicDomainNotNullValidated transitions a domain's NOT NULL constraint
+// from ENFORCING to DROPPING.
+type MakePublicDomainNotNullValidated struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// RemoveDomainNotNull removes the NOT NULL constraint from a domain type
+// descriptor.
+type RemoveDomainNotNull struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// SetDomainConstraintName sets the name of a constraint on a domain type
+// descriptor.
+type SetDomainConstraintName struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+	Name         string
+}
+
+// RemoveDomainConstraintName replaces a constraint's name on a domain type
+// descriptor with a placeholder.
+type RemoveDomainConstraintName struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}

@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -228,6 +229,10 @@ type snapWrite struct {
 	hardState  raftpb.HardState
 	desc       *roachpb.RangeDescriptor // corresponds to the range descriptor in the snapshot
 	origDesc   *roachpb.RangeDescriptor // pre-snapshot range descriptor
+	// raftAppliedIndex is the replica's applied index before the snapshot. With
+	// separated engines, only the unapplied log suffix (after this index) is
+	// cleared; the applied prefix is left for WAG garbage collection.
+	raftAppliedIndex kvpb.RaftIndex
 	// NB: subsume must be in sorted order by DestroyReplicaInfo start key.
 	subsume []kvstorage.DestroyReplicaInfo
 }
@@ -321,14 +326,16 @@ func (s *snapWriter) prepareSnapApply(ctx context.Context, sw snapWrite) error {
 // The method knows how to handle separated and single engine, so that the
 // caller is not concerned about it.
 func (s *snapWriter) rewriteRaftState(ctx context.Context, sw *snapWrite) error {
-	// If engines are separated, write directly to the raft engine batch.
+	// If engines are separated, write directly to the raft engine batch. Only
+	// clear the unapplied suffix of the log; the applied prefix is left for WAG
+	// garbage collection.
 	if s.raftWO != nil {
-		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(s.raftWO), sw.sl, sw.hardState, sw.truncState)
+		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(s.raftWO), sw.sl, sw.hardState, sw.truncState, sw.raftAppliedIndex)
 	}
 	// Otherwise, write to an SSTable in the state machine engine, or s.batch if
 	// applying the snapshot as a batch.
 	return s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), sw.sl, sw.hardState, sw.truncState)
+		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), sw.sl, sw.hardState, sw.truncState, 0 /* clearAfter */)
 	})
 }
 

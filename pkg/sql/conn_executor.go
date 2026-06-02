@@ -956,6 +956,29 @@ func (s *Server) SetupConn(
 ) (ConnectionHandler, error) {
 	sd := newSessionData(args)
 	sds := sessiondata.NewStack(sd)
+
+	// For the PostgreSQL dump/restore client tools (pg_dump, pg_restore,
+	// pg_dumpall), default pg_dump_compatibility to "cockroachdb" so that dumps
+	// are correct out of the box. We only do this when the client has not
+	// configured pg_dump_compatibility explicitly, so that an explicit value
+	// (including "off") is always honored. The decision is keyed off the
+	// startup application_name and is applied through the normal session-default
+	// path below, which also validates the value. The resulting notice is
+	// delivered to the client during sendInitialConnData.
+	var startupNotices []pgnotice.Notice
+	if _, explicit := args.SessionDefaults["pg_dump_compatibility"]; !explicit {
+		appName := args.SessionDefaults["application_name"]
+		if val, ok := sessiondatapb.DefaultPgDumpCompatibilityForAppName(appName); ok {
+			args.SessionDefaults["pg_dump_compatibility"] = val
+			notice := pgnotice.Newf(
+				"setting pg_dump_compatibility = %q because application_name is %q", val, appName,
+			)
+			notice = pgnotice.Notice(errors.WithHint(notice,
+				"set pg_dump_compatibility explicitly (e.g. 'off' or 'postgres') to override this default"))
+			startupNotices = append(startupNotices, notice)
+		}
+	}
+
 	// Set the SessionData from args.SessionDefaults. This also validates the
 	// respective values.
 	sdMutIterator := sessionmutator.MakeSessionDataMutatorIterator(sds, args.SessionDefaults, s.cfg.Settings)
@@ -998,7 +1021,7 @@ func (s *Server) SetupConn(
 		false, /* underOuterTxn */
 		nil,   /* postSetupFn */
 	)
-	return ConnectionHandler{ex}, nil
+	return ConnectionHandler{ex: ex, startupNotices: startupNotices}, nil
 }
 
 // IncrementConnectionCount increases connectionCount by 1 if possible and
@@ -1077,6 +1100,18 @@ func (s *Server) GetConnectionCount() int64 {
 // it away from other packages.
 type ConnectionHandler struct {
 	ex *connExecutor
+	// startupNotices are NOTICE messages accumulated during connection setup
+	// (e.g. when pg_dump_compatibility is defaulted for a dump/restore client).
+	// They are delivered to the client during sendInitialConnData, before the
+	// initial ReadyForQuery.
+	startupNotices []pgnotice.Notice
+}
+
+// GetStartupNotices returns the NOTICE messages that were accumulated during
+// connection setup. These should be sent to the client before the initial
+// ReadyForQuery.
+func (h ConnectionHandler) GetStartupNotices() []pgnotice.Notice {
+	return h.startupNotices
 }
 
 // SetOnTCPKeepAliveChange registers a callback that is invoked when any
@@ -3904,6 +3939,16 @@ func (ex *connExecutor) QualityOfService() sessiondatapb.QoSLevel {
 	return ex.sessionData().DefaultTxnQualityOfService
 }
 
+// sessionResourceGroupID returns the resource group id bound to the session
+// via SET resource_group, or zero if none is bound. It is used to stamp new
+// transactions for admission control, mirroring QualityOfService.
+func (ex *connExecutor) sessionResourceGroupID() uint64 {
+	if ex.sessionData() == nil {
+		return 0
+	}
+	return ex.sessionData().ResourceGroupID
+}
+
 // copyQualityOfService returns the QoSLevel session setting for COPY if the
 // session settings are populated, otherwise the background QoSLevel.
 func (ex *connExecutor) copyQualityOfService() sessiondatapb.QoSLevel {
@@ -4416,6 +4461,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				nil, // historicalTimestamp not chained
 				ex.transitionCtx,
 				ex.QualityOfService(),
+				ex.sessionResourceGroupID(),
 				chainModes.isoLevel,
 				ex.omitInRangefeeds(),
 				ex.bufferedWritesEnabled(explicitTxn),
@@ -4949,6 +4995,20 @@ type StatementCounters struct {
 	RoutineInsertCount telemetry.CounterWithAggMetric
 	RoutineDeleteCount telemetry.CounterWithAggMetric
 
+	// DDL/DCL statements within the UDF/SP body. CREATE TABLE is split
+	// by tree.Persistence: RoutineCreateTableCount tracks permanent
+	// tables and RoutineCreateTempTableCount tracks temporary tables.
+	RoutineCreateTableCount            telemetry.CounterWithAggMetric
+	RoutineCreateTempTableCount        telemetry.CounterWithAggMetric
+	RoutineDropTableCount              telemetry.CounterWithAggMetric
+	RoutineCreateSchemaCount           telemetry.CounterWithAggMetric
+	RoutineDropSchemaCount             telemetry.CounterWithAggMetric
+	RoutineCreateRoleCount             telemetry.CounterWithAggMetric
+	RoutineDropRoleCount               telemetry.CounterWithAggMetric
+	RoutineGrantCount                  telemetry.CounterWithAggMetric
+	RoutineRevokeCount                 telemetry.CounterWithAggMetric
+	RoutineAlterDefaultPrivilegesCount telemetry.CounterWithAggMetric
+
 	// Transaction operations.
 	TxnBeginCount    telemetry.CounterWithAggMetric
 	TxnCommitCount   telemetry.CounterWithAggMetric
@@ -5035,6 +5095,26 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaRoutineInsertStarted, internal)),
 		RoutineDeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaRoutineDeleteStarted, internal)),
+		RoutineCreateTableCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateTableStarted, internal)),
+		RoutineCreateTempTableCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateTempTableStarted, internal)),
+		RoutineDropTableCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDropTableStarted, internal)),
+		RoutineCreateSchemaCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateSchemaStarted, internal)),
+		RoutineDropSchemaCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDropSchemaStarted, internal)),
+		RoutineCreateRoleCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateRoleStarted, internal)),
+		RoutineDropRoleCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDropRoleStarted, internal)),
+		RoutineGrantCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineGrantStarted, internal)),
+		RoutineRevokeCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineRevokeStarted, internal)),
+		RoutineAlterDefaultPrivilegesCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineAlterDefaultPrivilegesStarted, internal)),
 		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDStarted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
@@ -5096,6 +5176,26 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaRoutineInsertExecuted, internal)),
 		RoutineDeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaRoutineDeleteExecuted, internal)),
+		RoutineCreateTableCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateTableExecuted, internal)),
+		RoutineCreateTempTableCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateTempTableExecuted, internal)),
+		RoutineDropTableCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDropTableExecuted, internal)),
+		RoutineCreateSchemaCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateSchemaExecuted, internal)),
+		RoutineDropSchemaCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDropSchemaExecuted, internal)),
+		RoutineCreateRoleCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineCreateRoleExecuted, internal)),
+		RoutineDropRoleCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDropRoleExecuted, internal)),
+		RoutineGrantCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineGrantExecuted, internal)),
+		RoutineRevokeCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineRevokeExecuted, internal)),
+		RoutineAlterDefaultPrivilegesCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineAlterDefaultPrivilegesExecuted, internal)),
 		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDExecuted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
@@ -5187,10 +5287,20 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 // import cycle.
 func (sc *StatementCounters) toRoutineStmtCounters() eval.RoutineStatementCounters {
 	return eval.RoutineStatementCounters{
-		SelectCount: &sc.RoutineSelectCount,
-		UpdateCount: &sc.RoutineUpdateCount,
-		InsertCount: &sc.RoutineInsertCount,
-		DeleteCount: &sc.RoutineDeleteCount,
+		SelectCount:                 &sc.RoutineSelectCount,
+		UpdateCount:                 &sc.RoutineUpdateCount,
+		InsertCount:                 &sc.RoutineInsertCount,
+		DeleteCount:                 &sc.RoutineDeleteCount,
+		CreateTableCount:            &sc.RoutineCreateTableCount,
+		CreateTempTableCount:        &sc.RoutineCreateTempTableCount,
+		DropTableCount:              &sc.RoutineDropTableCount,
+		CreateSchemaCount:           &sc.RoutineCreateSchemaCount,
+		DropSchemaCount:             &sc.RoutineDropSchemaCount,
+		CreateRoleCount:             &sc.RoutineCreateRoleCount,
+		DropRoleCount:               &sc.RoutineDropRoleCount,
+		GrantCount:                  &sc.RoutineGrantCount,
+		RevokeCount:                 &sc.RoutineRevokeCount,
+		AlterDefaultPrivilegesCount: &sc.RoutineAlterDefaultPrivilegesCount,
 	}
 }
 

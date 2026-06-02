@@ -471,11 +471,11 @@ func makePGPrivilegeInquiryDef(
 					// Remove the first argument.
 					args = args[1:]
 				} else {
-					if evalCtx.SessionData().User().Undefined() {
+					user = evalCtx.EffectiveUser()
+					if user.Undefined() {
 						// Wut... is this possible?
 						return tree.DNull, nil
 					}
-					user = evalCtx.SessionData().User()
 				}
 				ret, err := fn(ctx, evalCtx, args, user)
 				if err != nil {
@@ -1953,8 +1953,8 @@ FROM defaults_parsed
 				"INSERT WITH GRANT OPTION":     {Kind: privilege.INSERT, GrantOption: true},
 				"UPDATE":                       {Kind: privilege.UPDATE},
 				"UPDATE WITH GRANT OPTION":     {Kind: privilege.UPDATE, GrantOption: true},
-				"REFERENCES":                   {Kind: privilege.SELECT},
-				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
+				"REFERENCES":                   {Kind: privilege.REFERENCES},
+				"REFERENCES WITH GRANT OPTION": {Kind: privilege.REFERENCES, GrantOption: true},
 			})
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1981,8 +1981,8 @@ FROM defaults_parsed
 				"INSERT WITH GRANT OPTION":     {Kind: privilege.INSERT, GrantOption: true},
 				"UPDATE":                       {Kind: privilege.UPDATE},
 				"UPDATE WITH GRANT OPTION":     {Kind: privilege.UPDATE, GrantOption: true},
-				"REFERENCES":                   {Kind: privilege.SELECT},
-				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
+				"REFERENCES":                   {Kind: privilege.REFERENCES},
+				"REFERENCES WITH GRANT OPTION": {Kind: privilege.REFERENCES, GrantOption: true},
 			})
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -2097,7 +2097,7 @@ FROM defaults_parsed
 
 			// For user-defined function, utilize the descriptor based way.
 			if catid.IsOIDUserDefined(oid.(*tree.DOid).Oid) {
-				return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, evalCtx.SessionData().User(), privs)
+				return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, user, privs)
 			}
 
 			// For builtin functions, all users should have `EXECUTE` privilege, but
@@ -2263,8 +2263,8 @@ FROM defaults_parsed
 				"DELETE WITH GRANT OPTION":     {Kind: privilege.DELETE, GrantOption: true},
 				"TRUNCATE":                     {Kind: privilege.TRUNCATE},
 				"TRUNCATE WITH GRANT OPTION":   {Kind: privilege.TRUNCATE, GrantOption: true},
-				"REFERENCES":                   {Kind: privilege.SELECT},
-				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
+				"REFERENCES":                   {Kind: privilege.REFERENCES},
+				"REFERENCES WITH GRANT OPTION": {Kind: privilege.REFERENCES, GrantOption: true},
 				"TRIGGER":                      {Kind: privilege.TRIGGER},
 				"TRIGGER WITH GRANT OPTION":    {Kind: privilege.TRIGGER, GrantOption: true},
 				"RULE":                         {Kind: privilege.RULE},
@@ -2643,7 +2643,7 @@ FROM defaults_parsed
                   WHEN sub.db_id IS NULL
                     THEN crdb_internal.force_error('42704',
                            'database with OID ' || $1::STRING || ' does not exist')::INT
-                  WHEN NOT has_database_privilege(sub.db_id::OID, 'CONNECT')
+                  WHEN NOT has_database_privilege(session_user, sub.db_id::OID, 'CONNECT')
                     THEN crdb_internal.force_error('42501',
                            'permission denied for database ' || sub.db_name)::INT
                   ELSE sub.size
@@ -2675,7 +2675,7 @@ FROM defaults_parsed
                   WHEN sub.db_id IS NULL
                     THEN crdb_internal.force_error('3D000',
                            'database "' || $1 || '" does not exist')::INT
-                  WHEN NOT has_database_privilege(sub.db_id::OID, 'CONNECT')
+                  WHEN NOT has_database_privilege(session_user, sub.db_id::OID, 'CONNECT')
                     THEN crdb_internal.force_error('42501',
                            'permission denied for database ' || $1)::INT
                   ELSE sub.size
@@ -2714,7 +2714,11 @@ FROM defaults_parsed
 	// Postgres treats these as effectively public (any user can ask for the
 	// size of any relation). pg_database_size matches Postgres' stricter
 	// rule: the caller must have CONNECT on the database, otherwise the
-	// builtin errors with 42501. The bodies inline into outer queries, so
+	// builtin errors with 42501. The gate passes session_user explicitly
+	// because current_user inside a SECURITY DEFINER body resolves to the
+	// definer (NodeUser, which trivially has CONNECT). session_user ignores
+	// SET ROLE, so the check is against the connection's authenticated user
+	// rather than its currently-impersonated role. The bodies inline into outer queries, so
 	// bulk calls (e.g. SELECT pg_relation_size(c.oid) FROM pg_class c)
 	// scan system.table_metadata once total rather than once per row.
 	//
@@ -2724,6 +2728,13 @@ FROM defaults_parsed
 	// in that case so callers see the v1 (over-counted) value rather than
 	// NULL or 0. Once the cluster is fully upgraded and the cache cycles
 	// once, all rows have the per-index data and the fallback is dormant.
+	//
+	// Relations with no system.table_metadata row return NULL. This covers
+	// virtual tables (pg_catalog, information_schema, crdb_internal) which
+	// have no on-disk storage, as well as physical tables whose metadata
+	// row has not yet been written by the cache job. NULL is preferable to
+	// 0 because it lets SUM-style aggregations skip rows where the concept
+	// of on-disk size does not apply, instead of summing meaningless zeros.
 	"pg_relation_size": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
 		tree.Overload{
@@ -2742,8 +2753,7 @@ FROM defaults_parsed
                     COALESCE((tm_idx.details->'index_sizes'->>ti.index_id::TEXT)::INT, 0)
                   WHEN c.relkind IS NOT NULL THEN COALESCE(
                     (tm.details->'index_sizes'->>(tm.details->>'primary_index_id'))::INT,
-                    tm.replication_size_bytes,
-                    0)
+                    tm.replication_size_bytes)
                   ELSE NULL
                 END
            FROM (SELECT $1::INT AS id) input
@@ -2758,7 +2768,7 @@ FROM defaults_parsed
 				"\"heap only\" semantics, since CockroachDB's primary index is the row data). " +
 				"For an index this is the size of just that index. The size is read from a " +
 				"periodically-refreshed cache and may lag behind the true value by minutes. " +
-				"Returns NULL if no such relation exists.",
+				"Returns NULL if no such relation exists or has no on-disk representation.",
 			Volatility:   volatility.Volatile,
 			Language:     tree.RoutineLangSQL,
 			SecurityMode: tree.RoutineDefiner,
@@ -2777,8 +2787,7 @@ FROM defaults_parsed
                   WHEN c.relkind IS NULL OR c.relkind = 'i' THEN NULL
                   ELSE COALESCE(
                     (tm.details->'index_sizes'->>(tm.details->>'primary_index_id'))::INT,
-                    tm.replication_size_bytes,
-                    0)
+                    tm.replication_size_bytes)
                 END
            FROM (SELECT $1::INT AS id) input
            LEFT JOIN pg_catalog.pg_class@primary c ON c.oid = $1
@@ -2787,7 +2796,7 @@ FROM defaults_parsed
 				"excluding indexes. In CockroachDB this is the primary index size, since the " +
 				"primary index is the row data. The size is read from a periodically-refreshed " +
 				"cache and may lag behind the true value by minutes. Returns NULL if no such " +
-				"relation exists.",
+				"relation exists or has no on-disk representation.",
 			Volatility:   volatility.Volatile,
 			Language:     tree.RoutineLangSQL,
 			SecurityMode: tree.RoutineDefiner,
@@ -2801,7 +2810,7 @@ FROM defaults_parsed
 			ReturnType: tree.FixedReturnType(types.Int),
 			Body: `SELECT CASE
                   WHEN c.relkind IS NULL OR c.relkind = 'i' THEN NULL
-                  ELSE COALESCE(tm.replication_size_bytes, 0)::INT
+                  ELSE tm.replication_size_bytes
                 END
            FROM (SELECT $1::INT AS id) input
            LEFT JOIN pg_catalog.pg_class@primary c ON c.oid = $1
@@ -2810,7 +2819,8 @@ FROM defaults_parsed
 				"including all indexes and any data still occupying the table's keyspace " +
 				"(such as dropped-index data awaiting garbage collection). The size is read " +
 				"from a periodically-refreshed cache and may lag behind the true value by " +
-				"minutes. Returns NULL if no such relation exists.",
+				"minutes. Returns NULL if no such relation exists or has no on-disk " +
+				"representation.",
 			Volatility:   volatility.Volatile,
 			Language:     tree.RoutineLangSQL,
 			SecurityMode: tree.RoutineDefiner,
@@ -2824,6 +2834,7 @@ FROM defaults_parsed
 			ReturnType: tree.FixedReturnType(types.Int),
 			Body: `SELECT CASE
                   WHEN c.relkind IS NULL OR c.relkind = 'i' THEN NULL
+                  WHEN tm.table_id IS NULL THEN NULL
                   ELSE COALESCE((
                     SELECT sum(value::INT)::INT
                       FROM jsonb_each_text(tm.details->'index_sizes')
@@ -2843,7 +2854,7 @@ FROM defaults_parsed
 				"reported by pg_relation_size and pg_table_size, since CockroachDB stores " +
 				"row data in the primary index). The size is read from a " +
 				"periodically-refreshed cache and may lag behind the true value by minutes. " +
-				"Returns NULL if no such relation exists.",
+				"Returns NULL if no such relation exists or has no on-disk representation.",
 			Volatility:   volatility.Volatile,
 			Language:     tree.RoutineLangSQL,
 			SecurityMode: tree.RoutineDefiner,

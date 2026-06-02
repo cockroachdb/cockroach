@@ -2486,18 +2486,26 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 // Because cascades and triggers can themselves generate more cascades, check,
 // or trigger queries, this method can append to plan.cascades, plan.checkPlans,
 // and plan.triggers (and all these plans must be closed later).
-//
-// Returns false if an error was encountered and sets that error in the provided
-// receiver.
 func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 	ctx context.Context,
 	planner *planner,
 	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
 	plan *planComponents,
 	recv *DistSQLReceiver,
-) bool {
-	if len(plan.cascades) == 0 && len(plan.checkPlans) == 0 && len(plan.triggers) == 0 {
-		return false
+) {
+	if len(plan.checkPlans) == 0 {
+		if len(plan.cascades) == 0 && len(plan.triggers) == 0 {
+			// We have no postqueries to run.
+			return
+		}
+		if rcr, ok := recv.resultWriter.(RestrictedCommandResult); ok && rcr.RowsAffected() == 0 {
+			// We have some cascades and / or row-level triggers, but the main
+			// query didn't modify any rows, meaning that cascades / row-level
+			// triggers would no-op, so we simply short-circuit their execution.
+			// TODO(#126362): once we support statement-level triggers, this
+			// might need to be adjusted.
+			return
+		}
 	}
 
 	prevSteppingMode := planner.Txn().ConfigureStepping(ctx, kv.SteppingEnabled)
@@ -2533,7 +2541,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 			// run as part of the same statement as the corresponding mutations.
 			if err := planner.Txn().Step(ctx, false /* allowReadTimestampStep */); err != nil {
 				recv.SetError(err)
-				return false
+				return
 			}
 
 			// The cascading query is allowed to autocommit only if it is the last
@@ -2555,7 +2563,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 				&plan.cascades[cascadesIdx], defaultGetSaveFlowsFunc,
 			)
 			if !ok {
-				return false
+				return
 			}
 			checksContainLocking = checksContainLocking || newChecksContainLocking
 		}
@@ -2578,7 +2586,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 			// part of the same statement as the corresponding mutations.
 			if err := planner.Txn().Step(ctx, false /* allowReadTimestampStep */); err != nil {
 				recv.SetError(err)
-				return false
+				return
 			}
 
 			// We'll run the checks in parallel if the parallelization is enabled, we have
@@ -2604,7 +2612,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 				checksToRun := plan.checkPlans[checksIdx:]
 				if err := dsp.planAndRunChecksInParallel(ctx, checksToRun, planner, evalCtxFactory, recv); err != nil {
 					recv.SetError(err)
-					return false
+					return
 				}
 			} else {
 				if (len(plan.checkPlans) - checksIdx) > 1 {
@@ -2624,7 +2632,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 						recv.stats.add,
 					); err != nil {
 						recv.SetError(err)
-						return false
+						return
 					}
 				}
 			}
@@ -2658,12 +2666,11 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 				&plan.triggers[triggersIdx], defaultGetSaveFlowsFunc,
 			)
 			if !ok {
-				return false
+				return
 			}
 			checksContainLocking = checksContainLocking || newChecksContainLocking
 		}
 	}
-	return true
 }
 
 // checkPostQueryBuffer checks whether the given post-query has an input buffer

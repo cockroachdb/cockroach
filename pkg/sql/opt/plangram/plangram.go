@@ -11,27 +11,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-// VisibleToPlanGram returns false if expr is invisible to PlanGram
-// matching. Invisible expressions (e.g. Distribute, Barrier, Explain, etc) are
-// ignored during PlanGram matching.
-func VisibleToPlanGram(expr memo.RelExpr) bool {
-	switch expr.(type) {
-	// Invisible expressions must be unary so that the required PlanGram term can
-	// be passed down to the child group.
-	case *memo.NormCycleTestRelExpr, *memo.MemoCycleTestRelExpr, *memo.BarrierExpr,
-		*memo.DistributeExpr, *memo.ExplainExpr:
-		return false
-	default:
-		return true
-	}
-}
-
 // BuildChildRequired returns the PlanGram term for the nth child of
 // the parent expression.
 func BuildChildRequired(
 	parent memo.RelExpr, required physical.PlanGram, childIdx int, md *opt.Metadata,
 ) physical.PlanGram {
-	if !VisibleToPlanGram(parent) {
+	if !physical.VisibleToPlanGram(parent.Op()) {
 		// For expressions not visible to PlanGrams, the current term is simply
 		// passed down.
 		return required

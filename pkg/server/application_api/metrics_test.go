@@ -356,6 +356,17 @@ func confirmMetricCount(t *testing.T, db *gosql.DB, metricName string, expected 
 	require.Equal(t, expected, int(res.Int64))
 }
 
+// confirmRoutineMetricCounts asserts the started and completed routine
+// counters for the given dotted suffix (e.g. "create_table" maps to
+// sql.routine.create_table.started.count and sql.routine.create_table.count).
+func confirmRoutineMetricCounts(
+	t *testing.T, db *gosql.DB, suffix string, expectedStarted, expectedExecuted int,
+) {
+	t.Helper()
+	confirmMetricCount(t, db, fmt.Sprintf("sql.routine.%s.started.count", suffix), expectedStarted)
+	confirmMetricCount(t, db, fmt.Sprintf("sql.routine.%s.count", suffix), expectedExecuted)
+}
+
 func TestStoreProcedureCallStatementMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -785,4 +796,135 @@ func TestUDFStatementMetrics(t *testing.T) {
 	expectedSelectCount += 1
 	confirmMetricCount(t, db, "sql.routine.insert.count", expectedInsertCount)
 	confirmMetricCount(t, db, "sql.routine.select.count", expectedSelectCount)
+}
+
+// TestStoreProcedureCallDDLDCLMetrics verifies that DDL and DCL statements
+// executed inside stored procedure bodies advance the corresponding
+// sql.routine.<type>.{started.count,count} counters.
+func TestStoreProcedureCallDDLDCLMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	db := srv.SystemLayer().SQLConn(t)
+
+	// DDL inside PL/pgSQL procedure bodies is only permitted when late
+	// binding is enabled, so turn it on before creating those procedures.
+	_, err := db.Exec(
+		`SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = true`,
+	)
+	require.NoError(t, err)
+
+	// Pre-create everything later procedures reference. Doing it at the
+	// top level keeps the routine counters at zero before the per-case
+	// CALLs below run.
+	_, err = db.Exec(`
+		CREATE TABLE base_tbl (a INT PRIMARY KEY);
+		CREATE TABLE drop_target_tbl (a INT PRIMARY KEY);
+		CREATE SCHEMA drop_target_schema;
+		CREATE ROLE drop_target_role;
+		CREATE ROLE grantee_role;
+		SET experimental_enable_temp_tables = 'on';
+	`)
+	require.NoError(t, err)
+
+	// callProc creates a single-statement procedure named p_<suffix>
+	// with the given body and calls it.
+	callProc := func(t *testing.T, suffix, body string) {
+		t.Helper()
+		_, err := db.Exec(fmt.Sprintf(
+			`CREATE PROCEDURE p_%[1]s() LANGUAGE PLpgSQL AS $$ BEGIN %[2]s; END $$; CALL p_%[1]s();`,
+			suffix, body,
+		))
+		require.NoError(t, err)
+	}
+
+	// Each row exercises one routine body statement and asserts both
+	// the started and executed counters advance by 1.
+	for _, tc := range []struct{ suffix, body string }{
+		{"create_table", "CREATE TABLE proc_created_tbl (a INT PRIMARY KEY)"},
+		{"drop_table", "DROP TABLE drop_target_tbl"},
+		{"create_temp_table", "CREATE TEMPORARY TABLE proc_temp_tbl (a INT PRIMARY KEY)"},
+		{"create_schema", "CREATE SCHEMA proc_created_schema"},
+		{"drop_schema", "DROP SCHEMA drop_target_schema"},
+		{"create_role", "CREATE ROLE proc_created_role"},
+		{"drop_role", "DROP ROLE drop_target_role"},
+	} {
+		t.Run(tc.suffix, func(t *testing.T) {
+			callProc(t, tc.suffix, tc.body)
+			confirmRoutineMetricCounts(t, db, tc.suffix, 1, 1)
+		})
+	}
+	// CREATE TEMPORARY TABLE shares the CREATE TABLE tag but must not
+	// advance the permanent counter.
+	confirmRoutineMetricCounts(t, db, "create_table", 1, 1)
+
+	t.Run("failed_create_table", func(t *testing.T) {
+		// base_tbl already exists, so a non-IF-NOT-EXISTS CREATE fails;
+		// only the started counter must advance.
+		_, err := db.Exec(`
+			CREATE PROCEDURE p_create_table_dup() LANGUAGE PLpgSQL AS $$
+			BEGIN CREATE TABLE base_tbl (a INT PRIMARY KEY); END $$;
+		`)
+		require.NoError(t, err)
+		_, err = db.Exec(`CALL p_create_table_dup();`)
+		require.Error(t, err)
+		confirmRoutineMetricCounts(t, db, "create_table", 2, 1)
+	})
+
+	t.Run("multi_dcl", func(t *testing.T) {
+		// Verify each body statement is counted individually.
+		_, err := db.Exec(`
+			CREATE PROCEDURE p_multi_dcl() LANGUAGE PLpgSQL AS $$
+			BEGIN
+				GRANT SELECT ON base_tbl TO grantee_role;
+				GRANT INSERT ON base_tbl TO grantee_role;
+				REVOKE SELECT ON base_tbl FROM grantee_role;
+				GRANT UPDATE ON base_tbl TO grantee_role;
+				REVOKE INSERT ON base_tbl FROM grantee_role;
+				ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO grantee_role;
+				ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM grantee_role;
+			END $$;
+			CALL p_multi_dcl();
+		`)
+		require.NoError(t, err)
+		confirmRoutineMetricCounts(t, db, "grant", 3, 3)
+		confirmRoutineMetricCounts(t, db, "revoke", 2, 2)
+		confirmRoutineMetricCounts(t, db, "alter_default_privileges", 2, 2)
+	})
+
+	t.Run("language_sql", func(t *testing.T) {
+		// Verify counters also advance for LANGUAGE SQL procedure bodies,
+		// not just PLpgSQL.
+		_, err := db.Exec(`
+			CREATE PROCEDURE p_sqllang_grant() LANGUAGE SQL AS $$
+			GRANT DELETE ON base_tbl TO grantee_role;
+			$$;
+			CALL p_sqllang_grant();
+		`)
+		require.NoError(t, err)
+		confirmRoutineMetricCounts(t, db, "grant", 4, 4)
+	})
+
+	t.Run("nested_call", func(t *testing.T) {
+		// The inner body statement must attribute to its per-tag
+		// counter, not just bump an outer-procedure counter.
+		_, err := db.Exec(`
+			CREATE PROCEDURE p_inner_create() LANGUAGE PLpgSQL AS $$
+			BEGIN CREATE TABLE nested_created_tbl (a INT PRIMARY KEY); END $$;
+			CREATE PROCEDURE p_outer_nested() LANGUAGE PLpgSQL AS $$
+			BEGIN CALL p_inner_create(); END $$;
+			CALL p_outer_nested();
+		`)
+		require.NoError(t, err)
+		// Prior subtests bumped started by 2 (1 success + 1 failure)
+		// and executed by 1; the inner CREATE TABLE here adds 1 to each.
+		confirmRoutineMetricCounts(t, db, "create_table", 3, 2)
+	})
+
+	// Routine DML counters must stay at 0 since no DML ran in any
+	// procedure body above.
+	for _, suffix := range []string{"select", "insert", "update", "delete"} {
+		confirmMetricCount(t, db, fmt.Sprintf("sql.routine.%s.count", suffix), 0)
+	}
 }

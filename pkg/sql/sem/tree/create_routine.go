@@ -83,8 +83,9 @@ type CreateRoutine struct {
 	Options     RoutineOptions
 	// RoutineBody is set during parsing for routines that use SQL-standard
 	// inline body syntax: either BEGIN ATOMIC ... END or a bare RETURN expr
-	// (as opposed to the dollar-quoted AS $$ ... $$ syntax). Currently
-	// unimplemented in the optimizer.
+	// (as opposed to the dollar-quoted AS $$ ... $$ syntax). The opt builder
+	// rewrites it into a RoutineBodyStr option via
+	// ConvertInlineRoutineBodyToOption and clears this field.
 	RoutineBody *RoutineBody
 	// BodyStatements is not assigned during initial parsing of user input. It's
 	// assigned during opt builder for logging purpose at the moment. It stores
@@ -284,6 +285,82 @@ type RoutineBody struct {
 	// Stmts is populated during parsing. Unlike BodyStatements, we don't need
 	// to create separate Annotations for each statement.
 	Stmts Statements
+}
+
+// ConvertInlineRoutineBodyToOption rewrites a parsed inline routine body
+// (the SQL-standard `BEGIN ATOMIC ... END` or bare `RETURN expr` forms) into
+// the legacy string body form by serializing each statement and appending the
+// result as a RoutineBodyStr option. After this runs, cf.RoutineBody is
+// cleared so downstream code can process the routine as if the user had
+// written `AS $$ ... $$`.
+//
+// CockroachDB already does early binding for SQL routines, so the inline and
+// string forms are semantically equivalent; only the input syntax differs.
+//
+// Clearing cf.RoutineBody makes this idempotent, which matters because the opt
+// builder mutates the CreateRoutine AST in place and that AST may be re-built
+// (e.g. on a transaction retry or a re-executed prepared statement). On the
+// second pass cf.RoutineBody is nil, so the caller skips the conversion and the
+// previously appended RoutineBodyStr carries the body. Without the clear, a
+// second pass would append a duplicate body and then fail the hasStringBody
+// check below.
+func ConvertInlineRoutineBodyToOption(cf *CreateRoutine) error {
+	var hasStringBody, hasLang bool
+	var lang RoutineLanguage
+	for _, opt := range cf.Options {
+		switch t := opt.(type) {
+		case RoutineBodyStr:
+			hasStringBody = true
+		case RoutineLanguage:
+			lang = t
+			hasLang = true
+		}
+	}
+	if hasStringBody {
+		return pgerror.New(pgcode.InvalidFunctionDefinition,
+			"duplicate function body specified")
+	}
+	if hasLang && lang != RoutineLangSQL {
+		return pgerror.New(pgcode.InvalidFunctionDefinition,
+			"inline SQL function body only valid for language SQL")
+	}
+
+	fmtCtx := NewFmtCtx(FmtParsable)
+	for i, stmt := range cf.RoutineBody.Stmts {
+		// Reject DDL and DCL in the inline body. Postgres parses BEGIN ATOMIC
+		// bodies at definition time (early binding), so it forbids schema
+		// changes there; stored procedures support DDL only through the
+		// dollar-quoted AS $$ ... $$ form. Blocking it here keeps us consistent
+		// with Postgres and keeps DDL-in-routine support to a single code path.
+		if t := stmt.StatementType(); t == TypeDDL || t == TypeDCL {
+			return errors.WithHint(
+				pgerror.Newf(pgcode.FeatureNotSupported,
+					"%s is not yet supported in unquoted SQL routine body", stmt.StatementTag()),
+				"Use the dollar-quoted AS $$ ... $$ body form.",
+			)
+		}
+		if i > 0 {
+			fmtCtx.WriteString(" ")
+		}
+		// `RETURN expr` is only valid as a routine-body statement, so it
+		// cannot round-trip through the legacy parser. Emit it as `SELECT
+		// expr` instead — semantically equivalent for SQL routines, since
+		// the result is the value of the final query.
+		if r, ok := stmt.(*RoutineReturn); ok {
+			sel := &Select{
+				Select: &SelectClause{
+					Exprs: SelectExprs{{Expr: r.ReturnVal}},
+				},
+			}
+			fmtCtx.FormatNode(sel)
+		} else {
+			fmtCtx.FormatNode(stmt)
+		}
+		fmtCtx.WriteString(";")
+	}
+	cf.Options = append(cf.Options, RoutineBodyStr(fmtCtx.CloseAndGetString()))
+	cf.RoutineBody = nil
+	return nil
 }
 
 // RoutineReturn represent a RETURN statement in a UDF body.

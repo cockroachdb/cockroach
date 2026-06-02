@@ -1677,6 +1677,10 @@ system              public             29_81_1_not_null                         
 system              public             29_81_2_not_null                                                                                                name IS NOT NULL
 system              public             29_81_3_not_null                                                                                                config IS NOT NULL
 system              public             29_82_1_not_null                                                                                                value IS NOT NULL
+system              public             29_83_1_not_null                                                                                                node_id IS NOT NULL
+system              public             29_83_2_not_null                                                                                                license_id IS NOT NULL
+system              public             29_83_3_not_null                                                                                                period_start IS NOT NULL
+system              public             29_83_4_not_null                                                                                                vcpus IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
 system              public             check_bounds                                                                                                    ((start_key < end_key))
@@ -3096,6 +3100,7 @@ admin    test           DELETE             NULL
 admin    test           DROP               NULL
 admin    test           INSERT             NULL
 admin    test           MAINTAIN           NULL
+admin    test           REFERENCES         NULL
 admin    test           REPLICATIONDEST    NULL
 admin    test           REPLICATIONSOURCE  NULL
 admin    test           SELECT             NULL
@@ -3111,6 +3116,7 @@ root     test           DELETE             NULL
 root     test           DROP               NULL
 root     test           INSERT             NULL
 root     test           MAINTAIN           NULL
+root     test           REFERENCES         NULL
 root     test           REPLICATIONDEST    NULL
 root     test           REPLICATIONSOURCE  NULL
 root     test           SELECT             NULL
@@ -3999,6 +4005,7 @@ optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on
 optimizer_enable_lock_elision                                    on
 optimizer_hoist_uncorrelated_equality_subqueries                 on
 optimizer_inline_any_unnest_subquery                             on
+optimizer_inline_placeholder_equalities                          on
 optimizer_merge_joins_enabled                                    on
 optimizer_min_row_count                                          1
 optimizer_plan_lookup_joins_with_reverse_scans                   on
@@ -4053,6 +4060,7 @@ recursion_depth_limit                                            1000
 register_latch_wait_contention_events                            off
 reorder_joins_limit                                              8
 require_explicit_primary_keys                                    off
+resource_group                                                   ·
 results_buffer_size                                              524288
 role                                                             none
 row_security                                                     on

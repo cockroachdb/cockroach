@@ -468,6 +468,31 @@ func PgDumpCompatibilityFromString(val string) (_ string, ok bool) {
 	}
 }
 
+// PgDumpClientAppNames are the application_name values reported by the
+// PostgreSQL dump/restore client tools (pg_dump, pg_restore, pg_dumpall) via
+// libpq's fallback_application_name. The match is exact and case-sensitive,
+// since that is precisely what those tools send.
+var PgDumpClientAppNames = []string{"pg_dump", "pg_restore", "pg_dumpall"}
+
+// DefaultPgDumpCompatibilityForAppName returns the pg_dump_compatibility value
+// to apply by default for a connection whose application_name is appName, along
+// with whether such a default applies. A default is returned only for the
+// PostgreSQL dump/restore client tools (see PgDumpClientAppNames). The chosen
+// value is PgDumpCompatibilityCockroachDB so that dumps round-trip into another
+// CockroachDB cluster without further configuration.
+//
+// Callers are responsible for applying this default only when the client has
+// not explicitly configured pg_dump_compatibility, so that an explicit value
+// (including "off") is always respected.
+func DefaultPgDumpCompatibilityForAppName(appName string) (_ string, ok bool) {
+	for _, name := range PgDumpClientAppNames {
+		if appName == name {
+			return PgDumpCompatibilityCockroachDB, true
+		}
+	}
+	return "", false
+}
+
 // CanaryStatsMode controls which table statistics the optimizer uses for
 // query planning in this session. See the comments on each mode for details.
 type CanaryStatsMode int64

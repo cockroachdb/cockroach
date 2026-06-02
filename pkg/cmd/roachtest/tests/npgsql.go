@@ -58,6 +58,12 @@ func registerNpgsql(r registry.Registry) {
 			`GRANT admin TO npgsql_tests`,
 			`DROP DATABASE IF EXISTS npgsql_tests`,
 			`CREATE DATABASE npgsql_tests`,
+			// The npgsql test suite runs many tests in parallel. Concurrent DDL
+			// modify the database descriptor and cause concurrent transactions
+			// to fail with a retry error which npgsql does not retry. Retain
+			// the old descriptor versions to prevent the un-retried errors from
+			// percolating.
+			`SET CLUSTER SETTING sql.catalog.descriptor_lease.lock_old_versions.enabled = 'true'`,
 		} {
 			if _, err := db.ExecContext(ctx, cmd); err != nil {
 				t.Fatal(err)

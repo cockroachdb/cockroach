@@ -615,12 +615,13 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		}
 	}
 	if err := sw.prepareSnapApply(ctx, snapWrite{
-		sl:         r.raftMu.stateLoader.StateLoader,
-		truncState: truncState,
-		hardState:  hs,
-		desc:       desc,
-		origDesc:   r.shMu.state.Desc,
-		subsume:    subsume, // NB: ordered by StartKey
+		sl:               r.raftMu.stateLoader.StateLoader,
+		truncState:       truncState,
+		hardState:        hs,
+		desc:             desc,
+		origDesc:         r.shMu.state.Desc,
+		raftAppliedIndex: r.shMu.state.RaftAppliedIndex,
+		subsume:          subsume, // NB: ordered by StartKey
 	}); err != nil {
 		return err
 	}

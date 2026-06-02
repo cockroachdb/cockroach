@@ -1,5 +1,7 @@
 /* setup */
 CREATE DOMAIN salmon AS INT DEFAULT 0;
+CREATE TABLE t (c salmon);
+CREATE VIEW v AS SELECT c FROM t;
 
 /* test */
 EXPLAIN (DDL) ALTER DOMAIN salmon RENAME TO trout;

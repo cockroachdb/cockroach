@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -263,8 +264,11 @@ func ReplayWAG(
 		if apply, err := canApplyWAGNode(ctx, node, stateRW); err != nil {
 			return errors.Wrapf(err, "WAG node %d", wagIdx)
 		} else if !apply {
+			log.KvExec.VInfof(ctx, 2, "skipping already-applied WAG node %d: %s",
+				wagIdx, node.Events)
 			continue
 		}
+		log.KvExec.VInfof(ctx, 2, "applying WAG node %d: %s", wagIdx, node.Events)
 		for target := range wagNodeCatchUps(node) {
 			if err := replayRaftLog(ctx, raftRO, target, newBatch); err != nil {
 				return errors.Wrapf(err, "WAG node %d: catch-up r%d", wagIdx, target.rangeID)

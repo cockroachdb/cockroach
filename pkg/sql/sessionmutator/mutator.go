@@ -1164,6 +1164,10 @@ func (m *SessionDataMutator) SetOptimizerInlineAnyUnnestSubquery(val bool) {
 	m.Data.OptimizerInlineAnyUnnestSubquery = val
 }
 
+func (m *SessionDataMutator) SetOptimizerInlinePlaceholderEqualities(val bool) {
+	m.Data.OptimizerInlinePlaceholderEqualities = val
+}
+
 func (m *SessionDataMutator) SetUseBackupsWithIDs(val bool) {
 	m.Data.UseBackupsWithIDs = val
 }
@@ -1209,6 +1213,14 @@ func (m *SessionDataMutator) SetPgDumpCompatibility(val string) {
 
 func (m *SessionDataMutator) SetStatsAsOf(val hlc.Timestamp) {
 	m.Data.StatsAsOf = val
+}
+
+// SetResourceGroup records both the user-visible name and the resolved id
+// of the session's resource group. Passing an empty name and zero id
+// clears the binding.
+func (m *SessionDataMutator) SetResourceGroup(name string, id uint64) {
+	m.Data.ResourceGroupName = name
+	m.Data.ResourceGroupID = id
 }
 
 func (m *SessionDataMutator) SetBufferedWritesImplicitTxnsEnabled(val bool) {

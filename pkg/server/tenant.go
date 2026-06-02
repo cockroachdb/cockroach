@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiinternal"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
@@ -1248,6 +1249,10 @@ func makeTenantSQLServerArgs(
 		}
 		// Expose cert expirations in metrics.
 		registry.AddMetricStruct(cm.Metrics())
+	} else {
+		// Register stub certificate metrics so the metadata is discoverable
+		// by tools like `cockroach gen metric-list` even in insecure mode.
+		registry.AddMetricStruct(security.NewStubMetrics())
 	}
 
 	registry.AddMetricStruct(rpcContext.Metrics())
@@ -1488,6 +1493,7 @@ func makeTenantSQLServerArgs(
 		sqlCPUProvider:           sqlCPUProvider,
 		rangeDescIteratorFactory: tenantConnect,
 		tenantTimeSeriesServer:   sTS,
+		timeSeriesQuerier:        ts.NewTenantSQLAdapter(sTS),
 		tenantCapabilitiesReader: sql.EmptySystemTenantOnly[tenantcapabilities.Reader](),
 	}, nil
 }

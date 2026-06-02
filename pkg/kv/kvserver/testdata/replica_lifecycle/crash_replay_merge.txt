@@ -1,0 +1,83 @@
+# Verify that a merge which crashes before applying to the state engine is
+# recovered by WAG replay on restart.
+create-descriptor start=a end=m replicas=(1,2,3)
+----
+created descriptor: r1:{a-m} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+
+create-replica range-id=1 initialized
+----
+created replica: (n1,s1):1
+state engine:
+Put: 0,0 /Local/RangeID/1/r/RangeLease (0x01698972726c6c2d00): <empty>
+Put: 0,0 /Local/RangeID/1/r/RangeGCThreshold (0x016989726c67632d00): 0,0
+Put: 0,0 /Local/RangeID/1/r/RangeGCHint (0x016989727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
+Put: 0,0 /Local/RangeID/1/r/RangeVersion (0x016989727276657200): 10.8-upgrading-step-007
+Put: 0,0 /Local/RangeID/1/r/RangeAppliedState (0x016989727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
+Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
+log engine:
+Put: 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
+Put: 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): index:10 term:5 
+
+set-lease range-id=1 replica=1
+----
+ok
+
+# Set up the RHS range.
+create-descriptor start=m end=z replicas=(1,2,3)
+----
+created descriptor: r2:{m-z} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+
+create-replica range-id=2 initialized
+----
+created replica: (n1,s1):1
+state engine:
+Put: 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): <empty>
+Put: 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 0,0
+Put: 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
+Put: 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 10.8-upgrading-step-007
+Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
+Put: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): replica_id:1 
+log engine:
+Put: 0,0 /Local/RangeID/2/u/RaftHardState (0x01698a757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
+Put: 0,0 /Local/RangeID/2/u/RaftTruncatedState (0x01698a757266747400): index:10 term:5 
+
+set-lease range-id=2 replica=1
+----
+ok
+
+eval-merge lhs-range-id=1 rhs-range-id=2
+----
+merged: r1 ["a", "m") + r2 ["m", "z") -> r1 ["a", "z")
+
+disable-state-flush
+----
+ok
+
+# The WAG node is written but the state engine batch is dropped.
+apply-merge range-id=1
+----
+state engine:
+(matches WAG node)
+log engine:
+Delete (Sized at 38): 0,0 /Local/RangeID/2/u/RaftHardState (0x01698a757266746800): 
+Delete (Sized at 32): 0,0 /Local/RangeID/2/u/RaftTruncatedState (0x01698a757266747400): 
+Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): (r2/1:10,EventSubsume,"m") (r1/1:11,EventMerge,"a")
+> Delete (Sized at 28): 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 
+> Delete (Sized at 43): 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): 
+> Delete (Sized at 34): 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): 
+> Delete (Sized at 44): 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): 
+> Delete (Sized at 36): 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 
+> Put: 0,0 /Local/RangeID/2/u/RangeTombstone (0x01698a757266746200): next_replica_id:2147483647 
+> Delete: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): 
+
+# WAG replay recovers the merge's state batch.
+restart
+----
+applying WAG node 1: [(r2/1:10,EventSubsume,‹"m"›) (r1/1:11,EventMerge,‹"a"›)]
+
+# Only the LHS remains, widened to [a, z).
+print-range-state
+----
+range desc: r1:{a-z} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} AppliedIndex=10 TruncatedState={Index:10,Term:5} LastIdx=10
+		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseLeader term=10 min-exp=0.000000100,0 pro=0,0 acq=Unspecified

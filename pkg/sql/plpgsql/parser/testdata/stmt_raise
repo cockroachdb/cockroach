@@ -4,7 +4,6 @@ BEGIN
   RAISE;
 END
 ----
-----
 at or near ";": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 DECLARE
@@ -12,17 +11,7 @@ BEGIN
   RAISE;
        ^
 HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+See: https://go.crdb.dev/issue-v/169573/
 
 parse
 DECLARE

@@ -9,11 +9,12 @@ go_library(
         "//pkg/backup",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/multiregionccl",
-        "//pkg/ccl/multitenantccl",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/crosscluster/logical",
         "//pkg/crosscluster/physical",
         "//pkg/crosscluster/producer",
+        "//pkg/multitenant/tenantcostclient",
+        "//pkg/multitenant/tenantcostserver",
         "//pkg/security/gssapiauth",
     ],
 )

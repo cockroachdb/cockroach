@@ -55,7 +55,9 @@ func (p *planner) createUserDefinedSchemaDescriptor(
 	if err != nil {
 		return nil, nil, err
 	}
-	user := sessionData.User()
+	// Use p.User() so SECURITY DEFINER procedures record the definer as the
+	// schema owner, matching PostgreSQL.
+	user := p.User()
 	var schemaName string
 	if !n.Schema.ExplicitSchema {
 		schemaName = authRole.Normalized()

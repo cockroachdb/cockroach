@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -220,6 +221,15 @@ type plOptions struct {
 	// late-bound PL/pgSQL procedure, where the body is stored verbatim and
 	// references are resolved at CALL time.
 	skipSQL bool
+
+	// securityMode and routineOwner carry the enclosing routine's effective
+	// identity onto every continuation's UDFDefinition. PL/pgSQL COMMIT and
+	// ROLLBACK resume the body via a cached resumeProc memo that bypasses the
+	// optbuilder, so routineGenerator.Start relies on these fields to push the
+	// definer on resume. Zero values (RoutineInvoker, undefined owner) leave
+	// INVOKER and DO-block paths unaffected.
+	securityMode tree.RoutineSecurity
+	routineOwner username.SQLUsername
 }
 
 // basePLOptions returns a new plOptions struct with default values.
@@ -280,6 +290,14 @@ func (opts plOptions) SetIsTriggerFn(isTriggerFn bool) plOptions {
 // given value.
 func (opts plOptions) SetSkipSQL(skipSQL bool) plOptions {
 	opts.skipSQL = skipSQL
+	return opts
+}
+
+// SetSecurity returns a new plOptions struct with the routine's security mode
+// and owner set so that continuations inherit them. See plOptions.securityMode.
+func (opts plOptions) SetSecurity(mode tree.RoutineSecurity, owner username.SQLUsername) plOptions {
+	opts.securityMode = mode
+	opts.routineOwner = owner
 	return opts
 }
 
@@ -2247,6 +2265,9 @@ func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 			BlockState:        b.block().state,
 			RoutineType:       tree.UDFRoutine,
 			RoutineLang:       tree.RoutineLangPLpgSQL,
+			// See plOptions.securityMode for why continuations carry these.
+			SecurityMode: b.options.securityMode,
+			RoutineOwner: b.options.routineOwner,
 		},
 		typ: continuationDefault,
 		s:   s,

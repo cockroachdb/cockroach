@@ -741,22 +741,32 @@ type AdmitResponse struct {
 }
 
 // Resource group IDs used in Resource Manager mode. Work is split into
-// two groups based on WorkInfo.Priority.
+// two groups based on WorkInfo.Priority. These are uint64 aliases of the
+// exported admissionpb ids.
 const (
 	// highResourceGroupID is used for work with priority >= NormalPri.
-	highResourceGroupID uint64 = 1
+	highResourceGroupID = uint64(admissionpb.HighResourceGroupID)
 	// lowResourceGroupID is used for work with priority < NormalPri.
-	lowResourceGroupID uint64 = 2
+	lowResourceGroupID = uint64(admissionpb.LowResourceGroupID)
 )
 
-// priorityToResourceGroupKey maps a WorkPriority to the rg-keyed
-// groupKey for one of the two hardcoded resource groups. Used in
-// Resource Manager mode.
+// highResourceGroupKey and lowResourceGroupKey are the groupKeys for the
+// two built-in resource groups. They are tenant-agnostic (tenantID 0):
+// the built-ins are shared across tenants on the host, matching how
+// builtinGroupConfigs seeds them. User-defined groups, in contrast, are
+// per-tenant and use rgGroupKey with a real tenant id.
+var (
+	highResourceGroupKey = groupKey{groupID: highResourceGroupID}
+	lowResourceGroupKey  = groupKey{groupID: lowResourceGroupID}
+)
+
+// priorityToResourceGroupKey maps a WorkPriority to one of the two
+// built-in resource group keys. Used in Resource Manager mode.
 func priorityToResourceGroupKey(pri admissionpb.WorkPriority) groupKey {
 	if pri >= admissionpb.NormalPri {
-		return rgGroupKey(highResourceGroupID)
+		return highResourceGroupKey
 	}
-	return rgGroupKey(lowResourceGroupID)
+	return lowResourceGroupKey
 }
 
 // tenantGroupKeyForWorkInfo is the default groupKeyForWorkInfo
@@ -766,14 +776,27 @@ func tenantGroupKeyForWorkInfo(info WorkInfo, _ *settings.Values) groupKey {
 }
 
 // cpuTimeTokenGroupKeyForWorkInfo is the groupKeyForWorkInfo
-// installed by the CTT WorkQueue. In resourceManagerMode the key is
-// derived from WorkInfo.Priority; otherwise it falls back to
-// tenant-keyed grouping.
+// installed by the CTT WorkQueue. Outside resourceManagerMode the key
+// is tenant-keyed. In resourceManagerMode the key is the resource group
+// named by WorkInfo.ResourceGroupID, or, when no group is named, the
+// one derived from WorkInfo.Priority.
 func cpuTimeTokenGroupKeyForWorkInfo(info WorkInfo, sv *settings.Values) groupKey {
-	if cpuTimeTokenACMode.Get(sv) == resourceManagerMode {
-		return priorityToResourceGroupKey(info.Priority)
+	if cpuTimeTokenACMode.Get(sv) != resourceManagerMode {
+		return tenantGroupKey(info.TenantID.ToUint64())
 	}
-	return tenantGroupKey(info.TenantID.ToUint64())
+	switch id := uint64(info.ResourceGroupID); id {
+	case 0:
+		// No group named; derive one from priority.
+		return priorityToResourceGroupKey(info.Priority)
+	case highResourceGroupID:
+		return highResourceGroupKey
+	case lowResourceGroupID:
+		return lowResourceGroupKey
+	default:
+		// A non-built-in id names a user-defined resource group, scoped to
+		// the sender's tenant via TenantID.
+		return rgGroupKey(info.TenantID.ToUint64(), id)
+	}
 }
 
 // Admit is called when requesting admission for some work. If

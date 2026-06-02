@@ -31,7 +31,13 @@ var _ perturbation = partition{}
 
 func (p partition) setup() variations {
 	p.partitionSite = true
-	v := setup(p, defaultThresholds())
+	// The partition test isolates an entire region (4 of 12 nodes), removing
+	// 1/3 of leaseholders. Foreground throughput naturally drops sharply
+	// while the partition is in effect, and the meaningful pass/fail signal
+	// is whether the cluster returns to baseline once the partition heals.
+	// Skip the perturbation-interval gate; keep the default recovery gate.
+	v := setup(p, noImpactThresholds())
+	v.recoveryImpact = defaultThresholds()
 	v.leaseType = registry.ExpirationLeases
 	// TODO(baptist): Remove this setting once #120073 is fixed.
 	v.clusterSettings["kv.lease.reject_on_leader_unknown.enabled"] = "true"

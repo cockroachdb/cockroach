@@ -180,24 +180,21 @@ func TestRetiredWorkStatesCapOverflow(t *testing.T) {
 
 	tenantID := roachpb.MustMakeTenantID(1)
 
-	// Fill the retired list to the cap by setting and clearing
-	// work states without calling rangeWorkStates (which drains).
-	for range maxRetiredWorkStates {
+	// Fill the shard's retired list to the per-shard cap by setting and
+	// clearing work states without calling rangeWorkStates (which drains).
+	// A single goroutine always maps to the same shard.
+	for range maxRetiredPerShard {
 		clear := SetWorkState(tenantID, WorkloadInfo{WorkloadID: 1}, WorkCPU, "fill")
 		clear()
 	}
 
-	retiredWorkStates.Lock()
-	require.Equal(t, maxRetiredWorkStates, len(retiredWorkStates.states))
-	retiredWorkStates.Unlock()
+	require.Equal(t, maxRetiredPerShard, totalRetiredWorkStates())
 
-	// One more retire should be silently dropped.
+	// One more retire should be silently dropped (shard is full).
 	clear := SetWorkState(tenantID, WorkloadInfo{WorkloadID: 1}, WorkCPU, "overflow")
 	clear()
 
-	retiredWorkStates.Lock()
-	require.Equal(t, maxRetiredWorkStates, len(retiredWorkStates.states))
-	retiredWorkStates.Unlock()
+	require.Equal(t, maxRetiredPerShard, totalRetiredWorkStates())
 
 	// Clean up: drain the retired list back to the pool.
 	reclaimRetiredWorkStates()

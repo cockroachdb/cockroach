@@ -40,6 +40,7 @@ filegroup(
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.3:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.4:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-26.1:__pkg__",
+        "//pkg/sql/logictest/tests/cockroach-go-testserver-26.2:__pkg__",
     ],
 )
 

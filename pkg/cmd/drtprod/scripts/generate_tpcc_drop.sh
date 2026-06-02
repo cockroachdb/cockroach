@@ -40,6 +40,7 @@ do
   # Create the workload script
   cat <<EOF >/tmp/tpcc_drop.sh
 #!/usr/bin/env bash
+set -o pipefail
 
 read -r -a PGURLS_ARR <<< "$PGURLS"
 
@@ -68,13 +69,18 @@ while true; do
         --concurrency 4 \
         --db cct_tpcc_drop \
         "$PG_URL_N1" | tee "\$INIT_LOG"
-    if [ \$? -eq 0 ]; then
-        rm "\$INIT_LOG"
+    if [ \$? -ne 0 ]; then
+        sleep 20
+        echo ">> tpcc import failed, skipping workload run and retrying"
+        ./cockroach sql --url "${PG_URL_N1}" -e "DROP DATABASE IF EXISTS cct_tpcc_drop CASCADE;"
+        sleep 3600
+        continue
     fi
+    rm "\$INIT_LOG"
     echo ">> Dropping cct_tpcc_drop_old if it exists"
     ./cockroach sql --url "${PG_URL_N1}" -e "DROP DATABASE cct_tpcc_drop_old CASCADE;"
     sleep 5
-    echo ">> Starting tpcc workload for 1h"
+    echo ">> Starting tpcc workload for 24h"
     ./cockroach workload run tpcc \
         --warehouses 3000 \
         --active-warehouses 1000 \

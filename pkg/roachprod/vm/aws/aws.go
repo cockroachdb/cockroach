@@ -1751,11 +1751,16 @@ func (p *Provider) listRegionsFiltered(
 		namesFilter = fmt.Sprintf("Name=tag:Name,Values=%s", strings.Join(names, ","))
 	}
 
+	failedRegions := make(map[string]bool)
+	var failedRegionsMux syncutil.Mutex
 	for _, r := range regions {
 		g.GoCtx(func(ctx context.Context) error {
 			vms, err := p.describeInstances(ctx, l, r, opts, listOpts, namesFilter)
 			if err != nil {
 				l.Printf("Failed to list AWS VMs in region: %s\n%v\n", r, err)
+				failedRegionsMux.Lock()
+				failedRegions[r] = true
+				failedRegionsMux.Unlock()
 				return nil
 			}
 			mux.Lock()
@@ -1783,6 +1788,10 @@ func (p *Provider) listRegionsFiltered(
 		}
 
 		for _, r := range regions {
+			if failedRegions[r] {
+				l.Printf("Skipping empty cluster detection in region %s: instance listing failed", r)
+				continue
+			}
 			clusterNames, err := p.listManagedLaunchTemplates(l, r)
 			if err != nil {
 				l.Printf("Failed to list managed launch templates in region %s: %v", r, err)

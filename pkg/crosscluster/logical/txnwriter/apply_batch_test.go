@@ -484,6 +484,36 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 			)
 		},
 	}, {
+		// Regression test for #171194 (uncovered by the
+		// ldr/transactional/conflict roachtest): a tombstone update that
+		// encounters a live row triggers a ConditionFailedError with
+		// HadNewerOriginTimestamp. The applier must convert this to
+		// ErrStalePreviousValue so the refresh path reads the live row
+		// and converts the tombstone update into a delete.
+		name: "refresh_converts_tombstone_update_to_delete",
+		setup: func(t *testing.T, baseID int) {
+			sqlDB.Exec(t, fmt.Sprintf(
+				`INSERT INTO parent (id, payload) VALUES (%d, 'live')`, baseID+1))
+		},
+		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
+			return ldrdecoder.Transaction{
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
+				WriteSet: []ldrdecoder.DecodedRow{{
+					Row:      tree.Datums{tree.NewDInt(tree.DInt(baseID + 1)), tree.DNull},
+					PrevRow:  nil, // tombstone update: no previous row
+					IsDelete: true,
+					TableID:  parentID,
+				}},
+			}
+		},
+		validate: func(t *testing.T, baseID int, result ApplyResult) {
+			require.Equal(t, ApplyResult{AppliedRows: 1}, result)
+			sqlDB.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT count(*) FROM parent WHERE id = %d`, baseID+1),
+				[][]string{{"0"}},
+			)
+		},
+	}, {
 		name: "refresh_converts_delete_to_tombstone_update",
 		setup: func(t *testing.T, baseID int) {
 		},

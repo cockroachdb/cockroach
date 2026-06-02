@@ -14,10 +14,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/ldrrandgen"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
@@ -63,7 +63,7 @@ func TestTombstoneUpdaterRandomTables(t *testing.T) {
 
 	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
 	tu := NewTombstoneUpdater(
-		s.Codec(), s.DB(), s.LeaseManager().(*lease.Manager),
+		s.Codec(), s.LeaseManager().(*lease.Manager),
 		desc.GetID(), sd, s.ClusterSettings())
 	defer tu.ReleaseLeases(ctx)
 
@@ -84,14 +84,18 @@ func TestTombstoneUpdaterRandomTables(t *testing.T) {
 		before := s.Clock().Now()
 		after := s.Clock().Now()
 
-		err := s.InternalDB().(isql.DB).Txn(ctx,
-			func(ctx context.Context, txn isql.Txn) error {
-				_, err := tu.UpdateTombstone(ctx, txn, after, row)
-				return err
-			})
+		err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, err := tu.UpdateTombstone(ctx, txn, after, row)
+			return err
+		})
 		require.NoError(t, err)
 
-		lwwLoss, err := tu.UpdateTombstone(ctx, nil, before, row)
+		var lwwLoss bool
+		err = s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			var err error
+			lwwLoss, err = tu.UpdateTombstone(ctx, txn, before, row)
+			return err
+		})
 		require.NoError(t, err)
 		require.True(t, lwwLoss, "expected LWW loss for tombstone update")
 
@@ -118,6 +122,58 @@ func generateRandomRow(rng *rand.Rand, cols []catalog.Column) []tree.Datum {
 		row = append(row, datum)
 	}
 	return row
+}
+
+func TestTombstoneUpdaterStalePreviousValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartSlimServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE tombstone_stale_test (
+		id INT PRIMARY KEY,
+		name STRING,
+		extra STRING
+	)`)
+
+	desc := cdctest.GetHydratedTableDescriptor(
+		t, s.ExecutorConfig(), tree.Name("tombstone_stale_test"))
+
+	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
+	tu := NewTombstoneUpdater(
+		s.Codec(), s.LeaseManager().(*lease.Manager),
+		desc.GetID(), sd, s.ClusterSettings())
+	defer tu.ReleaseLeases(ctx)
+
+	session := newInternalSession(t, s)
+	defer session.Close(ctx)
+
+	writer, err := NewRowWriter(ctx, desc, session)
+	require.NoError(t, err)
+
+	row := tree.Datums{
+		tree.NewDInt(1),
+		tree.NewDString("live"),
+		tree.DNull,
+	}
+
+	insertTS := s.Clock().Now()
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return writer.InsertRow(ctx, insertTS, row)
+	})
+	require.NoError(t, err)
+
+	// UpdateTombstone on a live row should return ErrStalePreviousValue because
+	// the CPut expects a tombstone but finds a live value.
+	tombstoneTS := s.Clock().Now()
+	err = s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		_, err := tu.UpdateTombstone(ctx, txn, tombstoneTS, row)
+		return err
+	})
+	require.ErrorIs(t, err, ErrStalePreviousValue)
 }
 
 func TestTombstoneDescriptorLease(t *testing.T) {

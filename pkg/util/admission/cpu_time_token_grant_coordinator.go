@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/crlib/crtime"
-	"github.com/cockroachdb/errors"
 )
 
 // cpuTimeTokenACEnabled is the legacy bool setting for enabling CPU time
@@ -75,12 +74,6 @@ var cpuTimeTokenACMode = settings.RegisterEnumSetting[cpuTimeTokenMode](
 		serverlessMode:      "serverless",
 		resourceManagerMode: "resource_manager",
 	},
-	settings.WithValidateEnum(func(val string) error {
-		if val == "resource_manager" {
-			return errors.New("resource_manager mode is not yet implemented")
-		}
-		return nil
-	}),
 )
 
 // cpuTimeTokenACKillSwitch is an env var kill switch that disables CPU time

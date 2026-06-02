@@ -164,6 +164,7 @@ optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on             
 optimizer_enable_lock_elision                                    on                  Controls whether the optimizer can eliminate unnecessary locking operations.
 optimizer_hoist_uncorrelated_equality_subqueries                 on                  Controls whether the optimizer hoists uncorrelated subqueries in equality expressions with columns, potentially producing more efficient plans.
 optimizer_inline_any_unnest_subquery                             on                  Controls whether the optimizer inlines subqueries containing ANY expressions combined with UNNEST.
+optimizer_inline_placeholder_equalities                          on                  Controls whether the optimizer inlines placeholder equalities in the InlineConstVar normalization rule.
 optimizer_merge_joins_enabled                                    on                  Controls whether the optimizer should explore query plans with merge joins.
 optimizer_min_row_count                                          1                   Sets a lower bound on row count estimates during query planning, except for expressions with zero cardinality.
 optimizer_plan_lookup_joins_with_reverse_scans                   on                  Controls whether the optimizer can plan lookup joins using reverse index scans.
@@ -218,6 +219,7 @@ recursion_depth_limit                                            1000           
 register_latch_wait_contention_events                            off                 Controls whether contention events are registered for latch wait operations.
 reorder_joins_limit                                              8                   Sets the number of joins at which the optimizer should stop attempting to reorder.
 require_explicit_primary_keys                                    off                 Controls whether CREATE TABLE statements should error out if no primary key is provided.
+resource_group                                                   ·                   Binds the session's KV work to a named resource group for admission control. Only honored when admission.cpu_time_tokens.mode is set to resource_manager. The empty string (the default) leaves the session unbound.
 results_buffer_size                                              524288              Specifies the size at which the pgwire results buffer will self-flush.
 role                                                             none                The current role for the session.
 row_security                                                     on                  Controls whether row level security is enabled.
@@ -526,7 +528,7 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM CURRENT_CATALOG WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
-/Table/82  /Max     {1}       1
+/Table/83  /Max     {1}       1
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor WITH DETAILS]

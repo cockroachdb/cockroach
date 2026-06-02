@@ -290,6 +290,20 @@ const (
 	// to persist per-tenant resource group configurations.
 	V26_3_AddResourceGroupsTable
 
+	// V26_3_CrdbInternalTSDB gates SQL access to the in-cluster TSDB through
+	// the crdb_internal.tsdb_query generator builtin.
+	V26_3_CrdbInternalTSDB
+
+	// V26_3_GrantReferencesToUsersWithCreate grants the REFERENCES privilege
+	// to all users/roles that currently hold CREATE on any table. This ensures
+	// backwards compatibility after FK creation switches from requiring CREATE
+	// to requiring REFERENCES on both the origin and referenced tables.
+	V26_3_GrantReferencesToUsersWithCreate
+
+	// V26_3_AddVcpuUsageTable adds the system.vcpu_usage table for
+	// tracking vCPU consumption per node per audit interval for license auditing.
+	V26_3_AddVcpuUsageTable
+
 	// V26_3_ApproxStoreLocalBytes enables tracking of store-local write
 	// bytes in RangeAppliedState.
 	V26_3_ApproxStoreLocalBytes
@@ -385,7 +399,13 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V26_3_AddResourceGroupsTable: {Major: 26, Minor: 2, Internal: 10},
 
-	V26_3_ApproxStoreLocalBytes: {Major: 26, Minor: 2, Internal: 12},
+	V26_3_CrdbInternalTSDB: {Major: 26, Minor: 2, Internal: 12},
+
+	V26_3_GrantReferencesToUsersWithCreate: {Major: 26, Minor: 2, Internal: 14},
+
+	V26_3_AddVcpuUsageTable: {Major: 26, Minor: 2, Internal: 16},
+
+	V26_3_ApproxStoreLocalBytes: {Major: 26, Minor: 2, Internal: 18},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************
@@ -400,7 +420,7 @@ const MinSupported Key = V25_4
 
 // PreviousRelease is the logical cluster version of the previous release (which must
 // have at least an RC build published).
-const PreviousRelease Key = V26_1
+const PreviousRelease Key = V26_2
 
 // V26_3 is a placeholder that will eventually be replaced by the actual 26.3
 // version Key, but in the meantime it points to the latest Key. The placeholder

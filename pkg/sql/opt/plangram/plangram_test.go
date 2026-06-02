@@ -42,7 +42,7 @@ func TestVisibleToPlanGram(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expected, plangram.VisibleToPlanGram(tc.expr))
+			require.Equal(t, tc.expected, physical.VisibleToPlanGram(tc.expr.Op()))
 		})
 	}
 }

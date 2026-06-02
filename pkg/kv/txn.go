@@ -279,9 +279,10 @@ func NewLeafTxn(
 			)
 		}
 		txn.admissionHeader = kvpb.AdmissionHeader{
-			CreateTime: header.CreateTime,
-			Priority:   header.Priority,
-			Source:     header.Source,
+			CreateTime:      header.CreateTime,
+			Priority:        header.Priority,
+			Source:          header.Source,
+			ResourceGroupID: header.ResourceGroupID,
 		}
 	}
 	return txn
@@ -472,6 +473,14 @@ func (txn *Txn) SetWorkloadInfo(
 	txn.workloadID = workloadID
 	txn.appNameID = appNameID
 	txn.workloadType = workloadType
+}
+
+// SetResourceGroup records the resource group id that requests sent through
+// this transaction should be admitted under. The id is carried on the
+// admission header of every BatchRequest. Zero clears the binding, restoring
+// the server's default routing.
+func (txn *Txn) SetResourceGroup(id uint64) {
+	txn.admissionHeader.ResourceGroupID = id
 }
 
 // SetBufferedWritesEnabled toggles whether the writes are buffered on the

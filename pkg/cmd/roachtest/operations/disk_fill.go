@@ -64,6 +64,39 @@ func removeFillFiles(
 	}
 }
 
+// maybeResumePausedImportJobs resumes any IMPORT jobs that were paused due to
+// insufficient disk capacity during the fill period.
+func maybeResumePausedImportJobs(
+	ctx context.Context, o operation.Operation, c cluster.Cluster, nodeID int,
+) {
+	db, err := c.ConnE(ctx, o.L(), nodeID)
+	if err != nil {
+		o.Errorf("failed to connect to node %d to resume imports: %v", nodeID, err)
+		return
+	}
+	defer db.Close()
+
+	var count int
+	if err := db.QueryRowContext(ctx,
+		"SELECT count(*) FROM [SHOW JOBS] WHERE status = 'paused' AND job_type = 'IMPORT'",
+	).Scan(&count); err != nil {
+		o.Errorf("failed to check for paused import jobs: %v", err)
+		return
+	}
+	if count == 0 {
+		return
+	}
+
+	o.Status(fmt.Sprintf("resuming %d paused import job(s)", count))
+	if _, err := db.ExecContext(ctx,
+		"RESUME JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE status = 'paused' AND job_type = 'IMPORT')",
+	); err != nil {
+		o.Errorf("failed to resume paused import jobs: %v", err)
+		return
+	}
+	o.Status(fmt.Sprintf("resumed %d paused import job(s)", count))
+}
+
 type cleanupDiskFill struct {
 	node       option.NodeListOption
 	storeCount int
@@ -81,6 +114,7 @@ func (cl *cleanupDiskFill) Cleanup(ctx context.Context, o operation.Operation, c
 	// resolves on its own once the fill files are removed.
 	if helpers.CheckNodeHealth(ctx, o, c, cl.node[0], 5 /* maxAttempts */, 5*time.Second) {
 		o.Status(fmt.Sprintf("node %s healthy after cleanup", cl.node.NodeIDsString()))
+		maybeResumePausedImportJobs(ctx, o, c, cl.node[0])
 		return
 	}
 
@@ -101,6 +135,7 @@ func (cl *cleanupDiskFill) Cleanup(ctx context.Context, o operation.Operation, c
 		return
 	}
 	o.Status(fmt.Sprintf("node %d healthy after restart", cl.node[0]))
+	maybeResumePausedImportJobs(ctx, o, c, cl.node[0])
 }
 
 // fillStores creates ballast files on each store of the target node,

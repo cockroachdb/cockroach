@@ -21,6 +21,12 @@ import (
 var useGatewayRoutingMode = metamorphic.ConstantWithTestBool("stream-use-gateway-routing-mode", false)
 var useExternalConnection = metamorphic.ConstantWithTestBool("stream-use-external-connection", true)
 
+// IsGatewayRoutingMode returns true if the metamorphic constant selects
+// gateway routing mode for the current test binary invocation.
+func IsGatewayRoutingMode() bool {
+	return useGatewayRoutingMode
+}
+
 func GetExternalConnectionURI(
 	t *testing.T,
 	sourceCluster serverutils.ApplicationLayerInterface,

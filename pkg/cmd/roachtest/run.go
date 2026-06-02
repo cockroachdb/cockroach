@@ -24,6 +24,7 @@ import (
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	roachtestdd "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/datadog"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/dlq"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -168,13 +169,6 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		runnerLogPath:       runnerLogPath,
 	}
 
-	github := &githubIssues{
-		disable:     runner.config.disableIssue,
-		dryRun:      runner.config.dryRunIssuePosting,
-		issuePoster: issues.Post,
-		teamLoader:  team.DefaultLoadTeams,
-	}
-
 	runnerL.Printf("global random seed: %d", globalSeed)
 	go func() {
 		if err := http.ListenAndServe(
@@ -210,6 +204,26 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	// is being used.
 	if err = os.Unsetenv(install.DefaultAuthModeEnv); err != nil {
 		return err
+	}
+
+	// Wire up GitHub issue posting. If a DLQ bucket is configured, wrap the
+	// poster so failed posts (e.g. during a GitHub outage) are persisted to
+	// GCS for later replay. See pkg/cmd/roachtest/dlq.
+	var issuePoster dlq.PostFunc = issues.Post
+	if bucket := os.Getenv("GITHUB_DLQ_BUCKET"); bucket != "" {
+		wrapped, err := dlq.WrapIssuePoster(ctx, runnerL, bucket, issuePoster)
+		if err != nil {
+			runnerL.Printf("warning: GitHub DLQ writer init failed, DLQ disabled: %v", err)
+		} else {
+			issuePoster = wrapped
+			runnerL.Printf("GitHub DLQ enabled: bucket=%s", bucket)
+		}
+	}
+	github := &githubIssues{
+		disable:     runner.config.disableIssue,
+		dryRun:      runner.config.dryRunIssuePosting,
+		issuePoster: issuePoster,
+		teamLoader:  team.DefaultLoadTeams,
 	}
 
 	err = runner.Run(

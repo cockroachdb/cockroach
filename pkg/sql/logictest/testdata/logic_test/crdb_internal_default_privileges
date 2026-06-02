@@ -556,6 +556,7 @@ test           NULL         root      false          tables       bar       REPL
 test           NULL         root      false          tables       bar       REPLICATIONSOURCE  false
 test           NULL         root      false          tables       bar       MAINTAIN           false
 test           NULL         root      false          tables       bar       TRUNCATE           false
+test           NULL         root      false          tables       bar       REFERENCES         false
 test           NULL         root      false          tables       foo       BACKUP             false
 test           NULL         root      false          tables       foo       CHANGEFEED         false
 test           NULL         root      false          tables       foo       CREATE             false
@@ -569,6 +570,7 @@ test           NULL         root      false          tables       foo       REPL
 test           NULL         root      false          tables       foo       REPLICATIONSOURCE  false
 test           NULL         root      false          tables       foo       MAINTAIN           false
 test           NULL         root      false          tables       foo       TRUNCATE           false
+test           NULL         root      false          tables       foo       REFERENCES         false
 test           NULL         root      false          tables       root      ALL                true
 test           NULL         root      false          sequences    root      ALL                true
 test           NULL         root      false          types        root      ALL                true

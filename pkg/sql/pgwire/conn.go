@@ -327,6 +327,15 @@ func (c *conn) sendInitialConnData(
 		return sql.ConnectionHandler{}, err
 	}
 
+	// Deliver any notices accumulated during connection setup (e.g. defaulting
+	// pg_dump_compatibility for a dump/restore client) before signaling that the
+	// connection is ready for queries.
+	for _, notice := range connHandler.GetStartupNotices() {
+		if err := c.bufferNotice(ctx, notice); err != nil {
+			return sql.ConnectionHandler{}, err
+		}
+	}
+
 	if err := c.bufferInitialReadyForQuery(connHandler.GetQueryCancelKey()); err != nil {
 		return sql.ConnectionHandler{}, err
 	}

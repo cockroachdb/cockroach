@@ -11,11 +11,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,7 +44,7 @@ func TestTombstoneUpdaterSetsOriginID(t *testing.T) {
 	desc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		s.DB(), s.Codec(), dbNames[0], "tab")
 	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
-	tu := sqlwriter.NewTombstoneUpdater(s.Codec(), s.DB(), s.LeaseManager().(*lease.Manager), desc.GetID(), sd, s.ClusterSettings())
+	tu := sqlwriter.NewTombstoneUpdater(s.Codec(), s.LeaseManager().(*lease.Manager), desc.GetID(), sd, s.ClusterSettings())
 	defer tu.ReleaseLeases(ctx)
 
 	// Set up 1 way logical replication. The replication stream is used to ensure
@@ -63,14 +62,14 @@ func TestTombstoneUpdaterSetsOriginID(t *testing.T) {
 		tree.DNull,                 // v (deleted)
 	}
 
-	_, err := tu.UpdateTombstone(ctx, nil, s.Clock().Now(), row)
+	err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		_, err := tu.UpdateTombstone(ctx, txn, s.Clock().Now(), row)
+		return err
+	})
 	require.NoError(t, err)
 
-	config := s.ExecutorConfig().(sql.ExecutorConfig)
-	err = sql.DescsTxn(ctx, &config, func(
-		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
-	) error {
-		_, err = tu.UpdateTombstone(ctx, txn, s.Clock().Now(), row)
+	err = s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		_, err := tu.UpdateTombstone(ctx, txn, s.Clock().Now(), row)
 		return err
 	})
 	require.NoError(t, err)

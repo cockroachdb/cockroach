@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -421,6 +422,86 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		memMS.AgeTo(diskMS.LastUpdateNanos)
 		require.Equal(t, memMS, diskMS)
 		return true // more
+	})
+}
+
+// TestStoreStartClearsSnapshotStorageScratch verifies the scratch directory's
+// lifecycle across Store.Start, for both single and separated engines:
+//
+//  1. Leftover scratch files (simulating a crash mid-snapshot) survive past
+//     the point where WAG replay would consume them. This is checked via the
+//     BeforeClearSnapshotScratchOnStart knob.
+//  2. The same files are then removed by Clear before Start returns.
+//
+// TODO(sep-raft-log): Ensure that the test still passes after introducing WAG
+// replay. It is essential to have a flush after finishing WAG replay to avoid
+// deleting files that would be needed in case of a crash.
+func TestStoreStartClearsSnapshotStorageScratch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "separated", func(t *testing.T, sepEng bool) {
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		cfg := TestStoreConfig(nil)
+
+		// The knob fires during Start, by which point env and ssts (assigned
+		// below after the store is built) are populated. The closure captures
+		// them by reference.
+		var env *fs.Env
+		var ssts []string
+		var preClearCalls int
+		var preClearErrs []error
+		cfg.TestingKnobs.BeforeClearSnapshotScratchOnStart = func() {
+			preClearCalls++
+			for _, p := range ssts {
+				if _, statErr := env.Stat(p); statErr != nil {
+					preClearErrs = append(preClearErrs,
+						errors.Wrapf(statErr, "scratch file %s missing at pre-clear hook", p))
+				}
+			}
+		}
+
+		store := createTestStoreWithoutStart(
+			ctx, t, stopper, testStoreOpts{useSeparatedEngines: sepEng}, &cfg,
+		)
+
+		// Seed a leftover scratch file under the snapshot storage directory.
+		// We deliberately skip scratch.Close() to simulate a node that crashed
+		// mid-snapshot and never ran the per-snapshot cleanup.
+		scratch := store.sstSnapshotStorage.NewScratchSpace(
+			roachpb.RangeID(42), uuid.MakeV4(), cfg.Settings,
+		)
+		f, err := scratch.NewFile(ctx, 0)
+		require.NoError(t, err)
+		require.NoError(t, f.Write([]byte("leftover sst")))
+		require.NoError(t, f.Finish())
+
+		env = store.StateEngine().Env()
+		ssts = scratch.SSTs()
+		require.NotEmpty(t, ssts)
+
+		// Sanity check: the leftover file exists before Start.
+		for _, p := range ssts {
+			_, statErr := env.Stat(p)
+			require.NoError(t, statErr, "scratch file %s should exist before Start", p)
+		}
+
+		require.NoError(t, store.Start(ctx, stopper))
+		store.WaitForInit()
+
+		// (1) The pre-clear hook ran exactly once, with all leftover files
+		// still on disk. This is where WAG replay would consume them.
+		require.Equal(t, 1, preClearCalls, "pre-clear knob should fire exactly once")
+		require.Empty(t, preClearErrs, "leftover scratch files should survive past WAG replay")
+
+		// (2) Scratch file should have been removed by Start.
+		for _, p := range ssts {
+			_, statErr := env.Stat(p)
+			require.True(t, oserror.IsNotExist(statErr),
+				"scratch file %s should be removed by Start, got err=%v", p, statErr)
+		}
 	})
 }
 

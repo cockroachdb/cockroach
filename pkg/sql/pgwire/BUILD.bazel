@@ -189,6 +189,7 @@ go_test(
         "//pkg/util/metric/aggmetric",
         "//pkg/util/mon",
         "//pkg/util/randutil",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/uuid",

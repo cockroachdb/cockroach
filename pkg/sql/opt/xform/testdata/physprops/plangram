@@ -1727,7 +1727,7 @@ lock xy
  ├── locking: for-update
  ├── cardinality: [0 - 1]
  ├── volatile
- ├── cost: 9.06
+ ├── cost: 15.1
  ├── key: ()
  ├── fd: ()-->(1,2)
  └── scan xy
@@ -1750,7 +1750,7 @@ lock xy
  ├── locking: for-update
  ├── cardinality: [0 - 1]
  ├── volatile
- ├── cost: 9.06
+ ├── cost: 15.1
  ├── cost-flags: plangram-mismatch
  ├── key: ()
  ├── fd: ()-->(1,2)

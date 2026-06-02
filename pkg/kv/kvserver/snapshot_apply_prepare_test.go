@@ -145,6 +145,11 @@ func testPrepareSnapApply(t *testing.T, separateEngines bool) {
 	createRaftState(t, eng.LogEngine(), descA.RangeID)
 	createRangeData(t, eng.StateEngine(), *descB)
 	createRaftState(t, eng.LogEngine(), descB.RangeID)
+	// Create raft state for the main replica too, so that the log clearing is
+	// exercised. The applied index is set to truncIndex+1 so that in the
+	// separated engines case, entries at and below it are retained for WAG GC.
+	createRaftState(t, eng.LogEngine(), id.RangeID)
+	const raftAppliedIndex kvpb.RaftIndex = 11 // truncIndex(10) + 1
 
 	sl := kvstorage.MakeStateLoader(id.RangeID)
 	ctx := context.Background()
@@ -187,11 +192,12 @@ func testPrepareSnapApply(t *testing.T, separateEngines bool) {
 		writeSST: writeSST,
 	}
 	require.NoError(t, sw.prepareSnapApply(ctx, snapWrite{
-		sl:         sl.StateLoader,
-		truncState: kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
-		hardState:  raftpb.HardState{Term: 20, Commit: 100},
-		desc:       snapDesc,
-		origDesc:   origDesc,
+		sl:               sl.StateLoader,
+		truncState:       kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
+		hardState:        raftpb.HardState{Term: 20, Commit: 100},
+		desc:             snapDesc,
+		origDesc:         origDesc,
+		raftAppliedIndex: raftAppliedIndex,
 		subsume: []kvstorage.DestroyReplicaInfo{
 			{FullReplicaID: roachpb.FullReplicaID{RangeID: descA.RangeID, ReplicaID: replicaID}, Keys: descA.RSpan()},
 			{FullReplicaID: roachpb.FullReplicaID{RangeID: descB.RangeID, ReplicaID: replicaID}, Keys: descB.RSpan()},

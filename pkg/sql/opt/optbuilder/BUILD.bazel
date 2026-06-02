@@ -122,6 +122,7 @@ go_test(
     srcs = [
         "builder_test.go",
         "name_resolution_test.go",
+        "routine_test.go",
         "scalar_test.go",
         "statement_tree_test.go",
         "union_test.go",
@@ -134,6 +135,7 @@ go_test(
         "//pkg/sql/catalog/colinfo/colinfotestutils",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/opt/testutils/opttester",
         "//pkg/sql/opt/testutils/testcat",
@@ -146,5 +148,6 @@ go_test(
         "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )

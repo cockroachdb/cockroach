@@ -72,95 +72,44 @@ WHERE
 `)
 }
 
-func check3322(db *gosql.DB, asOfSystemTime string) (retErr error) {
+func check3322(db *gosql.DB, asOfSystemTime string) error {
 	// Entries in the DISTRICT, ORDER, and NEW-ORDER tables must satisfy the relationship:
 	// D_NEXT_O_ID - 1 = max(O_ID) = max(NO_O_ID)
 	txn, err := beginAsOfSystemTime(db, asOfSystemTime)
 	if err != nil {
 		return err
 	}
-	ts, err := selectTimestamp(txn)
-	_ = txn.Rollback() // close the txn now that we're done with it
-	if err != nil {
-		return err
-	}
-	districtRowsQuery := `
-SELECT
-    d_next_o_id
-FROM
-    district AS OF SYSTEM TIME '` + ts + `'
-ORDER BY
-    d_w_id, d_id`
-	districtRows, err := db.Query(districtRowsQuery)
-	if err != nil {
-		return err
-	}
-	defer func() { retErr = errors.CombineErrors(retErr, districtRows.Close()) }()
-	newOrderQuery := `
-SELECT
-    max(no_o_id)
-FROM
-    new_order AS OF SYSTEM TIME '` + ts + `'
-GROUP BY
-    no_d_id, no_w_id
-ORDER BY
-    no_w_id, no_d_id;`
-	newOrderRows, err := db.Query(newOrderQuery)
-	if err != nil {
-		return err
-	}
-	defer func() { retErr = errors.CombineErrors(retErr, newOrderRows.Close()) }()
-	orderRowsQuery := `
-SELECT
-    max(o_id)
-FROM
-    "order" AS OF SYSTEM TIME '` + ts + `'
-GROUP BY
-    o_d_id, o_w_id
-ORDER BY
-    o_w_id, o_d_id`
-	orderRows, err := db.Query(orderRowsQuery)
-	if err != nil {
-		return err
-	}
-	defer func() { retErr = errors.CombineErrors(retErr, orderRows.Close()) }()
-	var district, newOrder, order float64
-	var i int
-	for ; districtRows.Next() && newOrderRows.Next() && orderRows.Next(); i++ {
-		if err := districtRows.Scan(&district); err != nil {
-			return err
-		}
-		if err := newOrderRows.Scan(&newOrder); err != nil {
-			return err
-		}
-		if err := orderRows.Scan(&order); err != nil {
-			return err
-		}
+	defer func() { _ = txn.Rollback() }()
 
-		if (order != newOrder) || (order != (district - 1)) {
-			return errors.Errorf("inequality at idx %d: order: %f, newOrder: %f, district-1: %f",
-				i, order, newOrder, district-1)
-		}
+	districts, err := scanFloats(txn, `
+SELECT d_next_o_id FROM district ORDER BY d_w_id, d_id`)
+	if err != nil {
+		return errors.Wrap(err, "on district")
 	}
-	if err := districtRows.Err(); err != nil {
-		retErr = errors.CombineErrors(retErr, errors.Wrap(err, "on district"))
+	newOrders, err := scanFloats(txn, `
+SELECT max(no_o_id) FROM new_order GROUP BY no_d_id, no_w_id ORDER BY no_w_id, no_d_id`)
+	if err != nil {
+		return errors.Wrap(err, "on new_order")
 	}
-	if err := newOrderRows.Err(); err != nil {
-		retErr = errors.CombineErrors(retErr, errors.Wrap(err, "on new_order"))
+	orders, err := scanFloats(txn, `
+SELECT max(o_id) FROM "order" GROUP BY o_d_id, o_w_id ORDER BY o_w_id, o_d_id`)
+	if err != nil {
+		return errors.Wrap(err, "on order")
 	}
-	if err := orderRows.Err(); err != nil {
-		retErr = errors.CombineErrors(retErr, errors.Wrap(err, "on order"))
+
+	if len(districts) != len(newOrders) || len(districts) != len(orders) {
+		return errors.Errorf("length mismatch: district=%d, newOrder=%d, order=%d",
+			len(districts), len(newOrders), len(orders))
 	}
-	// Return the error before performing the remaining checks, because they are
-	// expected to fail if something else has already gone wrong.
-	if retErr != nil {
-		return retErr
-	}
-	if districtRows.Next() || newOrderRows.Next() || orderRows.Next() {
-		return errors.New("length mismatch between rows")
-	}
-	if i == 0 {
+	if len(districts) == 0 {
 		return errors.Errorf("zero rows")
+	}
+	for i := range districts {
+		if (orders[i] != newOrders[i]) || (orders[i] != (districts[i] - 1)) {
+			return errors.Errorf(
+				"inequality at idx %d: order: %f, newOrder: %f, district-1: %f",
+				i, orders[i], newOrders[i], districts[i]-1)
+		}
 	}
 	return nil
 }
@@ -184,68 +133,37 @@ WHERE
 `)
 }
 
-func check3324(db *gosql.DB, asOfSystemTime string) (retErr error) {
+func check3324(db *gosql.DB, asOfSystemTime string) error {
 	// sum(O_OL_CNT) = [number of rows in the ORDER-LINE table for this district]
 	txn, err := beginAsOfSystemTime(db, asOfSystemTime)
 	if err != nil {
 		return err
 	}
-	// Select a timestamp which will be used for the concurrent queries below.
-	ts, err := selectTimestamp(txn)
-	_ = txn.Rollback() // close txn now that we're done with it.
+	defer func() { _ = txn.Rollback() }()
+
+	orderOLCounts, err := scanInt64s(txn, `
+SELECT sum(o_ol_cnt) FROM "order" GROUP BY o_w_id, o_d_id ORDER BY o_w_id, o_d_id`)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "on order")
 	}
-	leftRows, err := db.Query(`
-SELECT
-    sum(o_ol_cnt)
-FROM
-    "order" AS OF SYSTEM TIME '` + ts + `'
-GROUP BY
-    o_w_id, o_d_id
-ORDER BY
-    o_w_id, o_d_id`)
+	olCounts, err := scanInt64s(txn, `
+SELECT count(*) FROM order_line GROUP BY ol_w_id, ol_d_id ORDER BY ol_w_id, ol_d_id`)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "on order_line")
 	}
-	defer func() { retErr = errors.CombineErrors(retErr, leftRows.Close()) }()
-	rightRows, err := db.Query(`
-SELECT
-    count(*)
-FROM
-    order_line AS OF SYSTEM TIME '` + ts + `'
-GROUP BY
-    ol_w_id, ol_d_id
-ORDER BY
-    ol_w_id, ol_d_id`)
-	if err != nil {
-		return err
+
+	if len(orderOLCounts) != len(olCounts) {
+		return errors.Errorf("length mismatch: order=%d, order_line=%d",
+			len(orderOLCounts), len(olCounts))
 	}
-	defer func() { retErr = errors.CombineErrors(retErr, rightRows.Close()) }()
-	var i int
-	var left, right int64
-	for ; leftRows.Next() && rightRows.Next(); i++ {
-		if err := leftRows.Scan(&left); err != nil {
-			return err
-		}
-		if err := rightRows.Scan(&right); err != nil {
-			return err
-		}
-		if left != right {
-			return errors.Errorf("order.sum(o_ol_cnt): %d != order_line.count(*): %d", left, right)
-		}
-	}
-	if err := leftRows.Err(); err != nil {
-		return errors.Wrap(err, "on `order`")
-	}
-	if err := rightRows.Err(); err != nil {
-		return errors.Wrap(err, "on `order_line`")
-	}
-	if leftRows.Next() || rightRows.Next() {
-		return errors.Errorf("at %s: length of order.sum(o_ol_cnt) != order_line.count(*)", ts)
-	}
-	if i == 0 {
+	if len(orderOLCounts) == 0 {
 		return errors.Errorf("0 rows returned")
+	}
+	for i := range orderOLCounts {
+		if orderOLCounts[i] != olCounts[i] {
+			return errors.Errorf("order.sum(o_ol_cnt): %d != order_line.count(*): %d",
+				orderOLCounts[i], olCounts[i])
+		}
 	}
 	return nil
 }
@@ -461,6 +379,40 @@ func checkNoRows(db *gosql.DB, asOfSystemTime string, q string) error {
 	return nil
 }
 
+func scanFloats(txn *gosql.Tx, query string) ([]float64, error) {
+	rows, err := txn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []float64
+	for rows.Next() {
+		var v float64
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		result = append(result, v)
+	}
+	return result, rows.Err()
+}
+
+func scanInt64s(txn *gosql.Tx, query string) ([]int64, error) {
+	rows, err := txn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []int64
+	for rows.Next() {
+		var v int64
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		result = append(result, v)
+	}
+	return result, rows.Err()
+}
+
 // beginAsOfSystemTime starts a transaction and optionally sets it to occur at
 // the provided asOfSystemTime. If asOfSystemTime is empty, the transaction will
 // not be historical. The asOfSystemTime value will be used as literal SQL in a
@@ -468,6 +420,13 @@ func checkNoRows(db *gosql.DB, asOfSystemTime string, q string) error {
 func beginAsOfSystemTime(db *gosql.DB, asOfSystemTime string) (txn *gosql.Tx, err error) {
 	txn, err = db.Begin()
 	if err != nil {
+		return nil, err
+	}
+	// The cluster's default isolation level may be READ COMMITTED, which does
+	// not support AS OF SYSTEM TIME. Consistency checks require serializable
+	// snapshot reads, so set it explicitly.
+	if _, err = txn.Exec("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"); err != nil {
+		_ = txn.Rollback()
 		return nil, err
 	}
 	if asOfSystemTime != "" {
@@ -478,11 +437,4 @@ func beginAsOfSystemTime(db *gosql.DB, asOfSystemTime string) (txn *gosql.Tx, er
 		}
 	}
 	return txn, nil
-}
-
-// selectTimestamp retrieves an unquoted string literal of a decimal value
-// representing the hlc timestamp of the provided txn.
-func selectTimestamp(txn *gosql.Tx) (ts string, err error) {
-	err = txn.QueryRow("SELECT cluster_logical_timestamp()::string").Scan(&ts)
-	return ts, err
 }

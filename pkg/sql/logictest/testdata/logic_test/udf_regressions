@@ -198,7 +198,6 @@ SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
 ----
 0
 
-
 subtest end
 
 subtest regression_94146
@@ -453,7 +452,6 @@ SELECT f_103869('sq_103869')
 ----
 2
 
-
 subtest end
 
 # Regression test for #104927. Correctly resolve table references in UDFs as
@@ -488,7 +486,6 @@ query T
 SELECT f104927()
 ----
 [{"i": 1, "s": "foo"}]
-
 
 subtest end
 
@@ -543,7 +540,6 @@ $$
 
 subtest end
 
-
 # Regression tests for #105259 and #107654. Do not type-check subqueries in UDFs
 # outside optbuilder. Doing so can cause internal errors.
 subtest regression_105259
@@ -566,7 +562,6 @@ CREATE FUNCTION f() RETURNS VOID LANGUAGE SQL AS $$
 $$
 
 subtest end
-
 
 # Regression test for #108297. UDFs with VOID return types should succeed when
 # the last statement returns columns of any type.
@@ -864,5 +859,54 @@ DROP FUNCTION sc_62227.next_id;
 DROP FUNCTION sc_62227.next_id_sql;
 DROP SEQUENCE sc_62227.myseq;
 DROP SCHEMA sc_62227;
+
+subtest end
+
+subtest regression_170852
+
+# Regression test for #170852. Building a routine whose body contains a
+# NULL-valued REGCLASS expression (e.g. NULL::REGCLASS, or an uninitialized
+# OUT parameter of type REGCLASS) should not fail with an internal error.
+# maybeTrackRegclassDependenciesForViews evaluates constant REGCLASS
+# expressions and previously asserted the result was a *tree.DOid, but a NULL
+# REGCLASS evaluates to tree.DNull.
+statement ok
+CREATE FUNCTION f_170852_null() RETURNS INT LANGUAGE plpgsql AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT nextval(NULL::REGCLASS) INTO v;
+  RETURN v;
+END;
+$$;
+
+# An uninitialized OUT parameter of type REGCLASS also evaluates to NULL when
+# the routine body is built.
+statement ok
+CREATE FUNCTION f_170852_out(OUT p0 REGCLASS, IN p1 BOOL) RETURNS REGCLASS
+LANGUAGE plpgsql AS $$
+BEGIN
+  p0 := p0;
+END;
+$$;
+
+# The same NULL handling applies to SQL UDFs.
+statement ok
+CREATE FUNCTION f_170852_sql() RETURNS REGCLASS LANGUAGE sql AS $$
+  SELECT NULL::REGCLASS;
+$$;
+
+# Empty function body should work too.
+statement ok
+CREATE FUNCTION f_170852_empty_body(OUT p0 REGCLASS, IN p1 BOOL) RETURNS REGCLASS
+LANGUAGE plpgsql AS $$
+BEGIN
+END;
+$$;
+
+statement ok
+DROP FUNCTION f_170852_null;
+DROP FUNCTION f_170852_out;
+DROP FUNCTION f_170852_sql;
 
 subtest end

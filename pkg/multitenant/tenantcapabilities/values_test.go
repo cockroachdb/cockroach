@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -19,6 +20,7 @@ func someCaps() *tenantcapabilitiespb.TenantCapabilities {
 
 // TestIDs ensures that iterating IDs always works for the ID lookup functions.
 func TestIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for _, id := range tenantcapabilitiespb.IDs {
 		_, err := GetValueByID(someCaps(), id)
 		require.NoError(t, err, id)
@@ -31,6 +33,7 @@ func TestIDs(t *testing.T) {
 // capability types, and all default Get results are valid input for
 // Set.
 func TestGetSet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	var v tenantcapabilitiespb.TenantCapabilities
 	for _, id := range tenantcapabilitiespb.IDs {
 		switch c, _ := FromID(id); c := c.(type) {
@@ -47,6 +50,7 @@ func TestGetSet(t *testing.T) {
 // TestSpanConfigBoundsSetGet ensures calling Get on SpanConfigBounds that have
 // been previously modified using a Set returns the correct value.
 func TestSpanConfigBoundsSetGet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	capability := spanConfigBoundsCapability(tenantcapabilitiespb.TenantSpanConfigBounds)
 	val := capability.Value(someCaps())
 

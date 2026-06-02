@@ -262,6 +262,35 @@ func (g *routineGenerator) ResolvedType() *types.T {
 
 // Start is part of the eval.ValueGenerator interface.
 func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
+	// SECURITY DEFINER routines push the owner so the body resolves
+	// privileges, ownership, and current_user against the definer. A
+	// DEFINER tail-call replaces the prior push (TCO collapses the outer
+	// frame); an INVOKER tail-call leaves it intact so PL/pgSQL loop
+	// continuations inherit the outer effective user.
+	var restore func()
+	defer func() {
+		if restore != nil {
+			restore()
+		}
+	}()
+	maybePushSecurityDefiner := func() error {
+		if g.expr.SecurityMode != tree.RoutineDefiner {
+			return nil
+		}
+		if g.expr.RoutineOwner.Undefined() {
+			return errors.AssertionFailedf(
+				"routine %q is SECURITY DEFINER but RoutineOwner is unset", g.expr.Name,
+			)
+		}
+		if restore != nil {
+			restore()
+		}
+		restore = g.p.EvalContext().PushEffectiveUser(g.expr.RoutineOwner)
+		return nil
+	}
+	if err := maybePushSecurityDefiner(); err != nil {
+		return err
+	}
 	enabledStepping := false
 	var prevSteppingMode kv.SteppingMode
 	var prevSeqNum enginepb.TxnSeq
@@ -295,6 +324,9 @@ func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
 		// Since it's in tail-call position, evaluating it will give the result of
 		// this routine as well.
 		g.reset(ctx, g.p, g.deferredRoutine.expr, g.deferredRoutine.args)
+		if err := maybePushSecurityDefiner(); err != nil {
+			return err
+		}
 	}
 }
 

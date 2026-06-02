@@ -81,5 +81,6 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_knz_bubbline//computil",
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

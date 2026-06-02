@@ -309,6 +309,7 @@ test           public       t            table        testuser  CREATE          
 test           public       t            table        testuser  DROP               true
 test           public       t            table        testuser  INSERT             true
 test           public       t            table        testuser  MAINTAIN           true
+test           public       t            table        testuser  REFERENCES         true
 test           public       t            table        testuser  REPLICATIONDEST    true
 test           public       t            table        testuser  REPLICATIONSOURCE  true
 test           public       t            table        testuser  SELECT             true

@@ -87,9 +87,17 @@ type BackupRestoreTestingKnobs struct {
 	// download span worker before sending the download span request.
 	RunBeforeSendingDownloadSpan func() error
 
-	// RunBeforeDownloadCleanup is called before we cleanup after all external
-	// files have been download.
-	RunBeforeDownloadCleanup func() error
+	// RunAfterSendingDownloadSpan is called after the download span RPC
+	// completes; a non-nil return value is returned in place of the real
+	// result, allowing tests to inject a failure while letting the
+	// underlying download actually run.
+	RunAfterSendingDownloadSpan func() error
+
+	// OverrideRemainingBytesFn, if set, replaces the value returned by the
+	// remaining-bytes computation inside waitForDownloadToComplete. Tests
+	// use it to drive the observer through deterministic progress patterns
+	// without depending on the actual download's pacing.
+	OverrideRemainingBytesFn func() uint64
 
 	// AfterAddRemoteSST is called after a remote SST is linked to pebble during
 	// the link phase of online restore.

@@ -640,6 +640,7 @@ func workInfoForBatch(
 		AppNameID:       ba.Header.AppNameID,
 		GatewayNodeID:   ba.Header.GatewayNodeID,
 		WorkloadType:    workloadid.WorkloadType(ba.Header.WorkloadType),
+		ResourceGroupID: admissionpb.ResourceGroupID(ba.AdmissionHeader.ResourceGroupID),
 	}
 	return admissionInfo
 }

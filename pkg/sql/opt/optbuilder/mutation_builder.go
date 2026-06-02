@@ -1048,20 +1048,40 @@ func (mb *mutationBuilder) maybeAddRegionColLookup(op opt.Operator) {
 		// The scan is exempt from RLS to maintain data integrity.
 		cat.PolicyScopeExempt,
 	)
-	if !refScope.expr.Relational().FuncDeps.ColsAreLaxKey(refLookupCols) {
-		// The lookup columns must be a lax key, otherwise the join may return
-		// multiple rows for a single row in the target table. This should already
-		// be enforced by the foreign-key constraint.
-		panic(errors.AssertionFailedf(
-			"lookup columns using constraint %q must be a lax key", lookupFK.Name()))
-	}
 	var joinFlags memo.JoinFlags
 	if mb.b.evalCtx.SessionData().PreferLookupJoinsForFKs {
 		joinFlags = memo.PreferLookupJoinIntoRight
 	}
+	parentNonKey := !refScope.expr.Relational().FuncDeps.ColsAreLaxKey(refLookupCols)
+	if parentNonKey {
+		// The non-region foreign-key columns aren't a lax key on the parent, so
+		// the join could return multiple rows per child input row. We will use an
+		// unordered DistinctOn to select an arbitrary matching parent row for each
+		// child row. This requires a key on the child rows, so ensure it here.
+		mb.outScope.expr = mb.b.factory.CustomFuncs().EnsureKey(mb.outScope.expr)
+	}
+	inputCols := mb.outScope.expr.Relational().OutputCols
 	mb.outScope.expr = mb.b.factory.ConstructLeftJoin(
 		mb.outScope.expr, refScope.expr, joinCond, &memo.JoinPrivate{Flags: joinFlags},
 	)
+	if parentNonKey {
+		// Use an unordered DistinctOn to arbitrarily select matching parent rows.
+		// Group on all input columns from before the join (they form a superkey
+		// after EnsureKey); optimizer rules can simplify the grouping columns
+		// using the input key. The parent's region column is the only parent
+		// column needed downstream, and FirstAgg picks one arbitrary value from
+		// the matching parent rows.
+		aggs := memo.AggregationsExpr{
+			f.ConstructAggregationsItem(
+				f.ConstructFirstAgg(f.ConstructVariable(lookupRegionColID)),
+				lookupRegionColID,
+			),
+		}
+		groupingPrivate := memo.GroupingPrivate{GroupingCols: inputCols}
+		mb.outScope.expr = f.ConstructDistinctOn(
+			mb.outScope.expr, aggs, &groupingPrivate,
+		)
+	}
 	// Build a CASE expression to determine the final value of the region column.
 	// Use the looked-up value if non-NULL, and otherwise use the default value
 	// which was already projected in the input.

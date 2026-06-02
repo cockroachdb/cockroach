@@ -338,6 +338,46 @@ CREATE TABLE public."MixedCase" (
 CREATE TABLE public.a_very_long_identifier_name_to_test_pg_dump_quote_safety (
     id INT PRIMARY KEY
 );
+
+-- ===========================================================
+-- Block I: Domain types.
+-- ===========================================================
+
+-- Plain domain (no constraints, no default).
+CREATE DOMAIN public.dom_plain AS INT;
+
+-- CHECK constraint, exercised via pg_constraint round-trip.
+CREATE DOMAIN public.dom_positive AS INT CHECK (VALUE > 0);
+
+-- Domain over TEXT with a CHECK constraint containing literal text.
+CREATE DOMAIN public.dom_email AS TEXT CHECK (VALUE LIKE '%@%');
+
+-- NOT NULL domain.
+CREATE DOMAIN public.dom_nn_label AS TEXT NOT NULL;
+
+-- DEFAULT expressions. Cover a literal, a no-arg function call, a
+-- function call with arguments, and an arithmetic expression to make
+-- sure pg_dump emits them raw (via typdefaultbin → pg_get_expr) rather
+-- than wrapping the value in string literal quoting.
+CREATE DOMAIN public.dom_default_lit AS INT DEFAULT 0;
+CREATE DOMAIN public.dom_default_now AS TIMESTAMPTZ DEFAULT now();
+CREATE DOMAIN public.dom_default_func AS TEXT DEFAULT upper('abc');
+CREATE DOMAIN public.dom_default_arith AS INT DEFAULT 1 + 2;
+
+-- Named CHECK constraints.
+CREATE DOMAIN public.dom_bounded AS INT
+    CONSTRAINT must_be_positive CHECK (VALUE > 0)
+    CONSTRAINT must_be_small CHECK (VALUE < 100);
+
+-- Table that uses domain columns to exercise dependency ordering in the dump.
+CREATE TABLE public.with_domain (
+    id INT PRIMARY KEY,
+    score public.dom_positive,
+    email public.dom_email,
+    label public.dom_nn_label,
+    code public.dom_default_lit,
+    bounded public.dom_bounded
+);
 `
 
 func initPGDump(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -553,6 +593,19 @@ var pgDumpExpectedPatterns = []struct {
 	{`CREATE TABLE public."MixedCase"`, "mixed-case table name", false},
 	{`"ColName"`, "mixed-case column name", false},
 	{"a_very_long_identifier_name_to_test_pg_dump_quote_safety", "long identifier", false},
+	// Block I: domain types.
+	{"CREATE DOMAIN public.dom_plain", "dom_plain domain", false},
+	{"CREATE DOMAIN public.dom_positive", "dom_positive CHECK domain", false},
+	{"CREATE DOMAIN public.dom_email", "dom_email CHECK domain", false},
+	{"CREATE DOMAIN public.dom_nn_label", "dom_nn_label NOT NULL domain", false},
+	{"CREATE DOMAIN public.dom_default_lit", "dom_default_lit literal DEFAULT", false},
+	{"DEFAULT now()", "domain DEFAULT now() (no-arg function)", false},
+	{"DEFAULT upper('abc')", "domain DEFAULT with function arg", false},
+	{"DEFAULT 1 + 2", "domain DEFAULT arithmetic expr", false},
+	{"CREATE DOMAIN public.dom_bounded", "dom_bounded domain", false},
+	{"CONSTRAINT must_be_positive", "named domain CHECK constraint", false},
+	{"CONSTRAINT must_be_small", "second named domain CHECK constraint", false},
+	{"CREATE TABLE public.with_domain", "with_domain table", false},
 }
 
 // verifyDumpContent checks that the dump output contains all expected

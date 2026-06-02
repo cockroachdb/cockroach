@@ -226,6 +226,19 @@ type ResourceGroupID uint64
 // SafeValue implements redact.SafeValue.
 func (ResourceGroupID) SafeValue() {}
 
+// HighResourceGroupID and LowResourceGroupID are the ids of the two
+// built-in resource groups used in resource-manager-mode admission
+// control. High carries work with priority >= NormalPri, Low carries
+// the rest. The ids are defined here, rather than in pkg/util/admission,
+// so that other packages (e.g. the SQL resource group name cache) can
+// refer to the same values without depending on admission internals.
+// The corresponding group configs are seeded in
+// pkg/util/admission/resource_group_config_holder.go.
+const (
+	HighResourceGroupID ResourceGroupID = 1
+	LowResourceGroupID  ResourceGroupID = 2
+)
+
 // WorkClassFromPri translates a WorkPriority to its given WorkClass.
 func WorkClassFromPri(pri WorkPriority) WorkClass {
 	class := RegularWorkClass

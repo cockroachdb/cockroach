@@ -105,24 +105,22 @@ func (tw *transactionWriter) tryApplyTransaction(
 				return ApplyResult{}, err
 			}
 		case row.IsTombstoneUpdate():
-			// Use a KV savepoint so that a LWW-loser ConditionFailedError
-			// on one tombstone does not abort the surrounding transaction.
+			// Use a KV savepoint so that a ConditionFailedError on one
+			// tombstone does not abort the surrounding transaction.
+			var lwwLoss bool
 			err := tw.session.KVSavepoint(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				batch := txn.NewBatch()
-				batch.Header.WriteOptions = sqlwriter.OriginID1Options
-				if err := tw.tombstoneUpdaters[row.TableID].AddToBatch(
-					ctx, txn, batch, transaction.TxnID.Timestamp, row.Row,
-				); err != nil {
-					return err
-				}
-				return txn.Run(ctx, batch)
+				var err error
+				lwwLoss, err = tw.tombstoneUpdaters[row.TableID].UpdateTombstone(
+					ctx, txn, transaction.TxnID.Timestamp, row.Row,
+				)
+				return err
 			})
-			if sqlwriter.IsLwwLoser(err) {
-				lwwLosers++
-				continue
-			}
 			if err != nil {
 				return ApplyResult{}, err
+			}
+			if lwwLoss {
+				lwwLosers++
+				continue
 			}
 		case row.IsInsertRow():
 			err := tableWriter.InsertRow(ctx, transaction.TxnID.Timestamp, row.Row)

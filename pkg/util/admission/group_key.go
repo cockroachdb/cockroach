@@ -50,9 +50,13 @@ func tenantGroupKey(id uint64) groupKey {
 	return groupKey{tenantID: id}
 }
 
-// rgGroupKey returns the groupKey for a resource group container.
-func rgGroupKey(id uint64) groupKey {
-	return groupKey{groupID: id}
+// rgGroupKey returns the groupKey for a resource group container owned
+// by the given tenant. User-defined resource groups are scoped to a
+// tenant, so both fields are generally non-zero. The two built-in
+// groups are tenant-agnostic (tenantID 0); use highResourceGroupKey /
+// lowResourceGroupKey for those rather than constructing them here.
+func rgGroupKey(tenantID, groupID uint64) groupKey {
+	return groupKey{tenantID: tenantID, groupID: groupID}
 }
 
 // isBuiltin reports whether k names a built-in group (one always

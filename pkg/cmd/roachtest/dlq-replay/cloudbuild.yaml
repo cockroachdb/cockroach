@@ -1,0 +1,13 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build',
+         '--tag', '${_IMAGE}:${_IMAGE_TAG}',
+         '--build-arg', 'SHA=${_GIT_SHA}',
+         '--build-arg', 'OWNER=${_OWNER}',
+         '--build-arg', 'REPO=${_REPO}',
+         '--build-arg', 'BAZEL_IMAGE=${_BAZEL_IMAGE}',
+         '.']
+images:
+- '${_IMAGE}:${_IMAGE_TAG}'
+options:
+  machineType: 'E2_HIGHCPU_8'

@@ -821,6 +821,17 @@ type fkSelfResolver struct {
 
 var _ resolver.SchemaResolver = &fkSelfResolver{}
 
+// checkFKReferencesPrivilege implements fkPrivilegeChecker by delegating to the
+// inner SchemaResolver.
+func (r *fkSelfResolver) checkFKReferencesPrivilege(
+	ctx context.Context, parent catalog.TableDescriptor,
+) error {
+	if checker, ok := r.SchemaResolver.(fkPrivilegeChecker); ok {
+		return checker.checkFKReferencesPrivilege(ctx, parent)
+	}
+	return nil
+}
+
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *fkSelfResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,

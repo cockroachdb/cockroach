@@ -85,6 +85,10 @@ func (s *cpuHandleAssertingSession) Txn(ctx context.Context, do func(context.Con
 	return s.Session.Txn(ctx, do)
 }
 
+// TestTxnModeSmoketest exercises basic transactional LDR and is the preferred
+// place to add non-invasive assertions about internal job state (e.g. partition
+// URIs, CPU handles). Extend this test rather than spinning up a new cluster
+// for each trivial assertion.
 func TestTxnModeSmoketest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
@@ -135,6 +139,17 @@ func TestTxnModeSmoketest(t *testing.T) {
 
 	destDB.CheckQueryResults(t, "SELECT * FROM parent ORDER BY id", [][]string{})
 	destDB.CheckQueryResults(t, "SELECT * FROM child ORDER BY id", [][]string{})
+
+	// Verify partition URIs are checkpointed in job progress. In gateway
+	// routing mode (set by the stream-use-gateway-routing-mode metamorphic
+	// constant), checkpointPartitionURIs intentionally skips saving URIs.
+	progress := jobutils.GetJobProgress(t, destDB, jobID)
+	ldrProgress := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+	if replicationtestutils.IsGatewayRoutingMode() {
+		require.Empty(t, ldrProgress.PartitionConnUris)
+	} else {
+		require.NotEmpty(t, ldrProgress.PartitionConnUris)
+	}
 
 	// Verify that at least one session had its CPU handle checked, confirming
 	// that the writer goroutines are running with per-goroutine handles.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright 2016 The Cockroach Authors.
+# Copyright 2026 The Cockroach Authors.
 #
 # Use of this software is governed by the CockroachDB Software License
 # included in the /LICENSE file.
@@ -16,6 +16,9 @@ export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b
 USER_ID=$(id -un)
 NAME=${GCEWORKER_NAME-gceworker-${USER_ID//./}}
 FQNAME="${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}"
+
+# Derive the region from the zone by stripping the trailing zone letter.
+REGION="${CLOUDSDK_COMPUTE_ZONE%-*}"
 
 # IMAGE_FAMILY can be used to override the image when creating a gceworker.
 # For example:
@@ -40,54 +43,55 @@ function user_domain_suffix() {
 }
 
 function gcloud_compute_ssh() {
-	gcloud compute ssh --ssh-flag="-o StrictHostKeyChecking=no" --ssh-flag="-o UserKnownHostsFile=/dev/null" "$@"
+	gcloud compute ssh --tunnel-through-iap --ssh-flag="-o StrictHostKeyChecking=no" --ssh-flag="-o UserKnownHostsFile=/dev/null" "$@"
 }
 
 function start_and_wait() {
 	gcloud compute instances start "${1}"
-	if [ -z "${GCEWORKER_NO_FIREWALL_WARNING-}" ]; then
-		cat <<EOF
-	      Note: gceworkers are not to be exposed to the public internet[1].
-	      At home or at an office, you may use the below to allowlist your current IP address:
-	      $0 update-firewall.
-
-        This warning can be suppressed via GCEWORKER_NO_FIREWALL_WARNING=true.
-
-        [1]: https://cockroachlabs.slack.com/archives/C0HM2DZ34/p1719878745576399
-EOF
-	fi
 	echo "waiting for node to finish starting..."
 	# Wait for vm and sshd to start up.
 	retry gcloud_compute_ssh "${1}" --command=true || true
 }
 
 function refresh_ssh_config() {
-	IP=$(get_ip)
-	if ! grep -q "${FQNAME}" ~/.ssh/config; then
-		USER_DOMAIN_SUFFIX="$(user_domain_suffix)"
-		echo "No alias found for ${FQNAME} in ~/.ssh/config. Creating one for ${USER_DOMAIN_SUFFIX} now with the instance external ip."
-		echo "Host ${FQNAME}
-  HostName ${IP}
-  User ${USER_DOMAIN_SUFFIX}
-  IdentityFile $HOME/.ssh/google_compute_engine
-  UserKnownHostsFile=$HOME/.ssh/google_compute_known_hosts
-  IdentitiesOnly=yes
-  CheckHostIP=no" >>~/.ssh/config
-	else
-		sed -i"" -e "/Host ${FQNAME}/,/HostName/ s/HostName .*/HostName ${IP}/" ~/.ssh/config
+	# Remove any stale entry for this instance.
+	if grep -q "${FQNAME}" ~/.ssh/config 2>/dev/null; then
+		sed -i"" -e "/Host ${FQNAME}/,/^$/d" ~/.ssh/config
 	fi
+	USER_DOMAIN_SUFFIX="$(user_domain_suffix)"
+	echo "Writing SSH config entry for ${FQNAME} with IAP tunnel proxy."
+	echo "
+Host ${FQNAME}
+  HostName ${NAME}
+  User ${USER_DOMAIN_SUFFIX}
+  ProxyCommand gcloud compute start-iap-tunnel %h %p --listen-on-stdin --zone=${CLOUDSDK_COMPUTE_ZONE} --project=${CLOUDSDK_CORE_PROJECT} --quiet
+  IdentityFile $HOME/.ssh/google_compute_engine
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null" >>~/.ssh/config
 }
 
-function update_firewall() {
-	MY_IP="$(dig +short -4 myip.opendns.com @resolver1.opendns.com)"
-	RULE="$(whoami)-home-ssh-rule"
-	gcloud compute firewall-rules delete --quiet "$RULE" || true
-	gcloud compute firewall-rules create --quiet "$RULE" \
-		--network=default \
-		--allow=tcp:22 \
-		--source-ranges="$MY_IP/32" \
-		--direction=INGRESS \
-		--priority=0
+function grant_ssh_access() {
+	local user_email
+	user_email=$(gcloud config get-value account 2>/dev/null)
+	if [[ -z "${user_email}" || "${user_email}" == "(unset)" ]]; then
+		echo "Error: no active gcloud account found. Run 'gcloud auth login' first." >&2
+		exit 1
+	fi
+	echo "Granting OS Login access to ${user_email} on ${NAME}..."
+	gcloud compute instances add-iam-policy-binding "${NAME}" \
+		--zone="${CLOUDSDK_COMPUTE_ZONE}" \
+		--member="user:${user_email}" \
+		--role="roles/compute.osAdminLogin" \
+		--project="${CLOUDSDK_CORE_PROJECT}" \
+		--quiet
+}
+
+function ensure_created_with_label() {
+	local current
+	current=$(gcloud compute instances describe "${NAME}" --format="value(labels.created-with)" 2>/dev/null)
+	if [[ -z "${current}" ]]; then
+		gcloud compute instances add-labels "${NAME}" --labels="created-with=gceworker-legacy" > /dev/null
+	fi
 }
 
 case "${cmd}" in
@@ -110,25 +114,28 @@ create)
 	gcloud compute instances \
 		create "${NAME}" \
 		--machine-type "n2-custom-24-32768" \
-		--network "default" \
+		--network "cockroach-workers-vpc" \
+		--subnet "cockroach-workers-vpc-${REGION}" \
+		--tags "gceworker" \
 		--maintenance-policy "MIGRATE" \
 		--image-project "ubuntu-os-cloud" \
 		--image-family "${IMAGE_FAMILY}" \
 		--boot-disk-size "250" \
 		--boot-disk-type "pd-ssd" \
 		--boot-disk-device-name "${NAME}" \
+		--service-account "cockroach-worker@cockroach-workers.iam.gserviceaccount.com" \
 		--scopes "cloud-platform" \
-		--labels "created-by=${gsuite_account_for_label:0:63}" \
+		--labels "created-by=${gsuite_account_for_label:0:63},created-with=gceworker" \
 		--metadata enable-oslogin=TRUE,block-project-ssh-keys=TRUE
-	gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
-	update_firewall
+
+	grant_ssh_access
 
 	# wait a bit to let gcloud create the instance before retrying
 	sleep 30
 	# Retry while vm and sshd start up.
 	start_and_wait "${NAME}"
 
-	gcloud compute scp --recurse "build/bootstrap" "${NAME}:bootstrap"
+	gcloud compute scp --tunnel-through-iap --recurse "build/bootstrap" "${NAME}:bootstrap"
 	gcloud_compute_ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
 
 	if [[ "$COCKROACH_DEV_LICENSE" ]]; then
@@ -142,29 +149,18 @@ create)
 	gcloud_compute_ssh "${NAME}" --command="sudo cp bootstrap/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
 
 	;;
-update-firewall)
-	update_firewall
-	;;
 start)
+	ensure_created_with_label
 	start_and_wait "${NAME}"
 	refresh_ssh_config
 
 	# SSH into the node, since that's probably why we started it.
 	echo "****************************************"
-	echo "Hint: you should also be able to directly invoke:"
-	echo "ssh ${FQNAME}"
-	echo "  or"
-	echo "mosh ${FQNAME}"
-	echo "if needed instead of '$0 (ssh|mosh)'."
-	echo "If this does not work, try removing the section for your gceworker from ~/.ssh/config"
-	echo "and invoke '$0 start' again to recreate it."
-	echo
-	if [ -z "${GCEWORKER_START_SSH_COMMAND-}" ]; then
-		echo "Connecting via SSH."
-		echo "Set GCEWORKER_START_SSH_COMMAND=mosh to use mosh instead"
-	fi
+	echo "Hint: you can also connect directly via:"
+	echo "gcloud compute ssh ${NAME} --tunnel-through-iap"
+	echo "if needed instead of '$0 ssh'."
 	echo "****************************************"
-	$0 "${GCEWORKER_START_SSH_COMMAND-ssh}"
+	$0 ssh
 	;;
 stop)
 	read -r -p "This will stop the VM. Are you sure? [yes] " response
@@ -186,6 +182,7 @@ suspend)
 	gcloud compute instances suspend "${NAME}"
 	;;
 resume)
+	ensure_created_with_label
 	gcloud compute instances resume "${NAME}"
 	# This conveniently waits until the VM is ready and then drops
 	# us into a ssh session.
@@ -209,18 +206,11 @@ delete | destroy)
 		echo Aborting
 		exit 1
 	fi
-	status=0
-	gcloud compute firewall-rules delete "${NAME}-mosh" --quiet || status=$((status + 1))
-	RULE="$(whoami)-home-ssh-rule"
-	gcloud compute firewall-rules delete --quiet "$RULE" || status=$((status + 1))
-	gcloud compute instances delete "${NAME}" --quiet || status=$((status + 1))
-	exit ${status}
+	gcloud compute instances delete "${NAME}" --quiet
 	;;
 ssh)
+	ensure_created_with_label
 	gcloud_compute_ssh "${NAME}" --ssh-flag="-A" "$@"
-	;;
-mosh)
-	mosh --ssh "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" "$(user_domain_suffix)@${FQNAME}"
 	;;
 get)
 	rpath="${1}"
@@ -231,7 +221,7 @@ get)
 	fi
 	from="${NAME}:${rpath}"
 	shift
-	gcloud compute scp --recurse "${from}" "$@"
+	gcloud compute scp --tunnel-through-iap --recurse "${from}" "$@"
 	;;
 put)
 	# scp allows one or more sources, followed by a single destination. (With no
@@ -248,15 +238,15 @@ put)
 		rpath="${@: -1}"
 	fi
 	to="${NAME}:${rpath}"
-	gcloud compute scp --recurse "${lpaths[@]}" "${to}"
+	gcloud compute scp --tunnel-through-iap --recurse "${lpaths[@]}" "${to}"
 	;;
 ip)
 	get_ip
 	;;
 vscode)
 	start_and_wait "${NAME}"
-	HOST="$(gcloud_compute_ssh --dry-run "$NAME" | awk '{print $NF}')"
-	code --wait --remote ssh-remote+"$HOST" "$@"
+	refresh_ssh_config
+	code --wait --remote ssh-remote+"${FQNAME}" "$@"
 	;;
 status)
 	gcloud compute instances describe "$NAME" --format="table(name,status,lastStartTimestamp,lastStopTimestamp)"
@@ -270,8 +260,70 @@ update-hosts)
 	# Step 2: Insert the new line at the end unconditionally
 	echo "${NEW_IP} ${NAME}.local" | sudo tee -a ${HOSTS_FILE} > /dev/null
 	;;
+migrate)
+	# Verify the VM exists.
+	if ! gcloud compute instances describe "${NAME}" --zone="${CLOUDSDK_COMPUTE_ZONE}" --project="${CLOUDSDK_CORE_PROJECT}" > /dev/null 2>&1; then
+		echo "Error: VM ${NAME} does not exist." >&2
+		exit 1
+	fi
+
+	# Check current network.
+	current_network=$(gcloud compute instances describe "${NAME}" \
+		--zone="${CLOUDSDK_COMPUTE_ZONE}" \
+		--project="${CLOUDSDK_CORE_PROJECT}" \
+		--format="value(networkInterfaces[0].network)")
+	if [[ "${current_network}" == *"cockroach-workers-vpc"* ]]; then
+		echo "VM ${NAME} is already on cockroach-workers-vpc. Nothing to do."
+		exit 0
+	fi
+
+	echo "This will migrate ${NAME} to the cockroach-workers-vpc network."
+	echo ""
+	echo "  The following changes will be made:"
+	echo "    - Stop the VM (if running)"
+	echo "    - Update NIC to cockroach-workers-vpc / cockroach-workers-vpc-${REGION}"
+	echo "    - Apply created-with=gceworker-legacy label"
+	echo "    - Grant OS Login admin access"
+	echo "    - Update SSH config for IAP tunneling"
+	echo ""
+	read -r -p "Are you sure? [yes] " response
+	response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
+	if [[ $response != "yes" ]]; then
+		echo Aborting
+		exit 1
+	fi
+
+	# Stop the VM if it's not already stopped.
+	vm_status=$(gcloud compute instances describe "${NAME}" \
+		--zone="${CLOUDSDK_COMPUTE_ZONE}" \
+		--project="${CLOUDSDK_CORE_PROJECT}" \
+		--format="value(status)")
+	if [[ "${vm_status}" == "RUNNING" || "${vm_status}" == "SUSPENDED" ]]; then
+		echo "VM is ${vm_status}, stopping..."
+		gcloud compute instances stop "${NAME}" \
+			--zone="${CLOUDSDK_COMPUTE_ZONE}" \
+			--project="${CLOUDSDK_CORE_PROJECT}"
+	else
+		echo "VM is already ${vm_status}, skipping stop."
+	fi
+
+	echo "Updating network interface to cockroach-workers-vpc..."
+	gcloud compute instances network-interfaces update "${NAME}" \
+		--zone="${CLOUDSDK_COMPUTE_ZONE}" \
+		--project="${CLOUDSDK_CORE_PROJECT}" \
+		--network="cockroach-workers-vpc" \
+		--subnetwork="cockroach-workers-vpc-${REGION}" \
+		--network-interface="nic0"
+
+	ensure_created_with_label
+	grant_ssh_access
+	refresh_ssh_config
+
+	echo ""
+	echo "Migration complete. Run '$0 start' to start the VM on the new network."
+	;;
 *)
-	echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, get, put, sync, or update-hosts"
+	echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, reset, delete, status, ssh, get, put, ip, vscode, update-hosts, migrate, or gcloud"
 	exit 1
 	;;
 esac

@@ -179,20 +179,18 @@ func checkExpressionEvaluation(
 	return nil
 }
 
-// checkComputedColumnsInConstraints rejects computed columns that are
+// checkComputedColumnsInConstraints rejects virtual computed columns that are
 // in a unique or a foreign key constraint. Lock derivation hashes column datums
-// from the decoded row, which does not contain computed columns.
-//
-// TODO(#164507): support stored computed columns.
+// from the decoded row, which does not contain virtual computed columns.
 func checkComputedColumnsInConstraints(
 	dst *descpb.TableDescriptor, columns []catalog.Column, colOrd catalog.TableColMap,
 ) error {
-	getComputedCol := func(colID descpb.ColumnID) (catalog.Column, bool) {
+	getVirtualCol := func(colID descpb.ColumnID) (catalog.Column, bool) {
 		ord, ok := colOrd.Get(colID)
-		if !ok || !columns[ord].IsComputed() {
-			return nil, false
+		if ok && columns[ord].IsVirtual() {
+			return columns[ord], true
 		}
-		return columns[ord], true
+		return nil, false
 	}
 
 	for _, idx := range dst.Indexes {
@@ -200,9 +198,9 @@ func checkComputedColumnsInConstraints(
 			continue
 		}
 		for _, colID := range idx.KeyColumnIDs {
-			if col, ok := getComputedCol(colID); ok {
+			if col, ok := getVirtualCol(colID); ok {
 				return errors.Newf(
-					"table %s has a computed column %s that is a key of unique index %s",
+					"table %s has a virtual computed column %s that is a key of unique index %s",
 					dst.Name, col.GetName(), idx.Name,
 				)
 			}
@@ -213,9 +211,9 @@ func checkComputedColumnsInConstraints(
 	// but the check should be harmless in case we add support.
 	for _, fk := range dst.OutboundFKs {
 		for _, colID := range fk.OriginColumnIDs {
-			if col, ok := getComputedCol(colID); ok {
+			if col, ok := getVirtualCol(colID); ok {
 				return errors.Newf(
-					"table %s has a computed column %s that is part of foreign key %s",
+					"table %s has a virtual computed column %s that is part of foreign key %s",
 					dst.Name, col.GetName(), fk.Name,
 				)
 			}
@@ -224,9 +222,9 @@ func checkComputedColumnsInConstraints(
 
 	for _, fk := range dst.InboundFKs {
 		for _, colID := range fk.ReferencedColumnIDs {
-			if col, ok := getComputedCol(colID); ok {
+			if col, ok := getVirtualCol(colID); ok {
 				return errors.Newf(
-					"table %s has a computed column %s that is referenced by foreign key %s",
+					"table %s has a virtual computed column %s that is referenced by foreign key %s",
 					dst.Name, col.GetName(), fk.Name,
 				)
 			}
