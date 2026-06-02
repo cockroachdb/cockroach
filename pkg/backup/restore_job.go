@@ -138,6 +138,17 @@ const (
 	// restoreTempSystemDBPrefix is the prefix used for the temporary system
 	// database created during restore.
 	restoreTempSystemDBPrefix = "crdb_temp_system"
+
+	// Per-type info-keys used by RESTORE to persist (ID, Version) tuples for
+	// every descriptor materialized in OFFLINE state. The descriptor body is
+	// fetched from KV when needed; persisting only references keeps the
+	// per-row size well under the raft command size limit at multi-million
+	// descriptor scale. See backuppb.RestoreDescRefs for the value shape.
+	restoreTableDescRefsKey    = "restore_table_desc_refs"
+	restoreTypeDescRefsKey     = "restore_type_desc_refs"
+	restoreSchemaDescRefsKey   = "restore_schema_desc_refs"
+	restoreDatabaseDescRefsKey = "restore_database_desc_refs"
+	restoreFunctionDescRefsKey = "restore_function_desc_refs"
 )
 
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
@@ -167,6 +178,242 @@ func restoreTempSystemName(
 }
 
 var laggingRestoreProcErr = errors.New("try re-planning due to lagging restore processors")
+
+// getDescRefs reads the RestoreDescRefs proto stored at the given info-key for
+// the given restore job. Returns (nil, false, nil) when the key is absent.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func getDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, infoKey string,
+) ([]backuppb.RestoreDescRef, bool, error) {
+	raw, ok, err := jobs.InfoStorageForJob(txn, jobID).Get(ctx, "restore-desc-refs", infoKey)
+	if err != nil || !ok {
+		return nil, false, err
+	}
+	var msg backuppb.RestoreDescRefs
+	if err := protoutil.Unmarshal(raw, &msg); err != nil {
+		return nil, false, errors.Wrap(err, "decoding restore desc refs")
+	}
+	return msg.Refs, true, nil
+}
+
+// writeDescRefs marshals refs as a RestoreDescRefs proto and writes it to the
+// given info-key for the restore job.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func writeDescRefs(
+	ctx context.Context,
+	txn isql.Txn,
+	jobID jobspb.JobID,
+	infoKey string,
+	refs []backuppb.RestoreDescRef,
+) error {
+	bytes, err := protoutil.Marshal(&backuppb.RestoreDescRefs{Refs: refs})
+	if err != nil {
+		return errors.Wrap(err, "encoding restore desc refs")
+	}
+	return jobs.InfoStorageForJob(txn, jobID).Write(ctx, infoKey, bytes)
+}
+
+// descRefsFromTableDescs extracts (ID, Version) tuples from a table-descriptor
+// slice for persisting via writeDescRefs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromTableDescs(descs []*descpb.TableDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// descRefsFromTypeDescs is the type-descriptor analog of
+// descRefsFromTableDescs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromTypeDescs(descs []*descpb.TypeDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// descRefsFromSchemaDescs is the schema-descriptor analog of
+// descRefsFromTableDescs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromSchemaDescs(descs []*descpb.SchemaDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// descRefsFromDatabaseDescs is the database-descriptor analog of
+// descRefsFromTableDescs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromDatabaseDescs(descs []*descpb.DatabaseDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// descRefsFromFunctionDescs is the function-descriptor analog of
+// descRefsFromTableDescs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func descRefsFromFunctionDescs(descs []*descpb.FunctionDescriptor) []backuppb.RestoreDescRef {
+	out := make([]backuppb.RestoreDescRef, len(descs))
+	for i, d := range descs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out
+}
+
+// tableDescRefs returns (ID, Version) tuples for tables this restore job is
+// materializing. Prefers the dedicated info-key row; falls back to the legacy
+// details.TableDescs slice for jobs created before info-key writes existed.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func tableDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
+) ([]backuppb.RestoreDescRef, error) {
+	refs, ok, err := getDescRefs(ctx, txn, jobID, restoreTableDescRefsKey)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return refs, nil
+	}
+	out := make([]backuppb.RestoreDescRef, len(details.TableDescs))
+	for i, d := range details.TableDescs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out, nil
+}
+
+// typeDescRefs is the type-descriptor analog of tableDescRefs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func typeDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
+) ([]backuppb.RestoreDescRef, error) {
+	refs, ok, err := getDescRefs(ctx, txn, jobID, restoreTypeDescRefsKey)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return refs, nil
+	}
+	out := make([]backuppb.RestoreDescRef, len(details.TypeDescs))
+	for i, d := range details.TypeDescs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out, nil
+}
+
+// schemaDescRefs is the schema-descriptor analog of tableDescRefs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func schemaDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
+) ([]backuppb.RestoreDescRef, error) {
+	refs, ok, err := getDescRefs(ctx, txn, jobID, restoreSchemaDescRefsKey)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return refs, nil
+	}
+	out := make([]backuppb.RestoreDescRef, len(details.SchemaDescs))
+	for i, d := range details.SchemaDescs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out, nil
+}
+
+// databaseDescRefs is the database-descriptor analog of tableDescRefs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func databaseDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
+) ([]backuppb.RestoreDescRef, error) {
+	refs, ok, err := getDescRefs(ctx, txn, jobID, restoreDatabaseDescRefsKey)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return refs, nil
+	}
+	out := make([]backuppb.RestoreDescRef, len(details.DatabaseDescs))
+	for i, d := range details.DatabaseDescs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out, nil
+}
+
+// functionDescRefs is the function-descriptor analog of tableDescRefs.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func functionDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
+) ([]backuppb.RestoreDescRef, error) {
+	refs, ok, err := getDescRefs(ctx, txn, jobID, restoreFunctionDescRefsKey)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return refs, nil
+	}
+	out := make([]backuppb.RestoreDescRef, len(details.FunctionDescs))
+	for i, d := range details.FunctionDescs {
+		out[i] = backuppb.RestoreDescRef{ID: d.ID, Version: d.Version}
+	}
+	return out, nil
+}
+
+// allDescRefs returns (ID, Version) tuples for every descriptor this restore
+// job is materializing — tables, types, schemas, databases, and functions —
+// suitable for a single batched MutableByID().Descs fetch.
+//
+// TODO (kev-cao): remove this helper and flatten call-sites in 27.1+.
+func allDescRefs(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.RestoreDetails,
+) ([]backuppb.RestoreDescRef, error) {
+	tables, err := tableDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return nil, err
+	}
+	types, err := typeDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return nil, err
+	}
+	schemas, err := schemaDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return nil, err
+	}
+	databases, err := databaseDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return nil, err
+	}
+	functions, err := functionDescRefs(ctx, txn, jobID, details)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]backuppb.RestoreDescRef, 0,
+		len(tables)+len(types)+len(schemas)+len(databases)+len(functions))
+	out = append(out, tables...)
+	out = append(out, types...)
+	out = append(out, schemas...)
+	out = append(out, databases...)
+	out = append(out, functions...)
+	return out, nil
+}
 
 // rewriteBackupSpanKey rewrites a backup span start key for the purposes of
 // splitting up the target key-space to send out the actual work of restoring.
@@ -2079,6 +2326,36 @@ func createImportingDescriptors(
 			details.FunctionDescs[i] = fn.FuncDesc()
 		}
 
+		// Dual-write each descriptor type's (ID, Version) tuples to a
+		// dedicated system.job_info row alongside the legacy slice
+		// population above. The info-key rows are the long-term source of
+		// truth — later phases of the restore fetch descriptor bodies from
+		// KV by ID rather than relying on the full payloads on
+		// RestoreDetails — but the legacy slices remain populated here for
+		// mixed-version compatibility. A later commit gates the legacy
+		// writes off once the cluster has crossed the corresponding
+		// cluster version.
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTableDescRefsKey,
+			descRefsFromTableDescs(details.TableDescs)); err != nil {
+			return err
+		}
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTypeDescRefsKey,
+			descRefsFromTypeDescs(details.TypeDescs)); err != nil {
+			return err
+		}
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreSchemaDescRefsKey,
+			descRefsFromSchemaDescs(details.SchemaDescs)); err != nil {
+			return err
+		}
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreDatabaseDescRefsKey,
+			descRefsFromDatabaseDescs(details.DatabaseDescs)); err != nil {
+			return err
+		}
+		if err := writeDescRefs(ctx, txn, r.job.ID(), restoreFunctionDescRefsKey,
+			descRefsFromFunctionDescs(details.FunctionDescs)); err != nil {
+			return err
+		}
+
 		// Update the job once all descs have been prepared for ingestion.
 		//
 		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
@@ -3317,6 +3594,31 @@ func (r *restoreResumer) publishDescriptors(
 	details.FunctionDescs = newFunctions
 	if details.OnlineImpl() {
 		details.PostDownloadTableAutoStatsSettings = tableAutoStatsSettings
+	}
+	// Dual-write the published (ID, Version) tuples to the dedicated
+	// info-key rows alongside the legacy slice updates above. See the
+	// matching block in createImportingDescriptors for the rationale; a
+	// later commit gates the legacy writes off once the cluster has
+	// crossed the corresponding cluster version.
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTableDescRefsKey,
+		descRefsFromTableDescs(newTables)); err != nil {
+		return err
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreTypeDescRefsKey,
+		descRefsFromTypeDescs(newTypes)); err != nil {
+		return err
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreSchemaDescRefsKey,
+		descRefsFromSchemaDescs(newSchemas)); err != nil {
+		return err
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreDatabaseDescRefsKey,
+		descRefsFromDatabaseDescs(newDBs)); err != nil {
+		return err
+	}
+	if err := writeDescRefs(ctx, txn, r.job.ID(), restoreFunctionDescRefsKey,
+		descRefsFromFunctionDescs(newFunctions)); err != nil {
+		return err
 	}
 	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
 	if err := r.job.DeprecatedWithTxn(txn).SetDetails(ctx, details); err != nil {
