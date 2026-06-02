@@ -100,8 +100,11 @@ type Registry struct {
 	nodeID    *base.SQLIDContainer
 	settings  *cluster.Settings
 	execCtx   jobExecCtxMaker
-	metrics   Metrics
-	knobs     TestingKnobs
+
+	metrics        Metrics
+	clusterMetrics ClusterMetrics
+
+	knobs TestingKnobs
 
 	// adoptionChan is used to nudge the registry to resume claimed jobs and
 	// potentially attempt to claim jobs.
@@ -253,7 +256,7 @@ func MakeRegistry(
 	}
 	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
 	r.mu.waiting = make(map[jobspb.JobID]map[*waitingSet]struct{})
-	r.metrics.init(histogramWindowInterval, lookup)
+	initMetrics(&r.metrics, &r.clusterMetrics, histogramWindowInterval, lookup)
 	return r
 }
 
@@ -269,6 +272,11 @@ func (r *Registry) SetInternalDB(db isql.DB) {
 // cycles.
 func (r *Registry) MetricsStruct() *Metrics {
 	return &r.metrics
+}
+
+// ClusterMetrics returns the per-cluster metrics for jobs that opted in via WithJobClusterMetrics.
+func (r *Registry) ClusterMetrics() *ClusterMetrics {
+	return &r.clusterMetrics
 }
 
 // CurrentlyRunningJobs returns a slice of the ids of all jobs running on this node.
@@ -1432,6 +1440,17 @@ func WithJobMetrics(m metric.Struct) RegisterOption {
 	}
 }
 
+// WithJobClusterMetrics returns a RegisterOption which configures
+// jobs of this type to use the specified cluster metrics.
+//
+// Use this alongside WithJobMetrics for jobs that have both per-node
+// and cluster-wide metric needs.
+func WithJobClusterMetrics(m metric.Struct) RegisterOption {
+	return func(opts *registerOptions) {
+		opts.clusterMetrics = m
+	}
+}
+
 // WithResolvedMetric registers a gauge metric that the poller will update to
 // reflect the minimum resolved timestamp of all the jobs of this type.
 func WithResolvedMetric(m *metric.Gauge) RegisterOption {
@@ -1454,6 +1473,10 @@ type registerOptions struct {
 
 	// metrics allow jobs to register job specific metrics.
 	metrics metric.Struct
+
+	// clusterMetrics, if set, is the per-cluster metric struct
+	// registered via WithJobClusterMetrics.
+	clusterMetrics metric.Struct
 
 	// resolvedMetric, if set, is the metric to update using the min resolved ts.
 	resolvedMetric *metric.Gauge

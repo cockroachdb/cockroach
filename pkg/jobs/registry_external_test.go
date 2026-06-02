@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmwriter"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -37,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -524,4 +527,55 @@ func TestWaitWithRetryableError(t *testing.T) {
 		// retry.
 		require.GreaterOrEqualf(t, numberOfTimesDetected.Load(), int64(2), "jobs query did not retry")
 	}
+}
+
+type testJobClusterMetrics struct {
+	Counter *clustermetrics.Counter
+}
+
+func (*testJobClusterMetrics) MetricStruct() {}
+
+// TestWithJobClusterMetrics verifies that a struct registered via
+// WithJobClusterMetrics flows through the registry and lands in
+// system.cluster_metrics on flush.
+func TestWithJobClusterMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer clustermetrics.TestingAllowNonInitConstruction()()
+
+	const metricName = "test.with_job_cluster_metrics.counter"
+	tcm := &testJobClusterMetrics{
+		Counter: clustermetrics.NewCounter(metric.Metadata{Name: metricName}),
+	}
+
+	defer jobs.TestingRegisterConstructor(
+		jobspb.TypeImport,
+		func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return jobstest.FakeResumer{}
+		},
+		jobs.UsesTenantCostControl,
+		jobs.WithJobClusterMetrics(tcm),
+	)()
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	require.Same(t, metric.Struct(tcm),
+		registry.ClusterMetrics().JobSpecificMetrics[jobspb.TypeImport])
+
+	tcm.Counter.Inc(42)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg.ClusterMetricsWriter.(*cmwriter.Writer).Flush(ctx)
+
+	runner := sqlutils.MakeSQLRunner(s.SQLConn(t))
+	var value int64
+	runner.QueryRow(t,
+		`SELECT value FROM system.cluster_metrics WHERE name = $1`,
+		metricName,
+	).Scan(&value)
+	require.Equal(t, int64(42), value)
 }
