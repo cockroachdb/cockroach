@@ -91,15 +91,21 @@ run_bazel_github() {
 }
 
 # configure_bazel_storage_access_token mints a short-lived GCS access token
-# from the service-account key in $GOOGLE_EPHEMERAL_CREDENTIALS and exports it
-# as $BAZEL_STORAGE_ACCESS_TOKEN. build/bazelutil/credential-helper (wired into
-# .bazelrc) reads this token to authenticate Bazel's downloads of Go module
-# dependencies from the private cockroach-godeps GCS bucket.
+# from a service-account key and exports it as $BAZEL_STORAGE_ACCESS_TOKEN.
+# build/bazelutil/credential-helper (wired into .bazelrc) reads this token to
+# authenticate Bazel's downloads of Go module dependencies from the private
+# cockroach-godeps GCS bucket.
 #
-# This is opt-in: only the nightly configurations that build or test via Bazel
-# call it, so the rest of CI keeps using run_bazel unchanged. Callers that build
-# inside the builder container (run_bazel) must also forward the variable into
-# the container by adding `-e BAZEL_STORAGE_ACCESS_TOKEN` to
+# The key is taken from $1 if given, otherwise from $GOOGLE_EPHEMERAL_CREDENTIALS.
+# Nightly builds have the ephemeral key in their environment and call this with
+# no arguments; release/customized builds run under a different service account
+# and pass that account's key explicitly. Whichever account is used must hold
+# roles/storage.objectViewer on gs://cockroach-godeps-private.
+#
+# This is opt-in: only the configurations that build or test via Bazel call it,
+# so the rest of CI keeps using run_bazel unchanged. Callers that build inside
+# the builder container (run_bazel) must also forward the variable into the
+# container by adding `-e BAZEL_STORAGE_ACCESS_TOKEN` to
 # $BAZEL_SUPPORT_EXTRA_DOCKER_ARGS. Callers that invoke Bazel directly on the
 # agent need only call this function; the bazel process inherits the exported
 # variable.
@@ -111,7 +117,8 @@ run_bazel_github() {
 # materialized. The token is minted under an isolated CLOUDSDK_CONFIG so the
 # agent's default gcloud account, which other build steps rely on, is untouched.
 configure_bazel_storage_access_token() {
-  : "${GOOGLE_EPHEMERAL_CREDENTIALS:?must be set to authenticate to the private cockroach-godeps bucket}"
+  local creds="${1:-${GOOGLE_EPHEMERAL_CREDENTIALS:-}}"
+  : "${creds:?a service-account key must be provided to authenticate to the private cockroach-godeps bucket}"
   # Disable xtrace while the key and token are in flight; some callers run with
   # `set -x`, which would otherwise echo the credential to the build log.
   local xtrace_was_on=0
@@ -119,7 +126,7 @@ configure_bazel_storage_access_token() {
   local keyfile sdkconfig
   keyfile=$(mktemp)
   sdkconfig=$(mktemp -d)
-  printf '%s' "${GOOGLE_EPHEMERAL_CREDENTIALS}" > "${keyfile}"
+  printf '%s' "${creds}" > "${keyfile}"
   CLOUDSDK_CONFIG="${sdkconfig}" gcloud auth activate-service-account \
     --key-file="${keyfile}" >/dev/null 2>&1
   export BAZEL_STORAGE_ACCESS_TOKEN
