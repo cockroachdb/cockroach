@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -75,7 +76,8 @@ func RecomputeStats(
 
 	args = nil // avoid accidental use below
 
-	actualMS, err := rditer.ComputeStatsForRange(ctx, desc, reader, cArgs.Header.Timestamp.WallTime)
+	actualMS, err := rditer.ComputeStatsForRange(ctx, desc, reader,
+		fs.BatchEvalReadCategory, cArgs.Header.Timestamp.WallTime)
 	if err != nil {
 		return result.Result{}, err
 	}

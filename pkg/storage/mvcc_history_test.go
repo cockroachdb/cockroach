@@ -558,13 +558,14 @@ func TestMVCCHistories(t *testing.T) {
 					var msEngineBefore enginepb.MVCCStats
 					if stats {
 						for _, span := range spans {
-							ms, err := storage.ComputeStats(ctx, e.engine, span.Key, span.EndKey, statsTS)
+							ms, err := storage.ComputeStats(ctx, e.engine, fs.UnknownReadCategory, span.Key, span.EndKey, statsTS)
 							require.NoError(t, err)
 							msEngineBefore.Add(ms)
 
 							lockSpan := lockTableSpan(span)
 							lockMs, err := storage.ComputeStats(
-								ctx, e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
+								ctx, e.engine, fs.UnknownReadCategory,
+								lockSpan.Key, lockSpan.EndKey, statsTS)
 							require.NoError(t, err)
 							msEngineBefore.Add(lockMs)
 						}
@@ -590,13 +591,14 @@ func TestMVCCHistories(t *testing.T) {
 						// command, and compare them with the real computed stats diff.
 						var msEngineDiff enginepb.MVCCStats
 						for _, span := range spans {
-							ms, err := storage.ComputeStats(ctx, e.engine, span.Key, span.EndKey, statsTS)
+							ms, err := storage.ComputeStats(ctx, e.engine, fs.UnknownReadCategory, span.Key, span.EndKey, statsTS)
 							require.NoError(t, err)
 							msEngineDiff.Add(ms)
 
 							lockSpan := lockTableSpan(span)
 							lockMs, err := storage.ComputeStats(
-								ctx, e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
+								ctx, e.engine, fs.UnknownReadCategory,
+								lockSpan.Key, lockSpan.EndKey, statsTS)
 							require.NoError(t, err)
 							msEngineDiff.Add(lockMs)
 						}
@@ -644,13 +646,14 @@ func TestMVCCHistories(t *testing.T) {
 				if stats && (dataChange || locksChange) {
 					var msFinal enginepb.MVCCStats
 					for _, span := range spans {
-						ms, err := storage.ComputeStats(ctx, e.engine, span.Key, span.EndKey, statsTS)
+						ms, err := storage.ComputeStats(ctx, e.engine, fs.UnknownReadCategory, span.Key, span.EndKey, statsTS)
 						require.NoError(t, err)
 						msFinal.Add(ms)
 
 						lockSpan := lockTableSpan(span)
 						lockMs, err := storage.ComputeStats(
-							ctx, e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
+							ctx, e.engine, fs.UnknownReadCategory,
+							lockSpan.Key, lockSpan.EndKey, statsTS)
 						require.NoError(t, err)
 						msFinal.Add(lockMs)
 					}
@@ -1163,7 +1166,7 @@ func cmdGCClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	gcTs := e.getTs(nil)
 	return e.withWriter("gc_clear_range", func(rw storage.ReadWriter) error {
-		cms, err := storage.ComputeStats(context.Background(), rw, key, endKey, 100e9)
+		cms, err := storage.ComputeStats(context.Background(), rw, fs.UnknownReadCategory, key, endKey, 100e9)
 		require.NoError(e.t, err, "failed to compute range stats")
 		return storage.MVCCGarbageCollectWholeRange(e.ctx, rw, e.ms, key, endKey, gcTs, cms)
 	})
@@ -1320,7 +1323,8 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 		// before the start key -- don't attempt to compute covered stats for these
 		// to avoid iterator panics.
 		if key.Compare(endKey) < 0 && key.Compare(keys.LocalMax) >= 0 {
-			ms, err := storage.ComputeStats(context.Background(), e.engine, key, endKey, ts.WallTime)
+			ms, err := storage.ComputeStats(context.Background(), e.engine,
+				fs.UnknownReadCategory, key, endKey, ts.WallTime)
 			if err != nil {
 				return err
 			}
