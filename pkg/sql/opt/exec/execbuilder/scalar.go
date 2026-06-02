@@ -905,7 +905,15 @@ func (b *Builder) buildSubquery(
 			if len(eb.checks) > 0 {
 				return expectedLazyRoutineError("check")
 			}
-			plan, err := b.factory.ConstructPlan(
+			// Construct the plan with the same factory that built the nodes
+			// above (ef), not the enclosing builder's factory (b.factory).
+			// Under EXPLAIN ANALYZE, b.factory may be an explain.Factory
+			// captured when the enclosing routine body was built, while the
+			// nodes here were built lazily at execution time with the plain
+			// runtime factory ef. Using b.factory would both panic on the
+			// root.(*Node) assertion and yield a non-executable *explain.Plan.
+			// This mirrors the recursive-CTE builder (see relational.go).
+			plan, err := ef.ConstructPlan(
 				ePlan.root, eb.subqueries, eb.cascades, eb.triggers, eb.checks, inputRowCount, eb.flags,
 			)
 			if err != nil {
