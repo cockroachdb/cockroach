@@ -73,6 +73,41 @@ $$;
 subtest end
 
 
+subtest grant_role_blocked_in_procedures
+
+# GRANT ROLE and REVOKE ROLE are blocked in procedures and functions.
+statement error pgcode 0A000 unimplemented: GRANT ROLE usage inside a function definition
+CREATE PROCEDURE p_grant_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  GRANT r1 TO r2;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: REVOKE ROLE usage inside a function definition
+CREATE PROCEDURE p_revoke_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  REVOKE r1 FROM r2;
+END
+$$;
+
+# Also blocked in functions.
+statement error pgcode 0A000 unimplemented: GRANT ROLE usage inside a function definition
+CREATE FUNCTION f_grant_role() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  GRANT r1 TO r2;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: REVOKE ROLE usage inside a function definition
+CREATE FUNCTION f_revoke_role() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  REVOKE r1 FROM r2;
+END
+$$;
+
+subtest end
+
+
 subtest grant_in_procedure
 
 statement ok

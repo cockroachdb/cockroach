@@ -379,7 +379,7 @@ COMMIT;
 	"Statement": "GRANT admin TO craig",
 	"StatementFingerprintID": "13141210421725929372",
 	"StmtPosInTxn": 1,
-	"Tag": "GRANT",
+	"Tag": "GRANT ROLE",
 	"User": "root"
 }
 
