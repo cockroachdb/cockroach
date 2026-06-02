@@ -109,6 +109,168 @@ func TestDebugTimeSeriesDumpCmd(t *testing.T) {
 		))
 		require.Contains(t, out, "--upload-workers is set to an invalid value. please select a value which between 1 and 100.")
 	})
+
+	t.Run("debug tsdump with --metrics-list-file flag", func(t *testing.T) {
+		// Create a temporary metrics list file with specific metrics
+		metricsListFile, err := os.CreateTemp("", "metrics_list_*.txt")
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, os.Remove(metricsListFile.Name()))
+		}()
+
+		// Write a metric that should exist in any CockroachDB cluster
+		// sql.mem.root.current is a gauge that always exists
+		metricsContent := `# Test metrics list file
+sql.mem.root.current
+`
+		_, err = metricsListFile.WriteString(metricsContent)
+		require.NoError(t, err)
+		require.NoError(t, metricsListFile.Close())
+
+		// Run tsdump with --metrics-list-file flag
+		out, err := c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=csv --metrics-list-file=%s --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+			metricsListFile.Name(),
+		))
+		require.NoError(t, err)
+
+		// Expected metrics: sql.mem.root.current is a gauge (not histogram),
+		// so it gets cr.node. and cr.store. prefixes without histogram suffixes
+		expectedMetrics := map[string]struct{}{
+			"cr.node.sql.mem.root.current":  {},
+			"cr.store.sql.mem.root.current": {},
+		}
+
+		// Extract unique metric names from output (CSV format: metric_name,timestamp,source,value)
+		// Output contains: command echo line, then CSV data lines starting with cr.node./cr.store.
+		actualMetrics := make(map[string]struct{})
+		for _, line := range strings.Split(out, "\n") {
+			// Skip non-CSV lines (command echo, empty lines)
+			if !strings.HasPrefix(line, "cr.node.") && !strings.HasPrefix(line, "cr.store.") {
+				continue
+			}
+			metricName := strings.Split(line, ",")[0]
+			actualMetrics[metricName] = struct{}{}
+		}
+
+		for metricName := range actualMetrics {
+			_, expected := expectedMetrics[metricName]
+			require.True(t, expected, "unexpected metric in output: %s", metricName)
+		}
+	})
+
+	t.Run("debug tsdump with --metrics-list-file flag using regex pattern", func(t *testing.T) {
+		// Create a temporary metrics list file with a regex pattern
+		metricsListFile, err := os.CreateTemp("", "metrics_list_regex_*.txt")
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, os.Remove(metricsListFile.Name()))
+		}()
+
+		// Write a regex pattern that should match multiple sql.mem metrics
+		// The pattern contains regex metacharacters (\. and .*) so it will be auto-detected as regex
+		metricsContent := `# Test regex pattern
+sql\.mem\..*
+`
+		_, err = metricsListFile.WriteString(metricsContent)
+		require.NoError(t, err)
+		require.NoError(t, metricsListFile.Close())
+
+		// Run tsdump with --metrics-list-file flag
+		out, err := c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=csv --metrics-list-file=%s --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+			metricsListFile.Name(),
+		))
+		require.NoError(t, err)
+
+		// Extract unique metric names from output
+		actualMetrics := make(map[string]struct{})
+		for _, line := range strings.Split(out, "\n") {
+			// Skip non-CSV lines (command echo, empty lines)
+			if !strings.HasPrefix(line, "cr.node.") && !strings.HasPrefix(line, "cr.store.") {
+				continue
+			}
+			metricName := strings.Split(line, ",")[0]
+			actualMetrics[metricName] = struct{}{}
+		}
+
+		for metricName := range actualMetrics {
+			// All metrics should match sql.mem.* pattern (with cr.node. or cr.store. prefix)
+			require.True(t,
+				strings.HasPrefix(metricName, "cr.node.sql.mem.") || strings.HasPrefix(metricName, "cr.store.sql.mem."),
+				"metric %s does not match expected pattern sql.mem.*", metricName)
+		}
+	})
+
+	t.Run("debug tsdump with --metrics-list-file flag and non-existent file", func(t *testing.T) {
+		out, _ := c.RunWithCapture(
+			"debug tsdump --format=csv --metrics-list-file=/nonexistent/path/metrics.txt --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+		)
+		// The command output should contain the error message
+		require.Contains(t, out, "failed to open metrics list file")
+	})
+
+	t.Run("debug tsdump with --metrics-list-file flag and empty file", func(t *testing.T) {
+		// Create an empty metrics list file
+		emptyFile, err := os.CreateTemp("", "empty_metrics_*.txt")
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, os.Remove(emptyFile.Name()))
+		}()
+		require.NoError(t, emptyFile.Close())
+
+		out, _ := c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=csv --metrics-list-file=%s --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+			emptyFile.Name(),
+		))
+		// The command output should contain the error message
+		require.Contains(t, out, "no valid metric names or patterns")
+	})
+
+	t.Run("debug tsdump with --metrics-list-file flag and invalid regex", func(t *testing.T) {
+		// Create a metrics list file with valid metrics and invalid regex patterns
+		invalidRegexFile, err := os.CreateTemp("", "invalid_regex_*.txt")
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, os.Remove(invalidRegexFile.Name()))
+		}()
+
+		// Write a mix of valid metrics and invalid regex patterns
+		// Invalid regex patterns should be skipped with warning, valid metrics should still work
+		metricsContent := `[invalid
+sql.query.count
+(unclosed_paren`
+		_, err = invalidRegexFile.WriteString(metricsContent)
+		require.NoError(t, err)
+		require.NoError(t, invalidRegexFile.Close())
+
+		out, _ := c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=csv --metrics-list-file=%s --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+			invalidRegexFile.Name(),
+		))
+
+		// Invalid regex patterns are skipped.
+		// Extract unique metric names from output
+		actualMetrics := make(map[string]struct{})
+		for _, line := range strings.Split(out, "\n") {
+			// Skip non-CSV lines (command echo, empty lines, warnings)
+			if !strings.HasPrefix(line, "cr.node.") && !strings.HasPrefix(line, "cr.store.") {
+				continue
+			}
+			metricName := strings.Split(line, ",")[0]
+			actualMetrics[metricName] = struct{}{}
+		}
+
+		// Verify valid metrics are present (with cr.node. prefix)
+		expectedMetrics := map[string]struct{}{
+			"cr.store.sql.query.count": {},
+			"cr.node.sql.query.count":  {},
+		}
+		for metric := range actualMetrics {
+			_, expected := expectedMetrics[metric]
+			require.True(t, expected, "unexpected metric in output: %s", metric)
+		}
+	})
 }
 
 func TestMakeOpenMetricsWriter(t *testing.T) {
@@ -407,4 +569,187 @@ func TestTsDumpFormatsDataDriven(t *testing.T) {
 			}
 		})
 	})
+}
+
+// TestIsRegexPattern tests the automatic regex pattern detection.
+func TestIsRegexPattern(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		input    string
+		expected bool
+	}{
+		// Literal metric names (no regex metacharacters)
+		{"sql.query.count", false},
+		{"changefeed.commit_latency", false},
+		{"jobs.changefeed.currently_paused", false},
+		{"sql.mem.", false},
+
+		// Regex patterns (contain metacharacters)
+		{"sql\\..*", true},                   // contains \. and .*
+		{".*latency.*", true},                // contains .*
+		{"sql\\.query\\.(count|rate)", true}, // contains \. | ( )
+		{"^sql\\..*", true},                  // contains ^ \. .*
+		{"sql\\.query\\.count$", true},       // contains \. $
+		{"sql\\.(query|exec)\\..*", true},    // contains \. | ( ) .*
+		{"[a-z]+\\.count", true},             // contains [ ] + \.
+		{"sql\\.query\\.count{1,3}", true},   // contains \. { }
+		{"sql\\.query\\.count?", true},       // contains \. ?
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			result := isRegexPattern(tc.input)
+			require.Equal(t, tc.expected, result, "isRegexPattern(%q) = %v, want %v", tc.input, result, tc.expected)
+		})
+	}
+}
+
+// TestReadMetricsListFile tests the metrics list file parsing functionality.
+func TestReadMetricsListFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name           string
+		fileContent    string
+		expectedNames  []string
+		expectedRegex  []bool
+		expectedErrMsg string
+	}{
+		{
+			name: "basic literal metrics",
+			fileContent: `sql.query.count
+changefeed.emitted_bytes
+kv.dist_sender.rpc.sent`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes", "kv.dist_sender.rpc.sent"},
+			expectedRegex: []bool{false, false, false},
+		},
+		{
+			name: "comments and empty lines",
+			fileContent: `# This is a comment
+sql.query.count
+
+# Another comment
+changefeed.emitted_bytes
+
+`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "inline comments",
+			fileContent: `sql.query.count # this is the query counter
+changefeed.emitted_bytes  # bytes emitted`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "strip cr.node prefix",
+			fileContent: `cr.node.sql.query.count
+cr.node.changefeed.emitted_bytes`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "strip cr.store prefix",
+			fileContent: `cr.store.capacity
+cr.store.capacity.available`,
+			expectedNames: []string{"capacity", "capacity.available"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "strip cockroachdb prefix",
+			fileContent: `cockroachdb.sql.query.count
+cockroachdb.changefeed.emitted_bytes`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "deduplicate entries",
+			fileContent: `sql.query.count
+changefeed.emitted_bytes
+sql.query.count`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "whitespace trimming",
+			fileContent: `   sql.query.count   
+	changefeed.emitted_bytes	`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "regex patterns auto-detected",
+			fileContent: `sql.query.count
+sql\..*
+.*latency.*`,
+			expectedNames: []string{"sql.query.count", "sql\\..*", ".*latency.*"},
+			expectedRegex: []bool{false, true, true},
+		},
+		{
+			name: "mixed literals and regex",
+			fileContent: `# Literal metrics
+changefeed.emitted_bytes
+jobs.changefeed.currently_paused
+
+# Regex patterns
+distsender\.errors\..*
+.*capacity.*`,
+			expectedNames: []string{"changefeed.emitted_bytes", "jobs.changefeed.currently_paused", "distsender\\.errors\\..*", ".*capacity.*"},
+			expectedRegex: []bool{false, false, true, true},
+		},
+		{
+			name:           "empty file",
+			fileContent:    "",
+			expectedErrMsg: "no valid metric names or patterns",
+		},
+		{
+			name: "only comments",
+			fileContent: `# comment 1
+# comment 2`,
+			expectedErrMsg: "no valid metric names or patterns",
+		},
+		{
+			name: "invalid regex pattern is skipped with warning",
+			fileContent: `sql.query.count
+[invalid`,
+			// Invalid regex is skipped with warning, valid metric is still parsed
+			expectedNames: []string{"sql.query.count"},
+			expectedRegex: []bool{false},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create temporary file with test content
+			tmpFile, err := os.CreateTemp("", "metrics_list_*.txt")
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, os.Remove(tmpFile.Name()))
+			}()
+
+			_, err = tmpFile.WriteString(tc.fileContent)
+			require.NoError(t, err)
+			require.NoError(t, tmpFile.Close())
+
+			entries, err := readMetricsListFile(tmpFile.Name())
+
+			if tc.expectedErrMsg != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedErrMsg)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, entries, len(tc.expectedNames))
+
+			for i, entry := range entries {
+				require.Equal(t, tc.expectedNames[i], entry.Value, "entry[%d].Value", i)
+				require.Equal(t, tc.expectedRegex[i], entry.IsRegex, "entry[%d].IsRegex", i)
+			}
+		})
+	}
 }
