@@ -478,7 +478,7 @@ func makePubsubSink(
 		return nil, err
 	}
 
-	return makeBatchingSink(
+	return makeBatchingOrNoLingerSink(
 		ctx,
 		sinkTypePubsub,
 		sinkClient,

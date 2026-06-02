@@ -461,7 +461,7 @@ func makeWebhookSink(
 		return nil, err
 	}
 
-	return makeBatchingSink(
+	return makeBatchingOrNoLingerSink(
 		ctx,
 		sinkTypeWebhook,
 		sinkClient,

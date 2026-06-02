@@ -253,6 +253,19 @@ var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
 	settings.WithPublic)
 
 // BatchReductionRetryEnabled enables the temporary reduction of batch sizes upon kafka message too large errors
+// NoLingerSinkEnabled selects the noLingerSink implementation in place
+// of the existing batchingSink for the webhook, kafka, and pubsub v2
+// sinks. When false (the default), changefeeds use the timer-based
+// batchingSink. When true, they use the pull-based noLingerSink, which
+// is still under development.
+var NoLingerSinkEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.no_linger_sink.enabled",
+	"if true, the webhook, kafka, and pubsub v2 sinks use the no-linger "+
+		"batching sink instead of the timer-based batching sink",
+	false,
+	settings.WithPublic)
+
 var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"changefeed.batch_reduction_retry_enabled",

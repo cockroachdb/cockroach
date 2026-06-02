@@ -99,26 +99,6 @@ type flushReq struct {
 	waiter chan struct{}
 }
 
-// attributes contain additional metadata which may be emitted alongside a row
-// but separate from the encoded keys and values.
-type attributes struct {
-	tableName       string
-	headers         map[string][]byte
-	mvcc            hlc.Timestamp
-	csvColumnHeader []byte
-}
-
-type rowEvent struct {
-	key             []byte
-	val             []byte
-	topicDescriptor TopicDescriptor
-	headers         rowHeaders
-	csvColumnHeader []byte
-
-	alloc kvevent.Alloc
-	mvcc  hlc.Timestamp
-}
-
 // Flush implements the Sink interface, returning the first error that has
 // occured in the past EmitRow calls.
 func (s *batchingSink) Flush(ctx context.Context) error {
@@ -163,24 +143,10 @@ func (s *batchingSink) Topics() []string {
 
 var _ SinkWithTopics = (*batchingSink)(nil)
 
-// Event structs and batch structs which are transferred across routines (and
-// therefore escape to the heap) can both be incredibly frequent (every event
-// may be its own batch) and temporary, so to avoid GC thrashing they are both
-// claimed and freed from object pools.
-var eventPool = sync.Pool{
-	New: func() interface{} {
-		return new(rowEvent)
-	},
-}
-
-func newRowEvent() *rowEvent {
-	return eventPool.Get().(*rowEvent)
-}
-func freeRowEvent(e *rowEvent) {
-	*e = rowEvent{}
-	eventPool.Put(e)
-}
-
+// sinkBatch instances are transferred across routines (and therefore escape
+// to the heap) and can be very frequent in the steady state, so they are
+// claimed and freed from a sync.Pool to avoid GC thrashing. The analogous
+// pool for rowEvent lives in sink_event.go alongside the rowEvent type.
 var batchPool = sync.Pool{
 	New: func() interface{} {
 		return new(sinkBatch)
