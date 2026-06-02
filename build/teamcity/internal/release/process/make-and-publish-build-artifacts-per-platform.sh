@@ -70,7 +70,12 @@ git tag "${build_name}"
 tc_end_block "Tag the release"
 
 tc_start_block "Compile and publish artifacts"
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e build_name=$build_name -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform -e telemetry_disabled=$telemetry_disabled -e cockroach_archive_prefix=$cockroach_archive_prefix" run_bazel << 'EOF'
+# Mint a token so Bazel can fetch private Go module dependencies from the
+# cockroach-godeps bucket; forwarded into the container via the -e below. This
+# build runs under the GCS upload service account ($gcs_credentials) rather than
+# the nightlies' $GOOGLE_EPHEMERAL_CREDENTIALS, so the key is passed explicitly.
+configure_bazel_storage_access_token "$gcs_credentials"
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e build_name=$build_name -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform -e telemetry_disabled=$telemetry_disabled -e cockroach_archive_prefix=$cockroach_archive_prefix -e BAZEL_STORAGE_ACCESS_TOKEN" run_bazel << 'EOF'
 bazel build //pkg/cmd/publish-artifacts
 BAZEL_BIN=$(bazel info bazel-bin)
 export google_credentials="$gcs_credentials"
