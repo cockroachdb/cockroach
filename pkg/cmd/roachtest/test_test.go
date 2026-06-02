@@ -8,6 +8,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"math/rand"
 	"path/filepath"
@@ -717,4 +718,45 @@ func TestVMPreemptionPolling(t *testing.T) {
 
 		require.NoError(t, err)
 	})
+}
+
+func TestRunnerInvariantViolation(t *testing.T) {
+	for _, testFailed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("failed=%t", testFailed), func(t *testing.T) {
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			cr := newClusterRegistry()
+			runner := newUnitTestRunner(cr, stopper)
+
+			var buf syncedBuffer
+			copt := defaultClusterOpt()
+			lopt := defaultLoggingOpt(&buf)
+			test := registry.TestSpec{
+				Name:             `invariant`,
+				Owner:            OwnerUnitTest,
+				Timeout:          10 * time.Second,
+				Cluster:          spec.MakeClusterSpec(0),
+				CompatibleClouds: registry.AllClouds,
+				Suites:           registry.Suites(registry.Nightly),
+				CockroachBinary:  registry.StandardCockroach,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					if testFailed {
+						t.Fatal("boom")
+					}
+				},
+			}
+
+			// Simulate an invariant violation detected during teardown.
+			runner.storageInvariantViolation.Store(true)
+
+			err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
+				defaultParallelism, copt, testOpts{}, lopt)
+
+			// The storage invariant violation takes precedence over test
+			// failures, so we expect errStorageInvariantViolation regardless
+			// of whether the test itself passed or failed.
+			require.ErrorIs(t, err, errStorageInvariantViolation)
+		})
+	}
 }
