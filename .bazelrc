@@ -49,6 +49,8 @@ common --@aspect_rules_ts//ts:skipLibCheck=honor_tsconfig
 common --@aspect_rules_ts//ts:default_to_tsc_transpiler
 build --enable_platform_specific_config
 build --define gotags=bazel,gss
+# See the script for implementation details, including information on authenticating
+# with GCP.
 build --credential_helper=*.googleapis.com=%workspace%/build/bazelutil/credential-helper
 build --credential_helper=storage.googleapis.com=%workspace%/build/bazelutil/credential-helper
 build --experimental_proto_descriptor_sets_include_source_info
