@@ -10,14 +10,21 @@ import (
 	"fmt"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -27,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,9 +62,11 @@ func setupParentChildReplication(
 
 	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
 
+	cursorTS := s.Clock().Now()
 	destDB.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLES (parent, child) ON $1 INTO TABLES (parent, child) WITH MODE = 'transactional'",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLES (parent, child) ON $1 INTO TABLES (parent, child) WITH MODE = 'transactional', CURSOR = $2",
 		sourceURL.String(),
+		cursorTS.AsOfSystemTime(),
 	).Scan(&jobID)
 
 	return sourceDB, destDB, jobID
@@ -158,6 +169,43 @@ func TestTxnModeSmoketest(t *testing.T) {
 		"expected at least one session to have its CPU handle checked")
 }
 
+func TestTxnModeRequiresCursor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(conn)
+
+	runner.Exec(t, "CREATE DATABASE source_db")
+	runner.Exec(t, "CREATE DATABASE dest_db")
+
+	sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
+	destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
+
+	for _, db := range []*sqlutils.SQLRunner{sourceDB, destDB} {
+		db.Exec(t, "CREATE TABLE tab (id INT PRIMARY KEY)")
+	}
+
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
+
+	destDB.ExpectErr(t,
+		"CURSOR is required with MODE = 'transactional'",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional'",
+		sourceURL.String(),
+	)
+}
+
 // TestTxnModeCursorAlignsProducerPTS verifies that the producer-side
 // protected timestamp is installed at the user-supplied CURSOR rather than
 // at the producer's statement time.
@@ -220,6 +268,115 @@ func TestTxnModeCursorAlignsProducerPTS(t *testing.T) {
 		"producer PTS should equal user-supplied CURSOR")
 }
 
+// TestTxnModeCursorBehindGCPauses verifies that when CURSOR is older than
+// the source's GC threshold at request time.
+func TestTxnModeCursorBehindGCPauses(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	streamingKnobs := &sql.StreamingTestingKnobs{
+		DistSQLRetryPolicy: &retry.Options{
+			InitialBackoff: time.Millisecond,
+			MaxBackoff:     time.Millisecond,
+			MaxRetries:     1,
+		},
+	}
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			DistSQL: &execinfra.TestingKnobs{
+				StreamingTestingKnobs: streamingKnobs,
+			},
+			Streaming: streamingKnobs,
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(conn)
+	sysDB := srv.SystemLayer().SQLConn(t)
+	sysRunner := sqlutils.MakeSQLRunner(sysDB)
+	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
+	sqltestutils.SetShortRangeFeedIntervals(t, srv)
+
+	runner.Exec(t, "CREATE DATABASE source_db")
+	runner.Exec(t, "CREATE DATABASE dest_db")
+
+	sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
+	destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
+	for _, db := range []*sqlutils.SQLRunner{sourceDB, destDB} {
+		db.Exec(t, "CREATE TABLE tab (id INT PRIMARY KEY, v INT, s STRING)")
+	}
+
+	sourceDB.Exec(t, "INSERT INTO tab VALUES (1, 10, 'a'), (2, 20, 'b'), (3, 30, 'c')")
+	cursorTS := s.Clock().Now()
+	sourceDB.Exec(t, "ALTER TABLE tab CONFIGURE ZONE USING gc.ttlseconds = 1")
+
+	// Wait until the leaseholder replica observes gc.ttlseconds=1.
+	storageSrv := srv.StorageLayer()
+	store, err := storageSrv.GetStores().(*kvserver.Stores).GetStore(storageSrv.GetFirstStoreID())
+	require.NoError(t, err)
+	var tableID uint32
+	sourceDB.QueryRow(t, "SELECT 'tab'::regclass::oid::int").Scan(&tableID)
+	tablePrefix := s.Codec().TablePrefix(tableID)
+	var repl *kvserver.Replica
+	testutils.SucceedsSoon(t, func() error {
+		repl = store.LookupReplica(roachpb.RKey(tablePrefix))
+		if repl == nil {
+			return errors.New("waiting for replica")
+		}
+		cfg, err := repl.LoadSpanConfig(ctx)
+		if err != nil {
+			return err
+		}
+		if cfg.GCPolicy.TTLSeconds != 1 {
+			return errors.Newf("waiting for gc.ttlseconds=1, got %d", cfg.GCPolicy.TTLSeconds)
+		}
+		return nil
+	})
+
+	// Repeatedly force MVCC GC until the replica's GC threshold has actually
+	// advanced past cursorTS.
+	ptsReader := store.GetStoreConfig().ProtectedTimestampReader
+	testutils.SucceedsSoon(t, func() error {
+		if err := spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, s.Clock().Now()); err != nil {
+			return err
+		}
+		processErr, enqueueErr := store.Enqueue(ctx, "mvccGC", repl, true /* skipShouldQueue */, false /* async */)
+		if enqueueErr != nil {
+			return errors.Wrap(enqueueErr, "enqueueing replica")
+		}
+		if processErr != nil {
+			return errors.Wrap(processErr, "processing replica")
+		}
+		gcThreshold := repl.GetGCThreshold()
+		if !cursorTS.Less(gcThreshold) {
+			return errors.Newf("GC threshold %s has not advanced past cursorTS %s", gcThreshold, cursorTS)
+		}
+		return nil
+	})
+
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
+
+	var jobID jobspb.JobID
+	destDB.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional', CURSOR = $2",
+		sourceURL.String(),
+		cursorTS.AsOfSystemTime(),
+	).Scan(&jobID)
+
+	jobutils.WaitForJobToPause(t, destDB, jobID)
+
+	var runningStatus string
+	destDB.QueryRow(t, "SELECT running_status FROM [SHOW JOBS] WHERE job_id = $1", jobID).Scan(&runningStatus)
+	require.Contains(t, runningStatus, "must be after replica GC threshold",
+		"expected GC threshold error in running_status")
+}
+
 func TestTxnModeUniqueConstraintUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
@@ -259,9 +416,11 @@ func TestTxnModeUniqueConstraintUpdate(t *testing.T) {
 
 	// Create logical replication stream with transactional mode
 	var jobID jobspb.JobID
+	cursorTS := s.Clock().Now()
 	destDB.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLES (source_db.test_table) ON $1 INTO TABLES (dest_db.test_table) WITH MODE = 'transactional'",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLES (source_db.test_table) ON $1 INTO TABLES (dest_db.test_table) WITH MODE = 'transactional', CURSOR = $2",
 		sourceURL.String(),
+		cursorTS.AsOfSystemTime(),
 	).Scan(&jobID)
 
 	// Insert initial rows after starting replication
