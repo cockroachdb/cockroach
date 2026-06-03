@@ -106,6 +106,13 @@ func TestLogic_mixed_version_timeseries_range_already_exists(
 	runLogicTest(t, "mixed_version_timeseries_range_already_exists")
 }
 
+func TestLogic_mixed_version_udf_can_mutate(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_udf_can_mutate")
+}
+
 func TestLogic_upgrade(
 	t *testing.T,
 ) {

@@ -856,6 +856,13 @@ func (b *Builder) buildTriggerFunction(
 	stmtScope := plBuilder.buildRootBlock(stmt.AST, triggerFuncScope, params)
 	udfDef.Body = []memo.RelExpr{stmtScope.expr}
 	udfDef.BodyProps = []*physical.Required{stmtScope.makePhysicalProps()}
+	// The trigger function body is eagerly built here, so CanMutate is derived
+	// directly from it.
+	//
+	// TODO(janexing): once deferred optbuild is in place for trigger functions,
+	// pass CanMutate from the trigger descriptor (via cat.Trigger) to
+	// udfDef.CanMutate.
+	udfDef.CanMutate = tree.RoutineCanMutateFromBool(stmtScope.expr.Relational().CanMutate)
 	// Placeholder that ensure the length of BodyTags is the same as Body.
 	udfDef.BodyTags = make([]string, 1)
 

@@ -1473,3 +1473,19 @@ func (b *Builder) setMutationFlags(e memo.RelExpr) {
 		b.flags.Set(exec.PlanFlagContainsUpsert)
 	}
 }
+
+// applyRoutineCanMutateFlags sets PlanFlagContainsMutation based on the
+// routine's CanMutate status. See UDFDefinition.ResolveCanMutate for how the
+// unknown state is resolved. When a specific mutating body statement is
+// identified, its statement-specific flags are recorded as well.
+func (b *Builder) applyRoutineCanMutateFlags(def *memo.UDFDefinition) {
+	canMutate, mutatingStmt := def.ResolveCanMutate()
+	if !canMutate {
+		return
+	}
+	if mutatingStmt != nil {
+		b.setMutationFlags(mutatingStmt)
+		return
+	}
+	b.flags.Set(exec.PlanFlagContainsMutation)
+}

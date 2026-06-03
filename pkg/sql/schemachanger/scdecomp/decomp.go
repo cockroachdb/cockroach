@@ -995,6 +995,7 @@ func (w *walkCtx) walkTrigger(tbl catalog.TableDescriptor, t *descpb.TriggerDesc
 		FuncID:    t.FuncID,
 		FuncBody:  string(t.FuncBody),
 		FuncArgs:  t.FuncArgs,
+		CanMutate: t.CanMutate,
 	})
 	w.ev(scpb.Status_PUBLIC, &scpb.TriggerDeps{
 		TableID:        tbl.GetID(),
@@ -1210,6 +1211,7 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 		Body:        string(fnDesc.GetFunctionBody()),
 		Lang:        catpb.FunctionLanguage{Lang: fnDesc.GetLanguage()},
 		UsesTypeIDs: fnDesc.GetDependsOnTypes(),
+		CanMutate:   fnDesc.GetCanMutate(),
 	}
 	dedupeColIDs := func(colIDs []catid.ColumnID) []catid.ColumnID {
 		ret := catalog.MakeTableColSet()

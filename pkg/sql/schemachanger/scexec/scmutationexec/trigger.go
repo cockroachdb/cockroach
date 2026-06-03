@@ -113,6 +113,7 @@ func (i *immediateVisitor) SetTriggerFunctionCall(
 	trigger.FuncID = op.FunctionCall.FuncID
 	trigger.FuncArgs = op.FunctionCall.FuncArgs
 	trigger.FuncBody = descpb.RoutineBody(op.FunctionCall.FuncBody)
+	trigger.CanMutate = op.FunctionCall.CanMutate
 	return nil
 }
 

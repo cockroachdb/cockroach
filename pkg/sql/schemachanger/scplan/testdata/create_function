@@ -99,6 +99,7 @@ StatementPhase stage 1 of 1 with 13 MutationType ops
           SELECT a FROM v;
           SELECT b'@':::@100107;
           SELECT nextval(105:::REGCLASS);
+        CanMutate: 2
         FunctionID: 109
         Lang:
           Lang: 1
@@ -272,6 +273,7 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
           SELECT a FROM v;
           SELECT b'@':::@100107;
           SELECT nextval(105:::REGCLASS);
+        CanMutate: 2
         FunctionID: 109
         Lang:
           Lang: 1
@@ -532,6 +534,7 @@ StatementPhase stage 1 of 1 with 13 MutationType ops
           SELECT b'@':::@100107;
           RETURN nextval(105:::REGCLASS);
           END;
+        CanMutate: 2
         FunctionID: 111
         Lang:
           Lang: 2
@@ -707,6 +710,7 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
           SELECT b'@':::@100107;
           RETURN nextval(105:::REGCLASS);
           END;
+        CanMutate: 2
         FunctionID: 111
         Lang:
           Lang: 2

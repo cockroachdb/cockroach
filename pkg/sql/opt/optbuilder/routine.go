@@ -530,6 +530,36 @@ func (b *Builder) buildRoutine(
 		panic(errors.AssertionFailedf("unexpected language: %v", o.Language))
 	}
 
+	// Derive canMutate from the descriptor (via the Overload). When the
+	// descriptor's CanMutate is unknown, fall back to inspecting the
+	// eagerly-built body expressions. Unknown occurs for descriptors
+	// created before the can_mutate field was introduced.
+	//
+	// This resolution always produces a definite value before the UDF
+	// call expression is constructed below, so parent routines that call
+	// this one will never see an unknown mutation status from this child.
+	//
+	// TODO(janexing): once deferred optbuild is in place, the body is no
+	// longer built at plan time, so the body-inspection fallback below is
+	// unavailable. At that point the persisted descriptor CanMutate (read
+	// here via the Overload) must be the sole source passed to the
+	// UDFDefinition; an UNKNOWN value (a pre-field descriptor) will then
+	// have to force conservative root-txn handling.
+	canMutate := o.CanMutate
+	if canMutate == tree.RoutineCanMutateUnknown {
+		for _, s := range body {
+			if s != nil {
+				if relExpr := s.Relational(); relExpr != nil && relExpr.CanMutate {
+					canMutate = tree.RoutineMutates
+					break
+				}
+			}
+		}
+		if canMutate == tree.RoutineCanMutateUnknown {
+			canMutate = tree.RoutineDoesNotMutate
+		}
+	}
+
 	multiColDataSource := len(f.ResolvedType().TupleContents()) > 0 && oldInsideDataSource
 	routine := b.factory.ConstructUDFCall(
 		args,
@@ -552,6 +582,7 @@ func (b *Builder) buildRoutine(
 				ResultBufferID:     resultBufferID,
 				SecurityMode:       o.SecurityMode,
 				RoutineOwner:       routineOwner,
+				CanMutate:          canMutate,
 			},
 		},
 	)
@@ -1029,6 +1060,7 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 
 	// Build a CALL expression that invokes the routine.
 	outScope := inScope.push()
+	bodyExpr := bodyScope.expr
 	routine := b.factory.ConstructUDFCall(
 		memo.ScalarListExpr{},
 		&memo.UDFCallPrivate{
@@ -1038,10 +1070,11 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 				Volatility:  volatility.Volatile,
 				RoutineType: tree.ProcedureRoutine,
 				RoutineLang: tree.RoutineLangPLpgSQL,
-				Body:        []memo.RelExpr{bodyScope.expr},
+				Body:        []memo.RelExpr{bodyExpr},
 				BodyProps:   []*physical.Required{bodyScope.makePhysicalProps()},
 				BodyStmts:   bodyStmts,
 				BodyASTs:    []tree.Statement{nil},
+				CanMutate:   tree.RoutineCanMutateFromBool(bodyExpr.Relational().CanMutate),
 			},
 		},
 	)

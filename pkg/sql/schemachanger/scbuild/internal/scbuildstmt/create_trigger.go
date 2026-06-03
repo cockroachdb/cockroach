@@ -6,8 +6,10 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -137,13 +139,21 @@ func CreateTrigger(b BuildCtx, n *tree.CreateTrigger) {
 	if n.FuncBody == "" {
 		panic(errors.AssertionFailedf("expected non-empty function body"))
 	}
-	b.Add(&scpb.TriggerFunctionCall{
+	funcCall := &scpb.TriggerFunctionCall{
 		TableID:   tableID,
 		TriggerID: triggerID,
 		FuncID:    fn.FunctionID,
 		FuncBody:  b.ReplaceSeqTypeNamesInStatements(n.FuncBody, catpb.Function_PLPGSQL),
 		FuncArgs:  n.FuncArgs,
-	})
+	}
+	// Persist CanMutate only once the cluster is on 26.3, since the can_mutate
+	// field does not exist on pre-26.3 binaries. Pre-existing trigger
+	// descriptors keep the zero value (UNKNOWN), which makes consumers derive
+	// the value from the built body.
+	if b.ClusterSettings().Version.IsActive(b, clusterversion.V26_3_Start) {
+		funcCall.CanMutate = funcdesc.CanMutateToProto(n.CanMutate)
+	}
+	b.Add(funcCall)
 	b.Add(&scpb.TriggerDeps{
 		TableID:        tableID,
 		TriggerID:      triggerID,

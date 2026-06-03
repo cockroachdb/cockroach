@@ -240,6 +240,7 @@ FunctionBody : []UsesViews
 FunctionBody : []UsesSequenceIDs
 FunctionBody : []UsesTypeIDs
 FunctionBody : []UsesFunctionIDs
+FunctionBody :  CanMutate
 
 object FunctionComment
 
@@ -570,6 +571,7 @@ TriggerFunctionCall :  TriggerID
 TriggerFunctionCall :  FuncID
 TriggerFunctionCall : []FuncArgs
 TriggerFunctionCall :  FuncBody
+TriggerFunctionCall :  CanMutate
 
 object TriggerName
 

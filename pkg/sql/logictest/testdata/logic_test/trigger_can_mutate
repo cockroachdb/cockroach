@@ -1,0 +1,74 @@
+# LogicTest: local
+
+# Tests that CanMutate is persisted on the trigger descriptor at CREATE TRIGGER
+# time and kept consistent when the trigger function is replaced. The value is
+# stored on the trigger (nested in the table descriptor), not on the trigger
+# function's own descriptor, because the function body can only be analyzed once
+# bound to a table.
+
+subtest persist
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE audit_log (id INT)
+
+statement ok
+CREATE FUNCTION f_mut() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (NEW.a);
+    RETURN NEW;
+  END
+$$
+
+statement ok
+CREATE FUNCTION f_ro() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NEW;
+  END
+$$
+
+statement ok
+CREATE TRIGGER tr_mut BEFORE INSERT ON t FOR EACH ROW EXECUTE FUNCTION f_mut()
+
+statement ok
+CREATE TRIGGER tr_ro BEFORE INSERT ON t FOR EACH ROW EXECUTE FUNCTION f_ro()
+
+# A mutating trigger function gets CAN_MUTATE; a read-only one CANNOT_MUTATE.
+query TT colnames
+SELECT tr->>'name' AS name, tr->>'canMutate' AS can_mutate
+FROM system.descriptor,
+     jsonb_array_elements(
+       crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'table'->'triggers'
+     ) AS tr
+WHERE id = 't'::regclass::oid::int
+ORDER BY name
+----
+name    can_mutate
+tr_mut  CAN_MUTATE
+tr_ro   CANNOT_MUTATE
+
+subtest propagate
+
+# Replacing the read-only trigger function with a mutating body propagates the
+# new CanMutate to the dependent trigger descriptor.
+statement ok
+CREATE OR REPLACE FUNCTION f_ro() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (NEW.a);
+    RETURN NEW;
+  END
+$$
+
+query T
+SELECT tr->>'canMutate'
+FROM system.descriptor,
+     jsonb_array_elements(
+       crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'table'->'triggers'
+     ) AS tr
+WHERE id = 't'::regclass::oid::int AND tr->>'name' = 'tr_ro'
+----
+CAN_MUTATE
+
+subtest end

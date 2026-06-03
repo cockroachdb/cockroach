@@ -53,6 +53,7 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
         TriggerID: 1
     *scop.SetTriggerFunctionCall
       FunctionCall:
+        CanMutate: 2
         FuncArgs: []
         FuncBody: |
           BEGIN
@@ -138,6 +139,7 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
         TriggerID: 1
     *scop.SetTriggerFunctionCall
       FunctionCall:
+        CanMutate: 2
         FuncArgs: []
         FuncBody: |
           BEGIN
@@ -262,6 +264,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
         TriggerID: 2
     *scop.SetTriggerFunctionCall
       FunctionCall:
+        CanMutate: 2
         FuncArgs: []
         FuncBody: |
           BEGIN
@@ -363,6 +366,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
         TriggerID: 2
     *scop.SetTriggerFunctionCall
       FunctionCall:
+        CanMutate: 2
         FuncArgs: []
         FuncBody: |
           BEGIN
