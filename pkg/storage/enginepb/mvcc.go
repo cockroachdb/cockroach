@@ -149,11 +149,20 @@ func (ms MVCCStats) Total() int64 {
 	return ms.KeyBytes + ms.ValBytes + ms.RangeKeyBytes + ms.RangeValBytes
 }
 
+// TotalWithoutLockBytes is like Total but excludes LockBytes. It returns the
+// total MVCC data size (point and range key-value pairs) without replicated
+// lock data.
+func (ms MVCCStats) TotalWithoutLockBytes() int64 {
+	return ms.KeyBytes + ms.ValBytes + ms.RangeKeyBytes + ms.RangeValBytes
+}
+
 // GCBytes is a convenience function which returns the number of gc bytes,
 // that is the key and value bytes excluding the live bytes, both for
-// point keys and range keys.
+// point keys and range keys. Replicated lock bytes are excluded because
+// they are not eligible for MVCC garbage collection; their age is tracked
+// separately via LockAge.
 func (ms MVCCStats) GCBytes() int64 {
-	return ms.Total() - ms.LiveBytes
+	return ms.TotalWithoutLockBytes() - ms.LiveBytes
 }
 
 // HasNoUserData returns true if there is no user data in the range.
