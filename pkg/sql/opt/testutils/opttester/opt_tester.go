@@ -2379,7 +2379,9 @@ func (ot *OptTester) optimizeExpr(
 	if !ot.Flags.PlanGram.Any() {
 		root := o.Memo().RootExpr()
 		props := *o.Memo().RootProps()
-		props.PlanGram = ot.Flags.PlanGram.WithNoneFallback()
+		props.PlanGram = physical.MergePlanGrams(physical.IdentifiedPlanGram{
+			ID: "stmt", PlanGram: ot.Flags.PlanGram,
+		})
 		o.Memo().SetRoot(root, &props)
 	}
 	root, err := o.Optimize()
