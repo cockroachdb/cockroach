@@ -53,15 +53,15 @@ RUN case ${TARGETPLATFORM} in \
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
     apt-get clean && \
-    curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
-    unzip "git-2.29.2.zip" && \
-    cd git-2.29.2 && \
+    curl -fsSL https://github.com/git/git/archive/v2.54.0.zip -o "git-2.54.0.zip" && \
+    unzip "git-2.54.0.zip" && \
+    cd git-2.54.0 && \
     make configure && \
     ./configure && \
     make && \
     make install && \
     cd .. && \
-    rm -rf git-2.29.2.zip git-2.29.2
+    rm -rf git-2.54.0.zip git-2.54.0
 
 RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
  && echo 'deb https://packages.cloud.google.com/apt cloud-sdk main' | tee /etc/apt/sources.list.d/gcloud.list \
