@@ -123,6 +123,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			AppNameID:     req.Batch.AppNameID,
 			GatewayNodeID: req.Batch.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+			EnrichmentID:  req.Batch.EnrichmentID,
 		}
 	}
 	cleanup := ash.SetWorkState(

@@ -35,6 +35,7 @@ func (r *Replica) maybeRateLimitBatch(
 			AppNameID:     ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+			EnrichmentID:  ba.EnrichmentID,
 		},
 		ash.WorkOther, "TenantRateLimit")
 	defer cleanup()

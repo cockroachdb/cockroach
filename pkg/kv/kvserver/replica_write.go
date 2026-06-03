@@ -207,6 +207,7 @@ func (r *Replica) executeWriteBatch(
 			AppNameID:     ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+			EnrichmentID:  ba.EnrichmentID,
 		},
 		ash.WorkOther, "RaftProposalWait")
 	defer raftCleanup()

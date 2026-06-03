@@ -216,6 +216,7 @@ func evaluateBatch(
 			AppNameID:     ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+			EnrichmentID:  ba.EnrichmentID,
 		},
 		ash.WorkIO, "KVEval")
 	defer cleanup()

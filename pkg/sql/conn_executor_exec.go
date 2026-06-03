@@ -669,7 +669,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
 	if p.txn != nil {
 		p.txn.SetWorkloadInfo(
-			uint64(ih.fingerprintId), appNameID, workloadid.WorkloadTypeStatement,
+			uint64(ih.fingerprintId), appNameID, workloadid.WorkloadTypeStatement, 0, /* enrichmentID */
 		)
 	}
 
@@ -1706,7 +1706,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
 	if p.txn != nil {
 		p.txn.SetWorkloadInfo(
-			uint64(ih.fingerprintId), appNameID2, workloadid.WorkloadTypeStatement,
+			uint64(ih.fingerprintId), appNameID2, workloadid.WorkloadTypeStatement, 0, /* enrichmentID */
 		)
 	}
 
@@ -2627,7 +2627,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		txnFingerprintID := ex.extraTxnState.transactionStatementsHash.Sum()
 		appNameID := ash.GetOrStoreAppNameID(ex.sessionData().ApplicationName)
 		ex.state.mu.txn.SetWorkloadInfo(
-			txnFingerprintID, appNameID, workloadid.WorkloadTypeCommit,
+			txnFingerprintID, appNameID, workloadid.WorkloadTypeCommit, 0, /* enrichmentID */
 		)
 	}
 
@@ -2932,6 +2932,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			planner.extendedEvalCtx.WorkloadID,
 			planner.extendedEvalCtx.AppNameID,
 			roachpb.NodeID(planner.extendedEvalCtx.NodeID.SQLInstanceID()),
+			planner.extendedEvalCtx.EnrichmentID,
 		)
 		if err != nil {
 			return err

@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "enrichment",
+    srcs = ["cluster_settings.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obs/ash/enrichment",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/settings"],
+)

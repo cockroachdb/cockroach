@@ -505,7 +505,7 @@ func (s *Storage) Insert(
 ) (err error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetWorkloadInfo(uint64(workloadid.WORKLOAD_ID_SQL_LIVENESS), 0 /* appNameID */, workloadid.WorkloadTypeSystem)
+		txn.SetWorkloadInfo(uint64(workloadid.WORKLOAD_ID_SQL_LIVENESS), 0 /* appNameID */, workloadid.WorkloadTypeSystem, 0 /* enrichmentID */)
 		batch := txn.NewBatch()
 
 		k, region, err := s.keyCodec.encode(sid)
@@ -554,7 +554,7 @@ func (s *Storage) Update(
 		return false, hlc.Timestamp{}, err
 	}
 	err = s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetWorkloadInfo(uint64(workloadid.WORKLOAD_ID_SQL_LIVENESS), 0 /* appNameID */, workloadid.WorkloadTypeSystem)
+		txn.SetWorkloadInfo(uint64(workloadid.WORKLOAD_ID_SQL_LIVENESS), 0 /* appNameID */, workloadid.WorkloadTypeSystem, 0 /* enrichmentID */)
 		kv, err := txn.Get(ctx, k)
 		if err != nil {
 			return err

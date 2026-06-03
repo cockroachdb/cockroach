@@ -462,6 +462,7 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 				AppNameID:     req.Batch.AppNameID,
 				GatewayNodeID: req.Batch.GatewayNodeID,
 				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+				EnrichmentID:  req.Batch.EnrichmentID,
 			}
 		}
 		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnPushWait")
@@ -484,6 +485,7 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 				AppNameID:     req.Batch.AppNameID,
 				GatewayNodeID: req.Batch.GatewayNodeID,
 				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+				EnrichmentID:  req.Batch.EnrichmentID,
 			}
 		}
 		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnQueryWait")
