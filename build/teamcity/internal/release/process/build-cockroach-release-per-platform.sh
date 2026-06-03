@@ -54,7 +54,7 @@ tc_end_block "Variable Setup"
 
 
 tc_start_block "Make and publish release artifacts"
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$version -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform -e telemetry_disabled=$telemetry_disabled -e cockroach_archive_prefix=$cockroach_archive_prefix" run_bazel << 'EOF'
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$version -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform -e telemetry_disabled=$telemetry_disabled -e cockroach_archive_prefix=$cockroach_archive_prefix -e BAZEL_STORAGE_ACCESS_TOKEN" run_bazel << 'EOF'
 bazel build //pkg/cmd/publish-artifacts
 BAZEL_BIN=$(bazel info bazel-bin)
 export google_credentials="$gcs_credentials"

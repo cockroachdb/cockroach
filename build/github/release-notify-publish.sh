@@ -33,5 +33,5 @@ source "$dir/build/teamcity-bazel-support.sh"  # for run_bazel
 # Forward the secrets and the publish SHA into the container.
 # IS_PRODUCTION_REPO is read by the binary's isProductionRepo() helper to
 # pick the Slack channel; without it the binary defaults to #db-release-test.
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e JIRA_API_TOKEN -e JIRA_EMAIL -e SLACK_BOT_TOKEN -e BUILD_VCS_NUMBER -e IS_PRODUCTION_REPO" \
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e JIRA_API_TOKEN -e JIRA_EMAIL -e SLACK_BOT_TOKEN -e BUILD_VCS_NUMBER -e IS_PRODUCTION_REPO -e BAZEL_STORAGE_ACCESS_TOKEN" \
   run_bazel build/github/release-notify-publish-impl.sh
