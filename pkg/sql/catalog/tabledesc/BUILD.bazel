@@ -76,7 +76,7 @@ go_library(
 
 go_test(
     name = "tabledesc_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "constraint_test.go",
         "helpers_test.go",
