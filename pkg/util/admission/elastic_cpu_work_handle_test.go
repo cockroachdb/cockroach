@@ -6,6 +6,7 @@
 package admission
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -207,4 +208,28 @@ func TestElasticCPUWorkHandlePreWork(t *testing.T) {
 	// Pre-work is still counted in the difference we return. Also included is
 	// how much over the allotment we ran (+50ms).
 	require.Equal(t, difference, (450+50)*time.Millisecond)
+}
+
+// TestContextWithoutElasticCPUWorkHandle verifies that a handle can be stripped
+// from a context, that stripping is idempotent, and that a handle can be
+// re-installed on a stripped context. This underpins the data-race fix in
+// kvadmission.Handle.AnnotateCtx (#170847): a request not admitted as elastic
+// work must not inherit an enclosing request's handle through a shared context.
+func TestContextWithoutElasticCPUWorkHandle(t *testing.T) {
+	h := TestingNewElasticCPUHandle()
+
+	withHandle := ContextWithElasticCPUWorkHandle(context.Background(), h)
+	require.Same(t, h, ElasticCPUWorkHandleFromContext(withHandle))
+
+	// Stripping removes the handle.
+	stripped := ContextWithoutElasticCPUWorkHandle(withHandle)
+	require.Nil(t, ElasticCPUWorkHandleFromContext(stripped))
+
+	// Stripping is idempotent, and a no-op on a context that never had a handle.
+	require.Nil(t, ElasticCPUWorkHandleFromContext(ContextWithoutElasticCPUWorkHandle(stripped)))
+	require.Nil(t, ElasticCPUWorkHandleFromContext(ContextWithoutElasticCPUWorkHandle(context.Background())))
+
+	// A later request can install its own handle on a stripped context.
+	reinstalled := ContextWithElasticCPUWorkHandle(stripped, h)
+	require.Same(t, h, ElasticCPUWorkHandleFromContext(reinstalled))
 }

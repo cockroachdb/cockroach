@@ -227,6 +227,27 @@ func ElasticCPUWorkHandleFromContext(ctx context.Context) *ElasticCPUWorkHandle 
 	return h
 }
 
+// ContextWithoutElasticCPUWorkHandle returns a Context with any
+// ElasticCPUWorkHandle removed. It is used to prevent a request that was not
+// itself admitted as elastic CPU work from inheriting a handle belonging to an
+// enclosing request whose context it shares.
+//
+// An ElasticCPUWorkHandle is mutable, single-goroutine state owned by the one
+// request it was minted for. It is not safe to share across goroutines.
+// Internal KV requests issued mid-evaluation through the node-local
+// internal-client adapter (e.g. txnwait QueryTxn pushes) pass the Go context
+// through in-process, so without stripping they would inherit and concurrently
+// mutate the enclosing request's handle; over a network RPC the handle would
+// not propagate at all. Stripping makes the local path match that behavior.
+func ContextWithoutElasticCPUWorkHandle(ctx context.Context) context.Context {
+	if ElasticCPUWorkHandleFromContext(ctx) == nil {
+		return ctx
+	}
+	// Shadow the handle with a typed nil so ElasticCPUWorkHandleFromContext
+	// returns nil rather than the inherited handle.
+	return context.WithValue(ctx, handleKey{}, (*ElasticCPUWorkHandle)(nil))
+}
+
 // TestingNewElasticCPUHandle exports the ElasticCPUWorkHandle constructor for
 // testing purposes.
 func TestingNewElasticCPUHandle() *ElasticCPUWorkHandle {
