@@ -611,6 +611,15 @@ jobs:
           workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
           service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
 
+      # The sentry binary is built via Bazel, which fetches private godeps
+      # from cockroach-godeps-private. Without BAZEL_STORAGE_ACCESS_TOKEN the
+      # credential helper falls back to `roachdev` (absent in CI) and those
+      # fetches 403. Skipped in dry-run since the panic script exits before
+      # any build.
+      - name: Set Bazel storage access token
+        if: env.DRY_RUN == ''
+        run: ./build/github/set-bazel-storage-access-token.sh
+
       # Fetch the Sentry auth token via the official Google action so it's
       # auto-registered with ::add-mask:: and never has to flow through `echo`
       # in our scripts. Skipped in dry-run since the script exits early.
