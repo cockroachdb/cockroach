@@ -50,6 +50,8 @@ test           information_schema  constraint_column_usage                table 
 test           information_schema  constraint_table_usage                 table        public   SELECT          false
 test           information_schema  crdb_cluster_active_session_history    table        public   SELECT          false
 test           information_schema  crdb_index_usage_statistics            table        public   SELECT          false
+test           information_schema  crdb_jobs                              table        public   SELECT          false
+test           information_schema  crdb_jobs_with_progress                table        public   SELECT          false
 test           information_schema  crdb_node_active_session_history       table        public   SELECT          false
 test           information_schema  crdb_statement_statistics              table        public   SELECT          false
 test           information_schema  crdb_transaction_statistics            table        public   SELECT          false

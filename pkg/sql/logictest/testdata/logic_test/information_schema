@@ -38,6 +38,8 @@ information_schema  constraint_column_usage                table  node  NULL  NU
 information_schema  constraint_table_usage                 table  node  NULL  NULL
 information_schema  crdb_cluster_active_session_history    view   node  NULL  NULL
 information_schema  crdb_index_usage_statistics            table  node  NULL  NULL
+information_schema  crdb_jobs                              view   node  NULL  NULL
+information_schema  crdb_jobs_with_progress                view   node  NULL  NULL
 information_schema  crdb_node_active_session_history       view   node  NULL  NULL
 information_schema  crdb_statement_statistics              view   node  NULL  NULL
 information_schema  crdb_transaction_statistics            view   node  NULL  NULL
@@ -257,6 +259,8 @@ information_schema  constraint_column_usage                table  node  NULL  NU
 information_schema  constraint_table_usage                 table  node  NULL  NULL
 information_schema  crdb_cluster_active_session_history    view   node  NULL  NULL
 information_schema  crdb_index_usage_statistics            table  node  NULL  NULL
+information_schema  crdb_jobs                              view   node  NULL  NULL
+information_schema  crdb_jobs_with_progress                view   node  NULL  NULL
 information_schema  crdb_node_active_session_history       view   node  NULL  NULL
 information_schema  crdb_statement_statistics              view   node  NULL  NULL
 information_schema  crdb_transaction_statistics            view   node  NULL  NULL
@@ -427,6 +431,8 @@ information_schema  constraint_column_usage
 information_schema  constraint_table_usage
 information_schema  crdb_cluster_active_session_history
 information_schema  crdb_index_usage_statistics
+information_schema  crdb_jobs
+information_schema  crdb_jobs_with_progress
 information_schema  crdb_node_active_session_history
 information_schema  crdb_statement_statistics
 information_schema  crdb_transaction_statistics
@@ -703,6 +709,8 @@ constraint_column_usage
 constraint_table_usage
 crdb_cluster_active_session_history
 crdb_index_usage_statistics
+crdb_jobs
+crdb_jobs_with_progress
 crdb_node_active_session_history
 crdb_statement_statistics
 crdb_transaction_statistics
@@ -1025,6 +1033,8 @@ system         information_schema  constraint_column_usage                SYSTEM
 system         information_schema  constraint_table_usage                 SYSTEM VIEW  NO
 system         information_schema  crdb_cluster_active_session_history    SYSTEM VIEW  NO
 system         information_schema  crdb_index_usage_statistics            SYSTEM VIEW  NO
+system         information_schema  crdb_jobs                              SYSTEM VIEW  NO
+system         information_schema  crdb_jobs_with_progress                SYSTEM VIEW  NO
 system         information_schema  crdb_node_active_session_history       SYSTEM VIEW  NO
 system         information_schema  crdb_statement_statistics              SYSTEM VIEW  NO
 system         information_schema  crdb_transaction_statistics            SYSTEM VIEW  NO
@@ -2482,6 +2492,8 @@ NULL     public   system         information_schema  constraint_column_usage    
 NULL     public   system         information_schema  constraint_table_usage                 SELECT          NO            YES
 NULL     public   system         information_schema  crdb_cluster_active_session_history    SELECT          NO            YES
 NULL     public   system         information_schema  crdb_index_usage_statistics            SELECT          NO            YES
+NULL     public   system         information_schema  crdb_jobs                              SELECT          NO            YES
+NULL     public   system         information_schema  crdb_jobs_with_progress                SELECT          NO            YES
 NULL     public   system         information_schema  crdb_node_active_session_history       SELECT          NO            YES
 NULL     public   system         information_schema  crdb_statement_statistics              SELECT          NO            YES
 NULL     public   system         information_schema  crdb_transaction_statistics            SELECT          NO            YES
@@ -2729,6 +2741,8 @@ NULL     public   system         information_schema  constraint_column_usage    
 NULL     public   system         information_schema  constraint_table_usage                 SELECT          NO            YES
 NULL     public   system         information_schema  crdb_cluster_active_session_history    SELECT          NO            YES
 NULL     public   system         information_schema  crdb_index_usage_statistics            SELECT          NO            YES
+NULL     public   system         information_schema  crdb_jobs                              SELECT          NO            YES
+NULL     public   system         information_schema  crdb_jobs_with_progress                SELECT          NO            YES
 NULL     public   system         information_schema  crdb_node_active_session_history       SELECT          NO            YES
 NULL     public   system         information_schema  crdb_statement_statistics              SELECT          NO            YES
 NULL     public   system         information_schema  crdb_transaction_statistics            SELECT          NO            YES

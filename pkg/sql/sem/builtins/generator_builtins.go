@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -797,6 +798,38 @@ The output can be used to recreate a database.'
 			sessionPendingJobsType,
 			makeSessionPendingJobsGenerator,
 			`Returns rows of information about all pending jobs created in the session txn.`,
+			volatility.Volatile,
+		),
+	),
+	"information_schema.crdb_job_messages": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{{Name: "job_id", Typ: types.Int}},
+			jobMessagesGeneratorType,
+			makeJobMessagesGenerator,
+			`Returns the messages emitted by the specified job, ordered by `+
+				`recorded time descending. Returns no rows if the job does not `+
+				`exist or is not visible to the current user.`,
+			volatility.Volatile,
+		),
+	),
+	"information_schema.crdb_job_progress_history": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{{Name: "job_id", Typ: types.Int}},
+			jobProgressHistoryGeneratorType,
+			makeJobProgressHistoryGenerator,
+			`Returns the progress trajectory of the specified job, ordered by `+
+				`recorded time descending. Returns no rows if the job does not `+
+				`exist or is not visible to the current user. The resolved `+
+				`column is the raw HLC; apply hlc_to_timestamp at the call `+
+				`site for a wall-clock value.`,
 			volatility.Volatile,
 		),
 	),
@@ -3320,6 +3353,16 @@ var sessionPendingJobsType = types.MakeLabeledTuple(
 	[]string{"job_id", "job_type", "description", "user_name"},
 )
 
+var jobMessagesGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.TimestampTZ, types.String, types.String},
+	[]string{"recorded", "kind", "message"},
+)
+
+var jobProgressHistoryGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.TimestampTZ, types.Float, types.Decimal},
+	[]string{"recorded", "progress_fraction", "resolved"},
+)
+
 // Phase is used to determine if CREATE statements or ALTER statements
 // are being generated for showCreateAllTables.
 type Phase int
@@ -3861,6 +3904,180 @@ func (s *sessionPendingJobsGenerator) Values() (tree.Datums, error) {
 
 // Close implements the eval.ValueGenerator interface.
 func (s *sessionPendingJobsGenerator) Close(ctx context.Context) {
+}
+
+// jobMessagesGenerator backs information_schema.crdb_job_messages(job_id).
+// It fetches the per-job message history from system.job_message via the
+// internal SQL executor, after verifying that the caller can view the job's
+// owner (matching the access semantics used by information_schema.crdb_jobs).
+// If the job does not exist or is not visible, no rows are returned.
+type jobMessagesGenerator struct {
+	jobID   jobspb.JobID
+	evalCtx *eval.Context
+	rows    eval.InternalRows
+}
+
+func makeJobMessagesGenerator(
+	_ context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	return &jobMessagesGenerator{
+		jobID:   jobspb.JobID(int64(tree.MustBeDInt(args[0]))),
+		evalCtx: evalCtx,
+	}, nil
+}
+
+// ResolvedType implements the eval.ValueGenerator interface.
+func (g *jobMessagesGenerator) ResolvedType() *types.T {
+	return jobMessagesGeneratorType
+}
+
+// Start implements the eval.ValueGenerator interface.
+func (g *jobMessagesGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	// Start may be called again to restart the generator; release any iterator
+	// from a prior run before opening a new one.
+	if g.rows != nil {
+		_ = g.rows.Close()
+		g.rows = nil
+	}
+	owner, ok, err := lookupJobOwner(ctx, g.evalCtx, g.jobID)
+	if err != nil {
+		return err
+	}
+	if !ok || !g.evalCtx.SessionAccessor.HasViewAccessToJob(ctx, owner) {
+		return nil
+	}
+	rows, err := g.evalCtx.Planner.QueryIteratorEx(ctx,
+		"crdb-job-messages",
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT written, kind, message FROM system.job_message "+
+			"WHERE job_id = $1 ORDER BY written DESC",
+		int64(g.jobID))
+	if err != nil {
+		return err
+	}
+	g.rows = rows
+	return nil
+}
+
+// Next implements the eval.ValueGenerator interface.
+func (g *jobMessagesGenerator) Next(ctx context.Context) (bool, error) {
+	if g.rows == nil {
+		return false, nil
+	}
+	return g.rows.Next(ctx)
+}
+
+// Values implements the eval.ValueGenerator interface.
+func (g *jobMessagesGenerator) Values() (tree.Datums, error) {
+	return g.rows.Cur(), nil
+}
+
+// Close implements the eval.ValueGenerator interface.
+func (g *jobMessagesGenerator) Close(_ context.Context) {
+	if g.rows != nil {
+		_ = g.rows.Close()
+	}
+}
+
+// jobProgressHistoryGenerator backs
+// information_schema.crdb_job_progress_history(job_id). Same access semantics
+// as jobMessagesGenerator (visible-job-only, empty otherwise). The resolved
+// column is returned as the raw HLC decimal stored in
+// system.job_progress_history; callers wanting a wall-clock value apply
+// hlc_to_timestamp at the call site.
+type jobProgressHistoryGenerator struct {
+	jobID   jobspb.JobID
+	evalCtx *eval.Context
+	rows    eval.InternalRows
+}
+
+func makeJobProgressHistoryGenerator(
+	_ context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	return &jobProgressHistoryGenerator{
+		jobID:   jobspb.JobID(int64(tree.MustBeDInt(args[0]))),
+		evalCtx: evalCtx,
+	}, nil
+}
+
+// ResolvedType implements the eval.ValueGenerator interface.
+func (g *jobProgressHistoryGenerator) ResolvedType() *types.T {
+	return jobProgressHistoryGeneratorType
+}
+
+// Start implements the eval.ValueGenerator interface.
+func (g *jobProgressHistoryGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	// Start may be called again to restart the generator; release any iterator
+	// from a prior run before opening a new one.
+	if g.rows != nil {
+		_ = g.rows.Close()
+		g.rows = nil
+	}
+	owner, ok, err := lookupJobOwner(ctx, g.evalCtx, g.jobID)
+	if err != nil {
+		return err
+	}
+	if !ok || !g.evalCtx.SessionAccessor.HasViewAccessToJob(ctx, owner) {
+		return nil
+	}
+	rows, err := g.evalCtx.Planner.QueryIteratorEx(ctx,
+		"crdb-job-progress-history",
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT written, fraction, resolved FROM system.job_progress_history "+
+			"WHERE job_id = $1 ORDER BY written DESC",
+		int64(g.jobID))
+	if err != nil {
+		return err
+	}
+	g.rows = rows
+	return nil
+}
+
+// Next implements the eval.ValueGenerator interface.
+func (g *jobProgressHistoryGenerator) Next(ctx context.Context) (bool, error) {
+	if g.rows == nil {
+		return false, nil
+	}
+	return g.rows.Next(ctx)
+}
+
+// Values implements the eval.ValueGenerator interface.
+func (g *jobProgressHistoryGenerator) Values() (tree.Datums, error) {
+	return g.rows.Cur(), nil
+}
+
+// Close implements the eval.ValueGenerator interface.
+func (g *jobProgressHistoryGenerator) Close(_ context.Context) {
+	if g.rows != nil {
+		_ = g.rows.Close()
+	}
+}
+
+// lookupJobOwner fetches the owner of the specified job. The boolean return
+// is false if no such job exists; the error return is set only if the lookup
+// itself fails.
+func lookupJobOwner(
+	ctx context.Context, evalCtx *eval.Context, jobID jobspb.JobID,
+) (username.SQLUsername, bool, error) {
+	it, err := evalCtx.Planner.QueryIteratorEx(ctx,
+		"crdb-job-owner-lookup",
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT owner FROM system.public.jobs WHERE id = $1",
+		int64(jobID))
+	if err != nil {
+		return username.SQLUsername{}, false, err
+	}
+	defer func() { _ = it.Close() }()
+	ok, err := it.Next(ctx)
+	if err != nil || !ok {
+		return username.SQLUsername{}, false, err
+	}
+	ownerDatum := it.Cur()[0]
+	if ownerDatum == tree.DNull {
+		return username.SQLUsername{}, false, nil
+	}
+	return username.MakeSQLUsernameFromPreNormalizedString(
+		string(tree.MustBeDString(ownerDatum))), true, nil
 }
 
 // identGenerator supports the execution of
