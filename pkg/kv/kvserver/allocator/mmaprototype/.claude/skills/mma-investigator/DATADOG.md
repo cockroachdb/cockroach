@@ -1,12 +1,19 @@
-# Datadog Query Templates for MMA Investigation
+# Datadog Guide for MMA Investigation
 
-Pre-built query templates for investigating MMA behavior. Replace `{cluster}`
-with the actual cluster name/tag and adjust time ranges as needed.
+Query templates and Datadog-specific tips for investigating MMA behavior.
+Replace `{cluster}` with the actual cluster name/tag and adjust time ranges as
+needed.
 
-Use the built-in `datadog` skill for reading from to Datadog.
+Use the built-in `datadog` skill for guidance on Datadog MCP tool usage, and
+prefer the MCP tools for both metrics and logs.
 
-**Important:** All CockroachDB metrics in Datadog use the `cockroachdb.`
-prefix (e.g. `cockroachdb.mma.store.cpu.utilization`).
+MMA-specific tips:
+- **Metric prefix.** All CockroachDB metrics in Datadog use the `cockroachdb.`
+  prefix (e.g. `cockroachdb.mma.store.cpu.utilization`, not
+  `mma.store.cpu.utilization`).
+- **Log storage tier.** Query the **Flex tier** for logs
+  (`storage_tier: "flex"` or `"flex_and_indexes"`); most CockroachDB logs are
+  only in Flex storage.
 
 ## Reference Dashboard
 
@@ -20,12 +27,23 @@ The team uses the **MMA Enriched** dashboard to monitor MMA behavior:
   ```
 
 When presenting findings, always link to this dashboard filtered to the
-cluster and time window under investigation.
+cluster and time window under investigation. Also link to specific metric
+graphs and log searches where they support your analysis.
 
 ## Metric Queries
 
 Use the Datadog MCP `get_datadog_metric` tool for timeseries data. All metric
 queries support `from`/`to` parameters for time scoping.
+
+**Reading the procession.** To see a metric's evolution across the window without
+dumping raw CSV, call `get_datadog_metric` with `raw_data=false` — it returns
+~20 buckets of min/max/avg per series. Query `by {node_id}` (or `by {store}`) so
+you can compare nodes; a bucket whose `max` ≫ `avg`, or a level shift across
+buckets, is the signal to zoom in on. For sub-unit metrics (e.g.
+`*.percent_normalized`, range 0–1), the 20-bucket avgs can round to 0/1 and hide
+a real swing (e.g. 0.40→0.62) — scale up, or re-query a narrower window with
+float formatting. Confirm the cluster tag resolves first
+(`crl-prod-<id>` for Cloud — see Troubleshooting Missing Data).
 
 ### 1. Resource Balance Across Stores (Start Here)
 
@@ -37,11 +55,14 @@ used in the MMA Enriched dashboard.
 # CPU load per node (nanos/sec of CPU attributed to KV work)
 avg:cockroachdb.rebalancing.cpunanospersecond{cluster:{cluster}} by {node_id}
 
-# System CPU utilization per node (normalized %)
-avg:cockroachdb.sys.cpu.combined.percent.normalized{cluster:{cluster}} by {node_id}
+# Host (whole-machine) CPU per node — the primary physical CPU signal
+avg:cockroachdb.sys.cpu.host.combined.percent_normalized{cluster:{cluster}} by {node_id}
+
+# CRDB-process CPU per node (Datadog uses the underscore form: percent_normalized)
+avg:cockroachdb.sys.cpu.combined.percent_normalized{cluster:{cluster}} by {node_id}
 
 # System CPU per store (weighted, used in dashboard)
-sum:cockroachdb.sys.cpu.combined.percent.normalized{cluster:{cluster}} by {node_id,store}.weighted()
+sum:cockroachdb.sys.cpu.combined.percent_normalized{cluster:{cluster}} by {node_id,store}.weighted()
 
 # MMA's view of CPU utilization per store
 avg:cockroachdb.mma.store.cpu.utilization{cluster:{cluster}} by {store}
@@ -236,54 +257,83 @@ max:cockroachdb.mma.span_config.normalization.soft_error{cluster:{cluster}} by {
 Use the Datadog MCP `search_datadog_logs` tool. **Always set
 `storage_tier: "flex"`** — most logs are in Flex storage.
 
-### General MMA Log Search
+### Scope by attribute, not free text
+
+MMA logs carry structured attributes; scope with these (plus `cluster:` and the
+time window) rather than grepping raw text. Confirmed on a CC cluster:
 
 ```
-# All MMA rebalancing logs for a cluster
-host:{host} "rebalanceStores begins"
+# Tightest: the MMA algorithm logs only (pass summary, load summaries,
+# candidate evaluation, results). @file is the source path.
+cluster:{cluster} @file:*mmaprototype*
 
-# Rebalancing pass summaries (Infof level — always visible)
-host:{host} "rebalancing pass"
+# Broader: the whole KV distribution layer (MMA + replicate/lease queue +
+# replica-change enactment). Use when you also want surrounding queue activity.
+cluster:{cluster} @channel:KV_DISTRIBUTION
+
+# All lines within ONE rebalanceStores pass share an mmaid tag. It is a nested
+# tag: query as @tags.mmaid (NOT @mmaid). @n / @s give node / store.
+cluster:{cluster} @tags.mmaid:{N}
 ```
 
-Note: filter by `host:` (the specific host name, e.g. `wenyi-skew-0006`) or
-`service:` depending on how the cluster's logs are tagged. Try both if one
-returns no results.
+Do **not** filter on `status:error` to find MMA problems — in Cloud that is
+dominated by log-sink/telemetry noise (`fluentSink … connection refused`,
+`fluent-bit`), not CRDB. MMA has no dedicated error log; failures appear as
+`result(failed): …` reasons inside the reports below.
 
-### Overload State Transitions
+### The three Infof tiers (what survives in production)
 
-```
-host:{host} "overload-start"
-host:{host} "overload-end"
-host:{host} "overload-continued"
-host:{host} "was added to shedding store list"
-host:{host} "skipping overloaded store"
-```
-
-### Candidate Evaluation and Outcomes
+Detailed MMA logs sit at `VEvent` level 2/3 and are suppressed in prod; only
+these promoted tiers are reliably present (see the `Logging` section of the
+package `CLAUDE.md`):
 
 ```
-host:{host} "considering lease-transfer"
-host:{host} "considering replica-transfer"
-host:{host} "no candidates found"
-host:{host} "no suitable target found"
-host:{host} "result(success)"
-host:{host} "result(failed)"
+# 1. Per-pass summary — every pass, per local store. The backbone.
+cluster:{cluster} @file:*mmaprototype* "rebalancing pass summary"
+
+# 2. Outer-loop narrative — promoted ~every 10 min.
+cluster:{cluster} "cluster means:"
+cluster:{cluster} "evaluating s"            # per-store sls / nls / worst dim
+cluster:{cluster} "adding overloaded store"
+
+# 3. Per-store detailed burst — promoted ~every 30 min for a store continuously
+#    overloaded >=30 min. The full shedding attempt for that store.
+cluster:{cluster} "start processing shedding store s{N}"
 ```
 
-### Grace Periods and Limits
+### The richest line: per-store-per-dimension load summary
 
 ```
-host:{host} "in lease shedding grace period"
-host:{host} "reached max range move count"
-host:{host} "reached pending decrease threshold"
-host:{host} "too soon after failed change"
+# Exact classification plus the numbers (incl. the capacity-model output), e.g.:
+#   load summary for dim=CPURate (s37): overloadSlow, reason: load is >10% above
+#   mean [load= meanLoad= fractionUsed= meanUtil= capacity=]
+cluster:{cluster} "load summary for dim"
 ```
 
-### Tracing a Specific Pass
+### Overload state transitions
 
 ```
-host:{host} mmaid={N}
+cluster:{cluster} "overload-start"
+cluster:{cluster} "overload-end"
+cluster:{cluster} "overload-continued"
+```
+
+### Candidate evaluation and outcomes (inside a detailed burst)
+
+```
+cluster:{cluster} "considering lease-transfer"
+cluster:{cluster} "considering replica-transfer"
+cluster:{cluster} "result(success)"     # actual movement, with resulting loads
+cluster:{cluster} "result(failed)"      # carries the reason, e.g. no-cand-load
+cluster:{cluster} "in lease shedding grace period"
+cluster:{cluster} "reached max lease transfer count"
+cluster:{cluster} "reached pending decrease threshold"
+```
+
+### Tracing a specific pass
+
+```
+cluster:{cluster} @tags.mmaid:{N}
 ```
 
 ## SQL Log Analytics
@@ -314,7 +364,47 @@ GROUP BY CASE
   END
 ```
 
-Note: set the `filter` parameter to `host:{host}` to scope these queries.
+Note: set the `filter` parameter to `cluster:{cluster}` (optionally with
+`@file:*mmaprototype*`) to scope these queries.
+
+## Troubleshooting Missing Data
+
+If metrics or logs return empty/zero results where you'd expect data, check
+these common causes before concluding the data doesn't exist:
+
+1. **Missing `cockroachdb.` prefix on metrics.** All CockroachDB metrics in
+   Datadog are prefixed with `cockroachdb.` (e.g. `cockroachdb.mma.store.cpu.utilization`,
+   not `mma.store.cpu.utilization`). This is the most common cause of
+   all-zero metric results.
+2. **Wrong storage tier for logs.** Most CockroachDB logs are only in
+   Flex storage. If `search_datadog_logs` returns nothing, make sure you're
+   using `storage_tier: "flex_and_indexes"`.
+3. **Incorrect tag names or values.** Verify tag names with the dashboard or
+   `get_datadog_metric_context`. Common pitfalls:
+   - The cluster name should be in `cluster`, or sometimes a substring of `hostname`
+   - For CockroachDB Cloud clusters the `cluster` tag is `crl-prod-<id>` (e.g.
+     `crl-prod-38z`), not the bare `<id>` from a debug-zip directory name or a
+     store locality. Querying the bare id returns no data. Fastest tag check: run
+     a normal scoped query (`roachdev datadog metrics query
+     "avg:cockroachdb.<metric>{cluster:crl-prod-<id>}"`) — if it returns data the
+     tag is right. (The `get_datadog_metric` "metadata mode" via the `roachdev …
+     mcp call` path still demands a `queries=[…]` arg, so it is not a convenient
+     tag-only probe.)
+   - `store` vs `store_id` (check which tag key the metric actually uses)
+   - `node_id` vs `instance`
+4. **Time range mismatch.** Double-check that `from` and `to` match the
+   investigation window. ISO 8601 timestamps must include timezone (use `Z`
+   for UTC).
+5. **Aggregation hiding signal.** A `sum` or `avg` across all stores may wash
+   out per-store spikes. Try grouping by `store` or `node_id` to see
+   individual series.
+6. **Metric not yet emitted.** Some MMA metrics (e.g. `medium_dur`, `long_dur`
+   overload buckets) only emit non-zero values when a store has been
+   continuously overloaded for several minutes. Zero values may be correct.
+
+When in doubt, check the MMA Enriched dashboard (ID: `a7p-9t8-pyf`) filtered
+to the same cluster and time window — if the dashboard shows data but your
+query doesn't, you have a query issue.
 
 ## Metric Discovery
 

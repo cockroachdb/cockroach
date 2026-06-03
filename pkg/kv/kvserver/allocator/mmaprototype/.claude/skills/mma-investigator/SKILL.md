@@ -40,63 +40,11 @@ subsequent Datadog queries must be scoped to this cluster and time window.
 
 ## Using Datadog
 
-Use the built-in `datadog` skill for guidance on Datadog MCP tool usage.
-
-MMA-specific Datadog tips:
-- Always query the **Flex tier** for logs (`storage_tier: "flex"` or
-  `"flex_and_indexes"`).
-- All CockroachDB metrics in Datadog use the `cockroachdb.` prefix.
-  For example, the MMA CPU utilization metric is `cockroachdb.mma.store.cpu.utilization`,
-  not `mma.store.cpu.utilization`.
-- Prefer MCP tools for logs and metrics.
-
-Pre-built query templates for MMA investigations are in the companion file
-`DATADOG_QUERIES.md`. Use these as starting points and adapt as needed.
-
-### Reference Dashboard
-
-The team uses the **MMA Enriched** dashboard (ID: `a7p-9t8-pyf`) to monitor
-MMA behavior. It is filterable by cluster, node_id, store, and upload_id.
-
-Link template:
-```
-https://us5.datadoghq.com/dashboard/a7p-9t8-pyf/mma-enriched?tpl_var_cluster%5B0%5D={cluster}&from_ts={from_ms}&to_ts={to_ms}&live=false
-```
-
-When presenting findings, link to this dashboard filtered to the cluster and
-time window. Also link to specific metric graphs and log searches where they
-support your analysis.
-
-## Troubleshooting Missing Data
-
-If metrics or logs return empty/zero results where you'd expect data, check
-these common causes before concluding the data doesn't exist:
-
-1. **Missing `cockroachdb.` prefix on metrics.** All CockroachDB metrics in
-   Datadog are prefixed with `cockroachdb.` (e.g. `cockroachdb.mma.store.cpu.utilization`,
-   not `mma.store.cpu.utilization`). This is the most common cause of
-   all-zero metric results.
-2. **Wrong storage tier for logs.** Most CockroachDB logs are only in
-   Flex storage. If `search_datadog_logs` returns nothing, make sure you're
-   using `storage_tier: "flex_and_indexes"`.
-3. **Incorrect tag names or values.** Verify tag names with the dashboard or
-   `get_datadog_metric_context`. Common pitfalls:
-   - The cluster name should be in `cluster`, or sometimes a substring of `hostname`
-   - `store` vs `store_id` (check which tag key the metric actually uses)
-   - `node_id` vs `instance`
-4. **Time range mismatch.** Double-check that `from` and `to` match the
-   investigation window. ISO 8601 timestamps must include timezone (use `Z`
-   for UTC).
-5. **Aggregation hiding signal.** A `sum` or `avg` across all stores may wash
-   out per-store spikes. Try grouping by `store` or `node_id` to see
-   individual series.
-6. **Metric not yet emitted.** Some MMA metrics (e.g. `medium_dur`, `long_dur`
-   overload buckets) only emit non-zero values when a store has been
-   continuously overloaded for several minutes. Zero values may be correct.
-
-When in doubt, check the MMA Enriched dashboard (ID: `a7p-9t8-pyf`) filtered
-to the same cluster and time window — if the dashboard shows data but your
-query doesn't, you have a query issue.
+Most MMA investigations rely on Datadog for metrics and logs. If you are using
+Datadog for this investigation, read `DATADOG.md` first. It covers the `datadog`
+skill, MMA-specific tips (the `cockroachdb.` metric prefix, the Flex log storage
+tier), the MMA Enriched reference dashboard, ready-to-use metric and log query
+templates, and how to troubleshoot empty or missing results.
 
 ## Investigation Workflow
 
@@ -120,7 +68,7 @@ Accept input via:
 
 **This is the most important step.** Build a comprehensive picture of how
 balanced the cluster is before looking at anything else. Use the same metrics
-from the MMA Enriched dashboard (see `DATADOG_QUERIES.md`).
+from the MMA Enriched dashboard (see `DATADOG.md`).
 
 Query these metric groups in order:
 
@@ -183,7 +131,7 @@ Present this as a timeline with evidence (metric graphs, timestamps).
 Search for MMA logs on the KvDistribution channel to understand decision-level
 detail. Always use Flex tier.
 
-Key log patterns (see `DATADOG_QUERIES.md` for query syntax):
+Key log patterns (see `DATADOG.md` for query syntax):
 
 - **Rebalancing pass summaries**: `"rebalancing pass"` — successes, failures
   by reason, and skipped stores.
