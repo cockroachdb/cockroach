@@ -1307,7 +1307,21 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			b.appendPlpgSQLStmts(&doCon, stmts[i+1:])
 			return b.callContinuation(&doCon, s)
 
+		case *ast.Case:
+			panic(unimplementedCaseStmtErr)
+
+		case *ast.Assert:
+			panic(unimplementedAssertStmtErr)
+
+		case *ast.DynamicExecute:
+			panic(unimplementedDynamicExecuteStmtErr)
+
+		case *ast.GetDiagnostics:
+			panic(unimplementedGetDiagnosticsStmtErr)
+
 		default:
+			// Safety net for PL/pgSQL statement types added to the AST in the
+			// future without optbuilder support.
 			panic(errors.WithDetailf(unsupportedPLStmtErr,
 				"%s is not yet supported", stmt.PlpgSQLStatementTag(),
 			))
@@ -2909,6 +2923,18 @@ func (tc *transactionControlVisitor) Visit(
 var (
 	unsupportedPLStmtErr = unimplemented.New("unimplemented PL/pgSQL statement",
 		"attempted to use a PL/pgSQL statement that is not yet supported",
+	)
+	unimplementedCaseStmtErr = unimplemented.NewWithIssueDetail(169579, "CASE statement",
+		"PL/pgSQL CASE statement is not yet supported",
+	)
+	unimplementedAssertStmtErr = unimplemented.NewWithIssueDetail(169580, "ASSERT statement",
+		"PL/pgSQL ASSERT statement is not yet supported",
+	)
+	unimplementedDynamicExecuteStmtErr = unimplemented.NewWithIssueDetail(169581, "dynamic EXECUTE",
+		"PL/pgSQL EXECUTE of a dynamic SQL string is not yet supported",
+	)
+	unimplementedGetDiagnosticsStmtErr = unimplemented.NewWithIssueDetail(117410, "GET DIAGNOSTICS",
+		"PL/pgSQL GET DIAGNOSTICS statement is not yet supported",
 	)
 	notNullVarErr = unimplemented.NewWithIssueDetail(105243, "not null variable",
 		"not-null PL/pgSQL variables are not yet supported",

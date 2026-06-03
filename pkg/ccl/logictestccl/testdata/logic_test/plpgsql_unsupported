@@ -18,7 +18,7 @@ statement ok
 CREATE TABLE mytable (inserted_by TEXT, inserted TIMESTAMP);
 CREATE TABLE c (checked_user TEXT, checked_date TIMESTAMP);
 
-statement error pgcode 0A000 DETAIL: stmt_dyn_exec is not yet supported
+statement error pgcode 0A000 pq: unimplemented: PL/pgSQL EXECUTE of a dynamic SQL string is not yet supported
 CREATE PROCEDURE test(checked_user TEXT, checked_date TIMESTAMP)
 AS $$
 DECLARE
@@ -33,7 +33,7 @@ $$ LANGUAGE plpgsql;
 statement ok
 CREATE TABLE t6 (a int);
 
-statement error pgcode 0A000 DETAIL: stmt_case is not yet supported
+statement error pgcode 0A000 pq: unimplemented: PL/pgSQL CASE statement is not yet supported
 CREATE PROCEDURE p6(IN i int)
 LANGUAGE plpgsql
 AS $$
@@ -49,6 +49,26 @@ BEGIN
     ELSE
       ROLLBACK;
   END CASE;
+END;
+$$;
+
+statement error pgcode 0A000 pq: unimplemented: PL/pgSQL ASSERT statement is not yet supported
+CREATE PROCEDURE p_assert(IN i int)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  ASSERT i > 0, 'i must be positive';
+END;
+$$;
+
+statement error pgcode 0A000 pq: unimplemented: PL/pgSQL GET DIAGNOSTICS statement is not yet supported
+CREATE PROCEDURE p_get_diag()
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  rc INT;
+BEGIN
+  GET DIAGNOSTICS rc = ROW_COUNT;
 END;
 $$;
 
