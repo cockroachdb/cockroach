@@ -1,0 +1,9 @@
+setup
+CREATE DATABASE db;
+USE db;
+CREATE TABLE t1 (a INT);
+----
+
+test
+CREATE TABLE IF NOT EXISTS t1 (a INT);
+----

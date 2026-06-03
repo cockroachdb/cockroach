@@ -1,0 +1,8 @@
+setup
+CREATE DATABASE db;
+USE db;
+----
+
+test
+CREATE TABLE t2 (a INT NOT NULL, b STRING);
+----
