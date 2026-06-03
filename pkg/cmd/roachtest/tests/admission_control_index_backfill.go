@@ -109,7 +109,7 @@ func registerIndexBackfill(r registry.Registry) {
 			Owner:            registry.OwnerAdmissionControl,
 			Benchmark:        true,
 			CompatibleClouds: registry.OnlyGCE,
-			Suites:           registry.Suites(registry.Nightly),
+			Suites:           registry.Suites(registry.Weekly),
 			Cluster:          clusterSpec,
 			SnapshotPrefix:   v.snapshotPrefix,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
