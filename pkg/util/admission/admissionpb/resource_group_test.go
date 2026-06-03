@@ -14,7 +14,7 @@ import (
 func TestNormalize(t *testing.T) {
 	tests := []struct {
 		name              string
-		weights           []int64
+		weights           []uint32
 		expectedBurstFrac []float64
 	}{
 		{
@@ -24,31 +24,30 @@ func TestNormalize(t *testing.T) {
 		},
 		{
 			name:              "single group below floor",
-			weights:           []int64{50},
+			weights:           []uint32{50},
 			expectedBurstFrac: []float64{1.0},
 		},
 		{
 			name:              "sum below 100 still normalized",
-			weights:           []int64{20, 20},
+			weights:           []uint32{20, 20},
 			expectedBurstFrac: []float64{0.5, 0.5},
 		},
 		{
 			name:              "sum equals 100",
-			weights:           []int64{80, 20},
+			weights:           []uint32{80, 20},
 			expectedBurstFrac: []float64{0.8, 0.2},
 		},
 		{
 			name:              "sum above 100",
-			weights:           []int64{100, 100, 50},
+			weights:           []uint32{100, 100, 50},
 			expectedBurstFrac: []float64{100.0 / 250.0, 100.0 / 250.0, 50.0 / 250.0},
 		},
 		{
-			// Non-positive CPUWeight is rejected at the SQL boundary. The
-			// helper still must not panic on divide-by-zero if it ever sees
-			// such input: a single zero-weight group yields BurstFrac=0,
-			// not a NaN.
-			name:              "non-positive weight tolerated",
-			weights:           []int64{0},
+			// A zero CPUWeight is rejected at the SQL boundary. The helper
+			// still must not panic on divide-by-zero if it ever sees such
+			// input: a single zero-weight group yields BurstFrac=0, not a NaN.
+			name:              "zero weight tolerated",
+			weights:           []uint32{0},
 			expectedBurstFrac: []float64{0},
 		},
 	}

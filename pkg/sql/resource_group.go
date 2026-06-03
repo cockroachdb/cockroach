@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -96,11 +97,11 @@ func applyResourceGroupOptions(
 			if err != nil {
 				return err
 			}
-			if v <= 0 {
+			if v <= 0 || v > math.MaxUint32 {
 				return pgerror.Newf(pgcode.InvalidParameterValue,
-					"%s must be a positive integer, got %d", key, v)
+					"%s must be an integer in (0, %d], got %d", key, uint32(math.MaxUint32), v)
 			}
-			cfg.CPUWeight = v
+			cfg.CPUWeight = uint32(v)
 		case resourceGroupOptMaxCPU:
 			datum, err := evalOpt(opt.Value)
 			if err != nil {
@@ -145,7 +146,7 @@ func (c *createResourceGroupNode) startExec(params runParams) error {
 	if err := applyResourceGroupOptions(ctx, p.SemaCtx(), p.EvalContext(), &cfg, c.n.Options); err != nil {
 		return err
 	}
-	if cfg.CPUWeight <= 0 {
+	if cfg.CPUWeight == 0 {
 		return pgerror.Newf(pgcode.InvalidParameterValue,
 			"%s is required and must be a positive integer", resourceGroupOptCPUWeight)
 	}
