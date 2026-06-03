@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -25,6 +26,24 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
+)
+
+// prepareBindStepReadSequenceEnabled gates the sequencing point that
+// execPrepare and execBind create before issuing KV reads (descriptor
+// resolution during Parse, ResolveTypeByOID during Bind). Stepping there lets
+// those reads observe a valid read snapshot after a ROLLBACK TO SAVEPOINT,
+// avoiding an internal error.
+//
+// It defaults to true and exists only as an escape hatch: if the added
+// stepping causes unforeseen problems in the field, setting this to false
+// restores the prior (pre-fix) behavior where Parse and Bind do not step.
+var prepareBindStepReadSequenceEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.pgwire.prepare_bind_step_read_sequence.enabled",
+	"if enabled, the pgwire Parse and Bind commands create a sequencing point "+
+		"before issuing KV reads so those reads observe a valid read snapshot "+
+		"after a ROLLBACK TO SAVEPOINT",
+	true,
 )
 
 func (ex *connExecutor) execPrepare(
@@ -86,17 +105,22 @@ func (ex *connExecutor) execPrepare(
 	// descriptor resolution) observe a valid read snapshot, including
 	// after a prior ROLLBACK TO SAVEPOINT. For an internal executor
 	// running under an outer txn, the deferred cleanup undoes the step
-	// so the parent's read snapshot is left untouched.
-	cleanup, err := ex.stepReadSequenceWithRestore(ctx)
-	if err != nil {
-		return retErr(err)
+	// so the parent's read snapshot is left untouched. Gated by an escape
+	// hatch; see prepareBindStepReadSequenceEnabled.
+	cleanup := func() error { return nil }
+	if prepareBindStepReadSequenceEnabled.Get(&ex.server.cfg.Settings.SV) {
+		var err error
+		cleanup, err = ex.stepReadSequenceWithRestore(ctx)
+		if err != nil {
+			return retErr(err)
+		}
 	}
 	defer func() {
 		if err := cleanup(); err != nil {
 			retEv, retPayload = retErr(err)
 		}
 	}()
-	_, err = ex.addPreparedStmt(
+	_, err := ex.addPreparedStmt(
 		ctx,
 		parseCmd.Name,
 		stmt,
@@ -416,10 +440,15 @@ func (ex *connExecutor) execBind(
 	// observe a valid read snapshot, including after a prior ROLLBACK TO
 	// SAVEPOINT. For an internal executor running under an outer txn,
 	// the deferred cleanup undoes the step so the parent's read snapshot
-	// is left untouched.
-	cleanup, err := ex.stepReadSequenceWithRestore(ctx)
-	if err != nil {
-		return retErr(err)
+	// is left untouched. Gated by an escape hatch; see
+	// prepareBindStepReadSequenceEnabled.
+	cleanup := func() error { return nil }
+	if prepareBindStepReadSequenceEnabled.Get(&ex.server.cfg.Settings.SV) {
+		var err error
+		cleanup, err = ex.stepReadSequenceWithRestore(ctx)
+		if err != nil {
+			return retErr(err)
+		}
 	}
 	defer func() {
 		if err := cleanup(); err != nil {
