@@ -199,6 +199,7 @@ var AggregateOpReverseMap = map[Operator]string{
 	AvgOp:                         "avg",
 	BitAndAggOp:                   "bit_and",
 	BitOrAggOp:                    "bit_or",
+	BitXorAggOp:                   "bit_xor",
 	BoolAndOp:                     "bool_and",
 	BoolOrOp:                      "bool_or",
 	ConcatAggOp:                   "concat_agg",
@@ -337,7 +338,7 @@ func BoolOperatorRequiresNotNullArgs(op Operator) bool {
 func AggregateIgnoresNulls(op Operator) bool {
 	switch op {
 
-	case AnyNotNullAggOp, AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp,
+	case AnyNotNullAggOp, AvgOp, BitAndAggOp, BitOrAggOp, BitXorAggOp, BoolAndOp, BoolOrOp,
 		ConstNotNullAggOp, CorrOp, CountOp, MaxOp, MinOp, SqrDiffOp, StdDevOp,
 		StringAggOp, SumOp, SumIntOp, VarianceOp, XorAggOp, PercentileDiscOp,
 		PercentileContOp, STMakeLineOp, STCollectOp, STExtentOp, STUnionOp, STAsMVTOp,
@@ -363,7 +364,7 @@ func AggregateIsNullOnEmpty(op Operator) bool {
 	switch op {
 
 	case AnyNotNullAggOp, ArrayAggOp, ArrayCatAggOp, AvgOp, BitAndAggOp,
-		BitOrAggOp, BoolAndOp, BoolOrOp, ConcatAggOp, ConstAggOp,
+		BitOrAggOp, BitXorAggOp, BoolAndOp, BoolOrOp, ConcatAggOp, ConstAggOp,
 		ConstNotNullAggOp, CorrOp, FirstAggOp, JsonAggOp, JsonbAggOp,
 		MaxOp, MinOp, SqrDiffOp, StdDevOp, STMakeLineOp, StringAggOp, SumOp, SumIntOp,
 		VarianceOp, XorAggOp, PercentileDiscOp, PercentileContOp,
@@ -393,7 +394,7 @@ func AggregateIsNeverNullOnNonNullInput(op Operator) bool {
 	switch op {
 
 	case AnyNotNullAggOp, ArrayAggOp, ArrayCatAggOp, AvgOp, BitAndAggOp,
-		BitOrAggOp, BoolAndOp, BoolOrOp, ConcatAggOp, ConstAggOp,
+		BitOrAggOp, BitXorAggOp, BoolAndOp, BoolOrOp, ConcatAggOp, ConstAggOp,
 		ConstNotNullAggOp, CountOp, CountRowsOp, FirstAggOp,
 		JsonAggOp, JsonbAggOp, MaxOp, MinOp, SqrDiffOp,
 		StringAggOp, SumOp, SumIntOp, XorAggOp, PercentileDiscOp, PercentileContOp,
@@ -440,7 +441,7 @@ func AggregateIsNeverNull(op Operator) bool {
 func AggregatesCanMerge(inner, outer Operator) bool {
 	switch inner {
 
-	case AnyNotNullAggOp, BitAndAggOp, BitOrAggOp, BoolAndOp,
+	case AnyNotNullAggOp, BitAndAggOp, BitOrAggOp, BitXorAggOp, BoolAndOp,
 		BoolOrOp, ConstAggOp, ConstNotNullAggOp, FirstAggOp,
 		MaxOp, MinOp, STMakeLineOp, STExtentOp, STUnionOp, SumOp, SumIntOp, XorAggOp:
 		return inner == outer
@@ -476,7 +477,7 @@ func AggregateIgnoresDuplicates(op Operator) bool {
 		ConstAggOp, ConstNotNullAggOp, FirstAggOp, MaxOp, MinOp, STExtentOp:
 		return true
 
-	case ArrayAggOp, ArrayCatAggOp, AvgOp, ConcatAggOp, CountOp, CorrOp, CountRowsOp,
+	case ArrayAggOp, ArrayCatAggOp, AvgOp, BitXorAggOp, ConcatAggOp, CountOp, CorrOp, CountRowsOp,
 		SumIntOp, SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, JsonAggOp, JsonbAggOp,
 		StringAggOp, PercentileDiscOp, PercentileContOp, StdDevPopOp, STMakeLineOp,
 		VarPopOp, JsonObjectAggOp, JsonbObjectAggOp, STCollectOp, STUnionOp, STAsMVTOp,

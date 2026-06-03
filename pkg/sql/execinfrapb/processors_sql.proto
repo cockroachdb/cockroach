@@ -842,6 +842,7 @@ message AggregatorSpec {
     MERGE_TRANSACTION_STATS = 64;
     MERGE_AGGREGATED_STMT_METADATA = 65;
     ST_ASMVT = 66;
+    BIT_XOR = 67;
   }
 
   enum Type {

@@ -155,6 +155,16 @@ var aggregates = map[string]builtinDefinition{
 			"Calculates the bitwise OR of all non-null input values, or null if none."),
 	),
 
+	// The INT overload reuses newIntXorAggregate, which has identical semantics
+	// (the XOR of all non-null inputs, or NULL if there are none); xor_agg is a
+	// CockroachDB extension that predates PostgreSQL's bit_xor.
+	"bit_xor": makeBuiltin(tree.FunctionProperties{},
+		makeImmutableAggOverload([]*types.T{types.Int}, types.Int, newIntXorAggregate,
+			"Calculates the bitwise XOR of all non-null input values, or null if none."),
+		makeImmutableAggOverload([]*types.T{types.VarBit}, types.VarBit, newBitBitXorAggregate,
+			"Calculates the bitwise XOR of all non-null input values, or null if none."),
+	),
+
 	"bool_and": makeBuiltin(tree.FunctionProperties{},
 		makeImmutableAggOverload([]*types.T{types.Bool}, types.Bool, newBoolAndAggregate,
 			"Calculates the boolean value of `AND`ing all selected values."),
@@ -1311,6 +1321,7 @@ var _ eval.AggregateFunc = &intBitAndAggregate{}
 var _ eval.AggregateFunc = &bitBitAndAggregate{}
 var _ eval.AggregateFunc = &intBitOrAggregate{}
 var _ eval.AggregateFunc = &bitBitOrAggregate{}
+var _ eval.AggregateFunc = &bitBitXorAggregate{}
 var _ eval.AggregateFunc = &percentileDiscAggregate{}
 var _ eval.AggregateFunc = &percentileContAggregate{}
 var _ eval.AggregateFunc = &stMakeLineAgg{}
@@ -1379,6 +1390,7 @@ const sizeOfIntBitAndAggregate = int64(unsafe.Sizeof(intBitAndAggregate{}))
 const sizeOfBitBitAndAggregate = int64(unsafe.Sizeof(bitBitAndAggregate{}))
 const sizeOfIntBitOrAggregate = int64(unsafe.Sizeof(intBitOrAggregate{}))
 const sizeOfBitBitOrAggregate = int64(unsafe.Sizeof(bitBitOrAggregate{}))
+const sizeOfBitBitXorAggregate = int64(unsafe.Sizeof(bitBitXorAggregate{}))
 const sizeOfPercentileDiscAggregate = int64(unsafe.Sizeof(percentileDiscAggregate{}))
 const sizeOfPercentileContAggregate = int64(unsafe.Sizeof(percentileContAggregate{}))
 const sizeOfSTMakeLineAggregate = int64(unsafe.Sizeof(stMakeLineAgg{}))
@@ -2401,6 +2413,63 @@ func (a *bitBitOrAggregate) Close(context.Context) {}
 // Size is part of the eval.AggregateFunc interface.
 func (a *bitBitOrAggregate) Size() int64 {
 	return sizeOfBitBitOrAggregate
+}
+
+type bitBitXorAggregate struct {
+	sawNonNull bool
+	result     bitarray.BitArray
+}
+
+func newBitBitXorAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
+	return &bitBitXorAggregate{}
+}
+
+// Add inserts one value into the running bitwise XOR.
+func (a *bitBitXorAggregate) Add(
+	_ context.Context, datum tree.Datum, otherArgs ...tree.Datum,
+) error {
+	if datum == tree.DNull {
+		return nil
+	}
+	bits := &tree.MustBeDBitArray(datum).BitArray
+	if !a.sawNonNull {
+		// This is the first non-null datum, so we simply store
+		// the provided value for the aggregation.
+		a.result = *bits
+		a.sawNonNull = true
+		return nil
+	}
+	// If the length of the current bit array is different from that of the
+	// stored value, we return an error.
+	if a.result.BitLen() != bits.BitLen() {
+		return tree.NewCannotMixBitArraySizesError("XOR")
+	}
+	// This is not the first non-null datum, so we actually XOR it with the
+	// aggregate so far.
+	a.result = bitarray.Xor(a.result, *bits)
+	return nil
+}
+
+// Result returns the bitwise XOR.
+func (a *bitBitXorAggregate) Result() (tree.Datum, error) {
+	if !a.sawNonNull {
+		return tree.DNull, nil
+	}
+	return &tree.DBitArray{BitArray: a.result}, nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *bitBitXorAggregate) Reset(context.Context) {
+	a.sawNonNull = false
+	a.result = bitarray.BitArray{}
+}
+
+// Close is part of the eval.AggregateFunc interface.
+func (a *bitBitXorAggregate) Close(context.Context) {}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *bitBitXorAggregate) Size() int64 {
+	return sizeOfBitBitXorAggregate
 }
 
 type boolAndAggregate struct {

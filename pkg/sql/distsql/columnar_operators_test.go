@@ -64,6 +64,7 @@ var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
 	execinfrapb.StringAgg:                   2,
 	execinfrapb.BitAnd:                      1,
 	execinfrapb.BitOr:                       1,
+	execinfrapb.BitXor:                      1,
 	execinfrapb.Corr:                        2,
 	execinfrapb.PercentileDiscImpl:          2,
 	execinfrapb.PercentileContImpl:          2,

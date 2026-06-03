@@ -872,6 +872,11 @@ define BitOrAgg {
 }
 
 [Scalar, Aggregate]
+define BitXorAgg {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
 define BoolAnd {
     Input ScalarExpr
 }
