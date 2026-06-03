@@ -43,3 +43,98 @@ CREATE VIEW information_schema.crdb_cluster_active_session_history AS
            work_event,
            goroutine_id
     FROM crdb_internal.cluster_active_session_history`
+
+// CRDBStatementStatistics describes the schema of the information_schema view
+// that surfaces persisted statement statistics. It reads directly from
+// system.statement_statistics joined to system.statements, filtered to exclude
+// internal-app traffic. The query/query_summary/database COALESCEs fall back to
+// the metadata JSONB when the system.statements row isn't present yet.
+const CRDBStatementStatistics = `
+CREATE VIEW information_schema.crdb_statement_statistics AS
+    SELECT
+        ss.aggregated_ts,
+        ss.fingerprint_id,
+        ss.transaction_fingerprint_id,
+        ss.plan_hash,
+        ss.app_name,
+        ss.node_id,
+        ss.agg_interval,
+        ss.execution_count,
+        ss.service_latency,
+        ss.cpu_sql_nanos,
+        ss.contention_time,
+        ss.total_estimated_execution_time,
+        ss.p99_latency,
+        ss.exec_sample_count,
+        ss.svc_lat_sum,
+        ss.cpu_sql_nanos_sum,
+        ss.contention_time_sum,
+        ss.svc_lat_sum_sq,
+        ss.cpu_sql_nanos_sum_sq,
+        ss.contention_time_sum_sq,
+        ss.kv_cpu_time_nanos_sum,
+        ss.kv_cpu_time_nanos_sum_sq,
+        ss.admission_wait_time_sum,
+        ss.admission_wait_time_sum_sq,
+        ss.rows_read_sum,
+        ss.rows_written_sum,
+        ss.bytes_read_sum,
+        ss.bytes_read_sum_sq,
+        ss.max_retries,
+        COALESCE(s.fingerprint, ss.metadata->>'query', '')        AS query,
+        COALESCE(s.summary,     ss.metadata->>'querySummary', '') AS query_summary,
+        COALESCE(s.db,          ss.metadata->>'db', '')           AS database
+    FROM
+        system.statement_statistics AS ss
+    LEFT JOIN
+        system.statements AS s ON ss.fingerprint_id = s.fingerprint_id
+    WHERE
+        ss.app_name NOT LIKE '$ internal%'`
+
+// CRDBTransactionStatistics describes the schema of the information_schema view
+// that surfaces persisted transaction statistics. It reads directly from
+// system.transaction_statistics, filtered to exclude internal-app traffic.
+// stmt_fingerprint_ids is projected to BYTES[] (decoded from the hex-encoded
+// JSONB array stored in metadata->'stmtFingerprintIDs'); elements are
+// byte-identical to crdb_statement_statistics.fingerprint_id, so joining the
+// two views requires unnest(stmt_fingerprint_ids) first.
+const CRDBTransactionStatistics = `
+CREATE VIEW information_schema.crdb_transaction_statistics AS
+    SELECT
+        aggregated_ts,
+        fingerprint_id,
+        app_name,
+        node_id,
+        agg_interval,
+        execution_count,
+        service_latency,
+        cpu_sql_nanos,
+        contention_time,
+        total_estimated_execution_time,
+        p99_latency,
+        exec_sample_count,
+        svc_lat_sum,
+        cpu_sql_nanos_sum,
+        contention_time_sum,
+        svc_lat_sum_sq,
+        cpu_sql_nanos_sum_sq,
+        contention_time_sum_sq,
+        kv_cpu_time_nanos_sum,
+        kv_cpu_time_nanos_sum_sq,
+        admission_wait_time_sum,
+        admission_wait_time_sum_sq,
+        rows_read_sum,
+        rows_written_sum,
+        bytes_read_sum,
+        bytes_read_sum_sq,
+        max_retries,
+        commit_lat_sum,
+        commit_lat_sum_sq,
+        ARRAY(
+            SELECT decode(elem, 'hex')
+            FROM jsonb_array_elements_text(metadata->'stmtFingerprintIDs') AS elem
+        ) AS stmt_fingerprint_ids
+    FROM
+        system.transaction_statistics
+    WHERE
+        app_name NOT LIKE '$ internal%'`
