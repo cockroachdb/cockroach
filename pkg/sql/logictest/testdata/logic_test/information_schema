@@ -39,6 +39,8 @@ information_schema  constraint_table_usage                 table  node  NULL  NU
 information_schema  crdb_cluster_active_session_history    view   node  NULL  NULL
 information_schema  crdb_index_usage_statistics            table  node  NULL  NULL
 information_schema  crdb_node_active_session_history       view   node  NULL  NULL
+information_schema  crdb_statement_statistics              view   node  NULL  NULL
+information_schema  crdb_transaction_statistics            view   node  NULL  NULL
 information_schema  data_type_privileges                   table  node  NULL  NULL
 information_schema  domain_constraints                     table  node  NULL  NULL
 information_schema  domain_udt_usage                       table  node  NULL  NULL
@@ -256,6 +258,8 @@ information_schema  constraint_table_usage                 table  node  NULL  NU
 information_schema  crdb_cluster_active_session_history    view   node  NULL  NULL
 information_schema  crdb_index_usage_statistics            table  node  NULL  NULL
 information_schema  crdb_node_active_session_history       view   node  NULL  NULL
+information_schema  crdb_statement_statistics              view   node  NULL  NULL
+information_schema  crdb_transaction_statistics            view   node  NULL  NULL
 information_schema  data_type_privileges                   table  node  NULL  NULL
 information_schema  domain_constraints                     table  node  NULL  NULL
 information_schema  domain_udt_usage                       table  node  NULL  NULL
@@ -424,6 +428,8 @@ information_schema  constraint_table_usage
 information_schema  crdb_cluster_active_session_history
 information_schema  crdb_index_usage_statistics
 information_schema  crdb_node_active_session_history
+information_schema  crdb_statement_statistics
+information_schema  crdb_transaction_statistics
 information_schema  data_type_privileges
 information_schema  domain_constraints
 information_schema  domain_udt_usage
@@ -698,6 +704,8 @@ constraint_table_usage
 crdb_cluster_active_session_history
 crdb_index_usage_statistics
 crdb_node_active_session_history
+crdb_statement_statistics
+crdb_transaction_statistics
 data_type_privileges
 domain_constraints
 domain_udt_usage
@@ -1018,6 +1026,8 @@ system         information_schema  constraint_table_usage                 SYSTEM
 system         information_schema  crdb_cluster_active_session_history    SYSTEM VIEW  NO
 system         information_schema  crdb_index_usage_statistics            SYSTEM VIEW  NO
 system         information_schema  crdb_node_active_session_history       SYSTEM VIEW  NO
+system         information_schema  crdb_statement_statistics              SYSTEM VIEW  NO
+system         information_schema  crdb_transaction_statistics            SYSTEM VIEW  NO
 system         information_schema  data_type_privileges                   SYSTEM VIEW  NO
 system         information_schema  domain_constraints                     SYSTEM VIEW  NO
 system         information_schema  domain_udt_usage                       SYSTEM VIEW  NO
@@ -2473,6 +2483,8 @@ NULL     public   system         information_schema  constraint_table_usage     
 NULL     public   system         information_schema  crdb_cluster_active_session_history    SELECT          NO            YES
 NULL     public   system         information_schema  crdb_index_usage_statistics            SELECT          NO            YES
 NULL     public   system         information_schema  crdb_node_active_session_history       SELECT          NO            YES
+NULL     public   system         information_schema  crdb_statement_statistics              SELECT          NO            YES
+NULL     public   system         information_schema  crdb_transaction_statistics            SELECT          NO            YES
 NULL     public   system         information_schema  data_type_privileges                   SELECT          NO            YES
 NULL     public   system         information_schema  domain_constraints                     SELECT          NO            YES
 NULL     public   system         information_schema  domain_udt_usage                       SELECT          NO            YES
@@ -2718,6 +2730,8 @@ NULL     public   system         information_schema  constraint_table_usage     
 NULL     public   system         information_schema  crdb_cluster_active_session_history    SELECT          NO            YES
 NULL     public   system         information_schema  crdb_index_usage_statistics            SELECT          NO            YES
 NULL     public   system         information_schema  crdb_node_active_session_history       SELECT          NO            YES
+NULL     public   system         information_schema  crdb_statement_statistics              SELECT          NO            YES
+NULL     public   system         information_schema  crdb_transaction_statistics            SELECT          NO            YES
 NULL     public   system         information_schema  data_type_privileges                   SELECT          NO            YES
 NULL     public   system         information_schema  domain_constraints                     SELECT          NO            YES
 NULL     public   system         information_schema  domain_udt_usage                       SELECT          NO            YES
@@ -4722,5 +4736,47 @@ SELECT * FROM information_schema.attributes WHERE udt_name = 'u'
 udt_catalog  udt_schema  udt_name  attribute_name  ordinal_position  attribute_default  is_nullable  data_type  character_maximum_length  character_octet_length  character_set_catalog  character_set_schema  character_set_name  collation_catalog  collation_schema  collation_name  numeric_precision  numeric_precision_radix  numeric_scale  datetime_precision  interval_type  interval_precision  attribute_udt_catalog  attribute_udt_schema  attribute_udt_name  scope_catalog  scope_schema  scope_name  maximum_cardinality  dtd_identifier  is_derived_reference_attribute
 test         public      u         ufoo            1                 NULL               YES          integer    NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            32                 2                        0              NULL                NULL           NULL                test                   pg_catalog            int4                NULL           NULL          NULL        NULL                 1               NO
 test         public      u         ubar            2                 NULL               YES          integer    NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            32                 2                        0              NULL                NULL           NULL                test                   pg_catalog            int4                NULL           NULL          NULL        NULL                 2               NO
+
+subtest end
+
+subtest crdb_statement_statistics_view
+
+# Validate the view body projects the documented columns, in order, with the
+# documented types. Selecting through the view (rather than reading
+# information_schema.columns) exercises the actual view definition, so it
+# catches drift between the view body and the registered resultColumns. The
+# WHERE clause matches no rows, so this asserts the schema contract
+# deterministically. Skipped before v26.2 finalizes, where the underlying
+# computed columns / system.statements do not exist yet and the view body fails
+# to plan. Mirrors the crdb_internal.statement_statistics_persisted convention.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTTTTITIRRRRRIRRRRRRRRRRRRRRITTT colnames
+SELECT * FROM information_schema.crdb_statement_statistics WHERE aggregated_ts < '1970-01-01'
+----
+aggregated_ts  fingerprint_id  transaction_fingerprint_id  plan_hash  app_name  node_id  agg_interval  execution_count  service_latency  cpu_sql_nanos  contention_time  total_estimated_execution_time  p99_latency  exec_sample_count  svc_lat_sum  cpu_sql_nanos_sum  contention_time_sum  svc_lat_sum_sq  cpu_sql_nanos_sum_sq  contention_time_sum_sq  kv_cpu_time_nanos_sum  kv_cpu_time_nanos_sum_sq  admission_wait_time_sum  admission_wait_time_sum_sq  rows_read_sum  rows_written_sum  bytes_read_sum  bytes_read_sum_sq  max_retries  query  query_summary  database
+
+subtest end
+
+subtest crdb_transaction_statistics_view
+
+# See crdb_statement_statistics_view above for the rationale behind selecting
+# through the view with a no-match WHERE clause.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTTITIRRRRRIRRRRRRRRRRRRRRIRRT colnames
+SELECT * FROM information_schema.crdb_transaction_statistics WHERE aggregated_ts < '1970-01-01'
+----
+aggregated_ts  fingerprint_id  app_name  node_id  agg_interval  execution_count  service_latency  cpu_sql_nanos  contention_time  total_estimated_execution_time  p99_latency  exec_sample_count  svc_lat_sum  cpu_sql_nanos_sum  contention_time_sum  svc_lat_sum_sq  cpu_sql_nanos_sum_sq  contention_time_sum_sq  kv_cpu_time_nanos_sum  kv_cpu_time_nanos_sum_sq  admission_wait_time_sum  admission_wait_time_sum_sq  rows_read_sum  rows_written_sum  bytes_read_sum  bytes_read_sum_sq  max_retries  commit_lat_sum  commit_lat_sum_sq  stmt_fingerprint_ids
+
+# stmt_fingerprint_ids must be BYTES[]. The colnames type char above only
+# asserts it is non-numeric; this pins it as an array. Reads
+# information_schema.columns (the registered descriptor), so it is safe to run
+# in mixed version.
+query T
+SELECT data_type FROM information_schema.columns
+WHERE table_schema = 'information_schema'
+  AND table_name = 'crdb_transaction_statistics'
+  AND column_name = 'stmt_fingerprint_ids'
+----
+ARRAY
 
 subtest end
