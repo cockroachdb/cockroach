@@ -35,7 +35,7 @@ var Enabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"obs.ash.enabled",
 	"enable active session history sampling",
-	false,
+	true,
 	settings.WithPublic,
 )
 
