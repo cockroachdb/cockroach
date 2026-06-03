@@ -70,7 +70,7 @@ if ! git merge-base --is-ancestor $OLD_SHA $NEW_SHA; then
   exit 1
 fi
 
-COMMITS=$(git log --no-merges --pretty='format: * [`%h`](https://github.com/cockroachdb/pebble/commit/%h) %s' "$OLD_SHA..$NEW_SHA")
+COMMITS=$(git log --no-merges --pretty='format: * [`%h`](https://github.com/cockroachdb/pebble-private/commit/%h) %s' "$OLD_SHA..$NEW_SHA")
 popd
 
 echo
@@ -90,8 +90,10 @@ fi
 
 # Pull in the Pebble module at the desired SHA.
 ./dev generate go
-go get "github.com/cockroachdb/pebble@${NEW_SHA}"
+
+go mod edit -replace "github.com/cockroachdb/pebble=github.com/cockroachdb/pebble-private@${NEW_SHA}"
 go mod tidy
+
 git add go.mod go.sum
 # Create the branch and commit on the CockroachDB repository.
 git commit -m "go.mod: bump Pebble to ${NEW_SHA:0:12}
