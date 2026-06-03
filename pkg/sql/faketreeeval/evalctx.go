@@ -456,6 +456,25 @@ func (ep *DummyEvalPlanner) GetTypeFromValidSQLSyntax(
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
+// PGFunctionIsVisible is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) PGFunctionIsVisible(
+	ctx context.Context, oid oid.Oid,
+) (*tree.DBool, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// PGTableIsVisible is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) PGTableIsVisible(
+	ctx context.Context, oid oid.Oid,
+) (*tree.DBool, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// PGTypeIsVisible is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) PGTypeIsVisible(ctx context.Context, oid oid.Oid) (*tree.DBool, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 // EvalSubquery is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error) {
 	return nil, errors.WithStack(errEvalPlanner)

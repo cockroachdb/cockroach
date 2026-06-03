@@ -313,6 +313,16 @@ type planner struct {
 	// trackDependency is used to track circular dependencies when dropping views.
 	trackDependency map[catid.DescID]bool
 
+	// pgClassOIDCache memoizes the resolution of a pg_class OID to its relation
+	// name and schema name for the duration of the current statement. It is used
+	// by the pg_*_is_visible builtins (see pg_is_visible.go) to resolve hashed
+	// OIDs (index entries, composite types) without issuing a separate internal
+	// query per call. It is built lazily on first use and reset per statement in
+	// resetPlanner; nil means "not yet built". It needs no synchronization because
+	// builtins access the planner single-threaded during evaluation (like the many
+	// evalCtx.Planner.QueryRowEx callers in pg_builtins.go).
+	pgClassOIDCache map[oid.Oid]pgClassNameAndSchema
+
 	reducedAuditConfig *auditlogging.ReducedAuditConfig
 
 	// This field is embedded into the planner to avoid an allocation in
@@ -1082,6 +1092,7 @@ func (p *planner) resetPlanner(
 	p.schemaResolver.sessionDataStack = p.EvalContext().SessionDataStack
 	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors(), p)
 	p.skipDescriptorCache = false
+	p.pgClassOIDCache = nil
 	p.typeResolutionDbID = descpb.InvalidID
 	p.pausablePortal = nil
 	p.routineMetadataForwarder = nil

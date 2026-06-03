@@ -885,7 +885,9 @@ RESET search_path
 # in reg_qual_sc whose name is also defined in public must be qualified.
 statement ok
 CREATE TABLE public.shadow (id INT);
-CREATE TABLE reg_qual_sc.shadow (id INT)
+CREATE TABLE reg_qual_sc.shadow (id INT);
+CREATE TYPE public.shadow_ty AS ENUM ('a');
+CREATE TYPE reg_qual_sc.shadow_ty AS ENUM ('b')
 
 statement ok
 SET search_path = public, reg_qual_sc
@@ -914,6 +916,18 @@ SELECT pg_table_is_visible(
 ----
 true  false
 
+# Types shadow the same way: with public earlier than reg_qual_sc, only the
+# public type with a shared name is visible.
+query BB
+SELECT pg_type_is_visible(
+         (SELECT t.oid FROM pg_type t JOIN pg_namespace n ON t.typnamespace = n.oid
+          WHERE t.typname = 'shadow_ty' AND n.nspname = 'public')),
+       pg_type_is_visible(
+         (SELECT t.oid FROM pg_type t JOIN pg_namespace n ON t.typnamespace = n.oid
+          WHERE t.typname = 'shadow_ty' AND n.nspname = 'reg_qual_sc'))
+----
+true  false
+
 statement ok
 RESET search_path
 
@@ -932,10 +946,12 @@ statement ok
 DROP TABLE "Mixed Case"."Weird Name";
 DROP SCHEMA "Mixed Case";
 DROP TABLE public.shadow;
+DROP TYPE public.shadow_ty;
 DROP TYPE reg_qual_sc.color;
 DROP FUNCTION reg_qual_sc.f;
 DROP TABLE reg_qual_sc.t;
 DROP TABLE reg_qual_sc.shadow;
+DROP TYPE reg_qual_sc.shadow_ty;
 DROP SCHEMA reg_qual_sc
 
 subtest end
