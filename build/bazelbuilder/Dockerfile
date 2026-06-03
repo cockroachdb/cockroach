@@ -67,15 +67,15 @@ RUN if [[ ${TARGETPLATFORM} == "linux/s390x" ]] ; then \
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
     apt-get clean && \
-    curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
-    unzip "git-2.29.2.zip" && \
-    cd git-2.29.2 && \
+    curl -fsSL https://github.com/git/git/archive/v2.54.0.zip -o "git-2.54.0.zip" && \
+    unzip "git-2.54.0.zip" && \
+    cd git-2.54.0 && \
     make configure && \
     ./configure && \
     make && \
     make install && \
     cd .. && \
-    rm -rf git-2.29.2.zip git-2.29.2
+    rm -rf git-2.54.0.zip git-2.54.0
 
 # NB: Don't install the azure CLI on s390x which doesn't support it.
 RUN if [[ ${TARGETPLATFORM} != "linux/s390x" ]]; then \
