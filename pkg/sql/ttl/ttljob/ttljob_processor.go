@@ -117,6 +117,11 @@ func (t *ttlProcessor) Start(context.Context) {}
 // Run implements the execinfra.Processor interface.
 func (t *ttlProcessor) Run(ctx context.Context, output execinfra.RowReceiver) {
 	ctx = t.StartInternal(ctx, "ttl")
+	// This Run override drives the work loop inline on this goroutine rather
+	// than through ProcessorBaseNoHelper.Run, so register the ASH work state
+	// here (set and cleared on this same goroutine).
+	cleanup := t.SetWorkStateForGoroutine("ttl")
+	defer cleanup()
 	defer output.ProducerDone()
 	defer execinfra.SendTraceData(ctx, t.FlowCtx, output)
 	err := t.work(ctx, output)

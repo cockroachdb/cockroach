@@ -27,5 +27,5 @@ ReplicationFlowControl  WorkAdmission  pkg/kv/kvserver/kvflowcontrol/rac2
 TenantRateLimit         WorkOther      pkg/kv/kvserver
 TxnPushWait             WorkLock       pkg/kv/kvserver/concurrency
 TxnQueryWait            WorkLock       pkg/kv/kvserver/concurrency
-name                    WorkCPU        pkg/sql/execinfra
+event                   WorkCPU        pkg/sql/execinfra
 string(q.queueKind)     WorkAdmission  pkg/util/admission
