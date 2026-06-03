@@ -142,11 +142,10 @@ func (t TxnMeta) Short() redact.SafeString {
 	return redact.SafeString(t.ID.Short().String())
 }
 
-// Total returns the range size as the sum of the key and value
-// bytes. This includes all non-live keys and all versioned values,
-// both for point and range keys.
+// Total returns the total size of the range, including point key-value data,
+// range key data, and replicated lock data.
 func (ms MVCCStats) Total() int64 {
-	return ms.KeyBytes + ms.ValBytes + ms.RangeKeyBytes + ms.RangeValBytes
+	return ms.KeyBytes + ms.ValBytes + ms.RangeKeyBytes + ms.RangeValBytes + ms.LockBytes
 }
 
 // TotalWithoutLockBytes is like Total but excludes LockBytes. It returns the
