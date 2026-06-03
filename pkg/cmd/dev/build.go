@@ -216,6 +216,9 @@ func (d *dev) crossBuild(
 	if err != nil {
 		return err
 	}
+	if err := d.checkBazelStorageAccess(ctx, token); err != nil {
+		return err
+	}
 	dockerArgs = append(dockerArgs, "-e", "BAZEL_STORAGE_ACCESS_TOKEN="+token)
 
 	dockerArgs, err = d.getDockerRunArgs(ctx, volume, false, dockerArgs)
@@ -273,6 +276,15 @@ func (d *dev) crossBuild(
 	return err
 }
 
+// godepsBucket is the private GCS bucket that holds the vendored Go module
+// archives Bazel fetches during a cross build.
+const godepsBucket = "cockroach-godeps-private"
+
+// gcloudADCLoginHint is the remediation appended to access-token errors. The
+// token is an application-default credential, so the fix is almost always to
+// (re)authenticate ADC with an account that has access to godepsBucket.
+const gcloudADCLoginHint = "run `gcloud auth application-default login` with your @cockroachlabs.com account"
+
 // getBazelStorageAccessToken returns a GCP access token suitable for use
 // as $BAZEL_STORAGE_ACCESS_TOKEN. If the variable is already set in the
 // environment (as it is in CI, where build/github/set-bazel-storage-access-token.sh
@@ -285,13 +297,49 @@ func (d *dev) getBazelStorageAccessToken(ctx context.Context) (string, error) {
 	}
 	out, err := d.exec.CommandContextSilent(ctx, "roachdev", "gcp", "token")
 	if err != nil {
-		return "", fmt.Errorf("could not mint BAZEL_STORAGE_ACCESS_TOKEN via `roachdev gcp token` (%w)", err)
+		return "", fmt.Errorf(
+			"could not mint BAZEL_STORAGE_ACCESS_TOKEN via `roachdev gcp token`: %w\n\t%s",
+			err, gcloudADCLoginHint)
 	}
 	token := strings.TrimSpace(string(out))
 	if token == "" {
-		return "", errors.New("`roachdev gcp token` returned an empty token")
+		return "", fmt.Errorf("`roachdev gcp token` returned an empty token\n\t%s", gcloudADCLoginHint)
 	}
 	return token, nil
+}
+
+// checkBazelStorageAccess verifies the access token can actually read the
+// private godepsBucket before the (long) cross build starts. A non-empty but
+// unauthorized token — application-default credentials for a personal
+// account, a stale $BAZEL_STORAGE_ACCESS_TOKEN, or a user not granted bucket
+// access — otherwise surfaces only as an opaque HTTP 403 deep in the Bazel
+// module fetch.
+//
+// The probe is a single authenticated request for a sentinel object. GCS
+// answers 403 when the caller cannot read the bucket but 404 when access is
+// granted and the object is merely absent, so only 401/403 are treated as a
+// credentials problem. Any other outcome — including being unable to run the
+// probe at all (curl missing, host offline) — does not block the build; a
+// real fetch failure will still surface during the build itself.
+func (d *dev) checkBazelStorageAccess(ctx context.Context, token string) error {
+	const probeURL = "https://storage.googleapis.com/" + godepsBucket + "/.dev-access-probe"
+	out, err := d.exec.CommandContextSilent(ctx, "curl",
+		"--silent", "--show-error", "--output", os.DevNull, "--write-out", "%{http_code}",
+		"--header", "Authorization: Bearer "+token, probeURL)
+	if err != nil {
+		// The probe itself could not run (curl missing, host offline); don't
+		// block the build, as documented above.
+		//nolint:returnerrcheck
+		return nil
+	}
+	switch code := strings.TrimSpace(string(out)); code {
+	case "401", "403":
+		return fmt.Errorf(
+			"the GCP credentials used for cross builds cannot read gs://%s (HTTP %s)\n\t%s",
+			godepsBucket, code, gcloudADCLoginHint)
+	default:
+		return nil
+	}
 }
 
 func (d *dev) stageArtifacts(
