@@ -530,6 +530,9 @@ jobs:
             jira_api_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-jira-api-token
             slack_bot_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-slack-bot-token
 
+      - name: Set Bazel storage access token
+        run: ./build/github/set-bazel-storage-access-token.sh
+
       - name: Notify Jira and Slack
         env:
           JIRA_API_TOKEN: ${{ steps.secrets.outputs.jira_api_token }}

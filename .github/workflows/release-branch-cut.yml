@@ -95,6 +95,9 @@ jobs:
             github_pat:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-github-pat
             slack_bot_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-slack-bot-token
 
+      - name: Set Bazel storage access token
+        run: ./build/github/set-bazel-storage-access-token.sh
+
       # The wrapper builds the release binary inside the bazel docker
       # container (via run_bazel) and invokes it there, so the host
       # runner doesn't need bazel/Go installed. The DRY_RUN and

@@ -210,6 +210,9 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
 
+      - name: Set Bazel storage access token
+        run: ./build/github/set-bazel-storage-access-token.sh
+
       - name: Build and publish release artifacts
         env:
           PLATFORM: ${{ matrix.platform }}
@@ -267,6 +270,9 @@ jobs:
 
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Set Bazel storage access token
+        run: ./build/github/set-bazel-storage-access-token.sh
 
       - name: Build and publish release artifacts
         env:
@@ -326,6 +332,9 @@ jobs:
 
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Set Bazel storage access token
+        run: ./build/github/set-bazel-storage-access-token.sh
 
       - name: Build and publish release artifacts (no telemetry)
         env:
