@@ -124,6 +124,48 @@ See: `pkg/kv/kvserver/allocator/mmaprototype/load.go` for `LoadDimension`,
 - Capacity-weighted mean: computed as `sum(load)/sum(capacity)`, not the
   average of individual utilizations.
 
+### CPU capacity model and immovable ("auxiliary") load
+
+A node's CPU is rarely all range work. MMA decomposes a node's measured CPU into
+a **movable** part (work that scales with the KV ranges it can relocate) and an
+**immovable** part (everything else — SQL gateway execution, plus untracked
+overhead such as backups, GC, CDC, OS), and treats them differently. The exact
+model is `computePhysicalCPU` in
+`pkg/kv/kvserver/mmaintegration/physical_model.go`; the essentials:
+
+- Inputs (per node, from the store descriptor's `NodeCapacity`): `nodeUsage`
+  (measured node CPU), `nodeCap` (physical cores, ns/s), `storesCPU` (the
+  directly-tracked replica CPU summed over the node's stores), and the SQL split
+  `sqlDistCPU` / `sqlGatewayCPU`. These are **not** exported as standalone
+  metrics — they appear in the `mma_state.json` snapshot (`NodeLoad.node_cpu_load`
+  = `nodeUsage`, `node_cpu_capacity` = `nodeCap`).
+- An overhead multiplier `k = clamp(nodeUsage / (storesCPU + sqlDistCPU +
+  sqlGatewayCPU), 1, maxCPUAmplification=3)` scales tracked CPU up to actual
+  node CPU (covering untracked work). Distributed SQL scales with ranges, so it
+  is folded into a per-range **amplification factor**; gateway SQL plus any
+  excess become **immovable**: `immovable = max(0, nodeUsage −
+  (storesCPU + sqlDistCPU)·k)`.
+- **Immovable CPU is added to each store's `load`, not subtracted from its
+  `capacity`.** Per store: `load = storeCPU·ampFactor + immovable/numStores`,
+  `capacity = nodeCap/numStores` (a stable, real-world number). These surface as
+  the metrics `mma.store.cpu.load`, `mma.store.cpu.capacity`, and their ratio
+  `mma.store.cpu.utilization`. Note `mma.store.cpu.load` therefore reflects the
+  store's share of *total* node CPU (including immovable load), and is generally
+  **larger** than the movable replica CPU reported by
+  `rebalancing.cpunanospersecond`.
+
+**Why this matters for diagnosis.** A node running hot purely from immovable work
+still shows high `mma.store.cpu.load`/`utilization` and can become a shed
+candidate — but MMA can only relocate the *movable* part (leases/replicas), so
+shedding cannot reduce the immovable load. This is the mechanism behind a
+lease-shed runaway (MMA sheds leases, even to the point of draining a store,
+while utilization stays high). The deliberate alternative — subtracting immovable
+CPU from capacity — was rejected because it hides the pressure in the denominator
+and can make MMA send work *toward* an already-hot node; see the worked example
+in `physical_model.go`. A practical estimate of the immovable load is the gap
+between total node CPU (`sys.cpu.*`, or `mma.store.cpu.load`) and the movable
+replica CPU (`rebalancing.cpunanospersecond`).
+
 ### Secondary Dimensions (Not Yet Active)
 
 `LeaseCount` and `ReplicaCount` are defined as `SecondaryLoadDimension` but are
