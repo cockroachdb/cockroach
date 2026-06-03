@@ -268,7 +268,6 @@ func (e *Env) Ref() {
 	e.refs.Add(1)
 }
 
-// Assert that Env implements vfs.FS.
 var _ vfs.FS = (*Env)(nil)
 
 // IsReadOnly returns true if the environment is opened in read-only mode.
@@ -508,6 +507,16 @@ func (e *Env) PathDir(path string) string {
 // path is any file or directory within that filesystem.
 func (e *Env) GetDiskUsage(path string) (vfs.DiskUsage, error) {
 	return e.defaultFS.GetDiskUsage(path)
+}
+
+// Traits is part of the vfs.FS interface.
+func (e *Env) Traits() vfs.Traits {
+	return vfs.Traits{}
+}
+
+// Seal is part of the vfs.FS interface.
+func (e *Env) Seal(path string) error {
+	return vfs.ErrUnsupported
 }
 
 // CreateWithSync creates a file wrapped with logic to periodically sync

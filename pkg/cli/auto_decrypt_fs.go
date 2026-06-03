@@ -252,6 +252,16 @@ func (afs *autoDecryptFS) Unwrap() vfs.FS {
 	return nil
 }
 
+// Traits is part of the vfs.FS interface.
+func (afs *autoDecryptFS) Traits() vfs.Traits {
+	return vfs.Traits{}
+}
+
+// Seal is part of the vfs.FS interface.
+func (afs *autoDecryptFS) Seal(path string) error {
+	return vfs.ErrUnsupported
+}
+
 // maybeSwitchFS finds the first ancestor of path that is registered as an
 // encrypted FS; if there is such a path, returns the decrypted FS for that
 // path. Otherwise, returns the default FS.
