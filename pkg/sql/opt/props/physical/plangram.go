@@ -216,6 +216,14 @@ func (p PlanGram) WithNoneFallback() PlanGram {
 // nested parenthesized expressions are indented to their paren depth. If
 // newlines is false, the entire grammar is written on a single line.
 func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
+	p.formatPretty(b, newlines, p.fixNames())
+}
+
+// formatPretty writes the full PlanGram grammar to the buffer, substituting
+// production names from the renames map.
+func (p PlanGram) formatPretty(
+	b *bytes.Buffer, newlines bool, renames map[*planGramProduction]string,
+) {
 	if newlines {
 		defer b.WriteRune('\n')
 	}
@@ -226,6 +234,13 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 	if p.None() {
 		b.WriteString("root: none;")
 		return
+	}
+
+	prodName := func(pp *planGramProduction) string {
+		if n, ok := renames[pp]; ok {
+			return n
+		}
+		return pp.name
 	}
 
 	// hasNestedExpr reports whether term is an expression with at least one
@@ -266,7 +281,7 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 		switch t := term.(type) {
 		case *planGramProduction:
 			// Assume nonterminal names don't need to be quoted.
-			b.WriteString(t.name)
+			b.WriteString(prodName(t))
 		case *planGramExpr:
 			b.WriteRune('(')
 			if t.op == opt.UnknownOp {
@@ -332,7 +347,7 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 		} else {
 			b.WriteRune(' ')
 		}
-		formatProduction(pp.name, pp.rules)
+		formatProduction(prodName(pp), pp.rules)
 	})
 }
 
