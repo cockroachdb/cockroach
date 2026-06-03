@@ -5849,9 +5849,31 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 
 	eventClause := strings.Join(events, " OR ")
 
+	// Sometimes attach a WHEN clause referencing a table column to exercise
+	// trigger-column dependency tracking (TriggerWhen and the column IDs in
+	// TriggerDeps). NEW is legal only without DELETE, OLD only without INSERT,
+	// so skip the clause when both events are present. randColumn may pick a
+	// non-existent column, yielding a tolerated UndefinedColumn (see below).
+	whenClause := ""
+	if og.randIntn(2) == 0 && triggerTableExists {
+		canUseNew := !slices.Contains(events, "DELETE")
+		canUseOld := !slices.Contains(events, "INSERT")
+		if canUseNew || canUseOld {
+			record := "NEW"
+			if !canUseNew {
+				record = "OLD"
+			}
+			col, err := og.randColumn(ctx, tx, *tableName, og.pctExisting(true))
+			if err != nil {
+				return nil, err
+			}
+			whenClause = fmt.Sprintf("WHEN (%s.%s IS NOT NULL) ", record, col.String())
+		}
+	}
+
 	opStmt.sql = fmt.Sprintf(
-		"CREATE %sTRIGGER %s %s %s ON %s FOR EACH ROW EXECUTE FUNCTION %s()",
-		orReplace, triggerName, triggerActionTime, eventClause, tableName, resolvedTriggerFunctionName,
+		"CREATE %sTRIGGER %s %s %s ON %s FOR EACH ROW %sEXECUTE FUNCTION %s()",
+		orReplace, triggerName, triggerActionTime, eventClause, tableName, whenClause, resolvedTriggerFunctionName,
 	)
 	og.LogMessage(fmt.Sprintf("createTrigger: %s", opStmt.sql))
 
@@ -5864,7 +5886,8 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		// columns, enum types, enum members) are evaluated lazily at CREATE
 		// TRIGGER time, not when the function is created. Any referenced
 		// object may have been dropped or transitioned to a non-public state
-		// in the interim.
+		// in the interim. The WHEN clause column reference is also resolved
+		// here, so UndefinedColumn may originate from it as well.
 		{code: pgcode.UndefinedTable, condition: true},
 		{code: pgcode.UndefinedFunction, condition: true},
 		{code: pgcode.UndefinedColumn, condition: true},
