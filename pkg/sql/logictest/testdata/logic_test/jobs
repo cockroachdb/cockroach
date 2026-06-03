@@ -753,3 +753,97 @@ statement ok
 DROP TABLE crdb_jobs_ph_test
 
 subtest end
+
+subtest information_schema_crdb_jobs_owner_subset
+
+user root
+
+# Set up a root-owned job and a testuser-owned job, then verify that testuser
+# (a non-admin with no VIEWJOB) sees their own job but not the root-owned one
+# across all four surfaces: crdb_jobs, crdb_jobs_with_progress,
+# crdb_job_messages, and crdb_job_progress_history.
+statement ok
+CREATE TABLE crdb_jobs_owner_root_test (x INT)
+
+statement ok
+CREATE INDEX a_descriptively_named_idx_owned_by_root
+  ON crdb_jobs_owner_root_test (x)
+
+let $root_job_id
+SELECT job_id FROM information_schema.crdb_jobs
+WHERE job_type = 'SCHEMA CHANGE'
+  AND description LIKE 'CREATE INDEX a_descriptively_named_idx_owned_by_root%'
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+user testuser
+
+statement ok
+CREATE TABLE crdb_jobs_owner_testuser_test (x INT)
+
+statement ok
+CREATE INDEX a_descriptively_named_idx_owned_by_testuser
+  ON crdb_jobs_owner_testuser_test (x)
+
+let $own_job_id
+SELECT job_id FROM information_schema.crdb_jobs
+WHERE owner = 'testuser'
+  AND description LIKE 'CREATE INDEX a_descriptively_named_idx_owned_by_testuser%'
+
+# crdb_jobs: testuser sees their own job but not the root-owned one.
+query II
+SELECT
+  (SELECT count(*) FROM information_schema.crdb_jobs WHERE job_id = $own_job_id),
+  (SELECT count(*) FROM information_schema.crdb_jobs WHERE job_id = $root_job_id)
+----
+1  0
+
+# crdb_jobs_with_progress: same.
+query II
+SELECT
+  (SELECT count(*) FROM information_schema.crdb_jobs_with_progress WHERE job_id = $own_job_id),
+  (SELECT count(*) FROM information_schema.crdb_jobs_with_progress WHERE job_id = $root_job_id)
+----
+1  0
+
+# crdb_job_messages: testuser sees messages for their own job; the SRF returns
+# zero rows for jobs they cannot view.
+query BB
+SELECT
+  (SELECT count(*) > 0 FROM information_schema.crdb_job_messages($own_job_id)),
+  (SELECT count(*) > 0 FROM information_schema.crdb_job_messages($root_job_id))
+----
+true  false
+
+# crdb_job_progress_history: same.
+query BB
+SELECT
+  (SELECT count(*) > 0 FROM information_schema.crdb_job_progress_history($own_job_id)),
+  (SELECT count(*) > 0 FROM information_schema.crdb_job_progress_history($root_job_id))
+----
+true  false
+
+# An admin sweeping all four surfaces still sees every job — owner-based
+# filtering only narrows the view for non-admins.
+user root
+
+query IIBB
+SELECT
+  (SELECT count(*) FROM information_schema.crdb_jobs WHERE job_id IN ($own_job_id, $root_job_id)),
+  (SELECT count(*) FROM information_schema.crdb_jobs_with_progress WHERE job_id IN ($own_job_id, $root_job_id)),
+  (SELECT count(*) > 0 FROM information_schema.crdb_job_messages($own_job_id)),
+  (SELECT count(*) > 0 FROM information_schema.crdb_job_progress_history($own_job_id))
+----
+2  2  true  true
+
+statement ok
+DROP TABLE crdb_jobs_owner_testuser_test
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM testuser
+
+statement ok
+DROP TABLE crdb_jobs_owner_root_test
+
+subtest end
