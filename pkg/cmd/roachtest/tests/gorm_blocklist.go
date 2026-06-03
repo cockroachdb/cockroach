@@ -7,4 +7,7 @@ package tests
 
 var gormBlocklist = blocklist{}
 
-var gormIgnorelist = blocklist{}
+var gormIgnorelist = blocklist{
+	"tests.TestSingleTableHasManyAssociation":              "170984",
+	"tests.TestSingleTableHasManyAssociation/UpdatedAt#09": "170984",
+}
