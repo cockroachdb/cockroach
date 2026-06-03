@@ -289,7 +289,7 @@ func TestPipelineMetric(t *testing.T) {
 	expectPrepareStmt(ctx, t, "", "SELECT $1::INT8 + $2::INT8", &rd, serverSideConn)
 	expectBindStmt(ctx, t, "", &rd, serverSideConn)
 	expectDescribeStmt(ctx, t, "", pgwirebase.PreparePortal, &rd, serverSideConn)
-	expectExecPortal(ctx, t, "", &rd, serverSideConn)
+	expectExecPortalPipelined(ctx, t, "", &rd, serverSideConn)
 	require.EqualValues(t, 5, serverSideConn.stmtBuf.PipelineCount.Value())
 
 	// Send another query in the pipeline.
@@ -310,19 +310,21 @@ func TestPipelineMetric(t *testing.T) {
 		return nil
 	})
 
-	// Process all of the commands that are in the pipeline.
+	// Process all of the commands that are in the pipeline. In the PostgreSQL
+	// pipeline protocol, ReadyForQuery is sent once per Sync (not per Execute),
+	// so we use expectExecPortalPipelined and expectSyncAndSendReadyForQuery.
 	expectPrepareStmt(ctx, t, "", "SELECT ($1::INT8 + $2::INT8) + $3::INT8", &rd, serverSideConn)
 	expectBindStmt(ctx, t, "", &rd, serverSideConn)
 	expectDescribeStmt(ctx, t, "", pgwirebase.PreparePortal, &rd, serverSideConn)
-	expectExecPortal(ctx, t, "", &rd, serverSideConn)
-	expectSync(ctx, t, &rd)
+	expectExecPortalPipelined(ctx, t, "", &rd, serverSideConn)
+	expectSyncAndSendReadyForQuery(ctx, t, &rd, serverSideConn)
 	require.EqualValues(t, 5, serverSideConn.stmtBuf.PipelineCount.Value())
 
 	expectPrepareStmt(ctx, t, "", "SELECT $1::STRING", &rd, serverSideConn)
 	expectBindStmt(ctx, t, "", &rd, serverSideConn)
 	expectDescribeStmt(ctx, t, "", pgwirebase.PreparePortal, &rd, serverSideConn)
-	expectExecPortal(ctx, t, "", &rd, serverSideConn)
-	expectSync(ctx, t, &rd)
+	expectExecPortalPipelined(ctx, t, "", &rd, serverSideConn)
+	expectSyncAndSendReadyForQuery(ctx, t, &rd, serverSideConn)
 	require.EqualValues(t, 0, serverSideConn.stmtBuf.PipelineCount.Value())
 
 	err = pipeline.Close()
@@ -948,6 +950,46 @@ func expectSync(ctx context.Context, t *testing.T, rd *sql.StmtBufReader) {
 	_, ok := cmd.(sql.Sync)
 	if !ok {
 		t.Fatalf("expected command Sync, got: %T (%+v)", cmd, cmd)
+	}
+}
+
+// expectSyncAndSendReadyForQuery reads a Sync command from the stmtBuf and
+// sends ReadyForQuery back to the client. In the PostgreSQL pipeline protocol,
+// ReadyForQuery is sent after Sync, not after each Execute.
+func expectSyncAndSendReadyForQuery(
+	ctx context.Context, t *testing.T, rd *sql.StmtBufReader, c *conn,
+) {
+	t.Helper()
+	expectSync(ctx, t, rd)
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
+	c.msgBuilder.writeByte('I') // transaction status: no txn
+	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// expectExecPortalPipelined reads an ExecPortal command from the stmtBuf and
+// sends only CommandComplete (no ReadyForQuery) back to the client. This
+// matches the PostgreSQL pipeline protocol where ReadyForQuery is sent after
+// Sync, not after each Execute.
+func expectExecPortalPipelined(
+	ctx context.Context, t *testing.T, expName string, rd *sql.StmtBufReader, c *conn,
+) {
+	t.Helper()
+	cmd, err := rd.CurCmd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rd.AdvanceOne()
+	ep, ok := cmd.(sql.ExecPortal)
+	if !ok {
+		t.Fatalf("expected command ExecPortal, got: %T (%+v)", cmd, cmd)
+	}
+	if ep.Name != expName {
+		t.Fatalf("expected name %s, got %s", expName, ep.Name)
+	}
+	if err := finishQuery(cmdComplete, c); err != nil {
+		t.Fatal(err)
 	}
 }
 
