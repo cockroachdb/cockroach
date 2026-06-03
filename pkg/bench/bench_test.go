@@ -1279,6 +1279,52 @@ func BenchmarkPlanning(b *testing.B) {
 	})
 }
 
+// BenchmarkPlanningWithEnums measures planning of a query against a table with
+// user-defined enum (UDT) columns. The optimizer synthesizes a check constraint
+// of the form `col IN (v1, ..., vN)` for each enum column, and type-checking
+// that constraint resolves the enum type once per IN-list element. This
+// benchmark exercises the resolved-type cache on schemaResolver, which collapses
+// those repeated resolutions to one lookup per distinct UDT.
+func BenchmarkPlanningWithEnums(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+
+	s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: "bench"})
+	defer s.Stopper().Stop(context.Background())
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	db.Exec(b, "CREATE DATABASE bench")
+	// Disable the query cache so every iteration re-plans (and re-type-checks)
+	// the statement rather than serving a cached memo.
+	db.Exec(b, "SET CLUSTER SETTING sql.query_cache.enabled = false")
+
+	// A large enum (~50 values, like ISO country codes) plus a small one.
+	country := []string{
+		"af", "al", "dz", "ar", "au", "at", "be", "br", "bg", "ca",
+		"cl", "cn", "co", "hr", "cz", "dk", "eg", "fi", "fr", "de",
+		"gr", "hu", "in", "id", "ie", "il", "it", "jp", "ke", "kr",
+		"mx", "nl", "ne", "no", "pe", "ph", "pl", "pt", "ro", "ru",
+		"sa", "sg", "za", "es", "se", "ch", "tr", "ua", "gb", "us",
+		"zw",
+	}
+	db.Exec(b, fmt.Sprintf(
+		"CREATE TYPE country AS ENUM ('%s')", strings.Join(country, "','")))
+	db.Exec(b, "CREATE TYPE ledger AS ENUM ('a', 'b', 'c', 'd')")
+	db.Exec(b, `CREATE TABLE wallets (
+		id INT PRIMARY KEY,
+		mobile STRING,
+		country country,
+		ledger ledger,
+		INDEX (mobile)
+	)`)
+
+	const q = "SELECT * FROM wallets WHERE mobile = '555' AND country = 'af'"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		db.Exec(b, q)
+	}
+}
+
 func setupIndexJoinBenchmark(b *testing.B, db *sqlutils.SQLRunner) {
 	// The table will have an extra column not contained in the index to force a
 	// join with the PK.
