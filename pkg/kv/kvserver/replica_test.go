@@ -15382,6 +15382,53 @@ func TestEntireSpanExcludedFromBackup(t *testing.T) {
 			}},
 			want: false,
 		},
+		{
+			// Regression test for #171405: an excluded config that does not
+			// extend to the end of the request span leaves a trailing gap. That
+			// gap is governed by the (non-excluded) fallback config, so the span
+			// is not entirely excluded and must not be elided. This is the shape
+			// of a trailing exclude_data_from_backup table in an unsplit range
+			// that physically contains later, unconfigured tables.
+			name:     "trailing gap after excluded config",
+			sp:       mkSpan("b", "e"),
+			excluded: true,
+			reader: &backupExclusionStoreReader{entries: []struct {
+				span roachpb.Span
+				conf roachpb.SpanConfig
+			}{
+				{span: mkSpan("b", "c"), conf: excluded},
+			}},
+			want: false,
+		},
+		{
+			// A gap between two excluded configs is likewise fallback keyspace,
+			// so the span is not entirely excluded.
+			name:     "interior gap between excluded configs",
+			sp:       mkSpan("a", "d"),
+			excluded: true,
+			reader: &backupExclusionStoreReader{entries: []struct {
+				span roachpb.Span
+				conf roachpb.SpanConfig
+			}{
+				{span: mkSpan("a", "b"), conf: excluded},
+				{span: mkSpan("c", "d"), conf: excluded},
+			}},
+			want: false,
+		},
+		{
+			// A gap before the first excluded config (the request span starts in
+			// fallback keyspace) is not entirely excluded.
+			name:     "leading gap before excluded config",
+			sp:       mkSpan("a", "d"),
+			excluded: true,
+			reader: &backupExclusionStoreReader{entries: []struct {
+				span roachpb.Span
+				conf roachpb.SpanConfig
+			}{
+				{span: mkSpan("b", "d"), conf: excluded},
+			}},
+			want: false,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := entireSpanExcludedFromBackup(ctx, tc.sp, tc.excluded, tc.reader)

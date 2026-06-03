@@ -1495,13 +1495,21 @@ func excludeReplicaFromBackup(
 	return excluded
 }
 
-// entireSpanExcludedFromBackup returns true if all span configurations
-// covering the given span have ExcludeDataFromBackup set. The
+// entireSpanExcludedFromBackup returns true only if every key in the given
+// span is covered by a span config with ExcludeDataFromBackup set. The
 // excludeDataFromBackup parameter is used as a fast path: if the
 // replica's cached config does not have ExcludeDataFromBackup, we can
 // skip the iteration entirely. When span config coalescing is enabled,
 // a single range may cover multiple span config entries, so we must
 // check all of them rather than relying on the replica's cached config.
+//
+// Verifying coverage matters as much as checking the bit: ForEachOverlapping-
+// SpanConfig only visits configs that exist, and any keyspace within the span
+// that no config covers is governed by the (non-excluded) fallback config. A
+// gap therefore means the span is not entirely excluded. Treating a gap as
+// vacuously excluded would silently drop its data from a backup (#171405): a
+// trailing exclude_data_from_backup table whose config does not extend to the
+// end of an unsplit range leaves a trailing gap covering later tables.
 func entireSpanExcludedFromBackup(
 	ctx context.Context,
 	sp roachpb.Span,
@@ -1514,18 +1522,29 @@ func entireSpanExcludedFromBackup(
 	if confReader == nil {
 		return false, errors.New("span config reader not available")
 	}
-	excluded := true
+	// ForEachOverlappingSpanConfig visits overlapping configs in key order. We
+	// track how far contiguous excluded coverage extends from the start of sp:
+	// covered advances only across adjacent excluded configs, so any config that
+	// is not excluded, or any gap before a config's start key, leaves covered
+	// short of sp.EndKey.
+	covered := sp.Key
 	if err := confReader.ForEachOverlappingSpanConfig(ctx, sp,
-		func(_ roachpb.Span, conf roachpb.SpanConfig) error {
+		func(confSpan roachpb.Span, conf roachpb.SpanConfig) error {
 			if !conf.ExcludeDataFromBackup {
-				excluded = false
+				return nil
+			}
+			if confSpan.Key.Compare(covered) > 0 {
+				return nil // gap before this config; coverage cannot advance
+			}
+			if confSpan.EndKey.Compare(covered) > 0 {
+				covered = confSpan.EndKey
 			}
 			return nil
 		},
 	); err != nil {
 		return false, errors.Wrap(err, "looking up span config for backup exclusion")
 	}
-	return excluded, nil
+	return covered.Compare(sp.EndKey) >= 0, nil
 }
 
 // Version returns the replica version.
