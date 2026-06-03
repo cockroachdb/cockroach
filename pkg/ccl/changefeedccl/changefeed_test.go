@@ -2169,6 +2169,10 @@ func TestChangefeedBackfillObservability(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+				// Our schemachange will rewrite the primary index; GC will remove all
+				// the sticky bits which makes our ranges eligible for merge queue unless
+				// we disable it.
+				sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = false`)
 
 				knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
 				registry := s.Server.JobRegistry().(*jobs.Registry)
