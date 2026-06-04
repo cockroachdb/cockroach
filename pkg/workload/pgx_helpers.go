@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
@@ -224,20 +225,7 @@ func NewMultiConnPool(
 				minConns = numConns
 			}
 			poolCfg.MinConns = int32(minConns)
-			poolCfg.PrepareConn = func(ctx context.Context, conn *pgx.Conn) (bool, error) {
-				m.mu.RLock()
-				defer m.mu.RUnlock()
-				for name, sql := range m.mu.preparedStatements {
-					// Note that calling `Prepare` with a name that has already been
-					// prepared is idempotent and short-circuits before doing any
-					// communication to the server.
-					if _, err := conn.Prepare(ctx, name, sql); err != nil {
-						log.Dev.Warningf(ctx, "error preparing statement. name=%s sql=%s %v", name, sql, err)
-						return false, nil
-					}
-				}
-				return true, nil
-			}
+			poolCfg.PrepareConn = m.prepareConn
 
 			// Attach the supplied tracer to the ConnConfig.
 			poolCfg.ConnConfig.Tracer = cfg.QueryTracer
@@ -261,6 +249,57 @@ func NewMultiConnPool(
 	}
 
 	return m, nil
+}
+
+// prepareConnRetryOpts controls how long prepareConn retries transient
+// statement-preparation failures on a single connection.
+var prepareConnRetryOpts = retry.Options{
+	InitialBackoff: 100 * time.Millisecond,
+	MaxBackoff:     2 * time.Second,
+	Multiplier:     2,
+	MaxDuration:    30 * time.Second,
+}
+
+// prepareConn implements pgxpool.Config.PrepareConn: it prepares every
+// registered statement on a newly acquired connection, reporting the connection
+// ready only once they all succeed.
+//
+// pgxpool's Acquire calls this hook and, if it reports the connection unusable,
+// retries with a different connection only a bounded number of times
+// (maxConns+1) before failing the acquisition outright with "too many failed
+// attempts acquiring connection". Those retries can be exhausted very quickly
+// to address a common transient failure: preparing an AS OF SYSTEM TIME
+// statement against a database or table created within the follower-read
+// window. Such a prepare resolves names at a historical timestamp and fails
+// with "does not exist" until that timestamp advances past the object's
+// creation. To handle this, prepareConn retries on its own (see
+// prepareConnRetryOpts) before giving up.
+func (m *MultiConnPool) prepareConn(ctx context.Context, conn *pgx.Conn) (bool, error) {
+	var lastErr error
+	for r := retry.StartWithCtx(ctx, prepareConnRetryOpts); r.Next(); {
+		lastErr = m.prepareStatements(ctx, conn)
+		if lastErr == nil {
+			return true, nil
+		}
+		log.Dev.Warningf(ctx, "error preparing statements on new connection, retrying: %v", lastErr)
+	}
+	// Retries were exhausted. Surface the underlying error rather than letting
+	// pgxpool report its generic "too many failed attempts" message.
+	return false, errors.Wrap(lastErr, "preparing statements on new connection")
+}
+
+// prepareStatements prepares every registered statement on conn, returning the
+// first preparation error. Preparing a statement that conn has already prepared
+// is idempotent and short-circuits without server communication.
+func (m *MultiConnPool) prepareStatements(ctx context.Context, conn *pgx.Conn) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for name, sql := range m.mu.preparedStatements {
+		if _, err := conn.Prepare(ctx, name, sql); err != nil {
+			return errors.Wrapf(err, "preparing %s", name)
+		}
+	}
+	return nil
 }
 
 // AddPreparedStatement adds the given sql statement to the map of
