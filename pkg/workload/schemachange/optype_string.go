@@ -59,19 +59,21 @@ func _() {
 	_ = x[createTableAs-43]
 	_ = x[createView-44]
 	_ = x[createFunction-45]
-	_ = x[createTrigger-46]
-	_ = x[createTriggerFunction-47]
-	_ = x[commentOn-48]
-	_ = x[dropFunction-49]
-	_ = x[dropIndex-50]
-	_ = x[dropPolicy-51]
-	_ = x[dropSchema-52]
-	_ = x[dropSequence-53]
-	_ = x[dropTable-54]
-	_ = x[dropTrigger-55]
-	_ = x[dropView-56]
-	_ = x[truncateTable-57]
-	_ = x[inspect-58]
+	_ = x[createProcedure-46]
+	_ = x[createTrigger-47]
+	_ = x[createTriggerFunction-48]
+	_ = x[commentOn-49]
+	_ = x[dropFunction-50]
+	_ = x[dropIndex-51]
+	_ = x[dropPolicy-52]
+	_ = x[dropSchema-53]
+	_ = x[dropSequence-54]
+	_ = x[dropTable-55]
+	_ = x[dropTrigger-56]
+	_ = x[dropProcedure-57]
+	_ = x[dropView-58]
+	_ = x[truncateTable-59]
+	_ = x[inspect-60]
 }
 
 func (i opType) String() string {
@@ -168,6 +170,8 @@ func (i opType) String() string {
 		return "createView"
 	case createFunction:
 		return "createFunction"
+	case createProcedure:
+		return "createProcedure"
 	case createTrigger:
 		return "createTrigger"
 	case createTriggerFunction:
@@ -188,6 +192,8 @@ func (i opType) String() string {
 		return "dropTable"
 	case dropTrigger:
 		return "dropTrigger"
+	case dropProcedure:
+		return "dropProcedure"
 	case dropView:
 		return "dropView"
 	case truncateTable:

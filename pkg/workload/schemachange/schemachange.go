@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -445,6 +446,20 @@ func (s *schemaChange) setClusterSettings(ctx context.Context, url string) (err 
 	} {
 		_, err := conn.Exec(ctx, stmt)
 		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	// Only enable late binding (see createProcedure) once V26_3 is active: the
+	// setting and the procedure ops that need it are gated to V26_3, and
+	// referencing it on a predecessor binary during a mixed-version run errors.
+	belowV26_3, err := isClusterVersionLessThan(ctx, conn, clusterversion.V26_3.Version())
+	if err != nil {
+		return err
+	}
+	if !belowV26_3 {
+		const enableLateBinding = `SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = 'true'`
+		if _, err := conn.Exec(ctx, enableLateBinding); err != nil {
 			return errors.WithStack(err)
 		}
 	}

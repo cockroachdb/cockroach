@@ -134,6 +134,7 @@ const (
 	createTableAs         // CREATE TABLE <table> AS <def>
 	createView            // CREATE VIEW <view> AS <def>
 	createFunction        // CREATE FUNCTION <function> ...
+	createProcedure       // CREATE PROCEDURE <procedure>() LANGUAGE PLpgSQL AS $$ BEGIN <ddl/dcl> END $$
 	createTrigger         // CREATE TRIGGER <trigger> {...} ON <table> EXECUTE FUNCTION <function>()
 	createTriggerFunction // CREATE FUNCTION <function>() RETURNS TRIGGER ...
 
@@ -143,14 +144,15 @@ const (
 
 	// DROP ...
 
-	dropFunction // DROP FUNCTION <function>
-	dropIndex    // DROP INDEX <index>@<table>
-	dropPolicy   // DROP POLICY [IF EXISTS] <policy> ON <table>
-	dropSchema   // DROP SCHEMA <schema>
-	dropSequence // DROP SEQUENCE <sequence>
-	dropTable    // DROP TABLE <table>
-	dropTrigger  // DROP TRIGGER <trigger> ON <table>
-	dropView     // DROP VIEW <view>
+	dropFunction  // DROP FUNCTION <function>
+	dropIndex     // DROP INDEX <index>@<table>
+	dropPolicy    // DROP POLICY [IF EXISTS] <policy> ON <table>
+	dropSchema    // DROP SCHEMA <schema>
+	dropSequence  // DROP SEQUENCE <sequence>
+	dropTable     // DROP TABLE <table>
+	dropTrigger   // DROP TRIGGER <trigger> ON <table>
+	dropProcedure // DROP PROCEDURE <procedure>
+	dropView      // DROP VIEW <view>
 	truncateTable
 
 	// INSPECT ...
@@ -257,6 +259,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	alterTypeDropValue:                (*operationGenerator).alterTypeDropValue,
 	commentOn:                         (*operationGenerator).commentOn,
 	createFunction:                    (*operationGenerator).createFunction,
+	createProcedure:                   (*operationGenerator).createProcedure,
 	createIndex:                       (*operationGenerator).createIndex,
 	createPolicy:                      (*operationGenerator).createPolicy,
 	createSchema:                      (*operationGenerator).createSchema,
@@ -275,6 +278,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	dropSequence:                      (*operationGenerator).dropSequence,
 	dropTable:                         (*operationGenerator).dropTable,
 	dropTrigger:                       (*operationGenerator).dropTrigger,
+	dropProcedure:                     (*operationGenerator).dropProcedure,
 	dropView:                          (*operationGenerator).dropView,
 	renameIndex:                       (*operationGenerator).renameIndex,
 	renameSequence:                    (*operationGenerator).renameSequence,
@@ -321,6 +325,7 @@ var opWeights = []int{
 	alterTypeDropValue:                1,
 	commentOn:                         1,
 	createFunction:                    1,
+	createProcedure:                   2,
 	createIndex:                       1,
 	createPolicy:                      1,
 	createSchema:                      1,
@@ -339,6 +344,7 @@ var opWeights = []int{
 	dropSequence:                      1,
 	dropTable:                         1,
 	dropTrigger:                       1,
+	dropProcedure:                     1,
 	dropView:                          1,
 	renameIndex:                       1,
 	renameSequence:                    1,
@@ -396,6 +402,7 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	createSequence:                    clusterversion.MinSupported,
 	createTrigger:                     clusterversion.V26_2_Start,
 	createTriggerFunction:             clusterversion.V26_2_Start,
+	createProcedure:                   clusterversion.V26_3,
 	dropFunction:                      clusterversion.MinSupported,
 	dropIndex:                         clusterversion.MinSupported,
 	dropPolicy:                        clusterversion.MinSupported,
@@ -403,6 +410,7 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	dropSequence:                      clusterversion.MinSupported,
 	dropTable:                         clusterversion.MinSupported,
 	dropTrigger:                       clusterversion.V26_2_Start,
+	dropProcedure:                     clusterversion.V26_3,
 	dropView:                          clusterversion.MinSupported,
 	truncateTable:                     clusterversion.V25_4,
 }
