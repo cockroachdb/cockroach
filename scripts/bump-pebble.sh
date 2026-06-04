@@ -34,7 +34,7 @@ pushd() { builtin pushd "$@" > /dev/null; }
 popd() { builtin popd "$@" > /dev/null; }
 
 # Grab the current Pebble SHA.
-OLD_SHA=$(grep 'github.com/cockroachdb/pebble' go.mod | grep -o -E '[a-f0-9]{12}$')
+OLD_SHA=$(grep 'github.com/cockroachdb/pebble-private' go.mod | grep -o -E '[a-f0-9]{12}$')
 echo "Current pebble SHA: $OLD_SHA"
 
 git submodule update --init --recursive
