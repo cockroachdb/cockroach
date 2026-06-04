@@ -325,6 +325,18 @@ var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationIn
 		},
 	},
 
+	// XOR is associative and commutative, so the partial XORs computed on each
+	// node can be combined with another XOR in the final stage.
+	execinfrapb.BitXor: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.BitXor},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.BitXor,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
 	execinfrapb.CovarPop: {
 		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.TransitionRegrAggregate},
 		FinalStage: []FinalStageInfo{

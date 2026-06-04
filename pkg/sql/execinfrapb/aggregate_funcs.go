@@ -33,6 +33,7 @@ const (
 	StringAgg                   = AggregatorSpec_STRING_AGG
 	BitAnd                      = AggregatorSpec_BIT_AND
 	BitOr                       = AggregatorSpec_BIT_OR
+	BitXor                      = AggregatorSpec_BIT_XOR
 	Corr                        = AggregatorSpec_CORR
 	PercentileDiscImpl          = AggregatorSpec_PERCENTILE_DISC_IMPL
 	PercentileContImpl          = AggregatorSpec_PERCENTILE_CONT_IMPL

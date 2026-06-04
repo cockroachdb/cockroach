@@ -3398,6 +3398,119 @@ SELECT bit_or(x) FROM (VALUES ('100'::bit(3)), ('101010111'::varbit)) t(x)
 statement error cannot OR bit strings of different sizes
 SELECT bit_or(x) FROM (VALUES (''::varbit), ('1'::varbit)) t(x)
 
+# Tests for the bit_xor aggregate function.
+
+subtest bit_xor_aggregate
+
+statement ok
+DROP TABLE IF EXISTS vals
+
+statement ok
+CREATE TABLE vals (
+  i INT,
+  v VARBIT,
+  b BIT(8)
+)
+
+# bit_xor returns NULL if there are no rows.
+
+query TTT
+SELECT bit_xor(i), bit_xor(v), bit_xor(b) FROM vals
+----
+NULL NULL NULL
+
+# bit_xor does not trigger aggregation on a constant with a source that has no
+# rows.
+
+query IT
+SELECT bit_xor(7), bit_xor('1000'::varbit) FROM vals
+----
+NULL NULL
+
+# bit_xor triggers aggregation and computation on a constant with no source.
+
+query ITT
+SELECT bit_xor(7), bit_xor('1000'::bit(4)), bit_xor('1010'::varbit)
+----
+7 1000 1010
+
+# bit_xor returns NULL given a NULL.
+
+query IT
+SELECT bit_xor(NULL::int), bit_xor(NULL::varbit)
+----
+NULL NULL
+
+# Successful aggregation over a sequence of non-nulls.
+
+statement ok
+INSERT INTO vals VALUES
+(1, '11111110'::varbit, '11111110'::bit(8)),
+(2, '01111111'::varbit, '01111110'::bit(8)),
+(4, '10111111'::varbit, '10111110'::bit(8)),
+(8, '11011111'::varbit, '11011110'::bit(8)),
+(16, '11101111'::varbit, '11101110'::bit(8))
+
+query ITT
+SELECT bit_xor(i), bit_xor(v), bit_xor(b) FROM vals
+----
+31 00001110 00001110
+
+# Aggregation over a sequence with nulls and non-nulls; nulls are skipped.
+
+statement ok
+INSERT INTO vals VALUES
+(NULL, NULL::varbit, NULL::bit),
+(NULL, NULL::varbit, NULL::bit)
+
+query ITT
+SELECT bit_xor(i), bit_xor(v), bit_xor(b) FROM vals
+----
+31 00001110 00001110
+
+# Aggregation over a sequence with all nulls returns NULL.
+
+statement count 7
+DELETE FROM vals
+
+statement ok
+INSERT INTO vals VALUES (NULL, NULL::varbit, NULL::bit), (NULL, NULL::varbit, NULL::bit)
+
+query ITT
+SELECT bit_xor(i), bit_xor(v), bit_xor(b) FROM vals
+----
+NULL NULL NULL
+
+# Unlike bit_and and bit_or, bit_xor does NOT ignore duplicates: an even number
+# of identical values cancels out to zero, while an odd number leaves one copy.
+
+query IT
+SELECT bit_xor(i), bit_xor(v) FROM (VALUES (5, '101'::varbit), (5, '101'::varbit)) t(i, v)
+----
+0 000
+
+query IT
+SELECT bit_xor(i), bit_xor(v)
+  FROM (VALUES (5, '101'::varbit), (5, '101'::varbit), (5, '101'::varbit)) t(i, v)
+----
+5 101
+
+# bit_xor returns an error when given an uncasted null.
+
+statement error ambiguous call: bit_xor\(unknown\), candidates are
+SELECT bit_xor(NULL)
+
+# bit_xor returns an error when called on bit arrays of different sizes.
+
+statement error cannot XOR bit strings of different sizes
+SELECT bit_xor(x::varbit) FROM (VALUES ('1'), ('11')) t(x)
+
+statement error cannot XOR bit strings of different sizes
+SELECT bit_xor(x) FROM (VALUES ('100'::bit(3)), ('101010111'::varbit)) t(x)
+
+statement error cannot XOR bit strings of different sizes
+SELECT bit_xor(x) FROM (VALUES (''::varbit), ('1'::varbit)) t(x)
+
 # Regression test for #46981 (not propagating an error which occurs when
 # rendering the single output row of countRows aggregate).
 statement ok

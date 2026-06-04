@@ -2963,6 +2963,8 @@ var builtinOidsArray = []string{
 	3008: `crdb_internal.tsdb_query(name: string, start_time: timestamptz, end_time: timestamptz, options: jsonb) -> tuple{timestamptz AS timestamp, float AS value, string AS source}`,
 	3009: `information_schema.crdb_job_messages(job_id: int) -> tuple{timestamptz AS recorded, string AS kind, string AS message}`,
 	3010: `information_schema.crdb_job_progress_history(job_id: int) -> tuple{timestamptz AS recorded, float AS progress_fraction, decimal AS resolved}`,
+	3011: `bit_xor(arg1: int) -> int`,
+	3012: `bit_xor(arg1: varbit) -> varbit`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
