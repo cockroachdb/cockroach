@@ -453,7 +453,7 @@ func makeMVCCGCQueueScoreImpl(
 		}
 		return float64(n)
 	}
-	r.DeadFraction = math.Max(1-clamp(ms.LiveBytes)/(1+clamp(ms.Total())), 0)
+	r.DeadFraction = math.Max(1-clamp(ms.LiveBytes)/(1+clamp(ms.TotalWithoutLockBytes())), 0)
 
 	// The "raw" GC score is the total GC'able bytes age normalized by (non-live
 	// size * the replica's TTL in seconds). This is a scale-invariant factor by
