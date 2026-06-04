@@ -1,0 +1,8 @@
+setup
+CREATE DOMAIN salmon AS INT;
+CREATE TABLE t (c salmon);
+----
+
+test
+ALTER DOMAIN salmon SET DEFAULT 42;
+----

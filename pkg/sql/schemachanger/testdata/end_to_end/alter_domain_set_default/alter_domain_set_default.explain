@@ -1,0 +1,34 @@
+/* setup */
+CREATE DOMAIN salmon AS INT;
+CREATE TABLE t (c salmon);
+
+/* test */
+EXPLAIN (DDL) ALTER DOMAIN salmon SET DEFAULT 42;
+----
+Schema change plan for ALTER DOMAIN ‹defaultdb›.‹public›.‹salmon› SET DEFAULT ‹42›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → WRITE_ONLY DomainDefault:{DescID: 104 (salmon), Expr: 42:::INT8}
+ │         └── 1 Mutation operation
+ │              └── AddDomainDefault {"Expr":"42:::INT8","TypeID":104}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── WRITE_ONLY → ABSENT DomainDefault:{DescID: 104 (salmon), Expr: 42:::INT8}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → WRITE_ONLY DomainDefault:{DescID: 104 (salmon), Expr: 42:::INT8}
+ │         └── 3 Mutation operations
+ │              ├── AddDomainDefault {"Expr":"42:::INT8","TypeID":104}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: PostCom..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── WRITE_ONLY → PUBLIC DomainDefault:{DescID: 104 (salmon), Expr: 42:::INT8}
+           └── 2 Mutation operations
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

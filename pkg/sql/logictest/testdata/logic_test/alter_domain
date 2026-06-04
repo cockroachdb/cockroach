@@ -8,18 +8,155 @@ CREATE DOMAIN d AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
 
 subtest set_default
 
-statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
-ALTER DOMAIN d SET DEFAULT 42
+statement ok
+CREATE DOMAIN d_def AS INT DEFAULT 0
 
-statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
-ALTER DOMAIN d SET DEFAULT 1 + 2
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 42
+
+statement ok
+CREATE TABLE t_set_def (c d_def);
+INSERT INTO t_set_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_set_def
+----
+42
+
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 1 + 2
+
+statement ok
+TRUNCATE t_set_def;
+INSERT INTO t_set_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_set_def
+----
+3
+
+# SET DEFAULT NULL stores the literal NULL expression and is distinct from
+# DROP DEFAULT (which leaves typdefault unset).
+statement ok
+ALTER DOMAIN d_def SET DEFAULT NULL
+
+query B
+SELECT typdefault IS NOT NULL FROM pg_catalog.pg_type WHERE typname = 'd_def'
+----
+true
+
+statement ok
+TRUNCATE t_set_def;
+INSERT INTO t_set_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_set_def
+----
+NULL
+
+let $stored_null_default
+SELECT typdefault FROM pg_catalog.pg_type WHERE typname = 'd_def'
+
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 99
+
+statement ok
+ALTER DOMAIN d_def SET DEFAULT $stored_null_default
+
+query B
+SELECT typdefault = '$stored_null_default'
+  FROM pg_catalog.pg_type WHERE typname = 'd_def'
+----
+true
+
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 10
+
+let $stored_int_default
+SELECT typdefault FROM pg_catalog.pg_type WHERE typname = 'd_def'
+
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 99
+
+statement ok
+ALTER DOMAIN d_def SET DEFAULT $stored_int_default
+
+query B
+SELECT typdefault = '$stored_int_default'
+  FROM pg_catalog.pg_type WHERE typname = 'd_def'
+----
+true
+
+statement ok
+TRUNCATE t_set_def;
+INSERT INTO t_set_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_set_def
+----
+10
+
+statement error could not parse "not an int" as type int
+ALTER DOMAIN d_def SET DEFAULT 'not an int'
+
+# References to other descriptors are rejected until back-references on type
+# descriptors are supported by the declarative schema changer.
+statement ok
+CREATE SEQUENCE seq_for_dom;
+CREATE TYPE enum_for_dom AS ENUM ('a', 'b');
+CREATE FUNCTION fn_for_dom() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement error pgcode 0A000 sequence references in domain DEFAULT expressions are not supported
+ALTER DOMAIN d_def SET DEFAULT nextval('seq_for_dom')
+
+statement error pgcode 0A000 function references in domain DEFAULT expressions are not supported
+ALTER DOMAIN d_def SET DEFAULT fn_for_dom()
+
+# A domain whose base type is INT can still reject a default that casts to a
+# user-defined type, since the resulting expression still references the type.
+statement error pgcode 0A000 user-defined type references in domain DEFAULT expressions are not supported
+ALTER DOMAIN d_def SET DEFAULT (CASE WHEN 'a'::enum_for_dom = 'a' THEN 1 ELSE 0 END)
+
+statement ok
+DROP FUNCTION fn_for_dom;
+DROP TYPE enum_for_dom;
+DROP SEQUENCE seq_for_dom
+
+statement ok
+DROP TABLE t_set_def
 
 subtest end
 
 subtest drop_default
 
-statement error pgcode 0A000 ALTER DOMAIN DROP DEFAULT is not supported
-ALTER DOMAIN d DROP DEFAULT
+statement ok
+ALTER DOMAIN d_def DROP DEFAULT
+
+# DROP DEFAULT clears typdefault entirely, distinguishing it from
+# SET DEFAULT NULL (which sets typdefault to the literal NULL expression).
+query B
+SELECT typdefault IS NULL FROM pg_catalog.pg_type WHERE typname = 'd_def'
+----
+true
+
+statement ok
+CREATE TABLE t_drop_def (c d_def);
+INSERT INTO t_drop_def (c) VALUES (DEFAULT)
+
+query T
+SELECT c FROM t_drop_def
+----
+NULL
+
+statement ok
+ALTER DOMAIN d_def DROP DEFAULT
+
+statement ok
+ALTER DOMAIN d_def SET DEFAULT 0
+
+statement ok
+DROP TABLE t_drop_def;
+DROP DOMAIN d_def
 
 subtest end
 
@@ -657,7 +794,7 @@ CREATE SCHEMA s
 statement ok
 CREATE DOMAIN s.d_qual AS INT
 
-statement error pgcode 0A000 ALTER DOMAIN SET DEFAULT is not supported
+statement ok
 ALTER DOMAIN s.d_qual SET DEFAULT 1
 
 subtest end
