@@ -50,6 +50,14 @@ func (p *planner) DropTenantByID(
 		return errors.Wrap(err, "destroying tenant")
 	}
 
+	// If this is a branch tenant, release the protected-timestamp record
+	// it wrote against its parent at fork time. The release is part of the
+	// DROP txn so it is committed atomically with the tenant's transition
+	// to DROP state; if either side fails the parent stays protected.
+	if err := releaseBranchPTSRecords(ctx, p, info); err != nil {
+		return errors.Wrap(err, "releasing branch protected timestamp")
+	}
+
 	return dropTenantInternal(
 		ctx,
 		p.ExecCfg().Settings,

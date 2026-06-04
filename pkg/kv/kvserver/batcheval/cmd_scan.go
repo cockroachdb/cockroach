@@ -64,6 +64,7 @@ func Scan(
 		DontInterleaveIntents:   cArgs.DontInterleaveIntents,
 		ReadCategory:            readCategory,
 		ReturnRawMVCCValues:     args.ReturnRawMVCCValues,
+		Tombstones:              args.IncludeTombstones,
 		WorkloadID:              h.WorkloadID,
 	}
 

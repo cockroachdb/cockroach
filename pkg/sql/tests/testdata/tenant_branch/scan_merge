@@ -1,0 +1,77 @@
+# Stress the branch scan merge across many interleaved rows.
+#
+# The branch's view of a scan is a merge between the branch's own keyspace
+# and the parent's keyspace at the fork point: branch values shadow parent
+# values, branch tombstones suppress parent rows, and parent rows fill in
+# the gaps. This file packs all three behaviors into a single ordered scan.
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER prod;
+ALTER VIRTUAL CLUSTER prod START SERVICE SHARED;
+----
+
+exec-sql tenant=prod
+CREATE TABLE items (id INT PRIMARY KEY, label STRING);
+INSERT INTO items VALUES
+  (1, 'p1'), (2, 'p2'), (3, 'p3'), (4, 'p4'), (5, 'p5'),
+  (6, 'p6'), (7, 'p7'), (8, 'p8'), (9, 'p9'), (10, 'p10');
+----
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER dev BRANCH FROM prod;
+ALTER VIRTUAL CLUSTER dev START SERVICE SHARED;
+----
+
+# Branch mutations: shadow some rows, delete others, insert new keys at
+# both the bottom and the middle of the keyspace.
+exec-sql tenant=dev
+UPDATE items SET label = 'b3'  WHERE id = 3;
+UPDATE items SET label = 'b7'  WHERE id = 7;
+UPDATE items SET label = 'b10' WHERE id = 10;
+DELETE FROM items WHERE id IN (2, 5, 8);
+INSERT INTO items VALUES (0, 'b0'), (4, 'b4-conflict')
+  ON CONFLICT (id) DO UPDATE SET label = excluded.label;
+INSERT INTO items VALUES (11, 'b11'), (12, 'b12');
+----
+
+# Expected: branch scan returns a single ordered stream where branch
+# values shadow parent (3, 4, 7, 10), tombstones drop rows (2, 5, 8),
+# and branch-only rows (0, 11, 12) appear at the right positions.
+query-sql tenant=dev
+SELECT id, label FROM items ORDER BY id
+----
+0 b0
+1 p1
+3 b3
+4 b4-conflict
+6 p6
+7 b7
+9 p9
+10 b10
+11 b11
+12 b12
+
+# Range scans should produce the same correct merge.
+query-sql tenant=dev
+SELECT id, label FROM items WHERE id BETWEEN 3 AND 9 ORDER BY id
+----
+3 b3
+4 b4-conflict
+6 p6
+7 b7
+9 p9
+
+# Parent is untouched.
+query-sql tenant=prod
+SELECT id, label FROM items ORDER BY id
+----
+1 p1
+2 p2
+3 p3
+4 p4
+5 p5
+6 p6
+7 p7
+8 p8
+9 p9
+10 p10

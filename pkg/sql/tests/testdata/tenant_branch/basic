@@ -1,0 +1,48 @@
+# End-to-end demo: branch a tenant, see parent's data, write isolated
+# changes, confirm the parent is untouched.
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER prod;
+ALTER VIRTUAL CLUSTER prod START SERVICE SHARED;
+----
+
+exec-sql tenant=prod
+CREATE TABLE accounts (id INT PRIMARY KEY, balance INT);
+INSERT INTO accounts VALUES (1, 100), (2, 200), (3, 300);
+----
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER dev BRANCH FROM prod;
+ALTER VIRTUAL CLUSTER dev START SERVICE SHARED;
+----
+
+# The branch sees parent's rows via copy-on-write fallthrough.
+query-sql tenant=dev
+SELECT * FROM accounts ORDER BY id
+----
+1 100
+2 200
+3 300
+
+# Writes against the branch are isolated.
+exec-sql tenant=dev
+INSERT INTO accounts VALUES (4, 400);
+UPDATE accounts SET balance = 999 WHERE id = 1;
+DELETE FROM accounts WHERE id = 2;
+----
+
+# The branch reflects the modified state.
+query-sql tenant=dev
+SELECT * FROM accounts ORDER BY id
+----
+1 999
+3 300
+4 400
+
+# The parent is unchanged.
+query-sql tenant=prod
+SELECT * FROM accounts ORDER BY id
+----
+1 100
+2 200
+3 300

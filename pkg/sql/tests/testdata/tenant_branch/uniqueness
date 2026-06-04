@@ -1,0 +1,109 @@
+# Uniqueness checks (PK and UNIQUE secondary index) must consult the
+# parent's keyspace when the branch has never written the conflicting
+# key. Without the BranchSender's CPut(nil-expected) parent check, a
+# CPut on a key the branch has not written succeeds against the empty
+# branch keyspace even when the parent has a value at the same key,
+# silently allowing a duplicate row that violates the constraint.
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER prod;
+ALTER VIRTUAL CLUSTER prod START SERVICE SHARED;
+----
+
+exec-sql tenant=prod
+CREATE TABLE users (
+  id INT PRIMARY KEY,
+  email STRING NOT NULL UNIQUE,
+  handle STRING NOT NULL UNIQUE,
+  name STRING
+);
+INSERT INTO users VALUES
+  (1, 'alice@example.com', 'alice', 'Alice'),
+  (2, 'bob@example.com',   'bob',   'Bob');
+----
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER dev BRANCH FROM prod;
+ALTER VIRTUAL CLUSTER dev START SERVICE SHARED;
+----
+
+# Sanity: branch sees parent's rows.
+query-sql tenant=dev
+SELECT id, email, handle FROM users ORDER BY id
+----
+1 alice@example.com alice
+2 bob@example.com bob
+
+# PK collision against an inherited row must fail.
+exec-sql tenant=dev
+INSERT INTO users VALUES (1, 'fresh@example.com', 'fresh', 'Fresh');
+----
+pq: duplicate key value violates unique constraint "users_pkey"
+
+# UNIQUE secondary index collision against an inherited row's email
+# must fail. Without the parent CPut check this slips through, leaving
+# two live rows with the same email — a constraint violation that the
+# index lookup then silently hides because branch's index entry shadows
+# parent's at the same key.
+exec-sql tenant=dev
+INSERT INTO users VALUES (10, 'alice@example.com', 'alice10', 'AliceClone');
+----
+pq: duplicate key value violates unique constraint "users_email_key"
+
+# UNIQUE secondary index collision on the second unique column behaves
+# the same way — no shortcut from the first column's check.
+exec-sql tenant=dev
+INSERT INTO users VALUES (11, 'fresh@example.com', 'bob', 'BobClone');
+----
+pq: duplicate key value violates unique constraint "users_handle_key"
+
+# A non-conflicting INSERT proceeds normally.
+exec-sql tenant=dev
+INSERT INTO users VALUES (3, 'carol@example.com', 'carol', 'Carol');
+----
+
+query-sql tenant=dev
+SELECT id, email, handle FROM users ORDER BY id
+----
+1 alice@example.com alice
+2 bob@example.com bob
+3 carol@example.com carol
+
+# Reading by a unique column that only exists on the parent finds the
+# parent's row through the branch's read fallthrough.
+query-sql tenant=dev
+SELECT id, name FROM users WHERE email = 'alice@example.com'
+----
+1 Alice
+
+query-sql tenant=dev
+SELECT id, name FROM users WHERE handle = 'bob'
+----
+2 Bob
+
+# DELETE on the branch tombstones the inherited row; a subsequent
+# INSERT at the same PK and unique-column values must succeed because
+# the branch's tombstone records an explicit deletion.
+exec-sql tenant=dev
+DELETE FROM users WHERE id = 1;
+----
+
+query-sql tenant=dev
+SELECT id, email FROM users WHERE id = 1
+----
+
+exec-sql tenant=dev
+INSERT INTO users VALUES (1, 'alice@example.com', 'alice', 'AliceReborn');
+----
+
+query-sql tenant=dev
+SELECT id, email, handle, name FROM users WHERE id = 1
+----
+1 alice@example.com alice AliceReborn
+
+# The parent is untouched throughout.
+query-sql tenant=prod
+SELECT id, email, handle, name FROM users ORDER BY id
+----
+1 alice@example.com alice Alice
+2 bob@example.com bob Bob
