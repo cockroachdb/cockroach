@@ -375,9 +375,11 @@ func (t *testLeaseAcquirer) Codec() keys.SQLCodec {
 	panic("should not be called")
 }
 
-func (t *testLeaseAcquirer) RegisterLeaseObserver(observer lease.Observer) (unregisterFn func()) {
+func (t *testLeaseAcquirer) RegisterLeaseObserver(
+	observer lease.Observer, _ []descpb.ID,
+) (initialVersions map[descpb.ID]descpb.DescriptorVersion, unregisterFn func()) {
 	t.observers = append(t.observers, observer)
-	return func() {
+	return nil, func() {
 		t.unregisterLeaseObserver(observer)
 	}
 }
@@ -498,7 +500,7 @@ func TestPauseOrResumePolling(t *testing.T) {
 		targets:  CreateChangefeedTargets(tableID),
 	}
 	sf.testingInitSchemaFeed()
-	unregisterFn := lm.RegisterLeaseObserver(&sf)
+	_, unregisterFn := lm.RegisterLeaseObserver(&sf, nil)
 	defer unregisterFn()
 
 	getFrontier := func() hlc.Timestamp {
@@ -612,7 +614,7 @@ func TestPauseOrResumePollingAdvancesToNow(t *testing.T) {
 		targets:  CreateChangefeedTargets(tableID),
 	}
 	sf.testingInitSchemaFeed()
-	unregisterFn := lm.RegisterLeaseObserver(&sf)
+	_, unregisterFn := lm.RegisterLeaseObserver(&sf, nil)
 	defer unregisterFn()
 
 	getFrontier := func() hlc.Timestamp {
@@ -680,7 +682,7 @@ func BenchmarkPauseOrResumePolling(b *testing.B) {
 		targets:  CreateChangefeedTargets(tableID),
 	}
 	sf.testingInitSchemaFeed()
-	unregisterFn := lm.RegisterLeaseObserver(&sf)
+	_, unregisterFn := lm.RegisterLeaseObserver(&sf, nil)
 	defer unregisterFn()
 
 	setFrontier := func(ts hlc.Timestamp) error {
