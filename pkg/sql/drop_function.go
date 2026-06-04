@@ -161,6 +161,30 @@ func (p *planner) matchRoutine(
 	return &ol, nil
 }
 
+// checkPrivilegesForReplaceFunction checks that the current user owns the
+// function. Unlike checkPrivilegesForDropFunction, schema ownership alone
+// is not sufficient — the user must own the function directly, matching
+// PostgreSQL's behavior for CREATE OR REPLACE.
+func (p *planner) checkPrivilegesForReplaceFunction(
+	ctx context.Context, fnID descpb.ID,
+) (*funcdesc.Mutable, error) {
+	mutable, err := p.Descriptors().MutableByID(p.Txn()).Function(ctx, fnID)
+	if err != nil {
+		return nil, err
+	}
+	hasOwnership, err := p.HasOwnership(ctx, mutable)
+	if err != nil {
+		return nil, err
+	}
+	if !hasOwnership {
+		return nil, pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"must be owner of function %s", mutable.GetName(),
+		)
+	}
+	return mutable, nil
+}
+
 func (p *planner) checkPrivilegesForDropFunction(
 	ctx context.Context, fnID descpb.ID,
 ) (*funcdesc.Mutable, error) {

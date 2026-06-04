@@ -808,3 +808,66 @@ DROP ROLE role_a;
 DROP ROLE role_b;
 
 subtest end
+
+subtest replace_requires_function_ownership
+
+statement ok
+CREATE USER schema_owner;
+CREATE USER func_creator;
+GRANT schema_owner, func_creator TO testuser;
+CREATE SCHEMA test_replace_schema;
+ALTER SCHEMA test_replace_schema OWNER TO schema_owner;
+GRANT CREATE ON SCHEMA test_replace_schema TO func_creator;
+GRANT USAGE ON SCHEMA test_replace_schema TO func_creator;
+GRANT USAGE ON SCHEMA test_replace_schema TO schema_owner;
+
+# func_creator creates a function in the schema.
+user testuser
+
+statement ok
+SET ROLE func_creator
+
+statement ok
+CREATE FUNCTION test_replace_schema.my_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+# schema_owner tries to replace it — should fail.
+statement ok
+SET ROLE schema_owner
+
+statement error pgcode 42501 must be owner of function my_func
+CREATE OR REPLACE FUNCTION test_replace_schema.my_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$;
+
+# Also test procedures.
+statement ok
+SET ROLE func_creator
+
+statement ok
+CREATE PROCEDURE test_replace_schema.my_proc() LANGUAGE PLpgSQL AS $$ BEGIN NULL; END; $$;
+
+statement ok
+SET ROLE schema_owner
+
+statement error pgcode 42501 must be owner of function my_proc
+CREATE OR REPLACE PROCEDURE test_replace_schema.my_proc() LANGUAGE PLpgSQL AS $$ BEGIN NULL; END; $$;
+
+# The function owner can still replace it.
+statement ok
+SET ROLE func_creator
+
+statement ok
+CREATE OR REPLACE FUNCTION test_replace_schema.my_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 3 $$;
+
+# Clean up.
+statement ok
+DROP FUNCTION test_replace_schema.my_func;
+DROP PROCEDURE test_replace_schema.my_proc;
+
+user root
+
+statement ok
+DROP SCHEMA test_replace_schema;
+REVOKE schema_owner, func_creator FROM testuser;
+DROP USER schema_owner;
+DROP USER func_creator;
+
+subtest end
