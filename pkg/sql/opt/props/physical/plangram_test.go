@@ -1049,6 +1049,83 @@ func TestPlanGramBuilder(t *testing.T) {
 		require.Equal(t, "root: (Select scan); scan: (Scan);", pg1.String())
 	})
 
+	t.Run("prefix applied to production names", func(t *testing.T) {
+		var b PlanGramBuilder
+		b.Prefix = "p_"
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.EnterExpr(opt.SelectOp))
+		require.NoError(t, b.RefProduction("scan"))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		require.NoError(t, b.EnterProduction("scan"))
+		require.NoError(t, b.EnterExpr(opt.ScanOp))
+		require.NoError(t, b.AddField(PlanGramField{Key: "Index", Val: "abc_a_idx"}))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		pg, err := b.Build()
+		require.NoError(t, err)
+		require.Equal(t,
+			`root: (Select p_scan); p_scan: (Scan Index="abc_a_idx");`,
+			pg.String())
+	})
+
+	t.Run("prefix with forward reference", func(t *testing.T) {
+		var b PlanGramBuilder
+		b.Prefix = "x_"
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.RefProduction("alt"))
+		require.NoError(t, b.LeaveProduction())
+		require.NoError(t, b.EnterProduction("alt"))
+		require.NoError(t, b.EnterExpr(opt.ScanOp))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.EnterExpr(opt.ValuesOp))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		pg, err := b.Build()
+		require.NoError(t, err)
+		require.Equal(t,
+			"root: x_alt; x_alt: (Scan) | (Values);",
+			pg.String())
+	})
+
+	t.Run("prefix preserved across Reset", func(t *testing.T) {
+		var b PlanGramBuilder
+		b.Prefix = "q_"
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.EnterExpr(opt.ScanOp))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		_, err := b.Build()
+		require.NoError(t, err)
+
+		b.Reset()
+
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.RefProduction("n0"))
+		require.NoError(t, b.LeaveProduction())
+		require.NoError(t, b.EnterProduction("n0"))
+		require.NoError(t, b.EnterExpr(opt.ValuesOp))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		pg, err := b.Build()
+		require.NoError(t, err)
+		require.Equal(t, "root: q_n0; q_n0: (Values);", pg.String())
+	})
+
+	t.Run("empty prefix preserves default behavior", func(t *testing.T) {
+		var b PlanGramBuilder
+		require.NoError(t, b.EnterProduction("root"))
+		require.NoError(t, b.RefProduction("scan"))
+		require.NoError(t, b.LeaveProduction())
+		require.NoError(t, b.EnterProduction("scan"))
+		require.NoError(t, b.EnterExpr(opt.ScanOp))
+		require.NoError(t, b.LeaveExpr())
+		require.NoError(t, b.LeaveProduction())
+		pg, err := b.Build()
+		require.NoError(t, err)
+		require.Equal(t, "root: scan; scan: (Scan);", pg.String())
+	})
+
 	// Error tests: setup returns the first non-nil error it encounters. If
 	// setup returns nil, Build's error is checked instead (covers errors that
 	// only surface at finalization, e.g. missing root or unmatched Enter).

@@ -423,6 +423,10 @@ func (p PlanGram) String() string {
 //
 // A PlanGramBuilder is not safe for concurrent use.
 type PlanGramBuilder struct {
+	// Prefix, when non-empty, is prepended to every production name except
+	// "root". This allows disambiguation when multiple grammars are combined.
+	// Preserved across Reset calls (configuration, not grammar state).
+	Prefix string
 	// productions tracks all named productions, including forward-reference
 	// stubs (which have empty rules until their EnterProduction call
 	// completes). Lazily allocated on first use; cleared by Reset.
@@ -654,14 +658,18 @@ func (b *PlanGramBuilder) getOrCreateProduction(name string) (*planGramProductio
 	if err := validateNonterminalName(name); err != nil {
 		return nil, err
 	}
-	if pp, ok := b.productions[name]; ok {
+	effectiveName := name
+	if name != "root" {
+		effectiveName = b.Prefix + name
+	}
+	if pp, ok := b.productions[effectiveName]; ok {
 		return pp, nil
 	}
 	if b.productions == nil {
 		b.productions = make(map[string]*planGramProduction)
 	}
-	pp := &planGramProduction{name: name}
-	b.productions[name] = pp
+	pp := &planGramProduction{name: effectiveName}
+	b.productions[effectiveName] = pp
 	return pp, nil
 }
 
