@@ -337,9 +337,8 @@ jobs:
           DOCKER_ACCESS_TOKEN: ${{ steps.secrets.outputs.docker_access_token }}
           DOCKER_ID: ${{ steps.secrets.outputs.docker_id }}
           # GHA tagging path: HTTPS push using the bot PAT. The PAT must
-          # authorize git_repo_for_tag (the prod repo for real publishes,
-          # and any fork used for dry-run rehearsal). TC tagging path
-          # (SSH deploy key) is unaffected — TC sets
+          # authorize TAG_REPO (the repo the release tag is pushed to). TC
+          # tagging path (SSH deploy key) is unaffected — TC sets
           # GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY directly and the
           # script branches on it first.
           # Use GH_TOKEN (not GITHUB_TOKEN). GHA's runner reserves the
@@ -347,6 +346,10 @@ jobs:
           # issued workflow token; GH_TOKEN sidesteps that and matches
           # the convention used by every other release workflow step.
           GH_TOKEN: ${{ steps.secrets.outputs.github_pat }}
+          # Tag the repo the workflow runs in rather than a hardcoded
+          # destination. For dry-run, only tag when the operator opts in
+          # via inputs.dryrun_tag (pointed at the current repo / fork).
+          TAG_REPO: ${{ github.repository }}
           DRYRUN_TAG_REPO: ${{ env.DRY_RUN != '' && inputs.dryrun_tag && github.repository || '' }}
           # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
           TC_BUILD_BRANCH: ${{ github.ref_name }}
