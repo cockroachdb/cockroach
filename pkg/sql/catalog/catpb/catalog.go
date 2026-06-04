@@ -93,6 +93,10 @@ const (
 	// partial stats collection fraction stale rows table setting.
 	AutoPartialStatsFractionStaleTableSettingName = "sql_stats_automatic_partial_collection_fraction_stale_rows"
 
+	// AutoPartialFixupStatsEnabledTableSettingName is the name of the automatic
+	// partial fixup stats collection enabled table setting.
+	AutoPartialFixupStatsEnabledTableSettingName = "sql_stats_automatic_partial_collection_fix_scan_row_count_enabled"
+
 	// AutoFullStatsEnabledSettingName is the name of the automatic full
 	// stats collection enabled cluster setting.
 	AutoFullStatsEnabledSettingName = "sql.stats.automatic_full_collection.enabled"

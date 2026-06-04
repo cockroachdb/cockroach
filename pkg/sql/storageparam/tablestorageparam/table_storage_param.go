@@ -625,6 +625,11 @@ var tableParams = map[string]tableParam{
 		onSet:            autoStatsEnabledSetFunc,
 		onReset:          autoStatsTableSettingResetFunc,
 	},
+	catpb.AutoPartialFixupStatsEnabledTableSettingName: {
+		validateSetValue: autoStatsEnabledPreSetFunc,
+		onSet:            autoStatsEnabledSetFunc,
+		onReset:          autoStatsTableSettingResetFunc,
+	},
 	catpb.AutoFullStatsEnabledTableSettingName: {
 		validateSetValue: autoStatsEnabledPreSetFunc,
 		onSet:            autoStatsEnabledSetFunc,
@@ -879,6 +884,9 @@ func autoStatsEnabledSetFunc(ctx context.Context, po *Setter, key string, value 
 	case catpb.AutoPartialStatsEnabledTableSettingName:
 		po.TableDesc.AutoStatsSettings.PartialEnabled = &boolVal
 		return nil
+	case catpb.AutoPartialFixupStatsEnabledTableSettingName:
+		po.TableDesc.AutoStatsSettings.PartialFixupEnabled = &boolVal
+		return nil
 	case catpb.AutoFullStatsEnabledTableSettingName:
 		po.TableDesc.AutoStatsSettings.FullEnabled = &boolVal
 		return nil
@@ -975,6 +983,9 @@ func autoStatsTableSettingResetFunc(_ context.Context, po *Setter, key string, v
 		return nil
 	case catpb.AutoPartialStatsEnabledTableSettingName:
 		autoStatsSettings.PartialEnabled = nil
+		return nil
+	case catpb.AutoPartialFixupStatsEnabledTableSettingName:
+		autoStatsSettings.PartialFixupEnabled = nil
 		return nil
 	case catpb.AutoFullStatsEnabledTableSettingName:
 		autoStatsSettings.FullEnabled = nil

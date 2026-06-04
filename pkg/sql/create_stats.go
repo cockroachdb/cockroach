@@ -143,6 +143,15 @@ var automaticExtremesStatsConcurrencyLimit = settings.RegisterIntSetting(
 	settings.IntWithMinimum(1),
 )
 
+var automaticFixMisestimatesStatsConcurrencyLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.fix_misestimates_concurrency_limit",
+	"determines the maximum number of concurrent automatic partial 'fix misestimates' table statistics collection jobs",
+	128,
+	settings.WithPublic,
+	settings.NonNegativeInt,
+)
+
 const nonIndexColHistogramBuckets = 2
 
 // createStatsNode is a planNode implemented in terms of a function. The
@@ -319,6 +328,13 @@ func getAutoStatsKind(details jobspb.CreateStatsDetails) int {
 		if details.UsingExtremes {
 			return 2
 		}
+		if details.WhereClause != "" {
+			// TODO(discuss during review): should we use a different name for
+			// "fix misestimates" auto partial stats collection? Currently it
+			// can be distinguished from the USING EXTREMES auto partial
+			// collection based on whether WhereSpans is set.
+			return 3
+		}
 		fallthrough
 	default:
 		if buildutil.CrdbTestBuild {
@@ -353,6 +369,10 @@ var checkFullStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " = 1")
 // conflict with the USING EXTREMES job.
 var checkExtremesStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " IN (1, 2)")
 
+// Both full and "fix misestimates" auto stats collections on the same table
+// conflict with the "fix misestimates" job.
+var checkFixMisestimatesStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " IN (1, 3)")
+
 var checkGlobalStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " = $2")
 
 // checkConcurrencyLimit verifies that starting a new stats job will not exceed
@@ -375,8 +395,13 @@ func (n *createStatsNode) checkConcurrencyLimit(
 		tableLimitQuery = checkFullStatsJobsQuery
 		globalLimit = int(automaticFullStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
 	case jobspb.AutoPartialStatsName:
-		tableLimitQuery = checkExtremesStatsJobsQuery
-		globalLimit = int(automaticExtremesStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
+		if details.UsingExtremes {
+			tableLimitQuery = checkExtremesStatsJobsQuery
+			globalLimit = int(automaticExtremesStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
+		} else if details.WhereClause != "" {
+			tableLimitQuery = checkFixMisestimatesStatsJobsQuery
+			globalLimit = int(automaticFixMisestimatesStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
+		}
 	}
 	kind := getAutoStatsKind(details)
 
@@ -516,6 +541,10 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			return nil, errors.AssertionFailedf(
 				"expected whereSpans to be set for statistics with a WHERE clause")
 		}
+		if len(n.whereSpans) != 1 {
+			return nil, errors.AssertionFailedf(
+				"expected whereSpans to contain exactly one span")
+		}
 		// Safe to use AsString since whereClause is only used to populate the
 		// predicate in system.table_statistics.
 		whereClause = tree.AsString(n.Options.Where.Expr)
@@ -538,7 +567,9 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	if len(n.ColumnNames) == 0 {
 		virtColEnabled := statsOnVirtualCols.Get(n.p.ExecCfg().SV())
 		// Disable multi-column stats and deleting stats if partial statistics at
-		// the extremes are requested.
+		// the extremes are requested. (Partial statistics with
+		// WHERE clause require a single column to be specified - this is
+		// enforced in the optbuilder.)
 		// TODO(#94076): add support for creating multi-column stats.
 		var multiColEnabled bool
 		if !n.Options.UsingExtremes {
@@ -683,10 +714,10 @@ const maxNonIndexCols = 100
 // If nonIndexJsonHistograms is true, 2-bucket histograms are collected for
 // non-indexed JSON columns.
 //
-// If partialStatsUsingExtremes is true, we only collect statistics on
-// single columns that are prefixes of forward indexes, and skip over
-// partial, sharded, and implicitly partitioned indexes. Partial
-// statistic creation only supports these columns.
+// If partialStatsUsingExtremes is true, we only collect statistics on single
+// columns that are prefixes of forward indexes, and skip over partial, sharded,
+// and implicitly partitioned indexes. Partial statistic creation only supports
+// these columns.
 //
 // In addition to the index columns, we collect stats on up to maxNonIndexCols
 // other columns from the table. We only collect histograms for index columns,
@@ -1097,9 +1128,9 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) (r
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				// Plan and run partial stats on multiple columns separately since each
-				// partial stat collection will use a different index and have different
-				// plans.
+				// Plan and run USING EXTREMES partial stats on multiple columns
+				// separately since each partial stat collection will use a
+				// different index and have different plans.
 				singleColDetails := protoutil.Clone(&details).(*jobspb.CreateStatsDetails)
 				singleColDetails.ColumnStats = []jobspb.CreateStatsDetails_ColStat{colStat}
 				planCtx := dsp.NewPlanningCtx(ctx, innerEvalCtx, innerP, txn.KV(), FullDistribution)

@@ -17,12 +17,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -79,7 +82,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 		nil, /* parentMon */
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// There should not be any stats yet.
 	if err := checkStatsCount(ctx, cache, descA, 0 /* expectedFull */, 0 /* expectedPartial */); err != nil {
@@ -242,7 +245,7 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 		nil, /* parentMon */
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	r := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+	r := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// Exclude the 5 system tables which don't use autostats.
 	systemTablesWithStats := bootstrap.NumSystemTablesForSystemTenant - 5
@@ -345,7 +348,7 @@ func BenchmarkEnsureAllTables(b *testing.B) {
 				nil, /* parentMon */
 			)
 			require.NoError(b, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-			r := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+			r := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -420,7 +423,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		nil, /* parentMon */
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// curTime is used as the current time throughout the test to ensure that the
 	// calculated average refresh time is consistent even if there are delays due
@@ -671,7 +674,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		nil, /* parentMon */
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
 
@@ -728,7 +731,7 @@ func TestAutoStatsOnStartupClusterSettingOff(t *testing.T) {
 		nil, /* parentMon */
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// Refresher start should trigger stats collection on t.a.
 	if err := refresher.Start(
@@ -777,7 +780,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 		nil, /* parentMon */
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	r := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+	r := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// Try to refresh stats on a table that doesn't exist.
 	r.maybeRefreshStats(
@@ -1018,9 +1021,9 @@ func TestAutoStatsDisabledReadOnlyTenant(t *testing.T) {
 		nil, /* parentMon */
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache,
+	refresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache,
 		time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
-	readOnlyRefresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache,
+	readOnlyRefresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache,
 		time.Microsecond /* asOfTime */, nil /* knobs */, true /* readOnlyTenant */)
 
 	// Test normal table descriptor with normal tenant (should have auto stats enabled).
@@ -1051,7 +1054,7 @@ func TestRefresherReadOnlyShutdown(t *testing.T) {
 	internalDB := s.InternalDB().(descs.DB)
 
 	// Create a read-only refresher.
-	readOnlyRefresher := MakeRefresher(s.AmbientCtx(), s.ClusterSettings(), internalDB, nil, /* cache */
+	readOnlyRefresher := MakeRefresher(s.AmbientCtx(), s.ClusterSettings(), s.Codec(), internalDB, nil, /* cache */
 		time.Microsecond /* asOfTime */, nil /* knobs */, true /* readOnlyTenant */)
 
 	// Start the refresher.
@@ -1103,7 +1106,7 @@ func TestEstimateStaleness(t *testing.T) {
 	knobs := &TableStatsTestingKnobs{
 		StubTimeNow: func() time.Time { return curTime },
 	}
-	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, knobs, false /* readOnlyTenant */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, knobs, false /* readOnlyTenant */)
 
 	checkEstimatedStaleness := func(expected float64) error {
 		return testutils.SucceedsSoonError(func() error {
@@ -1442,4 +1445,401 @@ func TestAddMisestimateRandomized(t *testing.T) {
 		})
 		require.Equal(t, dedupAndMerge(append(slices.Clone(old), new...)), r.misestimateSpans[id])
 	}
+}
+
+func TestSpanToBounds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const tableID = 100
+	const indexID = 1
+
+	asc := catenumpb.IndexColumn_ASC
+	desc := catenumpb.IndexColumn_DESC
+
+	encodeInt := func(key roachpb.Key, v int, dir catenumpb.IndexColumn_Direction) roachpb.Key {
+		if dir == desc {
+			return encoding.EncodeVarintDescending(key, int64(v))
+		}
+		return encoding.EncodeVarintAscending(key, int64(v))
+	}
+
+	encodeString := func(
+		key roachpb.Key, s string, dir catenumpb.IndexColumn_Direction,
+	) roachpb.Key {
+		if dir == desc {
+			return encoding.EncodeStringDescending(key, s)
+		}
+		return encoding.EncodeStringAscending(key, s)
+	}
+
+	// makeIntKey builds a key with an optional leading integer datum, plus
+	// optional extra trailing bytes.
+	makeIntKey := func(
+		val *int, dir catenumpb.IndexColumn_Direction, extra ...byte,
+	) roachpb.Key {
+		key := keys.MakeTableIDIndexID(nil /* key */, tableID, indexID)
+		if val != nil {
+			key = encodeInt(key, *val, dir)
+		}
+		key = append(key, extra...)
+		return key
+	}
+
+	// makeStringKey builds a key with an optional leading string datum, plus
+	// optional extra trailing bytes.
+	makeStringKey := func(
+		val *string, dir catenumpb.IndexColumn_Direction, extra ...byte,
+	) roachpb.Key {
+		key := keys.MakeTableIDIndexID(nil /* key */, tableID, indexID)
+		if val != nil {
+			key = encodeString(key, *val, dir)
+		}
+		key = append(key, extra...)
+		return key
+	}
+
+	intPtr := func(v int) *int { return &v }
+	strPtr := func(s string) *string { return &s }
+
+	const colName = "c"
+
+	testCases := []struct {
+		name     string
+		span     roachpb.Span
+		dir      catenumpb.IndexColumn_Direction // asc if unset
+		colType  *types.T                        // types.Int if unset
+		expected string
+	}{
+		// --- Int column ---
+		{
+			name:     "int Get ASC",
+			span:     roachpb.Span{Key: makeIntKey(intPtr(42), asc)},
+			expected: "c = 42",
+		},
+		{
+			name:     "int Get no datum is contradiction",
+			span:     roachpb.Span{Key: makeIntKey(nil, asc)},
+			expected: "false",
+		},
+		{
+			name: "int closed interval ASC same value",
+			span: roachpb.Span{
+				// Note that this is an invalid span, but that's ok.
+				Key:    makeIntKey(intPtr(10), asc),
+				EndKey: makeIntKey(intPtr(10), asc),
+			},
+			expected: "c = 10",
+		},
+		{
+			name: "int closed interval ASC different values",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(5), asc),
+				EndKey: makeIntKey(intPtr(15), asc),
+			},
+			expected: "5 <= c AND c <= 15",
+		},
+		{
+			name: "int closed interval DESC different values",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(15), desc),
+				EndKey: makeIntKey(intPtr(5), desc),
+			},
+			dir:      desc,
+			expected: "15 >= c AND c >= 5",
+		},
+		{
+			name: "int half-open start only ASC",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(10), asc),
+				EndKey: makeIntKey(nil, asc),
+			},
+			expected: "c >= 10",
+		},
+		{
+			name: "int half-open start only DESC",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(10), desc),
+				EndKey: makeIntKey(nil, desc),
+			},
+			dir:      desc,
+			expected: "c <= 10",
+		},
+		{
+			name: "int half-open end only ASC",
+			span: roachpb.Span{
+				Key:    makeIntKey(nil, asc),
+				EndKey: makeIntKey(intPtr(20), asc),
+			},
+			expected: "c <= 20",
+		},
+		{
+			name: "int half-open end only DESC",
+			span: roachpb.Span{
+				Key:    makeIntKey(nil, desc),
+				EndKey: makeIntKey(intPtr(20), desc),
+			},
+			dir:      desc,
+			expected: "c >= 20",
+		},
+		{
+			name: "full index scan is contradiction",
+			span: roachpb.Span{
+				Key:    makeIntKey(nil, asc),
+				EndKey: keys.MakeTableIDIndexID(nil /* key */, tableID, indexID+1),
+			},
+			expected: "false",
+		},
+		{
+			name: "int negative values",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(-100), asc),
+				EndKey: makeIntKey(intPtr(-1), asc),
+			},
+			expected: "-100 <= c AND c <= -1",
+		},
+		{
+			name:     "int zero value Get",
+			span:     roachpb.Span{Key: makeIntKey(intPtr(0), asc)},
+			expected: "c = 0",
+		},
+
+		// --- String column ---
+		{
+			name:     "string Get ASC",
+			span:     roachpb.Span{Key: makeStringKey(strPtr("hello"), asc)},
+			colType:  types.String,
+			expected: "c = 'hello'",
+		},
+		{
+			name: "string closed interval ASC",
+			span: roachpb.Span{
+				Key:    makeStringKey(strPtr("aaa"), asc),
+				EndKey: makeStringKey(strPtr("zzz"), asc),
+			},
+			colType:  types.String,
+			expected: "'aaa' <= c AND c <= 'zzz'",
+		},
+		{
+			name: "string closed interval DESC",
+			span: roachpb.Span{
+				Key:    makeStringKey(strPtr("zzz"), desc),
+				EndKey: makeStringKey(strPtr("aaa"), desc),
+			},
+			dir:      desc,
+			colType:  types.String,
+			expected: "'zzz' >= c AND c >= 'aaa'",
+		},
+		{
+			name: "string half-open start ASC",
+			span: roachpb.Span{
+				Key:    makeStringKey(strPtr("foo"), asc),
+				EndKey: makeStringKey(nil, asc),
+			},
+			colType:  types.String,
+			expected: "c >= 'foo'",
+		},
+		{
+			name: "string half-open end ASC",
+			span: roachpb.Span{
+				Key:    makeStringKey(nil, asc),
+				EndKey: makeStringKey(strPtr("bar"), asc),
+			},
+			colType:  types.String,
+			expected: "c <= 'bar'",
+		},
+		{
+			name:     "string with special characters",
+			span:     roachpb.Span{Key: makeStringKey(strPtr("it's"), asc)},
+			colType:  types.String,
+			expected: "c = e'it\\'s'",
+		},
+
+		// --- Composite keys (trailing bytes from a second column) ---
+		{
+			// Same first-column value with different trailing bytes from a
+			// second column. Since the function strips trailing bytes via
+			// remainingKey, the first-column prefix is identical, reducing
+			// to equality.
+			name: "composite same first col trailing ASC",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(10), asc, 0x01),
+				EndKey: makeIntKey(intPtr(10), asc, 0x02),
+			},
+			expected: "c = 10",
+		},
+		{
+			// Different first-column values with trailing bytes still
+			// produce a range on the first column.
+			name: "composite different first col with trailing ASC",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(5), asc, 0x01),
+				EndKey: makeIntKey(intPtr(15), asc, 0x02),
+			},
+			expected: "5 <= c AND c <= 15",
+		},
+		{
+			name: "composite string with trailing ASC",
+			span: roachpb.Span{
+				Key:    makeStringKey(strPtr("abc"), asc, 0x01),
+				EndKey: makeStringKey(strPtr("abc"), asc, 0xFF),
+			},
+			colType:  types.String,
+			expected: "c = 'abc'",
+		},
+		{
+			// Simulate a real composite index (c INT, v INT) where the
+			// span covers (c=5, v=1) to (c=5, v=100). The second-column
+			// encoded values differ but the first-column value is the
+			// same, so we get equality on c.
+			name: "composite with different second Int column",
+			span: roachpb.Span{
+				Key:    encodeInt(makeIntKey(intPtr(5), asc), 1, asc),
+				EndKey: encodeInt(makeIntKey(intPtr(5), asc), 100, asc),
+			},
+			expected: "c = 5",
+		},
+		{
+			// Composite index (c INT, v INT), span covers (c=1, v=50)
+			// to (c=10, v=50). Different first-column values produce a
+			// range.
+			name: "composite with different first col and encoded second col",
+			span: roachpb.Span{
+				Key:    encodeInt(makeIntKey(intPtr(1), asc), 50, asc),
+				EndKey: encodeInt(makeIntKey(intPtr(10), asc), 50, asc),
+			},
+			expected: "1 <= c AND c <= 10",
+		},
+		{
+			// Composite index (c STRING, v INT), span covers
+			// (c='foo', v=1) to (c='foo', v=99).
+			name: "composite String first col with different second Int col",
+			span: roachpb.Span{
+				Key:    encodeInt(makeStringKey(strPtr("foo"), asc), 1, asc),
+				EndKey: encodeInt(makeStringKey(strPtr("foo"), asc), 99, asc),
+			},
+			colType:  types.String,
+			expected: "c = 'foo'",
+		},
+	}
+
+	var da tree.DatumAlloc
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			colType := tc.colType
+			if colType == nil {
+				colType = types.Int
+			}
+			info := indexInfo{
+				tableID:       tableID,
+				indexID:       indexID,
+				keyColumnName: colName,
+				keyColumnDir:  tc.dir,
+				keyColumnType: colType,
+			}
+			result, err := spanToBounds(context.Background(), keys.SystemSQLCodec, tc.span, info, &da)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+// TestFixMisestimatesAutoStats verifies that "fix misestimates" stats are
+// collected automatically in response to scans with significantly incorrect
+// estimated row count.
+// TODO(yuzefovich): consider also adding a test with "ascending key problem",
+// with forecasts disabled, and ensuring that fixup partial stats continuously
+// advance the "frontier".
+func TestFixMisestimatesAutoStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Speed up the test.
+	defer func(oldRefreshInterval, oldAsOf time.Duration) {
+		DefaultRefreshInterval = oldRefreshInterval
+		DefaultAsOfTime = oldAsOf
+	}(DefaultRefreshInterval, DefaultAsOfTime)
+	DefaultRefreshInterval = time.Second
+	DefaultAsOfTime = 100 * time.Millisecond
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			TableStatsKnobs: &TableStatsTestingKnobs{
+				// Disable USING EXTREMES auto partial stats collection so that
+				// it doesn't interfere with "fix misestimates" auto partial
+				// stats.
+				DisablePartialUsingExtremes: true,
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	// Disable auto full table stats collection to have more control.
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_full_collection.enabled = false;`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_partial_collection.fix_scan_row_count_misestimate.enabled = true;`)
+
+	// Set up the state where the only present table stats are quite stale.
+	sqlDB.Exec(t, `
+	CREATE TABLE t (k INT PRIMARY KEY) WITH (sql_stats_automatic_partial_collection_fix_scan_row_count_enabled = true);
+	INSERT INTO t SELECT generate_series(1, 1000);
+	ANALYZE t;
+	INSERT INTO t SELECT generate_series(1001, 5000);
+`)
+
+	// Use a query that gets a bad estimate due to stale stats.
+	const query = `SELECT count(*) FROM t WHERE k > 900;`
+
+	// Sanity check that the estimate is, indeed, bad.
+	sqlDB.Exec(t, `SELECT crdb_internal.clear_table_stats_cache();`)
+	output := sqlDB.QueryStr(t, `EXPLAIN `+query)
+	var foundBadEstimate bool
+	for _, line := range output {
+		if strings.Contains(line[0], `estimated row count: 100`) {
+			foundBadEstimate = true
+			break
+		}
+	}
+	require.True(t, foundBadEstimate)
+
+	// Run the query via EXPLAIN ANALYZE to sanity check that the warning is
+	// printed.
+	output = sqlDB.QueryStr(t, `EXPLAIN ANALYZE `+query)
+	const expected = `WARNING: the row count estimate is inaccurate`
+	var foundWarning bool
+	for _, line := range output {
+		if strings.Contains(line[0], expected) {
+			foundWarning = true
+			break
+		}
+	}
+	require.True(t, foundWarning)
+
+	// Now, meat of the test - the query should have asked for "fix
+	// misestimates" stats to be collected, so we check that those are collected
+	// reasonably quickly.
+	testutils.SucceedsSoon(t, func() error {
+		const partialPredicate = `k >= 901`
+		row := sqlDB.QueryRow(t, `SELECT count(*) FROM [SHOW STATISTICS FOR TABLE t] WHERE partial_predicate = $1`, partialPredicate)
+		var partialStatsCount int
+		row.Scan(&partialStatsCount)
+		if partialStatsCount != 1 {
+			return fmt.Errorf("not yet collected")
+		}
+		return nil
+	})
+
+	// Sanity check that "fix misestimates" stats are now used for a better
+	// estimate.
+	sqlDB.Exec(t, `SELECT crdb_internal.clear_table_stats_cache();`)
+	output = sqlDB.QueryStr(t, `EXPLAIN SELECT count(*) FROM t WHERE k > 900;`)
+	var foundGoodEstimate bool
+	for _, line := range output {
+		if strings.Contains(line[0], `estimated row count: 4,102`) {
+			foundGoodEstimate = true
+			break
+		}
+	}
+	require.True(t, foundGoodEstimate)
 }

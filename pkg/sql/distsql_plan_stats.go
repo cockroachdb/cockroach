@@ -160,11 +160,15 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 	// Estimate the expected number of rows based on existing stats in the cache.
 	var rowsExpected uint64
 	if len(tableStats) > 0 {
+		// Estimate the expected number of rows based on existing stats in the
+		// cache.
 		overhead := stats.AutomaticStatisticsFractionStaleRows.Get(&dsp.st.SV)
 		if autoStatsFractionStaleRowsForTable, ok := desc.AutoStatsFractionStaleRows(); ok {
 			overhead = autoStatsFractionStaleRowsForTable
 		}
-		if details.UsingExtremes {
+		if details.UsingExtremes || details.WhereClause != "" {
+			// TODO(yuzefovich): figure out whether it's worth plumbing the
+			// estimated row count for the fixup auto stats.
 			rowsExpected = uint64(int64(
 				// The total expected number of rows is the estimated number of stale
 				// rows since we're only collecting stats on rows outside the bounds of
@@ -330,6 +334,10 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		err = scan.initDescSpecificCol(colCfg, column)
 	} else if details.WhereClause != "" {
 		err = scan.initDescSpecificIndex(colCfg, column, details.WhereIndexID)
+	} else {
+		err = errors.AssertionFailedf(
+			"partial stats require either USING EXTREMES or a WHERE clause",
+		)
 	}
 	if err != nil {
 		return nil, err
@@ -418,12 +426,9 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		if err != nil {
 			return nil, err
 		}
-	} else if details.WhereClause != "" {
+	} else {
 		predicate = details.WhereClause
 		scan.spans = details.WhereSpans
-	} else {
-		return nil, errors.AssertionFailedf(
-			"partial stats require either USING EXTREMES or a WHERE clause")
 	}
 	p, err := dsp.createTableReaders(ctx, planCtx, &scan)
 	if err != nil {
@@ -764,7 +769,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 		if details.ColumnStats[i].HistogramMaxBuckets > 0 {
 			histogramMaxBuckets = details.ColumnStats[i].HistogramMaxBuckets
 		}
-		if details.ColumnStats[i].Inverted && details.UsingExtremes {
+		if details.ColumnStats[i].Inverted && (details.UsingExtremes || details.WhereClause != "") {
 			return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cannot create partial statistics on an inverted index column")
 		}
 		reqStats[i] = requestedStat{
