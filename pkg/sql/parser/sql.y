@@ -1621,7 +1621,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <[]tree.RangePartition> range_partitions
 %type <empty> opt_all_clause
 %type <empty> opt_privileges_clause
-%type <bool> distinct_clause opt_with_data
+%type <bool> distinct_clause opt_with_data opt_create_as_data
 %type <tree.DistinctOn> distinct_on_clause
 %type <tree.NameList> opt_column_list insert_column_list opt_stats_columns query_stats_cols
 // Note that "no index" variants exist to disable custom ORDER BY <index> syntax
@@ -11850,6 +11850,7 @@ create_table_as_stmt:
       IfNotExists: false,
       Defs: $5.tblDefs(),
       AsSource: $8.slct(),
+      WithNoData: $9.bool(),
       StorageParams: $6.storageParams(),
       OnCommit: $10.createTableOnCommitSetting(),
       Persistence: $2.persistence(),
@@ -11863,6 +11864,7 @@ create_table_as_stmt:
       IfNotExists: true,
       Defs: $8.tblDefs(),
       AsSource: $11.slct(),
+      WithNoData: $12.bool(),
       StorageParams: $9.storageParams(),
       OnCommit: $13.createTableOnCommitSetting(),
       Persistence: $2.persistence(),
@@ -11870,9 +11872,9 @@ create_table_as_stmt:
   }
 
 opt_create_as_data:
-  /* EMPTY */  { /* no error */ }
-| WITH DATA    { /* SKIP DOC */ /* This is the default */ }
-| WITH NO DATA { return unimplemented(sqllex, "create table as with no data") }
+  /* EMPTY */  { $$.val = false }
+| WITH DATA    { /* SKIP DOC */ $$.val = false }
+| WITH NO DATA { $$.val = true }
 
 /*
  * Redundancy here is needed to avoid shift/reduce conflicts,

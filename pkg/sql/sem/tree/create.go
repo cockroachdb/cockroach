@@ -1550,9 +1550,10 @@ type CreateTable struct {
 	// In CREATE...AS queries, Defs represents a list of ColumnTableDefs, one for
 	// each column, and a ConstraintTableDef for each constraint on a subset of
 	// these columns.
-	Defs     TableDefs
-	AsSource *Select
-	Locality *Locality
+	Defs       TableDefs
+	AsSource   *Select
+	WithNoData bool
+	Locality   *Locality
 }
 
 // As returns true if this table represents a CREATE TABLE ... AS statement,
@@ -1609,6 +1610,9 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 		}
 		ctx.WriteString(" AS ")
 		ctx.FormatNode(node.AsSource)
+		if node.WithNoData {
+			ctx.WriteString(" WITH NO DATA")
+		}
 	} else {
 		ctx.WriteString(" (")
 		ctx.FormatNode(&node.Defs)

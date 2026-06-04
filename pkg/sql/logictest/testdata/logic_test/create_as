@@ -688,3 +688,64 @@ forks   30  1
 spoons  10  1
 
 subtest end
+
+# Test CREATE TABLE ... AS ... WITH NO DATA (#171333). The destination table
+# inherits the SELECT's column types but is left empty.
+subtest with_no_data
+
+statement ok
+CREATE TABLE wnd_src (a INT, b STRING); INSERT INTO wnd_src VALUES (1, 'x'), (2, 'y')
+
+statement ok
+CREATE TABLE wnd_empty AS SELECT * FROM wnd_src WITH NO DATA
+
+query IT rowsort
+SELECT a, b FROM wnd_empty
+----
+
+query TT
+SELECT column_name, data_type FROM [SHOW COLUMNS FROM wnd_empty] WHERE column_name IN ('a', 'b') ORDER BY column_name
+----
+a  INT8
+b  STRING
+
+# Explicit WITH DATA still copies rows.
+statement ok
+CREATE TABLE wnd_full AS SELECT * FROM wnd_src WITH DATA
+
+query IT rowsort
+SELECT a, b FROM wnd_full
+----
+1  x
+2  y
+
+# Default (no clause) still copies rows.
+statement ok
+CREATE TABLE wnd_default AS SELECT * FROM wnd_src
+
+query IT rowsort
+SELECT a, b FROM wnd_default
+----
+1  x
+2  y
+
+# IF NOT EXISTS path accepts WITH NO DATA.
+statement ok
+CREATE TABLE IF NOT EXISTS wnd_ifne AS SELECT * FROM wnd_src WITH NO DATA
+
+query IT rowsort
+SELECT a, b FROM wnd_ifne
+----
+
+# Temporary table path accepts WITH NO DATA.
+statement ok
+SET experimental_enable_temp_tables = 'on'
+
+statement ok
+CREATE TEMP TABLE wnd_temp AS SELECT * FROM wnd_src WITH NO DATA
+
+query IT rowsort
+SELECT a, b FROM wnd_temp
+----
+
+subtest end
