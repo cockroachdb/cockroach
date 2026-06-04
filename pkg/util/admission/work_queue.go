@@ -223,6 +223,8 @@ type WorkInfo struct {
 	// WorkloadID is used for ASH sampling.
 	WorkloadID uint64
 	// AppNameID is the hash of the application name. Used for ASH sampling.
+	// Deprecated in favor of EnrichmentID once 26.3 is finalized; retained
+	// for mixed-version compatibility.
 	AppNameID uint64
 	// GatewayNodeID is the node that initiated the workload. Used for ASH
 	// sampling.
@@ -230,6 +232,10 @@ type WorkInfo struct {
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents. Used for ASH sampling.
 	WorkloadType workloadid.WorkloadType
+	// EnrichmentID is the 64-bit short hash (clusterunique.ID.ShortID)
+	// of the execution whose attributes were cached on the gateway
+	// node. Zero means "unset". Used for ASH sampling.
+	EnrichmentID uint64
 }
 
 // ReplicatedWorkInfo groups everything needed to admit replicated writes, done
@@ -1091,6 +1097,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 			AppNameID:     info.AppNameID,
 			GatewayNodeID: info.GatewayNodeID,
 			WorkloadType:  info.WorkloadType,
+			EnrichmentID:  info.EnrichmentID,
 		},
 		ash.WorkAdmission, string(q.queueKind))
 	defer cleanup()

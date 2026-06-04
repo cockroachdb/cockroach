@@ -399,6 +399,7 @@ func serializeEvalContext(evalCtx *eval.Context) execinfrapb.EvalContext {
 		WorkloadID:                        evalCtx.WorkloadID,
 		AppNameID:                         evalCtx.AppNameID,
 		WorkloadType:                      evalCtx.WorkloadType.ToUint32(),
+		EnrichmentID:                      evalCtx.EnrichmentID,
 	}
 }
 
@@ -478,13 +479,14 @@ func (dsp *DistSQLPlanner) setupFlows(
 		StatementSQL:      statementSQL,
 	}
 	if localState.IsLocal {
-		// VectorizeMode, workloadID, appNameID, and workloadType are
-		// the only fields that the setup code expects to be set in the
-		// local flows.
+		// VectorizeMode, workloadID, appNameID, enrichmentID, and
+		// workloadType are the only fields that the setup code expects
+		// to be set in the local flows.
 		setupReq.EvalContext.SessionData.VectorizeMode = evalCtx.SessionData().VectorizeMode
 		setupReq.EvalContext.WorkloadID = evalCtx.WorkloadID
 		setupReq.EvalContext.AppNameID = evalCtx.AppNameID
 		setupReq.EvalContext.WorkloadType = evalCtx.WorkloadType.ToUint32()
+		setupReq.EvalContext.EnrichmentID = evalCtx.EnrichmentID
 	} else {
 		// In distributed plans populate some extra state.
 		setupReq.EvalContext = serializeEvalContext(evalCtx)

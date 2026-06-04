@@ -402,14 +402,22 @@ type Context struct {
 
 	// AppNameID is the hash of the application name, for ASH
 	// sampling. Set alongside WorkloadID in the connExecutor.
-	// Note(alyshan): This will eventually be replaced by a general
-	// enrichment_id field which will enable the ASH sampler to
-	// enrich samples with more workload context.
+	// Deprecated in favor of EnrichmentID once 26.3 is finalized;
+	// retained for mixed-version compatibility.
 	AppNameID uint64
 
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents (statement fingerprint, job ID, system task).
 	WorkloadType workloadid.WorkloadType
+
+	// EnrichmentID is the 64-bit short hash (clusterunique.ID.ShortID)
+	// of the statement's QueryID, under which the gateway's ASH
+	// enrichment cache holds this execution's attributes. Zero means
+	// "unset" — see the comment on kvpb.Header.EnrichmentID for why
+	// that's safe. The sampler stamps it onto each sample so downstream
+	// enrichment can resolve attributes via the local cache or the
+	// GetASHEnrichmentData RPC.
+	EnrichmentID uint64
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution

@@ -1825,6 +1825,7 @@ GO_TARGETS = [
     "//pkg/multitenant/tenantcostserver:tenantcostserver",
     "//pkg/multitenant/tenantcostserver:tenantcostserver_test",
     "//pkg/multitenant:multitenant",
+    "//pkg/obs/ash/enrichment:enrichment",
     "//pkg/obs/ash:ash",
     "//pkg/obs/ash:ash_test",
     "//pkg/obs/clustermetrics/cmmetrics:cmmetrics",

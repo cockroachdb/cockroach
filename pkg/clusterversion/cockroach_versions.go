@@ -308,6 +308,15 @@ const (
 	// bytes in RangeAppliedState.
 	V26_3_ApproxStoreLocalBytes
 
+	// V26_3_ASHEnrichment gates the ASH sampler's outbound
+	// GetASHEnrichmentData RPC. Before finalization the sampler skips
+	// remote enrichment (the handler is always installed but never
+	// called), so a mixed-version cluster doesn't generate spurious
+	// "unknown method" failures against pre-26.3 nodes. After
+	// finalization the sampler issues per-tick RPCs to gateway nodes
+	// to resolve enrichment attributes for sampled work.
+	V26_3_ASHEnrichment
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -406,6 +415,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_AddVcpuUsageTable: {Major: 26, Minor: 2, Internal: 16},
 
 	V26_3_ApproxStoreLocalBytes: {Major: 26, Minor: 2, Internal: 18},
+
+	V26_3_ASHEnrichment: {Major: 26, Minor: 2, Internal: 20},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

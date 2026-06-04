@@ -52,15 +52,22 @@ type WorkloadInfo struct {
 	WorkloadID uint64
 	// AppNameID is the hash of the application name. Set when the
 	// workload is from SQL execution.
-	// Note(alyshan): This will eventually be replaced by a general
-	// enrichment_id field which will enable the ASH sampler to
-	// enrich samples with more workload context.
+	// Deprecated in favor of EnrichmentID once 26.3 is finalized;
+	// retained for mixed-version compatibility.
 	AppNameID uint64
 	// GatewayNodeID is the node that initiated the workload.
 	GatewayNodeID roachpb.NodeID
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents, controlling how the sampler encodes the ID.
 	WorkloadType workloadid.WorkloadType
+	// EnrichmentID is the 64-bit short hash (clusterunique.ID.ShortID)
+	// of the execution whose attributes were cached on the gateway
+	// node. Zero means "unset" — the value is a hash and the
+	// probability of a real ShortID hashing to zero is 2^-64. The
+	// sampler stamps it onto each sample so downstream enrichment can
+	// resolve attributes via the local cache or the
+	// GetASHEnrichmentData RPC.
+	EnrichmentID uint64
 }
 
 // ASHSample represents a single Active Session History sample.

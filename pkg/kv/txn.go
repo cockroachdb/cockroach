@@ -86,9 +86,8 @@ type Txn struct {
 	// appNameID, if != 0, is the hash of the application name for
 	// ASH sampling. Propagated alongside workloadID to all BatchRequests.
 	// Set when the workload is from SQL execution.
-	// Note(alyshan): This will eventually be replaced by a general
-	// enrichment_id field which will enable the ASH sampler to
-	// enrich samples with more workload context.
+	// Deprecated in favor of enrichmentID once 26.3 is finalized; retained
+	// for mixed-version compatibility.
 	appNameID uint64
 
 	// workloadID, if != 0, is the identifier for the workload that is using
@@ -103,6 +102,13 @@ type Txn struct {
 	// workloadType identifies the kind of workload that workloadID
 	// represents (statement fingerprint, job, system task).
 	workloadType workloadid.WorkloadType
+	// enrichmentID, if non-zero, is the 64-bit short hash
+	// (clusterunique.ID.ShortID) under which the gateway's ASH
+	// enrichment cache holds this execution's attributes. Propagated
+	// alongside workloadID to all BatchRequests.
+	// Set when the workload is from SQL execution. Same concurrency
+	// note as workloadID.
+	enrichmentID uint64
 
 	// The following fields are not safe for concurrent modification.
 	// They should be set before operating on the transaction.
@@ -464,15 +470,18 @@ func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
-// SetWorkloadInfo sets the workload ID, app name ID, and workload
-// type for ASH sampling. All three are automatically propagated to
-// all BatchRequests sent through this transaction.
+// SetWorkloadInfo sets the workload ID, app name ID, workload type,
+// and enrichment ID for ASH sampling. All four are automatically
+// propagated to all BatchRequests sent through this transaction.
+// enrichmentID is the short hash (clusterunique.ID.ShortID); zero
+// means "no enrichment".
 func (txn *Txn) SetWorkloadInfo(
-	workloadID, appNameID uint64, workloadType workloadid.WorkloadType,
+	workloadID, appNameID uint64, workloadType workloadid.WorkloadType, enrichmentID uint64,
 ) {
 	txn.workloadID = workloadID
 	txn.appNameID = appNameID
 	txn.workloadType = workloadType
+	txn.enrichmentID = enrichmentID
 }
 
 // SetResourceGroup records the resource group id that requests sent through
@@ -1405,6 +1414,10 @@ func (txn *Txn) Send(
 
 	if txn.workloadType != workloadid.WorkloadTypeUnknown && ba.Header.WorkloadType == 0 {
 		ba.Header.WorkloadType = txn.workloadType.ToUint32()
+	}
+
+	if txn.enrichmentID != 0 && ba.Header.EnrichmentID == 0 {
+		ba.Header.EnrichmentID = txn.enrichmentID
 	}
 
 	// Requests with a bounded staleness header should use NegotiateAndSend.

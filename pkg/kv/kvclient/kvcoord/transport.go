@@ -212,6 +212,7 @@ func (gt *grpcTransport) sendBatch(
 		AppNameID:     ba.AppNameID,
 		GatewayNodeID: ba.GatewayNodeID,
 		WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+		EnrichmentID:  ba.EnrichmentID,
 	}
 	var cleanup func()
 	if rpc.IsLocal(iface) {

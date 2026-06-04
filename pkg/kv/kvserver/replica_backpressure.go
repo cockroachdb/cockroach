@@ -208,6 +208,7 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 					AppNameID:     ba.AppNameID,
 					GatewayNodeID: ba.GatewayNodeID,
 					WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+					EnrichmentID:  ba.EnrichmentID,
 				},
 				ash.WorkOther, "Backpressure")
 			defer cleanup() //nolint:deferloop

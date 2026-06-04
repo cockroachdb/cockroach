@@ -306,6 +306,7 @@ func (n *controllerImpl) AdmitKVWork(
 					AppNameID:     admissionInfo.AppNameID,
 					GatewayNodeID: admissionInfo.GatewayNodeID,
 					WorkloadType:  admissionInfo.WorkloadType,
+					EnrichmentID:  admissionInfo.EnrichmentID,
 				})
 			if err != nil {
 				return Handle{}, err
@@ -641,6 +642,7 @@ func workInfoForBatch(
 		GatewayNodeID:   ba.Header.GatewayNodeID,
 		WorkloadType:    workloadid.WorkloadType(ba.Header.WorkloadType),
 		ResourceGroupID: admissionpb.ResourceGroupID(ba.AdmissionHeader.ResourceGroupID),
+		EnrichmentID:    ba.Header.EnrichmentID,
 	}
 	return admissionInfo
 }

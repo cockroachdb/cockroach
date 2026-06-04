@@ -570,6 +570,7 @@ func (m *Manager) iterAndWait(
 			AppNameID:     lg.ba.AppNameID,
 			GatewayNodeID: lg.ba.GatewayNodeID,
 			WorkloadType:  workloadid.WorkloadType(lg.ba.WorkloadType),
+			EnrichmentID:  lg.ba.EnrichmentID,
 		}
 	}
 	for it.FirstOverlap(wait); it.Valid(); it.NextOverlap(wait) {

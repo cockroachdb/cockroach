@@ -4140,6 +4140,8 @@ func TestBatchHeaderFieldsAreAccountedForInBufferedWrites(t *testing.T) {
 		"AppNameID": iSwearFieldDoesNotNeedHandling,
 		// Observability label, doesn't affect batch processing.
 		"WorkloadType": iSwearFieldDoesNotNeedHandling,
+		// Observability label, doesn't affect batch processing.
+		"EnrichmentID": iSwearFieldDoesNotNeedHandling,
 	}
 
 	header := kvpb.Header{}

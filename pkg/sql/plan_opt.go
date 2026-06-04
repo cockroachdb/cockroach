@@ -304,6 +304,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 			AppNameID:     p.extendedEvalCtx.AppNameID,
 			GatewayNodeID: roachpb.NodeID(p.extendedEvalCtx.NodeID.SQLInstanceID()),
 			WorkloadType:  p.extendedEvalCtx.WorkloadType,
+			EnrichmentID:  p.extendedEvalCtx.EnrichmentID,
 		},
 		ash.WorkCPU, "Optimize")
 	defer cleanup()
