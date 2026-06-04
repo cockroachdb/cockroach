@@ -17,7 +17,7 @@ message ResourceGroupConfig {
 
   // CPUWeight is the relative share of CPU the group is entitled to
   // when contending with other groups. Must be > 0.
-  int64 cpu_weight = 1 [(gogoproto.customname) = "CPUWeight"];
+  uint32 cpu_weight = 1 [(gogoproto.customname) = "CPUWeight"];
 
   // MaxCPU allows the group to burst to the cluster's maximum
   // available CPU when no other group is contending.

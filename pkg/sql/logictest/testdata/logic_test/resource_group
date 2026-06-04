@@ -36,11 +36,14 @@ CREATE RESOURCE GROUP missing_weight
 statement error pq: cpu_weight is required and must be a positive integer
 CREATE RESOURCE GROUP only_max_cpu WITH (max_cpu = true)
 
-statement error pq: cpu_weight must be a positive integer
+statement error pq: cpu_weight must be an integer in \(0, 4294967295\], got 0
 CREATE RESOURCE GROUP zero_weight WITH (cpu_weight = 0)
 
-statement error pq: cpu_weight must be a positive integer
+statement error pq: cpu_weight must be an integer in \(0, 4294967295\], got -1
 CREATE RESOURCE GROUP negative_weight WITH (cpu_weight = -1)
+
+statement error pq: cpu_weight must be an integer in \(0, 4294967295\], got 4294967296
+CREATE RESOURCE GROUP too_large_weight WITH (cpu_weight = 4294967296)
 
 # Unknown options are rejected.
 statement error pq: unknown resource group option "bogus"
