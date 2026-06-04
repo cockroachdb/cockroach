@@ -721,6 +721,15 @@ var mathBuiltins = map[string]builtinDefinition{
 				b2, _ := args[2].(*tree.DDecimal).Float64()
 				count := int(tree.MustBeDInt(args[3]))
 				// See postgres/src/backend/utils/adp/numeric.c:width_bucket_numeric.
+				// PostgreSQL validates count before the NaN and finite-bound
+				// checks, so an invalid count is reported even when another
+				// argument is also invalid.
+				if count <= 0 {
+					return nil, pgerror.New(
+						pgcode.InvalidArgumentForWidthBucketFunction,
+						"count must be greater than zero",
+					)
+				}
 				if math.IsNaN(operand) || math.IsNaN(b1) || math.IsNaN(b2) {
 					return nil, pgerror.New(
 						pgcode.InvalidArgumentForWidthBucketFunction,
@@ -731,6 +740,12 @@ var mathBuiltins = map[string]builtinDefinition{
 					return nil, pgerror.New(
 						pgcode.InvalidArgumentForWidthBucketFunction,
 						"lower and upper bounds must be finite",
+					)
+				}
+				if b1 == b2 {
+					return nil, pgerror.New(
+						pgcode.InvalidArgumentForWidthBucketFunction,
+						"lower bound cannot equal upper bound",
 					)
 				}
 				if math.IsInf(operand, 1) {
@@ -754,6 +769,18 @@ var mathBuiltins = map[string]builtinDefinition{
 				b1 := float64(tree.MustBeDInt(args[1]))
 				b2 := float64(tree.MustBeDInt(args[2]))
 				count := int(tree.MustBeDInt(args[3]))
+				if count <= 0 {
+					return nil, pgerror.New(
+						pgcode.InvalidArgumentForWidthBucketFunction,
+						"count must be greater than zero",
+					)
+				}
+				if b1 == b2 {
+					return nil, pgerror.New(
+						pgcode.InvalidArgumentForWidthBucketFunction,
+						"lower bound cannot equal upper bound",
+					)
+				}
 				return tree.NewDInt(tree.DInt(widthBucket(operand, b1, b2, count))), nil
 			},
 			Info: "return the bucket number to which operand would be assigned in a histogram having count " +
