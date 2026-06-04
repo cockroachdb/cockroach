@@ -1551,7 +1551,7 @@ func (*GrantRole) StatementReturnType() StatementReturnType { return DDL }
 func (*GrantRole) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*GrantRole) StatementTag() string { return "GRANT" }
+func (*GrantRole) StatementTag() string { return "GRANT ROLE" }
 
 // StatementReturnType implements the Statement interface.
 func (n *Insert) StatementReturnType() StatementReturnType { return n.Returning.statementReturnType() }
@@ -1779,7 +1779,7 @@ func (*RevokeRole) StatementReturnType() StatementReturnType { return DDL }
 func (*RevokeRole) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*RevokeRole) StatementTag() string { return "REVOKE" }
+func (*RevokeRole) StatementTag() string { return "REVOKE ROLE" }
 
 // StatementReturnType implements the Statement interface.
 func (*RollbackPrepared) StatementReturnType() StatementReturnType { return Ack }

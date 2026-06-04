@@ -1444,10 +1444,10 @@ DROP ROLE testuser
 statement error cannot execute SET CLUSTER SETTING in a read-only transaction
 SET CLUSTER SETTING sql.auth.change_own_password.enabled = true
 
-statement error cannot execute GRANT in a read-only transaction
+statement error cannot execute GRANT ROLE in a read-only transaction
 GRANT admin TO testuser
 
-statement error cannot execute REVOKE in a read-only transaction
+statement error cannot execute REVOKE ROLE in a read-only transaction
 REVOKE admin FROM testuser
 
 statement error cannot execute GRANT in a read-only transaction
