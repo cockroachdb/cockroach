@@ -352,7 +352,7 @@ func (r *cutRunner) processCandidate(ctx context.Context, c jiraIssue) error {
 		return errors.Wrap(err, "posting Slack message")
 	}
 	if !r.dryRun {
-		if err := r.jira.AddComment(issueKey, buildJiraComment(details, link)); err != nil {
+		if _, err := r.jira.AddComment(issueKey, buildJiraComment(details, link)); err != nil {
 			return errors.Wrap(err, "adding Jira comment")
 		}
 	} else {
