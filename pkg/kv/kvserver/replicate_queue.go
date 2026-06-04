@@ -880,7 +880,7 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 		)
 		traceOutput := redact.Sprintf("\ntrace:\n%s", rec)
 		if err != nil {
-			log.KvDistribution.Infof(logCtx, "error processing replica: %v%s", err, traceOutput)
+			log.KvDistribution.Warningf(logCtx, "error processing replica: %v%s", err, traceOutput)
 		} else {
 			log.KvDistribution.Infof(logCtx, "processing replica took %s, exceeding threshold of %s%s",
 				processDuration, loggingThreshold, traceOutput)

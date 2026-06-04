@@ -208,7 +208,7 @@ func (r *Replica) checkConsistencyImpl(
 		// isn't duplicated except in rare leaseholder change scenarios (and concurrent invocation of
 		// RecomputeStats is allowed because these requests block on one another). Also, we're
 		// essentially paced by the consistency checker so we won't call this too often.
-		log.KvExec.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
+		log.KvExec.Warningf(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
 
 		var b kv.Batch
 		b.AddRawRequest(&kvpb.RecomputeStatsRequest{

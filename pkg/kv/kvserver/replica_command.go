@@ -1649,7 +1649,7 @@ func (r *Replica) initializeRaftLearners(
 	// them all back.
 	defer func() {
 		if err != nil {
-			log.KvExec.Infof(
+			log.KvExec.Errorf(
 				ctx,
 				"could not successfully add and upreplicate %s replica(s) on %s, rolling back: %v",
 				replicaType,

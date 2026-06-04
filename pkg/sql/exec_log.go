@@ -298,7 +298,14 @@ func (p *planner) maybeLogStatementInternal(
 				CommonSQLEventDetails: commonSQLEventDetails,
 				CommonSQLExecDetails:  execDetails,
 			}
-			log.StructuredEvent(ctx, severity.INFO, event)
+			// A slow query that also carries an error (e.g. a transaction retry
+			// or uncertainty error) signals contention or overload, not just
+			// "this took a while", so it is elevated to WARNING.
+			sev := severity.INFO
+			if execDetails.ErrorText != "" {
+				sev = severity.WARNING
+			}
+			log.StructuredEvent(ctx, sev, event)
 		case execType == executorTypeInternal && slowInternalQueryLogEnabled:
 			// Internal queries that surpass the slow query log threshold should only
 			// be logged to the slow-internal-only log if the cluster setting dictates.

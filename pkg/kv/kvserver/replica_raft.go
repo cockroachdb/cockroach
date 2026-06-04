@@ -1817,7 +1817,7 @@ func (r *replicaSyncCallback) OnLogSync(
 
 	r.store.metrics.RaftLogCommitLatency.RecordValue(stats.CommitDur.Nanoseconds())
 	if stats.TotalDuration > defaultReplicaRaftMuWarnThreshold {
-		log.KvExec.Infof(repl.raftCtx, "slow non-blocking raft commit: %s", stats.BatchCommitStats)
+		log.KvExec.Warningf(repl.raftCtx, "slow non-blocking raft commit: %s", stats.BatchCommitStats)
 	}
 }
 

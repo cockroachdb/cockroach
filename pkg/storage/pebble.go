@@ -1275,12 +1275,26 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		el := cfg.opts.EventListener
 		p.asyncDone.Go(func() { el.DiskSlow(info) })
 	})
+	loggingListener := pebble.MakeLoggingEventListener(pebbleLogger{
+		ctx:   logCtx,
+		depth: 2, // skip over the EventListener stack frame
+	})
+	// Cancelled compactions (errors.Is(info.Err, pebble.ErrCancelledCompaction))
+	// indicate LSM maintenance is being preempted by concurrent operations.
+	// Sustained cancellations starve L0 cleanup and can lead to read stalls,
+	// so they are surfaced at WARNING rather than INFO. Other CompactionEnd
+	// events stay on the default INFO path.
+	defaultCompactionEnd := loggingListener.CompactionEnd
+	loggingListener.CompactionEnd = func(info pebble.CompactionInfo) {
+		if errors.Is(info.Err, pebble.ErrCancelledCompaction) {
+			log.Storage.Warningf(logCtx, "%s", info)
+			return
+		}
+		defaultCompactionEnd(info)
+	}
 	el := pebble.TeeEventListener(
 		p.makeMetricEtcEventListener(logCtx),
-		pebble.MakeLoggingEventListener(pebbleLogger{
-			ctx:   logCtx,
-			depth: 2, // skip over the EventListener stack frame
-		}),
+		loggingListener,
 	)
 
 	p.eventListener = &el

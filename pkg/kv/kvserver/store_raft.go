@@ -286,7 +286,7 @@ func (s *Store) HandleSnapshot(
 		if err != nil && ctx.Err() != nil {
 			// Log trace of incoming snapshot on context cancellation (e.g.
 			// times out or caller goes away).
-			log.KvExec.Infof(ctx, "incoming snapshot stream failed with error: %v\ntrace:\n%v",
+			log.KvExec.Errorf(ctx, "incoming snapshot stream failed with error: %v\ntrace:\n%v",
 				err, tracing.SpanFromContext(ctx).GetConfiguredRecording())
 		}
 		return err
@@ -773,7 +773,7 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	// processing time means we'll have starved local replicas of ticks and
 	// remote replicas will likely start campaigning.
 	if elapsed >= defaultReplicaRaftMuWarnThreshold {
-		log.KvExec.Infof(ctx, "%s; node might be overloaded", stats)
+		log.KvExec.Warningf(ctx, "%s; node might be overloaded", stats)
 	}
 }
 

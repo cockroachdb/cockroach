@@ -47,5 +47,15 @@ func LogStateChangeStructured(
 		}
 	}
 
-	log.StructuredEventDepth(ctx, severity.INFO, 1, &out)
+	// Job transitions to a terminal failure state (failed / revert-failed) are
+	// emitted at ERROR since they indicate a job did not complete its work and
+	// can degrade dependent subsystems (e.g. a failed AUTO CREATE PARTIAL STATS
+	// job blocks stats freshness and degrades optimizer plans); other
+	// transitions (running, paused, succeeded, canceled by the user) stay at
+	// INFO.
+	sev := severity.INFO
+	if state == StateFailed || state == StateRevertFailed {
+		sev = severity.ERROR
+	}
+	log.StructuredEventDepth(ctx, sev, 1, &out)
 }
