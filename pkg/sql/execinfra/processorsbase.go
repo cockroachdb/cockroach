@@ -417,8 +417,14 @@ type ProcessorBaseNoHelper struct {
 	// next.
 	curInputToDrain int
 
-	// ashCleanup clears the ASH work state set during StartInternal.
-	ashCleanup func()
+	// ashWorkName is the work-event name for ASH sampling, captured from the
+	// name passed to StartInternal. It is used to register the ASH work state
+	// on the goroutine that drives this processor's execution (see Run and
+	// Resume). It is not used to register state in StartInternal itself,
+	// because Start and Close are not guaranteed to run on the same goroutine,
+	// whereas the ASH API requires the work state to be set and cleared from
+	// the same goroutine.
+	ashWorkName string
 }
 
 // MustBeStreaming implements the Processor interface.
@@ -768,6 +774,10 @@ func (pb *ProcessorBaseNoHelper) Run(ctx context.Context, output RowReceiver) {
 		panic("processor output is not provided for emitting rows")
 	}
 	pb.self.Start(ctx)
+	// This goroutine drives the processor's Next/Close loop below, so register
+	// the ASH work state here (set and cleared on this same goroutine).
+	cleanup := pb.SetWorkStateForGoroutine(pb.ashWorkName)
+	defer cleanup()
 	Run(pb.ctx, pb.self, output)
 }
 
@@ -776,6 +786,8 @@ func (pb *ProcessorBaseNoHelper) Resume(output RowReceiver) {
 	if output == nil {
 		panic("processor output is not provided for emitting rows")
 	}
+	cleanup := pb.SetWorkStateForGoroutine(pb.ashWorkName)
+	defer cleanup()
 	Run(pb.ctx, pb.self, output)
 }
 
@@ -935,23 +947,41 @@ func (pb *ProcessorBaseNoHelper) StartInternal(
 	if !noSpan {
 		pb.ctx, pb.span = ProcessorSpan(ctx, pb.FlowCtx, name, pb.ProcessorID, eventListeners...)
 	}
-	if pb.FlowCtx != nil && pb.FlowCtx.EvalCtx != nil {
-		var gatewayNodeID roachpb.NodeID
-		if pb.FlowCtx.NodeID != nil {
-			gatewayNodeID = roachpb.NodeID(pb.FlowCtx.NodeID.SQLInstanceID())
-		}
-		pb.ashCleanup = ash.SetWorkState(
-			pb.FlowCtx.Codec().TenantID,
-			ash.WorkloadInfo{
-				WorkloadID:    pb.FlowCtx.EvalCtx.WorkloadID,
-				AppNameID:     pb.FlowCtx.EvalCtx.AppNameID,
-				GatewayNodeID: gatewayNodeID,
-				WorkloadType:  pb.FlowCtx.EvalCtx.WorkloadType,
-				EnrichmentID:  pb.FlowCtx.EvalCtx.EnrichmentID,
-			},
-			ash.WorkCPU, name)
-	}
+	pb.ashWorkName = name
 	return pb.ctx
+}
+
+// SetWorkStateForGoroutine registers this processor's ASH work state on the
+// calling goroutine under the given work-event name and returns a cleanup
+// function that clears it. The registration and the cleanup must run on the
+// same goroutine, because the ASH API keys work state by goroutine ID and
+// asserts same-goroutine set/clear. Callers must therefore invoke it from the
+// goroutine that performs the work being attributed, not from StartInternal,
+// since Start and Close may run on different goroutines. If ASH is disabled or
+// the flow context is unavailable, the returned cleanup is a no-op.
+//
+// Processors driven through ProcessorBaseNoHelper.Run/Resume are registered
+// automatically (see Run). This method only needs to be called directly by
+// processors that override Run and run their work loop inline, or that perform
+// their work on a separate goroutine (e.g. bulkRowWriter's convert loop).
+func (pb *ProcessorBaseNoHelper) SetWorkStateForGoroutine(event string) func() {
+	if pb.FlowCtx == nil || pb.FlowCtx.EvalCtx == nil {
+		return func() {}
+	}
+	var gatewayNodeID roachpb.NodeID
+	if pb.FlowCtx.NodeID != nil {
+		gatewayNodeID = roachpb.NodeID(pb.FlowCtx.NodeID.SQLInstanceID())
+	}
+	return ash.SetWorkState(
+		pb.FlowCtx.Codec().TenantID,
+		ash.WorkloadInfo{
+			WorkloadID:    pb.FlowCtx.EvalCtx.WorkloadID,
+			AppNameID:     pb.FlowCtx.EvalCtx.AppNameID,
+			GatewayNodeID: gatewayNodeID,
+			WorkloadType:  pb.FlowCtx.EvalCtx.WorkloadType,
+			EnrichmentID:  pb.FlowCtx.EvalCtx.EnrichmentID,
+		},
+		ash.WorkCPU, event)
 }
 
 // Ctx is an accessor method for ctx which is guaranteed to return non-nil
@@ -984,10 +1014,6 @@ func (pb *ProcessorBaseNoHelper) InternalClose() bool {
 		input.ConsumerClosed()
 	}
 
-	if pb.ashCleanup != nil {
-		pb.ashCleanup()
-		pb.ashCleanup = nil
-	}
 	pb.Closed = true
 	pb.span.Finish()
 	pb.span = nil

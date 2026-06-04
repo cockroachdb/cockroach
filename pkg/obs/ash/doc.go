@@ -269,7 +269,7 @@
 //
 // # Cluster Settings
 //
-//   - obs.ash.enabled (bool, default false): enables ASH sampling.
+//   - obs.ash.enabled (bool, default true): enables ASH sampling.
 //   - obs.ash.sample_interval (duration, default 1s): interval between
 //     samples.
 //   - obs.ash.buffer_size (int, default 1000000): maximum number of

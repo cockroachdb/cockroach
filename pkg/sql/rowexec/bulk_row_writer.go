@@ -187,6 +187,14 @@ func (sp *bulkRowWriter) convertLoop(
 ) error {
 	defer close(kvCh)
 
+	// This goroutine drives the input operator tree via sp.input.Next, so
+	// register the ASH work state here (set and cleared on this goroutine).
+	// The bulkRowWriter processor itself does its work inside Start on a
+	// different goroutine, so the processor-level registration in
+	// ProcessorBaseNoHelper.Run does not cover this loop.
+	cleanup := sp.SetWorkStateForGoroutine("bulkRowWriter")
+	defer cleanup()
+
 	done := false
 	alloc := &tree.DatumAlloc{}
 	typs := sp.input.OutputTypes()

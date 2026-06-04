@@ -192,6 +192,12 @@ func (s *sampleAggregator) Run(ctx context.Context, output execinfra.RowReceiver
 	ctx = s.StartInternal(ctx, sampleAggregatorProcName)
 	s.input.Start(ctx)
 
+	// This Run override drives the work loop inline on this goroutine rather
+	// than through ProcessorBaseNoHelper.Run, so register the ASH work state
+	// here (set and cleared on this same goroutine).
+	cleanup := s.SetWorkStateForGoroutine(sampleAggregatorProcName)
+	defer cleanup()
+
 	// Use defer to ensure cleanup happens even on panic (fix for issue #160337).
 	var earlyExit bool
 	var err error
