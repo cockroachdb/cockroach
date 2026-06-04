@@ -38,6 +38,12 @@ type latencyVerifier struct {
 	jobFetcher               jobFetcher
 	setTestStatus            func(...interface{})
 
+	// expectBacklog enables the convergence-from-behind logic for jobs that
+	// start with a backlog (e.g. initial scan). When false, the verifier
+	// assumes replication starts with no lag and simply checks that lag
+	// stays below targetSteadyLatency on every poll.
+	expectBacklog bool
+
 	initialScanHighwater time.Time
 	initialScanLatency   time.Duration
 
@@ -82,6 +88,11 @@ func makeLatencyVerifier(
 }
 
 func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
+	if !lv.expectBacklog {
+		lv.noteHighwaterNoBacklog(highwaterTime)
+		return
+	}
+
 	// Highwater timestamps received before the statement time indicate an initial
 	// scan is taking place.
 	if highwaterTime.Before(lv.statementTime) {
@@ -153,6 +164,30 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 	if justSwitchedToSteadyState {
 		lv.logger.Printf("just reached steady state, sleeping for 2 minutes to ensure no temporary latency regressions")
 		time.Sleep(2 * time.Minute)
+	}
+}
+
+// noteHighwaterNoBacklog is the simple no-backlog path. It assumes replication
+// starts with no lag and just checks that lag stays below the threshold.
+func (lv *latencyVerifier) noteHighwaterNoBacklog(highwaterTime time.Time) {
+	if highwaterTime.IsZero() {
+		return
+	}
+	latency := timeutil.Since(highwaterTime)
+	lv.latencyBecameSteady = true
+	if err := lv.latencyHist.RecordValue(latency.Nanoseconds()); err != nil {
+		if lv.tooLargeEveryN.ShouldLog() {
+			lv.logger.Printf("%s: could not record value %s: %s\n", lv.name, latency, err)
+		}
+	}
+	if latency > lv.maxSeenSteadyLatency {
+		lv.maxSeenSteadyLatency = latency
+	}
+	if lv.maxSeenSteadyEveryN.ShouldLog() {
+		update := fmt.Sprintf(
+			"%s: end-to-end steady latency %s; max steady latency so far %s; highwater %s",
+			lv.name, latency.Truncate(time.Millisecond), lv.maxSeenSteadyLatency.Truncate(time.Millisecond), highwaterTime)
+		lv.setTestStatus(update)
 	}
 }
 
