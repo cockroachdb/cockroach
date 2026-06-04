@@ -102,7 +102,12 @@ func newGRPCPeerOptions(
 		locality: locality,
 		peers:    &rpcCtx.peers,
 		connOptions: &ConnectionOptions[*grpc.ClientConn]{
-			dial: func(ctx context.Context, target string, class rpcbase.ConnectionClass) (*grpc.ClientConn, error) {
+			// nodeID is unused on the gRPC path: the cluster-identity
+			// invariant is enforced once per *ClientConn lifetime via
+			// onlyOnceDialer + the initial heartbeat (see onlyOnceDialer in
+			// context.go). drpc uses the same parameter to drive per-dial
+			// validation in validateOnDial.
+			dial: func(ctx context.Context, target string, _ roachpb.NodeID, class rpcbase.ConnectionClass) (*grpc.ClientConn, error) {
 				additionalDialOpts := []grpc.DialOption{grpc.WithStatsHandler(&statsTracker{lm})}
 				additionalDialOpts = append(additionalDialOpts, rpcCtx.testingDialOpts...)
 				// onNetworkDial is a callback that is called after we dial a TCP connection.
