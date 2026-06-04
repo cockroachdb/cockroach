@@ -108,12 +108,17 @@ RUN if [[ ${TARGETPLATFORM} != "linux/s390x" ]]; then \
  fi
 
 # NB: As above, this is not available on `s390x`.
+# NB: Pin to a specific gcloud version. The unversioned
+# `google-cloud-cli-linux-$ARCH.tar.gz` URL always serves the latest release on
+# the `rapid` channel, so the pinned SHASUMs below would break every time Google
+# ships a new gcloud version. Bump GCLOUD_VERSION and both SHASUMs together.
 RUN if [[ ${TARGETPLATFORM} != "linux/s390x" ]]; then \
+ GCLOUD_VERSION=571.0.0; \
  case ${TARGETPLATFORM} in \
-     "linux/amd64") ARCH=x86_64; SHASUM=080dc67647ba765295a2045aa0d75364121889b712a98e2c6c7eab93f333015d ;; \
-     "linux/arm64") ARCH=arm; SHASUM=6bb473ed86f23bb3a117398e5dd9039d0412c26ca1595c344146d1a1d4a5e335 ;; \
+     "linux/amd64") ARCH=x86_64; SHASUM=e537598d1c7b6839ddce95ce25dbaf25571322886c1f3464dd74771e568fcfdd ;; \
+     "linux/arm64") ARCH=arm; SHASUM=25431065668969c6b5b647834fe73ecf2b1522ae6d1a3caf49e62451852370e9 ;; \
  esac  \
- && curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-$ARCH.tar.gz" -o gcloud.tar.gz \
+ && curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-$GCLOUD_VERSION-linux-$ARCH.tar.gz" -o gcloud.tar.gz \
  && echo "$SHASUM gcloud.tar.gz" | sha256sum -c - \
  && tar -xzf gcloud.tar.gz \
  && rm gcloud.tar.gz ; \
