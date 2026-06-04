@@ -114,8 +114,12 @@ run_bazel_github() {
 # key out of the container: only the ~1h token crosses the boundary. That TTL
 # comfortably covers the dependency-fetch phase of a build; the credential
 # helper is not consulted again once the external repositories have been
-# materialized. The token is minted under an isolated CLOUDSDK_CONFIG so the
-# agent's default gcloud account, which other build steps rely on, is untouched.
+# materialized.
+#
+# The token is minted via gcloud where it is available. Some agents have no
+# gcloud build (Google ships no Cloud SDK for s390x), so we fall back to minting
+# the token directly from the key via the OAuth 2.0 JWT-bearer flow, which needs
+# only openssl, curl, and python3.
 configure_bazel_storage_access_token() {
   local creds="${1:-${GOOGLE_EPHEMERAL_CREDENTIALS:-}}"
   : "${creds:?a service-account key must be provided to authenticate to the private cockroach-godeps bucket}"
@@ -123,18 +127,97 @@ configure_bazel_storage_access_token() {
   # `set -x`, which would otherwise echo the credential to the build log.
   local xtrace_was_on=0
   case "$-" in *x*) xtrace_was_on=1; set +x;; esac
-  local keyfile sdkconfig
+  local keyfile token rc=0
   keyfile=$(mktemp)
-  sdkconfig=$(mktemp -d)
   printf '%s' "${creds}" > "${keyfile}"
-  CLOUDSDK_CONFIG="${sdkconfig}" gcloud auth activate-service-account \
-    --key-file="${keyfile}" >/dev/null 2>&1
-  export BAZEL_STORAGE_ACCESS_TOKEN
-  BAZEL_STORAGE_ACCESS_TOKEN=$(CLOUDSDK_CONFIG="${sdkconfig}" gcloud auth print-access-token)
+  # Capture the mint result via `|| rc=$?` rather than a bare assignment so a
+  # failure does not abort here under `set -e`: we want to clean up the key and
+  # surface a clear error regardless of which path ran.
+  if command -v gcloud >/dev/null 2>&1; then
+    token=$(_mint_storage_access_token_gcloud "${keyfile}") || rc=$?
+  else
+    token=$(_mint_storage_access_token_jwt "${keyfile}") || rc=$?
+  fi
   rm -f "${keyfile}"
-  rm -rf "${sdkconfig}"
   [[ "${xtrace_was_on}" == 1 ]] && set -x
+  if [[ "${rc}" -ne 0 || -z "${token}" ]]; then
+    echo "failed to mint \$BAZEL_STORAGE_ACCESS_TOKEN; Bazel will be unable to fetch private dependencies" >&2
+    return 1
+  fi
+  export BAZEL_STORAGE_ACCESS_TOKEN="${token}"
   return 0
+}
+
+# _mint_storage_access_token_gcloud prints an access token for the key in the
+# file $1, using the gcloud CLI. The service account is activated under an
+# isolated CLOUDSDK_CONFIG so the agent's default gcloud account, which other
+# build steps rely on, is left untouched.
+_mint_storage_access_token_gcloud() {
+  local keyfile="$1"
+  local sdkconfig token rc=0
+  sdkconfig=$(mktemp -d)
+  # Capture into `token` rather than printing print-access-token directly, so the
+  # config directory is always removed below and a gcloud failure still
+  # propagates as this function's exit status (a trailing `rm` would mask it, and
+  # an EXIT trap set here would leak into the caller's shell).
+  CLOUDSDK_CONFIG="${sdkconfig}" gcloud auth activate-service-account \
+    --key-file="${keyfile}" >/dev/null 2>&1 || rc=$?
+  if [[ "${rc}" -eq 0 ]]; then
+    token=$(CLOUDSDK_CONFIG="${sdkconfig}" gcloud auth print-access-token) || rc=$?
+  fi
+  rm -rf "${sdkconfig}"
+  [[ "${rc}" -eq 0 ]] || return "${rc}"
+  printf '%s' "${token}"
+}
+
+# _mint_storage_access_token_jwt prints an access token for the key in the file
+# $1 without gcloud, implementing the OAuth 2.0 JWT-bearer flow (RFC 7523): it
+# builds a JWT asserting the service account's identity, signs it with the
+# account's RSA private key (RS256, via openssl), and exchanges it for a token
+# at the account's token endpoint. The scope is read-only storage, which is all
+# the dependency fetch needs. python3 parses the key because the PEM private key
+# carries embedded newlines that text tools mangle.
+_mint_storage_access_token_jwt() {
+  local keyfile="$1"
+  local client_email token_uri now exp
+  client_email=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["client_email"])' "${keyfile}")
+  token_uri=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("token_uri", "https://oauth2.googleapis.com/token"))' "${keyfile}")
+  now=$(date +%s)
+  exp=$((now + 3600))
+
+  local header_b64 claims_b64 signing_input sig_b64 assertion pemfile
+  header_b64=$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | _base64url)
+  claims_b64=$(printf '{"iss":"%s","scope":"https://www.googleapis.com/auth/devstorage.read_only","aud":"%s","iat":%s,"exp":%s}' \
+    "${client_email}" "${token_uri}" "${now}" "${exp}" | _base64url)
+  signing_input="${header_b64}.${claims_b64}"
+  pemfile=$(mktemp)
+  python3 -c 'import json,sys; sys.stdout.write(json.load(open(sys.argv[1]))["private_key"])' "${keyfile}" > "${pemfile}"
+  sig_b64=$(printf '%s' "${signing_input}" | openssl dgst -sha256 -sign "${pemfile}" -binary | _base64url)
+  # Remove the key as soon as signing is done, to minimize the window it is on
+  # disk; this also runs on the error paths below, since errexit is not in effect
+  # inside this command-substitution subshell.
+  rm -f "${pemfile}"
+  assertion="${signing_input}.${sig_b64}"
+
+  local response
+  response=$(curl -sS -X POST "${token_uri}" \
+    --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer' \
+    --data-urlencode "assertion=${assertion}")
+  # On success the response carries the access token, so only echo it on the
+  # failure path, where it instead holds Google's (non-secret) error body, e.g.
+  # {"error":"invalid_grant","error_description":"..."} — invaluable in CI logs.
+  printf '%s' "${response}" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])' 2>/dev/null || {
+      echo "failed to mint storage access token; token endpoint response: ${response}" >&2
+      return 1
+    }
+}
+
+# _base64url base64url-encodes stdin with padding stripped (per JWT). openssl's
+# -A keeps the output on a single line; the surrounding $() strips the trailing
+# newline.
+_base64url() {
+  openssl base64 -A | tr '+/' '-_' | tr -d '='
 }
 
 # local copy of _tc_build_branch from teamcity-support.sh to avoid imports.
