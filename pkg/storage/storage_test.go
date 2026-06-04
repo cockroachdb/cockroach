@@ -56,7 +56,7 @@ func TestPebbleEncryption(t *testing.T) {
 		env, err := fs.InitEnvFromStoreSpec(
 			ctx,
 			base.StoreSpec{
-				InMemory:          true,
+				Type:              storageconfig.StoreTypeInMemory,
 				Size:              storageconfig.BytesSize(512 << 20),
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
@@ -108,7 +108,7 @@ func TestPebbleEncryption(t *testing.T) {
 		env, err := fs.InitEnvFromStoreSpec(
 			ctx,
 			base.StoreSpec{
-				InMemory:          true,
+				Type:              storageconfig.StoreTypeInMemory,
 				Size:              storageconfig.BytesSize(512 << 20),
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
@@ -199,7 +199,7 @@ func TestPebbleEncryption2(t *testing.T) {
 		env, err := fs.InitEnvFromStoreSpec(
 			ctx,
 			base.StoreSpec{
-				InMemory:          true,
+				Type:              storageconfig.StoreTypeInMemory,
 				Size:              storageconfig.BytesSize(512 << 20),
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,

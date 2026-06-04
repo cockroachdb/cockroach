@@ -1808,7 +1808,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 
 	encryptedStore := false
 	for _, storeSpec := range s.cfg.Stores.Specs {
-		if storeSpec.InMemory {
+		if !storeSpec.IsLocal() {
 			continue
 		}
 		if storeSpec.IsEncrypted() {

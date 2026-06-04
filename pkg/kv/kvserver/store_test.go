@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -4716,7 +4717,7 @@ func TestNewNodeCapacityProviderCluster(t *testing.T) {
 	numStoresPerNode := 2
 	var storeSpecs []base.StoreSpec
 	for i := 0; i < numStoresPerNode; i++ {
-		storeSpecs = append(storeSpecs, base.StoreSpec{InMemory: true})
+		storeSpecs = append(storeSpecs, base.StoreSpec{Type: storageconfig.StoreTypeInMemory})
 	}
 	serverArgs := base.TestServerArgs{
 		Knobs: base.TestingKnobs{

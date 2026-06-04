@@ -1349,7 +1349,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 		deviceIDToStoreID: make(map[disk.DeviceID]roachpb.StoreID),
 	}
 	for i := range engines {
-		if specs[i].Path == "" || specs[i].InMemory {
+		if !specs[i].IsLocal() {
 			continue
 		}
 		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i].LogEngine())

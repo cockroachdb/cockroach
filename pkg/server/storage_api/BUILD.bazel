@@ -52,6 +52,7 @@ go_test(
         "//pkg/server/serverpb",
         "//pkg/server/srvtestutils",
         "//pkg/server/status/statuspb",
+        "//pkg/storage/storageconfig",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

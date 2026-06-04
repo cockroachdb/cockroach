@@ -691,7 +691,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	encryptedStore := false
 	for _, storeSpec := range s.sqlServer.cfg.Stores.Specs {
-		if storeSpec.InMemory {
+		if !storeSpec.IsLocal() {
 			continue
 		}
 		if storeSpec.IsEncrypted() {

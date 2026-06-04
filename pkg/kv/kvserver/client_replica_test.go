@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -2313,7 +2314,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				StoreSpecs: []base.StoreSpec{
 					{
-						InMemory:    true,
+						Type:        storageconfig.StoreTypeInMemory,
 						StickyVFSID: "1",
 					},
 				},
@@ -2994,7 +2995,7 @@ func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 			Settings: st,
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.StoreTypeInMemory,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -5156,7 +5157,7 @@ func TestTenantID(t *testing.T) {
 		Insecure: true,
 		StoreSpecs: []base.StoreSpec{
 			{
-				InMemory:    true,
+				Type:        storageconfig.StoreTypeInMemory,
 				StickyVFSID: "1",
 			},
 		},

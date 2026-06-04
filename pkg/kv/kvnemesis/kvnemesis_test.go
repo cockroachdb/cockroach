@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -325,7 +326,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 				}
 				perNodeServerArgs.StoreSpecs = append(
 					perNodeServerArgs.StoreSpecs,
-					base.StoreSpec{InMemory: true, StickyVFSID: strconv.Itoa(nodeId)},
+					base.StoreSpec{Type: storageconfig.StoreTypeInMemory, StickyVFSID: strconv.Itoa(nodeId)},
 				)
 				perNode[i] = perNodeServerArgs
 			}

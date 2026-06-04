@@ -31,7 +31,7 @@ func TestStickyVFS(t *testing.T) {
 	)
 
 	spec1 := base.StoreSpec{
-		InMemory:    true,
+		Type:        storageconfig.StoreTypeInMemory,
 		StickyVFSID: "engine1",
 		Size:        storageconfig.BytesSize(storeSize),
 	}

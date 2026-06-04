@@ -738,7 +738,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	var physicalStores int
 	for _, spec := range cfg.Stores.Specs {
-		if !spec.InMemory {
+		if spec.IsLocal() {
 			physicalStores++
 		}
 	}
@@ -814,7 +814,8 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			storageConfigOpts = append(storageConfigOpts, opt)
 		}
 
-		if spec.InMemory {
+		switch spec.Type {
+		case storageconfig.StoreTypeInMemory:
 			var sizeInBytes int64
 			if spec.Size.IsSet() {
 				if spec.Size.IsBytes() {
@@ -836,7 +837,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			addCfgOpt(storage.RemoteStorageFactory(cfg.EarlyBootExternalStorageAccessor))
 
 			detail(redact.Sprintf("store %d: in-memory, size %s", i, humanizeutil.IBytes(sizeInBytes)))
-		} else {
+		case storageconfig.StoreTypeLocal:
 			// NB: We've already initialized an *fs.Env backed by the real
 			// physical filesystem. This initialization will create the
 			// data directory if it didn't already exist.
@@ -894,6 +895,9 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					},
 				}))
 			}
+		default:
+			// TODO(basalt): handle basalt backed stores correctly.
+			return Engines{}, errors.New("basalt backed stores not yet supported")
 		}
 		eng, err := storage.Open(ctx, storeEnvs[i], cfg.Settings, storageConfigOpts...)
 		if err != nil {

@@ -150,8 +150,8 @@ func TestBootstrapNewStore(t *testing.T) {
 
 	specs := []base.StoreSpec{
 		{Path: path},
-		{InMemory: true},
-		{InMemory: true},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
 	}
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		StoreSpecs: specs,
@@ -189,27 +189,27 @@ func TestStartManyStores(t *testing.T) {
 	defer cleanup()
 
 	specs := []base.StoreSpec{
-		{Path: path},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
+		{Type: storageconfig.StoreTypeLocal, Path: path},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
+		{Type: storageconfig.StoreTypeInMemory},
 	}
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
@@ -250,8 +250,8 @@ func TestNodeJoin(t *testing.T) {
 	perNode := map[int]base.TestServerArgs{}
 	perNode[0] = base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
-			{InMemory: true},
-			{InMemory: true},
+			{Type: storageconfig.StoreTypeInMemory},
+			{Type: storageconfig.StoreTypeInMemory},
 		},
 	}
 	perNode[1] = perNode[0]
@@ -424,7 +424,7 @@ func TestNodeEmitsLowDiskSpaceEvents(t *testing.T) {
 		},
 		StoreSpecs: []base.StoreSpec{
 			{
-				InMemory:    true,
+				Type:        storageconfig.StoreTypeInMemory,
 				StickyVFSID: "foo",
 			},
 		},

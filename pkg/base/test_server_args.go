@@ -642,11 +642,11 @@ func InternalNonDefaultDecision(
 	return baseArg
 }
 
-// DefaultTestStoreSpec is just a single in memory store of 512 MiB
+// DefaultTestStoreSpec is just a single in-memory store of 512 MiB
 // with no special attributes.
 var DefaultTestStoreSpec = storageconfig.Store{
-	InMemory: true,
-	Size:     storageconfig.BytesSize(512 << 20),
+	Type: storageconfig.StoreTypeInMemory,
+	Size: storageconfig.BytesSize(512 << 20),
 }
 
 // DefaultTestTempStorageConfig is the associated temp storage for

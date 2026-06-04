@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -806,7 +807,7 @@ func TestLearnerRaftConfState(t *testing.T) {
 		path := filepath.Join(dir, "testserver", strconv.Itoa(i))
 		serverArgsPerNode[i] = base.TestServerArgs{
 			Knobs:      knobs,
-			StoreSpecs: []base.StoreSpec{{InMemory: false, Path: path}},
+			StoreSpecs: []base.StoreSpec{{Type: storageconfig.StoreTypeLocal, Path: path}},
 		}
 	}
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{

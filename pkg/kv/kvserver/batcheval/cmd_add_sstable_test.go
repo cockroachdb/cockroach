@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -1202,7 +1203,7 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 }
 
 // TestDBAddSSTable tests application of an SST to a database, both in-memory
-// and on disk.
+// and local on-disk.
 func TestDBAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1219,7 +1220,7 @@ func TestDBAddSSTable(t *testing.T) {
 		defer log.Scope(t).Close(t)
 		ctx := context.Background()
 		storeSpec := base.DefaultTestStoreSpec
-		storeSpec.InMemory = false
+		storeSpec.Type = storageconfig.StoreTypeLocal
 		storeSpec.Path = t.TempDir()
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{storeSpec},
@@ -1232,6 +1233,8 @@ func TestDBAddSSTable(t *testing.T) {
 
 		runTestDBAddSSTable(ctx, t, db, s, store)
 	})
+
+	// TODO(basalt): add a test case for basalt backed stores.
 }
 
 // if store != nil, assume it is on-disk and check ingestion semantics.

@@ -189,9 +189,9 @@ func initTempStorageConfig(
 ) (base.TempStorageConfig, error) {
 	// Initialize the target directory for temporary storage. If encryption at
 	// rest is enabled in any fashion, we'll want temp storage to be encrypted
-	// too. To achieve this, we use the first encrypted store as temp dir
-	// target, if any. If we can't find one, we use the first StoreSpec in the
-	// list.
+	// too. To achieve this, we use the first encrypted local on-disk store as
+	// temp dir target, if any. If we can't find one, we use the first StoreSpec
+	// in the list.
 	//
 	// Note that we already cleaned up any abandoned temporary directories from
 	// the previous process earlier in the startup sequence (see
@@ -199,35 +199,35 @@ func initTempStorageConfig(
 	specIdxDisk := -1
 	specIdxEncrypted := -1
 	for i, spec := range stores.Specs {
-		if spec.InMemory {
+		if spec.IsInMemory() {
 			continue
 		}
-		if spec.IsEncrypted() && specIdxEncrypted == -1 {
+		if specIdxEncrypted == -1 && spec.IsEncrypted() {
 			// TODO(jackson): One store's EncryptionOptions may say to encrypt
 			// with a real key, while another store's say to use key=plain.
 			// This provides no guarantee that we'll use the encrypted one's.
 			specIdxEncrypted = i
 		}
-		if specIdxDisk == -1 {
+		if specIdxDisk == -1 && spec.IsLocal() {
 			specIdxDisk = i
 		}
 	}
 
-	// Use first store by default. This might be an in-memory store.
+	// Use first store by default. This might be an in-memory or basalt store.
 	specIdx := 0
 	if specIdxEncrypted >= 0 {
 		// Prefer an encrypted store.
 		specIdx = specIdxEncrypted
 	} else if specIdxDisk >= 0 {
-		// Prefer a non-encrypted on-disk store.
+		// Prefer a non-encrypted local store.
 		specIdx = specIdxDisk
 	}
 	useStore := stores.Specs[specIdx]
 
-	// The temp store size can depend on the location of the first regular store
+	// The temp store size can depend on the location of the first local store
 	// (if it's expressed as a percentage), so we resolve that flag here.
 	var tempStorePercentageResolver percentResolverFunc
-	if !useStore.InMemory {
+	if useStore.IsLocal() {
 		dir := useStore.Path
 		// Create the store dir, if it doesn't exist. The dir is required to exist
 		// by diskPercentResolverFactory.
@@ -252,16 +252,16 @@ func initTempStorageConfig(
 		// The default temp storage size is different when the temp
 		// storage is in memory (which occurs when no temp directory
 		// is specified and the first store is in memory).
-		if startCtx.tempDir == "" && useStore.InMemory {
+		if startCtx.tempDir == "" && !useStore.IsLocal() {
 			tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
 		} else {
 			tempStorageMaxSizeBytes = base.DefaultTempStorageMaxSizeBytes
 		}
 	}
 
-	// If all stores are in-memory and no temp dir was specified, the temp
-	// store will also be in memory. This is a testing scenario.
-	if startCtx.tempDir == "" && useStore.InMemory {
+	// If none of the stores are local on-disk and no temp dir was specified,
+	// the temp store will be in-memory. This is a testing scenario.
+	if startCtx.tempDir == "" && !useStore.IsLocal() {
 		return base.NewTempStorageConfig(
 			ctx,
 			st,
@@ -273,8 +273,7 @@ func initTempStorageConfig(
 		), nil
 	}
 
-	// Set temp directory to first store's path if the temp storage is not
-	// in memory.
+	// Set temp directory to first store's path if the temp storage is local.
 	parentDir := startCtx.tempDir
 	if parentDir == "" {
 		parentDir = useStore.Path
@@ -286,7 +285,7 @@ func initTempStorageConfig(
 	}
 
 	recordPath := ""
-	if useStore.InMemory {
+	if !useStore.IsLocal() {
 		stopper.AddCloser(stop.CloserFn(func() {
 			unlockDirFn()
 			// Remove the temp directory directly since there is no record file.
@@ -1447,7 +1446,7 @@ func reclaimDiskSpace(ctx context.Context, rootFS vfs.FS, specs []base.StoreSpec
 	var err error
 	// Reclaim any temporary directories.
 	for _, spec := range specs {
-		if spec.InMemory {
+		if !spec.IsLocal() {
 			continue
 		}
 		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)

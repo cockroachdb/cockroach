@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -33,7 +34,8 @@ func newPlanStore(cfg Config) (loqrecovery.PlanStore, error) {
 	spec := cfg.Stores.Specs[0]
 	fs := vfs.Default
 	path := spec.Path
-	if spec.InMemory {
+	switch spec.Type {
+	case storageconfig.StoreTypeInMemory:
 		path = ""
 		if spec.StickyVFSID != "" {
 			if cfg.TestingKnobs.Server == nil {
@@ -51,6 +53,9 @@ func newPlanStore(cfg Config) (loqrecovery.PlanStore, error) {
 		} else {
 			fs = vfs.NewMem()
 		}
+	case storageconfig.StoreTypeBasalt:
+		// TODO(basalt): handle basalt backed stores correctly.
+		return loqrecovery.PlanStore{}, errors.New("basalt backed stores not yet supported")
 	}
 	return loqrecovery.NewPlanStore(path, fs), nil
 }

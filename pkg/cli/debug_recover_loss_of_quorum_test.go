@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -114,7 +115,7 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{{InMemory: true}},
+			StoreSpecs: []base.StoreSpec{{Type: storageconfig.StoreTypeInMemory}},
 			Insecure:   true,
 			// This logic is specific to the storage layer.
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
@@ -376,7 +377,7 @@ func TestStageVersionCheck(t *testing.T) {
 					},
 				},
 				StoreSpecs: []base.StoreSpec{
-					{InMemory: true, StickyVFSID: "1"},
+					{Type: storageconfig.StoreTypeInMemory, StickyVFSID: "1"},
 				},
 			},
 		},
@@ -510,11 +511,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 					},
 				},
 			},
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory: true,
-				},
-			},
+			StoreSpecs: []base.StoreSpec{{Type: storageconfig.StoreTypeInMemory}},
 		}
 	}
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
