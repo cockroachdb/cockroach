@@ -15,8 +15,7 @@ func _() {
 	var x [1]struct{}
 	_ = x[Precedence-1]
 	_ = x[SameStagePrecedence-2]
-	_ = x[PreviousStagePrecedence-3]
-	_ = x[PreviousTransactionPrecedence-4]
+	_ = x[PreviousTransactionPrecedence-3]
 }
 
 func (i DepEdgeKind) String() string {
@@ -25,8 +24,6 @@ func (i DepEdgeKind) String() string {
 		return "Precedence"
 	case SameStagePrecedence:
 		return "SameStagePrecedence"
-	case PreviousStagePrecedence:
-		return "PreviousStagePrecedence"
 	case PreviousTransactionPrecedence:
 		return "PreviousTransactionPrecedence"
 	default:

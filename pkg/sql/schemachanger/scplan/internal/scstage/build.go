@@ -559,10 +559,6 @@ func (sb stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
 		}
 		return de.From().CurrentStatus != sb.bc.initial[idx]
 
-	case scgraph.PreviousStagePrecedence:
-		// True iff the source node has not been fulfilled in an earlier stage.
-		return !fromIsFulfilled
-
 	case scgraph.Precedence:
 		// True iff the source node has not been fulfilled in an earlier stage
 		// and also iff it's not (yet?) scheduled to be fulfilled in this stage.
@@ -668,7 +664,7 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
 			return iterutil.StopIteration()
 		}
 		switch de.Kind() {
-		case scgraph.PreviousStagePrecedence, scgraph.PreviousTransactionPrecedence:
+		case scgraph.PreviousTransactionPrecedence:
 			// `de.from` might be schedulable but the dep edge requires `n` to be scheduled
 			// at a different transaction/stage, so even if `de.from` is indeed schedulable
 			// in this stage, `n` cannot be scheduled in the same stage due to this dep edge.

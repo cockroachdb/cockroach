@@ -48,13 +48,13 @@ func makeDepEdges(getTargetIdx getTargetIdxFunc) depEdges {
 	}
 }
 
-// insertOrUpdate will insert a new dep edge if no such edge exists between
-// from and to. Otherwise, it will update the edge accordingly. An error
-// may be returned if the kind is incompatible with the existing kind for
-// the edge. For example, one cannot have a rule which indicates
-// PreviousStagePrecedence and also SameStagePrecedence; that would be
-// impossible to fulfill. Precedence is compatible with other kind of
-// edge, but other kinds of edges are not compatible with each other.
+// insertOrUpdate will insert a new dep edge if no such edge exists between from
+// and to. Otherwise, it will update the edge accordingly. An error may be
+// returned if the kind is incompatible with the existing kind for the edge. For
+// example, one cannot have a rule which indicates PreviousTransactionPrecedence
+// and also SameStagePrecedence; that would be impossible to fulfill. Precedence
+// is compatible with other kind of edge, but other kinds of edges are not
+// compatible with each other.
 func (et *depEdges) insertOrUpdate(rule Rule, kind DepEdgeKind, from, to *screl.Node) error {
 	k := makeEdgeKey(et.getTargetIdx, from, to)
 	if got, ok := et.get(k); ok {

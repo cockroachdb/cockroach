@@ -86,16 +86,6 @@ const (
 	// be reached before the destination (to), and _must_ do so in the same stage.
 	SameStagePrecedence
 
-	// PreviousStagePrecedence indicates that the source (from) of the edge must
-	// be reached before the destination (to), and _must_ do so in a previous
-	// stage.
-	//
-	// This edge kind is only maintained for compatibility with the 23.1 and 22.2
-	// releases via the release_22_2 and release_23_1 rulesets and should not be
-	// used elsewhere.
-	// Deprecated
-	PreviousStagePrecedence
-
 	// PreviousTransactionPrecedence indicates that the source (from) of the edge
 	// must be reached before the destination (to), and _must_ do so in a previous
 	// transaction.
@@ -161,8 +151,8 @@ func (de *DepEdge) Rules() []Rule { return de.rules }
 
 // Kind returns the kind of the DepEdge. Note that it returns the strongest
 // kind implied by a rule; if one rule which created this edge is Precedence,
-// and another is SameStagePrecedence or PreviousStagePrecedence, then it
-// returns the latter.
+// and another is SameStagePrecedence or PreviousTransactionPrecedence, then
+// it returns the latter.
 func (de *DepEdge) Kind() DepEdgeKind { return de.kind }
 
 // String returns a string representation of this edge
