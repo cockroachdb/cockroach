@@ -230,8 +230,16 @@ func (s *SSTSinkKeyWriter) maybeDoSizeFlush(ctx context.Context, nextKey roachpb
 	if !hardFlush && lastFile.EntryCounts.DataSize < fileSpanByteLimit {
 		return nil
 	}
+	// nextKey may include a column family suffix (e.g. /Table/T/1/PK/1/1).
+	// Truncate to the row key so that the manifest file span boundary is a
+	// safe split point — restore uses these boundaries to split ranges, and
+	// splitting within a row can corrupt reads.
+	safeStartKey, err := keys.EnsureSafeSplitKey(nextKey)
+	if err != nil {
+		return err
+	}
 	newSpan := roachpb.Span{
-		Key:    nextKey,
+		Key:    safeStartKey,
 		EndKey: lastFile.Span.EndKey,
 	}
 	if lastFile.Span.ContainsKey(newSpan.Key) {
