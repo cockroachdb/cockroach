@@ -73,9 +73,11 @@ func TestAlterLDRSkipRejectsInvalidState(t *testing.T) {
 
 	t.Run("skip on running job", func(t *testing.T) {
 		var jobID jobspb.JobID
+		cursorTS := s.Clock().Now()
 		destDB.QueryRow(t,
-			"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional'",
+			"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional', CURSOR = $2",
 			sourceURL.String(),
+			cursorTS.AsOfSystemTime(),
 		).Scan(&jobID)
 		jobutils.WaitForJobToRun(t, destDB, jobID)
 
