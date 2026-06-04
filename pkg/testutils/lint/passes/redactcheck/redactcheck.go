@@ -269,6 +269,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"TxnEpoch":       {},
 						"TxnSeq":         {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/storage/storageconfig": {
+						"StoreType": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/util/admission": {
 						"WorkKind":  {},
 						"QueueKind": {},

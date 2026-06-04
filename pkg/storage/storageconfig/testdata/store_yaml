@@ -9,6 +9,12 @@ type: mem
 size: 1 GiB
 sticky-vfs-id: foo
 
+to-yaml basalt
+----
+type: basalt
+path: basalt://prod/cluster/store1
+size: 1 GiB
+
 to-yaml misc
 ----
 path: /mnt/data1
@@ -74,6 +80,23 @@ invalid-field: foo
 yaml: unmarshal errors:
   line 3: field invalid-field not found in type storageconfig.Store
 
+from-yaml
+type: local
+path: foo
+size: 50%
+----
+path: foo
+size: 50%
+
+from-yaml
+type: basalt
+path: basalt://prod/cluster/store1
+size: 10%
+----
+type: basalt
+path: basalt://prod/cluster/store1
+size: 10%
+
 validate
 path: foo
 size: 0
@@ -96,25 +119,67 @@ validate
 path: foo
 type: mem
 ----
-path specified for in memory store
+path specified for in-memory store
 
 validate
 type: mem
 size: 90%
 ballast-size: 5%
 ----
-ballast-size specified for in memory store
+ballast-size specified for in-memory store
 
 validate
 size: 90%
 ----
-no path specified
+no path specified for local on-disk store
 
 validate
 path: foo
 sticky-vfs-id: foo
 ----
-on-disk store cannot use a sticky VFS ID
+local on-disk store cannot use sticky VFS ID
+
+validate
+type: basalt
+----
+no path specified for basalt store
+
+validate
+type: basalt
+path: /mnt/data1
+----
+basalt store path must start with basalt://
+
+validate
+type: basalt
+path: basalt://ctrl:5000/cluster/store1
+size: 1,000 MiB
+----
+type: basalt
+path: basalt://ctrl:5000/cluster/store1
+size: 1,000 MiB
+
+validate
+type: basalt
+path: basalt://ctrl:5000/cluster/store1
+----
+type: basalt
+path: basalt://ctrl:5000/cluster/store1
+
+validate
+type: basalt
+path: basalt://ctrl:5000/cluster/store1
+sticky-vfs-id: foo
+----
+basalt store cannot use sticky VFS ID
+
+validate
+type: basalt
+path: basalt://ctrl:5000/cluster/store1
+encryption:
+    key: /some/file
+----
+encryption is not supported for basalt stores
 
 validate
 path: /mnt/data1
