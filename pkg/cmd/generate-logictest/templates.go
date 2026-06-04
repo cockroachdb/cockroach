@@ -42,7 +42,11 @@ func runExecBuildLogicTest(t *testing.T, file string) {
 		ForceProductionValues:       true,{{end}}
 		// Disable the direct scans in order to keep the output of EXPLAIN (VEC)
 		// deterministic.
-		DisableDirectColumnarScans: true,
+		DisableDirectColumnarScans: true,{{ if not .ForceProductionValues }}
+		// ForceProductionValues is not set for this config, so we must
+		// explicitly disable optimizer perturbations to keep EXPLAIN output
+		// deterministic when COCKROACH_LOGIC_TEST_OPTIMIZER_METAMORPHIC is set.
+		DisableOptimizerPerturbations: true,{{end}}
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(execBuildLogicTestDir, file))
 }
@@ -65,7 +69,8 @@ func runSqliteLogicTest(t *testing.T, file string) {
 		DisableUseMVCCRangeTombstonesForPointDeletes: true,
 		// Some sqlite tests with very low bytes limit value are too slow, so
 		// ensure 3 KiB lower bound.
-		BatchBytesLimitLowerBound: 3 << 10, // 3 KiB
+		BatchBytesLimitLowerBound:     3 << 10, // 3 KiB
+		DisableOptimizerPerturbations: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(sqliteLogicTestDir, file))
 }
@@ -188,7 +193,8 @@ func TestLogic_tmp(t *testing.T) {
 	{{- if .ExecBuildLogicTest }}
 	glob = filepath.Join(execBuildLogicTestDir, "_*")
 	serverArgs := logictest.TestServerArgs{
-		DisableWorkmemRandomization: true,
+		DisableWorkmemRandomization:   true,
+		DisableOptimizerPerturbations: true,
 	}
 	logictest.RunLogicTests(t, serverArgs, configIdx, glob)
 	{{- end }}
