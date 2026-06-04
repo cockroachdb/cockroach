@@ -221,12 +221,22 @@ type Handle struct {
 	cpuKVAdmissionQResp admission.AdmitResponse
 }
 
-// AnnotateCtx annotates the given context with the ElasticCPUWorkHandle,
-// which is used deep in the storage layer (e.g., mvccExportToWriter) to pace
-// CPU intensive operations.
+// AnnotateCtx annotates the given context with this request's
+// ElasticCPUWorkHandle, which is used deep in the storage layer (e.g.,
+// mvccExportToWriter) to pace CPU intensive operations. If the request has no
+// handle of its own, any handle inherited from an enclosing request's context
+// is stripped instead; see admission.ContextWithoutElasticCPUWorkHandle.
 func (h *Handle) AnnotateCtx(ctx context.Context) context.Context {
 	if h.elasticCPUWorkHandle != nil {
 		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, h.elasticCPUWorkHandle)
+	} else {
+		// This request was not admitted as elastic CPU work, so it must not
+		// inherit an ElasticCPUWorkHandle from an enclosing request whose context
+		// it shares. This happens for internal KV requests issued mid-evaluation
+		// via the node-local internal-client adapter (e.g. txnwait QueryTxn
+		// pushes): the handle is owned by the single request it was minted for,
+		// and concurrently mutating it across goroutines is a data race.
+		ctx = admission.ContextWithoutElasticCPUWorkHandle(ctx)
 	}
 	return ctx
 }

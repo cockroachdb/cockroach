@@ -139,3 +139,30 @@ func TestWorkInfoForBatch(t *testing.T) {
 		})
 	}
 }
+
+// TestAnnotateCtxStripsInheritedElasticHandle verifies that Handle.AnnotateCtx
+// installs an elastic CPU work handle when the request was admitted as elastic
+// work, and strips any inherited handle when it was not. The latter prevents a
+// request from concurrently mutating an enclosing request's handle when it
+// shares its context (e.g. internal KV requests issued via the node-local
+// internal-client adapter), which is a data race. See #170847.
+func TestAnnotateCtxStripsInheritedElasticHandle(t *testing.T) {
+	// An enclosing request's context carries its handle.
+	inherited := admission.TestingNewElasticCPUHandle()
+	enclosingCtx := admission.ContextWithElasticCPUWorkHandle(context.Background(), inherited)
+
+	// A request admitted as elastic work installs its own handle, overriding any
+	// inherited one.
+	own := admission.TestingNewElasticCPUHandle()
+	h := Handle{elasticCPUWorkHandle: own}
+	require.Same(t, own, admission.ElasticCPUWorkHandleFromContext(h.AnnotateCtx(enclosingCtx)))
+
+	// A request not admitted as elastic work must not inherit the enclosing
+	// handle.
+	h = Handle{}
+	require.Nil(t, admission.ElasticCPUWorkHandleFromContext(h.AnnotateCtx(enclosingCtx)))
+
+	// The no-handle case is also a no-op on a context that never had one.
+	h = Handle{}
+	require.Nil(t, admission.ElasticCPUWorkHandleFromContext(h.AnnotateCtx(context.Background())))
+}
