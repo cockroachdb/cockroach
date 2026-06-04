@@ -47,7 +47,9 @@ if [[ -z "${DRY_RUN}" ]] ; then
   fi
   gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/cockroach"
   gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
-  git_repo_for_tag="cockroachdb/cockroach"
+  # Tag the repo the workflow runs in (passed as TAG_REPO, e.g.
+  # cockroachdb/cockroach-private) rather than hardcoding a destination.
+  git_repo_for_tag="${TAG_REPO:?TAG_REPO must be set by the workflow for non-dry-run}"
 else
   gcs_bucket="cockroach-release-artifacts-dryrun"
   gcs_staged_bucket="cockroach-release-artifacts-staged-dryrun"
