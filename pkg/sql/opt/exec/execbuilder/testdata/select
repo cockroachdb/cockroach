@@ -337,7 +337,7 @@ EXPLAIN (VERBOSE) SELECT 1 FROM [$t_id() as num_ref_alias]
 statement ok
 DROP TABLE num_ref
 
-query error pq: \[\d+\(1\) AS num_ref_alias\]: relation "num_ref" is being dropped: descriptor is being dropped
+query error pq: \[\d+\(1\) AS num_ref_alias\]: relation "num_ref" is being dropped
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1) AS num_ref_alias]
 
 # ------------------------------------------------------------------------------
