@@ -79,6 +79,9 @@ type LDRWorkload struct {
 	manualSchemaSetup bool
 	dbName            string
 	tableNames        []string
+	// skipDLQCheck skips DLQ table validation. Transactional mode does not
+	// create DLQ tables. Defaults to false, preserving existing behavior.
+	skipDLQCheck bool
 }
 
 func registerLogicalDataReplicationTests(r registry.Registry) {
@@ -509,11 +512,15 @@ func TestLDRConflict(
 	c.Run(ctx, option.WithNodes(setup.workloadNode), "./workload", "init", "conflict", leftURL)
 
 	t.Status("creating bidirectional replication job")
-	setup.right.sysSQL.QueryRow(t, `
+	modeOption := ""
+	if ldrConfig.mode != Default {
+		modeOption = fmt.Sprintf(", MODE = '%s'", ldrConfig.mode)
+	}
+	setup.right.sysSQL.QueryRow(t, fmt.Sprintf(`
 	CREATE LOGICALLY REPLICATED TABLE conflict.conflict FROM TABLE conflict.conflict
 		ON 'external://left'
-		WITH BIDIRECTIONAL ON 'external://right'
-	`).Scan(&rightJobID)
+		WITH BIDIRECTIONAL ON 'external://right'%s
+	`, modeOption)).Scan(&rightJobID)
 
 	t.Status("waiting for right job to start up")
 	waitForReplicatedTime(t, rightJobID, setup.right.db, getLogicalDataReplicationJobInfo, 2*time.Minute)
@@ -544,7 +551,7 @@ func TestLDRConflict(
 		leftURL)
 
 	t.Status("verifying results")
-	verifyConflictCorrectness(ctx, t, setup, leftJobID, rightJobID)
+	verifyConflictCorrectness(ctx, t, setup, leftJobID, rightJobID, ldrConfig.mode.SkipDLQCheck())
 }
 
 // verifyConflictCorrectness waits for replication to catch up, checks DLQs,
@@ -555,14 +562,22 @@ func TestLDRConflict(
 // on both sides, the test passes. Otherwise, the test fails and prints the
 // diffs.
 func verifyConflictCorrectness(
-	ctx context.Context, t test.Test, setup multiClusterSetup, leftJobID, rightJobID int,
+	ctx context.Context,
+	t test.Test,
+	setup multiClusterSetup,
+	leftJobID, rightJobID int,
+	skipDLQCheck bool,
 ) {
 	now := timeutil.Now()
 	t.Status("waiting for replicated times to catchup")
 	waitForReplicatedTimeToReachTimestamp(t, leftJobID, setup.left.db, getLogicalDataReplicationJobInfo, 2*time.Minute, now)
-	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.left.db, "conflict"))
+	if !skipDLQCheck {
+		require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.left.db, "conflict"))
+	}
 	waitForReplicatedTimeToReachTimestamp(t, rightJobID, setup.right.db, getLogicalDataReplicationJobInfo, 2*time.Minute, now)
-	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.right.db, "conflict"))
+	if !skipDLQCheck {
+		require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.right.db, "conflict"))
+	}
 
 	t.Status("comparing fingerprints")
 	fpQuery := "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE conflict.conflict"
@@ -1019,15 +1034,22 @@ func (m mode) String() string {
 		return "immediate"
 	case ModeValidated:
 		return "validated"
+	case ModeTransactional:
+		return "transactional"
 	default:
 		return "default"
 	}
 }
 
+// SkipDLQCheck returns true if DLQ table validation should be skipped
+// for this mode. Transactional mode does not create DLQ tables.
+func (m mode) SkipDLQCheck() bool { return m == ModeTransactional }
+
 const (
 	Default = iota
 	ModeImmediate
 	ModeValidated
+	ModeTransactional
 )
 
 type multiClusterSpec struct {
@@ -1401,10 +1423,14 @@ func VerifyCorrectness(
 	t.Status("waiting for replicated times to catchup before verifying left and right clusters")
 	if leftJobID != 0 {
 		waitForReplicatedTimeToReachTimestamp(t, leftJobID, setup.left.db, getLogicalDataReplicationJobInfo, waitTime, now)
-		require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.left.db, ldrWorkload.dbName))
+		if !ldrWorkload.skipDLQCheck {
+			require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.left.db, ldrWorkload.dbName))
+		}
 	}
 	waitForReplicatedTimeToReachTimestamp(t, rightJobID, setup.right.db, getLogicalDataReplicationJobInfo, waitTime, now)
-	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.right.db, ldrWorkload.dbName))
+	if !ldrWorkload.skipDLQCheck {
+		require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.right.db, ldrWorkload.dbName))
+	}
 
 	t.Status("verifying equality of left and right clusters")
 
