@@ -374,6 +374,12 @@ func (p *planner) renameTenant(
 		}
 	}
 
+	if info.PhysicalReplicationConsumerJobID != 0 {
+		return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot rename tenant %q while it is the destination of a replication stream", info.Name),
+			"Complete or cancel the replication stream before renaming the tenant.")
+	}
+
 	if info.ServiceMode != mtinfopb.ServiceModeNone {
 		// No name changes while there is a service mode.
 		//

@@ -586,6 +586,55 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 	})
 }
 
+// TestTenantStreamingRenameTenant verifies that a destination tenant cannot be
+// renamed while it is the target of an active replication stream, and that the
+// rename is allowed again once the stream is cancelled or has completed via
+// cutover.
+func TestTenantStreamingRenameTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	t.Run("cancel", func(t *testing.T) {
+		args := replicationtestutils.DefaultTenantStreamingClustersArgs
+		c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+		defer cleanup()
+
+		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+		c.WaitUntilReplicatedTime(c.SrcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
+
+		c.DestSysSQL.ExpectErr(t,
+			`cannot rename tenant .* while it is the destination of a replication stream`,
+			fmt.Sprintf("ALTER VIRTUAL CLUSTER %s RENAME TO newdestination", c.Args.DestTenantName))
+		c.SrcSysSQL.ExpectErr(t,
+			`cannot rename tenant in service mode`,
+			fmt.Sprintf("ALTER VIRTUAL CLUSTER %s RENAME TO newsource", c.Args.SrcTenantName))
+
+		c.DestSysSQL.Exec(t, fmt.Sprintf("CANCEL JOB %d", ingestionJobID))
+		jobutils.WaitForJobToCancel(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+		jobutils.WaitForJobToFail(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+
+		c.DestSysSQL.Exec(t,
+			fmt.Sprintf("ALTER VIRTUAL CLUSTER %s RENAME TO newdestination", c.Args.DestTenantName))
+	})
+
+	t.Run("cutover", func(t *testing.T) {
+		args := replicationtestutils.DefaultTenantStreamingClustersArgs
+		c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+		defer cleanup()
+
+		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+		srcTime := c.SrcCluster.Server(0).Clock().Now()
+		c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+		c.Cutover(ctx, producerJobID, ingestionJobID, srcTime.GoTime(), false)
+
+		c.DestSysSQL.Exec(t,
+			fmt.Sprintf("ALTER VIRTUAL CLUSTER %s RENAME TO newdestination", c.Args.DestTenantName))
+	})
+}
+
 func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
