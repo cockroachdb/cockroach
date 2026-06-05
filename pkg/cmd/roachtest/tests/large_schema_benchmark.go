@@ -7,6 +7,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/cockroachdb/errors"
@@ -496,83 +498,186 @@ func runLargeSchemaIntrospectionBenchmark(
 	t.L().Printf("Introspection benchmark complete")
 }
 
-// takeAndTrackBackupFixture creates a backup fixture of a cluster and tracks
-// metrics about the backup operation. If the backup fails or the fixture
-// otherwise cannot be created, an error is returned by the finish function.
+// takeAndTrackBackupFixture creates a backup fixture comprising the chain
+// full → inc → inc → compacted(over the two incrementals) → inc, and
+// surfaces planning/execution timings for the full, incremental, and
+// compacted backups.  Errors are returned via the wait function rather than
+// failing the test.
 func takeAndTrackBackupFixture(
-	ctx context.Context, t test.Test, c cluster.Cluster, numTables int, backupTimeout time.Duration,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	numTables int,
+	perBackupTimeout time.Duration,
 ) (waitForBackup func() error) {
-	conn := c.Conn(ctx, t.L(), 1)
+	const (
+		fullPlanMetric    = "full_backup_planning_time"
+		fullExecMetric    = "full_backup_execution_time"
+		incPlanMetric     = "inc_backup_planning_time"
+		incExecMetric     = "inc_backup_execution_time"
+		compactPlanMetric = "compacted_backup_planning_time"
+		compactExecMetric = "compacted_backup_execution_time"
+	)
+
+	db := c.Conn(ctx, t.L(), 1)
 	fixtureReg := GetFixtureRegistry(ctx, t, c.Cloud())
 	fixture := LargeEmptySchemaFixture{NumTables: numTables}
 	handle, err := fixtureReg.Create(ctx, fixture.Kind(), t.L())
 	require.NoError(t, err)
 	collectionURI := fixtureReg.URI(handle.Metadata().DataPath)
-	t.L().Printf("creating fixture at '%s'", collectionURI.String())
+	uri := collectionURI.String()
+	t.L().Printf("creating fixture at '%s'", uri)
 
-	var backupJobID jobspb.JobID
-	// A failure in planning or execution will be reported as a 0 value for the
-	// corresponding time metric.
-	var planningTime, executionTime time.Duration
-	start := timeutil.Now()
-	planErr := conn.QueryRow(
-		`BACKUP INTO $1 WITH detached`,
-		collectionURI.String(),
-	).Scan(&backupJobID)
-	if planErr == nil {
-		planningTime = timeutil.Since(start)
+	// For simplicity only the first incremental is metered; the other two
+	// incrementals are taken but not tracked. Metric values for unreached or
+	// failed steps remain at zero so the emitted shape is stable across runs.
+	metrics := map[string]*roachtestutil.AggregatedMetric{
+		fullPlanMetric:    {Name: fullPlanMetric, Unit: "ms"},
+		fullExecMetric:    {Name: fullExecMetric, Unit: "s"},
+		incPlanMetric:     {Name: incPlanMetric, Unit: "ms"},
+		incExecMetric:     {Name: incExecMetric, Unit: "s"},
+		compactPlanMetric: {Name: compactPlanMetric, Unit: "ms"},
+		compactExecMetric: {Name: compactExecMetric, Unit: "s"},
+	}
+	record := func(planName, execName string, planning, execution time.Duration) {
+		metrics[planName].Value = roachtestutil.MetricPoint(planning / time.Millisecond)
+		metrics[execName].Value = roachtestutil.MetricPoint(execution / time.Second)
 	}
 
-	// Wait for the backup to complete in a separate goroutine, so that we can
-	// track the time it takes and whether it succeeds or fails.
 	grp := t.NewErrorGroup(task.WithContext(ctx), task.Name("track-backup"))
 	grp.Go(func(ctx context.Context, l *logger.Logger) error {
-		defer func() {
-			uploadBackupSummaryStats(t, c, planningTime, executionTime)
-		}()
-		// Planning failed, no backup job to wait for.
-		if planErr != nil {
-			return errors.Wrap(planErr, "failed to plan backup job")
+		defer uploadBackupSummaryStats(t, c, metrics)
+
+		// Each step sets its AOST explicitly to a precomputed HLC string; the
+		// same string then doubles as the [start, end] range we feed into
+		// crdb_internal.backup_compaction.
+		nowAOST := func() string {
+			return hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}.AsOfSystemTime()
 		}
-		if err := WaitForTerminal(ctx, conn, backupJobID, backupTimeout); err != nil {
-			return errors.Wrap(err, "backup job did not complete within timeout")
+		backupStmt := func(latest bool, aost string) string {
+			latestClause := ""
+			if latest {
+				latestClause = " LATEST IN"
+			}
+			return fmt.Sprintf(
+				"BACKUP INTO%s '%s' AS OF SYSTEM TIME '%s' WITH detached",
+				latestClause, uri, aost,
+			)
 		}
-		var startTime, endTime time.Time
-		var backupErr string
-		var executionFailed bool
-		if err := conn.QueryRow(
-			`SELECT started, finished, status != $1, error FROM [SHOW JOB $2]`, "succeeded", backupJobID,
-		).Scan(&startTime, &endTime, &executionFailed, &backupErr); err != nil {
-			return errors.Wrap(err, "failed to query backup job details")
+
+		fullAOST := nowAOST()
+		fullPlan, fullExec, err := runBackupStep(
+			ctx, db, backupStmt(false, fullAOST), nil, perBackupTimeout,
+		)
+		record(fullPlanMetric, fullExecMetric, fullPlan, fullExec)
+		if err != nil {
+			return errors.Wrap(err, "full backup")
 		}
-		if executionFailed {
-			return errors.Newf("backup job failed with error: %s", backupErr)
+
+		incPlan, incExec, err := runBackupStep(
+			ctx, db, backupStmt(true, nowAOST()), nil, perBackupTimeout,
+		)
+		record(incPlanMetric, incExecMetric, incPlan, incExec)
+		if err != nil {
+			return errors.Wrap(err, "incremental 1")
 		}
-		executionTime = endTime.Sub(startTime)
-		return errors.Wrap(handle.SetReadyAt(ctx), "failed to mark fixture as complete")
+
+		inc2AOST := nowAOST()
+		if _, _, err := runBackupStep(
+			ctx, db, backupStmt(true, inc2AOST), nil, perBackupTimeout,
+		); err != nil {
+			return errors.Wrap(err, "incremental 2")
+		}
+
+		fullSubdir, err := fetchFullSubdir(ctx, db, uri)
+		if err != nil {
+			return errors.Wrap(err, "fetching full subdir for compaction")
+		}
+		compactPlan, compactExec, err := runBackupStep(
+			ctx, db,
+			`SELECT crdb_internal.backup_compaction(0, $1, $2, $3::DECIMAL, $4::DECIMAL)`,
+			[]interface{}{backupStmt(true, ""), fullSubdir, fullAOST, inc2AOST},
+			perBackupTimeout,
+		)
+		record(compactPlanMetric, compactExecMetric, compactPlan, compactExec)
+		if err != nil {
+			return errors.Wrap(err, "compaction")
+		}
+
+		if _, _, err := runBackupStep(
+			ctx, db, backupStmt(true, nowAOST()), nil, perBackupTimeout,
+		); err != nil {
+			return errors.Wrap(err, "incremental 3")
+		}
+
+		return errors.Wrap(handle.SetReadyAt(ctx), "marking fixture ready")
 	})
 
 	return grp.WaitE
 }
 
-// uploadBackupSummaryStats uploads summary statistics about the backup
-// operation.
+// fetchFullSubdir returns the full-backup subdirectory of the collection at
+// uri.
+func fetchFullSubdir(ctx context.Context, db *gosql.DB, uri string) (string, error) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, "SET use_backups_with_ids = true"); err != nil {
+		return "", errors.Wrap(err, "setting use_backups_with_ids")
+	}
+	var fullSubdir string
+	if err := conn.QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT full_subdir FROM [SHOW BACKUPS IN '%s' WITH DEBUG] LIMIT 1`, uri,
+	)).Scan(&fullSubdir); err != nil {
+		return "", errors.Wrap(err, "scanning full_subdir")
+	}
+	return fullSubdir, nil
+}
+
+// runBackupStep runs a SQL statement that synchronously returns a backup job
+// ID, waits for the resulting job to reach a terminal state within
+// perBackupTimeout, and returns the planning and execution times. On
+// failure, the corresponding times are zero.
+func runBackupStep(
+	ctx context.Context,
+	db *gosql.DB,
+	stmt string,
+	args []interface{},
+	perBackupTimeout time.Duration,
+) (planning, execution time.Duration, _ error) {
+	var jobID jobspb.JobID
+	start := timeutil.Now()
+	if err := db.QueryRowContext(ctx, stmt, args...).Scan(&jobID); err != nil {
+		return 0, 0, errors.Wrap(err, "planning")
+	}
+	planning = timeutil.Since(start)
+
+	if err := WaitForTerminal(ctx, db, jobID, perBackupTimeout); err != nil {
+		return planning, 0, errors.Wrapf(err, "waiting for job %d", jobID)
+	}
+	var startTime, finishTime time.Time
+	var status, jobErr string
+	if err := db.QueryRowContext(ctx,
+		`SELECT started, finished, status, error FROM [SHOW JOB $1]`, jobID,
+	).Scan(&startTime, &finishTime, &status, &jobErr); err != nil {
+		return planning, 0, errors.Wrapf(err, "querying job %d details", jobID)
+	}
+	if status != "succeeded" {
+		return planning, 0, errors.Newf("job %d ended in state %s: %s", jobID, status, jobErr)
+	}
+	return planning, finishTime.Sub(startTime), nil
+}
+
+// uploadBackupSummaryStats writes the metric set to the perf summary
+// artifact.
 func uploadBackupSummaryStats(
-	t test.Test, c cluster.Cluster, planningTime time.Duration, executionTime time.Duration,
+	t test.Test, c cluster.Cluster, metrics map[string]*roachtestutil.AggregatedMetric,
 ) {
-	stats := roachtestutil.AggregatedPerfMetrics{
-		{
-			Name:           "backup_planning_time",
-			Value:          roachtestutil.MetricPoint(planningTime / time.Millisecond),
-			Unit:           "ms",
-			IsHigherBetter: false,
-		},
-		{
-			Name:           "backup_execution_time",
-			Value:          roachtestutil.MetricPoint(executionTime / time.Second),
-			Unit:           "s",
-			IsHigherBetter: false,
-		},
+	stats := make(roachtestutil.AggregatedPerfMetrics, 0, len(metrics))
+	for _, m := range metrics {
+		stats = append(stats, m)
 	}
 	if err := roachtestutil.WritePerfSummaryStats(t, c, stats); err != nil {
 		t.L().Printf("failed to upload performance artifacts: %v", err)
