@@ -407,8 +407,10 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 
 		// If we have a single statement txn we want to run CTAS async, and
-		// consequently ensure it gets queued as a SchemaChange.
-		if params.extendedEvalCtx.TxnIsSingleStmt {
+		// consequently ensure it gets queued as a SchemaChange. WITH NO DATA does
+		// not populate any rows, so there is no backfill to defer; the table is
+		// left PUBLIC and created empty, just like a plain CREATE TABLE.
+		if params.extendedEvalCtx.TxnIsSingleStmt && !n.n.WithNoData {
 			desc.State = descpb.DescriptorState_ADD
 		}
 	} else {
@@ -538,8 +540,9 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	// If we are in a multi-statement txn or the source has placeholders, we
-	// execute the CTAS query synchronously.
-	if n.n.As() && !params.extendedEvalCtx.TxnIsSingleStmt {
+	// execute the CTAS query synchronously. WITH NO DATA skips populating the
+	// table: the AS query was planned to derive column types but is not executed.
+	if n.n.As() && !n.n.WithNoData && !params.extendedEvalCtx.TxnIsSingleStmt {
 		err = func() error {
 			// The data fill portion of CREATE AS must operate on a read snapshot,
 			// so that it doesn't end up observing its own writes.
