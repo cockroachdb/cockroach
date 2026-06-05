@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"reflect"
 	"sort"
 	"sync"
 	"testing"
@@ -273,8 +272,8 @@ func TestHistogram(t *testing.T) {
 		expSum += float64(m)
 	}
 
-	act := *h.ToPrometheusMetric().Histogram
-	exp := prometheusgo.Histogram{
+	act := h.ToPrometheusMetric().Histogram
+	exp := &prometheusgo.Histogram{
 		SampleCount: u(len(measurements)),
 		SampleSum:   &expSum,
 		Bucket: []*prometheusgo.Bucket{
@@ -288,8 +287,8 @@ func TestHistogram(t *testing.T) {
 		},
 	}
 
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	if !proto.Equal(act, exp) { // nolint:protoequal
+		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp.String(), act.String()))
 	}
 
 	histWindow := h.WindowedSnapshot()
@@ -362,8 +361,8 @@ func TestManualWindowHistogram(t *testing.T) {
 	require.NoError(t, histogram.Write(pMetric))
 	h.Update(histogram, pMetric.Histogram)
 
-	act := *h.ToPrometheusMetric().Histogram
-	exp := prometheusgo.Histogram{
+	act := h.ToPrometheusMetric().Histogram
+	exp := &prometheusgo.Histogram{
 		SampleCount: u(len(measurements)),
 		SampleSum:   &expSum,
 		Bucket: []*prometheusgo.Bucket{
@@ -377,8 +376,8 @@ func TestManualWindowHistogram(t *testing.T) {
 		},
 	}
 
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	if !proto.Equal(act, exp) { // nolint:protoequal
+		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp.String(), act.String()))
 	}
 
 	// Rotate and RecordValue are not supported when using Update. See comment on
@@ -411,8 +410,8 @@ func TestManualWindowHistogram(t *testing.T) {
 	histogram.Observe(5)
 	histogram.Observe(5)
 
-	act = *h.WindowedSnapshot().h
-	exp = prometheusgo.Histogram{
+	act = h.WindowedSnapshot().h
+	exp = &prometheusgo.Histogram{
 		SampleCount: u(len(measurements) + len(measurements2)),
 		SampleSum:   &expSum,
 		Bucket: []*prometheusgo.Bucket{
@@ -424,8 +423,8 @@ func TestManualWindowHistogram(t *testing.T) {
 		},
 	}
 
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	if !proto.Equal(act, exp) { // nolint:protoequal
+		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp.String(), act.String()))
 	}
 }
 

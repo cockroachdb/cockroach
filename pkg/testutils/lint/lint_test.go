@@ -1613,6 +1613,7 @@ func TestLint(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
+			stream.GrepNot(`nolint:protoequal`),
 		), func(s string) {
 			t.Errorf("\n%s <- forbidden; use '.Equal()' method instead or  reflect.DeepEqual()", s)
 		}); err != nil {

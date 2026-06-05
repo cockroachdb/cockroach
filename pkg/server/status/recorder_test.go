@@ -171,7 +171,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	recorder.AddTenantRegistry(tenantID, metric.NewTenantRegistries(regTenant, clusterRegTenant))
 
 	buf := bytes.NewBuffer([]byte{})
-	err = recorder.PrintAsText(buf, expfmt.FmtText, false, metric.Metadata_INTERNAL)
+	err = recorder.PrintAsText(buf, expfmt.NewFormat(expfmt.TypeTextPlain), false, metric.Metadata_INTERNAL)
 	require.NoError(t, err)
 
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="system"} 123`)
@@ -179,7 +179,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	require.Contains(t, buf.String(), `cluster_metric{node_id="7",tenant="application"} 789`)
 
 	bufTenant := bytes.NewBuffer([]byte{})
-	err = recorderTenant.PrintAsText(bufTenant, expfmt.FmtText, false, metric.Metadata_INTERNAL)
+	err = recorderTenant.PrintAsText(bufTenant, expfmt.NewFormat(expfmt.TypeTextPlain), false, metric.Metadata_INTERNAL)
 	require.NoError(t, err)
 
 	require.NotContains(t, bufTenant.String(), `some_metric{node_id="7",tenant="system"} 123`)
@@ -190,7 +190,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	appNameContainer.Set("application2")
 
 	buf = bytes.NewBuffer([]byte{})
-	err = recorder.PrintAsText(buf, expfmt.FmtText, false, metric.Metadata_INTERNAL)
+	err = recorder.PrintAsText(buf, expfmt.NewFormat(expfmt.TypeTextPlain), false, metric.Metadata_INTERNAL)
 	require.NoError(t, err)
 
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="system"} 123`)
@@ -198,7 +198,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	require.Contains(t, buf.String(), `cluster_metric{node_id="7",tenant="application2"} 789`)
 
 	bufTenant = bytes.NewBuffer([]byte{})
-	err = recorderTenant.PrintAsText(bufTenant, expfmt.FmtText, false, metric.Metadata_INTERNAL)
+	err = recorderTenant.PrintAsText(bufTenant, expfmt.NewFormat(expfmt.TypeTextPlain), false, metric.Metadata_INTERNAL)
 	require.NoError(t, err)
 
 	require.NotContains(t, bufTenant.String(), `some_metric{node_id="7",tenant="system"} 123`)
@@ -1053,7 +1053,7 @@ func TestMetricsRecorder(t *testing.T) {
 			if _, err := recorder.MarshalJSON(); err != nil {
 				t.Error(err)
 			}
-			_ = recorder.PrintAsText(io.Discard, expfmt.FmtText, false, metric.Metadata_INTERNAL)
+			_ = recorder.PrintAsText(io.Discard, expfmt.NewFormat(expfmt.TypeTextPlain), false, metric.Metadata_INTERNAL)
 			_ = recorder.GetTimeSeriesData(false)
 			wg.Done()
 		}()
@@ -1521,7 +1521,7 @@ func TestScrapeMetrics(t *testing.T) {
 	// First scrape: meta-metrics should be zero in the output because the
 	// gauges haven't been updated yet.
 	var buf bytes.Buffer
-	require.NoError(t, recorder.PrintAsText(&buf, expfmt.FmtText, false, metric.Metadata_INTERNAL))
+	require.NoError(t, recorder.PrintAsText(&buf, expfmt.NewFormat(expfmt.TypeTextPlain), false, metric.Metadata_INTERNAL))
 	firstOutput := buf.String()
 
 	require.Contains(t, firstOutput, "obs_metric_export_name_count")
@@ -1553,7 +1553,7 @@ func TestScrapeMetrics(t *testing.T) {
 	// first scrape. This proves values survive across cycles and are not
 	// prematurely cleared.
 	buf.Reset()
-	require.NoError(t, recorder.PrintAsText(&buf, expfmt.FmtText, false, metric.Metadata_INTERNAL))
+	require.NoError(t, recorder.PrintAsText(&buf, expfmt.NewFormat(expfmt.TypeTextPlain), false, metric.Metadata_INTERNAL))
 	secondOutput := buf.String()
 
 	require.Contains(t, secondOutput,
@@ -1586,13 +1586,13 @@ func TestScrapeMetrics(t *testing.T) {
 	// The fourth scrape should show the updated count (4).
 	ac.AddChild("d").Inc(4)
 	buf.Reset()
-	require.NoError(t, recorder.PrintAsText(&buf, expfmt.FmtText, false, metric.Metadata_INTERNAL))
+	require.NoError(t, recorder.PrintAsText(&buf, expfmt.NewFormat(expfmt.TypeTextPlain), false, metric.Metadata_INTERNAL))
 	thirdOutput := buf.String()
 	require.Regexp(t, `obs_metric_export_child_count\{[^}]*metric_name="test_agg"[^}]*\} 3`,
 		thirdOutput)
 
 	buf.Reset()
-	require.NoError(t, recorder.PrintAsText(&buf, expfmt.FmtText, false, metric.Metadata_INTERNAL))
+	require.NoError(t, recorder.PrintAsText(&buf, expfmt.NewFormat(expfmt.TypeTextPlain), false, metric.Metadata_INTERNAL))
 	fourthOutput := buf.String()
 	require.Regexp(t, `obs_metric_export_child_count\{[^}]*metric_name="test_agg"[^}]*\} 4`,
 		fourthOutput)
@@ -1725,11 +1725,11 @@ func TestOwnerMetricCount(t *testing.T) {
 
 	// First scrape: populates the OwnerMetricCount gauge internally.
 	var buf bytes.Buffer
-	require.NoError(t, recorder.PrintAsText(&buf, expfmt.FmtText, false, metric.Metadata_INTERNAL))
+	require.NoError(t, recorder.PrintAsText(&buf, expfmt.NewFormat(expfmt.TypeTextPlain), false, metric.Metadata_INTERNAL))
 
 	// Second scrape: the first scrape's owner counts are now visible.
 	buf.Reset()
-	require.NoError(t, recorder.PrintAsText(&buf, expfmt.FmtText, false, metric.Metadata_INTERNAL))
+	require.NoError(t, recorder.PrintAsText(&buf, expfmt.NewFormat(expfmt.TypeTextPlain), false, metric.Metadata_INTERNAL))
 	output := buf.String()
 
 	// The OwnerMetricCount metric and both team labels must appear.
