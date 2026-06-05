@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1482,6 +1483,143 @@ func TestCompactionWithRangeKeys(t *testing.T) {
 	db.Exec(t, "DROP TABLE foo")
 	db.Exec(t, restoreQuery(t, "TABLE foo", collectionURI, noAOST, noOpts))
 	fingerprintsAfter := fingerprint()
+
+	require.Equal(t, fingerprintsBefore, fingerprintsAfter)
+}
+
+// TestCompactionColFamilySplitKey is an end-to-end regression test for
+// #169539. When backup compaction writes only keys from a non-zero column
+// family, a size flush may use the raw key (including the column family suffix)
+// as the manifest file's span boundary. This produces an unsafe split key that
+// causes bad splits during restore, corrupting data.
+//
+// The test creates a table with two column families, updates only the second
+// column family across incremental backups, and compacts with a tiny file size
+// to trigger size-based flushes on column-family-1-only keys. It then asserts
+// that no file span boundary in the compacted backup is an unsafe split key,
+// and that a restore roundtrip preserves data integrity.
+func TestCompactionColFamilySplitKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tempDir, tempDirCleanup := testutils.TempDir(t)
+	defer tempDirCleanup()
+	st := cluster.MakeTestingClusterSettings()
+	_, db, cleanup := backupRestoreTestSetupEmpty(
+		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+			},
+		},
+	)
+	defer cleanup()
+
+	db.Exec(t, "CREATE DATABASE data")
+	db.Exec(t, `CREATE TABLE data.foo (
+		k STRING PRIMARY KEY,
+		a STRING NOT NULL,
+		b STRING NOT NULL,
+		FAMILY fam0 (k, a),
+		FAMILY fam1 (b)
+	)`)
+	defer func() {
+		db.Exec(t, "DROP TABLE IF EXISTS data.foo")
+	}()
+
+	const numRows = 100
+	db.Exec(t, "INSERT INTO data.foo SELECT i::STRING, i::STRING, i::STRING FROM generate_series(1, $1) AS g(i)", numRows)
+
+	const targets = "DATABASE data"
+	collectionURI := []string{"nodelocal://1/backup"}
+	start := getTime()
+	backupStmt := fullBackupQuery(targets, collectionURI, start, noOpts)
+	db.Exec(t, backupStmt)
+
+	// Incremental backups that only modify column family 1 (the `b` column).
+	for range 3 {
+		db.Exec(t, "UPDATE data.foo SET b = b || 'x' WHERE k IN ('1', '50', '100')")
+		db.Exec(t, incBackupQuery(targets, collectionURI, noAOST, noOpts))
+	}
+	end := getTime()
+	db.Exec(t, incBackupQuery(targets, collectionURI, end, noOpts))
+
+	// Force tiny file sizes during compaction so that size-based flushes
+	// occur while the sink is writing only column-family-1 keys.
+	db.Exec(t, "SET CLUSTER SETTING bulkio.backup.file_size = '1'")
+
+	backupPath := getLatestFullDir(t, db, collectionURI...)
+	compactionJobID := triggerCompaction(t, db, backupStmt, backupPath, start, end)
+	jobutils.WaitForJobToSucceed(t, db, compactionJobID)
+
+	// Reset file size to avoid affecting the restore.
+	db.Exec(t, "SET CLUSTER SETTING bulkio.backup.file_size = '128MB'")
+
+	// Inspect the compacted backup manifest: every file span start key must be
+	// a safe split key (at a row boundary, not a column family boundary).
+	rows := db.Query(t,
+		fmt.Sprintf(
+			`SELECT start_key FROM [SHOW BACKUP FILES FROM LATEST IN (%s)]`,
+			stringifyCollectionURI(collectionURI),
+		),
+	)
+	defer rows.Close()
+
+	var numFiles, numUnsafe int
+	for rows.Next() {
+		numFiles++
+		var startKey []byte
+		require.NoError(t, rows.Scan(&startKey))
+		if len(startKey) == 0 {
+			continue
+		}
+		safe, err := keys.EnsureSafeSplitKey(roachpb.Key(startKey))
+		if err != nil {
+			continue
+		}
+		if !roachpb.Key(startKey).Equal(safe) {
+			numUnsafe++
+		}
+	}
+	require.NoError(t, rows.Err())
+	require.Greater(t, numFiles, 0, "expected at least one file in the compacted backup")
+	require.Equal(t, 0, numUnsafe, "found unsafe split keys in compacted backup file spans")
+
+	// Configure restore to create many small spans so that span boundaries
+	// align with file span start keys, triggering splits at those points.
+	db.Exec(t, "SET CLUSTER SETTING backup.restore_span.target_size = '1'")
+	db.Exec(t, "SET CLUSTER SETTING backup.restore_span.max_file_count = 1")
+
+	fingerprintsBefore := db.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data.foo")
+	db.Exec(t, "DROP DATABASE data CASCADE")
+	db.Exec(t, restoreQuery(t, targets, collectionURI, noAOST, noOpts))
+
+	// Check for bad splits: scan range start keys that fall within the
+	// table's key span and flag any that are not safe split keys.
+	var tableID uint32
+	db.QueryRow(t, "SELECT 'data.foo'::REGCLASS::INT").Scan(&tableID)
+	rangeRows := db.Query(t,
+		"SELECT start_key FROM crdb_internal.ranges_no_leases WHERE start_key >= $1 AND start_key < $2",
+		keys.SystemSQLCodec.TablePrefix(tableID),
+		keys.SystemSQLCodec.TablePrefix(tableID+1),
+	)
+	defer rangeRows.Close()
+
+	var numBadSplits int
+	for rangeRows.Next() {
+		var startKey []byte
+		require.NoError(t, rangeRows.Scan(&startKey))
+		safe, err := keys.EnsureSafeSplitKey(roachpb.Key(startKey))
+		if err != nil {
+			continue
+		}
+		if !roachpb.Key(startKey).Equal(safe) {
+			numBadSplits++
+		}
+	}
+	require.NoError(t, rangeRows.Err())
+	require.Equal(t, 0, numBadSplits, "found bad splits in restored table ranges")
+
+	fingerprintsAfter := db.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data.foo")
 
 	require.Equal(t, fingerprintsBefore, fingerprintsAfter)
 }

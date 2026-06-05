@@ -49,7 +49,6 @@ go_test(
         "//pkg/sql/execinfrapb",
         "//pkg/storage",
         "//pkg/testutils",
-        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
