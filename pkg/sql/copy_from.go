@@ -1266,6 +1266,11 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 			Select: vc,
 		},
 		Returning: tree.AbsentReturningClause,
+		// PostgreSQL's COPY FROM writes explicit values into identity columns,
+		// behaving like OVERRIDING SYSTEM VALUE. Match that so a COPY column
+		// list may include GENERATED ALWAYS AS IDENTITY columns (as pg_dump
+		// emits).
+		Overriding: tree.OverridingModeSystemValue,
 	}
 
 	// Initialize annotations for the statement. This is required for proper

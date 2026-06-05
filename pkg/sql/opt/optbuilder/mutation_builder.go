@@ -260,6 +260,12 @@ type mutationBuilder struct {
 	// update. Example:
 	//   INSERT INTO t (a, b, region) VALUES (1, 2, 'us-east-1');
 	regionColExplicitlyMutated bool
+
+	// insertOverriding is the OVERRIDING mode of the INSERT being built. It
+	// controls whether explicit values may be supplied for identity columns.
+	// COPY FROM sets OverridingModeSystemValue so that GENERATED ALWAYS AS
+	// IDENTITY columns accept the copied values, matching PostgreSQL.
+	insertOverriding tree.OverridingMode
 }
 
 func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName) {
