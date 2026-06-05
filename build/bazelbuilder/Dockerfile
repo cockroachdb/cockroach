@@ -67,15 +67,15 @@ RUN if [[ ${TARGETPLATFORM} == "linux/s390x" ]] ; then \
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
     apt-get clean && \
-    curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
-    unzip "git-2.29.2.zip" && \
-    cd git-2.29.2 && \
+    curl -fsSL https://github.com/git/git/archive/v2.54.0.zip -o "git-2.54.0.zip" && \
+    unzip "git-2.54.0.zip" && \
+    cd git-2.54.0 && \
     make configure && \
     ./configure && \
     make && \
     make install && \
     cd .. && \
-    rm -rf git-2.29.2.zip git-2.29.2
+    rm -rf git-2.54.0.zip git-2.54.0
 
 # NB: Don't install the azure CLI on s390x which doesn't support it.
 RUN if [[ ${TARGETPLATFORM} != "linux/s390x" ]]; then \
@@ -87,12 +87,17 @@ RUN if [[ ${TARGETPLATFORM} != "linux/s390x" ]]; then \
  fi
 
 # NB: As above, this is not available on `s390x`.
+# NB: Pin to a specific gcloud version. The unversioned
+# `google-cloud-cli-linux-$ARCH.tar.gz` URL always serves the latest release on
+# the `rapid` channel, so the pinned SHASUMs below would break every time Google
+# ships a new gcloud version. Bump GCLOUD_VERSION and both SHASUMs together.
 RUN if [[ ${TARGETPLATFORM} != "linux/s390x" ]]; then \
+ GCLOUD_VERSION=571.0.0; \
  case ${TARGETPLATFORM} in \
-     "linux/amd64") ARCH=x86_64; SHASUM=8ba7e746ca05f225e5a73952bbc03f4086a5f65fd94f3717df6f75f212587159 ;; \
-     "linux/arm64") ARCH=arm; SHASUM=e6153461e3154ebce61d35b73005bdd14a0ecacd42e5008f66e25b4ad231e5c9 ;; \
+     "linux/amd64") ARCH=x86_64; SHASUM=e537598d1c7b6839ddce95ce25dbaf25571322886c1f3464dd74771e568fcfdd ;; \
+     "linux/arm64") ARCH=arm; SHASUM=25431065668969c6b5b647834fe73ecf2b1522ae6d1a3caf49e62451852370e9 ;; \
  esac  \
- && curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-$ARCH.tar.gz" -o gcloud.tar.gz \
+ && curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-$GCLOUD_VERSION-linux-$ARCH.tar.gz" -o gcloud.tar.gz \
  && echo "$SHASUM gcloud.tar.gz" | sha256sum -c - \
  && tar -xzf gcloud.tar.gz \
  && rm gcloud.tar.gz ; \
