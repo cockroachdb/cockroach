@@ -4805,7 +4805,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	// to BytesIn to account for the previous WAL.
 	sm.WALBytesWritten.UpdateIfHigher(int64(m.WAL.BytesWritten))
 	sm.WALBytesIn.Update(int64(m.WAL.BytesIn))
-	sm.WALFailoverSwitchCount.Update(m.WAL.Failover.DirSwitchCount)
+	sm.WALFailoverSwitchCount.Update(m.WAL.Failover.SegmentSwitchCount)
 	sm.WALFailoverPrimaryDuration.Update(m.WAL.Failover.PrimaryWriteDuration.Nanoseconds())
 	sm.WALFailoverSecondaryDuration.Update(m.WAL.Failover.SecondaryWriteDuration.Nanoseconds())
 	sm.BatchCommitCount.Update(int64(m.BatchCommitStats.Count))
