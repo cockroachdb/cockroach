@@ -856,6 +856,26 @@ func resetRBRUsingConstraint(b BuildCtx, tbl *scpb.Table) {
 	}
 }
 
+// maybeDropRBRUsingConstraint drops the table's
+// TableLocalityRegionalByRowUsingConstraint element when it references the
+// constraint identified by constraintID. This is used when a foreign key is
+// dropped as a cascade side-effect (e.g. DROP TABLE ... CASCADE on the
+// referenced table): the FK that backs infer_rbr_region_col_using_constraint
+// goes away, so the storage param pointing at it must be cleared too. Otherwise
+// the descriptor is left referencing a constraint that no longer exists, which
+// fails validation. Unlike the explicit ALTER TABLE DROP CONSTRAINT path (see
+// checkRegionalByRowConstraintConflict), cascading drops clear the param
+// silently rather than erroring.
+func maybeDropRBRUsingConstraint(
+	b BuildCtx, tableID catid.DescID, constraintID catid.ConstraintID,
+) {
+	elem := b.QueryByID(tableID).
+		FilterTableLocalityRegionalByRowUsingConstraint().MustGetZeroOrOneElement()
+	if elem != nil && elem.ConstraintID == constraintID {
+		b.Drop(elem)
+	}
+}
+
 // setSchemaLocked sets the schema_locked storage parameter using the dedicated
 // TableSchemaLocked element. The val is parsed as a boolean; empty string is
 // treated as false.

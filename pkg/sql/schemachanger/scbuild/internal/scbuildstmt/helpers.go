@@ -251,6 +251,14 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			*scpb.TableLocalitySecondaryRegion, *scpb.Trigger:
 			// These can be safely skipped and will be cleaned up on their own because
 			// of dependents cleaned up above.
+		case *scpb.ForeignKeyConstraint, *scpb.ForeignKeyConstraintUnvalidated:
+			// If this FK backs a REGIONAL BY ROW table's
+			// infer_rbr_region_col_using_constraint storage param, clear that param
+			// too; otherwise the descriptor would be left referencing a constraint
+			// that this cascade is removing.
+			constraintID, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+			maybeDropRBRUsingConstraint(b, screl.GetDescID(e), constraintID.(catid.ConstraintID))
+			b.Drop(e)
 		case
 			*scpb.ColumnDefaultExpression,
 			*scpb.ColumnOnUpdateExpression,
@@ -259,8 +267,6 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			*scpb.PolicyWithCheckExpr,
 			*scpb.CheckConstraint,
 			*scpb.CheckConstraintUnvalidated,
-			*scpb.ForeignKeyConstraint,
-			*scpb.ForeignKeyConstraintUnvalidated,
 			*scpb.SequenceOwner,
 			*scpb.DatabaseRegionConfig:
 			b.Drop(e)
