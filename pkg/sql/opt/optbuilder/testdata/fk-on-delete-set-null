@@ -249,3 +249,63 @@ root
                 │         └── child_virt.p:13 = p:17
                 └── projections
                      └── NULL::INT8 [as=p_new:18]
+
+# Regression test for #143402: cascade scan must include write-only mutation
+# columns so they appear in the fetch set. Without this, addSynthesizedColsForUpdate
+# adds the column to the update set but not the fetch set, triggering the
+# assertion "execution requires all update columns have a fetch column".
+exec-ddl
+CREATE TABLE parent_mut (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_mut (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_mut(p) ON DELETE SET NULL,
+  "m:write-only" INT DEFAULT 0
+)
+----
+
+build-post-queries
+DELETE FROM parent_mut WHERE p > 1
+----
+root
+ ├── delete parent_mut
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_mut_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent_mut
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 > 1
+ └── cascade
+      └── update child_mut
+           ├── columns: <none>
+           ├── fetch columns: c:12 child_mut.p:13 m:14
+           ├── update-mapping:
+           │    ├── p_new:18 => child_mut.p:8
+           │    └── m_default:19 => m:9
+           └── project
+                ├── columns: m_default:19!null c:12!null child_mut.p:13 m:14 p_new:18
+                ├── project
+                │    ├── columns: p_new:18 c:12!null child_mut.p:13 m:14
+                │    ├── semi-join (hash)
+                │    │    ├── columns: c:12!null child_mut.p:13 m:14
+                │    │    ├── scan child_mut
+                │    │    │    ├── columns: c:12!null child_mut.p:13 m:14
+                │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    ├── with-scan &1
+                │    │    │    ├── columns: p:17!null
+                │    │    │    └── mapping:
+                │    │    │         └──  parent_mut.p:4 => p:17
+                │    │    └── filters
+                │    │         └── child_mut.p:13 = p:17
+                │    └── projections
+                │         └── NULL::INT8 [as=p_new:18]
+                └── projections
+                     └── 0 [as=m_default:19]
