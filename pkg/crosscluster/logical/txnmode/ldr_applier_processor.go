@@ -132,7 +132,9 @@ func (p *ldrApplierProcessor) sendError(err error) {
 // decoder, dep resolver client, transaction writers, and the applier itself.
 func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 	applierID := p.spec.ApplierID
-	tableMappings, err := buildTableMappings(ctx, p.spec.Schema)
+	tableMappings, err := ldrdecoder.BuildTableMappings(
+		ctx, p.spec.Schema.TableMetadataByDestID, p.spec.Schema.TypeDescriptors,
+	)
 	if err != nil {
 		return errors.Wrap(err, "building table mappings")
 	}
