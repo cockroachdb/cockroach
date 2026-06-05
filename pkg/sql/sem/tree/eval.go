@@ -1125,6 +1125,27 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			EvalOp:     &DivIntDecimalOp{},
 			Volatility: volatility.Immutable,
 		},
+		// Keep the mixed float/integer overloads unpreferred so they are used
+		// for typed operands like 8::FLOAT / 2::INT, but do not win tie-breaks
+		// for untyped constants in a FLOAT context. The existing overload
+		// preference heuristic lets the homogeneous FLOAT overload win without
+		// adding division-specific resolution logic.
+		{
+			LeftType:           types.Float,
+			RightType:          types.Int,
+			ReturnType:         types.Float,
+			EvalOp:             &DivFloatIntOp{},
+			OverloadPreference: OverloadPreferenceUnpreferred,
+			Volatility:         volatility.Immutable,
+		},
+		{
+			LeftType:           types.Int,
+			RightType:          types.Float,
+			ReturnType:         types.Float,
+			EvalOp:             &DivIntFloatOp{},
+			OverloadPreference: OverloadPreferenceUnpreferred,
+			Volatility:         volatility.Immutable,
+		},
 		{
 			LeftType:   types.Interval,
 			RightType:  types.Int,
