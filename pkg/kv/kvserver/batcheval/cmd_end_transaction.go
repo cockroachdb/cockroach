@@ -1680,6 +1680,17 @@ func mergeTrigger(
 		ms.Subtract(merge.RightRangeIDLocalMVCCStats)
 	}
 
+	lhsLoader := MakeStateLoader(rec)
+	rhsLoader := kvstorage.MakeStateLoader(merge.RightDesc.RangeID)
+
+	// Read the RHS's ApproxStoreLocalBytes and carry it in the MergeTrigger
+	// so that all replicas use the same deterministic value at apply time.
+	if rhsAS, err := rhsLoader.LoadRangeAppliedState(ctx, batch); err != nil {
+		return result.Result{}, errors.Wrap(err, "loading RHS RangeAppliedState for merge")
+	} else {
+		merge.RightApproxStoreLocalBytes = rhsAS.ApproxStoreLocalBytes
+	}
+
 	var pd result.Result
 	pd.Replicated.Merge = &kvserverpb.Merge{
 		MergeTrigger: *merge,
@@ -1691,9 +1702,6 @@ func mergeTrigger(
 	// we have force-flushed once during the merge txn anyway, we choose to
 	// complete the merge story and finish the merge on all replicas.
 	pd.Replicated.DoTimelyApplicationToAllReplicas = true
-
-	lhsLoader := MakeStateLoader(rec)
-	rhsLoader := kvstorage.MakeStateLoader(merge.RightDesc.RangeID)
 
 	{
 		// If we have GC hints populated that means we are trying to perform

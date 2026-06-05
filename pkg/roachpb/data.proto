@@ -222,6 +222,18 @@ message MergeTrigger {
   // TODO(replication): remove this field in the 23.2 cycle (i.e. on master after
   // 23.1 has been cut).
   bool write_gc_hint = 8 [(gogoproto.customname) = "WriteGCHint"];
+
+  // RightApproxStoreLocalBytes is the RHS's ApproxStoreLocalBytes at merge
+  // eval time. It is carried in the MergeTrigger so that all replicas use the
+  // same deterministic value when absorbing the RHS into the LHS.
+  //
+  // Reading from the local engine at apply time would not be deterministic.
+  // Concretely, a lease request can land on the RHS after the SubsumeRequest;
+  // the merge protocol does not coordinate with it, so some replicas may
+  // apply the lease request before the merge absorbs the RHS and others may
+  // not. The lease request contributes to ApproxStoreLocalBytes, so reading
+  // the field at apply time could yield different values across replicas.
+  int64 right_approx_store_local_bytes = 10;
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
