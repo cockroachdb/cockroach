@@ -23,7 +23,7 @@ done
 
 # Retrieve token (with logging disabled)
 set +x
-GITHUB_TOKEN=$(gcloud secrets versions access 1 --secret=cockroach-microbench-ga-token)
+GITHUB_TOKEN=$(gcloud secrets versions access latest --secret=cockroach-microbench-ga-token)
 export GITHUB_TOKEN
 set -x
 
