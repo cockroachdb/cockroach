@@ -4727,6 +4727,9 @@ func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opS
 			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')' as name,
 			(id + 100000) as func_oid
 			FROM functions
+			-- Procedures share the routine namespace with functions but cannot be
+			-- targeted by DROP FUNCTION, so exclude them (prokind = 'p').
+			INNER JOIN pg_catalog.pg_proc pproc ON pproc.oid = (id + 100000) AND pproc.prokind != 'p'
 			JOIN LATERAL (
 				SELECT
 					COALESCE(array_agg(replace(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname), 'pg_catalog.', '')), '{}') AS funcargs
@@ -4803,6 +4806,50 @@ func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opS
 	return opStmt, nil
 }
 
+// dropProcedure generates a DROP PROCEDURE statement targeting a procedure
+// created by createProcedure. Procedures share the routine namespace with
+// functions and are distinguished via pg_catalog.pg_proc.prokind = 'p'. The
+// workload only ever creates argument-less procedures, so the bare procedure
+// name resolves unambiguously and no argument signature is needed.
+func (og *operationGenerator) dropProcedure(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT
+			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) as name
+			FROM functions
+			INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000)
+			WHERE prokind = 'p'
+			`,
+	)
+
+	procedures, err := Collect(ctx, og, tx, pgx.RowToMap, q)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt, expectedCode, err := Generate[*tree.DropRoutine](og.params.rng, og.produceError(), []GenerationCase{
+		{pgcode.UndefinedFunction, `DROP PROCEDURE "NoSuchProcedure"`},
+		{pgcode.SuccessfulCompletion, `DROP PROCEDURE IF EXISTS "NoSuchProcedure"`},
+		{pgcode.SuccessfulCompletion, `DROP PROCEDURE { ProcedureName }`},
+	}, template.FuncMap{
+		"ProcedureName": func() (string, error) {
+			one, err := PickOne(og.params.rng, procedures)
+			if err != nil {
+				return "", err
+			}
+			return one["name"].(string), nil
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return newOpStmt(stmt, codesWithConditions{
+		{expectedCode, true},
+	}), nil
+}
+
 func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
 	q := With([]CTE{
 		{"descriptors", descJSONQuery},
@@ -4813,6 +4860,9 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')' AS qualified_name,
 				(id + 100000) as func_oid
 			FROM functions
+			-- Procedures share the routine namespace with functions but cannot be
+			-- targeted by ALTER FUNCTION, so exclude them (prokind = 'p').
+			INNER JOIN pg_catalog.pg_proc pproc ON pproc.oid = (id + 100000) AND pproc.prokind != 'p'
 			JOIN LATERAL (
 				SELECT
 					COALESCE(array_agg(replace(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname), 'pg_catalog.', '')), '{}') AS funcargs
@@ -4929,6 +4979,9 @@ func (og *operationGenerator) alterFunctionSetSchema(
 				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')' AS qualified_name,
 				(id + 100000) as func_oid
 			FROM functions
+			-- Procedures share the routine namespace with functions but cannot be
+			-- targeted by ALTER FUNCTION, so exclude them (prokind = 'p').
+			INNER JOIN pg_catalog.pg_proc pproc ON pproc.oid = (id + 100000) AND pproc.prokind != 'p'
 			JOIN LATERAL (
 				SELECT
 					COALESCE(array_agg(replace(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname), 'pg_catalog.', '')), '{}') AS funcargs
@@ -5215,14 +5268,21 @@ func (og *operationGenerator) typeFromTypeName(
 	return typ, nil
 }
 
+// versionQuerier is satisfied by both pgx.Tx and *pgx.Conn, allowing cluster
+// version checks either inside a transaction or on a bare connection (e.g.
+// before any transaction has been started, as in setClusterSettings).
+type versionQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 // Check if the test is running with a mixed version cluster, with a version
 // less than the target version number. This can be used to detect
 // in mixed version environments if certain errors should be encountered.
 func isClusterVersionLessThan(
-	ctx context.Context, tx pgx.Tx, targetVersion roachpb.Version,
+	ctx context.Context, q versionQuerier, targetVersion roachpb.Version,
 ) (bool, error) {
 	var clusterVersionStr string
-	row := tx.QueryRow(ctx, `SHOW CLUSTER SETTING version`)
+	row := q.QueryRow(ctx, `SHOW CLUSTER SETTING version`)
 	if err := row.Scan(&clusterVersionStr); err != nil {
 		return false, err
 	}
@@ -5778,6 +5838,115 @@ func (og *operationGenerator) createTriggerFunction(
 	return opStmt, nil
 }
 
+// createProcedure generates a CREATE PROCEDURE statement whose PL/pgSQL body
+// contains one or more DDL/DCL statements from an allowlist (see
+// randProcedureBody). The procedure is created but not executed here.
+func (og *operationGenerator) createProcedure(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	schemaName, err := og.randSchema(ctx, tx, og.alwaysExisting())
+	if err != nil {
+		return nil, err
+	}
+	procName := fmt.Sprintf("proc_%s", og.newUniqueSeqNumSuffix())
+	resolvedName := fmt.Sprintf("%s.%s", schemaName, procName)
+
+	body, err := og.randProcedureBody(ctx, tx, schemaName)
+	if err != nil {
+		return nil, err
+	}
+
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = fmt.Sprintf(
+		`CREATE PROCEDURE %s() LANGUAGE PLpgSQL AS $PROC$ BEGIN %s END $PROC$`,
+		resolvedName, body,
+	)
+	og.LogMessage(fmt.Sprintf("createProcedure: %s", opStmt.sql))
+
+	procAlreadyExists, err := og.fnExistsByName(ctx, tx, schemaName, procName)
+	if err != nil {
+		return nil, err
+	}
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateFunction, condition: procAlreadyExists},
+	})
+	return opStmt, nil
+}
+
+// randProcedureBody builds the PL/pgSQL body of a procedure as one or more
+// ';'-terminated DDL/DCL statements drawn from an allowlist. The
+// returned string is meant to be embedded between BEGIN and END.
+//
+// Every object the body creates uses a fresh unique name, so no body statement
+// depends on another created in the same body (the early-binding constraint).
+// GRANT/REVOKE targets are limited to the public role (always present) and, when
+// available, a pre-existing table; the table-targeting variants are skipped when
+// no table exists. schemaName is the schema of the enclosing procedure and is
+// reused for objects the body creates.
+func (og *operationGenerator) randProcedureBody(
+	ctx context.Context, tx pgx.Tx, schemaName string,
+) (string, error) {
+	// Pick a pre-existing table for the GRANT/REVOKE-on-table variants. When no
+	// table exists, those variants are omitted from the candidate set.
+	var existingTable string
+	if tableName, err := og.randTable(ctx, tx, og.alwaysExisting(), ""); err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", err
+		}
+	} else {
+		existingTable = tableName.String()
+	}
+
+	// candidates holds the allowlisted statement generators, each returning a
+	// single statement without a trailing ';'. The CREATE TABLE candidate is
+	// always present, guaranteeing the body has at least one statement.
+	candidates := []func() string{
+		func() string {
+			return fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.proctbl_%s (id INT PRIMARY KEY)",
+				schemaName, og.newUniqueSeqNumSuffix())
+		},
+		func() string {
+			return fmt.Sprintf("DROP TABLE IF EXISTS %s.proctbl_%s",
+				schemaName, og.newUniqueSeqNumSuffix())
+		},
+		func() string {
+			return fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS sc_%s", og.newUniqueSeqNumSuffix())
+		},
+		func() string {
+			return fmt.Sprintf("DROP SCHEMA IF EXISTS sc_%s", og.newUniqueSeqNumSuffix())
+		},
+		func() string {
+			return fmt.Sprintf("CREATE ROLE IF NOT EXISTS role_%s", og.newUniqueSeqNumSuffix())
+		},
+		func() string {
+			return fmt.Sprintf("DROP ROLE IF EXISTS role_%s", og.newUniqueSeqNumSuffix())
+		},
+		func() string {
+			return "ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO public"
+		},
+		func() string {
+			return "ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM public"
+		},
+	}
+	if existingTable != "" {
+		candidates = append(candidates,
+			func() string {
+				return fmt.Sprintf("GRANT SELECT ON TABLE %s TO public", existingTable)
+			},
+			func() string {
+				return fmt.Sprintf("REVOKE SELECT ON TABLE %s FROM public", existingTable)
+			},
+		)
+	}
+
+	const maxBodyStmts = 4
+	numStmts := 1 + og.randIntn(maxBodyStmts)
+	var body strings.Builder
+	for i := 0; i < numStmts; i++ {
+		body.WriteString(candidates[og.randIntn(len(candidates))]())
+		body.WriteString("; ")
+	}
+	return body.String(), nil
+}
+
 // createTrigger generates a CREATE TRIGGER statement referencing an existing
 // trigger function. If no trigger functions exist yet, it emits a dummy
 // statement that fails gracefully.
@@ -5993,7 +6162,10 @@ FROM
 	functions
 	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000)
 	WHERE COALESCE((descriptor->'state')::STRING, 'PUBLIC') = 'PUBLIC'::STRING
-	AND prorettype != 'trigger'::REGTYPE;`)
+	AND prorettype != 'trigger'::REGTYPE
+	-- Procedures cannot be invoked as scalar expressions, so exclude them
+	-- (prokind = 'p') from the set of UDFs available for body references.
+	AND prokind != 'p';`)
 	return Collect(ctx, og, tx, pgx.RowToMap, q)
 }
 
