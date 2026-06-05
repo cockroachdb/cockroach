@@ -37,6 +37,10 @@ type TableMapping struct {
 // destination table ID to the source table descriptor it replicates from, and
 // typeDescs carries all user-defined types referenced by those source
 // descriptors so they can be hydrated.
+//
+// The source descriptors are built as immutable descriptors: the decoder only
+// reads them, and immutable descriptors are cheaper to operate on in the
+// per-event decode hot path than mutable ones.
 func BuildTableMappings(
 	ctx context.Context,
 	srcDescsByDestID map[int32]descpb.TableDescriptor,
@@ -46,7 +50,7 @@ func BuildTableMappings(
 
 	tableMappings := make([]TableMapping, 0, len(srcDescsByDestID))
 	for destID, srcTableDesc := range srcDescsByDestID {
-		srcDesc := tabledesc.NewBuilder(&srcTableDesc).BuildCreatedMutableTable()
+		srcDesc := tabledesc.NewBuilder(&srcTableDesc).BuildImmutableTable()
 
 		if err := typedesc.HydrateTypesInDescriptor(ctx, srcDesc, crossClusterResolver); err != nil {
 			return nil, errors.Wrapf(err, "hydrating types for dest table %d", destID)
