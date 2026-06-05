@@ -22,6 +22,7 @@ import (
 	"github.com/elastic/gosigar"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,7 +65,7 @@ func TestTenantVars(t *testing.T) {
 		require.Equal(t, 200, resp.StatusCode,
 			"invalid non-200 status code %v from tenant", resp.StatusCode)
 
-		var parser expfmt.TextParser
+		parser := expfmt.NewTextParser(model.UTF8Validation)
 		metrics, err := parser.TextToMetricFamilies(resp.Body)
 		require.NoError(t, err)
 

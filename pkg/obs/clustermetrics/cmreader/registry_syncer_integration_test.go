@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -280,7 +281,7 @@ func TestRegistrySyncer(t *testing.T) {
 	require.Contains(t, promOutput, `store="2"`, "store=2 label should appear in /_status/vars")
 
 	// Parse the prometheus output and verify specific values.
-	var parser expfmt.TextParser
+	parser := expfmt.NewTextParser(model.UTF8Validation)
 	families, err := parser.TextToMetricFamilies(strings.NewReader(promOutput))
 	require.NoError(t, err)
 
@@ -465,14 +466,14 @@ func checkGaugeVecValue(
 	// Scrape the registry and parse prometheus output to read specific label values.
 	pe := metric.MakePrometheusExporter()
 	var buf strings.Builder
-	err := pe.ScrapeAndPrintAsText(&buf, expfmt.FmtText, func(exporter *metric.PrometheusExporter) {
+	err := pe.ScrapeAndPrintAsText(&buf, expfmt.NewFormat(expfmt.TypeTextPlain), func(exporter *metric.PrometheusExporter) {
 		exporter.ScrapeRegistry(reg)
 	})
 	if err != nil {
 		return fmt.Errorf("failed to scrape registry: %w", err)
 	}
 
-	var parser expfmt.TextParser
+	parser := expfmt.NewTextParser(model.UTF8Validation)
 	families, err := parser.TextToMetricFamilies(strings.NewReader(buf.String()))
 	if err != nil {
 		return fmt.Errorf("failed to parse prometheus output: %w", err)
@@ -521,14 +522,14 @@ func checkGaugeVecLabelAbsent(
 	pe := metric.MakePrometheusExporter()
 	var buf strings.Builder
 	err := pe.ScrapeAndPrintAsText(
-		&buf, expfmt.FmtText, func(exporter *metric.PrometheusExporter) {
+		&buf, expfmt.NewFormat(expfmt.TypeTextPlain), func(exporter *metric.PrometheusExporter) {
 			exporter.ScrapeRegistry(reg)
 		})
 	if err != nil {
 		return fmt.Errorf("failed to scrape registry: %w", err)
 	}
 
-	var parser expfmt.TextParser
+	parser := expfmt.NewTextParser(model.UTF8Validation)
 	families, err := parser.TextToMetricFamilies(
 		strings.NewReader(buf.String()))
 	if err != nil {
@@ -691,14 +692,14 @@ func scrapeStopwatchVecValue(
 	pe := metric.MakePrometheusExporter()
 	var buf strings.Builder
 	err := pe.ScrapeAndPrintAsText(
-		&buf, expfmt.FmtText, func(exporter *metric.PrometheusExporter) {
+		&buf, expfmt.NewFormat(expfmt.TypeTextPlain), func(exporter *metric.PrometheusExporter) {
 			exporter.ScrapeRegistry(reg)
 		})
 	if err != nil {
 		return 0, fmt.Errorf("failed to scrape registry: %w", err)
 	}
 
-	var parser expfmt.TextParser
+	parser := expfmt.NewTextParser(model.UTF8Validation)
 	families, err := parser.TextToMetricFamilies(strings.NewReader(buf.String()))
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse prometheus output: %w", err)

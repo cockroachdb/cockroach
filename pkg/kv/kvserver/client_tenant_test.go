@@ -103,7 +103,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 			ex.ScrapeRegistry(store.Registry(), metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 		}
 		var in bytes.Buffer
-		if err := ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape); err != nil {
+		if err := ex.ScrapeAndPrintAsText(&in, expfmt.NewFormat(expfmt.TypeTextPlain), scrape); err != nil {
 			t.Fatalf("failed to print prometheus data: %v", err)
 		}
 		if seen != 2 {
