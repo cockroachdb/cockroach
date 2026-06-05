@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -132,4 +133,60 @@ func TestTxnDecoderRejectsTimestampMismatch(t *testing.T) {
 	}
 	_, err = decoder.DecodeTxn(ctx, badEvents)
 	require.ErrorContains(t, err, "inconsistent timestamps")
+}
+
+func BenchmarkTxnDecoder(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	srv, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	sqlutils.MakeSQLRunner(sqlDB).Exec(b, `CREATE TABLE "order" (
+		o_id INT NOT NULL, o_d_id INT NOT NULL, o_w_id INT NOT NULL,
+		o_c_id INT, o_entry_d TIMESTAMP, o_carrier_id INT,
+		o_ol_cnt INT, o_all_local INT,
+		PRIMARY KEY (o_w_id, o_d_id, o_id DESC)
+	)`)
+
+	desc := cdctest.GetHydratedTableDescriptor(b, s.ExecutorConfig(), tree.Name("order"))
+
+	// Construct the table mappings exactly as the production txn writer does, so
+	// the benchmark exercises the real decode setup path.
+	tableMappings, err := BuildTableMappings(
+		ctx,
+		map[int32]descpb.TableDescriptor{int32(desc.GetID()): *desc.TableDesc()},
+		nil, /* typeDescs */
+	)
+	require.NoError(b, err)
+
+	decoder, err := NewTxnDecoder(ctx, s.InternalDB().(descs.DB), s.ClusterSettings(), tableMappings)
+	require.NoError(b, err)
+
+	eb := NewTestEventBuilder(b, desc.TableDesc())
+	txnTime := s.Clock().Now()
+
+	events := make([]streampb.StreamEvent_KV, 10)
+	for i := range events {
+		events[i] = eb.InsertEvent(txnTime, tree.Datums{
+			tree.NewDInt(tree.DInt(i + 1)),
+			tree.NewDInt(1),
+			tree.NewDInt(1),
+			tree.NewDInt(tree.DInt(i + 100)),
+			tree.DNull,
+			tree.DNull,
+			tree.NewDInt(10),
+			tree.NewDInt(1),
+		})
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := decoder.DecodeTxn(ctx, events)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
 }

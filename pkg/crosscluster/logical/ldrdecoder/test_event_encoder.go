@@ -22,14 +22,14 @@ import (
 
 // EventBuilder helps construct StreamEvent_KV events for testing.
 type EventBuilder struct {
-	t         *testing.T
+	t         testing.TB
 	tableDesc catalog.TableDescriptor
 	colMap    catalog.TableColMap
 	codec     keys.SQLCodec
 }
 
-// newEventBuilder creates a new EventBuilder for the given table descriptor.
-func NewTestEventBuilder(t *testing.T, desc *descpb.TableDescriptor) *EventBuilder {
+// NewTestEventBuilder creates a new EventBuilder for the given table descriptor.
+func NewTestEventBuilder(t testing.TB, desc *descpb.TableDescriptor) *EventBuilder {
 	tableDesc := tabledesc.NewBuilder(desc).BuildImmutableTable()
 	var colMap catalog.TableColMap
 	for i, col := range tableDesc.PublicColumns() {

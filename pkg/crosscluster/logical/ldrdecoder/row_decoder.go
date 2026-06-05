@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -17,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -27,6 +30,38 @@ import (
 type TableMapping struct {
 	SourceDescriptor catalog.TableDescriptor
 	DestID           descpb.ID
+}
+
+// BuildTableMappings constructs the TableMappings consumed by NewTxnDecoder from
+// the wire representation of the replicated schema. srcDescsByDestID maps each
+// destination table ID to the source table descriptor it replicates from, and
+// typeDescs carries all user-defined types referenced by those source
+// descriptors so they can be hydrated.
+//
+// The source descriptors are built as immutable descriptors: the decoder only
+// reads them, and immutable descriptors are cheaper to operate on in the
+// per-event decode hot path than mutable ones.
+func BuildTableMappings(
+	ctx context.Context,
+	srcDescsByDestID map[int32]descpb.TableDescriptor,
+	typeDescs []*descpb.TypeDescriptor,
+) ([]TableMapping, error) {
+	crossClusterResolver := crosscluster.MakeCrossClusterTypeResolver(typeDescs)
+
+	tableMappings := make([]TableMapping, 0, len(srcDescsByDestID))
+	for destID, srcTableDesc := range srcDescsByDestID {
+		srcDesc := tabledesc.NewBuilder(&srcTableDesc).BuildImmutableTable()
+
+		if err := typedesc.HydrateTypesInDescriptor(ctx, srcDesc, crossClusterResolver); err != nil {
+			return nil, errors.Wrapf(err, "hydrating types for dest table %d", destID)
+		}
+
+		tableMappings = append(tableMappings, TableMapping{
+			SourceDescriptor: srcDesc,
+			DestID:           descpb.ID(destID),
+		})
+	}
+	return tableMappings, nil
 }
 
 type tableDecoder struct {

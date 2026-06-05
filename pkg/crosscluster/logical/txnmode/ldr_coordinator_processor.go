@@ -21,10 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -132,7 +129,9 @@ func (p *ldrCoordinatorProcessor) Start(ctx context.Context) {
 // applier mappings.
 func (p *ldrCoordinatorProcessor) setup(ctx context.Context) error {
 	// Build table mappings from spec.
-	tableMappings, err := buildTableMappings(ctx, p.spec.Schema)
+	tableMappings, err := ldrdecoder.BuildTableMappings(
+		ctx, p.spec.Schema.TableMetadataByDestID, p.spec.Schema.TypeDescriptors,
+	)
 	if err != nil {
 		return errors.Wrap(err, "building table mappings")
 	}
@@ -569,29 +568,6 @@ func (p *ldrCoordinatorProcessor) createTxnFeed(
 	// Create merged feed from all partitions.
 	targetBatchKVs := int(txnBatchSize.Get(&p.FlowCtx.Cfg.Settings.SV))
 	return txnfeed.NewMergeFeed(orderedFeeds, coveringSpan, targetBatchKVs, p.spec.EndTime), nil
-}
-
-// buildTableMappings reconstructs table mappings by hydrating type references
-// in source descriptors. Used by both the coordinator and applier processors.
-func buildTableMappings(
-	ctx context.Context, schema execinfrapb.LDRSchema,
-) ([]ldrdecoder.TableMapping, error) {
-	crossClusterResolver := crosscluster.MakeCrossClusterTypeResolver(schema.TypeDescriptors)
-
-	tableMappings := make([]ldrdecoder.TableMapping, 0, len(schema.TableMetadataByDestID))
-	for destID, srcTableDesc := range schema.TableMetadataByDestID {
-		cpy := tabledesc.NewBuilder(&srcTableDesc).BuildCreatedMutableTable()
-
-		if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, crossClusterResolver); err != nil {
-			return nil, errors.Wrapf(err, "hydrating types for dest table %d", destID)
-		}
-
-		tableMappings = append(tableMappings, ldrdecoder.TableMapping{
-			SourceDescriptor: cpy,
-			DestID:           descpb.ID(destID),
-		})
-	}
-	return tableMappings, nil
 }
 
 func init() {
