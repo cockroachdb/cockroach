@@ -1180,6 +1180,46 @@ func TestMultiMergeIndexBackfill(t *testing.T) {
 	require.GreaterOrEqual(t, manifestCountByIteration[1], 12)
 }
 
+// TestDistributedMergeMaxInputFiles verifies that bulkio.merge.max_input_files
+// bounds the number of SST files a merge iteration will open. A tiny
+// bulkio.sst_writer.batch_size forces the map phase to emit one SST per index
+// entry, so a small table already exceeds a low limit. Setting the limit to 0
+// disables the guard and lets the same backfill succeed.
+func TestDistributedMergeMaxInputFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: t.TempDir(),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
+	// Force one SST per index entry so even a small table produces many files.
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.sst_writer.batch_size = '1B'`)
+
+	tdb.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, v INT)`)
+	tdb.Exec(t, `INSERT INTO t SELECT i, i FROM generate_series(1, 100) AS g(i)`)
+
+	// With a low limit, the backfill's merge phase rejects the file count
+	// instead of exhausting file descriptors.
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.merge.max_input_files = 20`)
+	_, err := tdb.DB.ExecContext(ctx, `CREATE INDEX idx_capped ON t (v)`)
+	require.Error(t, err)
+	require.Regexp(t, `exceeding the limit of 20`, err.Error())
+
+	// Setting the limit to 0 disables the guard and the backfill succeeds.
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.merge.max_input_files = 0`)
+	tdb.Exec(t, `CREATE INDEX idx_uncapped ON t (v)`)
+}
+
 // TestDistributedMergePhasedProgress verifies the 3-phase progress model for
 // distributed merge backfills. The model divides progress as:
 //   - Phase 0 (map): 0-33% (span-based progress during backfill)

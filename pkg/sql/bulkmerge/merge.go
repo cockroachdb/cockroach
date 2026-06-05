@@ -34,6 +34,22 @@ var InstanceUnavailabilityTimeout = settings.RegisterDurationSetting(
 	30*time.Minute,
 )
 
+// maxInputFiles caps the number of input SST files a single merge iteration
+// will accept. The merge opens its inputs concurrently, so an unbounded count
+// can exhaust file descriptors. A value of 0 disables the check.
+//
+// The default is a conservative bound. The map phase emits roughly one file per
+// bulkio.sst_writer.batch_size (default 128 MiB) of KV data, so 50,000 files
+// corresponds to ~6 TiB of data in a single merge.
+var maxInputFiles = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"bulkio.merge.max_input_files",
+	"maximum number of input SST files a single distributed merge iteration "+
+		"will accept before failing; 0 disables the check",
+	50_000,
+	settings.NonNegativeInt,
+)
+
 // MergeOptions contains configuration for the distributed merge operation.
 type MergeOptions struct {
 	// Iteration is the current merge iteration (1-based).
@@ -93,11 +109,27 @@ func Merge(
 ) (MergeResult, error) {
 	logMergeInputs(ctx, ssts, opts.Iteration, opts.MaxIterations)
 
+	sv := &execCtx.ExecCfg().Settings.SV
+
+	// Fail fast on an unmanageable number of input files rather than exhausting
+	// file descriptors mid-flow and only failing after a slow revert.
+	if limit := maxInputFiles.Get(sv); limit > 0 && int64(len(ssts)) > limit {
+		return MergeResult{}, errors.WithHintf(
+			errors.Newf(
+				"distributed merge input has %d SST files, exceeding the limit of %d",
+				len(ssts), limit,
+			),
+			"This usually means too many small SST files were produced by the map "+
+				"phase. Increase bulkio.sst_writer.batch_size so fewer, larger files "+
+				"are written, raise bulkio.merge.file_size, or raise "+
+				"bulkio.merge.max_input_files if this file count is expected.",
+		)
+	}
+
 	// Proactive plan-coverage gate: retry until SetupAllNodesPlanning
 	// returns an instance set that covers every node owning an input
 	// SST. Avoids silent empty merge output when the planner's health
 	// view briefly drops a required node.
-	sv := &execCtx.ExecCfg().Settings.SV
 	retryOpts := retry.Options{
 		InitialBackoff: 5 * time.Second,
 		MaxBackoff:     1 * time.Minute,
