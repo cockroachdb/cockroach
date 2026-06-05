@@ -29,9 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	workloadrand "github.com/cockroachdb/cockroach/pkg/workload/rand"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -989,27 +991,46 @@ func TestLDRUniqueConstraintUpdate(
 	validateLatency()
 }
 
+// ldrJobInfo reports an LDR job's state. It is populated from
+// crdb_internal.jobs, whose high_water_timestamp column is sourced from
+// system.job_progress. Transactional LDR records its replicated time only in
+// system.job_progress, so this is the authoritative source for the job's
+// high-water mark.
 type ldrJobInfo struct {
-	*jobRecord
+	status    string
+	highWater time.Time
+	finished  time.Time
+	errMsg    string
 }
 
-// GetHighWater returns the replicated time.
-func (c *ldrJobInfo) GetHighWater() time.Time {
-	replicatedTime := c.progress.GetLogicalReplication().ReplicatedTime
-	if replicatedTime.IsEmpty() {
-		return time.Time{}
-	}
-	return replicatedTime.GoTime()
-}
+func (c *ldrJobInfo) GetHighWater() time.Time    { return c.highWater }
+func (c *ldrJobInfo) GetFinishedTime() time.Time { return c.finished }
+func (c *ldrJobInfo) GetStatus() string          { return c.status }
+func (c *ldrJobInfo) GetError() string           { return c.errMsg }
 
 var _ jobInfo = (*ldrJobInfo)(nil)
 
 func getLogicalDataReplicationJobInfo(db *gosql.DB, jobID int) (jobInfo, error) {
-	jr, err := getJobRecord(db, jobID)
-	if err != nil {
-		return nil, err
+	var info ldrJobInfo
+	var highWaterStr *string
+	var finished *time.Time
+	if err := db.QueryRow(
+		`SELECT status, high_water_timestamp::STRING, finished, error
+		 FROM crdb_internal.jobs WHERE job_id = $1`, jobID,
+	).Scan(&info.status, &highWaterStr, &finished, &info.errMsg); err != nil {
+		return nil, errors.Wrapf(err, "querying job info for job %d", jobID)
 	}
-	return &ldrJobInfo{jr}, nil
+	if highWaterStr != nil {
+		ts, err := hlc.ParseHLC(*highWaterStr)
+		if err != nil {
+			return nil, errors.Wrap(err, "parsing high_water_timestamp")
+		}
+		info.highWater = ts.GoTime()
+	}
+	if finished != nil {
+		info.finished = *finished
+	}
+	return &info, nil
 }
 
 type ldrTestSpec struct {
