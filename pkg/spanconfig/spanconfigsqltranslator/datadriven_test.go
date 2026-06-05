@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -136,7 +137,7 @@ func TestDataDriven(t *testing.T) {
 					},
 				},
 				StoreSpecs: []base.StoreSpec{
-					{InMemory: true, Attributes: []string{attr}},
+					{Type: storageconfig.StoreTypeInMemory, Attributes: []string{attr}},
 				},
 			}
 		}

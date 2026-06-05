@@ -28,8 +28,13 @@ func TestStoreYAMLOutput(t *testing.T) {
 		"mem": {
 			Path:        "",
 			Size:        BytesSize(1024 * 1024 * 1024),
-			InMemory:    true,
+			Type:        StoreTypeInMemory,
 			StickyVFSID: "foo",
+		},
+		"basalt": {
+			Path: "basalt://prod/cluster/store1",
+			Size: BytesSize(1024 * 1024 * 1024),
+			Type: StoreTypeBasalt,
 		},
 		"misc": {
 			Path:            "/mnt/data1",
@@ -112,19 +117,21 @@ func TestStoreYAMLRoundTrip(t *testing.T) {
 
 func randStore(rng *rand.Rand) Store {
 	var s Store
-	if rng.IntN(2) == 0 {
-		s.InMemory = true
-		s.Size = randSize(rng, MinimumStoreSize, 100<<30, 1, 100)
-		if rng.IntN(2) == 0 {
-			s.StickyVFSID = "foo"
-		}
-	} else {
+	switch StoreType(rng.IntN(3)) {
+	case StoreTypeLocal:
 		if rng.IntN(2) == 0 {
 			s.Size = randSize(rng, MinimumStoreSize, math.MaxInt64, 1, 100)
 		}
 		if rng.IntN(2) == 0 {
 			s.BallastSize = randSize(rng, 0, 1<<20, 0, 10)
 		}
+	case StoreTypeInMemory:
+		s.Size = randSize(rng, MinimumStoreSize, 100<<30, 1, 100)
+		if rng.IntN(2) == 0 {
+			s.StickyVFSID = "foo"
+		}
+	case StoreTypeBasalt:
+		s.Size = randSize(rng, MinimumStoreSize, 100<<30, 1, 100)
 	}
 
 	if rng.IntN(2) == 0 {

@@ -29,7 +29,7 @@ var ballastsEnabled bool = envutil.EnvOrDefaultBool("COCKROACH_AUTO_BALLAST", tr
 // If the current on-disk ballast does not match the configured ballast size
 // in spec, IsDiskFull will resize the file if available capacity allows.
 func IsDiskFull(fs vfs.FS, spec base.StoreSpec) (bool, error) {
-	if spec.InMemory {
+	if !spec.IsLocal() {
 		return false, nil
 	}
 

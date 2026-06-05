@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
@@ -285,11 +286,12 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	// Validate the store specs.
 	for _, storeSpec := range params.StoreSpecs {
-		if storeSpec.InMemory {
+		switch storeSpec.Type {
+		case storageconfig.StoreTypeInMemory:
 			if storeSpec.Size.IsPercent() {
 				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", base.StoreSpecCmdLineString(storeSpec)))
 			}
-		} else {
+		case storageconfig.StoreTypeLocal:
 			// The default store spec is in-memory, so if this one is on-disk then
 			// one specific test must have requested it. A failure is returned if
 			// the Path field is empty, which means the test is then forced to pick
@@ -313,6 +315,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			if cfg.ExecutionTraceDirName == "" {
 				cfg.ExecutionTraceDirName = filepath.Join(storeSpec.Path, "logs", base.ExecutionTraceDir)
 			}
+		default:
+			// TODO(basalt): handle basalt backed stores correctly.
+			panic(fmt.Sprintf("test server does not yet support store type: %v", storeSpec.Type))
 		}
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}

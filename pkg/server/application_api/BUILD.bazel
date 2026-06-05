@@ -83,6 +83,7 @@ go_test(
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/types",
         "//pkg/storage/fs",
+        "//pkg/storage/storageconfig",
         "//pkg/testutils",
         "//pkg/testutils/diagutils",
         "//pkg/testutils/listenerutil",

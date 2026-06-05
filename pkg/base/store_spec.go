@@ -53,8 +53,13 @@ func StoreSpecCmdLineString(ss storageconfig.Store) string {
 	if len(ss.Path) != 0 {
 		fmt.Fprintf(&buffer, "path=%s,", ss.Path)
 	}
-	if ss.InMemory {
+	switch ss.Type {
+	case storageconfig.StoreTypeInMemory:
 		fmt.Fprint(&buffer, "type=mem,")
+	case storageconfig.StoreTypeBasalt:
+		fmt.Fprint(&buffer, "type=basalt,")
+	case storageconfig.StoreTypeLocal:
+		// default; no type field emitted
 	}
 	if ss.Size.IsBytes() {
 		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.Size.Bytes()))
@@ -93,35 +98,58 @@ func StoreSpecCmdLineString(ss storageconfig.Store) string {
 	return buffer.String()
 }
 
+// storeSpecFields is the set of recognized field names in a --store flag value.
+// Used by NewStoreSpec to distinguish field separators from commas embedded in
+// values (e.g., basalt URLs with multiple controller addresses).
+var storeSpecFields = map[string]struct{}{
+	"path":             {},
+	"type":             {},
+	"size":             {},
+	"ballast-size":     {},
+	"attrs":            {},
+	"pebble":           {},
+	"provisioned-rate": {},
+}
+
 // NewStoreSpec parses the string passed into a --store flag and returns a
 // StoreSpec if it is correctly parsed.
-// There are five possible fields that can be passed in, comma separated:
+// There are seven possible fields that can be passed in, comma separated:
 //   - path=xxx The directory in which the rocks db instance should be
 //     located, required unless using an in memory storage.
-//   - type=mem This specifies that the store is an in memory storage instead of
-//     an on disk one. mem is currently the only other type available.
+//   - type=local/mem/basalt This specifies that the store uses a local on-disk,
+//     in-memory or basalt storage.
 //   - size=xxx The optional maximum size of the storage. This can be in one of a
-//     few different formats.
-//   - 10000000000     -> 10000000000 bytes
-//   - 20GB            -> 20000000000 bytes
-//   - 20GiB           -> 21474836480 bytes
-//   - 0.02TiB         -> 21474836480 bytes
-//   - 20%             -> 20% of the available space
-//   - 0.2             -> 20% of the available space
+//     few different formats:
+//     -- 10000000000     -> 10000000000 bytes
+//     -- 20GB            -> 20000000000 bytes
+//     -- 20GiB           -> 21474836480 bytes
+//     -- 0.02TiB         -> 21474836480 bytes
+//     -- 20%             -> 20% of the available space
+//     -- 0.2             -> 20% of the available space
+//   - ballast-size=xxx The optional size of the ballast file. Uses the same
+//     format as the size field.
 //   - attrs=xxx:yyy:zzz A colon separated list of optional attributes.
+//   - pebble=xxx The optional string for specifying Pebble options.
 //   - provisioned-rate=bandwidth=<bandwidth-bytes/s> The provisioned-rate can be
 //     used for admission control for operations on the store and if unspecified,
 //     a cluster setting (kvadmission.store.provisioned_bandwidth) will be used.
 //
-// Note that commas are forbidden within any field name or value.
-func NewStoreSpec(value string) (StoreSpec, error) {
+// Note that commas are forbidden within field names and most field values,
+// since they are used to separate fields. However, basalt store paths (for
+// example: "basalt://addr1,addr2/cluster-id/store-id") may contain commas as
+// part of the controller address list. The parser handles this by only
+// splitting on commas that are followed by a recognized field name and '='.
+func NewStoreSpec(spec string) (StoreSpec, error) {
 	const pathField = "path"
-	if len(value) == 0 {
+	if len(spec) == 0 {
 		return StoreSpec{}, fmt.Errorf("no value specified")
 	}
 	var ss StoreSpec
 	used := make(map[string]struct{})
-	for _, split := range strings.Split(value, ",") {
+	typeSet := false
+	splits := strings.Split(spec, ",")
+	for splitIdx := 0; splitIdx < len(splits); splitIdx++ {
+		split := splits[splitIdx]
 		if len(split) == 0 {
 			continue
 		}
@@ -140,8 +168,8 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		}
 		used[field] = struct{}{}
 
-		if len(field) == 0 {
-			continue
+		if _, ok := storeSpecFields[field]; !ok {
+			return StoreSpec{}, fmt.Errorf("%s is not a valid store field", field)
 		}
 		if len(value) == 0 {
 			return StoreSpec{}, fmt.Errorf("no value specified for %s", field)
@@ -149,6 +177,33 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 
 		switch field {
 		case pathField:
+			if strings.HasPrefix(value, storageconfig.BasaltPathPrefix) {
+				if typeSet && ss.Type != storageconfig.StoreTypeBasalt {
+					return StoreSpec{}, fmt.Errorf("cannot set a basalt path with store type %s", ss.Type)
+				}
+				ss.Type = storageconfig.StoreTypeBasalt
+				typeSet = true
+
+				// We find the all the subsequent fields that do not contain a
+				// valid field name followed by the '=' character, which implies
+				// that they are a part of the basalt controller URL, and
+				// combine them into the current path.
+				for _, next := range splits[splitIdx+1:] {
+					eqIdx := strings.IndexByte(next, '=')
+					if eqIdx != -1 {
+						fName := strings.ToLower(next[:eqIdx])
+						if _, ok := storeSpecFields[fName]; ok {
+							break // next segment is a new field
+						}
+					}
+					// Not a recognized field — this comma was part of the
+					// basalt URL. Merge this into the current path and advance
+					// the iteration index for the outer loop, marking the next
+					// split as "consumed".
+					value += "," + next
+					splitIdx++
+				}
+			}
 			ss.Path = value
 		case "size":
 			var err error
@@ -176,11 +231,22 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			}
 			sort.Strings(ss.Attributes)
 		case "type":
-			if value == "mem" {
-				ss.InMemory = true
-			} else {
+			if typeSet && !strings.EqualFold(value, "basalt") {
+				return StoreSpec{}, fmt.Errorf("cannot set store type %s with a basalt path", value)
+			}
+			// We use strings.EqualFold to maintain parity with the YAML parsing
+			// code for StoreType.
+			switch {
+			case strings.EqualFold(value, "mem"):
+				ss.Type = storageconfig.StoreTypeInMemory
+			case strings.EqualFold(value, "basalt"):
+				ss.Type = storageconfig.StoreTypeBasalt
+			case strings.EqualFold(value, "local"):
+				ss.Type = storageconfig.StoreTypeLocal
+			default:
 				return StoreSpec{}, fmt.Errorf("%s is not a valid store type", value)
 			}
+			typeSet = true
 		case "pebble":
 			// Pebble options are supplied in the Pebble OPTIONS ini-like
 			// format, but allowing any whitespace to delimit lines. Convert
@@ -231,9 +297,6 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 				return StoreSpec{}, err
 			}
 			ss.ProvisionedRate = rateSpec
-
-		default:
-			return StoreSpec{}, fmt.Errorf("%s is not a valid store field", field)
 		}
 	}
 	if err := ss.Validate(); err != nil {
@@ -301,7 +364,7 @@ func (ssl StoreSpecList) PriorCriticalAlertError() (err error) {
 		err = errors.WithDetailf(err, "%v", newErr)
 	}
 	for _, ss := range ssl.Specs {
-		if ss.InMemory {
+		if !ss.IsLocal() {
 			continue
 		}
 		path := PreventedStartupFile(filepath.Join(ss.Path, AuxiliaryDir))

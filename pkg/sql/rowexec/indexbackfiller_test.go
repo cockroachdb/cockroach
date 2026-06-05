@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -299,7 +300,7 @@ func BenchmarkIndexBackfill(b *testing.B) {
 				},
 			},
 		},
-		StoreSpecs: []base.StoreSpec{{InMemory: false, Path: filepath.Join(dir, "testserver")}},
+		StoreSpecs: []base.StoreSpec{{Type: storageconfig.StoreTypeLocal, Path: filepath.Join(dir, "testserver")}},
 	})
 	defer srv.Stopper().Stop(ctx)
 

@@ -224,18 +224,17 @@ func makeSharedProcessTenantServerConfig(
 	// use an in-memory store.
 	candidateSpec := kvServerCfg.Stores.Specs[0]
 	for _, storeSpec := range kvServerCfg.Stores.Specs {
-		if storeSpec.InMemory {
+		if !storeSpec.IsLocal() {
 			continue
 		}
 		candidateSpec = storeSpec
 		break
 	}
-	// Then construct a spec. The logic above either selected an
-	// in-memory store (e.g. in tests) or the first on-disk store. In
-	// the on-disk case, we reuse the original spec; this propagates
-	// all the common store parameters.
+	// Then construct a spec. The logic above either selected a non-local store
+	// (e.g. in tests) or the first local on-disk store. In the local case, we
+	// reuse the original spec; this propagates all the common store parameters.
 	storeSpec := candidateSpec
-	if !storeSpec.InMemory {
+	if storeSpec.IsLocal() {
 		storeDir := filepath.Join(storeSpec.Path, "tenant-"+tenantID.String())
 		if err := os.MkdirAll(storeDir, 0755); err != nil {
 			return BaseConfig{}, SQLConfig{}, err

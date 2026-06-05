@@ -176,20 +176,23 @@ func TestStartArgChecking(t *testing.T) {
 		{[]string{`--store=type=bli`}, `bli is not a valid store type`},
 		{[]string{`--store=bla=bli`}, `bla is not a valid store field`},
 		{[]string{`--store=size=123gb`}, `no path specified`},
-		{[]string{`--store=type=mem`}, `size must be specified for an in memory store`},
-		{[]string{`--store=type=mem,path=blah`}, `path specified for in memory store`},
+		{[]string{`--store=type=mem`}, `size must be specified for in-memory store`},
+		{[]string{`--store=type=mem,path=blah`}, `path specified for in-memory store`},
 		{[]string{"--store=type=mem,size=1GiB"}, ``},
+		{[]string{"--store=type=basalt,path=basalt://prod/cluster-id/store-id"}, ``},
+		{[]string{"--store=type=basalt,path=basalt://ctrl1:4873,ctrl2:4980/cluster-id/store-id"}, ``},
+		{[]string{"--store=type=basalt,path=/mnt/local"}, `basalt store path must start with basalt://`},
+		{[]string{"--store=type=basalt,path=basalt://prod/cluster-id/store-id,size=20GiB"}, ``},
 	}
 	for i, c := range testCases {
 		// Reset the context and insecure flag for every test case.
 		initCLIDefaults()
 		err := f.Parse(c.args)
-		var err2 error
 		if err == nil {
-			err2 = extraStoreFlagInit(startCmd)
+			err = extraStoreFlagInit(startCmd)
 		}
-		if !testutils.IsError(err, c.expected) && !testutils.IsError(err2, c.expected) {
-			t.Errorf("%d: expected %q, but found %v / %v", i, c.expected, err, err2)
+		if !testutils.IsError(err, c.expected) {
+			t.Errorf("%d: expected %q, but found %v", i, c.expected, err)
 		}
 	}
 }

@@ -2096,7 +2096,7 @@ func (tc *TestCluster) RestartServerWithInspect(
 	}
 
 	for i, specs := range serverArgs.StoreSpecs {
-		if specs.InMemory && specs.StickyVFSID == "" {
+		if specs.IsInMemory() && specs.StickyVFSID == "" {
 			return errors.Errorf("failed to restart Server %d, because a restart can only be used on a server with a sticky VFS", i)
 		}
 	}
@@ -2219,7 +2219,7 @@ func (tc *TestCluster) CrashNode(idx int) {
 
 	crashedVFSesMap := make(map[string]*vfs.MemFS)
 	for i, spec := range serverArgs.StoreSpecs {
-		if !spec.InMemory || spec.StickyVFSID == "" {
+		if !spec.IsInMemory() || spec.StickyVFSID == "" {
 			tc.t.Fatalf(
 				"crash emulation requires all stores to be in-memory with sticky VFS IDs; "+
 					"store %d on server %d does not meet requirements", i, idx)

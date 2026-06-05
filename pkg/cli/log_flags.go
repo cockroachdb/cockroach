@@ -246,14 +246,14 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	return nil
 }
 
-// getDefaultLogDirFromStores derives a log directory path from the
-// configure first on-disk store. If more than one on-disk store is
-// defined, the ambiguousLogDirs return value is true.
+// getDefaultLogDirFromStores derives a log directory path from the configured
+// first local on-disk store. If more than one local store is defined, the
+// ambiguousLogDirs return value is true.
 func getDefaultLogDirFromStores() (dir *string, ambiguousLogDirs bool) {
-	// Default the log directory to the "logs" subdirectory of the first
-	// non-memory store.
+	// Default the log directory to the "logs" subdirectory of the first local
+	// on-disk store.
 	for _, spec := range serverCfg.Stores.Specs {
-		if spec.InMemory {
+		if !spec.IsLocal() {
 			continue
 		}
 		if dir != nil {
@@ -263,7 +263,6 @@ func getDefaultLogDirFromStores() (dir *string, ambiguousLogDirs bool) {
 		s := filepath.Join(spec.Path, "logs")
 		dir = &s
 	}
-
 	return
 }
 

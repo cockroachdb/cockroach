@@ -46,8 +46,8 @@ func TestParseInitNodeAttributes(t *testing.T) {
 	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	cfg.Attrs = "attr1=val1::attr2=val2"
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{
-		InMemory: true,
-		Size:     storageconfig.BytesSize(storageconfig.MinimumStoreSize * 100),
+		Type: storageconfig.StoreTypeInMemory,
+		Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize * 100),
 	}}}
 	engines, err := cfg.CreateEngines(context.Background())
 	if err != nil {
@@ -78,7 +78,7 @@ func TestCreateEnginesWithMultipleStores(t *testing.T) {
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{
 		{Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize), Path: tmpDir1},
 		{Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize), Path: tmpDir2},
-		{InMemory: true, Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize * 100)},
+		{Type: storageconfig.StoreTypeInMemory, Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize * 100)},
 	}}
 	engines, err := cfg.CreateEngines(context.Background())
 	if err != nil {
@@ -105,8 +105,8 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	cfg.JoinList = []string{"localhost:12345", "[::1]:23456", "f00f::1234", ":34567", ":0", ":", "", "localhost"}
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{
-		InMemory: true,
-		Size:     storageconfig.BytesSize(storageconfig.MinimumStoreSize * 100),
+		Type: storageconfig.StoreTypeInMemory,
+		Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize * 100),
 	}}}
 	engines, err := cfg.CreateEngines(context.Background())
 	if err != nil {
@@ -388,6 +388,7 @@ func TestCreateEngines(t *testing.T) {
 
 	specs := map[string]base.StoreSpec{}
 
+	// TODO(basalt): add tests for basalt based engines.
 	datadriven.RunTest(t, "testdata/create_engines", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "store-spec":
@@ -399,7 +400,7 @@ func TestCreateEngines(t *testing.T) {
 				parts := strings.SplitN(line, "=", 2)
 				switch parts[0] {
 				case "in-memory":
-					spec.InMemory = true
+					spec.Type = storageconfig.StoreTypeInMemory
 				case "attrs":
 					spec.Attributes = strings.Split(parts[1], ":")
 				default:

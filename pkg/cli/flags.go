@@ -1535,7 +1535,7 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 	// didn't mistakenly assume a heading '~' would get translated by
 	// CockroachDB. (The shell should be responsible for that.)
 	for i, ss := range serverCfg.Stores.Specs {
-		if ss.InMemory {
+		if !ss.IsLocal() {
 			continue
 		}
 		absPath, err := base.GetAbsoluteFSPath("path", ss.Path)
@@ -1565,7 +1565,7 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 	if !fs.Changed(cliflags.ExternalIODir.Name) {
 		// Try to find a directory from the store configuration.
 		for _, ss := range serverCfg.Stores.Specs {
-			if ss.InMemory {
+			if !ss.IsLocal() {
 				continue
 			}
 			startCtx.externalIODir = filepath.Join(ss.Path, "extern")

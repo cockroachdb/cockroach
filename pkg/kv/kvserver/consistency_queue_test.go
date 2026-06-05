@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -273,7 +274,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 				Server: &server.TestingKnobs{StickyVFSRegistry: stickyVFSRegistry},
 			},
 			StoreSpecs: []base.StoreSpec{{
-				InMemory:    true,
+				Type:        storageconfig.StoreTypeInMemory,
 				StickyVFSID: id,
 			}},
 		}

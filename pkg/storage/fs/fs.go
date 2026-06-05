@@ -106,7 +106,8 @@ func InitEnvFromStoreSpec(
 ) (*Env, error) {
 	fs := vfs.Default
 	dir := spec.Path
-	if spec.InMemory {
+	switch spec.Type {
+	case storageconfig.StoreTypeInMemory:
 		if spec.StickyVFSID != "" {
 			if stickyRegistry == nil {
 				return nil, errors.Errorf("missing StickyVFSRegistry")
@@ -115,6 +116,9 @@ func InitEnvFromStoreSpec(
 		} else {
 			fs = vfs.NewMem()
 		}
+	case storageconfig.StoreTypeBasalt:
+		// TODO(basalt): handle basalt backed stores correctly.
+		return nil, errors.New("basalt backed stores not yet supported")
 	}
 	// Override encryption options from the store spec.
 	cfg.EncryptionOptions = spec.EncryptionOptions
