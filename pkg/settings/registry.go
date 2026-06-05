@@ -288,7 +288,8 @@ var retiredSettings = map[InternalKey]struct{}{
 	"changefeed.aggregator.heartbeat":                          {},
 
 	// removed as of 26.3
-	"log.channel_compatibility_mode.enabled": {},
+	"log.channel_compatibility_mode.enabled":            {},
+	"sql.inspect.uniqueness_check.complex_keys.enabled": {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults
