@@ -53,26 +53,39 @@ RUN case ${TARGETPLATFORM} in \
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
     apt-get clean && \
-    curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
-    unzip "git-2.29.2.zip" && \
-    cd git-2.29.2 && \
+    curl -fsSL https://github.com/git/git/archive/v2.54.0.zip -o "git-2.54.0.zip" && \
+    unzip "git-2.54.0.zip" && \
+    cd git-2.54.0 && \
     make configure && \
     ./configure && \
     make && \
     make install && \
     cd .. && \
-    rm -rf git-2.29.2.zip git-2.29.2
+    rm -rf git-2.54.0.zip git-2.54.0
 
-RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
- && echo 'deb https://packages.cloud.google.com/apt cloud-sdk main' | tee /etc/apt/sources.list.d/gcloud.list \
- && curl -fsLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | apt-key add - \
+RUN curl -fsLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | apt-key add - \
  && echo "deb https://packages.microsoft.com/repos/azure-cli/ focal main" > /etc/apt/sources.list.d/azure-cli.list \
  && apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    azure-cli \
-    google-cloud-sdk \
-    google-cloud-cli-gke-gcloud-auth-plugin \
-    && apt-get clean
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends azure-cli \
+ && apt-get clean
+
+# NB: Pin to a specific gcloud version. The apt `cloud-sdk` channel no longer
+# offers a co-installable `google-cloud-sdk` / `google-cloud-cli` pair for this
+# base image, and the unversioned `google-cloud-cli-linux-$ARCH.tar.gz` URL
+# always serves the latest `rapid`-channel release (which would break the pinned
+# SHASUMs below on every gcloud release). Bump GCLOUD_VERSION and both SHASUMs
+# together.
+RUN GCLOUD_VERSION=571.0.0; \
+ case ${TARGETPLATFORM} in \
+     "linux/amd64") ARCH=x86_64; SHASUM=e537598d1c7b6839ddce95ce25dbaf25571322886c1f3464dd74771e568fcfdd ;; \
+     "linux/arm64") ARCH=arm; SHASUM=25431065668969c6b5b647834fe73ecf2b1522ae6d1a3caf49e62451852370e9 ;; \
+ esac  \
+ && curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-$GCLOUD_VERSION-linux-$ARCH.tar.gz" -o gcloud.tar.gz \
+ && echo "$SHASUM gcloud.tar.gz" | sha256sum -c - \
+ && tar -xzf gcloud.tar.gz \
+ && rm gcloud.tar.gz
+
+ENV PATH="$PATH:/google-cloud-sdk/bin"
 
 # chrome is needed for UI tests. Unfortunately it is only distributed for x86_64
 # and not for ARM. Chrome shouldn't need to be installed when we migrate away
