@@ -24,6 +24,7 @@ func TestSupportedCRDBInternalBuiltinsNotChanged(t *testing.T) {
 		`crdb_internal.datums_to_bytes`:           {},
 		`crdb_internal.increment_feature_counter`: {},
 		`crdb_internal.deserialize_session`:       {},
+		`crdb_internal.assignment_cast`:           {},
 	}
 
 	// Check that the actual map matches the expected map
