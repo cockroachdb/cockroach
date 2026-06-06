@@ -369,14 +369,8 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		rhsRepl.mu.Unlock()
 		rhsRepl.readOnlyCmdMu.Unlock()
 
-		// Absorb the RHS ApproxStoreLocalBytes into the LHS before
-		// SubsumeReplica deletes the RHS state.
-		rhsSL := kvstorage.MakeStateLoader(merge.RightDesc.RangeID)
-		rhsAS, err := rhsSL.LoadRangeAppliedState(ctx, b.batch.State())
-		if err != nil {
-			return errors.Wrapf(err, "loading RHS RangeAppliedState for merge")
-		}
-		b.state.ApproxStoreLocalBytes += rhsAS.ApproxStoreLocalBytes
+		// Absorb the RHS ApproxStoreLocalBytes into the LHS.
+		b.state.ApproxStoreLocalBytes += merge.RightApproxStoreLocalBytes
 
 		if err := mergePreApply(ctx, b.ReadWriter(), b.batch.WagWriter(), mergePreApplyInput{
 			lhsID:          b.r.ID(),
