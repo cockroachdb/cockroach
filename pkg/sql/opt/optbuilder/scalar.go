@@ -901,6 +901,17 @@ var SupportedCRDBInternalBuiltins = map[string]struct{}{
 	`crdb_internal.increment_feature_counter`: {},
 	// Used by sqlproxy for connection migration.
 	`crdb_internal.deserialize_session`: {},
+	// assignment_cast is not a user-facing builtin; the optimizer and the
+	// declarative schema changer inject it to perform assignment-context casts.
+	// Notably, creating an expression index (or adding a computed column, or
+	// changing a column type) adds a transient validation CHECK constraint of
+	// the form CASE WHEN crdb_internal.assignment_cast(<expr>, NULL::<type>) IS
+	// NULL THEN true ELSE true END, which is enforced for the duration of the
+	// backfill. Without this entry, every concurrent INSERT/UPSERT/UPDATE would
+	// rebuild that check and be rejected by the unsafe-internals gate. This is
+	// the same reason datums_to_bytes (injected for hash-sharded computed
+	// columns) is allowlisted above.
+	`crdb_internal.assignment_cast`: {},
 }
 
 // isUnsafeBuiltin returns true if the given function definition

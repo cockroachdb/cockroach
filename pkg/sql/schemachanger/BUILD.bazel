@@ -25,6 +25,7 @@ go_test(
     size = "enormous",
     srcs = [
         "dml_injection_test.go",
+        "expression_index_concurrent_dml_test.go",
         "main_test.go",
         "schemachanger_test.go",
         ":test_gen",  # keep
@@ -71,6 +72,7 @@ go_test(
         "//pkg/util/log/eventlog",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_lib_pq//:pq",
