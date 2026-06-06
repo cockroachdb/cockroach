@@ -38,6 +38,8 @@ const (
 	// non-prod side-effect targets (e.g. Slack channels). When unset
 	// (TeamCity, local invocations, forks) we treat the run as non-prod.
 	envIsProductionRepo = "IS_PRODUCTION_REPO"
+
+	versionFilePath = "pkg/build/version.txt"
 )
 
 // isProductionRepo reports whether the binary is running under the

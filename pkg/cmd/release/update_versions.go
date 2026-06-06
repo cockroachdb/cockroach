@@ -38,7 +38,6 @@ const (
 	versionBumpOnly     = "version-bump-only"
 	cockroachRepoFlag   = "cockroach-repo"
 	githubUsernameFlag  = "github-username"
-	versionFile         = "pkg/build/version.txt"
 
 	defaultGithubUsernameFlag = "cockroach-teamcity"
 )
@@ -548,7 +547,7 @@ func generateRepoList(
 			log.Printf("not bumping version on the same branch %s", branch)
 			continue
 		}
-		curVersion, err := fileContent(remoteOrigin+"/"+branch, versionFile)
+		curVersion, err := fileContent(remoteOrigin+"/"+branch, versionFilePath)
 		if err != nil {
 			return []prRepo{}, fmt.Errorf("reading git file content: %w", err)
 		}
@@ -570,7 +569,7 @@ func generateRepoList(
 			commitMessage:  generateCommitMessage(commitMessagePrefix, releasedVersion, nextVersion),
 			fn: func(gitDir string) error {
 				contents := []byte(nextVersion.String() + "\n")
-				dest := path.Join(gitDir, versionFile)
+				dest := path.Join(gitDir, versionFilePath)
 				if err := os.WriteFile(dest, contents, 0644); err != nil {
 					return fmt.Errorf("cannot write version.txt: %w", err)
 				}
@@ -715,7 +714,7 @@ func generateRepoList(
 			continue
 		}
 		// try to merge and see if anything is changed, ignore version.txt changes.
-		createsMergeCommit, err := mergeCreatesContentChanges(mergeBranch, nextRCBranch, []string{versionFile})
+		createsMergeCommit, err := mergeCreatesContentChanges(mergeBranch, nextRCBranch, []string{versionFilePath})
 		if err != nil {
 			return []prRepo{}, fmt.Errorf("checking if merge creates content changes: %w", err)
 		}
@@ -738,7 +737,7 @@ func generateRepoList(
 					return fmt.Errorf("failed running '%s' with message '%s': %w", cmd.String(), string(out), err)
 				}
 				log.Printf("ran '%s': %s\n", cmd.String(), string(out))
-				coCmd := exec.Command("git", "checkout", remoteOrigin+"/"+nextRCBranch, "--", versionFile)
+				coCmd := exec.Command("git", "checkout", remoteOrigin+"/"+nextRCBranch, "--", versionFilePath)
 				coCmd.Dir = gitDir
 				out, err = coCmd.CombinedOutput()
 				if err != nil {
