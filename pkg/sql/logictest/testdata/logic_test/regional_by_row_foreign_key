@@ -2491,3 +2491,102 @@ SELECT count(*) FROM c_nonunique WHERE pk = 10
 1
 
 subtest end
+
+subtest drop_table_cascade_170181
+
+# Regression test for #170181. Dropping a table referenced by an FK that infers
+# the region column (via infer_rbr_region_col_using_constraint) on a REGIONAL BY
+# ROW child must also clear that child's stored constraint reference, so the
+# child remains valid after CASCADE removes the FK.
+
+statement ok
+CREATE TABLE parent_drop_cascade (
+  k INT PRIMARY KEY,
+  v INT
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE child_drop_cascade (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k)
+    REFERENCES parent_drop_cascade (crdb_region, k),
+  FAMILY (k, parent_k, crdb_region)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+statement ok
+DROP TABLE parent_drop_cascade CASCADE
+
+# The child survives with both the foreign key and the
+# infer_rbr_region_col_using_constraint storage param removed.
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child_drop_cascade]
+----
+CREATE TABLE public.child_drop_cascade (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_drop_cascade_pkey PRIMARY KEY (k ASC),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, crdb_region)
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
+
+statement ok
+DROP TABLE child_drop_cascade
+
+subtest end
+
+subtest drop_constraint_cascade_170181
+
+# Regression test for #170181 via the dependent-FK cascade path: dropping the
+# parent unique constraint that backs the child's RBR-using FK with CASCADE must
+# likewise clear the child's infer_rbr_region_col_using_constraint param.
+
+statement ok
+SET create_table_with_schema_locked = false
+
+# The parent's primary key is on id so that parent_uniq is the sole uniqueness
+# provider for (region, k); otherwise the cascade would keep the child's FK
+# (and thus its storage param) by finding a replacement constraint.
+statement ok
+CREATE TABLE parent_drop_constraint (
+  id INT PRIMARY KEY,
+  k INT,
+  region crdb_internal_region,
+  CONSTRAINT parent_uniq UNIQUE WITHOUT INDEX (region, k)
+)
+
+statement ok
+CREATE TABLE child_drop_constraint (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k)
+    REFERENCES parent_drop_constraint (region, k),
+  FAMILY (k, parent_k, crdb_region)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE parent_drop_constraint DROP CONSTRAINT parent_uniq CASCADE
+
+# The child survives with both the foreign key and the
+# infer_rbr_region_col_using_constraint storage param removed.
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child_drop_constraint]
+----
+CREATE TABLE public.child_drop_constraint (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_drop_constraint_pkey PRIMARY KEY (k ASC),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+DROP TABLE child_drop_constraint
+
+statement ok
+DROP TABLE parent_drop_constraint
+
+statement ok
+RESET create_table_with_schema_locked
+
+subtest end
