@@ -63,6 +63,31 @@ func (c *githubClient) GetBranchSHA(ctx context.Context, branch string) (string,
 	return *ref.Object.SHA, nil
 }
 
+// GetFileContentAtRef returns the decoded contents of the file at path as of
+// the given ref (a SHA, branch, or tag). It is used to read a file out of a
+// specific commit without checking the repository out. The GitHub Contents
+// API returns base64-encoded content for files under 1 MB, which go-github
+// decodes for us; larger files would need DownloadContents, but the files we
+// read here (e.g. pkg/build/version.txt) are tiny.
+func (c *githubClient) GetFileContentAtRef(ctx context.Context, ref, path string) (string, error) {
+	fileContent, _, _, err := c.client.Repositories.GetContents(
+		ctx, c.owner, c.repo, path, &github.RepositoryContentGetOptions{Ref: ref},
+	)
+	if err != nil {
+		return "", errors.Wrapf(err, "get contents %s at %s", path, ref)
+	}
+	if fileContent == nil {
+		// A directory path returns nil fileContent (and a populated
+		// directoryContent slice); callers here only ever request files.
+		return "", errors.Newf("%s at %s is not a file", path, ref)
+	}
+	content, err := fileContent.GetContent()
+	if err != nil {
+		return "", errors.Wrapf(err, "decoding %s at %s", path, ref)
+	}
+	return content, nil
+}
+
 // CreateBranch creates refs/heads/{branch} pointing at sha.
 func (c *githubClient) CreateBranch(ctx context.Context, branch, sha string) error {
 	ref := &github.Reference{
