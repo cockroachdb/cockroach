@@ -7,18 +7,22 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -558,6 +562,237 @@ func TestFetchSHAForPickSHANonNotFoundErrorPropagates(t *testing.T) {
 	require.False(t, errors.Is(err, errBranchNotFound),
 		"500 must not be wrapped as errBranchNotFound")
 	require.ErrorContains(t, err, "fetching tip SHA for staging branch")
+}
+
+// mkVersionFileHandler serves the GitHub Contents API for versionFilePath
+// from a ref->contents map, base64-encoding the body the way the real API
+// does. A ref absent from the map responds 404 (so GetContents surfaces a
+// read error); set serverErr to fail every request with a 500 instead.
+func mkVersionFileHandler(bySHA map[string]string, serverErr bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if serverErr {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if !strings.Contains(r.URL.Path, "/contents/"+versionFilePath) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		content, ok := bySHA[r.URL.Query().Get("ref")]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		enc := base64.StdEncoding.EncodeToString([]byte(content))
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"type":"file","encoding":"base64","content":%q,"path":%q}`,
+			enc, versionFilePath)
+	}
+}
+
+// TestVerifyVersionFile checks the guard that blocks a build-and-sign dispatch
+// when pkg/build/version.txt at the picked SHA disagrees with the version
+// named on the Jira ticket — the failure mode that shipped a stale version
+// before this check existed.
+func TestVerifyVersionFile(t *testing.T) {
+	const sha = "abcdef0123456789"
+
+	tests := []struct {
+		name             string
+		ticketVersion    string // version parsed from the ticket summary
+		fileContent      string // pkg/build/version.txt at sha; "" => not present
+		serverErr        bool
+		expectErrContain string
+		expectSummary    string // substring the summary block must contain
+	}{
+		{
+			name:          "match",
+			ticketVersion: "v26.3.0-alpha.1",
+			fileContent:   "v26.3.0-alpha.1\n",
+			expectSummary: "✅",
+		},
+		{
+			name:          "match ignores surrounding whitespace",
+			ticketVersion: "v25.4.3",
+			fileContent:   "  v25.4.3\n\n",
+			expectSummary: "version verified",
+		},
+		{
+			name:             "mismatch blocks dispatch",
+			ticketVersion:    "v26.3.0-alpha.1",
+			fileContent:      "v26.2.0\n",
+			expectErrContain: "ticket REL-1 targets v26.3.0-alpha.1",
+			expectSummary:    "version mismatch",
+		},
+		{
+			// The motivating incident: an alpha bump that never landed, so the
+			// pre-release ordinal differs while major.minor.patch matches.
+			name:             "pre-release ordinal mismatch",
+			ticketVersion:    "v26.3.0-alpha.1",
+			fileContent:      "v26.3.0-alpha.2\n",
+			expectErrContain: "ticket REL-1 targets v26.3.0-alpha.1",
+			expectSummary:    "version mismatch",
+		},
+		{
+			name:             "unparseable file contents",
+			ticketVersion:    "v25.4.3",
+			fileContent:      "not-a-version\n",
+			expectErrContain: "parsing " + versionFilePath,
+		},
+		{
+			name:             "version file missing at sha",
+			ticketVersion:    "v25.4.3",
+			fileContent:      "",
+			expectErrContain: "reading " + versionFilePath,
+		},
+		{
+			name:             "github error propagates",
+			ticketVersion:    "v25.4.3",
+			serverErr:        true,
+			expectErrContain: "reading " + versionFilePath,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			refs := map[string]string{}
+			if tc.fileContent != "" {
+				refs[sha] = tc.fileContent
+			}
+			ghSrv := httptest.NewServer(mkVersionFileHandler(refs, tc.serverErr))
+			defer ghSrv.Close()
+
+			r := newPickSHARunnerForTest(t, ghSrv, nil, time.Time{})
+			r.repo = "cockroachdb/cockroach"
+			r.summaryFile = filepath.Join(t.TempDir(), "summary.md")
+
+			want, err := version.Parse(tc.ticketVersion)
+			require.NoError(t, err)
+
+			err = r.verifyVersionFile(context.Background(), "REL-1", sha, masterBranch, want)
+			if tc.expectErrContain != "" {
+				require.ErrorContains(t, err, tc.expectErrContain)
+			} else {
+				require.NoError(t, err)
+			}
+
+			if tc.expectSummary != "" {
+				data, readErr := os.ReadFile(r.summaryFile)
+				require.NoError(t, readErr)
+				require.Contains(t, string(data), tc.expectSummary)
+				require.Contains(t, string(data), "REL-1")
+			}
+		})
+	}
+}
+
+// TestVerifyVersionFileNoSummaryFile ensures the version check still works
+// (and doesn't panic) when no summary file is configured, as on local runs.
+func TestVerifyVersionFileNoSummaryFile(t *testing.T) {
+	const sha = "deadbeefcafe0001"
+	ghSrv := httptest.NewServer(mkVersionFileHandler(
+		map[string]string{sha: "v25.4.3\n"}, false))
+	defer ghSrv.Close()
+
+	r := newPickSHARunnerForTest(t, ghSrv, nil, time.Time{})
+	r.repo = "cockroachdb/cockroach"
+	// r.summaryFile intentionally left empty.
+
+	want, err := version.Parse("v25.4.3")
+	require.NoError(t, err)
+	require.NoError(t, r.verifyVersionFile(context.Background(), "REL-1", sha, "release-25.4.3-rc", want))
+}
+
+// TestPickSHARunnerProcessCandidateMismatchBlocksDispatch is the end-to-end
+// guard: when version.txt at the picked SHA disagrees with the ticket,
+// processCandidate must return an error and must NOT dispatch build-and-sign.
+// The isolated TestVerifyVersionFile would stay green even if the
+// verifyVersionFile call were dropped from processCandidate; this test fails
+// loudly in that case by asserting the dispatch counter stays at zero.
+func TestPickSHARunnerProcessCandidateMismatchBlocksDispatch(t *testing.T) {
+	today := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	const staging = "release-25.4.3-rc"
+	const stagingSHA = "stagingsha0001beef"
+
+	// Candidate summary parses as v25.4.3 and pick-date is today.
+	candidate := mkPickSHACandidate(t, "2026-04-20")
+
+	// Pick SHA subtask is open so processCandidate proceeds past the
+	// idempotency gate to the version check.
+	openSubtask := jiraSubtask{Key: "REL-2"}
+	openSubtask.Fields.Summary = "Pick SHA"
+	openSubtask.Fields.Status.Name = "To Do"
+
+	var dispatches atomic.Int64
+	ghSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/dispatches"):
+			dispatches.Add(1)
+			t.Errorf("build-and-sign must not be dispatched on version mismatch")
+			w.WriteHeader(http.StatusInternalServerError)
+		case strings.Contains(r.URL.Path, "/git/ref/heads/"):
+			fmt.Fprintf(w, `{"ref":"refs/heads/%s","object":{"sha":%q}}`, staging, stagingSHA)
+		case strings.Contains(r.URL.Path, "/contents/"+versionFilePath):
+			// version.txt (v25.4.2) disagrees with the ticket (v25.4.3).
+			enc := base64.StdEncoding.EncodeToString([]byte("v25.4.2\n"))
+			fmt.Fprintf(w, `{"type":"file","encoding":"base64","content":%q}`, enc)
+		default:
+			t.Errorf("unexpected GitHub call: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer ghSrv.Close()
+
+	jiraSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only GetIssue is expected: the version check fails before any Jira
+		// mutation, so UpdateFields/Transition/AddComment would be a bug.
+		if r.Method != http.MethodGet || !strings.Contains(r.URL.Path, "/rest/api/3/issue/REL-1") {
+			t.Errorf("unexpected jira call: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mkPickSHAFullIssueJSON(t, staging, []jiraSubtask{openSubtask})))
+	}))
+	defer jiraSrv.Close()
+
+	r := newPickSHARunnerForTest(t, ghSrv, jiraSrv, today)
+	r.repo = "owner/repo"
+
+	err := r.processCandidate(context.Background(), candidate)
+	require.ErrorContains(t, err, "ticket REL-1 targets v25.4.3")
+	require.Equal(t, int64(0), dispatches.Load(),
+		"dispatch must be blocked when version.txt mismatches the ticket")
+}
+
+// TestBuildVersionCheckSummary locks down the Markdown rendered for the job
+// summary in both the match and mismatch cases.
+func TestBuildVersionCheckSummary(t *testing.T) {
+	const sha = "abcdef0123456789cafe"
+	want := version.MustParse("v26.3.0-alpha.1")
+
+	t.Run("match", func(t *testing.T) {
+		s := buildVersionCheckSummary(
+			"REL-1", sha, masterBranch, want, want, true, "cockroachdb/cockroach")
+		require.Contains(t, s, "✅")
+		require.Contains(t, s, "REL-1")
+		require.Contains(t, s, "version verified")
+		require.Contains(t, s, "v26.3.0-alpha.1")
+		// SHA is shortened to 12 chars and linked to the commit.
+		require.Contains(t, s, "abcdef012345")
+		require.Contains(t, s, "https://github.com/cockroachdb/cockroach/commit/"+sha)
+	})
+
+	t.Run("mismatch", func(t *testing.T) {
+		got := version.MustParse("v26.2.0")
+		s := buildVersionCheckSummary(
+			"REL-1", sha, masterBranch, want, got, false, "cockroachdb/cockroach")
+		require.Contains(t, s, "❌")
+		require.Contains(t, s, "version mismatch")
+		require.Contains(t, s, "build-and-sign was not dispatched")
+		require.Contains(t, s, "v26.3.0-alpha.1") // wanted
+		require.Contains(t, s, "v26.2.0")         // found
+	})
 }
 
 // mkPickSHACandidate builds a candidate jiraIssue suitable for the JQL search
