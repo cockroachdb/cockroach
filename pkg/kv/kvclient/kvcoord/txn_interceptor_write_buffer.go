@@ -1755,6 +1755,23 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	}
 	twb.flushed = true
 
+	// On rollback, discard all buffered writes. These writes are wasted
+	// work. Additionally it is unsafe to send writes in the same batch as a
+	// rollback:
+	//
+	// If we prepended the buffered requests to an EndTxn(commit=false)
+	// batch, the DistSender may divide the combined batch across ranges (a
+	// rollback's EndTxn is not split into its own batch the way a commit's
+	// is). The ABORTED status from the successful EndTxn(abort) is then used
+	// to update the transaction on the next batch request. That following
+	// request can hit an error (ExclusionViolationError, WriteTooOldError,
+	// etc) and trip the assertion in checkTxnStatusValid that disallows such
+	// errors on a finalized transaction, fataling the node (#171482).
+	if et, ok := ba.GetArg(kvpb.EndTxn); ok && !et.(*kvpb.EndTxnRequest).Commit {
+		twb.resetBuffer()
+		return twb.wrapped.SendLocked(ctx, ba)
+	}
+
 	numKeysBuffered := twb.buffer.Len()
 	if numKeysBuffered == 0 {
 		return twb.wrapped.SendLocked(ctx, ba) // nothing to flush
