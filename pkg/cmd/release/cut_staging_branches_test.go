@@ -12,12 +12,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
 	"github.com/slack-go/slack"
 	"github.com/stretchr/testify/require"
@@ -639,6 +642,211 @@ func TestCutRunnerProcessCandidateEarlyReturns(t *testing.T) {
 			require.NoError(t, r.processCandidate(context.Background(), *c))
 		})
 	}
+}
+
+// TestBuildCutSummary locks down the Markdown rendered for the job summary in
+// the cut, resumed, and dry-run cases, plus the failure block.
+func TestBuildCutSummary(t *testing.T) {
+	v := mustParseVersion(t, "v25.4.3")
+	const sha = "stagingsha0001beef99"
+
+	t.Run("fresh cut", func(t *testing.T) {
+		s := buildCutSummary("REL-1", v, "release-25.4.3-rc", sha, "owner/repo", false, false)
+		require.Contains(t, s, "✅")
+		require.Contains(t, s, "REL-1")
+		require.Contains(t, s, "staging branch cut")
+		require.Contains(t, s, "v25.4.3")
+		require.Contains(t, s, "release-25.4.3-rc")
+		require.Contains(t, s, "stagingsha000") // shortened to 12 chars
+		require.Contains(t, s, "https://github.com/owner/repo/commit/"+sha)
+		require.NotContains(t, s, "dry run")
+	})
+
+	t.Run("resumed", func(t *testing.T) {
+		s := buildCutSummary("REL-1", v, "release-25.4.3-rc", sha, "owner/repo", true, false)
+		require.Contains(t, s, "staging branch resumed")
+	})
+
+	t.Run("dry run", func(t *testing.T) {
+		s := buildCutSummary("REL-1", v, "release-25.4.3-rc", sha, "owner/repo", false, true)
+		require.Contains(t, s, "dry run")
+	})
+}
+
+func TestBuildCutFailureSummary(t *testing.T) {
+	s := buildCutFailureSummary("REL-1", errors.New("creating staging branch: boom"))
+	require.Contains(t, s, "❌")
+	require.Contains(t, s, "REL-1")
+	require.Contains(t, s, "branch cut failed")
+	require.Contains(t, s, "creating staging branch: boom")
+}
+
+// TestCutRunnerProcessCandidateWritesSummary guards the success-block wiring in
+// processCandidate: the recovery (resumed) path must append a ✅ block to the
+// configured summary file. It reuses the already-Baking recovery setup so no
+// branch is created — only the resume path runs.
+func TestCutRunnerProcessCandidateWritesSummary(t *testing.T) {
+	today := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	bn := branchNames{base: "release-25.4", staging: "release-25.4.3-rc"}
+
+	candidate := *mkJiraIssue(t, "REL-1", "Release: v25.4.3", map[string]interface{}{
+		cfCutBranchDate: "2026-04-20",
+		cfStagingBranch: bn.staging,
+	})
+
+	doneSubtask := jiraSubtask{Key: "REL-2"}
+	doneSubtask.Fields.Summary = cutStagingSubtaskMatch
+	doneSubtask.Fields.Status.Name = "Done"
+	subtaskRaw, err := json.Marshal([]jiraSubtask{doneSubtask})
+	require.NoError(t, err)
+	fullFields, err := json.Marshal(map[string]interface{}{
+		"summary":           "Release: v25.4.3",
+		cfCutBranchDate:     "2026-04-20",
+		cfStagingBranch:     bn.staging,
+		cfPickSHADate:       "2026-04-22",
+		cfCloudReleaseNotes: "2026-04-23",
+		cfPublishBinary:     "2026-04-24",
+		"status":            map[string]interface{}{"name": bakingStatusName, "id": "151"},
+		"subtasks":          json.RawMessage(subtaskRaw),
+	})
+	require.NoError(t, err)
+	fullJSON := `{"key":"REL-1","fields":` + string(fullFields) + `}`
+
+	const stagingSHA = "stagingsha000"
+	ghSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/git/ref/heads/"+bn.staging):
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"ref":"refs/heads/%s","object":{"sha":%q}}`, bn.staging, stagingSHA)
+		case strings.HasSuffix(r.URL.Path, "/labels"):
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Errorf("unexpected GitHub call: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer ghSrv.Close()
+
+	jiraSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/rest/api/3/issue/REL-1"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(fullJSON))
+		case r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/rest/api/3/issue/REL-1"):
+			w.WriteHeader(http.StatusNoContent)
+		case strings.HasSuffix(r.URL.Path, "/REL-1/comment"):
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Errorf("unexpected jira call: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer jiraSrv.Close()
+
+	slackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"channel":"C1","ts":"1.2","permalink":"https://slack/x"}`))
+	}))
+	defer slackSrv.Close()
+
+	gh := newGitHubClient("test", "owner", "repo")
+	u, err := url.Parse(ghSrv.URL + "/")
+	require.NoError(t, err)
+	gh.client.BaseURL = u
+
+	jc := newJiraClient("bot@example.com", "test")
+	jc.baseURL = jiraSrv.URL
+
+	summaryFile := filepath.Join(t.TempDir(), "summary.md")
+	r := &cutRunner{
+		jira:          jc,
+		gh:            gh,
+		slack:         newSlackClientForTest(slackSrv.URL),
+		today:         today,
+		repo:          "owner/repo",
+		channel:       "test-channel",
+		summaryWriter: summaryWriter{path: summaryFile},
+	}
+	require.NoError(t, r.processCandidate(context.Background(), candidate))
+
+	data, err := os.ReadFile(summaryFile)
+	require.NoError(t, err)
+	require.Contains(t, string(data), "✅")
+	require.Contains(t, string(data), "REL-1")
+	require.Contains(t, string(data), "staging branch resumed")
+}
+
+// TestCutRunnerRunWritesFailureSummary guards the failure-block wiring in
+// run(): a candidate whose processing fails must produce a ❌ block in the
+// summary file. The failure is induced by a GitHub error during validate (the
+// branch-existence check), which run()'s per-candidate error handler turns
+// into a failure block.
+func TestCutRunnerRunWritesFailureSummary(t *testing.T) {
+	today := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+
+	fullFields, err := json.Marshal(map[string]interface{}{
+		"summary":       "Release: v25.4.3",
+		cfCutBranchDate: "2026-04-20",
+	})
+	require.NoError(t, err)
+	fullJSON := `{"key":"REL-1","fields":` + string(fullFields) + `}`
+
+	// GitHub fails every call: BranchExists (the first GH call in validate)
+	// surfaces the error, so processCandidate returns before any mutation.
+	ghSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ghSrv.Close()
+
+	jiraSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/rest/api/3/issue/REL-1") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(fullJSON))
+			return
+		}
+		t.Errorf("unexpected jira call: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer jiraSrv.Close()
+
+	slackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"channel":"C1","ts":"1.2","permalink":"https://slack/x"}`))
+	}))
+	defer slackSrv.Close()
+
+	gh := newGitHubClient("test", "owner", "repo")
+	u, err := url.Parse(ghSrv.URL + "/")
+	require.NoError(t, err)
+	gh.client.BaseURL = u
+
+	jc := newJiraClient("bot@example.com", "test")
+	jc.baseURL = jiraSrv.URL
+
+	summaryFile := filepath.Join(t.TempDir(), "summary.md")
+	r := &cutRunner{
+		jira:          jc,
+		gh:            gh,
+		slack:         newSlackClientForTest(slackSrv.URL),
+		today:         today,
+		repo:          "owner/repo",
+		channel:       "test-channel",
+		opsChannel:    "ops-channel",
+		testIssueKey:  "REL-1", // bypass JQL search; candidates() fetches REL-1
+		summaryWriter: summaryWriter{path: summaryFile},
+	}
+	require.Error(t, r.run(context.Background()))
+
+	data, err := os.ReadFile(summaryFile)
+	require.NoError(t, err)
+	require.Contains(t, string(data), "❌")
+	require.Contains(t, string(data), "REL-1")
+	require.Contains(t, string(data), "branch cut failed")
+	// The actual error must reach the block, not just the header — otherwise a
+	// future change that drops error detail would go undetected.
+	require.Contains(t, string(data), "validating ticket and repo state")
 }
 
 func TestBuildJiraComment(t *testing.T) {
