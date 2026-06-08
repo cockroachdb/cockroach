@@ -60,6 +60,7 @@ var notifyPublishFlags = struct {
 	ibmChannel  string
 	jiraIssue   string
 	versionFile string
+	summaryFile string
 }{}
 
 var notifyPublishCmd = &cobra.Command{
@@ -97,6 +98,10 @@ func init() {
 			"(recovery escape hatch for the zero/multiple-match cases)")
 	notifyPublishCmd.Flags().StringVar(&notifyPublishFlags.versionFile, "version-file", versionFilePath,
 		"path to the version.txt file, read relative to the working dir")
+	notifyPublishCmd.Flags().StringVar(&notifyPublishFlags.summaryFile, "summary-file", "",
+		"path to a Markdown file to append the publish-notification result to "+
+			"(the GHA wrapper points this at /artifacts so the run can surface "+
+			"the outcome in the job summary, not just the logs); empty disables it")
 }
 
 func runNotifyPublish(_ *cobra.Command, _ []string) error {
@@ -137,14 +142,15 @@ func runNotifyPublish(_ *cobra.Command, _ []string) error {
 	}
 
 	r := &notifyPublishRunner{
-		jira:       newJiraClient(jiraEmail, jiraToken),
-		slack:      newSlackClient(slackToken),
-		sha:        notifyPublishFlags.sha,
-		version:    version,
-		channel:    channel,
-		ibmChannel: ibmChannel,
-		jiraIssue:  notifyPublishFlags.jiraIssue,
-		dryRun:     notifyPublishFlags.dryRun,
+		jira:          newJiraClient(jiraEmail, jiraToken),
+		slack:         newSlackClient(slackToken),
+		sha:           notifyPublishFlags.sha,
+		version:       version,
+		channel:       channel,
+		ibmChannel:    ibmChannel,
+		jiraIssue:     notifyPublishFlags.jiraIssue,
+		dryRun:        notifyPublishFlags.dryRun,
+		summaryWriter: summaryWriter{path: notifyPublishFlags.summaryFile},
 	}
 	return r.run()
 }
@@ -162,6 +168,9 @@ type notifyPublishRunner struct {
 	ibmChannel string // IBM-OEM "published" announcement target
 	jiraIssue  string // when set, skips the JQL lookup
 	dryRun     bool
+	// summaryWriter records a single result block (success or failure) for the
+	// GitHub Actions job summary, written by run() via a defer.
+	summaryWriter
 }
 
 // jiraSearchCommenter is the narrow Jira surface the runner needs.
@@ -177,14 +186,24 @@ type slackPoster interface {
 	PostMessage(channel, text string) (string, error)
 }
 
-func (r *notifyPublishRunner) run() error {
-	key, err := r.resolveTicketKey()
+func (r *notifyPublishRunner) run() (retErr error) {
+	// key and commentID are captured by the defer so it can render the
+	// outcome block once, after every early return below has run. They stay
+	// "" until resolved, which the summary renders as an unresolved-ticket
+	// failure.
+	var key, commentID string
+	defer func() {
+		r.append(buildNotifyPublishSummary(
+			key, r.version, r.channel, r.ibmChannel, commentID, retErr, r.dryRun))
+	}()
+
+	var err error
+	key, err = r.resolveTicketKey()
 	if err != nil {
 		return err
 	}
 
 	commentDoc := buildBlessedJiraComment(r.version)
-	var commentID string
 	if r.dryRun {
 		log.Printf("[DRY RUN] would post Jira comment on %s; body: %s",
 			key, mustJSON(commentDoc))
@@ -226,6 +245,48 @@ func (r *notifyPublishRunner) run() error {
 	}
 	log.Printf("posted IBM-OEM announcement to %s", r.ibmChannel)
 	return nil
+}
+
+// buildNotifyPublishSummary renders the single Markdown block recorded for a
+// publish-notification run. A failure is rendered as a prominent block naming
+// the ticket (or marking it unresolved when the run failed before the JQL
+// lookup); a success links to the Jira comment so an operator can jump
+// straight to the "blessed" note. A dry run is marked as such because nothing
+// was actually posted.
+func buildNotifyPublishSummary(
+	key, version, channel, ibmChannel, commentID string, runErr error, dryRun bool,
+) string {
+	if runErr != nil {
+		ticket := key
+		if ticket == "" {
+			ticket = "(unresolved ticket)"
+		}
+		// When the Jira comment was already posted (commentID set) but a later
+		// step failed, tell the operator it's live and link it — they only need
+		// to repost to Slack, not rerun the whole notification.
+		postedNote := ""
+		if commentID != "" {
+			postedNote = fmt.Sprintf("The Jira comment was already posted: [%s](%s).\n\n",
+				key, jiraCommentPermalink(key, commentID))
+		}
+		return fmt.Sprintf(
+			"## ❌ %s — publish notification failed\n\n"+
+				"Version `%s`.\n\n"+
+				"%s"+
+				"```\n%v\n```\n\n",
+			ticket, version, postedNote, runErr)
+	}
+	if dryRun {
+		return fmt.Sprintf(
+			"## ✅ %s — publish notification _(dry run — nothing posted)_\n\n"+
+				"Version `%s`.\n\n",
+			key, version)
+	}
+	return fmt.Sprintf(
+		"## ✅ %s — publish announced\n\n"+
+			"Version `%s` blessed: posted to `%s` and `%s`, "+
+			"and commented on [%s](%s).\n\n",
+		key, version, channel, ibmChannel, key, jiraCommentPermalink(key, commentID))
 }
 
 // resolveTicketKey returns the Jira ticket key to post on. When the
