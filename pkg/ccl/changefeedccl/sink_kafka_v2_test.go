@@ -303,8 +303,9 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 	baseBatchCfg := sinkBatchConfig{}
 
 	cases := []struct {
-		name       string
-		jsonConfig map[string]any
+		name             string
+		jsonConfig       map[string]any
+		settingsOverride func(*cluster.Settings)
 		// Both expectedOpts and expectedBatchCfg will be merged with their respective base* before comparison.
 		expectedOpts                map[string]any
 		expectedBatchConfig         sinkBatchConfig
@@ -354,6 +355,17 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 			},
 		},
 		{
+			name: "max inflight produce requests per broker setting",
+			settingsOverride: func(s *cluster.Settings) {
+				changefeedbase.KafkaV2MaxInflightProduceRequestsPerBroker.Override(
+					context.Background(), &s.SV, 17,
+				)
+			},
+			expectedOpts: map[string]any{
+				"MaxProduceRequestsInflightPerBroker": 17,
+			},
+		},
+		{
 			name: "lots of options",
 			jsonConfig: map[string]any{
 				"ClientID":     "test",
@@ -388,7 +400,11 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 			jsonBs, err := json.Marshal(c.jsonConfig)
 			require.NoError(t, err)
 
-			fx := newKafkaSinkV2Fx(t, withJSONConfig(string(jsonBs)), withRealClient())
+			opts := []fxOpt{withJSONConfig(string(jsonBs)), withRealClient()}
+			if c.settingsOverride != nil {
+				opts = append(opts, withSettings(c.settingsOverride))
+			}
+			fx := newKafkaSinkV2Fx(t, opts...)
 			defer fx.close()
 
 			expectedOpts := shallowMerge(baseExpectedOpts, c.expectedOpts)
