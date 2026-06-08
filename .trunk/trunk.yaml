@@ -1,0 +1,48 @@
+# Trunk configuration file
+# This configuration replicates the bors.toml settings for merge queue functionality
+
+version: 0.1
+
+# CLI configuration
+cli:
+  version: 1.22.2
+
+# Merge queue configuration (equivalent to bors.toml)
+merge:
+  # Use Trunk's merge queue service
+  service: queue
+  
+  # Required status checks that must pass before merging
+  # These correspond to the job names in github-actions-essential-ci.yml
+  required_statuses:
+    - "acceptance"
+    - "check_generated_code"
+    - "docker_image_amd64"
+    - "examples_orms"
+    - "lint"
+    - "linux_amd64_build"
+    - "linux_amd64_fips_build"
+    - "local_roachtest"
+    - "local_roachtest_fips"
+    - "unit_tests"
+  
+# Actions configuration
+actions:
+  enabled:
+    - merge-queue
+
+  # Disable for other branches to avoid conflicts
+  disabled: []
+
+# Plugins configuration (if needed for additional functionality)
+plugins:
+  sources: []
+
+# Lint configuration (keeping minimal for merge queue focus)
+lint:
+  enabled: []
+
+# Runtimes (if needed)
+runtimes:
+  enabled: []
+
