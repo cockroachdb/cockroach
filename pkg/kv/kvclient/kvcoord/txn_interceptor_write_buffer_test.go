@@ -2342,58 +2342,67 @@ func TestTxnWriteBufferFlushesAfterDisabling(t *testing.T) {
 	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Count())
 }
 
-// TestTxnWriteBufferDiscardsBufferOnRollback verifies that when buffering is
-// disabled mid-transaction with a non-empty buffer and the next batch is a
-// rollback, the buffered writes are discarded rather than flushed into the
-// EndTxn(abort) batch. Flushing them into the rollback lets the DistSender carry
-// the EndTxn's ABORTED status into a following buffered request, which can then
-// fail an assertion and fatal the node (#171482).
+// TestTxnWriteBufferDiscardsBufferOnRollback verifies that a rollback with a
+// non-empty buffer discards the buffered writes rather than flushing them into
+// the EndTxn(abort) batch. Flushing them into the rollback lets the DistSender
+// carry the EndTxn's ABORTED status into a following buffered request, which can
+// then fail an assertion and fatal the node (#171482).
+//
+// A rollback reaches flushBufferAndSendBatch via two paths, both exercised here:
+// buffering still enabled when the rollback arrives, and buffering disabled
+// mid-transaction (which defers the flush to the next batch, i.e. the rollback).
 func TestTxnWriteBufferDiscardsBufferOnRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
-	txn := makeTxnProto()
-	txn.Sequence = 1
-	keyA := roachpb.Key("a")
+	testutils.RunTrueAndFalse(t, "disableBeforeRollback", func(t *testing.T, disableBeforeRollback bool) {
+		twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
-	// Buffer a blind write.
-	ba := &kvpb.BatchRequest{}
-	ba.Header = kvpb.Header{Txn: &txn}
-	ba.Add(putArgs(keyA, "val1", txn.Sequence))
+		txn := makeTxnProto()
+		txn.Sequence = 1
+		keyA := roachpb.Key("a")
 
-	numCalledBefore := mockSender.NumCalled()
-	br, pErr := twb.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-	require.Equal(t, numCalledBefore, mockSender.NumCalled())
-	require.Len(t, twb.testingBufferedWritesAsSlice(), 1)
+		// Buffer a blind write.
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		ba.Add(putArgs(keyA, "val1", txn.Sequence))
 
-	// Disable write buffering, then roll back.
-	twb.setEnabled(false)
-	ba = &kvpb.BatchRequest{}
-	ba.Header = kvpb.Header{Txn: &txn}
-	ba.Add(&kvpb.EndTxnRequest{Commit: false})
+		numCalledBefore := mockSender.NumCalled()
+		br, pErr := twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.Equal(t, numCalledBefore, mockSender.NumCalled())
+		require.Len(t, twb.testingBufferedWritesAsSlice(), 1)
 
-	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		// The buffered Put must not be flushed alongside the rollback: the
-		// wrapped sender sees exactly the EndTxn(abort).
-		require.Len(t, ba.Requests, 1)
-		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		br = ba.CreateReply()
-		br.Txn = ba.Txn
-		return br, nil
+		if disableBeforeRollback {
+			twb.setEnabled(false)
+		}
+
+		// Roll back.
+		ba = &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		ba.Add(&kvpb.EndTxnRequest{Commit: false})
+
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			// The buffered Put must not be flushed alongside the rollback: the
+			// wrapped sender sees exactly the EndTxn(abort).
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+			br = ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+
+		br, pErr = twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.Len(t, br.Responses, 1)
+		require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+
+		// The buffer was discarded, not flushed.
+		require.Equal(t, 0, len(twb.testingBufferedWritesAsSlice()))
 	})
-
-	br, pErr = twb.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-	require.Len(t, br.Responses, 1)
-	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
-
-	// The buffer was discarded, not flushed.
-	require.Equal(t, 0, len(twb.testingBufferedWritesAsSlice()))
 }
 
 // TestTxnWriteBufferClearsBufferOnEpochBump tests that the txnWriteBuffer
