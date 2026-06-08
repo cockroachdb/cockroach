@@ -2764,10 +2764,10 @@ def go_deps():
         name = "com_github_dvsekhvalnov_jose2go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/dvsekhvalnov/jose2go",
-        sha256 = "f4827d6c8116cc0d32e822acb4f33283db8013b850e1009c47bb70361e90e312",
-        strip_prefix = "github.com/dvsekhvalnov/jose2go@v1.6.0",
+        sha256 = "99ca0fb985cea6c42221142f29f728abbac66ec0bdbc4345dbb587574e1ebd93",
+        strip_prefix = "github.com/dvsekhvalnov/jose2go@v1.7.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/dvsekhvalnov/jose2go/com_github_dvsekhvalnov_jose2go-v1.6.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/dvsekhvalnov/jose2go/com_github_dvsekhvalnov_jose2go-v1.7.0.zip",
         ],
     )
     go_repository(
