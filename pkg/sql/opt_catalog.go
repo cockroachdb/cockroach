@@ -398,15 +398,17 @@ func getDescForDataSource(o cat.DataSource) (catalog.TableDescriptor, error) {
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.
-func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
+func (oc *optCatalog) CheckPrivilege(
+	ctx context.Context, o cat.Object, user username.SQLUsername, priv privilege.Kind,
+) error {
 	if o.ID() == 0 {
-		return oc.planner.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, priv)
+		return oc.planner.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, priv, user)
 	}
 	desc, err := getDescFromCatalogObjectForPermissions(o)
 	if err != nil {
 		return err
 	}
-	return oc.planner.CheckPrivilege(ctx, desc, priv)
+	return oc.planner.CheckPrivilegeForUser(ctx, desc, priv, user)
 }
 
 // CheckAnyPrivilege is part of the cat.Catalog interface.
@@ -419,7 +421,9 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 }
 
 // CheckExecutionPrivilege is part of the cat.Catalog interface.
-func (oc *optCatalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error {
+func (oc *optCatalog) CheckExecutionPrivilege(
+	ctx context.Context, oid oid.Oid, user username.SQLUsername,
+) error {
 	// If the required cluster version is not active, revert to pre-23.2
 	// behavior without any privilege checks.
 	activeVersion := oc.planner.ExecCfg().Settings.Version.ActiveVersion(ctx)
@@ -430,7 +434,7 @@ func (oc *optCatalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) 
 	if err != nil {
 		return errors.WithAssertionFailure(err)
 	}
-	return oc.planner.CheckPrivilege(ctx, desc, privilege.EXECUTE)
+	return oc.planner.CheckPrivilegeForUser(ctx, desc, privilege.EXECUTE, user)
 }
 
 // HasAdminRole is part of the cat.Catalog interface.
@@ -503,6 +507,11 @@ func (oc *optCatalog) Optimizer() interface{} {
 	}
 	plannerInterface := eval.Planner(oc.planner)
 	return plannerInterface.Optimizer()
+}
+
+// GetCurrentUser is part of the cat.Catalog interface.
+func (oc *optCatalog) GetCurrentUser() username.SQLUsername {
+	return oc.planner.User()
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
@@ -672,6 +681,11 @@ func (ov *optView) ColumnName(i int) tree.Name {
 func (ov *optView) CollectTypes(ord int) (descpb.IDs, error) {
 	col := ov.desc.AllColumns()[ord]
 	return collectTypes(col)
+}
+
+// Owner is part of the cat.View interface.
+func (ov *optView) Owner() username.SQLUsername {
+	return ov.desc.GetPrivileges().Owner()
 }
 
 // optSequence is a wrapper around catalog.TableDescriptor that

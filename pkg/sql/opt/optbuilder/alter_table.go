@@ -29,7 +29,7 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 		panic(err)
 	}
 	table := index.Table()
-	if err := b.catalog.CheckPrivilege(b.ctx, table, privilege.INSERT); err != nil {
+	if err := b.catalog.CheckPrivilege(b.ctx, table, b.catalog.GetCurrentUser(), privilege.INSERT); err != nil {
 		panic(err)
 	}
 
@@ -93,7 +93,7 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) 
 		panic(err)
 	}
 	table := index.Table()
-	if err := b.catalog.CheckPrivilege(b.ctx, table, privilege.INSERT); err != nil {
+	if err := b.catalog.CheckPrivilege(b.ctx, table, b.catalog.GetCurrentUser(), privilege.INSERT); err != nil {
 		panic(err)
 	}
 
@@ -143,7 +143,7 @@ func (b *Builder) buildAlterTableRelocate(
 		panic(err)
 	}
 	table := index.Table()
-	if err := b.catalog.CheckPrivilege(b.ctx, table, privilege.INSERT); err != nil {
+	if err := b.catalog.CheckPrivilege(b.ctx, table, b.catalog.GetCurrentUser(), privilege.INSERT); err != nil {
 		panic(err)
 	}
 
