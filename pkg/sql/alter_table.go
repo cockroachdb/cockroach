@@ -724,6 +724,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableSetAudit:
+			if t.IsDeprecatedExperimentalSyntax &&
+				params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_TableAuditGA) {
+				return pgerror.Newf(pgcode.Syntax,
+					"EXPERIMENTAL_AUDIT is deprecated, use ALTER TABLE ... AUDIT SET instead")
+			}
 			changed, err := params.p.setAuditMode(params.ctx, n.tableDesc, t.Mode)
 			if err != nil {
 				return err

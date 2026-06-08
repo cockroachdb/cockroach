@@ -163,7 +163,7 @@ FILES = [
     "drop_view",
     "execute_schedules_stmt",
     "execute_stmt",
-    "experimental_audit",
+    "audit",
     "explain_analyze_stmt",
     "explain_stmt",
     "explainable_stmt",

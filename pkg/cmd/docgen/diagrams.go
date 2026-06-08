@@ -1094,10 +1094,10 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:   "experimental_audit",
+		name:   "audit",
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"audit_mode", "alter_table_cmd", "alter_table_cmds"},
-		match:  []*regexp.Regexp{regexp.MustCompile(`relation_expr 'EXPERIMENTAL_AUDIT'`)},
+		match:  []*regexp.Regexp{regexp.MustCompile(`relation_expr 'AUDIT'`)},
 		replace: map[string]string{
 			"relation_expr": "table_name",
 		},

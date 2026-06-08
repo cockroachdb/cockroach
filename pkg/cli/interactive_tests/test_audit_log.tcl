@@ -15,7 +15,7 @@ eexpect root@
 end_test
 
 start_test "Check that statements start being logged synchronously if auditing is enabled"
-send "ALTER TABLE helloworld EXPERIMENTAL_AUDIT SET READ WRITE;\r"
+send "ALTER TABLE helloworld AUDIT SET READ WRITE;\r"
 eexpect root@
 # check that the audit change itself is recorded.
 # Note: we really would like to check for redaction markers here, alas this grep
@@ -48,7 +48,7 @@ system "truncate -s0 $logfile"
 system "if grep -q helloworld $logfile; then false; fi"
 
 start_test "Check that audit removal is logged too"
-send "ALTER TABLE helloworld EXPERIMENTAL_AUDIT SET OFF;\r"
+send "ALTER TABLE helloworld AUDIT SET OFF;\r"
 eexpect root@
 system "grep -q 'sensitive_table_access.*ALTER TABLE.*helloworld.*SET OFF.*AccessMode\":\"rw\"' $logfile"
 end_test
@@ -71,7 +71,7 @@ eexpect root@
 send "create database d; create table d.helloworld(x INT) WITH (schema_locked=false);\r"
 eexpect CREATE
 eexpect root@
-send "alter table d.helloworld EXPERIMENTAL_AUDIT SET READ WRITE;\r"
+send "alter table d.helloworld AUDIT SET READ WRITE;\r"
 eexpect "ALTER TABLE"
 eexpect root@
 send "select x from d.helloworld;\r"

@@ -15,7 +15,7 @@ func init() {
 		{
 			Name: "select from an audit table",
 			Setup: `CREATE TABLE audit_table(a INT) WITH (schema_locked = false);
-							ALTER TABLE audit_table EXPERIMENTAL_AUDIT SET READ WRITE;`,
+							ALTER TABLE audit_table AUDIT SET READ WRITE;`,
 			Stmt: "SELECT * from audit_table",
 		},
 	})

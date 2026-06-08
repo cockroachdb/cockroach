@@ -13,7 +13,7 @@ CREATE TABLE defaultdb.foo (
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo EXPERIMENTAL_AUDIT SET READ WRITE
+ALTER TABLE defaultdb.foo AUDIT SET READ WRITE
 ----
 
 unimplemented

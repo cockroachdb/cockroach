@@ -317,6 +317,11 @@ const (
 	// to resolve enrichment attributes for sampled work.
 	V26_3_ASHEnrichment
 
+	// V26_3_TableAuditGA graduates the table audit logging feature from
+	// experimental to GA. The ALTER TABLE ... AUDIT SET syntax replaces
+	// the deprecated ALTER TABLE ... EXPERIMENTAL_AUDIT SET syntax.
+	V26_3_TableAuditGA
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -417,6 +422,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_ApproxStoreLocalBytes: {Major: 26, Minor: 2, Internal: 18},
 
 	V26_3_ASHEnrichment: {Major: 26, Minor: 2, Internal: 20},
+
+	V26_3_TableAuditGA: {Major: 26, Minor: 2, Internal: 22},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

@@ -592,6 +592,10 @@ func (m AuditMode) TelemetryName() string {
 // AlterTableSetAudit represents an ALTER TABLE AUDIT SET statement.
 type AlterTableSetAudit struct {
 	Mode AuditMode
+	// IsDeprecatedExperimentalSyntax is set to true when the statement was
+	// written using the deprecated EXPERIMENTAL_AUDIT keyword. This allows
+	// the executor to reject the deprecated syntax in 26.3+.
+	IsDeprecatedExperimentalSyntax bool
 }
 
 // TelemetryName implements the AlterTableCmd interface.
@@ -601,7 +605,7 @@ func (node *AlterTableSetAudit) TelemetryName() string {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableSetAudit) Format(ctx *FmtCtx) {
-	ctx.WriteString(" EXPERIMENTAL_AUDIT SET ")
+	ctx.WriteString(" AUDIT SET ")
 	ctx.WriteString(node.Mode.String())
 }
 

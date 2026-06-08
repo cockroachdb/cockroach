@@ -163,7 +163,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:drop_view.bnf",
     "//docs/generated/sql/bnf:execute_schedules_stmt.bnf",
     "//docs/generated/sql/bnf:execute_stmt.bnf",
-    "//docs/generated/sql/bnf:experimental_audit.bnf",
+    "//docs/generated/sql/bnf:audit.bnf",
     "//docs/generated/sql/bnf:explain_analyze_stmt.bnf",
     "//docs/generated/sql/bnf:explain_stmt.bnf",
     "//docs/generated/sql/bnf:explainable_stmt.bnf",

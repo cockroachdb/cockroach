@@ -261,7 +261,7 @@ This default configuration includes:
 |----------------------------------------|-----------------------------------------------------------------------|----------------------|
 | `cockroach.log`                        | Uncategorized and debug messages                                      | `DEV`                |
 | `cockroach-pebble.log`                 | Low-level storage logs                                                | `STORAGE`            |
-| `cockroach-sql-audit.log`              | Output from the experimental/alpha "SQL audit logging" feature        | `SENSITIVE_ACCESS`   |
+| `cockroach-sql-audit.log`              | Output from SQL audit logging feature                                 | `SENSITIVE_ACCESS`   |
 | `cockroach-sql-exec.log`               | SQL statements when enabled via cluster setting                       | `SQL_EXEC`           |
 | `cockroach-auth.log`                   | SQL authentication and session logs, when enabled via cluster setting | `SESSIONS`           |
 | `cockroach-sql-slow.log`               | Slow query log when enabled via cluster setting                       | `SQL_PERF`           |

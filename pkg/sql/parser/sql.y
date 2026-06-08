@@ -1014,7 +1014,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC AS_JSON AT_AT
-%token <str> ASENSITIVE ASYMMETRIC AT ATOMIC ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY AVOID_FULL_SCAN
+%token <str> ASENSITIVE ASYMMETRIC AT ATOMIC ATTRIBUTE AUDIT AUTHORIZATION AUTOMATIC AVAILABILITY AVOID_FULL_SCAN
 
 %token <str> BACKUP BACKUPS BACKWARD BATCH BEFORE BEGIN BETWEEN BIDIRECTIONAL BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
@@ -3152,10 +3152,18 @@ alter_table_cmd:
       DropBehavior: $4.dropBehavior(),
     }
   }
-  // ALTER TABLE <name> EXPERIMENTAL_AUDIT SET <mode>
-| EXPERIMENTAL_AUDIT SET audit_mode
+  // ALTER TABLE <name> AUDIT SET <mode>
+| AUDIT SET audit_mode
   {
     $$.val = &tree.AlterTableSetAudit{Mode: $3.auditMode()}
+  }
+  // ALTER TABLE <name> EXPERIMENTAL_AUDIT SET <mode> (deprecated alias)
+| EXPERIMENTAL_AUDIT SET audit_mode
+  {
+    $$.val = &tree.AlterTableSetAudit{
+      Mode: $3.auditMode(),
+      IsDeprecatedExperimentalSyntax: true,
+    }
   }
   // ALTER TABLE <name> PARTITION BY ...
 | partition_by_table
@@ -19479,6 +19487,7 @@ unreserved_keyword:
 | AT
 | ATOMIC
 | ATTRIBUTE
+| AUDIT
 | AUTOMATIC
 | AVAILABILITY
 | AVOID_FULL_SCAN
@@ -20002,6 +20011,7 @@ bare_label_keywords:
 | AT
 | ATOMIC
 | ATTRIBUTE
+| AUDIT
 | AUTHORIZATION
 | AUTOMATIC
 | AVAILABILITY

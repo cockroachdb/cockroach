@@ -944,7 +944,7 @@ statement ok
 SET create_table_with_schema_locked=false
 
 statement ok
-CREATE TABLE audit(x INT); ALTER TABLE audit EXPERIMENTAL_AUDIT SET READ WRITE;
+CREATE TABLE audit(x INT); ALTER TABLE audit AUDIT SET READ WRITE;
 
 statement ok
 RESET create_table_with_schema_locked
@@ -966,17 +966,37 @@ ALTER TABLE audit ADD COLUMN y INT
 
 # But not the audit settings.
 statement error pq: only users with admin or MODIFYCLUSTERSETTING system privilege are allowed to change audit settings on a table
-ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF
+ALTER TABLE audit AUDIT SET OFF
 
 user root
 
 statement ok
-ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF
+ALTER TABLE audit AUDIT SET OFF
 
 query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.set_audit_mode.off'
 ----
 sql.schema.set_audit_mode.off
+
+subtest audit_experimental_deprecated
+
+# In 26.3+, EXPERIMENTAL_AUDIT should be rejected.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+
+statement error pq: EXPERIMENTAL_AUDIT is deprecated, use ALTER TABLE ... AUDIT SET instead
+ALTER TABLE audit EXPERIMENTAL_AUDIT SET READ WRITE
+
+statement error pq: EXPERIMENTAL_AUDIT is deprecated, use ALTER TABLE ... AUDIT SET instead
+ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF
+
+# The new AUDIT syntax should work.
+statement ok
+ALTER TABLE audit AUDIT SET READ WRITE
+
+statement ok
+ALTER TABLE audit AUDIT SET OFF
+
+subtest end
 
 # Check column backfill in the presence of fks
 subtest 27402

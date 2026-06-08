@@ -163,7 +163,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:drop_view.html",
     "//docs/generated/sql/bnf:execute.html",
     "//docs/generated/sql/bnf:execute_schedules.html",
-    "//docs/generated/sql/bnf:experimental_audit.html",
+    "//docs/generated/sql/bnf:audit.html",
     "//docs/generated/sql/bnf:explain.html",
     "//docs/generated/sql/bnf:explain_analyze.html",
     "//docs/generated/sql/bnf:explainable.html",

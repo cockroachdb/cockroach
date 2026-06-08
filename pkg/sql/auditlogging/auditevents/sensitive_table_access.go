@@ -20,7 +20,7 @@ import (
 var errTxnIsNotOpen = errors.New("txn is already committed or rolled back")
 
 // SensitiveTableAccessEvent identifies accesses on tables that have been configured
-// for auditing. See EXPERIMENTAL_AUDIT.
+// for auditing. See ALTER TABLE ... AUDIT SET.
 type SensitiveTableAccessEvent struct {
 	TableDesc catalog.TableDescriptor
 	Writing   bool
