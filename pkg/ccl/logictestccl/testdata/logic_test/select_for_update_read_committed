@@ -640,3 +640,39 @@ RESET optimizer_use_lock_op_for_serializable
 
 statement ok
 RESET enable_durable_locking_for_serializable
+
+subtest regression_170749
+
+# Regression test for #170749: a Lock operator (READ COMMITTED FOR UPDATE)
+# combined with ORDER BY under non-default NULLS ordering must not fail
+# execbuild.
+statement ok
+CREATE TABLE t_170749 (
+  id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NULL,
+  used_at TIMESTAMP NULL,
+  inserted_at TIMESTAMP NOT NULL DEFAULT now(),
+  INDEX queued_users_inserted_at_index (inserted_at ASC),
+  INDEX queued_users_used_at_index (used_at ASC),
+  FAMILY fam_0 (id, user_id, used_at, inserted_at)
+)
+
+statement ok
+SET null_ordered_last = true
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+query T
+SELECT user_id FROM t_170749
+WHERE used_at IS NULL ORDER BY inserted_at ASC LIMIT 1
+FOR UPDATE SKIP LOCKED
+----
+
+statement ok
+COMMIT
+
+statement ok
+RESET null_ordered_last
+
+subtest end
