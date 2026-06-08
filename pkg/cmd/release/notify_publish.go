@@ -53,11 +53,6 @@ var publishedBullets = []string{
 // rehearsal traffic doesn't reach the IBM team.
 const ibmOEMChannel = "#proj-ibm-oem-releases"
 
-// defaultVersionFilePath is the in-repo path the publish workflow
-// checks out at the publish SHA; the file holds the version being
-// shipped. Override via --version-file for local rehearsals.
-const defaultVersionFilePath = "pkg/build/version.txt"
-
 var notifyPublishFlags = struct {
 	sha         string
 	dryRun      bool
@@ -100,7 +95,7 @@ func init() {
 	notifyPublishCmd.Flags().StringVar(&notifyPublishFlags.jiraIssue, "jira-issue", "",
 		"skip JQL lookup and post the comment on this ticket key directly "+
 			"(recovery escape hatch for the zero/multiple-match cases)")
-	notifyPublishCmd.Flags().StringVar(&notifyPublishFlags.versionFile, "version-file", defaultVersionFilePath,
+	notifyPublishCmd.Flags().StringVar(&notifyPublishFlags.versionFile, "version-file", versionFilePath,
 		"path to the version.txt file, read relative to the working dir")
 }
 
