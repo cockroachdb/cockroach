@@ -145,6 +145,12 @@ for product in cockroach cockroach-sql; do
       gcloud storage cp "gs://$gcs_staged_bucket/$archive.sha256sum" "gs://$gcs_bucket/$archive.sha256sum"
   done
 done
+
+for f in \
+  "cockroach@$version.sbom.cyclonedx.json" \
+  "cockroach@$version.list-of-license-types.txt"; do
+  gcloud storage cp "gs://$gcs_staged_bucket/$f" "gs://$gcs_bucket/$f"
+done
 tc_end_block "Copy binaries"
 
 
