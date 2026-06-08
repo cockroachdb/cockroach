@@ -376,6 +376,117 @@ func TestNotifyPublishRunnerRun_DryRunDoesNotCallJiraOrSlack(t *testing.T) {
 	require.Empty(t, slack.posts, "PostMessage must not be called in dry-run")
 }
 
+// TestBuildNotifyPublishSummary locks down the Markdown rendered for the job
+// summary across the success, dry-run, and failure (resolved/unresolved)
+// cases.
+func TestBuildNotifyPublishSummary(t *testing.T) {
+	t.Run("success links to the comment", func(t *testing.T) {
+		s := buildNotifyPublishSummary(
+			"REL-4910", "v24.3.33", "#db-release-status", "#proj-ibm-oem-releases",
+			"363988", nil, false)
+		require.Contains(t, s, "✅")
+		require.Contains(t, s, "REL-4910")
+		require.Contains(t, s, "publish announced")
+		require.Contains(t, s, "v24.3.33")
+		require.Contains(t, s, "#db-release-status")
+		require.Contains(t, s, "#proj-ibm-oem-releases")
+		require.Contains(t, s,
+			"https://cockroachlabs.atlassian.net/browse/REL-4910?focusedCommentId=363988")
+	})
+
+	t.Run("dry run is marked and posts nothing", func(t *testing.T) {
+		s := buildNotifyPublishSummary(
+			"REL-4910", "v24.3.33", "#db-release-status", "#proj-ibm-oem-releases",
+			"DRYRUN", nil, true)
+		require.Contains(t, s, "✅")
+		require.Contains(t, s, "dry run")
+		require.NotContains(t, s, "focusedCommentId",
+			"dry run must not render a bogus comment permalink")
+	})
+
+	t.Run("failure with resolved ticket, no comment yet", func(t *testing.T) {
+		s := buildNotifyPublishSummary(
+			"REL-4910", "v24.3.33", "#db-release-status", "#proj-ibm-oem-releases",
+			"", errors.New("slack 500"), false)
+		require.Contains(t, s, "❌")
+		require.Contains(t, s, "REL-4910")
+		require.Contains(t, s, "publish notification failed")
+		require.Contains(t, s, "slack 500")
+		require.NotContains(t, s, "already posted",
+			"no Jira comment was posted, so the block must not claim one is live")
+	})
+
+	t.Run("failure after the Jira comment is already posted", func(t *testing.T) {
+		// AddComment succeeded (commentID set) but a later step failed. The
+		// block must tell the operator the comment is live and link it so they
+		// know to repost only to Slack.
+		s := buildNotifyPublishSummary(
+			"REL-4910", "v24.3.33", "#db-release-status", "#proj-ibm-oem-releases",
+			"363988", errors.New("slack 500"), false)
+		require.Contains(t, s, "❌")
+		require.Contains(t, s, "already posted")
+		require.Contains(t, s,
+			"https://cockroachlabs.atlassian.net/browse/REL-4910?focusedCommentId=363988")
+		require.Contains(t, s, "slack 500")
+	})
+
+	t.Run("failure before the ticket is resolved", func(t *testing.T) {
+		s := buildNotifyPublishSummary(
+			"", "v24.3.33", "#db-release-status", "#proj-ibm-oem-releases",
+			"", errors.New("jql boom"), false)
+		require.Contains(t, s, "❌")
+		require.Contains(t, s, "unresolved ticket")
+		require.Contains(t, s, "jql boom")
+	})
+}
+
+// TestNotifyPublishRunnerRun_WritesSummary guards the defer wiring in run():
+// a successful run writes a ✅ block and a failing run writes a ❌ block to the
+// configured summary file. The isolated TestBuildNotifyPublishSummary would
+// stay green even if run() never called append, so this test exercises the
+// connection.
+func TestNotifyPublishRunnerRun_WritesSummary(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		summaryFile := filepath.Join(t.TempDir(), "summary.md")
+		r := &notifyPublishRunner{
+			jira:          &fakeJira{searchResult: []jiraIssue{{Key: "REL-4910"}}, addCommentID: "363988"},
+			slack:         &fakeSlack{},
+			sha:           "deadbeef",
+			version:       "v24.3.33",
+			channel:       "#db-release-status",
+			ibmChannel:    "#proj-ibm-oem-releases",
+			summaryWriter: summaryWriter{path: summaryFile},
+		}
+		require.NoError(t, r.run())
+		data, err := os.ReadFile(summaryFile)
+		require.NoError(t, err)
+		require.Contains(t, string(data), "✅")
+		require.Contains(t, string(data), "REL-4910")
+		require.Contains(t, string(data), "focusedCommentId=363988")
+	})
+
+	t.Run("failure", func(t *testing.T) {
+		summaryFile := filepath.Join(t.TempDir(), "summary.md")
+		r := &notifyPublishRunner{
+			jira:          &fakeJira{searchResult: []jiraIssue{{Key: "REL-4910"}}, addCommentID: "363988"},
+			slack:         &fakeSlack{postErrs: []error{errors.New("slack 500")}},
+			sha:           "deadbeef",
+			version:       "v24.3.33",
+			channel:       "#db-release-status",
+			ibmChannel:    "#proj-ibm-oem-releases",
+			summaryWriter: summaryWriter{path: summaryFile},
+		}
+		require.Error(t, r.run())
+		data, err := os.ReadFile(summaryFile)
+		require.NoError(t, err)
+		require.Contains(t, string(data), "❌")
+		require.Contains(t, string(data), "REL-4910")
+		// AddComment succeeded before the Slack failure, so the block must
+		// surface the live comment's permalink.
+		require.Contains(t, string(data), "focusedCommentId=363988")
+	})
+}
+
 // TestAddCommentReturnsID exercises the modified jiraClient.AddComment
 // against a stubbed Jira REST endpoint that mirrors the
 // /rest/api/3/issue/{key}/comment response shape. Catches Jira-API
