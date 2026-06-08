@@ -426,6 +426,20 @@ var KafkaMaxRequestSize = settings.RegisterByteSizeSetting(
 	settings.WithPublic,
 )
 
+// KafkaV2MaxInflightProduceRequestsPerBroker controls the maximum number of
+// concurrent produce requests the kafka v2 sink will issue to a single broker.
+// This corresponds to franz-go's MaxProduceRequestsInflightPerBroker option.
+// The default of 1 matches the franz-go default. ParallelIO handles ordering
+// independently of franz-go, so values >1 are safe.
+var KafkaV2MaxInflightProduceRequestsPerBroker = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"changefeed.kafka_v2.max_inflight_produce_requests_per_broker",
+	"the maximum number of concurrent produce requests the kafka v2 sink will "+
+		"issue to a single broker",
+	1,
+	settings.PositiveInt,
+)
+
 // PartitionAlgEnabled enables the partition_alg changefeed option.
 // TODO(#126991): delete reference to changefeed.new_kafka_sink_enabled
 // when enabled everywhere.
