@@ -55,7 +55,7 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 				}),
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+				{{Key: s2k("a"), EndKey: s2k("c")}},
 			},
 		},
 		// Flushes do not occur if the last key written exceeds the file size. The caller is
@@ -68,7 +68,7 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 				}),
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+				{{Key: s2k("a"), EndKey: s2k("c")}},
 			},
 		},
 		// Ensure that if the size is exceeded mid-span, a flush occurs.
@@ -79,10 +79,10 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 					{key: "a", value: exceedsSSTSizeVal, timestamp: 15}, {key: "b", timestamp: 15}}),
 			},
 			flushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("b")}},
+				{{Key: s2k("a"), EndKey: s2k("b")}},
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("b"), EndKey: s2k0("c")}},
+				{{Key: s2k("b"), EndKey: s2k("c")}},
 			},
 		},
 		// Represents writing a series of keys and encountering each of the flush conditions.
@@ -100,12 +100,12 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 					withKVs([]kvAndTS{{key: "e", timestamp: 10}}),
 			},
 			flushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("c")}},
-				{{Key: s2k0("c"), EndKey: s2k0("d")}},
-				{{Key: s2k0("a"), EndKey: s2k0("d")}},
+				{{Key: s2k("a"), EndKey: s2k("c")}},
+				{{Key: s2k("c"), EndKey: s2k("d")}},
+				{{Key: s2k("a"), EndKey: s2k("d")}},
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("c"), EndKey: s2k0("f")}},
+				{{Key: s2k("c"), EndKey: s2k("f")}},
 			},
 		},
 		// Two spans that are contiguous with each other should be merged into one span.
@@ -120,7 +120,7 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 				}),
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("e")}},
+				{{Key: s2k("a"), EndKey: s2k("e")}},
 			},
 		},
 		// If a span overlaps its previous span, a flush must occur first. Should not occur in
@@ -136,10 +136,10 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 				}),
 			},
 			flushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+				{{Key: s2k("a"), EndKey: s2k("c")}},
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("b"), EndKey: s2k0("e")}},
+				{{Key: s2k("b"), EndKey: s2k("e")}},
 			},
 		},
 		// If a span precedes the previous span but does not overlap, a flush must
@@ -155,10 +155,10 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 				}),
 			},
 			flushedSpans: []roachpb.Spans{
-				{{Key: s2k0("c"), EndKey: s2k0("e")}},
+				{{Key: s2k("c"), EndKey: s2k("e")}},
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+				{{Key: s2k("a"), EndKey: s2k("c")}},
 			},
 		},
 		// If a span is non-contiguous with the previous span, the BackupManifest_File must be
@@ -175,8 +175,8 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 			},
 			unflushedSpans: []roachpb.Spans{
 				{
-					{Key: s2k0("a"), EndKey: s2k0("c")},
-					{Key: s2k0("d"), EndKey: s2k0("g")},
+					{Key: s2k("a"), EndKey: s2k("c")},
+					{Key: s2k("d"), EndKey: s2k("g")},
 				},
 			},
 		},
@@ -192,8 +192,8 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 					{key: "c", timestamp: 10}, {key: "d", timestamp: 10},
 				}),
 			},
-			flushedSpans:   []roachpb.Spans{{{Key: s2k0("a"), EndKey: s2k0("c")}}},
-			unflushedSpans: []roachpb.Spans{{{Key: s2k0("c"), EndKey: s2k0("e")}}},
+			flushedSpans:   []roachpb.Spans{{{Key: s2k("a"), EndKey: s2k("c")}}},
+			unflushedSpans: []roachpb.Spans{{{Key: s2k("c"), EndKey: s2k("e")}}},
 		},
 		// If a span is non-contiguous with the previous span and the previous span's last key
 		// exceeded the file size, the SST file must be flushed before writing the new span.
@@ -207,8 +207,8 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 					{key: "d", timestamp: 10}, {key: "e", timestamp: 10},
 				}),
 			},
-			flushedSpans:   []roachpb.Spans{{{Key: s2k0("a"), EndKey: s2k0("c")}}},
-			unflushedSpans: []roachpb.Spans{{{Key: s2k0("d"), EndKey: s2k0("g")}}},
+			flushedSpans:   []roachpb.Spans{{{Key: s2k("a"), EndKey: s2k("c")}}},
+			unflushedSpans: []roachpb.Spans{{{Key: s2k("d"), EndKey: s2k("g")}}},
 		},
 		// Writing keys with different prefixes should flush the previous span.
 		{
@@ -225,10 +225,10 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 				),
 			},
 			flushedSpans: []roachpb.Spans{
-				{{Key: s2k0("2/a"), EndKey: s2k0("2/e")}},
+				{{Key: s2k("2/a"), EndKey: s2k("2/e")}},
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("3/e"), EndKey: s2k0("3/g")}},
+				{{Key: s2k("3/e"), EndKey: s2k("3/g")}},
 			},
 		},
 		// Flush does not occur if last key written is mid-row even if size exceeded.
@@ -243,7 +243,7 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 					}),
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("d")}},
+				{{Key: s2k("a"), EndKey: s2k("d")}},
 			},
 		},
 		// If size flush is blocked by mid-row key, the next key should cause a flush.
@@ -259,10 +259,10 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 					}),
 			},
 			flushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+				{{Key: s2k("a"), EndKey: s2k("c")}},
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("c"), EndKey: s2k0("d")}},
+				{{Key: s2k("c"), EndKey: s2k("d")}},
 			},
 		},
 		// If fileSpanByteLimit is reached, the file should be split at the new
@@ -278,7 +278,7 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 					}),
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("c")}, {Key: s2k0("c"), EndKey: s2k0("d")}},
+				{{Key: s2k("a"), EndKey: s2k("c")}, {Key: s2k("c"), EndKey: s2k("d")}},
 			},
 		},
 		// If a fileSpanByteLimit is reached, resetting on a new contiguous span
@@ -299,8 +299,8 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 			},
 			unflushedSpans: []roachpb.Spans{
 				{
-					{Key: s2k0("a"), EndKey: s2k0("c")},
-					{Key: s2k0("c"), EndKey: s2k0("e")},
+					{Key: s2k("a"), EndKey: s2k("c")},
+					{Key: s2k("c"), EndKey: s2k("e")},
 				},
 			},
 		},
@@ -309,7 +309,7 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 		{
 			name: "extend-mid-row-despite-manifest-size-limit",
 			exportKVs: []*mvccKVSet{
-				newRawMVCCKeySet(s2k0("a"), s2k0("d")).withRawKVs([]mvccKV{
+				newRawMVCCKeySet(s2k("a"), s2k("d")).withRawKVs([]mvccKV{
 					kvAndTS{key: "a", timestamp: 10}.toMVCCKV(s2k0),
 					kvAndTS{key: "b", timestamp: 10, value: exceedsFileSizeVal}.toMVCCKV(s2k0),
 					kvAndTS{key: "b", timestamp: 10, value: exceedsFileSizeVal}.toMVCCKV(s2k1),
@@ -318,9 +318,29 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 			},
 			unflushedSpans: []roachpb.Spans{
 				{
-					{Key: s2k0("a"), EndKey: s2k0("c")},
-					{Key: s2k0("c"), EndKey: s2k0("d")},
+					{Key: s2k("a"), EndKey: s2k("c")},
+					{Key: s2k("c"), EndKey: s2k("d")},
 				},
+			},
+		},
+		// Size flush when all keys are from a non-zero column family.
+		// The split point must be a safe split key (row-level), not a
+		// column-family-level key. Regression test for #169539.
+		{
+			name: "size-flush-split-at-col-family-1-key",
+			exportKVs: []*mvccKVSet{
+				newRawMVCCKeySet(s2k("a"), s2k("d")).withRawKVs([]mvccKV{
+					kvAndTS{key: "a", timestamp: 10, value: exceedsSSTSizeVal}.toMVCCKV(s2k1),
+					kvAndTS{key: "b", timestamp: 10, value: exceedsSSTSizeVal}.toMVCCKV(s2k1),
+					kvAndTS{key: "c", timestamp: 10}.toMVCCKV(s2k1),
+				}),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k("a"), EndKey: s2k("b")}},
+				{{Key: s2k("b"), EndKey: s2k("c")}},
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k("c"), EndKey: s2k("d")}},
 			},
 		},
 	} {
@@ -521,6 +541,51 @@ func TestSSTSinkWriterSafeAgainstKeyMutation(t *testing.T) {
 		require.Equal(t, originalSpan, sink.flushedFiles[0].Span)
 		require.NoError(t, sink.Flush(ctx))
 	})
+
+	t.Run("safe on size flush split", func(t *testing.T) {
+		defer testutils.HookGlobal(&fileSpanByteLimit, int64(8<<10))()
+		sizeFlushSink, _ := sstSinkKeyWriterTestSetup(t, st, execinfrapb.ElidePrefix_TenantAndTable)
+		defer func() {
+			require.NoError(t, sizeFlushSink.Close())
+		}()
+
+		require.NoError(t, sizeFlushSink.Reset(ctx, roachpb.Span{
+			Key: s2k("a"), EndKey: s2k("z"),
+		}))
+
+		// Push the open file's accumulated data size past fileSpanByteLimit so
+		// that the next WriteKey triggers maybeDoSizeFlush.
+		bigVal := make([]byte, fileSpanByteLimit)
+		require.NoError(t, sizeFlushSink.WriteKey(ctx, storage.MVCCKey{
+			Key:       s2k0("a"),
+			Timestamp: hlc.Timestamp{WallTime: 10},
+		}, bigVal))
+
+		// Mirror compactSpanEntry's scratch-reuse pattern: the splitting key
+		// lives in a buffer that the caller will overwrite after WriteKey
+		// returns. Without the defensive clone in maybeDoSizeFlush, the
+		// just-shrunk file's EndKey would alias this buffer.
+		splitKey := s2k0("b")
+		safeSplitKey := s2k("b")
+		scratch := append(roachpb.Key(nil), splitKey...)
+		require.NoError(t, sizeFlushSink.WriteKey(ctx, storage.MVCCKey{
+			Key:       scratch,
+			Timestamp: hlc.Timestamp{WallTime: 10},
+		}, []byte("v")))
+
+		require.Len(t, sizeFlushSink.flushedFiles, 2)
+		require.Equal(t, safeSplitKey, sizeFlushSink.flushedFiles[0].Span.EndKey)
+
+		// Overwrite scratch in place. The just-shrunk file's EndKey must
+		// remain byte-stable; otherwise it aliased caller memory.
+		for i := range scratch {
+			scratch[i] = 0xFF
+		}
+		require.Equal(t, safeSplitKey, sizeFlushSink.flushedFiles[0].Span.EndKey)
+
+		sizeFlushSink.AssumeNotMidRow()
+		require.NoError(t, sizeFlushSink.Flush(ctx))
+	})
 }
 
 func sstSinkKeyWriterTestSetup(
@@ -547,8 +612,8 @@ type mvccKVSet struct {
 func newMVCCKeySet(spanStart string, spanEnd string) *mvccKVSet {
 	return &mvccKVSet{
 		span: roachpb.Span{
-			Key:    s2k0(spanStart),
-			EndKey: s2k0(spanEnd),
+			Key:    s2k(spanStart),
+			EndKey: s2k(spanEnd),
 		},
 	}
 }

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -482,8 +481,7 @@ func s2k(s string) roachpb.Key {
 }
 
 func s2kWithColFamily(s string, colfamily uint64) roachpb.Key {
-	keys := s2k(s)
-	return encoding.EncodeUvarintAscending(keys, colfamily)
+	return keys.MakeFamilyKey(s2k(s), uint32(colfamily))
 }
 
 func s2k0(s string) roachpb.Key {
