@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -61,6 +62,18 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 			backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
 		})
 	}
+
+	// This validates that backing up to a bucket with no prefix works, a bug that
+	// was encountered in cockroachdb#171471. Note that because this test does not
+	// use a unique bucket per run, it is not safe to run this test in parallel
+	// with itself. Flakes can occur if multiple runs of this test are running at
+	// the same time.
+	t.Run("bare prefix uri", func(t *testing.T) {
+		tc, db, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+		defer cleanupFn()
+		uri := setupS3URI(t, db, baseBucket, "", creds)
+		backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
+	})
 }
 
 // TestCloudBackupRestoreS3WithLegacyPut tests that backup/restore works when
@@ -155,15 +168,27 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 
 	const numAccounts = 1000
 
-	ctx := context.Background()
-	tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
-	defer cleanupFn()
-	prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
-	uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
-	values := uri.Query()
-	values.Add(cloud.AuthParam, cloud.AuthParamImplicit)
-	uri.RawQuery = values.Encode()
-	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
+	// with-prefix=false validates that backing up to a bucket with no prefix
+	// works, a bug that was encountered in cockroachdb#171471. Note that because
+	// this test does not use a unique bucket per run, it is not safe to run this
+	// test in parallel with itself. Flakes can occur if multiple runs of this
+	// test are running at the same time.
+	testutils.RunTrueAndFalse(
+		t, "with prefix", func(t *testing.T, withPrefix bool) {
+			ctx := context.Background()
+			tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+			defer cleanupFn()
+			prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
+			if !withPrefix {
+				prefix = ""
+			}
+			uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
+			values := uri.Query()
+			values.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+			uri.RawQuery = values.Encode()
+			backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
+		},
+	)
 }
 
 // TestCloudBackupRestoreAzure hits the real Azure Blob Storage and so could
@@ -269,6 +294,25 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 			})
 		}
 	}
+
+	// This validates that backing up to a bucket with no prefix works, a bug that
+	// was encountered in cockroachdb#171471. Note that because this test does not
+	// use a unique bucket per run, it is not safe to run this test in parallel
+	// with itself. Flakes can occur if multiple runs of this test are running at
+	// the same time.
+	t.Run("bare prefix uri", func(t *testing.T) {
+		const numAccounts = 1000
+
+		ctx := context.Background()
+		testCluster, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+		defer cleanupFn()
+		storageURI := url.URL{Scheme: "azure", Host: bucket, Path: ""}
+		storageValues := storageURI.Query()
+		storageValues.Add(azure.AzureAccountNameParam, accountName)
+		storageURI.RawQuery = storageValues.Encode()
+
+		backupAndRestore(ctx, t, testCluster, []string{storageURI.String()}, []string{storageURI.String()}, numAccounts, nil)
+	})
 }
 
 // TestCloudBackupRestoreKMSInaccessibleMetric tests that backup statements
