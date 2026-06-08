@@ -3325,10 +3325,10 @@ def go_deps():
         name = "com_github_go_jose_go_jose_v4",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/go-jose/go-jose/v4",
-        sha256 = "7bb0205c235a4bc2bbca729a08d2d86f31ac0199cfc1c70b2d780f7594366407",
-        strip_prefix = "github.com/go-jose/go-jose/v4@v4.0.5",
+        sha256 = "06a37b6668012a2dd109a5f71f6ae15387dc808b35d3cf73f5e406e78a17b027",
+        strip_prefix = "github.com/go-jose/go-jose/v4@v4.1.4",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/go-jose/go-jose/v4/com_github_go_jose_go_jose_v4-v4.0.5.zip",
+            "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/go-jose/go-jose/v4/com_github_go_jose_go_jose_v4-v4.1.4.zip",
         ],
     )
     go_repository(
