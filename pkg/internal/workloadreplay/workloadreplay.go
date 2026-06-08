@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/storage"
+	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -72,6 +73,9 @@ func writeRowsGCS(ctx context.Context, filename string, rows *gosql.Rows) (strin
 	encodedKey := base64.StdEncoding.EncodeToString([]byte(credKey))
 	encodedCredByte, err := base64.StdEncoding.DecodeString(encodedKey)
 	if err != nil {
+		return "", err
+	}
+	if err := gcp.ValidateCredentialType(encodedCredByte); err != nil {
 		return "", err
 	}
 
