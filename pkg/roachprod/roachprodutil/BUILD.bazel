@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cloud/gcp",
         "//pkg/util/httputil",
         "@com_github_binxio_gcloudconfig//:gcloudconfig",
         "@com_github_cockroachdb_errors//:errors",
