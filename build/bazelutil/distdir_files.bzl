@@ -500,7 +500,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/go-gl/glfw/com_github_go_gl_glfw-v0.0.0-20190409004039-e6da0acd62b1.zip": "96c694c42e7b866ea8e26dc48b612c4daa8582ce61fdeefbe92c1a4c46163169",
     "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/go-gl/glfw/v3.3/glfw/com_github_go_gl_glfw_v3_3_glfw-v0.0.0-20200222043503-6f7a984d4dc4.zip": "2f6a1963397cb7c3df66257a45d75fae860aa9b9eec17825d8101c1e1313da5b",
     "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/go-ini/ini/com_github_go_ini_ini-v1.25.4.zip": "2ec52de9f1c96133e9f81b8250fdc99ca0729c0d429e318d7c8836b7a6ba5f60",
-    "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/go-jose/go-jose/v4/com_github_go_jose_go_jose_v4-v4.0.5.zip": "7bb0205c235a4bc2bbca729a08d2d86f31ac0199cfc1c70b2d780f7594366407",
+    "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/go-jose/go-jose/v4/com_github_go_jose_go_jose_v4-v4.1.4.zip": "06a37b6668012a2dd109a5f71f6ae15387dc808b35d3cf73f5e406e78a17b027",
     "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/go-kit/kit/com_github_go_kit_kit-v0.10.0.zip": "dbdc933092b036483ca332f8c7c13e8b7d029192e79354d4f5a581ef3c364816",
     "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/go-kit/log/com_github_go_kit_log-v0.2.1.zip": "52634b502b9d0aa945833d93582cffc1bdd9bfa39810e7c70d0688e330b75198",
     "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/go-latex/latex/com_github_go_latex_latex-v0.0.0-20231108140139-5c1ce85aa4ea.zip": "eee17f6b6ac8e1571a29101eab97b1c247fc1109ee3c3c632e38c0fc81e3e753",
