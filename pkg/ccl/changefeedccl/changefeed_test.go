@@ -11426,7 +11426,7 @@ func TestPubsubValidationErrors(t *testing.T) {
 		},
 		{
 			name:          "invalid json",
-			expectedError: "creating credentials from json: invalid character",
+			expectedError: "invalid credentials JSON",
 			uri: fmt.Sprintf("gcpubsub://myproject?region={region}&CREDENTIALS=%s",
 				base64.StdEncoding.EncodeToString([]byte("invalid json"))),
 		},

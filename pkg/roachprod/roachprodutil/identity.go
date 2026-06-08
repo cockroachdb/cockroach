@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/binxio/gcloudconfig"
+	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2"
@@ -82,7 +83,7 @@ func NewIAPTokenSource(opts IAPTokenSourceOptions) (*IAPTokenSourceImpl, error) 
 	if cj := os.Getenv(CredentialsEnvironmentVariable); cj != "" {
 		// In case a GOOGLE_EPHEMERAL_CREDENTIALS environment variable exist,
 		// it takes precedence over other sources, and we use it as our identity.
-		creds, err = google.CredentialsFromJSON(ctx, []byte(cj), cloudPlatformScope)
+		creds, err = gcp.CredentialsFromJSON(ctx, []byte(cj), cloudPlatformScope)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get credentials from environment variable")
 		}
