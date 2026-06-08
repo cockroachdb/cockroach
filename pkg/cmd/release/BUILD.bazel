@@ -14,6 +14,7 @@ go_library(
         "release_notes_api.go",
         "sender.go",
         "slack_post.go",
+        "summary.go",
         "templates.go",
         "update_brew.go",
         "update_helm.go",
@@ -51,6 +52,7 @@ go_test(
         "git_test.go",
         "notify_publish_test.go",
         "pick_sha_test.go",
+        "summary_test.go",
         "update_releases_test.go",
     ],
     data = glob([
