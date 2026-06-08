@@ -69,6 +69,7 @@ var pickSHAFlags = struct {
 	channel       string
 	opsChannel    string
 	buildWorkflow string
+	summaryFile   string
 }{}
 
 var pickSHACmd = &cobra.Command{
@@ -107,6 +108,10 @@ func init() {
 		"Slack channel for failure notifications")
 	pickSHACmd.Flags().StringVar(&pickSHAFlags.buildWorkflow, "build-workflow", defaultBuildWorkflow,
 		"name of the workflow file (in .github/workflows) to dispatch")
+	pickSHACmd.Flags().StringVar(&pickSHAFlags.summaryFile, "summary-file", "",
+		"path to a Markdown file to append per-ticket version-check results to "+
+			"(the GHA wrapper points this at /artifacts so the run can surface "+
+			"the outcome in the job summary, not just the logs); empty disables it")
 }
 
 func runPickSHA(_ *cobra.Command, _ []string) error {
@@ -166,6 +171,7 @@ func runPickSHA(_ *cobra.Command, _ []string) error {
 		opsChannel:         pickSHAFlags.opsChannel,
 		repo:               pickSHAFlags.repo,
 		buildWorkflow:      pickSHAFlags.buildWorkflow,
+		summaryFile:        pickSHAFlags.summaryFile,
 		releaseNotesAPIKey: releaseNotesAPIKey,
 	}
 	return r.run(context.Background())
@@ -185,6 +191,13 @@ type pickSHARunner struct {
 	opsChannel    string
 	repo          string
 	buildWorkflow string
+	// summaryFile, when non-empty, names a Markdown file that processCandidate
+	// appends a version-check result block to for each ticket it acts on. The
+	// GHA wrapper points this at the mounted /artifacts dir and concatenates it
+	// into $GITHUB_STEP_SUMMARY after the run, so a version mismatch is visible
+	// in the job summary rather than buried in the logs. Best-effort: write
+	// failures are logged and never fail the run.
+	summaryFile string
 	// releaseNotesAPIKey is the X-API-Key for the docs release-notes
 	// automation endpoint. Required at startup; per-candidate API failures
 	// are non-fatal (warning to #release-ops, continue).
@@ -281,6 +294,15 @@ func (r *pickSHARunner) processCandidate(ctx context.Context, c jiraIssue) error
 	}
 	sha, fetchBranch, err := r.fetchSHAForPickSHA(ctx, c.Key, staging, v)
 	if err != nil {
+		return err
+	}
+
+	// Guard against dispatching a build off a SHA whose version marker doesn't
+	// match the ticket: build-and-sign stamps artifacts from version.txt, so a
+	// mismatch publishes the wrong version (e.g. an alpha bump that never
+	// landed before the SHA was picked). Block the dispatch and surface the
+	// fix so an operator can correct version.txt and re-run.
+	if err := r.verifyVersionFile(ctx, c.Key, sha, fetchBranch, v); err != nil {
 		return err
 	}
 
@@ -388,6 +410,98 @@ func (r *pickSHARunner) fetchSHAForPickSHA(
 		return "", "", errors.Wrapf(err, "fetching tip SHA for fallback branch %s", masterBranch)
 	}
 	return sha, masterBranch, nil
+}
+
+// verifyVersionFile reads versionFilePath at the picked SHA and checks it
+// against want (the version parsed from the ticket summary). It records the
+// outcome in the run summary (best-effort) and returns an error on any
+// mismatch or read failure so the caller blocks the build-and-sign dispatch.
+//
+// fetchBranch is the branch the SHA actually came from (which may be master
+// via the pre-release fallback even though the ticket names a release-series
+// staging branch); it's included in the messages so an operator knows where
+// to apply the fix.
+func (r *pickSHARunner) verifyVersionFile(
+	ctx context.Context, key, sha, fetchBranch string, want version.Version,
+) error {
+	raw, err := r.gh.GetFileContentAtRef(ctx, sha, versionFilePath)
+	if err != nil {
+		return errors.Wrapf(err, "reading %s at %s (%s)", versionFilePath, sha, fetchBranch)
+	}
+	gotStr := strings.TrimSpace(raw)
+	got, err := version.Parse(gotStr)
+	if err != nil {
+		return errors.Wrapf(err, "parsing %s contents %q at %s (%s)",
+			versionFilePath, gotStr, sha, fetchBranch)
+	}
+	match := got.Equals(want)
+	r.appendSummary(buildVersionCheckSummary(key, sha, fetchBranch, want, got, match, r.repo))
+	if !match {
+		return errors.Newf(
+			"%s at %s (%s) is %s but ticket %s targets %s; "+
+				"fix %s on %s and re-run pick-sha",
+			versionFilePath, sha, fetchBranch, got, key, want,
+			versionFilePath, fetchBranch)
+	}
+	log.Printf("ticket %s: verified %s=%s at %s (%s)", key, versionFilePath, got, sha, fetchBranch)
+	return nil
+}
+
+// appendSummary appends a Markdown block to the file named by r.summaryFile,
+// if set. The summary is informational (the GHA wrapper folds it into the job
+// summary), so write failures are logged and swallowed rather than failing the
+// run. A no-op when summaryFile is empty (local/dry runs without the wrapper).
+func (r *pickSHARunner) appendSummary(block string) {
+	if r.summaryFile == "" {
+		return
+	}
+	f, err := os.OpenFile(r.summaryFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Printf("failed to open summary file %s: %v", r.summaryFile, err)
+		return
+	}
+	defer func() {
+		// Close flushes buffered writes, so a full /artifacts mount can
+		// surface here even when WriteString reported success. Log it to honor
+		// the "write failures are logged" contract; it remains non-fatal.
+		if cerr := f.Close(); cerr != nil {
+			log.Printf("failed to close summary file %s: %v", r.summaryFile, cerr)
+		}
+	}()
+	if _, err := f.WriteString(block); err != nil {
+		log.Printf("failed to write summary file %s: %v", r.summaryFile, err)
+	}
+}
+
+// buildVersionCheckSummary renders the Markdown block recorded for one
+// ticket's version check. A mismatch is rendered as a prominent failure block
+// (the dispatch is blocked), a match as a one-line confirmation. The SHA links
+// to the commit so an operator can inspect version.txt directly.
+func buildVersionCheckSummary(
+	key, sha, fetchBranch string, want, got version.Version, match bool, repo string,
+) string {
+	commitURL := fmt.Sprintf("https://github.com/%s/commit/%s", repo, sha)
+	if !match {
+		return fmt.Sprintf(
+			"## ❌ %s — version mismatch\n\n"+
+				"`%s` at [`%s`](%s) on `%s` is `%s`, but the release ticket targets `%s`.\n\n"+
+				"**build-and-sign was not dispatched.** Fix `%s` on `%s` and re-run pick-sha.\n\n",
+			key, versionFilePath, shortSHA(sha), commitURL, fetchBranch, got, want,
+			versionFilePath, fetchBranch)
+	}
+	return fmt.Sprintf(
+		"## ✅ %s — version verified\n\n"+
+			"`%s` at [`%s`](%s) on `%s` is `%s`, matching the release ticket.\n\n",
+		key, versionFilePath, shortSHA(sha), commitURL, fetchBranch, got)
+}
+
+// shortSHA returns the first 12 characters of a commit SHA for display, or the
+// whole string if it's shorter (e.g. a test fixture).
+func shortSHA(sha string) string {
+	if len(sha) <= 12 {
+		return sha
+	}
+	return sha[:12]
 }
 
 // notifyReleaseNotes builds the release-notes API payload from the Jira
