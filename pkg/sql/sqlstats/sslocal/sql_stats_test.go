@@ -1652,7 +1652,8 @@ func TestSQLStatsDiscardStatsOnFingerprintLimit(t *testing.T) {
 	resetMetricsForTest := func() {
 		// Reset the stats to ensure we start with a clean slate.
 		require.NoError(t, ssProvider.Reset(ctx))
-		discardedMetric.Reset()
+		// Clear atomically zeroes the count, Reset zeroes the metadata.
+		discardedMetric.Clear()
 	}
 
 	// We'll execute queries across 3 different applications.
