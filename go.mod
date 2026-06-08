@@ -147,7 +147,7 @@ require (
 	github.com/cockroachdb/version v0.0.0-20250509181251-54dac3003410
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
 	github.com/containerd/containerd v1.6.18
-	github.com/coreos/go-oidc/v3 v3.15.0
+	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/dave/dst v0.24.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/distribution v2.7.1+incompatible

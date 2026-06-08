@@ -2194,10 +2194,10 @@ def go_deps():
         name = "com_github_coreos_go_oidc_v3",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/coreos/go-oidc/v3",
-        sha256 = "70e7e08dce12ae0feb50c6a6befe9e73ddef046da79f705e0dec449298f6669e",
-        strip_prefix = "github.com/coreos/go-oidc/v3@v3.15.0",
+        sha256 = "ccaac2d73950b742318cc1b916906e27538d465676704a8c3797a5348f6430aa",
+        strip_prefix = "github.com/coreos/go-oidc/v3@v3.18.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/coreos/go-oidc/v3/com_github_coreos_go_oidc_v3-v3.15.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps-private/gomod/github.com/coreos/go-oidc/v3/com_github_coreos_go_oidc_v3-v3.18.0.zip",
         ],
     )
     go_repository(
