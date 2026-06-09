@@ -70,8 +70,8 @@ tc_start_block "Compare third-party notices"
 if ! diff -u "$root/licenses/THIRD-PARTY-NOTICES.txt" "$root/artifacts/THIRD-PARTY-NOTICES.txt"; then
   echo "::warning::generated THIRD-PARTY-NOTICES.txt differs from licenses/THIRD-PARTY-NOTICES.txt; consider regenerating and updating it."
 fi
-# The generated notices are only used for the comparison above; discard.
-rm -f "$root/artifacts/THIRD-PARTY-NOTICES.txt"
+# Keep the generated notices in the artifacts dir; the workflow publishes
+# it (alongside the SBOM and license-types list) as a build artifact.
 tc_end_block "Compare third-party notices"
 
 tc_start_block "Upload SBOM and license-types"
