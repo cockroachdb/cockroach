@@ -9,6 +9,7 @@ package lease
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"sort"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -1993,4 +1995,144 @@ func TestLeaseManagerLockedTimestampCluster(t *testing.T) {
 	assertDescriptorsCount(1)
 	closeAllowNextVersion()
 	require.NoError(t, grp.Wait())
+}
+
+// TestRoleLeaseConcurrentVersionBump reproduces a bug where acquireNodeLease's
+// special role-descriptor branch registers V_a in memory, then doAcquisition()
+// inserts a system.lease row for a concurrently-bumped V_b that isn't registered
+// in memory. The orphaned V_b row causes a CPut conflict when the rangefeed tries
+// to acquire V_b, failing purgeOldVersions before it can clean up V_a's row.
+// The impact is WaitForOneVersion hangs and subsequent role DDL is blocked.
+func TestRoleLeaseConcurrentVersionBump(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	const targetID = descpb.ID(keys.UsersTableID)
+
+	var armed, injected atomic.Bool
+	var bump func()
+	bumpDone := make(chan error, 1)
+
+	knobs := &ManagerTestingKnobs{
+		TestingBeforeRoleLeaseAcquisition: func(id descpb.ID) {
+			if id != targetID || !armed.Load() {
+				return
+			}
+			if injected.CompareAndSwap(false, true) {
+				bump()
+			}
+		},
+	}
+
+	settings := cluster.MakeTestingClusterSettings()
+	LeaseDuration.Override(ctx, &settings.SV, 24*time.Hour)
+
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings:          settings,
+			Knobs:             base.TestingKnobs{SQLLeaseManager: knobs},
+			DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	mgr0 := tc.Server(0).LeaseManager().(*Manager)
+	kvDB := tc.Server(0).DB()
+	db1 := tc.ServerConn(1)
+
+	usersVersion := func() descpb.DescriptorVersion {
+		return desctestutils.TestingGetPublicTableDescriptor(
+			kvDB, keys.SystemSQLCodec, "system", "users").GetVersion()
+	}
+
+	// Node 0 must hold an old lease so the next acquisition enters the special role-table branch.
+	require.NoError(t, mgr0.AcquireFreshestFromStore(ctx, targetID))
+
+	// When the knob fires, bump the descriptor version on node 1. Only wait
+	// for the version to be committed in KV; waiting for the full DDL would
+	// deadlock because it needs node 0 to converge.
+	bump = func() {
+		before := usersVersion()
+		go func() {
+			_, err := db1.Exec(`CREATE USER orphan_bump`)
+			bumpDone <- err
+		}()
+		testutils.SucceedsSoon(t, func() error {
+			if v := usersVersion(); v <= before {
+				return errors.Errorf("waiting for version bump beyond v%d", before)
+			}
+			return nil
+		})
+	}
+	armed.Store(true)
+
+	// Trigger the race: node 0 registers V_a, the knob bumps to V_b,
+	// then doAcquisition writes a system.lease row for V_b.
+	require.NoError(t, mgr0.AcquireFreshestFromStore(ctx, targetID))
+	require.True(t, injected.Load(), "injection knob never fired")
+
+	node0Instance := int64(mgr0.storage.nodeIDContainer.SQLInstanceID())
+
+	inMemNewest := func() descpb.DescriptorVersion {
+		st := mgr0.findDescriptorState(targetID, false)
+		require.NotNil(t, st)
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		newest := st.mu.active.findNewest()
+		require.NotNil(t, newest)
+		return newest.GetVersion()
+	}
+	storageMax := func() descpb.DescriptorVersion {
+		var v gosql.NullInt64
+		require.NoError(t, db1.QueryRow(
+			`SELECT max(version) FROM "".crdb_internal.kv_session_based_leases `+
+				`WHERE desc_id = $1 AND sql_instance_id = $2`,
+			int64(targetID), node0Instance).Scan(&v))
+		return descpb.DescriptorVersion(v.Int64)
+	}
+
+	t.Logf("after trigger: in-memory newest = v%d, storage max = v%d",
+		inMemNewest(), storageMax())
+
+	select {
+	case err := <-bumpDone:
+		require.NoError(t, err, "concurrent version bump failed")
+	case <-time.After(30 * time.Second):
+		t.Fatal("bump DDL did not return within 30s")
+	}
+
+	// Wait for the rangefeed to react. Without the fix, the in-memory
+	// version will catches up, but the old lease won't be released.
+	testutils.SucceedsSoon(t, func() error {
+		mem, stor := inMemNewest(), storageMax()
+		if mem < stor {
+			return errors.Errorf("in-memory version v%d has not caught up to storage v%d", mem, stor)
+		}
+		return nil
+	})
+	t.Logf("after settle: in-memory newest = v%d, storage max = v%d",
+		inMemNewest(), storageMax())
+
+	woCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	_, woErr := mgr0.WaitForOneVersion(woCtx, targetID, nil /* regions */, base.DefaultRetryOptions())
+	cancel()
+
+	// Dump all lease versions for diagnostics.
+	rows, err := db1.Query(
+		`SELECT version, count(*) FROM "".crdb_internal.kv_session_based_leases `+
+			`WHERE desc_id = $1 AND sql_instance_id = $2 GROUP BY version ORDER BY version`,
+		int64(targetID), node0Instance)
+	require.NoError(t, err)
+	defer rows.Close()
+	for rows.Next() {
+		var version, cnt int64
+		require.NoError(t, rows.Scan(&version, &cnt))
+		t.Logf("system.lease for desc %d, node %d: version=%d count=%d",
+			targetID, node0Instance, version, cnt)
+	}
+	require.NoError(t, rows.Err())
+
+	require.NoError(t, woErr,
+		"WaitForOneVersion could not drain old version (orphaned system.lease row)")
 }
