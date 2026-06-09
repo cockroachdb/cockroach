@@ -159,7 +159,7 @@ search
 [0, -1]
 ----
 vec7: 1
-5 leaf vectors, 8 vectors, 3 full vectors, 3 partitions
+5 leaf vectors, 8 vectors, 5 full vectors, 3 partitions
 
 format-tree
 ----

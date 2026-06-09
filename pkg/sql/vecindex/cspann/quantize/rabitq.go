@@ -19,6 +19,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// epsilon0 is the confidence parameter from Eq. 14 of the RaBitQ paper. The
+// paper recommends 1.9, which gives P{|error| > bound} ≤ 2·exp(−c₀·1.9²),
+// effectively zero for any realistic D.
+const epsilon0 = 1.9
+
 // RaBitQuantizer quantizes vectors according to the algorithm described in this
 // paper:
 //
@@ -42,6 +47,9 @@ type RaBitQuantizer struct {
 	sqrtDims float32
 	// sqrtDimsInv precomputes "1 / sqrtDims".
 	sqrtDimsInv float32
+	// sqrtDimsMinus1Inv precomputes "1 / √(dims-1)". It scales the Eq. 14 error
+	// bound's concentration term. Defined only when dims >= 2.
+	sqrtDimsMinus1Inv float32
 	// unbias is a precomputed slice of "dims" random values in the [0, 1)
 	// interval that's used to remove bias when quantizing query vectors.
 	unbias []float32
@@ -68,8 +76,10 @@ var _ Quantizer = (*RaBitQuantizer)(nil)
 // is created with the same seed that was previously used to create any
 // quantized sets that need to be searched or updated.
 func NewRaBitQuantizer(dims int, seed int64, distanceMetric vecpb.DistanceMetric) Quantizer {
-	if dims <= 0 {
-		panic(errors.AssertionFailedf("dimensions are not positive: %d", dims))
+	if dims < 2 {
+		// The Eq. 14 error bound divides by √(dims-1), and binary quantization
+		// of a single dimension carries no useful information.
+		panic(errors.AssertionFailedf("RaBitQ requires dims >= 2: %d", dims))
 	}
 
 	rng := rand.New(rand.NewSource(seed))
@@ -83,11 +93,12 @@ func NewRaBitQuantizer(dims int, seed int64, distanceMetric vecpb.DistanceMetric
 
 	sqrtDims := num32.Sqrt(float32(dims))
 	return &RaBitQuantizer{
-		dims:           dims,
-		sqrtDims:       sqrtDims,
-		sqrtDimsInv:    1.0 / sqrtDims,
-		unbias:         unbias,
-		distanceMetric: distanceMetric,
+		dims:              dims,
+		sqrtDims:          sqrtDims,
+		sqrtDimsInv:       1.0 / sqrtDims,
+		sqrtDimsMinus1Inv: 1.0 / num32.Sqrt(float32(dims-1)),
+		unbias:            unbias,
+		distanceMetric:    distanceMetric,
 	}
 }
 
@@ -261,6 +272,19 @@ func (q *RaBitQuantizer) EstimateDistances(
 		tempQueryQuantized4[offset] = quantized4 << shift
 	}
 
+	// rabitqErrorBound implements Eq. 14 of the RaBitQ paper. inv is the stored
+	// 1/⟨ō,o⟩ from QuantizedDotProducts; the bound on the estimator ⟨ō,q⟩/⟨ō,o⟩
+	// is √(inv²−1) · ε₀/√(D−1), held with probability ≈ 1. multiplier is the
+	// Jacobian (from Eq. 2 for L2 or footnote 8 for inner-product/cosine) that
+	// converts the bound on ⟨o,q⟩ to a bound on the full distance. The max()
+	// guard handles two non-mathematical cases: inv == 0, the sentinel
+	// quantizeHelper stores when the data vector equals the centroid (the
+	// multiplier is also zero in that case, so the returned bound is zero);
+	// and inv slightly < 1 from float rounding (⟨ō,o⟩ ≤ 1 mathematically).
+	rabitqErrorBound := func(multiplier, inv float32) float32 {
+		return multiplier * num32.Sqrt(max(inv*inv-1, 0)) * epsilon0 * q.sqrtDimsMinus1Inv
+	}
+
 	count := raBitSet.GetCount()
 	for i := range count {
 		code := raBitSet.Codes.At(i)
@@ -305,10 +329,12 @@ func (q *RaBitQuantizer) EstimateDistances(
 			multiplier := 2 * dataCentroidDistance * queryCentroidDistance
 			distance -= multiplier * estimator
 
-			// Error bounds for the estimator are +- 1/√dims. For the entire distance,
-			// that must be scaled by the amount the estimator is scaled by. Ensure
-			// the distance is >= 0, adjusting the error bound accordingly.
-			errorBound := multiplier / q.sqrtDims
+			// Eq. 14 of the RaBitQ paper bounds the estimator error per data
+			// vector using its quantization quality (1/⟨ō,o⟩ stored in
+			// QuantizedDotProducts). When the squared distance is clamped to
+			// zero (the true distance can't be negative), tighten the reported
+			// bound by the amount that was clamped away.
+			errorBound := rabitqErrorBound(multiplier, raBitSet.QuantizedDotProducts[i])
 			if distance < 0 {
 				errorBound = max(errorBound+distance, 0)
 				distance = 0
@@ -329,9 +355,10 @@ func (q *RaBitQuantizer) EstimateDistances(
 			innerProduct := multiplier*estimator +
 				raBitSet.CentroidDotProducts[i] + queryCentroidDotProduct - squaredCentroidNorm
 
-			// Error bounds for the estimator are +- 1/√dims. For the entire distance,
-			// that must be scaled by the amount the estimator is scaled by.
-			errorBound := multiplier / q.sqrtDims
+			// Eq. 14 of the RaBitQ paper bounds the estimator error per data
+			// vector using its quantization quality (1/⟨ō,o⟩ stored in
+			// QuantizedDotProducts).
+			errorBound := rabitqErrorBound(multiplier, raBitSet.QuantizedDotProducts[i])
 
 			var distance float32
 			if q.distanceMetric == vecpb.InnerProductDistance {

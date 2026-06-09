@@ -28,8 +28,8 @@ recall topk=10 beam-size=16 samples=20
 
 recall topk=10 beam-size=32 samples=20
 ----
-98.50% recall@10
+99.00% recall@10
 
 recall topk=10 beam-size=64 samples=20
 ----
-99.50% recall@10
+100.00% recall@10

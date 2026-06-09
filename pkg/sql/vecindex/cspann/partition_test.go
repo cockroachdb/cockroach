@@ -227,10 +227,10 @@ func TestPartition(t *testing.T) {
 		searchSet := SearchSet{MaxResults: 2, IncludeCentroidDistances: true}
 		_ = partition.Search(&workspace, RootKey, vector.T{1, 1}, &searchSet)
 		result1 := SearchResult{
-			QueryDistance: -11.52, ErrorBound: 8.96, CentroidDistance: -8.45, ParentPartitionKey: 1,
+			QueryDistance: -11.52, ErrorBound: 3.44, CentroidDistance: -8.45, ParentPartitionKey: 1,
 			ChildKey: childKey30, ValueBytes: valueBytes30}
 		result2 := SearchResult{
-			QueryDistance: -6.1, ErrorBound: 4.48, CentroidDistance: -5.12, ParentPartitionKey: 1,
+			QueryDistance: -6.1, ErrorBound: 1.72, CentroidDistance: -5.12, ParentPartitionKey: 1,
 			ChildKey: childKey20, ValueBytes: valueBytes20}
 		results := roundResults(searchSet.PopResults(), 2)
 		require.Equal(t, SearchResults{result1, result2}, results)

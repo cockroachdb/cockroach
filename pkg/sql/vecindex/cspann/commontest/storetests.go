@@ -406,7 +406,7 @@ func (suite *StoreTestSuite) TestSearchPartitions() {
 
 			// Validate search results.
 			result1 := cspann.SearchResult{
-				QueryDistance: 4.2, ErrorBound: 50.99,
+				QueryDistance: 4.2, ErrorBound: 27.4,
 				ParentPartitionKey: testPartitionKey2, ChildKey: partitionKey4, ValueBytes: valueBytes4}
 			result2 := cspann.SearchResult{
 				QueryDistance: 8, ErrorBound: 0,

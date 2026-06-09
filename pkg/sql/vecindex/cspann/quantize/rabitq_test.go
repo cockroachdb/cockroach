@@ -43,7 +43,7 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 		quantizer.EstimateDistances(
 			&workspace, quantizedSet, vector.T{1, 1}, distances, errorBounds)
 		require.Equal(t, []float32{17, 0, 41, 13, 41}, testutils.RoundFloats(distances, 2))
-		require.Equal(t, []float32{7.21, 14.12, 14.42, 0, 14.42},
+		require.Equal(t, []float32{0.01, 19.66, 0.02, 0, 0.02},
 			testutils.RoundFloats(errorBounds, 2))
 		require.Equal(t, []float32{4, 3}, quantizedSet.Centroid)
 
@@ -57,7 +57,7 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 		quantizer.EstimateDistances(
 			&workspace, quantizedSet, vector.T{1, 1}, distances, errorBounds)
 		require.Equal(t, []float32{17, 41}, testutils.RoundFloats(distances, 2))
-		require.Equal(t, []float32{7.21, 14.42}, testutils.RoundFloats(errorBounds, 2))
+		require.Equal(t, []float32{0.01, 0.02}, testutils.RoundFloats(errorBounds, 2))
 
 		// Remove remaining quantized vectors.
 		quantizedSet.ReplaceWithLast(0)
@@ -115,7 +115,7 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 		quantizer.EstimateDistances(
 			&workspace, quantizedSet, vector.T{1, 1}, distances, errorBounds)
 		require.Equal(t, []float32{18, 32}, testutils.RoundFloats(distances, 2))
-		require.Equal(t, []float32{4.95, 4.95}, testutils.RoundFloats(errorBounds, 2))
+		require.Equal(t, []float32{0.01, 0.01}, testutils.RoundFloats(errorBounds, 2))
 	})
 
 	t.Run("many dimensions, not multiple of 64", func(t *testing.T) {
@@ -145,7 +145,7 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 		quantizer.EstimateDistances(
 			&workspace, quantizedSet, ones, distances, errorBounds)
 		require.Equal(t, []float32{141, 0}, testutils.RoundFloats(distances, 2))
-		require.Equal(t, []float32{5.94, 5.94}, testutils.RoundFloats(errorBounds, 2))
+		require.Equal(t, []float32{0.02, 0.02}, testutils.RoundFloats(errorBounds, 2))
 	})
 
 	t.Run("add centroid to set", func(t *testing.T) {
@@ -166,7 +166,7 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 		quantizer.EstimateDistances(
 			&workspace, quantizedSet, vector.T{3, 2}, distances, errorBounds)
 		require.Equal(t, []float32{22.33, 115.67, 22.33, 49}, testutils.RoundFloats(distances, 2))
-		require.Equal(t, []float32{44.27, 44.27, 44.27, 0}, testutils.RoundFloats(errorBounds, 2))
+		require.Equal(t, []float32{39.65, 39.65, 39.65, 0}, testutils.RoundFloats(errorBounds, 2))
 
 		// Estimate distances when the query vector is the centroid.
 		quantizer.EstimateDistances(
@@ -205,7 +205,7 @@ func TestRaBitQuantizerInnerProduct(t *testing.T) {
 	errorBounds := make([]float32, quantizedSet.GetCount())
 	quantizer.EstimateDistances(&workspace, quantizedSet, vector.T{3, 4}, distances, errorBounds)
 	require.Equal(t, []float32{-23, -9, -38}, testutils.RoundFloats(distances, 2))
-	require.Equal(t, []float32{1.41, 3.16, 2.83}, testutils.RoundFloats(errorBounds, 2))
+	require.Equal(t, []float32{0, 4.25, 0}, testutils.RoundFloats(errorBounds, 2))
 
 	// Call NewQuantizedSet and ensure capacity.
 	quantizedSet = quantizer.NewSet(
@@ -238,7 +238,7 @@ func TestRaBitQuantizerCosine(t *testing.T) {
 	errorBounds := make([]float32, quantizedSet.GetCount())
 	quantizer.EstimateDistances(&workspace, quantizedSet, vector.T{-1, 0}, distances, errorBounds)
 	require.Equal(t, []float32{2, 1.14, 1.71}, testutils.RoundFloats(distances, 2))
-	require.Equal(t, []float32{0.69, 0.84, 0.23}, testutils.RoundFloats(errorBounds, 2))
+	require.Equal(t, []float32{0.16, 0.31, 0}, testutils.RoundFloats(errorBounds, 2))
 
 	// Call NewQuantizedSet and ensure capacity.
 	centroid := slices.Clone(quantizedSet.Centroid)
@@ -288,8 +288,8 @@ func TestRaBitQuantizeEmbeddings(t *testing.T) {
 	num32.Round(errorBounds, 4)
 	require.Equal(t, float32(0), distances[0])
 	require.Equal(t, float32(1.1069), distances[99])
-	require.Equal(t, float32(0.0247), errorBounds[0])
-	require.Equal(t, float32(0.0476), errorBounds[99])
+	require.Equal(t, float32(0.0651), errorBounds[0])
+	require.Equal(t, float32(0.0738), errorBounds[99])
 }
 
 // Benchmark quantization of 100 vectors.

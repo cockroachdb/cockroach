@@ -914,11 +914,11 @@ func TestTransformVector(t *testing.T) {
 	errorBounds := make([]float32, count)
 	quantizer.EstimateDistances(&workspace, originalSet, original.At(0), distances, errorBounds)
 	require.Equal(t, []float32{0, 272.75, 550.86, 950.93, 2421.41}, testutils.RoundFloats(distances, 2))
-	require.Equal(t, []float32{27.87, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
+	require.Equal(t, []float32{47.37, 55.93, 78.36, 99.82, 162.95}, testutils.RoundFloats(errorBounds, 2))
 
 	quantizer.EstimateDistances(&workspace, randomizedSet, randomized.At(0), distances, errorBounds)
 	require.Equal(t, []float32{5.1, 292.72, 454.95, 1011.85, 2475.87}, testutils.RoundFloats(distances, 2))
-	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
+	require.Equal(t, []float32{56.23, 62.84, 86.63, 99.59, 162.32}, testutils.RoundFloats(errorBounds, 2))
 }
 
 // TestIndexConcurrency builds an index on multiple goroutines, with background

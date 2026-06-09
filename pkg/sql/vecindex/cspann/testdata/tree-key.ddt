@@ -47,7 +47,7 @@ search tree=2
 [5, 5]
 ----
 vec7: 26
-5 leaf vectors, 7 vectors, 4 full vectors, 3 partitions
+5 leaf vectors, 7 vectors, 5 full vectors, 3 partitions
 
 # Delete from tree #2.
 delete tree=2
