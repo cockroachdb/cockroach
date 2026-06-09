@@ -258,6 +258,11 @@ func maybeDropDependentFKConstraints(
 	// dropDependentFKConstraint is a helper function that drops a dependent
 	// FK constraint with ID `fkConstraintID`.
 	dropDependentFKConstraint := func(fkTableID catid.DescID, fkConstraintID catid.ConstraintID) {
+		// If this FK backs the origin table's
+		// infer_rbr_region_col_using_constraint storage param, clear that param too;
+		// otherwise the descriptor would be left referencing a constraint that this
+		// cascade is removing.
+		maybeDropRBRUsingConstraint(b, fkTableID, fkConstraintID)
 		b.BackReferences(tableID).Filter(hasTableID(fkTableID)).Filter(hasConstraintIDAttrFilter(fkConstraintID)).
 			ForEach(func(
 				current scpb.Status, target scpb.TargetStatus, e scpb.Element,
