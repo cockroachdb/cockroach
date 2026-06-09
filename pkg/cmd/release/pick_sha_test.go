@@ -664,7 +664,7 @@ func TestVerifyVersionFile(t *testing.T) {
 
 			r := newPickSHARunnerForTest(t, ghSrv, nil, time.Time{})
 			r.repo = "cockroachdb/cockroach"
-			r.summaryFile = filepath.Join(t.TempDir(), "summary.md")
+			r.summaryWriter = summaryWriter{path: filepath.Join(t.TempDir(), "summary.md")}
 
 			want, err := version.Parse(tc.ticketVersion)
 			require.NoError(t, err)
@@ -677,7 +677,7 @@ func TestVerifyVersionFile(t *testing.T) {
 			}
 
 			if tc.expectSummary != "" {
-				data, readErr := os.ReadFile(r.summaryFile)
+				data, readErr := os.ReadFile(r.path)
 				require.NoError(t, readErr)
 				require.Contains(t, string(data), tc.expectSummary)
 				require.Contains(t, string(data), "REL-1")
