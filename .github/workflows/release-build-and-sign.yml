@@ -12,20 +12,15 @@
 #     |
 #     +-> build-linux (matrix: linux-amd64, linux-arm64, linux-amd64-fips)
 #     +-> build-nonlinux (matrix: darwin-amd64, darwin-arm64, win-amd64)
-#     +-> build-per-platform-ibm (matrix: 3 linux platforms, no telemetry —
-#         release-24.1 has no linux-s390x support, so the IBM matrix mirrors
-#         build-linux above instead of carrying the extra platform.)
 #     +-> generate-sbom (SBOM + notices + license-types; independent of builds)
 #           |
 #           +---> build-docker (needs build-linux)
-#           +---> build-docker-ibm (needs IBM linux builds)
 #           |       |
 #           |       +---> publish-cloud-only (needs build-docker)
 #           |               |
 #           |               +---> cloud-rollout (needs publish-cloud-only)
 #           |
 #           +---> macos-signing (needs build-nonlinux)
-#           +---> ibm-signing (needs IBM linux builds)
 #           +---> sentry-panic (needs build-linux)
 #
 #   notify (always, needs all above)
@@ -48,7 +43,7 @@ on:
         type: string
         default: ''
       skip_jobs:
-        description: 'Comma-separated job IDs to skip (no spaces) when resuming after a partial failure. Validated by the validate-skip-jobs job. Valid IDs: build-linux, build-nonlinux, build-per-platform-ibm, build-docker, build-docker-ibm, macos-signing, ibm-signing, sentry-panic, generate-sbom, publish-cloud-only, cloud-rollout.'
+        description: 'Comma-separated job IDs to skip (no spaces) when resuming after a partial failure. Validated by the validate-skip-jobs job. Valid IDs: build-linux, build-nonlinux, build-docker, macos-signing, sentry-panic, generate-sbom, publish-cloud-only, cloud-rollout.'
         type: string
         default: ''
 
@@ -131,11 +126,8 @@ jobs:
           valid_ids=(
             build-linux
             build-nonlinux
-            build-per-platform-ibm
             build-docker
-            build-docker-ibm
             macos-signing
-            ibm-signing
             sentry-panic
             generate-sbom
             publish-cloud-only
@@ -167,7 +159,7 @@ jobs:
   # the in-job docker build, you MUST keep the setup-qemu / setup-buildx
   # steps on that branch — without QEMU binfmt handlers, the arm64 RUN
   # steps abort with `exec /bin/sh: exec format error`. Same applies to
-  # build-nonlinux and build-per-platform-ibm below.
+  # build-nonlinux below.
   build-linux:
     name: 'Build ${{ matrix.platform }}'
     needs: validate-skip-jobs
@@ -293,82 +285,6 @@ jobs:
           # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
           TC_BUILD_BRANCH: ${{ github.ref_name }}
           TC_BUILDTYPE_ID: release-build-${{ matrix.platform }}
-          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
-        run: |
-          build/teamcity/internal/release/process/build-cockroach-release-per-platform.sh
-
-  # --------------------------------------------------------------------------
-  # Stage 1b: IBM per-platform builds (no telemetry, parallel with above)
-  # --------------------------------------------------------------------------
-  build-per-platform-ibm:
-    name: 'Build IBM ${{ matrix.platform }}'
-    needs: validate-skip-jobs
-    if: >-
-      ${{ !contains(format(',{0},', inputs.skip_jobs), ',build-per-platform-ibm,') &&
-        (github.ref == 'refs/heads/master' ||
-         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
-         startsWith(github.ref, 'refs/heads/staging-v'))
-      }}
-    runs-on: [self-hosted, ubuntu_big_2004]
-    timeout-minutes: 120
-    permissions:
-      id-token: write
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - linux-amd64
-          - linux-arm64
-          - linux-amd64-fips
-    steps:
-      - name: Free disk space
-        # Best-effort: GitHub-hosted ubuntu-latest runners need this to fit
-        # the build artifacts on a 14 GB disk; self-hosted runners have
-        # plenty of headroom and may not grant the GHA service user sudo,
-        # so tolerate failures here rather than blocking the job.
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || :
-          sudo docker image prune --all --force || :
-          df -h /
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          ref: ${{ inputs.sha || github.sha }}
-          submodules: true
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
-        with:
-          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
-          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
-
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
-
-      # On release-26.1 the per-platform script does an in-job
-      # `docker build --platform=linux/<arch>` for arm64; without QEMU
-      # binfmt handlers the arm64 RUN steps abort with `exec format error`.
-      # See the BACKPORT NOTE above the build-linux job.
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
-
-      - name: Set up QEMU for multi-arch builds
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
-        with:
-          # Disable the binfmt-installer cache: it warns "Path Validation
-          # Error" on every post-step because the action doesn't write to
-          # the cache path it later tries to save. The image is tiny — the
-          # cache wasn't buying us anything anyway.
-          cache-image: false
-
-      - name: Build and publish release artifacts (no telemetry)
-        env:
-          PLATFORM: ${{ matrix.platform }}
-          TELEMETRY_DISABLED: 'true'
-          COCKROACH_ARCHIVE_PREFIX: cockroach-ibm
-          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
-          TC_BUILD_BRANCH: ${{ github.ref_name }}
-          TC_BUILDTYPE_ID: release-build-ibm-${{ matrix.platform }}
           BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
         run: |
           build/teamcity/internal/release/process/build-cockroach-release-per-platform.sh
@@ -502,59 +418,6 @@ jobs:
         run: |
           build/teamcity/internal/release/process/build-cockroach-release-docker.sh
 
-  build-docker-ibm:
-    name: Build Docker images (IBM, no telemetry)
-    needs: build-per-platform-ibm
-    if: >-
-      ${{ !cancelled() &&
-        (needs.build-per-platform-ibm.result == 'success' ||
-         (needs.build-per-platform-ibm.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',build-per-platform-ibm,'))) &&
-        !contains(format(',{0},', inputs.skip_jobs), ',build-docker-ibm,') &&
-        (github.ref == 'refs/heads/master' ||
-         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
-         startsWith(github.ref, 'refs/heads/staging-v'))
-      }}
-    runs-on: [self-hosted, ubuntu_big_2004]
-    timeout-minutes: 90
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          ref: ${{ inputs.sha || github.sha }}
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
-        with:
-          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
-          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
-
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
-
-      - name: Set up QEMU for multi-arch builds
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
-        with:
-          # Disable the binfmt-installer cache: it warns "Path Validation
-          # Error" on every post-step because the action doesn't write to
-          # the cache path it later tries to save. The image is tiny — the
-          # cache wasn't buying us anything anyway.
-          cache-image: false
-
-      - name: Build and push Docker images (no telemetry)
-        env:
-          TELEMETRY_DISABLED: 'true'
-          COCKROACH_ARCHIVE_PREFIX: cockroach-ibm
-          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
-          TC_BUILD_BRANCH: ${{ github.ref_name }}
-          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
-        run: |
-          build/teamcity/internal/release/process/build-cockroach-release-docker.sh
-
   # --------------------------------------------------------------------------
   # Stage 2b: macOS signing (needs darwin-arm64 build)
   # --------------------------------------------------------------------------
@@ -622,49 +485,6 @@ jobs:
           BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
         run: |
           build/github/release-sign-macos.sh
-
-  # --------------------------------------------------------------------------
-  # Stage 2c: IBM/GPG signing (needs IBM linux builds)
-  # --------------------------------------------------------------------------
-  ibm-signing:
-    name: IBM GPG signing
-    needs: build-per-platform-ibm
-    if: >-
-      ${{ !cancelled() &&
-        (needs.build-per-platform-ibm.result == 'success' ||
-         (needs.build-per-platform-ibm.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',build-per-platform-ibm,'))) &&
-        !contains(format(',{0},', inputs.skip_jobs), ',ibm-signing,') &&
-        (github.ref == 'refs/heads/master' ||
-         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
-         startsWith(github.ref, 'refs/heads/staging-v'))
-      }}
-    runs-on: [self-hosted, ubuntu_2004]
-    timeout-minutes: 30
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          ref: ${{ inputs.sha || github.sha }}
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
-        with:
-          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
-          service_account: ${{ env.RELEASE_SIGNING_SERVICE_ACCOUNT }}
-
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
-
-      - name: Sign IBM release artifacts (GPG)
-        env:
-          COCKROACH_ARCHIVE_PREFIX: cockroach-ibm
-          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
-          TC_BUILD_BRANCH: ${{ github.ref_name }}
-          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
-        run: |
-          build/github/release-sign-ibm.sh
 
   # --------------------------------------------------------------------------
   # Stage 2d: Sentry panic (needs linux-amd64 build)
@@ -869,11 +689,8 @@ jobs:
       - validate-skip-jobs
       - build-linux
       - build-nonlinux
-      - build-per-platform-ibm
       - build-docker
-      - build-docker-ibm
       - macos-signing
-      - ibm-signing
       - sentry-panic
       - generate-sbom
       - publish-cloud-only
