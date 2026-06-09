@@ -152,7 +152,11 @@ func IndexExists(
 	// insufficient in this state, so we instead check that the cluster version
 	// recorded for the full backup was at least a 26.1 cluster and avoid the
 	// mixed-version state entirely.
-	fullManifestPath := path.Join(subdir, backupbase.BackupMetadataName)
+	//
+	// Due to some shenanigans with how our cloud stores treat a leading "/"
+	// differently depending on whether the base prefix is empty or not, we
+	// normalize here to ensure there is no leading "/".
+	fullManifestPath := strings.TrimPrefix(path.Join(subdir, backupbase.BackupMetadataName), "/")
 	manifest, memSize, err := ReadBackupManifest(ctx, mem, store, fullManifestPath, enc, kmsEnv)
 	defer mem.Shrink(ctx, memSize)
 	if err != nil {
