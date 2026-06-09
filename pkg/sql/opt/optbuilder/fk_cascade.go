@@ -109,8 +109,8 @@ func (cb *onDeleteCascadeBuilder) Build(
 			// Build a semi join of the table with the mutation input.
 			//
 			// The scope returned by buildDeleteCascadeMutationInput has one column
-			// for each public table column, making it appropriate to set it as
-			// mb.fetchScope.
+			// for each public and mutation table column, making it appropriate to
+			// set it as mb.fetchScope.
 			oldValues := cb.oldValues.RemapColumns(colMap)
 			mb.fetchScope = b.buildDeleteCascadeMutationInput(
 				cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues,
@@ -328,10 +328,12 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 
 			// Build the input to the delete mutation, which is simply a Scan with a
 			// Select on top. The scan is exempt from RLS to maintain data integrity.
+			// Include mutation columns as in regular deletes, so that write-only
+			// columns are available to the execution engine.
 			mb.fetchScope = b.buildScan(
 				b.addTable(cb.childTable, &mb.alias),
 				tableOrdinals(cb.childTable, columnKinds{
-					includeMutations: false,
+					includeMutations: true,
 					includeSystem:    false,
 					includeInverted:  false,
 				}),
@@ -501,8 +503,8 @@ func (cb *onDeleteSetBuilder) Build(
 			// Build a semi join of the table with the mutation input.
 			//
 			// The scope returned by buildDeleteCascadeMutationInput has one column
-			// for each public table column, making it appropriate to set it as
-			// mb.fetchScope.
+			// for each public and mutation table column, making it appropriate to
+			// set it as mb.fetchScope.
 			oldValues := cb.oldValues.RemapColumns(colMap)
 			mb.fetchScope = b.buildDeleteCascadeMutationInput(
 				cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues,
@@ -553,7 +555,7 @@ func (cb *onDeleteSetBuilder) Build(
 // The WithScan columns that correspond to the FK columns are specified in
 // oldValues.
 //
-// The returned scope has one column for each public table column.
+// The returned scope has one column for each public and mutation table column.
 //
 // For example, if we have a child table with foreign key on p, the expression
 // will look like this:
@@ -596,11 +598,14 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 		}
 	}
 
-	// The scan is exempt from RLS to maintain data integrity.
+	// The scan is exempt from RLS to maintain data integrity. Include mutation
+	// columns so that write-only columns being added by concurrent schema changes
+	// are available as fetch columns when addSynthesizedColsForUpdate adds them
+	// to the update set.
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
-			includeMutations: false,
+			includeMutations: true,
 			includeSystem:    false,
 			includeInverted:  false,
 		}),
@@ -848,7 +853,7 @@ func (cb *onUpdateCascadeBuilder) Build(
 // The WithScan columns that correspond to the FK columns are specified in
 // oldValues and newValues.
 //
-// The returned scope has one column for each public table column, followed by
+// The returned scope has one column for each public and mutation table column, followed by
 // the columns that contain the old FK values, followed by the columns that
 // contain the new FK values.
 //
@@ -884,11 +889,14 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 		}
 	}
 
-	// The scan is exempt from RLS to maintain data integrity.
+	// The scan is exempt from RLS to maintain data integrity. Include mutation
+	// columns so that write-only columns being added by concurrent schema changes
+	// are available as fetch columns when addSynthesizedColsForUpdate adds them
+	// to the update set.
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
-			includeMutations: false,
+			includeMutations: true,
 			includeSystem:    false,
 			includeInverted:  false,
 		}),

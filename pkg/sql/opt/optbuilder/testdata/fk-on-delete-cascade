@@ -1221,3 +1221,81 @@ root
                 │         └──  parent_virt.p:4 => p:19
                 └── filters
                      └── child_virt.p:14 = p:19
+
+# Regression test for #143402: cascade scan must include write-only mutation
+# columns so they appear in the fetch set.
+
+exec-ddl
+CREATE TABLE parent_mut (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_mut (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES parent_mut(p) ON DELETE CASCADE,
+  "m:write-only" INT DEFAULT 0
+)
+----
+
+# Fast path.
+build-post-queries
+DELETE FROM parent_mut WHERE p > 1
+----
+root
+ ├── delete parent_mut
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── cascades
+ │    │    └── child_mut_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent_mut
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── p:4 > 1
+ └── cascade
+      └── delete child_mut
+           ├── columns: <none>
+           ├── fetch columns: c:12 child_mut.p:13 m:14
+           └── select
+                ├── columns: c:12!null child_mut.p:13!null m:14
+                ├── scan child_mut
+                │    ├── columns: c:12!null child_mut.p:13!null m:14
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── child_mut.p:13 > 1
+
+# No fast path.
+build-post-queries
+DELETE FROM parent_mut WHERE p > 1 AND random() < 0.5
+----
+root
+ ├── delete parent_mut
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_mut_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent_mut
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── (p:4 > 1) AND (random() < 0.5)
+ └── cascade
+      └── delete child_mut
+           ├── columns: <none>
+           ├── fetch columns: c:12 child_mut.p:13 m:14
+           └── semi-join (hash)
+                ├── columns: c:12!null child_mut.p:13!null m:14
+                ├── scan child_mut
+                │    ├── columns: c:12!null child_mut.p:13!null m:14
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                ├── with-scan &1
+                │    ├── columns: p:17!null
+                │    └── mapping:
+                │         └──  parent_mut.p:4 => p:17
+                └── filters
+                     └── child_mut.p:13 = p:17

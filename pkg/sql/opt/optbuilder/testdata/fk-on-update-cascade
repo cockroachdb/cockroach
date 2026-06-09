@@ -1732,3 +1732,82 @@ root
                           │    └── flags: avoid-full-scan disabled not visible index feature
                           └── filters
                                └── p:21 = parent_diff_type.p:22
+
+# Regression test for #143402: cascade scan must include write-only mutation
+# columns so they appear in the fetch set.
+exec-ddl
+CREATE TABLE parent_mut (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_mut (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES parent_mut(p) ON UPDATE CASCADE,
+  "m:write-only" INT DEFAULT 0
+)
+----
+
+build-post-queries
+UPDATE parent_mut SET p = p * 10 WHERE p > 1
+----
+root
+ ├── update parent_mut
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── update-mapping:
+ │    │    └── p_new:7 => p:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_mut_p_fkey
+ │    └── project
+ │         ├── columns: p_new:7!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── select
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── scan parent_mut
+ │         │    │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    │    └── flags: avoid-full-scan
+ │         │    └── filters
+ │         │         └── p:4 > 1
+ │         └── projections
+ │              └── p:4 * 10 [as=p_new:7]
+ └── cascade
+      └── update child_mut
+           ├── columns: <none>
+           ├── fetch columns: c:13 child_mut.p:14 m:15
+           ├── update-mapping:
+           │    ├── p_new:19 => child_mut.p:9
+           │    └── m_default:20 => m:10
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: m_default:20!null c:13!null child_mut.p:14!null m:15 p_old:18!null p_new:19!null
+           │    ├── inner-join (hash)
+           │    │    ├── columns: c:13!null child_mut.p:14!null m:15 p_old:18!null p_new:19!null
+           │    │    ├── scan child_mut
+           │    │    │    ├── columns: c:13!null child_mut.p:14!null m:15
+           │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+           │    │    ├── select
+           │    │    │    ├── columns: p_old:18!null p_new:19!null
+           │    │    │    ├── with-scan &1
+           │    │    │    │    ├── columns: p_old:18!null p_new:19!null
+           │    │    │    │    └── mapping:
+           │    │    │    │         ├──  parent_mut.p:4 => p_old:18
+           │    │    │    │         └──  p_new:7 => p_new:19
+           │    │    │    └── filters
+           │    │    │         └── p_old:18 IS DISTINCT FROM p_new:19
+           │    │    └── filters
+           │    │         └── child_mut.p:14 = p_old:18
+           │    └── projections
+           │         └── 0 [as=m_default:20]
+           └── f-k-checks
+                └── f-k-checks-item: child_mut(p) -> parent_mut(p)
+                     └── anti-join (hash)
+                          ├── columns: p:21!null
+                          ├── with-scan &2
+                          │    ├── columns: p:21!null
+                          │    └── mapping:
+                          │         └──  p_new:19 => p:21
+                          ├── scan parent_mut
+                          │    ├── columns: parent_mut.p:22!null
+                          │    └── flags: avoid-full-scan disabled not visible index feature
+                          └── filters
+                               └── p:21 = parent_mut.p:22
