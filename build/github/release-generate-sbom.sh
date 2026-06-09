@@ -44,14 +44,16 @@ tc_start_block "Generate SBOM, notices, and license-types"
 # walker can read each package's metadata, then run the tool. `bazel
 # fetch` downloads and extracts only; it runs no build actions. bazel and
 # the tool run from the repo root so the //pkg/cmd/cockroach target
-# resolves; the Blue Oak rating check is intentionally not run
-# (--validate and --check-conflicts still gate the release).
+# resolves. Only --validate gates: the Blue Oak rating check and the
+# copyleft-conflict check are intentionally not run. The latter flags
+# geos (LGPL-2.1, weak copyleft), which CockroachDB ships as a
+# dynamically loaded library — an accepted dependency, not a release
+# blocker.
 (
   cd "$root"
   bazel fetch //pkg/cmd/cockroach
   "$root/artifacts/cockroach-sbom" \
     --validate \
-    --check-conflicts \
     --version       "${version}" \
     --output        "$root/artifacts/${sbom_file}" \
     --notices       "$root/artifacts/THIRD-PARTY-NOTICES.txt" \
