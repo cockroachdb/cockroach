@@ -27,5 +27,11 @@ if [[ -n "${TEST_ISSUE_KEY:-}" ]]; then
   args+=(--test-issue-key "$TEST_ISSUE_KEY")
 fi
 
+# Write per-ticket branch-cut results to a file under the mounted /artifacts
+# dir (host: $root/artifacts). The host wrapper folds this into
+# $GITHUB_STEP_SUMMARY after the container exits so the cut/resumed/failed
+# outcomes show up in the job summary, not just the logs.
+args+=(--summary-file /artifacts/cut-staging-summary.md)
+
 $(bazel info --config=crosslinux bazel-bin)/pkg/cmd/release/release_/release \
   cut-staging-branches "${args[@]}"
