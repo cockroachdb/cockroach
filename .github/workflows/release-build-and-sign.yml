@@ -295,10 +295,10 @@ jobs:
   # Generates the CycloneDX SBOM, third-party notices, and unique
   # license-types list from source via the release-eng sbom tool, and
   # uploads the SBOM + license-types list to the staged release bucket.
-  # Fails the build on: any license not rated Bronze+ on the Blue Oak
-  # Council list, or any copyleft license conflict. Independent of the
-  # per-platform builds — it works from the source tree plus the bazel
-  # dependency graph.
+  # Fails the build on any copyleft license conflict or SBOM validation
+  # error. Runs entirely on the host (Go + Bazel installed below); the
+  # tool needs both go and bazel on PATH. Independent of the per-platform
+  # builds — it works from the source tree plus the bazel dependency graph.
   generate-sbom:
     name: Generate SBOM and notices
     needs: validate-skip-jobs
@@ -352,6 +352,12 @@ jobs:
           mkdir -p "${GITHUB_WORKSPACE}/artifacts"
           cd release-eng/sbom
           CGO_ENABLED=0 go build -o "${GITHUB_WORKSPACE}/artifacts/cockroach-sbom" .
+
+      # The sbom tool runs `bazel fetch` and queries the dependency graph,
+      # so bazel must be on PATH. setup-bazelisk honors the repo's
+      # .bazelversion.
+      - name: Set up Bazelisk
+        uses: bazelbuild/setup-bazelisk@b39c379c82683a5f25d34f0d062761f62693e0b2 # v3.0.0
 
       - name: Generate and upload SBOM
         env:
