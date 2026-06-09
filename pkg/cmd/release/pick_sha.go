@@ -171,7 +171,7 @@ func runPickSHA(_ *cobra.Command, _ []string) error {
 		opsChannel:         pickSHAFlags.opsChannel,
 		repo:               pickSHAFlags.repo,
 		buildWorkflow:      pickSHAFlags.buildWorkflow,
-		summaryFile:        pickSHAFlags.summaryFile,
+		summaryWriter:      summaryWriter{path: pickSHAFlags.summaryFile},
 		releaseNotesAPIKey: releaseNotesAPIKey,
 	}
 	return r.run(context.Background())
@@ -191,13 +191,9 @@ type pickSHARunner struct {
 	opsChannel    string
 	repo          string
 	buildWorkflow string
-	// summaryFile, when non-empty, names a Markdown file that processCandidate
-	// appends a version-check result block to for each ticket it acts on. The
-	// GHA wrapper points this at the mounted /artifacts dir and concatenates it
-	// into $GITHUB_STEP_SUMMARY after the run, so a version mismatch is visible
-	// in the job summary rather than buried in the logs. Best-effort: write
-	// failures are logged and never fail the run.
-	summaryFile string
+	// summaryWriter records a version-check result block for each ticket
+	// processCandidate acts on, for the GitHub Actions job summary.
+	summaryWriter
 	// releaseNotesAPIKey is the X-API-Key for the docs release-notes
 	// automation endpoint. Required at startup; per-candidate API failures
 	// are non-fatal (warning to #release-ops, continue).
@@ -435,7 +431,7 @@ func (r *pickSHARunner) verifyVersionFile(
 			versionFilePath, gotStr, sha, fetchBranch)
 	}
 	match := got.Equals(want)
-	r.appendSummary(buildVersionCheckSummary(key, sha, fetchBranch, want, got, match, r.repo))
+	r.append(buildVersionCheckSummary(key, sha, fetchBranch, want, got, match, r.repo))
 	if !match {
 		return errors.Newf(
 			"%s at %s (%s) is %s but ticket %s targets %s; "+
@@ -447,32 +443,6 @@ func (r *pickSHARunner) verifyVersionFile(
 	return nil
 }
 
-// appendSummary appends a Markdown block to the file named by r.summaryFile,
-// if set. The summary is informational (the GHA wrapper folds it into the job
-// summary), so write failures are logged and swallowed rather than failing the
-// run. A no-op when summaryFile is empty (local/dry runs without the wrapper).
-func (r *pickSHARunner) appendSummary(block string) {
-	if r.summaryFile == "" {
-		return
-	}
-	f, err := os.OpenFile(r.summaryFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		log.Printf("failed to open summary file %s: %v", r.summaryFile, err)
-		return
-	}
-	defer func() {
-		// Close flushes buffered writes, so a full /artifacts mount can
-		// surface here even when WriteString reported success. Log it to honor
-		// the "write failures are logged" contract; it remains non-fatal.
-		if cerr := f.Close(); cerr != nil {
-			log.Printf("failed to close summary file %s: %v", r.summaryFile, cerr)
-		}
-	}()
-	if _, err := f.WriteString(block); err != nil {
-		log.Printf("failed to write summary file %s: %v", r.summaryFile, err)
-	}
-}
-
 // buildVersionCheckSummary renders the Markdown block recorded for one
 // ticket's version check. A mismatch is rendered as a prominent failure block
 // (the dispatch is blocked), a match as a one-line confirmation. The SHA links
@@ -480,28 +450,19 @@ func (r *pickSHARunner) appendSummary(block string) {
 func buildVersionCheckSummary(
 	key, sha, fetchBranch string, want, got version.Version, match bool, repo string,
 ) string {
-	commitURL := fmt.Sprintf("https://github.com/%s/commit/%s", repo, sha)
+	url := commitURL(repo, sha)
 	if !match {
 		return fmt.Sprintf(
 			"## ❌ %s — version mismatch\n\n"+
 				"`%s` at [`%s`](%s) on `%s` is `%s`, but the release ticket targets `%s`.\n\n"+
 				"**build-and-sign was not dispatched.** Fix `%s` on `%s` and re-run pick-sha.\n\n",
-			key, versionFilePath, shortSHA(sha), commitURL, fetchBranch, got, want,
+			key, versionFilePath, shortSHA(sha), url, fetchBranch, got, want,
 			versionFilePath, fetchBranch)
 	}
 	return fmt.Sprintf(
 		"## ✅ %s — version verified\n\n"+
 			"`%s` at [`%s`](%s) on `%s` is `%s`, matching the release ticket.\n\n",
-		key, versionFilePath, shortSHA(sha), commitURL, fetchBranch, got)
-}
-
-// shortSHA returns the first 12 characters of a commit SHA for display, or the
-// whole string if it's shorter (e.g. a test fixture).
-func shortSHA(sha string) string {
-	if len(sha) <= 12 {
-		return sha
-	}
-	return sha[:12]
+		key, versionFilePath, shortSHA(sha), url, fetchBranch, got)
 }
 
 // notifyReleaseNotes builds the release-notes API payload from the Jira
