@@ -138,15 +138,18 @@ func (t *TenantServer) Query(
 	return t.tenantConnect.Query(ctx, req)
 }
 
-// storeTenantMetrics mirrors kvbase.TenantsStorageMetricsSet. We maintain a
-// hardcoded copy here to avoid import cycles with kvbase.
+// storeTenantMetrics is a hand-maintained copy of
+// kvbase.TenantsStorageMetricsSet. The authoritative set is assembled in
+// pkg/kv/kvserver, which populates the kvbase variable from an init(); pkg/ts
+// cannot import kvserver, so the set is duplicated here. The two must stay
+// equal: TestStoreTenantMetricsInSync fails if they drift.
 var storeTenantMetrics = map[string]struct{}{
-	"livebytes": {}, "sysbytes": {}, "keybytes": {}, "valbytes": {},
-	"rangekeybytes": {}, "rangevalbytes": {}, "totalbytes": {},
-	"intentbytes": {}, "lockbytes": {}, "livecount": {}, "keycount": {},
-	"valcount": {}, "rangekeycount": {}, "rangevalcount": {},
-	"intentcount": {}, "lockcount": {}, "lockage": {}, "gcbytesage": {},
-	"syscount": {}, "abortspanbytes": {},
+	"abortspanbytes": {}, "gcbytesage": {}, "intentage": {},
+	"intentbytes": {}, "intentcount": {}, "keybytes": {},
+	"keycount": {}, "livebytes": {}, "livecount": {},
+	"rangekeybytes": {}, "rangekeycount": {}, "rangevalbytes": {},
+	"rangevalcount": {}, "replicas.cpunanospersecond": {}, "sysbytes": {},
+	"syscount": {}, "totalbytes": {}, "valbytes": {}, "valcount": {},
 }
 
 // isStoreTenantMetric returns true if name is in storeTenantMetrics.
