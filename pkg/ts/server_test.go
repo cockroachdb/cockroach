@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
@@ -355,6 +356,30 @@ func TestServerQueryMultiTenantAllSources(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestStoreTenantMetricsInSync guards against drift between the hand-maintained
+// storeTenantMetrics copy in pkg/ts and its source of truth,
+// kvbase.TenantsStorageMetricsSet (populated by an init() in pkg/kv/kvserver).
+//
+// pkg/ts keeps its own copy because the authoritative set is assembled in
+// kvserver, which pkg/ts cannot import. The two are used as duals: the metrics
+// recorder records per-tenant store children for exactly the kvbase set, while
+// pkg/ts uses its copy (via isStoreTenantSeries) to decide how the "All" view
+// combines sources. If they disagree, store metrics misclassify: a metric in
+// the kvbase set but missing from the ts copy is treated as an app/node metric
+// and double-counted in the "All" view (the cockroachdb/cockroach#160479 bug),
+// while a metric only in the ts copy is wrongly scoped away for secondary
+// tenants. This test fails loudly so the copy is kept in sync by hand.
+func TestStoreTenantMetricsInSync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// The set is populated by kvserver's init(), which the test binary links.
+	require.NotEmpty(t, kvbase.TenantsStorageMetricsSet,
+		"kvbase.TenantsStorageMetricsSet is empty; kvserver init did not run")
+	require.Equal(t, kvbase.TenantsStorageMetricsSet, ts.StoreTenantMetricsForTesting,
+		"pkg/ts storeTenantMetrics has drifted from kvbase.TenantsStorageMetricsSet; "+
+			"update the copy in pkg/ts/server.go to match")
 }
 
 // TestServerQueryStarvation tests a very specific scenario, wherein a single
