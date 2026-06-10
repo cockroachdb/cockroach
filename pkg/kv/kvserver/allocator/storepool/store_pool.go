@@ -551,19 +551,32 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value, _ int64)
 		return
 	}
 
-	sp.storeDescriptorUpdate(storeDesc)
+	sp.storeDescriptorUpdate(storeDesc, sp.clock.Now())
+}
+
+// UpdateStoreDescriptor ingests a store descriptor into the StorePool exactly as
+// the gossip callback (storeGossipUpdate) would: it updates the store detail,
+// populates the per-node locality map, and fires capacity-change callbacks. It
+// exists for callers that drive the StorePool outside of gossip — notably the
+// allocation simulator (asim) — so they exercise the real ingestion path rather
+// than mutating Details directly and silently dropping locality information.
+//
+// updatedAt records when the descriptor was observed; the simulator supplies the
+// descriptor's gossip timestamp so that store staleness is modeled consistently
+// with the gossip delay it emulates.
+func (sp *StorePool) UpdateStoreDescriptor(desc roachpb.StoreDescriptor, updatedAt hlc.Timestamp) {
+	sp.storeDescriptorUpdate(desc, updatedAt)
 }
 
 // storeDescriptorUpdate takes a store descriptor and updates the corresponding
-// details for the store in the storepool.
-func (sp *StorePool) storeDescriptorUpdate(storeDesc roachpb.StoreDescriptor) {
+// details for the store in the storepool. now is the time at which the
+// descriptor was observed (used as the store detail's last-updated time).
+func (sp *StorePool) storeDescriptorUpdate(storeDesc roachpb.StoreDescriptor, now hlc.Timestamp) {
 	// We keep copies of the capacity and storeID to pass into the
 	// capacityChanged callback.
 	var oldCapacity roachpb.StoreCapacity
 	storeID := storeDesc.StoreID
 	curCapacity := storeDesc.Capacity
-
-	now := sp.clock.Now()
 
 	detail := sp.GetStoreDetail(storeID)
 	detail.Lock()
