@@ -174,3 +174,50 @@ func TestGossip(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, int32(0), val.Desc.Capacity.LeaseCount)
 }
+
+// TestStorePoolLocalities checks the per-node locality information that the
+// StorePool exposes to the allocator (replicate/lease queues) after gossip has
+// propagated store descriptors.
+//
+// NB: this currently documents a bug. asim feeds descriptors into each node's
+// StorePool via a path that bypasses StorePool.storeDescriptorUpdate, so the
+// StorePool's node-locality map is never populated. GetLocalitiesByStore
+// therefore falls back to a synthesized [node] tier only, dropping region/zone.
+// The allocator's diversity scoring is consequently region-blind: two stores in
+// the same region but on different nodes look as diverse as two stores in
+// different regions. The follow-up commit routes asim through the real
+// ingestion path and flips the assertions below to be region-aware.
+func TestStorePoolLocalities(t *testing.T) {
+	settings := config.DefaultSimulationSettings()
+	// 4 nodes, one store each: nodes 1,2 in region "a"; nodes 3,4 in region "b".
+	c := state.ClusterInfoWithDistribution(
+		4 /* nodeCount */, 1 /* storesPerNode */, []string{"a", "b"},
+		[]float64{0.5, 0.5},
+	)
+	s := state.LoadClusterInfo(c, settings)
+
+	// Exchange store descriptors into every node's StorePool. Two ticks are
+	// needed: the first enqueues descriptors, the second delivers them once the
+	// gossip delay has elapsed (see TestGossip).
+	g := NewGossip(s, settings)
+	ctx := context.Background()
+	tick := settings.StartTime
+	g.Tick(ctx, tick, s)
+	tick = tick.Add(settings.StateExchangeDelay)
+	g.Tick(ctx, tick, s)
+
+	sp := s.StorePool(state.StoreID(1)).(*storepool.StorePool)
+	loc := sp.GetLocalitiesByStore([]roachpb.ReplicaDescriptor{
+		{NodeID: 1, StoreID: 1}, // region a
+		{NodeID: 2, StoreID: 2}, // region a
+		{NodeID: 3, StoreID: 3}, // region b
+	})
+
+	sameRegion := loc[1].DiversityScore(loc[2])  // s1, s2: both region a
+	crossRegion := loc[1].DiversityScore(loc[3]) // s1: region a, s3: region b
+
+	// BUG: same-region stores score as maximally diverse because the StorePool
+	// only sees the synthesized [node] tier; region/zone never reached it.
+	require.Equal(t, roachpb.MaxDiversityScore, sameRegion)
+	require.Equal(t, roachpb.MaxDiversityScore, crossRegion)
+}
