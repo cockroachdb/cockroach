@@ -402,6 +402,9 @@ jobs:
         with:
           ref: ${{ inputs.sha || github.sha }}
           submodules: true
+          # Full history so the SBOM tool can resolve vendored-component
+          # versions via `git log` (a shallow clone collapses them to HEAD).
+          fetch-depth: 0
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
@@ -438,10 +441,11 @@ jobs:
           CGO_ENABLED=0 go build -o "${GITHUB_WORKSPACE}/artifacts/cockroach-sbom" .
 
       # The sbom tool runs `bazel fetch` and queries the dependency graph,
-      # so bazel must be on PATH. setup-bazelisk honors the repo's
-      # .bazelversion.
-      - name: Set up Bazelisk
-        uses: bazelbuild/setup-bazelisk@b39c379c82683a5f25d34f0d062761f62693e0b2 # v3.0.0
+      # so bazel must be on PATH. setup-bazel honors the repo's
+      # .bazelversion. (Successor to the unmaintained setup-bazelisk, which
+      # is stuck on the deprecated Node 20 action runtime.)
+      - name: Set up Bazel
+        uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # v0.19.0
 
       - name: Generate and upload SBOM
         env:
@@ -450,6 +454,16 @@ jobs:
           BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
         run: |
           build/github/release-generate-sbom.sh
+
+      - name: Upload SBOM, license-types, and notices
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: sbom-and-notices
+          path: |
+            artifacts/cockroach@*.sbom.cyclonedx.json
+            artifacts/cockroach@*.list-of-license-types.txt
+            artifacts/THIRD-PARTY-NOTICES.txt
+          if-no-files-found: error
 
   # --------------------------------------------------------------------------
   # Stage 2: Docker images (needs Linux builds only)
