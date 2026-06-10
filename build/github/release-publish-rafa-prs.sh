@@ -17,6 +17,13 @@ set -euo pipefail
 
 : "${GH_TOKEN:?must be set by the workflow}"
 
+# The rafa-production release script pushes via
+# "https://$GH_USERNAME:$GH_TOKEN@github.com/...". With GH_USERNAME unset the
+# URL becomes "https://:$GH_TOKEN@..." (empty username), which this PAT rejects
+# — GitHub then 404s the private repo as "Repository not found". Pin the
+# conventional placeholder username, matching the clone credential helper below.
+export GH_USERNAME="${GH_USERNAME:-x-access-token}"
+
 version=$(grep -v "^#" "pkg/build/version.txt" | head -n1)
 echo "Creating RAFA release PRs for $version..."
 
