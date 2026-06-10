@@ -2773,6 +2773,7 @@ func TestFailDestAfterSourceFailure(t *testing.T) {
 	dbA.Exec(t, "CANCEL JOB $1", producerJobID)
 	jobutils.WaitForJobToCancel(t, dbA, producerJobID)
 
+	jobutils.WaitForJobToPause(t, dbB, jobBID)
 	dbB.Exec(t, "RESUME JOB $1", jobBID)
 	jobutils.WaitForJobToFail(t, dbB, jobBID)
 }
