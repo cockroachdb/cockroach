@@ -188,9 +188,11 @@ type slackPoster interface {
 
 func (r *notifyPublishRunner) run() (retErr error) {
 	// key and commentID are captured by the defer so it can render the
-	// outcome block once, after every early return below has run. They stay
-	// "" until resolved, which the summary renders as an unresolved-ticket
-	// failure.
+	// outcome block once, after every early return below has run.
+	// key stays "" only if resolveTicketKey fails (rendered as an
+	// unresolved-ticket failure). commentID stays "" until AddComment
+	// returns its ID, or is set to "DRYRUN" on the dry-run path so the
+	// deferred summary renders a success block without a real permalink.
 	var key, commentID string
 	defer func() {
 		r.append(buildNotifyPublishSummary(
@@ -346,7 +348,7 @@ func readVersionFile(path string) (string, error) {
 		return line, nil
 	}
 	if err := scanner.Err(); err != nil {
-		return "", err
+		return "", errors.Wrapf(err, "scanning %s", path)
 	}
 	return "", errors.Newf("no version line found in %s", path)
 }

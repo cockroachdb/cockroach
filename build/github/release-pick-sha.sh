@@ -57,9 +57,11 @@ BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e DRY_RUN -e TEST_ISSUE_KEY -e JIRA_API_TOKEN 
 # logs. Done on both success and failure — a mismatch exits non-zero, and
 # that's exactly the case we most want surfaced.
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" && -f "$summary_file" ]]; then
-  # `|| true` so a cat/write failure here can't abort under `set -e` and
-  # clobber the captured pick-sha exit code with cat's.
-  cat "$summary_file" >> "$GITHUB_STEP_SUMMARY" || true
+  # On a write failure, warn rather than `|| true`: a silently-empty job
+  # summary defeats the purpose of this fold. The echo succeeds, so `set -e`
+  # won't abort and the captured pick-sha exit code is preserved.
+  cat "$summary_file" >> "$GITHUB_STEP_SUMMARY" \
+    || echo "warning: could not write to GITHUB_STEP_SUMMARY" >&2
 fi
 
 exit "$rc"

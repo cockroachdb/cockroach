@@ -567,8 +567,10 @@ func TestFetchSHAForPickSHANonNotFoundErrorPropagates(t *testing.T) {
 // mkVersionFileHandler serves the GitHub Contents API for versionFilePath
 // from a ref->contents map, base64-encoding the body the way the real API
 // does. A ref absent from the map responds 404 (so GetContents surfaces a
-// read error); set serverErr to fail every request with a 500 instead.
-func mkVersionFileHandler(bySHA map[string]string, serverErr bool) http.HandlerFunc {
+// read error); set serverErr to fail every request with a 500 instead. Set
+// dirResp to respond with a directory listing (a JSON array) instead of a
+// file object, the shape go-github decodes into a nil file content.
+func mkVersionFileHandler(bySHA map[string]string, serverErr, dirResp bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if serverErr {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -576,6 +578,11 @@ func mkVersionFileHandler(bySHA map[string]string, serverErr bool) http.HandlerF
 		}
 		if !strings.Contains(r.URL.Path, "/contents/"+versionFilePath) {
 			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if dirResp {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `[{"type":"file","path":%q}]`, versionFilePath)
 			return
 		}
 		content, ok := bySHA[r.URL.Query().Get("ref")]
@@ -602,6 +609,7 @@ func TestVerifyVersionFile(t *testing.T) {
 		ticketVersion    string // version parsed from the ticket summary
 		fileContent      string // pkg/build/version.txt at sha; "" => not present
 		serverErr        bool
+		dirResp          bool // respond with a directory listing instead of a file
 		expectErrContain string
 		expectSummary    string // substring the summary block must contain
 	}{
@@ -651,6 +659,14 @@ func TestVerifyVersionFile(t *testing.T) {
 			serverErr:        true,
 			expectErrContain: "reading " + versionFilePath,
 		},
+		{
+			// A directory path returns a JSON array, which go-github decodes
+			// into a nil file content; the read must fail rather than panic.
+			name:             "directory response is not a file",
+			ticketVersion:    "v25.4.3",
+			dirResp:          true,
+			expectErrContain: "is not a file",
+		},
 	}
 
 	for _, tc := range tests {
@@ -659,7 +675,7 @@ func TestVerifyVersionFile(t *testing.T) {
 			if tc.fileContent != "" {
 				refs[sha] = tc.fileContent
 			}
-			ghSrv := httptest.NewServer(mkVersionFileHandler(refs, tc.serverErr))
+			ghSrv := httptest.NewServer(mkVersionFileHandler(refs, tc.serverErr, tc.dirResp))
 			defer ghSrv.Close()
 
 			r := newPickSHARunnerForTest(t, ghSrv, nil, time.Time{})
@@ -691,7 +707,7 @@ func TestVerifyVersionFile(t *testing.T) {
 func TestVerifyVersionFileNoSummaryFile(t *testing.T) {
 	const sha = "deadbeefcafe0001"
 	ghSrv := httptest.NewServer(mkVersionFileHandler(
-		map[string]string{sha: "v25.4.3\n"}, false))
+		map[string]string{sha: "v25.4.3\n"}, false, false))
 	defer ghSrv.Close()
 
 	r := newPickSHARunnerForTest(t, ghSrv, nil, time.Time{})
