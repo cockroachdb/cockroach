@@ -356,6 +356,11 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				s.done()
 			}
 
+			// Allow AOST queries on PCR reader virtual clusters.
+			if err := sqlConn.Exec(ctx, "SET bypass_pcr_reader_catalog_aost = 'true'"); err != nil {
+				log.Dev.Warningf(ctx, "failed to set bypass_pcr_reader_catalog_aost: %v", err)
+			}
+
 			// Only add tenant prefix for non system tenants.
 			var prefix string
 			if tenant.TenantId.ToUint64() != roachpb.SystemTenantID.ToUint64() {
