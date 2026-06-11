@@ -8,6 +8,7 @@ package gcp
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"net/url"
 	"path"
@@ -28,6 +29,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/net/http2"
 	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -225,6 +227,44 @@ func makeGCSStorage(
 	}, nil
 }
 
+// ValidateCredentialType checks that the given credentials JSON has a safe
+// credential type. Only service_account and authorized_user are allowed;
+// types like external_account can read local files or make arbitrary HTTP
+// requests during token exchange.
+func ValidateCredentialType(credentialsJSON []byte) error {
+	var cred struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(credentialsJSON, &cred); err != nil {
+		return errors.Wrap(err, "invalid credentials JSON")
+	}
+	switch cred.Type {
+	case "service_account", "authorized_user":
+		// These types contain only static credentials (keys or refresh tokens) and
+		// do not contain fields that could read local files or contact arbitrary
+		// URLs during token exchange.
+		return nil
+	default:
+		return errors.Newf(
+			"unsupported credential type %q; only service_account and authorized_user are supported",
+			cred.Type,
+		)
+	}
+}
+
+// CredentialsFromJSON validates that the given credentials JSON uses a safe
+// credential type, then parses the credentials. All callers that accept
+// user-supplied credential JSON should use this instead of calling
+// google.CredentialsFromJSON directly.
+func CredentialsFromJSON(
+	ctx context.Context, jsonData []byte, scopes ...string,
+) (*google.Credentials, error) {
+	if err := ValidateCredentialType(jsonData); err != nil {
+		return nil, err
+	}
+	return google.CredentialsFromJSON(ctx, jsonData, scopes...)
+}
+
 // createAuthOptionFromServiceAccountKey creates an option.ClientOption for
 // authentication with the given Service Account key.
 func createAuthOptionFromServiceAccountKey(encodedKey string) (option.ClientOption, error) {
@@ -233,7 +273,9 @@ func createAuthOptionFromServiceAccountKey(encodedKey string) (option.ClientOpti
 	if err != nil {
 		return nil, err
 	}
-
+	if err := ValidateCredentialType(credentialsJSON); err != nil {
+		return nil, err
+	}
 	return option.WithCredentialsJSON(credentialsJSON), nil
 }
 

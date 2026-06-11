@@ -30,6 +30,66 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
+func TestValidateCredentialType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		name        string
+		json        string
+		expectedErr string
+	}{
+		{
+			name: "service_account accepted",
+			json: `{"type": "service_account", "project_id": "test"}`,
+		},
+		{
+			name: "authorized_user accepted",
+			json: `{"type": "authorized_user", "client_id": "test"}`,
+		},
+		{
+			name:        "external_account rejected",
+			json:        `{"type": "external_account", "token_url": "https://evil.com"}`,
+			expectedErr: `unsupported credential type "external_account"`,
+		},
+		{
+			name:        "impersonated_service_account rejected",
+			json:        `{"type": "impersonated_service_account"}`,
+			expectedErr: `unsupported credential type "impersonated_service_account"`,
+		},
+		{
+			name:        "external_account_authorized_user rejected",
+			json:        `{"type": "external_account_authorized_user"}`,
+			expectedErr: `unsupported credential type "external_account_authorized_user"`,
+		},
+		{
+			name:        "empty type rejected",
+			json:        `{"type": ""}`,
+			expectedErr: `unsupported credential type ""`,
+		},
+		{
+			name:        "missing type rejected",
+			json:        `{"project_id": "test"}`,
+			expectedErr: `unsupported credential type ""`,
+		},
+		{
+			name:        "invalid JSON rejected",
+			json:        `not json`,
+			expectedErr: "invalid credentials JSON",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateCredentialType([]byte(tc.json))
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestPutGoogleCloud(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
