@@ -69,6 +69,7 @@ var pickSHAFlags = struct {
 	channel       string
 	opsChannel    string
 	buildWorkflow string
+	summaryFile   string
 }{}
 
 var pickSHACmd = &cobra.Command{
@@ -107,6 +108,10 @@ func init() {
 		"Slack channel for failure notifications")
 	pickSHACmd.Flags().StringVar(&pickSHAFlags.buildWorkflow, "build-workflow", defaultBuildWorkflow,
 		"name of the workflow file (in .github/workflows) to dispatch")
+	pickSHACmd.Flags().StringVar(&pickSHAFlags.summaryFile, "summary-file", "",
+		"path to a Markdown file to append per-ticket version-check results to "+
+			"(the GHA wrapper points this at /artifacts so the run can surface "+
+			"the outcome in the job summary, not just the logs); empty disables it")
 }
 
 func runPickSHA(_ *cobra.Command, _ []string) error {
@@ -166,6 +171,7 @@ func runPickSHA(_ *cobra.Command, _ []string) error {
 		opsChannel:         pickSHAFlags.opsChannel,
 		repo:               pickSHAFlags.repo,
 		buildWorkflow:      pickSHAFlags.buildWorkflow,
+		summaryWriter:      summaryWriter{path: pickSHAFlags.summaryFile},
 		releaseNotesAPIKey: releaseNotesAPIKey,
 	}
 	return r.run(context.Background())
@@ -185,6 +191,9 @@ type pickSHARunner struct {
 	opsChannel    string
 	repo          string
 	buildWorkflow string
+	// summaryWriter records a version-check result block for each ticket
+	// processCandidate acts on, for the GitHub Actions job summary.
+	summaryWriter
 	// releaseNotesAPIKey is the X-API-Key for the docs release-notes
 	// automation endpoint. Required at startup; per-candidate API failures
 	// are non-fatal (warning to #release-ops, continue).
@@ -284,6 +293,15 @@ func (r *pickSHARunner) processCandidate(ctx context.Context, c jiraIssue) error
 		return err
 	}
 
+	// Guard against dispatching a build off a SHA whose version marker doesn't
+	// match the ticket: build-and-sign stamps artifacts from version.txt, so a
+	// mismatch publishes the wrong version (e.g. an alpha bump that never
+	// landed before the SHA was picked). Block the dispatch and surface the
+	// fix so an operator can correct version.txt and re-run.
+	if err := r.verifyVersionFile(ctx, c.Key, sha, fetchBranch, v); err != nil {
+		return err
+	}
+
 	// `staging` keeps the ticket's original branch name so the Slack and
 	// Jira messages name the release series operators care about (e.g.
 	// release-26.1.0-rc), even when the actual SHA came from master via
@@ -346,7 +364,7 @@ func (r *pickSHARunner) processCandidate(ctx context.Context, c jiraIssue) error
 		return errors.Wrap(err, "posting Slack message")
 	}
 	if !r.dryRun {
-		if err := r.jira.AddComment(c.Key, buildPickSHAJiraComment(details, link, releaseNotesPRURL)); err != nil {
+		if _, err := r.jira.AddComment(c.Key, buildPickSHAJiraComment(details, link, releaseNotesPRURL)); err != nil {
 			return errors.Wrap(err, "adding Jira comment")
 		}
 	} else {
@@ -388,6 +406,63 @@ func (r *pickSHARunner) fetchSHAForPickSHA(
 		return "", "", errors.Wrapf(err, "fetching tip SHA for fallback branch %s", masterBranch)
 	}
 	return sha, masterBranch, nil
+}
+
+// verifyVersionFile reads versionFilePath at the picked SHA and checks it
+// against want (the version parsed from the ticket summary). It records the
+// outcome in the run summary (best-effort) and returns an error on any
+// mismatch or read failure so the caller blocks the build-and-sign dispatch.
+//
+// fetchBranch is the branch the SHA actually came from (which may be master
+// via the pre-release fallback even though the ticket names a release-series
+// staging branch); it's included in the messages so an operator knows where
+// to apply the fix.
+func (r *pickSHARunner) verifyVersionFile(
+	ctx context.Context, key, sha, fetchBranch string, want version.Version,
+) error {
+	raw, err := r.gh.GetFileContentAtRef(ctx, sha, versionFilePath)
+	if err != nil {
+		return errors.Wrapf(err, "reading %s at %s (%s)", versionFilePath, sha, fetchBranch)
+	}
+	gotStr := strings.TrimSpace(raw)
+	got, err := version.Parse(gotStr)
+	if err != nil {
+		return errors.Wrapf(err, "parsing %s contents %q at %s (%s)",
+			versionFilePath, gotStr, sha, fetchBranch)
+	}
+	match := got.Equals(want)
+	r.append(buildVersionCheckSummary(key, sha, fetchBranch, want, got, match, r.repo))
+	if !match {
+		return errors.Newf(
+			"%s at %s (%s) is %s but ticket %s targets %s; "+
+				"fix %s on %s and re-run pick-sha",
+			versionFilePath, sha, fetchBranch, got, key, want,
+			versionFilePath, fetchBranch)
+	}
+	log.Printf("ticket %s: verified %s=%s at %s (%s)", key, versionFilePath, got, sha, fetchBranch)
+	return nil
+}
+
+// buildVersionCheckSummary renders the Markdown block recorded for one
+// ticket's version check. A mismatch is rendered as a prominent failure block
+// (the dispatch is blocked), a match as a one-line confirmation. The SHA links
+// to the commit so an operator can inspect version.txt directly.
+func buildVersionCheckSummary(
+	key, sha, fetchBranch string, want, got version.Version, match bool, repo string,
+) string {
+	url := commitURL(repo, sha)
+	if !match {
+		return fmt.Sprintf(
+			"## ❌ %s — version mismatch\n\n"+
+				"`%s` at [`%s`](%s) on `%s` is `%s`, but the release ticket targets `%s`.\n\n"+
+				"**build-and-sign was not dispatched.** Fix `%s` on `%s` and re-run pick-sha.\n\n",
+			key, versionFilePath, shortSHA(sha), url, fetchBranch, got, want,
+			versionFilePath, fetchBranch)
+	}
+	return fmt.Sprintf(
+		"## ✅ %s — version verified\n\n"+
+			"`%s` at [`%s`](%s) on `%s` is `%s`, matching the release ticket.\n\n",
+		key, versionFilePath, shortSHA(sha), url, fetchBranch, got)
 }
 
 // notifyReleaseNotes builds the release-notes API payload from the Jira
@@ -444,10 +519,6 @@ func (r *pickSHARunner) warnReleaseNotes(key string, payload releaseNotesPayload
 		log.Printf("failed to post release-notes warning to %s: %v", r.opsChannel, postErr)
 	}
 }
-
-// jiraBrowseBaseURL is the public Jira base URL for issue links rendered
-// into Slack notifications. The cockroachlabs.atlassian.net host is fixed.
-const jiraBrowseBaseURL = "https://cockroachlabs.atlassian.net/browse"
 
 // docsInfraSlackLink is a pre-rendered Slack mrkdwn link to the
 // #docs-infrastructure-team channel — the team that owns the

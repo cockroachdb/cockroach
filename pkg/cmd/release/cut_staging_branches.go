@@ -99,6 +99,7 @@ var cutStagingFlags = struct {
 	repo         string
 	channel      string
 	opsChannel   string
+	summaryFile  string
 }{}
 
 var cutStagingBranchesCmd = &cobra.Command{
@@ -140,6 +141,10 @@ func init() {
 			" when "+envIsProductionRepo+"=true, "+nonProdChannel+" otherwise)")
 	cutStagingBranchesCmd.Flags().StringVar(&cutStagingFlags.opsChannel, "ops-channel", opsChannel,
 		"Slack channel for failure notifications")
+	cutStagingBranchesCmd.Flags().StringVar(&cutStagingFlags.summaryFile, "summary-file", "",
+		"path to a Markdown file to append per-ticket branch-cut results to "+
+			"(the GHA wrapper points this at /artifacts so the run can surface "+
+			"the outcome in the job summary, not just the logs); empty disables it")
 }
 
 func runCutStagingBranches(_ *cobra.Command, _ []string) error {
@@ -185,15 +190,16 @@ func runCutStagingBranches(_ *cobra.Command, _ []string) error {
 		}
 	}
 	r := &cutRunner{
-		jira:         jira,
-		gh:           gh,
-		slack:        sl,
-		dryRun:       cutStagingFlags.dryRun,
-		testIssueKey: cutStagingFlags.testIssueKey,
-		today:        today,
-		channel:      channel,
-		opsChannel:   cutStagingFlags.opsChannel,
-		repo:         cutStagingFlags.repo,
+		jira:          jira,
+		gh:            gh,
+		slack:         sl,
+		dryRun:        cutStagingFlags.dryRun,
+		testIssueKey:  cutStagingFlags.testIssueKey,
+		today:         today,
+		channel:       channel,
+		opsChannel:    cutStagingFlags.opsChannel,
+		repo:          cutStagingFlags.repo,
+		summaryWriter: summaryWriter{path: cutStagingFlags.summaryFile},
 	}
 	return r.run(context.Background())
 }
@@ -211,6 +217,9 @@ type cutRunner struct {
 	channel      string
 	opsChannel   string
 	repo         string
+	// summaryWriter records a branch-cut result block for each ticket the run
+	// acts on (cut/resumed) or fails on, for the GitHub Actions job summary.
+	summaryWriter
 }
 
 func (r *cutRunner) run(ctx context.Context) error {
@@ -225,6 +234,7 @@ func (r *cutRunner) run(ctx context.Context) error {
 	for _, c := range candidates {
 		if err := r.processCandidate(ctx, c); err != nil {
 			log.Printf("ticket %s failed: %v", c.Key, err)
+			r.append(buildCutFailureSummary(c.Key, err))
 			r.notifyFailure(errors.Wrapf(err, "ticket %s", c.Key))
 			if firstErr == nil {
 				firstErr = err
@@ -352,7 +362,7 @@ func (r *cutRunner) processCandidate(ctx context.Context, c jiraIssue) error {
 		return errors.Wrap(err, "posting Slack message")
 	}
 	if !r.dryRun {
-		if err := r.jira.AddComment(issueKey, buildJiraComment(details, link)); err != nil {
+		if _, err := r.jira.AddComment(issueKey, buildJiraComment(details, link)); err != nil {
 			return errors.Wrap(err, "adding Jira comment")
 		}
 	} else {
@@ -363,7 +373,41 @@ func (r *cutRunner) processCandidate(ctx context.Context, c jiraIssue) error {
 	} else {
 		log.Printf("ticket %s: cut staging branch %s at %s", issueKey, branchNames.staging, baseSHA)
 	}
+	r.append(buildCutSummary(issueKey, v, branchNames.staging, baseSHA, r.repo, branchAlreadyCut, r.dryRun))
 	return nil
+}
+
+// buildCutSummary renders the Markdown block recorded for one ticket whose
+// staging branch was cut (or resumed after a prior partial failure). The base
+// SHA links to the commit so an operator can confirm where the branch points.
+// resumed distinguishes a fresh cut from a recovery run; dryRun marks a
+// rehearsal where no branch was actually created.
+func buildCutSummary(
+	key string, v version.Version, stagingBranch, baseSHA, repo string, resumed, dryRun bool,
+) string {
+	action := "staging branch cut"
+	if resumed {
+		action = "staging branch resumed"
+	}
+	dryNote := ""
+	if dryRun {
+		dryNote = " _(dry run — no branch created)_"
+	}
+	return fmt.Sprintf(
+		"## ✅ %s — %s%s\n\n"+
+			"Release `%s`: staging branch `%s` at [`%s`](%s).\n\n",
+		key, action, dryNote, v, stagingBranch, shortSHA(baseSHA), commitURL(repo, baseSHA))
+}
+
+// buildCutFailureSummary renders the Markdown block recorded when a ticket
+// fails mid-cut. The error is included so the failure is actionable from the
+// job summary; the full context remains in the logs and the #release-ops
+// Slack notification.
+func buildCutFailureSummary(key string, err error) string {
+	return fmt.Sprintf(
+		"## ❌ %s — branch cut failed\n\n"+
+			"```\n%v\n```\n\n",
+		key, err)
 }
 
 // candidates returns the list of Jira tickets to evaluate. When
