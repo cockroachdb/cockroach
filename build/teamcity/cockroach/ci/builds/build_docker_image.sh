@@ -59,7 +59,7 @@ docker_tag="cockroachdb/cockroach-ci"
 docker build \
   --no-cache \
   --platform=linux/${build_arch} \
-  --build-arg TARGETARCH=${build_arch} \
+  --build-arg TARGETARCH="${build_arch}" \
   --tag="$docker_tag" \
   --memory 30g \
   --memory-swap -1 \

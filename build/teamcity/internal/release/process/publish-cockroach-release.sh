@@ -114,10 +114,25 @@ dockerhub_tag="${dockerhub_repository}:${build_name}"
 # context (matching build/deploy/Dockerfile) and build a multi-arch image in one
 # `docker buildx build` step instead of building per-arch images and stitching
 # them together with `docker manifest`.
-context=$(mktemp -d)
+tmpdir=$(mktemp -d)
+# Register a single EXIT trap up front. The buildx builder is created below; the
+# cleanup function removes it only if "$builder" has been set by then.
+builder=""
+cleanup() {
+  if [[ -n "$builder" ]]; then
+    docker buildx rm "$builder" 2>/dev/null || true
+  fi
+  rm -rf "$tmpdir"
+  remove_files_on_exit
+}
+trap cleanup EXIT
+
+context="$tmpdir/context"
+mkdir -p "$context"
 cp build/deploy/Dockerfile "$context/Dockerfile"
 for platform_name in amd64 arm64; do
-  staging=$(mktemp -d)
+  staging="$tmpdir/staging-${platform_name}"
+  mkdir -p "$staging"
   tar \
     --directory="$staging" \
     --extract \
@@ -132,10 +147,9 @@ for platform_name in amd64 arm64; do
   cp LICENSE licenses/THIRD-PARTY-NOTICES.txt "$context/${platform_name}/"
 done
 
-docker buildx rm "release-builder-$$" 2>/dev/null || true
-docker buildx create --name "release-builder-$$" --use
-cleanup_buildx() { docker buildx rm "release-builder-$$" || true; }
-trap "cleanup_buildx; remove_files_on_exit" EXIT
+builder="release-builder-$$"
+docker buildx rm "$builder" 2>/dev/null || true
+docker buildx create --name "$builder" --use
 
 docker buildx build --label version="$version" --pull --push --no-cache \
   --platform linux/amd64,linux/arm64 \
@@ -147,9 +161,11 @@ tc_start_block "Make and push FIPS docker image"
 dockerhub_tag_fips="${dockerhub_repository}:${build_name}-fips"
 gcr_tag_fips="${gcr_repository}:${build_name}-fips"
 
-fips_context=$(mktemp -d)
+fips_context="$tmpdir/fips-context"
+mkdir -p "$fips_context"
 cp build/deploy/Dockerfile "$fips_context/Dockerfile"
-fips_staging=$(mktemp -d)
+fips_staging="$tmpdir/staging-fips"
+mkdir -p "$fips_staging"
 tar \
   --directory="$fips_staging" \
   --extract \
