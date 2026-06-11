@@ -16,6 +16,8 @@ type RaftTransportMetrics struct {
 	MessagesSent    *metric.Counter
 	MessagesRcvd    *metric.Counter
 
+	BytesSent *metric.Counter
+
 	ReverseSent *metric.Counter
 	ReverseRcvd *metric.Counter
 
@@ -67,6 +69,13 @@ have a fuller picture.`,
 			Help:        "Number of Raft messages received by the Raft Transport",
 			Measurement: "Messages",
 			Unit:        metric.Unit_COUNT,
+		}),
+
+		BytesSent: metric.NewCounter(metric.Metadata{
+			Name:        "raft.transport.bytes-sent",
+			Help:        "Total byte size of Raft messages sent by the Raft Transport",
+			Measurement: "Bytes",
+			Unit:        metric.Unit_BYTES,
 		}),
 
 		ReverseSent: metric.NewCounter(metric.Metadata{

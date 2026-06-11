@@ -737,6 +737,7 @@ owners:
   raft_storage_read_bytes: cockroachdb/kv
   raft_ticks: cockroachdb/kv
   raft_timeoutcampaign: cockroachdb/kv
+  raft_transport_bytes_sent: cockroachdb/kv
   raft_transport_flow_token_dispatches_dropped: cockroachdb/kv
   raft_transport_rcvd: cockroachdb/kv
   raft_transport_reverse_rcvd: cockroachdb/kv

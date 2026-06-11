@@ -20518,6 +20518,15 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv
+    - name: raft.transport.bytes-sent
+      exported_name: raft_transport_bytes_sent
+      description: Total byte size of Raft messages sent by the Raft Transport
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/kv
     - name: raft.transport.flow-token-dispatches-dropped
       exported_name: raft_transport_flow_token_dispatches_dropped
       description: Number of flow token dispatches dropped by the Raft Transport

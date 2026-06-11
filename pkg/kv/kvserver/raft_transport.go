@@ -737,6 +737,7 @@ func (t *RaftTransport) processQueue(
 				return err
 			}
 			t.metrics.MessagesSent.Inc(int64(len(batch.Requests)))
+			t.metrics.BytesSent.Inc(int64(batch.Size()))
 			clearRequestBatch(batch)
 
 		case <-dispatchPendingFlowTokensCh:
@@ -766,6 +767,7 @@ func (t *RaftTransport) processQueue(
 				return err
 			}
 			t.metrics.MessagesSent.Inc(int64(len(batch.Requests)))
+			t.metrics.BytesSent.Inc(int64(batch.Size()))
 			clearRequestBatch(batch)
 
 			if fn := t.knobs.OnFallbackDispatch; fn != nil {

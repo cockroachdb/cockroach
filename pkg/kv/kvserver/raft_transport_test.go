@@ -452,6 +452,47 @@ func TestInOrderDelivery(t *testing.T) {
 	}
 }
 
+// TestRaftTransportBytesSentMetric verifies that the raft.transport.bytes-sent
+// metric tracks the marshaled size of the batches sent by the transport.
+func TestRaftTransportBytesSentMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	rttc := newRaftTransportTestContext(t, cluster.MakeTestingClusterSettings())
+	defer rttc.Stop()
+
+	serverReplica := roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
+	rttc.AddNode(serverReplica.NodeID)
+	serverChannel := rttc.ListenStore(serverReplica.NodeID, serverReplica.StoreID)
+
+	clientReplica := roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
+	clientTransport := rttc.AddNode(clientReplica.NodeID)
+
+	req := &kvserverpb.RaftMessageRequest{
+		RangeID: 1,
+		Message: raftpb.Message{
+			Type: raftpb.MsgApp,
+			From: raftpb.PeerID(clientReplica.ReplicaID),
+			To:   raftpb.PeerID(serverReplica.ReplicaID),
+		},
+		FromReplica: clientReplica,
+		ToReplica:   serverReplica,
+	}
+	// The batch envelope wraps the request, so the bytes recorded for the send
+	// must be at least the request's own marshaled size. Computed before
+	// SendAsync, which takes ownership of req.
+	expectedMin := int64(req.Size())
+
+	require.True(t, clientTransport.SendAsync(req, rpcbase.DefaultClass))
+	<-serverChannel.ch
+
+	testutils.SucceedsSoon(t, func() error {
+		if n := clientTransport.Metrics().BytesSent.Count(); n < expectedMin {
+			return errors.Errorf("expected bytes-sent >= %d, got %d", expectedMin, n)
+		}
+		return nil
+	})
+}
+
 // TestRaftTransportCircuitBreaker verifies that messages will be
 // dropped waiting for raft node connection to be established.
 func TestRaftTransportCircuitBreaker(t *testing.T) {
