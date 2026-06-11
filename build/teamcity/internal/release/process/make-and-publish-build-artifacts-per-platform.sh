@@ -102,39 +102,10 @@ $BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/
 EOF
 tc_end_block "Compile and publish artifacts"
 
-if [[ $platform == "linux-amd64" || $platform == "linux-arm64" || $platform == "linux-amd64-fips" ]]; then
-  arch="amd64"
-  if [[ $platform == "linux-arm64" ]]; then
-    arch="arm64"
-  fi
-
-  tc_start_block "Make and push docker image"
-  docker_login_with_google
-
-  cp --recursive "build/deploy" "build/deploy-${platform}"
-  tar \
-    --directory="build/deploy-${platform}" \
-    --extract \
-    --file="artifacts/cockroach-${build_name}.${platform}.tgz" \
-    --ungzip \
-    --ignore-zeros \
-    --strip-components=1
-  cp LICENSE licenses/THIRD-PARTY-NOTICES.txt "build/deploy-${platform}"
-  # Move the libs where Dockerfile expects them to be
-  mv build/deploy-${platform}/lib/* build/deploy-${platform}/
-  rmdir build/deploy-${platform}/lib
-
-  build_docker_tag="${gcr_repository}:${arch}-${build_name}"
-  if [[ $platform == "linux-amd64-fips" ]]; then
-    build_docker_tag="${gcr_repository}:${build_name}-fips"
-    docker build --no-cache --pull --platform "linux/${arch}" --tag="${build_docker_tag}" --build-arg fips_enabled=1 "build/deploy-${platform}"
-  else
-    docker build --no-cache --pull --platform "linux/${arch}" --tag="${build_docker_tag}" "build/deploy-${platform}"
-  fi
-  docker push "$build_docker_tag"
-
-  tc_end_block "Make and push docker images"
-fi
+# Docker images are no longer built here. The per-platform jobs only publish
+# tarballs to GCS; the multi-arch docker image is built from those tarballs in
+# a single `docker buildx build` step by
+# make-and-publish-build-artifacts-docker.sh.
 
 # Make finding the tag name easy.
 cat << EOF
