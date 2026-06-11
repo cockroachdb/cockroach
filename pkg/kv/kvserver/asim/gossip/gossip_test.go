@@ -177,16 +177,9 @@ func TestGossip(t *testing.T) {
 
 // TestStorePoolLocalities checks the per-node locality information that the
 // StorePool exposes to the allocator (replicate/lease queues) after gossip has
-// propagated store descriptors.
-//
-// NB: this currently documents a bug. asim feeds descriptors into each node's
-// StorePool via a path that bypasses StorePool.storeDescriptorUpdate, so the
-// StorePool's node-locality map is never populated. GetLocalitiesByStore
-// therefore falls back to a synthesized [node] tier only, dropping region/zone.
-// The allocator's diversity scoring is consequently region-blind: two stores in
-// the same region but on different nodes look as diverse as two stores in
-// different regions. The follow-up commit routes asim through the real
-// ingestion path and flips the assertions below to be region-aware.
+// propagated store descriptors. Region/zone tiers must be visible so the
+// allocator scores diversity correctly: two stores in the same region but on
+// different nodes are less diverse than two stores in different regions.
 func TestStorePoolLocalities(t *testing.T) {
 	settings := config.DefaultSimulationSettings()
 	// 4 nodes, one store each: nodes 1,2 in region "a"; nodes 3,4 in region "b".
@@ -216,8 +209,9 @@ func TestStorePoolLocalities(t *testing.T) {
 	sameRegion := loc[1].DiversityScore(loc[2])  // s1, s2: both region a
 	crossRegion := loc[1].DiversityScore(loc[3]) // s1: region a, s3: region b
 
-	// BUG: same-region stores score as maximally diverse because the StorePool
-	// only sees the synthesized [node] tier; region/zone never reached it.
-	require.Equal(t, roachpb.MaxDiversityScore, sameRegion)
+	// Same region, different nodes: localities are [region,zone,node] and differ
+	// only in the node tier (1 of 3 tiers).
+	require.Equal(t, 1.0/3.0, sameRegion)
+	// Different regions are maximally diverse.
 	require.Equal(t, roachpb.MaxDiversityScore, crossRegion)
 }

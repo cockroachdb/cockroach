@@ -75,42 +75,42 @@ gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 raft_cpu_per_write=
 
 # The assertion is deliberately on replica_moves rather than thrash_pct because
 # the current datadriven assertion helpers only assert on raw time-series stats.
-# The cluster starts diversity-optimal (see #171458), but mma-count still
-# produces excessive replica moves. A 20m run is enough to show the issue: with
-# this seed, sma-count has 11 moves on s7, while mma-count reaches 68. Expected
-# to fail until the issue is fixed.
+# The cluster starts diversity-optimal and stays that way: the queues respect
+# region locality and keep one replica per region, so region c stays pinned at
+# 80 replicas/store. sma-count then makes essentially no replica moves. mma-count,
+# however, still produces excessive replica moves, all within regions a and b. A
+# 20m run is enough to show the issue: with this seed, mma-count reaches 108 moves
+# on s7 while sma-count makes none. Expected to fail until the issue is fixed.
 assertion type=stat stat=replica_moves stores=(7) ticks=1 upper_bound=30 issue=https://github.com/cockroachdb/cockroach/issues/171458
 ----
 
 eval duration=20m samples=1 seed=42 cfgs=(sma-count,mma-count) metrics=(replicas,leases,replica_moves,cpu_util)
 ----
 sma-count:
-cpu_util#1: last:  [s1=0.13, s2=0.13, s3=0.13, s4=0.13, s5=0.13, s6=0.13, s7=0.15, s8=0.15, s9=0.13, s10=0.13, s11=0.13, s12=0.13, s13=0.15, s14=0.15, s15=0.15, s16=0.15, s17=0.13, s18=0.13, s19=0.13, s20=0.13, s21=0.13, s22=0.13] (stddev=0.01, mean=0.14, sum=3)
-cpu_util#1: thrash_pct: [s1=85%, s2=85%, s3=88%, s4=88%, s5=105%, s6=105%, s7=87%, s8=87%, s9=79%, s10=79%, s11=102%, s12=102%, s13=109%, s14=109%, s15=88%, s16=88%, s17=160%, s18=160%, s19=183%, s20=183%, s21=174%, s22=174%]  (sum=2519%)
+cpu_util#1: last:  [s1=0.12, s2=0.12, s3=0.12, s4=0.12, s5=0.12, s6=0.12, s7=0.14, s8=0.14, s9=0.12, s10=0.12, s11=0.12, s12=0.12, s13=0.12, s14=0.12, s15=0.14, s16=0.14, s17=0.16, s18=0.16, s19=0.16, s20=0.16, s21=0.18, s22=0.18] (stddev=0.02, mean=0.14, sum=3)
+cpu_util#1: thrash_pct: [s1=29%, s2=29%, s3=31%, s4=31%, s5=28%, s6=28%, s7=85%, s8=85%, s9=29%, s10=29%, s11=31%, s12=31%, s13=28%, s14=28%, s15=85%, s16=85%, s17=71%, s18=71%, s19=66%, s20=66%, s21=119%, s22=119%]  (sum=1205%)
 leases#1: first: [s1=60, s2=60, s3=60, s4=60, s5=60, s6=60, s7=60, s8=60, s9=0, s10=0, s11=0, s12=0, s13=0, s14=0, s15=0, s16=0, s17=0, s18=0, s19=0, s20=0, s21=0, s22=0] (stddev=28.86, mean=21.82, sum=480)
-leases#1: last:  [s1=26, s2=25, s3=26, s4=26, s5=26, s6=22, s7=25, s8=25, s9=20, s10=17, s11=19, s12=20, s13=20, s14=18, s15=21, s16=18, s17=21, s18=22, s19=20, s20=24, s21=20, s22=21] (stddev=2.89, mean=21.91, sum=482)
-leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=9%, s5=0%, s6=0%, s7=0%, s8=9%, s9=0%, s10=0%, s11=0%, s12=0%, s13=0%, s14=5%, s15=0%, s16=0%, s17=9%, s18=13%, s19=5%, s20=9%, s21=5%, s22=13%]  (sum=76%)
-replica_moves#1: last:  [s1=12, s2=10, s3=12, s4=10, s5=12, s6=11, s7=11, s8=11, s9=0, s10=0, s11=0, s12=0, s13=0, s14=1, s15=0, s16=0, s17=3, s18=5, s19=3, s20=3, s21=2, s22=5] (stddev=4.85, mean=5.05, sum=111)
-replica_moves#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%, s10=0%, s11=0%, s12=0%, s13=0%, s14=0%, s15=0%, s16=0%, s17=0%, s18=0%, s19=0%, s20=0%, s21=0%, s22=0%]  (sum=0%)
+leases#1: last:  [s1=27, s2=27, s3=27, s4=27, s5=27, s6=27, s7=27, s8=27, s9=18, s10=18, s11=18, s12=18, s13=18, s14=18, s15=18, s16=20, s17=21, s18=21, s19=20, s20=20, s21=19, s22=19] (stddev=3.95, mean=21.91, sum=482)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%, s10=0%, s11=0%, s12=0%, s13=0%, s14=0%, s15=0%, s16=0%, s17=0%, s18=0%, s19=0%, s20=0%, s21=0%, s22=0%]  (sum=0%)
 replicas#1: first: [s1=60, s2=60, s3=60, s4=60, s5=60, s6=60, s7=60, s8=60, s9=60, s10=60, s11=60, s12=60, s13=60, s14=60, s15=60, s16=60, s17=80, s18=80, s19=80, s20=80, s21=80, s22=80] (stddev=8.91, mean=65.45, sum=1440)
-replicas#1: last:  [s1=65, s2=66, s3=67, s4=65, s5=67, s6=63, s7=64, s8=66, s9=68, s10=66, s11=65, s12=66, s13=65, s14=65, s15=64, s16=66, s17=67, s18=68, s19=63, s20=66, s21=68, s22=66] (stddev=1.42, mean=65.73, sum=1446)
-replicas#1: thrash_pct: [s1=12%, s2=0%, s3=22%, s4=32%, s5=0%, s6=11%, s7=11%, s8=12%, s9=33%, s10=22%, s11=32%, s12=12%, s13=12%, s14=61%, s15=0%, s16=0%, s17=0%, s18=0%, s19=0%, s20=13%, s21=0%, s22=0%]  (sum=284%)
-hash: cd29bbb0e60b58a
+replicas#1: last:  [s1=60, s2=60, s3=60, s4=60, s5=60, s6=60, s7=60, s8=62, s9=60, s10=60, s11=60, s12=60, s13=60, s14=60, s15=60, s16=62, s17=80, s18=80, s19=80, s20=80, s21=80, s22=82] (stddev=8.97, mean=65.73, sum=1446)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%, s10=0%, s11=0%, s12=0%, s13=0%, s14=0%, s15=0%, s16=0%, s17=0%, s18=0%, s19=0%, s20=0%, s21=0%, s22=0%]  (sum=0%)
+hash: 43d3b24fc8f47c2f
 ==========================
 mma-count:
-cpu_util#1: last:  [s1=0.14, s2=0.14, s3=0.13, s4=0.13, s5=0.13, s6=0.13, s7=0.13, s8=0.13, s9=0.13, s10=0.13, s11=0.15, s12=0.15, s13=0.14, s14=0.14, s15=0.13, s16=0.13, s17=0.13, s18=0.13, s19=0.15, s20=0.15, s21=0.15, s22=0.15] (stddev=0.01, mean=0.14, sum=3)
-cpu_util#1: thrash_pct: [s1=529%, s2=529%, s3=583%, s4=583%, s5=534%, s6=534%, s7=733%, s8=733%, s9=495%, s10=495%, s11=857%, s12=857%, s13=436%, s14=436%, s15=745%, s16=745%, s17=708%, s18=708%, s19=999%, s20=999%, s21=938%, s22=938%]  (sum=15114%)
+cpu_util#1: last:  [s1=0.12, s2=0.12, s3=0.12, s4=0.12, s5=0.12, s6=0.12, s7=0.13, s8=0.13, s9=0.12, s10=0.12, s11=0.12, s12=0.12, s13=0.12, s14=0.12, s15=0.14, s16=0.14, s17=0.18, s18=0.18, s19=0.13, s20=0.13, s21=0.15, s22=0.15] (stddev=0.02, mean=0.13, sum=3)
+cpu_util#1: thrash_pct: [s1=1612%, s2=1612%, s3=1575%, s4=1575%, s5=1473%, s6=1473%, s7=1619%, s8=1619%, s9=1700%, s10=1700%, s11=1560%, s12=1560%, s13=1612%, s14=1612%, s15=1496%, s16=1496%, s17=2524%, s18=2524%, s19=2553%, s20=2553%, s21=2571%, s22=2571%]  (sum=40589%)
 leases#1: first: [s1=60, s2=60, s3=60, s4=60, s5=60, s6=60, s7=60, s8=60, s9=0, s10=0, s11=0, s12=0, s13=0, s14=0, s15=0, s16=0, s17=0, s18=0, s19=0, s20=0, s21=0, s22=0] (stddev=28.86, mean=21.82, sum=480)
-leases#1: last:  [s1=28, s2=30, s3=24, s4=27, s5=26, s6=28, s7=25, s8=25, s9=23, s10=27, s11=1, s12=23, s13=23, s14=23, s15=24, s16=28, s17=24, s18=26, s19=22, s20=1, s21=24, s22=0] (stddev=8.68, mean=21.91, sum=482)
-leases#1: thrash_pct: [s1=118%, s2=63%, s3=105%, s4=98%, s5=50%, s6=118%, s7=88%, s8=139%, s9=72%, s10=52%, s11=70%, s12=34%, s13=34%, s14=48%, s15=79%, s16=154%, s17=113%, s18=93%, s19=65%, s20=167%, s21=93%, s22=160%]  (sum=2012%)
-replica_moves#1: last:  [s1=58, s2=46, s3=55, s4=52, s5=45, s6=53, s7=68, s8=47, s9=37, s10=36, s11=0, s12=46, s13=31, s14=39, s15=50, s16=40, s17=52, s18=37, s19=41, s20=17, s21=43, s22=45] (stddev=13.76, mean=42.64, sum=938)
+leases#1: last:  [s1=24, s2=29, s3=31, s4=28, s5=29, s6=27, s7=23, s8=11, s9=25, s10=32, s11=26, s12=30, s13=26, s14=25, s15=29, s16=12, s17=1, s18=19, s19=13, s20=6, s21=12, s22=24] (stddev=8.58, mean=21.91, sum=482)
+leases#1: thrash_pct: [s1=314%, s2=389%, s3=349%, s4=373%, s5=339%, s6=320%, s7=291%, s8=230%, s9=297%, s10=336%, s11=294%, s12=272%, s13=271%, s14=271%, s15=248%, s16=237%, s17=450%, s18=495%, s19=517%, s20=542%, s21=540%, s22=451%]  (sum=7825%)
+replica_moves#1: last:  [s1=298, s2=328, s3=271, s4=304, s5=289, s6=316, s7=286, s8=128, s9=279, s10=300, s11=281, s12=282, s13=268, s14=252, s15=254, s16=116, s17=60, s18=44, s19=92, s20=114, s21=87, s22=73] (stddev=97.66, mean=214.64, sum=4722)
 replica_moves#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%, s10=0%, s11=0%, s12=0%, s13=0%, s14=0%, s15=0%, s16=0%, s17=0%, s18=0%, s19=0%, s20=0%, s21=0%, s22=0%]  (sum=0%)
 replicas#1: first: [s1=60, s2=60, s3=60, s4=60, s5=60, s6=60, s7=60, s8=60, s9=60, s10=60, s11=60, s12=60, s13=60, s14=60, s15=60, s16=60, s17=80, s18=80, s19=80, s20=80, s21=80, s22=80] (stddev=8.91, mean=65.45, sum=1440)
-replicas#1: last:  [s1=69, s2=66, s3=66, s4=65, s5=66, s6=66, s7=65, s8=65, s9=65, s10=67, s11=65, s12=66, s13=68, s14=66, s15=66, s16=66, s17=67, s18=65, s19=65, s20=64, s21=65, s22=63] (stddev=1.25, mean=65.73, sum=1446)
-replicas#1: thrash_pct: [s1=414%, s2=173%, s3=374%, s4=365%, s5=235%, s6=458%, s7=381%, s8=234%, s9=180%, s10=120%, s11=80%, s12=227%, s13=159%, s14=135%, s15=404%, s16=435%, s17=540%, s18=418%, s19=271%, s20=117%, s21=395%, s22=288%]  (sum=6406%)
-hash: f0278d5e1ce4b794
+replicas#1: last:  [s1=62, s2=64, s3=63, s4=63, s5=60, s6=61, s7=61, s8=57, s9=62, s10=63, s11=61, s12=64, s13=62, s14=63, s15=62, s16=58, s17=74, s18=89, s19=66, s20=72, s21=75, s22=84] (stddev=7.97, mean=65.73, sum=1446)
+replicas#1: thrash_pct: [s1=637%, s2=750%, s3=621%, s4=713%, s5=604%, s6=588%, s7=584%, s8=177%, s9=585%, s10=713%, s11=564%, s12=650%, s13=609%, s14=625%, s15=505%, s16=149%, s17=1678%, s18=1368%, s19=1806%, s20=1567%, s21=1662%, s22=1358%]  (sum=18513%)
+hash: f7c22c270eb363a1
 failed assertion sample 1
   stat=replica_moves value=(≤30.00) ticks=1
-	store=7 stat=68.00
-	store=7 stat=68.00
+	store=7 stat=286.00
+	store=7 stat=286.00
 ==========================

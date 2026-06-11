@@ -44,25 +44,25 @@ eval duration=10m samples=1 seed=42 cfgs=(sma-count,mma-count) metrics=(cpu,cpu_
 ----
 sma-count:
 disk_fraction_used#1: first: [s1=0.73, s2=0.73, s3=0.37, s4=0.37, s5=0.18, s6=0.18, s7=0.18] (stddev=0.23, mean=0.39, sum=3)
-disk_fraction_used#1: last:  [s1=0.92, s2=0.92, s3=0.37, s4=0.37, s5=0.06, s6=0.06, s7=0.06] (stddev=0.35, mean=0.39, sum=3)
-disk_fraction_used#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
+disk_fraction_used#1: last:  [s1=0.92, s2=0.92, s3=0.21, s4=0.21, s5=0.16, s6=0.17, s7=0.17] (stddev=0.33, mean=0.39, sum=3)
+disk_fraction_used#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=30%, s6=23%, s7=33%]  (sum=85%)
 leases#1: first: [s1=60, s2=0, s3=0, s4=0, s5=15, s6=0, s7=0] (stddev=20.78, mean=10.71, sum=75)
-leases#1: last:  [s1=42, s2=33, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=17.11, mean=10.71, sum=75)
-leases#1: thrash_pct: [s1=20%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=20%)
+leases#1: last:  [s1=41, s2=34, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=17.04, mean=10.71, sum=75)
+leases#1: thrash_pct: [s1=12%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=12%)
 replicas#1: first: [s1=60, s2=60, s3=30, s4=30, s5=15, s6=15, s7=15] (stddev=18.68, mean=32.14, sum=225)
-replicas#1: last:  [s1=75, s2=75, s3=30, s4=30, s5=5, s6=5, s7=5] (stddev=29.01, mean=32.14, sum=225)
-replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
-hash: 9e69db6ac95253c2
+replicas#1: last:  [s1=75, s2=75, s3=17, s4=17, s5=13, s6=14, s7=14] (stddev=27.14, mean=32.14, sum=225)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=30%, s6=23%, s7=33%]  (sum=85%)
+hash: 1f4760b1a2607a3d
 ==========================
 mma-count:
 disk_fraction_used#1: first: [s1=0.73, s2=0.73, s3=0.37, s4=0.37, s5=0.18, s6=0.18, s7=0.18] (stddev=0.23, mean=0.39, sum=3)
-disk_fraction_used#1: last:  [s1=0.92, s2=0.92, s3=0.37, s4=0.37, s5=0.06, s6=0.06, s7=0.06] (stddev=0.35, mean=0.39, sum=3)
-disk_fraction_used#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
+disk_fraction_used#1: last:  [s1=0.92, s2=0.92, s3=0.21, s4=0.21, s5=0.16, s6=0.17, s7=0.17] (stddev=0.33, mean=0.39, sum=3)
+disk_fraction_used#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=30%, s6=23%, s7=33%]  (sum=85%)
 leases#1: first: [s1=60, s2=0, s3=0, s4=0, s5=15, s6=0, s7=0] (stddev=20.78, mean=10.71, sum=75)
-leases#1: last:  [s1=42, s2=33, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=17.11, mean=10.71, sum=75)
-leases#1: thrash_pct: [s1=20%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=20%)
+leases#1: last:  [s1=41, s2=34, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=17.04, mean=10.71, sum=75)
+leases#1: thrash_pct: [s1=12%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=12%)
 replicas#1: first: [s1=60, s2=60, s3=30, s4=30, s5=15, s6=15, s7=15] (stddev=18.68, mean=32.14, sum=225)
-replicas#1: last:  [s1=75, s2=75, s3=30, s4=30, s5=5, s6=5, s7=5] (stddev=29.01, mean=32.14, sum=225)
-replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
-hash: 9e69db6ac95253c2
+replicas#1: last:  [s1=75, s2=75, s3=17, s4=17, s5=13, s6=14, s7=14] (stddev=27.14, mean=32.14, sum=225)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=30%, s6=23%, s7=33%]  (sum=85%)
+hash: 1f4760b1a2607a3d
 ==========================
