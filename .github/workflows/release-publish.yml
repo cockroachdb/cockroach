@@ -40,7 +40,7 @@ on:
         type: boolean
         default: false
       skip_jobs:
-        description: 'Comma-separated job IDs to skip (no spaces) when resuming after a partial failure. Validated by the validate-skip-jobs job. Valid IDs: validate-build, update-versions-master, publish-staged, publish-redhat.'
+        description: 'Comma-separated job IDs to skip (no spaces) when resuming after a partial failure. Validated by the validate-skip-jobs job. Valid IDs: validate-build, update-versions-master, publish-staged, publish-redhat, notify-publish.'
         type: string
         default: ''
 
@@ -101,6 +101,7 @@ jobs:
             update-versions-master
             publish-staged
             publish-redhat
+            notify-publish
           )
           IFS=',' read -ra requested <<< "$SKIP_JOBS"
           invalid=()
@@ -449,6 +450,7 @@ jobs:
          (needs.publish-staged.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',publish-staged,'))) &&
         (needs.publish-redhat.result == 'success' ||
          (needs.publish-redhat.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',publish-redhat,'))) &&
+        !contains(format(',{0},', inputs.skip_jobs), ',notify-publish,') &&
         !inputs.dry_run && vars.IS_PRODUCTION_REPO == 'true' &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
