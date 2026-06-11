@@ -31,6 +31,7 @@ go_test(
     embed = [":tenantcapabilitiesauthorizer"],
     deps = [
         "//pkg/kv/kvpb",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils",
         "//pkg/multitenant/tenantcapabilitiespb",

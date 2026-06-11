@@ -962,9 +962,11 @@ message EndTxnRequest {
   // above this deadline, an error will be returned and the client is supposed
   // to rollback the txn.
   util.hlc.Timestamp deadline = 3 [(gogoproto.nullable) = false];
-  // commit triggers. Note that commit triggers are for
-  // internal use only and will cause an error if requested through the
-  // external-facing KV API.
+  // InternalCommitTrigger holds triggers that are for internal use only: they
+  // drive privileged range operations (splits, merges, replica changes,
+  // sticky-bit updates) and are only ever populated by KV itself. A secondary
+  // tenant that attaches one is rejected unconditionally by the capability
+  // authorizer.
   InternalCommitTrigger internal_commit_trigger = 4;
   // Set of spans that the transaction has acquired locks within. These are
   // spans which must be resolved on txn completion. Note that these spans

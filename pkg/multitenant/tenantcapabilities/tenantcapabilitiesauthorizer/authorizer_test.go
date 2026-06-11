@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
@@ -219,5 +220,101 @@ func TestAllBatchRequestTypesHaveAssociatedCaps(t *testing.T) {
 		if !ok {
 			t.Errorf("no capability associated with request type %s", req)
 		}
+	}
+}
+
+// TestEndTxnWithCommitTriggerRequiresSystemTenant is a regression test for
+// VULM-477. A non-prepare EndTxn carries no capability requirement, but an
+// EndTxn may also carry an InternalCommitTrigger. Commit triggers drive
+// privileged range operations (split/merge, replica changes, sticky bit
+// modifications, node-liveness gossip) and are intended for internal use only.
+// A secondary tenant that attaches one to an otherwise-ordinary EndTxn must not
+// have it honored: the trigger executes in batcheval with little to no
+// validation of its contents against the tenant's keyspace, so allowing it lets
+// a tenant escape its capability set.
+//
+// Each batch mirrors the exploit: a write to anchor the transaction followed by
+// a committing EndTxn carrying a trigger. The authorization layer must reject it
+// for a secondary tenant regardless of the trigger's contents.
+func TestEndTxnWithCommitTriggerRequiresSystemTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	clusterSettings := cluster.MakeTestingClusterSettings()
+	reader := mockReader(make(map[roachpb.TenantID]*tenantcapabilities.Entry))
+	authorizer := New(clusterSettings, nil /* knobs */)
+	authorizer.BindReader(reader)
+
+	tenID := roachpb.MustMakeTenantID(10)
+	reader.updateState([]*tenantcapabilities.Update{
+		{Entry: tenantcapabilities.Entry{
+			TenantID:    tenID,
+			ServiceMode: mtinfopb.ServiceModeExternal,
+		}},
+	})
+
+	batchWithTrigger := func(ct *roachpb.InternalCommitTrigger) *kvpb.BatchRequest {
+		ba := &kvpb.BatchRequest{}
+		ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("a")}})
+		ba.Add(&kvpb.EndTxnRequest{Commit: true, InternalCommitTrigger: ct})
+		return ba
+	}
+
+	// Every kind of commit trigger must be rejected for a secondary tenant. The
+	// "empty" case matters most: the authorizer keys off InternalCommitTrigger !=
+	// nil, not off any populated sub-trigger, and an empty trigger that reached
+	// batcheval would crash the node (RunCommitTrigger fatals on an unrecognized
+	// trigger). It is also the exact boundary a future refactor could regress.
+	triggers := []struct {
+		name    string
+		trigger *roachpb.InternalCommitTrigger
+	}{
+		{"empty", &roachpb.InternalCommitTrigger{}},
+		{"sticky-bit", &roachpb.InternalCommitTrigger{StickyBitTrigger: &roachpb.StickyBitTrigger{}}},
+		{"split", &roachpb.InternalCommitTrigger{SplitTrigger: &roachpb.SplitTrigger{}}},
+		{"merge", &roachpb.InternalCommitTrigger{MergeTrigger: &roachpb.MergeTrigger{}}},
+		{"change-replicas", &roachpb.InternalCommitTrigger{ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{}}},
+		{"modified-span", &roachpb.InternalCommitTrigger{ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{}}},
+	}
+	for _, tc := range triggers {
+		t.Run(tc.name, func(t *testing.T) {
+			ba := batchWithTrigger(tc.trigger)
+			// The system tenant may always use commit triggers.
+			require.NoError(t, authorizer.HasCapabilityForBatch(ctx, roachpb.SystemTenantID, ba))
+			// A secondary tenant must be denied.
+			require.Error(t, authorizer.HasCapabilityForBatch(ctx, tenID, ba),
+				"secondary tenant was allowed to attach a commit trigger")
+		})
+	}
+
+	// A committing EndTxn without a trigger must remain allowed for a secondary
+	// tenant: the fix must not over-reject ordinary commits.
+	t.Run("no-trigger-allowed", func(t *testing.T) {
+		ba := &kvpb.BatchRequest{}
+		ba.Add(&kvpb.EndTxnRequest{Commit: true})
+		require.NoError(t, authorizer.HasCapabilityForBatch(ctx, tenID, ba))
+	})
+
+	// The rejection is mode-independent. In particular it must hold under
+	// allow-all, which otherwise waves through every capability check, and under
+	// the pre-v23.1 (v222) mode that getMode selects transiently during tenant
+	// startup before the capability reader is populated.
+	for _, mode := range []struct {
+		name string
+		mode authorizerModeType
+	}{
+		{"on", authorizerModeOn},
+		{"allow-all", authorizerModeAllowAll},
+		{"v222", authorizerModeV222},
+	} {
+		t.Run("mode="+mode.name, func(t *testing.T) {
+			authorizerMode.Override(ctx, &clusterSettings.SV, mode.mode)
+			defer authorizerMode.Override(ctx, &clusterSettings.SV, authorizerModeOn)
+			ba := batchWithTrigger(&roachpb.InternalCommitTrigger{
+				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{},
+			})
+			require.Errorf(t, authorizer.HasCapabilityForBatch(ctx, tenID, ba),
+				"secondary tenant trigger allowed under %s mode", mode.name)
+		})
 	}
 }

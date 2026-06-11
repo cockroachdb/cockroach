@@ -121,6 +121,10 @@ func (a *Authorizer) HasCapabilityForBatch(
 		return nil
 	}
 
+	if err := a.rejectInvalidBatchFromTenant(ba); err != nil {
+		return err
+	}
+
 	entry, mode := a.getMode(ctx, tenID)
 	if entry.ServiceMode == mtinfopb.ServiceModeNone || entry.ServiceMode == mtinfopb.ServiceModeStopping {
 		return errors.Newf("operation not allowed when in service mode %q", entry.ServiceMode)
@@ -138,6 +142,27 @@ func (a *Authorizer) HasCapabilityForBatch(
 		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
 		return err
 	}
+}
+
+// rejectInvalidBatch returns an error if the batch contains invalid
+// requests that should never be accepted from a tenant, regardless of
+// capabilities.
+func (a *Authorizer) rejectInvalidBatchFromTenant(ba *kvpb.BatchRequest) error {
+	for _, ru := range ba.Requests {
+		// Commit triggers drive privileged range operations (splits, merges, replica
+		// changes, sticky-bit updates, node-liveness gossip) and are KV-internal
+		// machinery, not a grantable capability. A secondary tenant has no legitimate
+		// reason to attach one — the SQL layer never produces them — and an empty
+		// trigger that reached batcheval would crash the node (RunCommitTrigger fatals
+		// on an unrecognized trigger). Reject any such request here, before the
+		// per-mode capability rules below, so that even the allow-all mode (which
+		// otherwise waves through every capability check) cannot let a tenant forge a
+		// trigger.
+		if et, ok := ru.GetInner().(*kvpb.EndTxnRequest); ok && et.InternalCommitTrigger != nil {
+			return errors.Newf("internal commit triggers may only be issued by the system tenant")
+		}
+	}
+	return nil
 }
 
 // authBatchNoCap implements the pre-v23.1 authorization behavior, where
@@ -267,6 +292,10 @@ var reqMethodToCap = map[kvpb.Method]methodCapability{
 
 	// The following have dynamic capabilities, depending on the type of request
 	// and the request's contents.
+	// NB: an EndTxn carrying an InternalCommitTrigger is rejected for secondary
+	// tenants unconditionally in HasCapabilityForBatch, before these per-mode
+	// capability rules are consulted — a commit trigger is not a grantable
+	// capability. Here we only classify ordinary and prepared EndTxns.
 	kvpb.EndTxn: dynamicCap(func(req kvpb.Request) tenantcapabilitiespb.ID {
 		et := req.(*kvpb.EndTxnRequest)
 		if et.Prepare {
