@@ -857,6 +857,13 @@ func TestRestoreWithBackupIDs(t *testing.T) {
 			disableIDs:   true,
 		},
 		{
+			name:         "RH restore from LATEST with AOST before latest backup",
+			collection:   rhColl,
+			token:        "LATEST",
+			aost:         rhTimes[1],
+			expectedRows: 1,
+		},
+		{
 			name:        "error/RH restore with time out of bounds of chain",
 			collection:  rhColl,
 			token:       backupIDsByColl[rhColl][1],
