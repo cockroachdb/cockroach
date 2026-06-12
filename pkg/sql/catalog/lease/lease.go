@@ -1591,6 +1591,15 @@ func (m *Manager) acquireNodeLease(
 				// instead of waiting for the asynchronous lease update.
 				m.leaseGeneration.Add(1)
 
+				// TestingBeforeRoleLeaseAcquisition fires after the in-memory
+				// descriptor (V_a) has been registered but before the storage lease
+				// is acquired below. Tests use it to deterministically bump the
+				// descriptor version into this window so the acquired storage lease
+				// (V_b) diverges from the registered version.
+				if fn := m.testingKnobs.TestingBeforeRoleLeaseAcquisition; fn != nil {
+					fn(id)
+				}
+
 				desc, err = doAcquisition()
 				if err != nil {
 					return false, err
@@ -1600,6 +1609,12 @@ func (m *Manager) acquireNodeLease(
 						fn(id, currentVersion, "system table acquisition returned nil, already leased")
 					}
 					return true, nil
+				}
+				// doAcquisition may have read a newer version than the one
+				// registered above if the descriptor was bumped concurrently.
+				// Must re-upsert to avoid conflicts or failures in purgeOldVersions.
+				if err := m.upsertDescriptorIntoState(ctx, id, session, desc); err != nil {
+					return false, err
 				}
 			} else {
 				desc, err := doAcquisition()
