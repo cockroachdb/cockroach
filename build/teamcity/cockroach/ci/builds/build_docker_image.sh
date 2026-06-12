@@ -28,14 +28,19 @@ tc_start_block "Copy cockroach binary and dependency files to build/deploy"
 # bazel-bin/pkg/cmd/cockroach/cockroach_/cockroach=>upstream_artifacts
 # bazel-bin/c-deps/libgeos/lib/libgeos.so=>upstream_artifacts
 # bazel-bin/c-deps/libgeos/lib/libgeos_c.so=>upstream_artifacts
+#
+# build/deploy/Dockerfile reads its inputs from a ${TARGETARCH}/ subdirectory of
+# the build context, so stage the files there.
+mkdir -p "build/deploy/${build_arch}"
 cp upstream_artifacts/cockroach\
    upstream_artifacts/libgeos.so \
    upstream_artifacts/libgeos_c.so \
-   build/deploy
+   "build/deploy/${build_arch}/"
 
-cp LICENSE licenses/THIRD-PARTY-NOTICES.txt build/deploy/
+cp build/deploy/cockroach.sh "build/deploy/${build_arch}/"
+cp LICENSE licenses/THIRD-PARTY-NOTICES.txt "build/deploy/${build_arch}/"
 
-chmod 755 build/deploy/cockroach
+chmod 755 "build/deploy/${build_arch}/cockroach"
 
 tc_end_block "Copy cockroach binary and dependency files to build/deploy"
 
@@ -54,6 +59,7 @@ docker_tag="cockroachdb/cockroach-ci"
 docker build \
   --no-cache \
   --platform=linux/${build_arch} \
+  --build-arg TARGETARCH="${build_arch}" \
   --tag="$docker_tag" \
   --memory 30g \
   --memory-swap -1 \

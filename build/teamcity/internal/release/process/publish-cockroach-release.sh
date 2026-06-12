@@ -107,87 +107,82 @@ configure_docker_creds
 docker_login_with_google
 docker_login
 
-declare -a gcr_arch_tags
-declare -a dockerhub_arch_tags
+gcr_tag="${gcr_repository}:${build_name}"
+dockerhub_tag="${dockerhub_repository}:${build_name}"
 
+# Lay out per-arch tarballs under ${arch}/ subdirectories of a single build
+# context (matching build/deploy/Dockerfile) and build a multi-arch image in one
+# `docker buildx build` step instead of building per-arch images and stitching
+# them together with `docker manifest`.
+tmpdir=$(mktemp -d)
+# Register a single EXIT trap up front. The buildx builder is created below; the
+# cleanup function removes it only if "$builder" has been set by then.
+builder=""
+cleanup() {
+  if [[ -n "$builder" ]]; then
+    docker buildx rm "$builder" 2>/dev/null || true
+  fi
+  rm -rf "$tmpdir"
+  remove_files_on_exit
+}
+trap cleanup EXIT
+
+context="$tmpdir/context"
+mkdir -p "$context"
+cp build/deploy/Dockerfile "$context/Dockerfile"
 for platform_name in amd64 arm64; do
-  cp --recursive "build/deploy" "build/deploy-${platform_name}"
+  staging="$tmpdir/staging-${platform_name}"
+  mkdir -p "$staging"
   tar \
-    --directory="build/deploy-${platform_name}" \
+    --directory="$staging" \
     --extract \
     --file="artifacts/cockroach-${build_name}.linux-${platform_name}.tgz" \
     --ungzip \
     --ignore-zeros \
     --strip-components=1
-  cp --recursive licenses "build/deploy-${platform_name}"
-  # Move the libs where Dockerfile expects them to be
-  mv build/deploy-${platform_name}/lib/* build/deploy-${platform_name}/
-  rmdir build/deploy-${platform_name}/lib
-
-  dockerhub_arch_tag="${dockerhub_repository}:${platform_name}-${build_name}"
-  gcr_arch_tag="${gcr_repository}:${platform_name}-${build_name}"
-  dockerhub_arch_tags+=("$dockerhub_arch_tag")
-  gcr_arch_tags+=("$gcr_arch_tag")
-
-  # Tag the arch specific images with only one tag per repository. The manifests will reference the tags.
-  docker build \
-    --label version="$version" \
-    --no-cache \
-    --pull \
-    --platform="linux/${platform_name}" \
-    --tag="${dockerhub_arch_tag}" \
-    --tag="${gcr_arch_tag}" \
-    "build/deploy-${platform_name}"
-  docker push "$gcr_arch_tag"
-  docker push "$dockerhub_arch_tag"
+  mkdir -p "$context/${platform_name}"
+  cp build/deploy/cockroach.sh "$context/${platform_name}/"
+  cp "$staging/cockroach" "$context/${platform_name}/"
+  cp "$staging"/lib/libgeos.so "$staging"/lib/libgeos_c.so "$context/${platform_name}/"
+  cp LICENSE licenses/THIRD-PARTY-NOTICES.txt "$context/${platform_name}/"
 done
 
-gcr_tag="${gcr_repository}:${build_name}"
-dockerhub_tag="${dockerhub_repository}:${build_name}"
-docker manifest rm "${gcr_tag}" || :
-docker manifest create "${gcr_tag}" "${gcr_arch_tags[@]}"
-docker manifest push "${gcr_tag}"
-docker manifest rm "${dockerhub_tag}" || :
-docker manifest create "${dockerhub_tag}" "${dockerhub_arch_tags[@]}"
-docker manifest push "${dockerhub_tag}"
+builder="release-builder-$$"
+docker buildx rm "$builder" 2>/dev/null || true
+docker buildx create --name "$builder" --use
 
-docker manifest rm "${dockerhub_repository}:latest"
-docker manifest create "${dockerhub_repository}:latest" "${dockerhub_arch_tags[@]}"
-docker manifest rm "${dockerhub_repository}:latest-${release_branch}" || :
-docker manifest create "${dockerhub_repository}:latest-${release_branch}" "${dockerhub_arch_tags[@]}"
+docker buildx build --label version="$version" --pull --push --no-cache \
+  --platform linux/amd64,linux/arm64 \
+  --tag "$gcr_tag" --tag "$dockerhub_tag" "$context"
 tc_end_block "Make and push multiarch docker images"
 
 
 tc_start_block "Make and push FIPS docker image"
-platform_name=amd64-fips
-cp --recursive "build/deploy" "build/deploy-${platform_name}"
-tar \
-  --directory="build/deploy-${platform_name}" \
-  --extract \
-  --file="artifacts/cockroach-${build_name}.linux-${platform_name}.tgz" \
-  --ungzip \
-  --ignore-zeros \
-  --strip-components=1
-cp --recursive licenses "build/deploy-${platform_name}"
-# Move the libs where Dockerfile expects them to be
-mv build/deploy-${platform_name}/lib/* build/deploy-${platform_name}/
-rmdir build/deploy-${platform_name}/lib
-
 dockerhub_tag_fips="${dockerhub_repository}:${build_name}-fips"
 gcr_tag_fips="${gcr_repository}:${build_name}-fips"
 
-# Tag the arch specific images with only one tag per repository. The manifests will reference the tags.
-docker build \
-  --label version="$version" \
-  --no-cache \
-  --pull \
-  --platform="linux/amd64" \
-  --tag="${dockerhub_tag_fips}" \
-  --tag="${gcr_tag_fips}" \
+fips_context="$tmpdir/fips-context"
+mkdir -p "$fips_context"
+cp build/deploy/Dockerfile "$fips_context/Dockerfile"
+fips_staging="$tmpdir/staging-fips"
+mkdir -p "$fips_staging"
+tar \
+  --directory="$fips_staging" \
+  --extract \
+  --file="artifacts/cockroach-${build_name}.linux-amd64-fips.tgz" \
+  --ungzip \
+  --ignore-zeros \
+  --strip-components=1
+mkdir -p "$fips_context/amd64"
+cp build/deploy/cockroach.sh "$fips_context/amd64/"
+cp "$fips_staging/cockroach" "$fips_context/amd64/"
+cp "$fips_staging"/lib/libgeos.so "$fips_staging"/lib/libgeos_c.so "$fips_context/amd64/"
+cp LICENSE licenses/THIRD-PARTY-NOTICES.txt "$fips_context/amd64/"
+
+docker buildx build --label version="$version" --pull --push --no-cache \
+  --platform linux/amd64 \
   --build-arg fips_enabled=1 \
-  "build/deploy-${platform_name}"
-docker push "$gcr_tag_fips"
-docker push "$dockerhub_tag_fips"
+  --tag "$gcr_tag_fips" --tag "$dockerhub_tag_fips" "$fips_context"
 tc_end_block "Make and push FIPS docker image"
 
 
@@ -230,7 +225,8 @@ tc_end_block "Publish binaries and archive as latest"
 
 tc_start_block "Tag docker image as latest-RELEASE_BRANCH"
 if [[ -z "$PRE_RELEASE" ]]; then
-  docker manifest push "${dockerhub_repository}:latest-${release_branch}"
+  docker buildx imagetools create \
+    -t "${dockerhub_repository}:latest-${release_branch}" "$dockerhub_tag"
 else
   echo "The ${dockerhub_repository}:latest-${release_branch} docker image tags were _not_ pushed."
 fi
@@ -243,7 +239,8 @@ tc_start_block "Tag docker images as latest"
 # https://github.com/cockroachdb/cockroach/issues/41067
 # https://github.com/cockroachdb/cockroach/issues/48309
 if [[ -n "${PUBLISH_LATEST}" || -n "${PRE_RELEASE}" ]]; then
-  docker manifest push "${dockerhub_repository}:latest"
+  docker buildx imagetools create \
+    -t "${dockerhub_repository}:latest" "$dockerhub_tag"
 else
   echo "The ${dockerhub_repository}:latest docker image tags were _not_ pushed."
 fi
