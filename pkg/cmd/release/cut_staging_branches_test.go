@@ -43,6 +43,7 @@ func TestParseReleaseVersion(t *testing.T) {
 		{name: "patch release", summary: "Release: v25.3.1", expectedVersion: "v25.3.1"},
 		{name: "trailing text", summary: "Release: v25.3.1 some other text", expectedVersion: "v25.3.1"},
 		{name: "alpha pre-release", summary: "Release: v25.3.1-alpha.1", expectedVersion: "v25.3.1-alpha.1"},
+		{name: "hotfix marker ignored", summary: "Release: v25.2.2 (hot fix)", expectedVersion: "v25.2.2"},
 		{name: "missing prefix", summary: "v25.3.1", expectedErr: "summary does not start with"},
 		{name: "garbage version", summary: "Release: vfoo.bar", expectedErr: "parsing version"},
 	}
@@ -61,19 +62,43 @@ func TestParseReleaseVersion(t *testing.T) {
 
 func TestDeriveBranchNames(t *testing.T) {
 	tests := []struct {
-		name            string
-		version         string
-		expectedBase    string
-		expectedStaging string
+		name              string
+		version           string
+		hotfix            bool
+		expectedBase      string
+		expectedBaseIsTag bool
+		expectedStaging   string
 	}{
 		{name: "patch release", version: "v25.4.3", expectedBase: "release-25.4", expectedStaging: "release-25.4.3-rc"},
 		{name: "alpha pre-release", version: "v25.3.1-alpha.1", expectedBase: "release-25.3", expectedStaging: "release-25.3.1-rc"},
+		{name: "hotfix branches from previous patch tag", version: "v25.2.2", hotfix: true,
+			expectedBase: "v25.2.1", expectedBaseIsTag: true, expectedStaging: "staging-v25.2.2"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			b := deriveBranchNames(mustParseVersion(t, tc.version))
+			b := deriveBranchNames(mustParseVersion(t, tc.version), tc.hotfix)
 			require.Equal(t, tc.expectedBase, b.base)
+			require.Equal(t, tc.expectedBaseIsTag, b.baseIsTag)
 			require.Equal(t, tc.expectedStaging, b.staging)
+		})
+	}
+}
+
+func TestIsHotfix(t *testing.T) {
+	tests := []struct {
+		name     string
+		summary  string
+		expected bool
+	}{
+		{name: "normal patch", summary: "Release: v25.2.20", expected: false},
+		{name: "hot fix marker", summary: "Release: v25.2.2 (hot fix)", expected: true},
+		{name: "unspaced hotfix marker", summary: "Release: v25.2.2 (hotfix)", expected: true},
+		{name: "uppercase marker", summary: "Release: v25.2.2 (HOT FIX)", expected: true},
+		{name: "pre-release", summary: "Release: v25.3.1-alpha.1", expected: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, isHotfix(tc.summary))
 		})
 	}
 }
@@ -178,7 +203,7 @@ func TestBuildReleaseDetails(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(`{"key":"REL-1234","fields":`+string(rawFields)+`}`), &issue))
 
 	v := mustParseVersion(t, "v25.4.3")
-	b := deriveBranchNames(v)
+	b := deriveBranchNames(v, false)
 	now := time.Date(2026, 4, 20, 7, 0, 0, 0, time.UTC)
 	d, err := buildReleaseDetails(v, &issue, b, "abc1234", now, "cockroachdb/cockroach")
 	require.NoError(t, err)
@@ -444,6 +469,58 @@ func TestCutRunnerValidate(t *testing.T) {
 	}
 }
 
+// TestCutRunnerValidateHotfix covers the hotfix branch of validate, where the
+// base ref is a release tag resolved through the Commits API rather than a
+// branch tip. mkRefHandler only serves heads refs, so this test stands a
+// dedicated server that also answers the commits/{ref} SHA lookup.
+func TestCutRunnerValidateHotfix(t *testing.T) {
+	bn := branchNames{base: "v25.2.1", baseIsTag: true, staging: "staging-v25.2.2"}
+	const tagSHA = "tagsha000deadbeef"
+
+	tests := []struct {
+		name        string
+		tagExists   bool
+		expectedSHA string
+		expectedErr string
+	}{
+		{name: "branches from previous patch tag", tagExists: true, expectedSHA: tagSHA},
+		{name: "missing base tag surfaces user-readable error", tagExists: false,
+			expectedErr: "base tag v25.2.1 does not exist on GitHub"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				// Staging branch never exists yet for a fresh hotfix cut.
+				case strings.Contains(r.URL.Path, "/git/ref/heads/"):
+					w.WriteHeader(http.StatusNotFound)
+				// GetCommitSHA1 returns the SHA as the raw response body.
+				case strings.HasSuffix(r.URL.Path, "/commits/refs/tags/v25.2.1"):
+					if !tc.tagExists {
+						w.WriteHeader(http.StatusNotFound)
+						return
+					}
+					_, _ = w.Write([]byte(tagSHA))
+				default:
+					t.Errorf("unexpected GitHub call: %s %s", r.Method, r.URL.Path)
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}))
+			defer srv.Close()
+			r := &cutRunner{gh: newGitHubClientForTest(t, srv)}
+			issue := mkJiraIssue(t, "REL-1", "Release: v25.2.2 (hot fix)", nil)
+			sha, alreadyCut, err := r.validate(context.Background(), issue, bn)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			require.False(t, alreadyCut)
+			require.Equal(t, tc.expectedSHA, sha)
+		})
+	}
+}
+
 func TestJiraIssueStatusName(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -647,28 +724,32 @@ func TestCutRunnerProcessCandidateEarlyReturns(t *testing.T) {
 // TestBuildCutSummary locks down the Markdown rendered for the job summary in
 // the cut, resumed, and dry-run cases, plus the failure block.
 func TestBuildCutSummary(t *testing.T) {
-	v := mustParseVersion(t, "v25.4.3")
-	const sha = "stagingsha0001beef99"
+	const (
+		title = "Release: v25.2.20"
+		sha   = "stagingsha0001beef99"
+	)
 
 	t.Run("fresh cut", func(t *testing.T) {
-		s := buildCutSummary("REL-1", v, "release-25.4.3-rc", sha, "owner/repo", false, false)
+		s := buildCutSummary("REL-1", title, "release-25.2.20-rc", sha, "owner/repo", false, false)
 		require.Contains(t, s, "✅")
-		require.Contains(t, s, "REL-1")
-		require.Contains(t, s, "staging branch cut")
-		require.Contains(t, s, "v25.4.3")
-		require.Contains(t, s, "release-25.4.3-rc")
+		// Heading links "<KEY> - <title>" to the Jira issue.
+		require.Contains(t, s, "[REL-1 - Release: v25.2.20](https://cockroachlabs.atlassian.net/browse/REL-1)")
+		// Body line drops the "Release vX:" prefix the old format carried.
+		require.Contains(t, s, "staging branch `release-25.2.20-rc` at")
+		require.NotContains(t, s, "Release `v25.2.20`:")
 		require.Contains(t, s, "stagingsha000") // shortened to 12 chars
 		require.Contains(t, s, "https://github.com/owner/repo/commit/"+sha)
 		require.NotContains(t, s, "dry run")
+		require.NotContains(t, s, "resumed")
 	})
 
 	t.Run("resumed", func(t *testing.T) {
-		s := buildCutSummary("REL-1", v, "release-25.4.3-rc", sha, "owner/repo", true, false)
-		require.Contains(t, s, "staging branch resumed")
+		s := buildCutSummary("REL-1", title, "release-25.2.20-rc", sha, "owner/repo", true, false)
+		require.Contains(t, s, "resumed")
 	})
 
 	t.Run("dry run", func(t *testing.T) {
-		s := buildCutSummary("REL-1", v, "release-25.4.3-rc", sha, "owner/repo", false, true)
+		s := buildCutSummary("REL-1", title, "release-25.2.20-rc", sha, "owner/repo", false, true)
 		require.Contains(t, s, "dry run")
 	})
 }
@@ -775,7 +856,7 @@ func TestCutRunnerProcessCandidateWritesSummary(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(data), "✅")
 	require.Contains(t, string(data), "REL-1")
-	require.Contains(t, string(data), "staging branch resumed")
+	require.Contains(t, string(data), "resumed")
 }
 
 // TestCutRunnerRunWritesFailureSummary guards the failure-block wiring in

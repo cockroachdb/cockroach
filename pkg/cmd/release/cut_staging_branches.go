@@ -297,7 +297,7 @@ func (r *cutRunner) processCandidate(ctx context.Context, c jiraIssue) error {
 	}
 	issueKey := c.Key
 
-	branchNames := deriveBranchNames(v)
+	branchNames := deriveBranchNames(v, isHotfix(full.Fields.Summary))
 	baseSHA, branchAlreadyCut, err := r.validate(ctx, full, branchNames)
 	if err != nil {
 		return errors.Wrap(err, "validating ticket and repo state")
@@ -373,30 +373,29 @@ func (r *cutRunner) processCandidate(ctx context.Context, c jiraIssue) error {
 	} else {
 		log.Printf("ticket %s: cut staging branch %s at %s", issueKey, branchNames.staging, baseSHA)
 	}
-	r.append(buildCutSummary(issueKey, v, branchNames.staging, baseSHA, r.repo, branchAlreadyCut, r.dryRun))
+	r.append(buildCutSummary(issueKey, full.Fields.Summary, branchNames.staging, baseSHA, r.repo, branchAlreadyCut, r.dryRun))
 	return nil
 }
 
 // buildCutSummary renders the Markdown block recorded for one ticket whose
-// staging branch was cut (or resumed after a prior partial failure). The base
-// SHA links to the commit so an operator can confirm where the branch points.
-// resumed distinguishes a fresh cut from a recovery run; dryRun marks a
-// rehearsal where no branch was actually created.
-func buildCutSummary(
-	key string, v version.Version, stagingBranch, baseSHA, repo string, resumed, dryRun bool,
-) string {
-	action := "staging branch cut"
+// staging branch was cut (or resumed after a prior partial failure). The
+// heading links the ticket key and its Jira summary (title) to the issue; the
+// body names the staging branch and links the base SHA to its commit so an
+// operator can confirm where the branch points. resumed distinguishes a fresh
+// cut from a recovery run; dryRun marks a rehearsal where no branch was
+// actually created — both are noted on the body line, leaving the heading as a
+// stable "<KEY> - <title>" link.
+func buildCutSummary(key, title, stagingBranch, baseSHA, repo string, resumed, dryRun bool) string {
+	body := fmt.Sprintf("staging branch `%s` at [`%s`](%s).",
+		stagingBranch, shortSHA(baseSHA), commitURL(repo, baseSHA))
 	if resumed {
-		action = "staging branch resumed"
+		body += " _(resumed — branch already existed)_"
 	}
-	dryNote := ""
 	if dryRun {
-		dryNote = " _(dry run — no branch created)_"
+		body += " _(dry run — no branch created)_"
 	}
-	return fmt.Sprintf(
-		"## ✅ %s — %s%s\n\n"+
-			"Release `%s`: staging branch `%s` at [`%s`](%s).\n\n",
-		key, action, dryNote, v, stagingBranch, shortSHA(baseSHA), commitURL(repo, baseSHA))
+	return fmt.Sprintf("## ✅ [%s - %s](%s/%s)\n\n%s\n\n",
+		key, title, jiraBrowseBaseURL, key, body)
 }
 
 // buildCutFailureSummary renders the Markdown block recorded when a ticket
@@ -435,9 +434,9 @@ func (r *cutRunner) candidates() ([]jiraIssue, error) {
 
 // validate verifies that the ticket and the GitHub repo are in a state where
 // we can cut the staging branch, and returns the SHA the caller should record
-// as "cut at". It distinguishes a missing base branch (errBranchNotFound)
-// from any other GitHub failure, which is propagated as-is so transient
-// infrastructure errors don't get reported as "branch not found".
+// as "cut at". The base ref that SHA is resolved from may be a release branch
+// or, for a hotfix, a release tag; resolveBaseSHA owns that distinction and
+// turns a missing base ref into a user-readable error.
 //
 // When the staging branch already exists on GitHub *and* Jira's
 // cfStagingBranch field already names it, validate treats this as a recovery
@@ -482,14 +481,38 @@ func (r *cutRunner) validate(
 			"cfStagingBranch in Jira is %q but no such branch exists on GitHub",
 			jiraStaging)
 	}
-	baseSHA, err := r.gh.GetBranchSHA(ctx, b.base)
+	baseSHA, err := r.resolveBaseSHA(ctx, b)
 	if err != nil {
-		if errors.Is(err, errBranchNotFound) {
-			return "", false, errors.Newf("base branch %s does not exist on GitHub", b.base)
-		}
-		return "", false, errors.Wrapf(err, "fetching tip SHA for base branch %s", b.base)
+		return "", false, err
 	}
 	return baseSHA, false, nil
+}
+
+// resolveBaseSHA returns the commit SHA the staging branch should be cut from:
+// the tip of the release-X.Y base branch for a normal release, or the commit
+// the vX.Y.(Z-1) release tag points to for a hotfix (annotated tags are
+// dereferenced to their target commit). A missing base ref is surfaced as a
+// user-readable error so an operator can see at a glance that the branch or tag
+// the ticket expects isn't there, distinct from a transient GitHub failure.
+func (r *cutRunner) resolveBaseSHA(ctx context.Context, b branchNames) (string, error) {
+	if b.baseIsTag {
+		sha, err := r.gh.GetTagSHA(ctx, b.base)
+		if err != nil {
+			if errors.Is(err, errBranchNotFound) {
+				return "", errors.Newf("base tag %s does not exist on GitHub", b.base)
+			}
+			return "", errors.Wrapf(err, "fetching commit SHA for base tag %s", b.base)
+		}
+		return sha, nil
+	}
+	sha, err := r.gh.GetBranchSHA(ctx, b.base)
+	if err != nil {
+		if errors.Is(err, errBranchNotFound) {
+			return "", errors.Newf("base branch %s does not exist on GitHub", b.base)
+		}
+		return "", errors.Wrapf(err, "fetching tip SHA for base branch %s", b.base)
+	}
+	return sha, nil
 }
 
 // notifyFailure posts a one-line summary to Slack so operators see "something
@@ -537,17 +560,46 @@ func actionsRunURL() string {
 	return fmt.Sprintf("%s/%s/actions/runs/%s", server, repo, runID)
 }
 
-// branchNames holds the base and staging branch names derived from a
-// release version.
+// branchNames holds the base ref a staging branch is cut from and the staging
+// branch name itself, both derived from a release version.
+//
+// For a normal scheduled/patch release the base is the open release-X.Y branch
+// and the staging branch is release-X.Y.Z-rc. For a hotfix (a ticket whose
+// summary carries a "(hot fix)" marker) the staging branch is staging-vX.Y.Z
+// and the base is the vX.Y.(Z-1) release tag — a hotfix is built directly on
+// top of the previously published patch rather than on the open release branch.
 type branchNames struct {
-	base    string // release-25.4
-	staging string // release-25.4.3-rc
+	// base is the ref the staging branch is cut from: a branch name
+	// (release-25.4) for normal releases, or a release tag (v25.2.1) for
+	// hotfixes. baseIsTag selects which GitHub lookup resolves it to a SHA.
+	base      string
+	baseIsTag bool
+	// staging is the branch created by the cut: release-25.4.3-rc for normal
+	// releases, staging-v25.2.2 for hotfixes.
+	staging string
 }
 
-func deriveBranchNames(v version.Version) branchNames {
-	base := fmt.Sprintf("release-%d.%d", v.Major().Year, v.Major().Ordinal)
-	staging := fmt.Sprintf("release-%d.%d.%d-rc", v.Major().Year, v.Major().Ordinal, v.Patch())
-	return branchNames{base: base, staging: staging}
+func deriveBranchNames(v version.Version, hotfix bool) branchNames {
+	year, ordinal, patch := v.Major().Year, v.Major().Ordinal, v.Patch()
+	if hotfix {
+		return branchNames{
+			base:      fmt.Sprintf("v%d.%d.%d", year, ordinal, patch-1),
+			baseIsTag: true,
+			staging:   fmt.Sprintf("staging-v%d.%d.%d", year, ordinal, patch),
+		}
+	}
+	return branchNames{
+		base:    fmt.Sprintf("release-%d.%d", year, ordinal),
+		staging: fmt.Sprintf("release-%d.%d.%d-rc", year, ordinal, patch),
+	}
+}
+
+// isHotfix reports whether a release ticket summary marks a hotfix release.
+// Hotfix tickets carry a "(hot fix)" marker (e.g. "Release: v25.2.2 (hot fix)");
+// the match is case-insensitive and tolerates the unspaced "(hotfix)" variant.
+func isHotfix(summary string) bool {
+	s := strings.ToLower(summary)
+	return strings.Contains(s, "(hot fix)") || strings.Contains(s, "(hotfix)")
 }
 
 // parseReleaseVersion extracts the version from a Jira summary of the form
