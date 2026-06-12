@@ -17,6 +17,7 @@ import (
 	pb "cloud.google.com/go/pubsub/apiv1/pubsubpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -389,7 +390,7 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, err
 		if err != nil {
 			return nil, errors.Wrap(err, "decoding credentials json")
 		}
-		creds, err = google.CredentialsFromJSON(ctx, credsJSON, authScope)
+		creds, err = gcp.CredentialsFromJSON(ctx, credsJSON, authScope)
 		if err != nil {
 			return nil, errors.Wrap(err, "creating credentials from json")
 		}
