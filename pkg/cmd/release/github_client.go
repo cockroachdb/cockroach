@@ -63,6 +63,23 @@ func (c *githubClient) GetBranchSHA(ctx context.Context, branch string) (string,
 	return *ref.Object.SHA, nil
 }
 
+// GetTagSHA returns the commit SHA the named tag points to. Annotated tags are
+// dereferenced to their target commit (the Commits API resolves the ref), so
+// the result is always a commit SHA suitable for creating a branch from. It
+// returns errBranchNotFound (wrapped) when the tag doesn't exist (404), reusing
+// the same sentinel as GetBranchSHA so callers can treat "ref not found"
+// uniformly regardless of whether they looked up a branch or a tag.
+func (c *githubClient) GetTagSHA(ctx context.Context, tag string) (string, error) {
+	sha, resp, err := c.client.Repositories.GetCommitSHA1(ctx, c.owner, c.repo, "refs/tags/"+tag, "")
+	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return "", errors.Wrapf(errBranchNotFound, "get tag %s", tag)
+		}
+		return "", errors.Wrapf(err, "get tag %s", tag)
+	}
+	return sha, nil
+}
+
 // GetFileContentAtRef returns the decoded contents of the file at path as of
 // the given ref (a SHA, branch, or tag). It is used to read a file out of a
 // specific commit without checking the repository out. The GitHub Contents
