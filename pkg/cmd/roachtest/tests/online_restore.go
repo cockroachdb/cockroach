@@ -888,13 +888,6 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 		Execute: allNodes,
 	}
 
-	// Since we are intentionally failing the download job by deleting a file,
-	// we reduce the retry duration for the job to speed up the test.
-	_, err = dbConn.ExecContext(
-		ctx, "SET CLUSTER SETTING backup.restore.online_download_retry_max_duration = '5s'",
-	)
-	require.NoError(t, err, "failed to set download phase retry duration")
-
 	// A cluster backup will not allow deleting SSTs before the link phase
 	// completes, as it reads from the SSTs to restore the system tables. #170225
 	// outlines a bug where linked SSTs are being ingested into L0, which triggers
