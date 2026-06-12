@@ -72,7 +72,8 @@ func ParseArch(s string) CPUArch {
 		return ArchAMD64
 	}
 	if strings.Contains(arch, "arm64") || strings.Contains(arch, "aarch64") ||
-		strings.Contains(arch, "ampere") || strings.Contains(arch, "graviton") {
+		strings.Contains(arch, "ampere") || strings.Contains(arch, "graviton") ||
+		strings.Contains(arch, "axion") {
 		return ArchARM64
 	}
 	if strings.Contains(arch, "fips") {

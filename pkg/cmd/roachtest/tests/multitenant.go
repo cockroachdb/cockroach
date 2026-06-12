@@ -398,8 +398,8 @@ func registerMultiTenantMultiregion(r registry.Registry) {
 			9,
 			spec.Geo(),
 			spec.GCEZones(strings.Join([]string{
-				"us-west1-b", "us-west1-b", "us-west1-b",
-				"us-west1-b", "us-west1-b", "us-west1-b",
+				"us-west1-c", "us-west1-c", "us-west1-c",
+				"us-west1-c", "us-west1-c", "us-west1-c",
 				"us-east1-b", "us-east1-b", "us-east1-b",
 			}, ",")),
 		),

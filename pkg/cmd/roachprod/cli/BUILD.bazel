@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cli",
@@ -55,5 +55,16 @@ go_library(
         "@org_golang_x_term//:term",
         "@org_golang_x_text//language",
         "@org_golang_x_text//message",
+    ],
+)
+
+go_test(
+    name = "cli_test",
+    srcs = ["create_opts_test.go"],
+    embed = [":cli"],
+    deps = [
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
+        "@com_github_stretchr_testify//require",
     ],
 )

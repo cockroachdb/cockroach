@@ -15,6 +15,9 @@ type MachineInfo struct {
   // Allowed number of local SSDs, in ascending order; empty if local SSD not
   // supported.
   AllowedLocalSSDCount  []int
+  // LocalSSDAutoAttached is true when the machine type includes local SSDs
+  // automatically and callers must not request scratch disks separately.
+  LocalSSDAutoAttached  bool
   // List of allowed storage types, e.g. "pd-ssd", "hyperdisk-balanced".
   StorageTypes          []string
   // CPU platforms supported by this machine type, in oldest-to-newest order.
@@ -34,6 +37,7 @@ MachineInfo{
   MemoryGiB:            128,
   Architecture:         "amd64",
   AllowedLocalSSDCount: []int{4, 8, 16, 24},
+  LocalSSDAutoAttached: false,
   StorageTypes:         []string{"pd-standard", "pd-balanced", "pd-ssd", "pd-extreme", "hyperdisk-balanced", "hyperdisk-throughput"},
   CPUPlatforms:         []string{"Intel Cascade Lake", "Intel Ice Lake"},
 }
@@ -93,18 +97,29 @@ To update the code, consult the following Google Cloud documentation pages:
 
 2. **Local SSD counts** (exact mappings required): GCE has two distinct models:
    - **Older families (N1, N2, N2D, C2, C2D, M1, M3)**: Local SSDs can be attached to
-     base machine types. The allowed counts vary by vCPU count.
+     base machine types. The allowed counts vary by vCPU count. Set
+     `AllowedLocalSSDCount` to the requestable counts and leave
+     `LocalSSDAutoAttached` false.
    - **Newer families (C3, C3D, C4, C4A, C4D)**: Base types do NOT support local SSD.
      Only `-lssd` variants (e.g., `c4a-standard-8-lssd`) support local SSD, with
      fixed (not variable) counts. For these families, `AllowedLocalSSDCount` should
-     be empty for base types.
+     be empty for base types. For supported `-lssd` variants, set
+     `AllowedLocalSSDCount` to the fixed count and set `LocalSSDAutoAttached` true
+     because callers must not request additional scratch local SSD disks.
 
-   **Important**: The full list of allowed local SSD counts for each machine type
-   and vCPU configuration is documented at:
+   **IMPORTANT — `-lssd` is NOT available for all variants.** The `-lssd` suffix is
+   only offered for specific variants, and the code MUST gate on variant before
+   setting `AllowedLocalSSDCount`:
+   - **C3**: `-lssd` is only available for the `standard` variant (NOT `highmem` or `highcpu`).
+   - **C3D, C4, C4A, C4D**: `-lssd` is available for `standard` and `highmem` variants
+     (NOT `highcpu`).
+
+   Verify the supported variants at:
    https://docs.cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds
 
    When updating the `localSSDCounts*` and `lssdCount*` functions in the code,
-   always verify against this documentation to ensure the allowed counts are accurate.
+   always verify against this documentation to ensure the allowed counts and
+   `LocalSSDAutoAttached` values are accurate.
 
 3. **Architecture**: determined by machine family:
    - ARM64: T2A, C4A, N4A
@@ -246,12 +261,19 @@ When adding or modifying machine families, verify the following:
 
 2. **Local SSD model**: Determine which local SSD model applies:
    - **Older families (N1, N2, N2D, C2, C2D, M1, M3)**: Base types support
-     attaching local SSDs with varying counts.
+     attaching local SSDs with varying counts. `LocalSSDAutoAttached` must be false.
    - **Newer families (C3, C3D, C4, C4A, C4D)**: Base types do NOT support
      local SSD. Only `-lssd` variants do, with fixed (not variable) counts.
+     Supported `-lssd` variants must set `LocalSSDAutoAttached` true.
+   - **`-lssd` variant restrictions**: Not all variants support `-lssd`. The
+     code must gate on the variant name (e.g., `variant == "standard"`) before
+     setting `AllowedLocalSSDCount` and `LocalSSDAutoAttached`. See the `-lssd`
+     variant table in the "Implementation Patterns" section above.
 
 3. **Test coverage**: Add test cases for both base types AND `-lssd` variants
-   to verify the local SSD behavior is correct for both.
+   to verify the local SSD behavior is correct for both. Include negative test
+   cases for unsupported `-lssd` variants (e.g., `c4a-highcpu-32-lssd` should
+   have an empty `AllowedLocalSSDCount` and `LocalSSDAutoAttached: false`).
 
 4. **CPU platforms**: Check the machine family documentation for CPU platform
    information. Add the appropriate `platformsXXX` slice assignment and update
