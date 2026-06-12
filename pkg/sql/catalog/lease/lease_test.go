@@ -4585,3 +4585,55 @@ func TestLeaseInternalLookupCtxWithLocked(t *testing.T) {
 	require.NoError(t, grp.Wait())
 
 }
+
+// TestNoLeaseOnSyntheticPublicSchema verifies that the synthetic public schema
+// descriptor (ID 29) does not get a lease, even when information_schema or
+// crdb_internal queries trigger bulk lease acquisition on the system database.
+func TestNoLeaseOnSyntheticPublicSchema(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var acquiredPublicSchema atomic.Bool
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &lease.ManagerTestingKnobs{
+				LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
+					LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
+						if desc.GetID() == keys.SystemPublicSchemaID {
+							acquiredPublicSchema.Store(true)
+						}
+					},
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
+
+	// Enable leased descriptors and prefetching in catalog views so that
+	// EnsureBatch is exercised.
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = true")
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.prefetch.enabled = true")
+
+	// Query information_schema on the system database, which triggers
+	// GetAllDescriptorsForDatabase -> EnsureBatch on all namespace entries
+	// including ID 29.
+	sqlDB.Exec(t, "SELECT * FROM system.information_schema.tables")
+
+	// Verify no lease was acquired in memory.
+	require.False(t, acquiredPublicSchema.Load(),
+		"lease should not be acquired on synthetic public schema (desc %d)", keys.SystemPublicSchemaID)
+
+	// Verify no lease was stored in the system.lease table.
+	var count int
+	sqlDB.QueryRow(t,
+		"SELECT count(*) FROM system.lease WHERE desc_id = $1",
+		keys.SystemPublicSchemaID,
+	).Scan(&count)
+	require.Zero(t, count,
+		"no lease row should exist for synthetic public schema (desc %d)", keys.SystemPublicSchemaID)
+}
