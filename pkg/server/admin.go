@@ -2599,6 +2599,9 @@ func (s *adminServer) QueryPlan(
 func (s *systemAdminServer) DecommissionPreCheck(
 	ctx context.Context, req *serverpb.DecommissionPreCheckRequest,
 ) (*serverpb.DecommissionPreCheckResponse, error) {
+	if err := s.privilegeChecker.RequireRepairClusterPermission(ctx); err != nil {
+		return nil, err
+	}
 	var collectTraces bool
 	if s := tracing.SpanFromContext(ctx); (s != nil && s.RecordingType() != tracingpb.RecordingOff) || req.CollectTraces {
 		collectTraces = true
@@ -2689,6 +2692,9 @@ func (s *systemAdminServer) DecommissionPreCheck(
 func (s *systemAdminServer) DecommissionStatus(
 	ctx context.Context, req *serverpb.DecommissionStatusRequest,
 ) (*serverpb.DecommissionStatusResponse, error) {
+	if err := s.privilegeChecker.RequireRepairClusterPermission(ctx); err != nil {
+		return nil, err
+	}
 	r, err := s.decommissionStatusHelper(ctx, req)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
@@ -2827,6 +2833,9 @@ func (s *systemAdminServer) decommissionStatusHelper(
 func (s *systemAdminServer) Decommission(
 	ctx context.Context, req *serverpb.DecommissionRequest,
 ) (*serverpb.DecommissionStatusResponse, error) {
+	if err := s.privilegeChecker.RequireRepairClusterPermission(ctx); err != nil {
+		return nil, err
+	}
 	nodeIDs := req.NodeIDs
 
 	if len(nodeIDs) == 0 {
