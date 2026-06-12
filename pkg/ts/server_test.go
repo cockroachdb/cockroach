@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
@@ -252,6 +253,135 @@ func TestServerQuery(t *testing.T) {
 	}
 }
 
+// TestServerQueryMultiTenantAllSources is a regression test for a bug where the
+// unfiltered ("All sources") view dropped secondary tenants' data for app- and
+// node-level metrics in multi-tenant clusters.
+//
+// Time series are recorded differently depending on the metric:
+//
+//   - Store-level tenant metrics (e.g. livebytes): the bare source ("1") holds
+//     the cross-tenant aggregate and each tenant's source ("1-2") holds a subset
+//     of it, so summing the per-tenant sources back in would double-count.
+//   - App- and node-level metrics (e.g. sql.query.count): the bare source holds
+//     only the system tenant's contribution and each secondary tenant records
+//     under its own source ("1-2", "1-3"), so the per-tenant sources must be
+//     summed with the bare source to get the true total.
+//
+// The "All" view (no tenant filter) must therefore sum every source for app/node
+// metrics but keep only the bare source for store-tenant metrics. To exercise
+// filtering and aggregation across more than one base source, data is recorded on
+// two nodes ("1", "2") and two stores ("1", "2"), each with its own per-tenant
+// sources.
+func TestServerQueryMultiTenantAllSources(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	const appMetric = "cr.node.sql.query.count"
+	const storeMetric = "cr.store.livebytes"
+	const startNanos, endNanos int64 = 400 * 1e9, 500 * 1e9
+
+	// twoPoints returns the same value at both queried timestamps so each case
+	// can assert a single expected value.
+	twoPoints := func(v float64) []tspb.TimeSeriesDatapoint {
+		return []tspb.TimeSeriesDatapoint{
+			{TimestampNanos: startNanos, Value: v},
+			{TimestampNanos: endNanos, Value: v},
+		}
+	}
+
+	tsdb := s.TsDB().(*ts.DB)
+	require.NoError(t, tsdb.StoreData(ctx, ts.Resolution10s, []tspb.TimeSeriesData{
+		// App metric on two nodes: each bare source is system-only; each tenant
+		// records under its own nodeID-tenantID source.
+		{Name: appMetric, Source: "1", Datapoints: twoPoints(5)},
+		{Name: appMetric, Source: "1-2", Datapoints: twoPoints(1000)},
+		{Name: appMetric, Source: "1-3", Datapoints: twoPoints(200)},
+		{Name: appMetric, Source: "2", Datapoints: twoPoints(7)},
+		{Name: appMetric, Source: "2-2", Datapoints: twoPoints(2000)},
+		{Name: appMetric, Source: "2-3", Datapoints: twoPoints(300)},
+		// Store metric on two stores: each bare source is the cross-tenant
+		// aggregate; each tenant's source holds a subset of it.
+		{Name: storeMetric, Source: "1", Datapoints: twoPoints(100)},
+		{Name: storeMetric, Source: "1-2", Datapoints: twoPoints(70)},
+		{Name: storeMetric, Source: "2", Datapoints: twoPoints(150)},
+		{Name: storeMetric, Source: "2-2", Datapoints: twoPoints(90)},
+	}))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	testCases := []struct {
+		name     string
+		metric   string
+		tenantID roachpb.TenantID // zero value means no tenant filter ("All")
+		sources  []string
+		expected float64
+	}{
+		{name: "app all sources sums every tenant on every node", metric: appMetric, expected: 3512},
+		{name: "app all sources filtered to one node", metric: appMetric, sources: []string{"1"}, expected: 1205},
+		{name: "app specific tenant sums across nodes", metric: appMetric, tenantID: roachpb.MustMakeTenantID(2), expected: 3000},
+		{name: "app other tenant sums across nodes", metric: appMetric, tenantID: roachpb.MustMakeTenantID(3), expected: 500},
+		{name: "app system tenant sums bare sources", metric: appMetric, tenantID: roachpb.MustMakeTenantID(1), expected: 12},
+		{name: "store all sources sums only aggregates", metric: storeMetric, expected: 250},
+		{name: "store all sources filtered to one store", metric: storeMetric, sources: []string{"1"}, expected: 100},
+		{name: "store specific tenant sums subsets across stores", metric: storeMetric, tenantID: roachpb.MustMakeTenantID(2), expected: 160},
+		{name: "store system tenant sums aggregates", metric: storeMetric, tenantID: roachpb.MustMakeTenantID(1), expected: 250},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := client.Query(ctx, &tspb.TimeSeriesQueryRequest{
+				StartNanos: startNanos,
+				EndNanos:   endNanos,
+				Queries: []tspb.Query{
+					{Name: tc.metric, TenantID: tc.tenantID, Sources: tc.sources},
+				},
+			})
+			require.NoError(t, err)
+			require.Len(t, resp.Results, 1)
+			require.Len(t, resp.Results[0].Datapoints, 2)
+			for _, dp := range resp.Results[0].Datapoints {
+				require.Equal(t, tc.expected, dp.Value)
+			}
+		})
+	}
+}
+
+// TestStoreTenantMetricsInSync guards against drift between the hand-maintained
+// storeTenantMetrics copy in pkg/ts and its source of truth,
+// kvbase.TenantsStorageMetricsSet (populated by an init() in pkg/kv/kvserver).
+//
+// pkg/ts keeps its own copy because the authoritative set is assembled in
+// kvserver, which pkg/ts cannot import. The two are used as duals: the metrics
+// recorder records per-tenant store children for exactly the kvbase set, while
+// pkg/ts uses its copy (via isStoreTenantSeries) to decide how the "All" view
+// combines sources. If they disagree, store metrics misclassify: a metric in
+// the kvbase set but missing from the ts copy is treated as an app/node metric
+// and double-counted in the "All" view (the cockroachdb/cockroach#160479 bug),
+// while a metric only in the ts copy is wrongly scoped away for secondary
+// tenants. This test fails loudly so the copy is kept in sync by hand.
+func TestStoreTenantMetricsInSync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// The set is populated by kvserver's init(), which the test binary links.
+	require.NotEmpty(t, kvbase.TenantsStorageMetricsSet,
+		"kvbase.TenantsStorageMetricsSet is empty; kvserver init did not run")
+	require.Equal(t, kvbase.TenantsStorageMetricsSet, ts.StoreTenantMetricsForTesting,
+		"pkg/ts storeTenantMetrics has drifted from kvbase.TenantsStorageMetricsSet; "+
+			"update the copy in pkg/ts/server.go to match")
+}
+
 // TestServerQueryStarvation tests a very specific scenario, wherein a single
 // query request has more queries than the server's MaxWorkers count.
 func TestServerQueryStarvation(t *testing.T) {
@@ -318,12 +448,14 @@ func TestServerQueryTenant(t *testing.T) {
 	histogramBaseName := "sql.service.latency"
 	histogramSuffixedName := histogramBaseName + "-p99"
 
-	// Populate data directly. Aggregate sources ("1", "10") contain the sum
-	// of all tenants' data. Per-tenant sources ("1-2", "10-2") track tenant 2's
-	// individual contribution. The aggregate values are set to be the obvious
-	// sum so that the test clearly demonstrates no double-counting occurs:
-	//   node 1 aggregate (101) = tenant 2 (1) + other tenants (100)
-	//   node 10 aggregate (204) = tenant 2 (4) + other tenants (200)
+	// Populate data directly. tenantMetricName (and the histogram metric) are
+	// app-level metrics: the bare source ("1", "10") holds only the system
+	// tenant's value, and each secondary tenant records under its own source
+	// ("1-2", "10-2"). storeMetricName is a store-level tenant metric: the bare
+	// source holds the cross-tenant aggregate and the per-tenant source holds a
+	// subset of it. These record differently, so the unfiltered "All" view sums
+	// every source for app metrics but keeps only the bare source for store
+	// metrics.
 	tsdb := s.TsDB().(*ts.DB)
 	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
@@ -474,10 +606,10 @@ func TestServerQueryTenant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Undefined tenant ID should return aggregate values only (no double-counting).
-	// The aggregate source "1" has values 101.0 and 202.0, and source "10" has 204.0 and 405.0.
-	// Note these are the aggregate values, NOT aggregate + per-tenant (which would be
-	// 102.0 and 204.0 for source "1" if double-counting occurred).
+	// With no tenant filter ("All"), an app-level metric sums the system tenant's
+	// bare source with every secondary tenant's source. For source "1" that is
+	// 101 (system) + 1 (tenant 2) = 102; across sources "1" and "10" it is
+	// 101 + 1 + 204 + 4 = 310 at the first timestamp.
 	expectedAggregatedResult := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
 			{
@@ -488,11 +620,11 @@ func TestServerQueryTenant(t *testing.T) {
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 400 * 1e9,
-						Value:          101.0,
+						Value:          102.0,
 					},
 					{
 						TimestampNanos: 500 * 1e9,
-						Value:          202.0,
+						Value:          204.0,
 					},
 				},
 			},
@@ -504,11 +636,11 @@ func TestServerQueryTenant(t *testing.T) {
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 400 * 1e9,
-						Value:          305.0,
+						Value:          310.0,
 					},
 					{
 						TimestampNanos: 500 * 1e9,
-						Value:          607.0,
+						Value:          614.0,
 					},
 				},
 			},

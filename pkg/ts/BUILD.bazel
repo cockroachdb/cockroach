@@ -55,6 +55,7 @@ go_test(
     size = "medium",
     srcs = [
         "db_test.go",
+        "export_test.go",
         "iterator_test.go",
         "keys_test.go",
         "main_test.go",
@@ -72,6 +73,7 @@ go_test(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvbase",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",

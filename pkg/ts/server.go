@@ -124,36 +124,48 @@ func (t *TenantServer) Query(
 	for i, q := range req.Queries {
 		// Tenant-scoped metrics get marked with the tenantID. This includes both
 		// app-level metrics (in tenantRegistry) and store-level tenant metrics
-		// (identified by isStoreTenantMetric).
+		// (identified by isStoreTenantSeries).
 		//
 		// Histogram metrics are stored in TSDB under suffixed names (e.g.
 		// "cr.node.sql.service.latency-p99") but registered under the base name
-		// ("sql.service.latency"). Strip the suffix so both the registry lookup
-		// and the store metric check use the base metric name.
+		// ("sql.service.latency"). Strip the suffix for the registry lookup;
+		// isStoreTenantSeries strips it internally.
 		baseName := stripHistogramSuffix(q.Name)
-		storeMetricName := strings.TrimPrefix(baseName, "cr.store.")
-		if t.tenantRegistry.Contains(baseName) || isStoreTenantMetric(storeMetricName) {
+		if t.tenantRegistry.Contains(baseName) || isStoreTenantSeries(q.Name) {
 			req.Queries[i].TenantID = t.tenantID
 		}
 	}
 	return t.tenantConnect.Query(ctx, req)
 }
 
-// storeTenantMetrics mirrors kvbase.TenantsStorageMetricsSet. We maintain a
-// hardcoded copy here to avoid import cycles with kvbase.
+// storeTenantMetrics is a hand-maintained copy of
+// kvbase.TenantsStorageMetricsSet. The authoritative set is assembled in
+// pkg/kv/kvserver, which populates the kvbase variable from an init(); pkg/ts
+// cannot import kvserver, so the set is duplicated here. The two must stay
+// equal: TestStoreTenantMetricsInSync fails if they drift.
 var storeTenantMetrics = map[string]struct{}{
-	"livebytes": {}, "sysbytes": {}, "keybytes": {}, "valbytes": {},
-	"rangekeybytes": {}, "rangevalbytes": {}, "totalbytes": {},
-	"intentbytes": {}, "lockbytes": {}, "livecount": {}, "keycount": {},
-	"valcount": {}, "rangekeycount": {}, "rangevalcount": {},
-	"intentcount": {}, "lockcount": {}, "lockage": {}, "gcbytesage": {},
-	"syscount": {}, "abortspanbytes": {},
+	"abortspanbytes": {}, "gcbytesage": {}, "intentage": {},
+	"intentbytes": {}, "intentcount": {}, "keybytes": {},
+	"keycount": {}, "livebytes": {}, "livecount": {},
+	"rangekeybytes": {}, "rangekeycount": {}, "rangevalbytes": {},
+	"rangevalcount": {}, "replicas.cpunanospersecond": {}, "sysbytes": {},
+	"syscount": {}, "totalbytes": {}, "valbytes": {}, "valcount": {},
 }
 
 // isStoreTenantMetric returns true if name is in storeTenantMetrics.
 func isStoreTenantMetric(name string) bool {
 	_, ok := storeTenantMetrics[name]
 	return ok
+}
+
+// isStoreTenantSeries reports whether the fully-qualified time series name
+// refers to a store-level tenant metric (e.g. "cr.store.livebytes"). Such
+// metrics record the cross-tenant aggregate under the bare source and a subset
+// per tenant under nodeID-tenantID; all other metrics record only the system
+// tenant under the bare source and each secondary tenant under its own source.
+// This distinction governs how the unfiltered "All" view must combine sources.
+func isStoreTenantSeries(seriesName string) bool {
+	return isStoreTenantMetric(strings.TrimPrefix(stripHistogramSuffix(seriesName), "cr.store."))
 }
 
 // RegisterService registers the GRPC service.

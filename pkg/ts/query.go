@@ -822,6 +822,62 @@ func aggregate(agg tspb.TimeSeriesQueryAggregator, values []float64) float64 {
 	panic(fmt.Sprintf("unknown aggregator option encountered: %v", agg))
 }
 
+// addSourceReadOps adds the KV read operations for a single (source, timestamp)
+// to the batch, dispatching on the tenant filter. The reads it issues are
+// mirrored by the post-read source filtering in keepSourceRow. sumPerTenantSources
+// must be set from isStoreTenantSeries (negated) for the queried metric.
+func addSourceReadOps(
+	b *kv.Batch,
+	seriesName, source string,
+	diskResolution Resolution,
+	timestamp int64,
+	tenantID roachpb.TenantID,
+	sumPerTenantSources bool,
+) {
+	switch {
+	case tenantID.IsSet() && !tenantID.IsSystem():
+		// A specific secondary tenant: read only its individually-tracked
+		// data, stored under the nodeID-tenantID source.
+		b.Get(MakeDataKey(
+			seriesName, tsutil.MakeTenantSource(source, tenantID.String()),
+			diskResolution, timestamp,
+		))
+	case !tenantID.IsSet() && sumPerTenantSources:
+		// Unfiltered "All" view of an app- or node-level metric. The bare
+		// source holds only the system tenant's contribution; each secondary
+		// tenant records under its own nodeID-tenantID source. Read the bare
+		// source and scan all tenant sources so they are summed together.
+		b.Get(MakeDataKey(seriesName, source, diskResolution, timestamp))
+		startKey := MakeDataKey(
+			seriesName, tsutil.MakeTenantSourcePrefix(source), diskResolution, timestamp,
+		)
+		b.Scan(startKey, startKey.PrefixEnd())
+	default:
+		// System tenant, or the "All" view of a store-level tenant metric.
+		// The bare source already contains the cross-tenant aggregate, so
+		// reading tenant sources would double-count.
+		b.Get(MakeDataKey(seriesName, source, diskResolution, timestamp))
+	}
+}
+
+// keepSourceRow reports whether a scanned row should be included given the
+// tenant filter. tenantSource is the tenant component of the row's source (empty
+// for the bare source) as returned by tsutil.DecodeSource. It is the post-read
+// dual of addSourceReadOps: scans return every source, and this predicate keeps
+// the same subset those reads would have selected.
+func keepSourceRow(tenantSource string, tenantID roachpb.TenantID, sumPerTenantSources bool) bool {
+	if !tenantID.IsSet() {
+		// "All": app/node metrics record each tenant under a distinct source
+		// that must be summed; store-tenant metrics already have a
+		// pre-aggregated bare source, so per-tenant sources would double-count.
+		return sumPerTenantSources || tenantSource == ""
+	}
+	if tenantID.IsSystem() {
+		return tenantSource == ""
+	}
+	return tenantSource == tenantID.String()
+}
+
 // readFromDatabase retrieves data for the given series name, at the given disk
 // resolution, across the supplied time span, for only the given list of
 // sources.
@@ -838,16 +894,13 @@ func (db *DB) readFromDatabase(
 	b := &kv.Batch{}
 	startTimestamp := diskResolution.normalizeToSlab(timespan.StartNanos)
 	kd := diskResolution.SlabDuration()
+	sumPerTenantSources := !isStoreTenantSeries(seriesName)
 	for currentTimestamp := startTimestamp; currentTimestamp <= timespan.EndNanos; currentTimestamp += kd {
 		for _, source := range sources {
-			// Format the source based on the tenant filter. Non-system tenants
-			// use the format nodeID-tenantID; the system tenant and unfiltered
-			// queries use the bare nodeID which contains the aggregate.
-			if tenantID.IsSet() && !tenantID.IsSystem() {
-				source = tsutil.MakeTenantSource(source, tenantID.String())
-			}
-			key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
-			b.Get(key)
+			addSourceReadOps(
+				b, seriesName, source, diskResolution, currentTimestamp,
+				tenantID, sumPerTenantSources,
+			)
 		}
 	}
 	if err := db.db.Run(ctx, b); err != nil {
@@ -892,10 +945,9 @@ func (db *DB) readAllSourcesFromDatabase(
 		return nil, err
 	}
 
-	// Filter rows based on the tenant filter. When no tenant filter is set or
-	// the system tenant is specified, keep only aggregate sources (without a
-	// tenant prefix) to avoid double-counting. For specific tenants, keep only
-	// their individually-tracked data.
+	// Filter the scanned rows by tenant. See keepSourceRow for how the tenant
+	// filter and metric kind determine which sources are kept.
+	sumPerTenantSources := !isStoreTenantSeries(seriesName)
 	var rows []kv.KeyValue
 	for _, row := range b.Results[0].Rows {
 		_, source, _, _, err := DecodeDataKey(row.Key)
@@ -903,11 +955,7 @@ func (db *DB) readAllSourcesFromDatabase(
 			return nil, err
 		}
 		_, tenantSource := tsutil.DecodeSource(source)
-		if !tenantID.IsSet() || tenantID.IsSystem() {
-			if tenantSource == "" {
-				rows = append(rows, row)
-			}
-		} else if tenantSource == tenantID.String() {
+		if keepSourceRow(tenantSource, tenantID, sumPerTenantSources) {
 			rows = append(rows, row)
 		}
 	}
