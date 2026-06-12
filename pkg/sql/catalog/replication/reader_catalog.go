@@ -307,6 +307,8 @@ func shouldSetupForReader(id descpb.ID, name string, parentID descpb.ID) bool {
 	case keys.UsersTableID, keys.RoleMembersTableID, keys.RoleOptionsTableID,
 		keys.DatabaseRoleSettingsTableID, keys.TableStatisticsTableID:
 		return true
+	case keys.SystemDatabaseID, keys.SystemPublicSchemaID:
+		return false
 	default:
 		if parentID == keys.SystemDatabaseID {
 			switch name {
@@ -316,7 +318,7 @@ func shouldSetupForReader(id descpb.ID, name string, parentID descpb.ID) bool {
 				return false
 			}
 		}
-		return id != keys.SystemDatabaseID
+		return true
 	}
 }
 
