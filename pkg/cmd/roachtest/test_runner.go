@@ -706,6 +706,12 @@ func (r *testRunner) allocateOrAttachToCluster(
 		lopt.runnerL.PrintfCtx(ctx, "Creating new cluster for test %s: %s (arch=%q)", t.Name, t.Cluster, arch)
 	}
 
+	var clusterOS string
+	if clustersOpt.typ == localCluster {
+		clusterOS = runtime.GOOS
+	} else {
+		clusterOS = "linux" // Currently only test against linux clusters
+	}
 	cfg := clusterConfig{
 		nameOverride: clustersOpt.clusterName, // only set if we hit errClusterFound above
 		spec:         t.Cluster,
@@ -713,6 +719,8 @@ func (r *testRunner) allocateOrAttachToCluster(
 		username:     clustersOpt.user,
 		localCluster: clustersOpt.typ == localCluster,
 		arch:         arch,
+		os:           clusterOS,
+		benchmark:    t.Benchmark,
 	}
 	return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus)
 }

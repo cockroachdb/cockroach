@@ -835,6 +835,15 @@ func TestCreateRetryPlannerIgnoresFailedSuggestedZone(t *testing.T) {
 	require.Equal(t, "untried default zones", source)
 }
 
+func TestCreateRetryPlannerUsesGCEMachineTypeRetryCandidates(t *testing.T) {
+	params := spec.RoachprodClusterConfig{Cloud: spec.GCE}
+	planner := newCreateRetryPlanner(
+		spec.MakeClusterSpec(2), params, vm.ArchARM64, "t2a-standard-4",
+	)
+
+	require.Equal(t, []string{"us-central1-a", "us-central1-b", "us-central1-f"}, planner.retryCandidates)
+}
+
 func TestCreateRetryPlannerRecordFailureSkipsOverride(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
