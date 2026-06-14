@@ -1178,8 +1178,14 @@ func (s *state) UpdateStorePool(
 	for _, gossipStoreID := range storeIDs {
 		detail := storeDescriptors[gossipStoreID]
 		copiedDetail := detail.Copy()
-		node.storepool.Details.StoreDetails.Store(gossipStoreID, copiedDetail)
 		copiedDesc := *copiedDetail.Desc
+		// Ingest the descriptor through the real StorePool path so the per-node
+		// locality map and capacity callbacks are updated (writing Details
+		// directly skips both, leaving the allocator's diversity scoring
+		// region-blind). Pass the descriptor's gossip timestamp so store
+		// staleness reflects the modeled gossip delay rather than the current
+		// tick.
+		node.storepool.UpdateStoreDescriptor(copiedDesc, copiedDetail.LastUpdatedTime)
 		// TODO(mma): Support origin timestamps.
 		ts := s.clock.Now()
 		storeLoadMsg := mmaintegration.MakeStoreLoadMsg(copiedDesc, ts.UnixNano())

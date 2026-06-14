@@ -174,3 +174,44 @@ func TestGossip(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, int32(0), val.Desc.Capacity.LeaseCount)
 }
+
+// TestStorePoolLocalities checks the per-node locality information that the
+// StorePool exposes to the allocator (replicate/lease queues) after gossip has
+// propagated store descriptors. Region/zone tiers must be visible so the
+// allocator scores diversity correctly: two stores in the same region but on
+// different nodes are less diverse than two stores in different regions.
+func TestStorePoolLocalities(t *testing.T) {
+	settings := config.DefaultSimulationSettings()
+	// 4 nodes, one store each: nodes 1,2 in region "a"; nodes 3,4 in region "b".
+	c := state.ClusterInfoWithDistribution(
+		4 /* nodeCount */, 1 /* storesPerNode */, []string{"a", "b"},
+		[]float64{0.5, 0.5},
+	)
+	s := state.LoadClusterInfo(c, settings)
+
+	// Exchange store descriptors into every node's StorePool. Two ticks are
+	// needed: the first enqueues descriptors, the second delivers them once the
+	// gossip delay has elapsed (see TestGossip).
+	g := NewGossip(s, settings)
+	ctx := context.Background()
+	tick := settings.StartTime
+	g.Tick(ctx, tick, s)
+	tick = tick.Add(settings.StateExchangeDelay)
+	g.Tick(ctx, tick, s)
+
+	sp := s.StorePool(state.StoreID(1)).(*storepool.StorePool)
+	loc := sp.GetLocalitiesByStore([]roachpb.ReplicaDescriptor{
+		{NodeID: 1, StoreID: 1}, // region a
+		{NodeID: 2, StoreID: 2}, // region a
+		{NodeID: 3, StoreID: 3}, // region b
+	})
+
+	sameRegion := loc[1].DiversityScore(loc[2])  // s1, s2: both region a
+	crossRegion := loc[1].DiversityScore(loc[3]) // s1: region a, s3: region b
+
+	// Same region, different nodes: localities are [region,zone,node] and differ
+	// only in the node tier (1 of 3 tiers).
+	require.Equal(t, 1.0/3.0, sameRegion)
+	// Different regions are maximally diverse.
+	require.Equal(t, roachpb.MaxDiversityScore, crossRegion)
+}

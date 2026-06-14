@@ -1,0 +1,116 @@
+# This test attempts to reproduce one part of the replica movement observed in
+# #171402. The cluster has an asymmetric regional layout:
+#
+#   - region a: 4 nodes, 8 stores
+#   - region b: 4 nodes, 8 stores
+#   - region c: 3 nodes, 6 stores
+#
+# With RF=3 and locality at the region level, the diversity-optimal placement is
+# one replica per region. That means region c carries the same number of
+# replicas as regions a and b, but over fewer stores. The workload is write-only
+# and charges raft CPU to every replica.
+#
+# Suspected theory: locality diversity keeps one replica of each range in region
+# c; region c has fewer stores; write traffic gives every replica raft CPU; and
+# region c stores become comparatively overloaded per store. In this simulation,
+# mma-count eventually settles, but only after substantially more replica
+# movement than sma-count.
+gen_cluster nodes=11 stores_per_node=2 region=(a,b,c) nodes_per_region=(4,4,3)
+----
+
+gen_ranges ranges=480 repl_factor=3 placement_type=replica_placement bytes_mib=64
+{s1:*,s9,s17}:1
+{s2:*,s10,s18}:1
+{s3:*,s11,s19}:1
+{s4:*,s12,s20}:1
+{s5:*,s13,s21}:1
+{s6:*,s14,s22}:1
+{s7:*,s15,s17}:1
+{s8:*,s16,s18}:1
+{s1:*,s9,s19}:1
+{s2:*,s10,s20}:1
+{s3:*,s11,s21}:1
+{s4:*,s12,s22}:1
+{s5:*,s13,s17}:1
+{s6:*,s14,s18}:1
+{s7:*,s15,s19}:1
+{s8:*,s16,s20}:1
+{s1:*,s9,s21}:1
+{s2:*,s10,s22}:1
+{s3:*,s11,s17}:1
+{s4:*,s12,s18}:1
+{s5:*,s13,s19}:1
+{s6:*,s14,s20}:1
+{s7:*,s15,s21}:1
+{s8:*,s16,s22}:1
+----
+{s1:*,s9,s17}:1
+{s2:*,s10,s18}:1
+{s3:*,s11,s19}:1
+{s4:*,s12,s20}:1
+{s5:*,s13,s21}:1
+{s6:*,s14,s22}:1
+{s7:*,s15,s17}:1
+{s8:*,s16,s18}:1
+{s1:*,s9,s19}:1
+{s2:*,s10,s20}:1
+{s3:*,s11,s21}:1
+{s4:*,s12,s22}:1
+{s5:*,s13,s17}:1
+{s6:*,s14,s18}:1
+{s7:*,s15,s19}:1
+{s8:*,s16,s20}:1
+{s1:*,s9,s21}:1
+{s2:*,s10,s22}:1
+{s3:*,s11,s17}:1
+{s4:*,s12,s18}:1
+{s5:*,s13,s19}:1
+{s6:*,s14,s20}:1
+{s7:*,s15,s21}:1
+{s8:*,s16,s22}:1
+
+gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 raft_cpu_per_write=200000 min_key=0 max_key=10000
+----
+4.00 raft-vcpus, 19 MiB/s goodput
+
+# The assertion is deliberately on replica_moves rather than thrash_pct because
+# the current datadriven assertion helpers only assert on raw time-series stats.
+# The cluster starts diversity-optimal and stays that way: the queues respect
+# region locality and keep one replica per region, so region c stays pinned at
+# 80 replicas/store. sma-count then makes essentially no replica moves. mma-count,
+# however, still produces excessive replica moves, all within regions a and b. A
+# 20m run is enough to show the issue: with this seed, mma-count reaches 108 moves
+# on s7 while sma-count makes none. Expected to fail until the issue is fixed.
+assertion type=stat stat=replica_moves stores=(7) ticks=1 upper_bound=30 issue=https://github.com/cockroachdb/cockroach/issues/171458
+----
+
+eval duration=20m samples=1 seed=42 cfgs=(sma-count,mma-count) metrics=(replicas,leases,replica_moves,cpu_util)
+----
+sma-count:
+cpu_util#1: last:  [s1=0.12, s2=0.12, s3=0.12, s4=0.12, s5=0.12, s6=0.12, s7=0.14, s8=0.14, s9=0.12, s10=0.12, s11=0.12, s12=0.12, s13=0.12, s14=0.12, s15=0.14, s16=0.14, s17=0.16, s18=0.16, s19=0.16, s20=0.16, s21=0.18, s22=0.18] (stddev=0.02, mean=0.14, sum=3)
+cpu_util#1: thrash_pct: [s1=29%, s2=29%, s3=31%, s4=31%, s5=28%, s6=28%, s7=85%, s8=85%, s9=29%, s10=29%, s11=31%, s12=31%, s13=28%, s14=28%, s15=85%, s16=85%, s17=71%, s18=71%, s19=66%, s20=66%, s21=119%, s22=119%]  (sum=1205%)
+leases#1: first: [s1=60, s2=60, s3=60, s4=60, s5=60, s6=60, s7=60, s8=60, s9=0, s10=0, s11=0, s12=0, s13=0, s14=0, s15=0, s16=0, s17=0, s18=0, s19=0, s20=0, s21=0, s22=0] (stddev=28.86, mean=21.82, sum=480)
+leases#1: last:  [s1=27, s2=27, s3=27, s4=27, s5=27, s6=27, s7=27, s8=27, s9=18, s10=18, s11=18, s12=18, s13=18, s14=18, s15=18, s16=20, s17=21, s18=21, s19=20, s20=20, s21=19, s22=19] (stddev=3.95, mean=21.91, sum=482)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%, s10=0%, s11=0%, s12=0%, s13=0%, s14=0%, s15=0%, s16=0%, s17=0%, s18=0%, s19=0%, s20=0%, s21=0%, s22=0%]  (sum=0%)
+replicas#1: first: [s1=60, s2=60, s3=60, s4=60, s5=60, s6=60, s7=60, s8=60, s9=60, s10=60, s11=60, s12=60, s13=60, s14=60, s15=60, s16=60, s17=80, s18=80, s19=80, s20=80, s21=80, s22=80] (stddev=8.91, mean=65.45, sum=1440)
+replicas#1: last:  [s1=60, s2=60, s3=60, s4=60, s5=60, s6=60, s7=60, s8=62, s9=60, s10=60, s11=60, s12=60, s13=60, s14=60, s15=60, s16=62, s17=80, s18=80, s19=80, s20=80, s21=80, s22=82] (stddev=8.97, mean=65.73, sum=1446)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%, s10=0%, s11=0%, s12=0%, s13=0%, s14=0%, s15=0%, s16=0%, s17=0%, s18=0%, s19=0%, s20=0%, s21=0%, s22=0%]  (sum=0%)
+hash: 43d3b24fc8f47c2f
+==========================
+mma-count:
+cpu_util#1: last:  [s1=0.12, s2=0.12, s3=0.12, s4=0.12, s5=0.12, s6=0.12, s7=0.13, s8=0.13, s9=0.12, s10=0.12, s11=0.12, s12=0.12, s13=0.12, s14=0.12, s15=0.14, s16=0.14, s17=0.18, s18=0.18, s19=0.13, s20=0.13, s21=0.15, s22=0.15] (stddev=0.02, mean=0.13, sum=3)
+cpu_util#1: thrash_pct: [s1=1612%, s2=1612%, s3=1575%, s4=1575%, s5=1473%, s6=1473%, s7=1619%, s8=1619%, s9=1700%, s10=1700%, s11=1560%, s12=1560%, s13=1612%, s14=1612%, s15=1496%, s16=1496%, s17=2524%, s18=2524%, s19=2553%, s20=2553%, s21=2571%, s22=2571%]  (sum=40589%)
+leases#1: first: [s1=60, s2=60, s3=60, s4=60, s5=60, s6=60, s7=60, s8=60, s9=0, s10=0, s11=0, s12=0, s13=0, s14=0, s15=0, s16=0, s17=0, s18=0, s19=0, s20=0, s21=0, s22=0] (stddev=28.86, mean=21.82, sum=480)
+leases#1: last:  [s1=24, s2=29, s3=31, s4=28, s5=29, s6=27, s7=23, s8=11, s9=25, s10=32, s11=26, s12=30, s13=26, s14=25, s15=29, s16=12, s17=1, s18=19, s19=13, s20=6, s21=12, s22=24] (stddev=8.58, mean=21.91, sum=482)
+leases#1: thrash_pct: [s1=314%, s2=389%, s3=349%, s4=373%, s5=339%, s6=320%, s7=291%, s8=230%, s9=297%, s10=336%, s11=294%, s12=272%, s13=271%, s14=271%, s15=248%, s16=237%, s17=450%, s18=495%, s19=517%, s20=542%, s21=540%, s22=451%]  (sum=7825%)
+replica_moves#1: last:  [s1=298, s2=328, s3=271, s4=304, s5=289, s6=316, s7=286, s8=128, s9=279, s10=300, s11=281, s12=282, s13=268, s14=252, s15=254, s16=116, s17=60, s18=44, s19=92, s20=114, s21=87, s22=73] (stddev=97.66, mean=214.64, sum=4722)
+replica_moves#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%, s10=0%, s11=0%, s12=0%, s13=0%, s14=0%, s15=0%, s16=0%, s17=0%, s18=0%, s19=0%, s20=0%, s21=0%, s22=0%]  (sum=0%)
+replicas#1: first: [s1=60, s2=60, s3=60, s4=60, s5=60, s6=60, s7=60, s8=60, s9=60, s10=60, s11=60, s12=60, s13=60, s14=60, s15=60, s16=60, s17=80, s18=80, s19=80, s20=80, s21=80, s22=80] (stddev=8.91, mean=65.45, sum=1440)
+replicas#1: last:  [s1=62, s2=64, s3=63, s4=63, s5=60, s6=61, s7=61, s8=57, s9=62, s10=63, s11=61, s12=64, s13=62, s14=63, s15=62, s16=58, s17=74, s18=89, s19=66, s20=72, s21=75, s22=84] (stddev=7.97, mean=65.73, sum=1446)
+replicas#1: thrash_pct: [s1=637%, s2=750%, s3=621%, s4=713%, s5=604%, s6=588%, s7=584%, s8=177%, s9=585%, s10=713%, s11=564%, s12=650%, s13=609%, s14=625%, s15=505%, s16=149%, s17=1678%, s18=1368%, s19=1806%, s20=1567%, s21=1662%, s22=1358%]  (sum=18513%)
+hash: f7c22c270eb363a1
+failed assertion sample 1
+  stat=replica_moves value=(≤30.00) ticks=1
+	store=7 stat=286.00
+	store=7 stat=286.00
+==========================
