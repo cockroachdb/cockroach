@@ -753,6 +753,12 @@ func ensureVersion(
 		return nil
 	}
 
+	if fn := m.testingKnobs.TestingEnsureVersionError; fn != nil {
+		if err := fn(id, minVersion); err != nil {
+			return err
+		}
+	}
+
 	if err := m.AcquireFreshestFromStore(ctx, id); err != nil {
 		return err
 	}
@@ -1772,7 +1778,13 @@ func (m *Manager) purgeOldVersions(
 		return nil
 	}
 
-	if err := ensureVersion(ctx, id, minVersion, m); err != nil {
+	if err := retry.WithMaxAttempts(ctx, retry.Options{
+		InitialBackoff: 100 * time.Millisecond,
+		MaxBackoff:     2 * time.Second,
+		Multiplier:     2,
+	}, 5, func() error {
+		return ensureVersion(ctx, id, minVersion, m)
+	}); err != nil {
 		return err
 	}
 

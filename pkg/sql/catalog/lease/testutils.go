@@ -85,6 +85,11 @@ type ManagerTestingKnobs struct {
 	// into that window, so the acquired storage lease diverges from the version
 	// registered in memory.
 	TestingBeforeRoleLeaseAcquisition func(id descpb.ID)
+
+	// TestingEnsureVersionError, if set, is called from ensureVersion
+	// before reading from the store. If it returns a non-nil error,
+	// ensureVersion returns that error immediately.
+	TestingEnsureVersionError func(id descpb.ID, version descpb.DescriptorVersion) error
 }
 
 var _ base.ModuleTestingKnobs = &ManagerTestingKnobs{}
