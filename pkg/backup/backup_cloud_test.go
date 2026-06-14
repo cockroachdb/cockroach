@@ -309,6 +309,7 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 		storageURI := url.URL{Scheme: "azure", Host: bucket, Path: ""}
 		storageValues := storageURI.Query()
 		storageValues.Add(azure.AzureAccountNameParam, accountName)
+		storageValues.Add(cloud.AuthParam, cloud.AuthParamImplicit)
 		storageURI.RawQuery = storageValues.Encode()
 
 		backupAndRestore(ctx, t, testCluster, []string{storageURI.String()}, []string{storageURI.String()}, numAccounts, nil)
