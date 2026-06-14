@@ -293,6 +293,7 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(
 		kvGranter:               kvg,
 		l0CompactedBytes:        sgcMetrics.L0CompactedBytes,
 		l0TokensProduced:        sgcMetrics.L0TokensProduced,
+		bypassedWorkCount:       sgcMetrics.KVBypassedRequests,
 		diskWriteByteTokensUsed: sgcMetrics.KVDiskWriteByteTokensUsed,
 	}
 	coord := &storeGrantCoordinator{
@@ -382,6 +383,7 @@ type StoreGrantCoordinatorMetrics struct {
 	KVIOTokensTaken             *metric.Counter
 	KVIOTokensReturned          *metric.Counter
 	KVIOTokensBypassed          *metric.Counter
+	KVBypassedRequests          *metric.Counter
 	KVIOTokensAvailable         [admissionpb.NumWorkClasses]*metric.Gauge
 	KVIOTokensExhaustedDuration [admissionpb.NumWorkClasses]*metric.Counter
 
@@ -400,6 +402,7 @@ func makeStoreGrantCoordinatorMetrics(registry *metric.Registry) StoreGrantCoord
 		KVIOTokensTaken:    metric.NewCounter(kvIOTokensTaken),
 		KVIOTokensReturned: metric.NewCounter(kvIOTokensReturned),
 		KVIOTokensBypassed: metric.NewCounter(kvIOTokensBypassed),
+		KVBypassedRequests: metric.NewCounter(kvBypassedRequests),
 		L0CompactedBytes:   metric.NewCounter(l0CompactedBytes),
 		L0TokensProduced:   metric.NewCounter(l0TokensProduced),
 	}

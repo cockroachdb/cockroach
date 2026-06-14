@@ -69,6 +69,7 @@ func TestIOLoadListener(t *testing.T) {
 					diskBandwidthLimiter:    newDiskBandwidthLimiter(),
 					l0CompactedBytes:        metric.NewCounter(l0CompactedBytes),
 					l0TokensProduced:        metric.NewCounter(l0TokensProduced),
+					bypassedWorkCount:       metric.NewCounter(kvBypassedRequests),
 					diskWriteByteTokensUsed: newDiskWriteByteTokensUsedCounters(),
 				}
 				// The mutex is needed by ioLoadListener but is not useful in this
@@ -292,6 +293,7 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 		diskBandwidthLimiter:    newDiskBandwidthLimiter(),
 		l0CompactedBytes:        metric.NewCounter(l0CompactedBytes),
 		l0TokensProduced:        metric.NewCounter(l0TokensProduced),
+		bypassedWorkCount:       metric.NewCounter(kvBypassedRequests),
 		diskWriteByteTokensUsed: newDiskWriteByteTokensUsedCounters(),
 	}
 	ioll.kvGranter = kvGranter
@@ -311,6 +313,52 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
 	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
 	ioll.allocateTokensTick(unloadedDuration.ticksInAdjustmentInterval())
+}
+
+// TestIOLoadListenerBypassedRequestsMetric verifies that the
+// admission.granter.bypassed_requests.kv counter accumulates the per-interval
+// count of requests that bypassed admission control.
+func TestIOLoadListenerBypassedRequestsMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	req := &testRequesterForIOLL{}
+	kvGranter := &testGranterWithIOTokens{}
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	bypassedWorkCount := metric.NewCounter(kvBypassedRequests)
+	ioll := &ioLoadListener{
+		settings:                st,
+		kvRequester:             req,
+		perWorkTokenEstimator:   makeStorePerWorkTokenEstimator(),
+		diskBandwidthLimiter:    newDiskBandwidthLimiter(),
+		l0CompactedBytes:        metric.NewCounter(l0CompactedBytes),
+		l0TokensProduced:        metric.NewCounter(l0TokensProduced),
+		bypassedWorkCount:       bypassedWorkCount,
+		diskWriteByteTokensUsed: newDiskWriteByteTokensUsedCounters(),
+	}
+	ioll.kvGranter = kvGranter
+
+	// L0 flushed bytes must be non-zero so the estimator initializes its
+	// cumulative state on the first tick and computes real interval deltas
+	// on subsequent ticks.
+	var m pebble.Metrics
+	m.Levels[0] = pebble.LevelMetrics{Sublevels: 1}
+	m.Levels[0].Tables.Count = 1
+	m.Levels[0].TablesFlushed.Bytes = 1 << 20
+
+	// The first tick only initializes cumulative stats; no interval is computed
+	// yet, so nothing is counted.
+	req.stats = storeAdmissionStats{workCount: 10}
+	req.stats.aux.bypassedCount = 3
+	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
+	require.Equal(t, int64(0), bypassedWorkCount.Count())
+
+	// The second tick computes the interval delta of bypassed requests: 8-3 = 5.
+	req.stats = storeAdmissionStats{workCount: 25}
+	req.stats.aux.bypassedCount = 8
+	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
+	require.Equal(t, int64(5), bypassedWorkCount.Count())
 }
 
 // TODO(sumeer): we now do more work outside adjustTokensInner, so the parts
@@ -409,6 +457,7 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		diskBandwidthLimiter:    newDiskBandwidthLimiter(),
 		l0CompactedBytes:        metric.NewCounter(l0CompactedBytes),
 		l0TokensProduced:        metric.NewCounter(l0TokensProduced),
+		bypassedWorkCount:       metric.NewCounter(kvBypassedRequests),
 		diskWriteByteTokensUsed: newDiskWriteByteTokensUsedCounters(),
 	}
 	ioll.kvGranter = kvGranter

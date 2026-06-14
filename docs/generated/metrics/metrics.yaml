@@ -15278,6 +15278,15 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
+    - name: admission.granter.bypassed_requests.kv
+      exported_name: admission_granter_bypassed_requests_kv
+      description: Total number of requests that bypassed admission control (for example, below-raft writes that were not subject to replication admission control). A growing value indicates replication writes from nodes that do not have replication admission control enabled, which can overload the cluster.
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
     - name: admission.granter.cpu_load_long_period_duration.kv
       exported_name: admission_granter_cpu_load_long_period_duration_kv
       description: Total duration when CPULoad was being called with a long period. This is reported in nanoseconds from 26.1 onwards, and was microseconds before that.
