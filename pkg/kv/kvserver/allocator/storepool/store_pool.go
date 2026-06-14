@@ -1293,8 +1293,14 @@ func (sp *StorePool) getStoreListFromIDs(
 	}
 
 	var aliveStoreCount int
-	var throttled ThrottledStoreReasons
-	var storeDescriptors []roachpb.StoreDescriptor
+	// Both slices hold at most one entry per storeID, so pre-allocate to
+	// len(storeIDs) capacity. This avoids the repeated reallocate-and-copy as
+	// the slices grow: getStoreListFromIDs is on the allocator's hot path
+	// (called for every replication and rebalancing decision), where the
+	// incremental growth was observed to allocate ~1GB over a 5s profile and
+	// add GC pressure that hurts foreground latency. See #151952.
+	throttled := make(ThrottledStoreReasons, 0, len(storeIDs))
+	storeDescriptors := make([]roachpb.StoreDescriptor, 0, len(storeIDs))
 
 	now := sp.clock.Now()
 	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(&sp.st.SV)
