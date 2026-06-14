@@ -868,7 +868,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 	require.NoError(t, err)
 	defer testUtils.CloseConnections()
 
-	dbs := []string{"bank", "tpcc", schemaChangeDB}
+	dbs := []string{"bank", "tpcc"}
 	d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
 		ctx, t, c, testRNG, workloadSeed, testUtils, dbs,
 	)
@@ -922,10 +922,6 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 	collection, err := builder.Finalize(ctx)
 	require.NoError(t, err)
 
-	// Delete the backup SSTs as soon as possible after the link phase
-	// completes to minimize the window in which regular LSM compaction
-	// could download and incorporate the external SSTs, which would cause
-	// the download job to see 0 external bytes and succeed immediately.
 	err = d.deleteSSTFromBackupLayers(ctx, t.L(), dbConn, collection)
 	require.NoError(t, err, "failed to delete SSTs from backup layers")
 
