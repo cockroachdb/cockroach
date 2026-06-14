@@ -1103,20 +1103,37 @@ func (rd *replicationDriver) onFingerprintMismatch(
 	fingerPrintMonitor := rd.newMonitor(ctx)
 
 	fingerPrintMonitor.Go(func(ctx context.Context) error {
-		return rd.backupAfterFingerprintMismatch(ctx, srcTenantConn, rd.setup.src.name, startTime, endTime)
+		// The source tenant is never cut over, so its backup chain can be
+		// extended with an incremental.
+		return rd.backupAfterFingerprintMismatch(ctx, srcTenantConn, rd.setup.src.name, false /* postCutover */, startTime, endTime)
 	})
 	fingerPrintMonitor.Go(func(ctx context.Context) error {
-		return rd.backupAfterFingerprintMismatch(ctx, dstTenantConn, rd.setup.dst.name, startTime, endTime)
+		// onFingerprintMismatch only runs after the destination tenant has been
+		// cut over, so flag it as post-cutover.
+		return rd.backupAfterFingerprintMismatch(ctx, dstTenantConn, rd.setup.dst.name, true /* postCutover */, startTime, endTime)
 	})
 	fingerprintMonitorError := fingerPrintMonitor.WaitE()
 	require.NoError(rd.t, errors.CombineErrors(fingerprintBisectErr, fingerprintMonitorError))
 }
 
-// backupAfterFingerprintMismatch runs two backups on the provided tenant: a
-// full backup AOST the provided startTime, and an incremental backup AOST the
-// provided endTime. Both backups run with revision history.
+// backupAfterFingerprintMismatch captures the state of the provided tenant at
+// two timestamps to aid offline debugging of a fingerprint mismatch: the
+// startTime (the replication retained time) and the endTime (the cutover time).
+// Both backups run with revision history.
+//
+// The startTime is always captured with a full backup. The endTime is normally
+// captured with an incremental backup layered on top, but a tenant that has
+// already been cut over (postCutover) cannot extend that chain: the backup
+// engine rejects an incremental whose chain's full backup predates the cutover
+// time, requiring a new full backup after cutover. For such a tenant we capture
+// the endTime with a second full backup instead, which is equivalent for
+// debugging purposes.
 func (rd *replicationDriver) backupAfterFingerprintMismatch(
-	ctx context.Context, conn *gosql.DB, tenantName string, startTime, endTime hlc.Timestamp,
+	ctx context.Context,
+	conn *gosql.DB,
+	tenantName string,
+	postCutover bool,
+	startTime, endTime hlc.Timestamp,
 ) error {
 	if rd.c.IsLocal() {
 		rd.t.L().Printf("skip taking backups of tenants on local roachtest run")
@@ -1142,11 +1159,16 @@ func (rd *replicationDriver) backupAfterFingerprintMismatch(
 	if err != nil {
 		return errors.Wrapf(err, "full backup for %s failed", tenantName)
 	}
-	// The incremental backup for each tenant must match.
-	incBackupQuery := fmt.Sprintf("BACKUP INTO LATEST IN '%s' AS OF SYSTEM TIME '%s' with revision_history", collection, endTime.AsOfSystemTime())
-	_, err = conn.ExecContext(ctx, incBackupQuery)
-	if err != nil {
-		return errors.Wrapf(err, "inc backup for %s failed", tenantName)
+	// Capture the endTime state. A post-cutover tenant cannot extend the chain
+	// started above, so take a second full backup instead of an incremental.
+	endTimeBackupQuery := fmt.Sprintf("BACKUP INTO LATEST IN '%s' AS OF SYSTEM TIME '%s' with revision_history", collection, endTime.AsOfSystemTime())
+	backupKind := "inc"
+	if postCutover {
+		endTimeBackupQuery = fmt.Sprintf("BACKUP INTO '%s' AS OF SYSTEM TIME '%s' with revision_history", collection, endTime.AsOfSystemTime())
+		backupKind = "second full"
+	}
+	if _, err := conn.ExecContext(ctx, endTimeBackupQuery); err != nil {
+		return errors.Wrapf(err, "%s backup for %s failed", backupKind, tenantName)
 	}
 	return nil
 }
