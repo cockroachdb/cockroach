@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -183,6 +184,11 @@ type typeSchemaChanger struct {
 	// ensure proper rollback semantics on job failure.
 	transitioningMembers [][]byte
 	execCfg              *ExecutorConfig
+	// jobOwner is the SQL user that initiated the type schema-change job.
+	// Used as the identity for internal validation count queries
+	// (count-value-usage, count-array-type-value-usage), with implicit
+	// SELECT scoped to each scanned referencing descriptor.
+	jobOwner username.SQLUsername
 }
 
 // TypeSchemaChangerTestingKnobs contains testing knobs for the typeSchemaChanger.
@@ -1041,9 +1047,14 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromTable(
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
+		// Run as the job owner with implicit SELECT scoped to ID; the owner
+		// may not hold SELECT on every referencing view.
 		override := sessiondata.InternalExecutorOverride{
-			User:     username.NodeUserName(),
+			User:     t.jobOwner,
 			Database: dbDesc.GetName(),
+			DescriptorOverrides: map[uint32]sessiondata.DescriptorOverride{
+				uint32(ID): {Privileges: privilege.List{privilege.SELECT}.ToBitField()},
+			},
 		}
 		var rows tree.Datums
 		err = txn.WithSyntheticDescriptors(syntheticDescs, func() error {
@@ -1328,9 +1339,13 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
+		// Same identity scheme as canRemoveEnumValueFromTable.
 		override := sessiondata.InternalExecutorOverride{
-			User:     username.NodeUserName(),
+			User:     t.jobOwner,
 			Database: dbDesc.GetName(),
+			DescriptorOverrides: map[uint32]sessiondata.DescriptorOverride{
+				uint32(id): {Privileges: privilege.List{privilege.SELECT}.ToBitField()},
+			},
 		}
 		row, err := txn.QueryRowEx(
 			ctx,
@@ -1454,6 +1469,7 @@ func (t *typeChangeResumer) Resume(ctx context.Context, execCtx interface{}) err
 		typeID:               t.job.Details().(jobspb.TypeSchemaChangeDetails).TypeID,
 		transitioningMembers: t.job.Details().(jobspb.TypeSchemaChangeDetails).TransitioningMembers,
 		execCfg:              p.ExecCfg(),
+		jobOwner:             t.job.Payload().UsernameProto.Decode(),
 	}
 	return tc.execWithRetry(ctx)
 }
@@ -1467,6 +1483,7 @@ func (t *typeChangeResumer) OnFailOrCancel(
 		typeID:               t.job.Details().(jobspb.TypeSchemaChangeDetails).TypeID,
 		transitioningMembers: t.job.Details().(jobspb.TypeSchemaChangeDetails).TransitioningMembers,
 		execCfg:              execCtx.(JobExecContext).ExecCfg(),
+		jobOwner:             t.job.Payload().UsernameProto.Decode(),
 	}
 
 	if rollbackErr := func() error {
