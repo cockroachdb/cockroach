@@ -2701,13 +2701,14 @@ func resolveRestoreSubdirAndEndTime(
 	backupToken string,
 	aost hlc.Timestamp,
 ) (string, hlc.Timestamp, error) {
+	isLatest := strings.EqualFold(backupToken, backupbase.LatestFileName)
 	useIDs := p.SessionData().UseBackupsWithIDs
 	_, _, err := backupinfo.DecodeBackupID(backupToken)
-	if err != nil && !(useIDs && strings.EqualFold(backupToken, backupbase.LatestFileName)) {
+	if err != nil && !(useIDs && isLatest) {
 		// Revert to legacy behavior, backupToken is either a subdir or using the
 		// legacy interpretation of LATEST (latest full backup).
 		subdir := backupToken
-		if strings.EqualFold(backupToken, backupbase.LatestFileName) {
+		if isLatest {
 			// set subdir to content of latest file
 			latest, err := backupdest.ReadLatestFile(ctx, defaultCollectionURI,
 				p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
@@ -2729,7 +2730,7 @@ func resolveRestoreSubdirAndEndTime(
 
 	var backupIdx backuppb.BackupIndexMetadata
 	backupID := backupToken
-	if strings.EqualFold(backupToken, backupbase.LatestFileName) {
+	if isLatest {
 		backupIdx, backupID, err = backupinfo.FindLatestBackup(ctx, defaultRootStore)
 		if err != nil {
 			return "", hlc.Timestamp{}, err
@@ -2761,7 +2762,14 @@ func resolveRestoreSubdirAndEndTime(
 					"Please use 'SHOW BACKUPS IN ... WITH REVISION START TIME' to find a revision history backup.",
 				backupID,
 			)
-		} else if aost.Less(backupIdx.RevisionStartTime) || backupIdx.EndTime.Less(aost) {
+		} else if !isLatest &&
+			// When restoring from LATEST, the valid AOST range spans the
+			// entire chain, not just the latest backup. An incremental's
+			// RevisionStartTime only reflects its own coverage, but the
+			// chain's full backup may cover earlier timestamps. We skip the
+			// per-backup check here and let ValidateEndTimeAndTruncate
+			// validate against the full chain downstream.
+			(aost.Less(backupIdx.RevisionStartTime) || backupIdx.EndTime.Less(aost)) {
 			return "", hlc.Timestamp{}, errors.Errorf(
 				"backup %s does not cover the specified AS OF SYSTEM TIME. "+
 					"Please use 'SHOW BACKUPS IN ... WITH REVISION START TIME' to find a backup that covers the desired time.",
