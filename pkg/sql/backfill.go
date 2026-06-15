@@ -798,18 +798,22 @@ func (sc *SchemaChanger) validateConstraints(
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
 				defer func() { collection.ReleaseAll(ctx) }()
+				// Run validation as the schema-change job owner so the
+				// scan is bounded by the issuer's privileges, not node's.
+				validationSD := evalCtx.SessionData().Clone()
+				validationSD.UserProto = sc.job.Payload().UsernameProto
 				if ck := c.AsCheck(); ck != nil {
 					if err := validateCheckInTxn(
-						ctx, txn, &semaCtx, evalCtx.SessionData(), desc, ck,
+						ctx, txn, &semaCtx, validationSD, desc, ck,
 					); err != nil {
 						return err
 					}
 				} else if c.AsForeignKey() != nil {
-					if err := validateFkInTxn(ctx, txn, desc, c.GetName()); err != nil {
+					if err := validateFkInTxn(ctx, txn, desc, c.GetName(), validationSD.User()); err != nil {
 						return err
 					}
 				} else if c.AsUniqueWithoutIndex() != nil {
-					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, txn, desc, evalCtx.SessionData().User(), c.GetName()); err != nil {
+					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, txn, desc, validationSD.User(), c.GetName()); err != nil {
 						return err
 					}
 				} else {
@@ -1592,7 +1596,7 @@ func ValidateConstraint(
 				[]catalog.Descriptor{tableDesc},
 				func() error {
 					return validateForeignKey(ctx, txn, tableDesc.(*tabledesc.Mutable), targetTable, fk.ForeignKeyDesc(),
-						indexIDForValidation)
+						indexIDForValidation, sessionData.User())
 				},
 			)
 		case catconstants.ConstraintTypeUniqueWithoutIndex:
@@ -2772,7 +2776,11 @@ func getTargetTablesAndFk(
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
 func validateFkInTxn(
-	ctx context.Context, txn descs.Txn, srcTable *tabledesc.Mutable, fkName string,
+	ctx context.Context,
+	txn descs.Txn,
+	srcTable *tabledesc.Mutable,
+	fkName string,
+	user username.SQLUsername,
 ) error {
 	syntheticDescs, fk, targetTable, err := getTargetTablesAndFk(ctx, srcTable, txn, fkName)
 	if err != nil {
@@ -2782,7 +2790,7 @@ func validateFkInTxn(
 	return txn.WithSyntheticDescriptors(
 		syntheticDescs,
 		func() error {
-			return validateForeignKey(ctx, txn, srcTable, targetTable, fk, 0 /* indexIDForValidation */)
+			return validateForeignKey(ctx, txn, srcTable, targetTable, fk, 0 /* indexIDForValidation */, user)
 		})
 }
 
