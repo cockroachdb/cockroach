@@ -223,6 +223,19 @@ func (p *planner) HasPrivilege(
 		return false, errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
 	}
 
+	// DescriptorOverrides grants implicit privileges on specific table IDs; see
+	// the field's doc in sessiondata for the use cases. Any privilege
+	// check against a descriptor not in the map (or for a privilege bit
+	// not set in the entry's Privileges) falls through to the user's
+	// normal grants.
+	if d, ok := privilegeObject.(catalog.Descriptor); ok {
+		if override, ok := p.SessionData().DescriptorOverrides[uint32(d.GetID())]; ok {
+			if override.Privileges&privilegeKind.Mask() != 0 {
+				return true, nil
+			}
+		}
+	}
+
 	// root, admin and node user should always have privileges, except NOSQLLOGIN.
 	// This allows us to short-circuit privilege checks for
 	// virtual object such that we don't have to query the system.privileges
