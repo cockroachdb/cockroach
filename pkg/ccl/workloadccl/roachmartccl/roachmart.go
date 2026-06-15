@@ -25,7 +25,7 @@ import (
 // to roachprod.
 //
 // TODO(benesch): avoid hardcoding these.
-var zones = []string{"us-central1-b", "us-west1-b", "europe-west2-b"}
+var zones = []string{"us-central1-b", "us-west1-c", "europe-west2-b"}
 
 var usersSchema = func() string {
 	var buf bytes.Buffer
@@ -60,7 +60,7 @@ const (
 
 	zoneLocationsStmt = `UPSERT INTO system.locations VALUES
 		('zone', 'us-east1-b', 33.0641249, -80.0433347),
-		('zone', 'us-west1-b', 45.6319052, -121.2010282),
+		('zone', 'us-west1-c', 45.6319052, -121.2010282),
 		('zone', 'europe-west2-b', 51.509865, 0)
 	`
 )
