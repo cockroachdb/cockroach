@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -61,11 +62,22 @@ func validateCheckExpr(
 		queryStr = fmt.Sprintf(`SELECT %s FROM [%d AS t]@[%d] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), indexIDForValidation, exprStr)
 	}
 	log.Infof(ctx, "validating check constraint %q with query %q", formattedCkExpr, queryStr)
+
+	// Grant implicit SELECT on the table being scanned so a CREATE-only
+	// issuer can still validate the constraint they legitimately added.
+	selectBit := privilege.List{privilege.SELECT}.ToBitField()
+	execOverride := sessiondata.InternalExecutorOverride{
+		User: sessionData.User(),
+		DescriptorOverrides: map[uint32]sessiondata.DescriptorOverride{
+			uint32(tableDesc.GetID()): {Privileges: selectBit},
+		},
+	}
+
 	violatingRow, err = txn.QueryRowEx(
 		ctx,
 		"validate check constraint",
 		txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		execOverride,
 		queryStr)
 	if err != nil {
 		return nil, formattedCkExpr, err
@@ -264,8 +276,9 @@ func nonMatchingRowQuery(
 	return query, originColNames, nil
 }
 
-// validateForeignKey verifies that all the rows in the srcTable
-// have a matching row in their referenced table.
+// validateForeignKey verifies that all the rows in srcTable have a matching
+// row in their referenced table. user is the identity the validation
+// queries run as.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
@@ -276,7 +289,25 @@ func validateForeignKey(
 	targetTable catalog.TableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
 	indexIDForValidation descpb.IndexID,
+	user username.SQLUsername,
 ) error {
+	// The validation query reads from both srcTable and targetTable, but
+	// the caller (a schema-change job owner or an ALTER TABLE issuer) may
+	// hold only the privileges required to create the FK -- which in
+	// CockroachDB do not include SELECT on the target. Grant implicit
+	// SELECT on exactly the two descriptors the query touches so a user
+	// who legitimately created the FK can also validate it. Any
+	// reference outside those two descriptors still resolves against the
+	// caller's normal grants.
+	selectBit := privilege.List{privilege.SELECT}.ToBitField()
+	execOverride := sessiondata.InternalExecutorOverride{
+		User: user,
+		DescriptorOverrides: map[uint32]sessiondata.DescriptorOverride{
+			uint32(srcTable.GetID()):    {Privileges: selectBit},
+			uint32(targetTable.GetID()): {Privileges: selectBit},
+		},
+	}
+
 	nCols := len(fk.OriginColumnIDs)
 
 	referencedColumnNames, err := catalog.ColumnNamesForIDs(targetTable, fk.ReferencedColumnIDs)
@@ -304,7 +335,7 @@ func validateForeignKey(
 
 		values, err := txn.QueryRowEx(ctx, "validate foreign key constraint",
 			txn.KV(),
-			sessiondata.NodeUserSessionDataOverride, query)
+			execOverride, query)
 		if err != nil {
 			return err
 		}
@@ -327,7 +358,7 @@ func validateForeignKey(
 	)
 
 	values, err := txn.QueryRowEx(ctx, "validate fk constraint", txn.KV(),
-		sessiondata.NodeUserSessionDataOverride, query)
+		execOverride, query)
 	if err != nil {
 		return err
 	}
@@ -607,8 +638,10 @@ func RevalidateUniqueConstraintsInTable(
 // schema changer when the validation should be against a yet non-public
 // primary index.
 //
-// It operates entirely on the current goroutine and is thus able to
-// reuse an existing kv.Txn safely.
+// execOverride supplies the executing user and any DescriptorOverrides the
+// caller needs to scan srcTable -- e.g. a CREATE-only schema-change
+// issuer validating a newly added unique constraint has implicit SELECT
+// on srcTable via the override.
 //
 // preExisting indicates whether this constraint already exists, and therefore
 // informs the error message that gets produced.
