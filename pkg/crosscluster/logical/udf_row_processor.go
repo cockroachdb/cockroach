@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -97,6 +98,11 @@ func makeApplierQuerier(
 	jobID jobspb.JobID,
 	ie isql.Executor,
 ) *applierQuerier {
+	destIDs := make([]descpb.ID, 0, len(tableConfigByDestID))
+	for id := range tableConfigByDestID {
+		destIDs = append(destIDs, id)
+	}
+	grants := txnwriter.DestTableOverrides(destIDs)
 	return &applierQuerier{
 		queryBuffer: queryBuffer{
 			deleteQueries:  make(map[catid.DescID]queryBuilder, len(tableConfigByDestID)),
@@ -104,9 +110,9 @@ func makeApplierQuerier(
 			applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigByDestID)),
 		},
 		settings:    settings,
-		ieoInsert:   getIEOverride(replicatedInsertOpName, jobID),
-		ieoDelete:   getIEOverride(replicatedDeleteOpName, jobID),
-		ieoApplyUDF: getIEOverride(replicatedApplyUDFOpName, jobID),
+		ieoInsert:   getIEOverride(replicatedInsertOpName, jobID, grants),
+		ieoDelete:   getIEOverride(replicatedDeleteOpName, jobID, grants),
+		ieoApplyUDF: getIEOverride(replicatedApplyUDFOpName, jobID, grants),
 	}
 }
 
