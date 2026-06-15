@@ -516,7 +516,13 @@ message LogicalReplicationWriterSpec {
 
     optional string writer_type = 14 [(gogoproto.nullable) = false];
 
-    // Next ID: 15.
+    // UsernameProto is the SQL user that created the replication stream
+    // (the job owner). The writer-side internal-executor sessions run
+    // as this user so the writer's authority is bounded by the job
+    // owner's privileges instead of node's.
+    optional string username_proto = 15 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
+
+    // Next ID: 16.
 }
 
 message LogicalReplicationOfflineScanSpec {
