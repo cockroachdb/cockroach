@@ -11,6 +11,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+// DescriptorOverride is one entry in InternalExecutorOverride.DescriptorOverrides.
+// It overrides the executing user's access to a single descriptor for the
+// session's lifetime. Used by internal call sites that act on behalf of the
+// system rather than the user (schema-change validation, INSPECT, LDR
+// writer), where the user holds the high-level capability needed to issue
+// the operation (REPLICATIONDEST for LDR, schema-change privileges for
+// validation, INSPECT privilege for INSPECT) but might not hold the
+// descriptor-level grants or be exempt from RLS policies that would
+// otherwise constrain the per-descriptor scans/writes the operation
+// performs.
+type DescriptorOverride struct {
+	// Privileges is a bitfield of 1<<Privilege values granted implicitly on
+	// the descriptor regardless of the user's actual grants. A zero value
+	// grants no privileges; the user's normal grants still apply.
+	Privileges uint64
+	// BypassRLS, if true, exempts the descriptor from row-level-security
+	// policies for this session, as if the user held BYPASSRLS scoped to
+	// that table. Callers must only set this when the operation must see
+	// or write every row regardless of user policies (validation
+	// correctness, replication completeness).
+	BypassRLS bool
+}
+
 // InternalExecutorOverride is used by the Executor interface
 // to allow control over some of the session data.
 type InternalExecutorOverride struct {
@@ -90,6 +113,13 @@ type InternalExecutorOverride struct {
 	// AlwaysDistributeFullScans, if true, overrides the
 	// always_distribute_full_scans session variable.
 	AlwaysDistributeFullScans bool
+	// DescriptorOverrides lists table descriptor IDs the executing session has
+	// implicit internal-system access to. Each entry can grant privileges
+	// regardless of the user's actual grants and can independently exempt
+	// the descriptor from row-level-security policies. See
+	// DescriptorOverride and the corresponding field in
+	// LocalUnmigratableSessionData. uint32 avoids an import cycle.
+	DescriptorOverrides map[uint32]DescriptorOverride
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
