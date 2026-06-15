@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -58,11 +59,13 @@ func setupDLQTestTables(
 	tableNameToDesc map[string]catalog.TableDescriptor,
 	srcTableIDToName map[descpb.ID]dstTableMetadata,
 	expectedDLQTables []string,
+	db descs.DB,
 	ie isql.Executor,
 ) {
 	s := srv.ApplicationLayer()
 	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
-	ie = s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd))
+	db = s.InternalDB().(descs.DB)
+	ie = db.Executor(isql.WithSessionData(sd))
 
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT)`)
 
@@ -130,7 +133,7 @@ func setupDLQTestTables(
 		tableNameToDesc[fullyQualifiedName] = desc
 		expectedDLQTables = append(expectedDLQTables, fmt.Sprintf("dlq_%d_%s_%s", md.tableID, md.schema, md.table))
 	}
-	return tableNameToDesc, srcTableIDToName, expectedDLQTables, ie
+	return tableNameToDesc, srcTableIDToName, expectedDLQTables, db, ie
 }
 
 func WaitForDLQLogs(t *testing.T, db *sqlutils.SQLRunner, tableName string, minNumRows int) {
@@ -222,9 +225,9 @@ func TestDLQCreation(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	_, srcTableIDToName, expectedDLQTables, ie := setupDLQTestTables(ctx, t, sqlDB, kvDB, srv)
+	_, srcTableIDToName, expectedDLQTables, descsDB, ie := setupDLQTestTables(ctx, t, sqlDB, kvDB, srv)
 
-	dlqClient := InitDeadLetterQueueClient(ie, srcTableIDToName)
+	dlqClient := InitDeadLetterQueueClient(descsDB, ie, srcTableIDToName)
 	require.NoError(t, dlqClient.Create(ctx))
 
 	// Verify DLQ tables are created with their expected names
@@ -259,7 +262,7 @@ func TestDLQLogging(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	tableNameToDesc, srcTableIDToName, _, ie := setupDLQTestTables(ctx, t, sqlDB, kvDB, srv)
+	tableNameToDesc, srcTableIDToName, _, descsDB, ie := setupDLQTestTables(ctx, t, sqlDB, kvDB, srv)
 
 	// Build family desc for cdc event row
 	familyDesc := &descpb.ColumnFamilyDescriptor{
@@ -267,7 +270,7 @@ func TestDLQLogging(t *testing.T) {
 		Name: "",
 	}
 
-	dlqClient := InitDeadLetterQueueClient(ie, srcTableIDToName)
+	dlqClient := InitDeadLetterQueueClient(descsDB, ie, srcTableIDToName)
 	require.NoError(t, dlqClient.Create(ctx))
 
 	type testCase struct {
@@ -446,7 +449,8 @@ func TestDLQJSONQuery(t *testing.T) {
 	require.NoError(t, err)
 
 	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, srv.ExecutorConfig(), tableDesc)
-	ie := srv.InternalDB().(isql.DB).Executor()
+	descsDB := srv.InternalDB().(descs.DB)
+	ie := descsDB.Executor()
 	defer cleanup()
 
 	tableID := tableDesc.GetID()
@@ -455,7 +459,7 @@ func TestDLQJSONQuery(t *testing.T) {
 		schema:   publicScName,
 		table:    "foo",
 	}
-	dlqClient := InitDeadLetterQueueClient(ie, map[descpb.ID]dstTableMetadata{
+	dlqClient := InitDeadLetterQueueClient(descsDB, ie, map[descpb.ID]dstTableMetadata{
 		tableID: tableName,
 	})
 	require.NoError(t, dlqClient.Create(ctx))
