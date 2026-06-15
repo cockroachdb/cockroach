@@ -22,9 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -33,6 +36,24 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+// inspectExecOverride returns the InternalExecutorOverride to use for
+// INSPECT queries that scan tableDesc. Queries run as the table owner
+// with implicit SELECT on the scanned descriptor and with row-level
+// security bypassed for that descriptor so that policies on the
+// inspected table cannot hide rows from a corruption check.
+func inspectExecOverride(
+	tableDesc catalog.TableDescriptor, qos *sessiondatapb.QoSLevel,
+) sessiondata.InternalExecutorOverride {
+	selectBit := privilege.List{privilege.SELECT}.ToBitField()
+	return sessiondata.InternalExecutorOverride{
+		User:             tableDesc.GetPrivileges().Owner(),
+		QualityOfService: qos,
+		DescriptorOverrides: map[uint32]sessiondata.DescriptorOverride{
+			uint32(tableDesc.GetID()): {Privileges: selectBit, BypassRLS: true},
+		},
+	}
+}
 
 func loadTableDesc(
 	ctx context.Context,
