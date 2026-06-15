@@ -73,6 +73,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -449,6 +452,134 @@ func TestDatabaseLevelChangefeedNameResolutionIsSearchPathIndependent(t *testing
 			cdcTest(t, testFn, feedTestEnterpriseSinks)
 		})
 	}
+}
+
+// TestChangefeedExprAssignmentCastDuringSchemaChange is a regression test for a
+// changefeed that fails while a computed column (or expression index, or column
+// type change) is being added to its table.
+//
+// Adding such a column makes the declarative schema changer add a transient
+// validation CHECK constraint of the form
+//
+//	CASE WHEN crdb_internal.assignment_cast(<expr>, NULL::<type>) IS NULL
+//	     THEN true ELSE true END
+//
+// which is Validated() on the descriptor only between the ValidateConstraint
+// stage and the end of the schema change. A changefeed expression re-plans
+// against the descriptor as of each event's schema timestamp, so a row written
+// while the check is validated makes the optimizer rebuild that check through
+// the CDC function resolver. crdb_internal.assignment_cast must be resolvable
+// there, even though the changefeed's SELECT references neither the new column
+// nor crdb_internal.
+//
+// The test pins the timing by pausing the schema change at the validated-check
+// stage and writing the row then. A row's schema timestamp never precedes its
+// MVCC timestamp, so the row re-plans against the held descriptor version; the
+// stage stays paused until the feed emits its result so that version is not
+// superseded before the as-of read.
+func TestChangefeedExprAssignmentCastDuringSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// armed gates the schema-change hook until the changefeed is running and the
+	// ALTER under test starts. reachedStage is signalled when the schema change
+	// pauses at the validated-check stage; releaseStage is closed to let it
+	// proceed. pauseOnce ensures we pause at exactly one stage.
+	var armed atomic.Bool
+	reachedStage := make(chan struct{})
+	releaseStage := make(chan struct{})
+	var pauseOnce sync.Once
+
+	knobsFn := func(knobs *base.TestingKnobs) {
+		knobs.SQLDeclarativeSchemaChanger = &scexec.TestingKnobs{
+			BeforeStage: func(p scplan.Plan, stageIdx int) error {
+				if !armed.Load() {
+					return nil
+				}
+				if len(p.TargetState.Statements) == 0 ||
+					!strings.Contains(p.TargetState.Statements[0].Statement, "ADD COLUMN") {
+					return nil
+				}
+				// Pause once the transient assignment_cast CHECK is validated,
+				// holding that descriptor version current.
+				if !stageValidatesTransientCheck(p, stageIdx) {
+					return nil
+				}
+				pauseOnce.Do(func() {
+					reachedStage <- struct{}{}
+					<-releaseStage
+				})
+				return nil
+			},
+		}
+	}
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE events (id INT PRIMARY KEY, attrs JSONB)`)
+		sqlDB.Exec(t, `INSERT INTO events VALUES (1, '{"ref": "1f3c0a92-6b4d-47e8-8c21-7a9e0d3b5f01"}')`)
+
+		// The SELECT references neither the soon-to-be-added computed column nor
+		// crdb_internal.
+		foo := feed(t, f, `CREATE CHANGEFEED AS SELECT id FROM events`)
+		defer closeFeed(t, foo)
+
+		// Drain the initial-scan row, confirming the changefeed is running.
+		assertPayloads(t, foo, []string{
+			`events: [1]->{"id": 1}`,
+		})
+
+		// Run the ALTER on a goroutine so we can hold it paused at the
+		// validated-check stage while driving the feed.
+		armed.Store(true)
+		alterErr := make(chan error, 1)
+		go func() {
+			_, err := s.DB.ExecContext(context.Background(),
+				`ALTER TABLE events ADD COLUMN ref UUID AS ((attrs->>'ref')::UUID) VIRTUAL`)
+			alterErr <- err
+		}()
+
+		// Wait for the pause, and always release so the goroutine cannot leak if
+		// an assertion below fails.
+		select {
+		case <-reachedStage:
+		case <-time.After(60 * time.Second):
+			t.Fatal("timed out waiting for schema change to reach the validated-check stage")
+		}
+		var releaseOnce sync.Once
+		release := func() { releaseOnce.Do(func() { close(releaseStage) }) }
+		defer release()
+
+		// Write the row while the validated-check version is held current, so the
+		// changefeed re-plans against the assignment_cast check.
+		sqlDB.Exec(t, `INSERT INTO events VALUES (2, '{"ref": "1f3c0a92-6b4d-47e8-8c21-7a9e0d3b5f02"}')`)
+
+		// The row must be emitted rather than failing the changefeed. Keep the
+		// stage paused until the read returns so the held version survives the
+		// changefeed's as-of read.
+		assertPayloads(t, foo, []string{
+			`events: [2]->{"id": 2}`,
+		})
+
+		release()
+		require.NoError(t, <-alterErr)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("sinkless"), withKnobsFn(knobsFn))
+}
+
+// stageValidatesTransientCheck reports whether, at the start of the given stage,
+// the descriptor carries the validated transient assignment_cast CHECK. The
+// schema changer validates the check, then makes the new column public, then
+// removes the check; the column-public stage (MakeWriteOnlyColumnPublic) is the
+// window where the validated check is live on the descriptor.
+func stageValidatesTransientCheck(p scplan.Plan, stageIdx int) bool {
+	for _, op := range p.Stages[stageIdx].Ops() {
+		if _, ok := op.(*scop.MakeWriteOnlyColumnPublic); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func TestChangefeedBasicQuery(t *testing.T) {
