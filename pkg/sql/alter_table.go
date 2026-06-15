@@ -600,7 +600,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				ck.CheckDesc().Validity = descpb.ConstraintValidity_Validated
 			} else if fk := c.AsForeignKey(); fk != nil {
 				if err := validateFkInTxn(
-					params.ctx, params.p.InternalSQLTxn(), n.tableDesc, name,
+					params.ctx, params.p.InternalSQLTxn(), n.tableDesc, name, params.p.User(),
 				); err != nil {
 					return err
 				}
