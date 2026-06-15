@@ -62,8 +62,10 @@ func executeValidateConstraint(
 		return err
 	}
 
-	// Execute the validation operation as a root user.
-	execOverride := sessiondata.RootUserSessionDataOverride
+	// Run validation as the schema-change issuer. Per-constraint
+	// GrantOverrides are added inside validateForeignKey,
+	// validateCheckExpr, and the unique-without-index branch.
+	execOverride := sessiondata.InternalExecutorOverride{User: deps.User()}
 	err = deps.Validator().ValidateConstraint(ctx, table, constraint, op.IndexIDForValidation, execOverride)
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)
@@ -91,8 +93,9 @@ func executeValidateColumnNotNull(
 		}
 	}
 
-	// Execute the validation operation as a root user.
-	execOverride := sessiondata.RootUserSessionDataOverride
+	// NOT NULL validation reaches validateCheckExpr, which attaches
+	// the SELECT bypass scoped to the scanned table.
+	execOverride := sessiondata.InternalExecutorOverride{User: deps.User()}
 	err = deps.Validator().ValidateConstraint(ctx, table, constraint, op.IndexIDForValidation, execOverride)
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)
