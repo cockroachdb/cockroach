@@ -116,7 +116,14 @@ func (vd validator) ValidateConstraint(
 	indexIDForValidation descpb.IndexID,
 	override sessiondata.InternalExecutorOverride,
 ) error {
-	return vd.validateConstraint(ctx, tbl, constraint, indexIDForValidation, vd.newFakeSessionData(ctx, vd.settings, "validate-constraint"),
+	// validateCheckExpr derives the executing user from sessionData rather
+	// than the override, so mirror the override's user onto the fake
+	// session data we build here.
+	sd := vd.newFakeSessionData(ctx, vd.settings, "validate-constraint")
+	if !override.User.Undefined() {
+		sd.UserProto = override.User.EncodeProto()
+	}
+	return vd.validateConstraint(ctx, tbl, constraint, indexIDForValidation, sd,
 		vd.makeHistoricalInternalExecTxnRunner(), override)
 }
 
