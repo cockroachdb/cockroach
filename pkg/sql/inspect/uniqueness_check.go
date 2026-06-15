@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -170,10 +168,7 @@ GROUP BY %s
 	qos := getInspectQoS(&c.execCfg.Settings.SV)
 	it, err := c.execCfg.DistSQLSrv.DB.Executor().QueryIteratorEx(
 		ctx, "inspect-uniqueness-check", nil, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User:             username.NodeUserName(),
-			QualityOfService: &qos,
-		},
+		inspectExecOverride(c.tableDesc, &qos),
 		queryWithAsOf,
 		queryArgs...,
 	)
