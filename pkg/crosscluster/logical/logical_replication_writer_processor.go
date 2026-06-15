@@ -232,7 +232,7 @@ func newLogicalReplicationWriterProcessor(
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
-		dlqClient:  InitDeadLetterQueueClient(dlqDbExec, destTableBySrcID),
+		dlqClient:  InitDeadLetterQueueClient(flowCtx.Cfg.DB, dlqDbExec, destTableBySrcID),
 		metrics:    flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 		seenEvery:  log.Every(1 * time.Minute),
 		retryEvery: log.Every(1 * time.Minute),
