@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -677,6 +678,19 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 		for i := 0; i < numServers; i++ {
 			stickyServerArgs[i] = base.TestServerArgs{
 				Settings: settings,
+				RaftConfig: base.RaftConfig{
+					// Suppress timeout-based elections. This test relies on n1 staying
+					// the raft leader throughout. n1 acquires its leader lease while it
+					// is the range's only voter, so its leadership is fortified by
+					// self-support; n2-n5 are added afterwards. Promoting the newly added
+					// voters opens a window in which they have not yet fortified n1's
+					// term, and because raft election ticks run on real time (not the
+					// manual clock above), a new voter can time out and win an election
+					// before fortification is established. n1 is never killed and the
+					// test never needs an election, so disabling timeout-based elections
+					// keeps leadership pinned to n1.
+					RaftElectionTimeoutTicks: 1000000,
+				},
 				StoreSpecs: []base.StoreSpec{
 					{
 						InMemory:    true,
@@ -689,6 +703,14 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 						WallClock:         manualClock,
 					},
 					Store: &kvserver.StoreTestingKnobs{
+						RaftTestingKnobs: &raft.TestingKnobs{
+							// With the very high RaftElectionTimeoutTicks above, n1 only
+							// gets a single opportunity to campaign and must not miss it.
+							// Under leader leases in a cold cluster, a campaign can fail
+							// because peers don't yet provide store liveness support.
+							// Disable that pre-campaign check so n1's campaign succeeds.
+							DisablePreCampaignStoreLivenessCheck: true,
+						},
 						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
 							return true
 						},
