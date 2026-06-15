@@ -258,6 +258,13 @@ jobs:
           SMTP_PASSWORD: ${{ steps.secrets.outputs.smtp_password }}
           RELEASED_VERSION: ${{ steps.resolve.outputs.version }}
           IS_PRODUCTION_REPO: ${{ vars.IS_PRODUCTION_REPO }}
+          # Account that owns the PAT fetched above. update_versions_impl.sh
+          # passes this as --github-username, so the cockroach-private PR
+          # branches (version bump, noop merge) are pushed to this account's
+          # fork and opened cross-fork against origin — keeping bot branches
+          # off the canonical repo. Must match both the PAT owner and an
+          # existing fork crl-release-eng-bot/cockroach-private.
+          GITHUB_USERNAME: crl-release-eng-bot
         run: |
           build/github/release-update-versions.sh
 
