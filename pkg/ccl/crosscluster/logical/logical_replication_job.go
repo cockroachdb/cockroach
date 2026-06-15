@@ -438,6 +438,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		payload.Discard,
 		payload.Mode,
 		payload.MetricsLabel,
+		p.job.Payload().UsernameProto.Decode(),
 	)
 	if err != nil {
 		return nil, nil, info, err
