@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -38,6 +39,7 @@ func constructLogicalReplicationWriterSpecs(
 	mode jobspb.LogicalReplicationDetails_ApplyMode,
 	metricsLabel string,
 	writer sqlclustersettings.LDRWriterType,
+	jobOwner username.SQLUsername,
 ) (map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, error) {
 	spanGroup := roachpb.SpanGroup{}
 	baseSpec := execinfrapb.LogicalReplicationWriterSpec{
@@ -53,6 +55,7 @@ func constructLogicalReplicationWriterSpecs(
 		MetricsLabel:                metricsLabel,
 		TypeDescriptors:             srcTypes,
 		WriterType:                  string(writer),
+		UsernameProto:               jobOwner.EncodeProto(),
 	}
 
 	writerSpecs := make(map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, len(destSQLInstances))

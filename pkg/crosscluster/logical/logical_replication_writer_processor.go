@@ -201,7 +201,9 @@ func newLogicalReplicationWriterProcessor(
 		}
 	}
 
-	dlqDbExec := flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)))
+	dlqSd := sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)
+	dlqSd.UserProto = jobOwnerOrNode(ctx, spec.UsernameProto)
+	dlqDbExec := flowCtx.Cfg.DB.Executor(isql.WithSessionData(dlqSd))
 
 	var numTablesWithSecondaryIndexes int
 	for _, tc := range procConfigByDestTableID {
@@ -704,20 +706,35 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 
 	flowCtx := lrw.FlowCtx
 	lrw.bh = make([]BatchHandler, poolSize)
+	destIDs := make([]descpb.ID, 0, len(lrw.configByTable))
+	for id := range lrw.configByTable {
+		destIDs = append(destIDs, id)
+	}
+	destGrants := destTableOverrides(destIDs)
 	for i := range lrw.bh {
 		var rp BatchHandler
 		var err error
+		// The CRUD writer hands this SessionData to the apply session
+		// directly (no per-op InternalExecutorOverride wraps it), so
+		// the destination-table DML bypass must live on the
+		// SessionData itself. The SQL writer's per-op overrides
+		// supersede this and would set the same grants anyway.
 		sd := sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)
+		sd.UserProto = jobOwnerOrNode(ctx, lrw.spec.UsernameProto)
+		sd.DescriptorOverrides = destGrants
 
 		switch writer {
 		case sqlclustersettings.LDRWriterTypeSQL:
+			// Initialize the executor with a fresh session data - this will
+			// avoid creating a new copy on each executor usage.
+			exSd := sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)
+			exSd.UserProto = jobOwnerOrNode(ctx, lrw.spec.UsernameProto)
+			exSd.DescriptorOverrides = destGrants
 			rp, err = makeSQLProcessor(
 				ctx, flowCtx.Cfg.Settings, lrw.configByTable,
 				jobspb.JobID(lrw.spec.JobID),
 				flowCtx.Cfg.DB,
-				// Initialize the executor with a fresh session data - this will
-				// avoid creating a new copy on each executor usage.
-				flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
+				flowCtx.Cfg.DB.Executor(isql.WithSessionData(exSd)),
 				sd, lrw.spec,
 				flowCtx.Codec(),
 				flowCtx.Cfg.LeaseManager.(*lease.Manager),
