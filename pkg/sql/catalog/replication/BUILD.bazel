@@ -29,10 +29,14 @@ go_library(
 go_test(
     name = "replication_test",
     size = "large",
-    srcs = ["reader_catalog_test.go"],
+    srcs = [
+        "reader_catalog_internal_test.go",
+        "reader_catalog_test.go",
+    ],
+    embed = [":replication"],
     deps = [
-        ":replication",
         "//pkg/base",
+        "//pkg/keys",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -40,6 +44,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/lease",
+        "//pkg/sql/sem/catconstants",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
