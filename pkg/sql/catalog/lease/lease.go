@@ -1183,6 +1183,11 @@ func (m *Manager) EnsureBatch(ctx context.Context, ids []descpb.ID) error {
 			// Figure out which IDs have no state object allocated.
 			batchCompleted := true
 			for idx, id := range ids {
+				// The system public schema (ID 29) has no real KV descriptor
+				// and should not be leased.
+				if id == keys.SystemPublicSchemaID {
+					continue
+				}
 				if !m.maybePrepareDescriptorForBulkAcquisition(id, acquisitionCh) {
 					continue
 				}
