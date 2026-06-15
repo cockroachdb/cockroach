@@ -2448,6 +2448,12 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 	}
 
 	defaultDatum := randgen.RandDatum(og.params.rng, datumTyp, columnForDefault.nullable)
+	// RandDatum for OID-family types (OID, REGTYPE, REGCLASS, ...) produces a
+	// random OID that does not resolve to any real type/object, so pick a valid
+	// OID from a known column type instead.
+	if datumTyp.Family() == types.Oid.Family() {
+		defaultDatum = tree.NewDOid(randgen.RandColumnType(og.params.rng).Oid())
+	}
 	stmt := makeOpStmt(OpStmtDDL)
 	if (!datumTyp.Equivalent(columnForDefault.typ)) && defaultDatum != tree.DNull {
 		stmt.expectedExecErrors.add(pgcode.DatatypeMismatch)
