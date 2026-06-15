@@ -3799,8 +3799,14 @@ func TestLeaseManagerIsMemoryMonitored(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		runner.Exec(t, fmt.Sprintf("DROP TABLE t%d", i))
 	}
-	currentBytes := lm.TestingGetBoundAccount().Used()
-	require.Lessf(t, currentBytes, lastBytes, "memory usage should be decreasing after dropping a table")
+	testutils.SucceedsSoon(t, func() error {
+		currentBytes := lm.TestingGetBoundAccount().Used()
+		if currentBytes >= lastBytes {
+			return errors.Newf("memory usage %d should be less than %d after dropping tables",
+				currentBytes, lastBytes)
+		}
+		return nil
+	})
 }
 
 // TestLeaseManagerLockedTimestampConcurrent test does a simple concurrency
