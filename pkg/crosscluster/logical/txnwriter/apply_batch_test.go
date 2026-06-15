@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -30,6 +31,8 @@ func newTxnWriter(t *testing.T, s serverutils.ApplicationLayerInterface) Transac
 		s.InternalDB().(isql.DB),
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		username.RootUserName(),
+		nil, /* grants */
 	)
 	require.NoError(t, err)
 	return writer
