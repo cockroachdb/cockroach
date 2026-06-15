@@ -66,7 +66,11 @@ func (fsr *fakeSpanResolver) NewSpanResolverIterator(
 	txn *kv.Txn, optionalOracle replicaoracle.Oracle,
 ) SpanResolverIterator {
 	rng, _ := randutil.NewTestRand()
-	return &fakeSpanResolverIterator{fsr: fsr, db: txn.DB(), rng: rng}
+	var db *kv.DB
+	if txn != nil {
+		db = txn.DB()
+	}
+	return &fakeSpanResolverIterator{fsr: fsr, db: db, rng: rng}
 }
 
 // Seek is part of the SpanResolverIterator interface. Each Seek call generates
