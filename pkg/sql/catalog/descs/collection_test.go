@@ -1463,24 +1463,29 @@ func TestSystemDatabaseCacheEvictionOnDescriptorNotFound(t *testing.T) {
 	}))
 
 	// Second lookup: succeeds because the eviction cleared the stale
-	// SystemDatabaseCache entry. Without eviction, the cache would still
-	// return bogusID and this lookup would fail with ErrDescriptorNotFound.
-	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-		ctx context.Context, txn isql.Txn, col *descs.Collection,
-	) error {
-		db, err := col.ByName(txn.KV()).Get().Database(ctx, "system")
-		if err != nil {
-			return err
-		}
-		sc, err := col.ByName(txn.KV()).Get().Schema(ctx, db, "public")
-		if err != nil {
-			return err
-		}
-		desc, err := col.ByName(txn.KV()).Get().Table(ctx, db, sc, fakeName)
-		if err != nil {
-			return err
-		}
-		require.Equal(t, realID, desc.GetID())
-		return nil
-	}))
+	// SystemDatabaseCache entry and the corrected namespace entry is in KV.
+	// A background goroutine may re-populate the cache with the stale entry
+	// before we look it up, so retry until the eviction sticks.
+	testutils.SucceedsSoon(t, func() error {
+		return sql.DescsTxn(ctx, &execCfg, func(
+			ctx context.Context, txn isql.Txn, col *descs.Collection,
+		) error {
+			db, err := col.ByName(txn.KV()).Get().Database(ctx, "system")
+			if err != nil {
+				return err
+			}
+			sc, err := col.ByName(txn.KV()).Get().Schema(ctx, db, "public")
+			if err != nil {
+				return err
+			}
+			desc, err := col.ByName(txn.KV()).Get().Table(ctx, db, sc, fakeName)
+			if err != nil {
+				return err
+			}
+			if desc.GetID() != realID {
+				return errors.Newf("expected descriptor ID %d, got %d", realID, desc.GetID())
+			}
+			return nil
+		})
+	})
 }
