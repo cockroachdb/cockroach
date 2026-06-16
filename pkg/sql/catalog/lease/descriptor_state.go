@@ -299,6 +299,15 @@ func newDescriptorVersionState(
 	return descState
 }
 
+// removeOnceDereferenced reports whether a version lease should be
+// removed when the refcount is 0. t.mu must be held.
+func (t *descriptorState) removeOnceDereferenced(s *descriptorVersionState) bool {
+	return t.mu.takenOffline ||
+		s != t.mu.active.findNewest() ||
+		s.GetVersion() < t.mu.maxVersionSeen ||
+		t.m.removeOnceDereferenced()
+}
+
 // removeInactiveVersions removes inactive versions in t.mu.active.data with
 // refcount 0. t.mu must be locked. It returns leases that need to be released.
 func (t *descriptorState) removeInactiveVersions(ctx context.Context) []*storedLease {
@@ -306,7 +315,7 @@ func (t *descriptorState) removeInactiveVersions(ctx context.Context) []*storedL
 	// A copy of t.mu.active.data must be made since t.mu.active.data will be changed
 	// within the loop.
 	for _, desc := range append([]*descriptorVersionState(nil), t.mu.active.data...) {
-		if desc.refcount.Load() == 0 {
+		if desc.refcount.Load() == 0 && t.removeOnceDereferenced(desc) {
 			t.mu.active.remove(desc)
 			func() {
 				desc.mu.Lock()
@@ -342,15 +351,7 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		// Figure out if we'd like to remove the lease from the store asap (i.e.
 		// when the refcount drops to 0). If so, we'll need to mark the lease as
 		// invalid.
-		removeOnceDereferenced :=
-			// Release from the store if the descriptor has been dropped or taken
-			// offline.
-			t.mu.takenOffline ||
-				// Release from the store if the lease is not for the latest
-				// version; only leases for the latest version can be acquired.
-				s != t.mu.active.findNewest() ||
-				s.GetVersion() < t.mu.maxVersionSeen ||
-				t.m.removeOnceDereferenced()
+		removeOnceDereferenced := t.removeOnceDereferenced(s)
 		if !removeOnceDereferenced {
 			return nil
 		}
@@ -360,7 +361,7 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		if s.refcount.Load() < 0 {
 			panic(errors.AssertionFailedf("negative ref count: %s", s))
 		}
-		if s.refcount.Load() == 0 && s.mu.lease != nil && removeOnceDereferenced {
+		if s.refcount.Load() == 0 && s.mu.lease != nil {
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			l := s.mu.lease
