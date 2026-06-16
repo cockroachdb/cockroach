@@ -1138,6 +1138,10 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 				require.NoError(t, err)
 			}
 
+			// Reading tenants[gatewayNode] directly later hits a use-after-free
+			// on Go 1.26.x: the *testTenant gets GC'd mid-test. Do not inline.
+			gw := tenants[gatewayNode]
+
 			// Wait until all tenant servers are aware of the setting override.
 			testutils.SucceedsSoon(t, func() error {
 				settingNames := []string{
@@ -1170,7 +1174,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			tenantSQL.Exec(t, `CREATE DATABASE t`)
 			tenantSQL.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY)`)
 
-			codec := tenants[gatewayNode].Codec()
+			codec := gw.Codec()
 			startKey := codec.TenantPrefix()
 			tc.AddVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
 			tc.WaitForVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
@@ -1190,7 +1194,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			// Check that the cache was indeed populated.
 			tenantSQL.Exec(t, `SELECT * FROM t.test WHERE k = 1`)
 			tablePrefix := keys.MustAddr(codec.TenantPrefix())
-			cache := tenants[gatewayNode].DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
+			cache := gw.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 			entry, err := cache.TestingGetCached(ctx, tablePrefix, false, roachpb.LAG_BY_CLUSTER_SETTING)
 			require.NoError(t, err)
 			require.False(t, entry.Lease.Empty())
