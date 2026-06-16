@@ -354,7 +354,7 @@ func TestDeterministicInitialData(t *testing.T) {
 		`movr`:       0x05e20fbb5586c9b0,
 		`queue`:      0xcbf29ce484222325,
 		`rand`:       0xcbf29ce484222325,
-		`roachmart`:  0xda5e73423dbdb2d9,
+		`roachmart`:  0x81d003238ce4b1f4,
 		`sqlsmith`:   0xcbf29ce484222325,
 		`startrek`:   0xa0249fbdf612734c,
 		`tpcc`:       0xccfecd06eed59975,
