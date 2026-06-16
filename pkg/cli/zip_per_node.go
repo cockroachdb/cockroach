@@ -716,6 +716,10 @@ func (zc *debugZipContext) getInternalTablesPerNode(
 	}
 	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.GetURL(), sqlAddr.AddressField)
 	nodePrinter.info("using SQL connection URL: %s", curSQLConn.GetURL())
+	// Allow AOST queries on PCR reader virtual clusters.
+	if err := curSQLConn.Exec(context.Background(), "SET bypass_pcr_reader_catalog_aost = 'true'"); err != nil {
+		log.Dev.Warningf(context.Background(), "failed to set bypass_pcr_reader_catalog_aost: %v", err)
+	}
 
 	for _, table := range zipInternalTablesPerNode.GetTables() {
 		query, err := zipInternalTablesPerNode.QueryForTable(table, zipCtx.redact)
