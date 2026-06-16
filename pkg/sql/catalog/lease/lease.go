@@ -1228,6 +1228,9 @@ func releaseLease(ctx context.Context, lease *storedLease, m *Manager) (released
 	if err := m.stopper.RunAsyncTask(
 		newCtx, "sql.descriptorState: releasing descriptor lease",
 		func(ctx context.Context) {
+			if fn := m.testingKnobs.LeaseStoreTestingKnobs.TestingBeforeReleasingKVLease; fn != nil {
+				fn(lease.id)
+			}
 			m.storage.release(ctx, m.stopper, lease)
 		}); err != nil {
 		log.Dev.Warningf(ctx, "error: %s, not releasing lease: %q", err, lease)
@@ -1358,6 +1361,9 @@ func (m *Manager) purgeOldVersions(
 	}
 
 	if isInactive := catalog.HasInactiveDescriptorError(err); err == nil || isInactive {
+		if fn := m.testingKnobs.TestingBeforePurgeRemoveInactives; fn != nil && desc != nil {
+			fn(id)
+		}
 		removeInactives(isInactive)
 		if desc != nil {
 			t.release(ctx, desc)

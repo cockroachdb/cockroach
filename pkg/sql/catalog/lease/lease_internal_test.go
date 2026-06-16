@@ -2180,3 +2180,176 @@ func TestPurgeOldVersionsRetriesAfterEnsureVersionError(t *testing.T) {
 		t.Fatal("DDL hung — old lease stuck on node 0 (no retry of failed purge)")
 	}
 }
+
+// TestPurgeDoesNotEvictConcurrentlyAcquiredVersion verifies that purgeOldVersions
+// retains the newest descriptor version in memory when a newer version is
+// acquired concurrently, so a subsequent acquisition does not collide with a
+// system.lease row whose deletion is still pending.
+//
+// The race it guards against: while purgeOldVersions(vOld) holds a protective
+// refcount on vOld (the newest known version), a concurrent acquisition of
+// vNew = vOld+1 inserts vNew and bumps maxVersionSeen. If the purge then evicts
+// both vNew and vOld (vOld < maxVersionSeen), it empties the in-memory state
+// while vNew's lease row is still pending an async delete; the next acquisition
+// reads vNew from KV and its CPut conflicts with that orphaned row.
+// The fix keeps vNew in memory and in store.
+func TestPurgeDoesNotEvictConcurrentlyAcquiredVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// unblockRelease is closed to let blocked async KV deletes proceed; unblock
+	// makes that idempotent since it is closed both in the body and on exit.
+	unblockRelease := make(chan struct{})
+	var unblockOnce sync.Once
+	unblock := func() { unblockOnce.Do(func() { close(unblockRelease) }) }
+
+	// armed gates the knobs to the orchestrated phase; targetID is the descriptor
+	// under test; injected ensures the concurrent vNew acquisition runs once.
+	var armed, injected atomic.Bool
+	var targetID atomic.Int64
+
+	// bump commits vNew (DDL on node 1) and acquires it on node 0. It is invoked
+	// from inside purgeOldVersions via the knob; set up once the cluster is up.
+	var bump func()
+
+	knobs := &ManagerTestingKnobs{
+		// Keep node 0's rangefeed from purging/acquiring the target concurrently.
+		TestingDescriptorUpdateEvent: func(descriptor *descpb.Descriptor) error {
+			id, _, _, _, _ := descpb.GetDescriptorMetadata(descriptor)
+			if armed.Load() && int64(id) == targetID.Load() {
+				return errors.New("blocked for test")
+			}
+			return nil
+		},
+		// Inject the concurrent vNew acquisition (step 2) into the window between
+		// the protective refcount and removeInactiveVersions.
+		TestingBeforePurgeRemoveInactives: func(id descpb.ID) {
+			if armed.Load() && int64(id) == targetID.Load() &&
+				injected.CompareAndSwap(false, true) {
+				bump()
+			}
+		},
+		LeaseStoreTestingKnobs: StorageTestingKnobs{
+			// Block async deletes for the target so the orphaned vNew row lingers.
+			TestingBeforeReleasingKVLease: func(id descpb.ID) {
+				if armed.Load() && int64(id) == targetID.Load() {
+					<-unblockRelease
+				}
+			},
+		},
+	}
+
+	// Node 0 is the lease manager under test; node 1 runs the version-bumping DDL
+	// so it perturbs node 0 only via KV and the (blocked) rangefeed.
+	tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+		},
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {Knobs: base.TestingKnobs{SQLLeaseManager: knobs}},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	mgr0 := tc.Server(0).LeaseManager().(*Manager)
+	kvDB := tc.Server(0).DB()
+	codec := tc.Server(0).Codec()
+	db1 := tc.ServerConn(1)
+
+	_, err := db1.Exec(`CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY)`)
+	require.NoError(t, err)
+
+	id := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "test").GetID()
+	tableVersion := func() descpb.DescriptorVersion {
+		return desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "test").GetVersion()
+	}
+
+	// inMemVersions reports how many versions of the descriptor node 0 holds in
+	// memory; storeLeases reports how many lease rows node 0 holds for it in
+	// system.lease.
+	inMemVersions := func() int {
+		st := mgr0.findDescriptorState(id, false)
+		if st == nil {
+			return 0
+		}
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		return len(st.mu.active.data)
+	}
+	node0Instance := int64(mgr0.storage.nodeIDContainer.SQLInstanceID())
+	storeLeases := func() int {
+		var n int
+		require.NoError(t, db1.QueryRow(
+			`SELECT count(*) FROM "".crdb_internal.kv_session_based_leases `+
+				`WHERE desc_id = $1 AND sql_instance_id = $2`,
+			int64(id), node0Instance).Scan(&n))
+		return n
+	}
+
+	// On exit, drain the background DDL: disarm the knobs and unblock pending
+	// deletes. Registered after the Stop defer so it runs first, cluster still up.
+	ddlDone := make(chan error, 1)
+	defer func() {
+		armed.Store(false)
+		unblock()
+		select {
+		case <-ddlDone:
+		case <-time.After(30 * time.Second):
+		}
+	}()
+
+	// bump runs inside purgeOldVersions, after the protective refcount on vOld is
+	// held. The DDL runs in a goroutine because its internal WaitForOneVersion
+	// cannot converge while node 0 holds vOld; we wait only for vNew in KV.
+	bump = func() {
+		before := tableVersion()
+		go func() {
+			_, err := db1.Exec(`ALTER TABLE t.test ADD COLUMN v INT DEFAULT 0`)
+			ddlDone <- err
+		}()
+		testutils.SucceedsSoon(t, func() error {
+			if tableVersion() <= before {
+				return errors.Errorf("waiting for version bump beyond v%d", before)
+			}
+			return nil
+		})
+		require.NoError(t, mgr0.AcquireFreshestFromStore(ctx, id))
+	}
+
+	// Acquire vOld so it is the newest in-memory version (refcount 0) before
+	// arming, mirroring the version the rangefeed purge reacts to.
+	require.NoError(t, mgr0.AcquireFreshestFromStore(ctx, id))
+	vOld := tableVersion()
+
+	targetID.Store(int64(id))
+	armed.Store(true)
+
+	// Manually trigger purge with the race condition: the knob injects bump mid-call,
+	// then vNew and vOld are both removed, emptying active.data while their KV deletes
+	// are blocked.
+	require.NoError(t, mgr0.purgeOldVersions(ctx, kvDB, id, false /* dropped */, vOld))
+	require.True(t, injected.Load(), "concurrent vNew acquisition never injected")
+	require.Equal(t, 1, inMemVersions(), "purge should retain exactly the newest version")
+
+	// ensureVersion is the path the rangefeed uses to re-acquire vNew: it
+	// short-circuits when the newest in-memory version satisfies minVersion. With
+	// the bug active.data is empty, so it falls through to a fresh acquisition
+	// whose CPut conflicts with vNew's orphaned lease row; with the fix vNew is
+	// retained and ensureVersion returns without touching the store.
+	require.NoError(t, ensureVersion(ctx, id, tableVersion(), mgr0),
+		"re-acquisition failed: active.data emptied while a system.lease row was "+
+			"pending async deletion, so the CPut conflicts with the orphaned row")
+
+	// Let vOld's pending delete proceed and confirm node 0 converges to exactly
+	// one lease.
+	unblock()
+	testutils.SucceedsSoon(t, func() error {
+		if n := storeLeases(); n != 1 {
+			return errors.Errorf("expected 1 stored lease on node 0, got %d", n)
+		}
+		return nil
+	})
+	require.Equal(t, 1, inMemVersions(), "node 0 should still hold exactly the newest version")
+}
