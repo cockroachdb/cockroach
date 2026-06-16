@@ -1127,6 +1127,10 @@ func (m *SessionDataMutator) SetDistSQLPreventPartitioningSoftLimitedScans(val b
 	m.Data.DistSQLPreventPartitioningSoftLimitedScans = val
 }
 
+func (m *SessionDataMutator) SetOptimizerInlinePlaceholderEqualities(val bool) {
+	m.Data.OptimizerInlinePlaceholderEqualities = val
+}
+
 func (m *SessionDataMutator) SetOptimizerUseMinRowCountAntiJoinFix(val bool) {
 	m.Data.OptimizerUseMinRowCountAntiJoinFix = val
 }

@@ -1120,8 +1120,10 @@ quality of service: regular
                   execution time: 0µs
                   size: 1 column, 1 row
 
-statement ok
+statement count 1
 DELETE FROM t137352 WHERE true;
+
+statement ok
 INSERT INTO t137352 VALUES (1, 10, 3);
 
 query T kvtrace
@@ -1193,8 +1195,10 @@ quality of service: regular
               execution time: 0µs
               size: 1 column, 1 row
 
-statement ok
+statement count 1
 DELETE FROM t137352 WHERE true;
+
+statement ok
 INSERT INTO t137352 VALUES (1, 2, 3);
 
 query T kvtrace
@@ -1302,8 +1306,10 @@ quality of service: regular
                       table: t137352@t137352_pkey
                       spans: [/1 - /1]
 
-statement ok
+statement count 1
 DELETE FROM t137352 WHERE true;
+
+statement ok
 INSERT INTO t137352 VALUES (1, 1, 1);
 
 query T kvtrace
@@ -1375,8 +1381,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Same as above, but the second column family is set to NULL.
@@ -1393,8 +1401,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Both primary and non-unique secondary indexes are scanned and locked.
@@ -1435,8 +1445,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Same as above, but the second column family is set to NULL.
@@ -1454,8 +1466,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Both primary and unique secondary (on nullable column) indexes are scanned and
@@ -1497,8 +1511,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Same as above, but the second column family is set to NULL.
@@ -1516,8 +1532,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Both primary and unique secondary (on non-nullable column) indexes are scanned
@@ -1559,8 +1577,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Same as above, but the second column family is set to NULL.
@@ -1578,8 +1598,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # The filter is not pushed down into the scan, so no index is locked.
@@ -1617,8 +1639,10 @@ CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE true;
+
+statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 
 # Same as above, but the second column family is set to NULL.
@@ -1684,8 +1708,10 @@ CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
 Del (locking) /Table/120/4/4/0
 CPut /Table/120/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160_families WHERE true;
+
+statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
 
 query T kvtrace
@@ -1708,8 +1734,10 @@ CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
 Del (locking) /Table/120/4/4/0
 CPut /Table/120/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160_families WHERE true;
+
+statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
 
 query T kvtrace
@@ -1732,8 +1760,10 @@ CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
 Del (locking) /Table/120/4/4/0
 CPut /Table/120/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160_families WHERE true;
+
+statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
 
 query T kvtrace
@@ -1761,8 +1791,10 @@ statement ok
 SET use_cputs_on_non_unique_indexes = true;
 SET optimizer_use_lock_elision_multiple_families = true;
 
-statement ok
+statement count 1
 DELETE FROM t139160_families WHERE true;
+
+statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
 
 query T kvtrace
@@ -1784,8 +1816,10 @@ CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
 Del (locking) /Table/120/4/4/0
 CPut /Table/120/4/5/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160_families WHERE true;
+
+statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
 SET optimizer_enable_lock_elision = false;
 

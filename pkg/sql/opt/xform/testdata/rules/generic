@@ -930,6 +930,161 @@ project
       │    └── (10,)
       └── filters (true)
 
+exec-ddl
+CREATE TABLE u (
+  k INT PRIMARY KEY,
+  i INT
+)
+----
+
+# Regression tests for #169297. GenerateParameterizedJoin should not recurse
+# into subqueries to replace placeholders with Values columns. Doing so would
+# introduce correlation into an otherwise uncorrelated subquery, which can
+# prevent the optimizer from planning a lookup join.
+opt expect=GenerateParameterizedJoin
+SELECT * FROM t WHERE k = $1 AND (b OR EXISTS(SELECT 1 FROM u WHERE u.k = $1))
+----
+project
+ ├── columns: k:1!null i:2 s:3 b:4 t:5
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── inner-join (lookup t)
+      ├── columns: t.k:1!null t.i:2 s:3 b:4 t:5 "$1":16!null
+      ├── flags: disallow merge join
+      ├── key columns: [16] = [1]
+      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
+      ├── parameterized columns: (16)
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1-5,16), (1)==(16), (16)==(1)
+      ├── values
+      │    ├── columns: "$1":16
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(16)
+      │    └── ($1,)
+      └── filters
+           └── or [outer=(4), subquery]
+                ├── b:4
+                └── coalesce
+                     ├── subquery
+                     │    └── project
+                     │         ├── columns: column14:14!null
+                     │         ├── cardinality: [0 - 1]
+                     │         ├── has-placeholder
+                     │         ├── key: ()
+                     │         ├── fd: ()-->(14)
+                     │         ├── placeholder-scan u
+                     │         │    ├── columns: u.k:8!null
+                     │         │    ├── cardinality: [0 - 1]
+                     │         │    ├── has-placeholder
+                     │         │    ├── key: ()
+                     │         │    ├── fd: ()-->(8)
+                     │         │    └── span
+                     │         │         └── $1
+                     │         └── projections
+                     │              └── true [as=column14:14]
+                     └── false
+
+# Same as above, but with a scalar Subquery inside an OR.
+opt expect=GenerateParameterizedJoin
+SELECT * FROM t WHERE k = $1 AND (b OR i > (SELECT u.i FROM u WHERE u.k = $1))
+----
+project
+ ├── columns: k:1!null i:2 s:3 b:4 t:5
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── inner-join (lookup t)
+      ├── columns: t.k:1!null t.i:2 s:3 b:4 t:5 "$1":13!null
+      ├── flags: disallow merge join
+      ├── key columns: [13] = [1]
+      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
+      ├── parameterized columns: (13)
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1-5,13), (1)==(13), (13)==(1)
+      ├── values
+      │    ├── columns: "$1":13
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(13)
+      │    └── ($1,)
+      └── filters
+           └── or [outer=(2,4), subquery]
+                ├── b:4
+                └── gt
+                     ├── t.i:2
+                     └── subquery
+                          └── project
+                               ├── columns: u.i:9
+                               ├── cardinality: [0 - 1]
+                               ├── has-placeholder
+                               ├── key: ()
+                               ├── fd: ()-->(9)
+                               └── placeholder-scan u
+                                    ├── columns: u.k:8!null u.i:9
+                                    ├── cardinality: [0 - 1]
+                                    ├── has-placeholder
+                                    ├── key: ()
+                                    ├── fd: ()-->(8,9)
+                                    └── span
+                                         └── $1
+
+# Same as above, but with an Any subquery inside an OR.
+opt expect=GenerateParameterizedJoin
+SELECT * FROM t WHERE k = $1 AND (b OR i = ANY(SELECT u.i FROM u WHERE u.k = $1))
+----
+project
+ ├── columns: k:1!null i:2 s:3 b:4 t:5
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── inner-join (lookup t)
+      ├── columns: t.k:1!null t.i:2 s:3 b:4 t:5 "$1":13!null
+      ├── flags: disallow merge join
+      ├── key columns: [13] = [1]
+      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
+      ├── parameterized columns: (13)
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1-5,13), (1)==(13), (13)==(1)
+      ├── values
+      │    ├── columns: "$1":13
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(13)
+      │    └── ($1,)
+      └── filters
+           └── or [outer=(2,4), correlated-subquery]
+                ├── b:4
+                └── any: eq
+                     ├── project
+                     │    ├── columns: u.i:9
+                     │    ├── cardinality: [0 - 1]
+                     │    ├── has-placeholder
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(9)
+                     │    └── placeholder-scan u
+                     │         ├── columns: u.k:8!null u.i:9
+                     │         ├── cardinality: [0 - 1]
+                     │         ├── has-placeholder
+                     │         ├── key: ()
+                     │         ├── fd: ()-->(8,9)
+                     │         └── span
+                     │              └── $1
+                     └── t.i:2
+
 # The rule does not match if generic optimizations are disabled.
 opt set=(plan_cache_mode=force_custom_plan) expect-not=ConvertParameterizedLookupJoinToPlaceholderScan
 SELECT t.k FROM (VALUES ($1::INT)) AS v(k) JOIN t ON t.k = v.k
@@ -956,3 +1111,130 @@ project
       │    ├── fd: ()-->(1)
       │    └── ($1,)
       └── filters (true)
+
+# Regression test for #164666. The EXISTS subquery references t1.k2 via
+# correlation; after InlineConstVar propagates the placeholder from
+# t1.k2 = $1, the subquery filter becomes t3.k2 = $1, enabling an index
+# scan on t3 instead of a full scan.
+exec-ddl
+CREATE TABLE t164666_t1 (
+  k1 INT8 NOT NULL,
+  k2 INT8 NOT NULL,
+  a1 STRING NULL,
+  fk1 INT8 NULL,
+  CONSTRAINT pk_t164666_t1 PRIMARY KEY (k1 ASC),
+  INDEX ix_t164666_t1_k2 (k2 ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE t164666_t3 (
+  k4 INT8 NOT NULL,
+  fk2 STRING NOT NULL DEFAULT '',
+  k2 INT8 NULL,
+  k1 INT8 NULL,
+  b1 BOOL NULL,
+  CONSTRAINT pk_t164666_t3 PRIMARY KEY (k4 ASC),
+  INDEX ix_t164666_t3_k2 (k2 ASC)
+)
+----
+
+opt set=optimizer_inline_placeholder_equalities=on
+SELECT t164666_t1.k1
+FROM t164666_t1
+WHERE t164666_t1.k2 = $1
+AND (
+  t164666_t1.a1 IS NOT NULL
+  OR EXISTS(
+    SELECT 1
+    FROM t164666_t3
+    WHERE t164666_t3.k1 = t164666_t1.k1
+    AND t164666_t3.k2 = t164666_t1.k2
+  )
+)
+----
+project
+ ├── columns: k1:1!null
+ ├── has-placeholder
+ ├── key: (1)
+ └── select
+      ├── columns: t164666_t1.k1:1!null a1:3 canary_agg:16
+      ├── has-placeholder
+      ├── key: (1)
+      ├── fd: (1)-->(3,16)
+      ├── group-by (hash)
+      │    ├── columns: t164666_t1.k1:1!null a1:3 canary_agg:16
+      │    ├── grouping columns: t164666_t1.k1:1!null
+      │    ├── has-placeholder
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3,16)
+      │    ├── left-join (hash)
+      │    │    ├── columns: t164666_t1.k1:1!null t164666_t1.k2:2!null a1:3 t164666_t3.k2:9 t164666_t3.k1:10
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+      │    │    ├── has-placeholder
+      │    │    ├── fd: ()-->(2), (1)-->(3)
+      │    │    ├── project
+      │    │    │    ├── columns: t164666_t1.k1:1!null t164666_t1.k2:2!null a1:3
+      │    │    │    ├── has-placeholder
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: ()-->(2), (1)-->(3)
+      │    │    │    └── inner-join (lookup t164666_t1)
+      │    │    │         ├── columns: t164666_t1.k1:1!null t164666_t1.k2:2!null a1:3 "$1":18!null
+      │    │    │         ├── key columns: [1] = [1]
+      │    │    │         ├── lookup columns are key
+      │    │    │         ├── has-placeholder
+      │    │    │         ├── key: (1)
+      │    │    │         ├── fd: ()-->(2,18), (1)-->(3), (2)==(18), (18)==(2)
+      │    │    │         ├── inner-join (lookup t164666_t1@ix_t164666_t1_k2)
+      │    │    │         │    ├── columns: t164666_t1.k1:1!null t164666_t1.k2:2!null "$1":18!null
+      │    │    │         │    ├── flags: disallow merge join
+      │    │    │         │    ├── key columns: [18] = [2]
+      │    │    │         │    ├── parameterized columns: (18)
+      │    │    │         │    ├── has-placeholder
+      │    │    │         │    ├── key: (1)
+      │    │    │         │    ├── fd: ()-->(2,18), (2)==(18), (18)==(2)
+      │    │    │         │    ├── values
+      │    │    │         │    │    ├── columns: "$1":18
+      │    │    │         │    │    ├── cardinality: [1 - 1]
+      │    │    │         │    │    ├── has-placeholder
+      │    │    │         │    │    ├── key: ()
+      │    │    │         │    │    ├── fd: ()-->(18)
+      │    │    │         │    │    └── ($1,)
+      │    │    │         │    └── filters (true)
+      │    │    │         └── filters (true)
+      │    │    ├── project
+      │    │    │    ├── columns: t164666_t3.k2:9!null t164666_t3.k1:10
+      │    │    │    ├── has-placeholder
+      │    │    │    ├── fd: ()-->(9)
+      │    │    │    └── inner-join (lookup t164666_t3)
+      │    │    │         ├── columns: t164666_t3.k2:9!null t164666_t3.k1:10 "$1":19!null
+      │    │    │         ├── key columns: [7] = [7]
+      │    │    │         ├── lookup columns are key
+      │    │    │         ├── has-placeholder
+      │    │    │         ├── fd: ()-->(9,19), (9)==(19), (19)==(9)
+      │    │    │         ├── inner-join (lookup t164666_t3@ix_t164666_t3_k2)
+      │    │    │         │    ├── columns: k4:7!null t164666_t3.k2:9!null "$1":19!null
+      │    │    │         │    ├── flags: disallow merge join
+      │    │    │         │    ├── key columns: [19] = [9]
+      │    │    │         │    ├── parameterized columns: (19)
+      │    │    │         │    ├── has-placeholder
+      │    │    │         │    ├── key: (7)
+      │    │    │         │    ├── fd: ()-->(9,19), (9)==(19), (19)==(9)
+      │    │    │         │    ├── values
+      │    │    │         │    │    ├── columns: "$1":19
+      │    │    │         │    │    ├── cardinality: [1 - 1]
+      │    │    │         │    │    ├── has-placeholder
+      │    │    │         │    │    ├── key: ()
+      │    │    │         │    │    ├── fd: ()-->(19)
+      │    │    │         │    │    └── ($1,)
+      │    │    │         │    └── filters (true)
+      │    │    │         └── filters (true)
+      │    │    └── filters
+      │    │         └── t164666_t3.k1:10 = t164666_t1.k1:1 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+      │    └── aggregations
+      │         ├── const-not-null-agg [as=canary_agg:16, outer=(9)]
+      │         │    └── t164666_t3.k2:9
+      │         └── const-agg [as=a1:3, outer=(3)]
+      │              └── a1:3
+      └── filters
+           └── (a1:3 IS NOT NULL) OR (canary_agg:16 IS NOT NULL) [outer=(3,16)]
