@@ -191,6 +191,33 @@ func anyDataset(rng *rand.Rand) []string {
 	return nDatasets(rng, 1)
 }
 
+func nSmallDatasets(rng *rand.Rand, n int) []string {
+	small := slices.DeleteFunc(allDatasets(rng), func(name string) bool {
+		return datasets[name].getTableName() == "lineitem"
+	})
+	rng.Shuffle(len(small), func(i, j int) {
+		small[i], small[j] = small[j], small[i]
+	})
+	seen := make(map[string]bool)
+	var result []string
+	for _, name := range small {
+		tbl := datasets[name].getTableName()
+		if seen[tbl] {
+			continue
+		}
+		seen[tbl] = true
+		result = append(result, name)
+		if len(result) == n {
+			break
+		}
+	}
+	return result
+}
+
+func anySmallDataset(rng *rand.Rand) []string {
+	return nSmallDatasets(rng, 1)
+}
+
 // importTestSpec represents a subtest within the import test.
 type importTestSpec struct {
 	// subtestName is the name to register for this test.
@@ -273,11 +300,12 @@ var tests = []importTestSpec{
 			time.Sleep(10 * time.Second)
 		},
 	},
-	// Test job survival if a worker node is shutdown.
+	// Test job survival if a worker node is shutdown. Exclude lineitem (the
+	// largest dataset) to avoid timeouts when running with only 3 active nodes.
 	{
 		subtestName:  "nodeShutdown/worker",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anySmallDataset),
 		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset) error {
 			importConn := c.Conn(ctx, l, 2 /* gateway node */)
 			defer importConn.Close()
@@ -287,11 +315,13 @@ var tests = []importTestSpec{
 				})
 		},
 	},
-	// Test job survival if the coordinator node is shutdown.
+	// Test job survival if the coordinator node is shutdown. Exclude lineitem
+	// (the largest dataset) to avoid timeouts when running with only 3 active
+	// nodes.
 	{
 		subtestName:  "nodeShutdown/coordinator",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anySmallDataset),
 		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset) error {
 			importConn := c.Conn(ctx, l, 2 /* gateway node */)
 			defer importConn.Close()
