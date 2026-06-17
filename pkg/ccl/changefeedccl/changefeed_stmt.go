@@ -354,6 +354,13 @@ func changefeedPlanHook(
 			// fetch this value from that cluster setting.
 			perTableProtectedTimestampsEnabled := false
 			usingPerTablePTS := perTableTrackingEnabled && perTableProtectedTimestampsEnabled
+			ptsTS := details.StatementTime
+			if !ptsTS.IsEmpty() {
+				// WITH diff and CDC queries reading cdc_prev fetch the prev row at
+				// ts.Prev(); the PTS must cover that earlier timestamp. Shift
+				// unconditionally so adding diff via ALTER CHANGEFEED stays safe.
+				ptsTS = ptsTS.Prev()
+			}
 			if usingPerTablePTS {
 				protectedTimestampRecords := make(map[descpb.ID]uuid.UUID)
 				if err := targets.EachTarget(func(target changefeedbase.Target) error {
@@ -365,7 +372,7 @@ func changefeedPlanHook(
 						ctx,
 						jobID,
 						ptsTargets,
-						details.StatementTime,
+						ptsTS,
 					)
 					perTablePTSRecords = append(perTablePTSRecords, ptsRecord)
 					uuid := ptsRecord.ID.GetUUID()
@@ -377,7 +384,7 @@ func changefeedPlanHook(
 				systemTablesPTSRecord = createSystemTablesProtectedTimestampRecord(
 					ctx,
 					jobID,
-					details.StatementTime,
+					ptsTS,
 				)
 				ptsRecords = &cdcprogresspb.ProtectedTimestampRecords{
 					UserTables:   protectedTimestampRecords,
@@ -388,7 +395,7 @@ func changefeedPlanHook(
 					ctx,
 					jobID,
 					targets,
-					details.StatementTime,
+					ptsTS,
 				)
 				progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
 			}
