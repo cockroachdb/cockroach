@@ -305,6 +305,33 @@ func TestNotifyPublishRunnerRun(t *testing.T) {
 		"IBM-OEM message must not include a Jira link")
 }
 
+// TestNotifyPublishRunnerRun_PreReleaseSkipsIBM asserts that a pre-release
+// publish still posts the blessed Jira comment and #db-release-status message
+// but suppresses the IBM-OEM "published" announcement, which is GA-only.
+func TestNotifyPublishRunnerRun_PreReleaseSkipsIBM(t *testing.T) {
+	jira := &fakeJira{
+		searchResult: []jiraIssue{{Key: "REL-4910"}},
+		addCommentID: "363988",
+	}
+	slack := &fakeSlack{}
+	r := &notifyPublishRunner{
+		jira:       jira,
+		slack:      slack,
+		sha:        "deadbeef",
+		version:    "v26.3.0-alpha.2",
+		channel:    "#db-release-status",
+		ibmChannel: "#proj-ibm-oem-releases",
+	}
+	require.NoError(t, r.run())
+
+	require.Equal(t, "REL-4910", jira.addCommentKey,
+		"blessed Jira comment must still be posted for a pre-release")
+
+	require.Len(t, slack.posts, 1, "only the blessed post; IBM-OEM is skipped")
+	require.Equal(t, "#db-release-status", slack.posts[0].channel)
+	require.Contains(t, slack.posts[0].body, "`v26.3.0-alpha.2` binaries have been blessed:")
+}
+
 func TestNotifyPublishRunnerRun_AssertsOnEmptyCommentID(t *testing.T) {
 	jira := &fakeJira{
 		searchResult: []jiraIssue{{Key: "REL-4910"}},
@@ -383,21 +410,33 @@ func TestBuildNotifyPublishSummary(t *testing.T) {
 	t.Run("success links to the comment", func(t *testing.T) {
 		s := buildNotifyPublishSummary(
 			"REL-4910", "v24.3.33", "#db-release-status", "#proj-ibm-oem-releases",
-			"363988", nil, false)
+			"363988", false, nil, false)
 		require.Contains(t, s, "✅")
 		require.Contains(t, s, "REL-4910")
 		require.Contains(t, s, "publish announced")
 		require.Contains(t, s, "v24.3.33")
 		require.Contains(t, s, "#db-release-status")
 		require.Contains(t, s, "#proj-ibm-oem-releases")
+		require.NotContains(t, s, "skipped for pre-release")
 		require.Contains(t, s,
 			"https://cockroachlabs.atlassian.net/browse/REL-4910?focusedCommentId=363988")
+	})
+
+	t.Run("pre-release notes the IBM-OEM skip", func(t *testing.T) {
+		s := buildNotifyPublishSummary(
+			"REL-4910", "v26.3.0-alpha.2", "#db-release-status", "#proj-ibm-oem-releases",
+			"363988", true, nil, false)
+		require.Contains(t, s, "✅")
+		require.Contains(t, s, "publish announced")
+		require.Contains(t, s, "#db-release-status")
+		require.Contains(t, s, "skipped for pre-release")
+		require.Contains(t, s, "#proj-ibm-oem-releases")
 	})
 
 	t.Run("dry run is marked and posts nothing", func(t *testing.T) {
 		s := buildNotifyPublishSummary(
 			"REL-4910", "v24.3.33", "#db-release-status", "#proj-ibm-oem-releases",
-			"DRYRUN", nil, true)
+			"DRYRUN", false, nil, true)
 		require.Contains(t, s, "✅")
 		require.Contains(t, s, "dry run")
 		require.NotContains(t, s, "focusedCommentId",
@@ -407,7 +446,7 @@ func TestBuildNotifyPublishSummary(t *testing.T) {
 	t.Run("failure with resolved ticket, no comment yet", func(t *testing.T) {
 		s := buildNotifyPublishSummary(
 			"REL-4910", "v24.3.33", "#db-release-status", "#proj-ibm-oem-releases",
-			"", errors.New("slack 500"), false)
+			"", false, errors.New("slack 500"), false)
 		require.Contains(t, s, "❌")
 		require.Contains(t, s, "REL-4910")
 		require.Contains(t, s, "publish notification failed")
@@ -422,7 +461,7 @@ func TestBuildNotifyPublishSummary(t *testing.T) {
 		// know to repost only to Slack.
 		s := buildNotifyPublishSummary(
 			"REL-4910", "v24.3.33", "#db-release-status", "#proj-ibm-oem-releases",
-			"363988", errors.New("slack 500"), false)
+			"363988", false, errors.New("slack 500"), false)
 		require.Contains(t, s, "❌")
 		require.Contains(t, s, "already posted")
 		require.Contains(t, s,
@@ -433,7 +472,7 @@ func TestBuildNotifyPublishSummary(t *testing.T) {
 	t.Run("failure before the ticket is resolved", func(t *testing.T) {
 		s := buildNotifyPublishSummary(
 			"", "v24.3.33", "#db-release-status", "#proj-ibm-oem-releases",
-			"", errors.New("jql boom"), false)
+			"", false, errors.New("jql boom"), false)
 		require.Contains(t, s, "❌")
 		require.Contains(t, s, "unresolved ticket")
 		require.Contains(t, s, "jql boom")
