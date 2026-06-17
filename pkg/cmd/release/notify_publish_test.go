@@ -154,30 +154,59 @@ func TestReadVersionFile(t *testing.T) {
 	})
 }
 
-// fakeJira is a minimal jiraSearchCommenter for resolveTicketKey and run
+// fakeJira is a minimal jiraTicketClient for resolveTicketKey and run
 // tests. It records the JQL it was asked to run, returns canned issues,
-// and tracks AddComment calls. Behavior is per-test (set fields, then
-// invoke the runner); no goroutines so concurrent access isn't a concern.
+// and tracks GetIssue/AddComment/Transition calls. Behavior is per-test
+// (set fields, then invoke the runner); no goroutines so concurrent access
+// isn't a concern.
 type fakeJira struct {
 	searchResult []jiraIssue
 	searchErr    error
 	lastJQL      string
 
+	// getIssueResult is returned by GetIssue when non-nil; otherwise GetIssue
+	// returns a bare issue with just the key (no subtasks), which most tests
+	// want since they don't exercise the subtask transition.
+	getIssueResult *jiraIssue
+	getIssueErr    error
+	getIssueKey    string
+
 	addCommentID  string
 	addCommentErr error
 	addCommentKey string
 	addCommentDoc map[string]interface{}
+
+	transitionErr   error
+	transitionCalls []transitionCall
 }
+
+type transitionCall struct{ key, id string }
 
 func (f *fakeJira) SearchJQL(jql string, _ []string) ([]jiraIssue, error) {
 	f.lastJQL = jql
 	return f.searchResult, f.searchErr
 }
 
+func (f *fakeJira) GetIssue(key string) (*jiraIssue, error) {
+	f.getIssueKey = key
+	if f.getIssueErr != nil {
+		return nil, f.getIssueErr
+	}
+	if f.getIssueResult != nil {
+		return f.getIssueResult, nil
+	}
+	return &jiraIssue{Key: key}, nil
+}
+
 func (f *fakeJira) AddComment(key string, doc map[string]interface{}) (string, error) {
 	f.addCommentKey = key
 	f.addCommentDoc = doc
 	return f.addCommentID, f.addCommentErr
+}
+
+func (f *fakeJira) Transition(key string, transitionID string) error {
+	f.transitionCalls = append(f.transitionCalls, transitionCall{key: key, id: transitionID})
+	return f.transitionErr
 }
 
 // fakeSlack records every PostMessage call. The runner makes more than
@@ -401,6 +430,90 @@ func TestNotifyPublishRunnerRun_DryRunDoesNotCallJiraOrSlack(t *testing.T) {
 	require.NoError(t, r.run())
 	require.Empty(t, jira.addCommentKey, "AddComment must not be called in dry-run")
 	require.Empty(t, slack.posts, "PostMessage must not be called in dry-run")
+}
+
+// issueWithSubtask builds a parent issue carrying a single subtask with the
+// given summary and status, for exercising the publish-binaries transition.
+func issueWithSubtask(parentKey, subtaskKey, summary, status string) *jiraIssue {
+	var st jiraSubtask
+	st.Key = subtaskKey
+	st.Fields.Summary = summary
+	st.Fields.Status.Name = status
+	return &jiraIssue{
+		Key:    parentKey,
+		Fields: jiraIssueFields{Subtasks: []jiraSubtask{st}},
+	}
+}
+
+// TestNotifyPublishRunnerRun_TransitionsPublishSubtask asserts that an open
+// "Publish Binaries for Download" subtask is transitioned to Done after the
+// announcements, using the shared subtask-done transition ID.
+func TestNotifyPublishRunnerRun_TransitionsPublishSubtask(t *testing.T) {
+	jira := &fakeJira{
+		searchResult:   []jiraIssue{{Key: "REL-4910"}},
+		addCommentID:   "363988",
+		getIssueResult: issueWithSubtask("REL-4910", "REL-4911", "Publish Binaries for Download", "To Do"),
+	}
+	slack := &fakeSlack{}
+	r := &notifyPublishRunner{
+		jira:       jira,
+		slack:      slack,
+		sha:        "deadbeef",
+		version:    "v24.3.33",
+		channel:    "#db-release-status",
+		ibmChannel: "#proj-ibm-oem-releases",
+	}
+	require.NoError(t, r.run())
+
+	require.Len(t, slack.posts, 2, "blessed + IBM-OEM posts still happen")
+	require.Equal(t, []transitionCall{{key: "REL-4911", id: transitionSubtaskDone}},
+		jira.transitionCalls)
+}
+
+// TestNotifyPublishRunnerRun_SkipsTransitionWhenSubtaskDone asserts the
+// transition is a no-op when the subtask is already Done, so reruns don't
+// re-transition (which Jira rejects).
+func TestNotifyPublishRunnerRun_SkipsTransitionWhenSubtaskDone(t *testing.T) {
+	jira := &fakeJira{
+		searchResult:   []jiraIssue{{Key: "REL-4910"}},
+		addCommentID:   "363988",
+		getIssueResult: issueWithSubtask("REL-4910", "REL-4911", "Publish Binaries for Download", "Done"),
+	}
+	r := &notifyPublishRunner{
+		jira:       jira,
+		slack:      &fakeSlack{},
+		sha:        "deadbeef",
+		version:    "v24.3.33",
+		channel:    "#db-release-status",
+		ibmChannel: "#proj-ibm-oem-releases",
+	}
+	require.NoError(t, r.run())
+	require.Empty(t, jira.transitionCalls, "already-Done subtask must not be re-transitioned")
+}
+
+// TestNotifyPublishRunnerRun_TransitionFailureSurfaces asserts a failed
+// subtask transition fails the job loudly, after the comment and Slack posts
+// have already gone out.
+func TestNotifyPublishRunnerRun_TransitionFailureSurfaces(t *testing.T) {
+	jira := &fakeJira{
+		searchResult:   []jiraIssue{{Key: "REL-4910"}},
+		addCommentID:   "363988",
+		getIssueResult: issueWithSubtask("REL-4910", "REL-4911", "Publish Binaries for Download", "To Do"),
+		transitionErr:  errors.New("jira 500"),
+	}
+	slack := &fakeSlack{}
+	r := &notifyPublishRunner{
+		jira:       jira,
+		slack:      slack,
+		sha:        "deadbeef",
+		version:    "v24.3.33",
+		channel:    "#db-release-status",
+		ibmChannel: "#proj-ibm-oem-releases",
+	}
+	err := r.run()
+	require.ErrorContains(t, err, "transitioning subtask REL-4911 to Done")
+	require.Len(t, slack.posts, 2,
+		"both Slack posts must complete before the transition is attempted")
 }
 
 // TestBuildNotifyPublishSummary locks down the Markdown rendered for the job
