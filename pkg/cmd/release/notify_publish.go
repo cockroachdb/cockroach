@@ -55,6 +55,13 @@ var publishedBullets = []string{
 // rehearsal traffic doesn't reach the IBM team.
 const ibmOEMChannel = "#proj-ibm-oem-releases"
 
+// publishBinariesSubtaskMatch is the case-insensitive substring used to
+// find the CRDB Release subtask that tracks publishing the downloadable
+// binaries. run() transitions it to Done once the publish completes. The
+// match uses findOpenSubtask, so a missing or already-Done subtask makes
+// the transition a no-op (reruns and template tickets are safe).
+const publishBinariesSubtaskMatch = "Publish Binaries for Download"
+
 var notifyPublishFlags = struct {
 	sha         string
 	dryRun      bool
@@ -161,7 +168,7 @@ func runNotifyPublish(_ *cobra.Command, _ []string) error {
 // knobs for one publish-notification run. Kept narrow so unit tests can
 // substitute a fake jira/slack pair.
 type notifyPublishRunner struct {
-	jira  jiraSearchCommenter
+	jira  jiraTicketClient
 	slack slackPoster
 
 	sha        string
@@ -175,11 +182,15 @@ type notifyPublishRunner struct {
 	summaryWriter
 }
 
-// jiraSearchCommenter is the narrow Jira surface the runner needs.
-// Implemented by *jiraClient in production and by fakes in tests.
-type jiraSearchCommenter interface {
+// jiraTicketClient is the narrow Jira surface the runner needs: find the
+// release ticket, fetch it with its subtasks, comment on it, and close the
+// "Publish Binaries for Download" subtask. Implemented by *jiraClient in
+// production and by fakes in tests.
+type jiraTicketClient interface {
 	SearchJQL(jql string, fields []string) ([]jiraIssue, error)
+	GetIssue(key string) (*jiraIssue, error)
 	AddComment(key string, doc map[string]interface{}) (string, error)
+	Transition(key string, transitionID string) error
 }
 
 // slackPoster is the narrow Slack surface the runner needs. Implemented
@@ -218,6 +229,17 @@ func (r *notifyPublishRunner) run() (retErr error) {
 		return err
 	}
 
+	// Fetch the full issue (with subtasks) so we can close the
+	// "Publish Binaries for Download" subtask now that publishing is done.
+	// findOpenSubtask returns "" when the subtask is missing or already
+	// Done, so the transition below is a no-op on reruns and on template
+	// tickets surfaced by the dry-run JQL.
+	full, err := r.jira.GetIssue(key)
+	if err != nil {
+		return errors.Wrapf(err, "fetching full Jira issue %s", key)
+	}
+	publishSubtaskKey := findOpenSubtask(full, publishBinariesSubtaskMatch)
+
 	commentDoc := buildBlessedJiraComment(r.version)
 	if r.dryRun {
 		log.Printf("[DRY RUN] would post Jira comment on %s; body: %s",
@@ -241,6 +263,10 @@ func (r *notifyPublishRunner) run() (retErr error) {
 			log.Printf("[DRY RUN] would skip %s post for pre-release %s", r.ibmChannel, r.version)
 		} else {
 			log.Printf("[DRY RUN] would post to %s; body:\n%s", r.ibmChannel, ibmBody)
+		}
+		if publishSubtaskKey != "" {
+			log.Printf("[DRY RUN] would transition subtask %s (%s) to Done",
+				publishSubtaskKey, publishBinariesSubtaskMatch)
 		}
 		return nil
 	}
@@ -268,6 +294,19 @@ func (r *notifyPublishRunner) run() (retErr error) {
 		return errors.Wrapf(err, "posting IBM-OEM published message to %s", r.ibmChannel)
 	}
 	log.Printf("posted IBM-OEM announcement to %s", r.ibmChannel)
+
+	// Close the "Publish Binaries for Download" subtask last: the Jira
+	// comment and Slack announcements above are this job's operator-visible
+	// payload, so they run even if this bookkeeping transition fails. A
+	// failure here is surfaced as a job failure; the only manual follow-up
+	// is closing the subtask by hand.
+	if publishSubtaskKey != "" {
+		if err := r.jira.Transition(publishSubtaskKey, transitionSubtaskDone); err != nil {
+			return errors.Wrapf(err, "transitioning subtask %s to Done", publishSubtaskKey)
+		}
+		log.Printf("ticket %s: transitioned subtask %s (%s) to Done",
+			key, publishSubtaskKey, publishBinariesSubtaskMatch)
+	}
 	return nil
 }
 
