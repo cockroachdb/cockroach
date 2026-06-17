@@ -191,6 +191,33 @@ func anyDataset(rng *rand.Rand) []string {
 	return nDatasets(rng, 1)
 }
 
+func nSmallDatasets(rng *rand.Rand, n int) []string {
+	small := slices.DeleteFunc(allDatasets(rng), func(name string) bool {
+		return datasets[name].getTableName() == "lineitem"
+	})
+	rng.Shuffle(len(small), func(i, j int) {
+		small[i], small[j] = small[j], small[i]
+	})
+	seen := make(map[string]bool)
+	var result []string
+	for _, name := range small {
+		tbl := datasets[name].getTableName()
+		if seen[tbl] {
+			continue
+		}
+		seen[tbl] = true
+		result = append(result, name)
+		if len(result) == n {
+			break
+		}
+	}
+	return result
+}
+
+func anySmallDataset(rng *rand.Rand) []string {
+	return nSmallDatasets(rng, 1)
+}
+
 // importTestSpec represents a subtest within the import test.
 type importTestSpec struct {
 	// subtestName is the name to register for this test.
