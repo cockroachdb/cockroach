@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"github.com/spf13/cobra"
 )
 
@@ -41,7 +42,8 @@ var blessedBullets = []string{
 // IBM-OEM-facing "binaries have been published" announcement. Kept
 // separate from blessedBullets because the audience is different
 // (IBM-OEM team, not the wider release-team) and the verb differs
-// ("published" vs "blessed").
+// ("published" vs "blessed"). This post is GA-only: run() suppresses it
+// for pre-releases (see the IsPrerelease check there).
 var publishedBullets = []string{
 	"Ready for Security scans and SBOM",
 	"Ready for Initial Images and VCoO artifacts",
@@ -187,19 +189,30 @@ type slackPoster interface {
 }
 
 func (r *notifyPublishRunner) run() (retErr error) {
-	// key and commentID are captured by the defer so it can render the
-	// outcome block once, after every early return below has run.
-	// key stays "" only if resolveTicketKey fails (rendered as an
-	// unresolved-ticket failure). commentID stays "" until AddComment
-	// returns its ID, or is set to "DRYRUN" on the dry-run path so the
-	// deferred summary renders a success block without a real permalink.
+	// key, commentID, and ibmSkipped are captured by the defer so it can
+	// render the outcome block once, after every early return below has run.
+	// key/commentID stay "" until resolved, which the summary renders as an
+	// unresolved-ticket failure; ibmSkipped records whether the IBM-OEM
+	// "published" post was suppressed for a pre-release so the summary can
+	// say so.
 	var key, commentID string
+	var ibmSkipped bool
 	defer func() {
 		r.append(buildNotifyPublishSummary(
-			key, r.version, r.channel, r.ibmChannel, commentID, retErr, r.dryRun))
+			key, r.version, r.channel, r.ibmChannel, commentID, ibmSkipped, retErr, r.dryRun))
 	}()
 
-	var err error
+	// The IBM-OEM "binaries have been published" announcement is for GA
+	// releases only: that team consumes blessed images and VCoO artifacts,
+	// neither of which is produced for pre-releases (alpha/beta/rc). The
+	// blessed Jira comment and #db-release-status post still go out for every
+	// publish, pre-release or not.
+	v, err := version.Parse(r.version)
+	if err != nil {
+		return errors.Wrapf(err, "parsing version %q", r.version)
+	}
+	ibmSkipped = v.IsPrerelease()
+
 	key, err = r.resolveTicketKey()
 	if err != nil {
 		return err
@@ -224,7 +237,11 @@ func (r *notifyPublishRunner) run() (retErr error) {
 	ibmBody := buildPublishedSlackMessage(r.version)
 	if r.dryRun {
 		log.Printf("[DRY RUN] would post to %s; body:\n%s", r.channel, slackBody)
-		log.Printf("[DRY RUN] would post to %s; body:\n%s", r.ibmChannel, ibmBody)
+		if ibmSkipped {
+			log.Printf("[DRY RUN] would skip %s post for pre-release %s", r.ibmChannel, r.version)
+		} else {
+			log.Printf("[DRY RUN] would post to %s; body:\n%s", r.ibmChannel, ibmBody)
+		}
 		return nil
 	}
 	if _, err := r.slack.PostMessage(r.channel, slackBody); err != nil {
@@ -236,6 +253,11 @@ func (r *notifyPublishRunner) run() (retErr error) {
 	}
 	log.Printf("ticket %s: posted blessed comment %s and Slack announcement to %s",
 		key, commentID, r.channel)
+	if ibmSkipped {
+		log.Printf("skipping IBM-OEM announcement to %s for pre-release %s",
+			r.ibmChannel, r.version)
+		return nil
+	}
 	// The IBM-OEM post is Slack-only and intentionally has no Jira side.
 	// A failure here leaves the blessed message already posted: log the
 	// prepared body so the operator can copy-paste into the IBM channel
@@ -256,7 +278,7 @@ func (r *notifyPublishRunner) run() (retErr error) {
 // straight to the "blessed" note. A dry run is marked as such because nothing
 // was actually posted.
 func buildNotifyPublishSummary(
-	key, version, channel, ibmChannel, commentID string, runErr error, dryRun bool,
+	key, version, channel, ibmChannel, commentID string, ibmSkipped bool, runErr error, dryRun bool,
 ) string {
 	if runErr != nil {
 		ticket := key
@@ -283,6 +305,14 @@ func buildNotifyPublishSummary(
 			"## ✅ %s — publish notification _(dry run — nothing posted)_\n\n"+
 				"Version `%s`.\n\n",
 			key, version)
+	}
+	if ibmSkipped {
+		return fmt.Sprintf(
+			"## ✅ %s — publish announced\n\n"+
+				"Version `%s` blessed: posted to `%s` "+
+				"(IBM-OEM `%s` skipped for pre-release), "+
+				"and commented on [%s](%s).\n\n",
+			key, version, channel, ibmChannel, key, jiraCommentPermalink(key, commentID))
 	}
 	return fmt.Sprintf(
 		"## ✅ %s — publish announced\n\n"+
