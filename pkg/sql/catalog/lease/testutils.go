@@ -79,6 +79,14 @@ type ManagerTestingKnobs struct {
 	// was added for debugging #162173, and it can be removed when it's no
 	// longer needed.
 	TestingLeaseUpsertEventForID func(id descpb.ID, version descpb.DescriptorVersion, msg string)
+
+	// TestingBeforeRoleLeaseAcquisition, if set, is called in the special
+	// role/privilege-table acquisition path (acquireNodeLease) after the
+	// in-memory descriptor has been registered but before the storage lease is
+	// acquired. Tests use it to deterministically bump the descriptor version
+	// into that window, so the acquired storage lease diverges from the version
+	// registered in memory.
+	TestingBeforeRoleLeaseAcquisition func(id descpb.ID)
 }
 
 var _ base.ModuleTestingKnobs = &ManagerTestingKnobs{}
