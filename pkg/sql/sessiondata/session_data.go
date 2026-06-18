@@ -180,6 +180,21 @@ type LocalUnmigratableSessionData struct {
 	// AuthenticationMethod is the method used to authenticate this session.
 	AuthenticationMethod redact.SafeString
 
+	// DescriptorOverrides grants the current session implicit internal-system
+	// access on the keyed table descriptor IDs. Each entry can grant
+	// privileges that the user does not actually hold and can exempt the
+	// descriptor from row-level-security policies; see DescriptorOverride
+	// for the semantics of the individual fields. Set by job-owner-style
+	// identity flips that need to scan or modify a specific table on the
+	// user's behalf for system-internal purposes (e.g. CREATE-only
+	// schema-change issuers running validation count queries, LDR write
+	// sessions applying rows under the stream creator's identity). Any
+	// access check against a descriptor not in the map falls through to
+	// the user's actual grants and RLS posture. Local-only: privilege
+	// checks happen on the gateway at planning time. uint32 avoids
+	// pulling descpb into this package.
+	DescriptorOverrides map[uint32]DescriptorOverride
+
 	// ////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes or needs to persist amongst session //

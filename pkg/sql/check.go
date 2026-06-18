@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
@@ -65,12 +66,20 @@ func validateCheckExpr(
 	}
 	log.Dev.Infof(ctx, "validating check constraint %q with query %q", formattedCkExpr, queryStr)
 
-	// Validation queries use full table scans which we always want to distribute
-	// and partition across nodes.
-	// See https://github.com/cockroachdb/cockroach/issues/152859.
-	execOverride := sessiondata.NodeUserSessionDataOverride
-	execOverride.AlwaysDistributeFullScans = true
-	execOverride.PreventPartitioningSoftLimitedScans = &sessiondata.False
+	// Grant implicit SELECT on the table being scanned so a CREATE-only
+	// issuer can still validate the constraint they legitimately added.
+	// Bypass RLS so a deny-all policy on the table cannot cause the
+	// query to skip violating rows and silently report the constraint
+	// as valid.
+	selectBit := privilege.List{privilege.SELECT}.ToBitField()
+	execOverride := sessiondata.InternalExecutorOverride{
+		User:                                sessionData.User(),
+		AlwaysDistributeFullScans:           true,
+		PreventPartitioningSoftLimitedScans: &sessiondata.False,
+		DescriptorOverrides: map[uint32]sessiondata.DescriptorOverride{
+			uint32(tableDesc.GetID()): {Privileges: selectBit, BypassRLS: true},
+		},
+	}
 
 	violatingRow, err = txn.QueryRowEx(
 		ctx,
@@ -275,8 +284,9 @@ func nonMatchingRowQuery(
 	return query, originColNames, nil
 }
 
-// validateForeignKey verifies that all the rows in the srcTable
-// have a matching row in their referenced table.
+// validateForeignKey verifies that all the rows in srcTable have a matching
+// row in their referenced table. user is the identity the validation
+// queries run as.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
@@ -287,7 +297,27 @@ func validateForeignKey(
 	targetTable catalog.TableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
 	indexIDForValidation descpb.IndexID,
+	user username.SQLUsername,
 ) error {
+	// The validation query reads from both srcTable and targetTable, but
+	// the caller (a schema-change job owner or an ALTER TABLE issuer) may
+	// hold only the privileges required to create the FK -- which in
+	// CockroachDB do not include SELECT on the target. Grant implicit
+	// SELECT on exactly the two descriptors the query touches so a user
+	// who legitimately created the FK can also validate it. Bypass RLS
+	// on those same descriptors so a deny-all policy cannot hide
+	// violating rows from the LEFT JOIN. Any reference outside those two
+	// descriptors still resolves against the caller's normal grants and
+	// RLS posture.
+	selectBit := privilege.List{privilege.SELECT}.ToBitField()
+	execOverride := sessiondata.InternalExecutorOverride{
+		User: user,
+		DescriptorOverrides: map[uint32]sessiondata.DescriptorOverride{
+			uint32(srcTable.GetID()):    {Privileges: selectBit, BypassRLS: true},
+			uint32(targetTable.GetID()): {Privileges: selectBit, BypassRLS: true},
+		},
+	}
+
 	nCols := len(fk.OriginColumnIDs)
 
 	referencedColumnNames, err := catalog.ColumnNamesForIDs(targetTable, fk.ReferencedColumnIDs)
@@ -315,7 +345,7 @@ func validateForeignKey(
 
 		values, err := txn.QueryRowEx(ctx, "validate foreign key constraint",
 			txn.KV(),
-			sessiondata.NodeUserSessionDataOverride, query)
+			execOverride, query)
 		if err != nil {
 			return err
 		}
@@ -338,7 +368,7 @@ func validateForeignKey(
 	)
 
 	values, err := txn.QueryRowEx(ctx, "validate fk constraint", txn.KV(),
-		sessiondata.NodeUserSessionDataOverride, query)
+		execOverride, query)
 	if err != nil {
 		return err
 	}
@@ -489,6 +519,7 @@ func (p *planner) RevalidateUniqueConstraint(
 				return errors.Newf("%s is not a unique constraint", constraintName)
 			}
 			if index.ImplicitPartitioningColumnCount() > 0 {
+				execOverride := sessiondata.InternalExecutorOverride{User: p.User()}
 				return validateUniqueConstraint(
 					ctx,
 					tableDesc,
@@ -497,7 +528,7 @@ func (p *planner) RevalidateUniqueConstraint(
 					index.GetPredicate(),
 					0, /* indexIDForValidation */
 					p.InternalSQLTxn(),
-					p.User(),
+					execOverride,
 					true, /* preExisting */
 				)
 			}
@@ -509,6 +540,7 @@ func (p *planner) RevalidateUniqueConstraint(
 	// Check UNIQUE WITHOUT INDEX constraints.
 	for _, uc := range tableDesc.EnforcedUniqueConstraintsWithoutIndex() {
 		if uc.GetName() == constraintName {
+			execOverride := sessiondata.InternalExecutorOverride{User: p.User()}
 			return validateUniqueConstraint(
 				ctx,
 				tableDesc,
@@ -517,7 +549,7 @@ func (p *planner) RevalidateUniqueConstraint(
 				uc.GetPredicate(),
 				0, /* indexIDForValidation */
 				p.InternalSQLTxn(),
-				p.User(),
+				execOverride,
 				true, /* preExisting */
 			)
 		}
@@ -566,6 +598,7 @@ func HasVirtualUniqueConstraints(tableDesc catalog.TableDescriptor) bool {
 func RevalidateUniqueConstraintsInTable(
 	ctx context.Context, txn isql.Txn, user username.SQLUsername, tableDesc catalog.TableDescriptor,
 ) error {
+	execOverride := sessiondata.InternalExecutorOverride{User: user}
 	// Check implicitly partitioned UNIQUE indexes.
 	for _, index := range tableDesc.ActiveIndexes() {
 		if index.IsUnique() && index.ImplicitPartitioningColumnCount() > 0 {
@@ -577,7 +610,7 @@ func RevalidateUniqueConstraintsInTable(
 				index.GetPredicate(),
 				0, /* indexIDForValidation */
 				txn,
-				user,
+				execOverride,
 				true, /* preExisting */
 			); err != nil {
 				log.Dev.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
@@ -597,7 +630,7 @@ func RevalidateUniqueConstraintsInTable(
 				uc.GetPredicate(),
 				0, /* indexIDForValidation */
 				txn,
-				user,
+				execOverride,
 				true, /* preExisting */
 			); err != nil {
 				log.Dev.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
@@ -610,19 +643,25 @@ func RevalidateUniqueConstraintsInTable(
 	return nil
 }
 
-// validateUniqueConstraint verifies that all the rows in the srcTable
-// have unique values for the given columns.
+// validateUniqueConstraint runs the duplicate-row probe for a unique
+// constraint at the historical timestamp implied by txn. It verifies
+// that all the rows in srcTable have unique values for the given
+// columns.
 //
-// `indexIDForValidation`, if non-zero, will be used to force validation
-// against this particular index. This is used to facilitate the declarative
-// schema changer when the validation should be against a yet non-public
-// primary index.
+// indexIDForValidation, if non-zero, forces validation against that
+// particular index. This is used by the declarative schema changer when
+// the validation should run against a yet non-public primary index.
 //
-// It operates entirely on the current goroutine and is thus able to
-// reuse an existing kv.Txn safely.
+// execOverride supplies the executing user and any DescriptorOverrides
+// the caller needs to scan srcTable -- e.g. a CREATE-only schema-change
+// issuer validating a newly added unique constraint has implicit SELECT
+// on srcTable via the override.
 //
-// preExisting indicates whether this constraint already exists, and therefore
+// preExisting indicates whether this constraint already exists and
 // informs the error message that gets produced.
+//
+// validateUniqueConstraint operates entirely on the current goroutine
+// and is thus able to reuse an existing kv.Txn safely.
 func validateUniqueConstraint(
 	ctx context.Context,
 	srcTable catalog.TableDescriptor,
@@ -631,7 +670,7 @@ func validateUniqueConstraint(
 	pred string,
 	indexIDForValidation descpb.IndexID,
 	txn isql.Txn,
-	user username.SQLUsername,
+	execOverride sessiondata.InternalExecutorOverride,
 	preExisting bool,
 ) error {
 	query, colNames, err := duplicateRowQuery(
@@ -648,8 +687,6 @@ func validateUniqueConstraint(
 		query,
 	)
 
-	sessionDataOverride := sessiondata.NoSessionDataOverride
-	sessionDataOverride.User = user
 	// We are likely to have performed a lot of work before getting here (e.g.
 	// importing the data), so we want to make an effort in order to run the
 	// validation query without error in order to not fail the whole operation.
@@ -667,7 +704,7 @@ func validateUniqueConstraint(
 		MaxRetries:     5,
 	}
 	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
-		values, err = txn.QueryRowEx(ctx, "validate unique constraint", txn.KV(), sessionDataOverride, query)
+		values, err = txn.QueryRowEx(ctx, "validate unique constraint", txn.KV(), execOverride, query)
 		if err == nil {
 			break
 		}

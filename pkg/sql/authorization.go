@@ -124,10 +124,28 @@ func (p *planner) HasPrivilege(
 
 	// Do a safety check on the object, if it is considered unsafe
 	// does the caller have the appropriate session data to access it?
+	//
+	// This runs before DescriptorOverrides so that an override entry (which
+	// is keyed by descriptor ID) cannot bypass the system-internals
+	// access check on an unsafe object.
 	if p.objectIsUnsafe(ctx, privilegeObject) {
 		unsafeOverride := p.ExecCfg().EvalContextTestingKnobs.UnsafeOverride
 		if err := unsafesql.CheckInternalsAccess(ctx, p.SessionData(), p.stmt.AST, p.extendedEvalCtx.Annotations, &p.ExecCfg().Settings.SV, unsafeOverride); err != nil {
 			return false, err
+		}
+	}
+
+	// DescriptorOverrides grants implicit privileges on specific table IDs; see
+	// the field's doc in sessiondata for the use cases. Any privilege
+	// check against a descriptor not in the map (or for a privilege bit
+	// not set in the entry's Privileges) falls through to the user's
+	// normal grants. The entry's BypassRLS field is consumed separately
+	// in optbuilder when constructing the RLS filter.
+	if d, ok := privilegeObject.(catalog.Descriptor); ok {
+		if override, ok := p.SessionData().DescriptorOverrides[uint32(d.GetID())]; ok {
+			if override.Privileges&privilegeKind.Mask() != 0 {
+				return true, nil
+			}
 		}
 	}
 
