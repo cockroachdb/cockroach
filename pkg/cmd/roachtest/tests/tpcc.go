@@ -2011,7 +2011,7 @@ func (s tpccBenchSpec) EstimatedMax(cloud spec.Cloud) int {
 }
 
 func (s tpccBenchSpec) LoadWarehouses(cloud spec.Cloud) int {
-	return valueForCloud(cloud, s.LoadWarehousesGCE, s.LoadWarehousesAWS, s.LoadWarehousesAzure, s.EstimatedMaxIBM)
+	return valueForCloud(cloud, s.LoadWarehousesGCE, s.LoadWarehousesAWS, s.LoadWarehousesAzure, s.LoadWarehousesIBM)
 }
 
 // partitions returns the number of partitions specified to the load generator.
