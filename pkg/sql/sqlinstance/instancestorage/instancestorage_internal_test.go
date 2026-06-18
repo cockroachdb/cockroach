@@ -40,6 +40,86 @@ func makeSession() sqlliveness.SessionID {
 	return session
 }
 
+func TestSelectDistinctLiveRows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	type rowSpec struct {
+		instanceID base.SQLInstanceID
+		rpcAddr    string
+		sqlAddr    string
+		// live registers the row's session in slstorage so IsAlive returns
+		// true. Rows with live=false have an unregistered session and are
+		// dropped by the liveness filter.
+		live      bool
+		timestamp int64
+	}
+
+	tests := []struct {
+		name string
+		rows []rowSpec
+		// expectedIDs are the surviving instance IDs, order-independent.
+		expectedIDs []base.SQLInstanceID
+	}{
+		{
+			name: "shared sqlAddr keeps distinct rpcAddr rows",
+			rows: []rowSpec{
+				{instanceID: 1, rpcAddr: "rpc1", sqlAddr: "regional:26257", live: true, timestamp: 1},
+				{instanceID: 2, rpcAddr: "rpc2", sqlAddr: "regional:26257", live: true, timestamp: 2},
+			},
+			expectedIDs: []base.SQLInstanceID{1, 2},
+		},
+		{
+			name: "shared rpcAddr keeps newest by timestamp",
+			rows: []rowSpec{
+				{instanceID: 1, rpcAddr: "rpc1", sqlAddr: "sql1", live: true, timestamp: 1},
+				{instanceID: 2, rpcAddr: "rpc1", sqlAddr: "sql2", live: true, timestamp: 2},
+			},
+			expectedIDs: []base.SQLInstanceID{2},
+		},
+		{
+			name: "dead newer row does not displace live older row at same rpcAddr",
+			rows: []rowSpec{
+				{instanceID: 1, rpcAddr: "rpc1", sqlAddr: "sql1", live: true, timestamp: 1},
+				{instanceID: 2, rpcAddr: "rpc1", sqlAddr: "sql2", live: false, timestamp: 2},
+			},
+			expectedIDs: []base.SQLInstanceID{1},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			slStorage := slstorage.NewFakeStorage()
+			instanceRows := make([]instancerow, len(tc.rows))
+			for i, r := range tc.rows {
+				sessionID := makeSession()
+				if r.live {
+					require.NoError(t, slStorage.Insert(ctx, sessionID,
+						hlc.Timestamp{WallTime: int64(time.Hour)}))
+				}
+				instanceRows[i] = instancerow{
+					instanceID: r.instanceID,
+					rpcAddr:    r.rpcAddr,
+					sqlAddr:    r.sqlAddr,
+					sessionID:  sessionID,
+					timestamp:  hlc.Timestamp{WallTime: r.timestamp},
+				}
+			}
+
+			result, err := selectDistinctLiveRows(ctx, slStorage, instanceRows)
+			require.NoError(t, err)
+
+			gotIDs := make([]base.SQLInstanceID, len(result))
+			for i, r := range result {
+				gotIDs[i] = r.instanceID
+			}
+			require.ElementsMatch(t, tc.expectedIDs, gotIDs)
+		})
+	}
+}
+
 func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
