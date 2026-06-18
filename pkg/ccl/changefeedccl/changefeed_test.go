@@ -5193,6 +5193,110 @@ func TestChangefeedEnrichedSourceWithDataJSON(t *testing.T) {
 	})
 }
 
+// TestChangefeedEnrichedSourceTimestampPerEvent verifies that the enriched
+// source timestamps (ts_ns, ts_hlc, mvcc_timestamp) advance per event rather
+// than being frozen across events. It guards against a regression in the avro
+// encoder (#171792). avro and json build the source through separate code
+// paths, so each subtest guards its own format's per-event timestamps.
+func TestChangefeedEnrichedSourceTimestampPerEvent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type sourceTimestamps struct {
+		tsNS  int64
+		tsHLC string
+		mvcc  string
+	}
+
+	cases := []struct {
+		name         string
+		format       string
+		expectedRows []string
+		// extractSource normalizes the avro union wrappers and the flat json
+		// layout into a common form, so the assertions are format-independent.
+		extractSource func(t *testing.T, src map[string]any) sourceTimestamps
+	}{
+		{
+			name:   "avro",
+			format: "avro",
+			expectedRows: []string{
+				`foo: {"i":{"long":1}}->{"after": {"foo": {"i": {"long": 1}, "v": {"long": 1}}}, "op": {"string": "c"}}`,
+				`foo: {"i":{"long":1}}->{"after": {"foo": {"i": {"long": 1}, "v": {"long": 2}}}, "op": {"string": "u"}}`,
+			},
+			extractSource: func(t *testing.T, src map[string]any) sourceTimestamps {
+				s := src["source"].(map[string]any)
+				tsNS, err := s["ts_ns"].(map[string]any)["long"].(gojson.Number).Int64()
+				require.NoError(t, err)
+				return sourceTimestamps{
+					tsNS:  tsNS,
+					tsHLC: s["ts_hlc"].(map[string]any)["string"].(string),
+					mvcc:  s["mvcc_timestamp"].(map[string]any)["string"].(string),
+				}
+			},
+		},
+		{
+			name:   "json",
+			format: "json",
+			expectedRows: []string{
+				`foo: {"i": 1}->{"after": {"i": 1, "v": 1}, "op": "c"}`,
+				`foo: {"i": 1}->{"after": {"i": 1, "v": 2}, "op": "u"}`,
+			},
+			extractSource: func(t *testing.T, src map[string]any) sourceTimestamps {
+				tsNS, err := src["ts_ns"].(gojson.Number).Int64()
+				require.NoError(t, err)
+				return sourceTimestamps{
+					tsNS:  tsNS,
+					tsHLC: src["ts_hlc"].(string),
+					mvcc:  src["mvcc_timestamp"].(string),
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+				// Pin one event-consumer worker so the second write is guaranteed
+				// to find the cache entry populated by the first.
+				sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.event_consumer_workers = 1`)
+				sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, v INT)`)
+
+				stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH `+
+					`envelope=enriched, enriched_properties='source', updated, mvcc_timestamp, `+
+					`format=%s, initial_scan='no'`, tc.format)
+				testFeed := feed(t, f, stmt)
+				defer closeFeed(t, testFeed)
+
+				// Two writes to the same row. They share a table descriptor
+				// version, so the second reuses the cache entry the first
+				// populated; and because they target one key, per-key ordering
+				// guarantees the feed delivers them in commit order (got[0] is
+				// the insert, got[1] the update).
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 1)`)
+				sqlDB.Exec(t, `UPDATE foo SET v = 2 WHERE i = 1`)
+
+				var got []sourceTimestamps
+				assertPayloadsEnriched(t, testFeed, tc.expectedRows,
+					func(actualSource map[string]any) {
+						got = append(got, tc.extractSource(t, actualSource))
+					})
+
+				// Each source timestamp must advance from the first write to the
+				// second; the avro bug froze them at the event that populated the
+				// cache entry.
+				require.Len(t, got, 2)
+				require.Greater(t, got[1].tsNS, got[0].tsNS,
+					"source.ts_ns did not advance (stale cached source record?)")
+				require.True(t, parseTimeToHLC(t, got[0].tsHLC).Less(parseTimeToHLC(t, got[1].tsHLC)),
+					"source.ts_hlc did not advance (stale cached source record?)")
+				require.True(t, parseTimeToHLC(t, got[0].mvcc).Less(parseTimeToHLC(t, got[1].mvcc)),
+					"source.mvcc_timestamp did not advance (stale cached source record?)")
+			}, feedTestForceSink("kafka"))
+		})
+	}
+}
+
 func TestChangefeedEnrichedSourceSchemaInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
