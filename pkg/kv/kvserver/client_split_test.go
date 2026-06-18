@@ -2789,6 +2789,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 				GossipTestingKnobs: kvserver.StoreGossipTestingKnobs{
 					OverrideGossipWhenCapacityDeltaExceedsFraction: overrideCapacityFraction,
 					DisableLeaseCapacityGossip:                     true,
+					DisableLoadCapacityGossip:                      true,
 				},
 			},
 		},
