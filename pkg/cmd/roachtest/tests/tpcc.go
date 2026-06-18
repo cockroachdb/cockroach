@@ -1628,11 +1628,11 @@ func registerTPCC(r registry.Registry) {
 		CPUs:  4,
 
 		EnableDefaultScheduledBackup: true,
-		LoadWarehousesGCE:            1300,
+		LoadWarehousesGCE:            1600,
 		LoadWarehousesAWS:            1300,
 		LoadWarehousesAzure:          1300,
 		LoadWarehousesIBM:            1300,
-		EstimatedMaxGCE:              1000,
+		EstimatedMaxGCE:              1300,
 		EstimatedMaxAWS:              1000,
 		EstimatedMaxAzure:            1000,
 		EstimatedMaxIBM:              1000,
