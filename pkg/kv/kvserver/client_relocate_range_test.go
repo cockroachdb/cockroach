@@ -453,6 +453,7 @@ func TestAdminRelocateRangeRandom(t *testing.T) {
 func TestReplicaRemovalDuringGet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/171666")
 
 	ctx := context.Background()
 	tc, key, evalDuringReplicaRemoval := setupReplicaRemovalTest(t, ctx)
