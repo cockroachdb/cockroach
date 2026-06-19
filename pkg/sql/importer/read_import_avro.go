@@ -309,7 +309,7 @@ type avroRecordStream struct {
 	eof        bool        // Input eof reached
 	err        error       // Error, other than io.EOF
 	trimLeft   bool        // Trim record separator at the start of the buffer.
-	maxBufSize int         // Error if buf exceeds this threshold
+	maxBufSize int         // fill() errors if a record needs more than this many buffered bytes
 	minBufSize int         // Issue additional reads if buffer below this threshold
 	readSize   int         // Read that many bytes at a time.
 }
@@ -340,17 +340,19 @@ func (r *avroRecordStream) fill(sz int) {
 		return
 	}
 
-	// NB: We use bytes.Buffer for writing into our internal buf, but we cannot
-	// use bytes.Buffer for reading. The reason is that bytes.Buffer tries
-	// to be efficient in its memory management. In particular, it can reuse
-	// underlying memory if the buffer becomes empty (buf = buf[:0]).  This is
-	// problematic for us because the avro stream sends interface{} objects
-	// to the consumer workers. Those interface objects may (infrequently)
-	// reference the underlying byte array from which those interface objects
-	// were constructed (e.g. if we are decoding avro bytes data type, we may
-	// actually return []byte as an interface{} referencing underlying buffer).
-	// To avoid this unpleasant situation, we never reset the head of our
-	// buffer.
+	// Cap the read so the buffer never exceeds maxBufSize. If the buffer is
+	// already full and no record has decoded, the record is too large to
+	// import; surface an actionable error rather than reading without bound.
+	if sz = min(sz, r.maxBufSize-len(r.buf)); sz <= 0 {
+		r.err = errors.WithHint(
+			errors.Newf("avro record exceeds max buffer size of %d bytes", r.maxBufSize),
+			"raise the `max_row_size` option to import this file")
+		return
+	}
+
+	// We use bytes.Buffer for efficient append of new data to r.buf.
+	// Byte aliasing between r.buf and decoded avro values is prevented
+	// by readNative(), which copies remaining bytes after each decode.
 	sink := bytes.NewBuffer(r.buf)
 	_, r.err = io.CopyN(sink, r.input, int64(sz))
 	r.buf = sink.Bytes()
@@ -388,12 +390,17 @@ func (r *avroRecordStream) readNative() {
 	var decodeErr error
 	r.row = nil
 
+	// fill() enforces the maxBufSize ceiling and sets r.err once the buffer is
+	// full, so the loop only needs to keep reading while there is more input and
+	// no error has occurred.
 	canReadMoreData := func() bool {
-		return !r.eof && r.err == nil && len(r.buf) < r.maxBufSize
+		return !r.eof && r.err == nil
 	}
 
 	for sz := r.readSize; r.row == nil; sz *= 2 {
-		r.fill(sz)
+		if len(r.buf) < r.minBufSize || decodeErr != nil {
+			r.fill(sz)
+		}
 
 		if r.trimLeft {
 			r.trimLeft = !r.trimRecordSeparator()
@@ -417,7 +424,9 @@ func (r *avroRecordStream) readNative() {
 		return
 	}
 
-	r.buf = remaining
+	// Copy remaining bytes to a fresh slice so decoded rows that hold
+	// []byte references into the old backing array do not pin it in memory.
+	r.buf = append([]byte(nil), remaining...)
 	r.trimLeft = !r.trimRecordSeparator()
 }
 
