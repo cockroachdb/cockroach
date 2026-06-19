@@ -60,7 +60,9 @@ permissions: {}
 # rebuilt. The customer-facing publish step lives in release-publish.yml,
 # which is gated by the `release-ops` environment (required reviewer +
 # deployment-branch policy). Per-job `if:` checks below restrict dispatch
-# to master / release-*-rc / staging-v* as defense in depth.
+# to master / release-*-rc / staging-v*, plus any release-* branch when the
+# detect-version job reports a beta version (betas are cut from the plain
+# release-X.Y branch), as defense in depth.
 
 env:
   # DRY_RUN gates which GCS bucket / GCR repo / git tag the underlying
@@ -148,6 +150,54 @@ jobs:
           echo "skip_jobs validated: ${requested[*]}"
 
   # --------------------------------------------------------------------------
+  # Stage 0: Detect release version (beta gate)
+  # --------------------------------------------------------------------------
+  # The per-job branch guards below admit master, release-*-rc, and staging-v*
+  # unconditionally. Betas, however, are cut from the plain release-X.Y branch
+  # (no -rc suffix), so we also admit any release-* branch — but ONLY while it
+  # carries a beta version. A job-level `if:` cannot read a file, so this job
+  # reads pkg/build/version.txt at the dispatched SHA and exposes is_beta as an
+  # output that every gated job consults. Restricting the plain-release-branch
+  # path to beta versions keeps stable/patch builds off this workflow (those
+  # go through the -rc / staging-v* branches).
+  detect-version:
+    name: Detect release version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      is_beta: ${{ steps.detect.outputs.is_beta }}
+    steps:
+      # Partial (blob:none) + sparse checkout: materialize only
+      # pkg/build/version.txt instead of cloning the whole (large) repo, so
+      # this preflight gate stays fast and well within the timeout.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          filter: blob:none
+          sparse-checkout: pkg/build/version.txt
+          sparse-checkout-cone-mode: false
+      - name: Detect beta version
+        id: detect
+        run: |
+          set -euo pipefail
+          # Mirror the version read in build-cockroach-release-per-platform.sh:
+          # first non-comment line of pkg/build/version.txt, e.g. v26.3.0-beta.1.
+          version="$(grep -v '^#' pkg/build/version.txt | head -n1 || true)"
+          echo "version: ${version:-<unset>}"
+          # is_beta is true only for a -beta prerelease (e.g. v26.3.0-beta.1).
+          # Anything else (alpha, rc, stable, or unreadable) defaults to false,
+          # leaving the master / -rc / staging-v* paths as the only way in.
+          if [[ "$version" =~ -beta(\.|$) ]]; then
+            is_beta=true
+          else
+            is_beta=false
+          fi
+          echo "is_beta: $is_beta"
+          echo "is_beta=$is_beta" >> "$GITHUB_OUTPUT"
+
+  # --------------------------------------------------------------------------
   # Stage 1a: Linux per-platform builds (needed by Docker, sentry)
   # --------------------------------------------------------------------------
   # BACKPORT NOTE: on release branches up to and including release-26.1, the
@@ -162,11 +212,12 @@ jobs:
   # build-nonlinux below.
   build-linux:
     name: 'Build ${{ matrix.platform }}'
-    needs: validate-skip-jobs
+    needs: [validate-skip-jobs, detect-version]
     if: >-
       ${{ !contains(format(',{0},', inputs.skip_jobs), ',build-linux,') &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     runs-on: [self-hosted, ubuntu_big_2004]
@@ -236,11 +287,12 @@ jobs:
   # --------------------------------------------------------------------------
   build-nonlinux:
     name: 'Build ${{ matrix.platform }}'
-    needs: validate-skip-jobs
+    needs: [validate-skip-jobs, detect-version]
     if: >-
       ${{ !contains(format(',{0},', inputs.skip_jobs), ',build-nonlinux,') &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     runs-on: [self-hosted, ubuntu_big_2004]
@@ -301,11 +353,12 @@ jobs:
   # builds — it works from the source tree plus the bazel dependency graph.
   generate-sbom:
     name: Generate SBOM and notices
-    needs: validate-skip-jobs
+    needs: [validate-skip-jobs, detect-version]
     if: >-
       ${{ !contains(format(',{0},', inputs.skip_jobs), ',generate-sbom,') &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     runs-on: [self-hosted, ubuntu_big_2404]
@@ -386,7 +439,7 @@ jobs:
   # --------------------------------------------------------------------------
   build-docker:
     name: Build Docker images
-    needs: build-linux
+    needs: [build-linux, detect-version]
     # !cancelled() + (success || skipped) lets this job run when build-linux
     # was skipped via skip_jobs (resume after partial failure where the
     # linux artifacts are already in GCS from a prior run).
@@ -397,6 +450,7 @@ jobs:
         !contains(format(',{0},', inputs.skip_jobs), ',build-docker,') &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     runs-on: [self-hosted, ubuntu_big_2004]
@@ -443,7 +497,7 @@ jobs:
   # --------------------------------------------------------------------------
   macos-signing:
     name: macOS code signing
-    needs: build-nonlinux
+    needs: [build-nonlinux, detect-version]
     if: >-
       ${{ !cancelled() &&
         (needs.build-nonlinux.result == 'success' ||
@@ -451,6 +505,7 @@ jobs:
         !contains(format(',{0},', inputs.skip_jobs), ',macos-signing,') &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     runs-on: [self-hosted, ubuntu_2004]
@@ -511,7 +566,7 @@ jobs:
   # --------------------------------------------------------------------------
   sentry-panic:
     name: Generate Sentry panic
-    needs: build-linux
+    needs: [build-linux, detect-version]
     if: >-
       ${{ !cancelled() &&
         (needs.build-linux.result == 'success' ||
@@ -519,6 +574,7 @@ jobs:
         !contains(format(',{0},', inputs.skip_jobs), ',sentry-panic,') &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     runs-on: [self-hosted, ubuntu_2004]
@@ -573,7 +629,7 @@ jobs:
   # --------------------------------------------------------------------------
   publish-cloud-only:
     name: Publish cloud-only candidate
-    needs: build-docker
+    needs: [build-docker, detect-version]
     if: >-
       ${{ !cancelled() &&
         (needs.build-docker.result == 'success' ||
@@ -582,6 +638,7 @@ jobs:
         !inputs.dry_run && vars.IS_PRODUCTION_REPO == 'true' &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     runs-on: [self-hosted, ubuntu_2004]
@@ -634,7 +691,7 @@ jobs:
   # --------------------------------------------------------------------------
   cloud-rollout:
     name: 'Cloud rollout: create RAFA PRs'
-    needs: publish-cloud-only
+    needs: [publish-cloud-only, detect-version]
     if: >-
       ${{ !cancelled() &&
         (needs.publish-cloud-only.result == 'success' ||
@@ -643,6 +700,7 @@ jobs:
         !inputs.dry_run && vars.IS_PRODUCTION_REPO == 'true' &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     runs-on: [self-hosted, ubuntu_2004]
@@ -703,10 +761,12 @@ jobs:
       ${{ always() &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     needs:
       - validate-skip-jobs
+      - detect-version
       - build-linux
       - build-nonlinux
       - build-docker
