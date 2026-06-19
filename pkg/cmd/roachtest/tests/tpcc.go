@@ -1618,11 +1618,11 @@ func registerTPCC(r registry.Registry) {
 		CPUs:  4,
 
 		EnableDefaultScheduledBackup: true,
-		LoadWarehousesGCE:            1300,
+		LoadWarehousesGCE:            1600,
 		LoadWarehousesAWS:            1300,
 		LoadWarehousesAzure:          1300,
 		LoadWarehousesIBM:            1300,
-		EstimatedMaxGCE:              1000,
+		EstimatedMaxGCE:              1300,
 		EstimatedMaxAWS:              1000,
 		EstimatedMaxAzure:            1000,
 		EstimatedMaxIBM:              1000,
@@ -2001,7 +2001,7 @@ func (s tpccBenchSpec) EstimatedMax(cloud spec.Cloud) int {
 }
 
 func (s tpccBenchSpec) LoadWarehouses(cloud spec.Cloud) int {
-	return valueForCloud(cloud, s.LoadWarehousesGCE, s.LoadWarehousesAWS, s.LoadWarehousesAzure, s.EstimatedMaxIBM)
+	return valueForCloud(cloud, s.LoadWarehousesGCE, s.LoadWarehousesAWS, s.LoadWarehousesAzure, s.LoadWarehousesIBM)
 }
 
 // partitions returns the number of partitions specified to the load generator.
