@@ -10,6 +10,8 @@
 # It replaces the TeamCity "Publish Cockroach Release" composite build.
 #
 #   validate-skip-jobs (gates every job below; see skip_jobs input)
+#   detect-version     (beta gate; every job consults its is_beta output so
+#                       betas can publish from the plain release-X.Y branch)
 #     └─► validate-build ─► approve-publish ─┬─► update-versions-master
 #                                            └─► publish-staged ─┬─► publish-redhat
 #                                                                └─► create-rafa-prs
@@ -115,15 +117,64 @@ jobs:
           echo "skip_jobs validated: ${requested[*]}"
 
   # --------------------------------------------------------------------------
+  # Stage 0: Detect release version (beta gate)
+  # --------------------------------------------------------------------------
+  # The per-job branch guards below admit master, release-*-rc, and staging-v*
+  # unconditionally. Betas, however, are cut from the plain release-X.Y branch
+  # (no -rc suffix), so we also admit any release-* branch — but ONLY while it
+  # carries a beta version. A job-level `if:` cannot read a file, so this job
+  # reads pkg/build/version.txt at the dispatched SHA and exposes is_beta as an
+  # output that every gated job consults. Restricting the plain-release-branch
+  # path to beta versions keeps stable/patch publishes off this workflow (those
+  # go through the -rc / staging-v* branches).
+  detect-version:
+    name: Detect release version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      is_beta: ${{ steps.detect.outputs.is_beta }}
+    steps:
+      # Partial (blob:none) + sparse checkout: materialize only
+      # pkg/build/version.txt instead of cloning the whole (large) repo, so
+      # this preflight gate stays fast and well within the timeout.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          filter: blob:none
+          sparse-checkout: pkg/build/version.txt
+          sparse-checkout-cone-mode: false
+      - name: Detect beta version
+        id: detect
+        run: |
+          set -euo pipefail
+          # Mirror the version read in build-cockroach-release-per-platform.sh:
+          # first non-comment line of pkg/build/version.txt, e.g. v26.3.0-beta.1.
+          version="$(grep -v '^#' pkg/build/version.txt | head -n1 || true)"
+          echo "version: ${version:-<unset>}"
+          # is_beta is true only for a -beta prerelease (e.g. v26.3.0-beta.1).
+          # Anything else (alpha, rc, stable, or unreadable) defaults to false,
+          # leaving the master / -rc / staging-v* paths as the only way in.
+          if [[ "$version" =~ -beta(\.|$) ]]; then
+            is_beta=true
+          else
+            is_beta=false
+          fi
+          echo "is_beta: $is_beta"
+          echo "is_beta=$is_beta" >> "$GITHUB_OUTPUT"
+
+  # --------------------------------------------------------------------------
   # Pre-check: Verify build-and-sign completed for this SHA
   # --------------------------------------------------------------------------
   validate-build:
     name: Validate build-and-sign
-    needs: validate-skip-jobs
+    needs: [validate-skip-jobs, detect-version]
     if: >-
       ${{ !contains(format(',{0},', inputs.skip_jobs), ',validate-build,') &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     runs-on: ubuntu-latest
@@ -162,13 +213,14 @@ jobs:
   # --------------------------------------------------------------------------
   approve-publish:
     name: Approve publish
-    needs: validate-build
+    needs: [validate-build, detect-version]
     if: >-
       ${{ !cancelled() &&
         (needs.validate-build.result == 'success' ||
          (needs.validate-build.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',validate-build,'))) &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     environment: release-ops
@@ -185,13 +237,14 @@ jobs:
   # release branch dispatched the workflow.
   # --------------------------------------------------------------------------
   update-versions-master:
-    needs: approve-publish
+    needs: [approve-publish, detect-version]
     if: >-
       ${{ !cancelled() &&
         needs.approve-publish.result == 'success' &&
         !contains(format(',{0},', inputs.skip_jobs), ',update-versions-master,') &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     name: Update version.txt
@@ -278,13 +331,14 @@ jobs:
     # bump the dev version and open satellite-repo PRs; the latter
     # promotes the staged release artifacts. Sequencing them serially
     # added run time without buying anything.
-    needs: approve-publish
+    needs: [approve-publish, detect-version]
     if: >-
       ${{ !cancelled() &&
         needs.approve-publish.result == 'success' &&
         !contains(format(',{0},', inputs.skip_jobs), ',publish-staged,') &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     name: Publish staged cockroach release
@@ -369,7 +423,7 @@ jobs:
   # --------------------------------------------------------------------------
   publish-redhat:
     name: Publish to Red Hat
-    needs: publish-staged
+    needs: [publish-staged, detect-version]
     if: >-
       ${{ !cancelled() &&
         (needs.publish-staged.result == 'success' ||
@@ -378,6 +432,7 @@ jobs:
         !inputs.dry_run && vars.IS_PRODUCTION_REPO == 'true' &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     # Reviewer-approval gate is on approve-publish upstream; this job
@@ -434,7 +489,7 @@ jobs:
   # --------------------------------------------------------------------------
   create-rafa-prs:
     name: Create RAFA pull requests
-    needs: publish-staged
+    needs: [publish-staged, detect-version]
     if: >-
       ${{ !cancelled() &&
         (needs.publish-staged.result == 'success' ||
@@ -443,6 +498,7 @@ jobs:
         !inputs.dry_run && vars.IS_PRODUCTION_REPO == 'true' &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     # Reviewer-approval gate is on approve-publish upstream; this job
@@ -505,6 +561,7 @@ jobs:
   notify-publish:
     name: Notify #db-release-status
     needs:
+      - detect-version
       - publish-staged
       - publish-redhat
       - create-rafa-prs
@@ -519,6 +576,7 @@ jobs:
         !inputs.dry_run && vars.IS_PRODUCTION_REPO == 'true' &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     runs-on: [self-hosted, ubuntu_2404]
@@ -569,10 +627,12 @@ jobs:
       ${{ always() &&
         (github.ref == 'refs/heads/master' ||
          (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     needs:
       - validate-skip-jobs
+      - detect-version
       - validate-build
       - approve-publish
       - update-versions-master
