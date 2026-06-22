@@ -33,6 +33,7 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
         "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/schemachanger/scexec/scmutationexec",
         "//pkg/sql/schemachanger/scop",
