@@ -256,9 +256,10 @@ func (p *enrichedSourceProvider) GetJSON(
 	return p.jsonPartialObject.NewObject(p.jsonNonFixedData)
 }
 
-// GetAvro returns an avro FunctionalRecord for the source data.
+// GetAvro returns an avro FunctionalRecord for the source data. The encoder
+// caches the result, building one per table descriptor version.
 func (p *enrichedSourceProvider) GetAvro(
-	row cdcevent.Row, schemaPrefix string, evCtx eventContext,
+	row cdcevent.Row, schemaPrefix string,
 ) (*avro.FunctionalRecord, error) {
 	tableID := row.EventDescriptor.TableDescriptor().GetID()
 	tableInfo, ok := p.sourceData.tableSchemaInfo[tableID]
@@ -266,8 +267,9 @@ func (p *enrichedSourceProvider) GetAvro(
 		return nil, errors.AssertionFailedf("table %d not found in tableSchemaInfo", tableID)
 	}
 
+	// fromRow is run to populate the avro record for a specific row.
 	fromRow := func(row cdcevent.Row, dest map[string]any) {
-		// If this is the first use of the avro record (ie the first row the encoder processed), set the fixed fields.
+		// On first use of the record, set the fields that are fixed for the changefeed's lifetime.
 		if len(dest) == 0 {
 			dest[fieldNameJobID] = goavro.Union(avro.SchemaTypeString, p.sourceData.jobID)
 			dest[fieldNameChangefeedSink] = goavro.Union(avro.SchemaTypeString, p.sourceData.sink)
@@ -280,18 +282,20 @@ func (p *enrichedSourceProvider) GetAvro(
 			dest[fieldNameOrigin] = goavro.Union(avro.SchemaTypeString, originCockroachDB)
 		}
 
+		// The following fields do not change per row, they are fixed per descriptor version.
 		dest[fieldNameDatabaseName] = goavro.Union(avro.SchemaTypeString, tableInfo.dbName)
 		dest[fieldNameSchemaName] = goavro.Union(avro.SchemaTypeString, tableInfo.schemaName)
 		dest[fieldNameTableName] = goavro.Union(avro.SchemaTypeString, tableInfo.tableName)
 		dest[fieldNamePrimaryKeys] = goavro.Union(avro.SchemaTypeArray, tableInfo.primaryKeys)
 		dest[fieldNameTableID] = goavro.Union(avro.SchemaTypeInt, int32(tableID))
 
+		// The remaining fields need to be populated per row.
 		if p.opts.mvccTimestamp {
-			dest[fieldNameMVCCTimestamp] = goavro.Union(avro.SchemaTypeString, evCtx.mvcc.AsOfSystemTime())
+			dest[fieldNameMVCCTimestamp] = goavro.Union(avro.SchemaTypeString, row.MvccTimestamp.AsOfSystemTime())
 		}
 		if p.opts.updated {
-			dest[fieldNameUpdatedTSNS] = goavro.Union(avro.SchemaTypeLong, evCtx.updated.WallTime)
-			dest[fieldNameUpdatedTSHLC] = goavro.Union(avro.SchemaTypeString, evCtx.updated.AsOfSystemTime())
+			dest[fieldNameUpdatedTSNS] = goavro.Union(avro.SchemaTypeLong, row.SchemaTS.WallTime)
+			dest[fieldNameUpdatedTSHLC] = goavro.Union(avro.SchemaTypeString, row.SchemaTS.AsOfSystemTime())
 		}
 	}
 	sourceDataSchema, err := avro.NewFunctionalRecord("source", schemaPrefix, avroFields, fromRow)
