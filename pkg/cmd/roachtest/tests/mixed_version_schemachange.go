@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -26,6 +27,7 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 		// in a mixed version state, validating that the cluster is still healthy (via debug doctor examine).
 		Name:                       "schemachange/mixed-versions",
 		Owner:                      registry.OwnerSQLFoundations,
+		Timeout:                    4 * time.Hour,
 		Cluster:                    r.MakeClusterSpec(4, spec.WorkloadNode()),
 		CompatibleClouds:           registry.AllExceptAWS,
 		Suites:                     registry.Suites(registry.MixedVersion, registry.Nightly),
