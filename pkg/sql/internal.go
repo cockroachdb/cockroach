@@ -974,6 +974,9 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.BufferedWritesEnabled != nil {
 		sd.BufferedWritesEnabled = *o.BufferedWritesEnabled
 	}
+	if o.DescriptorOverrides != nil {
+		sd.DescriptorOverrides = o.DescriptorOverrides
+	}
 	// For 25.2, we're being conservative and explicitly disabling buffered
 	// writes for the internal executor.
 	// TODO(yuzefovich): remove this for 25.3.
