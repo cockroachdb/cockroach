@@ -420,25 +420,41 @@ func (c *CustomFuncs) ForDuplicateRemoval(private *memo.OrdinalityPrivate) (ok b
 	return private.ForDuplicateRemoval
 }
 
-// CanSimplifyCoalesceInFilters returns true if any filter condition contains a
-// Coalesce expression that can be simplified using the input's NOT NULL columns
-// plus null-rejecting columns from other filter conditions in the same set.
-func (c *CustomFuncs) CanSimplifyCoalesceInFilters(
-	filters memo.FiltersExpr, _ opt.ScalarExpr, notNullCols opt.ColSet,
-) bool {
-	filterNotNullCols := make([]opt.ColSet, len(filters))
+// computeFilterNotNullCols returns per-filter NOT NULL column sets and their
+// total union for the given filters. It extracts null-rejecting columns from
+// each filter item's constraints. Used by both CanSimplifyCoalesceInFilters and
+// SimplifyCoalesceInFilters to avoid duplicating constraint extraction.
+func computeFilterNotNullCols(
+	c *CustomFuncs, filters memo.FiltersExpr,
+) (perFilter []opt.ColSet, total opt.ColSet) {
+	perFilter = make([]opt.ColSet, len(filters))
 	for i := range filters {
 		constraints := filters[i].ScalarProps().Constraints
 		if constraints != nil {
-			constraints.ExtractNotNullCols(c.f.ctx, c.f.evalCtx, &filterNotNullCols[i])
+			constraints.ExtractNotNullCols(c.f.ctx, c.f.evalCtx, &perFilter[i])
 		}
 	}
-	totalFilterNotNullCols := opt.ColSet{}
-	for _, fc := range filterNotNullCols {
-		totalFilterNotNullCols = totalFilterNotNullCols.Union(fc)
+	for _, fc := range perFilter {
+		total = total.Union(fc)
 	}
+	return
+}
+
+// CanSimplifyCoalesceInFilters returns true if any filter condition contains a
+// Coalesce expression that can be simplified using the input's NOT NULL columns
+// plus null-rejecting columns from other filter conditions in the same set.
+// The _ opt.ScalarExpr parameter is unused; it is required by the optgen rule
+// which binds $cond but this function works with the full $filters set.
+func (c *CustomFuncs) CanSimplifyCoalesceInFilters(
+	filters memo.FiltersExpr, _ opt.ScalarExpr, notNullCols opt.ColSet,
+) bool {
+	perFilter, total := computeFilterNotNullCols(c, filters)
 	for i := range filters {
-		enriched := notNullCols.Union(totalFilterNotNullCols.Difference(filterNotNullCols[i]))
+		diff := total.Difference(perFilter[i])
+		enriched := notNullCols
+		if !diff.Empty() {
+			enriched = notNullCols.Union(diff)
+		}
 		if c.CanSimplifyCoalesceInScalar(filters[i].Condition, enriched) {
 			return true
 		}
@@ -453,21 +469,15 @@ func (c *CustomFuncs) CanSimplifyCoalesceInFilters(
 func (c *CustomFuncs) SimplifyCoalesceInFilters(
 	filters memo.FiltersExpr, notNullCols opt.ColSet,
 ) memo.FiltersExpr {
-	filterNotNullCols := make([]opt.ColSet, len(filters))
-	for i := range filters {
-		constraints := filters[i].ScalarProps().Constraints
-		if constraints != nil {
-			constraints.ExtractNotNullCols(c.f.ctx, c.f.evalCtx, &filterNotNullCols[i])
-		}
-	}
-	totalFilterNotNullCols := opt.ColSet{}
-	for _, fc := range filterNotNullCols {
-		totalFilterNotNullCols = totalFilterNotNullCols.Union(fc)
-	}
+	perFilter, total := computeFilterNotNullCols(c, filters)
 	newFilters := make(memo.FiltersExpr, len(filters))
 	for i := range filters {
 		f := &filters[i]
-		enriched := notNullCols.Union(totalFilterNotNullCols.Difference(filterNotNullCols[i]))
+		diff := total.Difference(perFilter[i])
+		enriched := notNullCols
+		if !diff.Empty() {
+			enriched = notNullCols.Union(diff)
+		}
 		simplified := c.SimplifyCoalesceInScalar(f.Condition, enriched)
 		if simplified == f.Condition {
 			newFilters[i] = *f
@@ -477,4 +487,3 @@ func (c *CustomFuncs) SimplifyCoalesceInFilters(
 	}
 	return newFilters
 }
-

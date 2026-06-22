@@ -33,7 +33,8 @@
 
 # SimplifyCoalesceSelect simplifies Coalesce expressions in Select filters by
 # eliminating leading operands that are guaranteed to be non-null according to
-# the input's relational properties.
+# the input's relational properties and null-rejecting columns from sibling
+# filter conditions.
 [SimplifyCoalesceSelect, Normalize, LowPriority]
 (Select
     $input:*

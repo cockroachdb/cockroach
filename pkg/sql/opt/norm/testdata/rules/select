@@ -2011,7 +2011,7 @@ select
 
 # Filter-derived NOT NULL: the condition b > 0 null-rejects b, so
 # COALESCE(b, c) simplifies to b even though b is nullable in the schema.
-# The b > 0 filter is then elided as redundant since b = 1 implies b > 0.
+# The redundant b > 0 filter is elided by existing normalization (b = 1 implies b > 0).
 norm expect=SimplifyCoalesceSelect
 SELECT * FROM d WHERE b > 0 AND COALESCE(b, c) = 1
 ----
@@ -2027,8 +2027,8 @@ select
       └── b:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
 
 # Nested COALESCE with filter-derived NOT NULL: c > 0 null-rejects c, so the
-# outer COALESCE(c, COALESCE(b, c)) simplifies to c. The c > 0 filter is then
-# elided as redundant since c = 1 implies c > 0.
+# outer COALESCE(c, COALESCE(b, c)) simplifies to c. The redundant c > 0 filter
+# is elided by existing normalization (c = 1 implies c > 0).
 norm expect=SimplifyCoalesceSelect
 SELECT * FROM d WHERE c > 0 AND COALESCE(c, COALESCE(b, c)) = 1
 ----
