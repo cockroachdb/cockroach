@@ -156,22 +156,25 @@ func (c *CustomFuncs) SimplifyCoalesceInScalar(
 // recurses into Coalesce args so that nested Coalesce expressions are not
 // missed when the outer Coalesce is not itself simplifiable.
 func (c *CustomFuncs) CanSimplifyCoalesceInScalar(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
-	found := false
-	var replace ReplaceFunc
-	replace = func(e opt.Expr) opt.Expr {
-		if co, ok := e.(*memo.CoalesceExpr); ok {
-			if c.CanSimplifyCoalesce(co.Args, notNullCols) {
-				found = true
-				return co
-			}
-			// Even if the outer Coalesce is not simplifiable, recurse into its
-			// args to find simplifiable nested Coalesce expressions.
-			return c.f.Replace(co, replace)
+	if co, ok := e.(*memo.CoalesceExpr); ok {
+		if c.CanSimplifyCoalesce(co.Args, notNullCols) {
+			return true
 		}
-		return c.f.Replace(e, replace)
+		for _, arg := range co.Args {
+			if c.CanSimplifyCoalesceInScalar(arg, notNullCols) {
+				return true
+			}
+		}
+		return false
 	}
-	replace(e)
-	return found
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		if sc, ok := e.Child(i).(opt.ScalarExpr); ok {
+			if c.CanSimplifyCoalesceInScalar(sc, notNullCols) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // IsConstValueEqual returns whether const1 and const2 are equal.

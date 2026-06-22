@@ -40,7 +40,7 @@
     $filters:[
             ...
             (FiltersItem $cond:*) &
-                (CanSimplifyCoalesceInScalar $cond (NotNullCols $input))
+                (CanSimplifyCoalesceInFilters $filters $cond (NotNullCols $input))
             ...
         ]
 )

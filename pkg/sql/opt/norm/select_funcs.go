@@ -420,18 +420,56 @@ func (c *CustomFuncs) ForDuplicateRemoval(private *memo.OrdinalityPrivate) (ok b
 	return private.ForDuplicateRemoval
 }
 
+// CanSimplifyCoalesceInFilters returns true if any filter condition contains a
+// Coalesce expression that can be simplified using the input's NOT NULL columns
+// plus null-rejecting columns from other filter conditions in the same set.
+func (c *CustomFuncs) CanSimplifyCoalesceInFilters(
+	filters memo.FiltersExpr, _ opt.ScalarExpr, notNullCols opt.ColSet,
+) bool {
+	filterNotNullCols := make([]opt.ColSet, len(filters))
+	for i := range filters {
+		constraints := filters[i].ScalarProps().Constraints
+		if constraints != nil {
+			constraints.ExtractNotNullCols(c.f.ctx, c.f.evalCtx, &filterNotNullCols[i])
+		}
+	}
+	totalFilterNotNullCols := opt.ColSet{}
+	for _, fc := range filterNotNullCols {
+		totalFilterNotNullCols = totalFilterNotNullCols.Union(fc)
+	}
+	for i := range filters {
+		enriched := notNullCols.Union(totalFilterNotNullCols.Difference(filterNotNullCols[i]))
+		if c.CanSimplifyCoalesceInScalar(filters[i].Condition, enriched) {
+			return true
+		}
+	}
+	return false
+}
+
 // SimplifyCoalesceInFilters simplifies Coalesce expressions in filter
-// conditions using the given not-null columns. Filters whose condition is
-// unchanged are reused as-is to avoid unnecessary memo invalidation.
+// conditions using the given not-null columns, including null-rejecting columns
+// derived from other filter conditions. Filters whose condition is unchanged
+// are reused as-is to avoid unnecessary memo invalidation.
 func (c *CustomFuncs) SimplifyCoalesceInFilters(
 	filters memo.FiltersExpr, notNullCols opt.ColSet,
 ) memo.FiltersExpr {
+	filterNotNullCols := make([]opt.ColSet, len(filters))
+	for i := range filters {
+		constraints := filters[i].ScalarProps().Constraints
+		if constraints != nil {
+			constraints.ExtractNotNullCols(c.f.ctx, c.f.evalCtx, &filterNotNullCols[i])
+		}
+	}
+	totalFilterNotNullCols := opt.ColSet{}
+	for _, fc := range filterNotNullCols {
+		totalFilterNotNullCols = totalFilterNotNullCols.Union(fc)
+	}
 	newFilters := make(memo.FiltersExpr, len(filters))
 	for i := range filters {
 		f := &filters[i]
-		simplified := c.SimplifyCoalesceInScalar(f.Condition, notNullCols)
+		enriched := notNullCols.Union(totalFilterNotNullCols.Difference(filterNotNullCols[i]))
+		simplified := c.SimplifyCoalesceInScalar(f.Condition, enriched)
 		if simplified == f.Condition {
-			// No change; reuse the original FiltersItem.
 			newFilters[i] = *f
 		} else {
 			newFilters[i] = c.f.ConstructFiltersItem(simplified)

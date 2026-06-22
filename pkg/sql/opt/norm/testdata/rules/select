@@ -2009,6 +2009,40 @@ select
  └── filters
       └── COALESCE(b:3, a:2) = 1 [outer=(2,3)]
 
+# Filter-derived NOT NULL: the condition b > 0 null-rejects b, so
+# COALESCE(b, c) simplifies to b even though b is nullable in the schema.
+# The b > 0 filter is then elided as redundant since b = 1 implies b > 0.
+norm expect=SimplifyCoalesceSelect
+SELECT * FROM d WHERE b > 0 AND COALESCE(b, c) = 1
+----
+select
+ ├── columns: k:1!null a:2!null b:3!null c:4 d:5
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4,5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── b:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+
+# Nested COALESCE with filter-derived NOT NULL: c > 0 null-rejects c, so the
+# outer COALESCE(c, COALESCE(b, c)) simplifies to c. The c > 0 filter is then
+# elided as redundant since c = 1 implies c > 0.
+norm expect=SimplifyCoalesceSelect
+SELECT * FROM d WHERE c > 0 AND COALESCE(c, COALESCE(b, c)) = 1
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4!null d:5
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3,5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── c:4 = 1 [outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+
 # --------------------------------------------------
 # EliminateCaseTrailingFalsyBranch
 # --------------------------------------------------
