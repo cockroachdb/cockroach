@@ -422,7 +422,9 @@ const (
 	replicatedApplyUDFOpName         = "replicated-apply-udf"
 )
 
-func getIEOverride(opName string, jobID jobspb.JobID) sessiondata.InternalExecutorOverride {
+func getIEOverride(
+	opName string, jobID jobspb.JobID, destGrants map[uint32]sessiondata.DescriptorOverride,
+) sessiondata.InternalExecutorOverride {
 	o := ieOverrideBase
 	// We want the ingestion queries to show up on the SQL Activity page
 	// alongside with the foreground traffic by default. We can achieve this
@@ -430,6 +432,7 @@ func getIEOverride(opName string, jobID jobspb.JobID) sessiondata.InternalExecut
 	// override (effectively, we opt out of using the "external" metrics for
 	// the ingestion queries).
 	o.ApplicationName = fmt.Sprintf("%s-%s-%d", catconstants.AttributedToUserInternalAppNamePrefix, opName, jobID)
+	o.DescriptorOverrides = destGrants
 	return o
 }
 
@@ -475,6 +478,11 @@ func makeSQLProcessor(
 		needUDFQuerier = needUDFQuerier || tc.dstOID != 0
 	}
 
+	destIDs := make([]descpb.ID, 0, len(tableConfigByDestID))
+	for id := range tableConfigByDestID {
+		destIDs = append(destIDs, id)
+	}
+	grants := destTableOverrides(destIDs)
 	lwwQuerier := &lwwQuerier{
 		sd:       sd,
 		settings: settings,
@@ -486,9 +494,9 @@ func makeSQLProcessor(
 			insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigByDestID)),
 		},
 		tombstoneUpdaters:          make(map[descpb.ID]*tombstoneUpdater, len(tableConfigByDestID)),
-		ieOverrideOptimisticInsert: getIEOverride(replicatedOptimisticInsertOpName, jobID),
-		ieOverrideInsert:           getIEOverride(replicatedInsertOpName, jobID),
-		ieOverrideDelete:           getIEOverride(replicatedDeleteOpName, jobID),
+		ieOverrideOptimisticInsert: getIEOverride(replicatedOptimisticInsertOpName, jobID, grants),
+		ieOverrideInsert:           getIEOverride(replicatedInsertOpName, jobID, grants),
+		ieOverrideDelete:           getIEOverride(replicatedDeleteOpName, jobID, grants),
 	}
 	var udfQuerier querier
 	if needUDFQuerier {
