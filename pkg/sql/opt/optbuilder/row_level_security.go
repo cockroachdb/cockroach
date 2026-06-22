@@ -79,6 +79,14 @@ func (b *Builder) isExemptFromRLSPolicies(
 	if err != nil {
 		panic(err)
 	}
+	// Per-descriptor bypass from InternalExecutorOverride.DescriptorOverrides:
+	// internal callers (schema-change validation, INSPECT, LDR writer)
+	// register this descriptor for system-internal access, which exempts
+	// it from RLS as if the user held BYPASSRLS scoped to this table.
+	// See sessiondata.DescriptorOverride.
+	if entry, ok := b.evalCtx.SessionData().DescriptorOverrides[uint32(tabMeta.Table.ID())]; ok && entry.BypassRLS {
+		bypassRLS = true
+	}
 	b.factory.Metadata().SetRLSEnabled(b.checkPrivilegeUser(), isAdmin, tabMeta.MetaID,
 		isOwnerAndNotForced, bypassRLS)
 	// Check if RLS filtering is exempt.
