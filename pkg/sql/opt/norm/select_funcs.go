@@ -419,3 +419,24 @@ func (c *CustomFuncs) addConjuncts(
 func (c *CustomFuncs) ForDuplicateRemoval(private *memo.OrdinalityPrivate) (ok bool) {
 	return private.ForDuplicateRemoval
 }
+
+// SimplifyCoalesceInFilters simplifies Coalesce expressions in filter
+// conditions using the given not-null columns. Filters whose condition is
+// unchanged are reused as-is to avoid unnecessary memo invalidation.
+func (c *CustomFuncs) SimplifyCoalesceInFilters(
+	filters memo.FiltersExpr, notNullCols opt.ColSet,
+) memo.FiltersExpr {
+	newFilters := make(memo.FiltersExpr, len(filters))
+	for i := range filters {
+		f := &filters[i]
+		simplified := c.SimplifyCoalesceInScalar(f.Condition, notNullCols)
+		if simplified == f.Condition {
+			// No change; reuse the original FiltersItem.
+			newFilters[i] = *f
+		} else {
+			newFilters[i] = c.f.ConstructFiltersItem(simplified)
+		}
+	}
+	return newFilters
+}
+
