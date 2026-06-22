@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -30,8 +31,15 @@ func executeValidateIndex(ctx context.Context, deps Dependencies, op *scop.Valid
 	if err != nil {
 		return err
 	}
-	// Execute the validation operation as a node user.
-	execOverride := sessiondata.NodeUserSessionDataOverride
+	// Run count queries as the schema-change issuer with implicit SELECT
+	// scoped to this table so a CREATE-only issuer can still validate.
+	selectBit := privilege.List{privilege.SELECT}.ToBitField()
+	execOverride := sessiondata.InternalExecutorOverride{
+		User: deps.User(),
+		DescriptorOverrides: map[uint32]sessiondata.DescriptorOverride{
+			uint32(table.GetID()): {Privileges: selectBit},
+		},
+	}
 	if index.GetType() == descpb.IndexDescriptor_FORWARD {
 		err = deps.Validator().ValidateForwardIndexes(ctx, deps.TransactionalJobRegistry().CurrentJob(), table, []catalog.Index{index}, execOverride)
 	} else {
@@ -60,8 +68,10 @@ func executeValidateConstraint(
 		return err
 	}
 
-	// Execute the validation operation as a node user.
-	execOverride := sessiondata.NodeUserSessionDataOverride
+	// Run validation as the schema-change issuer. Per-constraint
+	// DescriptorOverrides are added inside validateForeignKey,
+	// validateCheckExpr, and the unique-without-index branch.
+	execOverride := sessiondata.InternalExecutorOverride{User: deps.User()}
 	err = deps.Validator().ValidateConstraint(ctx, table, constraint, op.IndexIDForValidation, execOverride)
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)
@@ -89,8 +99,9 @@ func executeValidateColumnNotNull(
 		}
 	}
 
-	// Execute the validation operation as a node user.
-	execOverride := sessiondata.NodeUserSessionDataOverride
+	// NOT NULL validation reaches validateCheckExpr, which attaches
+	// the SELECT bypass scoped to the scanned table.
+	execOverride := sessiondata.InternalExecutorOverride{User: deps.User()}
 	err = deps.Validator().ValidateConstraint(ctx, table, constraint, op.IndexIDForValidation, execOverride)
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)
