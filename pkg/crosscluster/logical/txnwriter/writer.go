@@ -10,12 +10,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
@@ -41,10 +43,23 @@ type TransactionWriter interface {
 	Close(ctx context.Context)
 }
 
+// NewTransactionWriter constructs a TransactionWriter that applies
+// replicated rows as user. grants is attached to the session's
+// SessionData so that the privilege check for the apply queries (which
+// the session runs via Prepare/ExecutePrepared rather than per-op
+// InternalExecutorOverrides) sees the destination-table DML bypass.
+// LDR job owners typically hold REPLICATIONDEST without direct DML.
 func NewTransactionWriter(
-	ctx context.Context, db isql.DB, leaseMgr *lease.Manager, settings *cluster.Settings,
+	ctx context.Context,
+	db isql.DB,
+	leaseMgr *lease.Manager,
+	settings *cluster.Settings,
+	user username.SQLUsername,
+	grants map[uint32]sessiondata.DescriptorOverride,
 ) (TransactionWriter, error) {
 	sd := sql.NewInternalSessionData(ctx, settings, "txn-writer")
+	sd.UserProto = user.EncodeProto()
+	sd.DescriptorOverrides = grants
 	session, err := sqlwriter.NewInternalSession(ctx, db, sd, settings)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating new isql session for transaction writer")

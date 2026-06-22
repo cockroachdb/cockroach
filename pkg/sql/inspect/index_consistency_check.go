@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -23,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -221,10 +219,7 @@ func (c *indexConsistencyCheck) Start(
 	qos := getInspectQoS(&c.execCfg.Settings.SV)
 	it, err := c.execCfg.DistSQLSrv.DB.Executor().QueryIteratorEx(
 		ctx, "inspect-index-consistency-check", nil, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User:             username.NodeUserName(),
-			QualityOfService: &qos,
-		},
+		inspectExecOverride(c.tableDesc, &qos),
 		queryWithAsOf,
 		queryArgs...,
 	)
@@ -673,10 +668,7 @@ func (c *indexConsistencyCheck) computeHashAndRowCount(
 	qos := getInspectQoS(&c.execCfg.Settings.SV)
 	row, err := c.execCfg.DistSQLSrv.DB.Executor().QueryRowEx(
 		ctx, "inspect-index-consistency-hash", nil, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User:             username.NodeUserName(),
-			QualityOfService: &qos,
-		},
+		inspectExecOverride(c.tableDesc, &qos),
 		queryWithAsOf,
 		queryArgs...,
 	)

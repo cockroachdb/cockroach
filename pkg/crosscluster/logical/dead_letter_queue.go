@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -131,6 +132,7 @@ func (dlq *noopDeadLetterQueueClient) Log(
 }
 
 type deadLetterQueueClient struct {
+	db               descs.DB
 	ie               isql.Executor
 	destTableBySrcID map[descpb.ID]dstTableMetadata
 }
@@ -148,8 +150,63 @@ func (dlq *deadLetterQueueClient) Create(ctx context.Context) error {
 		if _, err := dlq.ie.Exec(ctx, "create-dlq-table", nil, createTableStmt); err != nil {
 			return errors.Wrapf(err, "failed to create dlq for table %d", dstTableMeta.tableID)
 		}
+
+		// CREATE TABLE IF NOT EXISTS silently accepts a pre-existing
+		// table, and the DLQ table name is predictable from the
+		// destination ID. We just asked CREATE to produce the table
+		// as the node user, so anything we end up with that isn't
+		// node-owned is something we didn't create -- refuse to use
+		// it rather than evaluate any column DEFAULTs, CHECK
+		// constraints, or triggers a non-node owner might have
+		// installed.
+		if err := dlq.validateDLQOwnership(ctx, dstTableMeta); err != nil {
+			return errors.Wrapf(err,
+				"dead letter queue table %s was not created by this node; refuse to use it",
+				dlqTableName)
+		}
 	}
 	return nil
+}
+
+// validateDLQOwnership refuses to use a DLQ table that is not owned
+// by the node user. Create() runs `CREATE TABLE IF NOT EXISTS` via
+// the internal executor (whose default identity is node), so a
+// freshly created DLQ table is always node-owned. A pre-existing
+// table with the same predictable name but a different owner is
+// not the one we declared and may carry column DEFAULTs, CHECK
+// constraints, or triggers we did not author -- refuse it.
+//
+// This check is intentionally narrow: a user who has somehow been
+// granted CREATE on the node-owned crdb_replication.dlq_* table (an
+// explicit misconfiguration; CREATE on that schema is not granted by
+// default) could ALTER the table without changing ownership, which
+// this check would not catch. Bounding that further is left to the
+// preceding LDR commit's identity flip: DLQ Log() now runs as the
+// job owner rather than as node.
+func (dlq *deadLetterQueueClient) validateDLQOwnership(
+	ctx context.Context, meta dstTableMetadata,
+) error {
+	return dlq.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		byName := txn.Descriptors().ByName(txn.KV()).Get()
+		dbDesc, err := byName.Database(ctx, meta.database)
+		if err != nil {
+			return err
+		}
+		scDesc, err := byName.Schema(ctx, dbDesc, dlqSchemaName)
+		if err != nil {
+			return err
+		}
+		tableName := fmt.Sprintf("dlq_%d_%s_%s", meta.tableID, meta.schema, meta.table)
+		tableDesc, err := byName.Table(ctx, dbDesc, scDesc, tableName)
+		if err != nil {
+			return err
+		}
+		owner := tableDesc.GetPrivileges().Owner()
+		if !owner.IsNodeUser() {
+			return errors.Newf("owner is %q, expected node user", owner)
+		}
+		return nil
+	})
 }
 
 func (dlq *deadLetterQueueClient) Log(
@@ -222,12 +279,13 @@ func (dlq *deadLetterQueueClient) Log(
 }
 
 func InitDeadLetterQueueClient(
-	ie isql.Executor, destTableBySrcID map[descpb.ID]dstTableMetadata,
+	db descs.DB, ie isql.Executor, destTableBySrcID map[descpb.ID]dstTableMetadata,
 ) DeadLetterQueueClient {
 	if testingDLQ != nil {
 		return testingDLQ
 	}
 	return &deadLetterQueueClient{
+		db:               db,
 		ie:               ie,
 		destTableBySrcID: destTableBySrcID,
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -133,6 +135,64 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 			require.NoError(t, err)
 			_, err = sqlDB.Exec(`SELECT crdb_internal.validate_ttl_scheduled_jobs()`)
 			require.NoError(t, err)
+		})
+	}
+}
+
+// TestSchemaChangeValidationWithCreateOnlyPrivilege asserts that a user
+// holding only CREATE on a table (not SELECT) can still validate
+// constraints they legitimately add. CHECK and UNIQUE WITHOUT INDEX
+// validation now runs as the schema-change issuer; the implicit SELECT
+// bypass scoped to the table being scanned is what lets a CREATE-only
+// issuer pass. Without that bypass, a user who adds a CHECK or UWI
+// constraint via the privilege they legitimately hold would fail
+// validation with a permission error.
+func TestSchemaChangeValidationWithCreateOnlyPrivilege(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	rootDB := sqlutils.MakeSQLRunner(sqlDB)
+	rootDB.Exec(t, fmt.Sprintf(`CREATE USER %s`, username.TestUser))
+	rootDB.Exec(t, fmt.Sprintf(`GRANT USAGE ON SCHEMA defaultdb.public TO %s`, username.TestUser))
+
+	userConn := s.SQLConn(t, serverutils.User(username.TestUser))
+	userRunner := sqlutils.MakeSQLRunner(userConn)
+	userRunner.Exec(t, `SET experimental_enable_unique_without_index_constraints = true`)
+
+	for _, useDeclarative := range []bool{false, true} {
+		name := "legacy"
+		if useDeclarative {
+			name = "declarative"
+		}
+		t.Run(name, func(t *testing.T) {
+			tableName := fmt.Sprintf("create_only_%s", name)
+			rootDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s (x INT, y INT)`, tableName))
+			rootDB.Exec(t, fmt.Sprintf(`INSERT INTO %s VALUES (1, 10), (2, 20), (3, 30)`, tableName))
+			rootDB.Exec(t, fmt.Sprintf(`GRANT CREATE ON TABLE %s TO %s`, tableName, username.TestUser))
+
+			if useDeclarative {
+				userRunner.Exec(t, `SET use_declarative_schema_changer = 'on'`)
+			} else {
+				userRunner.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+				rootDB.Exec(t, fmt.Sprintf(`ALTER TABLE %s SET (schema_locked = false)`, tableName))
+			}
+
+			// CHECK exercises validateCheckExpr; the user holds only
+			// CREATE (not SELECT) on the table, so without the implicit
+			// SELECT bypass the validation scan errors out.
+			userRunner.Exec(t,
+				fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT c_x_positive CHECK (x > 0)`, tableName))
+
+			// UNIQUE WITHOUT INDEX exercises validateUniqueConstraint via
+			// the validateUniqueWithoutIndexConstraintInTxn (legacy) /
+			// ValidateConstraint (declarative) call sites.
+			userRunner.Exec(t,
+				fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT u_y UNIQUE WITHOUT INDEX (y)`, tableName))
 		})
 	}
 }

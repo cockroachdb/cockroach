@@ -11,14 +11,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/inspect/inspectpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -236,10 +234,7 @@ func (c *rowCountCheck) computeRowCount(
 	qos := getInspectQoS(&c.execCfg.Settings.SV)
 	row, err := c.execCfg.DistSQLSrv.DB.Executor().QueryRowEx(
 		ctx, "inspect-row-count", nil, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User:             username.NodeUserName(),
-			QualityOfService: &qos,
-		},
+		inspectExecOverride(c.tableDesc, &qos),
 		queryWithAsOf,
 		queryArgs...,
 	)
