@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -23,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -216,10 +214,7 @@ func (c *indexConsistencyCheck) Start(
 	// Execute the query with AS OF SYSTEM TIME embedded in the SQL
 	it, err := c.flowCtx.Cfg.DB.Executor().QueryIteratorEx(
 		ctx, "inspect-index-consistency-check", nil, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User:             username.NodeUserName(),
-			QualityOfService: &sessiondatapb.BulkLowQoS,
-		},
+		inspectExecOverride(c.tableDesc, &sessiondatapb.BulkLowQoS),
 		queryWithAsOf,
 		queryArgs...,
 	)
