@@ -2,91 +2,91 @@
 # metadata about the team.
 # Expected structure is available in pkg/internal/team/team.go.
 
-cockroachdb/docs:
+cockroachlabs/docs:
   aliases:
-    cockroachdb/docs-infra-prs: other
-cockroachdb/sql-foundations:
+    cockroachlabs/docs-infra-prs: other
+cockroachlabs/sql-foundations:
   aliases:
-    cockroachdb/sql-syntax-prs: other
-    cockroachdb/sql-api-prs: other
+    cockroachlabs/sql-syntax-prs: other
+    cockroachlabs/sql-api-prs: other
   label: T-sql-foundations
-cockroachdb/sqlproxy-prs:
+cockroachlabs/sqlproxy-prs:
   label: T-cloud-platform
-cockroachdb/sql-queries:
+cockroachlabs/sql-queries:
   aliases:
-    cockroachdb/sql-queries-prs: other
-    cockroachdb/sql-optimizer: other
-    cockroachdb/sql-opt-prs: other
+    cockroachlabs/sql-queries-prs: other
+    cockroachlabs/sql-optimizer: other
+    cockroachlabs/sql-opt-prs: other
   # SQL Queries team uses GH projects v2.
   # See .github/workflows/add-issues-to-project.yml.
   label: T-sql-queries
   silence_mentions: true
-cockroachdb/kv:
+cockroachlabs/kv:
   aliases:
-    cockroachdb/kv-triage: roachtest
+    cockroachlabs/kv-triage: roachtest
     # This is a hack - we can't have the same key twice,
     # but it also doesn't seem worth rewriting the aliases
     # into slice form for just this.
-    'cockroachdb/kv-triage ': unittest
-    cockroachdb/kv-prs: other
-    cockroachdb/kv-distribution: other
+    'cockroachlabs/kv-triage ': unittest
+    cockroachlabs/kv-prs: other
+    cockroachlabs/kv-distribution: other
   label: T-kv
-cockroachdb/admission-control:
+cockroachlabs/admission-control:
   label: T-kv,A-admission-control
-cockroachdb/spatial:
+cockroachlabs/spatial:
   label: T-spatial
-cockroachdb/dev-inf:
+cockroachlabs/dev-inf:
   label: T-dev-inf
-cockroachdb/drp-eng:
+cockroachlabs/drp-eng:
   label: T-drpeng
-cockroachdb/multiregion:
+cockroachlabs/multiregion:
   label: T-multiregion
-cockroachdb/storage:
+cockroachlabs/storage:
   label: T-storage
-cockroachdb/test-eng:
+cockroachlabs/test-eng:
   label: T-testeng
-cockroachdb/test-eng-prs:
+cockroachlabs/test-eng-prs:
   label: T-testeng
-cockroachdb/security-engineering:
+cockroachlabs/security-engineering:
   label: T-security-engineering
-cockroachdb/product-security:
+cockroachlabs/product-security:
   label: T-product-security
-cockroachdb/disaster-recovery:
+cockroachlabs/disaster-recovery:
   label: T-disaster-recovery
-cockroachdb/cdc:
+cockroachlabs/cdc:
   aliases:
-    cockroachdb/cdc-prs: other
+    cockroachlabs/cdc-prs: other
   # CDC team uses GH projects v2, which doesn't have a REST API, so no triage column ID
   # see .github/workflows/add-issues-to-project.yml
   label: T-cdc
-cockroachdb/server:
+cockroachlabs/server:
   aliases:
-    cockroachdb/cli-prs: other
-    cockroachdb/server-prs: other
+    cockroachlabs/cli-prs: other
+    cockroachlabs/server-prs: other
   label: T-db-server
-cockroachdb/obs-prs:
+cockroachlabs/obs-prs:
   # The observability team uses Jira for managing issues. So there is no triage column ID.
   label: T-observability
-cockroachdb/obs-india-prs:
-cockroachdb/jobs:
+cockroachlabs/obs-india-prs:
+cockroachlabs/jobs:
   aliases:
-    cockroachdb/jobs-prs: other
+    cockroachlabs/jobs-prs: other
   # Jobs uses GH projects v2, which doesn't have a REST API, so no triage column ID
   # see .github/workflows/add-issues-to-project.yml
   label: T-jobs
-cockroachdb/cloud-identity:
-cockroachdb/code-systems-prs:
+cockroachlabs/cloud-identity:
+cockroachlabs/code-systems-prs:
   label: T-code-sys
-cockroachdb/unowned:
+cockroachlabs/unowned:
   aliases:
-    cockroachdb/rfc-prs: other
-cockroachdb/migrations:
+    cockroachlabs/rfc-prs: other
+cockroachlabs/migrations:
   label: T-migrations
-cockroachdb/release-eng:
+cockroachlabs/release-eng:
   aliases:
-    cockroachdb/release-eng-prs: other
-    cockroachdb/upgrade-prs: other
+    cockroachlabs/release-eng-prs: other
+    cockroachlabs/upgrade-prs: other
   label: T-release
-cockroachdb/field-engineering:
+cockroachlabs/field-engineering:
   # Field Eng isn't currently using github projects.
   label: T-field-eng
