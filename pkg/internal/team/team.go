@@ -26,8 +26,8 @@ type Team struct {
 	// Aliases is a map from additional team name to purpose for which to use
 	// them. The purpose "other" indicates a team that exists but which has no
 	// particular purpose as far as `teams` is concerned (for example, teams like
-	// the @cockroachdb/kv-prs team which exists primarily to route, via
-	// CODEOWNERS, code reviews for the @cockroachdb/kv team). This map
+	// the @cockroachlabs/kv-prs team which exists primarily to route, via
+	// CODEOWNERS, code reviews for the @cockroachlabs/kv team). This map
 	// does not contain TeamName.
 	Aliases map[Alias]Purpose `yaml:"aliases"`
 	// GitHub label will be added to issues posted for this team.

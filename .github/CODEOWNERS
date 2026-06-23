@@ -11,12 +11,12 @@
 #   parse it).
 #   Note that it is customary also to use a team name with `-noreview` suffix in
 #   the lines that start with `#!` (the suffix is trimmed in codeowners package).
-# - there is a special team @cockroachdb/unowned (only to be used with #! prefix as
+# - there is a special team @cockroachlabs/unowned (only to be used with #! prefix as
 #   to not confuse Github) for the rare situations in which a file has no canonical owner.
 #   Please use this sparingly.
 #
 #   TODO(test-eng): it would be good to lint that following a `#!` marker all mentioned
-#   teams match @cockroachdb/{unowned,*-noreview}.
+#   teams match @cockroachlabs/{unowned,*-noreview}.
 #
 # Remember, *the last rule to match wins*, and you need a trailing slash to get
 # recursive ownership of a directory.
@@ -28,607 +28,607 @@
 # [2]: https://help.github.com/articles/about-codeowners/
 # [3]: pkg/internal/codeowners
 
-/.github/                    @cockroachdb/dev-inf
-#!/.github/CODEOWNERS          @cockroachdb/unowned
+/.github/                    @cockroachlabs/dev-inf
+#!/.github/CODEOWNERS          @cockroachlabs/unowned
 
-/build/                      @cockroachdb/dev-inf
+/build/                      @cockroachlabs/dev-inf
 
-/docs/RFCS/                  @cockroachdb/rfc-prs
-/docs/generated/redact_safe.md @cockroachdb/security
+/docs/RFCS/                  @cockroachlabs/rfc-prs
+/docs/generated/redact_safe.md @cockroachlabs/security
 
-/LICENSE                     @cockroachdb/release-eng-prs
-/licenses                    @cockroachdb/release-eng-prs
+/LICENSE                     @cockroachlabs/release-eng-prs
+/licenses                    @cockroachlabs/release-eng-prs
 
-/Makefile                    @cockroachdb/dev-inf
+/Makefile                    @cockroachlabs/dev-inf
 
-#!/pkg                         @cockroachdb/unowned
-#!/pkg/sql/                    @cockroachdb/sql-queries-noreview
+#!/pkg                         @cockroachlabs/unowned
+#!/pkg/sql/                    @cockroachlabs/sql-queries-noreview
 
-/pkg/sql/inverted/           @cockroachdb/sql-queries-prs
-/pkg/sql/opt/                @cockroachdb/sql-queries-prs
-/pkg/sql/opt_*.go            @cockroachdb/sql-queries-prs
-#!/pkg/sql/opt/exec/execbuilder/testdata/ @cockroachdb/sql-queries-noreview
-/pkg/sql/plan_opt*.go        @cockroachdb/sql-queries-prs
-/pkg/sql/querycache/         @cockroachdb/sql-queries-prs
-/pkg/sql/span/               @cockroachdb/sql-queries-prs
-/pkg/sql/stats/              @cockroachdb/sql-queries-prs
+/pkg/sql/inverted/           @cockroachlabs/sql-queries-prs
+/pkg/sql/opt/                @cockroachlabs/sql-queries-prs
+/pkg/sql/opt_*.go            @cockroachlabs/sql-queries-prs
+#!/pkg/sql/opt/exec/execbuilder/testdata/ @cockroachlabs/sql-queries-noreview
+/pkg/sql/plan_opt*.go        @cockroachlabs/sql-queries-prs
+/pkg/sql/querycache/         @cockroachlabs/sql-queries-prs
+/pkg/sql/span/               @cockroachlabs/sql-queries-prs
+/pkg/sql/stats/              @cockroachlabs/sql-queries-prs
 
-/pkg/sql/col*                @cockroachdb/sql-queries-prs
-/pkg/sql/create_stats*       @cockroachdb/sql-queries-prs
-/pkg/sql/distsql*.go         @cockroachdb/sql-queries-prs
-/pkg/sql/execinfra/          @cockroachdb/sql-queries-prs
-/pkg/sql/execinfrapb/        @cockroachdb/sql-queries-prs
-/pkg/sql/execstats/          @cockroachdb/sql-queries-prs
-/pkg/sql/execinfrapb/processors_bulk_io.proto     @cockroachdb/disaster-recovery
-/pkg/sql/execinfrapb/processors_changefeeds.proto @cockroachdb/cdc-prs
-/pkg/sql/execinfrapb/processors_ttl.proto         @cockroachdb/sql-queries-prs
-/pkg/sql/exec_factory_util.go          @cockroachdb/sql-queries-prs
-#!/pkg/sql/exec_log*.go                @cockroachdb/sql-queries-noreview
-#!/pkg/sql/exec_util*.go               @cockroachdb/sql-queries-noreview
-/pkg/sql/execute.go                    @cockroachdb/sql-queries-prs
-/pkg/sql/executor_statement_metrics.go @cockroachdb/obs-prs
-/pkg/sql/flowinfra/          @cockroachdb/sql-queries-prs
-/pkg/sql/physicalplan/       @cockroachdb/sql-queries-prs
-/pkg/sql/row*                @cockroachdb/sql-queries-prs
-/pkg/sql/control_job*        @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs
-/pkg/sql/job_exec_context*   @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs
-/pkg/sql/delegate/*job*.go   @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
-/pkg/sql/partition*.go       @cockroachdb/sql-queries-prs
-/pkg/sql/temporary_schema*   @cockroachdb/sql-queries-prs
+/pkg/sql/col*                @cockroachlabs/sql-queries-prs
+/pkg/sql/create_stats*       @cockroachlabs/sql-queries-prs
+/pkg/sql/distsql*.go         @cockroachlabs/sql-queries-prs
+/pkg/sql/execinfra/          @cockroachlabs/sql-queries-prs
+/pkg/sql/execinfrapb/        @cockroachlabs/sql-queries-prs
+/pkg/sql/execstats/          @cockroachlabs/sql-queries-prs
+/pkg/sql/execinfrapb/processors_bulk_io.proto     @cockroachlabs/disaster-recovery
+/pkg/sql/execinfrapb/processors_changefeeds.proto @cockroachlabs/cdc-prs
+/pkg/sql/execinfrapb/processors_ttl.proto         @cockroachlabs/sql-queries-prs
+/pkg/sql/exec_factory_util.go          @cockroachlabs/sql-queries-prs
+#!/pkg/sql/exec_log*.go                @cockroachlabs/sql-queries-noreview
+#!/pkg/sql/exec_util*.go               @cockroachlabs/sql-queries-noreview
+/pkg/sql/execute.go                    @cockroachlabs/sql-queries-prs
+/pkg/sql/executor_statement_metrics.go @cockroachlabs/obs-prs
+/pkg/sql/flowinfra/          @cockroachlabs/sql-queries-prs
+/pkg/sql/physicalplan/       @cockroachlabs/sql-queries-prs
+/pkg/sql/row*                @cockroachlabs/sql-queries-prs
+/pkg/sql/control_job*        @cockroachlabs/sql-queries-prs @cockroachlabs/jobs-prs
+/pkg/sql/job_exec_context*   @cockroachlabs/sql-queries-prs @cockroachlabs/jobs-prs
+/pkg/sql/delegate/*job*.go   @cockroachlabs/jobs-prs @cockroachlabs/disaster-recovery
+/pkg/sql/partition*.go       @cockroachlabs/sql-queries-prs
+/pkg/sql/temporary_schema*   @cockroachlabs/sql-queries-prs
 
-/pkg/sql/importer/           @cockroachdb/sql-foundations
-/pkg/ccl/importerccl/        @cockroachdb/sql-foundations
+/pkg/sql/importer/           @cockroachlabs/sql-foundations
+/pkg/ccl/importerccl/        @cockroachlabs/sql-foundations
 
-/pkg/sql/appstatspb           @cockroachdb/obs-prs
-/pkg/sql/execstats/           @cockroachdb/obs-prs
-/pkg/sql/scheduledlogging/    @cockroachdb/obs-prs
-/pkg/sql/sqlstats/            @cockroachdb/obs-prs
-/pkg/sql/tablemetadatacache/  @cockroachdb/obs-prs
-/pkg/ccl/testccl/sqlstatsccl/ @cockroachdb/obs-prs
+/pkg/sql/appstatspb           @cockroachlabs/obs-prs
+/pkg/sql/execstats/           @cockroachlabs/obs-prs
+/pkg/sql/scheduledlogging/    @cockroachlabs/obs-prs
+/pkg/sql/sqlstats/            @cockroachlabs/obs-prs
+/pkg/sql/tablemetadatacache/  @cockroachlabs/obs-prs
+/pkg/ccl/testccl/sqlstatsccl/ @cockroachlabs/obs-prs
 
-/pkg/sql/sem/tree/           @cockroachdb/sql-syntax-prs
-/pkg/sql/parser/             @cockroachdb/sql-syntax-prs
-/pkg/sql/lex/                @cockroachdb/sql-syntax-prs
-/pkg/sql/show_create*.go     @cockroachdb/sql-syntax-prs
-/pkg/sql/types/              @cockroachdb/sql-syntax-prs
+/pkg/sql/sem/tree/           @cockroachlabs/sql-syntax-prs
+/pkg/sql/parser/             @cockroachlabs/sql-syntax-prs
+/pkg/sql/lex/                @cockroachlabs/sql-syntax-prs
+/pkg/sql/show_create*.go     @cockroachlabs/sql-syntax-prs
+/pkg/sql/types/              @cockroachlabs/sql-syntax-prs
 
-/pkg/sql/crdb_internal.go    @cockroachdb/sql-foundations
-/pkg/sql/pg_catalog.go       @cockroachdb/sql-foundations
-/pkg/sql/partitioning/       @cockroachdb/sql-queries-prs
-/pkg/sql/pgwire/             @cockroachdb/sql-foundations @cockroachdb/server-prs @cockroachdb/product-security
-/pkg/sql/pgwire/auth.go      @cockroachdb/sql-foundations @cockroachdb/server-prs @cockroachdb/prodsec
-/pkg/sql/sem/builtins/       @cockroachdb/sql-foundations
-/pkg/sql/sem/plpgsqltree/    @cockroachdb/sql-foundations
-/pkg/sql/vtable/             @cockroachdb/sql-foundations
+/pkg/sql/crdb_internal.go    @cockroachlabs/sql-foundations
+/pkg/sql/pg_catalog.go       @cockroachlabs/sql-foundations
+/pkg/sql/partitioning/       @cockroachlabs/sql-queries-prs
+/pkg/sql/pgwire/             @cockroachlabs/sql-foundations @cockroachlabs/server-prs @cockroachlabs/product-security
+/pkg/sql/pgwire/auth.go      @cockroachlabs/sql-foundations @cockroachlabs/server-prs @cockroachlabs/prodsec
+/pkg/sql/sem/builtins/       @cockroachlabs/sql-foundations
+/pkg/sql/sem/plpgsqltree/    @cockroachlabs/sql-foundations
+/pkg/sql/vtable/             @cockroachlabs/sql-foundations
 
-/pkg/sql/sessiondata/        @cockroachdb/sql-foundations
-/pkg/sql/tests/rsg_test.go   @cockroachdb/sql-foundations
-/pkg/sql/ttl                 @cockroachdb/sql-queries-prs
+/pkg/sql/sessiondata/        @cockroachlabs/sql-foundations
+/pkg/sql/tests/rsg_test.go   @cockroachlabs/sql-foundations
+/pkg/sql/ttl                 @cockroachlabs/sql-queries-prs
 
-/pkg/sql/syntheticprivilege/      @cockroachdb/sql-foundations
-/pkg/sql/syntheticprivilegecache/ @cockroachdb/sql-foundations
+/pkg/sql/syntheticprivilege/      @cockroachlabs/sql-foundations
+/pkg/sql/syntheticprivilegecache/ @cockroachlabs/sql-foundations
 
-/pkg/ccl/schemachangerccl/   @cockroachdb/sql-foundations
-/pkg/sql/bulkmerge/          @cockroachdb/sql-foundations
-/pkg/sql/bulksst/            @cockroachdb/sql-foundations
-/pkg/sql/bulkutil/           @cockroachdb/sql-foundations
-/pkg/sql/catalog/            @cockroachdb/sql-foundations
-/pkg/sql/catalog/multiregion @cockroachdb/sql-queries-prs
-/pkg/sql/doctor/             @cockroachdb/sql-foundations
-/pkg/sql/gcjob/              @cockroachdb/sql-foundations
-/pkg/sql/gcjob_test/         @cockroachdb/sql-foundations
-/pkg/sql/importer/           @cockroachdb/sql-foundations
-/pkg/sql/privilege/          @cockroachdb/sql-foundations
-/pkg/sql/schemachange/       @cockroachdb/sql-foundations
-/pkg/sql/schemachanger/      @cockroachdb/sql-foundations
-/pkg/sql/alter*.go           @cockroachdb/sql-foundations
-/pkg/sql/backfill*.go        @cockroachdb/sql-foundations
-/pkg/sql/create*.go          @cockroachdb/sql-foundations
-/pkg/sql/database*.go        @cockroachdb/sql-foundations
-/pkg/sql/drop*.go            @cockroachdb/sql-foundations
-/pkg/sql/grant*.go           @cockroachdb/sql-foundations
-/pkg/sql/multitenant_admin_function_test.go @cockroachdb/sql-foundations
-/pkg/sql/rename*.go          @cockroachdb/sql-foundations
-/pkg/sql/revoke*.go          @cockroachdb/sql-foundations
-/pkg/sql/schema*.go          @cockroachdb/sql-foundations
-/pkg/sql/zone*.go            @cockroachdb/sql-foundations
-/pkg/cmd/sql-bootstrap-data/ @cockroachdb/sql-foundations
+/pkg/ccl/schemachangerccl/   @cockroachlabs/sql-foundations
+/pkg/sql/bulkmerge/          @cockroachlabs/sql-foundations
+/pkg/sql/bulksst/            @cockroachlabs/sql-foundations
+/pkg/sql/bulkutil/           @cockroachlabs/sql-foundations
+/pkg/sql/catalog/            @cockroachlabs/sql-foundations
+/pkg/sql/catalog/multiregion @cockroachlabs/sql-queries-prs
+/pkg/sql/doctor/             @cockroachlabs/sql-foundations
+/pkg/sql/gcjob/              @cockroachlabs/sql-foundations
+/pkg/sql/gcjob_test/         @cockroachlabs/sql-foundations
+/pkg/sql/importer/           @cockroachlabs/sql-foundations
+/pkg/sql/privilege/          @cockroachlabs/sql-foundations
+/pkg/sql/schemachange/       @cockroachlabs/sql-foundations
+/pkg/sql/schemachanger/      @cockroachlabs/sql-foundations
+/pkg/sql/alter*.go           @cockroachlabs/sql-foundations
+/pkg/sql/backfill*.go        @cockroachlabs/sql-foundations
+/pkg/sql/create*.go          @cockroachlabs/sql-foundations
+/pkg/sql/database*.go        @cockroachlabs/sql-foundations
+/pkg/sql/drop*.go            @cockroachlabs/sql-foundations
+/pkg/sql/grant*.go           @cockroachlabs/sql-foundations
+/pkg/sql/multitenant_admin_function_test.go @cockroachlabs/sql-foundations
+/pkg/sql/rename*.go          @cockroachlabs/sql-foundations
+/pkg/sql/revoke*.go          @cockroachlabs/sql-foundations
+/pkg/sql/schema*.go          @cockroachlabs/sql-foundations
+/pkg/sql/zone*.go            @cockroachlabs/sql-foundations
+/pkg/cmd/sql-bootstrap-data/ @cockroachlabs/sql-foundations
 
-#!/pkg/sql/logictest/tests/cockroach-go-testserver-*/*.go @cockroachdb/sql-foundations-noreview
-#!/pkg/sql/logictest/tests/local-mixed-*/*.go             @cockroachdb/sql-foundations-noreview
+#!/pkg/sql/logictest/tests/cockroach-go-testserver-*/*.go @cockroachlabs/sql-foundations-noreview
+#!/pkg/sql/logictest/tests/local-mixed-*/*.go             @cockroachlabs/sql-foundations-noreview
 
 # Beware to not assign the CLI package directory to a single team, at
 # least until we heavily refactor the package to extract team-specific
 # functionality into sub-packages assigned to their respective teams.
 #
-#!/pkg/cli/                  @cockroachdb/unowned
-/pkg/cli/auth.go             @cockroachdb/prodsec @cockroachdb/cli-prs @cockroachdb/product-security
-/pkg/cli/cert*.go            @cockroachdb/prodsec @cockroachdb/cli-prs @cockroachdb/product-security
-/pkg/cli/cli.go              @cockroachdb/cli-prs
-/pkg/cli/cli_debug*.go       @cockroachdb/kv-prs         @cockroachdb/cli-prs
-/pkg/cli/cli_test.go         @cockroachdb/cli-prs
-/pkg/cli/clientflags/        @cockroachdb/sql-foundations @cockroachdb/cli-prs
-/pkg/cli/clienturl/          @cockroachdb/sql-foundations @cockroachdb/cli-prs
-/pkg/cli/clisqlcfg/          @cockroachdb/sql-foundations @cockroachdb/cli-prs
-/pkg/cli/clisqlclient/       @cockroachdb/sql-foundations @cockroachdb/cli-prs
-/pkg/cli/clisqlexec/         @cockroachdb/sql-foundations @cockroachdb/cli-prs
-/pkg/cli/clisqlshell/        @cockroachdb/sql-foundations @cockroachdb/cli-prs
-/pkg/cli/context.go          @cockroachdb/cli-prs
-/pkg/cli/convert_url*        @cockroachdb/sql-foundations   @cockroachdb/cli-prs
-/pkg/cli/debug*.go           @cockroachdb/kv-prs         @cockroachdb/cli-prs
-/pkg/cli/debug_job_trace*.go @cockroachdb/jobs-prs       @cockroachdb/disaster-recovery
-/pkg/cli/debug_logconfig.go  @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
-/pkg/cli/debug_merge_logs*.go @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
-/pkg/cli/declarative_*       @cockroachdb/sql-foundations
-/pkg/cli/decode*.go          @cockroachdb/kv-prs         @cockroachdb/cli-prs
-/pkg/cli/demo*.go            @cockroachdb/sql-foundations   @cockroachdb/server-prs @cockroachdb/cli-prs
-/pkg/cli/democluster/        @cockroachdb/sql-foundations   @cockroachdb/server-prs @cockroachdb/cli-prs
-/pkg/cli/doctor*.go          @cockroachdb/sql-foundations     @cockroachdb/cli-prs
-/pkg/cli/flags*.go           @cockroachdb/cli-prs
-/pkg/cli/import*.go          @cockroachdb/sql-foundations   @cockroachdb/cli-prs
-/pkg/cli/inflight_trace_dump/ @cockroachdb/obs-prs @cockroachdb/cli-prs @cockroachdb/obs-india-prs
-/pkg/cli/init.go             @cockroachdb/kv-prs         @cockroachdb/cli-prs
-/pkg/cli/log*.go             @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
-/pkg/cli/mt_cert*            @cockroachdb/prodsec @cockroachdb/product-security
-/pkg/cli/mt_proxy.go         @cockroachdb/sqlproxy-prs   @cockroachdb/server-prs
-/pkg/cli/mt_start_sql.go     @cockroachdb/sqlproxy-prs   @cockroachdb/server-prs
-/pkg/cli/mt_test_directory.go @cockroachdb/sqlproxy-prs  @cockroachdb/server-prs
-/pkg/cli/nodelocal*.go       @cockroachdb/disaster-recovery
-/pkg/cli/rpc*.go             @cockroachdb/kv-prs         @cockroachdb/cli-prs
-/pkg/cli/sql*.go             @cockroachdb/sql-foundations   @cockroachdb/cli-prs
-/pkg/cli/start*.go           @cockroachdb/server-prs     @cockroachdb/cli-prs
-/pkg/cli/statement*.go       @cockroachdb/obs-prs @cockroachdb/cli-prs
-/pkg/cli/syncbench/          @cockroachdb/storage @cockroachdb/kv-prs
-/pkg/cli/swappable_fs*       @cockroachdb/storage
-/pkg/cli/testutils.go        @cockroachdb/test-eng
-/pkg/cli/tsdump*.go          @cockroachdb/obs-prs @cockroachdb/obs-india-prs
-/pkg/cli/userfile.go         @cockroachdb/disaster-recovery
-/pkg/cli/workload*           @cockroachdb/test-eng
-/pkg/cli/zip*.go             @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
+#!/pkg/cli/                  @cockroachlabs/unowned
+/pkg/cli/auth.go             @cockroachlabs/prodsec @cockroachlabs/cli-prs @cockroachlabs/product-security
+/pkg/cli/cert*.go            @cockroachlabs/prodsec @cockroachlabs/cli-prs @cockroachlabs/product-security
+/pkg/cli/cli.go              @cockroachlabs/cli-prs
+/pkg/cli/cli_debug*.go       @cockroachlabs/kv-prs         @cockroachlabs/cli-prs
+/pkg/cli/cli_test.go         @cockroachlabs/cli-prs
+/pkg/cli/clientflags/        @cockroachlabs/sql-foundations @cockroachlabs/cli-prs
+/pkg/cli/clienturl/          @cockroachlabs/sql-foundations @cockroachlabs/cli-prs
+/pkg/cli/clisqlcfg/          @cockroachlabs/sql-foundations @cockroachlabs/cli-prs
+/pkg/cli/clisqlclient/       @cockroachlabs/sql-foundations @cockroachlabs/cli-prs
+/pkg/cli/clisqlexec/         @cockroachlabs/sql-foundations @cockroachlabs/cli-prs
+/pkg/cli/clisqlshell/        @cockroachlabs/sql-foundations @cockroachlabs/cli-prs
+/pkg/cli/context.go          @cockroachlabs/cli-prs
+/pkg/cli/convert_url*        @cockroachlabs/sql-foundations   @cockroachlabs/cli-prs
+/pkg/cli/debug*.go           @cockroachlabs/kv-prs         @cockroachlabs/cli-prs
+/pkg/cli/debug_job_trace*.go @cockroachlabs/jobs-prs       @cockroachlabs/disaster-recovery
+/pkg/cli/debug_logconfig.go  @cockroachlabs/obs-prs    @cockroachlabs/cli-prs @cockroachlabs/obs-india-prs
+/pkg/cli/debug_merge_logs*.go @cockroachlabs/obs-prs    @cockroachlabs/cli-prs @cockroachlabs/obs-india-prs
+/pkg/cli/declarative_*       @cockroachlabs/sql-foundations
+/pkg/cli/decode*.go          @cockroachlabs/kv-prs         @cockroachlabs/cli-prs
+/pkg/cli/demo*.go            @cockroachlabs/sql-foundations   @cockroachlabs/server-prs @cockroachlabs/cli-prs
+/pkg/cli/democluster/        @cockroachlabs/sql-foundations   @cockroachlabs/server-prs @cockroachlabs/cli-prs
+/pkg/cli/doctor*.go          @cockroachlabs/sql-foundations     @cockroachlabs/cli-prs
+/pkg/cli/flags*.go           @cockroachlabs/cli-prs
+/pkg/cli/import*.go          @cockroachlabs/sql-foundations   @cockroachlabs/cli-prs
+/pkg/cli/inflight_trace_dump/ @cockroachlabs/obs-prs @cockroachlabs/cli-prs @cockroachlabs/obs-india-prs
+/pkg/cli/init.go             @cockroachlabs/kv-prs         @cockroachlabs/cli-prs
+/pkg/cli/log*.go             @cockroachlabs/obs-prs    @cockroachlabs/cli-prs @cockroachlabs/obs-india-prs
+/pkg/cli/mt_cert*            @cockroachlabs/prodsec @cockroachlabs/product-security
+/pkg/cli/mt_proxy.go         @cockroachlabs/sqlproxy-prs   @cockroachlabs/server-prs
+/pkg/cli/mt_start_sql.go     @cockroachlabs/sqlproxy-prs   @cockroachlabs/server-prs
+/pkg/cli/mt_test_directory.go @cockroachlabs/sqlproxy-prs  @cockroachlabs/server-prs
+/pkg/cli/nodelocal*.go       @cockroachlabs/disaster-recovery
+/pkg/cli/rpc*.go             @cockroachlabs/kv-prs         @cockroachlabs/cli-prs
+/pkg/cli/sql*.go             @cockroachlabs/sql-foundations   @cockroachlabs/cli-prs
+/pkg/cli/start*.go           @cockroachlabs/server-prs     @cockroachlabs/cli-prs
+/pkg/cli/statement*.go       @cockroachlabs/obs-prs @cockroachlabs/cli-prs
+/pkg/cli/syncbench/          @cockroachlabs/storage @cockroachlabs/kv-prs
+/pkg/cli/swappable_fs*       @cockroachlabs/storage
+/pkg/cli/testutils.go        @cockroachlabs/test-eng
+/pkg/cli/tsdump*.go          @cockroachlabs/obs-prs @cockroachlabs/obs-india-prs
+/pkg/cli/userfile.go         @cockroachlabs/disaster-recovery
+/pkg/cli/workload*           @cockroachlabs/test-eng
+/pkg/cli/zip*.go             @cockroachlabs/obs-prs    @cockroachlabs/cli-prs @cockroachlabs/obs-india-prs
 
 # Beware to not assign the entire server package directory to a single
 # team, at least until we heavily refactor the package to extract
 # team-specific functionality into sub-packages assigned to their
 # respective teams.
 #
-#!/pkg/server/                           @cockroachdb/unowned
-/pkg/server/admin*.go                    @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/api_v2*.go                   @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/api_v2_auth*.go              @cockroachdb/obs-prs @cockroachdb/server-prs @cockroachdb/prodsec @cockroachdb/product-security
-/pkg/server/application_api/             @cockroachdb/obs-prs
-/pkg/server/authentication*.go           @cockroachdb/prodsec     @cockroachdb/server-prs @cockroachdb/product-security
-/pkg/server/clock_monotonicity.go        @cockroachdb/kv-prs
-/pkg/server/combined_statement_stats*.go @cockroachdb/obs-prs
-/pkg/server/critical_nodes*.go           @cockroachdb/obs-prs
-/pkg/server/debug/                       @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/decommission*.go             @cockroachdb/kv-prs      @cockroachdb/server-prs
-/pkg/server/drain*.go                    @cockroachdb/kv-prs      @cockroachdb/server-prs
-/pkg/server/dumpstore/                   @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/external_storage*.go         @cockroachdb/disaster-recovery @cockroachdb/server-prs
-/pkg/server/fanout*.go                   @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/diagnostics/                 @cockroachdb/obs-prs
-/pkg/server/dumpstore/                   @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/goroutinedumper/             @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/heapprofiler/                @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/import_ts*.go                @cockroachdb/obs-prs @cockroachdb/server-prs  @cockroachdb/kv-prs
-/pkg/server/index_usage*.go              @cockroachdb/obs-prs
-/pkg/server/init*.go                     @cockroachdb/kv-prs      @cockroachdb/server-prs
-/pkg/server/intent_*.go                  @cockroachdb/kv-prs      @cockroachdb/server-prs
-/pkg/server/key_vis*                     @cockroachdb/obs-prs
-/pkg/server/license/                     @cockroachdb/sql-foundations
-/pkg/server/load_endpoint*               @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/loss_of_quorum*.go           @cockroachdb/kv-prs
-/pkg/server/migration*                   @cockroachdb/sql-foundations
-/pkg/server/multi_store*                 @cockroachdb/kv-prs      @cockroachdb/storage
-/pkg/server/node*                        @cockroachdb/kv-prs      @cockroachdb/server-prs
-/pkg/server/node_http*.go                @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/node_tenant*go               @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/pgurl/                       @cockroachdb/sql-foundations @cockroachdb/cli-prs
-/pkg/server/pagination*                  @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/problem_ranges*.go           @cockroachdb/obs-prs
-/pkg/server/profiler/                    @cockroachdb/obs-prs @cockroachdb/kv-prs
-/pkg/server/purge_auth_*                 @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/server_controller_*.go       @cockroachdb/server-prs
-/pkg/server/server_controller_http.go    @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/server_controller_sql.go     @cockroachdb/sql-foundations @cockroachdb/server-prs
-/pkg/server/server_http*.go              @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/server_import_ts*.go         @cockroachdb/obs-prs @cockroachdb/kv-prs
-/pkg/server/server_obs*                  @cockroachdb/obs-prs
-/pkg/server/server_systemlog*            @cockroachdb/obs-prs
-/pkg/server/serverpb/                    @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/serverpb/authentication*     @cockroachdb/obs-prs @cockroachdb/prodsec @cockroachdb/server-prs @cockroachdb/product-security
-/pkg/server/serverpb/index_reco*         @cockroachdb/obs-prs
-/pkg/server/serverrules/                 @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/settings_cache*.go           @cockroachdb/server-prs
-/pkg/server/settingswatcher/             @cockroachdb/server-prs
-/pkg/server/span_stats*.go               @cockroachdb/obs-prs
-/pkg/server/sql_stats*.go                @cockroachdb/obs-prs
-/pkg/server/statement*.go                @cockroachdb/obs-prs
-/pkg/server/status*go                    @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/status*go                    @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/status/                      @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/sticky_vfs*                  @cockroachdb/storage
-/pkg/server/structlogging/               @cockroachdb/obs-prs
-/pkg/server/systemconfigwatcher/         @cockroachdb/kv-prs
-/pkg/server/telemetry/                   @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/tenant*.go                   @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/tenantsettingswatcher/       @cockroachdb/server-prs
-/pkg/server/testserver*.go               @cockroachdb/test-eng    @cockroachdb/server-prs
-/pkg/server/tracedumper/                 @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/user*.go                     @cockroachdb/obs-prs @cockroachdb/server-prs @cockroachdb/prodsec @cockroachdb/product-security
-/pkg/server/version_cluster*.go          @cockroachdb/dev-inf
+#!/pkg/server/                           @cockroachlabs/unowned
+/pkg/server/admin*.go                    @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/api_v2*.go                   @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/api_v2_auth*.go              @cockroachlabs/obs-prs @cockroachlabs/server-prs @cockroachlabs/prodsec @cockroachlabs/product-security
+/pkg/server/application_api/             @cockroachlabs/obs-prs
+/pkg/server/authentication*.go           @cockroachlabs/prodsec     @cockroachlabs/server-prs @cockroachlabs/product-security
+/pkg/server/clock_monotonicity.go        @cockroachlabs/kv-prs
+/pkg/server/combined_statement_stats*.go @cockroachlabs/obs-prs
+/pkg/server/critical_nodes*.go           @cockroachlabs/obs-prs
+/pkg/server/debug/                       @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/decommission*.go             @cockroachlabs/kv-prs      @cockroachlabs/server-prs
+/pkg/server/drain*.go                    @cockroachlabs/kv-prs      @cockroachlabs/server-prs
+/pkg/server/dumpstore/                   @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/external_storage*.go         @cockroachlabs/disaster-recovery @cockroachlabs/server-prs
+/pkg/server/fanout*.go                   @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/diagnostics/                 @cockroachlabs/obs-prs
+/pkg/server/dumpstore/                   @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/goroutinedumper/             @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/heapprofiler/                @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/import_ts*.go                @cockroachlabs/obs-prs @cockroachlabs/server-prs  @cockroachlabs/kv-prs
+/pkg/server/index_usage*.go              @cockroachlabs/obs-prs
+/pkg/server/init*.go                     @cockroachlabs/kv-prs      @cockroachlabs/server-prs
+/pkg/server/intent_*.go                  @cockroachlabs/kv-prs      @cockroachlabs/server-prs
+/pkg/server/key_vis*                     @cockroachlabs/obs-prs
+/pkg/server/license/                     @cockroachlabs/sql-foundations
+/pkg/server/load_endpoint*               @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/loss_of_quorum*.go           @cockroachlabs/kv-prs
+/pkg/server/migration*                   @cockroachlabs/sql-foundations
+/pkg/server/multi_store*                 @cockroachlabs/kv-prs      @cockroachlabs/storage
+/pkg/server/node*                        @cockroachlabs/kv-prs      @cockroachlabs/server-prs
+/pkg/server/node_http*.go                @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/node_tenant*go               @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/pgurl/                       @cockroachlabs/sql-foundations @cockroachlabs/cli-prs
+/pkg/server/pagination*                  @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/problem_ranges*.go           @cockroachlabs/obs-prs
+/pkg/server/profiler/                    @cockroachlabs/obs-prs @cockroachlabs/kv-prs
+/pkg/server/purge_auth_*                 @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/server_controller_*.go       @cockroachlabs/server-prs
+/pkg/server/server_controller_http.go    @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/server_controller_sql.go     @cockroachlabs/sql-foundations @cockroachlabs/server-prs
+/pkg/server/server_http*.go              @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/server_import_ts*.go         @cockroachlabs/obs-prs @cockroachlabs/kv-prs
+/pkg/server/server_obs*                  @cockroachlabs/obs-prs
+/pkg/server/server_systemlog*            @cockroachlabs/obs-prs
+/pkg/server/serverpb/                    @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/serverpb/authentication*     @cockroachlabs/obs-prs @cockroachlabs/prodsec @cockroachlabs/server-prs @cockroachlabs/product-security
+/pkg/server/serverpb/index_reco*         @cockroachlabs/obs-prs
+/pkg/server/serverrules/                 @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/settings_cache*.go           @cockroachlabs/server-prs
+/pkg/server/settingswatcher/             @cockroachlabs/server-prs
+/pkg/server/span_stats*.go               @cockroachlabs/obs-prs
+/pkg/server/sql_stats*.go                @cockroachlabs/obs-prs
+/pkg/server/statement*.go                @cockroachlabs/obs-prs
+/pkg/server/status*go                    @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/status*go                    @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/status/                      @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/sticky_vfs*                  @cockroachlabs/storage
+/pkg/server/structlogging/               @cockroachlabs/obs-prs
+/pkg/server/systemconfigwatcher/         @cockroachlabs/kv-prs
+/pkg/server/telemetry/                   @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/tenant*.go                   @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/tenantsettingswatcher/       @cockroachlabs/server-prs
+/pkg/server/testserver*.go               @cockroachlabs/test-eng    @cockroachlabs/server-prs
+/pkg/server/tracedumper/                 @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/server/user*.go                     @cockroachlabs/obs-prs @cockroachlabs/server-prs @cockroachlabs/prodsec @cockroachlabs/product-security
+/pkg/server/version_cluster*.go          @cockroachlabs/dev-inf
 
 
-/pkg/ccl/jobsccl/            @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
-/pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
+/pkg/ccl/jobsccl/            @cockroachlabs/jobs-prs @cockroachlabs/disaster-recovery
+/pkg/ccl/changefeedccl/      @cockroachlabs/cdc-prs
 
-/pkg/ccl/crosscluster/       @cockroachdb/disaster-recovery
-/pkg/ccl/crosscluster/logical/    @cockroachdb/cdc-prs
-/pkg/ccl/backupccl/          @cockroachdb/disaster-recovery
-/pkg/ccl/backupccl/*_job.go  @cockroachdb/disaster-recovery @cockroachdb/jobs-prs
-/pkg/ccl/revertccl/          @cockroachdb/disaster-recovery
-/pkg/ccl/storageccl/         @cockroachdb/disaster-recovery
-/pkg/ccl/cloudccl/           @cockroachdb/disaster-recovery
-/pkg/cloud/                  @cockroachdb/disaster-recovery
-/pkg/sql/distsql_plan_bulk*  @cockroachdb/disaster-recovery
+/pkg/ccl/crosscluster/       @cockroachlabs/disaster-recovery
+/pkg/ccl/crosscluster/logical/    @cockroachlabs/cdc-prs
+/pkg/ccl/backupccl/          @cockroachlabs/disaster-recovery
+/pkg/ccl/backupccl/*_job.go  @cockroachlabs/disaster-recovery @cockroachlabs/jobs-prs
+/pkg/ccl/revertccl/          @cockroachlabs/disaster-recovery
+/pkg/ccl/storageccl/         @cockroachlabs/disaster-recovery
+/pkg/ccl/cloudccl/           @cockroachlabs/disaster-recovery
+/pkg/cloud/                  @cockroachlabs/disaster-recovery
+/pkg/sql/distsql_plan_bulk*  @cockroachlabs/disaster-recovery
 
-/pkg/geo/                    @cockroachdb/spatial
+/pkg/geo/                    @cockroachlabs/spatial
 
-/pkg/inspectz/               @cockroachdb/admission-control
+/pkg/inspectz/               @cockroachlabs/admission-control
 
 # The KV team generally owns ./pkg/kv/... but not all of it. By convention,
 # inside of the /pkg/kv tree, we list out rules for each subdirectory, i.e. when
 # a new directory is created CODEOWNERS should mandate a new line below. This
 # serves as a lint that ownership is properly considered at creation time.
-/pkg/kv/*.*                             @cockroachdb/kv-prs
-/pkg/kv/bulk/                           @cockroachdb/disaster-recovery
-/pkg/kv/kvbase/                         @cockroachdb/kv-prs
-/pkg/kv/kvclient/                       @cockroachdb/kv-prs
-/pkg/kv/kvclient/kvcoord/*rangefeed*    @cockroachdb/kv-prs
-/pkg/kv/kvclient/kvstreamer             @cockroachdb/sql-queries-prs
-/pkg/kv/kvclient/rangefeed/             @cockroachdb/kv-prs
-/pkg/kv/kvnemesis/                      @cockroachdb/kv-prs
-/pkg/kv/kvpb/                           @cockroachdb/kv-prs
-/pkg/kv/kvpb/.gitattributes             @cockroachdb/dev-inf
-/pkg/kv/kvpb/ambiguous_*                @cockroachdb/kv-prs
-/pkg/kv/kvpb/api*                       @cockroachdb/kv-prs
-/pkg/kv/kvpb/batch*                     @cockroachdb/kv-prs
-/pkg/kv/kvpb/error*                     @cockroachdb/kv-prs
-/pkg/kv/kvpb/gen                        @cockroachdb/dev-inf
-/pkg/kv/kvpb/gen.bzl                    @cockroachdb/dev-inf
-/pkg/kv/kvpb/kvpbmock/                  @cockroachdb/kv-prs
-/pkg/kv/kvpb/method*                    @cockroachdb/kv-prs
-/pkg/kv/kvpb/string_test.go             @cockroachdb/kv-prs
-/pkg/kv/kvpb/testdata/ambi*             @cockroachdb/kv-prs
-/pkg/kv/kvpb/testdata/repl*             @cockroachdb/kv-prs
-/pkg/kv/kvprober/                       @cockroachdb/kv-prs
+/pkg/kv/*.*                             @cockroachlabs/kv-prs
+/pkg/kv/bulk/                           @cockroachlabs/disaster-recovery
+/pkg/kv/kvbase/                         @cockroachlabs/kv-prs
+/pkg/kv/kvclient/                       @cockroachlabs/kv-prs
+/pkg/kv/kvclient/kvcoord/*rangefeed*    @cockroachlabs/kv-prs
+/pkg/kv/kvclient/kvstreamer             @cockroachlabs/sql-queries-prs
+/pkg/kv/kvclient/rangefeed/             @cockroachlabs/kv-prs
+/pkg/kv/kvnemesis/                      @cockroachlabs/kv-prs
+/pkg/kv/kvpb/                           @cockroachlabs/kv-prs
+/pkg/kv/kvpb/.gitattributes             @cockroachlabs/dev-inf
+/pkg/kv/kvpb/ambiguous_*                @cockroachlabs/kv-prs
+/pkg/kv/kvpb/api*                       @cockroachlabs/kv-prs
+/pkg/kv/kvpb/batch*                     @cockroachlabs/kv-prs
+/pkg/kv/kvpb/error*                     @cockroachlabs/kv-prs
+/pkg/kv/kvpb/gen                        @cockroachlabs/dev-inf
+/pkg/kv/kvpb/gen.bzl                    @cockroachlabs/dev-inf
+/pkg/kv/kvpb/kvpbmock/                  @cockroachlabs/kv-prs
+/pkg/kv/kvpb/method*                    @cockroachlabs/kv-prs
+/pkg/kv/kvpb/string_test.go             @cockroachlabs/kv-prs
+/pkg/kv/kvpb/testdata/ambi*             @cockroachlabs/kv-prs
+/pkg/kv/kvpb/testdata/repl*             @cockroachlabs/kv-prs
+/pkg/kv/kvprober/                       @cockroachlabs/kv-prs
 # Same subdirectory rule as above for `/pkg/kv`
-/pkg/kv/kvserver/*.*                    @cockroachdb/kv-prs
-/pkg/kv/kvserver/*circuit*.go           @cockroachdb/kv-prs
-/pkg/kv/kvserver/*closed*ts*.go         @cockroachdb/kv-prs
-/pkg/kv/kvserver/*_app*.go              @cockroachdb/kv-prs
-/pkg/kv/kvserver/*closed_timestamp*.go  @cockroachdb/kv-prs
-/pkg/kv/kvserver/*consistency*.go       @cockroachdb/kv-prs
-/pkg/kv/kvserver/*probe*.go             @cockroachdb/kv-prs
-/pkg/kv/kvserver/*proposal*.go          @cockroachdb/kv-prs
-/pkg/kv/kvserver/*raft*.go              @cockroachdb/kv-prs
-/pkg/kv/kvserver/*raft*/                @cockroachdb/kv-prs
-/pkg/kv/kvserver/*rangefeed*.go         @cockroachdb/kv-prs
-/pkg/kv/kvserver/*sideload*.go          @cockroachdb/kv-prs
-/pkg/kv/kvserver/abortspan/             @cockroachdb/kv-prs
-/pkg/kv/kvserver/allocator/             @cockroachdb/kv-prs
-/pkg/kv/kvserver/apply/                 @cockroachdb/kv-prs
-/pkg/kv/kvserver/asim/                  @cockroachdb/kv-prs
-/pkg/kv/kvserver/batcheval/             @cockroachdb/kv-prs
-/pkg/kv/kvserver/benignerror/           @cockroachdb/kv-prs
-/pkg/kv/kvserver/closedts/              @cockroachdb/kv-prs
-/pkg/kv/kvserver/concurrency/           @cockroachdb/kv-prs
-/pkg/kv/kvserver/constraint/            @cockroachdb/kv-prs
-/pkg/kv/kvserver/diskmap/               @cockroachdb/kv-prs
-/pkg/kv/kvserver/gc/                    @cockroachdb/kv-prs
-/pkg/kv/kvserver/idalloc/               @cockroachdb/kv-prs
-/pkg/kv/kvserver/intentresolver/        @cockroachdb/kv-prs
-/pkg/kv/kvserver/kvadmission/           @cockroachdb/admission-control
-/pkg/kv/kvserver/kvflowcontrol/         @cockroachdb/admission-control
-/pkg/kv/kvserver/kvserverbase/          @cockroachdb/kv-prs
-/pkg/kv/kvserver/kvserverpb/            @cockroachdb/kv-prs
-/pkg/kv/kvserver/kvstorage/             @cockroachdb/kv-prs
-/pkg/kv/kvserver/leases/                @cockroachdb/kv-prs
-/pkg/kv/kvserver/liveness/              @cockroachdb/kv-prs
-/pkg/kv/kvserver/load/                  @cockroachdb/kv-prs
-/pkg/kv/kvserver/lockspanset/           @cockroachdb/kv-prs
-/pkg/kv/kvserver/logstore/              @cockroachdb/kv-prs
-/pkg/kv/kvserver/loqrecovery/           @cockroachdb/kv-prs
-/pkg/kv/kvserver/multiqueue/            @cockroachdb/kv-prs
-/pkg/kv/kvserver/protectedts/           @cockroachdb/kv-prs
-/pkg/kv/kvserver/rangefeed/             @cockroachdb/kv-prs
-/pkg/kv/kvserver/rangelog/              @cockroachdb/kv-prs
-/pkg/kv/kvserver/rditer/                @cockroachdb/kv-prs
-/pkg/kv/kvserver/readsummary/           @cockroachdb/kv-prs
-/pkg/kv/kvserver/replicastats/          @cockroachdb/kv-prs
-/pkg/kv/kvserver/reports/               @cockroachdb/kv-prs
-/pkg/kv/kvserver/spanlatch/             @cockroachdb/kv-prs
-/pkg/kv/kvserver/spanset/               @cockroachdb/kv-prs
-/pkg/kv/kvserver/split/                 @cockroachdb/kv-prs
-/pkg/kv/kvserver/stateloader/           @cockroachdb/kv-prs
-/pkg/kv/kvserver/storeliveness/         @cockroachdb/kv-prs
-/pkg/kv/kvserver/tenantrate/            @cockroachdb/kv-prs
-#!/pkg/kv/kvserver/testdata/            @cockroachdb/kv-prs-noreview
-/pkg/kv/kvserver/tscache/               @cockroachdb/kv-prs
-/pkg/kv/kvserver/txnrecovery/           @cockroachdb/kv-prs
-/pkg/kv/kvserver/txnwait/               @cockroachdb/kv-prs
-/pkg/kv/kvserver/uncertainty/           @cockroachdb/kv-prs
+/pkg/kv/kvserver/*.*                    @cockroachlabs/kv-prs
+/pkg/kv/kvserver/*circuit*.go           @cockroachlabs/kv-prs
+/pkg/kv/kvserver/*closed*ts*.go         @cockroachlabs/kv-prs
+/pkg/kv/kvserver/*_app*.go              @cockroachlabs/kv-prs
+/pkg/kv/kvserver/*closed_timestamp*.go  @cockroachlabs/kv-prs
+/pkg/kv/kvserver/*consistency*.go       @cockroachlabs/kv-prs
+/pkg/kv/kvserver/*probe*.go             @cockroachlabs/kv-prs
+/pkg/kv/kvserver/*proposal*.go          @cockroachlabs/kv-prs
+/pkg/kv/kvserver/*raft*.go              @cockroachlabs/kv-prs
+/pkg/kv/kvserver/*raft*/                @cockroachlabs/kv-prs
+/pkg/kv/kvserver/*rangefeed*.go         @cockroachlabs/kv-prs
+/pkg/kv/kvserver/*sideload*.go          @cockroachlabs/kv-prs
+/pkg/kv/kvserver/abortspan/             @cockroachlabs/kv-prs
+/pkg/kv/kvserver/allocator/             @cockroachlabs/kv-prs
+/pkg/kv/kvserver/apply/                 @cockroachlabs/kv-prs
+/pkg/kv/kvserver/asim/                  @cockroachlabs/kv-prs
+/pkg/kv/kvserver/batcheval/             @cockroachlabs/kv-prs
+/pkg/kv/kvserver/benignerror/           @cockroachlabs/kv-prs
+/pkg/kv/kvserver/closedts/              @cockroachlabs/kv-prs
+/pkg/kv/kvserver/concurrency/           @cockroachlabs/kv-prs
+/pkg/kv/kvserver/constraint/            @cockroachlabs/kv-prs
+/pkg/kv/kvserver/diskmap/               @cockroachlabs/kv-prs
+/pkg/kv/kvserver/gc/                    @cockroachlabs/kv-prs
+/pkg/kv/kvserver/idalloc/               @cockroachlabs/kv-prs
+/pkg/kv/kvserver/intentresolver/        @cockroachlabs/kv-prs
+/pkg/kv/kvserver/kvadmission/           @cockroachlabs/admission-control
+/pkg/kv/kvserver/kvflowcontrol/         @cockroachlabs/admission-control
+/pkg/kv/kvserver/kvserverbase/          @cockroachlabs/kv-prs
+/pkg/kv/kvserver/kvserverpb/            @cockroachlabs/kv-prs
+/pkg/kv/kvserver/kvstorage/             @cockroachlabs/kv-prs
+/pkg/kv/kvserver/leases/                @cockroachlabs/kv-prs
+/pkg/kv/kvserver/liveness/              @cockroachlabs/kv-prs
+/pkg/kv/kvserver/load/                  @cockroachlabs/kv-prs
+/pkg/kv/kvserver/lockspanset/           @cockroachlabs/kv-prs
+/pkg/kv/kvserver/logstore/              @cockroachlabs/kv-prs
+/pkg/kv/kvserver/loqrecovery/           @cockroachlabs/kv-prs
+/pkg/kv/kvserver/multiqueue/            @cockroachlabs/kv-prs
+/pkg/kv/kvserver/protectedts/           @cockroachlabs/kv-prs
+/pkg/kv/kvserver/rangefeed/             @cockroachlabs/kv-prs
+/pkg/kv/kvserver/rangelog/              @cockroachlabs/kv-prs
+/pkg/kv/kvserver/rditer/                @cockroachlabs/kv-prs
+/pkg/kv/kvserver/readsummary/           @cockroachlabs/kv-prs
+/pkg/kv/kvserver/replicastats/          @cockroachlabs/kv-prs
+/pkg/kv/kvserver/reports/               @cockroachlabs/kv-prs
+/pkg/kv/kvserver/spanlatch/             @cockroachlabs/kv-prs
+/pkg/kv/kvserver/spanset/               @cockroachlabs/kv-prs
+/pkg/kv/kvserver/split/                 @cockroachlabs/kv-prs
+/pkg/kv/kvserver/stateloader/           @cockroachlabs/kv-prs
+/pkg/kv/kvserver/storeliveness/         @cockroachlabs/kv-prs
+/pkg/kv/kvserver/tenantrate/            @cockroachlabs/kv-prs
+#!/pkg/kv/kvserver/testdata/            @cockroachlabs/kv-prs-noreview
+/pkg/kv/kvserver/tscache/               @cockroachlabs/kv-prs
+/pkg/kv/kvserver/txnrecovery/           @cockroachlabs/kv-prs
+/pkg/kv/kvserver/txnwait/               @cockroachlabs/kv-prs
+/pkg/kv/kvserver/uncertainty/           @cockroachlabs/kv-prs
 
 # The KV team owns integration with raft.
 #
-/pkg/raft/ @cockroachdb/kv-prs
+/pkg/raft/ @cockroachlabs/kv-prs
 
-/pkg/ccl/spanconfigccl/                            @cockroachdb/kv-prs @cockroachdb/sql-foundations
-/pkg/ccl/spanconfigccl/spanconfigkvaccessorccl/    @cockroachdb/kv-prs
-/pkg/ccl/spanconfigccl/spanconfiglimiterccl/       @cockroachdb/sql-foundations
-/pkg/ccl/spanconfigccl/spanconfigreconcilerccl/    @cockroachdb/sql-foundations
-/pkg/ccl/spanconfigccl/spanconfigsplitterccl/      @cockroachdb/sql-foundations
-/pkg/ccl/spanconfigccl/spanconfigsqltranslatorccl/ @cockroachdb/sql-foundations
-/pkg/ccl/spanconfigccl/spanconfigsqlwatcherccl/    @cockroachdb/sql-foundations
+/pkg/ccl/spanconfigccl/                            @cockroachlabs/kv-prs @cockroachlabs/sql-foundations
+/pkg/ccl/spanconfigccl/spanconfigkvaccessorccl/    @cockroachlabs/kv-prs
+/pkg/ccl/spanconfigccl/spanconfiglimiterccl/       @cockroachlabs/sql-foundations
+/pkg/ccl/spanconfigccl/spanconfigreconcilerccl/    @cockroachlabs/sql-foundations
+/pkg/ccl/spanconfigccl/spanconfigsplitterccl/      @cockroachlabs/sql-foundations
+/pkg/ccl/spanconfigccl/spanconfigsqltranslatorccl/ @cockroachlabs/sql-foundations
+/pkg/ccl/spanconfigccl/spanconfigsqlwatcherccl/    @cockroachlabs/sql-foundations
 
-/pkg/ccl/storageccl/engineccl   @cockroachdb/storage
-/pkg/storage/                   @cockroachdb/storage
+/pkg/ccl/storageccl/engineccl   @cockroachlabs/storage
+/pkg/storage/                   @cockroachlabs/storage
 
-/pkg/ui/                     @cockroachdb/obs-prs
+/pkg/ui/                     @cockroachlabs/obs-prs
 
-/docs/generated/http/        @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/cmd/docgen/http.go      @cockroachdb/obs-prs @cockroachdb/server-prs
+/docs/generated/http/        @cockroachlabs/obs-prs @cockroachlabs/server-prs
+/pkg/cmd/docgen/http.go      @cockroachlabs/obs-prs @cockroachlabs/server-prs
 
-/pkg/ccl/sqlproxyccl/        @cockroachdb/sqlproxy-prs @cockroachdb/server-prs
+/pkg/ccl/sqlproxyccl/        @cockroachlabs/sqlproxy-prs @cockroachlabs/server-prs
 
-/pkg/gen/                    @cockroachdb/dev-inf
-#!/pkg/gen/*.bzl               @cockroachdb/dev-inf-noreview
-/pkg/gen/gen.bzl             @cockroachdb/dev-inf
+/pkg/gen/                    @cockroachlabs/dev-inf
+#!/pkg/gen/*.bzl               @cockroachlabs/dev-inf-noreview
+/pkg/gen/gen.bzl             @cockroachlabs/dev-inf
 
-/pkg/acceptance/             @cockroachdb/sql-foundations
-/pkg/base/                   @cockroachdb/kv-prs @cockroachdb/server-prs
-#!/pkg/bench/                  @cockroachdb/sql-queries-noreview
-/pkg/bench/rttanalysis       @cockroachdb/sql-foundations
-/pkg/blobs/                  @cockroachdb/disaster-recovery
-/pkg/build/                  @cockroachdb/dev-inf
-#!/pkg/ccl/baseccl/          @cockroachdb/unowned
-/pkg/ccl/baseccl/encryption* @cockroachdb/storage
-/pkg/ccl/buildccl/           @cockroachdb/dev-inf
-#!/pkg/ccl/cliccl/           @cockroachdb/unowned
-/pkg/ccl/cmdccl/stub-schema-registry/ @cockroachdb/cdc-prs
-/pkg/ccl/cmdccl/clusterrepl/ @cockroachdb/disaster-recovery
-/pkg/ccl/gqpccl/             @cockroachdb/sql-queries-prs
-/pkg/ccl/gssapiccl/          @cockroachdb/product-security
-/pkg/ccl/jwtauthccl/         @cockroachdb/cloud-identity @cockroachdb/product-security
-#!/pkg/ccl/kvccl/              @cockroachdb/kv-noreview
-/pkg/ccl/kvccl/kvtenantccl/  @cockroachdb/server-prs
-/pkg/ccl/ldapccl/            @cockroachdb/prodsec @cockroachdb/product-security
-#!/pkg/ccl/upgradeccl/       @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
-#!/pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
-#!/pkg/ccl/sqlitelogictestccl/ @cockroachdb/sql-queries-noreview
-/pkg/ccl/multiregionccl/     @cockroachdb/sql-queries-prs
-/pkg/ccl/multitenantccl/     @cockroachdb/server-prs
-/pkg/ccl/multitenant/tenantcostclient/ @cockroachdb/sql-queries-prs
-/pkg/ccl/multitenant/tenantcostserver/ @cockroachdb/sql-queries-prs
-/pkg/ccl/oidcccl/            @cockroachdb/product-security
-/pkg/ccl/partitionccl/       @cockroachdb/sql-foundations
-/pkg/ccl/pgcryptoccl/        @cockroachdb/sql-foundations
-/pkg/ccl/plpgsqlccl/         @cockroachdb/sql-queries-prs
-/pkg/ccl/securityccl/        @cockroachdb/prodsec @cockroachdb/product-security
-#!/pkg/ccl/serverccl/        @cockroachdb/unowned
-/pkg/ccl/serverccl/diagnosticsccl/ @cockroachdb/obs-prs
-/pkg/ccl/serverccl/server_sql* @cockroachdb/server-prs
-/pkg/ccl/serverccl/server_controller* @cockroachdb/server-prs
-/pkg/ccl/serverccl/tenant_*  @cockroachdb/server-prs
-/pkg/ccl/serverccl/statusccl/ @cockroachdb/obs-prs
-/pkg/ccl/serverccl/admin_*   @cockroachdb/obs-prs
-/pkg/ccl/serverccl/api_*     @cockroachdb/obs-prs
-/pkg/ccl/serverccl/chart_*   @cockroachdb/obs-prs
+/pkg/acceptance/             @cockroachlabs/sql-foundations
+/pkg/base/                   @cockroachlabs/kv-prs @cockroachlabs/server-prs
+#!/pkg/bench/                  @cockroachlabs/sql-queries-noreview
+/pkg/bench/rttanalysis       @cockroachlabs/sql-foundations
+/pkg/blobs/                  @cockroachlabs/disaster-recovery
+/pkg/build/                  @cockroachlabs/dev-inf
+#!/pkg/ccl/baseccl/          @cockroachlabs/unowned
+/pkg/ccl/baseccl/encryption* @cockroachlabs/storage
+/pkg/ccl/buildccl/           @cockroachlabs/dev-inf
+#!/pkg/ccl/cliccl/           @cockroachlabs/unowned
+/pkg/ccl/cmdccl/stub-schema-registry/ @cockroachlabs/cdc-prs
+/pkg/ccl/cmdccl/clusterrepl/ @cockroachlabs/disaster-recovery
+/pkg/ccl/gqpccl/             @cockroachlabs/sql-queries-prs
+/pkg/ccl/gssapiccl/          @cockroachlabs/product-security
+/pkg/ccl/jwtauthccl/         @cockroachlabs/cloud-identity @cockroachlabs/product-security
+#!/pkg/ccl/kvccl/              @cockroachlabs/kv-noreview
+/pkg/ccl/kvccl/kvtenantccl/  @cockroachlabs/server-prs
+/pkg/ccl/ldapccl/            @cockroachlabs/prodsec @cockroachlabs/product-security
+#!/pkg/ccl/upgradeccl/       @cockroachlabs/release-eng-prs @cockroachlabs/upgrade-prs
+#!/pkg/ccl/logictestccl/       @cockroachlabs/sql-queries-noreview
+#!/pkg/ccl/sqlitelogictestccl/ @cockroachlabs/sql-queries-noreview
+/pkg/ccl/multiregionccl/     @cockroachlabs/sql-queries-prs
+/pkg/ccl/multitenantccl/     @cockroachlabs/server-prs
+/pkg/ccl/multitenant/tenantcostclient/ @cockroachlabs/sql-queries-prs
+/pkg/ccl/multitenant/tenantcostserver/ @cockroachlabs/sql-queries-prs
+/pkg/ccl/oidcccl/            @cockroachlabs/product-security
+/pkg/ccl/partitionccl/       @cockroachlabs/sql-foundations
+/pkg/ccl/pgcryptoccl/        @cockroachlabs/sql-foundations
+/pkg/ccl/plpgsqlccl/         @cockroachlabs/sql-queries-prs
+/pkg/ccl/securityccl/        @cockroachlabs/prodsec @cockroachlabs/product-security
+#!/pkg/ccl/serverccl/        @cockroachlabs/unowned
+/pkg/ccl/serverccl/diagnosticsccl/ @cockroachlabs/obs-prs
+/pkg/ccl/serverccl/server_sql* @cockroachlabs/server-prs
+/pkg/ccl/serverccl/server_controller* @cockroachlabs/server-prs
+/pkg/ccl/serverccl/tenant_*  @cockroachlabs/server-prs
+/pkg/ccl/serverccl/statusccl/ @cockroachlabs/obs-prs
+/pkg/ccl/serverccl/admin_*   @cockroachlabs/obs-prs
+/pkg/ccl/serverccl/api_*     @cockroachlabs/obs-prs
+/pkg/ccl/serverccl/chart_*   @cockroachlabs/obs-prs
 
-/pkg/ccl/telemetryccl/       @cockroachdb/obs-prs
+/pkg/ccl/telemetryccl/       @cockroachlabs/obs-prs
 
-/pkg/ccl/testccl/authccl/    @cockroachdb/cloud-identity @cockroachdb/prodsec @cockroachdb/product-security
-/pkg/ccl/testccl/sqlccl/     @cockroachdb/sql-queries-prs
-/pkg/ccl/testccl/workload/schemachange/ @cockroachdb/sql-foundations
-#!/pkg/ccl/testutilsccl/     @cockroachdb/test-eng-noreview
-/pkg/ccl/testutilsccl/alter_* @cockroachdb/sql-foundations
-#!/pkg/ccl/utilccl/          @cockroachdb/unowned
-/pkg/ccl/workloadccl/        @cockroachdb/test-eng
-/pkg/ccl/benchccl/rttanalysisccl/     @cockroachdb/sql-foundations
-#!/pkg/clusterversion/       @cockroachdb/kv-prs-noreview @cockroachdb/dev-inf-noreview @cockroachdb/test-eng-noreview
-/pkg/clusterversion/cockroach_versions.go @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
-/pkg/cmd/allocsim/           @cockroachdb/kv-prs
-/pkg/cmd/bazci/              @cockroachdb/dev-inf
-/pkg/cmd/cloudupload/        @cockroachdb/dev-inf
-/pkg/cmd/cmdutil/            @cockroachdb/dev-inf
-/pkg/cmd/cmp-protocol/       @cockroachdb/sql-foundations
-/pkg/cmd/cmp-sql/            @cockroachdb/sql-foundations
-/pkg/cmd/cmpconn/            @cockroachdb/sql-foundations
-/pkg/cmd/cockroach/          @cockroachdb/dev-inf @cockroachdb/cli-prs
-/pkg/cmd/cockroach-short/    @cockroachdb/dev-inf @cockroachdb/cli-prs
-/pkg/cmd/cockroach-sql/      @cockroachdb/sql-foundations @cockroachdb/cli-prs
-/pkg/cmd/compile-build/      @cockroachdb/dev-inf
-/pkg/cmd/cr2pg/              @cockroachdb/sql-foundations
-/pkg/cmd/dev/                @cockroachdb/dev-inf
-#!/pkg/cmd/docgen/             @cockroachdb/docs-infra-prs
-/pkg/cmd/docs-issue-generation/ @cockroachdb/dev-inf
-/pkg/cmd/fuzz/               @cockroachdb/test-eng
-/pkg/cmd/generate-binary/    @cockroachdb/sql-foundations
-/pkg/cmd/generate-distdir/ @cockroachdb/dev-inf
-/pkg/cmd/generate-logictest/       @cockroachdb/dev-inf
-/pkg/cmd/generate-acceptance-tests/       @cockroachdb/dev-inf
-/pkg/cmd/generate-metadata-tables/ @cockroachdb/sql-foundations
-/pkg/cmd/generate-spatial-ref-sys/ @cockroachdb/spatial
-/pkg/cmd/generate-bazel-extra/ @cockroachdb/dev-inf
-/pkg/cmd/generate-staticcheck/ @cockroachdb/dev-inf
-/pkg/cmd/generate-cgo/       @cockroachdb/dev-inf
-/pkg/cmd/geoviz/             @cockroachdb/spatial
-/pkg/cmd/github-action-poller/            @cockroachdb/dev-inf
-/pkg/cmd/github-post/        @cockroachdb/test-eng
-/pkg/cmd/github-pull-request-make/ @cockroachdb/dev-inf
-/pkg/cmd/gossipsim/          @cockroachdb/kv-prs
-/pkg/cmd/import-tools/       @cockroachdb/dev-inf
-/pkg/cmd/internal/issues/    @cockroachdb/test-eng
-/pkg/cmd/mirror/             @cockroachdb/dev-inf
-/pkg/cmd/prereqs/            @cockroachdb/dev-inf
-/pkg/cmd/protoc-gen-gogoroach/ @cockroachdb/dev-inf
-/pkg/cmd/publish-artifacts/  @cockroachdb/dev-inf
-/pkg/cmd/publish-provisional-artifacts/ @cockroachdb/dev-inf
-/pkg/cmd/reduce/             @cockroachdb/sql-queries-prs
-/pkg/cmd/release/            @cockroachdb/dev-inf
-/pkg/cmd/returncheck/        @cockroachdb/dev-inf
-/pkg/cmd/roachprod/          @cockroachdb/test-eng
-/pkg/cmd/roachprod-microbench/ @cockroachdb/test-eng
-/pkg/cmd/roachprod-stress/   @cockroachdb/test-eng
-#!/pkg/cmd/roachtest/          @cockroachdb/test-eng-noreview
-/pkg/cmd/roachtest/*.go               @cockroachdb/test-eng
-/pkg/cmd/roachtest/cluster/           @cockroachdb/test-eng
-/pkg/cmd/roachtest/clusterstats/      @cockroachdb/test-eng
-/pkg/cmd/roachtest/grafana/           @cockroachdb/test-eng
-/pkg/cmd/roachtest/fixtures/          @cockroachdb/test-eng
+/pkg/ccl/testccl/authccl/    @cockroachlabs/cloud-identity @cockroachlabs/prodsec @cockroachlabs/product-security
+/pkg/ccl/testccl/sqlccl/     @cockroachlabs/sql-queries-prs
+/pkg/ccl/testccl/workload/schemachange/ @cockroachlabs/sql-foundations
+#!/pkg/ccl/testutilsccl/     @cockroachlabs/test-eng-noreview
+/pkg/ccl/testutilsccl/alter_* @cockroachlabs/sql-foundations
+#!/pkg/ccl/utilccl/          @cockroachlabs/unowned
+/pkg/ccl/workloadccl/        @cockroachlabs/test-eng
+/pkg/ccl/benchccl/rttanalysisccl/     @cockroachlabs/sql-foundations
+#!/pkg/clusterversion/       @cockroachlabs/kv-prs-noreview @cockroachlabs/dev-inf-noreview @cockroachlabs/test-eng-noreview
+/pkg/clusterversion/cockroach_versions.go @cockroachlabs/release-eng-prs @cockroachlabs/upgrade-prs
+/pkg/cmd/allocsim/           @cockroachlabs/kv-prs
+/pkg/cmd/bazci/              @cockroachlabs/dev-inf
+/pkg/cmd/cloudupload/        @cockroachlabs/dev-inf
+/pkg/cmd/cmdutil/            @cockroachlabs/dev-inf
+/pkg/cmd/cmp-protocol/       @cockroachlabs/sql-foundations
+/pkg/cmd/cmp-sql/            @cockroachlabs/sql-foundations
+/pkg/cmd/cmpconn/            @cockroachlabs/sql-foundations
+/pkg/cmd/cockroach/          @cockroachlabs/dev-inf @cockroachlabs/cli-prs
+/pkg/cmd/cockroach-short/    @cockroachlabs/dev-inf @cockroachlabs/cli-prs
+/pkg/cmd/cockroach-sql/      @cockroachlabs/sql-foundations @cockroachlabs/cli-prs
+/pkg/cmd/compile-build/      @cockroachlabs/dev-inf
+/pkg/cmd/cr2pg/              @cockroachlabs/sql-foundations
+/pkg/cmd/dev/                @cockroachlabs/dev-inf
+#!/pkg/cmd/docgen/             @cockroachlabs/docs-infra-prs
+/pkg/cmd/docs-issue-generation/ @cockroachlabs/dev-inf
+/pkg/cmd/fuzz/               @cockroachlabs/test-eng
+/pkg/cmd/generate-binary/    @cockroachlabs/sql-foundations
+/pkg/cmd/generate-distdir/ @cockroachlabs/dev-inf
+/pkg/cmd/generate-logictest/       @cockroachlabs/dev-inf
+/pkg/cmd/generate-acceptance-tests/       @cockroachlabs/dev-inf
+/pkg/cmd/generate-metadata-tables/ @cockroachlabs/sql-foundations
+/pkg/cmd/generate-spatial-ref-sys/ @cockroachlabs/spatial
+/pkg/cmd/generate-bazel-extra/ @cockroachlabs/dev-inf
+/pkg/cmd/generate-staticcheck/ @cockroachlabs/dev-inf
+/pkg/cmd/generate-cgo/       @cockroachlabs/dev-inf
+/pkg/cmd/geoviz/             @cockroachlabs/spatial
+/pkg/cmd/github-action-poller/            @cockroachlabs/dev-inf
+/pkg/cmd/github-post/        @cockroachlabs/test-eng
+/pkg/cmd/github-pull-request-make/ @cockroachlabs/dev-inf
+/pkg/cmd/gossipsim/          @cockroachlabs/kv-prs
+/pkg/cmd/import-tools/       @cockroachlabs/dev-inf
+/pkg/cmd/internal/issues/    @cockroachlabs/test-eng
+/pkg/cmd/mirror/             @cockroachlabs/dev-inf
+/pkg/cmd/prereqs/            @cockroachlabs/dev-inf
+/pkg/cmd/protoc-gen-gogoroach/ @cockroachlabs/dev-inf
+/pkg/cmd/publish-artifacts/  @cockroachlabs/dev-inf
+/pkg/cmd/publish-provisional-artifacts/ @cockroachlabs/dev-inf
+/pkg/cmd/reduce/             @cockroachlabs/sql-queries-prs
+/pkg/cmd/release/            @cockroachlabs/dev-inf
+/pkg/cmd/returncheck/        @cockroachlabs/dev-inf
+/pkg/cmd/roachprod/          @cockroachlabs/test-eng
+/pkg/cmd/roachprod-microbench/ @cockroachlabs/test-eng
+/pkg/cmd/roachprod-stress/   @cockroachlabs/test-eng
+#!/pkg/cmd/roachtest/          @cockroachlabs/test-eng-noreview
+/pkg/cmd/roachtest/*.go               @cockroachlabs/test-eng
+/pkg/cmd/roachtest/cluster/           @cockroachlabs/test-eng
+/pkg/cmd/roachtest/clusterstats/      @cockroachlabs/test-eng
+/pkg/cmd/roachtest/grafana/           @cockroachlabs/test-eng
+/pkg/cmd/roachtest/fixtures/          @cockroachlabs/test-eng
 # TODO: should be owned by DRP team
-/pkg/cmd/roachtest/operation/         @cockroachdb/test-eng
-/pkg/cmd/roachtest/operations/        @cockroachdb/test-eng
-/pkg/cmd/roachtest/option/            @cockroachdb/test-eng
-/pkg/cmd/roachtest/registry/          @cockroachdb/test-eng
-/pkg/cmd/roachtest/roachtestflags     @cockroachdb/test-eng
-/pkg/cmd/roachtest/roachtestutil/     @cockroachdb/test-eng
-/pkg/cmd/roachtest/spec/              @cockroachdb/test-eng
-/pkg/cmd/roachtest/test/              @cockroachdb/test-eng
-/pkg/cmd/roachtest/testdata/          @cockroachdb/test-eng
-/pkg/cmd/roachtest/testselector/      @cockroachdb/test-eng
+/pkg/cmd/roachtest/operation/         @cockroachlabs/test-eng
+/pkg/cmd/roachtest/operations/        @cockroachlabs/test-eng
+/pkg/cmd/roachtest/option/            @cockroachlabs/test-eng
+/pkg/cmd/roachtest/registry/          @cockroachlabs/test-eng
+/pkg/cmd/roachtest/roachtestflags     @cockroachlabs/test-eng
+/pkg/cmd/roachtest/roachtestutil/     @cockroachlabs/test-eng
+/pkg/cmd/roachtest/spec/              @cockroachlabs/test-eng
+/pkg/cmd/roachtest/test/              @cockroachlabs/test-eng
+/pkg/cmd/roachtest/testdata/          @cockroachlabs/test-eng
+/pkg/cmd/roachtest/testselector/      @cockroachlabs/test-eng
 # This isn't quite right, each file should ideally be owned
 # by a team (or at least most of them), namely the team that
 # is the Owner for the roachtest, but until we unify these
 # two concepts of ownership we don't want to ping test-eng
 # on each test change.
-#!/pkg/cmd/roachtest/tests     @cockroachdb/test-eng-noreview
-/pkg/cmd/roachtest/tests/activerecord.go  @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/asyncpg.go       @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/django.go        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/gopg.go	        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/gorm.go	        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/hibernate.go	    @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/knex.go	        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/libpq.go	        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/npgsql.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/pgjdbc.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/pgx.go	          @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/ruby_pg.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/sequelize.go	    @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/typeorm.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/copy.go                         @cockroachdb/sql-foundations
-/pkg/cmd/roachtest/tests/copyfrom.go                     @cockroachdb/sql-foundations
-/pkg/cmd/roachtest/tests/inspect_throughput.go           @cockroachdb/sql-queries-prs
-/pkg/cmd/roachtest/tests/ttl_restart.go                  @cockroachdb/sql-queries-prs
-/pkg/cmd/roachtest/tests/multi_region_system_database.go @cockroachdb/sql-queries-prs
-/pkg/cmd/roachtest/tests/mixed_version_multi_region.go   @cockroachdb/sql-queries-prs
-/pkg/cmd/roachtest/tests/super_region_failover.go        @cockroachdb/sql-queries-prs
-/pkg/cmd/label-merged-pr/    @cockroachdb/dev-inf
-/pkg/cmd/roachvet/           @cockroachdb/dev-inf
-/pkg/cmd/skip-test/          @cockroachdb/test-eng
-/pkg/cmd/skiperrs/           @cockroachdb/sql-foundations
-/pkg/cmd/skipped-tests/      @cockroachdb/test-eng
-/pkg/cmd/smith/              @cockroachdb/sql-queries-prs
-/pkg/cmd/smithcmp/           @cockroachdb/sql-queries-prs
-/pkg/cmd/smithtest/          @cockroachdb/sql-queries-prs
-/pkg/cmd/teamcity-trigger/   @cockroachdb/dev-inf
-/pkg/cmd/testfilter/         @cockroachdb/test-eng
-/pkg/cmd/uptodate/           @cockroachdb/dev-inf
-#!/pkg/cmd/urlcheck/           @cockroachdb/docs-infra-prs
-/pkg/cmd/whoownsit/          @cockroachdb/test-eng
-/pkg/cmd/workload/           @cockroachdb/test-eng
-#!/pkg/cmd/wraprules/          @cockroachdb/obs-prs-noreview
-#!/pkg/cmd/zerosum/            @cockroachdb/kv-noreview
-/pkg/col/                    @cockroachdb/sql-queries-prs
-/pkg/compose/                @cockroachdb/sql-foundations
-/pkg/config/                 @cockroachdb/kv-prs @cockroachdb/server-prs
+#!/pkg/cmd/roachtest/tests     @cockroachlabs/test-eng-noreview
+/pkg/cmd/roachtest/tests/activerecord.go  @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/asyncpg.go       @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/django.go        @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/gopg.go	        @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/gorm.go	        @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/hibernate.go	    @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/knex.go	        @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/libpq.go	        @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/npgsql.go	      @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/pgjdbc.go	      @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/pgx.go	          @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/ruby_pg.go	      @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/sequelize.go	    @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/typeorm.go	      @cockroachlabs/sql-foundations @cockroachlabs/docs-infra-prs
+/pkg/cmd/roachtest/tests/copy.go                         @cockroachlabs/sql-foundations
+/pkg/cmd/roachtest/tests/copyfrom.go                     @cockroachlabs/sql-foundations
+/pkg/cmd/roachtest/tests/inspect_throughput.go           @cockroachlabs/sql-queries-prs
+/pkg/cmd/roachtest/tests/ttl_restart.go                  @cockroachlabs/sql-queries-prs
+/pkg/cmd/roachtest/tests/multi_region_system_database.go @cockroachlabs/sql-queries-prs
+/pkg/cmd/roachtest/tests/mixed_version_multi_region.go   @cockroachlabs/sql-queries-prs
+/pkg/cmd/roachtest/tests/super_region_failover.go        @cockroachlabs/sql-queries-prs
+/pkg/cmd/label-merged-pr/    @cockroachlabs/dev-inf
+/pkg/cmd/roachvet/           @cockroachlabs/dev-inf
+/pkg/cmd/skip-test/          @cockroachlabs/test-eng
+/pkg/cmd/skiperrs/           @cockroachlabs/sql-foundations
+/pkg/cmd/skipped-tests/      @cockroachlabs/test-eng
+/pkg/cmd/smith/              @cockroachlabs/sql-queries-prs
+/pkg/cmd/smithcmp/           @cockroachlabs/sql-queries-prs
+/pkg/cmd/smithtest/          @cockroachlabs/sql-queries-prs
+/pkg/cmd/teamcity-trigger/   @cockroachlabs/dev-inf
+/pkg/cmd/testfilter/         @cockroachlabs/test-eng
+/pkg/cmd/uptodate/           @cockroachlabs/dev-inf
+#!/pkg/cmd/urlcheck/           @cockroachlabs/docs-infra-prs
+/pkg/cmd/whoownsit/          @cockroachlabs/test-eng
+/pkg/cmd/workload/           @cockroachlabs/test-eng
+#!/pkg/cmd/wraprules/          @cockroachlabs/obs-prs-noreview
+#!/pkg/cmd/zerosum/            @cockroachlabs/kv-noreview
+/pkg/col/                    @cockroachlabs/sql-queries-prs
+/pkg/compose/                @cockroachlabs/sql-foundations
+/pkg/config/                 @cockroachlabs/kv-prs @cockroachlabs/server-prs
 # TODO(nickvigilante): add the cockroach repo to the docs-infra-prs team so that
 # Github stops complaining. Then remove the #! prefix here and on the other lines
 # that mention this team.
-#!/pkg/docs/                   @cockroachdb/docs-infra-prs
-#!/pkg/featureflag/            @cockroachdb/unowned
-/pkg/gossip/                 @cockroachdb/kv-prs
-/pkg/internal/client/requestbatcher/ @cockroachdb/kv-prs
-/pkg/internal/codeowners/    @cockroachdb/test-eng
-/pkg/internal/reporoot       @cockroachdb/dev-inf
-/pkg/internal/rsg/           @cockroachdb/sql-queries-prs
-/pkg/internal/sqlsmith/      @cockroachdb/sql-queries-prs
-/pkg/internal/team/          @cockroachdb/test-eng
-/pkg/internal/workloadreplay/          @cockroachdb/test-eng
-/pkg/jobs/                   @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
-/pkg/keys/                   @cockroachdb/kv-prs
-/pkg/keysbase/               @cockroachdb/kv-prs
+#!/pkg/docs/                   @cockroachlabs/docs-infra-prs
+#!/pkg/featureflag/            @cockroachlabs/unowned
+/pkg/gossip/                 @cockroachlabs/kv-prs
+/pkg/internal/client/requestbatcher/ @cockroachlabs/kv-prs
+/pkg/internal/codeowners/    @cockroachlabs/test-eng
+/pkg/internal/reporoot       @cockroachlabs/dev-inf
+/pkg/internal/rsg/           @cockroachlabs/sql-queries-prs
+/pkg/internal/sqlsmith/      @cockroachlabs/sql-queries-prs
+/pkg/internal/team/          @cockroachlabs/test-eng
+/pkg/internal/workloadreplay/          @cockroachlabs/test-eng
+/pkg/jobs/                   @cockroachlabs/jobs-prs @cockroachlabs/disaster-recovery
+/pkg/keys/                   @cockroachlabs/kv-prs
+/pkg/keysbase/               @cockroachlabs/kv-prs
 # Don't ping KV on updates to reserved descriptor IDs and such.
-#!/pkg/keys/constants.go       @cockroachdb/kv-prs-noreview
-/pkg/upgrade/                @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
-/pkg/keyvisualizer/          @cockroachdb/obs-prs
-/pkg/multitenant/            @cockroachdb/server-prs
-/pkg/release/                @cockroachdb/dev-inf
-/pkg/roachpb/.gitattributes  @cockroachdb/dev-inf
-#!/pkg/roachpb/BUILD.bazel     @cockroachdb/kv-prs-noreview
-/pkg/roachpb/data*           @cockroachdb/kv-prs
-/pkg/roachpb/leaseinfo*      @cockroachdb/kv-prs
-/pkg/roachpb/index*          @cockroachdb/obs-prs
-/pkg/roachpb/internal*       @cockroachdb/kv-prs
-/pkg/roachpb/io-formats*     @cockroachdb/disaster-recovery
-#!/pkg/roachpb/main_test.go    @cockroachdb/kv-prs-noreview
-/pkg/roachpb/merge_spans*    @cockroachdb/kv-prs
-/pkg/roachpb/metadata*       @cockroachdb/kv-prs
-/pkg/roachpb/span*           @cockroachdb/kv-prs
-/pkg/roachpb/string_test.go  @cockroachdb/kv-prs
-/pkg/roachpb/tenant*         @cockroachdb/kv-prs
-#!/pkg/roachpb/version*      @cockroachdb/unowned
-/pkg/roachprod/              @cockroachdb/test-eng
-/pkg/rpc/                    @cockroachdb/kv-prs
-/pkg/rpc/auth.go             @cockroachdb/kv-prs @cockroachdb/prodsec @cockroachdb/product-security
-/pkg/rpc/auth_tenant.go      @cockroachdb/server-prs @cockroachdb/prodsec @cockroachdb/product-security
-/pkg/scheduledjobs/          @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
-/pkg/security/               @cockroachdb/prodsec @cockroachdb/server-prs @cockroachdb/product-security
-/pkg/security/clientsecopts/ @cockroachdb/sql-foundations @cockroachdb/prodsec @cockroachdb/product-security
-#!/pkg/settings/             @cockroachdb/unowned
-/pkg/spanconfig/                         @cockroachdb/kv-prs @cockroachdb/sql-foundations
-/pkg/spanconfig/spanconfigbounds/        @cockroachdb/sql-foundations
-/pkg/spanconfig/spanconfigjob/           @cockroachdb/sql-foundations
-/pkg/spanconfig/spanconfigkvaccessor/    @cockroachdb/kv-prs
-/pkg/spanconfig/spanconfigkvsubscriber/  @cockroachdb/kv-prs
-/pkg/spanconfig/spanconfiglimiter/       @cockroachdb/sql-foundations
-/pkg/spanconfig/spanconfigmanager/       @cockroachdb/sql-foundations
-/pkg/spanconfig/spanconfigptsreader/     @cockroachdb/kv-prs
-/pkg/spanconfig/spanconfigreconciler/    @cockroachdb/kv-prs
-/pkg/spanconfig/spanconfigreporter/      @cockroachdb/kv-prs
-/pkg/spanconfig/spanconfigsplitter/      @cockroachdb/sql-foundations
-/pkg/spanconfig/spanconfigsqltranslator/ @cockroachdb/sql-foundations
-/pkg/spanconfig/spanconfigsqlwatcher/    @cockroachdb/sql-foundations
-/pkg/spanconfig/spanconfigstore/         @cockroachdb/kv-prs
-/pkg/spanconfig/spanconfigtestutils/     @cockroachdb/kv-prs @cockroachdb/sql-foundations
-/pkg/repstream/              @cockroachdb/disaster-recovery
-#!/pkg/testutils/              @cockroachdb/test-eng-noreview
-/pkg/testutils/reduce/       @cockroachdb/sql-queries-prs
-/pkg/testutils/sqlutils/     @cockroachdb/sql-queries-prs
-/pkg/testutils/jobutils/     @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
-/pkg/ts/                     @cockroachdb/kv-prs
-/pkg/ts/catalog/             @cockroachdb/obs-prs
-#!/pkg/util/                 @cockroachdb/unowned
-/pkg/util/addr/              @cockroachdb/obs-prs
-/pkg/util/admission/         @cockroachdb/admission-control
-/pkg/util/goschedstats       @cockroachdb/admission-control
-/pkg/util/grunning/          @cockroachdb/admission-control
-/pkg/util/log/               @cockroachdb/obs-prs @cockroachdb/obs-india-prs
-/pkg/util/metric/            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
-/pkg/util/mon                @cockroachdb/sql-queries-prs
-/pkg/util/schedulerlatency/  @cockroachdb/admission-control
-/pkg/util/stop/              @cockroachdb/kv-prs
-/pkg/util/tracing            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
-/pkg/workload/               @cockroachdb/test-eng
-/pkg/obs/                    @cockroachdb/obs-prs
-/pkg/ccl/auditloggingccl     @cockroachdb/obs-prs
-/pkg/cmd/drt*                @cockroachdb/test-eng
+#!/pkg/keys/constants.go       @cockroachlabs/kv-prs-noreview
+/pkg/upgrade/                @cockroachlabs/release-eng-prs @cockroachlabs/upgrade-prs
+/pkg/keyvisualizer/          @cockroachlabs/obs-prs
+/pkg/multitenant/            @cockroachlabs/server-prs
+/pkg/release/                @cockroachlabs/dev-inf
+/pkg/roachpb/.gitattributes  @cockroachlabs/dev-inf
+#!/pkg/roachpb/BUILD.bazel     @cockroachlabs/kv-prs-noreview
+/pkg/roachpb/data*           @cockroachlabs/kv-prs
+/pkg/roachpb/leaseinfo*      @cockroachlabs/kv-prs
+/pkg/roachpb/index*          @cockroachlabs/obs-prs
+/pkg/roachpb/internal*       @cockroachlabs/kv-prs
+/pkg/roachpb/io-formats*     @cockroachlabs/disaster-recovery
+#!/pkg/roachpb/main_test.go    @cockroachlabs/kv-prs-noreview
+/pkg/roachpb/merge_spans*    @cockroachlabs/kv-prs
+/pkg/roachpb/metadata*       @cockroachlabs/kv-prs
+/pkg/roachpb/span*           @cockroachlabs/kv-prs
+/pkg/roachpb/string_test.go  @cockroachlabs/kv-prs
+/pkg/roachpb/tenant*         @cockroachlabs/kv-prs
+#!/pkg/roachpb/version*      @cockroachlabs/unowned
+/pkg/roachprod/              @cockroachlabs/test-eng
+/pkg/rpc/                    @cockroachlabs/kv-prs
+/pkg/rpc/auth.go             @cockroachlabs/kv-prs @cockroachlabs/prodsec @cockroachlabs/product-security
+/pkg/rpc/auth_tenant.go      @cockroachlabs/server-prs @cockroachlabs/prodsec @cockroachlabs/product-security
+/pkg/scheduledjobs/          @cockroachlabs/jobs-prs @cockroachlabs/disaster-recovery
+/pkg/security/               @cockroachlabs/prodsec @cockroachlabs/server-prs @cockroachlabs/product-security
+/pkg/security/clientsecopts/ @cockroachlabs/sql-foundations @cockroachlabs/prodsec @cockroachlabs/product-security
+#!/pkg/settings/             @cockroachlabs/unowned
+/pkg/spanconfig/                         @cockroachlabs/kv-prs @cockroachlabs/sql-foundations
+/pkg/spanconfig/spanconfigbounds/        @cockroachlabs/sql-foundations
+/pkg/spanconfig/spanconfigjob/           @cockroachlabs/sql-foundations
+/pkg/spanconfig/spanconfigkvaccessor/    @cockroachlabs/kv-prs
+/pkg/spanconfig/spanconfigkvsubscriber/  @cockroachlabs/kv-prs
+/pkg/spanconfig/spanconfiglimiter/       @cockroachlabs/sql-foundations
+/pkg/spanconfig/spanconfigmanager/       @cockroachlabs/sql-foundations
+/pkg/spanconfig/spanconfigptsreader/     @cockroachlabs/kv-prs
+/pkg/spanconfig/spanconfigreconciler/    @cockroachlabs/kv-prs
+/pkg/spanconfig/spanconfigreporter/      @cockroachlabs/kv-prs
+/pkg/spanconfig/spanconfigsplitter/      @cockroachlabs/sql-foundations
+/pkg/spanconfig/spanconfigsqltranslator/ @cockroachlabs/sql-foundations
+/pkg/spanconfig/spanconfigsqlwatcher/    @cockroachlabs/sql-foundations
+/pkg/spanconfig/spanconfigstore/         @cockroachlabs/kv-prs
+/pkg/spanconfig/spanconfigtestutils/     @cockroachlabs/kv-prs @cockroachlabs/sql-foundations
+/pkg/repstream/              @cockroachlabs/disaster-recovery
+#!/pkg/testutils/              @cockroachlabs/test-eng-noreview
+/pkg/testutils/reduce/       @cockroachlabs/sql-queries-prs
+/pkg/testutils/sqlutils/     @cockroachlabs/sql-queries-prs
+/pkg/testutils/jobutils/     @cockroachlabs/jobs-prs @cockroachlabs/disaster-recovery
+/pkg/ts/                     @cockroachlabs/kv-prs
+/pkg/ts/catalog/             @cockroachlabs/obs-prs
+#!/pkg/util/                 @cockroachlabs/unowned
+/pkg/util/addr/              @cockroachlabs/obs-prs
+/pkg/util/admission/         @cockroachlabs/admission-control
+/pkg/util/goschedstats       @cockroachlabs/admission-control
+/pkg/util/grunning/          @cockroachlabs/admission-control
+/pkg/util/log/               @cockroachlabs/obs-prs @cockroachlabs/obs-india-prs
+/pkg/util/metric/            @cockroachlabs/obs-prs @cockroachlabs/obs-india-prs
+/pkg/util/mon                @cockroachlabs/sql-queries-prs
+/pkg/util/schedulerlatency/  @cockroachlabs/admission-control
+/pkg/util/stop/              @cockroachlabs/kv-prs
+/pkg/util/tracing            @cockroachlabs/obs-prs @cockroachlabs/obs-india-prs
+/pkg/workload/               @cockroachlabs/test-eng
+/pkg/obs/                    @cockroachlabs/obs-prs
+/pkg/ccl/auditloggingccl     @cockroachlabs/obs-prs
+/pkg/cmd/drt*                @cockroachlabs/test-eng
 
 # Own all bazel files to dev-inf, but don't request reviews for them
 # as they are mostly - but not only - generated code that changes with
 # changes to the Go code in the package.
-#!**/BUILD.bazel               @cockroachdb/dev-inf-noreview
+#!**/BUILD.bazel               @cockroachlabs/dev-inf-noreview
 
 # Own the generated proto files to someone. They're not
 # checked in, but since our owners tooling isn't aware
@@ -637,5 +637,5 @@
 # For some reason, **/*.pb.go does not work (in the
 # sense that ./pkg/cmd/whoownsit will not match this
 # pattern to any files).
-#!**.pb.go                   @cockroachdb/unowned
-#!**.pb.gw.go                @cockroachdb/unowned
+#!**.pb.go                   @cockroachlabs/unowned
+#!**.pb.gw.go                @cockroachlabs/unowned
