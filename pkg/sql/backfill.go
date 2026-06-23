@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -798,18 +799,22 @@ func (sc *SchemaChanger) validateConstraints(
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
 				defer func() { collection.ReleaseAll(ctx) }()
+				// Run validation as the schema-change job owner so the
+				// scan is bounded by the issuer's privileges, not node's.
+				validationSD := evalCtx.SessionData().Clone()
+				validationSD.UserProto = sc.job.Payload().UsernameProto
 				if ck := c.AsCheck(); ck != nil {
 					if err := validateCheckInTxn(
-						ctx, txn, &semaCtx, evalCtx.SessionData(), desc, ck,
+						ctx, txn, &semaCtx, validationSD, desc, ck,
 					); err != nil {
 						return err
 					}
 				} else if c.AsForeignKey() != nil {
-					if err := validateFkInTxn(ctx, txn, desc, c.GetName()); err != nil {
+					if err := validateFkInTxn(ctx, txn, desc, c.GetName(), validationSD.User()); err != nil {
 						return err
 					}
 				} else if c.AsUniqueWithoutIndex() != nil {
-					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, txn, desc, evalCtx.SessionData().User(), c.GetName()); err != nil {
+					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, txn, desc, validationSD.User(), c.GetName()); err != nil {
 						return err
 					}
 				} else {
@@ -1488,6 +1493,15 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	grp := ctxgroup.WithContext(ctx)
 	runHistoricalTxn := sc.makeFixedTimestampInternalExecRunner(readAsOf)
 
+	// Run the count queries as the schema-change issuer with implicit SELECT
+	// scoped to this table so a CREATE-only issuer can still validate.
+	selectBit := privilege.List{privilege.SELECT}.ToBitField()
+	execOverride := sessiondata.InternalExecutorOverride{
+		User: sc.job.Payload().UsernameProto.Decode(),
+		DescriptorOverrides: map[uint32]sessiondata.DescriptorOverride{
+			uint32(sc.descID): {Privileges: selectBit},
+		},
+	}
 	if len(forwardIndexes) > 0 {
 		grp.GoCtx(func(ctx context.Context) error {
 			return ValidateForwardIndexes(
@@ -1498,7 +1512,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 				runHistoricalTxn,
 				true,  /* withFirstMutationPubic */
 				false, /* gatherAllInvalid */
-				sessiondata.NoSessionDataOverride,
+				execOverride,
 				sc.execCfg.ProtectedTimestampManager,
 			)
 		})
@@ -1514,7 +1528,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 				runHistoricalTxn,
 				true,  /* withFirstMutationPublic */
 				false, /* gatherAllInvalid */
-				sessiondata.NoSessionDataOverride,
+				execOverride,
 				sc.execCfg.ProtectedTimestampManager,
 			)
 		})
@@ -1603,11 +1617,21 @@ func ValidateConstraint(
 				[]catalog.Descriptor{tableDesc},
 				func() error {
 					return validateForeignKey(ctx, txn, tableDesc.(*tabledesc.Mutable), targetTable, fk.ForeignKeyDesc(),
-						indexIDForValidation)
+						indexIDForValidation, sessionData.User())
 				},
 			)
 		case catconstants.ConstraintTypeUniqueWithoutIndex:
 			uwi := constraint.AsUniqueWithoutIndex()
+			// The issuer adding a UNIQUE WITHOUT INDEX constraint may
+			// hold only CREATE on the table; grant implicit SELECT on
+			// the scanned table so the duplicate-row probe succeeds.
+			selectBit := privilege.List{privilege.SELECT}.ToBitField()
+			execOverride := sessiondata.InternalExecutorOverride{
+				User: sessionData.User(),
+				DescriptorOverrides: map[uint32]sessiondata.DescriptorOverride{
+					uint32(tableDesc.GetID()): {Privileges: selectBit},
+				},
+			}
 			return txn.WithSyntheticDescriptors(
 				[]catalog.Descriptor{tableDesc},
 				func() error {
@@ -1617,7 +1641,7 @@ func ValidateConstraint(
 						uwi.GetPredicate(),
 						indexIDForValidation,
 						txn,
-						sessionData.User(),
+						execOverride,
 						false, /* preExisting */
 					)
 				},
@@ -2129,6 +2153,9 @@ func countIndexRowsAndMaybeCheckUniqueness(
 
 			// For implicitly partitioned unique indexes, we need to independently
 			// validate that the non-implicitly partitioned columns are unique.
+			// Forward the surrounding execOverride so the SELECT bypass on
+			// the target table reaches the duplicate-row probe; otherwise a
+			// CREATE-only issuer would fail with insufficient privilege.
 			if idx.IsUnique() && idx.ImplicitPartitioningColumnCount() > 0 && !skipUniquenessChecks {
 				if err := validateUniqueConstraint(
 					ctx,
@@ -2138,7 +2165,7 @@ func countIndexRowsAndMaybeCheckUniqueness(
 					idx.GetPredicate(),
 					0, /* indexIDForValidation */
 					txn,
-					username.NodeUserName(),
+					execOverride,
 					false, /* preExisting */
 				); err != nil {
 					return err
@@ -2769,7 +2796,11 @@ func getTargetTablesAndFk(
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
 func validateFkInTxn(
-	ctx context.Context, txn descs.Txn, srcTable *tabledesc.Mutable, fkName string,
+	ctx context.Context,
+	txn descs.Txn,
+	srcTable *tabledesc.Mutable,
+	fkName string,
+	user username.SQLUsername,
 ) error {
 	syntheticDescs, fk, targetTable, err := getTargetTablesAndFk(ctx, srcTable, txn, fkName)
 	if err != nil {
@@ -2779,7 +2810,7 @@ func validateFkInTxn(
 	return txn.WithSyntheticDescriptors(
 		syntheticDescs,
 		func() error {
-			return validateForeignKey(ctx, txn, srcTable, targetTable, fk, 0 /* indexIDForValidation */)
+			return validateForeignKey(ctx, txn, srcTable, targetTable, fk, 0 /* indexIDForValidation */, user)
 		})
 }
 
@@ -2817,6 +2848,16 @@ func validateUniqueWithoutIndexConstraintInTxn(
 		return errors.AssertionFailedf("unique constraint %s does not exist", constraintName)
 	}
 
+	// Grant the issuer implicit SELECT on the scanned table so a
+	// CREATE-only validator (e.g. ALTER TABLE VALIDATE CONSTRAINT
+	// run by a user who only holds CREATE) can probe for duplicates.
+	selectBit := privilege.List{privilege.SELECT}.ToBitField()
+	execOverride := sessiondata.InternalExecutorOverride{
+		User: user,
+		DescriptorOverrides: map[uint32]sessiondata.DescriptorOverride{
+			uint32(tableDesc.GetID()): {Privileges: selectBit},
+		},
+	}
 	return txn.WithSyntheticDescriptors(
 		syntheticDescs,
 		func() error {
@@ -2828,7 +2869,7 @@ func validateUniqueWithoutIndexConstraintInTxn(
 				uc.Predicate,
 				0, /* indexIDForValidation */
 				txn,
-				user,
+				execOverride,
 				false, /* preExisting */
 			)
 		})
