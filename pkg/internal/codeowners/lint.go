@@ -179,7 +179,7 @@ func LintEverythingIsOwned(
 
 	var buf strings.Builder
 	for _, s := range sl {
-		fmt.Fprintf(&buf, "%-28s @cockroachdb/<TODO>-noreview\n", string(filepath.Separator)+s+string(filepath.Separator))
+		fmt.Fprintf(&buf, "%-28s @cockroachlabs/<TODO>-noreview\n", string(filepath.Separator)+s+string(filepath.Separator))
 	}
 	if buf.Len() > 0 {
 		t.Errorf(`unowned packages found, please fill out the below and augment .github/CODEOWNERS:
