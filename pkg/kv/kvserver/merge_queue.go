@@ -44,7 +44,7 @@ var MergeQueueInterval = settings.RegisterDurationSetting(
 	settings.SystemOnly,
 	"kv.range_merge.queue_interval",
 	"how long the merge queue waits between processing replicas",
-	5*time.Second,
+	200*time.Millisecond,
 	settings.NonNegativeDuration,
 )
 
