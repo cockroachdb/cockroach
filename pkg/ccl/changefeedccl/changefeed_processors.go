@@ -2017,6 +2017,13 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		}
 		return cf.frontier.Frontier()
 	}()
+	ptsTS := highwater
+	if !ptsTS.IsEmpty() {
+		// WITH diff and CDC queries reading cdc_prev fetch the prev row at
+		// ts.Prev(); the PTS must cover that earlier timestamp. Shift
+		// unconditionally so adding diff via ALTER CHANGEFEED stays safe.
+		ptsTS = ptsTS.Prev()
+	}
 
 	if cf.spec.ProgressConfig != nil && cf.spec.ProgressConfig.PerTableProtectedTimestamps {
 		updatedPerTablePTS, err :=
@@ -2026,7 +2033,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		}
 
 		updatedSystemTablesPTS, err :=
-			cf.advanceSystemTablesProtectedTimestamp(ctx, txn, &ptsEntries, highwater, pts)
+			cf.advanceSystemTablesProtectedTimestamp(ctx, txn, &ptsEntries, ptsTS, pts)
 		if err != nil {
 			return false, err
 		}
@@ -2034,7 +2041,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		return updatedPerTablePTS || updatedSystemTablesPTS, nil
 	}
 
-	return cf.advanceProtectedTimestamp(ctx, progress, pts, highwater)
+	return cf.advanceProtectedTimestamp(ctx, progress, pts, ptsTS)
 }
 
 func (cf *changeFrontier) managePerTableProtectedTimestamps(
@@ -2054,9 +2061,13 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 			}
 			return frontier.Frontier()
 		}()
+		ptsTS := tableHighWater
+		if !ptsTS.IsEmpty() {
+			ptsTS = ptsTS.Prev()
+		}
 
 		if ptsEntries.UserTables[tableID] != uuid.Nil {
-			if updated, err := cf.advancePerTableProtectedTimestampRecord(ctx, ptsEntries, tableID, tableHighWater, pts); err != nil {
+			if updated, err := cf.advancePerTableProtectedTimestampRecord(ctx, ptsEntries, tableID, ptsTS, pts); err != nil {
 				return false, err
 			} else if updated {
 				updatedPerTablePTS = true
@@ -2064,7 +2075,7 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 		} else {
 			// TODO(#153894): Newly added/dropped tables should be caught and
 			// protected when starting the frontier, not here.
-			tableIDsToCreate[tableID] = tableHighWater
+			tableIDsToCreate[tableID] = ptsTS
 		}
 	}
 
