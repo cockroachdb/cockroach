@@ -558,6 +558,11 @@ func setFuncOptions(
 			}
 			udfDesc.SetVolatility(vol)
 		case tree.RoutineLeakproof:
+			if bool(t) {
+				if err := requireAdminForLeakproof(params.ctx, params.p); err != nil {
+					return err
+				}
+			}
 			udfDesc.SetLeakProof(bool(t))
 		case tree.RoutineNullInputBehavior:
 			v, err := funcinfo.NullInputBehaviorToProto(t)
@@ -655,6 +660,22 @@ func (p *planner) descIsTable(ctx context.Context, id descpb.ID) (bool, error) {
 		return false, err
 	}
 	return desc.DescriptorType() == catalog.Table, nil
+}
+
+// requireAdminForLeakproof returns an error unless the current user is a
+// member of the admin role. The LEAKPROOF option exempts a function from RLS
+// security barriers, so it is restricted to trusted users in the same spirit
+// as PostgreSQL, which permits only superusers to set LEAKPROOF.
+func requireAdminForLeakproof(ctx context.Context, p *planner) error {
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if !hasAdmin {
+		return pgerror.New(pgcode.InsufficientPrivilege,
+			"only members of the admin role may define a leakproof function")
+	}
+	return nil
 }
 
 // validateVolatilityInOptions checks if the volatility values in the given list

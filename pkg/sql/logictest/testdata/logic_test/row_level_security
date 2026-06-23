@@ -6101,7 +6101,20 @@ query IIB
 DELETE FROM t WHERE y = 20 AND fail() = 1 RETURNING *;
 ----
 
-# Custom function that is designated as leakproof
+# A non-admin user cannot designate a function as LEAKPROOF (matching
+# PostgreSQL, which only permits superusers to do so). LEAKPROOF functions
+# bypass RLS security barriers via the optimizer, so the option is restricted
+# to trusted users.
+statement error pgcode 42501 pq: only members of the admin role may define a leakproof function
+CREATE FUNCTION alice_leakproof() RETURNS INT IMMUTABLE LEAKPROOF
+AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+
+# Custom function that is designated as leakproof. We create it as admin
+# because non-admins are not permitted to set LEAKPROOF; alice gets EXECUTE
+# so she can use it in the queries below.
+statement ok
+RESET ROLE;
+
 statement ok
 CREATE FUNCTION divbyzero() RETURNS INT IMMUTABLE LEAKPROOF
 AS $$
@@ -6110,6 +6123,12 @@ AS $$
    RETURN 1;
  END;
 $$ LANGUAGE plpgsql;
+
+statement ok
+GRANT EXECUTE ON FUNCTION divbyzero() TO alice;
+
+statement ok
+SET ROLE alice;
 
 # Show that queries on rows we can see will cause the query to fail
 statement error pq: division by zero

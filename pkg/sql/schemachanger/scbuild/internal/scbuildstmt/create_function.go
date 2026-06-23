@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
@@ -163,6 +164,9 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 				Volatility: catpb.FunctionVolatility{Volatility: v},
 			})
 		case tree.RoutineLeakproof:
+			if bool(t) {
+				requireAdminForLeakproof(b)
+			}
 			b.Add(&scpb.FunctionLeakProof{
 				FunctionID: fnID,
 				LeakProof:  bool(t),
@@ -361,6 +365,9 @@ func replaceFunction(
 			}
 			volatility = v
 		case tree.RoutineLeakproof:
+			if bool(t) {
+				requireAdminForLeakproof(b)
+			}
 			leakProof = bool(t)
 		case tree.RoutineNullInputBehavior:
 			v, err := funcinfo.NullInputBehaviorToProto(t)
@@ -684,5 +691,20 @@ func validateFunctionLeakProof(options tree.RoutineOptions, vp funcinfo.Volatili
 	}
 	if err := vp.Validate(); err != nil {
 		panic(sqlerrors.NewInvalidVolatilityError(err))
+	}
+}
+
+// requireAdminForLeakproof panics with an insufficient-privilege error unless
+// the current user is a member of the admin role. The LEAKPROOF option exempts
+// a function from RLS security barriers, so it is restricted to trusted users
+// in the same spirit as PostgreSQL, which permits only superusers to set
+// LEAKPROOF.
+func requireAdminForLeakproof(b BuildCtx) {
+	// CurrentUserHasAdminOrIsMemberOf(admin) reduces to "is admin" because the
+	// implementation short-circuits on the cached hasAdmin bit before doing a
+	// role-membership lookup.
+	if !b.CurrentUserHasAdminOrIsMemberOf(username.AdminRoleName()) {
+		panic(pgerror.New(pgcode.InsufficientPrivilege,
+			"only members of the admin role may define a leakproof function"))
 	}
 }
