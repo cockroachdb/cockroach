@@ -188,3 +188,63 @@ query I
 SELECT strict_fn_imp('foo', NULL)
 ----
 NULL
+
+subtest leakproof_admin_only
+
+# The LEAKPROOF option permits the optimizer to push a function past security
+# barriers (notably the RLS barrier), so it is restricted to members of the
+# admin role. This matches PostgreSQL's behavior of permitting only superusers
+# to set LEAKPROOF.
+
+statement ok
+GRANT CREATE ON SCHEMA public TO testuser
+
+user testuser
+
+statement error pgcode 42501 pq: only members of the admin role may define a leakproof function
+CREATE FUNCTION lp_nonadmin() RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$
+
+statement ok
+CREATE FUNCTION lp_nonadmin() RETURNS INT IMMUTABLE NOT LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$
+
+statement error pgcode 42501 pq: only members of the admin role may define a leakproof function
+CREATE OR REPLACE FUNCTION lp_nonadmin() RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$ SELECT 2 $$
+
+statement error pgcode 42501 pq: only members of the admin role may define a leakproof function
+ALTER FUNCTION lp_nonadmin() LEAKPROOF
+
+# Toggling LEAKPROOF off does not require admin.
+statement ok
+ALTER FUNCTION lp_nonadmin() NOT LEAKPROOF
+
+user root
+
+# Admins can freely set LEAKPROOF.
+statement ok
+CREATE FUNCTION lp_admin() RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$
+
+# An admin may also drop LEAKPROOF from a function owned by a non-admin via
+# ALTER FUNCTION ... NOT LEAKPROOF; the new non-LEAKPROOF state never requires
+# elevated privilege.
+statement ok
+ALTER FUNCTION lp_nonadmin() NOT LEAKPROOF
+
+# After promoting testuser to admin, the restriction lifts.
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement ok
+CREATE FUNCTION lp_now_admin() RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$
+
+user root
+
+statement ok
+REVOKE admin FROM testuser;
+DROP FUNCTION lp_nonadmin;
+DROP FUNCTION lp_admin;
+DROP FUNCTION lp_now_admin;
+REVOKE CREATE ON SCHEMA public FROM testuser
+
+subtest end
