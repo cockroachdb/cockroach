@@ -3420,6 +3420,14 @@ func (m *Manager) cleanupUpdateKeys(ctx context.Context, force bool) error {
 	return nil
 }
 
+// TestingRefreshAndPurgeAllLeases synchronously refreshes every leased
+// descriptor and purges old versions, mimicking the periodic background
+// lease refresh task. Tests use this to deterministically force eviction of
+// older descriptor versions from the in-memory cache.
+func (m *Manager) TestingRefreshAndPurgeAllLeases(ctx context.Context) {
+	m.refreshSomeLeases(ctx, true /* refreshAndPurgeAllDescriptors */)
+}
+
 // Refresh some of the current leases. If refreshAndPurgeAllDescriptors is set,
 // then all descriptors are refreshed, and old versions are purged.
 func (m *Manager) refreshSomeLeases(ctx context.Context, refreshAndPurgeAllDescriptors bool) {

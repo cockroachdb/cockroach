@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -1510,6 +1511,107 @@ func TestCachedEventDescriptorGivesUpdatedTimestamp(t *testing.T) {
 	}
 
 	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestChangefeedWithDiffSurvivesDescriptorGCDuringInitialScan is a regression
+// test for the PTS-vs-GC off-by-one on the prev-row decode path during an
+// initial scan (#171740).
+func TestChangefeedWithDiffSurvivesDescriptorGCDuringInitialScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	variants := []struct {
+		name             string
+		feedFmt          string
+		expectedPayloads []string
+	}{
+		{
+			name:    "with-diff",
+			feedFmt: `CREATE CHANGEFEED FOR foo WITH diff, cursor = '%s', initial_scan = 'yes'`,
+			expectedPayloads: []string{
+				`foo: [1]->{"after": {"a": 1, "b": 1}, "before": null}`,
+			},
+		},
+		{
+			name:    "cdc-query-cdc-prev",
+			feedFmt: `CREATE CHANGEFEED WITH cursor = '%s', initial_scan = 'yes' AS SELECT *, cdc_prev FROM foo`,
+			expectedPayloads: []string{
+				`foo: [1]->{"a": 1, "b": 1, "cdc_prev": null}`,
+			},
+		},
+	}
+
+	for _, v := range variants {
+		t.Run(v.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+				ctx := context.Background()
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+				sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
+				leaseMgr := s.Server.LeaseManager().(*lease.Manager)
+
+				sysDB.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'")
+
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT)`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 1)`)
+
+				// Bumps foo to v2 and evicts v1 from the cache, so the
+				// prev-row Acquire at backfillTs.Prev() reads v1 from the
+				// store rather than the cache.
+				sqlDB.Exec(t, `GRANT SELECT ON TABLE foo TO public`)
+				leaseMgr.TestingRefreshAndPurgeAllLeases(ctx)
+
+				backfillTs := desctestutils.TestingGetPublicTableDescriptor(
+					s.SystemServer.DB(), s.Codec, "d", "foo").GetModificationTime()
+
+				// Prevent the changefeed from running before we can do the GC to cause
+				// the issue.
+				execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+				cfKnobs := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
+				gcReady := make(chan struct{})
+				cfKnobs.BeforeDistChangefeed = func() { <-gcReady }
+
+				foo := feed(t, f, fmt.Sprintf(v.feedFmt, backfillTs.AsOfSystemTime()))
+				defer closeFeed(t, foo)
+
+				store, err := s.SystemServer.GetStores().(*kvserver.Stores).GetStore(
+					s.SystemServer.GetFirstStoreID())
+				require.NoError(t, err)
+				ptsReader := store.GetStoreConfig().ProtectedTimestampReader
+				descriptorTableKey := s.Codec.TablePrefix(keys.DescriptorTableID)
+				descriptorTableSpan := roachpb.Span{
+					Key: descriptorTableKey, EndKey: descriptorTableKey.PrefixEnd(),
+				}
+				var descPTS hlc.Timestamp
+				fetchPTS := func() error {
+					if err := spanconfigptsreader.TestingRefreshPTSState(
+						ctx, ptsReader, s.SystemServer.Clock().Now()); err != nil {
+						return err
+					}
+					tss, _, err := ptsReader.GetProtectionTimestamps(ctx, descriptorTableSpan)
+					if err != nil {
+						return err
+					}
+					if len(tss) == 0 {
+						return errors.New("no PTS on descriptor range yet")
+					}
+					descPTS = slices.MinFunc(tss, func(a, b hlc.Timestamp) int { return a.Compare(b) })
+					return nil
+				}
+				testutils.SucceedsSoon(t, fetchPTS)
+
+				// GC to the latest timestamp the PTS permits (strict >).
+				forceTableGCAtTimestamp(t, s.SystemServer, "system", "descriptor", descPTS.Prev())
+				close(gcReady)
+
+				assertPayloads(t, foo, v.expectedPayloads)
+			}
+
+			// To repro on tenants, we'd have to GC the tenant-specific
+			// descriptor table. To keep the repro simple and consistent,
+			// we just do it without tenants.
+			cdcTestWithSystem(t, testFn, feedTestNoTenants, feedTestEnterpriseSinks)
+		})
+	}
 }
 
 func fetchRoleMembers(
