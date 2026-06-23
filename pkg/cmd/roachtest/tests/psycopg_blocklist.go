@@ -46,6 +46,7 @@ var psycopgIgnoreList = blocklist{
 	`tests.pool.test_pool_common.test_setup_no_timeout[ConnectionPool]`:                              "requires insecure mode",
 	`tests.pool.test_pool_common.test_setup_no_timeout[NullConnectionPool]`:                          "requires insecure mode",
 	`tests.pool.test_pool_common.test_stats_usage[NullConnectionPool]`:                               "test is timing dependent, see https://github.com/cockroachdb/cockroach/issues/143491",
+	`tests.pool.test_pool_common_async.test_check_init[asyncio-AsyncConnectionPool]`:                 "flaky pool check; see #171770",
 	`tests.pool.test_pool_common_async.test_queue[asyncio-AsyncNullConnectionPool]`:                  "requires insecure mode",
 	`tests.pool.test_pool_common_async.test_queue_timeout[asyncio-AsyncNullConnectionPool]`:          "see https://github.com/cockroachdb/cockroach/issues/144532",
 	`tests.pool.test_pool_common_async.test_queue_timeout_override[asyncio-AsyncNullConnectionPool]`: "see https://github.com/cockroachdb/cockroach/issues/144532",
