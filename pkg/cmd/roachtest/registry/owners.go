@@ -43,7 +43,7 @@ func (o Owner) IsValid() bool {
 
 // ToTeamAlias returns the team alias corresponding to the owner.
 func (o Owner) ToTeamAlias() team.Alias {
-	return team.Alias(fmt.Sprintf("cockroachdb/%s", o))
+	return team.Alias(fmt.Sprintf("cockroachlabs/%s", o))
 }
 
 var teams struct {

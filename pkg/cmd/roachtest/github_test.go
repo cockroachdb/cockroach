@@ -32,14 +32,14 @@ import (
 )
 
 var (
-	teamsYaml = `cockroachdb/unowned:
+	teamsYaml = `cockroachlabs/unowned:
   aliases:
-    cockroachdb/rfc-prs: other
+    cockroachlabs/rfc-prs: other
   triage_column_id: 0
-cockroachdb/test-eng:
+cockroachlabs/test-eng:
   label: T-testeng
   triage_column_id: 14041337
-cockroachdb/dev-inf:
+cockroachlabs/dev-inf:
   triage_column_id: 10210759`
 
 	validTeamsFn   = func() (team.Map, error) { return loadYamlTeams(teamsYaml) }
