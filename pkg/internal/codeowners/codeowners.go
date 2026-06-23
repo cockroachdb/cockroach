@@ -63,7 +63,7 @@ func LoadCodeOwners(r io.Reader, teams map[team.Alias]team.Team) (*CodeOwners, e
 		fields := strings.Fields(t)
 		rule := Rule{Pattern: fields[0]}
 		for _, field := range fields[1:] {
-			// @cockroachdb/kv[-noreview] --> cockroachdb/kv.
+			// @cockroachlabs/kv[-noreview] --> cockroachlabs/kv.
 			owner := team.Alias(strings.TrimSuffix(strings.TrimPrefix(field, "@"), "-noreview"))
 
 			if _, ok := teams[owner]; !ok {
@@ -164,7 +164,7 @@ func (co *CodeOwners) GetTestOwner(
 
 	if _teams == nil {
 		// N.B. if no owning team is found, we default to 'test-eng'. This should be a rare exception rather than the rule.
-		testEng := co.GetTeamForAlias("cockroachdb/test-eng")
+		testEng := co.GetTeamForAlias("cockroachlabs/test-eng")
 		if testEng.Name() == "" {
 			panic("test-eng team could not be found in TEAMS.yaml")
 		}
