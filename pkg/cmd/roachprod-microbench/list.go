@@ -71,7 +71,7 @@ func listBenchmarks(pkgDir string) (BenchmarkInfoList, error) {
 				teams := co.Match(filepath.Join("pkg", relFilename))
 				if len(teams) > 0 {
 					team := teams[0]
-					teamName := strings.TrimPrefix(string(team.TeamName), "cockroachdb/")
+					teamName := strings.TrimPrefix(string(team.TeamName), "cockroachlabs/")
 					return teamName, nil
 				}
 				return "", nil

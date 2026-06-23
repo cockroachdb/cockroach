@@ -560,7 +560,7 @@ type PostRequest struct {
 	// A path to the test artifacts relative to the artifacts root. If nonempty,
 	// allows the poster formatter to construct a direct URL to this directory.
 	Artifacts string
-	// MentionOnCreate is a slice of GitHub handles (@foo, @cockroachdb/some-team, etc)
+	// MentionOnCreate is a slice of GitHub handles (@foo, @cockroachlabs/some-team, etc)
 	// that should be mentioned in the message when creating a new issue. These are
 	// *not* mentioned when posting to an existing issue.
 	MentionOnCreate []string
