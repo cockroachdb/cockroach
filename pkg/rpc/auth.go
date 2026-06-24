@@ -428,12 +428,45 @@ func (a kvAuth) authenticateNetworkRequest(ctx context.Context) (authnResult, er
 		if err := checkRootOrNodeInScope(clientCert, a.tenant.tenantID); err != nil {
 			return nil, err
 		}
+	} else {
+		// rootOrNodeDNSet && certDNMatchesRootOrNodeDN: identity is established
+		// by the operator-configured DN flag. Verify the cert's tenant scope so
+		// a tenant-scoped principal cannot use this path to gain cluster-wide
+		// RPC access.
+		if err := checkCertTenantScope(clientCert, a.tenant.tenantID); err != nil {
+			return nil, err
+		}
 	}
 
 	if tenantIDFromMetadata.IsSet() {
 		return authnSuccessPeerIsTenantServer(tenantIDFromMetadata), nil
 	}
 	return authnSuccessPeerIsPrivileged{}, nil
+}
+
+// checkCertTenantScope verifies that at least one of the cert's user scopes
+// authorizes this server's tenant (Global or matching serverTenantID). The
+// caller must have already established root or node identity (e.g. via DN
+// match against the operator-configured *-cert-distinguished-name flag);
+// this helper deliberately does not re-check that the cert's scope username
+// is root or node, since the operator-configured DN already vouches for the
+// identity.
+func checkCertTenantScope(clientCert *x509.Certificate, serverTenantID roachpb.TenantID) error {
+	ok, err := security.CertificateUserScopeContainsFunc(clientCert,
+		func(scope security.CertificateUserScope) bool {
+			return scope.Global || scope.TenantID == serverTenantID
+		})
+	if err != nil || ok {
+		return err
+	}
+	certUserScope, err := security.GetCertificateUserScope(clientCert)
+	if err != nil {
+		return err
+	}
+	return authErrorf(
+		"need root or node client cert to perform RPCs on this server "+
+			"(this is tenant %v; cert is valid for %s)",
+		serverTenantID, security.FormatUserScopes(certUserScope))
 }
 
 // requiredAuthzMethod is a sum type that describes which authorization
