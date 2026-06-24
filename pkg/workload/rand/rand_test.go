@@ -90,7 +90,7 @@ func TestRandRun(t *testing.T) {
 			writeStmt, err := db.Prepare(stmt)
 			require.NoError(t, err)
 
-			table, err := LoadTable(db, tblName)
+			table, err := LoadTable(db, QualifiedName{Table: tblName})
 			require.NoError(t, err)
 
 			op := randOp{

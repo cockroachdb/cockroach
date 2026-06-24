@@ -37,7 +37,7 @@ func TestWriter(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE test`)
 	sqlDB.Exec(t, `CREATE TABLE test_writer (id INT PRIMARY KEY, data TEXT NOT NULL)`)
 
-	table, err := LoadTable(db, "test_writer")
+	table, err := LoadTable(db, QualifiedName{Table: "test_writer"})
 	require.NoError(t, err)
 
 	writer := NewTableWriter(db, table)
@@ -72,7 +72,7 @@ func runWriterTest(
 
 	t.Logf("stmt: %s\n", createStmt)
 
-	table, err := LoadTable(db, tableName)
+	table, err := LoadTable(db, QualifiedName{Table: tableName})
 	require.NoError(t, err)
 
 	writer := NewTableWriter(db, table)
