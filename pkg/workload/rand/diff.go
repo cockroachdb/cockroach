@@ -231,7 +231,7 @@ func fetchDiffRows(
 //   - Primary key hashes use FNV64, so hash collisions would cause rows to be
 //     silently dropped. This is negligible for reasonable table sizes.
 func Diff(
-	connA *gosql.DB, tableA string, connB *gosql.DB, tableB string, resultLimit int,
+	connA *gosql.DB, tableA QualifiedName, connB *gosql.DB, tableB QualifiedName, resultLimit int,
 ) ([]RowDiff, error) {
 	schema, err := LoadTable(connA, tableA)
 	if err != nil {
@@ -245,11 +245,11 @@ func Diff(
 	pkHashExpr := buildPKHashExpr(&schema)
 
 	// Phase 1: load hashes from both tables.
-	hashesA, err := queryHashes(connA, buildHashQuery(&schema, tableA))
+	hashesA, err := queryHashes(connA, buildHashQuery(&schema, tableA.String()))
 	if err != nil {
 		return nil, err
 	}
-	hashesB, err := queryHashes(connB, buildHashQuery(&schema, tableB))
+	hashesB, err := queryHashes(connB, buildHashQuery(&schema, tableB.String()))
 	if err != nil {
 		return nil, err
 	}
@@ -274,12 +274,12 @@ func Diff(
 
 	// Phase 2: fetch full row data only for differing rows.
 	numCols := len(schema.Cols)
-	fetchQueryA := buildFetchQuery(&schema, pkHashExpr, tableA)
+	fetchQueryA := buildFetchQuery(&schema, pkHashExpr, tableA.String())
 	dataA, err := fetchDiffRows(connA, fetchQueryA, numCols, diffPKs)
 	if err != nil {
 		return nil, err
 	}
-	fetchQueryB := buildFetchQuery(&schema, pkHashExpr, tableB)
+	fetchQueryB := buildFetchQuery(&schema, pkHashExpr, tableB.String())
 	dataB, err := fetchDiffRows(connB, fetchQueryB, numCols, diffPKs)
 	if err != nil {
 		return nil, err

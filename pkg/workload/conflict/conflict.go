@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	workloadrand "github.com/cockroachdb/cockroach/pkg/workload/rand"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/spf13/pflag"
 )
@@ -102,7 +103,7 @@ func (w *conflict) Ops(
 		poolA := clusterA.Get()
 		poolB := clusterB.Get()
 		dbs := []*gosql.DB{stdlib.OpenDBFromPool(poolA), stdlib.OpenDBFromPool(poolB)}
-		worker, err := newConflictWorker(dbs, w.tableName)
+		worker, err := newConflictWorker(dbs, workloadrand.QualifiedName{Table: w.tableName})
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
