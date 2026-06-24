@@ -2340,6 +2340,28 @@ ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z,
 statement ok
 DROP TABLE b, a
 
+subtest match_full_quoted_pk_column
+
+# Regression test: MATCH FULL FK validation must quote PK columns that are not
+# part of the FK and have names requiring quoting.
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY, b INT, UNIQUE (a, b))
+
+statement ok
+CREATE TABLE b ("my-pk" INT PRIMARY KEY, a INT, b INT)
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a, b) REFERENCES a (a, b) MATCH FULL NOT VALID
+
+statement ok
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+DROP TABLE b, a
+
+subtest end
+
 subtest Composite_Full_Validate_Later
 # Test inserting into table with an unvalidated constraint, and running VALIDATE CONSTRAINT later
 
@@ -4149,7 +4171,7 @@ ALTER TABLE drop_fk_during_addition
 	ADD CONSTRAINT fk FOREIGN KEY (name) REFERENCES drop_fk_during_addition_ref (name);
 DROP TABLE drop_fk_during_addition_ref;
 
-statement error pgcode XXA00 pq: transaction committed but schema change aborted with error: .* referenced table "drop_fk_during_addition_ref" \(271\) is dropped.*
+statement error pgcode XXA00 pq: transaction committed but schema change aborted with error: .* referenced table "drop_fk_during_addition_ref" \([0-9]+\) is dropped.*
 COMMIT;
 
 # Regression test for #80828. Do not attempt a fast path cascading delete when
