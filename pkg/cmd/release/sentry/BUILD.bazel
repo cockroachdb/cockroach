@@ -1,15 +1,29 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
     name = "sentry_lib",
-    srcs = ["main.go"],
+    srcs = [
+        "lock.go",
+        "main.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/release/sentry",
     visibility = ["//visibility:private"],
-    deps = ["//pkg/util/timeutil"],
+    deps = [
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//googleapi",
+    ],
 )
 
 go_binary(
     name = "sentry",
     embed = [":sentry_lib"],
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "sentry_test",
+    srcs = ["lock_test.go"],
+    embed = [":sentry_lib"],
 )
