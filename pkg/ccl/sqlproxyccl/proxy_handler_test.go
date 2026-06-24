@@ -1578,6 +1578,12 @@ func TestCancelQuery(t *testing.T) {
 	ctx := context.Background()
 	defer log.Scope(t).Close(t)
 
+	// Override defaultTransferTimeout for the duration of the test. This is
+	// scoped to the parent test (not a subtest) so that the restore runs
+	// after s.Stopper().Stop drains all async goroutines, avoiding a race
+	// between the restore write and reads in newTransferContext.
+	defer testutils.TestingHook(&defaultTransferTimeout, 3*time.Minute)()
+
 	// Start KV server, and enable session migration.
 	s, mainDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
@@ -1730,7 +1736,6 @@ func TestCancelQuery(t *testing.T) {
 		cancelFn = func() {
 			_ = conn.PgConn().CancelRequest(ctx)
 		}
-		defer testutils.TestingHook(&defaultTransferTimeout, 3*time.Minute)()
 		origCancelInfo, found := proxy.handler.cancelInfoMap.getCancelInfo(conn.PgConn().SecretKey())
 		require.True(t, found)
 		b := tds.DrainPod(tenantID, tenants[0].SQLAddr())
