@@ -860,7 +860,6 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 	t.L().Printf("random seed: %d", seed)
 
 	c.Start(ctx, t.L(), roachtestutil.MaybeUseMemoryBudget(t, 50), install.MakeClusterSettings(), c.CRDBNodes())
-	const jobStatusWait = time.Minute * 5
 
 	testUtils, err := setupBackupRestoreTestUtils(
 		ctx, t, c, testRNG,
@@ -945,14 +944,8 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 	downloadJobID, err := d.getORDownloadJobID(ctx, t.L(), testRNG)
 	require.NoError(t, err, "failed to get online restore download job ID")
 
-	err = WaitForPaused(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait)
-	require.NoError(t, err, "download job did not pause due to deleted SSTs")
-
-	_, err = dbConn.ExecContext(ctx, "CANCEL JOB $1", downloadJobID)
-	require.NoError(t, err, "failed to cancel download job after it paused")
-
-	err = WaitForCanceled(ctx, dbConn, jobspb.JobID(downloadJobID), 10*time.Minute)
-	require.NoError(t, err, "download job did not reach canceled state")
+	err = WaitForFailed(ctx, dbConn, jobspb.JobID(downloadJobID), 10*time.Minute)
+	require.NoError(t, err, "download job did not fail due to deleted SSTs")
 
 	err = checkNoExternalBytesRemaining(ctx, dbConn)
 	require.NoError(t, err, "external bytes still remain after download job failure")
