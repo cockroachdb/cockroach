@@ -38,6 +38,11 @@ type Metadata struct {
 	// InferredTypes represents the inferred types for placeholder, using protocol
 	// identifiers. Used for reporting on Describe.
 	InferredTypes []oid.Oid
+
+	// UDTs contains all user defined types referenced in the prepared
+	// statement. It is used to detect type version change, so the
+	// statement can be reparsed with updated versions.
+	UDTs []*types.T
 }
 
 // MemoryEstimate returns an estimation (in bytes) of how much memory is used by
@@ -56,6 +61,6 @@ func (pm *Metadata) MemoryEstimate() int64 {
 
 	res += int64(len(pm.Columns)) * int64(unsafe.Sizeof(colinfo.ResultColumn{}))
 	res += int64(len(pm.InferredTypes)) * int64(unsafe.Sizeof(oid.Oid(0)))
-
+	res += int64(len(pm.UDTs)) * int64(unsafe.Sizeof((*types.T)(nil)))
 	return res
 }
