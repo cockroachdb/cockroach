@@ -696,6 +696,11 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving goroutine_dump.*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
+	// Remove license-related NOTICE messages that may appear intermittently.
+	// Most NOTICE messages are stripped earlier in RunWithCapture, but this
+	// catches any that appear outside of SQL data retrieval lines.
+	re = regexp.MustCompile(`(?m)NOTICE: No license is installed[^\n]*\n?`)
+	out = re.ReplaceAllString(out, ``)
 
 	return out
 }
