@@ -206,6 +206,27 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true, nodeDNString: "CN=foo"},
 		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true,
 			rootDNString: "CN=foo", nodeDNString: "CN=bar"},
+
+		// A tenant-scoped cert whose DN exactly matches the configured
+		// root/node DN must still go through tenant-scope verification.
+		// Before the fix, the non-SAN DN-match branch returned success
+		// without calling checkRootOrNodeInScope, so a tenant-scoped
+		// principal gained cluster-wide RPC access on the system tenant.
+		{systemID: stid, ous: nil, commonName: "root", rootDNString: "CN=root", tenantScope: 10,
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenantID 10\)`},
+		{systemID: stid, ous: nil, commonName: "node", nodeDNString: "CN=node", tenantScope: 10,
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "node" on tenantID 10\)`},
+		// subject_required must behave identically: it gates whether DN must
+		// be configured, not whether scope is checked when it is.
+		{systemID: stid, ous: nil, commonName: "root", subjectRequired: true, rootDNString: "CN=root", tenantScope: 10,
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenantID 10\)`},
+		{systemID: stid, ous: nil, commonName: "node", subjectRequired: true, nodeDNString: "CN=node", tenantScope: 10,
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "node" on tenantID 10\)`},
+		// Cert tenant scope matches server tenant - accept.
+		{systemID: tenTen, ous: nil, commonName: "root", rootDNString: "CN=root", tenantScope: 10},
+		{systemID: tenTen, ous: nil, commonName: "node", nodeDNString: "CN=node", tenantScope: 10},
+		{systemID: tenTen, ous: nil, commonName: "root", subjectRequired: true, rootDNString: "CN=root", tenantScope: 10},
+		{systemID: tenTen, ous: nil, commonName: "node", subjectRequired: true, nodeDNString: "CN=node", tenantScope: 10},
 	} {
 		t.Run(fmt.Sprintf("from %v to %v (md %q)", tc.commonName, tc.systemID, tc.clientTenantInMD), func(t *testing.T) {
 			err := security.SetCertPrincipalMap(strings.Split(tc.certPrincipalMap, ","))
