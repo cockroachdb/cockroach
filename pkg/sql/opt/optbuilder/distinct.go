@@ -28,12 +28,22 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 	// This will cause an error for queries like:
 	//   SELECT DISTINCT a FROM t ORDER BY b
 	// Note: this behavior is consistent with PostgreSQL.
+	//
+	// An exception is made for the synthesized (col IS NULL) columns that
+	// buildOrderBy adds to implement non-default NULLS ordering (e.g. when
+	// null_ordered_last is set, or NULLS FIRST/LAST is given explicitly). When
+	// col is itself a projected column, the synthesized column is functionally
+	// determined by it and does not change the DISTINCT result, so we treat it
+	// as a grouping column. This mirrors case 3 in buildDistinctOn.
 	for _, col := range inScope.ordering {
 		if !private.GroupingCols.Contains(col.ID()) {
-			panic(pgerror.Newf(
-				pgcode.InvalidColumnReference,
-				"for SELECT DISTINCT, ORDER BY expressions must appear in select list",
-			))
+			if !b.isSynthesizedNullsOrderingCol(inScope, col.ID(), private.GroupingCols) {
+				panic(pgerror.Newf(
+					pgcode.InvalidColumnReference,
+					"for SELECT DISTINCT, ORDER BY expressions must appear in select list",
+				))
+			}
+			private.GroupingCols.Add(col.ID())
 		}
 	}
 
@@ -42,6 +52,34 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 	// the DistinctOn input.
 	input := inScope.expr
 	return b.factory.ConstructDistinctOn(input, memo.EmptyAggregationsExpr, &private)
+}
+
+// isSynthesizedNullsOrderingCol reports whether the ordering column identified
+// by colID is a synthesized "(col IS NULL)" expression where col is one of the
+// columns in groupingCols. buildOrderBy synthesizes such columns to implement
+// non-default NULLS ordering (e.g. when null_ordered_last is set, or NULLS
+// FIRST/LAST is requested explicitly). Because (col IS NULL) is functionally
+// determined by col, treating it as a grouping column does not change the
+// result of a DISTINCT or DISTINCT ON.
+func (b *Builder) isSynthesizedNullsOrderingCol(
+	inScope *scope, colID opt.ColumnID, groupingCols opt.ColSet,
+) bool {
+	scopeCol := inScope.getColumn(colID)
+	if scopeCol == nil {
+		return false
+	}
+	isExpr, isIs := scopeCol.scalar.(*memo.IsExpr)
+	if !isIs {
+		return false
+	}
+	if _, isNull := isExpr.Right.(*memo.NullExpr); !isNull {
+		return false
+	}
+	v, isVar := isExpr.Left.(*memo.VariableExpr)
+	if !isVar {
+		return false
+	}
+	return groupingCols.Contains(v.Col)
 }
 
 // buildDistinctOn builds a set of memo groups that represent a DISTINCT ON
@@ -84,29 +122,16 @@ func (b *Builder) buildDistinctOn(
 	var seen opt.ColSet
 	for _, col := range inScope.ordering {
 		if !distinctOnCols.Contains(col.ID()) {
-			colIsValid := false
-			scopeCol := inScope.getColumn(col.ID())
-			if scopeCol != nil {
-				if isExpr, ok := scopeCol.scalar.(*memo.IsExpr); ok {
-					if _, ok := isExpr.Right.(*memo.NullExpr); ok {
-						if v, ok := isExpr.Left.(*memo.VariableExpr); ok {
-							if distinctOnCols.Contains(v.Col) {
-								// We have a col IS NULL expression (case 3 above).
-								// Add the new column to distinctOnCols, since it doesn't change
-								// the semantics of the DISTINCT ON.
-								distinctOnCols.Add(col.ID())
-								colIsValid = true
-							}
-						}
-					}
-				}
-			}
-			if !colIsValid {
+			if !b.isSynthesizedNullsOrderingCol(inScope, col.ID(), distinctOnCols) {
 				panic(pgerror.Newf(
 					pgcode.InvalidColumnReference,
 					"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
 				))
 			}
+			// We have a (col IS NULL) expression (case 3 above). Add the new
+			// column to distinctOnCols, since it doesn't change the semantics of
+			// the DISTINCT ON.
+			distinctOnCols.Add(col.ID())
 		}
 		seen.Add(col.ID())
 		if seen.Equals(distinctOnCols) {
