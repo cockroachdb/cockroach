@@ -67,7 +67,9 @@ func (p *planner) AlterTableSetSchema(
 			"cannot move objects into or out of temporary schemas")
 	}
 
-	// The user needs DROP privilege on the table to set the schema.
+	// Postgres requires ownership of the relation to set the schema of a table.
+	// Accepting the DROP privilege is an intentional divergence so that the
+	// move can be delegated without granting full ownership.
 	err = p.CheckPrivilege(ctx, tableDesc, privilege.DROP)
 	if err != nil {
 		return nil, err
