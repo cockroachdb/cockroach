@@ -373,3 +373,55 @@ skipif config local-mixed-24.3 local-mixed-25.1
 statement error testuser3 cannot transfer ownership to otherrole
 ALTER JOB $testuser_job_id OWNER TO otherrole
 
+# Regression test for schema owners' privileges: Schema owners implicitly hold
+# the DROP privilege on relations in their schema. Operations gated on other
+# privileges or on relation ownership are not available to them (see VULM-376).
+subtest schema_owner_does_not_imply_object_owner
+
+user root
+
+statement ok
+CREATE ROLE sc_owner;
+CREATE ROLE obj_owner;
+GRANT sc_owner, obj_owner TO testuser;
+CREATE SCHEMA defaultdb.owned_sc AUTHORIZATION sc_owner;
+GRANT CREATE, USAGE ON SCHEMA defaultdb.owned_sc TO obj_owner
+
+user testuser
+
+statement ok
+SET ROLE obj_owner;
+CREATE TABLE defaultdb.owned_sc.t (c1 INT PRIMARY KEY)
+
+skipif config local-legacy-schema-changer local-mixed-24.3 local-mixed-25.1
+statement ok
+ALTER TABLE defaultdb.owned_sc.t ENABLE ROW LEVEL SECURITY;
+CREATE POLICY p ON defaultdb.owned_sc.t USING (true)
+
+statement ok
+SET ROLE sc_owner
+
+skipif config local-legacy-schema-changer local-mixed-24.3 local-mixed-25.1
+statement error pgcode 42501 pq: must be owner of table t or have CREATE privilege on table t
+ALTER TABLE defaultdb.owned_sc.t ADD COLUMN c2 INT
+
+skipif config local-legacy-schema-changer local-mixed-24.3 local-mixed-25.1
+statement error pgcode 42501 pq: must be owner of table t or have CREATE privilege on table t
+ALTER TABLE defaultdb.owned_sc.t DISABLE ROW LEVEL SECURITY
+
+skipif config local-legacy-schema-changer local-mixed-24.3 local-mixed-25.1
+statement error pgcode 42501 pq: must be owner of relation t
+DROP POLICY p ON defaultdb.owned_sc.t
+
+statement ok
+DROP TABLE defaultdb.owned_sc.t;
+DROP SCHEMA defaultdb.owned_sc
+
+user root
+
+statement ok
+REVOKE sc_owner, obj_owner FROM testuser;
+DROP ROLE sc_owner;
+DROP ROLE obj_owner
+
+subtest end
