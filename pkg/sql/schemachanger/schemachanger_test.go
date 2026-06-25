@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
 	"github.com/lib/pq"
@@ -619,7 +620,13 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 	}
 	s, setupConn, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+	var mu syncutil.Mutex
 	dbName, scName, tblName := "testdb", "testsc", "t"
+	getNames := func() (string, string, string) {
+		mu.Lock()
+		defer mu.Unlock()
+		return dbName, scName, tblName
+	}
 	useLegacyOrDeclarative := func(sqlDB *gosql.DB) error {
 		decl := rand.Intn(2) == 0
 		if !decl {
@@ -632,26 +639,27 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 
 	createSchema := func(conn *gosql.DB) error {
 		return testutils.SucceedsSoonError(func() error {
+			db, sc, tbl := getNames()
 			if _, err := conn.Exec("SET create_table_with_schema_locked=false"); err != nil {
 				return err
 			}
-			_, err := conn.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %v;", dbName))
+			_, err := conn.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %v;", db))
 			if err != nil {
 				return err
 			}
-			_, err = conn.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %v.%v;", dbName, scName))
+			_, err = conn.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %v.%v;", db, sc))
 			if err != nil {
 				return err
 			}
-			_, err = conn.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %v.%v.%v(col INT PRIMARY KEY);", dbName, scName, tblName))
+			_, err = conn.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %v.%v.%v(col INT PRIMARY KEY);", db, sc, tbl))
 			if err != nil {
 				return err
 			}
-			_, err = conn.Exec(fmt.Sprintf("DELETE FROM %v.%v.%v;", dbName, scName, tblName))
+			_, err = conn.Exec(fmt.Sprintf("DELETE FROM %v.%v.%v;", db, sc, tbl))
 			if err != nil {
 				return err
 			}
-			_, err = conn.Exec(fmt.Sprintf("INSERT INTO %v.%v.%v SELECT generate_series(1,100);", dbName, scName, tblName))
+			_, err = conn.Exec(fmt.Sprintf("INSERT INTO %v.%v.%v SELECT generate_series(1,100);", db, sc, tbl))
 			if err != nil {
 				return err
 			}
@@ -690,22 +698,25 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 		if err := useLegacyOrDeclarative(workerConn); err != nil {
 			return err
 		}
+		curDB, _, _ := getNames()
 		drop := rand.Intn(2) == 0
 		if drop {
-			if _, err := workerConn.Exec(fmt.Sprintf("DROP DATABASE %v CASCADE", dbName)); err != nil {
+			if _, err := workerConn.Exec(fmt.Sprintf("DROP DATABASE %v CASCADE", curDB)); err != nil {
 				return err
 			}
-			t.Logf("DROP DATABASE %v", dbName)
+			t.Logf("DROP DATABASE %v", curDB)
 			return createSchema(workerConn)
 		}
 		newDBName := fmt.Sprintf("testdb_%v", nextObjectID.Add(1))
-		if newDBName == dbName {
+		if newDBName == curDB {
 			return nil
 		}
-		if _, err := workerConn.Exec(fmt.Sprintf("ALTER DATABASE %v RENAME TO %v", dbName, newDBName)); err != nil {
+		if _, err := workerConn.Exec(fmt.Sprintf("ALTER DATABASE %v RENAME TO %v", curDB, newDBName)); err != nil {
 			return err
 		}
+		mu.Lock()
 		dbName = newDBName
+		mu.Unlock()
 		t.Logf("RENAME DATABASE TO %v", newDBName)
 		return nil
 	}))
@@ -715,23 +726,26 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 		if err := useLegacyOrDeclarative(workerConn); err != nil {
 			return err
 		}
+		curDB, curSC, _ := getNames()
 		drop := rand.Intn(2) == 0
 		newSCName := fmt.Sprintf("testsc_%v", nextObjectID.Add(1))
-		if scName == newSCName {
+		if curSC == newSCName {
 			return nil
 		}
 		var err error
 		if !drop {
-			_, err = workerConn.Exec(fmt.Sprintf("ALTER SCHEMA %v.%v RENAME TO %v", dbName, scName, newSCName))
+			_, err = workerConn.Exec(fmt.Sprintf("ALTER SCHEMA %v.%v RENAME TO %v", curDB, curSC, newSCName))
 		} else {
-			_, err = workerConn.Exec(fmt.Sprintf("DROP SCHEMA %v.%v CASCADE", dbName, scName))
+			_, err = workerConn.Exec(fmt.Sprintf("DROP SCHEMA %v.%v CASCADE", curDB, curSC))
 		}
 		if err == nil {
 			if !drop {
+				mu.Lock()
 				scName = newSCName
+				mu.Unlock()
 				t.Logf("RENAME SCHEMA TO %v", newSCName)
 			} else {
-				t.Logf("DROP SCHEMA TO %v", scName)
+				t.Logf("DROP SCHEMA TO %v", curSC)
 				return createSchema(workerConn)
 			}
 		} else if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema) {
@@ -748,15 +762,18 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 		}
 		newTblName := fmt.Sprintf("t_%v", nextObjectID.Add(1))
 		drop := rand.Intn(2) == 0
+		curDB, curSC, curTbl := getNames()
 		var err error
 		if !drop {
-			_, err = workerConn.Exec(fmt.Sprintf(`ALTER TABLE %v.%v.%v RENAME TO %v`, dbName, scName, tblName, newTblName))
+			_, err = workerConn.Exec(fmt.Sprintf(`ALTER TABLE %v.%v.%v RENAME TO %v`, curDB, curSC, curTbl, newTblName))
 		} else {
-			_, err = workerConn.Exec(fmt.Sprintf(`DROP TABLE %v.%v.%v`, dbName, scName, tblName))
+			_, err = workerConn.Exec(fmt.Sprintf(`DROP TABLE %v.%v.%v`, curDB, curSC, curTbl))
 		}
 		if err == nil {
 			if !drop {
+				mu.Lock()
 				tblName = newTblName
+				mu.Unlock()
 				t.Logf("RENAME TABLE TO %v", newTblName)
 			} else {
 				t.Logf("DROP TABLE %v", newTblName)
@@ -774,7 +791,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 		if err := useLegacyOrDeclarative(workerConn); err != nil {
 			return err
 		}
-		dbName, scName, tblName := dbName, scName, tblName
+		dbName, scName, tblName := getNames()
 		newColName := fmt.Sprintf("col_%v", nextObjectID.Add(1))
 
 		_, err := workerConn.Exec(fmt.Sprintf("ALTER TABLE %v.%v.%v ADD COLUMN %v INT DEFAULT %v",
@@ -795,7 +812,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 			return err
 		}
 		// Randomly pick a non-PK column to drop.
-		dbName, scName, tblName := dbName, scName, tblName
+		dbName, scName, tblName := getNames()
 		colName, err := getANonPrimaryKeyColumn(workerConn, dbName, scName, tblName)
 		if err != nil || colName == "" {
 			return err
@@ -818,7 +835,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 		newIndexName := fmt.Sprintf("idx_%v", nextObjectID.Add(1))
 
 		// Randomly pick a non-PK column to create an index on.
-		dbName, scName, tblName := dbName, scName, tblName
+		dbName, scName, tblName := getNames()
 		colName, err := getANonPrimaryKeyColumn(workerConn, dbName, scName, tblName)
 		if err != nil || colName == "" {
 			return err
@@ -846,7 +863,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 			return err
 		}
 		// Randomly pick a public, secondary index to drop.
-		dbName, scName, tblName := dbName, scName, tblName
+		dbName, scName, tblName := getNames()
 		indexName, err := getASecondaryIndex(workerConn, dbName, scName, tblName)
 		if err != nil || indexName == "" {
 			return err
