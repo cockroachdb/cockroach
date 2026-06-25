@@ -137,7 +137,7 @@ func matchFullUnacceptableKeyQuery(
 			if err != nil {
 				return "", nil, err
 			}
-			returnedCols = append(returnedCols, col.GetName())
+			returnedCols = append(returnedCols, tree.NameString(col.GetName()))
 		}
 	}
 

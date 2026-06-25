@@ -86,13 +86,13 @@ func newSQLUniqueWithoutIndexConstraintCheckOperation(
 func (o *sqlUniqueConstraintCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 	// Create a query of the form:
-	// SELECT a,b,c FROM db.t AS tbl1 JOIN
-	//   (SELECT b, c FROM db.t GROUP BY b, c
-	//     WHERE b IS NOT NULL AND c IS NOT NULL [AND partial index predicate]
-	//     HAVING COUNT(*) > 1) as tbl2
-	//   ON tbl1.b = tbl2.b AND tbl1.c = tbl2.c;
-	// Where a, b, and c are all the public columns in table db.t and b and c are
-	// the unique columns. We select all public columns to provide detailed
+	//   SELECT a, b, c FROM [<tableID> AS tbl1] JOIN
+	//     (SELECT b, c FROM [<tableID> AS tbl]
+	//       WHERE b IS NOT NULL AND c IS NOT NULL [AND partial index predicate]
+	//       GROUP BY b, c HAVING count(*) > 1) AS tbl2
+	//     ON tbl1.b = tbl2.b AND tbl1.c = tbl2.c
+	// where a, b, and c are all the public columns in the table, and b and c
+	// are the unique columns. We select all public columns to provide detailed
 	// information if there are constraint violations.
 
 	// Collect all the columns.
@@ -118,20 +118,19 @@ func (o *sqlUniqueConstraintCheckOperation) Start(params runParams) error {
 	if o.asOf != hlc.MaxTimestamp {
 		asOf = fmt.Sprintf("AS OF SYSTEM TIME '%s'", o.asOf.AsOfSystemTime())
 	}
-	tableName := fmt.Sprintf("%s.%s", o.tableName.Catalog(), o.tableName.Table())
 	dup, _, err := duplicateRowQuery(o.tableDesc, o.cols, o.predicate,
 		0 /* indexIDForValidation */, false /* limitResults */)
 	if err != nil {
 		return err
 	}
 
-	sel := fmt.Sprintf(`SELECT %[1]s 
-FROM %[2]s AS tbl1 JOIN 
-(%[3]s) AS tbl2 
+	sel := fmt.Sprintf(`SELECT %[1]s
+FROM [%[2]d AS tbl1] JOIN
+(%[3]s) AS tbl2
 ON %[4]s
 %[5]s `,
 		strings.Join(pCols, ","),        // 1
-		tableName,                       // 2
+		o.tableDesc.GetID(),             // 2
 		dup,                             // 3
 		strings.Join(matchers, " AND "), // 4
 		asOf,                            // 5
