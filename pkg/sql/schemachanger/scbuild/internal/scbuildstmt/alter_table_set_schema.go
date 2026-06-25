@@ -19,7 +19,9 @@ import (
 // It sets the schema for a table, view, or sequence.
 // Requires privileges: DROP on source table/view/sequence, CREATE on destination schema.
 func AlterTableSetSchema(b BuildCtx, n *tree.AlterTableSetSchema) {
-	// Resolve any type of object
+	// Postgres requires ownership of the relation to set the schema of a table.
+	// Accepting the DROP privilege is an intentional divergence so that the
+	// move can be delegated without granting full ownership.
 	elts := b.ResolveRelation(n.Name, ResolveParams{
 		IsExistenceOptional: n.IfExists,
 		RequiredPrivilege:   privilege.DROP,
