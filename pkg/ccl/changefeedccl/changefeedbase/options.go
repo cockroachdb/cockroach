@@ -42,6 +42,10 @@ type EnvelopeType string
 // FormatType configures the encoding format.
 type FormatType string
 
+// AvroModeType configures whether the Avro schema-registry interaction
+// registers schemas or only resolves already-registered schema IDs.
+type AvroModeType string
+
 // OnErrorType configures the job behavior when an error occurs.
 type OnErrorType string
 
@@ -85,6 +89,7 @@ const (
 // Constants for the options.
 const (
 	OptAvroSchemaPrefix                   = `avro_schema_prefix`
+	OptAvroMode                           = `avro_mode`
 	OptConfluentSchemaRegistry            = `confluent_schema_registry`
 	OptCursor                             = `cursor`
 	OptCustomKeyColumn                    = `key_column`
@@ -175,6 +180,14 @@ const (
 	OptFormatCSV      FormatType = `csv`
 	OptFormatParquet  FormatType = `parquet`
 	OptFormatProtobuf FormatType = `protobuf`
+
+	// OptAvroModeWrite is the write Avro schema-registry mode, and the behavior
+	// when avro_mode is unset: the sink registers each key/value schema and uses
+	// the returned ID.
+	OptAvroModeWrite AvroModeType = `write`
+	// OptAvroModeRead is a read-only Avro schema-registry mode: the sink looks
+	// up the schema ID of an already-registered subject.
+	OptAvroModeRead AvroModeType = `read`
 
 	OptOnErrorFail  OnErrorType = `fail`
 	OptOnErrorPause OnErrorType = `pause`
@@ -375,6 +388,7 @@ var jsonOption = OptionPermittedValues{Type: OptionTypeJSON}
 // PlanHookState.TypeAsStringOpts().
 var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptAvroSchemaPrefix:                   stringOption,
+	OptAvroMode:                           enum("read", "write"),
 	OptConfluentSchemaRegistry:            stringOption,
 	OptCursor:                             timestampOption,
 	OptCustomKeyColumn:                    stringOption,
@@ -436,7 +450,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptPartitionAlg)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptAvroMode, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptPartitionAlg)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)
@@ -457,7 +471,7 @@ var ExternalConnectionValidOptions = unionStringSets(SQLValidOptions, KafkaValid
 
 // CaseInsensitiveOpts options which supports case Insensitive value
 var CaseInsensitiveOpts = makeStringSet(OptFormat, OptEnvelope, OptCompression, OptSchemaChangeEvents,
-	OptSchemaChangePolicy, OptOnError, OptInitialScan)
+	OptSchemaChangePolicy, OptOnError, OptInitialScan, OptAvroMode)
 
 // RetiredOptions are the options which are no longer active.
 var RetiredOptions = makeStringSet(DeprecatedOptProtectDataFromGCOnPause)
@@ -857,6 +871,7 @@ type EncodingOptions struct {
 	Diff                        bool
 	EncodeJSONValueNullAsObject bool
 	AvroSchemaPrefix            string
+	AvroMode                    AvroModeType
 	SchemaRegistryURI           string
 	Compression                 string
 	CustomKeyColumn             string
@@ -898,6 +913,16 @@ func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 		o.Envelope = EnvelopeType(envelope)
 	}
 
+	avroMode, err := s.getEnumValue(OptAvroMode)
+	if err != nil {
+		return o, err
+	}
+	if o.Format == OptFormatAvro && avroMode == `` {
+		o.AvroMode = OptAvroModeWrite
+	} else {
+		o.AvroMode = AvroModeType(avroMode)
+	}
+
 	_, o.KeyInValue = s.m[OptKeyInValue]
 	_, o.TopicInValue = s.m[OptTopicInValue]
 	_, o.UpdatedTimestamps = s.m[OptUpdatedTimestamps]
@@ -936,6 +961,10 @@ func (e EncodingOptions) Validate() error {
 	}
 	if e.Format != OptFormatJSON && e.EncodeJSONValueNullAsObject {
 		return errors.Errorf(`%s is only usable with %s=%s`, OptEncodeJSONValueNullAsObject, OptFormat, OptFormatJSON)
+	}
+
+	if e.AvroMode != `` && e.Format != OptFormatAvro {
+		return errors.Errorf(`%s is only usable with %s=%s`, OptAvroMode, OptFormat, OptFormatAvro)
 	}
 
 	if e.Envelope == OptEnvelopeEnriched {

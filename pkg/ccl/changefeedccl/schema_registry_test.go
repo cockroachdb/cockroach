@@ -137,6 +137,65 @@ func TestConfluentSchemaRegistrySharedCache(t *testing.T) {
 
 }
 
+func TestConfluentSchemaRegistryLookup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	const schemaA = `{"type":"record","name":"r","fields":[{"name":"a","type":"long"}]}`
+
+	t.Run("resolves the latest registered schema id via GET", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+		// Register the schema as out of band operator.
+		wantID := regServer.RegisterSchema("subject1", schemaA)
+
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		id, err := reg.LookupSchemaIDForSubject(ctx, "subject1", schemaA)
+		require.NoError(t, err)
+		require.Equal(t, wantID, id)
+		require.Equal(t, 1, regServer.RegistrationCount())
+	})
+
+	t.Run("errors on a subject with no registered version", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		_, err = reg.LookupSchemaIDForSubject(ctx, "missing-value", schemaA)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "missing-value")
+	})
+
+	t.Run("caches by subject and schema", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+
+		regServer.RegisterSchema("subject1", schemaA)
+
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		id1, err := reg.LookupSchemaIDForSubject(ctx, "subject1", schemaA)
+		require.NoError(t, err)
+
+		// A second lookup of the same {subject, schema} is served from the
+		// cache; closing the server ensures no further request is made.
+		regServer.Close()
+		id2, err := reg.LookupSchemaIDForSubject(ctx, "subject1", schemaA)
+		require.NoError(t, err)
+		require.Equal(t, id1, id2)
+	})
+}
+
 func TestConfluentSchemaRegistryPing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
