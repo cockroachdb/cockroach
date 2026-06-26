@@ -31,9 +31,15 @@ echo "Creating RAFA release PRs for $version..."
 # When authenticating with a PAT, GitHub identifies the caller from the
 # token alone; the username is a syntactic placeholder, conventionally
 # "x-access-token".
+#
+# A shallow, single-branch clone is sufficient: the release PRs branch
+# from the tip of the default branch, so neither deeper history nor other
+# branches are needed. This keeps the clone fast despite the size of the
+# rafa-production repo.
 echo "Cloning rafa-production..."
 git -c "credential.https://github.com.helper=!f(){ echo username=x-access-token; echo password=${GH_TOKEN}; };f" \
-  clone https://github.com/cockroachlabs/rafa-production.git rafa-production
+  clone --depth=1 --single-branch \
+  https://github.com/cockroachlabs/rafa-production.git rafa-production
 
 # Write version file for the RAFA script.
 mkdir -p cockroach/pkg/build
