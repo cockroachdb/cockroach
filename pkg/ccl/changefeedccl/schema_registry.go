@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"path"
 	"time"
@@ -38,6 +39,12 @@ type schemaRegistry interface {
 	// be used in Avro wire messages or in other calls to the
 	// schema registry.
 	RegisterSchemaForSubject(ctx context.Context, subject string, schema string) (int32, error)
+
+	// LookupSchemaIDForSubject returns the schema ID of the latest registered
+	// version of subject. It fails without modifying the registry if subject
+	// has no registered version. localSchema identifies the caller's
+	// generated schema for caching purposes.
+	LookupSchemaIDForSubject(ctx context.Context, subject string, localSchema string) (int32, error)
 }
 
 type confluentSchemaVersionRequest struct {
@@ -46,6 +53,15 @@ type confluentSchemaVersionRequest struct {
 
 type confluentSchemaVersionResponse struct {
 	ID int32 `json:"id"`
+}
+
+// confluentSchemaVersionMetadata is the response returned against a
+// registered subject version.
+type confluentSchemaVersionMetadata struct {
+	Subject string `json:"subject"`
+	Version int32  `json:"version"`
+	ID      int32  `json:"id"`
+	Schema  string `json:"schema"`
 }
 
 type confluentSchemaRegistry struct {
@@ -244,7 +260,7 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 			return errors.Wrap(err, "contacting confluent schema registry")
 		}
 		defer gracefulClose(ctx, resp.Body)
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
 			return errors.Errorf("registering schema to %s %s: %s", u, resp.Status, body)
 		}
@@ -262,6 +278,47 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 		r.sliMetrics.SchemaRegistrations.Inc(1)
 	}
 	return id, nil
+}
+
+// LookupSchemaIDForSubject implements the schemaRegistry interface. It fetches
+// the latest registered version of the subject from the schema registry over
+// HTTP.
+//
+// See: https://docs.confluent.io/platform/current/schema-registry/develop/api.html#get--subjects-(string-%20subject)-versions-(versionId-%20version)
+//
+// TODO(sachin): implement different version strategies so callers can resolve a
+// specific version instead of always using the latest.
+func (r *confluentSchemaRegistry) LookupSchemaIDForSubject(
+	ctx context.Context, subject string, localSchema string,
+) (int32, error) {
+	u := r.urlForPath(fmt.Sprintf("subjects/%s/versions/latest", subject))
+	if log.V(1) {
+		log.Changefeed.Infof(ctx, "looking up avro schema id %s", u)
+	}
+
+	var meta confluentSchemaVersionMetadata
+	err := r.doWithRetry(ctx, func() error {
+		resp, err := r.client.Get(ctx, u)
+		if err != nil {
+			return errors.Wrap(err, "contacting confluent schema registry")
+		}
+		defer gracefulClose(ctx, resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return errors.Errorf("looking up schema id for subject %q at %s: %s: %s",
+				subject, u, resp.Status, body)
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
+			return errors.Wrap(err, "decoding confluent schema registry reply")
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	// TODO (sachin): implement a schema backward compatibility check to
+	// handle different schema versions.
+	return meta.ID, nil
 }
 
 func (r *confluentSchemaRegistry) doWithRetry(ctx context.Context, fn func() error) error {
@@ -362,6 +419,28 @@ func (csr *schemaRegistryWithCache) RegisterSchemaForSubject(
 		return id, nil
 	}
 	id, err := csr.base.RegisterSchemaForSubject(ctx, subject, schema)
+	if err == nil {
+		csr.cache.Add(cacheKey, id)
+	}
+	return id, err
+}
+
+// LookupSchemaIDForSubject implements the schemaRegistry interface. The cache is
+// keyed on {subject, schema}; keying on the local schema is what causes a table
+// schema change to re-resolve the ID rather than reuse a stale one.
+func (csr *schemaRegistryWithCache) LookupSchemaIDForSubject(
+	ctx context.Context, subject string, schema string,
+) (int32, error) {
+	cacheKey := schemaRegistryCacheKey{
+		subject: subject, schema: schema,
+	}
+	csr.cache.mu.Lock()
+	defer csr.cache.mu.Unlock()
+	id, ok := csr.cache.Get(cacheKey)
+	if ok {
+		return id, nil
+	}
+	id, err := csr.base.LookupSchemaIDForSubject(ctx, subject, schema)
 	if err == nil {
 		csr.cache.Add(cacheKey, id)
 	}
