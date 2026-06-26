@@ -440,6 +440,88 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 	}
 }
 
+// TestAvroEncoderReadOnlyMode verifies that with avro_mode='read' the encoder
+// resolves schema IDs of already-registered subjects and never registers
+// a schema, failing with an actionable error when a subject is missing.
+func TestAvroEncoderReadOnlyMode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tableDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	require.NoError(t, err)
+	row := rowenc.EncDatumRow{
+		rowenc.EncDatum{Datum: tree.NewDInt(1)},
+		rowenc.EncDatum{Datum: tree.NewDString(`bar`)},
+	}
+	ts := hlc.Timestamp{WallTime: 1, Logical: 2}
+
+	targets := changefeedbase.Targets{}
+	targets.Add(changefeedbase.Target{
+		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+		DescID:            tableDesc.GetID(),
+		StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
+	})
+
+	rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
+	var prevRow cdcevent.Row
+	evCtx := eventContext{updated: ts}
+
+	reg := cdctest.StartTestSchemaRegistry()
+	defer reg.Close()
+
+	writeOpts := changefeedbase.EncodingOptions{
+		Format:            changefeedbase.OptFormatAvro,
+		Envelope:          changefeedbase.OptEnvelopeWrapped,
+		SchemaRegistryURI: reg.URL(),
+	}
+
+	// Seed the registry by encoding once in the default (write) mode. This
+	// registers the key and value schemas, standing in for an
+	// operator's out-of-band registration.
+	writeEnc, err := getEncoder(ctx, writeOpts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, writeOpts))
+	require.NoError(t, err)
+	wantKey, err := writeEnc.EncodeKey(ctx, rowInsert)
+	require.NoError(t, err)
+	wantKey = append([]byte(nil), wantKey...)
+	wantValue, err := writeEnc.EncodeValue(ctx, evCtx, rowInsert, prevRow)
+	require.NoError(t, err)
+	wantValue = append([]byte(nil), wantValue...)
+	require.Equal(t, 2, reg.RegistrationCount())
+
+	// Drop the shared client-side cache.
+	TestingClearSchemaRegistrySingleton()
+
+	readOpts := writeOpts
+	readOpts.AvroMode = changefeedbase.OptAvroModeRead
+	readEnc, err := getEncoder(ctx, readOpts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, readOpts))
+	require.NoError(t, err)
+	gotKey, err := readEnc.EncodeKey(ctx, rowInsert)
+	require.NoError(t, err)
+	gotKey = append([]byte(nil), gotKey...)
+	gotValue, err := readEnc.EncodeValue(ctx, evCtx, rowInsert, prevRow)
+	require.NoError(t, err)
+
+	// Read mode resolves the same IDs and produces identical wire bytes,
+	// without issuing any registrations.
+	require.Equal(t, wantKey, gotKey)
+	require.Equal(t, wantValue, gotValue)
+	require.Equal(t, 2, reg.RegistrationCount())
+
+	// A subject that was never registered fails with an actionable error
+	// naming the subject, and still performs no writes.
+	TestingClearSchemaRegistrySingleton()
+	emptyReg := cdctest.StartTestSchemaRegistry()
+	defer emptyReg.Close()
+	readOpts.SchemaRegistryURI = emptyReg.URL()
+	failEnc, err := getEncoder(ctx, readOpts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, readOpts))
+	require.NoError(t, err)
+	_, err = failEnc.EncodeKey(ctx, rowInsert)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "foo-key")
+	require.Equal(t, 0, emptyReg.RegistrationCount())
+}
+
 func TestAvroArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

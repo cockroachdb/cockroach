@@ -37,6 +37,7 @@ type confluentAvroEncoder struct {
 	envelopeType                           changefeedbase.EnvelopeType
 	customKeyColumn                        string
 	headersJSONColumnName                  string
+	avroMode                               changefeedbase.AvroModeType
 
 	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
@@ -96,6 +97,7 @@ func newConfluentAvroEncoder(
 	e.headersJSONColumnName = opts.HeadersJSONColName
 	e.mvccTimestampField = opts.MVCCTimestamps
 	e.enrichedSourceProvider = enrichedSourceProvider
+	e.avroMode = opts.AvroMode
 
 	// TODO: Implement this.
 	if opts.KeyInValue {
@@ -162,7 +164,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
 		subject := changefeedbase.SQLNameToKafkaName(tableName) + confluentSubjectSuffixKey
-		registered.registryID, err = e.register(ctx, &registered.schema.Record, subject)
+		registered.registryID, err = e.resolveSchemaID(ctx, &registered.schema.Record, subject)
 		if err != nil {
 			return nil, err
 		}
@@ -278,7 +280,7 @@ func (e *confluentAvroEncoder) EncodeValue(
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
 		subject := changefeedbase.SQLNameToKafkaName(name) + confluentSubjectSuffixValue
-		registered.registryID, err = e.register(ctx, &registered.schema.Record, subject)
+		registered.registryID, err = e.resolveSchemaID(ctx, &registered.schema.Record, subject)
 		if err != nil {
 			return nil, err
 		}
@@ -324,7 +326,7 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
 		subject := changefeedbase.SQLNameToKafkaName(topic) + confluentSubjectSuffixValue
-		registered.registryID, err = e.register(ctx, &registered.schema.Record, subject)
+		registered.registryID, err = e.resolveSchemaID(ctx, &registered.schema.Record, subject)
 		if err != nil {
 			return nil, err
 		}
@@ -347,8 +349,15 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 	return registered.schema.BinaryFromRow(header, meta, nilRow, nilRow, nilRow, "")
 }
 
-func (e *confluentAvroEncoder) register(
+// resolveSchemaID returns the registry schema ID to stamp onto messages for the
+// given subject. In the default write mode it registers the schema; in
+// read mode it resolves the ID of an already-registered schema and never
+// writes to the registry.
+func (e *confluentAvroEncoder) resolveSchemaID(
 	ctx context.Context, schema *avro.Record, subject string,
 ) (int32, error) {
+	if e.avroMode == changefeedbase.OptAvroModeRead {
+		return e.schemaRegistry.LookupSchemaIDForSubject(ctx, subject, schema.Schema())
+	}
 	return e.schemaRegistry.RegisterSchemaForSubject(ctx, subject, schema.Schema())
 }
