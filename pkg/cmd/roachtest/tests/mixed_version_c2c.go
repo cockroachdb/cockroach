@@ -50,7 +50,7 @@ func registerC2CMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "c2c/mixed-version",
 		Owner:            registry.OwnerDisasterRecovery,
-		Cluster:          r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, spec.WorkloadNode(), spec.CPU(8)),
+		Cluster:          r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, spec.WorkloadNode(), spec.CPU(16)),
 		CompatibleClouds: sp.clouds,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -266,11 +266,11 @@ func (cm *c2cMixed) SetupHook(ctx context.Context) {
 func (cm *c2cMixed) WorkloadHook(ctx context.Context) {
 	tpccInitCmd := roachtestutil.NewCommand("./cockroach workload init tpcc").
 		Arg("{pgurl%s}", cm.c.Range(1, cm.sp.srcNodes)).
-		Flag("warehouses", 10)
+		Flag("warehouses", 50)
 	tpccRunCmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
 		Arg("{pgurl%s}", cm.c.Range(1, cm.sp.srcNodes)).
 		Option("tolerate-errors").
-		Flag("warehouses", 500)
+		Flag("warehouses", 50)
 	cm.workloadStopper = cm.sourceMvt.Workload("tpcc", cm.c.WorkloadNode(), tpccInitCmd, tpccRunCmd)
 
 	readerTenantName := fmt.Sprintf("%s-readonly", destTenantName)
@@ -278,7 +278,7 @@ func (cm *c2cMixed) WorkloadHook(ctx context.Context) {
 	tpccStandbyRunCmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
 		Arg("{pgurl%s:%s}", cm.c.Range(cm.sp.srcNodes+1, cm.sp.srcNodes+cm.sp.dstNodes), readerTenantName).
 		Option("tolerate-errors").
-		Flag("warehouses", 500).
+		Flag("warehouses", 50).
 		Flag("mix", "newOrder=0,payment=0,orderStatus=1,delivery=0,stockLevel=1")
 
 	cm.readOnlyWorkloadStopper = cm.destMvt.Workload("tpcc-read-only", cm.c.WorkloadNode(), nil, tpccStandbyRunCmd)
