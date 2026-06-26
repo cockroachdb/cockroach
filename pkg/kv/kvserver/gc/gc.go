@@ -408,9 +408,19 @@ func Run(
 	if err != nil {
 		return Info{}, err
 	}
-	err = processReplicatedRangeTombstones(ctx, desc, snap, fastPath, now, newThreshold, gcer, &info)
-	if err != nil {
-		return Info{}, err
+
+	// Skip range tombstone GC if point-key GC had any clear range failures; its
+	// invariants depend on the point-key phase having fully applied. The next
+	// cycle retries with a fresh snapshot. See #166091.
+	if info.ClearRangeSpanFailures > 0 {
+		log.KvExec.Infof(ctx,
+			"skipping range tombstone GC: %d clear range failure(s) in point-key phase",
+			info.ClearRangeSpanFailures)
+	} else {
+		err = processReplicatedRangeTombstones(ctx, desc, snap, fastPath, now, newThreshold, gcer, &info)
+		if err != nil {
+			return Info{}, err
+		}
 	}
 
 	// From now on, all keys processed are range-local and inline (zero timestamp).
