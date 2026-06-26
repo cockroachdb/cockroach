@@ -5902,7 +5902,13 @@ func (og *operationGenerator) setTableStorageParam(
 		if hasPgcodeBug {
 			stmt.potentialExecErrors.add(pgcode.Uncategorized)
 		}
-	} else if param == catpb.CanaryStatsWindowSettingName {
+	}
+
+	// sql_stats_canary_window is version-gated: before v26.2 finalization the
+	// server rejects it with FeatureNotSupported before it validates the value.
+	// This applies whether or not the value is valid, so the check is kept
+	// separate from the value-validity branches above.
+	if param == catpb.CanaryStatsWindowSettingName {
 		canaryNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_2.Version())
 		if err != nil {
 			return nil, err
