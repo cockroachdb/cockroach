@@ -71,6 +71,7 @@ go_test(
         "//pkg/util/log/eventlog",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_lib_pq//:pq",
