@@ -34,7 +34,7 @@ jobs:
     steps:
       - name: calculate commit depth
         run: echo COMMIT_DEPTH=$(echo '${{ github.event.pull_request.commits }} + 1' | bc) >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: ${{ env.COMMIT_DEPTH }}
@@ -61,7 +61,7 @@ jobs:
     steps:
       - name: calculate commit depth
         run: echo COMMIT_DEPTH=$(echo '${{ github.event.pull_request.commits }} + 1' | bc) >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: ${{ env.COMMIT_DEPTH }}

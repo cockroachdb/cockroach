@@ -13,7 +13,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       FETCH_DEPTH: 15
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
         with:
           # By default, checkout merges the PR into the current master.
           # Instead, we want to check out the PR as is.
@@ -24,7 +24,7 @@ jobs:
           fetch-depth: ${{ env.FETCH_DEPTH }}
 
       - name: Set up Bazel cache
-        uses: actions/cache@v3
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
         with:
           path: |
             ~/.cache/bazel
@@ -118,7 +118,7 @@ jobs:
           fi
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cover
           path: artifacts/cover-*.json
