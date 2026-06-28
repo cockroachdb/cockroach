@@ -185,7 +185,7 @@ jobs:
 
       - name: Checkout PR branch from fork
         if: steps.loop_check.outputs.proceed == 'true'
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.AUTOSOLVER_FORK_OWNER }}/${{ env.AUTOSOLVER_FORK_REPO }}
           ref: ${{ github.event.workflow_run.head_branch }}
@@ -217,7 +217,7 @@ jobs:
       - name: Fix CI failures
         id: fix
         if: steps.loop_check.outputs.proceed == 'true'
-        uses: cockroachdb/claude-code-action@v1
+        uses: cockroachdb/claude-code-action@426380f01bad0a17200865605a85cb28926dccbf # v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: us-east5

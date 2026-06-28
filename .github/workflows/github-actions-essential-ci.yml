@@ -58,7 +58,7 @@ jobs:
     runs-on: [self-hosted, ubuntu_big_2404]
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: compute metadata
@@ -79,7 +79,7 @@ jobs:
     runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: compute metadata
@@ -94,7 +94,7 @@ jobs:
     runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: compute metadata
@@ -115,11 +115,11 @@ jobs:
     runs-on: [self-hosted, ubuntu_big_2404]
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           path: cockroach
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           path: examples-orms
           repository: cockroachdb/examples-orms
@@ -148,7 +148,7 @@ jobs:
     runs-on: [self-hosted, ubuntu_huge_2404]
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           submodules: true
@@ -172,7 +172,7 @@ jobs:
     runs-on: [self-hosted, ubuntu_big_2404]
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           submodules: true
@@ -181,11 +181,11 @@ jobs:
       - run: ./build/github/get-engflow-keys.sh
       - name: run local roachtests
         run: ./build/github/local-roachtest.sh crosslinux
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: local_roachtest_test_summary.tsv
           path: artifacts/test_summary.tsv
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ failure() }}
         with:
           name: local roachtest artifacts
@@ -197,7 +197,7 @@ jobs:
     runs-on: [self-hosted, ubuntu_big_2404]
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           submodules: true
@@ -206,11 +206,11 @@ jobs:
       - run: ./build/github/get-engflow-keys.sh
       - name: run local roachtests
         run: ./build/github/local-roachtest.sh crosslinuxfips
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: local_roachtest_fips_test_summary.tsv
           path: artifacts/test_summary.tsv
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ failure() }}
         with:
           name: local roachtest (FIPS) artifacts
@@ -222,7 +222,7 @@ jobs:
     runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: compute metadata
@@ -243,7 +243,7 @@ jobs:
     runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: compute metadata
@@ -264,7 +264,7 @@ jobs:
     runs-on: [self-hosted, ubuntu_big_2404]
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: run race canary test
@@ -276,7 +276,7 @@ jobs:
       - name: calculate commit depth
         if: github.event.pull_request.commits
         run: echo COMMIT_DEPTH=$(echo '${{ github.event.pull_request.commits }} + 1' | bc) >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           # By default, checkout merges the PR into the current master.
           # Instead, we want to check out the PR as is.

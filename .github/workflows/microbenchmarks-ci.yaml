@@ -24,7 +24,7 @@ jobs:
       merge_base: ${{ steps.build.outputs.merge_base }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Build
         id: build
         uses: ./.github/actions/microbenchmark-build
@@ -38,7 +38,7 @@ jobs:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'X-skip-perf-check') }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Build
         id: build
         uses: ./.github/actions/microbenchmark-build
@@ -51,7 +51,7 @@ jobs:
     needs: [base, head]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Run
         uses: ./.github/actions/microbenchmark-run
         with:
@@ -64,7 +64,7 @@ jobs:
     needs: [base, head]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Run
         uses: ./.github/actions/microbenchmark-run
         with:
@@ -81,7 +81,7 @@ jobs:
     needs: [base, run-group-1, run-group-2]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - run: ./build/github/get-engflow-keys.sh
         shell: bash
       - name: Unique Build ID

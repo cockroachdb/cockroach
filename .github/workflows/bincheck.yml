@@ -13,14 +13,14 @@ jobs:
     if: github.repository == 'cockroachdb/cockroach'
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
     - run: cd build/release/bincheck && ./test-linux ${{ github.ref_name }} ${{ github.sha }}
 
   darwin-arm64:
     if: github.repository == 'cockroachdb/cockroach'
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
     - run: cd build/release/bincheck && ./test-macos-arm64 ${{ github.ref_name }} ${{ github.sha }}
 
   windows:
@@ -28,5 +28,5 @@ jobs:
     runs-on: windows-latest
     steps:
     - run: git config --system core.longpaths true
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
     - run: cd build/release/bincheck && bash test-windows ${{ github.ref_name }} ${{ github.sha }}
