@@ -27,7 +27,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 1
@@ -41,7 +41,7 @@ jobs:
 
       - name: Get usermapper token
         id: usermapper_auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           project_id: 'dev-inf-prod'
           service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
@@ -76,7 +76,7 @@ jobs:
       - name: Stage 1 - Initial Bug Screening
         id: stage1
         if: steps.verify_author.outputs.authorized == 'true'
-        uses: cockroachdb/claude-code-action@v1
+        uses: cockroachdb/claude-code-action@426380f01bad0a17200865605a85cb28926dccbf # v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global
@@ -128,7 +128,7 @@ jobs:
       - name: Stage 2 - Database Expert Review
         id: stage2
         if: contains(steps.stage1_result.outputs.result, 'STAGE1_RESULT - POTENTIAL_BUG_DETECTED')
-        uses: cockroachdb/claude-code-action@v1
+        uses: cockroachdb/claude-code-action@426380f01bad0a17200865605a85cb28926dccbf # v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global
@@ -179,7 +179,7 @@ jobs:
       - name: Stage 3 - Principal Engineer Final Review
         id: stage3
         if: contains(steps.stage2_result.outputs.result, 'STAGE2_RESULT - POTENTIAL_BUG_DETECTED')
-        uses: cockroachdb/claude-code-action@v1
+        uses: cockroachdb/claude-code-action@426380f01bad0a17200865605a85cb28926dccbf # v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global
@@ -244,7 +244,7 @@ jobs:
 
       - name: Final Analysis Report
         if: always() && steps.verify_author.outputs.authorized == 'true'
-        uses: cockroachdb/claude-code-action@v1
+        uses: cockroachdb/claude-code-action@426380f01bad0a17200865605a85cb28926dccbf # v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global
