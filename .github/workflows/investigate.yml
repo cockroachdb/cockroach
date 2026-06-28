@@ -107,7 +107,7 @@ jobs:
       # full clone of the cockroach repo while still giving the agent
       # full history without manual deepening.
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.HAS_API_KEY == 'true' && github.repository || env.CODE_REPO }}
           token: ${{ env.HAS_API_KEY == 'true' && secrets.GITHUB_TOKEN || secrets.INVESTIGATE_PAT }}
@@ -260,7 +260,7 @@ jobs:
           fi
 
       - name: Investigate
-        uses: cockroachdb/claude-code-action@v1
+        uses: cockroachdb/claude-code-action@426380f01bad0a17200865605a85cb28926dccbf # v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: ${{ env.HAS_API_KEY != 'true' && 'vertex-model-runners' || '' }}
           CLOUD_ML_REGION: ${{ env.HAS_API_KEY != 'true' && 'global' || '' }}
@@ -301,7 +301,7 @@ jobs:
 
       - name: Upload findings
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: investigation-findings
           path: artifacts/findings.md

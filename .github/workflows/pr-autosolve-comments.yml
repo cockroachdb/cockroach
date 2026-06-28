@@ -56,7 +56,7 @@ jobs:
       - name: Download event context
         id: download
         if: steps.check_trigger.outputs.has_artifact == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: pr-comment-context
           run-id: ${{ github.event.workflow_run.id }}
@@ -143,7 +143,7 @@ jobs:
           esac
 
       - name: Checkout PR branch from fork
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ steps.context.outputs.head_repo }}
           ref: ${{ steps.context.outputs.head_ref }}
@@ -325,7 +325,7 @@ jobs:
 
       - name: Address review comments
         id: address
-        uses: cockroachdb/claude-code-action@v1
+        uses: cockroachdb/claude-code-action@426380f01bad0a17200865605a85cb28926dccbf # v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: us-east5
