@@ -948,6 +948,13 @@ func causeContention(
 		defer wgTxnDone.Done()
 		tx, errTxn := conn.BeginTx(ctx, &gosql.TxOptions{})
 		require.NoError(t, errTxn)
+		// With write buffering, INSERTs use Put (not CPut) for non-unique
+		// secondary indexes, which means the write is buffered without acquiring
+		// a KV lock. Set this session variable within the transaction to ensure
+		// it applies to this connection, not a random pool connection.
+		_, errTxn = tx.ExecContext(ctx,
+			"SET LOCAL use_cputs_on_non_unique_indexes = true")
+		require.NoError(t, errTxn)
 		_, errTxn = tx.ExecContext(ctx,
 			fmt.Sprintf("INSERT INTO %s (id, s) VALUES ('test', $1);", table),
 			insertValue)
