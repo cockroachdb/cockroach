@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -24,6 +25,18 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var PreparedTransactionsEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.prepared_transactions.unsafe.enabled",
+	"enables PREPARE TRANSACTION statements (two-phase commit). "+
+		"When a transaction is prepared, it holds its locks indefinitely and "+
+		"cannot be pushed. If the coordinator that initiated the prepare fails "+
+		"to follow up with COMMIT PREPARED or ROLLBACK PREPARED, those locks "+
+		"will be held potentially forever, even across restarts, until the "+
+		"transaction is manually resolved. Use with caution.",
+	false,
+	settings.WithUnsafe)
+
 // maxPreparedTxnGlobalIDLen is the maximum length of a prepared transaction's
 // global ID. Taken from Postgres, see GIDSIZE.
 const maxPreparedTxnGlobalIDLen = 200
@@ -35,6 +48,20 @@ func (ex *connExecutor) execPrepareTransactionInOpenState(
 ) (fsm.Event, fsm.EventPayload) {
 	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "prepare sql txn")
 	defer sp.Finish()
+
+	if !PreparedTransactionsEnabled.Get(&ex.server.cfg.Settings.SV) {
+		if rbErr := ex.state.mu.txn.Rollback(ctx); rbErr != nil {
+			log.Dev.Warningf(ctx, "txn rollback failed: err=%s", rbErr)
+		}
+		return eventTxnFinishPrepared{}, eventTxnFinishPreparedErrPayload{
+			err: errors.WithHint(
+				pgerror.Newf(pgcode.FeatureNotSupported,
+					"prepared transactions are disabled because the feature is not yet GA"),
+				"Set the cluster setting sql.prepared_transactions.unsafe.enabled "+
+					"to true to enable prepared transactions.",
+			),
+		}
+	}
 
 	// Insert into the system table and prepare the transaction in the KV layer.
 	prepareErr := ex.execPrepareTransactionInOpenStateInternal(ctx, s)
