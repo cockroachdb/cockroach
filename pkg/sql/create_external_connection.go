@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -148,8 +149,8 @@ func (p *planner) createExternalConnection(
 	}
 
 	// Grant user `ALL` on the newly created External Connection.
-	grantStatement := fmt.Sprintf(`GRANT ALL ON EXTERNAL CONNECTION "%s" TO %s`,
-		ec.name, p.User().SQLIdentifier())
+	grantStatement := fmt.Sprintf(`GRANT ALL ON EXTERNAL CONNECTION %s TO %s`,
+		lexbase.EscapeSQLIdent(ec.name), p.User().SQLIdentifier())
 	_, err = txn.ExecEx(params.ctx,
 		"grant-on-create-external-connection", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride, grantStatement)
