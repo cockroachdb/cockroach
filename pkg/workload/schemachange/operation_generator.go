@@ -2816,6 +2816,12 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		WHERE NOT (
 			COALESCE((col->'hidden')::bool, false)
 			OR  COALESCE((col->'inaccessible')::bool, false)
+		)
+		AND EXISTS (
+			SELECT 1 FROM information_schema.columns AS isc
+			WHERE isc.table_schema = columns.schema_id::REGNAMESPACE::TEXT
+			  AND isc.table_name = columns.table_name
+			  AND isc.column_name = col->>'name'
 		)`, indexableQuery)
 	q := With([]CTE{
 		{"descriptors", descJSONQuery},
