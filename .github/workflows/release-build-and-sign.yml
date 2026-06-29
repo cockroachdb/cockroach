@@ -23,6 +23,11 @@
 #           |               +---> cloud-rollout (needs publish-cloud-only)
 #           |
 #           +---> macos-signing (needs build-nonlinux)
+#           |       |
+#           |       +---> bincheck (matrix: linux-amd64, linux-arm64, windows,
+#           |               darwin-arm64; native runners; needs macos-signing so
+#           |               the signed darwin archive exists; non-blocking, not
+#           |               in notify)
 #           +---> ibm-signing (needs IBM linux builds)
 #           +---> sentry-panic (needs build-linux)
 #
@@ -46,7 +51,7 @@ on:
         type: string
         default: ''
       skip_jobs:
-        description: 'Comma-separated job IDs to skip (no spaces) when resuming after a partial failure. Validated by the validate-skip-jobs job. Valid IDs: build-linux, build-nonlinux, build-per-platform-ibm, build-docker, build-docker-ibm, macos-signing, ibm-signing, sentry-panic, generate-sbom, publish-cloud-only, cloud-rollout.'
+        description: 'Comma-separated job IDs to skip (no spaces) when resuming after a partial failure. Validated by the validate-skip-jobs job. Valid IDs: build-linux, build-nonlinux, build-per-platform-ibm, build-docker, build-docker-ibm, macos-signing, ibm-signing, sentry-panic, generate-sbom, bincheck, publish-cloud-only, cloud-rollout.'
         type: string
         default: ''
 
@@ -138,6 +143,7 @@ jobs:
             ibm-signing
             sentry-panic
             generate-sbom
+            bincheck
             publish-cloud-only
             cloud-rollout
           )
@@ -174,6 +180,9 @@ jobs:
       contents: read
     outputs:
       is_beta: ${{ steps.detect.outputs.is_beta }}
+      # The release version (e.g. v26.3.0-beta.1) read from version.txt. Consumed
+      # by bincheck to locate the staged archive (cockroach-$version.$platform.*).
+      version: ${{ steps.detect.outputs.version }}
     steps:
       # Partial (blob:none) + sparse checkout: materialize only
       # pkg/build/version.txt instead of cloning the whole (large) repo, so
@@ -192,6 +201,7 @@ jobs:
           # first non-comment line of pkg/build/version.txt, e.g. v26.3.0-beta.1.
           version="$(grep -v '^#' pkg/build/version.txt | head -n1 || true)"
           echo "version: ${version:-<unset>}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           # is_beta is true only for a -beta prerelease (e.g. v26.3.0-beta.1).
           # Anything else (alpha, rc, stable, or unreadable) defaults to false,
           # leaving the master / -rc / staging-v* paths as the only way in.
@@ -486,6 +496,114 @@ jobs:
             artifacts/cockroach@*.list-of-license-types.txt
             artifacts/THIRD-PARTY-NOTICES.txt
           if-no-files-found: error
+
+  # --------------------------------------------------------------------------
+  # Stage 1d: Bincheck (smoke-test the staged per-platform binaries)
+  # --------------------------------------------------------------------------
+  # Downloads the just-staged release archive for each platform from the staged
+  # GCS bucket (the same bucket the build jobs uploaded to, dryrun or prod) and
+  # runs the bincheck smoke test: startup init time / heap budget, a single-node
+  # server + SQL query, libgeos, and a Build Tag / Commit ID match against the
+  # expected version + SHA. This validates the binaries *before* publish, where a
+  # bad build can simply be rebuilt.
+  #
+  # bincheck must execute each binary, so it runs on a native GitHub-hosted
+  # runner per OS/arch (the self-hosted fleet is Linux-amd64 only).
+  #
+  # The whole matrix waits for macos-signing (not just build-linux /
+  # build-nonlinux): the darwin-arm64 archive is staged by build-nonlinux only
+  # under its *.unsigned name; the bare signed cockroach-$v.darwin-11.0-arm64.tgz
+  # that test-macos-arm64 fetches is produced later by macos-signing, which
+  # re-uploads it to the staged bucket. Gating on macos-signing keeps all four
+  # legs in one job and means bincheck validates the same signed artifact
+  # customers receive. macos-signing transitively needs build-nonlinux, so the
+  # windows archive is also staged by the time this runs.
+  #
+  # Non-blocking by design: like build-docker-ubuntu it is a leaf (nothing
+  # needs: it and it is excluded from the notify job) and continue-on-error keeps
+  # the workflow green even on failure — a failure surfaces only as a ::warning::
+  # annotation, so a flaky smoke test never gates the release.
+  bincheck:
+    name: 'Bincheck ${{ matrix.platform }}'
+    needs: [build-linux, build-nonlinux, macos-signing, detect-version]
+    continue-on-error: true
+    if: >-
+      ${{ !cancelled() &&
+        (needs.build-linux.result == 'success' ||
+         (needs.build-linux.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',build-linux,'))) &&
+        (needs.build-nonlinux.result == 'success' ||
+         (needs.build-nonlinux.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',build-nonlinux,'))) &&
+        (needs.macos-signing.result == 'success' ||
+         (needs.macos-signing.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',macos-signing,'))) &&
+        !contains(format(',{0},', inputs.skip_jobs), ',bincheck,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-amd64
+            os: ubuntu-latest
+            script: test-linux
+          - platform: linux-arm64
+            os: ubuntu-24.04-arm
+            script: test-linux-arm64
+          - platform: darwin-arm64
+            os: macos-latest
+            script: test-macos-arm64
+          - platform: windows
+            os: windows-latest
+            script: test-windows
+    steps:
+      # Windows checkout fails on deep paths without longpaths enabled.
+      - name: Enable git long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+          # Mint an OAuth2 access token so the staged archive can be fetched with
+          # curl against the GCS API. This avoids depending on gcloud, which is
+          # not preinstalled on the Windows runner and is awkward to call from
+          # git-bash. The auth action calls setSecret() on this token, so it is
+          # masked in logs (including under the bincheck scripts' `set -x`).
+          token_format: 'access_token'
+
+      - name: Run bincheck
+        # bash on all OSes so the one invocation is portable (git-bash on
+        # Windows). The download uses curl, which is present on every runner.
+        shell: bash
+        env:
+          VERSION: ${{ needs.detect-version.outputs.version }}
+          SHA: ${{ inputs.sha || github.sha }}
+          # Pull the staged (pre-publish) archive from the same bucket the build
+          # jobs wrote to. download_binary.sh curls it from the GCS API with the
+          # access token below when BINCHECK_GCS_BUCKET is set, instead of the
+          # public CDN.
+          BINCHECK_GCS_BUCKET: ${{ env.DRY_RUN == '' && 'cockroach-release-artifacts-staged-prod' || 'cockroach-release-artifacts-staged-dryrun' }}
+          BINCHECK_GCS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          cd build/release/bincheck
+          if ! "./${{ matrix.script }}" "$VERSION" "$SHA"; then
+            echo "::warning title=bincheck ${{ matrix.platform }} failed::Staged ${{ matrix.platform }} binary failed bincheck (non-blocking)."
+            exit 1
+          fi
 
   # --------------------------------------------------------------------------
   # Stage 2: Docker images (needs Linux builds only)
