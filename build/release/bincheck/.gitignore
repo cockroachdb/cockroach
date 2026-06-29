@@ -4,6 +4,7 @@ cockroach-data/
 
 # files created running bincheck
 cockroach.tar.gz
+cockroach.zip
 aes-128.key
 mnt/
 actual
