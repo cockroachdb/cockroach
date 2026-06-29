@@ -7,7 +7,15 @@ FROM us-east1-docker.pkg.dev/crl-docker-sync/registry-access-redhat-com/ubi10/ub
 # hostname - used in cockroach k8s manifests
 # tar, gzip, xz - used by kubectl cp
 # tzdata - for time zone functions
-RUN microdnf update -y && microdnf install -y \
+#
+# --nobest is required on the update: the UBI base image and Red Hat's public
+# UBI RPM repos are published on independent cadences, so there are windows where
+# the repo has a newer glibc (e.g. -126) but not yet the matching
+# glibc-minimal-langpack (still -124). Without --nobest, microdnf treats the
+# unsatisfiable "best" glibc upgrade as a hard error and the build fails; with it,
+# microdnf applies the largest consistent set and picks up the rest once the repo
+# catches up.
+RUN microdnf update -y --nobest && microdnf install -y \
       ca-certificates \
       tzdata \
       hostname \
