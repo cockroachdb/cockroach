@@ -657,6 +657,23 @@ ALTER TABLE t.child ADD FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent 
 	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
 }
 
+// TestScrubHyphenatedDatabaseName tests that EXPERIMENTAL SCRUB works on tables
+// in databases with hyphens in their names.
+func TestScrubHyphenatedDatabaseName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	r := sqlutils.MakeSQLRunner(db)
+
+	r.Exec(t, `CREATE DATABASE "my-db"`)
+	r.Exec(t, `CREATE TABLE "my-db".test (k INT PRIMARY KEY, v INT, UNIQUE (v))`)
+	r.Exec(t, `INSERT INTO "my-db".test VALUES (1, 10), (2, 20)`)
+
+	// SCRUB should succeed without syntax errors from unquoted identifiers.
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE "my-db".test`, nil)
+}
+
 // TestScrubUniqueWithoutIndex tests SCRUB on a table that violates a
 // UNIQUE WITHOUT INDEX constraint.
 func TestScrubUniqueWithoutIndex(t *testing.T) {
