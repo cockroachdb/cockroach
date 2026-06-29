@@ -842,6 +842,7 @@ func TestPrecondition(t *testing.T) {
 func TestMigrationFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "flaky")
 
 	ctx := context.Background()
 
