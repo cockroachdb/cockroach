@@ -5683,6 +5683,16 @@ func mvccResolveWriteIntent(
 	// - writer2 dispatches ResolveIntent to key0 (with epoch 0)
 	// - ResolveIntent with epoch 0 aborts intent from epoch 1.
 
+	if update.Status == roachpb.COMMITTED &&
+		(meta.Txn.Epoch > update.Txn.Epoch || !timestampsValid) {
+		log.Warningf(ctx,
+			"illegal intent removal: intent at higher epoch or higher timestamp than committed lock update; "+
+				"key=%q txn=%s intent_epoch=%d intent_ts=%s lock_update_epoch=%d lock_update_ts=%s",
+			update.Key, update.Txn.ID, meta.Txn.Epoch, metaTimestamp,
+			update.Txn.Epoch, update.Txn.WriteTimestamp,
+		)
+	}
+
 	// First clear the provisional value.
 	if err := writer.ClearMVCC(latestKey, ClearOptions{
 		ValueSizeKnown: true,
