@@ -111,6 +111,7 @@ var (
 		"restore.wait_for_span_config_conformance.enabled",
 		"if enabled, RESTORE will ensure span config conformance before ingestion",
 		false,
+		settings.WithVisibility(settings.Public),
 	)
 )
 
