@@ -1,7 +1,10 @@
 FROM @repository@:@tag@
 
+# --nobest tolerates Red Hat UBI repo partial-publish windows where a newer
+# glibc is available without the matching glibc-minimal-langpack, which would
+# otherwise make the update fail the build. See build/deploy/Dockerfile.
 RUN microdnf install -y yum && \
-  yum -v -y update --all && \
+  yum -v -y update --all --nobest && \
   microdnf clean all && \
   rm -rf /var/cache/yum
 
