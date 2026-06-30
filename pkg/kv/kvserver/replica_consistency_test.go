@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -272,7 +274,22 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 	unlim := quotapool.NewRateLimiter("test", quotapool.Inf(), 0)
 	rd, err := CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
 	require.NoError(t, err)
-	fmt.Fprintf(sb, "checksum0: %x\n", rd.SHA512)
+	fmt.Fprintf(sb, "checksum0: %x %s\n", rd.SHA512, rd.diagnosticString())
+
+	// Write a RangeID-local replicated key so the rangeID-local diagnostic
+	// section is exercised. It then stays constant as the user and lock writes
+	// below land, demonstrating the per-section isolation that lets a single
+	// differing section localize corruption. RangeID-local replicated keys are
+	// stored as inline values (wrapped in MVCCMetadata), so we write it via an
+	// inline MVCCPut rather than PutUnversioned: ComputeStats decodes the
+	// inline value as MVCCMetadata, which would fail on a raw, unwrapped value.
+	_, err = storage.MVCCPut(
+		ctx, eng, keys.RangeGCThresholdKey(desc.RangeID), hlc.Timestamp{}, /* inline */
+		roachpb.MakeValueFromString("gc"), storage.MVCCWriteOptions{})
+	require.NoError(t, err)
+	rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
+	require.NoError(t, err)
+	fmt.Fprintf(sb, "checksum-rangeid: %x %s\n", rd.SHA512, rd.diagnosticString())
 
 	// We incrementally add writes, and check the checksums after each write to
 	// make sure they differ such that each write affects the checksum.
@@ -311,7 +328,7 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 
 		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
 		require.NoError(t, err)
-		fmt.Fprintf(sb, "checksum%d: %x\n", i+1, rd.SHA512)
+		fmt.Fprintf(sb, "checksum%d: %x %s\n", i+1, rd.SHA512, rd.diagnosticString())
 	}
 
 	// We then do the same for replicated locks.
@@ -332,7 +349,7 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 
 		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
 		require.NoError(t, err)
-		fmt.Fprintf(sb, "checksum%d: %x\n", i+1, rd.SHA512)
+		fmt.Fprintf(sb, "checksum%d: %x %s\n", i+1, rd.SHA512, rd.diagnosticString())
 	}
 
 	// Run another check to obtain stats for the final state.
@@ -344,4 +361,48 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 	fmt.Fprintf(sb, "stats: %s\n", string(json))
 
 	echotest.Require(t, sb.String(), datapathutils.TestDataPath(t, "replica_consistency_sha512"))
+}
+
+// TestXORFold checks that the word-wise xorFold.Update matches the naive
+// byte-at-a-time fold across arbitrary starting offsets and chunk lengths,
+// exercising the head/body/tail alignment paths and offset continuation across
+// successive calls.
+func TestXORFold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// reference is the obvious, slow definition of the fold.
+	reference := func(off int, chunks [][]byte) xorFold {
+		var x xorFold
+		o := off
+		for _, p := range chunks {
+			for i, b := range p {
+				x[(o+i)%16] ^= b
+			}
+			o += len(p)
+		}
+		return x
+	}
+
+	rng, _ := randutil.NewTestRand()
+	for range 100 {
+		// Mix offsets and lengths around the 16-byte boundary so the head, body,
+		// and tail paths (and chunks shorter than the head) are all exercised.
+		off := rng.Intn(100)
+		chunks := make([][]byte, rng.Intn(5))
+		for c := range chunks {
+			b := make([]byte, rng.Intn(40))
+			for i := range b {
+				b[i] = byte(rng.Intn(256))
+			}
+			chunks[c] = b
+		}
+
+		var got xorFold
+		o := off
+		for _, p := range chunks {
+			got.Update(o, p)
+			o += len(p)
+		}
+		require.Equal(t, reference(off, chunks), got, "off=%d chunks=%v", off, chunks)
+	}
 }
