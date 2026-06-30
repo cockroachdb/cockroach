@@ -4682,6 +4682,16 @@ func (dsp *DistSQLPlanner) addDistinctProcessors(
 	spec *execinfrapb.DistinctSpec,
 	finalizeLastStageCb func(*physicalplan.PhysicalPlan),
 ) {
+	// When the plan is distributed, the distinct must preserve the merge
+	// ordering in its output. The in-memory UnorderedDistinct preserves
+	// input ordering naturally, but the disk-spill fallback (external
+	// distinct with hash-based partitioner) does not. Setting
+	// OutputOrdering tells the external distinct to add a sort after the
+	// hash-based partitioner to restore the ordering.
+	if len(spec.OutputOrdering.Columns) == 0 && len(plan.MergeOrdering.Columns) > 0 {
+		spec.OutputOrdering = plan.MergeOrdering
+	}
+
 	distinctSpec := execinfrapb.ProcessorCoreUnion{
 		Distinct: spec,
 	}
