@@ -266,6 +266,9 @@ type StoreGossipTestingKnobs struct {
 	// only changes in the number of replicas can cause the store to gossip its
 	// capacity.
 	DisableLeaseCapacityGossip bool
+	// DisableLoadCapacityGossip disables the ability of changing per-second load
+	// (QPS, WPS, write bytes, CPU) to trigger the store to gossip its capacity.
+	DisableLoadCapacityGossip bool
 	// AsyncDisabled indicates that asyncGossipStore should not be treated as
 	// async.
 	AsyncDisabled bool
@@ -529,6 +532,13 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 
 	if s.knobs.DisableLeaseCapacityGossip {
 		updateForLeaseCount = false
+	}
+
+	if s.knobs.DisableLoadCapacityGossip {
+		updateForQPS = false
+		updateForWPS = false
+		updateForWBPS = false
+		updateForCPUS = false
 	}
 
 	if updateForQPS {
