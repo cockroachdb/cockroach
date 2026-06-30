@@ -266,6 +266,14 @@ func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
 	var prevSteppingMode kv.SteppingMode
 	var prevSeqNum enginepb.TxnSeq
 	for {
+		// Check for context cancellation on each iteration. This is necessary
+		// for PLpgSQL loops, which are compiled into recursive continuation
+		// routines that execute via tail-call optimization in this loop. Without
+		// this check, a loop with many iterations can run indefinitely even after
+		// a statement timeout has fired.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if g.expr.EnableStepping && !enabledStepping {
 			prevSteppingMode = txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 			prevSeqNum = txn.GetReadSeqNum()
