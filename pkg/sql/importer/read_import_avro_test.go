@@ -364,6 +364,67 @@ func TestReadsAvroRecords(t *testing.T) {
 	}
 }
 
+func TestAvroRecordStreamBufferBounded(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	th := newTestHelper(ctx, t)
+
+	const numRecords = 1000
+	stream := th.newRecordStream(t, roachpb.AvroOptions_BIN_RECORDS, false, numRecords)
+	rs := stream.producer.(*avroRecordStream)
+
+	var maxBufCap int
+	var rowIdx int64
+	for stream.producer.Scan() {
+		if cap(rs.buf) > maxBufCap {
+			maxBufCap = cap(rs.buf)
+		}
+		err := stream.Row()
+		require.NoError(t, err)
+		rowIdx++
+	}
+	require.NoError(t, stream.producer.Err())
+	require.EqualValues(t, numRecords, rowIdx)
+
+	// The buffer capacity should stay bounded. Each record is ~150-200
+	// bytes, plus readSize (4096). fill() is only called when the buffer
+	// drops below minBufSize, so capacity stays well below maxBufSize
+	// even over many records.
+	require.Less(t, maxBufCap, rs.maxBufSize,
+		"buffer capacity %d should stay below maxBufSize %d", maxBufCap, rs.maxBufSize)
+}
+
+// TestAvroRecordStreamRejectsOversizedRecord verifies that a record larger than
+// maxBufSize fails with an actionable error instead of growing the buffer
+// without bound.
+func TestAvroRecordStreamRejectsOversizedRecord(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	th := newTestHelper(ctx, t)
+
+	// Encode a single record whose string field dwarfs the buffer ceiling set
+	// below, so it can never be buffered in full.
+	record := map[string]interface{}{
+		"uid":   int64(1),
+		"uname": map[string]interface{}{"string": string(bytes.Repeat([]byte("x"), 4096))},
+		"notes": nil,
+	}
+	data, err := th.codec.BinaryFromNative(nil, record)
+	require.NoError(t, err)
+
+	stream := th.newRecordStream(t, roachpb.AvroOptions_BIN_RECORDS, false, 1)
+	rs := stream.producer.(*avroRecordStream)
+
+	// Point the stream at the oversized record and shrink the ceiling below it.
+	rs.input = &fileReader{Reader: bytes.NewReader(data)}
+	rs.maxBufSize = 64
+
+	require.False(t, stream.producer.Scan())
+	require.ErrorContains(t, stream.producer.Err(), "avro record exceeds max buffer size")
+}
+
 func TestReadsAvroOcf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
