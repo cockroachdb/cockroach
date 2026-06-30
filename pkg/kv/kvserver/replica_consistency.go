@@ -6,6 +6,7 @@
 package kvserver
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha512"
 	"encoding/binary"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -126,6 +128,17 @@ func (r *Replica) checkConsistencyImpl(
 					&results[idx].Response.Persisted,
 					&results[idx].Response.Delta,
 				)
+				// diagnostic is a per-section XOR fold of the digest input (see
+				// CalcReplicaDigest): when one section differs across replicas while
+				// the rest match, it points at single-bit (e.g. memory/block-cache)
+				// corruption and localizes it. The fold is short and linear, so it
+				// can leak the underlying key/value bytes; it is logged as an unsafe
+				// (redactable) value. It is omitted entirely when absent (a replica
+				// that predates the field), so this code stays agnostic to its
+				// contents.
+				if d := results[idx].Response.Diagnostic; d != "" {
+					buf.Printf("- %s\n", d)
+				}
 			}
 		}
 
@@ -448,6 +461,7 @@ func (*Replica) computeChecksumDone(rc *replicaChecksum, result *ReplicaDigest) 
 		delta.Subtract(result.RecomputedMS)
 		c.Delta = enginepb.MVCCStatsDelta(delta)
 		c.Persisted = result.PersistedMS
+		c.Diagnostic = result.diagnosticString()
 	}
 
 	// Sending succeeds because the channel is buffered, and there is at most one
@@ -457,11 +471,99 @@ func (*Replica) computeChecksumDone(rc *replicaChecksum, result *ReplicaDigest) 
 	close(rc.result)
 }
 
+// digestSection identifies a category of the replicated keyspace, used only to
+// bucket the diagnostic per-section XOR fold (see ReplicaDigest.SectionXOR).
+type digestSection int
+
+const (
+	sectionRangeIDLocal digestSection = iota // RangeID-local replicated (\x01i…)
+	sectionRangeLocal                        // range-local / system (\x01k…)
+	sectionLockTable                         // replicated lock table
+	sectionUser                              // user/global keys + MVCC range keys
+	numDigestSections
+)
+
+// xorFold is a 16-lane, position-dependent XOR fold of a byte stream, used for
+// the diagnostic per-section digest (see ReplicaDigest.SectionXOR). It is purely
+// diagnostic and never affects the digest or the consistency decision.
+type xorFold [16]byte
+
+// Update folds p into the accumulator, continuing a stream in which off bytes
+// have already been folded. It is the word-wise equivalent of:
+//
+//	for i := range p { x[(off+i)%16] ^= p[i] }
+//
+// Once aligned to a 16-byte boundary it folds the bulk two uint64s at a time,
+// keeping the lanes in registers across the loop.
+func (x *xorFold) Update(off int, p []byte) {
+	acc := x[:]
+	n := len(p)
+	idx := 0
+
+	// HEAD: fold byte-by-byte until the stream offset is 16-byte aligned.
+	if startOff := off % 16; startOff > 0 {
+		headLen := 16 - startOff
+		if headLen > n {
+			headLen = n
+		}
+		for i := 0; i < headLen; i++ {
+			acc[startOff+i] ^= p[idx]
+			idx++
+		}
+	}
+
+	// BODY: aligned, so each 16-byte chunk maps onto lanes [0,16). Process the
+	// bulk 16 bytes at a time, holding the two lanes in registers. Byte order is
+	// irrelevant to the result: the load, XOR, and store all use the same order,
+	// so this computes exactly the per-byte acc[j] ^= p[j]. We use NativeEndian to
+	// avoid any byteswap.
+	if idx+16 <= n {
+		// Hoist: load acc into local variables ONCE before the loop. The Go
+		// compiler will place these directly into CPU registers.
+		accReg1 := binary.NativeEndian.Uint64(acc[0:8])
+		accReg2 := binary.NativeEndian.Uint64(acc[8:16])
+
+		for idx+16 <= n {
+			// XOR the incoming data stream directly into the registers.
+			accReg1 ^= binary.NativeEndian.Uint64(p[idx : idx+8])
+			accReg2 ^= binary.NativeEndian.Uint64(p[idx+8 : idx+16])
+			idx += 16
+		}
+
+		// Sink: write the final accumulated result back to memory ONCE.
+		binary.NativeEndian.PutUint64(acc[0:8], accReg1)
+		binary.NativeEndian.PutUint64(acc[8:16], accReg2)
+	}
+
+	// TAIL: fewer than 16 bytes remain, still aligned to lane 0.
+	for tailOff := 0; idx < n; idx++ {
+		acc[tailOff] ^= p[idx]
+		tailOff++
+	}
+}
+
 // ReplicaDigest holds a summary of the replicated state on a replica.
 type ReplicaDigest struct {
 	SHA512       [sha512.Size]byte
 	PersistedMS  enginepb.MVCCStats
 	RecomputedMS enginepb.MVCCStats
+	// SectionXOR is a diagnostic-only, position-dependent XOR fold of the exact
+	// byte stream fed into SHA512, bucketed by digestSection. It does not affect
+	// the digest or the consistency decision; it exists so that an inconsistency
+	// can be classified at a glance (a single differing section with most bytes
+	// matching points at single-bit memory/block-cache corruption; many
+	// differing sections indicate structural divergence). See computeChecksumDone
+	// for how it is surfaced, and CollectChecksumResponse.diagnostic.
+	SectionXOR [numDigestSections]xorFold
+}
+
+// diagnosticString renders the per-section XOR folds for logging. It is purely
+// diagnostic (see SectionXOR); the format is intended for human eyeballing in
+// the inconsistency detail, not machine parsing.
+func (d *ReplicaDigest) diagnosticString() string {
+	return fmt.Sprintf("secxor[rid=%x rloc=%x lock=%x usr=%x]",
+		d.SectionXOR[sectionRangeIDLocal][:], d.SectionXOR[sectionRangeLocal][:],
+		d.SectionXOR[sectionLockTable][:], d.SectionXOR[sectionUser][:])
 }
 
 // CalcReplicaDigest computes the SHA512 hash and MVCC stats of the replica data
@@ -484,6 +586,21 @@ func CalcReplicaDigest(
 	var uuidBuf [uuid.Size]byte
 	hasher := sha512.New()
 
+	// sectionXOR is a diagnostic-only, position-dependent XOR fold of the exact
+	// bytes written to hasher, bucketed by digestSection (see
+	// ReplicaDigest.SectionXOR). write() tees each hasher write into the current
+	// section's fold; it must be used in place of hasher.Write for everything that
+	// contributes to the digest so the fold sees the identical byte stream. It
+	// does not change what is fed to hasher.
+	var sectionXOR [numDigestSections]xorFold
+	var sectionOff [numDigestSections]int
+	write := func(sec digestSection, p []byte) {
+		// hash.Hash.Write never returns an error.
+		_, _ = hasher.Write(p)
+		sectionXOR[sec].Update(sectionOff[sec], p)
+		sectionOff[sec] += len(p)
+	}
+
 	// Request quota from the limiter in chunks of at least targetBatchSize, to
 	// amortize the overhead of the limiter when reading many small KVs.
 	var batchSize int64
@@ -504,19 +621,22 @@ func CalcReplicaDigest(
 		if err := wait(int64(len(unsafeKey.Key) + len(unsafeValue))); err != nil {
 			return err
 		}
+		// Bucket this key for the diagnostic fold. Lock-table keys arrive via the
+		// LockTableKey visitor, so only RangeID-local, range-local, and user keys
+		// reach here.
+		sec := sectionUser
+		if bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeIDPrefix) {
+			sec = sectionRangeIDLocal
+		} else if bytes.HasPrefix(unsafeKey.Key, keys.LocalRangePrefix) {
+			sec = sectionRangeLocal
+		}
 		// Encode the length of the key and value.
 		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeKey.Key)))
-		if _, err := hasher.Write(intBuf[:]); err != nil {
-			return err
-		}
+		write(sec, intBuf[:])
 		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeValue)))
-		if _, err := hasher.Write(intBuf[:]); err != nil {
-			return err
-		}
+		write(sec, intBuf[:])
 		// Encode the key.
-		if _, err := hasher.Write(unsafeKey.Key); err != nil {
-			return err
-		}
+		write(sec, unsafeKey.Key)
 		timestamp = unsafeKey.Timestamp
 		if size := timestamp.Size(); size > cap(timestampBuf) {
 			timestampBuf = make([]byte, size)
@@ -526,12 +646,10 @@ func CalcReplicaDigest(
 		if _, err := protoutil.MarshalToSizedBuffer(&timestamp, timestampBuf); err != nil {
 			return err
 		}
-		if _, err := hasher.Write(timestampBuf); err != nil {
-			return err
-		}
+		write(sec, timestampBuf)
 		// Encode the value.
-		_, err := hasher.Write(unsafeValue)
-		return err
+		write(sec, unsafeValue)
+		return nil
 	}
 
 	visitors.RangeKey = func(rangeKV storage.MVCCRangeKeyValue) error {
@@ -541,26 +659,18 @@ func CalcReplicaDigest(
 		if err != nil {
 			return err
 		}
+		// MVCC range keys live in the user keyspace for the spans we digest.
+		const sec = sectionUser
 		// Encode the length of the start key and end key.
 		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(rangeKV.RangeKey.StartKey)))
-		if _, err := hasher.Write(intBuf[:]); err != nil {
-			return err
-		}
+		write(sec, intBuf[:])
 		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(rangeKV.RangeKey.EndKey)))
-		if _, err := hasher.Write(intBuf[:]); err != nil {
-			return err
-		}
+		write(sec, intBuf[:])
 		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(rangeKV.Value)))
-		if _, err := hasher.Write(intBuf[:]); err != nil {
-			return err
-		}
+		write(sec, intBuf[:])
 		// Encode the key.
-		if _, err := hasher.Write(rangeKV.RangeKey.StartKey); err != nil {
-			return err
-		}
-		if _, err := hasher.Write(rangeKV.RangeKey.EndKey); err != nil {
-			return err
-		}
+		write(sec, rangeKV.RangeKey.StartKey)
+		write(sec, rangeKV.RangeKey.EndKey)
 		timestamp = rangeKV.RangeKey.Timestamp
 		if size := timestamp.Size(); size > cap(timestampBuf) {
 			timestampBuf = make([]byte, size)
@@ -570,12 +680,10 @@ func CalcReplicaDigest(
 		if _, err := protoutil.MarshalToSizedBuffer(&timestamp, timestampBuf); err != nil {
 			return err
 		}
-		if _, err := hasher.Write(timestampBuf); err != nil {
-			return err
-		}
+		write(sec, timestampBuf)
 		// Encode the value.
-		_, err = hasher.Write(rangeKV.Value)
-		return err
+		write(sec, rangeKV.Value)
+		return nil
 	}
 
 	visitors.LockTableKey = func(unsafeKey storage.LockTableKey, unsafeValue []byte) error {
@@ -588,33 +696,24 @@ func CalcReplicaDigest(
 		if err := wait(int64(len(unsafeKey.Key) + len(unsafeValue))); err != nil {
 			return err
 		}
+		const sec = sectionLockTable
 		// Encode the length of the key and value.
 		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeKey.Key)))
-		if _, err := hasher.Write(intBuf[:]); err != nil {
-			return err
-		}
+		write(sec, intBuf[:])
 		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeValue)))
-		if _, err := hasher.Write(intBuf[:]); err != nil {
-			return err
-		}
+		write(sec, intBuf[:])
 		// Encode the key.
-		if _, err := hasher.Write(unsafeKey.Key); err != nil {
-			return err
-		}
+		write(sec, unsafeKey.Key)
 		// NOTE: this is not the same strength encoding that the actual lock
 		// table version uses. For that, see getByteForReplicatedLockStrength.
 		strengthBuf := intBuf[:1]
 		strengthBuf[0] = byte(unsafeKey.Strength)
-		if _, err := hasher.Write(strengthBuf); err != nil {
-			return err
-		}
+		write(sec, strengthBuf)
 		copy(uuidBuf[:], unsafeKey.TxnUUID.GetBytes())
-		if _, err := hasher.Write(uuidBuf[:]); err != nil {
-			return err
-		}
+		write(sec, uuidBuf[:])
 		// Encode the value.
-		_, err := hasher.Write(unsafeValue)
-		return err
+		write(sec, unsafeValue)
+		return nil
 	}
 
 	// In statsOnly mode, we hash only the RangeAppliedState. In regular mode, hash
@@ -645,12 +744,12 @@ func CalcReplicaDigest(
 		if err != nil {
 			return nil, err
 		}
-		if _, err := hasher.Write(b); err != nil {
-			return nil, err
-		}
+		// The RangeAppliedState is a RangeID-local key.
+		write(sectionRangeIDLocal, b)
 	}
 
 	hasher.Sum(result.SHA512[:0])
+	result.SectionXOR = sectionXOR
 
 	// We're not required to do so, but it looks nicer if both stats are aged to
 	// the same timestamp.
