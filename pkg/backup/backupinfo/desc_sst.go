@@ -49,7 +49,12 @@ func WriteDescsSST(
 	if err != nil {
 		return err
 	}
-	defer w.Close()
+	closed := false
+	defer func() {
+		if !closed {
+			w.Close()
+		}
+	}()
 	descSST := storage.MakeTransportSSTWriter(ctx, dest.Settings(), w)
 	defer descSST.Close()
 
@@ -61,6 +66,7 @@ func WriteDescsSST(
 		return err
 	}
 
+	closed = true
 	return w.Close()
 }
 

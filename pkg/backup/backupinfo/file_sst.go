@@ -55,7 +55,12 @@ func writeFilesSST(
 	if err != nil {
 		return err
 	}
-	defer w.Close()
+	closed := false
+	defer func() {
+		if !closed {
+			w.Close()
+		}
+	}()
 	fileSST := storage.MakeTransportSSTWriter(ctx, dest.Settings(), w)
 	defer fileSST.Close()
 
@@ -79,6 +84,7 @@ func writeFilesSST(
 	if err != nil {
 		return err
 	}
+	closed = true
 	return w.Close()
 }
 
