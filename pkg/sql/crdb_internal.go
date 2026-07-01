@@ -7912,7 +7912,7 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 
     blocking_txn_id              UUID NOT NULL,
     blocking_txn_fingerprint_id  BYTES NOT NULL,
-    blocking_stmt_fingerprint_id  BYTES,
+    blocking_stmt_fingerprint_id BYTES,
 
     waiting_txn_id               UUID NOT NULL,
     waiting_txn_fingerprint_id   BYTES NOT NULL,

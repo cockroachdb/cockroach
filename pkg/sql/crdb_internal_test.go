@@ -1926,7 +1926,7 @@ func TestSupportedCRDBInternalTablesNotChanged(t *testing.T) {
 	}
 }
 
-func TestBlockingStmtFingerprintIDinContentionEventsTable(t *testing.T) {
+func TestBlockingStmtFingerprintIDInContentionEventsTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
