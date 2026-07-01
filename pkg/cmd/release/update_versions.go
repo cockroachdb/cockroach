@@ -480,16 +480,19 @@ func generateRepoList(
 	if err != nil {
 		return nil, fmt.Errorf("parsing --%s: %w", cockroachRepoFlag, err)
 	}
-	// Satellite repos (homebrew-tap, helm-charts) inherit the owner from
-	// --cockroach-repo and keep their well-known names. Dry-run mirrors
-	// the historical convention of pushing into a `crltest`-owned set
-	// of fork-prefixed repos, but only on the canonical prod release
-	// repo (signalled by IS_PRODUCTION_REPO=true) — on a fork or local
-	// invocation, dry-run pushes to whatever --cockroach-repo points at
-	// (the operator's explicit choice). Triggering on
-	// isProductionRepo() rather than a hardcoded literal means the
-	// canonical repo can be renamed without code changes here.
-	owner := cockroachOwner
+	// Satellite repos (homebrew-tap, helm-charts) live under the
+	// cockroachdb org and keep their well-known names. Unlike the
+	// cockroach repo (which moved to the cockroachlabs org), these have
+	// not moved, so their owner is hardcoded here rather than inherited
+	// from --cockroach-repo. Dry-run mirrors the historical convention
+	// of pushing into a `crltest`-owned set of fork-prefixed repos, but
+	// only on the canonical prod release repo (signalled by
+	// IS_PRODUCTION_REPO=true) — on a fork or local invocation, dry-run
+	// pushes to whatever --cockroach-repo points at (the operator's
+	// explicit choice). Triggering on isProductionRepo() rather than a
+	// hardcoded literal means the canonical repo can be renamed without
+	// code changes here.
+	owner := "cockroachdb"
 	prefix := ""
 	if dryRun && isProductionRepo() {
 		// For test/dry-run purposes, we need to create "base repos" and "forked repos". The PRs will be submitted against the
