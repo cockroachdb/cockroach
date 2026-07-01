@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -310,8 +311,9 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 			descRow.ID, hex.EncodeToString(updatedDescBytes))
 		for _, namespaceRow := range reverseNamespace[descRow.ID] {
 			fmt.Fprintf(out,
-				"SELECT crdb_internal.unsafe_upsert_namespace_entry(%d, %d, '%s', %d, true);\n",
-				namespaceRow.ParentID, namespaceRow.ParentSchemaID, namespaceRow.Name, namespaceRow.ID)
+				"SELECT crdb_internal.unsafe_upsert_namespace_entry(%d, %d, %s, %d, true);\n",
+				namespaceRow.ParentID, namespaceRow.ParentSchemaID,
+				lexbase.EscapeSQLString(namespaceRow.Name), namespaceRow.ID)
 		}
 	}
 	// Handle dangling namespace entries.
@@ -325,8 +327,9 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 			continue
 		}
 		fmt.Fprintf(out,
-			"SELECT crdb_internal.unsafe_upsert_namespace_entry(%d, %d, '%s', %d, true);\n",
-			namespaceRow.ParentID, namespaceRow.ParentSchemaID, namespaceRow.Name, namespaceRow.ID)
+			"SELECT crdb_internal.unsafe_upsert_namespace_entry(%d, %d, %s, %d, true);\n",
+			namespaceRow.ParentID, namespaceRow.ParentSchemaID,
+			lexbase.EscapeSQLString(namespaceRow.Name), namespaceRow.ID)
 	}
 	fmt.Fprintln(out, `COMMIT;`)
 	return nil
