@@ -7912,6 +7912,7 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 
     blocking_txn_id              UUID NOT NULL,
     blocking_txn_fingerprint_id  BYTES NOT NULL,
+    blocking_stmt_fingerprint_id  BYTES,
 
     waiting_txn_id               UUID NOT NULL,
     waiting_txn_fingerprint_id   BYTES NOT NULL,
@@ -7957,7 +7958,7 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 			return nil, nil, err
 		}
 
-		const numDatums = 15
+		const numDatums = 16
 		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			for i := range resp.Events {
@@ -7965,8 +7966,15 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 				if err != nil {
 					return err
 				}
-				blockingFingerprintID := tree.NewDBytes(
+				blockingTxnFingerprintID := tree.NewDBytes(
 					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(resp.Events[i].BlockingTxnFingerprintID))))
+
+				blockingStmtFingerprintID := tree.DNull
+				if resp.Events[i].BlockingEvent.BlockingStmtFingerprintID != 0 {
+					blockingStmtFingerprintID = tree.NewDBytes(
+						tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(
+							resp.Events[i].BlockingEvent.BlockingStmtFingerprintID)))
+				}
 
 				waitingFingerprintID := tree.NewDBytes(
 					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(resp.Events[i].WaitingTxnFingerprintID))))
@@ -7998,18 +8006,19 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 				row = append(row[:0],
 					collectionTs, // collection_ts
 					tree.NewDUuid(tree.DUuid{UUID: resp.Events[i].BlockingEvent.TxnMeta.ID}), // blocking_txn_id
-					blockingFingerprintID, // blocking_fingerprint_id
+					blockingTxnFingerprintID,                                     // blocking_txn_fingerprint_id
+					blockingStmtFingerprintID,                                    // blocking_stmt_fingerprint_id
 					tree.NewDUuid(tree.DUuid{UUID: resp.Events[i].WaitingTxnID}), // waiting_txn_id
-					waitingFingerprintID,        // waiting_fingerprint_id
-					contentionDuration,          // contention_duration
-					contendingKey,               // contending_key,
-					contendingPrettyKey,         // contending_pretty_key
-					waitingStmtId,               // waiting_stmt_id
-					waitingStmtFingerprintID,    // waiting_stmt_fingerprint_id
-					tree.NewDString(dbName),     // database_name
-					tree.NewDString(schemaName), // schema_name
-					tree.NewDString(tableName),  // table_name
-					tree.NewDString(indexName),  // index_name
+					waitingFingerprintID,                                         // waiting_fingerprint_id
+					contentionDuration,                                           // contention_duration
+					contendingKey,                                                // contending_key,
+					contendingPrettyKey,                                          // contending_pretty_key
+					waitingStmtId,                                                // waiting_stmt_id
+					waitingStmtFingerprintID,                                     // waiting_stmt_fingerprint_id
+					tree.NewDString(dbName),                                      // database_name
+					tree.NewDString(schemaName),                                  // schema_name
+					tree.NewDString(tableName),                                   // table_name
+					tree.NewDString(indexName),                                   // index_name
 					tree.NewDString(resp.Events[i].ContentionType.String()),
 				)
 				if buildutil.CrdbTestBuild {

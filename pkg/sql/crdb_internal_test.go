@@ -1925,3 +1925,81 @@ func TestSupportedCRDBInternalTablesNotChanged(t *testing.T) {
 		}
 	}
 }
+
+func TestBlockingStmtFingerprintIDinContentionEventsTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '10ms'")
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name                      string
+		key                       string
+		blockingStmtFingerprintID uint64
+		expected                  gosql.NullString
+	}{
+		{
+			name:                      "non-null",
+			key:                       "/Animals/Cats",
+			blockingStmtFingerprintID: 9005,
+			expected:                  gosql.NullString{String: fmt.Sprintf("%016x", uint64(9005)), Valid: true},
+		},
+		{
+			name: "null",
+			key:  "/Animals/Dogs",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			keyEscaped := fmt.Sprintf("\"%s\"", tc.key)
+			s.ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry.AddContentionEvent(contentionpb.ExtendedContentionEvent{
+				BlockingEvent: kvpb.ContentionEvent{
+					Key: roachpb.Key(tc.key),
+					TxnMeta: enginepb.TxnMeta{
+						Key: roachpb.Key(tc.key),
+						ID:  uuid.MakeV4(),
+					},
+					Duration:                  1 * time.Minute,
+					BlockingStmtFingerprintID: tc.blockingStmtFingerprintID,
+				},
+				BlockingTxnFingerprintID: 9001,
+				WaitingTxnID:             uuid.MakeV4(),
+				WaitingTxnFingerprintID:  9002,
+				WaitingStmtID:            clusterunique.ID{Uint128: uint128.Uint128{Lo: 9003, Hi: 1004}},
+				WaitingStmtFingerprintID: 9004,
+				ContentionType:           contentionpb.ContentionType_LOCK_WAIT,
+			})
+
+			// Contention flush can take some time to flush the events.
+			testutils.SucceedsSoon(t, func() error {
+				row := sqlDB.QueryRow(`SELECT
+    encode(blocking_stmt_fingerprint_id, 'hex')
+		FROM crdb_internal.transaction_contention_events
+		WHERE contending_pretty_key = $1`, keyEscaped)
+
+				var actual gosql.NullString
+				err = row.Scan(&actual)
+				if err != nil {
+					return err
+				}
+				if actual != tc.expected {
+					return errors.Newf(
+						"unexpected blocking stmt fingerprint id: got %+v, expected %+v",
+						actual,
+						tc.expected,
+					)
+				}
+				return nil
+			})
+		})
+	}
+}

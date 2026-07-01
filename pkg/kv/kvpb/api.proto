@@ -3900,6 +3900,12 @@ message ContentionEvent {
   // IsLatch, if true, indicates that the contention event was due to waiting to
   // acquire a latch.
   bool is_latch = 4;
+
+  // BlockingStmtFingerprintID is the fingerprint ID of the statement that held
+  // the contended lock.
+  uint64 blocking_stmt_fingerprint_id = 5 [
+    (gogoproto.customname) = "BlockingStmtFingerprintID"
+  ];
 }
 
 // QuorumReplicationFlowAdmissionEvent is a message that is recorded on traces by a
