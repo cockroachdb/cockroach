@@ -108,7 +108,7 @@ go_library(
 
 go_test(
     name = "importer_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "bench_test.go",
         "client_import_test.go",
