@@ -21,6 +21,7 @@ fi
 
 arm_probability="${ARM_PROBABILITY:-0.5}"
 fips_probability="${FIPS_PROBABILITY:-0.02}"
+export ROACHTEST_BUILD_CACHE=true
 
 arch=amd64
 if [[ ${CLOUD} == "ibm" ]]; then
