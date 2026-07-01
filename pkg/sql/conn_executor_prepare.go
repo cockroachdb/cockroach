@@ -609,7 +609,14 @@ func (ex *connExecutor) execBind(
 	// schema changes. This check needs to happen during Bind (not Execute) to
 	// match PostgreSQL's behavior of returning errors before sending BindComplete.
 	// See issue #152791.
-	if len(ps.Columns) > 0 {
+	// We exclude the checking for EXPLAIN (ANALYZE) statements, since their results
+	// are not expected to be changed by a schema change.
+	var skipColChange bool
+	switch ps.AST.(type) {
+	case *tree.Explain, *tree.ExplainAnalyze:
+		skipColChange = true
+	}
+	if len(ps.Columns) > 0 && !skipColChange {
 		// Use chooseGenericPlan to determine which memo will actually be used
 		// during Execute, then check that memo for staleness. This mirrors
 		// the logic in chooseValidPreparedMemo.

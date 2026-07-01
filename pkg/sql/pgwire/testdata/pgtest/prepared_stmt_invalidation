@@ -93,3 +93,59 @@ until
 ReadyForQuery
 ----
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# EXPLAIN and EXPLAIN ANALYZE are exempt from the result-type validation above.
+send
+Query {"String": "DROP TABLE IF EXISTS t172030"}
+Query {"String": "CREATE TABLE t172030 (a INT PRIMARY KEY)"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "p172030", "Query": "EXPLAIN ANALYZE (DEBUG) DELETE FROM t172030"}
+Bind {"PreparedStatement": "p172030"}
+Execute
+Sync
+----
+
+until ignore=DataRow
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Invalidate the cached memo with a schema change to a referenced table.
+send
+Query {"String": "ALTER TABLE t172030 ADD COLUMN b INT"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Re-bind the same prepared statement on the now-stale memo. Unlike the SELECT *
+# case above, this must succeed because the EXPLAIN result type cannot change.
+send
+Bind {"PreparedStatement": "p172030"}
+Execute
+Sync
+----
+
+until ignore=DataRow
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
