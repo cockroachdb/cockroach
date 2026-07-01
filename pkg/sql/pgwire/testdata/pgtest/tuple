@@ -192,6 +192,38 @@ ReadyForQuery
 {"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: tuple must have non-negative number of elements","Detail":"numberOfElements=-1\n--\nstatement name \"s_negative_tuple\"\n--\nportal name \"p_negative_tuple\"\n--\nstatement summary \"SELECT _::r\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# element count too large for the buffer to possibly hold.
+send crdb_only
+Parse {"Name": "s_huge_count", "Query": "SELECT $1::r"}
+Bind {"DestinationPortal": "p_huge_count", "PreparedStatement": "s_huge_count", "ParameterFormatCodes": [1], "Parameters": [{"binary":"7FFFFFFF"}], "ResultFormatCodes": [0]}
+Execute {"Portal": "p_huge_count"}
+Sync
+----
+
+until crdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: tuple element count exceeds available data","Detail":"numberOfElements=2147483647 maxPossibleElements=0 bufferLength=4\n--\nstatement name \"s_huge_count\"\n--\nportal name \"p_huge_count\"\n--\nstatement summary \"SELECT _::r\""}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Parse {"Name": "s_zero_elements", "Query": "SELECT $1::r"}
+Bind {"DestinationPortal": "p_zero_elements", "PreparedStatement": "s_zero_elements", "ParameterFormatCodes": [1], "Parameters": [{"binary":"00000000"}], "ResultFormatCodes": [0]}
+Execute {"Portal": "p_zero_elements"}
+Sync
+----
+
+until crdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"42846","Message":"cannot cast tuple; wrong number of columns"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # not enough bytes for element OID
 # 00000001 - 1 element
 send
@@ -214,7 +246,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element OID for binary format","Detail":"elementIdx=0 bufferLength=4 bufferStartIdx=4 bufferEndIdx=8\n--\nstatement name \"s_element_oid_no_bytes\"\n--\nportal name \"p_element_oid_no_bytes\"\n--\nstatement summary \"SELECT _::r\""}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: tuple element count exceeds available data","Detail":"numberOfElements=1 maxPossibleElements=0 bufferLength=4\n--\nstatement name \"s_element_oid_no_bytes\"\n--\nportal name \"p_element_oid_no_bytes\"\n--\nstatement summary \"SELECT _::r\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # element OID not found
@@ -240,7 +272,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: element type not found for OID 0","Detail":"elementIdx=0 bufferLength=8 bufferStartIdx=4 bufferEndIdx=8\n--\nstatement name \"s_element_oid_not_found\"\n--\nportal name \"p_element_oid_not_found\"\n--\nstatement summary \"SELECT _::r\""}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: tuple element count exceeds available data","Detail":"numberOfElements=1 maxPossibleElements=0 bufferLength=8\n--\nstatement name \"s_element_oid_not_found\"\n--\nportal name \"p_element_oid_not_found\"\n--\nstatement summary \"SELECT _::r\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # not enough bytes for element size
@@ -266,7 +298,76 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element size for binary format","Detail":"elementIdx=0 bufferLength=8 bufferStartIdx=8 bufferEndIdx=12\n--\nstatement name \"s_element_size_no_bytes\"\n--\nportal name \"p_element_size_no_bytes\"\n--\nstatement summary \"SELECT _::r\""}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: tuple element count exceeds available data","Detail":"numberOfElements=1 maxPossibleElements=0 bufferLength=8\n--\nstatement name \"s_element_size_no_bytes\"\n--\nportal name \"p_element_size_no_bytes\"\n--\nstatement summary \"SELECT _::r\""}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# The following cases carry enough bytes to satisfy the up-front element-count
+# guard, so decoding proceeds into the per-element loop and exercises the
+# per-element validation that the guard would otherwise mask for smaller
+# buffers.
+
+# element count fits the buffer, but the element's OID does not exist.
+# 00000001 - 1 element
+# 00000000 - OID does not exist
+# 00000000 - trailing bytes so the count guard passes (unread before the error)
+send crdb_only
+Parse {"Name": "s_oid_not_found_past_count", "Query": "SELECT $1::r"}
+Bind {"DestinationPortal": "p_oid_not_found_past_count", "PreparedStatement": "s_oid_not_found_past_count", "ParameterFormatCodes": [1], "Parameters": [{"binary":"000000010000000000000000"}], "ResultFormatCodes": [0]}
+Execute {"Portal": "p_oid_not_found_past_count"}
+Sync
+----
+
+until crdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: element type not found for OID 0","Detail":"elementIdx=0 bufferLength=12 bufferStartIdx=4 bufferEndIdx=8\n--\nstatement name \"s_oid_not_found_past_count\"\n--\nportal name \"p_oid_not_found_past_count\"\n--\nstatement summary \"SELECT _::r\""}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# element count fits the buffer, but the first element's payload consumes so
+# many bytes that the second element's OID read runs off the end.
+# 00000002 - 2 elements
+# 00000011 - bytea OID
+# 00000005 - 5 byte element size
+# aabbccddee - 5 bytes of element data
+# 000000 - 3 trailing bytes (too few for the next element's 4 byte OID)
+send crdb_only
+Parse {"Name": "s_element_oid_short_past_count", "Query": "SELECT $1::r"}
+Bind {"DestinationPortal": "p_element_oid_short_past_count", "PreparedStatement": "s_element_oid_short_past_count", "ParameterFormatCodes": [1], "Parameters": [{"binary":"000000020000001100000005aabbccddee000000"}], "ResultFormatCodes": [0]}
+Execute {"Portal": "p_element_oid_short_past_count"}
+Sync
+----
+
+until crdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element OID for binary format","Detail":"elementIdx=1 bufferLength=20 bufferStartIdx=17 bufferEndIdx=21\n--\nstatement name \"s_element_oid_short_past_count\"\n--\nportal name \"p_element_oid_short_past_count\"\n--\nstatement summary \"SELECT _::r\""}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# element count fits the buffer, but the first element's payload consumes enough
+# bytes that the second element's size read runs off the end.
+# 00000002 - 2 elements
+# 00000011 - bytea OID
+# 00000001 - 1 byte element size
+# ab - 1 byte of element data
+# 00000010 - bool OID for the second element
+# 000000 - 3 trailing bytes (too few for the second element's 4 byte size)
+send crdb_only
+Parse {"Name": "s_element_size_short_past_count", "Query": "SELECT $1::r"}
+Bind {"DestinationPortal": "p_element_size_short_past_count", "PreparedStatement": "s_element_size_short_past_count", "ParameterFormatCodes": [1], "Parameters": [{"binary":"000000020000001100000001ab00000010000000"}], "ResultFormatCodes": [0]}
+Execute {"Portal": "p_element_size_short_past_count"}
+Sync
+----
+
+until crdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element size for binary format","Detail":"elementIdx=1 bufferLength=20 bufferStartIdx=17 bufferEndIdx=21\n--\nstatement name \"s_element_size_short_past_count\"\n--\nportal name \"p_element_size_short_past_count\"\n--\nstatement summary \"SELECT _::r\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # null element
