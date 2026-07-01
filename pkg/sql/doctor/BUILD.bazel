@@ -17,6 +17,7 @@ go_library(
         "//pkg/sql/catalog/descbuilder",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/nstree",
+        "//pkg/sql/lexbase",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
