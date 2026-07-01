@@ -136,3 +136,13 @@ query error pgcode 22023 data has length 3, which is not a multiple of block siz
 SELECT decrypt('abc', 'key', 'aes/pad:none')
 
 subtest end
+
+subtest decrypt_padding_error
+
+query error pgcode 22023 decrypt error: invalid PKCS padding
+SELECT decrypt('\x043db9c657e2a2cd693b4239a3d8a1cb', 'key', 'aes')
+
+query error pgcode 22023 decrypt error: invalid PKCS padding
+SELECT decrypt_iv('\xa020e6ef013e02e68a1153dac023088a', 'key', '123', 'aes')
+
+subtest end
