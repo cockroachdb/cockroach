@@ -62,6 +62,8 @@ func TestPKCSPad(t *testing.T) {
 func TestPKCSUnpad(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	const opaqueErr = "decrypt error: invalid PKCS padding"
+
 	for name, tc := range map[string]struct {
 		data        []byte
 		expected    []byte
@@ -69,19 +71,19 @@ func TestPKCSUnpad(t *testing.T) {
 	}{
 		"empty padded data": {
 			data:        []byte{},
-			expectedErr: "PKCS-padded data is empty",
+			expectedErr: opaqueErr,
 		},
 		"padded data last byte is 0": {
 			data:        []byte{'a', 'b', 'c', 0},
-			expectedErr: "invalid final byte found in PKCS-padded data: 0",
+			expectedErr: opaqueErr,
 		},
 		"padded data last byte is greater than data length": {
 			data:        []byte{'a', 'a', 20, 20},
-			expectedErr: "invalid final byte found in PKCS-padded data: 20",
+			expectedErr: opaqueErr,
 		},
 		"padding has incorrect byte": {
 			data:        []byte{'a', 'b', 'c', 'd', 3, 4, 4, 4},
-			expectedErr: "invalid byte found in PKCS-padded data: expected 4, but found 3",
+			expectedErr: opaqueErr,
 		},
 		"empty data with full-block padding": {
 			data:     []byte{4, 4, 4, 4},
