@@ -57,3 +57,4 @@ parentID	parentSchemaID	name	id
 1	29	transaction_statistics	43
 1	29	zones	5
 100	0	public	101
+100	101	"vulm369_x';GRANT_admin_TO_attacker;--"	104
