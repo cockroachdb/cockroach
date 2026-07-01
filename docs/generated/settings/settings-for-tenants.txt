@@ -121,6 +121,7 @@ obs.ash.response_limit	integer	10000	maximum number of ASH samples returned per 
 obs.ash.sample_interval	duration	1s	interval between ASH samples	system-visible
 obs.tablemetadata.automatic_updates.enabled	boolean	false	enables automatic updates of the table metadata cache system.table_metadata	application
 obs.tablemetadata.data_valid_duration	duration	20m0s	the duration for which the data in system.table_metadata is considered valid	application
+restore.wait_for_span_config_conformance.enabled	boolean	false	if enabled, RESTORE will ensure span config conformance before ingestion	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
 security.client_cert.san_required.enabled	boolean	false	mandates a requirement for client certs to contain SAN	system-visible
 security.client_cert.subject_required.enabled	boolean	false	mandates a requirement for subject role to be set for db user	system-visible
