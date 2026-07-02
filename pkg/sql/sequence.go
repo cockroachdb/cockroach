@@ -478,11 +478,21 @@ func assignSequenceOwner(
 				// want it to be.
 				if opts.SequenceOwner.OwnerTableID != tableDesc.ID ||
 					opts.SequenceOwner.OwnerColumnID != col.GetID() {
+					// OWNED BY mutates the target table's descriptor, so require
+					// ownership of it as PostgreSQL does. Check before detaching any
+					// existing owner to minimize what must be rolled back on failure.
+					hasOwnership, err := p.HasOwnership(ctx, tableDesc)
+					if err != nil {
+						return err
+					}
+					if !hasOwnership {
+						return pgerror.Newf(pgcode.InsufficientPrivilege,
+							"must be owner of relation %s", tree.Name(tableDesc.GetName()))
+					}
 					if err := removeSequenceOwnerIfExists(ctx, p, sequenceID, opts); err != nil {
 						return err
 					}
-					err := addSequenceOwner(ctx, p, option.ColumnItemVal, sequenceID, opts)
-					if err != nil {
+					if err := addSequenceOwner(ctx, p, option.ColumnItemVal, sequenceID, opts); err != nil {
 						return err
 					}
 				}
