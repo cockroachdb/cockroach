@@ -937,6 +937,7 @@ type ReplicationStreamManager interface {
 	) (streampb.ReplicationProducerSpec, error)
 
 	AuthorizeViaJob(ctx context.Context, streamID streampb.StreamID) error
+	AuthorizeViaJobAllowTerminal(ctx context.Context, streamID streampb.StreamID) (notFound bool, err error)
 	AuthorizeViaReplicationPriv(ctx context.Context, tableNames ...string) error
 }
 
