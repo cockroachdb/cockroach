@@ -2574,3 +2574,62 @@ SELECT count(*) FROM pg_tables WHERE tablename='t_seq_owner';
 0
 
 subtest end
+
+subtest owned_by_privilege
+
+# CREATE/ALTER SEQUENCE ... OWNED BY mutates the target table's descriptor, so it
+# requires ownership of that table (matching PostgreSQL). A non-owner must be
+# rejected. victim_table is owned by root.
+
+statement ok
+CREATE TABLE victim_table (id INT PRIMARY KEY, data STRING)
+
+statement ok
+GRANT CREATE ON SCHEMA public TO testuser
+
+user testuser
+
+statement ok
+CREATE SEQUENCE attacker_seq
+
+statement error pgcode 42501 must be owner of relation victim_table
+ALTER SEQUENCE attacker_seq OWNED BY victim_table.id
+
+statement error pgcode 42501 must be owner of relation victim_table
+CREATE SEQUENCE attacker_seq2 OWNED BY victim_table.id
+
+# A non-admin owner can set OWNED BY on a table it owns.
+statement ok
+CREATE TABLE testuser_tbl (id INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE testuser_seq OWNED BY testuser_tbl.id
+
+statement ok
+ALTER SEQUENCE attacker_seq OWNED BY testuser_tbl.id
+
+# OWNED BY NONE targets no table, so it requires no table ownership — for both
+# CREATE (no owner assigned) and ALTER (detaching an existing owner).
+statement ok
+CREATE SEQUENCE attacker_seq_none OWNED BY NONE
+
+statement ok
+ALTER SEQUENCE testuser_seq OWNED BY NONE
+
+user root
+
+# Admin/root bypasses the ownership requirement, so it can attach a sequence to a
+# table it does not own in the role sense (testuser_tbl is owned by testuser).
+statement ok
+CREATE SEQUENCE root_seq OWNED BY testuser_tbl.id
+
+statement ok
+DROP SEQUENCE root_seq, attacker_seq, attacker_seq_none, testuser_seq
+
+statement ok
+DROP TABLE victim_table, testuser_tbl
+
+statement ok
+REVOKE CREATE ON SCHEMA public FROM testuser
+
+subtest end
