@@ -81,6 +81,9 @@ func MakePolygonFromMultiLineString(g geo.Geometry, srid geopb.SRID) (geo.Geomet
 	if !ok {
 		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "argument must be MULTILINESTRING geometry")
 	}
+	if lsCollection.NumLineStrings() == 0 {
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "polygon shell must not be empty")
+	}
 	linestrings := make([]geo.Geometry, lsCollection.NumLineStrings())
 	for i := 0; i < lsCollection.NumLineStrings(); i++ {
 		lineStringT := lsCollection.LineString(i)

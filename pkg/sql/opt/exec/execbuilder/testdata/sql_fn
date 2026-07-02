@@ -147,7 +147,7 @@ SELECT AddGeometryColumn ('my_spatial_table','geom7',4326,'POINT',3)
 query error unimplemented: non-constant argument passed to addgeometrycolumn
 SELECT AddGeometryColumn ('my_spatial_table','geom'||k::string,4326,'POINT',2) FROM my_spatial_table
 
-query error at or near "fakeshape": syntax error
+query error pgcode 22023 invalid geometry shape "FAKESHAPE"
 SELECT AddGeometryColumn ('my_spatial_table','geom7',4326,'FAKESHAPE',2)
 
 statement ok
