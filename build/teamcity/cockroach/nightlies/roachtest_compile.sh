@@ -27,7 +27,23 @@ source "$dir/teamcity-bazel-support.sh"  # For run_bazel and configure_bazel_sto
 # dependencies, then forward it into the builder container. Without this the
 # helper falls through to its local-dev path (`roachdev`), which does not exist
 # on CI agents. Mirrors roachtest_nightly_gce.sh.
-configure_bazel_storage_access_token
+#
+# The token mechanism (this function, build/bazelutil/credential-helper, and its
+# .bazelrc wiring) was introduced in v26.3. This script is backported unchanged
+# to older release branches where none of that exists and Bazel fetches
+# dependencies by other means, so only mint the token where the function is
+# defined.
+if declare -F configure_bazel_storage_access_token >/dev/null; then
+  configure_bazel_storage_access_token
+else
+  echo "configure_bazel_storage_access_token not defined on this branch (pre-v26.3);" \
+       "skipping token minting and relying on this branch's Bazel dependency auth."
+fi
 
+# The standalone compile step only warms the build cache; it never runs tests,
+# so it passes --skip-host-tooling-unless-native-arch. roachtest_compile_bits.sh then builds the
+# host-architecture tooling (roachtest/roachprod/libgeos) only when the host
+# arch is itself one of the requested targets, so exactly one per-arch build
+# warms it instead of every build redundantly recompiling it.
 BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e BUILD_VCS_NUMBER -e GOOGLE_EPHEMERAL_CREDENTIALS -e TC_BUILD_BRANCH -e BAZEL_STORAGE_ACCESS_TOKEN" \
-  run_bazel build/teamcity/cockroach/nightlies/roachtest_compile_and_cache.sh "$@"
+  run_bazel build/teamcity/cockroach/nightlies/roachtest_compile_and_cache.sh --skip-host-tooling-unless-native-arch "$@"
