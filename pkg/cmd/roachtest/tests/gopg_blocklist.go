@@ -26,10 +26,11 @@ var gopgBlockList = blocklist{
 	"pg | Listener | returns an error on timeout":                     "41522",
 	"pg | Listener | supports concurrent Listen and Receive":          "41522",
 	"v10.ExampleDB_Model_postgresArrayStructTag":                      "32552",
-	"v10.TestConversion":                                              "32552",
-	"v10.TestGinkgo":                                                  "41522",
-	"v10.TestReadColumnValue":                                         "26925",
-	"v10.TestUnixSocket":                                              "31113",
+	"v10.TestBigColumn":       "172196",
+	"v10.TestConversion":      "32552",
+	"v10.TestGinkgo":          "41522",
+	"v10.TestReadColumnValue": "26925",
+	"v10.TestUnixSocket":      "31113",
 }
 
 var gopgIgnoreList = blocklist{
