@@ -27,12 +27,22 @@ set +a
 
 export ROACHTEST_BUILD_CACHE=true
 
-# Compile the requested architectures, defaulting to all of them. Passed
-# through from roachtest_compile.sh; roachtest_compile_bits.sh validates each
-# arch and fails on an unknown one.
-arches=("$@")
+# Compile the requested architectures, defaulting to all of them. Architectures
+# and pass-through flags (e.g. --skip-host-tooling-unless-native-arch) are forwarded from
+# roachtest_compile.sh; roachtest_compile_bits.sh validates each arch and fails
+# on an unknown one. Flags are separated from arches so the "build everything"
+# default only kicks in when no architecture was requested.
+flags=()
+arches=()
+for arg in "$@"; do
+  case "$arg" in
+    -*) flags+=("$arg") ;;
+    *)  arches+=("$arg") ;;
+  esac
+done
 if [[ ${#arches[@]} -eq 0 ]]; then
   arches=(amd64 arm64 amd64-fips)
 fi
 
-$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh "${arches[@]}"
+$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh \
+  ${flags[@]+"${flags[@]}"} "${arches[@]}"
