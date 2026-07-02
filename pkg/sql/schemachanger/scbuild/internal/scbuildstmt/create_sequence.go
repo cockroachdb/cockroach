@@ -197,8 +197,9 @@ func maybeAssignSequenceOwner(b BuildCtx, sequence *scpb.Namespace, owner *tree.
 		panic(errors.WithHint(pgerror.New(pgcode.Syntax, "invalid OWNED BY option"),
 			"Specify OWNED BY table.column or OWNED BY NONE."))
 	}
-	// Resolve table first to validate it's sane.
-	tableElts := b.ResolveTable(owner.TableName, ResolveParams{})
+	// OWNED BY mutates the target table's descriptor, so require ownership of
+	// it as PostgreSQL does.
+	tableElts := b.ResolveTable(owner.TableName, ResolveParams{RequireOwnership: true})
 	_, _, tbl := scpb.FindTable(tableElts)
 	_, _, tblNamespace := scpb.FindNamespace(tableElts)
 	if tblNamespace.DatabaseID != sequence.DatabaseID {
