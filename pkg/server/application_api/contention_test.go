@@ -74,34 +74,56 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 	server2Conn.Exec(t, "USE test")
 	server2Conn.Exec(t, "SET application_name = 'contentionTest'")
 
-	server1Conn.Exec(t, `
+	// Generate contention between the two connections. The scenario can be
+	// aborted by a "duplicate span" error, a known race condition in
+	// multi-node tracing that occurs when two connections have SET TRACING=on
+	// and execute concurrent DistSQL queries. When that happens, server2's
+	// batch stops before its transaction commits, so no transaction with
+	// contention is ever recorded for the 'contentionTest' app and the stats
+	// checks below would never succeed. Re-run the whole scenario instead.
+	testutils.SucceedsSoon(t, func() error {
+		// (Re-)prime the contended row: a previous aborted attempt may have
+		// left x = 1000 behind.
+		server1Conn.Exec(t, "DELETE FROM test WHERE true")
+		server1Conn.Exec(t, "INSERT INTO test VALUES (1)")
+
+		server1Conn.Exec(t, `
 SET TRACING=on;
 BEGIN;
 UPDATE test SET x = 100 WHERE x = 1;
 `)
-	_, err = server2Conn.DB.ExecContext(ctx, `
+		_, err := server2Conn.DB.ExecContext(ctx, `
  SET TRACING=on;
  BEGIN PRIORITY HIGH;
  UPDATE test SET x = 1000 WHERE x = 1;
  COMMIT;
  SET TRACING=off;
  `)
-	// This test can trigger "duplicate span" errors due to a known race condition
-	// in multi-node tracing. When two connections have SET TRACING=on and execute
-	// concurrent DistSQL queries, remote span recordings may be imported multiple
-	// times. This is benign for this test which is focused on contention events,
-	// not tracing correctness.
-	if err != nil && !strings.Contains(err.Error(), "duplicate span") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	server1Conn.ExpectErr(
-		t,
-		"^pq: restart transaction.+",
-		`
+		if err != nil {
+			// Reset both sessions before retrying: either connection may be
+			// left with an open (aborted) transaction and tracing enabled.
+			// The cleanup statements may themselves error (e.g. ROLLBACK
+			// outside a transaction), so errors are ignored.
+			for _, conn := range []*sqlutils.SQLRunner{server1Conn, server2Conn} {
+				_, _ = conn.DB.ExecContext(ctx, "ROLLBACK")
+				_, _ = conn.DB.ExecContext(ctx, "SET TRACING=off")
+			}
+			if strings.Contains(err.Error(), "duplicate span") {
+				return err
+			}
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// server2's high-priority transaction aborted server1's transaction.
+		server1Conn.ExpectErr(
+			t,
+			"^pq: restart transaction.+",
+			`
 COMMIT;
 SET TRACING=off;
 `,
-	)
+		)
+		return nil
+	})
 
 	sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, obsConn, 1,
 		sqlstatstestutil.TransactionFilter{App: "contentionTest"})
