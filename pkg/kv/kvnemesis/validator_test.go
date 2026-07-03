@@ -309,6 +309,16 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(tombstone(k1, t2, s2)),
 		},
 		{
+			name:  "one ambiguous deleterange with successful writes",
+			steps: []Step{step(withAmbResult(delRange(k1, k3, s1)))},
+			kvs:   kvs(tombstone(k1, t1, s1), tombstone(k2, t1, s1)),
+		},
+		{
+			name:  "one ambiguous deleterange with failed writes",
+			steps: []Step{step(withAmbResult(delRange(k1, k3, s1)))},
+			kvs:   nil,
+		},
+		{
 			name:  "one retryable put with write (correctly) missing",
 			steps: []Step{step(withResultErr(put(k1, s1), retryableError))},
 			kvs:   nil,

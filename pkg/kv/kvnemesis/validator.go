@@ -559,39 +559,57 @@ func (v *validator) processOp(op Operation) {
 			v.checkAtomic(`delete`, t.Result)
 		}
 	case *DeleteRangeOperation:
-		if v.checkNonAmbError(op, t.Result) {
+		isAmb, isErr := v.checkError(op, t.Result)
+		if isErr && !isAmb {
 			break
 		}
-		// We express DeleteRange as point deletions on all of the keys it claimed
-		// to have deleted and (atomically post-ceding the deletions) a scan that
-		// sees an empty span. If DeleteRange places a tombstone it didn't report,
-		// validation will fail with an unclaimed write. If it fails to delete a
-		// key, the scan will not validate. If it reports that it deleted a key
-		// that didn't have a non-nil value (i.e. didn't get a new tombstone),
-		// then validation will fail with a missing write. If it reports & places
-		// a tombstone that wasn't necessary (i.e. a combination of the above),
-		// validation will succeed. This is arguably incorrect; we had code in
-		// the past that handled this at the expense of additional complexity[^1].
-		// See the `one deleterange after write with spurious deletion` test case
-		// in TestValidate.
-		//
-		// [^1]: https://github.com/cockroachdb/cockroach/pull/68003/files#diff-804b6fefcb2b7ae68fab388e6dcbaf7dbc3937a266b14b79c330b703ea9d0d95R382-R388
-		deleteOps := make([]observedOp, len(t.Result.Keys))
-		for i, key := range t.Result.Keys {
-			sv, _ := v.tryConsumeWrite(key, t.Seq)
-			write := &observedWrite{
-				Key:           key,
-				Seq:           t.Seq,
-				Value:         roachpb.Value{},
-				IsDeleteRange: true, // only for String(), no semantics attached
-				Timestamp:     sv.Timestamp,
+
+		var deleteOps []observedOp
+		if isAmb {
+			// Ambiguous result: the response was lost so Result.Keys is
+			// empty. Consume whatever writes this sequence produced within
+			// the operation's span.
+			svs, _ := v.tryConsumeRangedWrite(t.Seq, t.Key, t.EndKey)
+			deleteOps = make([]observedOp, len(svs))
+			for i, sv := range svs {
+				deleteOps[i] = &observedWrite{
+					Key:           sv.Key,
+					Seq:           t.Seq,
+					Value:         roachpb.Value{},
+					IsDeleteRange: true,
+					Timestamp:     sv.Timestamp,
+				}
 			}
-			deleteOps[i] = write
+		} else {
+			// We express DeleteRange as point deletions on all of the keys
+			// it claimed to have deleted and (atomically post-ceding the
+			// deletions) a scan that sees an empty span. If DeleteRange
+			// places a tombstone it didn't report, validation will fail
+			// with an unclaimed write. If it fails to delete a key, the
+			// scan will not validate. If it reports that it deleted a key
+			// that didn't have a non-nil value (i.e. didn't get a new
+			// tombstone), then validation will fail with a missing write.
+			// If it reports & places a tombstone that wasn't necessary
+			// (i.e. a combination of the above), validation will succeed.
+			// This is arguably incorrect; we had code in the past that
+			// handled this at the expense of additional complexity[^1].
+			// See the `one deleterange after write with spurious deletion`
+			// test case in TestValidate.
+			//
+			// [^1]: https://github.com/cockroachdb/cockroach/pull/68003/files#diff-804b6fefcb2b7ae68fab388e6dcbaf7dbc3937a266b14b79c330b703ea9d0d95R382-R388
+			deleteOps = make([]observedOp, len(t.Result.Keys))
+			for i, key := range t.Result.Keys {
+				sv, _ := v.tryConsumeWrite(key, t.Seq)
+				deleteOps[i] = &observedWrite{
+					Key:           key,
+					Seq:           t.Seq,
+					Value:         roachpb.Value{},
+					IsDeleteRange: true,
+					Timestamp:     sv.Timestamp,
+				}
+			}
 		}
 		v.curObservations = append(v.curObservations, deleteOps...)
-		// Adding the scan to the current observations should follow the same
-		// conditions as a regular scan: add it ony if there are no errors.
-		_, isErr := v.checkError(op, t.Result)
 		// The span ought to be empty right after the DeleteRange.
 		//
 		// However, we do not add this observation if the observation filter is
