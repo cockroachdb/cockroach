@@ -196,6 +196,25 @@ type txnWriteBuffer struct {
 	// `flushed` tracks whether the buffer has been previously flushed.
 	flushed bool
 
+	// flushFailed is set when a batch carrying flushed buffered writes
+	// returns an error. The buffer is discarded when the flush batch is
+	// constructed, so at that point the flushed writes exist neither in the
+	// buffer nor (necessarily) at the server: the batch may have been
+	// applied partially by the DistSender. The transaction must not be
+	// allowed to recover in a way that could commit without those
+	// writes.
+	//
+	// The TxnCoordSender consults this flag to force retryable errors to
+	// restart the transaction from the beginning rather than allowing a
+	// per-statement retry under Read Committed.
+	//
+	// As a backstop, we also don't allow any requests other than
+	// EndTxn(abort) when this flag is set.
+	//
+	// Reset on epoch bumps: a restart re-issues every write, so the lost flush
+	// is no longer a problem.
+	flushFailed bool
+
 	pipelineEnabler pipelineEnabler
 
 	// flushOnNextBatch, if set, indicates that write buffering has just been
@@ -258,6 +277,19 @@ func (twb *txnWriteBuffer) setEnabled(enabled bool) {
 func (twb *txnWriteBuffer) SendLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (_ *kvpb.BatchResponse, pErr *kvpb.Error) {
+	if twb.flushFailed {
+		// A flush of the write buffer failed, discarding the buffered writes.
+		// The TxnCoordSender poisons or restarts the transaction in response,
+		// so no request other than a rollback should get this far. Reject
+		// anything else to make sure the transaction can't commit without the
+		// writes the failed flush discarded.
+		if etArg, hasET := ba.GetArg(kvpb.EndTxn); !hasET || etArg.(*kvpb.EndTxnRequest).Commit {
+			return nil, kvpb.NewError(errors.AssertionFailedf(
+				"unexpected batch after failed buffer flush: %s", ba.Summary()))
+		}
+		return twb.wrapped.SendLocked(ctx, ba)
+	}
+
 	if twb.flushOnNextBatch {
 		twb.flushOnNextBatch = false
 		return twb.flushBufferAndSendBatch(ctx, ba)
@@ -725,6 +757,9 @@ func (twb *txnWriteBuffer) epochBumpedLocked() {
 	// Sequence numbers are reset on epoch bumps so any retained savepoint is
 	// wrong.
 	twb.firstExplicitSavepointSeq = 0
+	// The new epoch re-issues every write, so a previously failed flush no
+	// longer endangers the transaction.
+	twb.flushFailed = false
 	twb.resetBuffer()
 }
 
@@ -1825,9 +1860,11 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		br, pErr := twb.wrapped.SendLocked(ctx, flushBatch)
 		if pErr != nil {
 			pErr.Index = nil
-			return nil, pErr
+			twb.flushFailed = true
+			return nil, twb.wrapFlushError(pErr)
 		}
 		if err := requireAllFlushedRequestsProcessed(br.Responses); err != nil {
+			twb.flushFailed = true
 			return nil, kvpb.NewError(err)
 		}
 
@@ -1843,15 +1880,44 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		log.VEventf(ctx, 2, "flushing %d buffered requests in batch: %v", len(reqs), ba)
 		br, pErr := twb.wrapped.SendLocked(ctx, ba)
 		if pErr != nil {
-			return nil, twb.adjustErrorUponFlush(ctx, numRevisionsBuffered, pErr)
+			twb.flushFailed = true
+			return nil, twb.wrapFlushError(twb.adjustErrorUponFlush(ctx, numRevisionsBuffered, pErr))
 		}
 		if err := requireAllFlushedRequestsProcessed(br.Responses[0:numRevisionsBuffered]); err != nil {
+			twb.flushFailed = true
 			return nil, kvpb.NewError(err)
 		}
 		// Strip out responses for all the flushed buffered writes.
 		br.Responses = br.Responses[numRevisionsBuffered:]
 		return br, nil
 	}
+}
+
+// wrapFlushError wraps an error returned by a batch that carried flushed
+// buffered writes.
+//
+// The buffered writes were discarded when the flush was constructed, so errors
+// that would normally permit the transaction to continue (those scoring
+// kvpb.ErrorScoreUnambiguousError, e.g. a WriteIntentError from a lock timeout)
+// must not do so here: continuing via a savepoint rollback could commit the
+// transaction without writes it acknowledged before the failure. Wrapping hides
+// the error's type from kvpb.ErrPriority's shallow check, so the TxnCoordSender
+// moves the transaction to an error state that only permits a full
+// rollback. The cause remains in the error chain for SQL's pgcode mapping.
+//
+// Retryable errors are returned unchanged: they are handled by the retry
+// machinery, which restarts the transaction from the beginning when
+// flushFailed is set.
+func (twb *txnWriteBuffer) wrapFlushError(pErr *kvpb.Error) *kvpb.Error {
+	goErr := pErr.GoError()
+
+	if kvpb.ErrPriority(goErr) != kvpb.ErrorScoreUnambiguousError {
+		return pErr
+	}
+
+	return kvpb.NewErrorWithMetadataFromExisting(
+		errors.Wrap(goErr, "previously buffered write failed"),
+		pErr)
 }
 
 func requireAllFlushedRequestsProcessed(responses []kvpb.ResponseUnion) error {

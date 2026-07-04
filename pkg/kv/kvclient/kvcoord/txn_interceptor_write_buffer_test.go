@@ -4183,3 +4183,187 @@ needs to be accounted for in the following functions:
 		}
 	}
 }
+
+// TestTxnWriteBufferFlushFailure verifies the write buffer's bookkeeping when
+// a buffer flush fails. A failed flush has already discarded the buffered
+// writes, so the interceptor must record the failure (the TxnCoordSender uses
+// this to prevent the transaction from recovering without the discarded
+// writes) and reject all subsequent batches except rollbacks.
+func TestTxnWriteBufferFlushFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+
+	newTxnWithBufferedPut := func() (txnWriteBuffer, *mockLockedSender, roachpb.Transaction) {
+		twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
+		txn := makeTxnProto()
+		txn.Sequence = 1
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		ba.Add(putArgs(keyA, "val1", txn.Sequence))
+		br, pErr := twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		return twb, mockSender, txn
+	}
+
+	t.Run("mid-txn flush failure", func(t *testing.T) {
+		twb, mockSender, txn := newTxnWithBufferedPut()
+
+		// Disabling buffering forces a flush on the next batch. Fail the flush
+		// batch.
+		twb.setEnabled(false)
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+			return nil, kvpb.NewError(&kvpb.WriteIntentError{})
+		})
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, Sequence: txn.Sequence}})
+		_, pErr := twb.SendLocked(ctx, ba)
+		require.NotNil(t, pErr)
+		require.True(t, twb.flushFailed)
+		// The error carries the wrapping and retains its cause.
+		require.ErrorContains(t, pErr.GoError(), "previously buffered write failed")
+		require.True(t, errors.HasType(pErr.GoError(), (*kvpb.WriteIntentError)(nil)))
+
+		// Subsequent non-rollback batches are rejected without being sent.
+		numCalled := mockSender.NumCalled()
+		_, pErr = twb.SendLocked(ctx, ba)
+		require.NotNil(t, pErr)
+		require.Equal(t, numCalled, mockSender.NumCalled())
+
+		// Rollbacks are let through.
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+		ba = &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		ba.Add(&kvpb.EndTxnRequest{Commit: false})
+		_, pErr = twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+
+		// An epoch bump makes the transaction usable again: the new epoch
+		// re-issues every write.
+		twb.epochBumpedLocked()
+		require.False(t, twb.flushFailed)
+	})
+
+	t.Run("trailing batch failure after successful flush", func(t *testing.T) {
+		twb, mockSender, txn := newTxnWithBufferedPut()
+
+		// The flush batch succeeds; the user's batch that follows it fails.
+		// The buffered writes are durable, so this is a normal error and must
+		// not be recorded as a flush failure.
+		twb.setEnabled(false)
+		mockSender.ChainMockSend(
+			func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			},
+			func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+				return nil, kvpb.NewError(&kvpb.WriteIntentError{})
+			},
+		)
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, Sequence: txn.Sequence}})
+		_, pErr := twb.SendLocked(ctx, ba)
+		require.NotNil(t, pErr)
+		require.False(t, twb.flushFailed)
+	})
+
+	t.Run("commit flush failure", func(t *testing.T) {
+		twb, mockSender, txn := newTxnWithBufferedPut()
+
+		// The commit batch carries the flushed Put. Its failure is a flush
+		// failure.
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 2)
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+			return nil, kvpb.NewError(&kvpb.WriteIntentError{})
+		})
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		ba.Add(&kvpb.EndTxnRequest{Commit: true})
+		_, pErr := twb.SendLocked(ctx, ba)
+		require.NotNil(t, pErr)
+		require.True(t, twb.flushFailed)
+		// The error carries the wrapping and retains its cause.
+		require.ErrorContains(t, pErr.GoError(), "previously buffered write failed")
+		require.True(t, errors.HasType(pErr.GoError(), (*kvpb.WriteIntentError)(nil)))
+	})
+
+	t.Run("rollback failure is not a flush failure", func(t *testing.T) {
+		twb, mockSender, txn := newTxnWithBufferedPut()
+
+		// A rollback discards the buffer rather than flushing it, so its
+		// failure doesn't endanger any writes.
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+			return nil, kvpb.NewError(&kvpb.WriteIntentError{})
+		})
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		ba.Add(&kvpb.EndTxnRequest{Commit: false})
+		_, pErr := twb.SendLocked(ctx, ba)
+		require.NotNil(t, pErr)
+		require.False(t, twb.flushFailed)
+	})
+}
+
+// TestTxnWriteBufferWrapFlushError verifies that wrapFlushError hides the
+// error's type from kvpb.ErrPriority's shallow check while preserving both
+// the cause in the error chain and the metadata carried on the kvpb.Error.
+func TestTxnWriteBufferWrapFlushError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	twb, _, _ := makeMockTxnWriteBuffer(ctx)
+	txn := makeTxnProto()
+
+	t.Run("unambiguous error is wrapped with metadata preserved", func(t *testing.T) {
+		pErr := kvpb.NewErrorWithTxn(&kvpb.WriteIntentError{}, &txn)
+		pErr.OriginNode = 3
+		pErr.Index = &kvpb.ErrPosition{Index: 7}
+		pErr.Now = hlc.ClockTimestamp{WallTime: 42}
+
+		wrapped := twb.wrapFlushError(pErr)
+
+		// The wrap defeats ErrPriority's shallow type switch, so the error no
+		// longer scores as recoverable via savepoint rollback.
+		require.Equal(t, kvpb.ErrorScoreUnambiguousError, kvpb.ErrPriority(pErr.GoError()))
+		require.NotEqual(t, kvpb.ErrorScoreUnambiguousError, kvpb.ErrPriority(wrapped.GoError()))
+		// The cause remains in the chain underneath the wrapping message.
+		require.ErrorContains(t, wrapped.GoError(), "previously buffered write failed")
+		require.True(t, errors.HasType(wrapped.GoError(), (*kvpb.WriteIntentError)(nil)))
+
+		// The metadata of the original error is preserved.
+		require.NotNil(t, wrapped.GetTxn())
+		require.Equal(t, txn.ID, wrapped.GetTxn().ID)
+		require.Equal(t, roachpb.NodeID(3), wrapped.OriginNode)
+		require.NotNil(t, wrapped.Index)
+		require.Equal(t, int32(7), wrapped.Index.Index)
+		require.NotSame(t, pErr.Index, wrapped.Index)
+		require.Equal(t, hlc.ClockTimestamp{WallTime: 42}, wrapped.Now)
+	})
+
+	t.Run("other errors pass through unchanged", func(t *testing.T) {
+		pErr := kvpb.NewErrorWithTxn(errors.New("boom"), &txn)
+		require.Same(t, pErr, twb.wrapFlushError(pErr))
+	})
+}
