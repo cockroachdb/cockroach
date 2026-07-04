@@ -523,6 +523,56 @@ subtest end
 
 
 
+subtest rollback_after_buffered_write_flush_failure
+# A failed flush of the write buffer discards the buffered writes, so unlike
+# other write intent errors, a flush failure poisons the transaction: a
+# savepoint rollback could otherwise let the transaction commit without
+# writes it acknowledged before the savepoint. This applies to initial
+# savepoints (the SAVEPOINT cockroach_restart protocol) as well, matching
+# the treatment of every other error that poisons the transaction.
+#
+# No real error path produces a WriteIntentError for a flush (see
+# inject-put-error in TestSavepoints), so the error is injected.
+
+begin buffered-writes
+----
+0 <noignore>
+
+savepoint init
+----
+0 <noignore>
+
+put flush-fail-key b
+----
+
+savepoint x
+----
+2 <noignore>
+
+# Disabling write buffering forces the buffered write to flush with the next
+# batch. The injected error fails the flush.
+disable-write-buffering
+----
+
+inject-put-error flush-fail-key
+----
+
+get unrelated-key
+----
+(*errbase.opaqueWrapper) previously buffered write failed: conflicting locks on "flush-fail-key" [reason=lock_timeout]
+
+rollback x
+----
+(*pgerror.withCandidateCode) unimplemented: cannot rollback to savepoint after error
+
+rollback init
+----
+(*pgerror.withCandidateCode) unimplemented: cannot rollback to savepoint after error
+
+subtest end
+
+
+
 subtest rollback_after_random_err
 # Only CPut errors allow rollbacks after them. Any other error results in the rollback failing.
 
