@@ -20,11 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -45,6 +47,11 @@ func TestSavepoints(t *testing.T) {
 		// TxnCoordSender, from storage.
 		params := base.TestServerArgs{}
 		var doAbort int64
+		// Armed by the inject-put-error directive; see its handler below.
+		var injectPutErr struct {
+			syncutil.Mutex
+			key roachpb.Key
+		}
 		params.Knobs.Store = &kvserver.StoreTestingKnobs{
 			EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 				TestingEvalFilter: func(args kvserverbase.FilterArgs) *kvpb.Error {
@@ -56,6 +63,20 @@ func TestSavepoints(t *testing.T) {
 					if key.Equal(errKey) {
 						return kvpb.NewErrorf("injected error")
 					}
+					if args.Req.Method() == kvpb.Put {
+						injectPutErr.Lock()
+						defer injectPutErr.Unlock()
+						if injectPutErr.key != nil && key.Equal(injectPutErr.key) {
+							pErr := kvpb.NewErrorWithTxn(&kvpb.WriteIntentError{
+								Reason: kvpb.WriteIntentError_REASON_LOCK_TIMEOUT,
+								Locks: []roachpb.Lock{
+									roachpb.MakeLock(&enginepb.TxnMeta{}, injectPutErr.key, lock.Intent),
+								},
+							}, args.Hdr.Txn)
+							injectPutErr.key = nil
+							return pErr
+						}
+					}
 					return nil
 				},
 			},
@@ -64,6 +85,11 @@ func TestSavepoints(t *testing.T) {
 		// New database for each test file.
 		s, _, db := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
+
+		// The metamorphic default for the max buffer size can be tiny, which
+		// would flush the buffer earlier than the buffered-writes subtests
+		// expect.
+		BufferedWritesMaxBufferSize.Override(ctx, &s.ClusterSettings().SV, defaultBufferSize)
 
 		// Transient state during the test.
 		sp := make(map[string]kv.SavepointToken)
@@ -87,7 +113,15 @@ func TestSavepoints(t *testing.T) {
 			switch td.Cmd {
 			case "begin":
 				txn = kv.NewTxn(ctx, db, 0)
+				if td.HasArg("buffered-writes") {
+					txn.SetBufferedWritesEnabled(true)
+				}
 				ptxn()
+
+			// disable-write-buffering turns off write buffering, which forces
+			// any buffered writes to be flushed with the next batch.
+			case "disable-write-buffering":
+				txn.SetBufferedWritesEnabled(false)
 
 			case "commit":
 				if err := txn.Commit(ctx); err != nil {
@@ -100,6 +134,17 @@ func TestSavepoints(t *testing.T) {
 				epochAfter := txn.Epoch()
 				fmt.Fprintf(&buf, "synthetic error: %v\n", retryErr)
 				fmt.Fprintf(&buf, "epoch: %d -> %d\n", epochBefore, epochAfter)
+
+			// inject-put-error <key> arms a one-shot failure: the next Put
+			// that evaluates on the key fails with a WriteIntentError. This is
+			// used to fail buffer flushes, which have no real error path that
+			// produces a WriteIntentError: mid-transaction flush batches are
+			// stripped of statement-scoped options such as lock timeouts (see
+			// clearBatchRequestOptions).
+			case "inject-put-error":
+				injectPutErr.Lock()
+				injectPutErr.key = roachpb.Key(td.CmdArgs[0].Key)
+				injectPutErr.Unlock()
 
 			// inject-error runs a Get with an untyped error injected into request
 			// evaluation.
