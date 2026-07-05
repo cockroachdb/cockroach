@@ -1440,6 +1440,19 @@ func (rr requestRecord) toResp(
 		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, dla)
 
 	case *kvpb.DeleteRequest:
+		// If we sent a locking Get for this Del and it came back unevaluated
+		// (because the batch's limit was exhausted first), the Del wasn't
+		// processed: return the ResumeSpan without buffering a tombstone or
+		// recording a lock.
+		if rr.transformed {
+			if getResp := br.GetInner().(*kvpb.GetResponse); getResp.ResumeSpan != nil {
+				ru.MustSetInner(&kvpb.DeleteResponse{
+					ResponseHeader: kvpb.ResponseHeader{ResumeSpan: getResp.ResumeSpan},
+				})
+				break
+			}
+		}
+
 		// To correctly populate FoundKey in the response, we must prefer any
 		// buffered values (if they exist).
 		var resp kvpb.DeleteResponse
@@ -1451,11 +1464,11 @@ func (rr requestRecord) toResp(
 			// We sent a GetRequest to the KV layer to acquire an exclusive lock
 			// on the key, populate FoundKey using the response.
 			getResp := br.GetInner().(*kvpb.GetResponse)
+			assertTrue(getResp.ResumeSpan == nil, "synthesizing DeleteResponse from unevaluated GetResponse")
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.Eventf(ctx, "synthesizing DeleteResponse from GetResponse: %#v", getResp)
 			}
 			resp.FoundKey = getResp.Value.IsPresent()
-			resp.ResumeSpan = getResp.ResumeSpan
 		} else {
 			// NB: If MustAcquireExclusiveLock wasn't set by the client then we
 			// eschew sending a Get request to the KV layer just to populate
@@ -1471,11 +1484,6 @@ func (rr requestRecord) toResp(
 		}
 
 		ru.MustSetInner(&resp)
-		if resp.ResumeSpan != nil {
-			// When the Get was incomplete, we haven't actually processed this
-			// Del, so we cannot buffer the write.
-			break
-		}
 
 		var dla *bufferedDurableLockAcquisition
 		if rr.transformed && exclusionTimestampRequired {
@@ -1489,6 +1497,16 @@ func (rr requestRecord) toResp(
 		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq, dla)
 
 	case *kvpb.GetRequest:
+		// If the request was sent to the KV layer but came back unevaluated
+		// (because the batch's limit was exhausted first), return the server
+		// response so that the client re-issues the request. Serving it from
+		// the buffer would hide the ResumeSpan and, for locking Gets, claim
+		// that a lock was acquired when none was.
+		if !rr.stripped && br.GetInner().Header().ResumeSpan != nil {
+			ru = br
+			break
+		}
+
 		val, _, served := twb.maybeServeRead(req.Key, req.Sequence)
 		if served {
 			// TODO(yuzefovich): we're effectively ignoring the limits of
@@ -1514,9 +1532,10 @@ func (rr requestRecord) toResp(
 		// replicated lock.
 		if rr.transformed {
 			transformedGetResponse := br.GetInner().(*kvpb.GetResponse)
+			assertTrue(transformedGetResponse.ResumeSpan == nil,
+				"recording lock acquisition from unevaluated GetResponse")
 			valueWasPresent := transformedGetResponse.Value.IsPresent()
-			lockShouldHaveBeenAcquired := (valueWasPresent || req.LockNonExisting) &&
-				transformedGetResponse.ResumeSpan == nil
+			lockShouldHaveBeenAcquired := valueWasPresent || req.LockNonExisting
 
 			if lockShouldHaveBeenAcquired {
 				dla := &bufferedDurableLockAcquisition{
