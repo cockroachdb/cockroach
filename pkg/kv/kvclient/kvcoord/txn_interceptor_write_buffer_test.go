@@ -1406,6 +1406,169 @@ func TestTxnWriteBufferResumeSpans(t *testing.T) {
 	require.Equal(t, 2, len(twb.testingBufferedWritesAsSlice()))
 }
 
+// TestTxnWriteBufferResumeSpansWithBufferedValue verifies that when a request
+// that is servable from the buffer is nevertheless sent to the KV layer (to
+// acquire a lock) and comes back unevaluated because the batch's limit was
+// exhausted, the txnWriteBuffer returns the ResumeSpan instead of serving the
+// request from the buffer. Serving it would tell the client the request
+// completed, and in particular that its lock was acquired, when no lock was
+// acquired anywhere.
+func TestTxnWriteBufferResumeSpansWithBufferedValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	t.Run("locking get", func(t *testing.T) {
+		twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
+
+		txn := makeTxnProto()
+		txn.Sequence = 1
+		keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+
+		// Buffer a write to keyA. No lock is acquired.
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		ba.Add(putArgs(keyA, "v1", txn.Sequence))
+		br, pErr := twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+
+		// Issue two replicated locking Gets with a limit of 1. Both are sent
+		// (transformed to unreplicated); the server evaluates the Get on keyB
+		// and returns the Get on keyA unevaluated.
+		txn.Sequence = 2
+		ba = &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn, MaxSpanRequestKeys: 1}
+		for _, k := range []roachpb.Key{keyB, keyA} {
+			ba.Add(&kvpb.GetRequest{
+				RequestHeader:        kvpb.RequestHeader{Key: k, Sequence: txn.Sequence},
+				KeyLockingStrength:   lock.Exclusive,
+				KeyLockingDurability: lock.Replicated,
+			})
+		}
+
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 2)
+			for _, ru := range ba.Requests {
+				req := ru.GetInner().(*kvpb.GetRequest)
+				require.Equal(t, lock.Unreplicated, req.KeyLockingDurability)
+			}
+
+			resp := ba.CreateReply()
+			resp.Txn = ba.Txn
+			resp.Responses = []kvpb.ResponseUnion{
+				{Value: &kvpb.ResponseUnion_Get{
+					Get: &kvpb.GetResponse{Value: &roachpb.Value{RawBytes: []byte("b")}},
+				}},
+				{Value: &kvpb.ResponseUnion_Get{
+					Get: &kvpb.GetResponse{ResponseHeader: kvpb.ResponseHeader{
+						ResumeSpan: &roachpb.Span{Key: keyA},
+					}},
+				}},
+			}
+			return resp, nil
+		})
+
+		br, pErr = twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.Len(t, br.Responses, 2)
+
+		// The Get on keyB was evaluated and acquired a lock.
+		require.NotNil(t, br.Responses[0].GetInner().(*kvpb.GetResponse).Value)
+
+		// The Get on keyA was not evaluated: its response must carry the
+		// ResumeSpan and no value, even though the key is servable from the
+		// buffer.
+		getResp := br.Responses[1].GetInner().(*kvpb.GetResponse)
+		require.NotNil(t, getResp.ResumeSpan)
+		require.Nil(t, getResp.Value)
+
+		// No lock must be recorded for keyA.
+		for _, bw := range twb.testingBufferedWritesAsSlice() {
+			if bw.key.Equal(keyA) {
+				require.Nil(t, bw.lki, "unexpected lock recorded for unevaluated Get")
+			}
+		}
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
+
+		txn := makeTxnProto()
+		txn.Sequence = 1
+		keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+		// Buffer a write to keyC. No lock is acquired.
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		ba.Add(putArgs(keyC, "v1", txn.Sequence))
+		br, pErr := twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+
+		// Delete all three keys with MaxSpanRequestKeys set to 2. All three
+		// Dels are transformed into locking Gets; the third one (keyC, which
+		// has a buffered value) comes back unevaluated.
+		txn.Sequence = 2
+		ba = &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn, MaxSpanRequestKeys: 2}
+		for _, k := range []roachpb.Key{keyA, keyB, keyC} {
+			del := delArgs(k, txn.Sequence)
+			del.MustAcquireExclusiveLock = true
+			ba.Add(del)
+		}
+
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 3)
+
+			resp := ba.CreateReply()
+			resp.Txn = ba.Txn
+			resp.Responses = []kvpb.ResponseUnion{
+				{Value: &kvpb.ResponseUnion_Get{
+					Get: &kvpb.GetResponse{Value: &roachpb.Value{RawBytes: []byte("a")}},
+				}},
+				{Value: &kvpb.ResponseUnion_Get{
+					Get: &kvpb.GetResponse{Value: &roachpb.Value{RawBytes: []byte("b")}},
+				}},
+				{Value: &kvpb.ResponseUnion_Get{
+					Get: &kvpb.GetResponse{ResponseHeader: kvpb.ResponseHeader{
+						ResumeSpan: &roachpb.Span{Key: keyC},
+					}},
+				}},
+			}
+			return resp, nil
+		})
+
+		br, pErr = twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.Len(t, br.Responses, 3)
+		require.Equal(t, &kvpb.DeleteResponse{FoundKey: true}, br.Responses[0].GetInner())
+		require.Equal(t, &kvpb.DeleteResponse{FoundKey: true}, br.Responses[1].GetInner())
+
+		// The Del on keyC was not processed: its response must carry the
+		// ResumeSpan and must not claim to have found the key, even though a
+		// buffered value exists.
+		delResp := br.Responses[2].GetInner().(*kvpb.DeleteResponse)
+		require.NotNil(t, delResp.ResumeSpan)
+		require.False(t, delResp.FoundKey)
+
+		// keyC must retain only the original buffered Put: no tombstone must
+		// have been buffered and no lock recorded.
+		var found bool
+		for _, bw := range twb.testingBufferedWritesAsSlice() {
+			if bw.key.Equal(keyC) {
+				found = true
+				require.Len(t, bw.vals, 1)
+				require.Equal(t, enginepb.TxnSeq(1), bw.vals[0].seq)
+				require.Nil(t, bw.lki, "unexpected lock recorded for unprocessed Del")
+			}
+		}
+		require.True(t, found)
+	})
+}
+
 // TestTxnWriteBufferMustSortBatchesBySequenceNumber verifies that flushed
 // batches are sorted in sequence number order, as currently required by the txn
 // pipeliner interceptor.
