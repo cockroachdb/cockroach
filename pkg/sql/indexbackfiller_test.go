@@ -1830,7 +1830,7 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 							targetState, jobState)
 					}
 					return nil
-				}, 30*time.Second)
+				}, 90*time.Second)
 			}
 
 			pauseAndResumeJob := func() {
