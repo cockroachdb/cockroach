@@ -120,7 +120,6 @@ func registerFailover(r registry.Registry) {
 				CompatibleClouds:       registry.OnlyGCE,                                                                                                                                          // dmsetup only configured for gce
 				Suites:                 registry.Suites(registry.Nightly),
 				Leases:                 leases,
-				SkipPostValidations:    registry.PostValidationNoDeadNodes, // cleanup kills nodes
 				PostProcessPerfMetrics: failoverAggregateFunction,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverChaos(ctx, t, c, readOnly)
@@ -172,7 +171,6 @@ func registerFailover(r registry.Registry) {
 			clusterOpts = append(clusterOpts, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2))
 			clouds := registry.OnlyGCE
 
-			var postValidation registry.PostValidation
 			if failureMode == failureModeDiskStall {
 				// Use PDs in an attempt to work around flakes encountered when using
 				// SSDs. See #97968.
@@ -182,7 +180,6 @@ func registerFailover(r registry.Registry) {
 				clusterOpts = append(clusterOpts, spec.ReuseNone())
 				// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and lsblk outputs in the same format.
 				clusterOpts = append(clusterOpts, spec.Arch(spec.AllExceptFIPS))
-				postValidation = registry.PostValidationNoDeadNodes
 				// dmsetup is currently only configured for gce.
 				clouds = registry.OnlyGCE
 			}
@@ -191,7 +188,6 @@ func registerFailover(r registry.Registry) {
 				Owner:                  registry.OwnerKV,
 				Benchmark:              true,
 				Timeout:                45 * time.Minute,
-				SkipPostValidations:    postValidation,
 				Cluster:                r.MakeClusterSpec(7, clusterOpts...),
 				CompatibleClouds:       clouds,
 				Suites:                 registry.Suites(registry.Nightly),
@@ -208,7 +204,6 @@ func registerFailover(r registry.Registry) {
 				Suites:                 registry.Suites(registry.Weekly),
 				Benchmark:              true,
 				Timeout:                45 * time.Minute,
-				SkipPostValidations:    postValidation,
 				Cluster:                r.MakeClusterSpec(5, clusterOpts...),
 				Leases:                 leases,
 				PostProcessPerfMetrics: failoverAggregateFunction,
@@ -223,7 +218,6 @@ func registerFailover(r registry.Registry) {
 				Suites:                 registry.Suites(registry.Weekly),
 				Benchmark:              true,
 				Timeout:                45 * time.Minute,
-				SkipPostValidations:    postValidation,
 				Cluster:                r.MakeClusterSpec(7, clusterOpts...),
 				Leases:                 leases,
 				PostProcessPerfMetrics: failoverAggregateFunction,

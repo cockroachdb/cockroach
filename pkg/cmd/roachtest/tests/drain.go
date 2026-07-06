@@ -63,7 +63,6 @@ func registerDrain(r registry.Registry) {
 			CompatibleClouds:    registry.AllExceptAWS,
 			Suites:              registry.Suites(registry.Nightly),
 			Leases:              registry.MetamorphicLeases,
-			SkipPostValidations: registry.PostValidationNoDeadNodes,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClusterNotAtQuorum(ctx, t, c)
 			},
@@ -76,7 +75,6 @@ func registerDrain(r registry.Registry) {
 			CompatibleClouds:    registry.AllExceptAWS,
 			Suites:              registry.Suites(registry.Nightly),
 			Leases:              registry.MetamorphicLeases,
-			SkipPostValidations: registry.PostValidationNoDeadNodes,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDrainAndShutdown(ctx, t, c)
 			},
