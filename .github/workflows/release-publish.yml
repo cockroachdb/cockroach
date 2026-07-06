@@ -147,12 +147,20 @@ jobs:
           sparse-checkout-cone-mode: false
       - name: Detect beta version
         id: detect
+        env:
+          # The repo(s) this run pushes the release tag to, printed below so
+          # the operator sees them before clicking through approve-publish.
+          # Must mirror TAG_REPO / EXTRA_TAG_REPO / DRYRUN_TAG_REPO in the
+          # publish-staged step: the env context is not available in
+          # workflow-level env, so the DRY_RUN branching is repeated here.
+          TAG_DESTINATIONS: ${{ env.DRY_RUN == '' && format('{0}, cockroachdb/cockroach', github.repository) || (inputs.dryrun_tag && format('{0} (dry-run)', github.repository) || 'none (dry-run)') }}
         run: |
           set -euo pipefail
           # Mirror the version read in build-cockroach-release-per-platform.sh:
           # first non-comment line of pkg/build/version.txt, e.g. v26.3.0-beta.1.
           version="$(grep -v '^#' pkg/build/version.txt | head -n1 || true)"
           echo "version: ${version:-<unset>}"
+          echo "release tag destination(s): ${TAG_DESTINATIONS}"
           # is_beta is true only for a -beta prerelease (e.g. v26.3.0-beta.1).
           # Anything else (alpha, rc, stable, or unreadable) defaults to false,
           # leaving the master / -rc / staging-v* paths as the only way in.
@@ -398,10 +406,10 @@ jobs:
           DOCKER_ACCESS_TOKEN: ${{ steps.secrets.outputs.docker_access_token }}
           DOCKER_ID: ${{ steps.secrets.outputs.docker_id }}
           # GHA tagging path: HTTPS push using the bot PAT. The PAT must
-          # authorize TAG_REPO (the repo the release tag is pushed to). TC
-          # tagging path (SSH deploy key) is unaffected — TC sets
-          # GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY directly and the
-          # script branches on it first.
+          # authorize TAG_REPO and EXTRA_TAG_REPO (the repos the release
+          # tag is pushed to). TC tagging path (SSH deploy key) is
+          # unaffected — TC sets GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY
+          # directly and the script branches on it first.
           # Use GH_TOKEN (not GITHUB_TOKEN). GHA's runner reserves the
           # GITHUB_TOKEN name and may shadow our value with the auto-
           # issued workflow token; GH_TOKEN sidesteps that and matches
@@ -411,6 +419,10 @@ jobs:
           # destination. For dry-run, only tag when the operator opts in
           # via inputs.dryrun_tag (pointed at the current repo / fork).
           TAG_REPO: ${{ github.repository }}
+          # Releases from this branch also push the tag to
+          # cockroachdb/cockroach. Empty in dry-run; the script rehearses
+          # the extra push against DRYRUN_TAG_REPO instead.
+          EXTRA_TAG_REPO: ${{ env.DRY_RUN == '' && 'cockroachdb/cockroach' || '' }}
           DRYRUN_TAG_REPO: ${{ env.DRY_RUN != '' && inputs.dryrun_tag && github.repository || '' }}
           # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
           TC_BUILD_BRANCH: ${{ github.ref_name }}
