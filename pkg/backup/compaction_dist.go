@@ -94,6 +94,7 @@ func createCompactionPlan(
 			fsc,
 			spanCh,
 			false, /* useLink */
+			0,     /* maxLevels */
 		), "generateAndSendImportSpans")
 	}
 	dsp := execCtx.DistSQLPlanner()

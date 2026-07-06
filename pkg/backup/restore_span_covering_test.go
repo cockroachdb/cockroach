@@ -270,7 +270,12 @@ func makeImportSpans(
 	introducedSpanFrontier spanUtils.Frontier,
 	completedSpans []jobspb.RestoreProgress_FrontierEntry,
 	useLink bool,
+	maxLevels ...int,
 ) ([]execinfrapb.RestoreSpanEntry, error) {
+	ml := 0
+	if len(maxLevels) > 0 {
+		ml = maxLevels[0]
+	}
 	cover := make([]execinfrapb.RestoreSpanEntry, 0)
 	spanCh := make(chan execinfrapb.RestoreSpanEntry)
 	g := ctxgroup.WithContext(context.Background())
@@ -303,6 +308,7 @@ func makeImportSpans(
 		&inclusiveEndKeyComparator{},
 		spanCh,
 		useLink,
+		ml,
 	)
 	close(spanCh)
 
@@ -1150,5 +1156,123 @@ func TestUseLinkLayerOrdering(t *testing.T) {
 		for _, file := range entry.Files {
 			require.False(t, file.UseLink, "all files should have UseLink=false when useLink=false")
 		}
+	}
+}
+
+// TestUseLinkLevelLimit verifies the count-based link->ingest switch: when a
+// chain has more than maxLevels layers, only the first maxLevels-1 are linked
+// and the rest are ingested; chains within maxLevels are linked in full.
+func TestUseLinkLevelLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
+	defer cleanupFn()
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
+
+	c := makeCoverUtils(ctx, t, &execCfg)
+
+	makeSpan := func(start, end string) roachpb.Span {
+		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
+	}
+
+	// makeBackups builds a chain of n layers, each with a single file covering
+	// the whole span. If revLayer is in [0, n), that layer is marked as a
+	// revision-history layer (which forces it and all layers above it to be
+	// ingested); revLayer < 0 means no revision history.
+	makeBackups := func(n, revLayer int) []backuppb.BackupManifest {
+		backups := make([]backuppb.BackupManifest, n)
+		for i := range backups {
+			mvccFilter := backuppb.MVCCFilter_Latest
+			if i == revLayer {
+				mvccFilter = backuppb.MVCCFilter_All
+			}
+			backups[i] = backuppb.BackupManifest{
+				Spans:      roachpb.Spans{makeSpan("a", "z")},
+				StartTime:  hlc.Timestamp{WallTime: int64(i)},
+				EndTime:    hlc.Timestamp{WallTime: int64(i + 1)},
+				MVCCFilter: mvccFilter,
+				Dir:        c.dir,
+				Files: []backuppb.BackupManifest_File{
+					{Span: makeSpan("a", "m"), Path: fmt.Sprintf("layer%d-file1", i)},
+				},
+			}
+		}
+		return backups
+	}
+
+	emptySpanFrontier, err := spanUtils.MakeFrontierAt(hlc.Timestamp{})
+	require.NoError(t, err)
+
+	// linkedLayers returns the set of layer indices that were linked in the cover.
+	linkedLayers := func(cover []execinfrapb.RestoreSpanEntry) map[int32]bool {
+		linked := make(map[int32]bool)
+		for _, entry := range cover {
+			for _, file := range entry.Files {
+				if file.UseLink {
+					linked[file.Layer] = true
+				}
+			}
+		}
+		return linked
+	}
+
+	testCases := []struct {
+		name         string
+		numLayers    int
+		maxLevels    int
+		revLayer     int // < 0 for no revision history
+		expectLinked []int32
+		expectIngest []int32
+	}{
+		{name: "within limit links all", numLayers: 6, maxLevels: 6, revLayer: -1,
+			expectLinked: []int32{0, 1, 2, 3, 4, 5}},
+		{name: "over limit links first maxLevels-1", numLayers: 8, maxLevels: 6, revLayer: -1,
+			expectLinked: []int32{0, 1, 2, 3, 4}, expectIngest: []int32{5, 6, 7}},
+		{name: "far over limit still links only maxLevels-1", numLayers: 30, maxLevels: 6, revLayer: -1,
+			expectLinked: []int32{0, 1, 2, 3, 4},
+			expectIngest: []int32{5, 10, 20, 29}},
+		{name: "disabled links all", numLayers: 30, maxLevels: 0, revLayer: -1,
+			expectLinked: []int32{0, 4, 5, 29}},
+		// The switch to ingest is the lower bound of the count boundary and the
+		// first revision-history layer.
+		{name: "revision history below count boundary switches earlier",
+			numLayers: 10, maxLevels: 6, revLayer: 3,
+			expectLinked: []int32{0, 1, 2}, expectIngest: []int32{3, 4, 5, 9}},
+		{name: "count boundary below revision history switches at count",
+			numLayers: 10, maxLevels: 6, revLayer: 8,
+			expectLinked: []int32{0, 1, 2, 3, 4}, expectIngest: []int32{5, 8, 9}},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			backups := makeBackups(tt.numLayers, tt.revLayer)
+			layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(
+				ctx, execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
+			require.NoError(t, err)
+
+			cover, err := makeImportSpans(
+				ctx,
+				roachpb.Spans{makeSpan("a", "z")},
+				backups,
+				layerToIterFactory,
+				noSpanTargetSize,
+				emptySpanFrontier,
+				nil,
+				true, /* useLink */
+				tt.maxLevels,
+			)
+			require.NoError(t, err)
+			require.NotEmpty(t, cover)
+
+			linked := linkedLayers(cover)
+			for _, l := range tt.expectLinked {
+				require.Truef(t, linked[l], "layer %d should be linked", l)
+			}
+			for _, l := range tt.expectIngest {
+				require.Falsef(t, linked[l], "layer %d should be ingested (not linked)", l)
+			}
+		})
 	}
 }

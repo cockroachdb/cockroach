@@ -111,6 +111,7 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 													&inclusiveEndKeyComparator{},
 													spanCh,
 													false, /* useLink */
+													0,     /* maxLevels */
 												)
 											})
 

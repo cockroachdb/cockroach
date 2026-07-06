@@ -228,6 +228,17 @@ func (f spanCoveringFilter) close() {
 	f.checkpointFrontier.Release()
 }
 
+// onlineRestoreMaxLevels is the number of LSM levels an online restore targets.
+// Pebble's LSM has a fixed depth of 7 levels (L0-L6), and each linked backup
+// layer registers as its own level below L0, so read amplification is bounded by
+// the number of linked layers. When a chain has more than this many layers, only
+// the first onlineRestoreMaxLevels-1 are linked and the remaining layers are
+// ingested, which merges them into a single level; the total then settles at
+// onlineRestoreMaxLevels regardless of chain length. It is a constant rather than
+// a setting because the value follows from the LSM's fixed depth, not from a
+// tunable policy.
+const onlineRestoreMaxLevels = 6
+
 // generateAndSendImportSpans partitions the spans of requiredSpans into a
 // covering of RestoreSpanEntry's which each have all overlapping files from the
 // passed backups assigned to them. The spans of requiredSpans are
@@ -280,6 +291,7 @@ func generateAndSendImportSpans(
 	fsc fileSpanComparator,
 	spanCh chan execinfrapb.RestoreSpanEntry,
 	useLink bool,
+	maxLevels int,
 ) error {
 
 	startKeyIt, err := newFileSpanStartKeyIterator(ctx, backups, layerToBackupManifestFileIterFactory)
@@ -315,6 +327,23 @@ func generateAndSendImportSpans(
 		}
 	}
 
+	// Bound the number of linked layers so read amplification stays bounded.
+	// Each linked layer becomes its own LSM level, but ingest merges its inputs
+	// into a single level, so beyond maxLevels total layers we link only the
+	// first maxLevels-1 and ingest the rest, capping the destination at
+	// maxLevels levels. Chains with maxLevels or fewer layers are linked in
+	// full. The switch to ingest happens at the earlier of this count boundary
+	// and the first revision-history layer.
+	//
+	// A maxLevels of 0 (or negative) disables the count-based cap entirely, so
+	// only revision history triggers the switch; non-online callers pass 0 since
+	// they never link.
+	countSwitchLayer := len(backups)
+	if maxLevels > 0 && len(backups) > maxLevels {
+		countSwitchLayer = maxLevels - 1
+	}
+	switchLayer := min(firstRevHistoryLayer, countSwitchLayer)
+
 	// lastCovSpanSize is the size of files added to the right-most span of
 	// the cover so far.
 	var lastCovSpanSize int64
@@ -332,11 +361,13 @@ func generateAndSendImportSpans(
 			for _, f := range covFilesByLayer[layer] {
 				// A file can be linked if:
 				// 1. useLink is true (caller wants linking)
-				// 2. It's in a layer before the first revision history layer
+				// 2. It's in a layer before the switch to ingest (the earlier of
+				//    the first revision-history layer and the count boundary)
 				// 3. It doesn't have range keys (online restore doesn't support them)
-				// Once we hit a layer with revision history, all subsequent layers
-				// must also be ingested to maintain correct MVCC/LSM ordering.
-				canLink := useLink && layer < firstRevHistoryLayer && !f.HasRangeKeys
+				// At and beyond switchLayer all layers must be ingested, both to
+				// maintain correct MVCC/LSM ordering across revision-history layers
+				// and to merge a long link tail into a single ingested level.
+				canLink := useLink && layer < switchLayer && !f.HasRangeKeys
 
 				fileSpec := execinfrapb.RestoreFileSpec{
 					Path:                    f.Path,

@@ -205,6 +205,7 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 			fsc,
 			entryCh,
 			false, /* useLink */
+			0,     /* maxLevels */
 		), "generate and send import spans")
 	}
 
