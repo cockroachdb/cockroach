@@ -839,6 +839,29 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 			})
 		}
 	})
+	t.Run("MaxBytes accepts human-readable byte strings", func(t *testing.T) {
+		opts := changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"MaxBytes": "1MiB"}}`)
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.Equal(t, jsonByteSize(1<<20), cfg.Flush.MaxBytes)
+	})
+	t.Run("MaxBytes accepts integer values", func(t *testing.T) {
+		opts := changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"MaxBytes": 1048576}}`)
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.Equal(t, jsonByteSize(1<<20), cfg.Flush.MaxBytes)
+	})
+	t.Run("MaxBytes accepts other byte units", func(t *testing.T) {
+		opts := changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"MaxBytes": "512KiB"}}`)
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.Equal(t, jsonByteSize(512*1024), cfg.Flush.MaxBytes)
+	})
+	t.Run("MaxBytes returns error for invalid string", func(t *testing.T) {
+		opts := changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"MaxBytes": "notabyte"}}`)
+		_, err := getSaramaConfig(opts)
+		require.Error(t, err)
+	})
 	t.Run("validate returns err for bad compression level", func(t *testing.T) {
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"Compression": "GZIP", "CompressionLevel": "invalid"}`)
 		_, err := getSaramaConfig(opts)
