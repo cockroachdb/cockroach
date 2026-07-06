@@ -224,7 +224,7 @@ func (m *MockTransactionalSender) CanUseSavepoint(context.Context, SavepointToke
 func (m *MockTransactionalSender) Key() roachpb.Key { panic("unimplemented") }
 
 // Epoch is part of the TxnSender interface.
-func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { panic("unimplemented") }
+func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { return 0 }
 
 // IsLocking is part of the TxnSender interface.
 func (m *MockTransactionalSender) IsLocking() bool { return false }

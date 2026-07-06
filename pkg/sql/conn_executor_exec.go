@@ -2199,11 +2199,20 @@ func (ex *connExecutor) stepReadSequenceWithRestore(ctx context.Context) (func()
 	}
 
 	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+	prevEpoch := ex.state.mu.txn.Epoch()
 	prevSeqNum := ex.state.mu.txn.GetReadSeqNum()
 	delegatedUnderOuterTxn := ex.executorType == executorTypeInternal && ex.extraTxnState.underOuterTxn
 	cleanup := func() error {
 		_ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
 		if delegatedUnderOuterTxn {
+			// Skip the restore across an epoch bump: writeSeq is 0 in the new
+			// epoch, so SetReadSeqNum(prevSeqNum) would violate readSeq <= writeSeq.
+			if curEpoch := ex.state.mu.txn.Epoch(); curEpoch != prevEpoch {
+				log.VEventf(ctx, 2,
+					"not restoring read sequence number across epoch bump (epoch %d -> %d)",
+					prevEpoch, curEpoch)
+				return nil
+			}
 			return ex.state.mu.txn.SetReadSeqNum(prevSeqNum)
 		}
 		return nil
