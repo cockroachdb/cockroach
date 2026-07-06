@@ -1939,12 +1939,26 @@ func clearBatchRequestOptions(ba *kvpb.BatchRequest) {
 	// If read consistency is set to anything but CONSISTENT, our flush will fail
 	// because we only allow inconsistent reads for read only requests.
 	ba.ReadConsistency = 0
-	// If WaitPolicy is set to SkipLocked, our request may fail validation.
+	// SkipLocked would fail validation on a batch with locking requests. Error
+	// would let the flush fail with a lock conflict at a point where the
+	// flushed writes have already been acknowledged to the client.
 	ba.WaitPolicy = 0
+	// LockTimeout is statement-scoped: the buffered writes were acknowledged
+	// without ever waiting on a lock, so the timeout of the statement that
+	// happens to trigger the flush must not apply to them. It is deliberately
+	// retained on combined commit batches, where a timeout failure is an
+	// ordinary commit failure.
+	ba.LockTimeout = 0
 	// Reset options that could result in an early batch return.
 	ba.MaxSpanRequestKeys = 0
 	ba.TargetBytes = 0
 	ba.ReturnElasticCPUResumeSpans = false
+	// WholeRowsOfSize and AllowEmpty only have meaning when a key or byte
+	// limit is set, but SQL sets them even on batches without limits, so they
+	// leak onto flush-triggering batches. Clear them rather than rely on the
+	// server ignoring them in the absence of limits.
+	ba.WholeRowsOfSize = 0
+	ba.AllowEmpty = false
 	ba.IsReverse = false
 	ba.WriteOptions = nil
 }
