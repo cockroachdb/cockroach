@@ -100,6 +100,55 @@ var restoreCompactedBackups = settings.RegisterBoolSetting(
 	settings.WithVisibility(settings.Reserved),
 )
 
+// defaultExperimentalCopy makes RESTORE default to experimental fast copy mode
+// when the user does not specify a mode and the statement options are
+// compatible with it. When they are not (e.g. an encrypted backup), RESTORE
+// falls back to a normal restore. The mode must be decided from statement
+// options alone because it fixes the result-column header before backup
+// manifests are read; see restoreOptionsAllowFastCopy.
+var defaultExperimentalCopy = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"backup.restore.default_experimental_copy.enabled",
+	"if enabled, RESTORE defaults to experimental fast copy mode when the "+
+		"backup is compatible, falling back to a normal restore otherwise",
+	false,
+	settings.WithVisibility(settings.Reserved),
+)
+
+// restoreOptionsAllowFastCopy reports whether the statement options are
+// compatible with defaulting to experimental fast copy mode. Only option-level
+// incompatibilities are consulted: the mode (and thus the result-column header)
+// must be chosen before backup manifests are resolved, so manifest-level
+// incompatibilities cannot participate in the default and would instead surface
+// as an error if fast copy is chosen.
+func restoreOptionsAllowFastCopy(opts tree.RestoreOptions) bool {
+	// Encrypted backups have no below-Raft decryption hook for linked SSTs.
+	if opts.EncryptionPassphrase != nil || len(opts.DecryptionKMSURI) > 0 {
+		return false
+	}
+	// verify_backup_table_data is incompatible with fast/online restore.
+	if opts.VerifyData {
+		return false
+	}
+	return true
+}
+
+// maybeDefaultToFastCopy flips an unspecified RESTORE to experimental fast copy
+// mode when either the test hook or the cluster setting asks for it and the
+// options allow it. It is a no-op if the user explicitly chose a mode.
+func maybeDefaultToFastCopy(restoreStmt *tree.Restore, sv *settings.Values) {
+	if restoreStmt.Options.ExperimentalCopy || restoreStmt.Options.ExperimentalOnline {
+		return
+	}
+	if !testFastRestore() && !defaultExperimentalCopy.Get(sv) {
+		return
+	}
+	if !restoreOptionsAllowFastCopy(restoreStmt.Options) {
+		return
+	}
+	restoreStmt.Options.ExperimentalCopy = true
+}
+
 // maybeFilterMissingViews filters the set of tables to restore to exclude views
 // whose dependencies are either missing or are themselves unrestorable due to
 // missing dependencies, and returns the resulting set of tables. If the
@@ -1453,9 +1502,7 @@ func restoreTypeCheck(
 	if !ok {
 		return false, nil, nil
 	}
-	if testFastRestore() && !restoreStmt.Options.ExperimentalCopy && !restoreStmt.Options.ExperimentalOnline {
-		restoreStmt.Options.ExperimentalCopy = true
-	}
+	maybeDefaultToFastCopy(restoreStmt, &p.ExecCfg().Settings.SV)
 	if err := exprutil.TypeCheck(
 		ctx, "RESTORE", p.SemaCtx(),
 		exprutil.StringArrays{
@@ -1500,9 +1547,7 @@ func restorePlanHook(
 	if !ok {
 		return nil, nil, false, nil
 	}
-	if testFastRestore() && !restoreStmt.Options.ExperimentalCopy && !restoreStmt.Options.ExperimentalOnline {
-		restoreStmt.Options.ExperimentalCopy = true
-	}
+	maybeDefaultToFastCopy(restoreStmt, &p.ExecCfg().Settings.SV)
 
 	if err := featureflag.CheckEnabled(
 		ctx,

@@ -945,3 +945,59 @@ func TestRestoreWithBackupIDs(t *testing.T) {
 		})
 	}
 }
+
+// TestMaybeDefaultToFastCopy verifies that the default_experimental_copy setting
+// flips an unspecified RESTORE to fast copy only when the options are
+// compatible, and never overrides an explicit mode.
+func TestMaybeDefaultToFastCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This test exercises the cluster-setting default path directly, so pin the
+	// metamorphic testFastRestore hook off; otherwise it would independently flip
+	// ExperimentalCopy on and mask the setting-off cases.
+	backuptestutils.DisableFastRestoreForTest(t)
+
+	ctx := context.Background()
+
+	testCases := []struct {
+		name         string
+		settingOn    bool
+		opts         tree.RestoreOptions
+		expectedCopy bool
+	}{
+		{name: "setting off leaves legacy", settingOn: false,
+			opts: tree.RestoreOptions{}, expectedCopy: false},
+		{name: "setting on defaults to fast copy", settingOn: true,
+			opts: tree.RestoreOptions{}, expectedCopy: true},
+		{name: "encryption passphrase falls back to legacy", settingOn: true,
+			opts:         tree.RestoreOptions{EncryptionPassphrase: tree.NewStrVal("secret")},
+			expectedCopy: false},
+		{name: "kms falls back to legacy", settingOn: true,
+			opts:         tree.RestoreOptions{DecryptionKMSURI: tree.StringOrPlaceholderOptList{tree.NewStrVal("kms://k")}},
+			expectedCopy: false},
+		{name: "verify_backup_table_data falls back to legacy", settingOn: true,
+			opts:         tree.RestoreOptions{VerifyData: true},
+			expectedCopy: false},
+		{name: "explicit online is untouched", settingOn: true,
+			opts:         tree.RestoreOptions{ExperimentalOnline: true},
+			expectedCopy: false},
+		{name: "explicit copy is untouched", settingOn: true,
+			opts:         tree.RestoreOptions{ExperimentalCopy: true},
+			expectedCopy: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			defaultExperimentalCopy.Override(ctx, &st.SV, tc.settingOn)
+
+			stmt := &tree.Restore{Options: tc.opts}
+			maybeDefaultToFastCopy(stmt, &st.SV)
+
+			require.Equal(t, tc.expectedCopy, stmt.Options.ExperimentalCopy)
+			// The online flag is never set by the default path.
+			require.Equal(t, tc.opts.ExperimentalOnline, stmt.Options.ExperimentalOnline)
+		})
+	}
+}
