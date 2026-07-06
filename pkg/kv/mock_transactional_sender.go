@@ -21,8 +21,9 @@ type MockTransactionalSender struct {
 	senderFunc func(
 		context.Context, *roachpb.Transaction, *kvpb.BatchRequest,
 	) (*kvpb.BatchResponse, *kvpb.Error)
-	txn roachpb.Transaction
-	pri roachpb.UserPriority
+	txn                   roachpb.Transaction
+	pri                   roachpb.UserPriority
+	bufferedWritesEnabled bool
 }
 
 // NewMockTransactionalSender creates a MockTransactionalSender.
@@ -109,11 +110,13 @@ func (m *MockTransactionalSender) SetOmitInRangefeeds() {
 }
 
 // SetBufferedWritesEnabled is part of the TxnSender interface.
-func (m *MockTransactionalSender) SetBufferedWritesEnabled(enabled bool) {}
+func (m *MockTransactionalSender) SetBufferedWritesEnabled(enabled bool) {
+	m.bufferedWritesEnabled = enabled
+}
 
 // BufferedWritesEnabled is part of the TxnSender interface.
 func (m *MockTransactionalSender) BufferedWritesEnabled() bool {
-	return false
+	return m.bufferedWritesEnabled
 }
 
 // String is part of the TxnSender interface.
