@@ -851,3 +851,37 @@ func TestTransactionAdmissionHeader(t *testing.T) {
 	expectedHeader.Priority = int32(admissionpb.LockingNormalPri)
 	require.Equal(t, expectedHeader, header)
 }
+
+// TestSetBufferedWritesEnabledProhibited verifies that when write buffering is
+// prohibited (as it is outside of test builds), SetBufferedWritesEnabled(true)
+// is a no-op, while disabling and the not-prohibited case behave normally.
+func TestSetBufferedWritesEnabledProhibited(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(nil), clock, stopper)
+
+	defer func(v bool) { bufferedWritesProhibited = v }(bufferedWritesProhibited)
+
+	t.Run("prohibited", func(t *testing.T) {
+		bufferedWritesProhibited = true
+		txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
+		txn.SetBufferedWritesEnabled(true)
+		require.False(t, txn.mu.sender.BufferedWritesEnabled(),
+			"enabling should be a no-op when prohibited")
+	})
+
+	t.Run("allowed", func(t *testing.T) {
+		bufferedWritesProhibited = false
+		txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
+		txn.SetBufferedWritesEnabled(true)
+		require.True(t, txn.mu.sender.BufferedWritesEnabled())
+		// Disabling is always honored.
+		txn.SetBufferedWritesEnabled(false)
+		require.False(t, txn.mu.sender.BufferedWritesEnabled())
+	})
+}
