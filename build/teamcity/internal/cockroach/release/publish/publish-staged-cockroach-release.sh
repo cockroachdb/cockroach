@@ -47,9 +47,13 @@ if [[ -z "${DRY_RUN}" ]] ; then
   fi
   gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/cockroach"
   gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
-  # Tag the repo the workflow runs in (passed as TAG_REPO, e.g.
-  # cockroachdb/cockroach-private) rather than hardcoding a destination.
+  # Tag the repo the workflow runs in (passed as TAG_REPO) rather than
+  # hardcoding a destination.
   git_repo_for_tag="${TAG_REPO:?TAG_REPO must be set by the workflow for non-dry-run}"
+  # Also push the release tag to an additional repo when configured (passed
+  # as EXTRA_TAG_REPO, e.g. cockroachdb/cockroach). Pushing the tag also
+  # pushes any commits it references that the destination does not have yet.
+  git_repo_for_extra_tag="${EXTRA_TAG_REPO:-}"
 else
   gcs_bucket="cockroach-release-artifacts-dryrun"
   gcs_staged_bucket="cockroach-release-artifacts-staged-dryrun"
@@ -57,8 +61,11 @@ else
   gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach"
   gcr_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach-test"
   # In dry-run, only tag if the operator opts in by pointing DRYRUN_TAG_REPO at a
-  # writable fork (e.g. user/cockroach).
+  # writable fork (e.g. user/cockroach). The extra tag push is rehearsed
+  # against the same fork: pushing an already-present identical tag a second
+  # time is a no-op.
   git_repo_for_tag="${DRYRUN_TAG_REPO:-}"
+  git_repo_for_extra_tag="${DRYRUN_TAG_REPO:-}"
 fi
 
 # With WIF (GitHub Actions), credentials are handled via the environment.
@@ -81,26 +88,33 @@ fi
 
 # Pick git tag remote + auth. TeamCity sets the SSH deploy key and uses
 # SSH; GitHub Actions sets a PAT (GH_TOKEN) and uses HTTPS with the
-# token embedded in the URL. The PAT must authorize git_repo_for_tag —
-# the prod repo for real publishes, and any fork used for dry-run
-# rehearsal. The GHA branch reads GH_TOKEN, not GITHUB_TOKEN: GHA's
-# runner reserves GITHUB_TOKEN for the auto-issued workflow token and
-# may shadow values set in the step's env block, so we use GH_TOKEN
-# both here and in the workflow.
+# token embedded in the URL. The PAT must authorize git_repo_for_tag and
+# git_repo_for_extra_tag — the prod repos for real publishes, and any
+# fork used for dry-run rehearsal. The GHA branch reads GH_TOKEN, not
+# GITHUB_TOKEN: GHA's runner reserves GITHUB_TOKEN for the auto-issued
+# workflow token and may shadow values set in the step's env block, so
+# we use GH_TOKEN both here and in the workflow.
 tag_remote=""
+extra_tag_remote=""
 tag_git_cmd=""
-if [[ -n "${git_repo_for_tag}" ]]; then
+if [[ -n "${git_repo_for_tag}${git_repo_for_extra_tag}" ]]; then
   if [[ -n "${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY:-}" ]]; then
     github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
     configure_git_ssh_key
-    tag_remote="ssh://git@github.com/${git_repo_for_tag}.git"
+    tag_remote_prefix="ssh://git@github.com/"
     tag_git_cmd="git_wrapped"
   elif [[ -n "${GH_TOKEN:-}" ]]; then
-    tag_remote="https://x-access-token:${GH_TOKEN}@github.com/${git_repo_for_tag}.git"
+    tag_remote_prefix="https://x-access-token:${GH_TOKEN}@github.com/"
     tag_git_cmd="git"
   else
-    echo "ERROR: tag repo ${git_repo_for_tag} configured but neither GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY nor GH_TOKEN is set"
+    echo "ERROR: tag repo(s) configured (primary '${git_repo_for_tag}', extra '${git_repo_for_extra_tag}') but neither GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY nor GH_TOKEN is set"
     exit 1
+  fi
+  if [[ -n "${git_repo_for_tag}" ]]; then
+    tag_remote="${tag_remote_prefix}${git_repo_for_tag}.git"
+  fi
+  if [[ -n "${git_repo_for_extra_tag}" ]]; then
+    extra_tag_remote="${tag_remote_prefix}${git_repo_for_extra_tag}.git"
   fi
 fi
 
@@ -119,6 +133,8 @@ if [[ -n "${git_repo_for_tag}" ]]; then
     echo "Tag ${version} already exists"
     exit 1
   fi
+fi
+if [[ -n "${git_repo_for_tag}${git_repo_for_extra_tag}" ]]; then
   git tag "${version}"
 else
   echo "No tag repo configured; skipping"
@@ -207,6 +223,24 @@ if [[ -n "${git_repo_for_tag}" ]]; then
   "${tag_git_cmd}" push "${tag_remote}" "$version"
 else
   echo "No tag repo configured; skipping"
+fi
+# The extra tag push is best-effort: the release does not depend on it and
+# the tag can be pushed manually afterwards, so a failure here only warns.
+# Unlike the primary repo above, there is deliberately no up-front existence
+# check: pushing an identical existing tag is a no-op, and a conflicting one
+# fails the push and triggers the warning.
+if [[ -n "${extra_tag_remote}" ]]; then
+  if ! "${tag_git_cmd}" push "${extra_tag_remote}" "$version"; then
+    msg="Failed to push ${version} to ${git_repo_for_extra_tag}. The release is unaffected; see the git output for the cause and push the tag manually once it is resolved."
+    echo "::warning title=Extra tag push failed::${msg}"
+    # The warning annotation alone is easy to miss on a green run, so also
+    # surface it in the job summary (unset outside GitHub Actions).
+    if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+      echo ":warning: ${msg}" >>"$GITHUB_STEP_SUMMARY"
+    fi
+  fi
+else
+  echo "No extra tag repo configured; skipping"
 fi
 tc_end_block "Push release tag to GitHub"
 
