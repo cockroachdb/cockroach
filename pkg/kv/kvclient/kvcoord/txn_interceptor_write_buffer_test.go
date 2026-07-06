@@ -4271,7 +4271,8 @@ func TestBatchHeaderFieldsAreAccountedForInBufferedWrites(t *testing.T) {
 		// cleared to avoid relying on the server-side gating.
 		"WholeRowsOfSize": fieldIsClearedBeforeFlush,
 		"AllowEmpty":      fieldIsClearedBeforeFlush,
-		// Controlled by interceptors below us.
+		// Controlled by interceptors below us; client batches carrying these
+		// are rejected by maybeRejectInternalHeaderFields.
 		"DistinctSpans":           iSwearFieldDoesNotNeedHandling,
 		"AsyncConsensus":          iSwearFieldDoesNotNeedHandling,
 		"CanForwardReadTimestamp": iSwearFieldDoesNotNeedHandling,
@@ -4293,11 +4294,13 @@ func TestBatchHeaderFieldsAreAccountedForInBufferedWrites(t *testing.T) {
 		"ReturnElasticCPUResumeSpans": fieldIsHandledByBatchSplitting,
 		// Seems good to keep the labels, we could add some.
 		"ProfileLabels": iSwearFieldDoesNotNeedHandling,
-		// Controlled by dist_sender
+		// Controlled by dist_sender; client batches carrying it are rejected
+		// by maybeRejectInternalHeaderFields.
 		"AmbiguousReplayProtection": iSwearFieldDoesNotNeedHandling,
 		// Flushes should be on the same connection as the original request
 		"ConnectionClass": iSwearFieldDoesNotNeedHandling,
-		// Managed by dist_sender
+		// Managed by dist_sender; client batches carrying it are rejected by
+		// maybeRejectInternalHeaderFields.
 		"ProxyRangeInfo": iSwearFieldDoesNotNeedHandling,
 		// We check this in validateBatch so we shouldn't have a WriteOption by the
 		// time this is checked.
@@ -4305,7 +4308,8 @@ func TestBatchHeaderFieldsAreAccountedForInBufferedWrites(t *testing.T) {
 		// Seems reasonable to use the same deadlock timeout as the inbound request
 		// for the flush.
 		"DeadlockTimeout": iSwearFieldDoesNotNeedHandling,
-		// Controlled by us.
+		// Controlled by us; client batches carrying it are rejected by
+		// maybeRejectInternalHeaderFields.
 		"HasBufferedAllPrecedingWrites": iSwearFieldDoesNotNeedHandling,
 		// Our flush should never need isReverse.
 		"IsReverse": fieldIsHandledByBatchSplitting,
