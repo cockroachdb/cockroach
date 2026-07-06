@@ -2234,6 +2234,105 @@ func TestTxnWriteBufferSplitsBatchesWhenNecessary(t *testing.T) {
 	}
 }
 
+// TestTxnWriteBufferFlushBatchClearsStatementOptions verifies that
+// statement-scoped header options on the batch that triggers a flush are not
+// applied to the separate batch that carries the previously buffered writes,
+// while the triggering batch itself retains them. It also verifies that a
+// commit flush, which prepends the buffered writes to the EndTxn batch,
+// deliberately retains LockTimeout.
+func TestTxnWriteBufferFlushBatchClearsStatementOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	keyA := roachpb.Key("a")
+
+	t.Run("mid-txn flush", func(t *testing.T) {
+		twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
+		txn := makeTxnProto()
+		txn.Sequence = 10
+
+		ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+		ba.Add(putArgs(keyA, "valA", txn.Sequence))
+		br, pErr := twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+
+		// A DeleteRange forces a mid-txn flush, which is always sent as a
+		// separate batch.
+		txn.Sequence++
+		ba = &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+		ba.LockTimeout = time.Second
+		ba.WholeRowsOfSize = 2
+		ba.AllowEmpty = true
+		ba.Add(delRangeArgs(keyA, keyA.Next(), txn.Sequence))
+
+		var batchCount int
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			batchCount++
+			switch batchCount {
+			case 1:
+				// The flush batch carrying the buffered write.
+				require.Len(t, ba.Requests, 1)
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+				require.Zero(t, ba.LockTimeout)
+				require.Zero(t, ba.WholeRowsOfSize)
+				require.False(t, ba.AllowEmpty)
+			case 2:
+				// The triggering batch retains its options.
+				require.Len(t, ba.Requests, 1)
+				require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[0].GetInner())
+				require.Equal(t, time.Second, ba.LockTimeout)
+				require.Equal(t, int32(2), ba.WholeRowsOfSize)
+				require.True(t, ba.AllowEmpty)
+			default:
+				t.Fatalf("too many batches: %d", batchCount)
+			}
+			resp := ba.CreateReply()
+			resp.Txn = ba.Txn
+			return resp, nil
+		})
+		br, pErr = twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.Equal(t, 2, batchCount)
+	})
+
+	t.Run("commit flush", func(t *testing.T) {
+		twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
+		txn := makeTxnProto()
+		txn.Sequence = 10
+
+		ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+		ba.Add(putArgs(keyA, "valA", txn.Sequence))
+		br, pErr := twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+
+		// A commit flush prepends the buffered writes to the EndTxn batch, so
+		// the LockTimeout stays.
+		txn.Sequence++
+		ba = &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+		ba.LockTimeout = time.Second
+		ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+		var batchCount int
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			batchCount++
+			require.Len(t, ba.Requests, 2)
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+			require.Equal(t, time.Second, ba.LockTimeout)
+			resp := ba.CreateReply()
+			resp.Txn = ba.Txn
+			return resp, nil
+		})
+		br, pErr = twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.Equal(t, 1, batchCount)
+	})
+}
+
 // TestTxnWriteBufferFlushesAfterDisabling verifies that the txnWriteBuffer
 // flushes on the next batch after it is disabled if it buffered any writes.
 func TestTxnWriteBufferFlushesAfterDisabling(t *testing.T) {
@@ -4125,6 +4224,14 @@ func TestBatchHeaderFieldsAreAccountedForInBufferedWrites(t *testing.T) {
 		// fieldIsHandledByBatchSplitting means that batches with this field are
 		// handled by batch splitting.
 		fieldIsHandledByBatchSplitting
+		// fieldIsClearedBeforeFlush means the field may legitimately be set on a
+		// batch that triggers a flush, but must not apply to the flushed writes,
+		// so it is cleared from the split flush batch. Unlike
+		// fieldIsHandledByBatchSplitting, the field does not itself force a
+		// split. Mid-txn flushes always split, so such a field only reaches
+		// flushed writes on the combined commit batch, where retaining it is a
+		// deliberate choice.
+		fieldIsClearedBeforeFlush
 	)
 
 	fieldStatuses := map[string]fieldStatus{
@@ -4146,19 +4253,24 @@ func TestBatchHeaderFieldsAreAccountedForInBufferedWrites(t *testing.T) {
 		// The RoutingPolicy only impacts the ordering of the replicas considered.
 		// For our flush batch, we will need to go to the leaseholder regardless.
 		"RoutingPolicy": iSwearFieldDoesNotNeedHandling,
-		// If WaitPolicy is set to SkipLocked, our request may fail validation.
+		// SkipLocked would fail validation on a locking batch. Error would let
+		// the flush fail with a lock conflict at a point where the writes have
+		// already been acknowledged to the client.
 		"WaitPolicy": fieldIsHandledByBatchSplitting,
-		// Using the configured lock timeout seems reasonable.
-		"LockTimeout": iSwearFieldDoesNotNeedHandling,
+		// LockTimeout is statement-scoped: the buffered writes were acknowledged
+		// without ever waiting on a lock, so the timeout of the statement that
+		// happens to trigger the flush must not apply to them.
+		"LockTimeout": fieldIsClearedBeforeFlush,
 		// Reset options that could result in an early batch return.
 		"MaxSpanRequestKeys": fieldIsHandledByBatchSplitting,
 		"TargetBytes":        fieldIsHandledByBatchSplitting,
 		// The following two fields are only meaningful if MaxSpanRequestKeys or
-		// TargetBytes is set and those keys are handled.
-		//
-		// TODO(ssd): Should we just clear these anyway?
-		"WholeRowsOfSize": iSwearFieldDoesNotNeedHandling,
-		"AllowEmpty":      iSwearFieldDoesNotNeedHandling,
+		// TargetBytes is set, but SQL sets them even on batches without limits
+		// (e.g. the fetcher sets WholeRowsOfSize whenever an IndexFetchSpec is
+		// provided), so they do leak onto flush-triggering batches and are
+		// cleared to avoid relying on the server-side gating.
+		"WholeRowsOfSize": fieldIsClearedBeforeFlush,
+		"AllowEmpty":      fieldIsClearedBeforeFlush,
 		// Controlled by interceptors below us.
 		"DistinctSpans":           iSwearFieldDoesNotNeedHandling,
 		"AsyncConsensus":          iSwearFieldDoesNotNeedHandling,
@@ -4220,7 +4332,7 @@ needs to be accounted for in the following functions:
     clearBatchRequestOptions
 `, fieldName)
 		}
-		if s == fieldIsHandledByBatchSplitting {
+		if s == fieldIsHandledByBatchSplitting || s == fieldIsClearedBeforeFlush {
 			// Trust, but verify.
 			f := val.Elem().Field(i)
 			require.True(t, f.CanSet())
@@ -4240,8 +4352,10 @@ needs to be accounted for in the following functions:
 				}
 			}
 			req := &kvpb.BatchRequest{Header: header}
-			require.True(t, separateBatchIsNeeded(req, nil),
-				"non-zero value for %s not handled in separateBatchIsNeeded", fieldName)
+			if s == fieldIsHandledByBatchSplitting {
+				require.True(t, separateBatchIsNeeded(req, nil),
+					"non-zero value for %s not handled in separateBatchIsNeeded", fieldName)
+			}
 
 			clearBatchRequestOptions(req)
 			require.Equal(t, kvpb.Header{}, req.Header,
