@@ -3785,6 +3785,16 @@ func (ex *connExecutor) bufferedWritesIsAllowedForIsolationLevel(
 	return bufferedWritesIsAllowedForIsolationLevel(ctx, ex.server.cfg.Settings, isoLevel)
 }
 
+// bufferedWritesForWeakIsolationProhibited, when true, prevents write
+// buffering for transactions at weak isolation levels regardless of the
+// sql.txn.write_buffering_for_weak_isolation.enabled cluster setting. It is
+// set outside of test builds: weak isolation levels lack the refresh
+// backstop that serializable transactions have, so buffered writes there
+// need more validation before being enableable in production. It is a var
+// (rather than an inline buildutil.CrdbTestBuild check) so that tests can
+// exercise both branches.
+var bufferedWritesForWeakIsolationProhibited = !buildutil.CrdbTestBuild
+
 func bufferedWritesIsAllowedForIsolationLevel(
 	ctx context.Context, st *cluster.Settings, isoLevel isolation.Level,
 ) bool {
@@ -3795,6 +3805,10 @@ func bufferedWritesIsAllowedForIsolationLevel(
 	// We are at a weaker isolation level that requires lock loss detection which
 	// is only available on 25.3 or greater.
 	if !st.Version.IsActive(ctx, clusterversion.V25_3) {
+		return false
+	}
+
+	if bufferedWritesForWeakIsolationProhibited {
 		return false
 	}
 
