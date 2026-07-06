@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,7 +20,9 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 type SentryIssue struct {
@@ -195,6 +198,13 @@ func main() {
 		if err := os.WriteFile(credFile, []byte(credJSON), 0o600); err != nil {
 			log.Fatal(err)
 		}
+		// Point Application Default Credentials at the same file so the GCS Go
+		// SDK (used for the sentry-panic lock) also authenticates. This only
+		// matters on the TeamCity path: GitHub Actions leaves GOOGLE_CREDENTIALS
+		// unset and run_bazel_github sets ADC up itself.
+		if err := os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", credFile); err != nil {
+			log.Fatal(err)
+		}
 		// Log in to GCP using the credentials file
 		log.Println("Logging in to Google Cloud Platform...")
 		gcloudCmd := exec.Command("gcloud", "auth", "activate-service-account", "--key-file", credFile)
@@ -245,29 +255,23 @@ func main() {
 	}
 
 	cockroachPath := fmt.Sprintf("./cockroach-%s.%s/cockroach", version, platform)
-	panicCmd := exec.Command(cockroachPath, "demo", "--insecure", "-e", "select crdb_internal.force_panic('testing');")
-	out, _ := panicCmd.CombinedOutput()
-	log.Printf("panic command output: %s", string(out))
 
-	// After running the panic command, find and delete Sentry issues
-	issues, err := findSentryIssues(sentryToken)
+	ctx := context.Background()
+	storageClient, err := storage.NewClient(ctx)
 	if err != nil {
-		log.Printf("Error finding Sentry issues: %v", err)
+		log.Fatalf("creating GCS client: %v", err)
+	}
+	defer func() { _ = storageClient.Close() }()
+
+	// Trigger the panic and clean up the resulting Sentry issue under a global
+	// lock so parallel releases don't clobber each other (see lock.go). The work
+	// lives in a helper that returns errors rather than calling log.Fatal, so its
+	// deferred lock release always runs; only after it returns do we turn a
+	// failure into the fatal exit.
+	if err := triggerPanicAndCleanup(ctx, storageClient, sentryToken, cockroachPath, version); err != nil {
+		log.Fatalf("sentry panic and cleanup failed: %v", err)
 	}
 
-	if len(issues) == 0 {
-		log.Fatal("No Sentry issues found")
-	}
-
-	log.Printf("Found %d issues matching the query", len(issues))
-	for _, issue := range issues {
-		if err := deleteSentryIssue(sentryToken, issue.ID); err != nil {
-			log.Printf("Error deleting Sentry issue %s: %v", issue.ID, err)
-		} else {
-			log.Printf("Successfully deleted Sentry issue %s (title: %s, first seen: %s, last seen: %s)",
-				issue.ID, issue.Title, issue.FirstSeen, issue.LastSeen)
-		}
-	}
 	// After handling Sentry issues, search GitHub issues
 	githubToken := os.Getenv("GITHUB_TOKEN")
 	if githubToken == "" {
@@ -284,4 +288,87 @@ func main() {
 				issue.Number, issue.Title, issue.HTMLURL, issue.CreatedAt)
 		}
 	}
+}
+
+// triggerPanicAndCleanup triggers the demo panic and then finds and deletes the
+// resulting Sentry issue, holding the global sentry-panic lock for the whole
+// sequence so that releases running in parallel do not clobber each other's
+// issues (see lock.go for why). The lock is released via defer before this
+// function returns, so the caller may log.Fatal on the returned error without
+// leaking the lock.
+func triggerPanicAndCleanup(
+	ctx context.Context, storageClient *storage.Client, sentryToken, cockroachPath, version string,
+) error {
+	// AcquiredAt is intentionally left unset here: acquireSentryLock stamps it on
+	// the attempt that actually wins the lock, so the TTL measures held duration
+	// rather than time spent waiting (see acquireSentryLock).
+	release, err := acquireSentryLock(ctx, storageClient, lockMetadata{
+		Version: version,
+		RunID:   runID(),
+	})
+	if err != nil {
+		return errors.Wrap(err, "acquiring sentry-panic lock")
+	}
+	defer release()
+
+	// crdb_internal access is gated behind the allow_unsafe_internals session
+	// variable (default off), so enable it before triggering the panic.
+	panicCmd := exec.Command(cockroachPath, "demo", "--insecure", "-e",
+		"set allow_unsafe_internals = true; select crdb_internal.force_panic('testing');")
+	out, runErr := panicCmd.CombinedOutput()
+	log.Printf("panic command output: %s", string(out))
+
+	// force_panic crashes the single-process demo, so a non-zero exit (an
+	// *exec.ExitError) is the expected, successful outcome and its exit code is
+	// deliberately ignored. Any other error means the command never ran to
+	// completion — a missing/unexecutable binary, wrong working directory, etc. —
+	// so no panic (and no Sentry event) was produced.
+	var exitErr *exec.ExitError
+	if runErr != nil && !errors.As(runErr, &exitErr) {
+		return errors.Wrapf(runErr, "running panic command (output: %q)", string(out))
+	}
+	// Even on a clean-looking exit, confirm the panic actually fired: the crash
+	// reporter shouts "a panic has occurred!" (and "a SQL panic has occurred...")
+	// to stderr precisely so it is always visible. If that marker is absent the
+	// SQL errored before reaching force_panic (e.g. a missing privilege), so no
+	// event was emitted; fail now with the output instead of sleeping a minute
+	// and returning the misleading "no Sentry issues found".
+	if !strings.Contains(string(out), "panic has occurred") {
+		return errors.Newf(
+			"panic command did not trigger a panic (output: %q)", string(out))
+	}
+
+	// After running the panic command, find and delete Sentry issues.
+	issues, err := findSentryIssues(sentryToken)
+	if err != nil {
+		return errors.Wrap(err, "finding Sentry issues")
+	}
+	if len(issues) == 0 {
+		// The panic was emitted (checked above) but Sentry has no matching issue:
+		// most likely an ingest/query problem rather than a failed panic.
+		return errors.New("no Sentry issues found (panic was emitted but not ingested)")
+	}
+
+	log.Printf("Found %d issues matching the query", len(issues))
+	for _, issue := range issues {
+		if err := deleteSentryIssue(sentryToken, issue.ID); err != nil {
+			log.Printf("Error deleting Sentry issue %s: %v", issue.ID, err)
+		} else {
+			log.Printf("Successfully deleted Sentry issue %s (title: %s, first seen: %s, last seen: %s)",
+				issue.ID, issue.Title, issue.FirstSeen, issue.LastSeen)
+		}
+	}
+	return nil
+}
+
+// runID returns a best-effort identifier for the current release run. It is used
+// only in lock metadata, to make it easy to see which run holds the lock.
+func runID() string {
+	if id := os.Getenv("GITHUB_RUN_ID"); id != "" {
+		return id
+	}
+	if h, err := os.Hostname(); err == nil {
+		return h
+	}
+	return "unknown"
 }
