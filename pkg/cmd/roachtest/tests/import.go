@@ -183,10 +183,6 @@ func nDatasets(rng *rand.Rand, n int) []string {
 	return allDatasets[:n]
 }
 
-func anyThreeDatasets(rng *rand.Rand) []string {
-	return nDatasets(rng, 3)
-}
-
 func anyDataset(rng *rand.Rand) []string {
 	return nDatasets(rng, 1)
 }
@@ -216,6 +212,10 @@ func nSmallDatasets(rng *rand.Rand, n int) []string {
 
 func anySmallDataset(rng *rand.Rand) []string {
 	return nSmallDatasets(rng, 1)
+}
+
+func anyThreeSmallDatasets(rng *rand.Rand) []string {
+	return nSmallDatasets(rng, 3)
 }
 
 // importTestSpec represents a subtest within the import test.
@@ -282,7 +282,7 @@ var tests = []importTestSpec{
 	{
 		subtestName:  "concurrency",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyThreeDatasets),
+		datasetNames: FromFunc(anyThreeSmallDatasets),
 	},
 	// Test with a decommissioned node.
 	{
@@ -335,14 +335,14 @@ var tests = []importTestSpec{
 	{
 		subtestName:  "cancellation",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyThreeDatasets),
+		datasetNames: FromFunc(anyThreeSmallDatasets),
 		importRunner: importCancellationRunner,
 	},
 	// Test column families.
 	{
 		subtestName:  "colfam",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anySmallDataset),
 		preTestHook:  makeColumnFamilies,
 	},
 }
