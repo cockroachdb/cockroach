@@ -5357,6 +5357,13 @@ const (
 	lockClearedByDelete
 )
 
+// resolveIntentAboveCommitTsLogEvery rate-limits logging of committed intent
+// resolutions that find the intent above the lock update's commit timestamp.
+// Each occurrence removes the intent that triggered it, but a single
+// ResolveIntentRange over a range holding many such intents could otherwise
+// log once per key.
+var resolveIntentAboveCommitTsLogEvery = log.Every(10 * time.Second)
+
 // mvccResolveWriteIntent is the core logic for resolving an intent. The
 // function accepts instructions for how to resolve the intent (encoded in the
 // LockUpdate), and the current value of the intent (meta). Returns how the
@@ -5683,10 +5690,19 @@ func mvccResolveWriteIntent(
 	// - writer2 dispatches ResolveIntent to key0 (with epoch 0)
 	// - ResolveIntent with epoch 0 aborts intent from epoch 1.
 
-	if update.Status == roachpb.COMMITTED &&
-		(meta.Txn.Epoch > update.Txn.Epoch || !timestampsValid) {
+	if update.Status == roachpb.COMMITTED && meta.Txn.Epoch > update.Txn.Epoch {
 		log.Warningf(ctx,
-			"illegal intent removal: intent at higher epoch or higher timestamp than committed lock update; "+
+			"illegal intent removal: intent at higher epoch than committed lock update; "+
+				"key=%q txn=%s intent_epoch=%d intent_ts=%s lock_update_epoch=%d lock_update_ts=%s",
+			update.Key, update.Txn.ID, meta.Txn.Epoch, metaTimestamp,
+			update.Txn.Epoch, update.Txn.WriteTimestamp,
+		)
+	} else if update.Status == roachpb.COMMITTED && !timestampsValid &&
+		resolveIntentAboveCommitTsLogEvery.ShouldLog() {
+		// We believe this should be rare but may be able to happen in some
+		// transactional write replay cases.
+		log.Infof(ctx,
+			"intent at higher timestamp than committed lock update; "+
 				"key=%q txn=%s intent_epoch=%d intent_ts=%s lock_update_epoch=%d lock_update_ts=%s",
 			update.Key, update.Txn.ID, meta.Txn.Epoch, metaTimestamp,
 			update.Txn.Epoch, update.Txn.WriteTimestamp,
