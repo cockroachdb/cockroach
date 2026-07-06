@@ -1209,7 +1209,6 @@ func TestOnlineRestoreLinkingNonexistentFiles(t *testing.T) {
 	// producing SSTs whose bounds are strictly enclosed by the base SST's
 	// wide bounds. When linked, Pebble's overlap checker sees the base file
 	// enclosing the incremental and opens it to probe for data overlap.
-	sqlDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_layer_limit = 25")
 	for i := 0; i < 20; i++ {
 		lo := 300 + i*20
 		hi := lo + 10

@@ -59,15 +59,6 @@ var onlineRestoreLinkWorkers = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-var onlineRestoreLayerLimit = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"backup.restore.online_layer_limit",
-	"maximum number of layers to restore in an online restore operation",
-	10,
-	settings.PositiveInt,
-	settings.WithVisibility(settings.Reserved),
-)
-
 // onlineRestoreUseDistFlow controls whether online restore uses the distributed
 // restore flow (distRestore with RestoreDataProcessor) instead of the simpler
 // sendAddRemoteSSTs loop. When enabled, the RestoreDataProcessor will link
@@ -481,12 +472,6 @@ func checkManifestsForOnlineCompat(
 ) error {
 	if len(manifests) < 1 {
 		return errors.AssertionFailedf("expected at least 1 backup manifest")
-	}
-
-	// TODO(online-restore): Remove once we support layer ordering and have tested some reasonable number of layers.
-	layerLimit := int(onlineRestoreLayerLimit.Get(&settings.SV))
-	if len(manifests) > layerLimit {
-		return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: too many incremental layers %d (from backup) > %d (limit)", len(manifests), layerLimit)
 	}
 
 	for _, manifest := range manifests {
