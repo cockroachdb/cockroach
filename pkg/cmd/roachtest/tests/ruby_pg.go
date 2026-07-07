@@ -68,6 +68,24 @@ func registerRubyPG(r registry.Registry) {
 			t.Fatal(err)
 		}
 
+		// Under heavy load on this single node, the sqlliveness heartbeat can be
+		// delayed past the default 40s session TTL, expiring the session
+		// mid-transaction and surfacing to the client as a transient retry error
+		// that fails an otherwise-passing test. Raise the TTL well above the
+		// default to give the heartbeat ample margin.
+		func() {
+			db, err := c.ConnE(ctx, t.L(), node[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			if _, err := db.ExecContext(
+				ctx, `SET CLUSTER SETTING server.sqlliveness.ttl = '90s'`,
+			); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
 		t.Status("cloning rails and installing prerequisites")
 
 		t.L().Printf("Supported ruby-pg version is %s.", rubyPGVersion)
