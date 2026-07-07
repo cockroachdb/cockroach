@@ -10,7 +10,10 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -20,12 +23,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,14 +72,13 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	}
 
 	// This validates that backing up to a bucket with no prefix works, a bug that
-	// was encountered in cockroachdb#171471. Note that because this test does not
-	// use a unique bucket per run, it is not safe to run this test in parallel
-	// with itself. Flakes can occur if multiple runs of this test are running at
-	// the same time.
+	// was encountered in cockroachdb#171471.
 	t.Run("bare prefix uri", func(t *testing.T) {
 		tc, db, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
 		defer cleanupFn()
 		uri := setupS3URI(t, db, baseBucket, "", creds)
+		cleanup := grabTestBackupLockOrSkip(t, tc, uri)
+		defer cleanup()
 		backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
 	})
 }
@@ -169,10 +176,7 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	const numAccounts = 1000
 
 	// with-prefix=false validates that backing up to a bucket with no prefix
-	// works, a bug that was encountered in cockroachdb#171471. Note that because
-	// this test does not use a unique bucket per run, it is not safe to run this
-	// test in parallel with itself. Flakes can occur if multiple runs of this
-	// test are running at the same time.
+	// works, a bug that was encountered in cockroachdb#171471.
 	testutils.RunTrueAndFalse(
 		t, "with prefix", func(t *testing.T, withPrefix bool) {
 			ctx := context.Background()
@@ -186,6 +190,11 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 			values := uri.Query()
 			values.Add(cloud.AuthParam, cloud.AuthParamImplicit)
 			uri.RawQuery = values.Encode()
+
+			if !withPrefix {
+				cleanup := grabTestBackupLockOrSkip(t, tc, uri)
+				defer cleanup()
+			}
 			backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
 		},
 	)
@@ -296,10 +305,7 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	}
 
 	// This validates that backing up to a bucket with no prefix works, a bug that
-	// was encountered in cockroachdb#171471. Note that because this test does not
-	// use a unique bucket per run, it is not safe to run this test in parallel
-	// with itself. Flakes can occur if multiple runs of this test are running at
-	// the same time.
+	// was encountered in cockroachdb#171471.
 	t.Run("bare prefix uri", func(t *testing.T) {
 		const numAccounts = 1000
 
@@ -311,7 +317,8 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 		storageValues.Add(azure.AzureAccountNameParam, accountName)
 		storageValues.Add(cloud.AuthParam, cloud.AuthParamImplicit)
 		storageURI.RawQuery = storageValues.Encode()
-
+		cleanup := grabTestBackupLockOrSkip(t, testCluster, storageURI)
+		defer cleanup()
 		backupAndRestore(ctx, t, testCluster, []string{storageURI.String()}, []string{storageURI.String()}, numAccounts, nil)
 	})
 }
@@ -364,4 +371,111 @@ func TestCloudBackupRestoreKMSInaccessibleMetric(t *testing.T) {
 			require.GreaterOrEqual(t, bm.LastKMSInaccessibleErrorTime.Value(), testStart)
 		})
 	}
+}
+
+const lockFileName = "UNIT_TEST_BACKUP_LOCK"
+
+// grabTestBackupLockOrSkip attempts to grab a lock on the given external storage
+// URI. If the lock is already held by another test, it skips the current test.
+// The returned cleanup function must be called to release the lock.
+// NB: This isn't a perfect lock, as the writing and reading of the lock file is
+// not atomic. If this becomes a problem, we will need to rely on the cloud
+// provider's native conditional writes.
+func grabTestBackupLockOrSkip(t *testing.T, tc *testcluster.TestCluster, uri url.URL) func() {
+	t.Helper()
+	ctx := context.Background()
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	alreadyLocked, cleanup, err := maybeWriteTestBackupLock(ctx, &execCfg, uri.String())
+	require.NoError(t, err)
+	if alreadyLocked {
+		skip.IgnoreLint(
+			t, "another test is already running against this bucket, skipping to avoid conflicts",
+		)
+	}
+	return func() {
+		if err := cleanup(); err != nil {
+			t.Fatalf("failed to cleanup test backup lock: %v", err)
+		}
+	}
+}
+
+// maybeWriteTestBackupLock checks if a lock file exists in the given external
+// storage. If the lock file does not exist or is stale, it writes a new lock
+// file and returns false. If the lock file exists and is not stale, it returns
+// true. The returned cleanup function must be called to release the lock.
+func maybeWriteTestBackupLock(
+	ctx context.Context, execCfg *sql.ExecutorConfig, uri string,
+) (alreadyLocked bool, cleanup func() error, err error) {
+	noop := func() error { return nil }
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, uri, username.RootUserName())
+	if err != nil {
+		return false, noop, err
+	}
+
+	canClaim, err := func() (bool, error) {
+		file, _, err := store.ReadFile(ctx, lockFileName, cloud.ReadOptions{})
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return true, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		defer file.Close(ctx)
+		// Ignoring stale backup locks prevents a test that failed to cleanup from
+		// blocking future test runs.
+		return isStaleTestBackupLock(ctx, file)
+	}()
+
+	if err != nil {
+		store.Close()
+		return false, noop, err
+	}
+	if !canClaim {
+		store.Close()
+		return true, noop, nil
+	}
+	if err := writeTestBackupLock(ctx, store); err != nil {
+		store.Close()
+		return false, noop, err
+	}
+
+	return false, func() error {
+		defer store.Close()
+		return store.Delete(ctx, lockFileName)
+	}, nil
+}
+
+// writeTestBackupLock writes a lock file to the given external storage. The
+// lock file contains the current timestamp in seconds since the epoch.
+func writeTestBackupLock(ctx context.Context, store cloud.ExternalStorage) error {
+	writer, err := store.Writer(ctx, lockFileName)
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write([]byte(strconv.FormatInt(timeutil.Now().Unix(), 10)))
+	if err != nil {
+		writer.Close()
+		return errors.Wrap(err, "writing test backup lock file")
+	}
+
+	return errors.Wrap(writer.Close(), "closing test backup lock file writer")
+}
+
+// isStaleTestBackupLock checks if the lock file is stale. A lock file is
+// considered stale if its age has exceeded a set threshold.
+func isStaleTestBackupLock(ctx context.Context, file ioctx.ReadCloserCtx) (bool, error) {
+	const staleThreshold = 12 * time.Hour
+
+	contents, err := ioctx.ReadAll(ctx, file)
+	if err != nil {
+		return false, errors.Wrap(err, "reading test backup lock file")
+	}
+
+	lockTime, err := strconv.ParseInt(strings.TrimSpace(string(contents)), 10, 64)
+	if err != nil {
+		return false, errors.Wrap(err, "parsing test backup lock file contents")
+	}
+
+	lockTimeT := time.Unix(lockTime, 0)
+	return timeutil.Since(lockTimeT) > staleThreshold, nil
 }
