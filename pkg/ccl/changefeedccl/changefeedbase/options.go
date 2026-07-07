@@ -1320,6 +1320,19 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 			}
 		}
 	}
+
+	// Resolved-timestamp messages are encoded against a second schema under
+	// the same <topic>-value subject as row messages. Read mode resolves only
+	// the subject's latest registered version, which cannot serve both
+	// shapes.
+	//
+	// TODO(CRDB-64294): Support resolved-timestamp schemas in avro_mode=read.
+	if s.m[OptFormat] == string(OptFormatAvro) &&
+		s.m[OptAvroMode] == string(OptAvroModeRead) && s.IsSet(OptResolvedTimestamps) {
+		return errors.Newf(`%s is not supported with %s=%s`,
+			OptResolvedTimestamps, OptAvroMode, OptAvroModeRead)
+	}
+
 	return nil
 }
 
