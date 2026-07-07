@@ -44,18 +44,28 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+// The get and scan transforms below are disabled by default while we decide
+// what to do about advisory locks and SELECT FOR UPDATE under read committed
+// isolation: a transformed lock is unreplicated and can be silently dropped
+// (range split, lease transfer, lock-table memory pressure), which breaks
+// callers that rely on the lock itself for correctness — most notably
+// pg_advisory_xact_lock's mutual exclusion (#172225). Whether to re-enable
+// the transforms (by exempting such callers) or remove them is tracked in
+// #172461.
 var bufferedWritesScanTransformEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.transformations.scans.enabled",
 	"if enabled, locking scans and reverse scans with replicated durability are transformed to unreplicated durability",
-	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.scans.enabled", true /* defaultValue */),
+	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.scans.enabled", false /* defaultValue */),
 )
 
+// See the comment above bufferedWritesScanTransformEnabled for why this is
+// disabled by default.
 var bufferedWritesGetTransformEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.transformations.get.enabled",
 	"if enabled, locking get requests with replicated durability are transformed to unreplicated durability",
-	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.get.enabled", true /* defaultValue */),
+	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.get.enabled", false /* defaultValue */),
 )
 
 const defaultBufferSize = 1 << 22 // 4MB
