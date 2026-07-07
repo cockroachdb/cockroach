@@ -131,6 +131,7 @@ func (r *singleRangeBatch) deepCopyRequests(s *Streamer) {
 			newGet.req.SetSpan(req.Span())
 			newGet.req.KeyLockingStrength = s.lockStrength
 			newGet.req.KeyLockingDurability = s.lockDurability
+			newGet.req.ReturnRawMVCCValues = s.returnRawMVCCValues
 			newGet.union.Get = &newGet.req
 			r.reqs[i].Value = &newGet.union
 		case *kvpb.ScanRequest:
@@ -140,6 +141,7 @@ func (r *singleRangeBatch) deepCopyRequests(s *Streamer) {
 			newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
 			newScan.req.KeyLockingStrength = s.lockStrength
 			newScan.req.KeyLockingDurability = s.lockDurability
+			newScan.req.ReturnRawMVCCValues = s.returnRawMVCCValues
 			newScan.union.Scan = &newScan.req
 			r.reqs[i].Value = &newScan.union
 		case *kvpb.ReverseScanRequest:
@@ -149,6 +151,7 @@ func (r *singleRangeBatch) deepCopyRequests(s *Streamer) {
 			newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
 			newScan.req.KeyLockingStrength = s.lockStrength
 			newScan.req.KeyLockingDurability = s.lockDurability
+			newScan.req.ReturnRawMVCCValues = s.returnRawMVCCValues
 			newScan.union.ReverseScan = &newScan.req
 			r.reqs[i].Value = &newScan.union
 		}
