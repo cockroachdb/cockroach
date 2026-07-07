@@ -464,22 +464,43 @@ func (s *eventStream) validateProducerJobAndSpec(ctx context.Context) (roachpb.T
 		return roachpb.TenantID{}, jobIsNotRunningError(producerJobID, job.State(), "stream events")
 	}
 
-	// Validate that the requested spans are a subset of the
-	// source tenant's keyspace.
-	sourceTenantID := sp.StreamReplication.TenantID
-	// TODO(ssd): Do some validation for logical replication jobs.
-	if sourceTenantID.IsSet() {
-		sourceTenantSpans := keys.MakeTenantSpan(sourceTenantID)
-		for _, sp := range s.spec.Spans {
-			if !sourceTenantSpans.Contains(sp) {
-				err := pgerror.Newf(pgcode.InvalidParameterValue, "requested span %s is not contained within the keyspace of source tenant %d",
-					sp,
-					sourceTenantID)
-				return roachpb.TenantID{}, err
-			}
+	if err := validateSpansAgainstAuthorizedKeyspace(
+		s.execCfg.Codec, sp.StreamReplication, s.spec.Spans, producerJobID,
+	); err != nil {
+		return roachpb.TenantID{}, err
+	}
+	return sp.StreamReplication.TenantID, nil
+}
+
+// validateSpansAgainstAuthorizedKeyspace returns an error if any of the
+// requested spans reaches outside the keyspace authorized by the producer
+// job's details.
+func validateSpansAgainstAuthorizedKeyspace(
+	codec keys.SQLCodec,
+	details *jobspb.StreamReplicationDetails,
+	requested []roachpb.Span,
+	producerJobID jobspb.JobID,
+) error {
+	var authorized roachpb.SpanGroup
+	if details.TenantID.IsSet() {
+		authorized.Add(keys.MakeTenantSpan(details.TenantID))
+	} else {
+		for _, tableID := range details.TableIDs {
+			authorized.Add(codec.TableSpan(tableID))
 		}
 	}
-	return sourceTenantID, nil
+	if authorized.Len() == 0 {
+		return errors.AssertionFailedf(
+			"producer job %d has no authorized spans", producerJobID)
+	}
+	for _, sp := range requested {
+		if !authorized.Encloses(sp) {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"requested span %s is not contained within the keyspace authorized by producer job %d",
+				sp, producerJobID)
+		}
+	}
+	return nil
 }
 
 const defaultBatchSize = 1 << 20
