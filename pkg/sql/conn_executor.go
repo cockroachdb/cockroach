@@ -4196,7 +4196,14 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				// issued some BatchRequests. We don't allow enabling buffered
 				// writes on such txn, so we'll keep the buffered writes
 				// enablement unchanged.
-				ex.state.mu.txn.SetBufferedWritesEnabled(ex.bufferedWritesEnabled(explicitTxn))
+				//
+				// Use the txn's isolation level: a BEGIN in the middle of a
+				// batch may have upgraded a weak-isolation implicit txn, and
+				// any ISOLATION LEVEL modifier on the BEGIN itself has already
+				// been applied by setTransactionModes.
+				enableBufferedWrites := ex.bufferedWritesEnabled(explicitTxn) &&
+					ex.bufferedWritesIsAllowedForIsolationLevel(ex.Ctx(), ex.state.mu.txn.IsoLevel())
+				ex.state.mu.txn.SetBufferedWritesEnabled(enableBufferedWrites)
 			}
 		}
 	case txnStart:
