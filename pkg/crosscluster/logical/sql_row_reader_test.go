@@ -8,6 +8,7 @@ package logical
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/apd/v3"
@@ -191,4 +192,88 @@ func TestSQLRowReaderWithArrayColumn(t *testing.T) {
 	require.Len(t, result, 2)
 	require.Equal(t, result[0].row[1], tree.NewDInt(10))
 	require.Equal(t, result[1].row[1], tree.NewDInt(20))
+}
+
+// TestSQLRowReaderResumeDropsOriginTimestamp is a regression test for a bug
+// where the KV streamer drops ReturnRawMVCCValues when a Get is deferred into a
+// resume batch. The reader selects crdb_internal_origin_timestamp, which is
+// recovered from the raw MVCC value header; if the resumed Get returns the
+// value without its MVCC header the origin timestamp decodes as NULL and the row
+// is misreported as locally written (isLocal=true). The txn writer's refresh
+// path then compares against the local row's mvcc timestamp instead of its
+// (older) origin timestamp, so the local row wins last-write-wins and the more
+// recent incoming write loses and is silently dropped.
+//
+// The resume is triggered by the streamer's cold response-size estimator: the
+// first batch of a fresh streamer targets len(keys) * initial_avg_response_size
+// (default 1KiB/key, see kvstreamer.DefaultInitialAvgResponseSize), with no
+// schema awareness. With multiple keys in a single range whose rows each exceed
+// 1KiB, the head-of-line Get consumes the whole batch budget and the remaining
+// Get(s) are deferred to a resume batch. Each ReadRows call spins up a fresh
+// streamer, so the estimator resets every refresh and this pagination is
+// reliable for LDR-sized rows. On buggy code the assertions below fail because
+// the origin timestamp is lost on the resumed Get.
+func TestSQLRowReaderResumeDropsOriginTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	// Large SQL memory pool so the streamer isn't hitting the root memory budget.
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: 1 << 30, /* 1GiB */
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, "CREATE TABLE defaultdb.tab (pk INT PRIMARY KEY, payload STRING)")
+
+	session := newInternalSession(t, s)
+	defer session.Close(ctx)
+
+	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", "tab")
+	writer, err := newSQLRowWriter(ctx, desc, session)
+	require.NoError(t, err)
+
+	// Write several rows, each with an origin timestamp and a payload well above
+	// the streamer's 1KiB/key cold estimate. The rows share a single range so
+	// they coalesce into one batch, guaranteeing that the head-of-line Get
+	// exhausts the budget and the rest are resumed.
+	const payloadSize = 4 << 10 // 4KiB, comfortably over the 1KiB estimate.
+	const numRows = 4
+	payload := strings.Repeat("a", payloadSize)
+
+	originTS := s.Clock().Now()
+	pks := make([]int, 0, numRows)
+	testRows := make([]tree.Datums, 0, numRows)
+	for i := 0; i < numRows; i++ {
+		pk := 10 + i
+		require.NoError(t, writer.InsertRow(ctx, originTS,
+			tree.Datums{tree.NewDInt(tree.DInt(pk)), tree.NewDString(payload)}))
+		pks = append(pks, pk)
+		testRows = append(testRows, tree.Datums{tree.NewDInt(tree.DInt(pk)), tree.DNull})
+	}
+
+	// Populate the range cache.
+	sqlRunner.Exec(t, "SELECT count(*) FROM defaultdb.tab")
+
+	reader, err := newSQLRowReader(ctx, desc, session)
+	require.NoError(t, err)
+
+	db := s.InternalDB().(isql.DB)
+	var result map[int]priorRow
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		result, err = reader.ReadRows(ctx, testRows)
+		return err
+	}))
+	require.Len(t, result, numRows)
+
+	// Every row was written with an origin timestamp, so none should be
+	// reported as locally written and each should carry the origin timestamp.
+	for i, pk := range pks {
+		pr, ok := result[i]
+		require.Truef(t, ok, "row for pk %d missing from result", pk)
+		require.Falsef(t, pr.isLocal, "row for pk %d wrongly reported as local", pk)
+		require.Equalf(t, originTS, pr.logicalTimestamp,
+			"row for pk %d lost its origin timestamp across a streamer resume", pk)
+	}
 }

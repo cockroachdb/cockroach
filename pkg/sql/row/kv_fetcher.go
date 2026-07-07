@@ -229,6 +229,7 @@ func NewStreamingKVFetcher(
 		GetKeyLockingStrength(lockStrength),
 		GetKeyLockingDurability(lockDurability),
 		reverse,
+		rawMVCCValues,
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {
