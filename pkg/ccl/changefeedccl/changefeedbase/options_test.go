@@ -37,6 +37,13 @@ func TestOptionsValidations(t *testing.T) {
 		{map[string]string{"initial_scan_only": "", "resolved": ""}, true, "cannot specify both initial_scan='only'"},
 		{map[string]string{"initial_scan_only": "", "resolved": ""}, true, "cannot specify both initial_scan='only'"},
 		{map[string]string{"key_column": "b"}, false, "requires the unordered option"},
+		{map[string]string{"format": "avro", "avro_mode": "read", "resolved": ""}, false,
+			"resolved is not supported with avro_mode=read"},
+		{map[string]string{"format": "avro", "avro_mode": "read", "resolved": "10s"}, false,
+			"resolved is not supported with avro_mode=read"},
+		{map[string]string{"format": "avro", "avro_mode": "write", "resolved": "10s"}, false, ""},
+		{map[string]string{"format": "avro", "avro_mode": "read"}, false, ""},
+		{map[string]string{"avro_mode": "read", "resolved": "10s"}, false, ""},
 	}
 
 	for _, test := range tests {
