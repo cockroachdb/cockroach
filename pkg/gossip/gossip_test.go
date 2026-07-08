@@ -494,21 +494,6 @@ func TestGossipMostDistant(t *testing.T) {
 func TestGossipNoForwardSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// HACK: deterministically reproduce the admission race seen in CI
-	// (#171923): stall the admission (gossipReceiver) of the last setup peer
-	// (n4) so that the first overflow client (n5) is admitted into the
-	// incoming set in its stead. An admitted client is never forwarded and
-	// never disconnects, so the test hangs on disconnectedCh below.
-	//
-	// NB: registered before the stopper's deferred Stop so that the hook is
-	// only unset after all servers have shut down (defers run LIFO).
-	testingGossipReceiverStallHook = func(nodeID roachpb.NodeID) {
-		if nodeID == 4 {
-			time.Sleep(3 * time.Second)
-		}
-	}
-	defer func() { testingGossipReceiverStallHook = nil }()
-
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
