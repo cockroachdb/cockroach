@@ -453,3 +453,167 @@ DROP MATERIALIZED VIEW maintain_mv;
 DROP TABLE maintain_t
 
 subtest end
+
+# Regression test for VULM-523: REFRESH must resolve schema-qualified references
+# in the view's own database, not the caller's current database.
+subtest regression_vulm523
+
+statement ok
+USE defaultdb
+
+statement ok
+CREATE FUNCTION public.vulm523_f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
+
+statement ok
+CREATE MATERIALIZED VIEW vulm523_mv AS SELECT public.vulm523_f() AS v
+
+statement ok
+CREATE ROLE vulm523_attacker WITH CREATEDB
+
+statement ok
+GRANT MAINTAIN ON vulm523_mv TO vulm523_attacker
+
+statement ok
+SET ROLE vulm523_attacker
+
+statement ok
+CREATE DATABASE vulm523_attacker_db
+
+statement ok
+USE vulm523_attacker_db
+
+statement ok
+CREATE FUNCTION public.vulm523_f() RETURNS INT LANGUAGE SQL AS $$ SELECT 999 $$
+
+statement ok
+REFRESH MATERIALIZED VIEW defaultdb.vulm523_mv
+
+statement ok
+RESET ROLE
+
+statement ok
+USE defaultdb
+
+# Owner's function ran (1), not the attacker's (999).
+query I
+SELECT v FROM vulm523_mv
+----
+1
+
+statement ok
+DROP MATERIALIZED VIEW vulm523_mv;
+DROP FUNCTION public.vulm523_f;
+DROP DATABASE vulm523_attacker_db CASCADE;
+DROP ROLE vulm523_attacker
+
+subtest end
+
+# CREATE TABLE AS and CREATE MATERIALIZED VIEW backfills resolve references in the
+# object's database, not the caller's current one.
+subtest regression_vulm523_create_paths
+
+statement ok
+USE defaultdb
+
+statement ok
+CREATE FUNCTION public.vulm523_cf() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
+
+statement ok
+CREATE DATABASE vulm523_other
+
+statement ok
+USE vulm523_other
+
+statement ok
+CREATE FUNCTION public.vulm523_cf() RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$
+
+statement ok
+CREATE MATERIALIZED VIEW defaultdb.vulm523_cmv AS SELECT public.vulm523_cf() AS v
+
+statement ok
+CREATE TABLE defaultdb.vulm523_ct AS SELECT public.vulm523_cf() AS v
+
+statement ok
+USE defaultdb
+
+# Resolved in defaultdb (1), not vulm523_other (2).
+query I
+SELECT v FROM defaultdb.vulm523_cmv
+----
+1
+
+query I
+SELECT v FROM defaultdb.vulm523_ct
+----
+1
+
+statement ok
+DROP MATERIALIZED VIEW defaultdb.vulm523_cmv;
+DROP TABLE defaultdb.vulm523_ct;
+DROP FUNCTION defaultdb.public.vulm523_cf;
+DROP DATABASE vulm523_other CASCADE
+
+subtest end
+
+# Table, sequence, and type references (stored db-independently) stay pinned to
+# the view's database on refresh, unaffected by the caller's current database.
+subtest regression_vulm523_other_object_types
+
+statement ok
+USE defaultdb
+
+statement ok
+CREATE TYPE vulm523_typ AS ENUM ('owner')
+
+statement ok
+CREATE SEQUENCE vulm523_seq START 100
+
+statement ok
+CREATE TABLE vulm523_src (a INT)
+
+statement ok
+INSERT INTO vulm523_src VALUES (1)
+
+statement ok
+CREATE MATERIALIZED VIEW vulm523_mv_obj AS
+  SELECT a, nextval('vulm523_seq') AS s, 'owner'::vulm523_typ AS t FROM vulm523_src
+  WITH NO DATA
+
+statement ok
+CREATE DATABASE vulm523_other2
+
+statement ok
+USE vulm523_other2
+
+statement ok
+CREATE TYPE vulm523_typ AS ENUM ('other')
+
+statement ok
+CREATE SEQUENCE vulm523_seq START 900
+
+statement ok
+CREATE TABLE vulm523_src (a INT)
+
+statement ok
+INSERT INTO vulm523_src VALUES (999)
+
+statement ok
+REFRESH MATERIALIZED VIEW defaultdb.vulm523_mv_obj
+
+statement ok
+USE defaultdb
+
+# Resolved in defaultdb: table (1), sequence (100), enum ('owner').
+query IIT
+SELECT a, s, t FROM vulm523_mv_obj
+----
+1  100  owner
+
+statement ok
+DROP MATERIALIZED VIEW vulm523_mv_obj;
+DROP TABLE vulm523_src;
+DROP SEQUENCE vulm523_seq;
+DROP TYPE vulm523_typ;
+DROP DATABASE vulm523_other2 CASCADE
+
+subtest end
