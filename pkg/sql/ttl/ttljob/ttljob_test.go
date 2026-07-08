@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1134,10 +1135,12 @@ CREATE TABLE t (
 )`)
 	th.sqlDB.Exec(t, `INSERT INTO t (id, expire_at) VALUES (1, '2020-01-01')`)
 
-	// Force the schedule to execute. Normally, the job would not fail due to a
-	// stats error, but we have set the ReturnStatsError knob to true in this
-	// test.
-	th.waitForScheduledJob(t, jobs.StateFailed, "cancelling TTL stats query because TTL job completed")
+	// Force the schedule to execute. Job completion cancels the sleeping stats
+	// query rather than waiting for it, and that self-cancellation is treated
+	// as normal shutdown: the job succeeds promptly (rather than after the
+	// 100-second sleep) even though ReturnStatsError surfaces real stats
+	// errors.
+	th.waitForScheduledJob(t, jobs.StateSucceeded, "")
 
 	results := th.sqlDB.QueryStr(t, "SELECT * FROM t")
 	require.Empty(t, results)
@@ -1481,6 +1484,181 @@ func TestRowLevelTTLJobCancelPrivileges(t *testing.T) {
 			} else {
 				require.Errorf(t, err, "expected %s to not be able to cancel the job", tc.cancelUser)
 				require.ErrorContains(t, err, "does not have privileges")
+			}
+		})
+	}
+}
+
+// TestRowLevelTTLRunsAsTableOwner verifies that the TTL SELECT/DELETE
+// statements run as the table's owner rather than the node user, and that the
+// job keeps working in situations where the owner's own grants would not
+// suffice (FORCE ROW LEVEL SECURITY policies, revoked EXECUTE on functions
+// referenced by the table).
+func TestRowLevelTTLRunsAsTableOwner(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		desc  string
+		setup []string
+		// waitForStats holds the delete phase until the initial row-stats fetch
+		// has published its gauges, which both avoids the job completing while a
+		// stats query is in flight (the resulting cancellation would fail the
+		// job via the ReturnStatsError knob) and asserts that the stats queries
+		// produce nonzero counts running as the table owner.
+		waitForStats bool
+		// verify runs after the TTL job has succeeded.
+		verify func(t *testing.T, sqlDB *sqlutils.SQLRunner)
+	}{
+		{
+			desc: "table owned by non-admin user",
+			setup: []string{
+				`CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at')`,
+				`ALTER TABLE tbl OWNER TO tbl_owner`,
+				`INSERT INTO tbl VALUES (1, '2020-01-01'), (2, '2020-01-01')`,
+			},
+		},
+		{
+			// ttl_row_stats_poll_interval also enables the row-stats queries,
+			// which run with the same identity and overrides as SELECT/DELETE.
+			// waitForStats requires the counts to come back nonzero, so this
+			// case asserts the RLS bypass covers the stats path too (a deny-all
+			// policy would otherwise make the counts read 0).
+			desc:         "deny-all FORCE ROW LEVEL SECURITY policy cannot block expiration",
+			waitForStats: true,
+			setup: []string{
+				`CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at', ttl_row_stats_poll_interval = '1 minute')`,
+				`ALTER TABLE tbl OWNER TO tbl_owner`,
+				`CREATE POLICY deny_all ON tbl USING (false)`,
+				`ALTER TABLE tbl ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY`,
+				`INSERT INTO tbl VALUES (1, '2020-01-01'), (2, '2020-01-01')`,
+			},
+		},
+		{
+			// The row-stats queries scan the table and so build the computed
+			// column's UDF as well; this case asserts (via the ReturnStatsError
+			// knob) that the stats path carries the EXECUTE override.
+			desc:         "UDF computed column with EXECUTE revoked from the owner",
+			waitForStats: true,
+			setup: []string{
+				`CREATE FUNCTION plus_one(i INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS 'SELECT i + 1'`,
+				`CREATE TABLE tbl (
+					id INT PRIMARY KEY,
+					expire_at TIMESTAMPTZ,
+					c INT AS (plus_one(id)) STORED
+				) WITH (ttl_expiration_expression = 'expire_at', ttl_row_stats_poll_interval = '1 minute')`,
+				`ALTER TABLE tbl OWNER TO tbl_owner`,
+				`REVOKE EXECUTE ON FUNCTION plus_one FROM public`,
+				`INSERT INTO tbl VALUES (1, '2020-01-01'), (2, '2020-01-01')`,
+			},
+		},
+		{
+			desc: "row-level DELETE trigger runs as the table owner",
+			setup: []string{
+				`CREATE TABLE audit (id SERIAL PRIMARY KEY, usr STRING)`,
+				`GRANT INSERT ON TABLE audit TO tbl_owner`,
+				`CREATE FUNCTION log_delete() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+					BEGIN
+						INSERT INTO audit (usr) VALUES (current_user);
+						RETURN OLD;
+					END
+				$$`,
+				`CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at')`,
+				`ALTER TABLE tbl OWNER TO tbl_owner`,
+				`GRANT EXECUTE ON FUNCTION log_delete TO tbl_owner`,
+				`CREATE TRIGGER log_del BEFORE DELETE ON tbl FOR EACH ROW EXECUTE FUNCTION log_delete()`,
+				`INSERT INTO tbl VALUES (1, '2020-01-01'), (2, '2020-01-01')`,
+			},
+			verify: func(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+				sqlDB.CheckQueryResults(t,
+					`SELECT DISTINCT usr FROM audit`,
+					[][]string{{"tbl_owner"}},
+				)
+			},
+		},
+		{
+			desc: "ON DELETE CASCADE child",
+			setup: []string{
+				`CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at')`,
+				`CREATE TABLE cascade_child (id INT PRIMARY KEY, pid INT REFERENCES tbl(id) ON DELETE CASCADE)`,
+				`ALTER TABLE tbl OWNER TO tbl_owner`,
+				`ALTER TABLE cascade_child OWNER TO tbl_owner`,
+				`INSERT INTO tbl VALUES (1, '2020-01-01'), (2, '2020-01-01')`,
+				`INSERT INTO cascade_child VALUES (10, 1), (20, 2)`,
+			},
+			verify: func(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+				// The cascade deleted the child rows.
+				require.Empty(t, sqlDB.QueryStr(t, `SELECT id FROM cascade_child`))
+			},
+		},
+		{
+			desc: "ON DELETE SET NULL child",
+			setup: []string{
+				`CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at')`,
+				`CREATE TABLE setnull_child (id INT PRIMARY KEY, pid INT REFERENCES tbl(id) ON DELETE SET NULL)`,
+				`ALTER TABLE tbl OWNER TO tbl_owner`,
+				`ALTER TABLE setnull_child OWNER TO tbl_owner`,
+				`INSERT INTO tbl VALUES (1, '2020-01-01'), (2, '2020-01-01')`,
+				`INSERT INTO setnull_child VALUES (10, 1), (20, 2)`,
+			},
+			verify: func(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+				// The cascade set the child FK column to NULL.
+				sqlDB.CheckQueryResults(t,
+					`SELECT id, pid FROM setnull_child ORDER BY id`,
+					[][]string{{"10", "NULL"}, {"20", "NULL"}},
+				)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			knobs := &sql.TTLTestingKnobs{
+				AOSTDuration: &zeroDuration,
+				// Fail the job on row-stats query errors (instead of only
+				// logging them) so the cases that enable
+				// ttl_row_stats_poll_interval also assert the stats path runs
+				// successfully as the table owner.
+				ReturnStatsError: true,
+			}
+			// th is captured by the BeforeProcessorStart closure below and
+			// assigned before any processor can run.
+			var th *rowLevelTTLTestJobTestHelper
+			if tc.waitForStats {
+				knobs.BeforeProcessorStart = func(ctx context.Context) error {
+					m := th.server.JobRegistry().(*jobs.Registry).
+						MetricsStruct().RowLevelTTL.(*ttljob.RowLevelTTLAggMetrics)
+					return testutils.SucceedsSoonError(func() error {
+						if m.TotalRows.Value() == 0 || m.TotalExpiredRows.Value() == 0 {
+							return errors.New("initial TTL row-stats fetch has not completed")
+						}
+						return nil
+					})
+				}
+			}
+			var cleanupFunc func()
+			th, cleanupFunc = newRowLevelTTLTestJobTestHelper(
+				t,
+				knobs,
+				1,     /* numNodes */
+				false, /* runMinActiveVersion */
+			)
+			defer cleanupFunc()
+
+			sqlDB := th.sqlDB
+			sqlDB.Exec(t, `CREATE USER tbl_owner`)
+			for _, stmt := range tc.setup {
+				sqlDB.Exec(t, stmt)
+			}
+
+			// Force the schedule to execute.
+			th.waitForScheduledJob(t, jobs.StateSucceeded, "")
+
+			results := sqlDB.QueryStr(t, "SELECT * FROM tbl")
+			require.Empty(t, results)
+
+			if tc.verify != nil {
+				tc.verify(t, sqlDB)
 			}
 		})
 	}
