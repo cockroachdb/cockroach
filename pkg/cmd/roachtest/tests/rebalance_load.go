@@ -140,8 +140,8 @@ func registerRebalanceLoad(r registry.Registry) {
 
 	}
 	// Concurrency is set high enough to produce meaningful
-	// replica-attributed CPU on all stores. The previous value (128)
-	// produced too little load for the rebalancer to act on reliably.
+	// replica-attributed CPU on all stores so the rebalancer has a
+	// signal to act on.
 	concurrency := 512
 	r.Add(
 		registry.TestSpec{
