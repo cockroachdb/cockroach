@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
@@ -675,6 +676,10 @@ func (u *unknownTable) IsRowLevelSecurityEnabled() bool { return false }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface
 func (u *unknownTable) IsRowLevelSecurityForced() bool { return false }
+
+// Owner is part of the cat.Table interface. A plan-gist table is a stub with no
+// descriptor, so it has no meaningful owner.
+func (u *unknownTable) Owner() username.SQLUsername { return username.SQLUsername{} }
 
 // Policies is part of the cat.Table interface.
 func (u *unknownTable) Policies() *cat.Policies { return nil }
