@@ -103,13 +103,30 @@ jobs:
         cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
         pnpm build:release
 
+      # Consult the remote, not local tags: the CI checkout does not fetch
+      # these tags, so a local `git tag -l` check always misses an
+      # already-pushed tag and fails the push. `git ls-remote` emits a
+      # trailing "^{}" line carrying the commit SHA for annotated tags, so
+      # tail -n1 yields the commit for both tag kinds (empty when absent).
+      #
+      # An existing tag must point at the commit being published. If it points
+      # elsewhere, the package version was not bumped for a new commit, so fail
+      # loudly rather than publish a version whose git tag disagrees with the
+      # published artifact.
     - name: Create version tag and push
       if: steps.version-check.outputs.published == 'no'
       run: |
         TAGNAME="@cockroachlabs/cluster-ui@$(jq -r '.version' ./package.json)"
-        if ! [ $(git tag -l "$TAGNAME") ]; then
-          git tag $TAGNAME
-          git push origin $TAGNAME
+        REMOTE_SHA="$(git ls-remote --tags origin "refs/tags/$TAGNAME" | tail -n1 | cut -f1)"
+        HEAD_SHA="$(git rev-parse HEAD)"
+        if [ -z "$REMOTE_SHA" ]; then
+          git tag "$TAGNAME"
+          git push origin "$TAGNAME"
+        elif [ "$REMOTE_SHA" = "$HEAD_SHA" ]; then
+          echo "Tag $TAGNAME already exists at $HEAD_SHA; skipping tag push."
+        else
+          echo "::error::Tag $TAGNAME already exists at $REMOTE_SHA but the commit being published is $HEAD_SHA. Bump the package version instead of publishing a different commit under an existing tag."
+          exit 1
         fi
 
       # npm trusted publishing (OIDC) requires npm >= 11.5.1 and Node >= 22.14;
