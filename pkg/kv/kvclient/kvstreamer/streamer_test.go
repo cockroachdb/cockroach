@@ -74,6 +74,7 @@ func getStreamer(
 		lock.None,
 		lock.Unreplicated,
 		reverse,
+		false, /* returnRawMVCCValues */
 	)
 }
 
@@ -136,6 +137,7 @@ func TestStreamerLimitations(t *testing.T) {
 				lock.None,
 				lock.Unreplicated,
 				false, /* reverse */
+				false, /* returnRawMVCCValues */
 			)
 		})
 	})
