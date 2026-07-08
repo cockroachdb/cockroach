@@ -403,7 +403,7 @@ func (tc *Catalog) IsOwner(
 ) (bool, error) {
 	switch t := o.(type) {
 	case *Table:
-		return t.Owner == user, nil
+		return t.owner == user, nil
 	default:
 		panic(errors.AssertionFailedf("type %T is not supported in IsOwner()", t))
 	}
@@ -906,7 +906,7 @@ type Table struct {
 	IsVirtual  bool
 	IsSystem   bool
 	Catalog    *Catalog
-	Owner      username.SQLUsername
+	owner      username.SQLUsername
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
@@ -1243,6 +1243,9 @@ func (tt *Table) IsRowLevelSecurityEnabled() bool { return tt.rlsEnabled }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface.
 func (tt *Table) IsRowLevelSecurityForced() bool { return tt.rlsForced }
+
+// Owner is part of the cat.Table interface.
+func (tt *Table) Owner() username.SQLUsername { return tt.owner }
 
 // Policies is part of the cat.Table interface.
 func (tt *Table) Policies() *cat.Policies {

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -1384,6 +1385,13 @@ type FKCascade struct {
 	// WithID identifies the buffer for the mutation input in the original
 	// expression tree. 0 if the cascade does not require input.
 	WithID opt.WithID
+
+	// ChildOwner is the owner of the referencing (child) table that the cascade
+	// modifies. The cascade — and the triggers and CHECK constraints it fires —
+	// runs with this identity rather than the user that issued the top-level
+	// mutation, matching PostgreSQL and preventing the referencing table's
+	// user-defined code from executing with the mutating user's authority.
+	ChildOwner username.SQLUsername
 }
 
 // AfterTriggers stores metadata necessary for building a set of AFTER triggers.

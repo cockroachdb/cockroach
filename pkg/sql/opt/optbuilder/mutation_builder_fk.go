@@ -170,6 +170,7 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 				HasBeforeTriggers: hasBeforeTriggers,
 				Builder:           builder,
 				WithID:            mb.withID,
+				ChildOwner:        h.otherTab.Owner(),
 			})
 			continue
 		}
@@ -317,6 +318,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 				HasBeforeTriggers: hasBeforeTriggers,
 				Builder:           builder,
 				WithID:            mb.withID,
+				ChildOwner:        h.otherTab.Owner(),
 			})
 			continue
 		}
@@ -439,6 +441,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 				HasBeforeTriggers: hasBeforeTriggers,
 				Builder:           builder,
 				WithID:            mb.withID,
+				ChildOwner:        h.otherTab.Owner(),
 			})
 			continue
 		}
