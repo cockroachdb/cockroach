@@ -231,7 +231,7 @@ func (l *lexer) setErr(err error) {
 func (l *lexer) scanUntilEndQuote(
 	lval *pgreplSymType, quoteCh rune, normFunc func(string) string, id int32,
 ) {
-	str := ""
+	var b strings.Builder
 	for l.pos < len(l.in) {
 		nextCh := l.next()
 		// Double quotes = 1 single quote.
@@ -240,6 +240,7 @@ func (l *lexer) scanUntilEndQuote(
 				l.next()
 			} else {
 				lval.SetID(id)
+				str := b.String()
 				if normFunc != nil {
 					str = normFunc(str)
 				}
@@ -247,7 +248,7 @@ func (l *lexer) scanUntilEndQuote(
 				return
 			}
 		}
-		str += string(nextCh)
+		b.WriteRune(nextCh)
 	}
 	lval.SetID(pgreplErrCode)
 	lval.SetStr(fmt.Sprintf("unfinished quote: %c", quoteCh))
