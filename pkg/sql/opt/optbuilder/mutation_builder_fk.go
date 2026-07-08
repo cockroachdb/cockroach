@@ -605,8 +605,15 @@ func (h *fkCheckHelper) initWithInboundFK(mb *mutationBuilder, fkOrdinal int) (o
 	if h.otherTab == nil {
 		return false
 	}
-	// We need SELECT privileges on the origin table.
-	mb.b.checkPrivilege(opt.DepByID(originID), h.otherTab, privilege.SELECT)
+	// A foreign-key referential action (cascade, set null/default) or existence
+	// check on the referencing table does not require the user issuing the
+	// mutation to hold privileges on that table: the action is authorized by the
+	// foreign key, and any cascade runs as the referencing table's owner, matching
+	// PostgreSQL. Record the dependency (so a cached plan is invalidated if the
+	// table changes) without performing a privilege check.
+	mb.b.factory.Metadata().AddDependency(
+		opt.DepByID(originID), h.otherTab, 0 /* priv */, mb.b.privilegeDependencyUser(),
+	)
 
 	numCols := h.fk.ColumnCount()
 	h.allocOrdinals(numCols)

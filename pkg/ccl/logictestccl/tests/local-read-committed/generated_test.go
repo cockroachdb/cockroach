@@ -912,6 +912,13 @@ func TestReadCommittedLogic_fk(
 	runLogicTest(t, "fk")
 }
 
+func TestReadCommittedLogic_fk_cascade_owner(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "fk_cascade_owner")
+}
+
 func TestReadCommittedLogic_float(
 	t *testing.T,
 ) {
