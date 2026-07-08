@@ -243,6 +243,11 @@ type Streamer struct {
 	// Scan.
 	reverse bool
 
+	// returnRawMVCCValues, if true, indicates that requests should return raw
+	// MVCC values (with their value headers). It is re-applied to resume
+	// requests, which are constructed from scratch.
+	returnRawMVCCValues bool
+
 	streamerStatistics
 
 	coordinator          workerCoordinator
@@ -404,6 +409,7 @@ func NewStreamer(
 	lockStrength lock.Strength,
 	lockDurability lock.Durability,
 	reverse bool,
+	returnRawMVCCValues bool,
 	workloadID uint64,
 	workloadType workloadid.WorkloadType,
 ) *Streamer {
@@ -433,6 +439,7 @@ func NewStreamer(
 		lockStrength:           lockStrength,
 		lockDurability:         lockDurability,
 		reverse:                reverse,
+		returnRawMVCCValues:    returnRawMVCCValues,
 	}
 	s.metrics.OperatorsCount.Inc(1)
 
@@ -1951,6 +1958,7 @@ func buildResumeSingleRangeBatch(
 			newGet.req.SetSpan(*get.ResumeSpan)
 			newGet.req.KeyLockingStrength = s.lockStrength
 			newGet.req.KeyLockingDurability = s.lockDurability
+			newGet.req.ReturnRawMVCCValues = s.returnRawMVCCValues
 			newGet.union.Get = &newGet.req
 			resumeReq.reqs[resumeReqIdx].Value = &newGet.union
 			resumeReq.positions = append(resumeReq.positions, position)
@@ -1981,6 +1989,7 @@ func buildResumeSingleRangeBatch(
 				newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
 				newScan.req.KeyLockingStrength = s.lockStrength
 				newScan.req.KeyLockingDurability = s.lockDurability
+				newScan.req.ReturnRawMVCCValues = s.returnRawMVCCValues
 				newScan.union.ReverseScan = &newScan.req
 				resumeReq.reqs[resumeReqIdx].Value = &newScan.union
 			} else {
@@ -1990,6 +1999,7 @@ func buildResumeSingleRangeBatch(
 				newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
 				newScan.req.KeyLockingStrength = s.lockStrength
 				newScan.req.KeyLockingDurability = s.lockDurability
+				newScan.req.ReturnRawMVCCValues = s.returnRawMVCCValues
 				newScan.union.Scan = &newScan.req
 				resumeReq.reqs[resumeReqIdx].Value = &newScan.union
 			}

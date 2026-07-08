@@ -240,6 +240,7 @@ func NewStreamingKVFetcher(
 		GetKeyLockingStrength(lockStrength),
 		GetKeyLockingDurability(lockDurability),
 		reverse,
+		rawMVCCValues,
 		workloadID,
 		workloadType,
 	)
