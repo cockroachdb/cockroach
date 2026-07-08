@@ -559,6 +559,22 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		})
 	}
 
+	// Wait until the setup connections have actually been admitted into the
+	// server's incoming set. The Recv() above is not enough: the admission
+	// decision runs asynchronously in the server's gossipReceiver goroutine
+	// and races with the init response consumed by Recv(). If we proceed
+	// while a setup connection is still pending admission, the first
+	// overflow client below can win the free slot; an admitted client is
+	// never forwarded and never disconnects, hanging the test.
+	testutils.SucceedsSoon(t, func() error {
+		local.server.mu.Lock()
+		defer local.server.mu.Unlock()
+		if n := len(local.server.mu.nodeMap); n < maxSize {
+			return fmt.Errorf("%d of %d incoming connections established", n, maxSize)
+		}
+		return nil
+	})
+
 	numClients := len(peers) * 2
 	disconnectedCh := make(chan *client)
 
