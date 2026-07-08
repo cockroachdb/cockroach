@@ -2711,3 +2711,86 @@ func TestBindAfterSavepointRollback(t *testing.T) {
 	_, err = p.Until(false /* keepErrMsg */, until...)
 	require.NoError(t, err)
 }
+
+// TestBufferedWritesNotEnabledOnTxnUpgradeAtWeakIsolation is a regression test
+// for the txnUpgradeToExplicit path enabling buffered writes without
+// consulting bufferedWritesIsAllowedForIsolationLevel. When a multi-statement
+// simple-query batch opens an implicit transaction at a weak isolation level
+// and a BEGIN in the batch upgrades it to an explicit transaction, the
+// upgrade must not enable write buffering unless
+// bufferedWritesIsAllowedForIsolationLevel permits it.
+func TestBufferedWritesNotEnabledOnTxnUpgradeAtWeakIsolation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(godb)
+	// Pin the metamorphic weak-isolation setting. In test builds the
+	// build-gated prohibition is off, so this setting alone decides whether
+	// weak-isolation transactions may buffer writes.
+	runner.Exec(t, "SET CLUSTER SETTING sql.txn.write_buffering_for_weak_isolation.enabled = false")
+
+	// Pin a single connection: the multi-statement batches below leave an
+	// open transaction on it that the EXPLAIN ANALYZE observation must join.
+	conn, err := godb.Conn(ctx)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+	exec := func(q string) {
+		t.Helper()
+		_, err := conn.ExecContext(ctx, q)
+		require.NoError(t, err)
+	}
+	exec("SET kv_transaction_buffered_writes_enabled = true")
+	exec("SET enable_implicit_transaction_for_batch_statements = true")
+
+	// bufferingOn reports whether the transaction currently open on conn has
+	// write buffering enabled, via the top-level field that EXPLAIN ANALYZE
+	// (VERBOSE) populates from the live kv.Txn (see instrumentation.go).
+	bufferingOn := func() bool {
+		rows, err := conn.QueryContext(ctx, "EXPLAIN ANALYZE (VERBOSE) SELECT 1")
+		require.NoError(t, err)
+		mat, err := sqlutils.RowsToStrMatrix(rows)
+		require.NoError(t, err)
+		for _, row := range mat {
+			if strings.Contains(row[0], "buffered writes enabled") {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Control case, first: proves the EXPLAIN-based observation mechanism
+	// works, so that the negative assertions below cannot pass vacuously.
+	t.Run("serializable control", func(t *testing.T) {
+		exec("SELECT 1; BEGIN")
+		defer exec("COMMIT")
+		require.True(t, bufferingOn())
+	})
+
+	t.Run("weak isolation via session default", func(t *testing.T) {
+		exec("SET default_transaction_isolation = 'read committed'")
+		defer exec("RESET default_transaction_isolation")
+		exec("SELECT 1; BEGIN")
+		defer exec("COMMIT")
+		require.False(t, bufferingOn())
+	})
+
+	t.Run("weak isolation via BEGIN modifier", func(t *testing.T) {
+		exec("SELECT 1; BEGIN ISOLATION LEVEL READ COMMITTED")
+		defer exec("COMMIT")
+		require.False(t, bufferingOn())
+	})
+
+	// The upgrade path must combine the session intent with
+	// bufferedWritesIsAllowedForIsolationLevel rather than unconditionally
+	// disable: with the cluster setting enabled, weak isolation may buffer.
+	t.Run("weak isolation allowed by setting", func(t *testing.T) {
+		runner.Exec(t, "SET CLUSTER SETTING sql.txn.write_buffering_for_weak_isolation.enabled = true")
+		defer runner.Exec(t, "SET CLUSTER SETTING sql.txn.write_buffering_for_weak_isolation.enabled = false")
+		exec("SELECT 1; BEGIN ISOLATION LEVEL READ COMMITTED")
+		defer exec("COMMIT")
+		require.True(t, bufferingOn())
+	})
+}
