@@ -881,6 +881,13 @@ func TestRepeatableReadLogic_fk(
 	runLogicTest(t, "fk")
 }
 
+func TestRepeatableReadLogic_fk_cascade_owner(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "fk_cascade_owner")
+}
+
 func TestRepeatableReadLogic_float(
 	t *testing.T,
 ) {

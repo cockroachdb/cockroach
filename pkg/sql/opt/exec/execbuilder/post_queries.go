@@ -152,6 +152,7 @@ func makePostQueryBuilder(b *Builder, mutationWithID opt.WithID) (*postQueryBuil
 func (cb *postQueryBuilder) setupCascade(cascade *memo.FKCascade) exec.PostQuery {
 	return exec.PostQuery{
 		FKConstraint: cascade.FKConstraint,
+		ChildOwner:   cascade.ChildOwner,
 		Buffer:       cb.mutationBuffer,
 		PlanFn: func(
 			ctx context.Context,

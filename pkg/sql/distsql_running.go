@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -2647,6 +2648,21 @@ func (dsp *DistSQLPlanner) planAndRunCascadeOrTrigger(
 	pq *postQueryMetadata,
 	defaultGetSaveFlowsFunc func() SaveFlowsFunc,
 ) (ok, checksContainLocking bool) {
+	// A foreign-key cascade runs as the referencing (child) table's owner rather
+	// than the user that issued the top-level mutation, matching PostgreSQL: the
+	// cascade's structural access, and the triggers and CHECK constraints it
+	// fires, execute with the child owner's identity. Push the owner onto both
+	// the planner's eval context (which drives the optbuilder's privilege-check
+	// user via planner.User() during PlanFn) and the flow eval context (which
+	// drives current_user and RLS during execution). ChildOwner is undefined
+	// only for triggers fired directly by the top-level mutation, which run as
+	// the mutating user; triggers fired by a cascade carry the cascade's owner
+	// (see addPostQueriesFromPlan).
+	if !pq.ChildOwner.Undefined() {
+		defer planner.EvalContext().PushEffectiveUser(pq.ChildOwner)()
+		defer evalCtx.Context.PushEffectiveUser(pq.ChildOwner)()
+	}
+
 	execFactory := newExecFactory(ctx, planner)
 	cascadePlan, err := pq.PlanFn(
 		ctx, &planner.semaCtx, &evalCtx.Context, execFactory,
@@ -2664,8 +2680,21 @@ func (dsp *DistSQLPlanner) planAndRunCascadeOrTrigger(
 	}
 	checksContainLocking = cp.flags.IsSet(planFlagCheckContainsLocking)
 
-	// add any newly generated post-queries to the queue.
-	addPostQueriesFromPlan(evalCtx, recv, cp, plan)
+	// The effective-user push above is gateway-local state: the stack is not
+	// serialized to remote flows, so a distributed plan would evaluate
+	// current_user, RLS, and routine privilege checks as the session user on
+	// remote nodes.
+	if !pq.ChildOwner.Undefined() {
+		if dist, _ := planner.getPlanDistribution(ctx, cp.main); dist.WillDistribute() {
+			recv.SetError(errors.AssertionFailedf(
+				"cascade or trigger plan running as the child table owner must not be distributed"))
+			return false, false
+		}
+	}
+
+	if !addPostQueriesFromPlan(evalCtx, recv, cp, plan, pq.ChildOwner) {
+		return false, false
+	}
 
 	if err := dsp.planAndRunPostquery(
 		ctx,
@@ -2687,8 +2716,20 @@ func (dsp *DistSQLPlanner) planAndRunCascadeOrTrigger(
 // addPostQueriesFromPlan queues any cascades, checks, and triggers from the
 // given "fromPlan" to the given "toPlan". It returns false if an error was
 // encountered and sets that error in the provided receiver, otherwise true.
+//
+// childOwner, when set, is the identity under which the post-query that produced
+// fromPlan is executing (a foreign-key cascade running as the referencing
+// table's owner). It is propagated to the newly queued triggers so that they run
+// as that same identity — the mutation firing them executes as childOwner. It is
+// undefined when the post-query that produced fromPlan is a trigger fired
+// directly by the top-level mutation, in which case the newly queued triggers
+// run as the user that issued the mutation. Cascades set their own owner and are
+// left untouched.
 func addPostQueriesFromPlan(
-	evalCtx *extendedEvalContext, recv *DistSQLReceiver, fromPlan, toPlan *planComponents,
+	evalCtx *extendedEvalContext,
+	recv *DistSQLReceiver,
+	fromPlan, toPlan *planComponents,
+	childOwner username.SQLUsername,
 ) bool {
 
 	// Collect any new checks.
@@ -2701,8 +2742,14 @@ func addPostQueriesFromPlan(
 		toPlan.cascades = append(toPlan.cascades, fromPlan.cascades...)
 	}
 
-	// Queue any new triggers.
+	// Queue any new triggers, propagating the child owner (if any) so they run
+	// with the same identity as the cascade that fired them.
 	if len(fromPlan.triggers) > 0 {
+		if !childOwner.Undefined() {
+			for i := range fromPlan.triggers {
+				fromPlan.triggers[i].ChildOwner = childOwner
+			}
+		}
 		toPlan.triggers = append(toPlan.triggers, fromPlan.triggers...)
 	}
 
