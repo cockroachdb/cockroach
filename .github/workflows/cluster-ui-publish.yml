@@ -1,19 +1,24 @@
-name: Publish Cluster UI Release
+name: Publish Cluster UI
 on:
   workflow_dispatch:
   push:
     branches:
+      - master
       - 'release-*'
     paths:
       - 'pkg/ui/workspaces/cluster-ui/**/*.tsx?'
       - 'pkg/ui/workspaces/cluster-ui/package.json'
 
+# A single workflow publishes @cockroachlabs/cluster-ui for both master
+# (pre-release, dist-tag "next") and release-* branches (dist-tag equal to
+# the branch name, e.g. "release-26.3"). npm trusted publishing binds a
+# package to exactly one workflow file, so both cases must live here.
 jobs:
   publish_cluster_ui:
-    if: github.repository == 'cockroachdb/cockroach'
+    if: github.repository == 'cockroachlabs/cockroach'
     runs-on: ubuntu-latest
     permissions:
-      id-token: write # Required for OIDC
+      id-token: write # Required for OIDC (npm trusted publishing)
       contents: write # Required for git tagging
     defaults:
       run:
@@ -34,6 +39,8 @@ jobs:
       with:
         version: "9.15.5"
 
+      # Publishing authenticates to npm via OIDC trusted publishing, so no
+      # NODE_AUTH_TOKEN is configured here.
     - name: Setup NodeJS
       uses: actions/setup-node@v4
       with:
@@ -70,15 +77,12 @@ jobs:
           echo "✅ Cluster UI package version $PACKAGE_VERSION should be published. ✅"
         fi
 
-    - name: Get Branch name
-      shell: bash
-      run: echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
-      id: branch-name
-
-      # Release-branch publishes normally use the branch name (e.g.
-      # "release-26.2") as the dist-tag. Versions carrying an "-alt." prerelease
-      # identifier instead publish under the dedicated "alt" dist-tag, so an alt
-      # build never lands on a release-series tag.
+      # Pre-releases from master go out under the "next" dist-tag; publishes
+      # from a release branch use the branch name (e.g. "release-26.3") so each
+      # release series has its own tag. Versions carrying an "-alt." prerelease
+      # identifier always publish under the "alt" dist-tag, regardless of which
+      # branch they are published from, so an alt build never lands on
+      # "next"/"latest" or a release-series tag.
     - name: Determine npm dist-tag
       id: dist-tag
       shell: bash
@@ -86,8 +90,10 @@ jobs:
         PACKAGE_VERSION=$(jq -r ".version" ./package.json)
         if [[ "$PACKAGE_VERSION" == *-alt.* ]]; then
           echo "tag=alt" >> "$GITHUB_OUTPUT"
+        elif [[ "$GITHUB_REF" == "refs/heads/master" ]]; then
+          echo "tag=next" >> "$GITHUB_OUTPUT"
         else
-          echo "tag=${{ steps.branch-name.outputs.branch }}" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Build Cluster UI
@@ -106,10 +112,15 @@ jobs:
           git push origin $TAGNAME
         fi
 
+      # npm trusted publishing (OIDC) requires npm >= 11.5.1 and Node >= 22.14;
+      # the runner's bundled npm may be older, so install a compatible version.
+      # The upload uses npm rather than pnpm because the repo's pinned pnpm
+      # (9.15.5) predates pnpm's OIDC trusted-publishing support (added in
+      # pnpm 10).
     - name: Upgrade npm for OIDC trusted publishing
       if: steps.version-check.outputs.published == 'no'
       run: npm install -g npm@11.5.1
 
-    - name: Publish patch version
+    - name: Publish
       if: steps.version-check.outputs.published == 'no'
       run: npm publish --access public --tag ${{ steps.dist-tag.outputs.tag }} --ignore-scripts
