@@ -1723,6 +1723,9 @@ func (ot *optTable) IsRowLevelSecurityEnabled() bool { return ot.rlsEnabled }
 // IsRowLevelSecurityForced is part of the cat.Table interface.
 func (ot *optTable) IsRowLevelSecurityForced() bool { return ot.rlsForced }
 
+// Owner is part of the cat.Table interface.
+func (ot *optTable) Owner() username.SQLUsername { return ot.desc.GetPrivileges().Owner() }
+
 // Policies is part of the cat.Table interface.
 func (ot *optTable) Policies() *cat.Policies {
 	if !ot.rlsEnabled {
@@ -2909,6 +2912,13 @@ func (ot *optVirtualTable) IsRowLevelSecurityEnabled() bool { return false }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface.
 func (ot *optVirtualTable) IsRowLevelSecurityForced() bool { return false }
+
+// Owner is part of the cat.Table interface. Virtual tables cannot be the
+// referencing side of a foreign key, so no cascade ever reads this. An empty
+// (undefined) username is returned so that any accidental future use fails
+// closed — pushing it as an effective user is a no-op — rather than escalating
+// to a privileged identity.
+func (ot *optVirtualTable) Owner() username.SQLUsername { return username.SQLUsername{} }
 
 // Policies is part of the cat.Table interface.
 func (ot *optVirtualTable) Policies() *cat.Policies { return nil }

@@ -73,7 +73,7 @@ func (tc *Catalog) AlterTableOwner(stmt *tree.AlterTableOwner) {
 		panic(errors.Newf(`user %q does not exist`, stmt.Owner.Name))
 	}
 
-	tab.Owner = user
+	tab.owner = user
 }
 
 // injectTableStats sets the table statistics as specified by a JSON object.

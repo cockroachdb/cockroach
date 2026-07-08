@@ -8,6 +8,7 @@ package cat
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -206,6 +207,9 @@ type Table interface {
 	// IsRowLevelSecurityForced is true if row-level security policies should be
 	// applied to the table owner.
 	IsRowLevelSecurityForced() bool
+
+	// Owner returns the role that owns the table.
+	Owner() username.SQLUsername
 
 	// Policies returns all the policies defined for this table.
 	Policies() *Policies

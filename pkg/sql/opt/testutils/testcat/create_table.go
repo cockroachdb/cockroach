@@ -540,7 +540,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 
 	tab.Columns = append(tab.Columns, rowid)
 	tab.addPrimaryColumnIndex("rowid")
-	tab.Owner = tc.currentUser
+	tab.owner = tc.currentUser
 
 	// Add the new table to the catalog.
 	tc.AddTable(tab)
