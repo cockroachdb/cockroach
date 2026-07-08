@@ -2521,3 +2521,135 @@ func TestTxnTracesSplitQueryIntents(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found, "didn't match: %s", dump)
 }
+
+// TestTxnBufferedWritesExclusionRollback reproduces issue #171482.
+//
+// A rollback issued after write buffering is disabled must not flush the
+// buffered writes into the EndTxn(abort) batch. If it does, the DistSender
+// divides the combined batch [Get(keyLow,excl), Get(keyA,excl),
+// EndTxn(abort,anchor=keyLow)] by range (a rollback's EndTxn is not split into
+// its own batch the way a commit's is). With synchronous sends the anchor
+// sub-batch [Get(keyLow), EndTxn(abort)] runs first and its ABORTED txn is
+// propagated (ba.UpdateTxn) into the Get(keyA,excl) sub-batch. When that
+// request hits an ExclusionViolationError with a finalized txn record, it would
+// trip checkTxnStatusValid and fataling the node.
+func TestTxnBufferedWritesExclusionRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	db := s.DB()
+
+	kvcoord.BufferedWritesEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	sqlDB := s.SystemLayer().SQLConn(t)
+	_, err := sqlDB.Exec(
+		"SET CLUSTER SETTING kv.transaction.write_buffering.transformations.get.enabled = true")
+	require.NoError(t, err)
+
+	// Force synchronous DistSender sends (by starving its async-sender
+	// pool) so the EndTxn(abort)'s ABORTED txn is propagated into the
+	// exclusion-Get sub-batch before it is sent.
+	_, err = sqlDB.Exec("SET CLUSTER SETTING kv.dist_sender.concurrency_limit = 0")
+	require.NoError(t, err)
+
+	keyLow := roachpb.Key("a") // txn anchor, lower-keyed range, sent first
+	keyA := roachpb.Key("z")   // exclusion key, higher range, sent second
+	require.NoError(t, db.AdminSplit(ctx, roachpb.Key("m"), hlc.Timestamp{}))
+	require.NoError(t, db.Put(ctx, keyLow, []byte("orig")))
+	require.NoError(t, db.Put(ctx, keyA, []byte("orig")))
+
+	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
+	txn.SetBufferedWritesEnabled(true)
+	_, err = txn.CommitTimestamp()
+	require.NoError(t, err)
+
+	// Lock keyLow first (becomes anchor), then keyA. Both replicated locking reads
+	// are downgraded to unreplicated and recorded in the buffer.
+	bLow := txn.NewBatch()
+	bLow.GetForUpdate(keyLow, kvpb.GuaranteedDurability)
+	require.NoError(t, txn.Run(ctx, bLow))
+	bA := txn.NewBatch()
+	bA.GetForUpdate(keyA, kvpb.GuaranteedDurability)
+	require.NoError(t, txn.Run(ctx, bA))
+
+	// Intervening committed write on keyA only, after the exclusion timestamp.
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn2 *kv.Txn) error {
+		require.NoError(t, txn2.SetUserPriority(roachpb.MaxUserPriority))
+		return txn2.Put(ctx, keyA, []byte("conflict"))
+	}))
+
+	// Disable buffering, then roll back. The rollback must discard the buffered
+	// writes rather than flush them into the EndTxn(abort) batch (#171482); it
+	// should simply succeed.
+	txn.SetBufferedWritesEnabled(false)
+	require.NoError(t, txn.Rollback(ctx))
+}
+
+// TestTxnBufferedWritesWriteTooOldRollback is the plain-Put counterpart of
+// TestTxnBufferedWritesExclusionRollback: Writes also #171482 but via
+// WriteTooOldError instead of ExclusionViolationError.
+//
+// The same checkTxnStatusValid fatal is reachable from two sides, which the
+// forceSerialSends subtests exercise:
+//
+//   - forceSerialSends=true: sub-batches are sent synchronously, so the
+//     EndTxn(abort)'s ABORTED txn is propagated into the Put(keyA) sub-batch before
+//     it is sent and the keyA leaseholder builds the WriteTooOldError around a
+//     finalized txn (kvserver.evaluateBatch). This is the server-side stack from
+//     #171482.
+//
+//   - forceSerialSends=false: the sub-batches are sent in parallel from the same
+//     pending txn, so the leaseholder is fine; instead the gateway merges the
+//     EndTxn's ABORTED status into the error while combining the responses
+//     (DistSender.divideAndSendBatchToRanges).
+//
+// Synchronous sends are forced by setting kv.dist_sender.concurrency_limit = 0,
+// which starves the DistSender's async-sender pool.
+func TestTxnBufferedWritesWriteTooOldRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	testutils.RunTrueAndFalse(t, "forceSerialSends", func(t *testing.T, forceSerialSends bool) {
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(ctx)
+		db := s.DB()
+
+		kvcoord.BufferedWritesEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+		if forceSerialSends {
+			_, err := s.SystemLayer().SQLConn(t).Exec(
+				"SET CLUSTER SETTING kv.dist_sender.concurrency_limit = 0")
+			require.NoError(t, err)
+		}
+
+		keyLow := roachpb.Key("a") // txn anchor, lower-keyed range, sent first
+		keyA := roachpb.Key("z")   // conflict key, higher range, sent second
+		require.NoError(t, db.AdminSplit(ctx, roachpb.Key("m"), hlc.Timestamp{}))
+
+		txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
+		txn.SetBufferedWritesEnabled(true)
+		_, err := txn.CommitTimestamp()
+		require.NoError(t, err)
+
+		// Buffer blind writes to keyLow (which becomes the anchor: the Put passes
+		// through the heartbeater before being buffered) then keyA. No locking reads
+		// are involved.
+		require.NoError(t, txn.Put(ctx, keyLow, []byte("v")))
+		require.NoError(t, txn.Put(ctx, keyA, []byte("v")))
+
+		// Intervening committed write on keyA only, after our write timestamp, so the
+		// buffered Put(keyA) hits a WriteTooOldError when flushed.
+		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn2 *kv.Txn) error {
+			require.NoError(t, txn2.SetUserPriority(roachpb.MaxUserPriority))
+			return txn2.Put(ctx, keyA, []byte("conflict"))
+		}))
+
+		// Disable buffering, then roll back. The rollback must discard the buffered
+		// writes rather than flush them into the EndTxn(abort) batch (#171482); it
+		// should simply succeed.
+		txn.SetBufferedWritesEnabled(false)
+		require.NoError(t, txn.Rollback(ctx))
+	})
+}
