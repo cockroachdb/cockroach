@@ -171,8 +171,8 @@ func registerRebalanceLoad(r registry.Registry) {
 			monitor := false
 			randomized := false
 			// Concurrency is set high enough to produce meaningful
-			// replica-attributed CPU on all stores. The previous value (128)
-			// produced too little load for the rebalancer to act on reliably.
+			// replica-attributed CPU on all stores so the rebalancer has a
+			// signal to act on.
 			concurrency := 512
 
 			// Use fewer nodes for the lease only test.
