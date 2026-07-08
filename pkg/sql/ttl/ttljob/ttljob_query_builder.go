@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -57,6 +59,11 @@ type SelectQueryParams struct {
 	TTLExpr           catpb.Expression
 	SelectDuration    *aggmetric.Histogram
 	SelectRateLimiter *quotapool.RateLimiter
+	// User and DescriptorOverrides identify the session the SELECT statements
+	// run as; see ttlSessionOverrides. The map is captured by reference and
+	// must not be mutated after construction.
+	User                username.SQLUsername
+	DescriptorOverrides map[uint32]sessiondata.DescriptorOverride
 }
 
 type SelectQueryBuilder interface {
@@ -82,13 +89,20 @@ type selectQueryBuilder struct {
 	cachedArgs []interface{}
 }
 
-func MakeSelectQueryBuilder(params SelectQueryParams, cutoff time.Time) SelectQueryBuilder {
+func MakeSelectQueryBuilder(
+	params SelectQueryParams, cutoff time.Time,
+) (SelectQueryBuilder, error) {
 	numPkCols := len(params.PKColNames)
 	if numPkCols == 0 {
-		panic("PKColNames is empty")
+		return nil, errors.AssertionFailedf("PKColNames is empty")
+	}
+	// An unset User would silently fall back to the internal executor's
+	// default identity (the node user, which bypasses privilege checks).
+	if params.User.Undefined() {
+		return nil, errors.AssertionFailedf("User is unset")
 	}
 	if numPkCols != len(params.PKColDirs) {
-		panic("different number of PKColNames and PKColDirs")
+		return nil, errors.AssertionFailedf("different number of PKColNames and PKColDirs")
 	}
 	// We will have a maximum of 1 + len(PKColNames)*2 columns, where one
 	// is reserved for AOST, and len(PKColNames) for both start and end key.
@@ -106,7 +120,7 @@ func MakeSelectQueryBuilder(params SelectQueryParams, cutoff time.Time) SelectQu
 		selectOpName:      redact.Sprintf("ttl select %s", params.RelationName),
 		cachedArgs:        cachedArgs,
 		isFirst:           true,
-	}
+	}, nil
 }
 
 // BuildQuery implements the SelectQueryBuilder interface.
@@ -125,11 +139,74 @@ func (b *selectQueryBuilder) BuildQuery() string {
 	)
 }
 
+// ttlSessionOverrides returns the identity that TTL statements against the given
+// table run as — the table's owner — together with the descriptor overrides that
+// identity needs.
+//
+// Running the SELECT, DELETE, and row-count statements as the owner rather than
+// the node user (which bypasses every privilege check) ensures that any
+// user-defined code they reach — DELETE triggers on the TTL table, and the
+// CHECK/computed-column UDFs re-evaluated by foreign-key cascades — executes
+// with the owner's privileges rather than node's. TTL itself never calls
+// crdb_internal.execute_internally, but a trigger fired by the TTL delete can;
+// under node's identity that would run arbitrary SQL with node's authority,
+// while under the owner's it is stopped by the builtin's global REPAIRCLUSTER
+// requirement (see TestRowLevelTTLCheckConstraintNoEscalation).
+//
+// Foreign-key referential actions triggered by the delete authorize their own
+// structural access as the referencing (child) table's owner, so the owner
+// running the TTL delete needs no privileges on the foreign-key cascade closure.
+// The overrides are therefore scoped to the TTL table itself and what naming and
+// planning it requires — access the node user was silently satisfying, which the
+// owner may lack:
+//
+//   - a row-level-security bypass on the TTL table, so a FORCE ROW LEVEL
+//     SECURITY policy does not hide expired rows from the owner and leave them
+//     undeleted (the owner already holds DML on the table it owns);
+//   - USAGE/CONNECT on the containing schema and database, for resolving the
+//     table's fully-qualified name; and
+//   - EXECUTE on the functions the table references (computed columns, CHECK and
+//     DEFAULT expressions, the TTL expression, partial-index predicates), which
+//     are built when the table is scanned.
+//
+// A DescriptorOverride can only grant per-descriptor privileges, never a global
+// privilege such as REPAIRCLUSTER, so these grants do not reopen the escalation.
+func ttlSessionOverrides(
+	tbl catalog.TableDescriptor,
+) (username.SQLUsername, map[uint32]sessiondata.DescriptorOverride, error) {
+	// Every valid descriptor has an owner (catprivilege.MaybeFixPrivileges
+	// backfills one on read), but an undefined owner passed to the internal
+	// executor would silently run the TTL statements as the privilege-bypassing
+	// node user, so fail loudly rather than fall through.
+	owner := tbl.GetPrivileges().Owner()
+	if owner.Undefined() {
+		return username.SQLUsername{}, nil, errors.AssertionFailedf(
+			"TTL table %d has no owner to run TTL statements as", tbl.GetID())
+	}
+	overrides := map[uint32]sessiondata.DescriptorOverride{
+		uint32(tbl.GetID()):             {BypassRLS: true},
+		uint32(tbl.GetParentID()):       {Privileges: privilege.List{privilege.CONNECT}.ToBitField()},
+		uint32(tbl.GetParentSchemaID()): {Privileges: privilege.List{privilege.USAGE}.ToBitField()},
+	}
+	fnIDs, err := tbl.GetAllReferencedFunctionIDs()
+	if err != nil {
+		return username.SQLUsername{}, nil, errors.Wrap(err, "collecting TTL descriptor overrides")
+	}
+	execPriv := privilege.List{privilege.EXECUTE}.ToBitField()
+	for _, id := range fnIDs.Ordered() {
+		overrides[uint32(id)] = sessiondata.DescriptorOverride{Privileges: execPriv}
+	}
+	return owner, overrides, nil
+}
+
 func getInternalExecutorOverride(
+	user username.SQLUsername,
+	descriptorOverrides map[uint32]sessiondata.DescriptorOverride,
 	qosLevel sessiondatapb.QoSLevel,
 ) sessiondata.InternalExecutorOverride {
 	return sessiondata.InternalExecutorOverride{
-		User:                   username.NodeUserName(),
+		User:                   user,
+		DescriptorOverrides:    descriptorOverrides,
 		QualityOfService:       &qosLevel,
 		OptimizerUseHistograms: true,
 	}
@@ -171,7 +248,7 @@ func (b *selectQueryBuilder) Run(
 		ctx,
 		b.selectOpName,
 		nil, /* txn */
-		getInternalExecutorOverride(sessiondatapb.BulkLowQoS),
+		getInternalExecutorOverride(b.User, b.DescriptorOverrides, sessiondatapb.BulkLowQoS),
 		query,
 		b.cachedArgs...,
 	)
@@ -203,6 +280,11 @@ type DeleteQueryParams struct {
 	DeleteBatchSize int64
 	TTLExpr         catpb.Expression
 	DeleteDuration  *aggmetric.Histogram
+	// User and DescriptorOverrides identify the session the DELETE statements
+	// run as; see ttlSessionOverrides. The map is captured by reference and
+	// must not be mutated after construction.
+	User                username.SQLUsername
+	DescriptorOverrides map[uint32]sessiondata.DescriptorOverride
 }
 
 // DeleteQueryBuilder is responsible for maintaining state around the DELETE
@@ -229,9 +311,16 @@ type deleteQueryBuilder struct {
 	cachedArgs []interface{}
 }
 
-func MakeDeleteQueryBuilder(params DeleteQueryParams, cutoff time.Time) DeleteQueryBuilder {
+func MakeDeleteQueryBuilder(
+	params DeleteQueryParams, cutoff time.Time,
+) (DeleteQueryBuilder, error) {
 	if len(params.PKColNames) == 0 {
-		panic("PKColNames is empty")
+		return nil, errors.AssertionFailedf("PKColNames is empty")
+	}
+	// An unset User would silently fall back to the internal executor's
+	// default identity (the node user, which bypasses privilege checks).
+	if params.User.Undefined() {
+		return nil, errors.AssertionFailedf("User is unset")
 	}
 	cachedArgs := make([]interface{}, 0, 1+int64(len(params.PKColNames))*params.DeleteBatchSize)
 	cachedArgs = append(cachedArgs, cutoff)
@@ -240,7 +329,7 @@ func MakeDeleteQueryBuilder(params DeleteQueryParams, cutoff time.Time) DeleteQu
 		DeleteQueryParams: params,
 		deleteOpName:      redact.Sprintf("ttl delete %s", params.RelationName),
 		cachedArgs:        cachedArgs,
-	}
+	}, nil
 }
 
 func (b *deleteQueryBuilder) BuildQuery(numRows int) string {
@@ -290,7 +379,7 @@ func (b *deleteQueryBuilder) Run(
 		ctx,
 		b.deleteOpName,
 		txn.KV(),
-		getInternalExecutorOverride(sessiondatapb.BulkLowQoS),
+		getInternalExecutorOverride(b.User, b.DescriptorOverrides, sessiondatapb.BulkLowQoS),
 		query,
 		deleteArgs...,
 	)

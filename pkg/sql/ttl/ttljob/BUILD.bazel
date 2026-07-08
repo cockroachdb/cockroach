@@ -35,6 +35,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/physicalplan",
+        "//pkg/sql/privilege",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
         "//pkg/sql/sem/tree",
@@ -63,6 +64,7 @@ go_test(
     size = "large",
     srcs = [
         "main_test.go",
+        "ttljob_escalation_test.go",
         "ttljob_internal_test.go",
         "ttljob_plans_test.go",
         "ttljob_processor_internal_test.go",
@@ -87,6 +89,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/catalog",

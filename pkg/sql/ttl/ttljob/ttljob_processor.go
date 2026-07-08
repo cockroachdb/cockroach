@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -72,41 +73,46 @@ func (t *ttlProcessor) Start(ctx context.Context) {
 	t.MoveToDraining(err)
 }
 
-func getTableInfo(
-	ctx context.Context, db descs.DB, tableID descpb.ID,
-) (
-	relationName string,
-	pkColIDs catalog.TableColMap,
-	pkColNames []string,
-	pkColTypes []*types.T,
-	pkColDirs []catenumpb.IndexColumn_Direction,
-	numFamilies int,
-	labelMetrics bool,
-	err error,
-) {
+// tableInfo holds the descriptor-derived state needed to build and run the
+// TTL SELECT/DELETE queries for a table.
+type tableInfo struct {
+	relationName string
+	pkColIDs     catalog.TableColMap
+	pkColNames   []string
+	pkColTypes   []*types.T
+	pkColDirs    []catenumpb.IndexColumn_Direction
+	numFamilies  int
+	labelMetrics bool
+	// owner and descOverrides identify the session the TTL queries run as;
+	// see ttlSessionOverrides.
+	owner         username.SQLUsername
+	descOverrides map[uint32]sessiondata.DescriptorOverride
+}
+
+func getTableInfo(ctx context.Context, db descs.DB, tableID descpb.ID) (info tableInfo, err error) {
 	err = db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 		if err != nil {
 			return err
 		}
 
-		numFamilies = desc.NumFamilies()
+		info.numFamilies = desc.NumFamilies()
 		var buf bytes.Buffer
 		primaryIndexDesc := desc.GetPrimaryIndex().IndexDesc()
-		pkColNames = make([]string, 0, len(primaryIndexDesc.KeyColumnNames))
+		info.pkColNames = make([]string, 0, len(primaryIndexDesc.KeyColumnNames))
 		for _, name := range primaryIndexDesc.KeyColumnNames {
 			lexbase.EncodeRestrictedSQLIdent(&buf, name, lexbase.EncNoFlags)
-			pkColNames = append(pkColNames, buf.String())
+			info.pkColNames = append(info.pkColNames, buf.String())
 			buf.Reset()
 		}
-		pkColTypes, err = GetPKColumnTypes(desc, primaryIndexDesc)
+		info.pkColTypes, err = GetPKColumnTypes(desc, primaryIndexDesc)
 		if err != nil {
 			return err
 		}
-		pkColDirs = primaryIndexDesc.KeyColumnDirections
-		pkColIDs = catalog.TableColMap{}
+		info.pkColDirs = primaryIndexDesc.KeyColumnDirections
+		info.pkColIDs = catalog.TableColMap{}
 		for i, id := range primaryIndexDesc.KeyColumnIDs {
-			pkColIDs.Set(id, i)
+			info.pkColIDs.Set(id, i)
 		}
 
 		if !desc.HasRowLevelTTL() {
@@ -114,17 +120,19 @@ func getTableInfo(
 		}
 
 		rowLevelTTL := desc.GetRowLevelTTL()
-		labelMetrics = rowLevelTTL.LabelMetrics
+		info.labelMetrics = rowLevelTTL.LabelMetrics
 
 		tn, err := descs.GetObjectName(ctx, txn.KV(), txn.Descriptors(), desc)
 		if err != nil {
 			return errors.Wrapf(err, "error fetching table relation name for TTL")
 		}
 
-		relationName = tn.FQString() + "@" + lexbase.EscapeSQLIdent(primaryIndexDesc.Name)
-		return nil
+		info.relationName = tn.FQString() + "@" + lexbase.EscapeSQLIdent(primaryIndexDesc.Name)
+
+		info.owner, info.descOverrides, err = ttlSessionOverrides(desc)
+		return err
 	})
-	return relationName, pkColIDs, pkColNames, pkColTypes, pkColDirs, numFamilies, labelMetrics, err
+	return info, err
 }
 
 func (t *ttlProcessor) work(ctx context.Context) error {
@@ -166,17 +174,15 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		deleteRateLimit,
 	)
 
-	relationName, pkColIDs, pkColNames, pkColTypes, pkColDirs, numFamilies, labelMetrics, err := getTableInfo(
-		ctx, db, tableID,
-	)
+	tableInfo, err := getTableInfo(ctx, db, tableID)
 	if err != nil {
 		return err
 	}
 
 	jobRegistry := serverCfg.JobRegistry
 	metrics := jobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
-		labelMetrics,
-		relationName,
+		tableInfo.labelMetrics,
+		tableInfo.relationName,
 	)
 
 	group := ctxgroup.WithContext(ctx)
@@ -240,42 +246,50 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	err = func() error {
 		boundsChan := make(chan QueryBounds, processorConcurrency)
 		defer close(boundsChan)
+		// runBounds processes a single unit of work from boundsChan.
+		runBounds := func(ctx context.Context, bounds QueryBounds) (int64, error) {
+			selectBuilder, err := MakeSelectQueryBuilder(
+				SelectQueryParams{
+					RelationName:        tableInfo.relationName,
+					PKColNames:          tableInfo.pkColNames,
+					PKColDirs:           tableInfo.pkColDirs,
+					PKColTypes:          tableInfo.pkColTypes,
+					Bounds:              bounds,
+					AOSTDuration:        ttlSpec.AOSTDuration,
+					SelectBatchSize:     ttlSpec.SelectBatchSize,
+					TTLExpr:             ttlExpr,
+					SelectDuration:      metrics.SelectDuration,
+					SelectRateLimiter:   selectRateLimiter,
+					User:                tableInfo.owner,
+					DescriptorOverrides: tableInfo.descOverrides,
+				},
+				cutoff,
+			)
+			if err != nil {
+				return 0, err
+			}
+			deleteBuilder, err := MakeDeleteQueryBuilder(
+				DeleteQueryParams{
+					RelationName:        tableInfo.relationName,
+					PKColNames:          tableInfo.pkColNames,
+					DeleteBatchSize:     ttlSpec.DeleteBatchSize,
+					TTLExpr:             ttlExpr,
+					DeleteDuration:      metrics.DeleteDuration,
+					User:                tableInfo.owner,
+					DescriptorOverrides: tableInfo.descOverrides,
+				},
+				cutoff,
+			)
+			if err != nil {
+				return 0, err
+			}
+			return t.runTTLOnQueryBounds(ctx, metrics, selectBuilder, deleteBuilder, deleteRateLimiter)
+		}
 		for i := int64(0); i < processorConcurrency; i++ {
 			group.GoCtx(func(ctx context.Context) error {
 				for bounds := range boundsChan {
 					start := timeutil.Now()
-					selectBuilder := MakeSelectQueryBuilder(
-						SelectQueryParams{
-							RelationName:      relationName,
-							PKColNames:        pkColNames,
-							PKColDirs:         pkColDirs,
-							PKColTypes:        pkColTypes,
-							Bounds:            bounds,
-							AOSTDuration:      ttlSpec.AOSTDuration,
-							SelectBatchSize:   ttlSpec.SelectBatchSize,
-							TTLExpr:           ttlExpr,
-							SelectDuration:    metrics.SelectDuration,
-							SelectRateLimiter: selectRateLimiter,
-						},
-						cutoff,
-					)
-					deleteBuilder := MakeDeleteQueryBuilder(
-						DeleteQueryParams{
-							RelationName:    relationName,
-							PKColNames:      pkColNames,
-							DeleteBatchSize: ttlSpec.DeleteBatchSize,
-							TTLExpr:         ttlExpr,
-							DeleteDuration:  metrics.DeleteDuration,
-						},
-						cutoff,
-					)
-					spanRowCount, err := t.runTTLOnQueryBounds(
-						ctx,
-						metrics,
-						selectBuilder,
-						deleteBuilder,
-						deleteRateLimiter,
-					)
+					spanRowCount, err := runBounds(ctx, bounds)
 					// add before returning err in case of partial success
 					processorRowCount.Add(spanRowCount)
 					rowsProccessedSinceLastUpdate.Add(spanRowCount)
@@ -301,10 +315,10 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 				ctx,
 				kvDB,
 				codec,
-				pkColIDs,
-				pkColTypes,
-				pkColDirs,
-				numFamilies,
+				tableInfo.pkColIDs,
+				tableInfo.pkColTypes,
+				tableInfo.pkColDirs,
+				tableInfo.numFamilies,
 				span,
 				&alloc,
 			); err != nil {
