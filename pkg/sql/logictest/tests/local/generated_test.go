@@ -871,6 +871,13 @@ func TestLogic_fk(
 	runLogicTest(t, "fk")
 }
 
+func TestLogic_fk_cascade_owner(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "fk_cascade_owner")
+}
+
 func TestLogic_float(
 	t *testing.T,
 ) {

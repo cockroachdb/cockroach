@@ -1,0 +1,723 @@
+# LogicTest: !local-legacy-schema-changer !local-mixed-24.3 !local-mixed-25.1
+#
+# The excluded configs are limitations of the test setup, not of the behavior
+# under test: CREATE TRIGGER requires the declarative schema changer, and ALTER
+# TABLE ... ROW LEVEL SECURITY requires the 25.2 upgrade to be finalized.
+#
+# Creating a foreign key requires CREATE on the referenced table on this
+# release, so the grants below say CREATE where they would say REFERENCES on
+# a release that has the newer foreign-key grant semantics. Either way the
+# point is the same: the child owner is given only what it needs to declare
+# the foreign key, and specifically not SELECT on the parent.
+#
+# Foreign-key referential actions, and the user-defined code they fire, run as
+# the referencing (child) table's owner rather than the user that issued the
+# top-level mutation — matching PostgreSQL. Each subtest below arranges for the
+# mutating user and the child owner to be different roles and observes which
+# identity the cascade runs as.
+#
+# testuser plays the user issuing the top-level mutation (it is the only
+# non-root user the logictest harness can log in as). The child owners never
+# need to log in — they only own objects and are observed via current_user —
+# so they are ordinary NOLOGIN roles.
+
+statement ok
+CREATE ROLE childowner
+
+statement ok
+CREATE ROLE attacker
+
+statement ok
+CREATE ROLE funcowner
+
+statement ok
+CREATE ROLE o_child
+
+statement ok
+CREATE ROLE o_gchild
+
+statement ok
+CREATE ROLE newowner
+
+subtest on_delete_cascade
+
+# parent is owned by testuser (the deleter); child (and everything the cascade
+# touches) is owned by childowner. testuser is given no privileges on child.
+statement ok
+CREATE TABLE parent (id INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE parent OWNER TO testuser
+
+statement ok
+GRANT CREATE ON parent TO childowner
+
+statement ok
+CREATE TABLE audit (who STRING)
+
+statement ok
+ALTER TABLE audit OWNER TO childowner
+
+statement ok
+CREATE FUNCTION log_del() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit VALUES (current_user);
+    RETURN OLD;
+  END
+$$
+
+statement ok
+ALTER FUNCTION log_del() OWNER TO childowner
+
+statement ok
+CREATE TABLE child (id INT PRIMARY KEY, pid INT REFERENCES parent(id) ON DELETE CASCADE)
+
+statement ok
+ALTER TABLE child OWNER TO childowner
+
+# A BEFORE trigger is built into the cascade mutation; an AFTER trigger runs
+# as a separately queued post-query. Both must observe childowner.
+statement ok
+CREATE TRIGGER t_before BEFORE DELETE ON child FOR EACH ROW EXECUTE FUNCTION log_del()
+
+statement ok
+CREATE TRIGGER t_after AFTER DELETE ON child FOR EACH ROW EXECUTE FUNCTION log_del()
+
+statement ok
+INSERT INTO parent VALUES (1)
+
+statement ok
+INSERT INTO child VALUES (10, 1)
+
+# testuser deletes from parent; it holds no privileges on child, yet the
+# cascade succeeds because it runs as childowner.
+user testuser
+
+statement count 1
+DELETE FROM parent WHERE id = 1
+
+user root
+
+# The cascade ran and deleted the child row.
+query I
+SELECT count(*) FROM child
+----
+0
+
+# Both cascade-fired triggers ran (BEFORE and AFTER), and both observed
+# current_user as childowner, not testuser.
+query TI
+SELECT who, count(*) FROM audit GROUP BY who
+----
+childowner  2
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+statement ok
+DROP TABLE audit
+
+statement ok
+DROP FUNCTION log_del
+
+subtest cascade_cannot_exfiltrate_from_deleter
+
+# The security property the owner identity protects: a cascade-fired CHECK
+# constraint must run as the child owner (the attacker), not the deleting
+# user — otherwise a child owner could exfiltrate any table the deleter can
+# read simply by waiting for the deleter to delete from the parent.
+#
+# testuser (the victim) owns a parent table and a secret; attacker owns a
+# child referencing the parent, with a CHECK-constraint UDF that tries to copy
+# the victim's secret into an attacker-owned table.
+statement ok
+CREATE TABLE secret (data STRING)
+
+statement ok
+INSERT INTO secret VALUES ('top-secret')
+
+statement ok
+ALTER TABLE secret OWNER TO testuser
+
+statement ok
+CREATE TABLE parent (id INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE parent OWNER TO testuser
+
+statement ok
+GRANT CREATE, SELECT ON parent TO attacker
+
+statement ok
+CREATE TABLE loot (data STRING)
+
+statement ok
+ALTER TABLE loot OWNER TO attacker
+
+statement ok
+CREATE FUNCTION pwn(x INT) RETURNS BOOL VOLATILE LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO loot SELECT data FROM secret;
+    RETURN true;
+  EXCEPTION WHEN OTHERS THEN
+    RETURN true;
+  END
+$$
+
+statement ok
+ALTER FUNCTION pwn(INT) OWNER TO attacker
+
+statement ok
+CREATE TABLE child (id INT PRIMARY KEY, pid INT REFERENCES parent(id) ON DELETE SET NULL, CHECK (pwn(pid)))
+
+statement ok
+ALTER TABLE child OWNER TO attacker
+
+statement ok
+INSERT INTO parent VALUES (1)
+
+statement ok
+INSERT INTO child VALUES (10, 1)
+
+# The child's CHECK also fires on the setup insert above (run as root, who
+# can read the secret), so reset loot to isolate what the cascade does.
+statement count 1
+DELETE FROM loot
+
+# The victim deletes from parent, which fires the SET NULL cascade on the
+# attacker's child and re-evaluates its CHECK. The CHECK's UDF runs as the
+# attacker (the child owner), not the victim (the deleter), so its read of
+# the victim's secret is denied — the exfiltration cannot proceed. The denial
+# surfaces while planning the cascade (it is a privilege error, not a runtime
+# one, so the UDF's exception handler does not swallow it), failing the
+# delete.
+user testuser
+
+statement error user attacker does not have SELECT privilege
+DELETE FROM parent WHERE id = 1
+
+user root
+
+# The core property: nothing landed in the attacker's table.
+query I
+SELECT count(*) FROM loot
+----
+0
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP FUNCTION pwn
+
+statement ok
+DROP TABLE loot
+
+statement ok
+DROP TABLE parent
+
+statement ok
+DROP TABLE secret
+
+subtest multi_level_cascade
+
+# In a chain of cascades (parent -> child -> gchild, each ON DELETE CASCADE,
+# each owned by a different role), every level runs as its own table's owner:
+# the gchild cascade generated while running the child cascade carries the
+# gchild owner, not the deleter's or the child owner's identity.
+statement ok
+CREATE TABLE parent (id INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE parent OWNER TO testuser
+
+statement ok
+GRANT CREATE ON parent TO o_child
+
+# Each level records current_user into its own owner's audit table via a
+# BEFORE DELETE trigger owned by that same role.
+statement ok
+CREATE TABLE audit_o_child (who STRING)
+
+statement ok
+ALTER TABLE audit_o_child OWNER TO o_child
+
+statement ok
+CREATE FUNCTION log_o_child() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_o_child VALUES (current_user);
+    RETURN OLD;
+  END
+$$
+
+statement ok
+ALTER FUNCTION log_o_child() OWNER TO o_child
+
+statement ok
+CREATE TABLE audit_o_gchild (who STRING)
+
+statement ok
+ALTER TABLE audit_o_gchild OWNER TO o_gchild
+
+statement ok
+CREATE FUNCTION log_o_gchild() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_o_gchild VALUES (current_user);
+    RETURN OLD;
+  END
+$$
+
+statement ok
+ALTER FUNCTION log_o_gchild() OWNER TO o_gchild
+
+statement ok
+CREATE TABLE child (id INT PRIMARY KEY, pid INT REFERENCES parent(id) ON DELETE CASCADE)
+
+statement ok
+ALTER TABLE child OWNER TO o_child
+
+statement ok
+CREATE TRIGGER t BEFORE DELETE ON child FOR EACH ROW EXECUTE FUNCTION log_o_child()
+
+statement ok
+GRANT CREATE ON child TO o_gchild
+
+statement ok
+CREATE TABLE gchild (id INT PRIMARY KEY, cid INT REFERENCES child(id) ON DELETE CASCADE)
+
+statement ok
+ALTER TABLE gchild OWNER TO o_gchild
+
+statement ok
+CREATE TRIGGER t BEFORE DELETE ON gchild FOR EACH ROW EXECUTE FUNCTION log_o_gchild()
+
+statement ok
+INSERT INTO parent VALUES (1)
+
+statement ok
+INSERT INTO child VALUES (10, 1)
+
+statement ok
+INSERT INTO gchild VALUES (100, 10)
+
+user testuser
+
+statement count 1
+DELETE FROM parent WHERE id = 1
+
+user root
+
+# The whole chain cascaded, each level running as its own owner.
+query I
+SELECT count(*) FROM gchild
+----
+0
+
+query T
+SELECT DISTINCT who FROM audit_o_child
+----
+o_child
+
+query T
+SELECT DISTINCT who FROM audit_o_gchild
+----
+o_gchild
+
+statement ok
+DROP TABLE gchild
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+statement ok
+DROP TABLE audit_o_child
+
+statement ok
+DROP TABLE audit_o_gchild
+
+statement ok
+DROP FUNCTION log_o_child
+
+statement ok
+DROP FUNCTION log_o_gchild
+
+subtest on_update_cascade
+
+# ON UPDATE cascade actions, and the triggers they fire, run as the child
+# owner — both when the parent is modified with UPDATE and with UPSERT, which
+# plan their cascades through separate code paths.
+#
+# The referenced column is a unique key rather than the primary key so that
+# an UPSERT on the primary key can modify it and fire the cascade.
+#
+# childowner needs SELECT on parent (not just CREATE): the cascade writes
+# new key values into child and re-checks them against parent, and that
+# existence check runs as the child owner like the rest of the cascade.
+statement ok
+CREATE TABLE parent (id INT PRIMARY KEY, uid INT UNIQUE)
+
+statement ok
+ALTER TABLE parent OWNER TO testuser
+
+statement ok
+GRANT CREATE ON parent TO childowner
+
+statement ok
+CREATE TABLE audit (who STRING)
+
+statement ok
+ALTER TABLE audit OWNER TO childowner
+
+# The trigger function is owned by a third role, funcowner. Trigger functions
+# are SECURITY INVOKER, so function ownership does not affect the identity the
+# trigger runs as: it must still observe the cascade's identity, childowner.
+statement ok
+CREATE FUNCTION log_upd() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit VALUES (current_user);
+    RETURN NEW;
+  END
+$$
+
+statement ok
+ALTER FUNCTION log_upd() OWNER TO funcowner
+
+statement ok
+CREATE TABLE child (id INT PRIMARY KEY, puid INT REFERENCES parent(uid) ON UPDATE CASCADE)
+
+statement ok
+ALTER TABLE child OWNER TO childowner
+
+statement ok
+CREATE TRIGGER t BEFORE UPDATE ON child FOR EACH ROW EXECUTE FUNCTION log_upd()
+
+statement ok
+INSERT INTO parent VALUES (1, 10)
+
+statement ok
+INSERT INTO child VALUES (100, 10)
+
+# With only CREATE on parent, the write-back cascade must fail: it
+# re-checks the new key value against parent, and that existence check runs
+# as childowner, who cannot read parent. The error naming childowner — not
+# testuser, who owns parent — pins which identity performs the check.
+user testuser
+
+statement error user childowner does not have SELECT privilege
+UPDATE parent SET uid = 13 WHERE id = 1
+
+user root
+
+statement ok
+GRANT SELECT ON parent TO childowner
+
+# testuser holds no privileges on child; both mutations succeed because the
+# cascade runs as childowner.
+user testuser
+
+statement ok
+UPDATE parent SET uid = 11 WHERE id = 1
+
+statement ok
+UPSERT INTO parent VALUES (1, 12)
+
+user root
+
+# Both cascades reached the child, and both cascade-fired triggers observed
+# current_user as childowner: not testuser, and not funcowner.
+query I
+SELECT puid FROM child
+----
+12
+
+query TI
+SELECT who, count(*) FROM audit GROUP BY who
+----
+childowner  2
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+statement ok
+DROP TABLE audit
+
+statement ok
+DROP FUNCTION log_upd
+
+subtest on_delete_set_default
+
+# The DEFAULT expression evaluated by an ON DELETE SET DEFAULT action observes
+# the cascade's identity: the referencing column's default is current_user, so
+# the value written by the cascade records who the cascade ran as. It must be
+# the child owner, not the deleting user.
+#
+# childowner needs SELECT on parent (not just CREATE): SET DEFAULT writes
+# the default value into child and re-checks it against parent, and that
+# existence check runs as the child owner like the rest of the cascade.
+statement ok
+CREATE TABLE parent (id STRING PRIMARY KEY)
+
+statement ok
+ALTER TABLE parent OWNER TO testuser
+
+statement ok
+GRANT CREATE, SELECT ON parent TO childowner
+
+statement ok
+CREATE TABLE child (
+  id INT PRIMARY KEY,
+  pid STRING DEFAULT current_user REFERENCES parent(id) ON DELETE SET DEFAULT
+)
+
+statement ok
+ALTER TABLE child OWNER TO childowner
+
+# The value SET DEFAULT writes must reference an existing parent row, so seed
+# the row the default resolves to when the cascade runs as childowner. If the
+# cascade ran as the deleter instead, the default would resolve to 'testuser',
+# which has no parent row, and the delete would fail with an FK violation.
+statement ok
+INSERT INTO parent VALUES ('p1'), ('childowner')
+
+statement ok
+INSERT INTO child VALUES (1, 'p1')
+
+user testuser
+
+statement count 1
+DELETE FROM parent WHERE id = 'p1'
+
+user root
+
+# The DEFAULT expression evaluated as the child owner.
+query T
+SELECT pid FROM child
+----
+childowner
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+subtest rls_under_cascade
+
+# Two row-level-security properties of the cascade identity:
+#
+#   1. The cascade's own scan and mutation of the child are exempt from RLS,
+#      even under FORCE ROW LEVEL SECURITY — referential integrity must hold
+#      regardless of policies, matching PostgreSQL (whose internal RI queries
+#      run exempt from row security).
+#   2. User-defined code fired by the cascade is not exempt: a trigger body
+#      reading an RLS-protected table sees the child owner's policy
+#      treatment, not the mutating user's.
+statement ok
+CREATE TABLE parent (id INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE parent OWNER TO testuser
+
+statement ok
+GRANT CREATE ON parent TO childowner
+
+# peek is protected by a policy that shows each row only to the user it
+# names.
+statement ok
+CREATE TABLE peek (who STRING)
+
+statement ok
+INSERT INTO peek VALUES ('childowner'), ('testuser'), ('root')
+
+statement ok
+GRANT SELECT ON peek TO public
+
+statement ok
+ALTER TABLE peek ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY
+
+statement ok
+CREATE POLICY p ON peek USING (who = current_user)
+
+statement ok
+CREATE TABLE audit (who STRING)
+
+statement ok
+ALTER TABLE audit OWNER TO childowner
+
+# The trigger records which peek rows are visible to the identity it runs
+# as.
+statement ok
+CREATE FUNCTION snoop() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit SELECT who FROM peek;
+    RETURN OLD;
+  END
+$$
+
+statement ok
+ALTER FUNCTION snoop() OWNER TO childowner
+
+statement ok
+CREATE TABLE child (id INT PRIMARY KEY, pid INT REFERENCES parent(id) ON DELETE CASCADE)
+
+statement ok
+ALTER TABLE child OWNER TO childowner
+
+statement ok
+CREATE TRIGGER t BEFORE DELETE ON child FOR EACH ROW EXECUTE FUNCTION snoop()
+
+statement ok
+INSERT INTO parent VALUES (1)
+
+statement ok
+INSERT INTO child VALUES (10, 1)
+
+# A deny-all forced policy on child must not stop the cascade (property 1).
+statement ok
+ALTER TABLE child ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY
+
+statement ok
+CREATE POLICY deny ON child USING (false)
+
+user testuser
+
+statement count 1
+DELETE FROM parent WHERE id = 1
+
+user root
+
+# The cascade deleted the child row despite the deny-all policy.
+statement ok
+ALTER TABLE child DISABLE ROW LEVEL SECURITY
+
+query I
+SELECT count(*) FROM child
+----
+0
+
+# The trigger saw peek through childowner's policy treatment: exactly the
+# childowner row, not testuser's (the deleter) or root's (property 2).
+query T
+SELECT who FROM audit
+----
+childowner
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+statement ok
+DROP FUNCTION snoop
+
+statement ok
+DROP TABLE peek
+
+statement ok
+DROP TABLE audit
+
+subtest owner_change_invalidates_cached_plan
+
+# The cascade records a dependency on the child table so that a cached plan
+# for the parent mutation is invalidated when the child changes. An owner
+# change must invalidate too — a cached cascade running as a stale owner
+# would be a security bug. The same delete statement text is executed twice
+# around an ALTER TABLE ... OWNER TO, so the second execution would reuse
+# the cached plan (and its recorded owner) if the owner change did not
+# invalidate it.
+statement ok
+CREATE TABLE parent (id INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE parent OWNER TO testuser
+
+statement ok
+GRANT CREATE ON parent TO childowner
+
+statement ok
+CREATE TABLE audit (who STRING)
+
+statement ok
+ALTER TABLE audit OWNER TO childowner
+
+# The trigger runs as whichever role owns child at execution time, so both
+# owners need to be able to write the audit row.
+statement ok
+GRANT INSERT ON audit TO public
+
+statement ok
+CREATE FUNCTION log_owner() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit VALUES (current_user);
+    RETURN OLD;
+  END
+$$
+
+statement ok
+ALTER FUNCTION log_owner() OWNER TO childowner
+
+statement ok
+CREATE TABLE child (id INT PRIMARY KEY, pid INT REFERENCES parent(id) ON DELETE CASCADE)
+
+statement ok
+ALTER TABLE child OWNER TO childowner
+
+statement ok
+CREATE TRIGGER t BEFORE DELETE ON child FOR EACH ROW EXECUTE FUNCTION log_owner()
+
+statement ok
+INSERT INTO parent VALUES (1), (2)
+
+statement ok
+INSERT INTO child VALUES (10, 1), (20, 2)
+
+user testuser
+
+statement count 1
+DELETE FROM parent WHERE id = (SELECT min(id) FROM parent)
+
+user root
+
+query T
+SELECT who FROM audit
+----
+childowner
+
+statement ok
+ALTER TABLE child OWNER TO newowner
+
+user testuser
+
+statement count 1
+DELETE FROM parent WHERE id = (SELECT min(id) FROM parent)
+
+user root
+
+# The second, textually identical delete ran its cascade as the new owner.
+query T rowsort
+SELECT who FROM audit
+----
+childowner
+newowner
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+statement ok
+DROP TABLE audit
+
+statement ok
+DROP FUNCTION log_owner

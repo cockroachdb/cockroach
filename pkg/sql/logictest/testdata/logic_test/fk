@@ -1180,7 +1180,12 @@ DELETE FROM test20045 WHERE x = 'pk2';
 statement ok
 DELETE FROM test20045 WHERE x = 'pk1';
 
-## Delete cascade without privileges
+## Delete cascade without privileges on the child table.
+##
+## A foreign-key cascade runs as the referencing (child) table's owner, so the
+## user issuing the delete needs no privileges on the child table for the
+## cascade to succeed (it only needs to be authorized to delete from the
+## parent). This matches PostgreSQL.
 
 statement ok
 CREATE DATABASE d;
@@ -1210,28 +1215,30 @@ GRANT ALL ON d.a TO testuser;
 
 user testuser
 
-statement error user testuser does not have SELECT privilege on relation b
+# testuser holds no privileges on d.b, but the cascade runs as d.b's owner
+# (root), so the delete succeeds and cascades to d.b.
+statement count 1
 DELETE FROM d.a WHERE id = 'a1';
 
 user root
 
+query I
+SELECT count(*) FROM d.b
+----
+0
+
+# The relaxation is scoped to the child side of the cascade only: the user
+# issuing the delete still needs DELETE on the parent table itself.
 statement ok
-GRANT SELECT ON d.b TO testuser;
+REVOKE DELETE ON d.a FROM testuser;
+
+statement ok
+INSERT INTO d.a VALUES ('a2');
 
 user testuser
 
-statement error user testuser does not have DELETE privilege on relation b
-DELETE FROM d.a WHERE id = 'a1';
-
-user root
-
-statement ok
-GRANT DELETE ON d.b TO testuser;
-
-user testuser
-
-statement ok
-DELETE FROM d.a WHERE id = 'a1';
+statement error user testuser does not have DELETE privilege on relation a
+DELETE FROM d.a WHERE id = 'a2';
 
 user root
 

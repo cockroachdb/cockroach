@@ -10,6 +10,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -303,6 +304,17 @@ type PostQuery struct {
 	// Triggers is used for logging and EXPLAIN purposes. It is nil if this
 	// PostQuery describes a foreign-key cascade action.
 	Triggers []cat.Trigger
+
+	// ChildOwner, when set, is the owner of the referencing (child) table that a
+	// foreign-key cascade modifies. The cascade is planned and executed with this
+	// identity — so its structural access, and the triggers and CHECK constraints
+	// it fires, run as the child owner rather than the user that issued the
+	// top-level mutation (matching PostgreSQL). The execbuilder leaves it unset
+	// for AFTER-trigger post-queries; at run time a cascade propagates its owner
+	// into the triggers it fires, so those trigger post-queries carry the
+	// cascade's owner. Triggers fired directly by the top-level mutation leave it
+	// unset and run as the mutating user.
+	ChildOwner username.SQLUsername
 
 	// Buffer is the Node returned by ConstructBuffer which stores the input to
 	// the mutation. It is nil if the cascade does not require a buffer.

@@ -75,13 +75,10 @@ type Context struct {
 	SessionDataStack *sessiondata.Stack
 
 	// effectiveUserStack temporarily overrides EffectiveUser while execution is
-	// inside code that runs as an identity other than the session user. Pushed
-	// by PushEffectiveUser and popped by the returned restore closure; the top
-	// entry wins. See EffectiveUser / PushEffectiveUser.
-	//
-	// No caller pushes onto this stack yet, so EffectiveUser is always the
-	// session user. A following commit uses it to run a foreign-key cascade as
-	// the referencing table's owner.
+	// inside code that runs as an identity other than the session user: a
+	// foreign-key cascade and the triggers it fires (the referencing table's
+	// owner). Pushed by PushEffectiveUser and popped by the returned restore
+	// closure; the top entry wins. See EffectiveUser / PushEffectiveUser.
 	effectiveUserStack []username.SQLUsername
 
 	// TxnState is a string representation of the current transactional state.
@@ -530,9 +527,9 @@ func (ec *Context) SessionData() *sessiondata.SessionData {
 }
 
 // EffectiveUser returns the user that should be used for privilege checks,
-// ownership assignment, and the current_user builtin. While code that runs as
-// an identity other than the session user is executing this is the pushed
-// identity; otherwise it falls back to the session user. session_user is never
+// ownership assignment, and the current_user builtin. While a foreign-key
+// cascade is executing this is the pushed identity (the referencing table's
+// owner); otherwise it falls back to the session user. session_user is never
 // affected.
 func (ec *Context) EffectiveUser() username.SQLUsername {
 	if n := len(ec.effectiveUserStack); n > 0 {
