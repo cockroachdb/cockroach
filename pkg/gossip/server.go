@@ -30,12 +30,6 @@ type serverInfo struct {
 	peerID    roachpb.NodeID
 }
 
-// testingGossipReceiverStallHook, if non-nil, is invoked at the start of the
-// gossip receiver task (which performs connection admission) with the NodeID
-// from the initial request. HACK: used to deterministically reproduce races
-// between connection admission and the init response.
-var testingGossipReceiverStallHook func(roachpb.NodeID)
-
 // server maintains an array of connected peers to which it gossips
 // newly arrived information on a periodic basis.
 type server struct {
@@ -149,14 +143,6 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	lastSentHighWaterStamps := make(map[roachpb.NodeID]int64)
 
 	if err := s.stopper.RunAsyncTask(ctx, "gossip receiver", func(ctx context.Context) {
-		// HACK: deterministic repro of the admission race. The connection
-		// admission decision (incoming.addNode / forward) lives in
-		// gossipReceiver and races with the init response sent by the main
-		// loop below. This hook lets a test stall the admission of a specific
-		// peer, simulating an unlucky scheduling delay.
-		if fn := testingGossipReceiverStallHook; fn != nil {
-			fn(args.NodeID)
-		}
 		errCh <- s.gossipReceiver(ctx, &args, &lastSentHighWaterStamps, send, stream.Recv)
 	}); err != nil {
 		return err
