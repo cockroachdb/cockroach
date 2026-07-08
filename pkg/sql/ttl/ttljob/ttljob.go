@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -113,6 +115,8 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 	var rowLevelTTL *catpb.RowLevelTTL
 	var relationName string
 	var entirePKSpan roachpb.Span
+	var owner username.SQLUsername
+	var descOverrides map[uint32]sessiondata.DescriptorOverride
 	if err := db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)
 		if err != nil {
@@ -147,7 +151,9 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		relationName = tn.FQString()
 
 		entirePKSpan = desc.PrimaryIndexSpan(execCfg.Codec)
-		return nil
+
+		owner, descOverrides, err = ttlSessionOverrides(desc)
+		return err
 	}); err != nil {
 		return err
 	}
@@ -158,15 +164,35 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 	statsCtx, statsCancel := context.WithCancelCause(ctx)
 	defer statsCancel(nil)
 	statsGroup := ctxgroup.WithContext(statsCtx)
+	// statsErr is the stats goroutine's own result. It is written as the
+	// goroutine exits and read only after statsGroup.Wait returns; see the
+	// comment there for why it is consulted instead of Wait's result.
+	var statsErr error
 	if rowLevelTTL.RowStatsPollInterval != 0 {
 		metrics := execCfg.JobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
 			labelMetrics,
 			relationName,
 		)
 
-		statsGroup.GoCtx(func(ctx context.Context) error {
+		statsGroup.GoCtx(func(ctx context.Context) (retErr error) {
+			defer func() { statsErr = retErr }()
+			fetch := func() error {
+				err := metrics.fetchStatistics(
+					ctx, execCfg, owner, descOverrides, relationName, details, aostDuration, ttlExpr,
+				)
+				if err != nil && ctx.Err() != nil {
+					// The stats context is cancelled when the TTL work completes, and
+					// a stats query interrupted mid-flight surfaces that as a
+					// cancellation error. Classify the error here, while the context
+					// still distinguishes our own shutdown from an external
+					// cancellation (such as CANCEL QUERY on the stats query, which
+					// must be reported as a stats failure below).
+					return nil //nolint:returnerrcheck
+				}
+				return err
+			}
 			// Do once initially to ensure we have some base statistics.
-			if err := metrics.fetchStatistics(ctx, execCfg, relationName, details, aostDuration, ttlExpr); err != nil {
+			if err := fetch(); err != nil {
 				return err
 			}
 			// Wait until poll interval is reached, or early exit when we are done
@@ -176,7 +202,7 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 				case <-ctx.Done():
 					return nil
 				case <-time.After(rowLevelTTL.RowStatsPollInterval):
-					if err := metrics.fetchStatistics(ctx, execCfg, relationName, details, aostDuration, ttlExpr); err != nil {
+					if err := fetch(); err != nil {
 						return err
 					}
 				}
@@ -276,6 +302,13 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		return err
 	}
 
+	// Call the BeforeProcessorStart hook for test synchronization.
+	if knobs.BeforeProcessorStart != nil {
+		if err := knobs.BeforeProcessorStart(ctx); err != nil {
+			return err
+		}
+	}
+
 	if err := t.progressTracker.initJobProgress(ctx, int64(jobSpanCount)); err != nil {
 		return err
 	}
@@ -344,9 +377,17 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		return err
 	}
 
-	if err := statsGroup.Wait(); err != nil {
-		// If the stats group was cancelled, use that error instead.
-		err = errors.CombineErrors(context.Cause(statsCtx), err)
+	// ctxgroup.Wait reports the group context's error even when every
+	// goroutine returned nil, so once the stats context is canceled at job
+	// completion, Wait returns context.Canceled regardless of how the stats
+	// goroutine exited. Its result is therefore ignored in favor of the
+	// goroutine's own.
+	_ = statsGroup.Wait()
+	if err := statsErr; err != nil {
+		// Errors caused by our own shutdown cancellation of the stats context
+		// are filtered out in the stats goroutine, so anything that reaches
+		// here is a real stats failure (including an external CANCEL QUERY of
+		// a stats query).
 		if knobs.ReturnStatsError {
 			return err
 		}
