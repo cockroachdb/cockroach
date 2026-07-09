@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // StatementOptions provides friendlier access to the options map from the WITH
@@ -45,6 +46,47 @@ type FormatType string
 // AvroModeType configures whether the Avro schema-registry interaction
 // registers schemas or only resolves already-registered schema IDs.
 type AvroModeType string
+
+// AvroVersionKind configures which version strategy to use in the avro read mode.
+type AvroVersionKind int
+
+const (
+	// AvroVersionLatest uses the newest registered version of the subject.
+	AvroVersionLatest AvroVersionKind = iota
+	// AvroVersionPin uses the pinned n version.
+	AvroVersionPin
+	// AvroVersionLatestCompatible uses the newest available version that
+	// passes the local compatibility check against the generated schema.
+	AvroVersionLatestCompatible
+)
+
+const (
+	avroVersionLatest           = `latest`
+	avroVersionLatestCompatible = `latest_compatible`
+)
+
+// AvroVersionStrategy describes how the read-only Avro sink picks a registered
+// version for a single subject.
+type AvroVersionStrategy struct {
+	Kind          AvroVersionKind
+	PinnedVersion int32
+}
+
+func (s AvroVersionStrategy) String() string {
+	switch s.Kind {
+	case AvroVersionPin:
+		return fmt.Sprintf("pin(%d)", s.PinnedVersion)
+	case AvroVersionLatestCompatible:
+		return avroVersionLatestCompatible
+	default:
+		return avroVersionLatest
+	}
+}
+
+var _ redact.SafeValue = AvroVersionStrategy{}
+
+// SafeValue implements redact.SafeValue.
+func (AvroVersionStrategy) SafeValue() {}
 
 // OnErrorType configures the job behavior when an error occurs.
 type OnErrorType string
