@@ -196,8 +196,11 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 	type issueFactory func(string, string) github.Issue
 
 	// issuesWithSuffix generates copies of the base issue passed, but
-	// changing the title based on the list of suffixes passed.
-	issuesWithSuffix := func(base github.Issue, suffixes ...string) []issueFactory {
+	// changing the title based on the list of suffixes passed. titlePrefix is the
+	// branch prefix carried by the issue's title (see branchTitlePrefix); related
+	// issues live on a different branch than the one under test, so they use a
+	// different prefix.
+	issuesWithSuffix := func(base github.Issue, titlePrefix string, suffixes ...string) []issueFactory {
 		factories := make([]issueFactory, 0, len(suffixes))
 		for k, suffix := range suffixes {
 			factories = append(factories,
@@ -207,7 +210,7 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 						issueNum = *base.Number
 					}
 					return github.Issue{
-						Title:  github.String(fmt.Sprintf("release-0.1: %s: %s%s failed [failure reason]", packageName, testName, suffix)),
+						Title:  github.String(fmt.Sprintf("%s%s: %s%s failed [failure reason]", titlePrefix, packageName, testName, suffix)),
 						Number: &issueNum,
 						Labels: base.Labels,
 					}
@@ -256,20 +259,20 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 		foundOnlyMatchingIssue: {
 			// only first matching issue is reported as there's an exact
 			// title match
-			issuesWithSuffix(matchingIssue, "", "-similar"),
+			issuesWithSuffix(matchingIssue, "release-0.1: ", "", "-similar"),
 			{},
 		},
 		foundMatchingAndRelatedIssue: {
 			// only second matching issue is reported as there's an exact
 			// title match
-			issuesWithSuffix(matchingIssue, "-similar", ""),
-			issuesWithSuffix(relatedIssue, ""),
+			issuesWithSuffix(matchingIssue, "release-0.1: ", "-similar", ""),
+			issuesWithSuffix(relatedIssue, "release-0.2: ", ""),
 		},
 		foundOnlyRelatedIssue: {
 			{},
 			// only second related issue is reported as there's an exact
 			// title match
-			issuesWithSuffix(relatedIssue, "-similar", ""),
+			issuesWithSuffix(relatedIssue, "release-0.2: ", "-similar", ""),
 		},
 	}
 	var sKeys []string
@@ -542,7 +545,13 @@ func TestDataDriven(t *testing.T) {
 			if arg, ok := d.Arg("label-match-set"); ok {
 				req.AdoptIssueLabelMatchSet = arg.Vals
 			}
-			existing, related := buildIssueQueries("repo", "org", "master", "foo: bar failed", req)
+			branch := "master"
+			if arg, ok := d.Arg("branch"); ok {
+				branch = arg.Vals[0]
+			}
+			baseTitle := "foo: bar failed"
+			title := branchTitlePrefix(branch) + baseTitle
+			existing, related := buildIssueQueries("repo", "org", branch, title, baseTitle, req)
 			return fmt.Sprintf("Existing issue query:\n  %s\nRelated issues query:\n  %s", existing, related)
 
 		default:
