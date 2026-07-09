@@ -89,6 +89,20 @@ var _ redact.SafeValue = AvroVersionStrategy{}
 // SafeValue implements redact.SafeValue.
 func (AvroVersionStrategy) SafeValue() {}
 
+// AvroSchemaOverride is the per-subject configuration from the avro_schemas
+// option.
+type AvroSchemaOverride struct {
+	// SubjectName overrides the registry subject; empty means the default
+	// subject name.
+	SubjectName string
+	// Version selects the registered version in avro read mode. The zero
+	// value selects the latest version.
+	Version AvroVersionStrategy
+}
+
+// AvroSchemaOverrides maps default subject names to their overrides.
+type AvroSchemaOverrides map[string]AvroSchemaOverride
+
 // OnErrorType configures the job behavior when an error occurs.
 type OnErrorType string
 
@@ -965,6 +979,7 @@ type EncodingOptions struct {
 	EncodeJSONValueNullAsObject bool
 	AvroSchemaPrefix            string
 	AvroMode                    AvroModeType
+	AvroSchemas                 AvroSchemaOverrides
 	SchemaRegistryURI           string
 	Compression                 string
 	CustomKeyColumn             string
