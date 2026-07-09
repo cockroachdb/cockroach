@@ -147,3 +147,81 @@ func TestAvroSchemaPrefixValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestAvroSchemasOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		name      string
+		opts      map[string]string
+		expectErr string
+	}{
+		{name: "subject rename in write mode",
+			opts: map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {"subject_name": "acme.foo"}}`}},
+		{name: "rename and strategies in read mode",
+			opts: map[string]string{"format": "avro", "avro_mode": "read",
+				"avro_schemas": `{"foo-value": {"version": "latest_compatible"}, "foo-key": {"version": "pin(3)", "subject_name": "acme.foo.key"}}`}},
+		{name: "version is not allowed in write mode",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {"version": "latest"}}`},
+			expectErr: "version is only usable with avro_mode=read"},
+		{name: "invalid JSON",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{`},
+			expectErr: "parsing avro_schemas"},
+		{name: "not an object",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `[]`},
+			expectErr: "must be a JSON object"},
+		{name: "key without a subject suffix",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo": {}}`},
+			expectErr: `ending in "-key" or "-value"`},
+		{name: "entry not an object",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": "acme.foo"}`},
+			expectErr: `entry "foo-value" must be a JSON object`},
+		{name: "unknown entry field",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {"subject": "x"}}`},
+			expectErr: "unknown field"},
+		{name: "empty subject_name",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {"subject_name": ""}}`},
+			expectErr: "empty subject_name"},
+		{name: "unknown version strategy",
+			opts:      map[string]string{"format": "avro", "avro_mode": "read", "avro_schemas": `{"foo-value": {"version": "newest"}}`},
+			expectErr: "invalid avro version strategy"},
+		{name: "pin without a version",
+			opts:      map[string]string{"format": "avro", "avro_mode": "read", "avro_schemas": `{"foo-value": {"version": "pin()"}}`},
+			expectErr: "invalid pinned version"},
+		{name: "pin with a non-numeric version",
+			opts:      map[string]string{"format": "avro", "avro_mode": "read", "avro_schemas": `{"foo-value": {"version": "pin(abc)"}}`},
+			expectErr: "invalid pinned version"},
+		{name: "pin zero",
+			opts:      map[string]string{"format": "avro", "avro_mode": "read", "avro_schemas": `{"foo-value": {"version": "pin(0)"}}`},
+			expectErr: "invalid pinned version"},
+		{name: "key entry without its value entry",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-key": {}}`},
+			expectErr: `requires a matching "foo-value" entry`},
+		{name: "collision on the effective subject",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {"subject_name": "bar-value"}, "bar-value": {}}`},
+			expectErr: "resolve to the same subject"},
+		{name: "requires avro format",
+			opts:      map[string]string{"avro_schemas": `{"foo-value": {}}`},
+			expectErr: "avro_schemas is only usable with format=avro"},
+		{name: "empty object allowed with avro format",
+			opts: map[string]string{"format": "avro", "avro_schemas": `{}`}},
+		{name: "pin requires read mode",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {"version": "pin(2)"}}`},
+			expectErr: "only usable with avro_mode=read"},
+		{name: "latest_compatible requires read mode",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {"version": "latest_compatible"}}`},
+			expectErr: "only usable with avro_mode=read"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := MakeStatementOptions(tc.opts).GetEncodingOptions()
+			if tc.expectErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tc.expectErr)
+			}
+		})
+	}
+}
