@@ -625,7 +625,12 @@ func TestTxnWriteBufferServesPointReadsLocally(t *testing.T) {
 		require.Nil(t, pErr)
 		require.NotNil(t, br)
 		require.Len(t, br.Responses, 1)
-		require.Equal(t, roachpb.MakeValueFromString(expVal), *br.Responses[0].GetInner().(*kvpb.GetResponse).Value)
+		getResp := br.Responses[0].GetInner().(*kvpb.GetResponse)
+		require.Equal(t, roachpb.MakeValueFromString(expVal), *getResp.Value)
+		// Buffer-served Gets must populate NumKeys/NumBytes to match the
+		// server-side accounting (NumKeys=1, NumBytes=len(RawBytes)).
+		require.Equal(t, int64(1), getResp.NumKeys)
+		require.Equal(t, int64(len(getResp.Value.RawBytes)), getResp.NumBytes)
 		// Should be served entirely from the buffer, and nothing should be sent to
 		// the KV layer.
 		require.Equal(t, numCalled, mockSender.NumCalled())
@@ -644,7 +649,11 @@ func TestTxnWriteBufferServesPointReadsLocally(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 	require.Len(t, br.Responses, 1)
-	require.False(t, br.Responses[0].GetInner().(*kvpb.GetResponse).Value.IsPresent())
+	getBResp := br.Responses[0].GetInner().(*kvpb.GetResponse)
+	require.False(t, getBResp.Value.IsPresent())
+	// A deleted key has no value, so NumKeys/NumBytes remain 0.
+	require.Equal(t, int64(0), getBResp.NumKeys)
+	require.Equal(t, int64(0), getBResp.NumBytes)
 	// Should be served entirely from the buffer, and nothing should be sent to
 	// the KV layer.
 	require.Equal(t, numCalled, mockSender.NumCalled())
