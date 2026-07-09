@@ -6,6 +6,7 @@
 package changefeedccl
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 
@@ -38,6 +39,7 @@ type confluentAvroEncoder struct {
 	customKeyColumn                        string
 	headersJSONColumnName                  string
 	avroMode                               changefeedbase.AvroModeType
+	avroSchemas                            changefeedbase.AvroSchemaOverrides
 
 	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
@@ -98,6 +100,7 @@ func newConfluentAvroEncoder(
 	e.mvccTimestampField = opts.MVCCTimestamps
 	e.enrichedSourceProvider = enrichedSourceProvider
 	e.avroMode = opts.AvroMode
+	e.avroSchemas = opts.AvroSchemas
 
 	// TODO: Implement this.
 	if opts.KeyInValue {
@@ -145,6 +148,12 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 		if err != nil {
 			return nil, err
 		}
+		// NB: This uses the kafka name escaper because it has to match the name
+		// of the kafka topic.
+		kafkaName := changefeedbase.SQLNameToKafkaName(tableName)
+		if e.keySchemaDisabled(kafkaName) {
+			return e.encodeJSONKey(ctx, row)
+		}
 		if e.customKeyColumn == "" {
 			registered.schema, err = avro.PrimaryIndexToAvroSchema(row, tableName, e.schemaPrefix)
 			if err != nil {
@@ -161,10 +170,10 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 			}
 		}
 
-		// NB: This uses the kafka name escaper because it has to match the name
-		// of the kafka topic.
-		subject := changefeedbase.SQLNameToKafkaName(tableName) + confluentSubjectSuffixKey
-		registered.registryID, err = e.resolveSchemaID(ctx, &registered.schema.Record, subject)
+		defaultSubject := kafkaName + confluentSubjectSuffixKey
+		subject := e.resolveSubject(defaultSubject)
+		registered.registryID, err = e.resolveSchemaID(
+			ctx, &registered.schema.Record, subject, e.versionStrategy(defaultSubject))
 		if err != nil {
 			return nil, err
 		}
@@ -279,8 +288,10 @@ func (e *confluentAvroEncoder) EncodeValue(
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := changefeedbase.SQLNameToKafkaName(name) + confluentSubjectSuffixValue
-		registered.registryID, err = e.resolveSchemaID(ctx, &registered.schema.Record, subject)
+		defaultSubject := changefeedbase.SQLNameToKafkaName(name) + confluentSubjectSuffixValue
+		subject := e.resolveSubject(defaultSubject)
+		registered.registryID, err = e.resolveSchemaID(
+			ctx, &registered.schema.Record, subject, e.versionStrategy(defaultSubject))
 		if err != nil {
 			return nil, err
 		}
@@ -325,8 +336,10 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := changefeedbase.SQLNameToKafkaName(topic) + confluentSubjectSuffixValue
-		registered.registryID, err = e.resolveSchemaID(ctx, &registered.schema.Record, subject)
+		defaultSubject := changefeedbase.SQLNameToKafkaName(topic) + confluentSubjectSuffixValue
+		subject := e.resolveSubject(defaultSubject)
+		registered.registryID, err = e.resolveSchemaID(
+			ctx, &registered.schema.Record, subject, e.versionStrategy(defaultSubject))
 		if err != nil {
 			return nil, err
 		}
@@ -354,20 +367,66 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 // read mode it resolves the ID of an already-registered schema and never
 // writes to the registry.
 func (e *confluentAvroEncoder) resolveSchemaID(
-	ctx context.Context, schema *avro.Record, subject string,
+	ctx context.Context,
+	schema *avro.Record,
+	subject string,
+	strategy changefeedbase.AvroVersionStrategy,
 ) (int32, error) {
 	if e.avroMode == changefeedbase.OptAvroModeRead {
-		return e.schemaRegistry.LookupSchemaIDForSubject(
-			ctx, subject, schema.Schema(), e.versionStrategy(subject))
+		return e.schemaRegistry.LookupSchemaIDForSubject(ctx, subject, schema.Schema(), strategy)
 	}
 	return e.schemaRegistry.RegisterSchemaForSubject(ctx, subject, schema.Schema())
 }
 
-// versionStrategy returns the version-selection strategy used to resolve
-// subject in read mode.
-//
-// TODO(sachin): consult the per-subject avro_schemas configuration once it
-// exists; until then every subject uses the default strategy.
-func (e *confluentAvroEncoder) versionStrategy(subject string) changefeedbase.AvroVersionStrategy {
-	return changefeedbase.AvroVersionStrategy{}
+// resolveSubject returns the registry subject to use for the given default
+// subject name, applying any avro_schemas subject-name override.
+func (e *confluentAvroEncoder) resolveSubject(defaultSubject string) string {
+	if o, ok := e.avroSchemas[defaultSubject]; ok && o.SubjectName != "" {
+		return o.SubjectName
+	}
+	return defaultSubject
+}
+
+// versionStrategy returns the version-selection strategy used to resolve the
+// given default subject in read mode. Subjects without a configured strategy
+// use the default, the latest registered version.
+func (e *confluentAvroEncoder) versionStrategy(
+	defaultSubject string,
+) changefeedbase.AvroVersionStrategy {
+	return e.avroSchemas[defaultSubject].Version
+}
+
+// keySchemaDisabled reports whether the avro key schema is disabled for the
+// topic with the given kafka name.
+func (e *confluentAvroEncoder) keySchemaDisabled(kafkaName string) bool {
+	if _, ok := e.avroSchemas[kafkaName+confluentSubjectSuffixKey]; ok {
+		return false
+	}
+	_, ok := e.avroSchemas[kafkaName+confluentSubjectSuffixValue]
+	return ok
+}
+
+// encodeJSONKey encodes the row's key columns as a JSON array, matching the
+// key bytes format=json feeds emit. It is used when the avro key schema is
+// disabled for the topic.
+func (e *confluentAvroEncoder) encodeJSONKey(
+	ctx context.Context, row cdcevent.Row,
+) ([]byte, error) {
+	var it cdcevent.Iterator
+	if e.customKeyColumn == "" {
+		it = row.ForEachKeyColumn()
+	} else {
+		var err error
+		it, err = row.DatumNamed(e.customKeyColumn)
+		if err != nil {
+			return nil, err
+		}
+	}
+	keyJSON, err := (&versionEncoder{}).encodeKeyRawAsArray(ctx, it)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	keyJSON.Format(&buf)
+	return buf.Bytes(), nil
 }
