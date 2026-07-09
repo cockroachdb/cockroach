@@ -27,8 +27,14 @@ import (
 // pri is the priority that should be used when giving the restarted transaction
 // the chance to get a higher priority. Not used when the transaction is being
 // aborted.
+//
+// mustRestart forces the transaction to restart from the beginning (with an
+// incremented epoch) even under isolation levels that would otherwise permit
+// adjusting the read snapshot mid-transaction. Callers use this when state
+// needed to continue the transaction has been lost on the client, e.g. when
+// buffered writes were discarded by a failed flush.
 func PrepareTransactionForRetry(
-	pErr *Error, pri roachpb.UserPriority, clock *hlc.Clock,
+	pErr *Error, pri roachpb.UserPriority, clock *hlc.Clock, mustRestart bool,
 ) (roachpb.Transaction, error) {
 	if pErr == nil {
 		return roachpb.Transaction{}, errors.AssertionFailedf("nil error")
@@ -143,7 +149,7 @@ func PrepareTransactionForRetry(
 		// prior writes. The user of the transaction (e.g. the SQL layer) is
 		// responsible for employing savepoints to selectively discard the writes
 		// from the current statement when it retries that statement.
-		if !txn.IsoLevel.PerStatementReadSnapshot() || errorAlwaysRequireRestart {
+		if !txn.IsoLevel.PerStatementReadSnapshot() || errorAlwaysRequireRestart || mustRestart {
 			txn.Restart(pri, txn.Priority, txn.WriteTimestamp)
 		} else {
 			txn.BumpReadTimestamp(txn.WriteTimestamp)
