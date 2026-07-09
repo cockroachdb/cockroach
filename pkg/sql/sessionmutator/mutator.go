@@ -937,6 +937,10 @@ func (m *SessionDataMutator) SetOptimizerUseHistogramsForMultiSpanConstColumns(v
 	m.Data.OptimizerUseHistogramsForMultiSpanConstColumns = val
 }
 
+func (m *SessionDataMutator) SetOptimizerUseHistogramsForWithScans(val bool) {
+	m.Data.OptimizerUseHistogramsForWithScans = val
+}
+
 func (m *SessionDataMutator) SetOptimizerUseProvidedOrderingFix(val bool) {
 	m.Data.OptimizerUseProvidedOrderingFix = val
 }

@@ -2817,7 +2817,8 @@ func (sb *statisticsBuilder) buildWithScan(
 func (sb *statisticsBuilder) colStatWithScan(
 	colSet opt.ColSet, withScan *WithScanExpr,
 ) *props.ColumnStatistic {
-	s := withScan.Relational().Statistics()
+	relProps := withScan.Relational()
+	s := relProps.Statistics()
 
 	boundExpr := sb.md.WithBinding(withScan.With).(RelExpr)
 
@@ -2829,6 +2830,11 @@ func (sb *statisticsBuilder) colStatWithScan(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
+	if sb.evalCtx.SessionData().OptimizerUseHistogramsForWithScans &&
+		sb.shouldUseHistogram(relProps) && inColStat.Histogram != nil &&
+		colSet.Len() == 1 {
+		colStat.Histogram = inColStat.Histogram.CopyWithCol(colSet.SingleColumn())
+	}
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }

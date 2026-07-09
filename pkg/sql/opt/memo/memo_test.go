@@ -656,6 +656,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns = false
 	notStale()
 
+	// Stale optimizer_use_histograms_for_with_scans.
+	evalCtx.SessionData().OptimizerUseHistogramsForWithScans = true
+	stale()
+	evalCtx.SessionData().OptimizerUseHistogramsForWithScans = false
+	notStale()
+
 	// Stale skip_underlying_view_privilege_checks.
 	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, true)
 	stale()
