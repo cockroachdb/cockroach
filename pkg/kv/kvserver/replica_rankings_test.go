@@ -383,12 +383,17 @@ func TestLoadQPSStats(t *testing.T) {
 
 	key = tc.ScratchRange(t)
 
-	req := &kvpb.PutRequest{
-		RequestHeader: kvpb.RequestHeader{Key: key},
-		Value:         roachpb.MakeValueFromString("value"),
+	// Construct a fresh batch for every attempt: the txn interceptor stack
+	// mutates the header of the batch it is handed, so a BatchRequest must not
+	// be reused across Send calls.
+	newBatchReq := func() *kvpb.BatchRequest {
+		batchReq := &kvpb.BatchRequest{}
+		batchReq.Add(&kvpb.PutRequest{
+			RequestHeader: kvpb.RequestHeader{Key: key},
+			Value:         roachpb.MakeValueFromString("value"),
+		})
+		return batchReq
 	}
-	batchReq := &kvpb.BatchRequest{}
-	batchReq.Add(req)
 
 	store, err := ts.GetStores().(*Stores).GetStore(ts.GetFirstStoreID())
 	require.NoError(t, err)
@@ -399,7 +404,7 @@ func TestLoadQPSStats(t *testing.T) {
 		failBatchReq.Store(true)
 		// Reset stats before sending request.
 		repl.loadStats.Reset()
-		_, pErr := txn.Send(ctx, batchReq)
+		_, pErr := txn.Send(ctx, newBatchReq())
 
 		qps = repl.loadStats.TestingGetSum(load.Queries)
 		writeBytes = repl.loadStats.TestingGetSum(load.WriteBytes)
@@ -418,7 +423,7 @@ func TestLoadQPSStats(t *testing.T) {
 	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Reset stats before sending request.
 		repl.loadStats.Reset()
-		_, pErr := txn.Send(ctx, batchReq)
+		_, pErr := txn.Send(ctx, newBatchReq())
 		qps = repl.loadStats.TestingGetSum(load.Queries)
 		writeBytes = repl.loadStats.TestingGetSum(load.WriteBytes)
 		return pErr.GoError()
