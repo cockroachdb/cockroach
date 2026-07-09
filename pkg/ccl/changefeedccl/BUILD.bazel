@@ -249,6 +249,7 @@ go_test(
         "//pkg/build",
         "//pkg/build/bazel",
         "//pkg/ccl",
+        "//pkg/ccl/changefeedccl/avro",
         "//pkg/ccl/changefeedccl/cdceval",
         "//pkg/ccl/changefeedccl/cdcevent",
         "//pkg/ccl/changefeedccl/cdcprogresspb",
