@@ -104,6 +104,7 @@ go_library(
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/transform",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
