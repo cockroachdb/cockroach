@@ -772,6 +772,12 @@ message LocalOnlySessionData {
   // a scan during query optimization. 0 means no limit.
   int32 optimizer_span_limit = 207;
 
+  // OptimizerUseHistogramsForWithScans, when true, allows the optimizer to
+  // propagate histograms from a CTE's bound expression to the WithScan
+  // expressions that read it, improving cardinality estimates for filters
+  // on CTE output.
+  bool optimizer_use_histograms_for_with_scans = 215;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
