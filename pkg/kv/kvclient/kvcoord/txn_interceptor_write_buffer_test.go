@@ -1569,6 +1569,234 @@ func TestTxnWriteBufferResumeSpansWithBufferedValue(t *testing.T) {
 	})
 }
 
+// TestTxnWriteBufferStrippedRequestsAfterExhaustedLimit verifies that
+// stripped requests (those served entirely from the buffer) that appear
+// after a response with a ResumeSpan are returned unprocessed -- with a
+// ResumeSpan covering the full request span and no value -- rather than
+// being served from the buffer. Without this, a limited batch such as
+// [Scan(a-c) limit=2, Get(d)] where d has a buffered write would
+// return the Get's value even though the Scan exhausted the limit,
+// causing the KV response stream to go out of key order.
+func TestTxnWriteBufferStrippedRequestsAfterExhaustedLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	keyA, keyB, keyC, keyD :=
+		roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"), roachpb.Key("d")
+
+	testCases := []struct {
+		name string
+		// req is the request on keyD, positioned after the Scan. It must be
+		// servable from the buffer so that it is stripped from the batch.
+		req kvpb.Request
+		// checkResp asserts the request-specific parts of the synthesized
+		// unprocessed response.
+		checkResp func(t *testing.T, resp kvpb.Response)
+	}{
+		{
+			name: "get",
+			req: &kvpb.GetRequest{
+				RequestHeader: kvpb.RequestHeader{Key: keyD, Sequence: 2},
+			},
+			checkResp: func(t *testing.T, resp kvpb.Response) {
+				require.Nil(t, resp.(*kvpb.GetResponse).Value,
+					"Get after an exhausted limit must not return a value")
+			},
+		},
+		{
+			// NB: without MustAcquireExclusiveLock the Del is stripped.
+			name: "delete",
+			req: &kvpb.DeleteRequest{
+				RequestHeader: kvpb.RequestHeader{Key: keyD, Sequence: 2},
+			},
+			checkResp: func(t *testing.T, resp kvpb.Response) {
+				require.False(t, resp.(*kvpb.DeleteResponse).FoundKey)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
+
+			txn := makeTxnProto()
+			txn.Sequence = 1
+
+			// Buffer a write to keyD.
+			ba := &kvpb.BatchRequest{}
+			ba.Header = kvpb.Header{Txn: &txn}
+			ba.Add(putArgs(keyD, "vd", txn.Sequence))
+			br, pErr := twb.SendLocked(ctx, ba)
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+
+			// Send a limited batch: Scan over [a, c) followed by the request
+			// on keyD. The latter is servable from the buffer, so it is
+			// stripped and only the Scan reaches the KV layer, where it
+			// exhausts the batch's key limit.
+			txn.Sequence = 2
+			ba = &kvpb.BatchRequest{}
+			ba.Header = kvpb.Header{Txn: &txn, MaxSpanRequestKeys: 2}
+			ba.Add(&kvpb.ScanRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key: keyA, EndKey: keyC, Sequence: txn.Sequence,
+				},
+			})
+			ba.Add(tc.req)
+
+			mockSender.MockSend(mockTruncatedScanResp(t, keyA, keyB, keyC))
+
+			br, pErr = twb.SendLocked(ctx, ba)
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+			require.Len(t, br.Responses, 2)
+
+			scanResp := br.Responses[0].GetInner().(*kvpb.ScanResponse)
+			require.NotNil(t, scanResp.ResumeSpan)
+
+			// The batch's limit was exhausted before the stripped request, so
+			// it must come back unprocessed.
+			resp := br.Responses[1].GetInner()
+			require.NotNil(t, resp.Header().ResumeSpan,
+				"stripped request after an exhausted limit must return a ResumeSpan")
+			require.Equal(t, roachpb.Span{Key: keyD}, *resp.Header().ResumeSpan)
+			require.Equal(t, kvpb.RESUME_KEY_LIMIT, resp.Header().ResumeReason)
+			tc.checkResp(t, resp)
+
+			// keyD must retain only the original buffered Put: the unprocessed
+			// request must not have buffered a value, a tombstone, or a lock.
+			var found bool
+			for _, bw := range twb.testingBufferedWritesAsSlice() {
+				if bw.key.Equal(keyD) {
+					found = true
+					require.Len(t, bw.vals, 1)
+					require.Equal(t, enginepb.TxnSeq(1), bw.vals[0].seq)
+					require.Nil(t, bw.lki)
+				}
+			}
+			require.True(t, found)
+		})
+	}
+}
+
+// mockTruncatedScanResp returns a send function that expects a batch
+// containing a single Scan over [keyA, keyC) and responds with rows for keyA
+// and keyB plus a ResumeSpan, as the server does when the Scan exhausts the
+// batch's key limit of 2.
+func mockTruncatedScanResp(
+	t *testing.T, keyA, keyB, keyC roachpb.Key,
+) func(*kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+	return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
+
+		resp := ba.CreateReply()
+		resp.Txn = ba.Txn
+		resp.Responses[0].MustSetInner(&kvpb.ScanResponse{
+			ResponseHeader: kvpb.ResponseHeader{
+				NumKeys:      2,
+				ResumeSpan:   &roachpb.Span{Key: keyB.Next(), EndKey: keyC},
+				ResumeReason: kvpb.RESUME_KEY_LIMIT,
+			},
+			Rows: []roachpb.KeyValue{
+				{Key: keyA, Value: roachpb.MakeValueFromString("va")},
+				{Key: keyB, Value: roachpb.MakeValueFromString("vb")},
+			},
+		})
+		return resp, nil
+	}
+}
+
+// TestTxnWriteBufferScanMergeRespectsResumeSpan verifies that a buffered
+// write positioned beyond a Scan's ResumeSpan is not merged into the
+// truncated response, and is instead merged into the response of the
+// continuation once the client re-issues the resume span.
+func TestTxnWriteBufferScanMergeRespectsResumeSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
+
+	keyA, keyB, keyC, keyD, keyE :=
+		roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"),
+		roachpb.Key("d"), roachpb.Key("e")
+
+	txn := makeTxnProto()
+	txn.Sequence = 1
+
+	// Buffer a write to keyD.
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(putArgs(keyD, "vd", txn.Sequence))
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Scan [a, e) with a key limit of 2. The server truncates the Scan after
+	// keyB; the buffered write to keyD lies beyond the ResumeSpan and must
+	// not be merged into this response.
+	txn.Sequence = 2
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn, MaxSpanRequestKeys: 2}
+	ba.Add(&kvpb.ScanRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key: keyA, EndKey: keyE, Sequence: txn.Sequence,
+		},
+	})
+
+	mockSender.MockSend(mockTruncatedScanResp(t, keyA, keyB, keyE))
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 1)
+
+	scanResp := br.Responses[0].GetInner().(*kvpb.ScanResponse)
+	require.NotNil(t, scanResp.ResumeSpan)
+	require.Equal(t, int64(2), scanResp.NumKeys)
+	require.Len(t, scanResp.Rows, 2)
+	require.Equal(t, keyA, scanResp.Rows[0].Key)
+	require.Equal(t, keyB, scanResp.Rows[1].Key)
+
+	// Continue the scan from the returned ResumeSpan. The server finds only
+	// keyC; the buffered write to keyD must now be merged into the response.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn, MaxSpanRequestKeys: 2}
+	ba.Add(&kvpb.ScanRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:      scanResp.ResumeSpan.Key,
+			EndKey:   scanResp.ResumeSpan.EndKey,
+			Sequence: txn.Sequence,
+		},
+	})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		resp := ba.CreateReply()
+		resp.Txn = ba.Txn
+		resp.Responses[0].MustSetInner(&kvpb.ScanResponse{
+			ResponseHeader: kvpb.ResponseHeader{NumKeys: 1},
+			Rows: []roachpb.KeyValue{
+				{Key: keyC, Value: roachpb.MakeValueFromString("vc")},
+			},
+		})
+		return resp, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 1)
+
+	scanResp = br.Responses[0].GetInner().(*kvpb.ScanResponse)
+	require.Nil(t, scanResp.ResumeSpan)
+	require.Equal(t, int64(2), scanResp.NumKeys)
+	require.Len(t, scanResp.Rows, 2)
+	require.Equal(t, keyC, scanResp.Rows[0].Key)
+	require.Equal(t, keyD, scanResp.Rows[1].Key)
+}
+
 // TestTxnWriteBufferMustSortBatchesBySequenceNumber verifies that flushed
 // batches are sorted in sequence number order, as currently required by the txn
 // pipeliner interceptor.
