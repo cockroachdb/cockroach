@@ -357,7 +357,17 @@ func (e *confluentAvroEncoder) resolveSchemaID(
 	ctx context.Context, schema *avro.Record, subject string,
 ) (int32, error) {
 	if e.avroMode == changefeedbase.OptAvroModeRead {
-		return e.schemaRegistry.LookupSchemaIDForSubject(ctx, subject, schema.Schema())
+		return e.schemaRegistry.LookupSchemaIDForSubject(
+			ctx, subject, schema.Schema(), e.versionStrategy(subject))
 	}
 	return e.schemaRegistry.RegisterSchemaForSubject(ctx, subject, schema.Schema())
+}
+
+// versionStrategy returns the version-selection strategy used to resolve
+// subject in read mode.
+//
+// TODO(sachin): consult the per-subject avro_schemas configuration once it
+// exists; until then every subject uses the default strategy.
+func (e *confluentAvroEncoder) versionStrategy(subject string) changefeedbase.AvroVersionStrategy {
+	return changefeedbase.AvroVersionStrategy{}
 }

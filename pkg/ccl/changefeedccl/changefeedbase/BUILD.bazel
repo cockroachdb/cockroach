@@ -28,6 +28,7 @@ go_library(
         "//pkg/util/json",
         "//pkg/util/metamorphic",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
