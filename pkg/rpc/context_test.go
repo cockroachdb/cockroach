@@ -122,7 +122,7 @@ func newTestContext(
 // TestPingInterceptors checks that OnOutgoingPing and OnIncomingPing can inject errors.
 func TestPingInterceptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // avoid hang on failure
+	ctx, cancel := context.WithTimeout(context.Background(), testutils.DefaultSucceedsSoonDuration) // avoid hang on failure
 	defer cancel()
 
 	const (
