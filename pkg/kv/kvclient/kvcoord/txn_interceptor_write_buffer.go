@@ -1631,6 +1631,11 @@ func (rr requestRecord) toResp(
 			getResp := &kvpb.GetResponse{}
 			if val.IsPresent() {
 				getResp.Value = val
+				// Match the server-side accounting in MVCCGet: NumKeys counts
+				// the key, NumBytes counts only the value (unlike Scan which
+				// includes the key in NumBytes).
+				getResp.NumKeys = 1
+				getResp.NumBytes = int64(len(val.RawBytes))
 			}
 			ru.MustSetInner(getResp)
 			log.VEventf(ctx, 2, "serving %s on key %s from the buffer", req.Method(), req.Key)
