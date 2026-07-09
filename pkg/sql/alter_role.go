@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -141,6 +142,102 @@ func (p *planner) checkPasswordOptionConstraints(
 	return nil
 }
 
+// nonSensitiveRoleOptions is the closed set of role options a CREATEROLE user
+// may grant without holding an equivalent capability. Every option NOT listed
+// here is treated as sensitive: it may only be granted by a user that already
+// holds the like-named global privilege or role option (see
+// checkRoleOptionConstraints). Enumerating the exempt set, rather than the
+// sensitive one, keeps the check fail-closed: a newly introduced role option is
+// gated by default, so adding one forces a deliberate decision that it is safe
+// to hand out freely before it can escalate a CREATEROLE user's privileges.
+//
+// The exempt options fall into a few groups:
+//   - NO* variants revoke a capability and so can never escalate privileges.
+//   - The login/password family (PASSWORD, VALID UNTIL, LOGIN, SQLLOGIN,
+//     CREATELOGIN) governs authentication, not capability escalation; the
+//     password-related options are constrained separately by
+//     checkPasswordOptionConstraints and the CREATELOGIN check.
+//   - CREATEROLE is already required by the enclosing authorization check.
+//   - SUBJECT concerns authentication, not capability escalation.
+//   - CONTROLCHANGEFEED is deprecated with no corresponding global privilege.
+var nonSensitiveRoleOptions = map[roleoption.Option]struct{}{
+	roleoption.CREATEROLE:             {},
+	roleoption.NOCREATEROLE:           {},
+	roleoption.PASSWORD:               {},
+	roleoption.LOGIN:                  {},
+	roleoption.NOLOGIN:                {},
+	roleoption.VALIDUNTIL:             {},
+	roleoption.NOCONTROLJOB:           {},
+	roleoption.CONTROLCHANGEFEED:      {},
+	roleoption.NOCONTROLCHANGEFEED:    {},
+	roleoption.NOCREATEDB:             {},
+	roleoption.CREATELOGIN:            {},
+	roleoption.NOCREATELOGIN:          {},
+	roleoption.NOVIEWACTIVITY:         {},
+	roleoption.NOCANCELQUERY:          {},
+	roleoption.NOMODIFYCLUSTERSETTING: {},
+	roleoption.NOVIEWACTIVITYREDACTED: {},
+	roleoption.NOREPLICATION:          {},
+	roleoption.SQLLOGIN:               {},
+	roleoption.NOSQLLOGIN:             {},
+	roleoption.NOVIEWCLUSTERSETTING:   {},
+	roleoption.SUBJECT:                {},
+	roleoption.NOBYPASSRLS:            {},
+}
+
+// roleOptionGlobalPrivilege classifies a role option for grant gating: it is
+// either exempt (grantable freely) or gated on the returned like-named global
+// privilege. ok is false for an option that is neither, which is a programming
+// error caught by the init assertion below.
+func roleOptionGlobalPrivilege(opt roleoption.Option) (priv privilege.Kind, exempt bool, ok bool) {
+	if _, exempt = nonSensitiveRoleOptions[opt]; exempt {
+		return 0, true, true
+	}
+	priv, ok = privilege.ByDisplayName[privilege.KindDisplayName(opt.String())]
+	return priv, false, ok
+}
+
+// init asserts every role option is classified, so adding one without marking it
+// exempt or mapping it to a global privilege fails on package load rather than
+// silently letting a CREATEROLE user grant a capability it lacks. Safe because
+// privilege.ByDisplayName and roleoption.ByName are populated before this runs.
+func init() {
+	for name, opt := range roleoption.ByName {
+		if _, _, ok := roleOptionGlobalPrivilege(opt); !ok {
+			panic(errors.AssertionFailedf(
+				"role option %s (%s) is neither exempt nor mapped to a global privilege; "+
+					"add it to nonSensitiveRoleOptions or define a matching privilege", name, opt))
+		}
+	}
+}
+
+// checkRoleOptionConstraints verifies the current user is permitted to grant
+// each sensitive role option in roleOptions. A sensitive option may only be
+// granted by a user that holds the like-named global privilege or role option;
+// admins/root pass. See nonSensitiveRoleOptions for the exempt set.
+func (p *planner) checkRoleOptionConstraints(
+	ctx context.Context, roleOptions roleoption.List,
+) error {
+	for _, ro := range roleOptions {
+		priv, exempt, ok := roleOptionGlobalPrivilege(ro.Option)
+		if exempt {
+			continue
+		}
+		// A lookup miss means a role option was added without being classified
+		// as sensitive or exempt. The init assertion above prevents this, but
+		// fail the grant rather than silently allowing it if one slips through.
+		if !ok {
+			return errors.AssertionFailedf(
+				"role option %s is neither exempt nor mapped to a global privilege; "+
+					"add it to nonSensitiveRoleOptions or define a matching privilege", ro.Option)
+		}
+		if err := p.CheckGlobalPrivilegeOrRoleOption(ctx, priv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (n *alterRoleNode) startExec(params runParams) error {
 	var opName redact.RedactableString
 	if n.isRole {
@@ -186,6 +283,9 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		// Check that the requested combination of password options is
 		// compatible with the user's own CREATELOGIN privilege.
 		if err := params.p.checkPasswordOptionConstraints(params.ctx, n.roleOptions, false /* newUser */); err != nil {
+			return err
+		}
+		if err := params.p.checkRoleOptionConstraints(params.ctx, n.roleOptions); err != nil {
 			return err
 		}
 	}
