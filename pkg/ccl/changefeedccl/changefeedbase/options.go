@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -102,6 +103,124 @@ type AvroSchemaOverride struct {
 // AvroSchemaOverrides maps default subject names to their overrides.
 type AvroSchemaOverrides map[string]AvroSchemaOverride
 
+const (
+	avroSchemasSubjectNameField = `subject_name`
+	avroSchemasVersionField     = `version`
+
+	avroSubjectSuffixKey   = `-key`
+	avroSubjectSuffixValue = `-value`
+)
+
+// ParseAvroVersionStrategy parses the version field of an avro_schemas entry:
+// "latest", "latest_compatible", or "pin(<n>)" with n >= 1.
+func ParseAvroVersionStrategy(s string) (AvroVersionStrategy, error) {
+	switch {
+	case s == avroVersionLatest:
+		return AvroVersionStrategy{Kind: AvroVersionLatest}, nil
+	case s == avroVersionLatestCompatible:
+		return AvroVersionStrategy{Kind: AvroVersionLatestCompatible}, nil
+	case strings.HasPrefix(s, `pin(`) && strings.HasSuffix(s, `)`):
+		n, err := strconv.ParseInt(s[len(`pin(`):len(s)-1], 10, 32)
+		if err != nil || n < 1 {
+			return AvroVersionStrategy{}, errors.Newf(
+				`invalid pinned version in avro version strategy %q; use "pin(<n>)" with n >= 1`, s)
+		}
+		return AvroVersionStrategy{Kind: AvroVersionPin, PinnedVersion: int32(n)}, nil
+	default:
+		return AvroVersionStrategy{}, errors.Newf(
+			`invalid avro version strategy %q; use %q, %q, or "pin(<n>)"`,
+			s, avroVersionLatest, avroVersionLatestCompatible)
+	}
+}
+
+// ParseAvroSchemaOverrides parses and validates the avro_schemas option JSON:
+// an object keyed by default subject names whose entries carry an optional
+// subject_name override and an optional read-mode version strategy.
+func ParseAvroSchemaOverrides(raw string, avroMode AvroModeType) (AvroSchemaOverrides, error) {
+	j, err := json.ParseJSON(raw)
+	if err != nil {
+		return nil, errors.Wrapf(err, "parsing %s", OptAvroSchemas)
+	}
+	it, err := j.ObjectIter()
+	if err != nil {
+		return nil, errors.Wrapf(err, "parsing %s", OptAvroSchemas)
+	}
+	if it == nil {
+		return nil, errors.Newf(
+			"%s must be a JSON object keyed by default subject names", OptAvroSchemas)
+	}
+	overrides := make(AvroSchemaOverrides, j.Len())
+	for it.Next() {
+		key := it.Key()
+		if !strings.HasSuffix(key, avroSubjectSuffixKey) &&
+			!strings.HasSuffix(key, avroSubjectSuffixValue) {
+			return nil, errors.Newf(
+				`%s key %q must be a default subject name ending in %q or %q`,
+				OptAvroSchemas, key, avroSubjectSuffixKey, avroSubjectSuffixValue)
+		}
+		entryIt, err := it.Value().ObjectIter()
+		if err != nil {
+			return nil, errors.Wrapf(err, "parsing %s entry %q", OptAvroSchemas, key)
+		}
+		if entryIt == nil {
+			return nil, errors.Newf("%s entry %q must be a JSON object", OptAvroSchemas, key)
+		}
+		var o AvroSchemaOverride
+		for entryIt.Next() {
+			text, err := entryIt.Value().AsText()
+			if err != nil || text == nil {
+				return nil, errors.Newf("%s entry %q field %q must be a string",
+					OptAvroSchemas, key, entryIt.Key())
+			}
+			switch entryIt.Key() {
+			case avroSchemasSubjectNameField:
+				if *text == `` {
+					return nil, errors.Newf("%s entry %q has an empty %s",
+						OptAvroSchemas, key, avroSchemasSubjectNameField)
+				}
+				o.SubjectName = *text
+			case avroSchemasVersionField:
+				if avroMode != OptAvroModeRead {
+					return nil, errors.Errorf(
+						`%s entry %q: version is only usable with %s=%s`,
+						OptAvroSchemas, key, OptAvroMode, OptAvroModeRead)
+				}
+				o.Version, err = ParseAvroVersionStrategy(*text)
+				if err != nil {
+					return nil, errors.Wrapf(err, "%s entry %q", OptAvroSchemas, key)
+				}
+			default:
+				return nil, errors.Newf(`%s entry %q has unknown field %q; use %q and %q`,
+					OptAvroSchemas, key, entryIt.Key(),
+					avroSchemasSubjectNameField, avroSchemasVersionField)
+			}
+		}
+		overrides[key] = o
+	}
+
+	// Every configured table must have its value entry, and distinct entries
+	// must not resolve to the same registry subject.
+	effective := make(map[string]string, len(overrides))
+	for key, o := range overrides {
+		if base, ok := strings.CutSuffix(key, avroSubjectSuffixKey); ok {
+			if _, ok := overrides[base+avroSubjectSuffixValue]; !ok {
+				return nil, errors.Newf("%s entry %q requires a matching %q entry",
+					OptAvroSchemas, key, base+avroSubjectSuffixValue)
+			}
+		}
+		subject := key
+		if o.SubjectName != `` {
+			subject = o.SubjectName
+		}
+		if other, ok := effective[subject]; ok {
+			return nil, errors.Newf("%s entries %q and %q resolve to the same subject %q",
+				OptAvroSchemas, other, key, subject)
+		}
+		effective[subject] = key
+	}
+	return overrides, nil
+}
+
 // OnErrorType configures the job behavior when an error occurs.
 type OnErrorType string
 
@@ -146,6 +265,7 @@ const (
 const (
 	OptAvroSchemaPrefix                   = `avro_schema_prefix`
 	OptAvroMode                           = `avro_mode`
+	OptAvroSchemas                        = `avro_schemas`
 	OptConfluentSchemaRegistry            = `confluent_schema_registry`
 	OptCursor                             = `cursor`
 	OptCustomKeyColumn                    = `key_column`
@@ -980,6 +1100,13 @@ func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 		o.AvroMode = AvroModeType(avroMode)
 	}
 
+	if raw, ok := s.m[OptAvroSchemas]; ok {
+		o.AvroSchemas, err = ParseAvroSchemaOverrides(raw, o.AvroMode)
+		if err != nil {
+			return o, err
+		}
+	}
+
 	_, o.KeyInValue = s.m[OptKeyInValue]
 	_, o.TopicInValue = s.m[OptTopicInValue]
 	_, o.UpdatedTimestamps = s.m[OptUpdatedTimestamps]
@@ -1022,6 +1149,10 @@ func (e EncodingOptions) Validate() error {
 
 	if e.AvroMode != `` && e.Format != OptFormatAvro {
 		return errors.Errorf(`%s is only usable with %s=%s`, OptAvroMode, OptFormat, OptFormatAvro)
+	}
+
+	if e.AvroSchemas != nil && e.Format != OptFormatAvro {
+		return errors.Errorf(`%s is only usable with %s=%s`, OptAvroSchemas, OptFormat, OptFormatAvro)
 	}
 
 	if e.Envelope == OptEnvelopeEnriched {
