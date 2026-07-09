@@ -4575,6 +4575,10 @@ func (m *sessionDataMutator) SetOptimizerUseMinRowCountAntiJoinFix(val bool) {
 	m.data.OptimizerUseMinRowCountAntiJoinFix = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseHistogramsForWithScans(val bool) {
+	m.data.OptimizerUseHistogramsForWithScans = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
