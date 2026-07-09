@@ -527,6 +527,10 @@ func (tc *TxnCoordSender) Send(
 		return nil, pErr
 	}
 
+	if pErr := maybeRejectInternalHeaderFields(ba); pErr != nil {
+		return nil, pErr
+	}
+
 	if ba.IsSingleEndTxnRequest() && !tc.hasAcquiredLocksOrBufferedWritesLocked() {
 		return nil, tc.finalizeNonLockingTxnLocked(ctx, ba)
 	}
@@ -736,6 +740,43 @@ func (tc *TxnCoordSender) maybeRejectIncompatibleRequest(
 	default:
 		panic("unexpected TxnType")
 	}
+}
+
+// maybeRejectInternalHeaderFields rejects batches on which the client has set
+// a header field that is owned by the txnInterceptor stack or the DistSender.
+// Those layers assume they are the only writers of these fields, and some
+// propagate the inbound header onto batches they construct themselves (for
+// example, the txnWriteBuffer copies it onto the batch that flushes buffered
+// writes), so a client-set value can change the meaning of requests the
+// client never sent. The check is a (test-build only) assertion because no
+// legitimate client sets these fields.
+//
+// This also catches reuse of a BatchRequest across Send calls: the
+// interceptors mutate the inbound header in place, so a reused batch arrives
+// here carrying internal state from its previous send.
+func maybeRejectInternalHeaderFields(ba *kvpb.BatchRequest) *kvpb.Error {
+	if !buildutil.CrdbTestBuild {
+		return nil
+	}
+	var field string
+	switch {
+	case ba.AsyncConsensus:
+		field = "AsyncConsensus"
+	case ba.CanForwardReadTimestamp:
+		field = "CanForwardReadTimestamp"
+	case ba.DistinctSpans:
+		field = "DistinctSpans"
+	case ba.AmbiguousReplayProtection:
+		field = "AmbiguousReplayProtection"
+	case ba.ProxyRangeInfo != nil:
+		field = "ProxyRangeInfo"
+	case ba.HasBufferedAllPrecedingWrites:
+		field = "HasBufferedAllPrecedingWrites"
+	default:
+		return nil
+	}
+	return kvpb.NewError(errors.AssertionFailedf(
+		"client-set %s on batch sent to TxnCoordSender", errors.Safe(field)))
 }
 
 // maybeRejectClientLocked checks whether the transaction is in a state that
