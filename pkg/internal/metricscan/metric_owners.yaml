@@ -593,6 +593,7 @@ owners:
   queue_lease_processingnanos: cockroachlabs/kv
   queue_lease_purgatory: cockroachlabs/kv
   queue_merge_pending: cockroachlabs/kv
+  queue_merge_process_cooldown: cockroachlabs/kv
   queue_merge_process_failure: cockroachlabs/kv
   queue_merge_process_success: cockroachlabs/kv
   queue_merge_processingnanos: cockroachlabs/kv
