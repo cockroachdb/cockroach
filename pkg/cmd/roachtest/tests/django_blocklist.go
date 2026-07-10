@@ -161,6 +161,7 @@ var djangoBlocklist = blocklist{
 	`schema.tests.SchemaTests.test_alter_text_field_to_date_field`:     "alter type requires USING",
 	`schema.tests.SchemaTests.test_alter_text_field_to_datetime_field`: "alter type requires USING",
 	`schema.tests.SchemaTests.test_alter_text_field_to_time_field`:     "alter type requires USING",
+	`test_utils.tests.HTMLEqualTests.test_parsing_errors`:              "Python 3.10 HTMLParser fix (CPython gh-135661) breaks the test used by the pinned fork",
 }
 
 var djangoIgnoreList = blocklist{
