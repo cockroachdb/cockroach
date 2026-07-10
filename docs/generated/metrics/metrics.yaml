@@ -13838,6 +13838,15 @@ layers:
       aggregation: AVG
       derivative: NONE
       visibility: SUPPORT
+    - name: queue.merge.process.cooldown
+      exported_name: queue_merge_process_cooldown
+      description: Number of times the merge queue processed a range, could not merge it, and armed a cooldown to avoid re-processing it
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: queue.merge.process.failure
       exported_name: queue_merge_process_failure
       description: Number of replicas which failed processing in the merge queue
