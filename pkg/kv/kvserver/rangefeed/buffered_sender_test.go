@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -44,6 +45,65 @@ func TestBufferedSenderReturnsErrorAfterManagerStop(t *testing.T) {
 	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: 1}
 	require.Equal(t, bs.sendBuffered(muxEv, nil).Error(), errors.New("stream sender is stopped").Error())
 	require.Equal(t, 0, bs.len())
+}
+
+// TestBufferedSenderReleasesAllocsOnSendError verifies that when the
+// underlying gRPC stream fails mid-batch, the buffered sender releases the
+// budget allocations of the events it popped from the queue but never sent.
+// Popped events are invisible to cleanup's queue drain, so they must be
+// released on the error return path of BufferedSender.run itself.
+func TestBufferedSenderReleasesAllocsOnSendError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	testServerStream := newTestServerStream()
+	st := cluster.MakeTestingClusterSettings()
+	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
+	sm := NewStreamManager(bs, NewStreamManagerMetrics())
+
+	streamID := int64(1)
+	sm.RegisteringStream(streamID)
+
+	fb := newTestBudget(math.MaxInt64)
+	defer fb.Close(ctx)
+	budgetUsed := func() int64 {
+		fb.mu.Lock()
+		defer fb.mu.Unlock()
+		return fb.mu.memBudget.Used()
+	}
+
+	val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	ev := new(kvpb.RangeFeedEvent)
+	ev.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val})
+	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev, RangeID: 1, StreamID: streamID}
+
+	// Buffer several events, each holding a budget allocation, before starting
+	// the sender's run loop so that they are popped as a single batch.
+	const numEvents = 5
+	const allocSize = 10
+	for range numEvents {
+		alloc, err := fb.TryGet(ctx, allocSize)
+		require.NoError(t, err)
+		require.NoError(t, bs.sendBuffered(muxEv, alloc))
+		// The queue holds its own reference now; drop ours.
+		alloc.Release(ctx)
+	}
+	require.Equal(t, int64(numEvents*allocSize), budgetUsed())
+
+	// Break the stream before the run loop gets a chance to send anything.
+	sendErr := errors.New("broken stream")
+	testServerStream.SetSendErr(sendErr)
+	require.NoError(t, sm.Start(ctx, stopper))
+	require.ErrorIs(t, <-sm.Error(), sendErr)
+	sm.Stop(ctx)
+
+	// Every allocation must have been returned: the event whose send failed on
+	// the send path, the popped-but-unsent events on the error return path, and
+	// any still-queued events by cleanup.
+	require.Zero(t, budgetUsed())
 }
 
 // TestBufferedSenderOnOverflow tests that BufferedSender handles overflow

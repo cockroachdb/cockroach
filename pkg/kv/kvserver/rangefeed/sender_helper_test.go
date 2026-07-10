@@ -35,6 +35,8 @@ type testServerStream struct {
 	eventsSent int
 	// streamEvents is a map of streamID to a list of events sent to that stream.
 	streamEvents map[int64][]*kvpb.MuxRangeFeedEvent
+	// sendErr, if non-nil, is returned by all subsequent Send calls.
+	sendErr error
 
 	// t can optionally set for additional logging.
 	t *testing.T
@@ -114,9 +116,20 @@ func (s *testServerStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	}
 	s.Lock()
 	defer s.Unlock()
+	if s.sendErr != nil {
+		return s.sendErr
+	}
 	s.eventsSent++
 	s.streamEvents[e.StreamID] = append(s.streamEvents[e.StreamID], e)
 	return nil
+}
+
+// SetSendErr makes all subsequent Send calls fail with err, mimicking a broken
+// gRPC stream.
+func (s *testServerStream) SetSendErr(err error) {
+	s.Lock()
+	defer s.Unlock()
+	s.sendErr = err
 }
 
 // BlockSend blocks any subsequent Send methods until the unblock callback is
