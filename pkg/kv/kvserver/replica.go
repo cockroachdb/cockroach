@@ -1059,6 +1059,25 @@ type Replica struct {
 	// semaphores.
 	splitQueueThrottle, mergeQueueThrottle util.EveryN
 
+	// mergeQueueCooldownMu records the time of the most recent merge queue
+	// process() attempt on this replica that found the range currently
+	// unmergeable (e.g. its right-hand neighbor has an unexpired sticky bit, is
+	// too large, or the merge would thrash). While kv.range_merge.cooldown has
+	// not elapsed since that time, mergeQueue.shouldQueue declines to re-offer
+	// the range, which stops the merge queue from busy-looping at top priority
+	// on a range it cannot merge (issue #171648).
+	//
+	// It is in-memory only and is intentionally lost on restart or lease
+	// transfer: the new leaseholder simply re-arms it after a single process()
+	// attempt. It is never set on a successful merge, so cascading merges (e.g.
+	// collapsing the many empty ranges left by a dropped table) stay fast. A
+	// dedicated mutex is used rather than r.mu because the field is read from
+	// shouldQueue and written from process(), neither of which holds r.mu.
+	mergeQueueCooldownMu struct {
+		syncutil.Mutex
+		ts hlc.Timestamp
+	}
+
 	// loadBasedSplitter keeps information about load-based splitting.
 	loadBasedSplitter split.Decider
 
@@ -1838,6 +1857,23 @@ func (r *Replica) setQueueLastProcessed(
 ) error {
 	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
 	return r.store.DB().PutInline(ctx, key, &timestamp)
+}
+
+// getMergeCooldown returns the time of the most recent merge queue process
+// attempt on this replica that found the range unmergeable, or the zero
+// timestamp if there has been none. See mergeQueueCooldownMu.
+func (r *Replica) getMergeCooldown() hlc.Timestamp {
+	r.mergeQueueCooldownMu.Lock()
+	defer r.mergeQueueCooldownMu.Unlock()
+	return r.mergeQueueCooldownMu.ts
+}
+
+// setMergeCooldown records that a merge queue process attempt on this replica
+// found the range unmergeable at the given time. See mergeQueueCooldownMu.
+func (r *Replica) setMergeCooldown(ts hlc.Timestamp) {
+	r.mergeQueueCooldownMu.Lock()
+	defer r.mergeQueueCooldownMu.Unlock()
+	r.mergeQueueCooldownMu.ts = ts
 }
 
 // RaftStatus returns the current raft status of the replica. It returns nil
