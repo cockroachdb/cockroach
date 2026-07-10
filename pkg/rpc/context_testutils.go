@@ -181,12 +181,19 @@ func (d *disablingDRPCClientStream) MsgRecv(msg drpc.Message, enc drpc.Encoding)
 // ... run operations
 // p.{Add,Remove}Partition(from, to)
 //
-// Partitions are reference-counted: each AddPartition(from, to) call must be
-// matched by a RemovePartition(from, to) call, and the connection is
-// partitioned as long as the count is positive. This allows concurrent actors
-// (e.g. a test worker injecting partitions and TestCluster.CrashNode isolating
-// a crashing node) to independently add and remove the same partition without
+// In addition to pairwise partitions, a node can be fully isolated from all
+// other nodes with {Add,Remove}NodeIsolation. Unlike a set of pairwise
+// partitions, the isolation does not require knowing the identities of the
+// peers, and extends to nodes that join or restart while it is in effect.
+//
+// Partitions and isolations are reference-counted: each Add call must be
+// matched by a Remove call, and the connection is severed as long as any
+// count affecting it is positive. This allows concurrent actors (e.g. a test
+// worker injecting partitions and TestCluster.CrashNode isolating a crashing
+// node) to independently sever and restore the same connection without
 // cancelling each other's effect.
+//
+// TODO(pav-kv): add tests for this type.
 type Partitioner struct {
 	partitionsEnabled atomic.Bool
 	nodeAddrMap       syncutil.Map[string, roachpb.NodeID]
@@ -196,6 +203,10 @@ type Partitioner struct {
 		// be able to connect to, with the number of times each partition has been
 		// added and not yet removed. Invariant: all counts are positive.
 		partitions map[roachpb.NodeID]map[roachpb.NodeID]int
+		// isolated is the set of NodeIDs that are severed from all other nodes,
+		// in both directions, with the number of times the isolation has been
+		// added and not yet removed. Invariant: all counts are positive.
+		isolated map[roachpb.NodeID]int
 	}
 }
 
@@ -254,11 +265,40 @@ func (p *Partitioner) RemovePartition(from roachpb.NodeID, to roachpb.NodeID) er
 	return err
 }
 
+// AddNodeIsolation adds one reference to the full isolation of the given
+// node: all connections to and from it are severed, including with nodes that
+// join or restart while the isolation is in effect. The isolation remains in
+// effect until RemoveNodeIsolation has been called as many times as
+// AddNodeIsolation.
+func (p *Partitioner) AddNodeIsolation(id roachpb.NodeID) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mu.isolated == nil {
+		p.mu.isolated = make(map[roachpb.NodeID]int)
+	}
+	p.mu.isolated[id]++
+}
+
+// RemoveNodeIsolation removes one reference to the full isolation of the
+// given node, and errors out if the node is not isolated.
+func (p *Partitioner) RemoveNodeIsolation(id roachpb.NodeID) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mu.isolated[id] == 0 {
+		return errors.Newf("cannot remove isolation of node %d; it is not isolated", id)
+	}
+	p.mu.isolated[id]--
+	if p.mu.isolated[id] == 0 {
+		delete(p.mu.isolated, id)
+	}
+	return nil
+}
+
 func (p *Partitioner) isPartitioned(from roachpb.NodeID, to roachpb.NodeID) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.mu.partitions == nil {
-		return false
+	if p.mu.isolated[from] > 0 || p.mu.isolated[to] > 0 {
+		return true
 	}
 	if toPartitions, ok := p.mu.partitions[from]; ok {
 		if _, ok := toPartitions[to]; ok {
