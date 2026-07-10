@@ -8,6 +8,7 @@ package backup
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -22,9 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/errors"
 )
 
 func distBackupPlanSpecs(
@@ -66,29 +65,13 @@ func distBackupPlanSpecs(
 		}
 	}
 
-	if encryption != nil && encryption.Mode == jobspb.EncryptionMode_KMS {
-		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, kmsEnv)
+	var fileEncryption *kvpb.FileEncryptionOptions
+	if encryption != nil {
+		key, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
 			return nil, err
 		}
-		defer func() {
-			err := kms.Close()
-			if err != nil {
-				log.Infof(ctx, "failed to close KMS: %+v", err)
-			}
-		}()
-
-		encryption.Key, err = kms.Decrypt(ctx, encryption.KMSInfo.EncryptedDataKey)
-		if err != nil {
-			return nil, errors.Wrap(err,
-				"failed to decrypt data key before starting BackupDataProcessor")
-		}
-	}
-	// Wrap the relevant BackupEncryptionOptions to be used by the Backup
-	// processor and KV ExportRequest.
-	var fileEncryption *kvpb.FileEncryptionOptions
-	if encryption != nil {
-		fileEncryption = &kvpb.FileEncryptionOptions{Key: encryption.Key}
+		fileEncryption = &kvpb.FileEncryptionOptions{Key: key}
 	}
 
 	// First construct spans based on span partitions. Then add on
