@@ -2207,12 +2207,19 @@ func (tc *TestCluster) CrashNode(idx int) {
 	// block RecvMsg on existing client streams that peers have open to the
 	// crashing node, preventing them from reading responses sent by the crashing
 	// node's server-side handlers.
+	//
+	// Capture the peer node IDs once, and use the same IDs for adding and
+	// removing the partitions: a concurrently restarting peer can report
+	// different NodeID() values across reads (zero until it has started).
 	crashingNodeID := tc.Servers[idx].NodeID()
+	peerNodeIDs := make([]roachpb.NodeID, 0, len(tc.Servers)-1)
 	for peerIdx := range tc.Servers {
 		if peerIdx == idx {
 			continue
 		}
-		peerNodeID := tc.Servers[peerIdx].NodeID()
+		peerNodeIDs = append(peerNodeIDs, tc.Servers[peerIdx].NodeID())
+	}
+	for _, peerNodeID := range peerNodeIDs {
 		require.NoError(tc.t, tc.partitioner.AddPartition(crashingNodeID, peerNodeID))
 		require.NoError(tc.t, tc.partitioner.AddPartition(peerNodeID, crashingNodeID))
 	}
@@ -2242,14 +2249,9 @@ func (tc *TestCluster) CrashNode(idx int) {
 		serverKnobs.StickyVFSRegistry.Set(stickyID, crashFS)
 	}
 
-	// Remove all partitions that were added above.
-	// TODO(pav-kv): this cancels any pre-existing partitions. We could fix that
-	// by remembering the previous partitions and restoring them.
-	for peerIdx := range tc.Servers {
-		if peerIdx == idx {
-			continue
-		}
-		peerNodeID := tc.Servers[peerIdx].NodeID()
+	// Remove the partitions added above. Partitions are reference-counted, so
+	// this does not cancel partitions added concurrently by other actors.
+	for _, peerNodeID := range peerNodeIDs {
 		require.NoError(tc.t, tc.partitioner.RemovePartition(crashingNodeID, peerNodeID))
 		require.NoError(tc.t, tc.partitioner.RemovePartition(peerNodeID, crashingNodeID))
 	}

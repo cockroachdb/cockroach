@@ -180,14 +180,22 @@ func (d *disablingDRPCClientStream) MsgRecv(msg drpc.Message, enc drpc.Encoding)
 // p.{Add,Remove}Partition(from, to)
 // ... run operations
 // p.{Add,Remove}Partition(from, to)
+//
+// Partitions are reference-counted: each AddPartition(from, to) call must be
+// matched by a RemovePartition(from, to) call, and the connection is
+// partitioned as long as the count is positive. This allows concurrent actors
+// (e.g. a test worker injecting partitions and TestCluster.CrashNode isolating
+// a crashing node) to independently add and remove the same partition without
+// cancelling each other's effect.
 type Partitioner struct {
 	partitionsEnabled atomic.Bool
 	nodeAddrMap       syncutil.Map[string, roachpb.NodeID]
 	mu                struct {
 		syncutil.Mutex
-		// partitions is a map from NodeID to a set of NodeIDs that the node should
-		// not be able to connect to.
-		partitions map[roachpb.NodeID]map[roachpb.NodeID]struct{}
+		// partitions maps a NodeID to the set of NodeIDs that the node should not
+		// be able to connect to, with the number of times each partition has been
+		// added and not yet removed. Invariant: all counts are positive.
+		partitions map[roachpb.NodeID]map[roachpb.NodeID]int
 	}
 }
 
@@ -202,6 +210,9 @@ func (p *Partitioner) RegisterNodeAddr(addr string, id roachpb.NodeID) {
 	p.nodeAddrMap.Store(addr, &id)
 }
 
+// AddPartition adds one reference to the partition from one node to another.
+// The partition remains in effect until RemovePartition has been called as
+// many times as AddPartition.
 func (p *Partitioner) AddPartition(from roachpb.NodeID, to roachpb.NodeID) error {
 	if from == to {
 		return errors.Newf("cannot add partition from node %d to itself", from)
@@ -209,15 +220,18 @@ func (p *Partitioner) AddPartition(from roachpb.NodeID, to roachpb.NodeID) error
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.mu.partitions == nil {
-		p.mu.partitions = make(map[roachpb.NodeID]map[roachpb.NodeID]struct{})
+		p.mu.partitions = make(map[roachpb.NodeID]map[roachpb.NodeID]int)
 	}
 	if p.mu.partitions[from] == nil {
-		p.mu.partitions[from] = make(map[roachpb.NodeID]struct{})
+		p.mu.partitions[from] = make(map[roachpb.NodeID]int)
 	}
-	p.mu.partitions[from][to] = struct{}{}
+	p.mu.partitions[from][to]++
 	return nil
 }
 
+// RemovePartition removes one reference to the partition from one node to
+// another, and errors out if the partition does not exist. The partition is
+// lifted once all references are removed.
 func (p *Partitioner) RemovePartition(from roachpb.NodeID, to roachpb.NodeID) error {
 	err := errors.Newf("cannot remove partition from node %d to %d; it doesn't exist", from, to)
 	p.mu.Lock()
@@ -227,9 +241,12 @@ func (p *Partitioner) RemovePartition(from roachpb.NodeID, to roachpb.NodeID) er
 	}
 	if toNodes, ok := p.mu.partitions[from]; ok {
 		if _, ok = toNodes[to]; ok {
-			delete(toNodes, to)
-			if len(toNodes) == 0 {
-				delete(p.mu.partitions, from)
+			toNodes[to]--
+			if toNodes[to] == 0 {
+				delete(toNodes, to)
+				if len(toNodes) == 0 {
+					delete(p.mu.partitions, from)
+				}
 			}
 			return nil
 		}
