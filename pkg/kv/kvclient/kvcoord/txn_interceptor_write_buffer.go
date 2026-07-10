@@ -28,6 +28,10 @@ import (
 )
 
 // BufferedWritesEnabled is used to enable write buffering.
+//
+// NB: write buffering is currently disabled outside of test builds regardless
+// of this setting; see (*kv.Txn).SetBufferedWritesEnabled. The setting default
+// is false to match.
 var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.enabled",
