@@ -557,11 +557,19 @@ func TestOnlineRestoreErrors(t *testing.T) {
 		rSQLDB.ExpectErr(t, "revision history backup not supported",
 			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", incrementalBackupWithRevs))
 	})
-	t.Run("external storage locations that don't support early boot are unsupported", func(t *testing.T) {
-		rSQLDB.Exec(t, "CREATE DATABASE bank")
-		rSQLDB.Exec(t, "BACKUP INTO 'userfile:///my_backups'")
-		rSQLDB.ExpectErr(t, "scheme userfile is not accessible during node startup",
-			"RESTORE DATABASE bank FROM LATEST IN 'userfile:///my_backups' WITH EXPERIMENTAL DEFERRED COPY")
+	t.Run("external storage that can't be linked falls back to ingest", func(t *testing.T) {
+		// userfile is reachable only from the SQL layer, so its files can't be
+		// linked below Raft. Online restore should fall back to ingesting them
+		// rather than hard-failing.
+		rSQLDB.Exec(t, "CREATE DATABASE ingestme")
+		rSQLDB.Exec(t, "CREATE TABLE ingestme.t (a INT PRIMARY KEY)")
+		rSQLDB.Exec(t, "INSERT INTO ingestme.t VALUES (1), (2), (3)")
+		rSQLDB.Exec(t, "BACKUP DATABASE ingestme INTO 'userfile:///my_backups'")
+		rSQLDB.Exec(t, "RESTORE DATABASE ingestme FROM LATEST IN 'userfile:///my_backups' "+
+			"WITH EXPERIMENTAL DEFERRED COPY, new_db_name='ingested'")
+		var count int
+		rSQLDB.QueryRow(t, "SELECT count(*) FROM ingested.t").Scan(&count)
+		require.Equal(t, 3, count)
 	})
 	t.Run("verify_backup_table_data not supported", func(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", fullBackup))

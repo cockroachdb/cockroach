@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1033,129 +1034,154 @@ func TestRestoreEntryCoverZeroSizeFiles(t *testing.T) {
 	}
 }
 
-// TestUseLinkLayerOrdering verifies that UseLink is correctly set based on
-// layer ordering: once a layer with revision history is encountered, that
-// layer and all subsequent layers must have UseLink=false.
+// TestUseLinkLayerOrdering verifies that UseLink is set as a strict oldest
+// prefix: once a layer must be ingested -- because it carries revision history
+// or because its store cannot be linked -- that layer and every newer layer are
+// ingested too. This preserves the invariant the hybrid link+ingest path relies
+// on: every linked layer is older than every ingested layer, so tombstones drawn
+// from the (newer) ingested layers only ever shadow older linked data.
 func TestUseLinkLayerOrdering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	// Register nodelocal for early boot so nodelocal-backed layers are linkable
+	// (linkSupportedForURI). Otherwise every file would fall back to ingest and
+	// the per-layer UseLink assignment under test could not be exercised.
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
 	defer cleanupFn()
 	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 
 	c := makeCoverUtils(ctx, t, &execCfg)
 
+	// unlinkableDir is a userfile store, reachable only from the SQL layer and so
+	// not linkable. Its nodelocal backing keeps it openable for
+	// GetBackupManifestIterFactories; linkability keys off the userfile URI.
+	unlinkableES, err := execCfg.DistSQLSrv.ExternalStorageFromURI(
+		ctx, "userfile:///mock", username.RootUserName())
+	require.NoError(t, err)
+	unlinkableDir := unlinkableES.Conf()
+
 	makeSpan := func(start, end string) roachpb.Span {
 		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
 	}
 
-	// Create backup manifests with different revision history configurations.
-	// Layer 0: no revision history (can link)
-	// Layer 1: no revision history (can link)
-	// Layer 2: HAS revision history (cannot link)
-	// Layer 3: no revision history (cannot link - because layer 2 has rev history)
-	backups := []backuppb.BackupManifest{
+	// layerSpec describes one backup layer: where its files live and whether it
+	// carries revision history.
+	type layerSpec struct {
+		dir             cloudpb.ExternalStorage
+		revisionHistory bool
+	}
+	testCases := []struct {
+		name         string
+		layers       []layerSpec
+		expectLinked []int32
+	}{
 		{
-			Spans:             roachpb.Spans{makeSpan("a", "z")},
-			EndTime:           hlc.Timestamp{WallTime: 1},
-			RevisionStartTime: hlc.Timestamp{}, // no revision history
-			MVCCFilter:        backuppb.MVCCFilter_Latest,
-			Dir:               c.dir,
-			Files: []backuppb.BackupManifest_File{
-				{Span: makeSpan("a", "m"), Path: "layer0-file1"},
+			name: "revision-history layer and all newer layers are ingested",
+			layers: []layerSpec{
+				{dir: c.dir},
+				{dir: c.dir},
+				{dir: c.dir, revisionHistory: true},
+				{dir: c.dir},
 			},
+			expectLinked: []int32{0, 1},
 		},
 		{
-			Spans:             roachpb.Spans{makeSpan("a", "z")},
-			StartTime:         hlc.Timestamp{WallTime: 1},
-			EndTime:           hlc.Timestamp{WallTime: 2},
-			RevisionStartTime: hlc.Timestamp{}, // no revision history
-			MVCCFilter:        backuppb.MVCCFilter_Latest,
-			Dir:               c.dir,
-			Files: []backuppb.BackupManifest_File{
-				{Span: makeSpan("a", "m"), Path: "layer1-file1"},
+			// An older unlinkable layer forces the newer linkable layer to ingest
+			// too, so linked layers stay strictly older than ingested ones.
+			name: "unlinkable layer and all newer layers are ingested",
+			layers: []layerSpec{
+				{dir: c.dir},
+				{dir: unlinkableDir},
+				{dir: c.dir},
 			},
-		},
-		{
-			Spans:             roachpb.Spans{makeSpan("a", "z")},
-			StartTime:         hlc.Timestamp{WallTime: 2},
-			EndTime:           hlc.Timestamp{WallTime: 3},
-			RevisionStartTime: hlc.Timestamp{WallTime: 2}, // HAS revision history!
-			MVCCFilter:        backuppb.MVCCFilter_All,
-			Dir:               c.dir,
-			Files: []backuppb.BackupManifest_File{
-				{Span: makeSpan("a", "m"), Path: "layer2-file1"},
-			},
-		},
-		{
-			Spans:             roachpb.Spans{makeSpan("a", "z")},
-			StartTime:         hlc.Timestamp{WallTime: 3},
-			EndTime:           hlc.Timestamp{WallTime: 4},
-			RevisionStartTime: hlc.Timestamp{}, // no revision history, but after layer with rev history
-			MVCCFilter:        backuppb.MVCCFilter_Latest,
-			Dir:               c.dir,
-			Files: []backuppb.BackupManifest_File{
-				{Span: makeSpan("a", "m"), Path: "layer3-file1"},
-			},
+			expectLinked: []int32{0},
 		},
 	}
-
-	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
-	require.NoError(t, err)
 
 	emptySpanFrontier, err := spanUtils.MakeFrontierAt(hlc.Timestamp{})
 	require.NoError(t, err)
 
-	// Test with useLink=true to verify per-layer UseLink assignment.
-	cover, err := makeImportSpans(
-		ctx,
-		roachpb.Spans{makeSpan("a", "z")},
-		backups,
-		layerToIterFactory,
-		noSpanTargetSize,
-		emptySpanFrontier,
-		nil,
-		true, /* useLink */
-	)
-	require.NoError(t, err)
-	require.NotEmpty(t, cover)
-
-	// Check UseLink values for each file.
-	for _, entry := range cover {
-		for _, file := range entry.Files {
-			switch file.Layer {
-			case 0:
-				require.True(t, file.UseLink, "layer 0 file should be linkable")
-			case 1:
-				require.True(t, file.UseLink, "layer 1 file should be linkable")
-			case 2:
-				require.False(t, file.UseLink, "layer 2 file should NOT be linkable (has revision history)")
-			case 3:
-				require.False(t, file.UseLink, "layer 3 file should NOT be linkable (after layer with revision history)")
+	// linkedLayers returns the set of layer indices linked in the cover.
+	linkedLayers := func(cover []execinfrapb.RestoreSpanEntry) map[int32]bool {
+		linked := make(map[int32]bool)
+		for _, entry := range cover {
+			for _, file := range entry.Files {
+				if file.UseLink {
+					linked[file.Layer] = true
+				}
 			}
 		}
+		return linked
 	}
 
-	// Test with useLink=false to verify all files have UseLink=false.
-	coverNoLink, err := makeImportSpans(
-		ctx,
-		roachpb.Spans{makeSpan("a", "z")},
-		backups,
-		layerToIterFactory,
-		noSpanTargetSize,
-		emptySpanFrontier,
-		nil,
-		false, /* useLink */
-	)
-	require.NoError(t, err)
-	require.NotEmpty(t, coverNoLink)
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			backups := make([]backuppb.BackupManifest, len(tt.layers))
+			for i, l := range tt.layers {
+				mvccFilter := backuppb.MVCCFilter_Latest
+				var revStart hlc.Timestamp
+				if l.revisionHistory {
+					mvccFilter = backuppb.MVCCFilter_All
+					revStart = hlc.Timestamp{WallTime: int64(i)}
+				}
+				backups[i] = backuppb.BackupManifest{
+					Spans:             roachpb.Spans{makeSpan("a", "z")},
+					StartTime:         hlc.Timestamp{WallTime: int64(i)},
+					EndTime:           hlc.Timestamp{WallTime: int64(i + 1)},
+					RevisionStartTime: revStart,
+					MVCCFilter:        mvccFilter,
+					Dir:               l.dir,
+					Files: []backuppb.BackupManifest_File{
+						{Span: makeSpan("a", "m"), Path: fmt.Sprintf("layer%d-file1", i)},
+					},
+				}
+			}
 
-	for _, entry := range coverNoLink {
-		for _, file := range entry.Files {
-			require.False(t, file.UseLink, "all files should have UseLink=false when useLink=false")
-		}
+			layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(
+				ctx, execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
+			require.NoError(t, err)
+
+			cover, err := makeImportSpans(
+				ctx,
+				roachpb.Spans{makeSpan("a", "z")},
+				backups,
+				layerToIterFactory,
+				noSpanTargetSize,
+				emptySpanFrontier,
+				nil,
+				true, /* useLink */
+			)
+			require.NoError(t, err)
+			require.NotEmpty(t, cover)
+
+			linked := linkedLayers(cover)
+			expected := make(map[int32]bool)
+			for _, l := range tt.expectLinked {
+				expected[l] = true
+			}
+			for layer := range tt.layers {
+				require.Equalf(t, expected[int32(layer)], linked[int32(layer)],
+					"layer %d: unexpected UseLink", layer)
+			}
+
+			// With useLink=false, no layer is linked.
+			coverNoLink, err := makeImportSpans(
+				ctx,
+				roachpb.Spans{makeSpan("a", "z")},
+				backups,
+				layerToIterFactory,
+				noSpanTargetSize,
+				emptySpanFrontier,
+				nil,
+				false, /* useLink */
+			)
+			require.NoError(t, err)
+			require.NotEmpty(t, coverNoLink)
+			require.Empty(t, linkedLayers(coverNoLink))
+		})
 	}
 }
 
@@ -1167,6 +1193,10 @@ func TestUseLinkLevelLimit(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	// Register nodelocal for early boot so its files are considered linkable
+	// (linkSupportedForURI). Otherwise every file would fall back to ingest and
+	// the count-based UseLink switch under test could not be exercised.
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
 	defer cleanupFn()
 	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)

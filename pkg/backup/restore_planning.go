@@ -1987,15 +1987,6 @@ func doRestorePlan(
 		}
 	}
 
-	if restoreStmt.Options.OnlineImpl() {
-		// validate that from uris are allowed in online restore
-		for _, path := range from {
-			if err := uriCompatibleWithOnlineRestore(ctx, p.InternalSQLTxn(), path); err != nil {
-				return err
-			}
-		}
-	}
-
 	defaultCollectionURI, _, err := backupdest.GetURIsByLocalityKV(from, "")
 	if err != nil {
 		return err

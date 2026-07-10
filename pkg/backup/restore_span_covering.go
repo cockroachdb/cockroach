@@ -342,7 +342,26 @@ func generateAndSendImportSpans(
 	if maxLevels > 0 && len(backups) > maxLevels {
 		countSwitchLayer = maxLevels - 1
 	}
-	switchLayer := min(firstRevHistoryLayer, countSwitchLayer)
+
+	// Find the first layer that cannot be linked because its store is reachable
+	// only from the SQL layer (userfile, prod nodelocal) rather than below Raft.
+	// Such a layer, and every newer layer, must be ingested: the hybrid
+	// link+ingest path shadows keys in linked layers with tombstones drawn from
+	// the ingested files, which is only correct if every ingested layer is newer
+	// than every linked layer. Deciding linkability per layer (rather than per
+	// file) keeps the linked layers a strict oldest prefix and preserves that
+	// ordering even when a chain spans multiple storage schemes.
+	firstUnlinkableLayer := len(backups)
+	if useLink {
+		for i := range backups {
+			if !layerLinkable(backups[i], backupLocalityMap[i]) {
+				firstUnlinkableLayer = i
+				break
+			}
+		}
+	}
+
+	switchLayer := min(firstRevHistoryLayer, countSwitchLayer, firstUnlinkableLayer)
 
 	// lastCovSpanSize is the size of files added to the right-most span of
 	// the cover so far.
@@ -359,19 +378,26 @@ func generateAndSendImportSpans(
 		}
 		for layer := range covFilesByLayer {
 			for _, f := range covFilesByLayer[layer] {
+				fileDir := backups[layer].Dir
+				if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
+					fileDir = dir
+				}
+
 				// A file can be linked if:
 				// 1. useLink is true (caller wants linking)
-				// 2. It's in a layer before the switch to ingest (the earlier of
-				//    the first revision-history layer and the count boundary)
+				// 2. It's in a layer before the switch to ingest, i.e. the earliest
+				//    of the first revision-history layer, the count boundary, and
+				//    the first layer whose store can't be linked (see switchLayer)
 				// 3. It doesn't have range keys (online restore doesn't support them)
 				// At and beyond switchLayer all layers must be ingested, both to
-				// maintain correct MVCC/LSM ordering across revision-history layers
-				// and to merge a long link tail into a single ingested level.
+				// maintain correct MVCC/LSM ordering across revision-history and
+				// unlinkable layers and to merge a long link tail into a single
+				// ingested level.
 				canLink := useLink && layer < switchLayer && !f.HasRangeKeys
 
 				fileSpec := execinfrapb.RestoreFileSpec{
 					Path:                    f.Path,
-					Dir:                     backups[layer].Dir,
+					Dir:                     fileDir,
 					BackupFileEntrySpan:     f.Span,
 					BackupFileEntryCounts:   f.EntryCounts,
 					BackingFileSize:         f.BackingFileSize,
@@ -379,9 +405,6 @@ func generateAndSendImportSpans(
 					Layer:                   int32(layer),
 					HasRangeKeys:            f.HasRangeKeys,
 					UseLink:                 canLink,
-				}
-				if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
-					fileSpec.Dir = dir
 				}
 				entry.Files = append(entry.Files, fileSpec)
 			}
