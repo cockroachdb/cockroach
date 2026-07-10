@@ -290,7 +290,7 @@ func (bs *BufferedSender) run(
 				}
 
 				bs.metrics.BufferedSenderQueueSize.Dec(int64(len(eventsBuf)))
-				for _, evt := range eventsBuf {
+				for i, evt := range eventsBuf {
 					// TODO(ssd): This might be another location where we could transform
 					// multiple events into BulkEvents. We can't just throw them all in a
 					// bulk event though since we are processing events for different
@@ -301,6 +301,13 @@ func (bs *BufferedSender) run(
 						onError(evt.ev.StreamID)
 					}
 					if err != nil {
+						// The stream is broken and we are shutting down. Release the
+						// allocations of the events that were popped from the queue but
+						// never sent; they are invisible to cleanup's queue drain. Events
+						// still in the queue are released by cleanup.
+						for _, unsent := range eventsBuf[i+1:] {
+							unsent.alloc.Release(ctx)
+						}
 						return err
 					}
 				}
