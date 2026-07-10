@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -136,11 +137,23 @@ func restoreOptionsAllowFastCopy(opts tree.RestoreOptions) bool {
 // maybeDefaultToFastCopy flips an unspecified RESTORE to experimental fast copy
 // mode when either the test hook or the cluster setting asks for it and the
 // options allow it. It is a no-op if the user explicitly chose a mode.
-func maybeDefaultToFastCopy(restoreStmt *tree.Restore, sv *settings.Values) {
+func maybeDefaultToFastCopy(
+	restoreStmt *tree.Restore, nodeID *base.SQLIDContainer, sv *settings.Values,
+) {
 	if restoreStmt.Options.ExperimentalCopy || restoreStmt.Options.ExperimentalOnline {
 		return
 	}
 	if !testFastRestore() && !defaultExperimentalCopy.Get(sv) {
+		return
+	}
+	// Fast copy links backup files below Raft via LinkExternalSSTable, which
+	// requires the SQL server to be colocated with the storage (KV) layer. That
+	// holds for the system tenant and shared-process tenants (both have a KV node
+	// ID) but not a separate-process SQL server, where the link is rejected. The
+	// presence of a node ID is exactly that distinction. Don't silently default to
+	// a mode that can't run here; an explicit EXPERIMENTAL COPY still surfaces the
+	// error.
+	if _, hasNodeID := nodeID.OptionalNodeID(); !hasNodeID {
 		return
 	}
 	if !restoreOptionsAllowFastCopy(restoreStmt.Options) {
@@ -1502,7 +1515,7 @@ func restoreTypeCheck(
 	if !ok {
 		return false, nil, nil
 	}
-	maybeDefaultToFastCopy(restoreStmt, &p.ExecCfg().Settings.SV)
+	maybeDefaultToFastCopy(restoreStmt, p.ExecCfg().NodeInfo.NodeID, &p.ExecCfg().Settings.SV)
 	if err := exprutil.TypeCheck(
 		ctx, "RESTORE", p.SemaCtx(),
 		exprutil.StringArrays{
@@ -1547,7 +1560,7 @@ func restorePlanHook(
 	if !ok {
 		return nil, nil, false, nil
 	}
-	maybeDefaultToFastCopy(restoreStmt, &p.ExecCfg().Settings.SV)
+	maybeDefaultToFastCopy(restoreStmt, p.ExecCfg().NodeInfo.NodeID, &p.ExecCfg().Settings.SV)
 
 	if err := featureflag.CheckEnabled(
 		ctx,

@@ -961,15 +961,21 @@ func TestMaybeDefaultToFastCopy(t *testing.T) {
 	ctx := context.Background()
 
 	testCases := []struct {
-		name         string
-		settingOn    bool
-		opts         tree.RestoreOptions
-		expectedCopy bool
+		name            string
+		settingOn       bool
+		separateProcess bool
+		opts            tree.RestoreOptions
+		expectedCopy    bool
 	}{
 		{name: "setting off leaves legacy", settingOn: false,
 			opts: tree.RestoreOptions{}, expectedCopy: false},
-		{name: "setting on defaults to fast copy", settingOn: true,
+		// A colocated SQL server (system or shared-process tenant, i.e. one with a
+		// KV node ID) can link, so it defaults to fast copy.
+		{name: "colocated defaults to fast copy", settingOn: true,
 			opts: tree.RestoreOptions{}, expectedCopy: true},
+		// A separate-process SQL server can't link, so it stays legacy.
+		{name: "separate-process falls back to legacy", settingOn: true,
+			separateProcess: true, opts: tree.RestoreOptions{}, expectedCopy: false},
 		{name: "encryption passphrase falls back to legacy", settingOn: true,
 			opts:         tree.RestoreOptions{EncryptionPassphrase: tree.NewStrVal("secret")},
 			expectedCopy: false},
@@ -992,8 +998,15 @@ func TestMaybeDefaultToFastCopy(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			defaultExperimentalCopy.Override(ctx, &st.SV, tc.settingOn)
 
+			// A colocated SQL server has a KV node ID; a separate-process one does
+			// not (OptionalNodeID reports false), which is the signal the gate uses.
+			nodeID := base.NewSQLIDContainerForNode(&base.NodeIDContainer{})
+			if tc.separateProcess {
+				nodeID = (&base.NodeIDContainer{}).SwitchToSQLIDContainerForStandaloneSQLInstance()
+			}
+
 			stmt := &tree.Restore{Options: tc.opts}
-			maybeDefaultToFastCopy(stmt, &st.SV)
+			maybeDefaultToFastCopy(stmt, nodeID, &st.SV)
 
 			require.Equal(t, tc.expectedCopy, stmt.Options.ExperimentalCopy)
 			// The online flag is never set by the default path.
