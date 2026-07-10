@@ -119,6 +119,10 @@ type InternalExecutorOverride struct {
 	// the descriptor from row-level-security policies. See
 	// DescriptorOverride and the corresponding field in
 	// LocalUnmigratableSessionData. uint32 avoids an import cycle.
+	//
+	// The map is captured by reference into the session's SessionData, and a
+	// caller may share one map across many concurrent sessions; neither the
+	// caller nor the executor may mutate it after the first use.
 	DescriptorOverrides map[uint32]DescriptorOverride
 }
 
