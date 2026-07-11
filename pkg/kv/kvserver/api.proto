@@ -43,6 +43,19 @@ message CollectChecksumResponse {
   storage.enginepb.MVCCStatsDelta delta = 3 [(gogoproto.nullable) = false];
   // persisted carries the persisted stats of the replica.
   storage.enginepb.MVCCStats persisted = 4 [(gogoproto.nullable) = false];
+  // diagnostic is a human-readable string containing per-section 16-byte XOR
+  // fold of the exact byte stream fed into the SHA-512 digest, hex-formatted
+  // for logging. This is not a strong checksum but can be cross-checked as a
+  // hint that perhaps a single bit or byte in the data has changed. It is
+  // purely diagnostic and is never used for the consistency decision: when an
+  // inconsistency is detected, the per-section folds of all replicas are logged
+  // in aligned columns so that a single differing section (with most bytes
+  // matching) points at single-bit (e.g. memory/block-cache) corruption and
+  // localizes it, whereas many differing sections indicate structural
+  // divergence. A CHECK_STATS check digests only the RangeAppliedState, so only
+  // the RangeID-local section is populated. Empty only when not computed by a
+  // node that predates this field.
+  string diagnostic = 5;
 }
 
 // WaitForApplicationRequest blocks until the addressed replica has applied the
