@@ -164,7 +164,7 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 		return errors.New("executor config is not of type sql.ExecutorConfig")
 	}
 
-	compactChain, encryption, err := p.compactionChainFromSpec(ctx, execCfg, user)
+	compactChain, encKey, err := p.compactionChainFromSpec(ctx, execCfg, user)
 	if err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			return p.processSpanEntries(
-				ctx, execCfg, entryCh, encryption, store, destLocalityKV,
+				ctx, execCfg, entryCh, encKey, store, destLocalityKV,
 			)
 		},
 	}
@@ -248,13 +248,13 @@ func (p *compactBackupsProcessor) processSpanEntries(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	entryCh chan execinfrapb.RestoreSpanEntry,
-	encryption *jobspb.BackupEncryptionOptions,
+	encKey []byte,
 	store cloud.ExternalStorage,
 	destLocality string,
 ) (err error) {
 	var fileEncryption *kvpb.FileEncryptionOptions
-	if encryption != nil {
-		fileEncryption = &kvpb.FileEncryptionOptions{Key: encryption.Key}
+	if len(encKey) > 0 {
+		fileEncryption = &kvpb.FileEncryptionOptions{Key: encKey}
 	}
 	sinkConf := backupsink.SSTSinkConf{
 		ID:        execCfg.DistSQLSrv.NodeID.SQLInstanceID(),
@@ -344,7 +344,7 @@ func (p *compactBackupsProcessor) isAssignedEntry(
 // compactionChainFromSpec constructs a compactionChain for the spec of a processor.
 func (p *compactBackupsProcessor) compactionChainFromSpec(
 	ctx context.Context, execCfg *sql.ExecutorConfig, user username.SQLUsername,
-) (compactionChain, *jobspb.BackupEncryptionOptions, error) {
+) (compactionChain, []byte, error) {
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
 		execCfg.Settings,
 		&execCfg.ExternalIODirConfig,
@@ -357,13 +357,20 @@ func (p *compactBackupsProcessor) compactionChainFromSpec(
 	if err != nil {
 		return compactionChain{}, nil, err
 	}
+	var encKey []byte
+	if encryption != nil {
+		encKey, err = backupencryption.GetEncryptionKey(ctx, encryption, &kmsEnv)
+		if err != nil {
+			return compactionChain{}, nil, err
+		}
+	}
 	compactChain, err := newCompactionChain(
 		prevManifests, p.spec.StartTime, p.spec.EndTime, localityInfo, allIters,
 	)
 	if err != nil {
 		return compactionChain{}, nil, err
 	}
-	return compactChain, encryption, nil
+	return compactChain, encKey, nil
 }
 
 func openSSTs(

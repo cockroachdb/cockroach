@@ -368,6 +368,65 @@ func TestBackupCompaction(t *testing.T) {
 	// iterator, add tests for dropped tables/indexes.
 }
 
+// TestBackupCompactionKMSEncrypted is a regression test for a bug where
+// compacting a KMS-encrypted backup chain fails. StartCompactionJob builds the
+// compaction job's encryption options from the re-parsed BACKUP statement but
+// never sets EncryptionMode_KMS (only RawKmsUris), so the resumer sees
+// Mode=None, treats the chain as unencrypted, and fails reading the encrypted
+// manifests. The passphrase path sets its Mode, which is why only KMS is
+// affected.
+func TestBackupCompactionKMSEncrypted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO(at): enable once OR supports encrypted backups.
+	backuptestutils.DisableFastRestoreForTest(t)
+
+	tempDir, tempDirCleanup := testutils.TempDir(t)
+	defer tempDirCleanup()
+	st := cluster.MakeTestingClusterSettings()
+	_, db, cleanupDB := backupRestoreTestSetupEmpty(
+		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+			},
+		},
+	)
+	defer cleanupDB()
+
+	kmsURI := constructMockKMSURIsWithKeyID([]string{"backup-compaction-key"})[0]
+	encryptOpts := fmt.Sprintf("WITH kms = '%s'", kmsURI)
+	collectionURI := []string{"nodelocal://1/backup"}
+
+	db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
+	defer db.Exec(t, "DROP TABLE foo")
+	db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
+	start := getTime()
+	backupStmt := fullBackupQuery(fullCluster, collectionURI, start, encryptOpts)
+	db.Exec(t, backupStmt)
+
+	db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
+	db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, encryptOpts))
+
+	db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
+	end := getTime()
+	db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, encryptOpts))
+
+	jobID := triggerCompaction(
+		t, db, backupStmt, getLatestFullDir(t, db, collectionURI[0]), start, end,
+	)
+	jobutils.WaitForJobToSucceed(t, db, jobID)
+
+	// Restore from the chain (which now includes the compacted backup) and
+	// confirm the data round-trips. This exercises the write/sink side: if the
+	// compacted SSTs were written with the wrong key, the restore fails or
+	// returns wrong data even though the compaction job succeeded.
+	before := db.QueryStr(t, "SELECT * FROM foo ORDER BY a")
+	db.Exec(t, "DROP TABLE foo")
+	db.Exec(t, restoreQuery(t, "TABLE foo", collectionURI, noAOST, encryptOpts))
+	require.Equal(t, before, db.QueryStr(t, "SELECT * FROM foo ORDER BY a"))
+}
+
 func TestScheduledBackupCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

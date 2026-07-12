@@ -238,6 +238,7 @@ func StartCompactionJob(
 		if encryption.Mode != jobspb.EncryptionMode_None {
 			return 0, errors.Newf("only one encryption mode can be specified")
 		}
+		encryption.Mode = jobspb.EncryptionMode_KMS
 		encryption.RawKmsUris = builtins.ExprSliceToStrSlice(options.EncryptionKMSURI)
 	}
 
