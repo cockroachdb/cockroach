@@ -166,14 +166,19 @@ type RecordedTxnStats struct {
 	IdleLatency             time.Duration
 	RowsAffected            int
 	CollectedExecStats      bool
-	ExecStats               execstats.QueryLevelStats
-	RowsRead                int64
-	RowsWritten             int64
-	BytesRead               int64
-	KVCPUTimeNanos          time.Duration
-	Priority                roachpb.UserPriority
-	TxnErr                  error
-	Application             string
+	// ExecStats, KVCPUTimeNanos, and IdleLatency span all execution attempts
+	// of the transaction, including auto-retried attempts, like ServiceLatency
+	// and RetryCount do. RowsRead, RowsWritten, and BytesRead are data-volume
+	// counters that a retried attempt deterministically re-produces, so they
+	// reflect only the final attempt (as does RowsAffected).
+	ExecStats      execstats.QueryLevelStats
+	RowsRead       int64
+	RowsWritten    int64
+	BytesRead      int64
+	KVCPUTimeNanos time.Duration
+	Priority       roachpb.UserPriority
+	TxnErr         error
+	Application    string
 	// Normalized user name.
 	UserNormalized   string
 	InternalExecutor bool

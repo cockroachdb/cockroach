@@ -150,6 +150,93 @@ SET TRACING=off;
 		contentionCountBefore, contentionCountNow)
 }
 
+// TestTxnContentionTimePreservedOnAutoRetry verifies that execution stats
+// accumulated before an automatic transaction retry are retained in the
+// recorded transaction statistics (#172228). Statement statistics
+// are recorded per execution attempt, but transaction statistics are recorded
+// once per transaction; contention observed by an attempt that is
+// subsequently retried must not be dropped from the transaction's stats, or
+// the two become inconsistent.
+func TestTxnContentionTimePreservedOnAutoRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	conn1 := sqlutils.MakeSQLRunner(s.SQLConn(t))
+	conn2 := sqlutils.MakeSQLRunner(s.SQLConn(t))
+	obsConn := sqlutils.MakeSQLRunner(s.SQLConn(t))
+
+	conn1.Exec(t, "CREATE TABLE test (x INT PRIMARY KEY)")
+	conn1.Exec(t, "INSERT INTO test VALUES (1)")
+	conn1.Exec(t, "CREATE SEQUENCE seq")
+	conn2.Exec(t, "SET application_name = 'retryContentionTest'")
+
+	// conn1 acquires an intent on the row.
+	conn1.Exec(t, `
+SET TRACING=on;
+BEGIN;
+UPDATE test SET x = 100 WHERE x = 1;
+`)
+
+	// conn2's high-priority transaction contends with conn1's intent on its
+	// first attempt (aborting conn1's transaction), then hits an injected
+	// retryable error. The conn executor transparently retries the
+	// transaction; the second attempt encounters no contention because
+	// conn1's transaction is already aborted, so any contention time in the
+	// recorded transaction stats must have been carried over from the first
+	// attempt.
+	_, err := conn2.DB.ExecContext(ctx, `
+SET TRACING=on;
+BEGIN PRIORITY HIGH;
+UPDATE test SET x = 1000 WHERE x = 1;
+SELECT IF(nextval('seq') <= 1, crdb_internal.force_retry('1h'), 0);
+COMMIT;
+SET TRACING=off;
+`)
+	require.NoError(t, err)
+
+	conn1.ExpectErr(t, "^pq: restart transaction.+", `
+COMMIT;
+SET TRACING=off;
+`)
+
+	sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, obsConn, 1,
+		sqlstatstestutil.TransactionFilter{App: "retryContentionTest"})
+
+	// The transaction must have auto-retried, otherwise this test isn't
+	// exercising anything.
+	obsConn.CheckQueryResults(t, `
+  SELECT count(*)
+  FROM crdb_internal.transaction_statistics
+  WHERE
+    (statistics -> 'statistics' ->> 'maxRetries')::INT > 0
+    AND app_name = 'retryContentionTest'
+`, [][]string{{"1"}})
+
+	// The contended UPDATE from the first attempt is recorded in statement
+	// statistics, and the contention time must also survive into the
+	// transaction statistics.
+	obsConn.CheckQueryResultsRetry(t, `
+  SELECT count(*)
+  FROM crdb_internal.statement_statistics
+  WHERE
+    (statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT > 0
+    AND app_name = 'retryContentionTest'
+`, [][]string{{"1"}})
+
+	obsConn.CheckQueryResultsRetry(t, `
+  SELECT count(*)
+  FROM crdb_internal.transaction_statistics
+  WHERE
+    (statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT > 0
+    AND app_name = 'retryContentionTest'
+`, [][]string{{"1"}})
+}
+
 func TestTransactionContentionEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
