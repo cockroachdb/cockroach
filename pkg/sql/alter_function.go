@@ -513,7 +513,7 @@ func (p *planner) mustGetMutableFunctionForAlter(
 		return nil, err
 	}
 	fnID := funcdesc.UserDefinedFunctionOIDToID(ol.Oid)
-	mut, err := p.checkPrivilegesForDropFunction(ctx, fnID)
+	mut, err := p.checkFunctionOwnership(ctx, fnID)
 	if err != nil {
 		return nil, err
 	}
