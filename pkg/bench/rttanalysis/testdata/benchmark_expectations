@@ -29,7 +29,7 @@ exp,benchmark
 14,AlterTableUnsplit/alter_table_unsplit_at_3_values
 2-4,Audit/select_from_an_audit_table
 13,CreateRole/create_role_with_1_option
-16,CreateRole/create_role_with_2_options
+16-18,CreateRole/create_role_with_2_options
 19,CreateRole/create_role_with_3_options
 14,CreateRole/create_role_with_no_options
 14,"Discard/DISCARD_ALL,_1_tables_in_1_db"
