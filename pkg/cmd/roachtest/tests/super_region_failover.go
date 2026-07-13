@@ -338,12 +338,16 @@ func waitForConstraintConformance(ctx context.Context, t test.Test, conn *gosql.
 	t.Fatal("timed out waiting for constraint conformance")
 }
 
-// waitForNoLearnerReplicas waits until all ranges in the test database have
-// completed any in-progress atomic replication changes. Ranges in joint
-// configurations (VOTER_DEMOTING_LEARNER, VOTER_INCOMING, etc.) report learner
-// replicas. Killing nodes while ranges are in joint configs can cause quorum
-// loss even when constraint conformance has been achieved, because joint
-// configs require a majority in both the old and new voter sets.
+// waitForNoLearnerReplicas waits until all ranges for the test tables and the
+// system database have completed any in-progress atomic replication changes.
+// Ranges in joint configurations (VOTER_DEMOTING_LEARNER, VOTER_INCOMING, etc.)
+// report learner replicas. Killing nodes while ranges are in joint configs can
+// cause quorum loss even when constraint conformance has been achieved, because
+// joint configs require a majority in both the old and new voter sets.
+//
+// This does not cover non-table ranges (meta, liveness, timeseries). Those are
+// unlikely to be mid-replication-change at test time since the zone config
+// changes in setupDatabase only affect the system database tables.
 func waitForNoLearnerReplicas(ctx context.Context, t test.Test, conn *gosql.DB) {
 	t.Helper()
 	tables := []string{
@@ -371,6 +375,18 @@ func waitForNoLearnerReplicas(ctx context.Context, t test.Test, conn *gosql.DB) 
 				break
 			}
 			totalLearners += count
+		}
+		if queryErr == nil {
+			var sysCount int
+			err := conn.QueryRowContext(ctx,
+				`SELECT count(*) FROM [SHOW RANGES FROM DATABASE system WITH DETAILS]
+				 WHERE learner_replicas != '{}'`,
+			).Scan(&sysCount)
+			if err != nil {
+				queryErr = err
+			} else {
+				totalLearners += sysCount
+			}
 		}
 		if queryErr != nil {
 			t.L().Printf("error checking learner replicas: %v", queryErr)
