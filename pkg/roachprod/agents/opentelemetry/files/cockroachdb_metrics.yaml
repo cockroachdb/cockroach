@@ -1456,6 +1456,7 @@ queue_lease_process_success: queue.lease.process.success
 queue_lease_processingnanos: queue.lease.processingnanos
 queue_lease_purgatory: queue.lease.purgatory
 queue_merge_pending: queue.merge.pending
+queue_merge_process_cooldown: queue.merge.process.cooldown
 queue_merge_process_failure: queue.merge.process.failure
 queue_merge_process_success: queue.merge.process.success
 queue_merge_processingnanos: queue.merge.processingnanos

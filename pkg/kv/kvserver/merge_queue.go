@@ -47,6 +47,22 @@ var MergeQueueInterval = settings.RegisterDurationSetting(
 	200*time.Millisecond,
 )
 
+// MergeQueueCooldown is the minimum duration the merge queue waits before
+// re-offering a range that it processed but could not merge (e.g. because the
+// right-hand neighbor has an unexpired sticky bit, is too large, or the merge
+// would thrash). Without it, such a range is re-enqueued at top priority on
+// every scanner cycle and on every write, busy-looping and starving genuinely
+// mergeable ranges (issue #171648). The cooldown does not apply after a
+// successful merge, so cascading merges remain fast. Setting it to 0 disables
+// the cooldown.
+var MergeQueueCooldown = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.range_merge.cooldown",
+	"minimum duration the merge queue waits before re-processing a range it "+
+		"could not merge; 0 disables the cooldown",
+	0,
+)
+
 // SkipMergeQueueForExternalBytes is a setting that controls whether
 // replicas with external bytes should be processed by the merge
 // queue.
@@ -168,6 +184,22 @@ func (mq *mergeQueue) shouldQueue(
 		return false, 0
 	}
 
+	// If this range recently failed a merge attempt (e.g. its right-hand
+	// neighbor has an unexpired sticky bit), back off for the cooldown window
+	// rather than re-offering it on every scanner cycle and on every write. The
+	// merge queue only learns the right-hand side's state during process(), so
+	// without this gate an unmergeable range is repeatedly re-enqueued at top
+	// priority and starves genuinely mergeable ranges. See
+	// Replica.mergeQueueCooldownMu.
+	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
+		if cd := MergeQueueCooldown.Get(&mq.store.ClusterSettings().SV); cd > 0 {
+			if last := repl.getMergeCooldown(); !last.IsEmpty() &&
+				now.ToTimestamp().GoTime().Sub(last.GoTime()) < cd {
+				return false, 0
+			}
+		}
+	}
+
 	// Invert sizeRatio to compute the priority so that smaller ranges are merged
 	// before larger ranges.
 	priority = 1 - sizeRatio
@@ -241,6 +273,22 @@ func (mq *mergeQueue) process(
 	ctx context.Context, lhsRepl *Replica, confReader spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 
+	// cannotMerge is set on the skip branches below where the range is currently
+	// unmergeable (right-hand neighbor has an unexpired sticky bit, is too large,
+	// or the merge would thrash). It arms an in-memory cooldown
+	// (kv.range_merge.cooldown) so shouldQueue stops re-offering this range on
+	// every scanner cycle and on every write until the cooldown expires (issue
+	// #171648). It is deliberately not set on a successful merge (so cascading
+	// merges stay fast), on the ConditionFailedError retry (which wants a prompt
+	// re-enqueue), or on errors (purgatory and the scanner already handle those).
+	var cannotMerge bool
+	defer func() {
+		if cannotMerge {
+			lhsRepl.setMergeCooldown(mq.store.Clock().Now())
+			mq.store.metrics.MergeQueueCooldown.Inc(1)
+		}
+	}()
+
 	lhsDesc := lhsRepl.Desc()
 	lhsStats := lhsRepl.GetMVCCStats()
 	minBytes := lhsRepl.GetMinBytes(ctx)
@@ -255,6 +303,7 @@ func (mq *mergeQueue) process(
 		return false, err
 	}
 	if rhsStats.Total() >= minBytes {
+		cannotMerge = true
 		log.VEventf(ctx, 2, "skipping merge: RHS meets minimum size threshold %d with %d bytes",
 			minBytes, rhsStats.Total())
 		return false, nil
@@ -263,9 +312,8 @@ func (mq *mergeQueue) process(
 	// Range was manually split and not expired, so skip merging.
 	now := mq.store.Clock().NowAsClockTimestamp()
 	if now.ToTimestamp().Less(rhsDesc.StickyBit) {
+		cannotMerge = true
 		log.VEventf(ctx, 2, "skipping merge: ranges were manually split and sticky bit was not expired")
-		// TODO(jeffreyxiao): Consider returning a purgatory error to avoid
-		// repeatedly processing ranges that cannot be merged.
 		return false, nil
 	}
 
@@ -283,6 +331,7 @@ func (mq *mergeQueue) process(
 		if canMergeLoad, loadMergeReason = canMergeRangeLoad(
 			ctx, lhsLoadSplitSnap, rhsLoadSplitSnap,
 		); !canMergeLoad {
+			cannotMerge = true
 			log.VEventf(ctx, 2, "skipping merge to avoid thrashing: merged range %s may split %s",
 				mergedDesc, loadMergeReason)
 			return false, nil
@@ -292,6 +341,7 @@ func (mq *mergeQueue) process(
 	shouldSplit, _ := shouldSplitRange(ctx, mergedDesc, mergedStats,
 		lhsRepl.GetMaxBytes(ctx), lhsRepl.shouldBackpressureWrites(), confReader)
 	if shouldSplit {
+		cannotMerge = true
 		log.VEventf(ctx, 2,
 			"skipping merge to avoid thrashing: merged range %s may split "+
 				"(estimated size: %d)",
