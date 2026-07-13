@@ -25,7 +25,10 @@ func sqlStatsTTLChange(
 		"system.transaction_activity",
 	}
 
-	id, _, _ := readerTenantInfo(ctx, d)
+	id, _, err := readerTenantInfo(ctx, d)
+	if err != nil {
+		return err
+	}
 	if id.IsSet() {
 		// Don't perform upgrade for read from standby tenants.
 		return nil

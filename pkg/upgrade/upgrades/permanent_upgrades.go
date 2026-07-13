@@ -262,13 +262,15 @@ func createDefaultDbs(
 	// already.
 	const createDbStmt = `CREATE DATABASE IF NOT EXISTS "%s" WITH OWNER root`
 
-	id, _, _ := readerTenantInfo(ctx, deps)
+	id, _, err := readerTenantInfo(ctx, deps)
+	if err != nil {
+		return err
+	}
 	if id.IsSet() {
 		// Don't create the default databases for read from standby tenants.
 		return nil
 	}
 
-	var err error
 	for _, dbName := range []string{catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName} {
 		stmt := fmt.Sprintf(createDbStmt, dbName)
 		_, err = deps.InternalExecutor.Exec(ctx, "create-default-DB", nil /* txn */, stmt)
