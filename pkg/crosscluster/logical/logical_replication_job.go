@@ -232,8 +232,9 @@ func (r *logicalReplicationResumer) ingest(
 
 	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
 	if !(payload.CreateTable && progress.ReplicatedTime.IsEmpty()) {
-		dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB, execCfg.InternalDB.Executor(), planInfo.destTableBySrcID)
-		if err := dlqClient.Create(ctx); err != nil {
+		if err := CreateDeadLetterQueue(
+			ctx, execCfg.InternalDB, execCfg.InternalDB.Executor(), planInfo.destTableBySrcID,
+		); err != nil {
 			return errors.Wrap(err, "failed to create dead letter queue")
 		}
 	}

@@ -11,10 +11,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -76,9 +79,11 @@ func (f dstTableMetadata) toDLQTableName() string {
 		lexbase.EscapeSQLIdent(fmt.Sprintf("dlq_%d_%s_%s", f.tableID, f.schema, f.table)))
 }
 
+// DeadLetterQueueClient writes rows that could not be applied to their
+// destination table into a per-table dead letter queue. Obtain one via
+// LoadDeadLetterQueueClient, which reuses the DLQ tables that an earlier
+// CreateDeadLetterQueue call made.
 type DeadLetterQueueClient interface {
-	Create(ctx context.Context) error
-
 	Log(
 		ctx context.Context,
 		ingestionJobID int64,
@@ -90,10 +95,6 @@ type DeadLetterQueueClient interface {
 }
 
 type noopDeadLetterQueueClient struct {
-}
-
-func (dlq *noopDeadLetterQueueClient) Create(_ context.Context) error {
-	return nil
 }
 
 func (dlq *noopDeadLetterQueueClient) Log(
@@ -135,10 +136,18 @@ type deadLetterQueueClient struct {
 	db               descs.DB
 	ie               isql.Executor
 	destTableBySrcID map[descpb.ID]dstTableMetadata
+
+	// overrideBySrcID maps a source table ID to the per-op executor override that
+	// authorizes a DLQ insert for that table (see buildDLQOverride). Populated by
+	// resolveOverrides during construction and read-only afterward, which is what
+	// lets concurrent Log calls read it without synchronization.
+	overrideBySrcID map[descpb.ID]sessiondata.InternalExecutorOverride
 }
 
-func (dlq *deadLetterQueueClient) Create(ctx context.Context) error {
-	// Create a dlq table for each table to be replicated.
+// createDLQTables creates the crdb_replication schema and dlq_* table for every
+// replicated table as the node user. It is idempotent (CREATE ... IF NOT
+// EXISTS) so a resumed job reuses tables an earlier run created.
+func (dlq *deadLetterQueueClient) createDLQTables(ctx context.Context) error {
 	for _, dstTableMeta := range dlq.destTableBySrcID {
 		dlqTableName := dstTableMeta.toDLQTableName()
 		createSchemaStmt := fmt.Sprintf(createSchemaBaseStmt, dstTableMeta.getDatabaseName(), dlqSchemaName)
@@ -150,63 +159,99 @@ func (dlq *deadLetterQueueClient) Create(ctx context.Context) error {
 		if _, err := dlq.ie.Exec(ctx, "create-dlq-table", nil, createTableStmt); err != nil {
 			return errors.Wrapf(err, "failed to create dlq for table %d", dstTableMeta.tableID)
 		}
-
-		// CREATE TABLE IF NOT EXISTS silently accepts a pre-existing
-		// table, and the DLQ table name is predictable from the
-		// destination ID. We just asked CREATE to produce the table
-		// as the node user, so anything we end up with that isn't
-		// node-owned is something we didn't create -- refuse to use
-		// it rather than evaluate any column DEFAULTs, CHECK
-		// constraints, or triggers a non-node owner might have
-		// installed.
-		if err := dlq.validateDLQOwnership(ctx, dstTableMeta); err != nil {
-			return errors.Wrapf(err,
-				"dead letter queue table %s was not created by this node; refuse to use it",
-				dlqTableName)
-		}
 	}
 	return nil
 }
 
-// validateDLQOwnership refuses to use a DLQ table that is not owned
-// by the node user. Create() runs `CREATE TABLE IF NOT EXISTS` via
-// the internal executor (whose default identity is node), so a
-// freshly created DLQ table is always node-owned. A pre-existing
-// table with the same predictable name but a different owner is
-// not the one we declared and may carry column DEFAULTs, CHECK
-// constraints, or triggers we did not author -- refuse it.
+// resolveOverrides validates that every DLQ table is node-owned (see
+// validateDLQOwnership) and populates overrideBySrcID with the per-op executor
+// override for each. It runs on both the create and load paths, so the writer
+// processor (which only loads) still gets the ownership check.
+func (dlq *deadLetterQueueClient) resolveOverrides(ctx context.Context) error {
+	for srcID, dstTableMeta := range dlq.destTableBySrcID {
+		schemaID, tableID, err := dlq.validateDLQOwnership(ctx, dstTableMeta)
+		if err != nil {
+			return errors.Wrapf(err, "resolving dead letter queue table %s",
+				dstTableMeta.toDLQTableName())
+		}
+		dlq.overrideBySrcID[srcID] = buildDLQOverride(schemaID, tableID)
+	}
+	return nil
+}
+
+// validateDLQOwnership refuses to use a DLQ table that is not node-owned,
+// returning the validated schema and table IDs so the caller builds the executor
+// override against the same descriptors that passed the check.
 //
-// This check is intentionally narrow: a user who has somehow been
-// granted CREATE on the node-owned crdb_replication.dlq_* table (an
-// explicit misconfiguration; CREATE on that schema is not granted by
-// default) could ALTER the table without changing ownership, which
-// this check would not catch. Bounding that further is left to the
-// preceding LDR commit's identity flip: DLQ Log() now runs as the
-// job owner rather than as node.
+// createDLQTables produces the table as node, but CREATE ... IF NOT EXISTS
+// silently accepts a pre-existing one, and the DLQ table name is predictable. An
+// attacker (the VULM-456 threat model) who pre-creates it can plant a UDF
+// DEFAULT / CHECK / trigger that later Log() INSERTs would evaluate under the job
+// owner's identity; that attacker owns the table, so an owner mismatch reliably
+// flags it as not ours.
+//
+// The check is intentionally narrow: an attacker granted CREATE on the
+// node-owned dlq_* table (a misconfiguration; not granted by default) could
+// ALTER in poisoned surface without changing ownership. That residual risk is
+// bounded because Log() runs as the job owner, not node -- worst case is
+// "attacker -> job owner", not "attacker -> node".
 func (dlq *deadLetterQueueClient) validateDLQOwnership(
 	ctx context.Context, meta dstTableMetadata,
-) error {
-	return dlq.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		byName := txn.Descriptors().ByName(txn.KV()).Get()
-		dbDesc, err := byName.Database(ctx, meta.database)
-		if err != nil {
-			return err
-		}
-		scDesc, err := byName.Schema(ctx, dbDesc, dlqSchemaName)
-		if err != nil {
-			return err
-		}
-		tableName := fmt.Sprintf("dlq_%d_%s_%s", meta.tableID, meta.schema, meta.table)
-		tableDesc, err := byName.Table(ctx, dbDesc, scDesc, tableName)
+) (schemaID, tableID descpb.ID, err error) {
+	err = dlq.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		scDesc, tableDesc, err := lookupDLQTable(ctx, txn, meta)
 		if err != nil {
 			return err
 		}
 		owner := tableDesc.GetPrivileges().Owner()
 		if !owner.IsNodeUser() {
-			return errors.Newf("owner is %q, expected node user", owner)
+			return errors.Newf("table is not owned by the node user (owner is %q)", owner)
 		}
+		schemaID, tableID = scDesc.GetID(), tableDesc.GetID()
 		return nil
 	})
+	return schemaID, tableID, err
+}
+
+// lookupDLQTable resolves the DLQ table descriptor for the given destination
+// table by its predictable name (dlq_<tableID>_<schema>_<table>), returning the
+// enclosing schema descriptor as well.
+func lookupDLQTable(
+	ctx context.Context, txn descs.Txn, meta dstTableMetadata,
+) (catalog.SchemaDescriptor, catalog.TableDescriptor, error) {
+	byName := txn.Descriptors().ByName(txn.KV()).Get()
+	dbDesc, err := byName.Database(ctx, meta.database)
+	if err != nil {
+		return nil, nil, err
+	}
+	scDesc, err := byName.Schema(ctx, dbDesc, dlqSchemaName)
+	if err != nil {
+		return nil, nil, err
+	}
+	tableName := fmt.Sprintf("dlq_%d_%s_%s", meta.tableID, meta.schema, meta.table)
+	tableDesc, err := byName.Table(ctx, dbDesc, scDesc, tableName)
+	if err != nil {
+		return nil, nil, err
+	}
+	return scDesc, tableDesc, nil
+}
+
+// buildDLQOverride returns the executor override that lets the LDR job owner --
+// who holds no grants on the node-owned DLQ table or crdb_replication schema --
+// insert a DLQ row. It grants only INSERT on the table and USAGE on the schema,
+// the minimum a Log() insert needs; it does not bypass RLS, as the DLQ table has
+// no row-level security policies.
+func buildDLQOverride(schemaID, tableID descpb.ID) sessiondata.InternalExecutorOverride {
+	overrides := map[uint32]sessiondata.DescriptorOverride{
+		uint32(tableID): {
+			Privileges: privilege.List{privilege.INSERT}.ToBitField(),
+		},
+		uint32(schemaID): {
+			Privileges: privilege.List{privilege.USAGE}.ToBitField(),
+		},
+	}
+	// Leaving User unset preserves the executor's job-owner identity.
+	return sessiondata.InternalExecutorOverride{DescriptorOverrides: overrides}
 }
 
 func (dlq *deadLetterQueueClient) Log(
@@ -242,13 +287,19 @@ func (dlq *deadLetterQueueClient) Log(
 		mutationType = insertMutation.String()
 	}
 
+	ovr, ok := dlq.overrideBySrcID[srcTableID]
+	if !ok {
+		return errors.Newf("no dlq executor override for src table id %d", srcTableID)
+	}
+
 	jsonRow, err := cdcEventRow.ToJSON()
 	if err != nil {
-		log.Warningf(ctx, "failed to convert cdc event row to json: %v", err)
-		if _, err := dlq.ie.Exec(
+		log.Dev.Warningf(ctx, "failed to convert cdc event row to json: %v", err)
+		if _, err := dlq.ie.ExecEx(
 			ctx,
 			"insert-row-into-dlq-table-fallback",
 			nil, /* txn */
+			ovr,
 			fmt.Sprintf(insertRowStmtFallBack, dlqTableName),
 			ingestionJobID,
 			dstTableMeta.tableID,
@@ -261,10 +312,11 @@ func (dlq *deadLetterQueueClient) Log(
 		return nil
 	}
 
-	if _, err := dlq.ie.Exec(
+	if _, err := dlq.ie.ExecEx(
 		ctx,
 		"insert-row-into-dlq-table",
 		nil, /* txn */
+		ovr,
 		fmt.Sprintf(insertBaseStmt, dlqTableName),
 		ingestionJobID,
 		dstTableMeta.tableID,
@@ -278,16 +330,56 @@ func (dlq *deadLetterQueueClient) Log(
 	return nil
 }
 
-func InitDeadLetterQueueClient(
-	db descs.DB, ie isql.Executor, destTableBySrcID map[descpb.ID]dstTableMetadata,
-) DeadLetterQueueClient {
+// CreateDeadLetterQueue creates the DLQ tables for every replicated table and
+// validates that they are node-owned. Use it from the job coordinator; writer
+// processors that Log() into the already-created tables should use
+// LoadDeadLetterQueueClient instead.
+func CreateDeadLetterQueue(
+	ctx context.Context,
+	db descs.DB,
+	ie isql.Executor,
+	destTableBySrcID map[descpb.ID]dstTableMetadata,
+) error {
 	if testingDLQ != nil {
-		return testingDLQ
+		return nil
 	}
+	c := newDeadLetterQueueClient(db, ie, destTableBySrcID)
+	if err := c.createDLQTables(ctx); err != nil {
+		return err
+	}
+	// resolveOverrides also validates node ownership; the overrides it builds are
+	// discarded here since only Log() (via LoadDeadLetterQueueClient) uses them.
+	return c.resolveOverrides(ctx)
+}
+
+// LoadDeadLetterQueueClient returns a client for DLQ tables created by an
+// earlier CreateDeadLetterQueue call. It validates that the tables exist
+// and are node-owned but does not create them, so it is safe to call from every
+// writer processor.
+func LoadDeadLetterQueueClient(
+	ctx context.Context,
+	db descs.DB,
+	ie isql.Executor,
+	destTableBySrcID map[descpb.ID]dstTableMetadata,
+) (DeadLetterQueueClient, error) {
+	if testingDLQ != nil {
+		return testingDLQ, nil
+	}
+	c := newDeadLetterQueueClient(db, ie, destTableBySrcID)
+	if err := c.resolveOverrides(ctx); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func newDeadLetterQueueClient(
+	db descs.DB, ie isql.Executor, destTableBySrcID map[descpb.ID]dstTableMetadata,
+) *deadLetterQueueClient {
 	return &deadLetterQueueClient{
 		db:               db,
 		ie:               ie,
 		destTableBySrcID: destTableBySrcID,
+		overrideBySrcID:  make(map[descpb.ID]sessiondata.InternalExecutorOverride),
 	}
 }
 

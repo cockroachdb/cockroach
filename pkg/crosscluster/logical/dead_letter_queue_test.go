@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -49,6 +50,28 @@ const (
 	dbAName       = "a"
 )
 
+// dlqWriterUser is a non-admin, non-node SQL user used to exercise the DLQ
+// Log() path under the same identity as an LDR job owner: it holds no grants on
+// the node-owned DLQ tables, so its inserts succeed only via the
+// DescriptorOverride that Log() attaches.
+const dlqWriterUser = "dlq_writer"
+
+// newDLQOwnerExecutor creates dlqWriterUser and returns an internal executor
+// that runs as that non-admin user, mirroring the LDR job owner that Log()
+// executes as in production.
+func newDLQOwnerExecutor(
+	ctx context.Context,
+	t *testing.T,
+	sqlDB *sqlutils.SQLRunner,
+	s serverutils.ApplicationLayerInterface,
+	db descs.DB,
+) isql.Executor {
+	sqlDB.Exec(t, fmt.Sprintf(`CREATE USER %s`, dlqWriterUser))
+	ownerSd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
+	ownerSd.UserProto = username.MakeSQLUsernameFromPreNormalizedString(dlqWriterUser).EncodeProto()
+	return db.Executor(isql.WithSessionData(ownerSd))
+}
+
 func setupDLQTestTables(
 	ctx context.Context,
 	t *testing.T,
@@ -60,12 +83,18 @@ func setupDLQTestTables(
 	srcTableIDToName map[descpb.ID]dstTableMetadata,
 	expectedDLQTables []string,
 	db descs.DB,
-	ie isql.Executor,
+	ieNode isql.Executor,
+	ieOwner isql.Executor,
 ) {
 	s := srv.ApplicationLayer()
-	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
 	db = s.InternalDB().(descs.DB)
-	ie = db.Executor(isql.WithSessionData(sd))
+
+	// ieNode runs as the default internal-executor identity (node), used for
+	// Create() which produces node-owned DLQ tables.
+	ieNode = db.Executor(isql.WithSessionData(
+		sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)))
+
+	ieOwner = newDLQOwnerExecutor(ctx, t, sqlDB, s, db)
 
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT)`)
 
@@ -133,7 +162,7 @@ func setupDLQTestTables(
 		tableNameToDesc[fullyQualifiedName] = desc
 		expectedDLQTables = append(expectedDLQTables, fmt.Sprintf("dlq_%d_%s_%s", md.tableID, md.schema, md.table))
 	}
-	return tableNameToDesc, srcTableIDToName, expectedDLQTables, db, ie
+	return tableNameToDesc, srcTableIDToName, expectedDLQTables, db, ieNode, ieOwner
 }
 
 func WaitForDLQLogs(t *testing.T, db *sqlutils.SQLRunner, tableName string, minNumRows int) {
@@ -176,7 +205,6 @@ func TestNoopDLQClient(t *testing.T) {
 	require.NoError(t, err)
 
 	dlqClient := InitNoopDeadLetterQueueClient()
-	require.NoError(t, dlqClient.Create(ctx))
 
 	type testCase struct {
 		name           string
@@ -225,10 +253,10 @@ func TestDLQCreation(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	_, srcTableIDToName, expectedDLQTables, descsDB, ie := setupDLQTestTables(ctx, t, sqlDB, kvDB, srv)
+	_, srcTableIDToName, expectedDLQTables, descsDB, ieNode, _ := setupDLQTestTables(ctx, t, sqlDB, kvDB, srv)
 
-	dlqClient := InitDeadLetterQueueClient(descsDB, ie, srcTableIDToName)
-	require.NoError(t, dlqClient.Create(ctx))
+	err := CreateDeadLetterQueue(ctx, descsDB, ieNode, srcTableIDToName)
+	require.NoError(t, err)
 
 	// Verify DLQ tables are created with their expected names
 	dlqTableQueryResult := sqlDB.QueryStr(t,
@@ -262,7 +290,7 @@ func TestDLQLogging(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	tableNameToDesc, srcTableIDToName, _, descsDB, ie := setupDLQTestTables(ctx, t, sqlDB, kvDB, srv)
+	tableNameToDesc, srcTableIDToName, _, descsDB, ieNode, ieOwner := setupDLQTestTables(ctx, t, sqlDB, kvDB, srv)
 
 	// Build family desc for cdc event row
 	familyDesc := &descpb.ColumnFamilyDescriptor{
@@ -270,8 +298,13 @@ func TestDLQLogging(t *testing.T) {
 		Name: "",
 	}
 
-	dlqClient := InitDeadLetterQueueClient(descsDB, ie, srcTableIDToName)
-	require.NoError(t, dlqClient.Create(ctx))
+	// Create the node-owned DLQ tables as node, then load a client as the
+	// non-admin job owner and log rows to exercise the DescriptorOverride that
+	// authorizes the insert.
+	err := CreateDeadLetterQueue(ctx, descsDB, ieNode, srcTableIDToName)
+	require.NoError(t, err)
+	dlqClient, err := LoadDeadLetterQueueClient(ctx, descsDB, ieOwner, srcTableIDToName)
+	require.NoError(t, err)
 
 	type testCase struct {
 		name           string
@@ -450,7 +483,6 @@ func TestDLQJSONQuery(t *testing.T) {
 
 	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, srv.ExecutorConfig(), tableDesc)
 	descsDB := srv.InternalDB().(descs.DB)
-	ie := descsDB.Executor()
 	defer cleanup()
 
 	tableID := tableDesc.GetID()
@@ -459,10 +491,16 @@ func TestDLQJSONQuery(t *testing.T) {
 		schema:   publicScName,
 		table:    "foo",
 	}
-	dlqClient := InitDeadLetterQueueClient(descsDB, ie, map[descpb.ID]dstTableMetadata{
-		tableID: tableName,
-	})
-	require.NoError(t, dlqClient.Create(ctx))
+	destTableBySrcID := map[descpb.ID]dstTableMetadata{tableID: tableName}
+
+	// Create the node-owned DLQ table as node, then load a client as a
+	// non-admin job owner to exercise the DescriptorOverride Log() attaches.
+	err = CreateDeadLetterQueue(ctx, descsDB, descsDB.Executor(), destTableBySrcID)
+	require.NoError(t, err)
+
+	ieOwner := newDLQOwnerExecutor(ctx, t, sqlDB, srv.ApplicationLayer(), descsDB)
+	dlqClient, err := LoadDeadLetterQueueClient(ctx, descsDB, ieOwner, destTableBySrcID)
+	require.NoError(t, err)
 
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'hello')`)
 	row := popRow(t)
@@ -512,6 +550,15 @@ func testEndToEndDLQ(t *testing.T, mode string) {
 	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.retry_queue_backoff  = '1ms'")
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
+	// Run the stream as a non-admin user so the job owner is scoped down. The
+	// user holds only REPLICATIONDEST (enough to create the stream); it has no
+	// grants on the node-owned DLQ tables, so the DLQ writes exercise the
+	// DescriptorOverride the writer attaches rather than relying on admin.
+	dbA.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
+	dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser))
+	dbAOwner := sqlutils.MakeSQLRunner(
+		s.SQLConn(t, serverutils.User(username.TestUser), serverutils.DBName("a")))
+
 	type testCase struct {
 		tableName         string
 		supportsImmediate bool
@@ -544,6 +591,13 @@ func testEndToEndDLQ(t *testing.T, mode string) {
 					key STRING PRIMARY KEY NOT NULL,
 					foreign_key STRING REFERENCES parent (key)
 				);`,
+			// Applying a replicated row validates the FK, which reads the
+			// non-replicated parent table, so the job owner needs SELECT on it;
+			// without it the FK check fails with a privilege error instead of the
+			// intended constraint violation.
+			// TODO(#172490): remove this grant once FK writes no longer require
+			// SELECT on the referenced table.
+			sqlA: fmt.Sprintf(`GRANT SELECT ON parent TO %s`, username.TestUser),
 			sqlB: `
 				INSERT INTO parent(key) VALUES ('parent');
 				INSERT INTO missing_foreign_key (key, foreign_key) values ('will_dlq', 'parent');`,
@@ -589,7 +643,7 @@ func testEndToEndDLQ(t *testing.T, mode string) {
 	var jobs []catpb.JobID
 	for _, tc := range tests {
 		var jobID catpb.JobID
-		dbA.QueryRow(t, fmt.Sprintf(
+		dbAOwner.QueryRow(t, fmt.Sprintf(
 			`CREATE LOGICAL REPLICATION STREAM FROM TABLE "%s" ON '%s' INTO TABLE "%s" WITH mode = '%s'`,
 			tc.tableName, dbBURL.String(), tc.tableName, mode)).Scan(&jobID)
 		jobs = append(jobs, jobID)
