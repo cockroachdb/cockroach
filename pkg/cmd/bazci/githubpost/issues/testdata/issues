@@ -6,6 +6,17 @@ Existing issue query:
 Related issues query:
   repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot -label:branch-master
 
+# On a release branch, the issue title carries a branch prefix. The existing-issue
+# query searches for the prefixed title (issues on this branch share the prefix),
+# while the related-issues query searches for the unprefixed base title so it can
+# match the same failure on other branches.
+build-issue-queries branch=release-25.3
+----
+Existing issue query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "release-25.3: foo: bar failed" label:O-robot label:branch-release-25.3 -label:X-noreuse
+Related issues query:
+  repo:"repo" user:"org" is:issue is:open in:title sort:created-desc "foo: bar failed" label:O-robot -label:branch-release-25.3
+
 # With no labels to match and no C-test-failure label, we should be searching
 # for O-robot.
 build-issue-queries labels=(foo,bar)

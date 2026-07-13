@@ -297,12 +297,26 @@ func releaseLabel(branch string) string {
 	return fmt.Sprintf("branch-%s", branch)
 }
 
+// buildIssueQueries builds the two GitHub searches used by post: one to find an
+// existing issue on the current branch to adopt (comment on), and one to find
+// "related" issues, i.e. the same failure on other branches.
+//
+// title is the fully-formed issue title, including the branch prefix added by
+// branchTitlePrefix (e.g. "release-25.3: pkg: TestFoo failed"). baseTitle is the
+// same title without that prefix (e.g. "pkg: TestFoo failed"). The existing-issue
+// search uses title, since issues on the current branch carry the same prefix.
+// The related-issue search uses baseTitle, because issues on other branches carry
+// a different prefix (or none, on master); GitHub's in:title phrase search matches
+// baseTitle as a substring of any branch's prefixed title, whereas searching for
+// the current branch's prefixed title would never match another branch's issue.
 func buildIssueQueries(
-	repo string, org string, branch string, title string, req PostRequest,
+	repo string, org string, branch string, title string, baseTitle string, req PostRequest,
 ) (existingIssueQuery string, relatedIssuesQuery string) {
-	base := fmt.Sprintf(
-		`repo:%q user:%q is:issue is:open in:title sort:created-desc %q`,
-		repo, org, title)
+	baseQuery := func(searchTitle string) string {
+		return fmt.Sprintf(
+			`repo:%q user:%q is:issue is:open in:title sort:created-desc %q`,
+			repo, org, searchTitle)
+	}
 
 	labelsQuery := func(mustHave, mustNotHave []string) string {
 		var b bytes.Buffer
@@ -333,12 +347,13 @@ func buildIssueQueries(
 		}
 	}
 
-	existingIssueQuery = base + labelsQuery(
+	existingIssueQuery = baseQuery(title) + labelsQuery(
 		append(mustHave, releaseLabel(branch)),
 		append(mustNotHave, noReuseLabel),
 	)
-	// The related issues query selects for branches.
-	relatedIssuesQuery = base + labelsQuery(
+	// The related issues query selects for other branches, so it searches for the
+	// unprefixed base title.
+	relatedIssuesQuery = baseQuery(baseTitle) + labelsQuery(
 		mustHave,
 		append(mustNotHave, releaseLabel(branch)),
 	)
@@ -390,13 +405,16 @@ func (p *poster) post(
 	)
 
 	// We just want the title this time around, as we're going to use
-	// it to figure out if an issue already exists.
-	title := branchTitlePrefix(p.Branch) + formatter.Title(data)
+	// it to figure out if an issue already exists. baseTitle is the title without
+	// the branch prefix; it is used to find related issues on other branches,
+	// whose titles carry a different prefix.
+	baseTitle := formatter.Title(data)
+	title := branchTitlePrefix(p.Branch) + baseTitle
 
 	// We carry out two searches below, one attempting to find an issue that we
 	// adopt (i.e. add a comment to) and one finding "related issues", i.e. those
 	// that would match if it weren't for their branch label.
-	qExisting, qRelated := buildIssueQueries(p.Repo, p.Org, p.Branch, title, req)
+	qExisting, qRelated := buildIssueQueries(p.Repo, p.Org, p.Branch, title, baseTitle, req)
 
 	rExisting, _, err := p.searchIssues(ctx, qExisting, &github.SearchOptions{
 		ListOptions: github.ListOptions{
@@ -432,7 +450,7 @@ func (p *poster) post(
 		data.MentionOnCreate = nil
 	}
 
-	data.RelatedIssues = filterByPrefixTitleMatch(rRelated, title)
+	data.RelatedIssues = filterRelatedByTitleMatch(rRelated, baseTitle)
 	data.InternalLog = ctx.Builder.String()
 	r := &Renderer{}
 	if err := formatter.Body(r, data); err != nil {
@@ -637,6 +655,26 @@ func filterByPrefixTitleMatch(
 	result *github.IssuesSearchResult, expectedTitle string,
 ) []github.Issue {
 	expectedTitleRegex := regexp.MustCompile(`^` + regexp.QuoteMeta(expectedTitle) + `(\s+|$)`)
+	var issues []github.Issue
+	for _, issue := range result.Issues {
+		if title := issue.Title; title != nil && expectedTitleRegex.MatchString(*title) {
+			issues = append(issues, issue)
+		}
+	}
+
+	return issues
+}
+
+// filterRelatedByTitleMatch is like filterByPrefixTitleMatch, but for issues on
+// other branches. Those issues carry a branch prefix ("<branch>: ", added by
+// branchTitlePrefix) that differs from the current branch's, or no prefix at all
+// on master, so the match allows an optional leading prefix before baseTitle.
+func filterRelatedByTitleMatch(result *github.IssuesSearchResult, baseTitle string) []github.Issue {
+	// A branch prefix has the form "<branch>: ". Branch names contain neither
+	// spaces nor colons, so [^:\s]+ cannot consume the colon of a
+	// package-qualified base title such as "storage: TestFoo failed"; in that
+	// case the regex backtracks to the unprefixed alternative.
+	expectedTitleRegex := regexp.MustCompile(`^([^:\s]+: )?` + regexp.QuoteMeta(baseTitle) + `(\s+|$)`)
 	var issues []github.Issue
 	for _, issue := range result.Issues {
 		if title := issue.Title; title != nil && expectedTitleRegex.MatchString(*title) {
