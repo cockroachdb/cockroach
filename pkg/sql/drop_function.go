@@ -160,6 +160,31 @@ func (p *planner) matchRoutine(
 	return &ol, nil
 }
 
+// checkFunctionOwnership returns the mutable function descriptor only if the
+// current user owns the function directly. Unlike canDropFunction, ownership of
+// the parent schema is intentionally insufficient: PostgreSQL requires ownership
+// of the function itself to ALTER or CREATE OR REPLACE it (schema ownership only
+// confers the right to DROP).
+func (p *planner) checkFunctionOwnership(
+	ctx context.Context, fnID descpb.ID,
+) (*funcdesc.Mutable, error) {
+	mutable, err := p.Descriptors().MutableByID(p.Txn()).Function(ctx, fnID)
+	if err != nil {
+		return nil, err
+	}
+	hasOwnership, err := p.HasOwnership(ctx, mutable)
+	if err != nil {
+		return nil, err
+	}
+	if !hasOwnership {
+		return nil, pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"must be owner of function %s", mutable.GetName(),
+		)
+	}
+	return mutable, nil
+}
+
 func (p *planner) checkPrivilegesForDropFunction(
 	ctx context.Context, fnID descpb.ID,
 ) (*funcdesc.Mutable, error) {
