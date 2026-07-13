@@ -4353,6 +4353,12 @@ func TestMergeQueue(t *testing.T) {
 	manualClock := hlc.NewHybridManualClock()
 	settings := cluster.MakeTestingClusterSettings()
 	kvserver.MergeQueueInterval.Override(ctx, &settings.SV, 0) // process greedily
+	// Disable the merge cooldown so that this test exercises the pre-cooldown
+	// merge semantics. The cooldown would otherwise back off a range for an hour
+	// after each unsuccessful attempt (e.g. while a sticky bit is set), delaying
+	// the subsequent verifyMergedSoon checks past their timeout. The cooldown is
+	// covered by TestMergeQueueCooldown.
+	kvserver.MergeQueueCooldown.Override(ctx, &settings.SV, 0)
 
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMinBytes = proto.Int64(1 << 10) // 1KB

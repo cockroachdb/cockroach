@@ -1936,6 +1936,13 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaMergeQueueCooldown = metric.Metadata{
+		Name: "queue.merge.process.cooldown",
+		Help: "Number of times the merge queue processed a range, could not " +
+			"merge it, and armed a cooldown to avoid re-processing it",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRaftLogQueueSuccesses = metric.Metadata{
 		Name:        "queue.raftlog.process.success",
 		Help:        "Number of replicas successfully processed by the Raft log queue",
@@ -2996,6 +3003,7 @@ type StoreMetrics struct {
 	MergeQueuePending                         *metric.Gauge
 	MergeQueueProcessingNanos                 *metric.Counter
 	MergeQueuePurgatory                       *metric.Gauge
+	MergeQueueCooldown                        *metric.Counter
 	RaftLogQueueSuccesses                     *metric.Counter
 	RaftLogQueueFailures                      *metric.Counter
 	RaftLogQueuePending                       *metric.Gauge
@@ -3783,6 +3791,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		MergeQueuePending:                         metric.NewGauge(metaMergeQueuePending),
 		MergeQueueProcessingNanos:                 metric.NewCounter(metaMergeQueueProcessingNanos),
 		MergeQueuePurgatory:                       metric.NewGauge(metaMergeQueuePurgatory),
+		MergeQueueCooldown:                        metric.NewCounter(metaMergeQueueCooldown),
 		RaftLogQueueSuccesses:                     metric.NewCounter(metaRaftLogQueueSuccesses),
 		RaftLogQueueFailures:                      metric.NewCounter(metaRaftLogQueueFailures),
 		RaftLogQueuePending:                       metric.NewGauge(metaRaftLogQueuePending),
