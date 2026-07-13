@@ -205,6 +205,11 @@ func newLogicalReplicationWriterProcessor(
 	dlqSd.UserProto = jobOwnerOrNode(ctx, spec.UsernameProto)
 	dlqDbExec := flowCtx.Cfg.DB.Executor(isql.WithSessionData(dlqSd))
 
+	dlqClient, err := LoadDeadLetterQueueClient(ctx, flowCtx.Cfg.DB, dlqDbExec, destTableBySrcID)
+	if err != nil {
+		return nil, err
+	}
+
 	var numTablesWithSecondaryIndexes int
 	for _, tc := range procConfigByDestTableID {
 		if len(tc.srcDesc.NonPrimaryIndexes()) > 0 {
@@ -226,7 +231,7 @@ func newLogicalReplicationWriterProcessor(
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
-		dlqClient: InitDeadLetterQueueClient(flowCtx.Cfg.DB, dlqDbExec, destTableBySrcID),
+		dlqClient: dlqClient,
 		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 		seenEvery: log.Every(1 * time.Minute),
 	}
