@@ -367,6 +367,7 @@ go_test(
         "blocklist_test.go",
         "cdc_helper_test.go",
         "drt_test.go",
+        "jepsen_test.go",
         "query_comparison_util_test.go",
         "restore_test.go",
         "sysbench_test.go",

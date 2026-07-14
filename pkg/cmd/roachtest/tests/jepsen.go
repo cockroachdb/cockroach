@@ -7,6 +7,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -79,6 +80,117 @@ const repoBranch = "tc-nightly-main"
 
 const gcpPath = "https://storage.googleapis.com/cockroach-jepsen"
 const binaryVersion = "0.1.0-bd82e2e-standalone"
+
+const (
+	jepsenFailureOutcomeMarker   = "Oh jeez, I'm sorry, Jepsen broke. Here's why:"
+	jepsenSqllivenessStartupErr  = "org.postgresql.util.PSQLException: ERROR: active-schema-leases-by-region: sqlliveness subsystem has not yet been started"
+	jepsenMonotonicSetupFrame    = "at jepsen.cockroach.monotonic.MonotonicClient.setup_BANG_"
+	jepsenSuccessVerdict         = "Everything looks good"
+	jepsenWorkloadCompleteMarker = "Run complete"
+)
+
+const (
+	jepsenOverallTimeout   = 40 * time.Minute
+	jepsenJVMStackDumpWait = 10 * time.Second
+)
+
+var errJepsenTimedOut = errors.New("timed out")
+
+type jepsenFailureBehavior string
+
+const (
+	jepsenFailureSkip      jepsenFailureBehavior = "skip"
+	jepsenFailureTransient jepsenFailureBehavior = "transient"
+)
+
+type jepsenKnownFailure struct {
+	behavior                  jepsenFailureBehavior
+	cause                     string
+	err                       error
+	outcomeContains           []string
+	requiresCompletedWorkload bool
+}
+
+var jepsenKnownFailures = []jepsenKnownFailure{
+	{
+		behavior: jepsenFailureTransient,
+		cause:    "jepsen monotonic setup hit unstarted sqlliveness",
+		outcomeContains: []string{
+			jepsenFailureOutcomeMarker + "\n" + jepsenSqllivenessStartupErr,
+			jepsenMonotonicSetupFrame,
+		},
+	},
+	{
+		behavior:                  jepsenFailureTransient,
+		cause:                     "jepsen workload completed, but analysis timed out",
+		err:                       errJepsenTimedOut,
+		requiresCompletedWorkload: true,
+	},
+	{
+		behavior:        jepsenFailureSkip,
+		cause:           "jepsen succeeded but exited nonzero",
+		outcomeContains: []string{jepsenSuccessVerdict},
+	},
+	{
+		behavior:        jepsenFailureSkip,
+		cause:           "jepsen broken barrier",
+		outcomeContains: []string{"BrokenBarrierException"},
+	},
+	{
+		behavior:        jepsenFailureSkip,
+		cause:           "jepsen interrupted",
+		outcomeContains: []string{"InterruptedException"},
+	},
+	{
+		behavior:        jepsenFailureSkip,
+		cause:           "jepsen array index out of bounds",
+		outcomeContains: []string{"ArrayIndexOutOfBoundsException"},
+	},
+	{
+		behavior:        jepsenFailureSkip,
+		cause:           "jepsen null pointer",
+		outcomeContains: []string{"NullPointerException"},
+	},
+	{
+		behavior:        jepsenFailureSkip,
+		cause:           "jepsen scp failure",
+		outcomeContains: []string{"clojure.lang.ExceptionInfo: clj-ssh scp failure"},
+	},
+	{
+		behavior:        jepsenFailureSkip,
+		cause:           "jepsen connection timeout",
+		outcomeContains: []string{"RuntimeException: Connection to"},
+	},
+}
+
+// classifyJepsenFailure recognizes known outcomes after a Jepsen invocation
+// has failed. outcome is the final outcome extracted from invoke.log, plus the
+// success verdict when analysis passed but the process still exited nonzero.
+func classifyJepsenFailure(
+	testErr error, outcome string, workloadCompleted bool,
+) (string, jepsenFailureBehavior, bool) {
+	for _, knownFailure := range jepsenKnownFailures {
+		if knownFailure.err != nil && !errors.Is(testErr, knownFailure.err) {
+			continue
+		}
+		if knownFailure.requiresCompletedWorkload && !workloadCompleted {
+			continue
+		}
+		if containsAll(outcome, knownFailure.outcomeContains) {
+			return knownFailure.cause, knownFailure.behavior, true
+		}
+	}
+	return "", "", false
+}
+
+func containsAll(s string, substrings []string) bool {
+	for _, substring := range substrings {
+		if !strings.Contains(s, substring) {
+			return false
+		}
+	}
+	return true
+}
 
 var jepsenNemeses = []struct {
 	name, config string
@@ -371,6 +483,8 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 		t.Fatal(err)
 	}
 	var testErr error
+	timeoutTimer := time.NewTimer(jepsenOverallTimeout)
+	defer timeoutTimer.Stop()
 	select {
 	case testErr = <-errCh:
 		if testErr == nil {
@@ -379,7 +493,7 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 			t.L().Printf("failed: %s", testErr)
 		}
 
-	case <-time.After(40 * time.Minute):
+	case <-timeoutTimer.C:
 		// Although we run tests of 6 minutes each, we use a timeout
 		// much larger than that. This is because Jepsen for some
 		// tests (e.g. register) runs a potentially long analysis
@@ -389,40 +503,54 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 		// Try to get any running jvm to log its stack traces for
 		// extra debugging help.
 		run(c, ctx, controller, "pkill -QUIT java")
-		time.Sleep(10 * time.Second)
-		run(c, ctx, controller, "pkill java")
-		t.L().Printf("timed out")
-		testErr = fmt.Errorf("timed out")
+		time.Sleep(jepsenJVMStackDumpWait)
+		if err := runE(c, ctx, controller, "pkill java"); err != nil {
+			// pkill exits 1 when no matching process is found.
+			// This is expected if the JVM already exited after
+			// the SIGQUIT above.
+			t.L().Printf("pkill java: %s", err)
+		}
+		t.L().Printf("%s", errJepsenTimedOut)
+		testErr = errJepsenTimedOut
 	}
 
 	if testErr != nil {
 		t.L().Printf("grabbing artifacts from controller. Tail of controller log:")
 		run(c, ctx, controller, "tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
-		// We recognize some errors and ignore them.
-		// We're looking for the "Oh jeez" message that Jepsen prints as the test's
-		// outcome, followed by some known exceptions on the next line. If we don't find
-		// either one, we consider the error unrecognized.
-		// TODO(andrei): The known errors are tracked in #30527 (BrokenBarrier and
-		// Interrupted) and #26082 (JSch). Remove errors from this unfortunate list
-		// once the respective issues are fixed.
-		ignoreErr := false
-		if err := runE(c, ctx, controller,
-			`grep -E "(Oh jeez, I'm sorry, Jepsen broke. Here's why|Caused by)" /mnt/data1/jepsen/cockroachdb/invoke.log -A1 | grep `+
-				`-e BrokenBarrierException `+
-				`-e InterruptedException `+
-				`-e ArrayIndexOutOfBoundsException `+
-				`-e NullPointerException `+
-				// And one more ssh failure we've seen, apparently encountered when
-				// downloading logs.
-				`-e "clojure.lang.ExceptionInfo: clj-ssh scp failure" `+
-				// And sometimes the analysis succeeds and yet we still get an error code for some reason.
-				`-e "Everything looks good" `+
-				`-e "RuntimeException: Connection to"`, // timeout
-		); err == nil {
-			t.L().Printf("Recognized BrokenBarrier or other known exceptions (see grep output above). " +
-				"Ignoring it and considering the test successful. " +
-				"See #30527 or #26082 for some of the ignored exceptions.")
-			ignoreErr = true
+
+		var outcome string
+		if result, err := c.RunWithDetailsSingleNode(
+			ctx, t.L(), option.WithNodes(controller),
+			fmt.Sprintf(
+				`sed -n -e '/%s/p' -e "/%s/,\$p" /mnt/data1/jepsen/cockroachdb/invoke.log`,
+				jepsenSuccessVerdict, jepsenFailureOutcomeMarker,
+			),
+		); err != nil {
+			t.L().Printf("failed to inspect Jepsen's final outcome: %s", err)
+		} else {
+			outcome = result.Stdout
+		}
+
+		workloadCompleted := false
+		if errors.Is(testErr, errJepsenTimedOut) {
+			if err := runE(c, ctx, controller,
+				fmt.Sprintf(
+					`grep -Fq %q /mnt/data1/jepsen/cockroachdb/store/latest/jepsen.log`,
+					jepsenWorkloadCompleteMarker,
+				),
+			); err == nil {
+				workloadCompleted = true
+			}
+		}
+
+		knownFailureCause, knownFailureBehavior, knownFailure := classifyJepsenFailure(
+			testErr, outcome, workloadCompleted,
+		)
+		if knownFailure {
+			t.L().Printf(
+				"Recognized known Jepsen failure (%s): %s",
+				knownFailureBehavior, knownFailureCause,
+			)
 		}
 
 		if result, err := c.RunWithDetailsSingleNode(
@@ -437,21 +565,11 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 		} else {
 			t.L().Printf("downloaded jepsen logs in failure-logs.tbz")
 		}
-		if ignoreErr {
+		switch knownFailureBehavior {
+		case jepsenFailureSkip:
 			t.Skip("recognized known error", testErr.Error())
-		}
-
-		// Check for timeouts where the Jepsen workload completed but analysis took too long.
-		// This typically happens when the history is large (e.g., due to many transaction retries
-		// under chaos nemeses), making linearizability checking slow.
-		// We still capture the logs above, but we want to classify this as a transient failure
-		// and not a test failure, since it's a known flake.
-		if testErr.Error() == "timed out" {
-			if err := runE(c, ctx, controller,
-				`grep -q "Run complete" /mnt/data1/jepsen/cockroachdb/store/latest/jepsen.log`,
-			); err == nil {
-				t.Fatal(rperrors.TransientFailure(testErr, "jepsen workload completed, but analysis timed out"))
-			}
+		case jepsenFailureTransient:
+			t.Fatal(rperrors.TransientFailure(testErr, knownFailureCause))
 		}
 
 		t.Fatal(testErr)
