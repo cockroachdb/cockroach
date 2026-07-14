@@ -278,15 +278,6 @@ func (twb *txnWriteBuffer) SendLocked(
 		ba.HasBufferedAllPrecedingWrites = true
 	}
 
-	if etArg, ok := ba.GetArg(kvpb.EndTxn); ok {
-		if !etArg.(*kvpb.EndTxnRequest).Commit {
-			// We're performing a rollback, so there is no point in flushing
-			// anything.
-			return twb.wrapped.SendLocked(ctx, ba)
-		}
-		return twb.flushBufferAndSendBatch(ctx, ba)
-	}
-
 	// We check if scan transforms are enabled once and use that answer until the
 	// end of SendLocked.
 	cfg := transformConfig{
@@ -400,6 +391,10 @@ func (twb *txnWriteBuffer) batchRequiresFlush(
 			// doing so.
 
 			log.VEventf(ctx, 2, "%s forcing flush of write buffer", req.Method())
+			return true
+		case *kvpb.EndTxnRequest:
+			// An EndTxn ends buffering (rollback discards buffer,
+			// commit flushes buffer).
 			return true
 		}
 	}
@@ -1748,8 +1743,10 @@ func (twb *txnWriteBuffer) removeFromBuffer(bw *bufferedWrite) {
 }
 
 // flushBufferAndSendBatch flushes all buffered writes when sending the supplied
-// batch request to the KV layer. This is done by pre-pending the buffered
-// writes to the requests in the batch.
+// batch request to the KV layer. In most cases, this is done by pre-pending the
+// buffered writes to the requests in the batch. In the case of rollbacks, the
+// buffer is abandoned. When required for correctness, the buffer may be flushed
+// in its own batch before the given batch is sent.
 //
 // The response is transformed to hide the fact that requests were added to the
 // batch to flush the buffer. Upper layers remain oblivious to the flush and any
@@ -1776,12 +1773,29 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	}
 	twb.flushed = true
 
+	// On rollback, discard all buffered writes. These writes are wasted
+	// work. Additionally it is unsafe to send writes in the same batch as a
+	// rollback:
+	//
+	// If we prepended the buffered requests to an EndTxn(commit=false)
+	// batch, the DistSender may divide the combined batch across ranges (a
+	// rollback's EndTxn is not split into its own batch the way a commit's
+	// is). The ABORTED status from the successful EndTxn(abort) is then used
+	// to update the transaction on the next batch request. That following
+	// request can hit an error (ExclusionViolationError, WriteTooOldError,
+	// etc) and trip the assertion in checkTxnStatusValid that disallows such
+	// errors on a finalized transaction, fataling the node (#171482).
+	endTxnArg, hasEndTxn := ba.GetArg(kvpb.EndTxn)
+	if hasEndTxn && !endTxnArg.(*kvpb.EndTxnRequest).Commit {
+		twb.resetBuffer()
+		return twb.wrapped.SendLocked(ctx, ba)
+	}
+
 	numKeysBuffered := twb.buffer.Len()
 	if numKeysBuffered == 0 {
 		return twb.wrapped.SendLocked(ctx, ba) // nothing to flush
 	}
 
-	endTxnArg, hasEndTxn := ba.GetArg(kvpb.EndTxn)
 	if !hasEndTxn {
 		// We're flushing the buffer even though the batch doesn't contain an EndTxn
 		// request. That means we buffered some writes and decided to disable write
