@@ -534,6 +534,7 @@ func restore(
 			&exclusiveEndKeyComparator{},
 			spanCh,
 			false, /* useLink */
+			0,     /* maxLevels */
 		), "generate and send import spans")
 	}
 

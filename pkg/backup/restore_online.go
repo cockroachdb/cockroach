@@ -59,15 +59,6 @@ var onlineRestoreLinkWorkers = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-var onlineRestoreLayerLimit = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"backup.restore.online_layer_limit",
-	"maximum number of layers to restore in an online restore operation",
-	10,
-	settings.PositiveInt,
-	settings.WithVisibility(settings.Reserved),
-)
-
 // onlineRestoreUseDistFlow controls whether online restore uses the distributed
 // restore flow (distRestore with RestoreDataProcessor) instead of the simpler
 // sendAddRemoteSSTs loop. When enabled, the RestoreDataProcessor will link
@@ -481,12 +472,6 @@ func checkManifestsForOnlineCompat(
 ) error {
 	if len(manifests) < 1 {
 		return errors.AssertionFailedf("expected at least 1 backup manifest")
-	}
-
-	// TODO(online-restore): Remove once we support layer ordering and have tested some reasonable number of layers.
-	layerLimit := int(onlineRestoreLayerLimit.Get(&settings.SV))
-	if len(manifests) > layerLimit {
-		return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: too many incremental layers %d (from backup) > %d (limit)", len(manifests), layerLimit)
 	}
 
 	for _, manifest := range manifests {
@@ -1080,32 +1065,39 @@ func getNumOnlineRestoreLinkWorkers(ctx context.Context, execCtx sql.JobExecCont
 	return defaultLinkWorkersPerNode * numNodes, nil
 }
 
-// uriCompatibleWithOnlineRestore validates that a uri scheme is supported for early boot.
-// additionally, if an external connection uri is passed, the underlying uri the
-// external connection points to will be loaded from the system table and validated
-func uriCompatibleWithOnlineRestore(ctx context.Context, txn isql.Txn, path string) error {
-	uri, err := url.Parse(path)
+// linkSupportedForURI reports whether files stored at uri can be linked below
+// Raft via LinkExternalSSTable rather than ingested. Linking opens the file from
+// the storage (KV) layer during early boot, so only schemes accessible there
+// qualify; stores reachable only from the SQL layer (e.g. userfile, and
+// nodelocal in production) cannot be linked and must be ingested instead. The
+// check goes through the early-boot registry, so a test that registers nodelocal
+// for early boot is correctly treated as linkable.
+//
+// uri is expected to already be materialized (external:// resolved by
+// resolveExternalStorageURIs), so no external-connection lookup is needed.
+func linkSupportedForURI(uri string) bool {
+	parsed, err := url.Parse(uri)
 	if err != nil {
-		return errors.Wrap(err, "failed to parse URI for online restore")
+		return false
 	}
-	scheme := uri.Scheme
-	if scheme == externalconn.Scheme {
-		// online restore materializes external connections late and does not support certain schemes,
-		// so we need to validate that the underlying uri has a supported scheme
-		ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, txn)
-		if err != nil {
-			return errors.Wrap(err, "failed to load external connection")
+	return cloud.SchemeSupportsEarlyBoot(parsed.Scheme) == nil
+}
+
+// layerLinkable reports whether every store backing a backup layer's files can
+// be linked (see linkSupportedForURI). A layer qualifies only if its default
+// store and all of its per-locality stores are linkable; if any file in the
+// layer would fall back to ingest, the whole layer must be ingested so that
+// linked layers remain a strict oldest prefix (see generateAndSendImportSpans).
+func layerLinkable(b backuppb.BackupManifest, localityDirs storeByLocalityKV) bool {
+	if !linkSupportedForURI(b.Dir.URI) {
+		return false
+	}
+	for _, dir := range localityDirs {
+		if !linkSupportedForURI(dir.URI) {
+			return false
 		}
-		materialized, err := externalconn.Materialize(ec, uri)
-		if err != nil {
-			return err
-		}
-		scheme = materialized.Scheme
 	}
-	if err := cloud.SchemeSupportsEarlyBoot(scheme); err != nil {
-		return errors.Wrap(err, "backup URI not supported for online restore")
-	}
-	return nil
+	return true
 }
 
 // resolveExternalStorageURIs resolves any external:// URIs in the provided
@@ -1150,12 +1142,8 @@ func resolveExternalStorageURIs(
 		if err != nil {
 			return "", false, errors.Wrap(err, "failed to materialize external connection URI")
 		}
-		// Revalidate in case the user changed the underlying uri in the external
-		// connection to a non early boot uri since the job was created.
-		if err := cloud.SchemeSupportsEarlyBoot(materialized.Scheme); err != nil {
-			return "", false, errors.Wrap(err, "backup URI not supported for online restore")
-		}
-
+		// The materialized scheme need not be early-boot accessible: files whose
+		// store can't be linked are ingested instead (see linkSupportedForURI).
 		return materialized.String(), true, nil
 	}
 

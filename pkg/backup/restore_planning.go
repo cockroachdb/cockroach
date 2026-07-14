@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -99,6 +100,67 @@ var restoreCompactedBackups = settings.RegisterBoolSetting(
 	true,
 	settings.WithVisibility(settings.Reserved),
 )
+
+// defaultExperimentalCopy makes RESTORE default to experimental fast copy mode
+// when the user does not specify a mode and the statement options are
+// compatible with it. When they are not (e.g. an encrypted backup), RESTORE
+// falls back to a normal restore. The mode must be decided from statement
+// options alone because it fixes the result-column header before backup
+// manifests are read; see restoreOptionsAllowFastCopy.
+var defaultExperimentalCopy = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"backup.restore.default_experimental_copy.enabled",
+	"if enabled, RESTORE defaults to experimental fast copy mode when the "+
+		"backup is compatible, falling back to a normal restore otherwise",
+	false,
+	settings.WithVisibility(settings.Reserved),
+)
+
+// restoreOptionsAllowFastCopy reports whether the statement options are
+// compatible with defaulting to experimental fast copy mode. Only option-level
+// incompatibilities are consulted: the mode (and thus the result-column header)
+// must be chosen before backup manifests are resolved, so manifest-level
+// incompatibilities cannot participate in the default and would instead surface
+// as an error if fast copy is chosen.
+func restoreOptionsAllowFastCopy(opts tree.RestoreOptions) bool {
+	// Encrypted backups have no below-Raft decryption hook for linked SSTs.
+	if opts.EncryptionPassphrase != nil || len(opts.DecryptionKMSURI) > 0 {
+		return false
+	}
+	// verify_backup_table_data is incompatible with fast/online restore.
+	if opts.VerifyData {
+		return false
+	}
+	return true
+}
+
+// maybeDefaultToFastCopy flips an unspecified RESTORE to experimental fast copy
+// mode when either the test hook or the cluster setting asks for it and the
+// options allow it. It is a no-op if the user explicitly chose a mode.
+func maybeDefaultToFastCopy(
+	restoreStmt *tree.Restore, nodeID *base.SQLIDContainer, sv *settings.Values,
+) {
+	if restoreStmt.Options.ExperimentalCopy || restoreStmt.Options.ExperimentalOnline {
+		return
+	}
+	if !testFastRestore() && !defaultExperimentalCopy.Get(sv) {
+		return
+	}
+	// Fast copy links backup files below Raft via LinkExternalSSTable, which
+	// requires the SQL server to be colocated with the storage (KV) layer. That
+	// holds for the system tenant and shared-process tenants (both have a KV node
+	// ID) but not a separate-process SQL server, where the link is rejected. The
+	// presence of a node ID is exactly that distinction. Don't silently default to
+	// a mode that can't run here; an explicit EXPERIMENTAL COPY still surfaces the
+	// error.
+	if _, hasNodeID := nodeID.OptionalNodeID(); !hasNodeID {
+		return
+	}
+	if !restoreOptionsAllowFastCopy(restoreStmt.Options) {
+		return
+	}
+	restoreStmt.Options.ExperimentalCopy = true
+}
 
 // maybeFilterMissingViews filters the set of tables to restore to exclude views
 // whose dependencies are either missing or are themselves unrestorable due to
@@ -1453,9 +1515,7 @@ func restoreTypeCheck(
 	if !ok {
 		return false, nil, nil
 	}
-	if testFastRestore() && !restoreStmt.Options.ExperimentalCopy && !restoreStmt.Options.ExperimentalOnline {
-		restoreStmt.Options.ExperimentalCopy = true
-	}
+	maybeDefaultToFastCopy(restoreStmt, p.ExecCfg().NodeInfo.NodeID, &p.ExecCfg().Settings.SV)
 	if err := exprutil.TypeCheck(
 		ctx, "RESTORE", p.SemaCtx(),
 		exprutil.StringArrays{
@@ -1500,9 +1560,7 @@ func restorePlanHook(
 	if !ok {
 		return nil, nil, false, nil
 	}
-	if testFastRestore() && !restoreStmt.Options.ExperimentalCopy && !restoreStmt.Options.ExperimentalOnline {
-		restoreStmt.Options.ExperimentalCopy = true
-	}
+	maybeDefaultToFastCopy(restoreStmt, p.ExecCfg().NodeInfo.NodeID, &p.ExecCfg().Settings.SV)
 
 	if err := featureflag.CheckEnabled(
 		ctx,
@@ -1926,15 +1984,6 @@ func doRestorePlan(
 		// backup manifest can take a while.
 		if err := checkForConflictingDescriptors(ctx, p.InternalSQLTxn()); err != nil {
 			return err
-		}
-	}
-
-	if restoreStmt.Options.OnlineImpl() {
-		// validate that from uris are allowed in online restore
-		for _, path := range from {
-			if err := uriCompatibleWithOnlineRestore(ctx, p.InternalSQLTxn(), path); err != nil {
-				return err
-			}
 		}
 	}
 

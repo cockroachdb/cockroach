@@ -33,7 +33,7 @@ import (
 // 1. Block all reads of backup data SSTs at the storage layer
 // 2. Inflate backup file stats by 100,000x (making ~3KB files appear as ~300MB)
 // 3. Force-enqueue ranges into the split queue after each LinkExternalSSTable
-// 4. Create a deep backup (9 incremental layers) with files across multiple ranges
+// 4. Create a multi-layer backup (5 incremental layers) with files across multiple ranges
 //
 // If restore fails to pre-split properly:
 // - All files accumulate on one range
@@ -53,7 +53,7 @@ func TestOnlineRestoreDistFlowSplitScatter(t *testing.T) {
 	blockCh := make(chan struct{})
 	defer nodelocal.ReplaceNodeLocalForTestingWithInterceptor(
 		t.TempDir(),
-		func(ctx context.Context, basename string) {
+		func(ctx context.Context, _ string, basename string) {
 			if strings.HasPrefix(basename, "data/") && strings.HasSuffix(basename, ".sst") {
 				select {
 				case <-ctx.Done():
@@ -140,12 +140,15 @@ func TestOnlineRestoreDistFlowSplitScatter(t *testing.T) {
 	}
 	runner.Exec(t, "ALTER TABLE data.bank SPLIT AT VALUES (20), (40), (60), (80)")
 
-	// Create backup with 10 total layers (1 full + 9 incremental).
+	// Create a backup with 6 total layers (1 full + 5 incremental). This stays
+	// within onlineRestoreMaxLevels, so every layer is linked and none is
+	// ingested: the test exercises the pure-link split/scatter path, whose
+	// pre-splitting must keep the blocked backup SSTs off the split-key scan path.
 	const backupURI = "nodelocal://1/backup"
 	runner.Exec(t, fmt.Sprintf("BACKUP TABLE data.bank INTO '%s'", backupURI))
 
 	// Each incremental updates a sliding window of rows for varied SST boundaries.
-	for i := 0; i < 9; i++ {
+	for i := 0; i < 5; i++ {
 		start := (i * 13) % 100
 		end := start + 35
 		if end > 100 {
@@ -174,13 +177,7 @@ func TestOnlineRestoreDistFlowSplitScatter(t *testing.T) {
 		runner.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
 	}
 
-	t.Run("goroutine-path", func(t *testing.T) {
-		runner.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = false")
-		restoreAndCancel(t)
-	})
-
-	t.Run("distflow-path", func(t *testing.T) {
-		runner.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = true")
-		restoreAndCancel(t)
-	})
+	// Online restore uses the distributed flow by default; exercise it directly.
+	// The legacy coordinator path is not the default here and is not covered.
+	restoreAndCancel(t)
 }

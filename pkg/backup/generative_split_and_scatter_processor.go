@@ -549,6 +549,7 @@ func runGenerativeSplitAndScatter(
 			fsc,
 			restoreSpanEntriesCh,
 			spec.UseLink,
+			onlineRestoreMaxLevels,
 		), "generating and sending import spans")
 	})
 

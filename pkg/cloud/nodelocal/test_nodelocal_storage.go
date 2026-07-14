@@ -70,16 +70,24 @@ func TestingMakeNodelocalStorage(
 
 // ReplaceNodeLocalForTestingWithInterceptor is like ReplaceNodeLocalForTesting
 // but calls interceptRead before each ReadFile call. The interceptor receives
-// the basename of the file being read. This can be used to inject blocking or
-// delays for specific files, e.g. to block reads of data SSTs during online
-// restore testing. Size calls are not intercepted so that Pebble can still
-// query external file sizes for disk usage accounting.
+// the storage's base path (the configured LocalFileConfig.Path, e.g. the backup
+// subdirectory) and the basename of the file being read. The base path lets
+// callers distinguish, for example, full-backup files from incremental-backup
+// files, which share the same basename layout but live under different bases.
+// This can be used to inject blocking or delays for specific files, e.g. to
+// block reads of data SSTs during online restore testing. Size calls are not
+// intercepted so that Pebble can still query external file sizes for disk usage
+// accounting.
 func ReplaceNodeLocalForTestingWithInterceptor(
-	root string, interceptRead func(context.Context, string),
+	root string, interceptRead func(ctx context.Context, base, basename string),
 ) func() {
 	makeFn := func(ctx context.Context, conf cloud.EarlyBootExternalStorageContext, es cloudpb.ExternalStorage) (cloud.ExternalStorage, error) {
 		inner := TestingMakeNodelocalStorage(root, conf.Settings, es)
-		return &interceptingStorage{ExternalStorage: inner, interceptRead: interceptRead}, nil
+		return &interceptingStorage{
+			ExternalStorage: inner,
+			interceptRead:   interceptRead,
+			base:            es.LocalFileConfig.Path,
+		}, nil
 	}
 	parserFn := func(uri *url.URL) (cloudpb.ExternalStorage, error) {
 		if !buildutil.CrdbTestBuild {
@@ -104,12 +112,13 @@ func ReplaceNodeLocalForTestingWithInterceptor(
 // before ReadFile operations.
 type interceptingStorage struct {
 	cloud.ExternalStorage
-	interceptRead func(context.Context, string)
+	interceptRead func(ctx context.Context, base, basename string)
+	base          string
 }
 
 func (s *interceptingStorage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
 ) (ioctx.ReadCloserCtx, int64, error) {
-	s.interceptRead(ctx, basename)
+	s.interceptRead(ctx, s.base, basename)
 	return s.ExternalStorage.ReadFile(ctx, basename, opts)
 }
