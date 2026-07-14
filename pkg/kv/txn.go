@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -440,7 +441,38 @@ func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
+// bufferedWritesProhibited, when true, makes SetBufferedWritesEnabled(true) a
+// no-op. It is set outside of test builds to disable write buffering entirely,
+// so that neither the cluster setting, the session variable, nor any direct
+// caller can turn the feature on. It is a var (rather than an inline
+// buildutil.CrdbTestBuild check) so that tests can exercise both branches.
+var bufferedWritesProhibited = !buildutil.CrdbTestBuild
+
+// bufferedWritesProhibitedLogEvery rate-limits the warning emitted when write
+// buffering is requested but prohibited. The prohibition is a static, build-time
+// condition, so a caller that keeps the cluster setting or session variable on
+// would otherwise log on every txn; once a minute is enough to surface the
+// misconfiguration without flooding the logs.
+var bufferedWritesProhibitedLogEvery = log.Every(time.Minute)
+
+// SetBufferedWritesEnabled toggles whether the writes are buffered on the
+// gateway node until the commit time. Buffered writes cannot be enabled on a
+// txn that performed any requests. When disabling buffered writes, if there are
+// any writes in the buffer, they are flushed with the next BatchRequest.
+//
+// Only allowed on the RootTxn.
 func (txn *Txn) SetBufferedWritesEnabled(enabled bool) {
+	if enabled && bufferedWritesProhibited {
+		// Write buffering is disabled outside of test builds. Enabling is a
+		// no-op; disabling is always honored. Warn (rate-limited) so an
+		// operator who turned the feature on via the cluster setting or session
+		// variable can see why it has no effect.
+		if bufferedWritesProhibitedLogEvery.ShouldLog() {
+			log.Warningf(context.Background(),
+				"buffered writes requested but disabled in this build; ignoring request to enable")
+		}
+		return
+	}
 	if txn.typ != RootTxn {
 		panic(errors.AssertionFailedf("SetBufferedWritesEnabled() called on leaf txn"))
 	}
