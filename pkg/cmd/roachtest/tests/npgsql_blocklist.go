@@ -666,6 +666,7 @@ var npgsqlIgnoreList = blocklist{
 	`Npgsql.Tests.CopyTests(Multiplexing).Import_numeric`:                                            "flaky",
 	`Npgsql.Tests.CopyTests(Multiplexing).Import_string_array`:                                       "flaky",
 	`Npgsql.Tests.CopyTests(Multiplexing).Prepended_messages`:                                        "flaky",
+	`Npgsql.Tests.CopyTests(NonMultiplexing).Prepended_messages`:                                     "flaky",
 	`Npgsql.Tests.NotificationTests.Wait_with_timeout`:                                               "flaky",
 	`Npgsql.Tests.NotificationTests.WaitAsync_with_timeout`:                                          "flaky",
 	`Npgsql.Tests.ReaderNewSchemaTests(Async).DefaultValue`:                                          "flaky",
