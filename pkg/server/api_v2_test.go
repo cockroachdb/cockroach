@@ -356,7 +356,7 @@ func TestAuthV2(t *testing.T) {
 // TestAuthV2LoginExpiredPassword verifies that the v2 login endpoint returns
 // the same generic error for an expired password as for any other
 // authentication failure. A distinct expired-password response would let an
-// unauthenticated caller confirm that a username exists (VULM-570).
+// unauthenticated caller confirm that a username exists.
 func TestAuthV2LoginExpiredPassword(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
