@@ -151,7 +151,7 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !verified {
-		http.Error(w, "the provided credentials did not match any account on the server", http.StatusUnauthorized)
+		http.Error(w, WebAuthenticationFailureMsg, http.StatusUnauthorized)
 		return
 	}
 
@@ -162,11 +162,12 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if expired {
-		http.Error(w, "the password has expired", http.StatusUnauthorized)
+		log.Ops.VWarningf(ctx, 1, "password for user %s has expired", username)
+		http.Error(w, WebAuthenticationFailureMsg, http.StatusUnauthorized)
 		return
 	}
 	if !verified {
-		http.Error(w, "the provided credentials did not match any account on the server", http.StatusUnauthorized)
+		http.Error(w, WebAuthenticationFailureMsg, http.StatusUnauthorized)
 		return
 	}
 
