@@ -30,7 +30,7 @@ go_library(
 
 go_test(
     name = "workloadccl_test",
-    size = "small",
+    size = "large",
     srcs = [
         "bench_test.go",
         "fixture_test.go",
