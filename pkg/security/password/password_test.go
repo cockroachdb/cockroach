@@ -160,3 +160,37 @@ func TestSCRAMToBCryptConversion(t *testing.T) {
 		})
 	}
 }
+
+// TestDummyCompareHashAndCleartextPassword verifies that the decoy comparison
+// acquires the hashing semaphore for each configured hash method (so its
+// rate-limiting and latency match a real check), reuses the cached hash, and
+// tolerates a nil semaphore.
+func TestDummyCompareHashAndCleartextPassword(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		method password.HashMethod
+		cost   int
+	}{
+		{password.HashBCrypt, bcrypt.MinCost},
+		{password.HashSCRAMSHA256, password.ScramMinCost},
+	} {
+		t.Run(tc.method.String(), func(t *testing.T) {
+			var acquired, released int
+			sem := func(context.Context) (func(), error) {
+				acquired++
+				return func() { released++ }, nil
+			}
+
+			require.NoError(t, password.DummyCompareHashAndCleartextPassword(ctx, "a", tc.method, tc.cost, sem))
+			require.NoError(t, password.DummyCompareHashAndCleartextPassword(ctx, "b", tc.method, tc.cost, sem))
+			require.Equal(t, 2, acquired)
+			require.Equal(t, 2, released)
+
+			// A nil semaphore is tolerated (matches CompareHashAndCleartextPassword).
+			require.NoError(t, password.DummyCompareHashAndCleartextPassword(ctx, "c", tc.method, tc.cost, nil))
+		})
+	}
+}
