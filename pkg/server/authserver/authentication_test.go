@@ -567,6 +567,34 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 		}
 	}
 
+	// Attempt with an expired password. Must return the same generic 401 error
+	// as any other failure: an expired-password-specific message (or one that
+	// echoes the username) would let an attacker confirm the account exists
+	// (VULM-570).
+	{
+		const expiredUser = "expireduser"
+		cmd := fmt.Sprintf(
+			"CREATE USER %s WITH PASSWORD '%s' VALID UNTIL '2000-01-01'", expiredUser, validPassword,
+		)
+		if _, err := db.Exec(cmd); err != nil {
+			t.Fatalf("failed to create user with expired password: %s", err)
+		}
+
+		response, err := tryLogin(expiredUser, validPassword)
+		if !testutils.IsError(err, "status: 401") {
+			t.Fatalf("expired-password login got error %s, wanted error with 401 status", err)
+		}
+		if !testutils.IsError(err, "did not match any account") {
+			t.Fatalf("expired-password login got error %s, wanted the generic failure message", err)
+		}
+		if testutils.IsError(err, "has expired") || testutils.IsError(err, expiredUser) {
+			t.Fatalf("expired-password login leaked account details: %s", err)
+		}
+		if cookies := response.Cookies(); len(cookies) > 0 {
+			t.Fatalf("expired-password login got cookies %v, wanted empty", cookies)
+		}
+	}
+
 	// Successful attempt. Should succeed and return a Set-Cookie header.
 	response, err := tryLogin(validUsername, validPassword)
 	if err != nil {
