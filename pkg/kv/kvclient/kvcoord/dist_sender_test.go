@@ -6739,3 +6739,62 @@ func BenchmarkDistSenderSunnyDay(b *testing.B) {
 		}
 	}
 }
+
+// TestSplitBatchUnsetsHasBufferedAllPrecedingWrites verifies that
+// splitBatchAndCheckForRefreshSpans clears the HasBufferedAllPrecedingWrites
+// flag when (and only when) the batch is split into multiple sub-batches.
+func TestSplitBatchUnsetsHasBufferedAllPrecedingWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC := roachpb.Key("c")
+	// NewPut calls InitChecksum, which panics if the same Value is reused, so
+	// mint a fresh Value per Put.
+	put := func(key roachpb.Key) kvpb.Request {
+		return kvpb.NewPut(key, roachpb.MakeValueFromString("v"))
+	}
+
+	testCases := []struct {
+		name        string
+		reqs        []kvpb.Request
+		expectSplit bool
+	}{
+		{
+			// A read between two writes forces Split to separate the writes into
+			// distinct sub-batches: this is the shape a buffered-writes flush of
+			// CPut(A)+read+Put(A) produces.
+			name:        "read between writes splits the batch",
+			reqs:        []kvpb.Request{put(keyA), kvpb.NewGet(keyB), put(keyA)},
+			expectSplit: true,
+		},
+		{
+			// Adjacent writes stay in a single batch so the flag
+			// can safely remain set.
+			name:        "adjacent writes do not split",
+			reqs:        []kvpb.Request{put(keyA), put(keyC)},
+			expectSplit: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ba := &kvpb.BatchRequest{}
+			ba.HasBufferedAllPrecedingWrites = true
+			ba.Add(tc.reqs...)
+
+			parts := splitBatchAndCheckForRefreshSpans(ba, false /* canSplitET */)
+
+			if tc.expectSplit {
+				require.Greater(t, len(parts), 1, "expected the batch to be split")
+				require.False(t, ba.HasBufferedAllPrecedingWrites,
+					"flag must be unset once the batch is split")
+			} else {
+				require.Len(t, parts, 1, "expected the batch not to be split")
+				require.True(t, ba.HasBufferedAllPrecedingWrites,
+					"flag must be retained when the batch is applied as a single unit")
+			}
+		})
+	}
+}
