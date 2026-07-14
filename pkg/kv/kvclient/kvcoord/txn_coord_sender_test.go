@@ -1774,6 +1774,88 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	})
 }
 
+// TestTxnCoordSenderRejectsInternalHeaderFields verifies that the
+// TxnCoordSender rejects client batches that set header fields owned by the
+// txnInterceptor stack or the DistSender. Layers below the TxnCoordSender
+// assume they are the only writers of these fields.
+func TestTxnCoordSenderRejectsInternalHeaderFields(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(nil)
+	ambient := log.MakeTestingAmbientCtxWithNewTracer()
+	sender := &mockSender{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
+			AmbientCtx: ambient,
+			Clock:      clock,
+			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
+		},
+		sender,
+	)
+	db := kv.NewDB(ambient, factory, clock, stopper)
+
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		resp := ba.CreateReply()
+		resp.Txn = ba.Txn
+		return resp, nil
+	})
+
+	testCases := []struct {
+		name        string
+		mutateBatch func(h *kvpb.Header)
+	}{
+		{
+			name:        "AsyncConsensus",
+			mutateBatch: func(h *kvpb.Header) { h.AsyncConsensus = true },
+		},
+		{
+			name:        "CanForwardReadTimestamp",
+			mutateBatch: func(h *kvpb.Header) { h.CanForwardReadTimestamp = true },
+		},
+		{
+			name:        "DistinctSpans",
+			mutateBatch: func(h *kvpb.Header) { h.DistinctSpans = true },
+		},
+		{
+			name:        "AmbiguousReplayProtection",
+			mutateBatch: func(h *kvpb.Header) { h.AmbiguousReplayProtection = true },
+		},
+		{
+			name:        "ProxyRangeInfo",
+			mutateBatch: func(h *kvpb.Header) { h.ProxyRangeInfo = &roachpb.RangeInfo{} },
+		},
+		{
+			name:        "HasBufferedAllPrecedingWrites",
+			mutateBatch: func(h *kvpb.Header) { h.HasBufferedAllPrecedingWrites = true },
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			txn := kv.NewTxn(ctx, db, roachpb.NodeID(1))
+			header := kvpb.Header{Txn: txn.TestingCloneTxn()}
+			put := &kvpb.PutRequest{
+				RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("a")},
+			}
+
+			// A batch without the field set is accepted.
+			_, pErr := kv.SendWrappedWith(ctx, txn, header, put)
+			require.Nil(t, pErr)
+
+			tc.mutateBatch(&header)
+			_, pErr = kv.SendWrappedWith(ctx, txn, header, put)
+			require.NotNil(t, pErr)
+			require.True(t, errors.IsAssertionFailure(pErr.GoError()), "%v", pErr)
+			require.ErrorContains(t, pErr.GoError(), tc.name)
+		})
+	}
+}
+
 // Test that lock tracking behaves correctly for transactions that attempt to
 // run a batch containing an EndTxn. Since in case of an error it's not easy to
 // determine whether any locks have been laid down (i.e. in case the batch was
