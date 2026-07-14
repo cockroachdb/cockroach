@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
@@ -457,5 +458,70 @@ CREATE TEMPORARY TABLE foo();
 		t.Fatal("session close timed out; connExecutor deadlocked?")
 	case err = <-done:
 		require.NoError(t, err)
+	}
+}
+
+// TestBufferedWritesIsAllowedForIsolationLevel verifies that write buffering
+// for weak isolation levels requires both a test build and the
+// sql.txn.write_buffering_for_weak_isolation.enabled cluster setting.
+func TestBufferedWritesIsAllowedForIsolationLevel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	defer func(v bool) {
+		bufferedWritesForWeakIsolationProhibited = v
+	}(bufferedWritesForWeakIsolationProhibited)
+
+	for _, tc := range []struct {
+		name       string
+		iso        isolation.Level
+		prohibited bool
+		setting    bool
+		expected   bool
+	}{
+		{
+			name:       "serializable allowed even when weak isolation prohibited",
+			iso:        isolation.Serializable,
+			prohibited: true,
+			setting:    false,
+			expected:   true,
+		},
+		{
+			name:       "read committed prohibited despite setting",
+			iso:        isolation.ReadCommitted,
+			prohibited: true,
+			setting:    true,
+			expected:   false,
+		},
+		{
+			name:       "read committed allowed by setting",
+			iso:        isolation.ReadCommitted,
+			prohibited: false,
+			setting:    true,
+			expected:   true,
+		},
+		{
+			name:       "read committed disallowed without setting",
+			iso:        isolation.ReadCommitted,
+			prohibited: false,
+			setting:    false,
+			expected:   false,
+		},
+		{
+			name:       "snapshot prohibited despite setting",
+			iso:        isolation.Snapshot,
+			prohibited: true,
+			setting:    true,
+			expected:   false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bufferedWritesForWeakIsolationProhibited = tc.prohibited
+			allowBufferedWritesForWeakIsolation.Override(ctx, &st.SV, tc.setting)
+			require.Equal(t, tc.expected,
+				bufferedWritesIsAllowedForIsolationLevel(ctx, st, tc.iso))
+		})
 	}
 }
