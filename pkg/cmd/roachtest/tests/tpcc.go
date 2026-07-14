@@ -1748,11 +1748,11 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  4,
 
-		LoadWarehousesGCE:   1600,
+		LoadWarehousesGCE:   2000,
 		LoadWarehousesAWS:   1300,
 		LoadWarehousesAzure: 1300,
 		LoadWarehousesIBM:   1300,
-		EstimatedMaxGCE:     1300,
+		EstimatedMaxGCE:     1700,
 		EstimatedMaxAWS:     1000,
 		EstimatedMaxAzure:   1000,
 		EstimatedMaxIBM:     1000,
