@@ -239,9 +239,17 @@ func TestImportFixtureCSVServer(t *testing.T) {
 	ts := httptest.NewServer(workload.CSVMux(workload.Registered()))
 	defer ts.Close()
 
+	// Disable auto stats collection. This test is not for verifying stats, and the
+	// auto stats job can leak a goroutine if it is still running at teardown and
+	// get flagged as a failure by leaktest.AfterTest.
+	st := cluster.MakeTestingClusterSettings()
+	stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+	stats.AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
+
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			UseDatabase: `d`,
+			Settings:    st,
 		},
 	)
 	defer s.Stopper().Stop(ctx)
