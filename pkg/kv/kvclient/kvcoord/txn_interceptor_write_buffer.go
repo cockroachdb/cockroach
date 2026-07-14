@@ -1367,6 +1367,21 @@ func (twb *txnWriteBuffer) mergeResponseWithRequestRecords(
 	// All original requests are guaranteed to be in the list of requestRecords,
 	// so the length of the merged responses is the same length as rr.
 	mergedResps := make([]kvpb.ResponseUnion, 0, len(rr))
+
+	// limitExhausted tracks whether a prior response in the batch was
+	// truncated due to a key or byte limit. Once set, every subsequent
+	// stripped request is returned unprocessed (empty response with a
+	// ResumeSpan covering the full request span) via synthUnprocessedResp
+	// instead of being served from the buffer.
+	//
+	// NB: In DistSender, write requests can still proceed after the limit
+	// has been exhausted if they occurred in the same batch that exhausted
+	// the limit. Here, we treat them as all unprocessed. SQL does not
+	// produce read/write batches currently and we prohibit write batches
+	// with limits other than Dels.
+	limitExhausted := false
+	var resumeReason kvpb.ResumeReason
+
 	for _, record := range rr {
 		brResp := kvpb.ResponseUnion{}
 		if !record.stripped {
@@ -1379,15 +1394,63 @@ func (twb *txnWriteBuffer) mergeResponseWithRequestRecords(
 			brResp = br.Responses[0]
 			br.Responses = br.Responses[1:]
 		}
+
+		// A stripped request that falls after the batch's truncation point
+		// must not be served from the buffer. Synthesize an unprocessed
+		// response with a ResumeSpan covering the full request span.
+		if limitExhausted && record.stripped {
+			resp, err := synthUnprocessedResp(record.origRequest, resumeReason)
+			if err != nil {
+				return nil, kvpb.NewError(err)
+			}
+			mergedResps = append(mergedResps, resp)
+			continue
+		}
+
 		resp, pErr := record.toResp(ctx, twb, brResp, br.Txn)
 		if pErr != nil {
 			return nil, pErr
 		}
 		mergedResps = append(mergedResps, resp)
+
+		// After processing this record, check whether its response was
+		// truncated due to a limit. If so, all later stripped requests
+		// must be returned unprocessed.
+		if !limitExhausted && resp.GetInner().Header().ResumeSpan != nil {
+			limitExhausted = true
+			resumeReason = resp.GetInner().Header().ResumeReason
+		}
 	}
 
 	br.Responses = mergedResps
 	return br, nil
+}
+
+// synthUnprocessedResp returns an empty response for req with a ResumeSpan
+// covering the full request span. It is used for stripped requests that fall
+// after the batch's truncation point: since the request was never sent to KV,
+// the interceptor synthesizes the same shape that DistSender's
+// fillSkippedResponses produces for ranges it never visits. See the comment
+// on limitExhausted in mergeResponseWithRequestRecords for the full rationale.
+func synthUnprocessedResp(req kvpb.Request, reason kvpb.ResumeReason) (kvpb.ResponseUnion, error) {
+	sp := req.Header().Span()
+	hdr := kvpb.ResponseHeader{ResumeSpan: &sp, ResumeReason: reason}
+	var ru kvpb.ResponseUnion
+	switch req.(type) {
+	case *kvpb.GetRequest:
+		ru.MustSetInner(&kvpb.GetResponse{ResponseHeader: hdr})
+	case *kvpb.DeleteRequest:
+		ru.MustSetInner(&kvpb.DeleteResponse{ResponseHeader: hdr})
+	case *kvpb.PutRequest:
+		ru.MustSetInner(&kvpb.PutResponse{ResponseHeader: hdr})
+	case *kvpb.ConditionalPutRequest:
+		ru.MustSetInner(&kvpb.ConditionalPutResponse{ResponseHeader: hdr})
+	default:
+		return ru, errors.AssertionFailedf(
+			"unsupported stripped request type %T", req,
+		)
+	}
+	return ru, nil
 }
 
 // requestRecord stores a set of metadata fields about potential transformations
@@ -1557,14 +1620,22 @@ func (rr requestRecord) toResp(
 
 		val, _, served := twb.maybeServeRead(req.Key, req.Sequence)
 		if served {
-			// TODO(yuzefovich): we're effectively ignoring the limits of
-			// BatchRequest when serving the Get from the buffer. We should
-			// consider setting the ResumeSpan if a limit has already been
-			// reached by this point. This will force us to set ResumeSpan on
-			// all remaining requests in the batch.
+			// NB: mergeResponseWithRequestRecords handles limit-exhaustion
+			// ordering for stripped Gets upstream (once any response carries
+			// a ResumeSpan, later stripped requests are routed through
+			// synthUnprocessedResp instead of here).
+			//
+			// TODO(ssd): buffer-served reads do not consume the limit budget,
+			// so a batch with stripped requests can overshoot MaxSpanRequestKeys /
+			// TargetBytes. This is benign for SQL today but should still be addressed.
 			getResp := &kvpb.GetResponse{}
 			if val.IsPresent() {
 				getResp.Value = val
+				// Match the server-side accounting in MVCCGet: NumKeys counts
+				// the key, NumBytes counts only the value (unlike Scan which
+				// includes the key in NumBytes).
+				getResp.NumKeys = 1
+				getResp.NumBytes = int64(len(val.RawBytes))
 			}
 			ru.MustSetInner(getResp)
 			log.VEventf(ctx, 2, "serving %s on key %s from the buffer", req.Method(), req.Key)
