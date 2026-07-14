@@ -158,6 +158,12 @@ func ErrPriority(err error) ErrorPriority {
 		// ConditionFailedError or a WriteIntentError to an error state. More
 		// specifically, we want to allow rollbacks to savepoint after one of these
 		// errors.
+		//
+		// NB: the txnWriteBuffer relies on this type switch being shallow: it
+		// wraps these errors when they are returned by a buffer flush, precisely
+		// so that they stop scoring as unambiguous and the transaction is moved
+		// to an error state. If this check is ever changed to unwrap the error
+		// chain, wrapFlushError must be revisited.
 		return ErrorScoreUnambiguousError
 	}
 	return ErrorScoreNonRetriable
@@ -180,6 +186,20 @@ func NewError(err error) *Error {
 func NewErrorWithTxn(err error, txn *roachpb.Transaction) *Error {
 	e := NewError(err)
 	e.SetTxn(txn)
+	return e
+}
+
+// NewErrorWithMetadataFromExisting creates an Error from the given error,
+// copying the Transaction, OriginNode, Index, and Now from o. The Transaction
+// and Index are cloned, so the new Error shares no mutable state with o.
+func NewErrorWithMetadataFromExisting(err error, o *Error) *Error {
+	e := NewError(err)
+	e.SetTxn(o.GetTxn())
+	e.OriginNode = o.OriginNode
+	if o.Index != nil {
+		e.Index = &ErrPosition{Index: o.Index.Index}
+	}
+	e.Now = o.Now
 	return e
 }
 

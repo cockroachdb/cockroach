@@ -958,8 +958,15 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(ctx context.Context, pErr *kv
 	}
 
 	// Construct the next txn proto using the provided error.
+	//
+	// If a flush of the write buffer failed, the buffered writes were
+	// discarded and can only be recovered by re-issuing the entire
+	// transaction. Force a restart from the beginning; otherwise, a
+	// per-statement retry under Read Committed would let the transaction
+	// commit without the discarded writes.
 	prevTxn := pErr.GetTxn()
-	nextTxn, assertErr := kvpb.PrepareTransactionForRetry(pErr, tc.mu.userPriority, tc.clock)
+	mustRestart := tc.interceptorAlloc.txnWriteBuffer.flushFailed
+	nextTxn, assertErr := kvpb.PrepareTransactionForRetry(pErr, tc.mu.userPriority, tc.clock, mustRestart)
 	if assertErr != nil {
 		return assertErr
 	}
@@ -1085,6 +1092,11 @@ func (tc *TxnCoordSender) updateStateLocked(
 	// rollback), but some errors are safe to allow continuing (in particular
 	// ConditionFailedError). In particular, SQL can recover by rolling back to a
 	// savepoint.
+	//
+	// NB: the txnWriteBuffer wraps errors returned by batches that carried a
+	// flush of buffered writes so that they don't score as unambiguous here:
+	// the flush discarded the buffered writes, so no error is safe to continue
+	// after in that case.
 	if kvpb.ErrPriority(pErr.GoError()) != kvpb.ErrorScoreUnambiguousError {
 		tc.mu.txnState = txnError
 		tc.mu.storedErr = kvpb.NewError(&kvpb.TxnAlreadyEncounteredErrorError{

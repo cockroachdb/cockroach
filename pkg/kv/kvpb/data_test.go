@@ -6,6 +6,7 @@
 package kvpb
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -31,7 +32,7 @@ func testPrepareTransactionForRetry(t *testing.T, isoLevel isolation.Level) {
 	tests := []struct {
 		name   string
 		err    *Error
-		expTxn roachpb.Transaction
+		expTxn func(mustRestart bool) roachpb.Transaction
 		expErr bool
 	}{
 		{
@@ -52,7 +53,7 @@ func testPrepareTransactionForRetry(t *testing.T, isoLevel isolation.Level) {
 		{
 			name: "txn aborted error",
 			err:  NewErrorWithTxn(&TransactionAbortedError{}, &txn),
-			expTxn: func() roachpb.Transaction {
+			expTxn: func(mustRestart bool) roachpb.Transaction {
 				nextTxn := txn
 				nextTxn.ID = txn2ID
 				nextTxn.ReadTimestamp = tsClock
@@ -61,73 +62,87 @@ func testPrepareTransactionForRetry(t *testing.T, isoLevel isolation.Level) {
 				nextTxn.LastHeartbeat = tsClock
 				nextTxn.GlobalUncertaintyLimit = tsClock
 				return nextTxn
-			}(),
+			},
 		},
 		{
 			name: "read within uncertainty error",
 			err:  NewErrorWithTxn(&ReadWithinUncertaintyIntervalError{ValueTimestamp: ts2}, &txn),
-			expTxn: func() roachpb.Transaction {
+			expTxn: func(mustRestart bool) roachpb.Transaction {
 				nextTxn := txn
-				if isoLevel != isolation.ReadCommitted {
+				if isoLevel != isolation.ReadCommitted || mustRestart {
 					nextTxn.Epoch++
 				}
 				nextTxn.ReadTimestamp = ts2.Next()
 				nextTxn.WriteTimestamp = ts2.Next()
 				return nextTxn
-			}(),
+			},
 		},
 		{
 			name: "txn push error",
 			err: NewErrorWithTxn(&TransactionPushError{
 				PusheeTxn: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{WriteTimestamp: ts2, Priority: 3}},
 			}, &txn),
-			expTxn: func() roachpb.Transaction {
+			expTxn: func(mustRestart bool) roachpb.Transaction {
 				nextTxn := txn
-				if isoLevel != isolation.ReadCommitted {
+				if isoLevel != isolation.ReadCommitted || mustRestart {
 					nextTxn.Epoch++
 				}
 				nextTxn.ReadTimestamp = ts2
 				nextTxn.WriteTimestamp = ts2
 				nextTxn.Priority = 2
 				return nextTxn
-			}(),
+			},
 		},
 		{
 			name: "txn retry error (reason: write too old)",
 			err:  NewErrorWithTxn(&TransactionRetryError{Reason: RETRY_WRITE_TOO_OLD}, &txn),
-			expTxn: func() roachpb.Transaction {
+			expTxn: func(mustRestart bool) roachpb.Transaction {
 				nextTxn := txn
-				if isoLevel != isolation.ReadCommitted {
+				if isoLevel != isolation.ReadCommitted || mustRestart {
 					nextTxn.Epoch++
 				}
 				return nextTxn
-			}(),
+			},
 		},
 		{
 			name: "txn retry error (reason: serializable)",
 			err:  NewErrorWithTxn(&TransactionRetryError{Reason: RETRY_SERIALIZABLE}, &txn),
-			expTxn: func() roachpb.Transaction {
+			expTxn: func(mustRestart bool) roachpb.Transaction {
 				nextTxn := txn
-				if isoLevel != isolation.ReadCommitted {
+				if isoLevel != isolation.ReadCommitted || mustRestart {
 					nextTxn.Epoch++
 				}
 				nextTxn.ReadTimestamp = tsClock
 				nextTxn.WriteTimestamp = tsClock
 				return nextTxn
-			}(),
+			},
 		},
 		{
 			name: "write too old error",
 			err:  NewErrorWithTxn(&WriteTooOldError{ActualTimestamp: ts2}, &txn),
-			expTxn: func() roachpb.Transaction {
+			expTxn: func(mustRestart bool) roachpb.Transaction {
 				nextTxn := txn
-				if isoLevel != isolation.ReadCommitted {
+				if isoLevel != isolation.ReadCommitted || mustRestart {
 					nextTxn.Epoch++
 				}
 				nextTxn.ReadTimestamp = ts2
 				nextTxn.WriteTimestamp = ts2
 				return nextTxn
-			}(),
+			},
+		},
+		{
+			name: "exclusion violation error",
+			err: NewErrorWithTxn(
+				NewExclusionViolationError(ts1, ts2, roachpb.Key("a")), &txn),
+			expTxn: func(mustRestart bool) roachpb.Transaction {
+				nextTxn := txn
+				// An exclusion violation always requires a restart, even under
+				// isolation levels with per-statement read snapshots.
+				nextTxn.Epoch++
+				nextTxn.ReadTimestamp = ts2.Next()
+				nextTxn.WriteTimestamp = ts2.Next()
+				return nextTxn
+			},
 		},
 		{
 			name:   "intent missing error",
@@ -136,22 +151,24 @@ func testPrepareTransactionForRetry(t *testing.T, isoLevel isolation.Level) {
 		},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, tsClock.WallTime)))
-			nextTxn, err := PrepareTransactionForRetry(tt.err, -1 /* pri */, clock)
-			if tt.expErr {
-				require.Error(t, err)
-				require.True(t, errors.IsAssertionFailure(err))
-				require.Zero(t, nextTxn)
-			} else {
-				require.NoError(t, err)
-				if nextTxn.ID != txn.ID {
-					// Eliminate randomness from ID generation.
-					nextTxn.ID = txn2ID
+		for _, mustRestart := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/mustRestart=%t", tt.name, mustRestart), func(t *testing.T) {
+				clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, tsClock.WallTime)))
+				nextTxn, err := PrepareTransactionForRetry(tt.err, -1 /* pri */, clock, mustRestart)
+				if tt.expErr {
+					require.Error(t, err)
+					require.True(t, errors.IsAssertionFailure(err))
+					require.Zero(t, nextTxn)
+				} else {
+					require.NoError(t, err)
+					if nextTxn.ID != txn.ID {
+						// Eliminate randomness from ID generation.
+						nextTxn.ID = txn2ID
+					}
+					require.Equal(t, tt.expTxn(mustRestart), nextTxn)
 				}
-				require.Equal(t, tt.expTxn, nextTxn)
-			}
-		})
+			})
+		}
 	}
 }
 
