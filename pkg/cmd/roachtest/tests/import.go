@@ -449,6 +449,10 @@ func runImportTest(
 	_, err = conn.ExecContext(ctx,
 		fmt.Sprintf(`SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = %v`, useDistributedMerge))
 	require.NoError(t, err)
+	// Disable elastic CPU admission control to speed up the import.
+	_, err = conn.ExecContext(ctx,
+		`SET CLUSTER SETTING admission.elastic_cpu.enabled = false`)
+	require.NoError(t, err)
 
 	// Initialize datasets and create tables.
 	for _, name := range datasetNames {
