@@ -76,6 +76,11 @@ type ManagerTestingKnobs struct {
 	// was added for debugging #162173, and it can be removed when it's no
 	// longer needed.
 	TestingLeaseUpsertEventForID func(id descpb.ID, version descpb.DescriptorVersion, msg string)
+
+	// TestingEnsureVersionError, if set, is called from ensureVersion
+	// before reading from the store. If it returns a non-nil error,
+	// ensureVersion returns that error immediately.
+	TestingEnsureVersionError func(id descpb.ID, version descpb.DescriptorVersion) error
 }
 
 var _ base.ModuleTestingKnobs = &ManagerTestingKnobs{}

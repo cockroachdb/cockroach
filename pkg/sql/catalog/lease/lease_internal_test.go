@@ -1732,3 +1732,96 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 }
+
+// TestPurgeOldVersionsRetriesAfterEnsureVersionError reproduces the
+// scenario from #170068: a rangefeed delivers a new descriptor version, but
+// ensureVersion cannot read it from KV (e.g. cross-region clock lag) and
+// returns "does not exist yet". Without a retry, the old lease is stuck in
+// system.lease forever, blocking WaitForOneVersion (used by IMPORT, DDLs).
+func TestPurgeOldVersionsRetriesAfterEnsureVersionError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// The knob injects a one-shot "does not exist yet" error from
+	// ensureVersion on node 0 for the target descriptor.
+	var targetID atomic.Int64
+	var armed atomic.Bool
+	knobFired := make(chan struct{}, 1)
+	knobs := &ManagerTestingKnobs{
+		TestingEnsureVersionError: func(
+			id descpb.ID, version descpb.DescriptorVersion,
+		) error {
+			if int64(id) != targetID.Load() || !armed.CompareAndSwap(true, false) {
+				return nil
+			}
+			select {
+			case knobFired <- struct{}{}:
+			default:
+			}
+			return errors.Errorf(
+				"version %d for descriptor does not exist yet", version,
+			)
+		},
+	}
+
+	tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+		},
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {Knobs: base.TestingKnobs{SQLLeaseManager: knobs}},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db1 := tc.ServerConn(1)
+	_, err := db1.Exec(`CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY)`)
+	require.NoError(t, err)
+
+	mgr0 := tc.Server(0).LeaseManager().(*Manager)
+	kvDB := tc.Server(0).DB()
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB, tc.Server(0).Codec(), "t", "test",
+	)
+	id := tableDesc.GetID()
+	targetID.Store(int64(id))
+
+	// Node 0 acquires a lease on the current version.
+	require.NoError(t, mgr0.AcquireFreshestFromStore(ctx, id))
+
+	// Arm the knob so the next ensureVersion call for this descriptor on
+	// node 0 will fail.
+	armed.Store(true)
+
+	// DDL from node 1 bumps the descriptor version. The DDL internally
+	// calls WaitForOneVersion, which blocks until every node has released
+	// its lease on the previous version. Without a retry of the failed
+	// purge on node 0, this will hang.
+	ddlDone := make(chan error, 1)
+	go func() {
+		_, err := db1.Exec(`ALTER TABLE t.test ADD COLUMN v INT DEFAULT 0`)
+		ddlDone <- err
+	}()
+
+	// Wait for the knob to fire, confirming that node 0's ensureVersion
+	// failed for the new version.
+	select {
+	case <-knobFired:
+		t.Log("ensureVersion error injected on node 0")
+	case <-time.After(30 * time.Second):
+		t.Fatal("timed out waiting for ensureVersion error injection")
+	}
+
+	// Wait for the DDL to complete. With the retry fix, node 0 retries the
+	// purge, releases the old lease, and WaitForOneVersion unblocks. Without
+	// the fix, the DDL hangs here.
+	select {
+	case err := <-ddlDone:
+		require.NoError(t, err, "DDL should complete once the purge is retried")
+	case <-time.After(30 * time.Second):
+		t.Fatal("DDL hung — old lease stuck on node 0 (no retry of failed purge)")
+	}
+}
