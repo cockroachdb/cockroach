@@ -71,6 +71,7 @@ func TestDeriveBranchNames(t *testing.T) {
 	}{
 		{name: "patch release", version: "v25.4.3", expectedBase: "release-25.4", expectedStaging: "release-25.4.3-rc"},
 		{name: "alpha pre-release", version: "v25.3.1-alpha.1", expectedBase: "release-25.3", expectedStaging: "release-25.3.1-rc"},
+		{name: "first rc of major release", version: "v26.3.0-rc.1", expectedBase: "release-26.3", expectedStaging: "release-26.3.0-rc"},
 		{name: "hotfix branches from previous patch tag", version: "v25.2.2", hotfix: true,
 			expectedBase: "v25.2.1", expectedBaseIsTag: true, expectedStaging: "staging-v25.2.2"},
 	}
@@ -80,6 +81,28 @@ func TestDeriveBranchNames(t *testing.T) {
 			require.Equal(t, tc.expectedBase, b.base)
 			require.Equal(t, tc.expectedBaseIsTag, b.baseIsTag)
 			require.Equal(t, tc.expectedStaging, b.staging)
+		})
+	}
+}
+
+func TestIsFirstMajorRC(t *testing.T) {
+	tests := []struct {
+		name     string
+		version  string
+		expected bool
+	}{
+		{name: "first rc of major release", version: "v26.3.0-rc.1", expected: true},
+		{name: "second rc", version: "v26.3.0-rc.2", expected: false},
+		{name: "alpha", version: "v26.3.0-alpha.1", expected: false},
+		{name: "beta", version: "v26.3.0-beta.1", expected: false},
+		{name: "final major release", version: "v26.3.0", expected: false},
+		{name: "first rc of a patch release", version: "v26.3.1-rc.1", expected: false},
+		{name: "cloudonly sub-phase of first rc", version: "v26.3.0-rc.1-cloudonly.2", expected: false},
+		{name: "adhoc build of first rc", version: "v26.3.0-rc.1-5-gabcdef1234", expected: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, isFirstMajorRC(mustParseVersion(t, tc.version)))
 		})
 	}
 }
@@ -139,6 +162,7 @@ func TestReleaseTypeFor(t *testing.T) {
 	}{
 		{name: "scheduled patch", version: "v25.4.3", expected: scheduledType},
 		{name: "pre-release derived", version: "v25.3.1-alpha.1", expected: preReleaseType},
+		{name: "first rc of major release", version: "v26.3.0-rc.1", expected: preReleaseType},
 		{name: "patch zero is major", version: "v25.4.0", expected: majorReleaseType},
 		{name: "override beats heuristic", version: "v25.4.3", jiraOverride: "Custom", expected: "Custom"},
 		{name: "override on pre-release", version: "v25.3.1-alpha.1", jiraOverride: "Pre-Release", expected: "Pre-Release"},
@@ -222,6 +246,36 @@ func TestBuildReleaseDetails(t *testing.T) {
 	require.Equal(t, "backport-25.4.3-rc", d.BackportLabel)
 	require.Equal(t, "Wednesday, 04/22: release-25.4.3-rc will be frozen", d.BackportLabelDescription)
 	require.Equal(t, scheduledType, d.ReleaseType)
+}
+
+// TestBuildReleaseDetailsFirstRC pins the details derived for the first RC of a
+// major release (vX.Y.0-rc.1): FinalRelease drops the -rc.1 suffix, the
+// backport label targets the release-X.Y.0-rc branch, and the release type is
+// pre-release so the RC/final-.0 Slack and Jira templates fire.
+func TestBuildReleaseDetailsFirstRC(t *testing.T) {
+	rawFields, err := json.Marshal(map[string]interface{}{
+		"summary":           "Release: v26.3.0-rc.1",
+		cfPickSHADate:       "2026-04-22",
+		cfCloudReleaseNotes: "2026-04-23",
+		cfPublishBinary:     "2026-04-24",
+	})
+	require.NoError(t, err)
+	var issue jiraIssue
+	require.NoError(t, json.Unmarshal([]byte(`{"key":"REL-1234","fields":`+string(rawFields)+`}`), &issue))
+
+	v := mustParseVersion(t, "v26.3.0-rc.1")
+	b := deriveBranchNames(v, false)
+	now := time.Date(2026, 4, 20, 7, 0, 0, 0, time.UTC)
+	d, err := buildReleaseDetails(v, &issue, b, "abc1234", now, "cockroachdb/cockroach")
+	require.NoError(t, err)
+
+	require.Equal(t, "v26.3.0-rc.1", d.Release)
+	require.Equal(t, "v26.3.0", d.FinalRelease)
+	require.Equal(t, "26.3", d.Series)
+	require.Equal(t, "release-26.3.0-rc", d.StagingBranch)
+	require.Equal(t, "release-26.3", d.BaseBranch)
+	require.Equal(t, "backport-26.3.0-rc", d.BackportLabel)
+	require.Equal(t, preReleaseType, d.ReleaseType)
 }
 
 func TestBuildSlackMessage(t *testing.T) {
@@ -675,6 +729,122 @@ func TestCutRunnerProcessCandidateSkipsBakingTransition(t *testing.T) {
 	require.True(t, labelCreated.Load(), "CreateLabel must run on the recovery path")
 }
 
+// TestCutRunnerProcessCandidateCutsFirstRC exercises the fresh-cut path for
+// the first RC of a major release (vX.Y.0-rc.1): the one patch-zero version
+// that does cut a staging branch. It verifies the release-X.Y.0-rc branch is
+// created at the tip of release-X.Y and the matching backport label is created.
+func TestCutRunnerProcessCandidateCutsFirstRC(t *testing.T) {
+	today := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	bn := branchNames{base: "release-26.3", staging: "release-26.3.0-rc"}
+	const baseSHA = "basesha000"
+
+	candidate := *mkJiraIssue(t, "REL-1", "Release: v26.3.0-rc.1", map[string]interface{}{
+		cfCutBranchDate: "2026-04-20",
+	})
+
+	todoSubtask := jiraSubtask{Key: "REL-2"}
+	todoSubtask.Fields.Summary = cutStagingSubtaskMatch
+	todoSubtask.Fields.Status.Name = "To Do"
+	subtaskRaw, err := json.Marshal([]jiraSubtask{todoSubtask})
+	require.NoError(t, err)
+	fullFields, err := json.Marshal(map[string]interface{}{
+		"summary":       "Release: v26.3.0-rc.1",
+		cfCutBranchDate: "2026-04-20",
+		cfPickSHADate:   "2026-04-22",
+		"status":        map[string]interface{}{"name": "Open", "id": "1"},
+		"subtasks":      json.RawMessage(subtaskRaw),
+	})
+	require.NoError(t, err)
+	fullJSON := `{"key":"REL-1","fields":` + string(fullFields) + `}`
+
+	var createdRef, createdSHA, createdLabel string
+	ghSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		// The staging branch doesn't exist yet; the base branch does. Exact
+		// suffix matches keep "release-26.3" from also matching the staging
+		// branch path.
+		case strings.HasSuffix(r.URL.Path, "/git/ref/heads/"+bn.staging):
+			w.WriteHeader(http.StatusNotFound)
+		case strings.HasSuffix(r.URL.Path, "/git/ref/heads/"+bn.base):
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"ref":"refs/heads/%s","object":{"sha":%q}}`, bn.base, baseSHA)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/git/refs"):
+			var req struct {
+				Ref string `json:"ref"`
+				SHA string `json:"sha"`
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+			createdRef, createdSHA = req.Ref, req.SHA
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			fmt.Fprintf(w, `{"ref":%q,"object":{"sha":%q}}`, req.Ref, req.SHA)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/labels"):
+			var req struct {
+				Name string `json:"name"`
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+			createdLabel = req.Name
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Errorf("unexpected GitHub call: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer ghSrv.Close()
+
+	var transitionedToBaking atomic.Bool
+	jiraSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/rest/api/3/issue/REL-1"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(fullJSON))
+		case r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/rest/api/3/issue/REL-1"):
+			w.WriteHeader(http.StatusNoContent)
+		case strings.HasSuffix(r.URL.Path, "/REL-1/transitions"):
+			transitionedToBaking.Store(true)
+			w.WriteHeader(http.StatusNoContent)
+		case strings.HasSuffix(r.URL.Path, "/REL-2/transitions"):
+			w.WriteHeader(http.StatusNoContent)
+		case strings.HasSuffix(r.URL.Path, "/REL-1/comment"):
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Errorf("unexpected jira call: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer jiraSrv.Close()
+
+	slackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"channel":"C1","ts":"1.2","permalink":"https://slack/x"}`))
+	}))
+	defer slackSrv.Close()
+
+	gh := newGitHubClient("test", "owner", "repo")
+	u, err := url.Parse(ghSrv.URL + "/")
+	require.NoError(t, err)
+	gh.client.BaseURL = u
+
+	jc := newJiraClient("bot@example.com", "test")
+	jc.baseURL = jiraSrv.URL
+
+	r := &cutRunner{
+		jira:    jc,
+		gh:      gh,
+		slack:   newSlackClientForTest(slackSrv.URL),
+		today:   today,
+		repo:    "owner/repo",
+		channel: "test-channel",
+	}
+	require.NoError(t, r.processCandidate(context.Background(), candidate))
+	require.Equal(t, "refs/heads/"+bn.staging, createdRef)
+	require.Equal(t, baseSHA, createdSHA)
+	require.Equal(t, "backport-26.3.0-rc", createdLabel)
+	require.True(t, transitionedToBaking.Load())
+}
+
 // TestCutRunnerProcessCandidateEarlyReturns covers the early-exit paths in
 // processCandidate that return nil without touching GitHub or Jira: an
 // unparseable summary, a patch-zero release, a missing cut-branch date, and
@@ -697,6 +867,25 @@ func TestCutRunnerProcessCandidateEarlyReturns(t *testing.T) {
 		{
 			name:    "patch-zero release skipped",
 			summary: "Release: v25.4.0",
+		},
+		// The patch-zero pre-release cases set a ready cut date so a
+		// regression in the patch-zero gate would fall through to the
+		// side-effecting path and panic on the nil clients, rather than
+		// being masked by the missing-cut-date skip.
+		{
+			name:    "alpha of major release skipped",
+			summary: "Release: v25.4.0-alpha.1",
+			cutDate: "2026-04-20",
+		},
+		{
+			name:    "beta of major release skipped",
+			summary: "Release: v25.4.0-beta.1",
+			cutDate: "2026-04-20",
+		},
+		{
+			name:    "second rc of major release skipped",
+			summary: "Release: v25.4.0-rc.2",
+			cutDate: "2026-04-20",
 		},
 		{
 			name:    "missing cut date skipped",
