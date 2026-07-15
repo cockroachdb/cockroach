@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/snappy"
 	"github.com/klauspost/compress/gzip"
@@ -176,9 +177,13 @@ func decompressUsing(
 		err = errors.CombineErrors(err, r.Close())
 	}()
 
-	decompressedBytes, err := io.ReadAll(r)
+	const maxSize = builtinconstants.MaxAllocatedStringSize
+	decompressedBytes, err := io.ReadAll(io.LimitReader(r, maxSize+1))
 	if err != nil {
 		return nil, err
+	}
+	if len(decompressedBytes) > maxSize {
+		return nil, errStringTooLarge
 	}
 	return decompressedBytes, nil
 }
