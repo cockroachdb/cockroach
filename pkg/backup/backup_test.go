@@ -892,8 +892,9 @@ func backupAndRestore(
 		var unused string
 		var exportedRows int64
 
+		start := getTime()
 		backupURIFmtString, backupURIArgs := uriFmtStringAndArgs(backupURIs, 0)
-		backupQuery := fmt.Sprintf("BACKUP DATABASE data INTO %s", backupURIFmtString)
+		backupQuery := fmt.Sprintf("BACKUP DATABASE data INTO %s %s", backupURIFmtString, aostExpr(start))
 		kmsURIArgs := make([]interface{}, 0)
 		var kmsURIFmtString string
 		if len(kmsURIs) > 0 {
@@ -953,8 +954,36 @@ SELECT payload FROM "".crdb_internal.system_jobs WHERE job_type = 'BACKUP' ORDER
 		if len(kmsURIs) > 0 {
 			incBackupQuery = fmt.Sprintf("%s WITH kms = %s", incBackupQuery, kmsURIFmtString)
 		}
-
+		sqlDB.Exec(t, `UPDATE data.bank SET balance = balance + 1`)
 		sqlDB.Exec(t, incBackupQuery, queryArgs...)
+
+		sqlDB.Exec(t, `UPDATE data.bank SET balance = balance + 1`)
+		sqlDB.Exec(t, incBackupQuery, queryArgs...)
+
+		sqlDB.Exec(t, `UPDATE data.bank SET balance = balance + 1`)
+		end := getTime()
+		finalIncBackupQuery := fmt.Sprintf(
+			`BACKUP DATABASE data INTO LATEST IN %s %s`, backupURIFmtString, aostExpr(end),
+		)
+		if len(kmsURIs) > 0 {
+			finalIncBackupQuery = fmt.Sprintf("%s WITH kms = %s", finalIncBackupQuery, kmsURIFmtString)
+		}
+		sqlDB.Exec(t, finalIncBackupQuery, queryArgs...)
+
+		inlineURIList := func(uris []string) string {
+			joined := stringifyCollectionURI(uris)
+			if len(uris) > 1 {
+				return "(" + joined + ")"
+			}
+			return joined
+		}
+		compactBackupStmt := fmt.Sprintf("BACKUP DATABASE data INTO %s", inlineURIList(backupURIs))
+		if len(kmsURIs) > 0 {
+			compactBackupStmt = fmt.Sprintf("%s WITH kms = %s", compactBackupStmt, inlineURIList(kmsURIs))
+		}
+		jobutils.WaitForJobToSucceed(t, sqlDB, triggerCompaction(
+			t, sqlDB, compactBackupStmt, getLatestFullDir(t, sqlDB, backupURIs[0]), start, end,
+		))
 	}
 	bankTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
 	backupTableFingerprint, err := fingerprintutils.FingerprintTable(ctx, conn, bankTableID,
