@@ -402,8 +402,6 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		sip.aggTimer.Reset(15 * time.Second)
 	}
 
-	defer sip.FlowCtx.Cfg.JobRegistry.MarkAsIngesting(catpb.JobID(sip.spec.JobID))()
-
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName, sip.agg)
 
 	sip.metrics = sip.FlowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
@@ -504,6 +502,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	})
 	sip.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(sip.checkpointCh)
+		defer sip.FlowCtx.Cfg.JobRegistry.MarkAsIngesting(catpb.JobID(sip.spec.JobID))()
 		if err := sip.flushLoop(ctx); err != nil {
 			sip.sendError(errors.Wrap(err, "flush loop"))
 		}

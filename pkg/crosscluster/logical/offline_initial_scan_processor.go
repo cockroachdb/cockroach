@@ -197,8 +197,6 @@ func (o *offlineInitialScanProcessor) Start(ctx context.Context) {
 
 	ctx = o.StartInternal(ctx, offlineInitialScanProcessorName)
 
-	defer o.FlowCtx.Cfg.JobRegistry.MarkAsIngesting(catpb.JobID(o.spec.JobID))()
-
 	if err := o.setup(ctx); err != nil {
 		o.MoveToDrainingAndLogError(err)
 		return
@@ -220,6 +218,7 @@ func (o *offlineInitialScanProcessor) Start(ctx context.Context) {
 	})
 	o.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(o.checkpointCh)
+		defer o.FlowCtx.Cfg.JobRegistry.MarkAsIngesting(catpb.JobID(o.spec.JobID))()
 		pprof.Do(ctx, pprof.Labels("proc", fmt.Sprintf("%d", o.ProcessorID)), func(ctx context.Context) {
 			for event := range o.subscription.Events() {
 				if err := o.handleEvent(ctx, event); err != nil {
