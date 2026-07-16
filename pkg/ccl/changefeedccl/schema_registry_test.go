@@ -144,6 +144,7 @@ func TestConfluentSchemaRegistryLookup(t *testing.T) {
 	ctx := context.Background()
 
 	const schemaA = `{"type":"record","name":"r","fields":[{"name":"a","type":"long"}]}`
+	const schemaB = `{"type":"record","name":"r","fields":[{"name":"b","type":"string"}]}`
 
 	t.Run("resolves the latest registered schema id via GET", func(t *testing.T) {
 		defer TestingClearSchemaRegistrySingleton()
@@ -172,6 +173,46 @@ func TestConfluentSchemaRegistryLookup(t *testing.T) {
 		_, err = reg.LookupSchemaIDForSubject(ctx, "missing-value", schemaA)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "missing-value")
+	})
+
+	t.Run("matches schemas that differ only in formatting", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+
+		const schemaAReformatted = `{
+			"type": "record",
+			"name": "r",
+			"fields": [ { "name": "a", "type": "long" } ]
+			}`
+		wantID := regServer.RegisterSchema("subject1", schemaAReformatted)
+
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		id, err := reg.LookupSchemaIDForSubject(ctx, "subject1", schemaA)
+		require.NoError(t, err)
+		require.Equal(t, wantID, id)
+	})
+
+	t.Run("rejects a mismatched schema and does not cache the rejection", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+
+		regServer.RegisterSchema("subject1", schemaA)
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		_, err = reg.LookupSchemaIDForSubject(ctx, "subject1", schemaB)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "subject1")
+		require.Contains(t, err.Error(), "does not match")
+
+		wantID := regServer.RegisterSchema("subject1", schemaB)
+		id, err := reg.LookupSchemaIDForSubject(ctx, "subject1", schemaB)
+		require.NoError(t, err)
+		require.Equal(t, wantID, id)
 	})
 
 	t.Run("caches by subject and schema", func(t *testing.T) {
