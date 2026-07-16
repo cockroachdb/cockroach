@@ -28,6 +28,10 @@ type StorageTestingKnobs struct {
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
 	RemoveOnceDereferenced bool
+	// TestingBeforeReleasingKVLease is called before each async KV lease
+	// row deletion in releaseLease. Tests use it to delay the delete and
+	// widen the race window between in-memory purge and KV cleanup.
+	TestingBeforeReleasingKVLease func(id descpb.ID)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -90,6 +94,12 @@ type ManagerTestingKnobs struct {
 	// before reading from the store. If it returns a non-nil error,
 	// ensureVersion returns that error immediately.
 	TestingEnsureVersionError func(id descpb.ID, version descpb.DescriptorVersion) error
+
+	// TestingBeforePurgeRemoveInactives, is called during purgeOldVersions
+	// after the protective refcount on the newest known version is acquired
+	// and before inactive versions are removed. Tests use it to inject a
+	// concurrent acquisition of a newer version into that window.
+	TestingBeforePurgeRemoveInactives func(id descpb.ID)
 }
 
 var _ base.ModuleTestingKnobs = &ManagerTestingKnobs{}
