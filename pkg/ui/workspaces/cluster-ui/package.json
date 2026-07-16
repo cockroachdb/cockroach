@@ -34,7 +34,7 @@
   "license": "MIT",
   "dependencies": {
     "@ant-design/icons": "^5.3.6",
-    "@babel/runtime": "^7.12.13",
+    "@babel/runtime": "^7.28.6",
     "@cockroachlabs/design-tokens": "0.4.5",
     "@cockroachlabs/icons": "0.5.2",
     "@cockroachlabs/ui-components": "0.4.3",
