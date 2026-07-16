@@ -32,18 +32,33 @@ const (
 	// storeToRangeFactor is the number of ranges to create per store in the
 	// cluster.
 	storeToRangeFactor = 10
-	// meanCPUTolerance is the tolerance applied when checking replica-attributed
-	// CPU (ms/s) of stores against the mean. The acceptable range w.r.t the mean
-	// is:
+	// meanCPUTolerance is the fractional slack allowed around the mean. It has
+	// two components:
 	//
-	//  mean_tolerance = mean * meanCPUTolerance
-	//  [mean - mean_tolerance, mean + mean_tolerance].
+	//   0.10 — the allocator's own convergence threshold, from
+	//          kv.allocator.store_cpu_rebalance_threshold in
+	//          pkg/kv/kvserver/allocator/base.go. A store is considered
+	//          overfull once its CPU exceeds mean * (1 + 0.10), so the
+	//          rebalancer can legitimately leave a store parked up to 10%
+	//          above the mean.
+	//   0.05 — a test-side noise buffer for TSDB sampling and the ~30-min
+	//          decaying window used by replica load stats. The value the
+	//          test reads lags the true load; this padding absorbs that.
+	meanCPUTolerance = 0.10 + 0.05
+	// minCPUDifferenceForTransfersMs mirrors the allocator constant
+	// MinCPUDifferenceForTransfers in pkg/kv/kvserver/allocator/base.go
+	// (= 2 * MinCPUThresholdDifference = 2 * 50ms = 100ms/s), converted from
+	// ns/s to ms/s to match the units used in this test. The store rebalancer
+	// declines any lease transfer where
 	//
-	// The store rebalancer converges to +-10% of the mean
-	// (kv.allocator.store_cpu_rebalance_threshold). The extra +5% buffer covers
-	// TSDB sampling and the ~30-min decaying window lag of the replica load
-	// stats.
-	meanCPUTolerance = 0.15
+	//   (source_cpu - lease_cpu) - coldest_cpu < 100ms/s
+	//
+	// (see bestStoreToMinimizeLoadDelta in allocator_scorer.go), so the
+	// hottest store can sit up to ~100ms/s above the coldest store at
+	// equilibrium. This acts as an absolute floor on the acceptable spread,
+	// which matters when mean load is low enough that the relative tolerance
+	// shrinks below it.
+	minCPUDifferenceForTransfersMs = 100.0
 	// statSamplePeriod is the period at which timeseries stats are sampled.
 	statSamplePeriod = 10 * time.Second
 	// stableDuration is the duration which the cluster's load must remain
@@ -383,12 +398,25 @@ func makeStoreCPUFn(
 	}, nil
 }
 
-// isLoadEvenlyDistributed checks whether any store's replica-attributed CPU is
-// above mean*(1+tolerance). Stores below mean*(1-tolerance) are reported for
-// visibility but do not cause the check to fail: the store rebalancer only
-// sheds from overloaded sources and has no pull-to-cold mechanism, so a
-// cold-side outlier is not actionable. The function expects the loads to be
-// indexed to store IDs in ms/s, see makeStoreCPUFn for example format.
+// isLoadEvenlyDistributed checks whether any store's replica-attributed CPU
+// is above the acceptable upper bound. Stores below the lower bound are
+// reported for visibility but do not cause the check to fail: the store
+// rebalancer only sheds from overloaded sources and has no pull-to-cold
+// mechanism, so a cold-side outlier is not actionable. The function expects
+// the loads to be indexed to store IDs in ms/s, see makeStoreCPUFn for example
+// format.
+//
+// The acceptable slack around the mean is:
+//
+//	slack = max(mean * tolerance, minCPUDifferenceForTransfersMs)
+//
+// mean * tolerance covers the allocator's own convergence threshold plus a
+// small buffer for stats sampling lag (see meanCPUTolerance for the
+// 0.10 + 0.05 breakdown). minCPUDifferenceForTransfersMs is the allocator's
+// anti-thrashing floor: the rebalancer refuses transfers that would close the
+// source→coldest gap by less than 100 ms/s, so a store can legitimately sit
+// that far above coldest even at equilibrium. Whichever term is larger
+// dominates — the relative one at high mean, the absolute floor at low mean.
 func isLoadEvenlyDistributed(loads []float64, tolerance float64) (ok bool, reason string) {
 	mean := arithmeticMean(loads)
 	// If the mean is zero, there's nothing meaningful to assert on. Return early
@@ -397,9 +425,9 @@ func isLoadEvenlyDistributed(loads []float64, tolerance float64) (ok bool, reaso
 		return false, "no load: mean=0"
 	}
 
-	meanTolerance := mean * tolerance
-	lb := mean - meanTolerance
-	ub := mean + meanTolerance
+	slack := max(mean*tolerance, minCPUDifferenceForTransfersMs)
+	lb := mean - slack
+	ub := mean + slack
 
 	// Partition the loads into above, below and within the tolerance bounds of
 	// the load mean.
@@ -416,8 +444,10 @@ func isLoadEvenlyDistributed(loads []float64, tolerance float64) (ok bool, reaso
 	}
 
 	ok = len(above) == 0
-	boundsStr := fmt.Sprintf("mean=%.0fms/s tolerance=%.1f%% (±%.0f) bounds=[%.0f, %.0f]",
-		mean, 100*tolerance, meanTolerance, lb, ub)
+	boundsStr := fmt.Sprintf(
+		"mean=%.0fms/s tolerance=%.1f%% floor=%.0fms/s slack=±%.0f bounds=[%.0f, %.0f]",
+		mean, 100*tolerance, minCPUDifferenceForTransfersMs, slack, lb, ub,
+	)
 	if len(above) > 0 || len(below) > 0 {
 		header := "above bounds"
 		if ok {
