@@ -32,32 +32,34 @@ const (
 	// storeToRangeFactor is the number of ranges to create per store in the
 	// cluster.
 	storeToRangeFactor = 10
-	// meanCPUTolerance is the fractional slack allowed around the mean. It has
-	// two components:
+	// meanCPUTolerance is the fractional slack allowed around the mean for the
+	// overfull check. It has two components:
 	//
 	//   0.10 — the allocator's own convergence threshold, from
 	//          kv.allocator.store_cpu_rebalance_threshold in
 	//          pkg/kv/kvserver/allocator/base.go. A store is considered
-	//          overfull once its CPU exceeds mean * (1 + 0.10), so the
-	//          rebalancer can legitimately leave a store parked up to 10%
-	//          above the mean.
+	//          overfull once its CPU exceeds mean * (1 + 0.10).
 	//   0.05 — a test-side noise buffer for TSDB sampling and the ~30-min
 	//          decaying window used by replica load stats. The value the
 	//          test reads lags the true load; this padding absorbs that.
 	meanCPUTolerance = 0.10 + 0.05
+	// minCPUThresholdDifferenceMs mirrors the allocator constant
+	// MinCPUThresholdDifference in pkg/kv/kvserver/allocator/base.go (= 50ms/s,
+	// converted from ns/s). It is the absolute floor for the overfull
+	// classification: a store is considered overfull once its CPU exceeds
+	// mean + max(mean * k, MinCPUThresholdDifference), where k is the
+	// store_cpu_rebalance_threshold setting.
+	minCPUThresholdDifferenceMs = 50.0
 	// minCPUDifferenceForTransfersMs mirrors the allocator constant
 	// MinCPUDifferenceForTransfers in pkg/kv/kvserver/allocator/base.go
-	// (= 2 * MinCPUThresholdDifference = 2 * 50ms = 100ms/s), converted from
-	// ns/s to ms/s to match the units used in this test. The store rebalancer
-	// declines any lease transfer where
+	// (= 2 * MinCPUThresholdDifference = 100ms/s). It is the anti-thrashing
+	// floor for lease transfers: bestStoreToMinimizeLoadDelta in
+	// allocator_scorer.go declines any transfer where
 	//
 	//   (source_cpu - lease_cpu) - coldest_cpu < 100ms/s
 	//
-	// (see bestStoreToMinimizeLoadDelta in allocator_scorer.go), so the
-	// hottest store can sit up to ~100ms/s above the coldest store at
-	// equilibrium. This acts as an absolute floor on the acceptable spread,
-	// which matters when mean load is low enough that the relative tolerance
-	// shrinks below it.
+	// so the hottest store can legitimately sit up to that far above the
+	// coldest at equilibrium.
 	minCPUDifferenceForTransfersMs = 100.0
 	// statSamplePeriod is the period at which timeseries stats are sampled.
 	statSamplePeriod = 10 * time.Second
@@ -330,7 +332,7 @@ func rebalanceByLoad(
 				continue
 			}
 			var curIsBalanced bool
-			curIsBalanced, reason = isLoadEvenlyDistributed(clusterStoresCPU, meanCPUTolerance)
+			curIsBalanced, reason = isLoadEvenlyDistributed(clusterStoresCPU, meanCPUTolerance, storeToRangeFactor)
 			l.Printf("cpu %s", reason)
 			if !prevIsBalanced && curIsBalanced {
 				balancedStartTime = now
@@ -398,26 +400,42 @@ func makeStoreCPUFn(
 	}, nil
 }
 
-// isLoadEvenlyDistributed checks whether any store's replica-attributed CPU
-// is above the acceptable upper bound. Stores below the lower bound are
-// reported for visibility but do not cause the check to fail: the store
-// rebalancer only sheds from overloaded sources and has no pull-to-cold
-// mechanism, so a cold-side outlier is not actionable. The function expects
-// the loads to be indexed to store IDs in ms/s, see makeStoreCPUFn for example
-// format.
+// isLoadEvenlyDistributed checks whether the observed per-store CPU is
+// consistent with an SMA lease-rebalance equilibrium. The rebalancer is at
+// legitimate equilibrium in either of two regimes:
 //
-// The acceptable slack around the mean is:
+//	(a) hot-check:   no store exceeds the SMA overfull threshold, so there
+//	                 is nothing to shed.
+//	(b) gap-check:   some store is overfull but the hot-cold gap is within
+//	                 the friction bound, so the rebalancer has shed
+//	                 everything it usefully can.
 //
-//	slack = max(mean * tolerance, minCPUDifferenceForTransfersMs)
+// The check passes if either holds; only when both fail is the load
+// meaningfully unbalanced.
 //
-// mean * tolerance covers the allocator's own convergence threshold plus a
-// small buffer for stats sampling lag (see meanCPUTolerance for the
-// 0.10 + 0.05 breakdown). minCPUDifferenceForTransfersMs is the allocator's
-// anti-thrashing floor: the rebalancer refuses transfers that would close the
-// source→coldest gap by less than 100 ms/s, so a store can legitimately sit
-// that far above coldest even at equilibrium. Whichever term is larger
-// dominates — the relative one at high mean, the absolute floor at low mean.
-func isLoadEvenlyDistributed(loads []float64, tolerance float64) (ok bool, reason string) {
+// The hot-check mirrors OverfullLoadThresholds in
+// pkg/kv/kvserver/allocator/allocatorimpl/threshold.go:
+//
+//	overfullBound = mean + max(mean * tolerance, MinCPUThresholdDifference)
+//
+// where tolerance folds in the allocator's own k = 0.10 plus a small
+// stats-lag buffer, and MinCPUThresholdDifference = 50 ms/s.
+//
+// The gap-check mirrors the friction check in bestStoreToMinimizeLoadDelta
+// (allocator_scorer.go): (source - lease) - coldest >= MinCPUDifferenceForTransfers.
+// Rearranged: hot - cold <= MinCPUDifferenceForTransfers + lease. Under kv
+// workload's uniform per-key load, lease ≈ mean/leasesPerStore. The 2x
+// multiplier absorbs stats-lag noise and the fact that leases on a hot store
+// often carry more than the cluster-average load.
+//
+// Stores below (mean - overfullSlack) are reported for visibility but never
+// fail the check on their own — the SMA rebalancer only sheds from overloaded
+// sources, so a cold-side outlier can indicate a rebalancer problem only when
+// paired with a hot store above the overfull threshold, which is exactly the
+// case the gap-check catches. See prior fix in b7376523652.
+func isLoadEvenlyDistributed(
+	loads []float64, tolerance float64, leasesPerStore int,
+) (ok bool, reason string) {
 	mean := arithmeticMean(loads)
 	// If the mean is zero, there's nothing meaningful to assert on. Return early
 	// that the load isn't evenly distributed.
@@ -425,16 +443,26 @@ func isLoadEvenlyDistributed(loads []float64, tolerance float64) (ok bool, reaso
 		return false, "no load: mean=0"
 	}
 
-	slack := max(mean*tolerance, minCPUDifferenceForTransfersMs)
-	lb := mean - slack
-	ub := mean + slack
+	overfullSlack := max(mean*tolerance, minCPUThresholdDifferenceMs)
+	overfullBound := mean + overfullSlack
+	lb := mean - overfullSlack
 
-	// Partition the loads into above, below and within the tolerance bounds of
-	// the load mean.
+	gapBound := minCPUDifferenceForTransfersMs + 2*mean/float64(leasesPerStore)
+
+	// Partition the loads into above, below and within the overfull bounds of
+	// the load mean, while tracking the hottest and coldest observed loads for
+	// the gap-check.
 	above, below, within := []int{}, []int{}, []int{}
+	hot, cold := loads[0], loads[0]
 	for i, load := range loads {
 		storeID := i + 1
-		if load > ub {
+		if load > hot {
+			hot = load
+		}
+		if load < cold {
+			cold = load
+		}
+		if load > overfullBound {
 			above = append(above, storeID)
 		} else if load < lb {
 			below = append(below, storeID)
@@ -443,25 +471,34 @@ func isLoadEvenlyDistributed(loads []float64, tolerance float64) (ok bool, reaso
 		}
 	}
 
-	ok = len(above) == 0
+	hotOk := hot <= overfullBound
+	gap := hot - cold
+	gapOk := gap <= gapBound
+	ok = hotOk || gapOk
+
 	boundsStr := fmt.Sprintf(
-		"mean=%.0fms/s tolerance=%.1f%% floor=%.0fms/s slack=±%.0f bounds=[%.0f, %.0f]",
-		mean, 100*tolerance, minCPUDifferenceForTransfersMs, slack, lb, ub,
+		"mean=%.0fms/s overfull=%.0f (tolerance=%.1f%% floor=%.0fms/s) gap=%.0f (bound=%.0f)",
+		mean, overfullBound, 100*tolerance, minCPUThresholdDifferenceMs, gap, gapBound,
 	)
-	if len(above) > 0 || len(below) > 0 {
-		header := "above bounds"
-		if ok {
-			header = "below bounds (informational, not a failure)"
-		}
+	switch {
+	case !ok:
 		reason = fmt.Sprintf(
-			"%s %s\n\tbelow  = %s\n\twithin = %s\n\tabove  = %s\n",
-			header, boundsStr,
+			"unbalanced %s\n\tabove overfull = %s\n\tbelow (info)   = %s\n\twithin         = %s\n",
+			boundsStr,
+			formatLoads(above, loads, mean),
 			formatLoads(below, loads, mean),
 			formatLoads(within, loads, mean),
-			formatLoads(above, loads, mean),
 		)
-	} else {
-		reason = fmt.Sprintf("within bounds %s\n\tstores=%s\n",
+	case len(above) > 0 || len(below) > 0:
+		reason = fmt.Sprintf(
+			"balanced (gap ok) %s\n\tabove overfull = %s\n\tbelow (info)   = %s\n\twithin         = %s\n",
+			boundsStr,
+			formatLoads(above, loads, mean),
+			formatLoads(below, loads, mean),
+			formatLoads(within, loads, mean),
+		)
+	default:
+		reason = fmt.Sprintf("balanced %s\n\tstores=%s\n",
 			boundsStr, formatLoads(within, loads, mean))
 	}
 	return
