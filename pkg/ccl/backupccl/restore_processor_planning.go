@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -64,29 +64,13 @@ func distRestore(
 	defer close(tracingAggCh)
 	var noTxn *kv.Txn
 
-	if md.encryption != nil && md.encryption.Mode == jobspb.EncryptionMode_KMS {
-		kms, err := cloud.KMSFromURI(ctx, md.encryption.KMSInfo.Uri, md.kmsEnv)
-		if err != nil {
-			return errors.Wrap(err, "creating KMS")
-		}
-		defer func() {
-			err := kms.Close()
-			if err != nil {
-				log.Infof(ctx, "failed to close KMS: %+v", err)
-			}
-		}()
-
-		md.encryption.Key, err = kms.Decrypt(ctx, md.encryption.KMSInfo.EncryptedDataKey)
-		if err != nil {
-			return errors.Wrap(err,
-				"failed to decrypt data key before starting BackupDataProcessor")
-		}
-	}
-	// Wrap the relevant BackupEncryptionOptions to be used by the Restore
-	// processor.
 	var fileEncryption *kvpb.FileEncryptionOptions
 	if md.encryption != nil {
-		fileEncryption = &kvpb.FileEncryptionOptions{Key: md.encryption.Key}
+		key, err := backupencryption.GetEncryptionKey(ctx, md.encryption, md.kmsEnv)
+		if err != nil {
+			return err
+		}
+		fileEncryption = &kvpb.FileEncryptionOptions{Key: key}
 	}
 
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
