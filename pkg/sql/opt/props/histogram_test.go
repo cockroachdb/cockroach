@@ -79,7 +79,7 @@ func TestCanFilter(t *testing.T) {
 
 	// The histogram column ID is 1 for all test cases. CanFilter should only
 	// return true for constraints in which column ID 1 is part of the exact
-	// prefix or the first column after.
+	// prefix, the first column after, or a constant column.
 	testData := []struct {
 		constraint string
 		canFilter  bool
@@ -111,7 +111,8 @@ func TestCanFilter(t *testing.T) {
 		},
 		{
 			constraint: "/2/-1: [/0/3 - /0/3] [/2/3 - /2/3]",
-			canFilter:  false,
+			canFilter:  true,
+			colIdx:     1,
 		},
 		{
 			constraint: "/2/1: [/0/3 - /0/3] [/0/5 - /0/5]",
@@ -357,6 +358,18 @@ func TestHistogram(t *testing.T) {
 		},
 		{
 			constraint: "/2/1/3: [/1/40/2 - /1/40/2] [/1/40/4 - /1/40/4] [/1/40/6 - /1/40/6]",
+			//   0 5.7143
+			// <---- 40 -
+			buckets: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 5.71, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
+			},
+			count:        5.71,
+			maxDistinct:  1,
+			distinct:     1,
+			maxFrequency: 5.71,
+		},
+		{
+			constraint: "/2/1: [/0/40 - /0/40] [/2/40 - /2/40]",
 			//   0 5.7143
 			// <---- 40 -
 			buckets: []cat.HistogramBucket{

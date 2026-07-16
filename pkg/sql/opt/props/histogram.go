@@ -333,7 +333,8 @@ func maxDistinctValuesInRange(lowerBound, upperBound tree.Datum) (n float64, ok 
 
 // CanFilter returns true if the given constraint can filter the histogram.
 // This is the case if the histogram column matches one of the columns in
-// the exact prefix of c or the next column immediately after the exact prefix.
+// the exact prefix of c, the next column immediately after the exact prefix,
+// or a column constrained to a single value in every span (a constant column).
 // Returns the offset of the matching column in the constraint if found, as
 // well as the exact prefix.
 func (h *Histogram) CanFilter(
@@ -344,6 +345,17 @@ func (h *Histogram) CanFilter(
 	for i := 0; i < constrainedCols && i <= exactPrefix; i++ {
 		if c.Columns.Get(i).ID() == h.col {
 			return i, exactPrefix, true
+		}
+	}
+	// A constant column (constrained to a single value in every span) can filter
+	// the histogram even when an earlier unconstrained column pushes it past the
+	// exact prefix, e.g. crdb_region on a REGIONAL BY ROW table. See Filter.
+	for i := exactPrefix + 1; i < constrainedCols; i++ {
+		if c.Columns.Get(i).ID() == h.col {
+			if c.ExtractConstCols(ctx, h.evalCtx).Contains(h.col) {
+				return i, exactPrefix, true
+			}
+			break
 		}
 	}
 	return 0, exactPrefix, false
@@ -582,6 +594,25 @@ func (h *Histogram) Filter(ctx context.Context, c *constraint.Constraint) *Histo
 	if !ok {
 		panic(errors.AssertionFailedf("column mismatch"))
 	}
+
+	// A column past the exact prefix was admitted as a constant column with value
+	// V. The prefix-based path below assumes the columns before colOffset are
+	// fixed to the first span's values, which does not hold when an earlier
+	// column varies, so filter against a synthetic single-column [V - V]
+	// constraint instead.
+	if colOffset > exactPrefix {
+		val := c.Spans.Get(0).StartKey().Value(colOffset)
+		var cols constraint.Columns
+		cols.InitSingle(opt.MakeOrderingColumn(h.col, false /* descending */))
+		key := constraint.MakeKey(val)
+		var span constraint.Span
+		span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+		return h.filter(
+			ctx, 1 /* spanCount */, func(int) *constraint.Span { return &span },
+			false /* desc */, 0 /* colOffset */, 1 /* exactPrefix */, nil /* prefix */, cols,
+		)
+	}
+
 	prefix := make([]tree.Datum, colOffset)
 	for i := range prefix {
 		prefix[i] = c.Spans.Get(0).StartKey().Value(i)
