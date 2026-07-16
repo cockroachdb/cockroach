@@ -3860,6 +3860,24 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_use_histograms_for_multi_span_const_columns`: {
+		Description:  sessionVarDescriptions["optimizer_use_histograms_for_multi_span_const_columns"],
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_histograms_for_multi_span_const_columns`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_histograms_for_multi_span_const_columns", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseHistogramsForMultiSpanConstColumns(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`optimizer_use_provided_ordering_fix`: {
 		Description:  sessionVarDescriptions["optimizer_use_provided_ordering_fix"],
 		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_provided_ordering_fix`),

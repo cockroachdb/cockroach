@@ -224,6 +224,7 @@ type Memo struct {
 	inlineAnyUnnestSubquery                    bool
 	inlinePlaceholderEqualities                bool
 	useMinRowCountAntiJoinFix                  bool
+	useHistogramsForMultiSpanConstColumns      bool
 	useBackupsWithIDs                          bool
 	// builtWithStatsRollout records the stats rollout mode under which
 	// this memo was built.
@@ -373,6 +374,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		inlineAnyUnnestSubquery:                    evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery,
 		inlinePlaceholderEqualities:                evalCtx.SessionData().OptimizerInlinePlaceholderEqualities,
 		useMinRowCountAntiJoinFix:                  evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix,
+		useHistogramsForMultiSpanConstColumns:      evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns,
 		skipUnderlyingViewPrivilegeChecks:          sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV),
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 		useBackupsWithIDs:                          evalCtx.SessionData().UseBackupsWithIDs,
@@ -563,6 +565,7 @@ func (m *Memo) IsStale(
 		m.inlineAnyUnnestSubquery != evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery ||
 		m.inlinePlaceholderEqualities != evalCtx.SessionData().OptimizerInlinePlaceholderEqualities ||
 		m.useMinRowCountAntiJoinFix != evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix ||
+		m.useHistogramsForMultiSpanConstColumns != evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns ||
 		m.skipUnderlyingViewPrivilegeChecks != sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV) ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel ||
 		m.useBackupsWithIDs != evalCtx.SessionData().UseBackupsWithIDs {

@@ -334,7 +334,8 @@ func maxDistinctValuesInRange(lowerBound, upperBound tree.Datum) (n float64, ok 
 // CanFilter returns true if the given constraint can filter the histogram.
 // This is the case if the histogram column matches one of the columns in
 // the exact prefix of c, the next column immediately after the exact prefix,
-// or a column constrained to a single value in every span (a constant column).
+// or, when optimizer_use_histograms_for_multi_span_const_columns is enabled,
+// a column constrained to a single value in every span (a constant column).
 // Returns the offset of the matching column in the constraint if found, as
 // well as the exact prefix.
 func (h *Histogram) CanFilter(
@@ -350,12 +351,14 @@ func (h *Histogram) CanFilter(
 	// A constant column (constrained to a single value in every span) can filter
 	// the histogram even when an earlier unconstrained column pushes it past the
 	// exact prefix, e.g. crdb_region on a REGIONAL BY ROW table. See Filter.
-	for i := exactPrefix + 1; i < constrainedCols; i++ {
-		if c.Columns.Get(i).ID() == h.col {
-			if c.ExtractConstCols(ctx, h.evalCtx).Contains(h.col) {
-				return i, exactPrefix, true
+	if h.evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns {
+		for i := exactPrefix + 1; i < constrainedCols; i++ {
+			if c.Columns.Get(i).ID() == h.col {
+				if c.ExtractConstCols(ctx, h.evalCtx).Contains(h.col) {
+					return i, exactPrefix, true
+				}
+				break
 			}
-			break
 		}
 	}
 	return 0, exactPrefix, false
@@ -634,8 +637,8 @@ func (h *Histogram) InvertedFilter(ctx context.Context, spans inverted.Spans) *H
 			return makeSpanFromInvertedSpan(spans[idx])
 		},
 		false, /* desc */
-		0,     /* exactPrefix */
 		0,     /* colOffset */
+		0,     /* exactPrefix */
 		nil,   /* prefix */
 		columns,
 	)

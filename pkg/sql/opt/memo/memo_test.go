@@ -644,6 +644,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix = false
 	notStale()
 
+	// Stale optimizer_use_histograms_for_multi_span_const_columns.
+	evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns = true
+	stale()
+	evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns = false
+	notStale()
+
 	// Stale skip_underlying_view_privilege_checks.
 	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, true)
 	stale()

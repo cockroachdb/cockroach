@@ -929,6 +929,10 @@ func (m *SessionDataMutator) SetOptimizerUseLockOpForSerializable(val bool) {
 	m.Data.OptimizerUseLockOpForSerializable = val
 }
 
+func (m *SessionDataMutator) SetOptimizerUseHistogramsForMultiSpanConstColumns(val bool) {
+	m.Data.OptimizerUseHistogramsForMultiSpanConstColumns = val
+}
+
 func (m *SessionDataMutator) SetOptimizerUseProvidedOrderingFix(val bool) {
 	m.Data.OptimizerUseProvidedOrderingFix = val
 }
