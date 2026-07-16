@@ -574,8 +574,9 @@ func maybeRevertToCutoverTimestamp(
 		return cutoverTimestamp, false, nil
 	}
 	if readerTenantID.IsSet() {
+		// Stopping the reader tenant should not block PCR cutover.
 		if err := stopTenant(ctx, p.ExecCfg(), readerTenantID); err != nil {
-			return cutoverTimestamp, false, errors.Wrapf(err, "failed to stop reader tenant")
+			log.Dev.Warningf(ctx, "failed to stop reader tenant: %v", err)
 		}
 	}
 	if err := ingeststopped.WaitForNoIngestingNodes(ctx, p, ingestionJob, maxIngestionProcessorShutdownWait); err != nil {
