@@ -61,8 +61,11 @@ func verifyStatsOnServers(
 
 	// Sanity regression check for bug #4624: ensure intent count is zero.
 	// This may not be true immediately due to the asynchronous nature of
-	// non-local intent resolution.
-	for i := 0; i < tc.NumServers(); i++ {
+	// non-local intent resolution. Only check the specified stores; other
+	// stores may hold system ranges on which background system activity
+	// (e.g. auto stats jobs) continuously creates transient intents, so
+	// their intent count may never settle at zero.
+	for _, i := range storeIdxSlice {
 		s := tc.GetFirstStoreFromServer(t, i)
 		m := s.Metrics()
 		testutils.SucceedsSoon(t, func() error {
