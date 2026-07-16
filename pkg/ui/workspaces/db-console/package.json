@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^5.3.6",
-    "@babel/runtime": "7.12.13",
+    "@babel/runtime": "^7.28.6",
     "@cockroachlabs/cluster-ui": "link:../cluster-ui",
     "@cockroachlabs/crdb-protobuf-client": "link:./src/js",
     "@cockroachlabs/crdb-protobuf-client-ccl": "link:./ccl/src/js",
