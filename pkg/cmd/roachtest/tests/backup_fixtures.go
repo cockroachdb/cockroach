@@ -651,6 +651,11 @@ func registerBackupFixtures(r registry.Registry) {
 			CompatibleClouds:  registry.Clouds(bf.clouds...),
 			Suites:            bf.suites,
 			Skip:              bf.skip,
+			// These tests generate backup fixtures and are I/O-bound; runtime
+			// assertions only add overhead (causing chronic timeouts, e.g.
+			// #172224) without exercising a meaningful assertion path. Always
+			// use the standard binary.
+			CockroachBinary: registry.StandardCockroach,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				require.NoError(t, maybePutAzureCredentialsFile(ctx, c, azureCredentialsFilePath))
 				registry := GetFixtureRegistry(ctx, t, c.Cloud())
