@@ -56,7 +56,7 @@ ALTER TABLE t INJECT STATISTICS '[
 # Test a multi-column inverted index scan where the leading prefix column i
 # spans multiple values but the second prefix column s is held to a single
 # value. s's histogram should be used even though s is outside the exact prefix.
-opt
+opt set=optimizer_use_histograms_for_multi_span_const_columns=true
 SELECT k FROM t@isj WHERE i IN (200, 300) AND s = 'banana' AND j @> '{"a": "b"}'
 ----
 project
@@ -137,7 +137,7 @@ ALTER TABLE rbr INJECT STATISTICS '[
 # crdb_region. The optimizer enumerates crdb_region into one span per region, all
 # pinning s='banana', so crdb_region varies while s is a constant column outside
 # the exact prefix.
-opt
+opt set=optimizer_use_histograms_for_multi_span_const_columns=true
 SELECT k FROM rbr@sj WHERE s = 'banana' AND j @> '{"a": "b"}'
 ----
 project

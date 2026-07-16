@@ -1,0 +1,137 @@
+# Tests for histogram filtering with columns that are constrained to the same
+# single value in every span of a multi-span constraint, but are beyond the
+# constraint's exact prefix because an earlier column is not constrained to a
+# single value. This commonly arises on REGIONAL BY ROW tables when
+# crdb_region is not pinned by the query; the CHECK constraint on the leading
+# column below simulates that pattern.
+#
+# Regression tests for #172569: the histogram of a later equality-constrained
+# column was discarded when the leading index column was unconstrained,
+# falling back to a distinct-count-based estimate. This reproduces the
+# scenario from the issue: a multi-column inverted index where the forward
+# prefix column keeps its histogram only if the constant-column path is used,
+# while the inverted column keeps its histogram via the separate
+# inverted-constraint path either way.
+
+exec-ddl
+CREATE TABLE t_inv (
+  k INT PRIMARY KEY,
+  r INT NOT NULL CHECK (r IN (1, 2, 3)),
+  field1 STRING NOT NULL,
+  field2 JSONB NOT NULL,
+  INVERTED INDEX inv (r, field1, field2)
+)
+----
+
+exec-ddl
+ALTER TABLE t_inv INJECT STATISTICS '[
+  {
+    "columns": ["field1"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_col_type": "STRING",
+    "histo_buckets": [
+      {"num_eq": 0,     "num_range": 0,     "distinct_range": 0,   "upper_bound": "aaa"},
+      {"num_eq": 50000, "num_range": 25000, "distinct_range": 499, "upper_bound": "hot"},
+      {"num_eq": 100,   "num_range": 24900, "distinct_range": 500, "upper_bound": "zzz"}
+    ]
+  },
+  {
+    "columns": ["field2"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {"num_eq": 0,     "num_range": 0,     "distinct_range": 0,   "upper_bound": "\\x376161610001126161610001"},
+      {"num_eq": 50000, "num_range": 25000, "distinct_range": 499, "upper_bound": "\\x37686f74000112686f740001"},
+      {"num_eq": 100,   "num_range": 24900, "distinct_range": 500, "upper_bound": "\\x377a7a7a0001127a7a7a0001"}
+    ]
+  },
+  {
+    "columns": ["r"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 3,
+    "null_count": 0
+  }
+]'
+----
+
+# Pinned leading column: expect field1 forward histogram + field2 inverted
+# histogram both used.
+opt
+SELECT k FROM t_inv@inv WHERE r = 1 AND field1 = 'hot' AND field2 @> '{"hot":"hot"}'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=1851.85]
+ ├── key: (1)
+ └── scan t_inv@inv,inverted
+      ├── columns: k:1(int!null)
+      ├── constraint: /2/3: [/1/'hot' - /1/'hot']
+      ├── inverted constraint: /7/1
+      │    └── spans: ["hot"/"hot", "hot"/"hot"]
+      ├── flags: force-index=inv
+      ├── stats: [rows=8333.33, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(2,3,7)=1, null(2,3,7)=0]
+      │   histogram(3)=  0 8333.3
+      │                <--- 'hot'
+      │   histogram(7)=  0             8333.3             0               0
+      │                <--- '\x37686f74000112686f740001' --- '\x37686f74000112686f740002'
+      └── key: (1)
+
+# Unpinned leading column: field1 is pinned to 'hot' in every span of the
+# multi-span constraint, so its histogram should still be used alongside the
+# inverted histogram for field2 (rows=25000, 3x the pinned estimate).
+opt set=optimizer_use_histograms_for_multi_span_const_columns=true
+SELECT k FROM t_inv@inv WHERE field1 = 'hot' AND field2 @> '{"hot":"hot"}'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=5555.56]
+ ├── key: (1)
+ └── scan t_inv@inv,inverted
+      ├── columns: k:1(int!null)
+      ├── constraint: /2/3
+      │    ├── [/1/'hot' - /1/'hot']
+      │    ├── [/2/'hot' - /2/'hot']
+      │    └── [/3/'hot' - /3/'hot']
+      ├── inverted constraint: /7/1
+      │    └── spans: ["hot"/"hot", "hot"/"hot"]
+      ├── flags: force-index=inv
+      ├── stats: [rows=25000, distinct(2)=3, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(2,3,7)=3, null(2,3,7)=0]
+      │   histogram(3)=  0  25000
+      │                <--- 'hot'
+      │   histogram(7)=  0             25000              0               0
+      │                <--- '\x37686f74000112686f740001' --- '\x37686f74000112686f740002'
+      └── key: (1)
+
+# With optimizer_use_histograms_for_multi_span_const_columns disabled, the
+# field1 histogram is discarded for the multi-span constraint and the
+# estimate falls back to a distinct-count ratio (1/1000) for field1.
+opt set=optimizer_use_histograms_for_multi_span_const_columns=false
+SELECT k FROM t_inv@inv WHERE field1 = 'hot' AND field2 @> '{"hot":"hot"}'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=5555.56]
+ ├── key: (1)
+ └── scan t_inv@inv,inverted
+      ├── columns: k:1(int!null)
+      ├── constraint: /2/3
+      │    ├── [/1/'hot' - /1/'hot']
+      │    ├── [/2/'hot' - /2/'hot']
+      │    └── [/3/'hot' - /3/'hot']
+      ├── inverted constraint: /7/1
+      │    └── spans: ["hot"/"hot", "hot"/"hot"]
+      ├── flags: force-index=inv
+      ├── stats: [rows=50, distinct(2)=3, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(2,3,7)=3, null(2,3,7)=0]
+      │   histogram(7)=  0               50               0               0
+      │                <--- '\x37686f74000112686f740001' --- '\x37686f74000112686f740002'
+      └── key: (1)

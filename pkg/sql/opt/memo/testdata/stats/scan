@@ -3506,7 +3506,7 @@ ALTER TABLE hist_multi INJECT STATISTICS '[
 # The leading index column a spans multiple values while b is held to a single
 # value, so b's histogram is used for the estimate even though b falls outside
 # the constraint's exact prefix.
-opt
+opt set=optimizer_use_histograms_for_multi_span_const_columns=true
 SELECT k FROM hist_multi@ab WHERE a IN (1, 2) AND b = 10
 ----
 project
@@ -3563,7 +3563,7 @@ ALTER TABLE hist_rbr INJECT STATISTICS '[
 # On a REGIONAL BY ROW table with crdb_region left unconstrained, the optimizer
 # enumerates crdb_region into one span per region, so crdb_region varies while a
 # is held to a single value outside the exact prefix. a's histogram is still used.
-opt
+opt set=optimizer_use_histograms_for_multi_span_const_columns=true
 SELECT k FROM hist_rbr@a_idx WHERE a = 10
 ----
 project

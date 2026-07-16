@@ -778,6 +778,15 @@ message LocalOnlySessionData {
   // on CTE output.
   bool optimizer_use_histograms_for_with_scans = 215;
 
+  // OptimizerUseHistogramsForMultiSpanConstColumns, when true, allows the
+  // optimizer to use a column's histogram to estimate the selectivity of a
+  // multi-span index constraint when the column is constrained to the same
+  // single value in every span, even if an earlier index column is not
+  // constrained to a single value. For example, the histogram for column b
+  // can filter /a/b: [/1/10 - /1/10] [/2/10 - /2/10]. This commonly arises
+  // on REGIONAL BY ROW tables when crdb_region is not pinned by the query.
+  bool optimizer_use_histograms_for_multi_span_const_columns = 217;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
