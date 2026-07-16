@@ -1260,7 +1260,9 @@ var errNo1PCTxn = kvpb.NewErrorf("cannot send 1PC txn to multiple ranges")
 // canSplitET parameter and checks whether the batch can forward its
 // read timestamp. If the batch has its CanForwardReadTimestamp flag
 // set but is being split across multiple sub-batches then the flag in
-// the batch header is unset.
+// the batch header is unset. The HasBufferedAllPrecedingWrites flag is
+// similarly unset on split, since its correctness relies on the batch
+// being applied as a single unit.
 func splitBatchAndCheckForRefreshSpans(
 	ba *kvpb.BatchRequest, canSplitET bool,
 ) [][]kvpb.RequestUnion {
@@ -1273,6 +1275,11 @@ func splitBatchAndCheckForRefreshSpans(
 	// we unset the CanForwardReadTimestamp flag.
 	if len(parts) > 1 {
 		unsetCanForwardReadTimestampFlag(ba)
+		// The HasBufferedAllPrecedingWrites flag tells the server it
+		// may skip the AbortSpan check, because a transaction that has
+		// buffered all preceding writes on the client. That assumption
+		// is violated once we split the batch.
+		ba.HasBufferedAllPrecedingWrites = false
 	}
 
 	return parts
