@@ -504,16 +504,49 @@ func NewIDVersionPrev(name string, id descpb.ID, currVersion descpb.DescriptorVe
 	return IDVersion{Name: name, ID: id, Version: currVersion - 1}
 }
 
-// ensureVersion ensures that the latest version >= minVersion. It will
-// check if the latest known version meets the criterion, or attempt to
+// errVersionDoesNotExistYet is returned by ensureVersion when the freshest
+// version readable from the store is still below the requested minVersion. This
+// is transient in cross-region deployments when the local clock lags the new
+// version's commit timestamp.
+var errVersionDoesNotExistYet = errors.New("descriptor version does not exist yet")
+
+// ensureVersion ensures that the latest version >= minVersion.
+// It retries the errVersionDoesNotExistYet error with MaxRetries, so a version
+// that never becomes readable cannot stall that goroutine indefinitely.
+func ensureVersion(
+	ctx context.Context, id descpb.ID, minVersion descpb.DescriptorVersion, m *Manager,
+) error {
+	var err error
+	for r := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: 100 * time.Millisecond,
+		MaxBackoff:     2 * time.Second,
+		Multiplier:     2,
+		MaxRetries:     10,
+	}); r.Next(); {
+		err = tryEnsureVersion(ctx, id, minVersion, m)
+		if err == nil || !errors.Is(err, errVersionDoesNotExistYet) {
+			return err
+		}
+	}
+	return err
+}
+
+// tryEnsureVersion makes a single attempt to ensure the latest version >= minVersion.
+// It will check if the latest known version meets the criterion, or attempt to
 // acquire a lease at the latest version with the hope that it meets
 // the criterion.
-func ensureVersion(
+func tryEnsureVersion(
 	ctx context.Context, id descpb.ID, minVersion descpb.DescriptorVersion, m *Manager,
 ) error {
 	if s := m.findNewest(id); s != nil && minVersion <= s.GetVersion() {
 		return nil
 	}
+
+	if err := m.AcquireFreshestFromStore(ctx, id); err != nil {
+		return err
+	}
+
+	s := m.findNewest(id)
 
 	if fn := m.testingKnobs.TestingEnsureVersionError; fn != nil {
 		if err := fn(id, minVersion); err != nil {
@@ -521,12 +554,11 @@ func ensureVersion(
 		}
 	}
 
-	if err := m.AcquireFreshestFromStore(ctx, id); err != nil {
-		return err
-	}
-
-	if s := m.findNewest(id); s != nil && s.GetVersion() < minVersion {
-		return errors.Errorf("version %d for descriptor %s does not exist yet", minVersion, s.GetName())
+	if s != nil && s.GetVersion() < minVersion {
+		return errors.Mark(
+			errors.Errorf("version %d for descriptor %s does not exist yet", minVersion, s.GetName()),
+			errVersionDoesNotExistYet,
+		)
 	}
 	return nil
 }
@@ -1027,13 +1059,7 @@ func purgeOldVersions(
 		return nil
 	}
 
-	if err := retry.WithMaxAttempts(ctx, retry.Options{
-		InitialBackoff: 100 * time.Millisecond,
-		MaxBackoff:     2 * time.Second,
-		Multiplier:     2,
-	}, 5, func() error {
-		return ensureVersion(ctx, id, minVersion, m)
-	}); err != nil {
+	if err := ensureVersion(ctx, id, minVersion, m); err != nil {
 		return err
 	}
 
