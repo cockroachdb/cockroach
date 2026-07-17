@@ -11,10 +11,13 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"math/rand"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/errors"
@@ -95,10 +98,13 @@ type poster struct {
 		opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error)
 	createComment func(ctx context.Context, owner string, repo string, number int,
 		comment *github.IssueComment) (*github.IssueComment, *github.Response, error)
+	editIssue func(ctx context.Context, owner string, repo string, number int,
+		issue *github.IssueRequest) (*github.Issue, *github.Response, error)
 	listCommits func(ctx context.Context, owner string, repo string,
 		opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error)
 	listMilestones func(ctx context.Context, owner string, repo string,
 		opt *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error)
+	waitForIssueSearch func(ctx context.Context) error
 }
 
 func newPoster(l Logger, client *github.Client, opts *Options) *poster {
@@ -108,8 +114,24 @@ func newPoster(l Logger, client *github.Client, opts *Options) *poster {
 		createIssue:    client.Issues.Create,
 		searchIssues:   client.Search.Issues,
 		createComment:  client.Issues.CreateComment,
+		editIssue:      client.Issues.Edit,
 		listCommits:    client.Repositories.ListCommits,
 		listMilestones: client.Issues.ListMilestones,
+		waitForIssueSearch: func(ctx context.Context) error {
+			const (
+				minimumDelay = 10 * time.Second
+				jitter       = 10 * time.Second
+			)
+			delay := minimumDelay + time.Duration(rand.Int63n(int64(jitter)))
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-timer.C:
+				return nil
+			}
+		},
 	}
 }
 
@@ -354,8 +376,27 @@ func (tfi TestFailureIssue) String() string {
 	}
 }
 
+const (
+	githubCommentingDisabledMessage = "Commenting is disabled on issues with more than 2500 comments"
+	maxIssuePostRetries             = 3
+)
+
+func isCommentingDisabledError(err error) bool {
+	var githubErr *github.ErrorResponse
+	return errors.As(err, &githubErr) &&
+		githubErr.Response != nil &&
+		githubErr.Response.StatusCode == http.StatusForbidden &&
+		githubErr.Message == githubCommentingDisabledMessage
+}
+
 func (p *poster) post(
 	origCtx context.Context, formatter IssueFormatter, req PostRequest,
+) (*TestFailureIssue, error) {
+	return p.postWithRetries(origCtx, formatter, req, maxIssuePostRetries)
+}
+
+func (p *poster) postWithRetries(
+	origCtx context.Context, formatter IssueFormatter, req PostRequest, retriesRemaining int,
 ) (*TestFailureIssue, error) {
 	ctx := &postCtx{Context: origCtx}
 	data := p.templateData(
@@ -402,30 +443,27 @@ func (p *poster) post(
 		// We found an existing issue to post a comment into.
 		foundIssue = existingIssues[0].Number
 		p.l.Printf("found existing GitHub issue: #%d", *foundIssue)
-		// We are not going to create an issue, so don't show
-		// MentionOnCreate to the formatter.Body call below.
-		data.MentionOnCreate = nil
 	}
 
 	data.RelatedIssues = filterByPrefixTitleMatch(rRelated, title)
 	data.InternalLog = ctx.Builder.String()
-	r := &Renderer{}
-	if err := formatter.Body(r, data); err != nil {
-		// Failure is not an option.
-		_ = err
-		fmt.Fprintln(&r.buf, "\nFailed to render body: "+err.Error())
+	renderBody := func(data TemplateData) string {
+		r := &Renderer{}
+		if err := formatter.Body(r, data); err != nil {
+			// Failure is not an option.
+			_ = err
+			fmt.Fprintln(&r.buf, "\nFailed to render body: "+err.Error())
+		}
+		return enforceMaxLength(r.buf.String())
 	}
-
-	body := enforceMaxLength(r.buf.String())
 
 	createLabels := []string{RobotLabel}
 	createLabels = append(createLabels, req.labels()...)
 	createLabels = append(createLabels, releaseLabel(p.Branch))
-	var result TestFailureIssue
-	if foundIssue == nil {
+	createNewIssue := func() (*TestFailureIssue, error) {
 		issueRequest := github.IssueRequest{
 			Title:     &title,
-			Body:      github.String(body),
+			Body:      github.String(renderBody(data)),
 			Labels:    &createLabels,
 			Milestone: p.getProbableMilestone(ctx),
 		}
@@ -435,23 +473,57 @@ func (p *poster) post(
 				github.Stringify(issueRequest))
 		}
 
-		result.Type = TestFailureNewIssue
-		result.ID = *issue.Number
+		result := &TestFailureIssue{Type: TestFailureNewIssue, ID: *issue.Number}
 		p.l.Printf("%s", result)
-	} else {
-		comment := github.IssueComment{Body: github.String(body)}
-		if _, _, err := p.createComment(
-			ctx, p.Org, p.Repo, *foundIssue, &comment); err != nil {
-			return nil, errors.Wrapf(err, "failed to update issue #%d with %s",
-				*foundIssue, github.Stringify(comment))
-		} else {
-			result.Type = TestFailureIssueComment
-			result.ID = *foundIssue
-			p.l.Printf("%s", result)
-		}
+		return result, nil
 	}
 
-	return &result, nil
+	if foundIssue == nil {
+		return createNewIssue()
+	}
+
+	// Mentions are only included when creating an issue, not when adding a
+	// comment to an existing one.
+	commentData := data
+	commentData.MentionOnCreate = nil
+	comment := github.IssueComment{Body: github.String(renderBody(commentData))}
+	if _, _, err := p.createComment(
+		ctx, p.Org, p.Repo, *foundIssue, &comment); err != nil {
+		if !isCommentingDisabledError(err) {
+			return nil, errors.Wrapf(err, "failed to update issue #%d with %s",
+				*foundIssue, github.Stringify(comment))
+		}
+
+		// GitHub returns the same error if search selects an issue that another
+		// process has already closed after reaching the comment limit. Closing an
+		// already closed issue is harmless, and retrying the full search below
+		// gives a replacement issue created by another process time to appear.
+		p.l.Printf(
+			"GitHub disabled comments on issue #%d; ensuring it is closed before looking for an issue again",
+			*foundIssue,
+		)
+		closeRequest := github.IssueRequest{State: github.String("closed")}
+		if _, _, closeErr := p.editIssue(
+			ctx, p.Org, p.Repo, *foundIssue, &closeRequest,
+		); closeErr != nil {
+			return nil, errors.Wrapf(closeErr,
+				"failed to close issue #%d after GitHub disabled comments", *foundIssue)
+		}
+
+		if retriesRemaining <= 0 {
+			return nil, errors.Wrapf(err, "failed to update issue #%d with %s after retries",
+				*foundIssue, github.Stringify(comment))
+		}
+		p.l.Printf("waiting for GitHub issue search to reflect the closed issue")
+		if waitErr := p.waitForIssueSearch(origCtx); waitErr != nil {
+			return nil, errors.Wrap(waitErr, "waiting to retry GitHub issue post")
+		}
+		return p.postWithRetries(origCtx, formatter, req, retriesRemaining-1)
+	}
+
+	result := &TestFailureIssue{Type: TestFailureIssueComment, ID: *foundIssue}
+	p.l.Printf("%s", result)
+	return result, nil
 }
 
 func (p *poster) teamcityURL(tab, fragment string) *url.URL {
@@ -562,8 +634,8 @@ type Logger interface {
 
 // Post either creates a new issue for a failed test, or posts a comment to an
 // existing open issue. GITHUB_API_TOKEN must be set to a valid GitHub token
-// that has permissions to search and create issues and comments or an error
-// will be returned.
+// that has permissions to search, create, and update issues and comments or an
+// error will be returned.
 func Post(
 	ctx context.Context, l Logger, formatter IssueFormatter, req PostRequest, opts *Options,
 ) (*TestFailureIssue, error) {

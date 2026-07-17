@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -418,6 +419,211 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 			return buf.String()
 		})
 	})
+}
+
+func TestPostHandlesCommentingDisabled(t *testing.T) {
+	const (
+		saturatedIssueNumber   = 30
+		replacementIssueNumber = 31
+	)
+
+	githubAPIError := func(statusCode int, message string) error {
+		return &github.ErrorResponse{
+			Response: &http.Response{
+				StatusCode: statusCode,
+				Request: &http.Request{
+					Method: http.MethodPost,
+					URL:    &url.URL{Scheme: "https", Host: "api.github.com"},
+				},
+			},
+			Message: message,
+		}
+	}
+
+	testCases := []struct {
+		name                   string
+		commentErr             error
+		existingIssueByAttempt []int
+		expectedResult         *TestFailureIssue
+		expectedErrMessage     string
+		expectedCloseCalls     int
+		expectedWaitCalls      int
+		expectedCreateCalls    int
+	}{
+		{
+			name: "adopts replacement after closing saturated issue",
+			commentErr: githubAPIError(
+				http.StatusForbidden, githubCommentingDisabledMessage,
+			),
+			existingIssueByAttempt: []int{saturatedIssueNumber, replacementIssueNumber},
+			expectedResult: &TestFailureIssue{
+				Type: TestFailureIssueComment,
+				ID:   replacementIssueNumber,
+			},
+			expectedCloseCalls: 1,
+			expectedWaitCalls:  1,
+		},
+		{
+			name: "retries when search returns already closed saturated issue",
+			commentErr: githubAPIError(
+				http.StatusForbidden, githubCommentingDisabledMessage,
+			),
+			existingIssueByAttempt: []int{
+				saturatedIssueNumber, saturatedIssueNumber, replacementIssueNumber,
+			},
+			expectedResult: &TestFailureIssue{
+				Type: TestFailureIssueComment,
+				ID:   replacementIssueNumber,
+			},
+			expectedCloseCalls: 2,
+			expectedWaitCalls:  2,
+		},
+		{
+			name: "creates replacement after closing saturated issue",
+			commentErr: githubAPIError(
+				http.StatusForbidden, githubCommentingDisabledMessage,
+			),
+			existingIssueByAttempt: []int{saturatedIssueNumber, 0},
+			expectedResult: &TestFailureIssue{
+				Type: TestFailureNewIssue,
+				ID:   replacementIssueNumber,
+			},
+			expectedCloseCalls:  1,
+			expectedWaitCalls:   1,
+			expectedCreateCalls: 1,
+		},
+		{
+			name: "stops after bounded retries",
+			commentErr: githubAPIError(
+				http.StatusForbidden, githubCommentingDisabledMessage,
+			),
+			existingIssueByAttempt: []int{
+				saturatedIssueNumber, saturatedIssueNumber, saturatedIssueNumber,
+				saturatedIssueNumber,
+			},
+			expectedErrMessage: "failed to update issue #30",
+			expectedCloseCalls: 4,
+			expectedWaitCalls:  3,
+		},
+		{
+			name: "other forbidden error",
+			commentErr: githubAPIError(
+				http.StatusForbidden, "Resource not accessible by integration",
+			),
+			existingIssueByAttempt: []int{saturatedIssueNumber},
+			expectedErrMessage:     "failed to update issue #30",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := &Options{
+				Org:    "cockroachdb",
+				Repo:   "cockroach",
+				Branch: "master",
+				SHA:    "abcd123",
+				TeamCityOptions: &TeamCityOptions{
+					BuildTypeID: "nightly123",
+					BuildID:     "8008135",
+					ServerURL:   "https://teamcity.example.com",
+				},
+				GetBinaryVersion: func() string {
+					return "v25.1.0"
+				},
+			}
+			var logOutput strings.Builder
+			p := &poster{
+				Options: opts,
+				l:       log.New(&logOutput, "", 0),
+			}
+
+			searchCalls := 0
+			p.searchIssues = func(
+				_ context.Context, _ string, _ *github.SearchOptions,
+			) (*github.IssuesSearchResult, *github.Response, error) {
+				searchCalls++
+				if searchCalls%2 == 1 {
+					attempt := (searchCalls - 1) / 2
+					require.Less(t, attempt, len(tc.existingIssueByAttempt))
+					issueNumber := tc.existingIssueByAttempt[attempt]
+					if issueNumber == 0 {
+						return &github.IssuesSearchResult{}, nil, nil
+					}
+					return &github.IssuesSearchResult{Issues: []github.Issue{{
+						Number: github.Int(issueNumber),
+						Title:  github.String("roachtest: cluster_creation failed"),
+					}}}, nil, nil
+				}
+				return &github.IssuesSearchResult{}, nil, nil
+			}
+
+			commentCalls := 0
+			p.createComment = func(
+				_ context.Context, _, _ string, number int, comment *github.IssueComment,
+			) (*github.IssueComment, *github.Response, error) {
+				commentCalls++
+				require.NotContains(t, comment.GetBody(), "/cc")
+				if number == saturatedIssueNumber {
+					return nil, nil, tc.commentErr
+				}
+				require.Equal(t, replacementIssueNumber, number)
+				return &github.IssueComment{}, nil, nil
+			}
+
+			closeCalls := 0
+			p.editIssue = func(
+				_ context.Context, _, _ string, number int, issue *github.IssueRequest,
+			) (*github.Issue, *github.Response, error) {
+				closeCalls++
+				require.Equal(t, saturatedIssueNumber, number)
+				require.Equal(t, "closed", issue.GetState())
+				return &github.Issue{}, nil, nil
+			}
+
+			createCalls := 0
+			p.createIssue = func(
+				_ context.Context, _, _ string, issue *github.IssueRequest,
+			) (*github.Issue, *github.Response, error) {
+				createCalls++
+				require.Equal(t, tc.expectedCloseCalls, closeCalls,
+					"the saturated issue must be closed first")
+				require.Contains(t, issue.GetBody(), "/cc @cockroachlabs/test-eng")
+				return &github.Issue{Number: github.Int(replacementIssueNumber)}, nil, nil
+			}
+			p.listMilestones = func(
+				_ context.Context, _, _ string, _ *github.MilestoneListOptions,
+			) ([]*github.Milestone, *github.Response, error) {
+				return nil, nil, nil
+			}
+			waitCalls := 0
+			p.waitForIssueSearch = func(context.Context) error {
+				waitCalls++
+				return nil
+			}
+
+			result, err := p.post(context.Background(), UnitTestFormatter, PostRequest{
+				PackageName:     "roachtest",
+				TestName:        "cluster_creation",
+				Message:         "cluster creation failed",
+				MentionOnCreate: []string{"@cockroachlabs/test-eng"},
+			})
+
+			require.Equal(t, 2*len(tc.existingIssueByAttempt), searchCalls)
+			require.Equal(t, tc.expectedCloseCalls, closeCalls)
+			require.Equal(t, tc.expectedWaitCalls, waitCalls)
+			require.Equal(t, tc.expectedCreateCalls, createCalls)
+			if tc.expectedResult != nil {
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedResult, result)
+				require.Contains(t, logOutput.String(),
+					"GitHub disabled comments on issue #30; ensuring it is closed")
+			} else {
+				require.Nil(t, result)
+				require.ErrorContains(t, err, tc.expectedErrMessage)
+			}
+			require.Equal(t, len(tc.existingIssueByAttempt)-tc.expectedCreateCalls, commentCalls)
+		})
+	}
 }
 
 func TestPostEndToEnd(t *testing.T) {
