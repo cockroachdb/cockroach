@@ -436,28 +436,37 @@ func (s *eventStream) addSST(sst *kvpb.RangeFeedSSTable, registeredSpan roachpb.
 
 func (s *eventStream) validateProducerJobAndSpec(ctx context.Context) (roachpb.TenantID, error) {
 	producerJobID := jobspb.JobID(s.streamID)
-	job, err := s.execCfg.JobRegistry.LoadJob(ctx, producerJobID)
+	details, state, err := loadProducerJobDetails(ctx, s.execCfg.JobRegistry, producerJobID)
 	if err != nil {
 		return roachpb.TenantID{}, err
+	}
+	if state != jobs.StateRunning {
+		return roachpb.TenantID{}, jobIsNotRunningError(producerJobID, state, "stream events")
+	}
+	if err := validateSpansAgainstAuthorizedKeyspace(
+		s.execCfg.Codec, details, s.spec.Spans, producerJobID,
+	); err != nil {
+		return roachpb.TenantID{}, err
+	}
+	return details.TenantID, nil
+}
+
+func loadProducerJobDetails(
+	ctx context.Context, registry *jobs.Registry, jobID jobspb.JobID,
+) (*jobspb.StreamReplicationDetails, jobs.State, error) {
+	job, err := registry.LoadJob(ctx, jobID)
+	if err != nil {
+		return nil, "", err
 	}
 	payload := job.Payload()
 	sp, ok := payload.GetDetails().(*jobspb.Payload_StreamReplication)
 	if !ok {
-		return roachpb.TenantID{}, notAReplicationJobError(producerJobID)
+		return nil, "", notAReplicationJobError(jobID)
 	}
 	if sp.StreamReplication == nil {
-		return roachpb.TenantID{}, errors.AssertionFailedf("unexpected nil StreamReplication in producer job %d payload", producerJobID)
+		return nil, "", errors.AssertionFailedf("unexpected nil StreamReplication in producer job %d payload", jobID)
 	}
-	if job.State() != jobs.StateRunning {
-		return roachpb.TenantID{}, jobIsNotRunningError(producerJobID, job.State(), "stream events")
-	}
-
-	if err := validateSpansAgainstAuthorizedKeyspace(
-		s.execCfg.Codec, sp.StreamReplication, s.spec.Spans, producerJobID,
-	); err != nil {
-		return roachpb.TenantID{}, err
-	}
-	return sp.StreamReplication.TenantID, nil
+	return sp.StreamReplication, job.State(), nil
 }
 
 // validateSpansAgainstAuthorizedKeyspace returns an error if any of the
