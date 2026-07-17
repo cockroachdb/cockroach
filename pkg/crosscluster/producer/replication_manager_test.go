@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -95,4 +96,100 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 		})
 	}
 
+}
+
+func TestPlanLogicalReplicationScopesToJobTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+	tDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	tDB.Exec(t, "CREATE TABLE tab_a (pk INT PRIMARY KEY)")
+	tDB.Exec(t, "CREATE TABLE tab_b (pk INT PRIMARY KEY)")
+
+	var tabAID, tabBID int32
+	tDB.QueryRow(t, "SELECT 'tab_a'::regclass::oid::int").Scan(&tabAID)
+	tDB.QueryRow(t, "SELECT 'tab_b'::regclass::oid::int").Scan(&tabBID)
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	var m sessiondatapb.MigratableSession
+	var sessionSerialized []byte
+	tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
+	require.NoError(t, protoutil.Unmarshal(sessionSerialized, &m))
+	sd, err := sessiondata.UnmarshalNonLocal(m.SessionData)
+	require.NoError(t, err)
+	sd.SessionData = m.SessionData
+	sd.LocalOnlySessionData = m.LocalOnlySessionData
+
+	startStream := func() streampb.StreamID {
+		txn := kvDB.NewTxn(ctx, "start-stream")
+		p, cleanup := sql.NewInternalPlanner(
+			"start-stream", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sd)
+		defer cleanup()
+		pi := p.(interface {
+			EvalContext() *eval.Context
+			InternalSQLTxn() descs.Txn
+		})
+		mgr, err := newReplicationStreamManager(
+			ctx, pi.EvalContext(), p.(resolver.SchemaResolver), pi.InternalSQLTxn(), clusterunique.ID{})
+		require.NoError(t, err)
+		require.NoError(t, mgr.AuthorizeViaReplicationPriv(ctx))
+		spec, err := mgr.StartReplicationStreamForTables(
+			ctx, streampb.ReplicationProducerRequest{TableNames: []string{"tab_a"}})
+		require.NoError(t, err)
+		require.NoError(t, txn.Commit(ctx))
+		return spec.StreamID
+	}
+	streamID := startStream()
+
+	plan := func(t *testing.T, tableIDs []int32) error {
+		reqBytes, err := protoutil.Marshal(&streampb.LogicalReplicationPlanRequest{
+			StreamID: streamID,
+			TableIDs: tableIDs,
+		})
+		require.NoError(t, err)
+		var respBytes []byte
+		row := sqlDB.QueryRow("SELECT crdb_internal.plan_logical_replication($1)", reqBytes)
+		return row.Scan(&respBytes)
+	}
+
+	tests := []struct {
+		name        string
+		tableIDs    []int32
+		expectedErr string
+	}{
+		{
+			name:     "in-scope table",
+			tableIDs: []int32{tabAID},
+		},
+		{
+			name:        "out-of-scope table",
+			tableIDs:    []int32{tabBID},
+			expectedErr: "not contained within the keyspace authorized",
+		},
+		{
+			name:        "mixed in-scope and out-of-scope",
+			tableIDs:    []int32{tabAID, tabBID},
+			expectedErr: "not contained within the keyspace authorized",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := plan(t, tc.tableIDs)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }
