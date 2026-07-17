@@ -4317,3 +4317,87 @@ DROP TABLE t2_fk;
 DROP TABLE t1_fk;
 
 subtest end
+
+subtest insert_update_without_select_on_referenced_table
+
+# An INSERT or UPDATE that writes the referencing columns of a foreign key must
+# not require the writing user to hold SELECT on the referenced (parent) table.
+# The existence check is mandated by the schema — creating the FK already
+# required CREATE on the parent — so ordinary DML privileges on the child
+# suffice. This matches PostgreSQL, where referential-integrity checks run with
+# the system's privileges rather than the writing user's. Regression test for
+# #172490.
+
+statement ok
+CREATE TABLE dml_parent (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE dml_child (id INT PRIMARY KEY, pid INT REFERENCES dml_parent(id))
+
+statement ok
+INSERT INTO dml_parent VALUES (1)
+
+statement ok
+CREATE USER child_writer
+
+# Grant the role to testuser so SET ROLE works.
+statement ok
+GRANT child_writer TO testuser
+
+# child_writer may write to the child but holds no privileges on the parent.
+statement ok
+GRANT INSERT, UPDATE, SELECT, DELETE ON dml_child TO child_writer
+
+user testuser
+
+statement ok
+SET ROLE child_writer
+
+# child_writer cannot read the parent directly: it holds no SELECT on it. The FK
+# writes below nonetheless succeed, showing the existence check is not gated on
+# the writing user's privileges.
+statement error user child_writer does not have SELECT privilege on relation dml_parent
+SELECT * FROM dml_parent
+
+# A non-NULL FK value triggers the existence check; it must succeed even though
+# child_writer holds no SELECT on dml_parent.
+statement ok
+INSERT INTO dml_child VALUES (10, 1)
+
+# A NULL FK value can never require an existence check; it must also succeed.
+statement ok
+INSERT INTO dml_child VALUES (11, NULL)
+
+# Updating the FK column triggers the existence check; it must succeed.
+statement ok
+UPDATE dml_child SET pid = 1 WHERE id = 11
+
+# An UPDATE that does not touch the FK column performs no existence check.
+statement ok
+UPDATE dml_child SET id = 12 WHERE id = 10
+
+# UPSERT and INSERT ... ON CONFLICT reach the same outbound FK check through
+# distinct optbuilder paths; both must also succeed without SELECT on the parent.
+statement ok
+UPSERT INTO dml_child VALUES (13, 1)
+
+statement ok
+INSERT INTO dml_child VALUES (14, 1) ON CONFLICT (id) DO UPDATE SET pid = 1
+
+# A genuine FK violation is still reported as a constraint violation (pgcode
+# 23503), not a privilege error.
+statement error pgcode 23503 violates foreign key constraint
+INSERT INTO dml_child VALUES (20, 999)
+
+user root
+
+statement ok
+DROP TABLE dml_child
+
+statement ok
+DROP TABLE dml_parent
+
+statement ok
+DROP USER child_writer
+
+subtest end
