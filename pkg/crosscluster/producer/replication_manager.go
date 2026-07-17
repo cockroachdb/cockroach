@@ -235,6 +235,9 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 	if err := r.Authorized("PlanLogicalReplication"); err != nil {
 		return nil, err
 	}
+	if err := r.validateTableIDsAgainstAuthorizedTables(ctx, req.StreamID, req.TableIDs); err != nil {
+		return nil, err
+	}
 
 	_, tenID, err := keys.DecodeTenantPrefix(r.evalCtx.Codec.TenantPrefix())
 	if err != nil {
@@ -276,6 +279,23 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 	spec.TableSpans = spans
 	spec.TypeDescriptors = typeDescriptors
 	return spec, nil
+}
+
+func (r *replicationStreamManagerImpl) validateTableIDsAgainstAuthorizedTables(
+	ctx context.Context, streamID streampb.StreamID, requested []int32,
+) error {
+	execCfg := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+	jobID := jobspb.JobID(streamID)
+	details, _, err := loadProducerJobDetails(ctx, execCfg.JobRegistry, jobID)
+
+	if err != nil {
+		return err
+	}
+	requestedSpans := make([]roachpb.Span, len(requested))
+	for i, id := range requested {
+		requestedSpans[i] = r.evalCtx.Codec.TableSpan(uint32(id))
+	}
+	return validateSpansAgainstAuthorizedKeyspace(r.evalCtx.Codec, details, requestedSpans, jobID)
 }
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.
