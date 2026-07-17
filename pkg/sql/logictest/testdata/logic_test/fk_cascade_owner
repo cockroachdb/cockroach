@@ -354,10 +354,6 @@ subtest on_update_cascade
 #
 # The referenced column is a unique key rather than the primary key so that
 # an UPSERT on the primary key can modify it and fire the cascade.
-#
-# childowner needs SELECT on parent (not just CREATE): the cascade writes
-# new key values into child and re-checks them against parent, and that
-# existence check runs as the child owner like the rest of the cascade.
 statement ok
 CREATE TABLE parent (id INT PRIMARY KEY, uid INT UNIQUE)
 
@@ -402,23 +398,15 @@ INSERT INTO parent VALUES (1, 10)
 statement ok
 INSERT INTO child VALUES (100, 10)
 
-# With only CREATE on parent, the write-back cascade must fail: it
-# re-checks the new key value against parent, and that existence check runs
-# as childowner, who cannot read parent. The error naming childowner — not
-# testuser, who owns parent — pins which identity performs the check.
+# With only CREATE on parent, the write-back cascade must succeed, matching
+# Postgres
 user testuser
-
-statement error user childowner does not have SELECT privilege
-UPDATE parent SET uid = 13 WHERE id = 1
-
-user root
 
 statement ok
-GRANT SELECT ON parent TO childowner
+UPDATE parent SET uid = 13 WHERE id = 1
 
-# testuser holds no privileges on child; both mutations succeed because the
+# testuser holds no privileges on child; mutations succeed because the
 # cascade runs as childowner.
-user testuser
 
 statement ok
 UPDATE parent SET uid = 11 WHERE id = 1
@@ -428,7 +416,7 @@ UPSERT INTO parent VALUES (1, 12)
 
 user root
 
-# Both cascades reached the child, and both cascade-fired triggers observed
+# Cascades reached the child, and cascade-fired triggers observed
 # current_user as childowner: not testuser, and not funcowner.
 query I
 SELECT puid FROM child
@@ -438,7 +426,7 @@ SELECT puid FROM child
 query TI
 SELECT who, count(*) FROM audit GROUP BY who
 ----
-childowner  2
+childowner  3
 
 statement ok
 DROP TABLE child
