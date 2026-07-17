@@ -2190,8 +2190,9 @@ func TestPurgeOldVersionsRetriesAfterEnsureVersionError(t *testing.T) {
 			case knobFired <- struct{}{}:
 			default:
 			}
-			return errors.Errorf(
-				"version %d for descriptor does not exist yet", version,
+			return errors.Mark(
+				errors.Errorf("version %d for descriptor does not exist yet", version),
+				errVersionDoesNotExistYet,
 			)
 		},
 	}
