@@ -4859,3 +4859,18 @@ scalar-group-by
  └── aggregations
       └── const-agg [as=string_agg:8]
            └── string_agg:8
+
+# any_value is lowered to the internal any-not-null-agg operator.
+build
+SELECT k, any_value(v) FROM kv GROUP BY k
+----
+group-by (hash)
+ ├── columns: k:1!null any_value:7
+ ├── grouping columns: k:1!null
+ ├── project
+ │    ├── columns: k:1!null v:2
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ └── aggregations
+      └── any-not-null-agg [as=any_value:7]
+           └── v:2

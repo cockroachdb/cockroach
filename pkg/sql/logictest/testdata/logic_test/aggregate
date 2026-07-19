@@ -4034,3 +4034,68 @@ query R
 SELECT percentile_cont(ARRAY[.4::FLOAT]) WITHIN GROUP (ORDER BY i::FLOAT4) FROM t90519;
 ----
 {2.2}
+
+# any_value returns an arbitrary non-NULL value from the group (#172590).
+subtest any_value
+
+statement ok
+CREATE TABLE any_value_t (k INT, v INT, s STRING)
+
+# No rows produces NULL.
+query I
+SELECT any_value(v) FROM any_value_t
+----
+NULL
+
+statement ok
+INSERT INTO any_value_t VALUES (1, NULL, NULL), (1, 10, 'x'), (2, NULL, NULL)
+
+# NULL values are skipped; the only non-NULL value must be returned.
+query I
+SELECT any_value(v) FROM any_value_t WHERE k = 1
+----
+10
+
+# A group with only NULL values returns NULL.
+query I
+SELECT any_value(v) FROM any_value_t WHERE k = 2
+----
+NULL
+
+query II rowsort
+SELECT k, any_value(v) FROM any_value_t GROUP BY k
+----
+1  10
+2  NULL
+
+# any_value works on any type.
+query T
+SELECT any_value(s) FROM any_value_t
+----
+x
+
+# The arbitrary value must still be one of the input values.
+query B
+SELECT any_value(v) IN (2, 4, 6) FROM (VALUES (2), (4), (6)) AS t(v)
+----
+true
+
+# any_value respects FILTER and DISTINCT.
+query I
+SELECT any_value(v) FILTER (WHERE v > 8) FROM (VALUES (2), (9)) AS t(v)
+----
+9
+
+query I
+SELECT any_value(DISTINCT v) FROM (VALUES (7), (7), (7)) AS t(v)
+----
+7
+
+# any_value can be used as a window function.
+query II rowsort
+SELECT k, any_value(v) OVER (PARTITION BY k) FROM any_value_t WHERE v IS NOT NULL
+----
+1  10
+
+statement ok
+DROP TABLE any_value_t

@@ -599,6 +599,16 @@ var aggregates = map[string]builtinDefinition{
 			"Returns an arbitrary not-NULL value, or NULL if none exists.",
 		))),
 
+	// any_value shares its implementation with the internal any_not_null
+	// aggregate; it is the user-facing name introduced by PostgreSQL 16.
+	"any_value": makeBuiltin(tree.FunctionProperties{},
+		makeImmutableAggOverloadWithReturnType(
+			[]*types.T{types.AnyElement},
+			tree.IdentityReturnType(0),
+			newAnyNotNullAggregate,
+			"Returns an arbitrary non-NULL value, or NULL if there are no non-NULL values.",
+		)),
+
 	// Ordered-set aggregations.
 	"percentile_disc": makeBuiltin(tree.FunctionProperties{},
 		makeImmutableAggOverloadWithReturnType(

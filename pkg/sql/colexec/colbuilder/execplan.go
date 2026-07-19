@@ -207,6 +207,12 @@ func supportedNatively(core *execinfrapb.ProcessorCoreUnion) error {
 				if !colexecagg.IsAggOptimized(*wf.Func.AggregateFunc) {
 					return errDefaultAggregateWindowFunction
 				}
+				if *wf.Func.AggregateFunc == execinfrapb.AnyNotNull {
+					// AnyNotNull has optimized hash and ordered aggregate
+					// implementations, but no window variant, so it must be
+					// run through the row-based windower.
+					return errAnyNotNullWindowFunction
+				}
 			}
 		}
 		return nil
@@ -245,6 +251,7 @@ var (
 	errNonInnerMergeJoinWithOnExpr    = errors.New("can't plan vectorized non-inner merge joins with ON expressions")
 	errWindowFunctionFilterClause     = errors.New("window functions with FILTER clause are not supported")
 	errDefaultAggregateWindowFunction = errors.New("default aggregate window functions not supported")
+	errAnyNotNullWindowFunction       = errors.New("any_not_null aggregate window function not supported")
 	// TODO(yuzefovich): #55758 has been resolved, re-evaluate whether it's
 	// worth unskipping stream ingestion processors from being wrapped.
 	errStreamIngestionWrap = errors.New("core.StreamIngestion{Data,Frontier} is not supported because of #55758")

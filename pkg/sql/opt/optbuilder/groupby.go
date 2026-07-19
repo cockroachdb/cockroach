@@ -813,6 +813,10 @@ func (b *Builder) constructWindowFn(name string, args []opt.ScalarExpr) opt.Scal
 
 func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.ScalarExpr {
 	switch name {
+	case "any_value":
+		// any_value has the same semantics as the internal any_not_null
+		// aggregate: it returns an arbitrary non-NULL input value.
+		return b.factory.ConstructAnyNotNullAgg(args[0])
 	case "array_agg":
 		return b.factory.ConstructArrayAgg(args[0])
 	case "array_cat_agg":

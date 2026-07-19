@@ -127,9 +127,12 @@ func TestTypingComparisonAssumptions(t *testing.T) {
 func TestTypingAggregateAssumptions(t *testing.T) {
 	for _, name := range builtins.AllAggregateBuiltinNames() {
 		if name == builtins.AnyNotNull ||
+			name == "any_value" ||
 			name == "percentile_disc" ||
 			name == "percentile_cont" {
-			// These are treated as special cases.
+			// These are treated as special cases. any_value shares the
+			// any_not_null implementation, whose return type mirrors its input
+			// rather than being fixed.
 			continue
 		}
 		_, overloads := builtinsregistry.GetBuiltinProperties(name)

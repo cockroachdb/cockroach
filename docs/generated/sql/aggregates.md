@@ -1,6 +1,8 @@
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
+<tr><td><a name="any_value"></a><code>any_value(arg1: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns an arbitrary non-NULL value, or NULL if there are no non-NULL values.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a>[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: <a href="bool.html">bool</a>[]) &rarr; <a href="bool.html">bool</a>[][]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
