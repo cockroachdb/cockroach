@@ -1711,21 +1711,33 @@ type connExecutor struct {
 		// shouldCollectTxnExecutionStats specifies whether the statements in
 		// this transaction should collect execution stats.
 		shouldCollectTxnExecutionStats bool
-		// accumulatedStats are the accumulated stats of all statements.
+		// The stats fields below follow one rule for transaction restarts:
+		// reset what a retried attempt deterministically re-produces (the
+		// data-volume counters rowsRead, bytesRead, and rowsWritten), and
+		// accumulate across attempts what it cannot (time, CPU, and most
+		// notably the contention that caused the retry in the first place —
+		// resetting those would drop them from the recorded transaction). The
+		// all-attempts scope matches the recorded service latency and retry
+		// count.
+
+		// accumulatedStats are the accumulated execution stats of all
+		// statement executions in this transaction, including executions from
+		// attempts that were subsequently auto-retried.
 		accumulatedStats execstats.QueryLevelStats
 
 		// idleLatency is the cumulative amount of time spent waiting for the
-		// client to send statements while holding the transaction open.
+		// client to send statements while holding the transaction open, across
+		// all execution attempts.
 		idleLatency time.Duration
 
-		// rowsRead and bytesRead are separate from QueryLevelStats because they are
-		// accumulated independently since they are always collected, as opposed to
-		// QueryLevelStats which are sampled.
-		rowsRead  int64
-		bytesRead int64
-
-		// rowsWritten tracks the number of rows written (modified) by all
-		// statements in this txn so far.
+		// rowsRead, bytesRead, and rowsWritten track the volume of data read
+		// and written by all statements in this txn so far. They are reset on
+		// transaction restart and reflect the final attempt. rowsRead and
+		// rowsWritten also drive the
+		// transaction_rows_{read,written}_{log,err} guardrails, which apply to
+		// each attempt individually.
+		rowsRead    int64
+		bytesRead   int64
 		rowsWritten int64
 
 		// rowsWrittenLogged and rowsReadLogged indicates whether we have
