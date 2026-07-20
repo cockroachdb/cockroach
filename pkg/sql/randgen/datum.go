@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	jsonpathparser "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -398,6 +399,21 @@ func randInterestingDatum(rng *rand.Rand, typ *types.T) tree.Datum {
 
 	special := specials[rng.Intn(len(specials))]
 	return adjustDatum(special, typ)
+}
+
+// randBoundedIntDatum returns a random integer datum for a column that feeds a
+// computed expression. Its magnitude is capped to the int32 range even for
+// int64 columns so that summing several operands stays well within int64.
+func randBoundedIntDatum(rng *rand.Rand, typ *types.T, nullable bool) tree.Datum {
+	if nullable && rng.Intn(10) == 0 {
+		return tree.DNull
+	}
+	w := typ.Width()
+	if w == 0 || w > 32 {
+		w = 32
+	}
+	bound := int64(1) << (w - 1)
+	return tree.NewDInt(tree.DInt(randutil.RandInt63InRange(rng, -bound, bound)))
 }
 
 func adjustDatum(datum tree.Datum, typ *types.T) tree.Datum {
