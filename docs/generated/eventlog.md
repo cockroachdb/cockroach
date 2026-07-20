@@ -2922,8 +2922,9 @@ Events of this type are only emitted when the cluster setting
 An event of type `client_authentication_ok` is reported when a client session
 was authenticated successfully.
 
-Events of this type are only emitted when the cluster setting
-`server.auth_log.sql_sessions.enabled` is set.
+Events of this type are always emitted to the SESSIONS channel,
+regardless of the `server.auth_log.sql_sessions.enabled` cluster
+setting. To suppress them, disable the SESSIONS log channel.
 
 
 | Field | Description | Sensitive |
@@ -2999,8 +3000,9 @@ Events of this type are only emitted when the cluster setting
 An event of type `client_session_end` is reported when a client session
 is completed.
 
-Events of this type are only emitted when the cluster setting
-`server.auth_log.sql_sessions.enabled` is set.
+Events of this type are always emitted to the SESSIONS channel,
+regardless of the `server.auth_log.sql_sessions.enabled` cluster
+setting. To suppress them, disable the SESSIONS log channel.
 
 
 | Field | Description | Sensitive |
