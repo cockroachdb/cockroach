@@ -32,21 +32,35 @@ const (
 	// storeToRangeFactor is the number of ranges to create per store in the
 	// cluster.
 	storeToRangeFactor = 10
-	// meanCPUTolerance is the tolerance applied when checking normalized (0-100)
-	// CPU percent utilization of stores against the mean. In multi-store tests,
-	// the same CPU utilization will be reported for stores on the same node. The
-	// acceptable range for CPU w.r.t the mean is:
+	// meanCPUTolerance is the fractional slack allowed around the mean for the
+	// overfull check. It has two components:
 	//
-	//  mean_tolerance = mean * meanCPUTolerance
-	//  [mean - mean_tolerance, mean + mean_tolerance].
+	//   0.10 — the allocator's own convergence threshold, from
+	//          kv.allocator.store_cpu_rebalance_threshold in
+	//          pkg/kv/kvserver/allocator/base.go. A store is considered
+	//          overfull once its CPU exceeds mean * (1 + 0.10).
+	//   0.05 — a test-side noise buffer for TSDB sampling and the ~30-min
+	//          decaying window used by replica load stats. The value the
+	//          test reads lags the true load; this padding absorbs that.
+	meanCPUTolerance = 0.10 + 0.05
+	// minCPUThresholdDifferenceMs mirrors the allocator constant
+	// MinCPUThresholdDifference in pkg/kv/kvserver/allocator/base.go (= 50ms/s,
+	// converted from ns/s). It is the absolute floor for the overfull
+	// classification: a store is considered overfull once its CPU exceeds
+	// mean + max(mean * k, MinCPUThresholdDifference), where k is the
+	// store_cpu_rebalance_threshold setting.
+	minCPUThresholdDifferenceMs = 50.0
+	// minCPUDifferenceForTransfersMs mirrors the allocator constant
+	// MinCPUDifferenceForTransfers in pkg/kv/kvserver/allocator/base.go
+	// (= 2 * MinCPUThresholdDifference = 100ms/s). It is the anti-thrashing
+	// floor for lease transfers: bestStoreToMinimizeLoadDelta in
+	// allocator_scorer.go declines any transfer where
 	//
-	// The store rebalancer watches the replica CPU load and balances within
-	// +-10% of the mean (by default). To reduce noise, add a buffer (+10%)
-	// ontop.
-	// TODO(kvoli): Reduce the buffer once we attribute other CPU usage to a
-	// store via a node, such a SQL execution, stats collection and compactions.
-	// See #109768.
-	meanCPUTolerance = 0.20
+	//   (source_cpu - lease_cpu) - coldest_cpu < 100ms/s
+	//
+	// so the hottest store can legitimately sit up to that far above the
+	// coldest at equilibrium.
+	minCPUDifferenceForTransfersMs = 100.0
 	// statSamplePeriod is the period at which timeseries stats are sampled.
 	statSamplePeriod = 10 * time.Second
 	// stableDuration is the duration which the cluster's load must remain
@@ -79,8 +93,8 @@ func registerRebalanceLoad(r registry.Registry) {
 		concurrency int,
 		mixedVersion bool,
 	) {
-		// This test asserts on the distribution of CPU utilization between nodes
-		// in the cluster, having backups also running could lead to unrelated
+		// This test asserts on the distribution of replica-attributed CPU between
+		// stores in the cluster. Having backups also running could lead to unrelated
 		// flakes - disable backup schedule.
 		startOpts := option.NewStartOpts(option.NoBackupSchedule)
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
@@ -110,10 +124,9 @@ func registerRebalanceLoad(r registry.Registry) {
 				// Only use the latest version of each release to work around #127029.
 				mixedversion.AlwaysUseLatestPredecessors,
 				// There have been many performance improvements in versions 25.1.0+.
-				// In particular, the CPU utilization attributed to SQL can vary
-				// significantly between versions, which can lead to flakiness in these
-				// tests since the StoreRebalancer, which operates at the store level,
-				// is unaware of such CPU use (e.g. #150603).
+				// The assertion uses replica-attributed CPU, which is less sensitive
+				// to version differences than host CPU, but keep the floor since it
+				// also works around other mixed-version issues (e.g. #150603).
 				mixedversion.MinimumSupportedVersion("v25.1.0"),
 			)
 			mvt.OnStartup("maybe enable split/scatter on tenant",
@@ -137,7 +150,10 @@ func registerRebalanceLoad(r registry.Registry) {
 		}
 
 	}
-	concurrency := 128
+	// Concurrency is set high enough to produce meaningful
+	// replica-attributed CPU on all stores so the rebalancer has a
+	// signal to act on.
+	concurrency := 512
 	r.Add(
 		registry.TestSpec{
 			Name:             `rebalance/by-load/leases`,
@@ -258,8 +274,8 @@ func rebalanceByLoad(
 	// We want each store to end up with approximately storeToRangeFactor
 	// (factor) leases such that the CPU load is evenly spread, e.g.
 	//   (n * factor) -1 splits = factor * n ranges = factor leases per store
-	// Note that we only assert on the CPU of each store w.r.t the mean, not
-	// the lease count.
+	// Note that we only assert on the replica-attributed CPU of each store w.r.t
+	// the mean, not the lease count.
 	splits := (numStores * storeToRangeFactor) - 1
 	c.Run(ctx, option.WithNodes(appNode), fmt.Sprintf("%s init kv --drop --splits=%d {pgurl:1}", workloadPath, splits))
 
@@ -292,7 +308,7 @@ func rebalanceByLoad(
 	m.Go(func(ctx context.Context, l *logger.Logger) error {
 		l.Printf("checking for CPU balance")
 
-		storeCPUFn, err := makeStoreCPUFn(ctx, t, l, c, numNodes, numStores)
+		storeCPUFn, err := makeStoreCPUFn(ctx, t, l, c, numStores)
 		if err != nil {
 			return err
 		}
@@ -316,7 +332,7 @@ func rebalanceByLoad(
 				continue
 			}
 			var curIsBalanced bool
-			curIsBalanced, reason = isLoadEvenlyDistributed(clusterStoresCPU, meanCPUTolerance)
+			curIsBalanced, reason = isLoadEvenlyDistributed(clusterStoresCPU, meanCPUTolerance, storeToRangeFactor)
 			l.Printf("cpu %s", reason)
 			if !prevIsBalanced && curIsBalanced {
 				balancedStartTime = now
@@ -333,11 +349,11 @@ func rebalanceByLoad(
 	return m.WaitE()
 }
 
-// makeStoreCPUFn returns a function which can be called to gather the CPU of
-// the cluster stores. When there are multiple stores per node, stores on the
-// same node will report identical CPU.
+// makeStoreCPUFn returns a function which can be called to gather the
+// replica-attributed CPU of the cluster stores in ms/s. Store IDs are assumed
+// to be sequential starting at 1.
 func makeStoreCPUFn(
-	ctx context.Context, t test.Test, l *logger.Logger, c cluster.Cluster, numNodes, numStores int,
+	ctx context.Context, t test.Test, l *logger.Logger, c cluster.Cluster, numStores int,
 ) (func(ctx context.Context) ([]float64, error), error) {
 	adminURLs, err := c.ExternalAdminUIAddr(ctx, l, c.Node(1), option.VirtualClusterName(install.SystemInterfaceName))
 	if err != nil {
@@ -345,10 +361,10 @@ func makeStoreCPUFn(
 	}
 	url := adminURLs[0]
 	startTime := timeutil.Now()
-	tsQueries := make([]tsQuery, numNodes)
+	tsQueries := make([]tsQuery, numStores)
 	for i := range tsQueries {
 		tsQueries[i] = tsQuery{
-			name:      "cr.node.sys.cpu.host.combined.percent-normalized",
+			name:      "cr.store.rebalancing.cpunanospersecond",
 			queryType: total,
 			sources:   []string{fmt.Sprintf("%d", i+1)},
 			tenantID:  roachpb.SystemTenantID,
@@ -363,43 +379,63 @@ func makeStoreCPUFn(
 			return nil, err
 		}
 
-		// Assume that stores on the same node will have sequential store IDs e.g.
-		// when the stores per node is 2:
-		//   node 1 = store 1, store 2 ... node N = store 2N-1, store 2N
-		storesPerNode := numStores / numNodes
 		storeCPUs := make([]float64, numStores)
-		for node, result := range resp.Results {
+		for storeIdx, result := range resp.Results {
 			if len(result.Datapoints) == 0 {
-				// If any node has no datapoints, there isn't much point looking at
+				// If any store has no datapoints, there isn't much point looking at
 				// others because the comparison is useless.
-				return nil, errors.Newf("node %d has no CPU datapoints", node)
+				return nil, errors.Newf("store %d has no CPU datapoints", storeIdx+1)
 			}
 			// Take the latest CPU data point only.
-			cpu := result.Datapoints[len(result.Datapoints)-1].Value
-			// The datapoint is a float representing a percentage in [0,1.0]. Assert
-			// as much to avoid any surprises.
-			if cpu < 0 || cpu > 1 {
+			cpuNanosPerSecond := result.Datapoints[len(result.Datapoints)-1].Value
+			if cpuNanosPerSecond < 0 {
 				return nil, errors.Newf(
-					"node idx %d has core count normalized CPU utilization ts datapoint "+
-						"not in [0\\%,100\\%] (impossible!): %v [resp=%+v]", node, cpu, resp)
+					"store %d has negative replica-attributed CPU ts datapoint: %v [resp=%+v]",
+					storeIdx+1, cpuNanosPerSecond, resp)
 			}
-
-			nodeIdx := node * storesPerNode
-			for storeOffset := 0; storeOffset < storesPerNode; storeOffset++ {
-				// The values will be a normalized float in [0,1.0], scale to a
-				// percentage [0,100].
-				storeCPUs[nodeIdx+storeOffset] = cpu * 100
-			}
+			// Convert ns/s to ms/s for human-readable logs (e.g. 2400 ms/s ≈ 2.4 cores).
+			storeCPUs[storeIdx] = cpuNanosPerSecond / 1e6
 		}
 		return storeCPUs, nil
 	}, nil
 }
 
-// isLoadEvenlyDistributed checks whether the load for the stores given are
-// within tolerance of the mean. If the store loads are, true is returned as
-// well as reason, otherwise false. The function expects the loads to be
-// indexed to store IDs, see makeStoreCPUFn for example format.
-func isLoadEvenlyDistributed(loads []float64, tolerance float64) (ok bool, reason string) {
+// isLoadEvenlyDistributed checks whether the observed per-store CPU is
+// consistent with an SMA lease-rebalance equilibrium. The rebalancer is at
+// legitimate equilibrium in either of two regimes:
+//
+//	(a) hot-check:   no store exceeds the SMA overfull threshold, so there
+//	                 is nothing to shed.
+//	(b) gap-check:   some store is overfull but the hot-cold gap is within
+//	                 the friction bound, so the rebalancer has shed
+//	                 everything it usefully can.
+//
+// The check passes if either holds; only when both fail is the load
+// meaningfully unbalanced.
+//
+// The hot-check mirrors OverfullLoadThresholds in
+// pkg/kv/kvserver/allocator/allocatorimpl/threshold.go:
+//
+//	overfullBound = mean + max(mean * tolerance, MinCPUThresholdDifference)
+//
+// where tolerance folds in the allocator's own k = 0.10 plus a small
+// stats-lag buffer, and MinCPUThresholdDifference = 50 ms/s.
+//
+// The gap-check mirrors the friction check in bestStoreToMinimizeLoadDelta
+// (allocator_scorer.go): (source - lease) - coldest >= MinCPUDifferenceForTransfers.
+// Rearranged: hot - cold <= MinCPUDifferenceForTransfers + lease. Under kv
+// workload's uniform per-key load, lease ≈ mean/leasesPerStore. The 2x
+// multiplier absorbs stats-lag noise and the fact that leases on a hot store
+// often carry more than the cluster-average load.
+//
+// Stores below (mean - overfullSlack) are reported for visibility but never
+// fail the check on their own — the SMA rebalancer only sheds from overloaded
+// sources, so a cold-side outlier can indicate a rebalancer problem only when
+// paired with a hot store above the overfull threshold, which is exactly the
+// case the gap-check catches. See prior fix in b7376523652.
+func isLoadEvenlyDistributed(
+	loads []float64, tolerance float64, leasesPerStore int,
+) (ok bool, reason string) {
 	mean := arithmeticMean(loads)
 	// If the mean is zero, there's nothing meaningful to assert on. Return early
 	// that the load isn't evenly distributed.
@@ -407,16 +443,26 @@ func isLoadEvenlyDistributed(loads []float64, tolerance float64) (ok bool, reaso
 		return false, "no load: mean=0"
 	}
 
-	meanTolerance := mean * tolerance
-	lb := mean - meanTolerance
-	ub := mean + meanTolerance
+	overfullSlack := max(mean*tolerance, minCPUThresholdDifferenceMs)
+	overfullBound := mean + overfullSlack
+	lb := mean - overfullSlack
 
-	// Partiton the loads into above, below and within the tolerance bounds of
-	// the load mean.
+	gapBound := minCPUDifferenceForTransfersMs + 2*mean/float64(leasesPerStore)
+
+	// Partition the loads into above, below and within the overfull bounds of
+	// the load mean, while tracking the hottest and coldest observed loads for
+	// the gap-check.
 	above, below, within := []int{}, []int{}, []int{}
+	hot, cold := loads[0], loads[0]
 	for i, load := range loads {
 		storeID := i + 1
-		if load > ub {
+		if load > hot {
+			hot = load
+		}
+		if load < cold {
+			cold = load
+		}
+		if load > overfullBound {
 			above = append(above, storeID)
 		} else if load < lb {
 			below = append(below, storeID)
@@ -425,20 +471,34 @@ func isLoadEvenlyDistributed(loads []float64, tolerance float64) (ok bool, reaso
 		}
 	}
 
-	boundsStr := fmt.Sprintf("mean=%.1f tolerance=%.1f%% (±%.1f) bounds=[%.1f, %.1f]",
-		mean, 100*tolerance, meanTolerance, lb, ub)
-	if len(below) > 0 || len(above) > 0 {
-		ok = false
+	hotOk := hot <= overfullBound
+	gap := hot - cold
+	gapOk := gap <= gapBound
+	ok = hotOk || gapOk
+
+	boundsStr := fmt.Sprintf(
+		"mean=%.0fms/s overfull=%.0f (tolerance=%.1f%% floor=%.0fms/s) gap=%.0f (bound=%.0f)",
+		mean, overfullBound, 100*tolerance, minCPUThresholdDifferenceMs, gap, gapBound,
+	)
+	switch {
+	case !ok:
 		reason = fmt.Sprintf(
-			"outside bounds %s\n\tbelow  = %s\n\twithin = %s\n\tabove  = %s\n",
+			"unbalanced %s\n\tabove overfull = %s\n\tbelow (info)   = %s\n\twithin         = %s\n",
 			boundsStr,
+			formatLoads(above, loads, mean),
 			formatLoads(below, loads, mean),
 			formatLoads(within, loads, mean),
-			formatLoads(above, loads, mean),
 		)
-	} else {
-		ok = true
-		reason = fmt.Sprintf("within bounds %s\n\tstores=%s\n",
+	case len(above) > 0 || len(below) > 0:
+		reason = fmt.Sprintf(
+			"balanced (gap ok) %s\n\tabove overfull = %s\n\tbelow (info)   = %s\n\twithin         = %s\n",
+			boundsStr,
+			formatLoads(above, loads, mean),
+			formatLoads(below, loads, mean),
+			formatLoads(within, loads, mean),
+		)
+	default:
+		reason = fmt.Sprintf("balanced %s\n\tstores=%s\n",
 			boundsStr, formatLoads(within, loads, mean))
 	}
 	return
@@ -448,8 +508,8 @@ func formatLoads(storeIDs []int, loads []float64, mean float64) string {
 	fmtLoads := make([]string, len(storeIDs))
 	for i, storeID := range storeIDs {
 		load := loads[storeID-1]
-		fmtLoads[i] = fmt.Sprintf("s%d: %d (%+3.1f%%)",
-			storeID, int(load), (load-mean)/mean*100,
+		fmtLoads[i] = fmt.Sprintf("s%d: %.0fms/s (%+3.1f%%)",
+			storeID, load, (load-mean)/mean*100,
 		)
 	}
 	return fmt.Sprintf("[%s]", strings.Join(fmtLoads, ", "))
