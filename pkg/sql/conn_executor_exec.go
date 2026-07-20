@@ -4449,15 +4449,18 @@ func (ex *connExecutor) onTxnRestart(ctx context.Context) {
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction, crtime.NowMono())
 		ex.extraTxnState.transactionStatementFingerprintIDs = nil
 		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
+		// Reset what the retried attempt deterministically re-produces as it
+		// re-executes the same statements: the data-volume counters reset
+		// here end up reflecting the final attempt. The remaining stats
+		// (accumulatedStats, idleLatency, kvCPUTimeNanos) measure time and
+		// work a retry does not re-produce — most notably the contention that
+		// caused the retry — so they intentionally survive the restart and
+		// accumulate across attempts, consistent with ServiceLatency and
+		// RetryCount. See the field comments on extraTxnState.
 		ex.extraTxnState.numRows = 0
-		// accumulatedStats are cleared, but shouldCollectTxnExecutionStats is
-		// unchanged.
-		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
-		ex.extraTxnState.idleLatency = 0
 		ex.extraTxnState.rowsRead = 0
 		ex.extraTxnState.bytesRead = 0
 		ex.extraTxnState.rowsWritten = 0
-		ex.extraTxnState.kvCPUTimeNanos = 0
 
 		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
 			ex.server.cfg.TestingKnobs.BeforeRestart(ctx, ex.state.mu.autoRetryReason)
