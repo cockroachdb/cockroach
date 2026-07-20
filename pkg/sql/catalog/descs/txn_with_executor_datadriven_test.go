@@ -47,7 +47,6 @@ func TestTxnWithExecutorDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
-			var out strings.Builder
 			var expErr string
 			if d.HasArg("error") {
 				d.ScanArgs(t, "error", &expErr)
@@ -63,7 +62,9 @@ func TestTxnWithExecutorDataDriven(t *testing.T) {
 			}
 			sd.SearchPath = &searchPath
 			ief := s.InternalDB().(descs.DB)
+			var out strings.Builder
 			err = ief.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+				out.Reset()
 				for _, stmt := range stmts {
 					switch d.Cmd {
 					case "exec":
