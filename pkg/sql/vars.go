@@ -2705,6 +2705,34 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_max_disjunction_split_count`: {
+		GetStringVal: makeIntGetStringValFn(`optimizer_max_disjunction_split_count`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set optimizer_max_disjunction_split_count to a negative value: %d", b)
+			}
+			if b > opt.MaxDisjunctionSplitCount {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set optimizer_max_disjunction_split_count to a value greater than %d",
+					opt.MaxDisjunctionSplitCount)
+			}
+			m.SetOptimizerMaxDisjunctionSplitCount(int32(b))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(int64(evalCtx.SessionData().OptimizerMaxDisjunctionSplitCount), 10), nil
+		},
+		GlobalDefault: func(_ *settings.Values) string {
+			return strconv.Itoa(opt.DefaultDisjunctionSplitCountLimit)
+		},
+	},
+
+	// CockroachDB extension.
 	`enable_super_regions`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_super_regions`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

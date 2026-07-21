@@ -1931,6 +1931,26 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 func (c *CustomFuncs) SplitDisjunction(
 	sp *memo.ScanPrivate, filters memo.FiltersExpr,
 ) (left opt.ScalarExpr, right opt.ScalarExpr, itemToReplace *memo.FiltersItem, ok bool) {
+	// Each split rewrites Select(Scan) into a UnionAll of two Selects over
+	// duplicated tables, and both are re-explored (and re-split), so
+	// exploration fans out by a factor of ~2 for every OR-connected conjunct in
+	// filters. When filters is an N-way AND of ORs, this causes memo growth
+	// exponential in N. Bail out entirely once the number of disjunctions
+	// exceeds the configured limit, leaving the unconstrained Scan+Select in
+	// place, to avoid exhausting node memory during planning. See #172644.
+	limit := int(c.e.evalCtx.SessionData().OptimizerMaxDisjunctionSplitCount)
+	if limit <= 0 {
+		limit = opt.DefaultDisjunctionSplitCountLimit
+	}
+	numDisjunctions := 0
+	for i := range filters {
+		if filters[i].Condition.Op() == opt.OrOp {
+			numDisjunctions++
+		}
+	}
+	if numDisjunctions > limit {
+		return nil, nil, nil, false
+	}
 	for i := range filters {
 		if filters[i].Condition.Op() == opt.OrOp {
 			if left, right, ok := c.findInterestingDisjunctionPair(sp, &filters[i]); ok {
@@ -1956,7 +1976,7 @@ func (c *CustomFuncs) SplitDisjunction(
 //	u = 1 OR v = 2
 //
 // If an index exists on u and another on v, an "interesting" pair exists, ("u =
-// 1", "v = 1"). If both indexes do not exist, there is no "interesting" pair
+// 1", "v = 2"). If both indexes do not exist, there is no "interesting" pair
 // possible.
 //
 // Now consider the expression:

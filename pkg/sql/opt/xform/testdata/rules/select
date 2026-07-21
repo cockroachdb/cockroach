@@ -11872,6 +11872,130 @@ project
            └── const-agg [as=b:3, outer=(3)]
                 └── b:3
 
+# Regression test for #172644. When the number of OR-connected filter conjuncts
+# exceeds optimizer_max_disjunction_split_count, SplitDisjunction bails out
+# instead of fanning out memo exploration exponentially.
+#
+# With the limit set to 1, a filter with two OR conjuncts is left as an
+# unconstrained scan with a filter.
+opt expect-not=SplitDisjunction set=(optimizer_max_disjunction_split_count=1)
+SELECT k FROM d WHERE (u = 1 OR v = 2) AND (u = 3 OR v = 4)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null u:2 v:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan d
+      │    ├── columns: k:1!null u:2 v:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           ├── (u:2 = 1) OR (v:3 = 2) [outer=(2,3)]
+           └── (u:2 = 3) OR (v:3 = 4) [outer=(2,3)]
+
+# With the default limit, the same filter is split.
+opt expect=SplitDisjunction
+SELECT k FROM d WHERE (u = 1 OR v = 2) AND (u = 3 OR v = 4)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── distinct-on
+      ├── columns: k:1!null u:2 v:3
+      ├── grouping columns: k:1!null
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── union-all
+      │    ├── columns: k:1!null u:2!null v:3!null
+      │    ├── left columns: k:7 u:8 v:9
+      │    ├── right columns: k:13 u:14 v:15
+      │    ├── inner-join (zigzag d@u d@v)
+      │    │    ├── columns: k:7!null u:8!null v:9!null
+      │    │    ├── eq columns: [7] = [7]
+      │    │    ├── left fixed columns: [8] = [1]
+      │    │    ├── right fixed columns: [9] = [4]
+      │    │    ├── key: (7)
+      │    │    ├── fd: ()-->(8,9)
+      │    │    └── filters
+      │    │         ├── u:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+      │    │         └── v:9 = 4 [outer=(9), constraints=(/9: [/4 - /4]; tight), fd=()-->(9)]
+      │    └── inner-join (zigzag d@u d@v)
+      │         ├── columns: k:13!null u:14!null v:15!null
+      │         ├── eq columns: [13] = [13]
+      │         ├── left fixed columns: [14] = [3]
+      │         ├── right fixed columns: [15] = [2]
+      │         ├── key: (13)
+      │         ├── fd: ()-->(14,15)
+      │         └── filters
+      │              ├── v:15 = 2 [outer=(15), constraints=(/15: [/2 - /2]; tight), fd=()-->(15)]
+      │              └── u:14 = 3 [outer=(14), constraints=(/14: [/3 - /3]; tight), fd=()-->(14)]
+      └── aggregations
+           ├── const-agg [as=u:2, outer=(2)]
+           │    └── u:2
+           └── const-agg [as=v:3, outer=(3)]
+                └── v:3
+
+exec-ddl
+CREATE TABLE t (
+  id INT PRIMARY KEY,
+  kind STRING NOT NULL,
+  a INT, b INT, c INT, d STRING, e STRING,
+  INDEX (a), INDEX (b), INDEX (c), INDEX (d), INDEX (e)
+)
+----
+
+# 13 disjunctions exceed the default limit of 8.
+opt expect-not=SplitDisjunction
+SELECT * FROM t WHERE NOT (
+     (kind = 'K1'  AND (a IS NOT NULL OR b IS NOT NULL))
+  OR (kind = 'K2'  AND a IS NULL AND b IS NOT NULL AND c IS NULL)
+  OR (kind = 'K3'  AND a IS NULL AND b IS NOT NULL AND d IS NULL)
+  OR (kind = 'K4'  AND a IS NOT NULL AND c IS NULL)
+  OR (kind = 'K5'  AND b IS NOT NULL AND c IS NULL AND d IS NULL)
+  OR (kind = 'K6'  AND (a IS NOT NULL OR d IS NOT NULL))
+  OR (kind = 'K7'  AND a IS NOT NULL)
+  OR (kind = 'K8'  AND a IS NOT NULL)
+  OR (kind = 'K9'  AND (a IS NOT NULL OR c IS NOT NULL))
+  OR (kind = 'K10' AND (c IS NOT NULL OR e IS NOT NULL))
+  OR (kind = 'K11' AND c IS NOT NULL)
+  OR (kind = 'K12' AND b IS NOT NULL AND a IS NULL AND d IS NULL)
+  OR (kind = 'K13' AND e IS NOT NULL)
+) LIMIT 1
+----
+limit
+ ├── columns: id:1!null kind:2!null a:3 b:4 c:5 d:6 e:7
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-7)
+ ├── select
+ │    ├── columns: id:1!null kind:2!null a:3 b:4 c:5 d:6 e:7
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-7)
+ │    ├── limit hint: 1.00
+ │    ├── scan t
+ │    │    ├── columns: id:1!null kind:2!null a:3 b:4 c:5 d:6 e:7
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-7)
+ │    │    └── limit hint: 1000.00
+ │    └── filters
+ │         ├── (kind:2 != 'K1') OR ((a:3 IS NULL) AND (b:4 IS NULL)) [outer=(2-4)]
+ │         ├── (((kind:2 != 'K2') OR (a:3 IS NOT NULL)) OR (b:4 IS NULL)) OR (c:5 IS NOT NULL) [outer=(2-5)]
+ │         ├── (((kind:2 != 'K3') OR (a:3 IS NOT NULL)) OR (b:4 IS NULL)) OR (d:6 IS NOT NULL) [outer=(2-4,6)]
+ │         ├── ((kind:2 != 'K4') OR (a:3 IS NULL)) OR (c:5 IS NOT NULL) [outer=(2,3,5)]
+ │         ├── (((kind:2 != 'K5') OR (b:4 IS NULL)) OR (c:5 IS NOT NULL)) OR (d:6 IS NOT NULL) [outer=(2,4-6)]
+ │         ├── (kind:2 != 'K6') OR ((a:3 IS NULL) AND (d:6 IS NULL)) [outer=(2,3,6)]
+ │         ├── (kind:2 != 'K7') OR (a:3 IS NULL) [outer=(2,3)]
+ │         ├── (kind:2 != 'K8') OR (a:3 IS NULL) [outer=(2,3)]
+ │         ├── (kind:2 != 'K9') OR ((a:3 IS NULL) AND (c:5 IS NULL)) [outer=(2,3,5)]
+ │         ├── (kind:2 != 'K10') OR ((c:5 IS NULL) AND (e:7 IS NULL)) [outer=(2,5,7)]
+ │         ├── (kind:2 != 'K11') OR (c:5 IS NULL) [outer=(2,5)]
+ │         ├── (((kind:2 != 'K12') OR (b:4 IS NULL)) OR (a:3 IS NOT NULL)) OR (d:6 IS NOT NULL) [outer=(2-4,6)]
+ │         └── (kind:2 != 'K13') OR (e:7 IS NULL) [outer=(2,7)]
+ └── 1
+
 # Regression test for #58390. SplitDisjunction must not generate a cycle in the
 # memo when there is a partial index with a predicate identical to the
 # disjunction in the query filter.
