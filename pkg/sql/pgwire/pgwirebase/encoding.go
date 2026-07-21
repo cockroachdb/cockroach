@@ -1085,6 +1085,12 @@ func decodeBinaryTuple(
 	}
 	bufferStartIdx = bufferEndIdx
 
+	if maxPossibleElements := (bufferLength - tupleHeaderSize) / (oidSize + elementSize); int(numberOfElements) > maxPossibleElements {
+		return nil, errors.WithDetailf(
+			pgerror.New(pgcode.Syntax, "tuple element count exceeds available data"),
+			"numberOfElements=%d maxPossibleElements=%d bufferLength=%d",
+			numberOfElements, maxPossibleElements, bufferLength)
+	}
 	typs := make([]*types.T, numberOfElements)
 	datums := make(tree.Datums, numberOfElements)
 
