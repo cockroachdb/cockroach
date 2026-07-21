@@ -315,6 +315,11 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 func (r *replicationStreamManagerImpl) validateTableIDsAgainstAuthorizedTables(
 	ctx context.Context, streamID streampb.StreamID, requested []int32,
 ) error {
+	// A job planned pre 25.2 does not send a stream ID, so there is no producer
+	// job to validate the requested tables against.
+	if streamID == 0 {
+		return nil
+	}
 	execCfg := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	jobID := jobspb.JobID(streamID)
 	details, _, err := loadProducerJobDetails(ctx, execCfg.JobRegistry, jobID)
