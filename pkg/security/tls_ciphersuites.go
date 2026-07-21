@@ -80,12 +80,10 @@ func OldCipherSuites() []uint16 {
 
 type tlsRestrictConfiguration struct {
 	syncutil.RWMutex
-	c          []string
 	restrictFn func(*tls.Conn) (error net.Error)
 }
 
 var tlsRestrictConfig = tlsRestrictConfiguration{
-	c:          []string{},
 	restrictFn: func(tlsConn *tls.Conn) (error net.Error) { return },
 }
 
@@ -160,11 +158,16 @@ func (*tlsRestrictConfiguration) configureTLSRestrict(ciphers []string) {
 	tlsRestrictConfig.Lock()
 	defer tlsRestrictConfig.Unlock()
 	tlsRestrictConfig.restrictFn = func(tlsConn *tls.Conn) (error net.Error) { return }
-	tlsRestrictConfig.c = ciphers
 	if len(ciphers) == 0 {
 		return
 	}
 
+	// Capture ciphers in the closure rather than reading it back from shared
+	// configuration state at invocation time. TLSCipherRestrict invokes
+	// restrictFn without holding the lock (to avoid serializing handshakes), so
+	// reading shared mutable state inside the closure would race with a
+	// concurrent reconfiguration. The captured slice is never mutated after this
+	// point.
 	tlsRestrictConfig.restrictFn = func(tlsConn *tls.Conn) (error net.Error) {
 		if !tlsConn.ConnectionState().HandshakeComplete {
 			// TODO(souravcrl): we need to provide a timebound context for handshake as it
@@ -179,7 +182,7 @@ func (*tlsRestrictConfiguration) configureTLSRestrict(ciphers []string) {
 		if !ok {
 			return &cipherRestrictError{errors.Errorf("cipher id %v does match implemented tls ciphers", selectedCipherID)}
 		}
-		if !slices.Contains(tlsRestrictConfig.c, cName) {
+		if !slices.Contains(ciphers, cName) {
 			return &cipherRestrictError{errors.Newf("presented cipher %s not in allowed cipher suite list", redact.SafeString(cName))}
 		}
 		return
@@ -191,12 +194,20 @@ func (*tlsRestrictConfiguration) configureTLSRestrict(ciphers []string) {
 // not check for used ciphers in the connection. It returns an error if the used
 // cipher is not present in the configured ciphers for the node.
 var TLSCipherRestrict = func(conn net.Conn) (err net.Error) {
-	var tlsRestrictFn func(*tls.Conn) (error net.Error)
-	{
-		tlsRestrictConfig.Lock()
-		defer tlsRestrictConfig.Unlock()
-		tlsRestrictFn = tlsRestrictConfig.restrictFn
-	}
+	// Grab the restrict function under the lock, but release the lock before
+	// invoking it: the function performs a blocking TLS handshake, and holding
+	// the process-global lock across it would serialize all handshakes on the
+	// node behind a single stalled connection. A read lock suffices because we
+	// only read restrictFn here; it is written under the write lock in
+	// configureTLSRestrict, and the closure operates solely on state captured at
+	// configuration time, so it is safe to invoke without holding the lock. The
+	// lock is released via the IIFE's defer rather than a bare block, because
+	// defer is function-scoped, not block-scoped.
+	tlsRestrictFn := func() func(*tls.Conn) (error net.Error) {
+		tlsRestrictConfig.RLock()
+		defer tlsRestrictConfig.RUnlock()
+		return tlsRestrictConfig.restrictFn
+	}()
 	// we always expect a TLS connection here, since this is executed on the
 	// tls.Listener or post applying tls.Server on the incoming connection
 	tlsConn, _ := conn.(*tls.Conn)
