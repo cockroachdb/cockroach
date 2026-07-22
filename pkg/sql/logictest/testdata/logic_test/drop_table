@@ -55,7 +55,7 @@ public  b  table  root  0  NULL
 statement error pgcode 42P01 relation "a" does not exist
 SELECT * FROM a
 
-statement error pq: \[\d+ AS a\]: descriptor is being dropped
+statement error pq: \[\d+ AS a\]: relation "a" is being dropped: descriptor is being dropped
 SELECT * FROM [$t_id AS a]
 
 statement error pgcode 42P01 relation "a" does not exist
