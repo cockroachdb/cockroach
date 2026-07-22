@@ -142,9 +142,12 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 			}
 			cummulativeAllocSize := int64(0)
 			for {
-				// If the bytes.Buffer sink exceeds the target size of a Parquet file, we
-				// flush before exporting any additional rows.
-				if int64(buf.Len()) >= sp.spec.ChunkSize {
+				// Rotate to a new file once the buffered data reaches the target
+				// size. buf.Len() is not usable here: bytes only reach buf when
+				// the row group is closed at flush time, so it stays 0 while a
+				// chunk is being written. The estimate is uncompressed, so for
+				// compressed exports ChunkSize is approximate.
+				if writer.BufferedBytesEstimate() >= sp.spec.ChunkSize {
 					break
 				}
 				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
