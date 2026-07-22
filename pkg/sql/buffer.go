@@ -25,6 +25,15 @@ type bufferNode struct {
 	rows       rowContainerHelper
 	currentRow tree.Datums
 
+	// iterMu synchronizes creation and closure of iterators over rows across
+	// the scanBufferNodes reading from this buffer. Multiple scanBufferNodes
+	// referencing this buffer can start concurrently (e.g. as inputs of a
+	// parallel unordered synchronizer), and rowcontainer.RowIterator (which
+	// rowContainerIterator wraps) is only safe for concurrent usage outside
+	// of creation and closure. scanBufferNodes must create iterators via
+	// newIterator, which locks iterMu (as does the iterator's Close method).
+	iterMu syncutil.Mutex
+
 	// label is a string used to describe the node in an EXPLAIN plan.
 	// TODO(yuzefovich/mgartner): make this redact.SafeString.
 	label string
@@ -64,39 +73,57 @@ func (n *bufferNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
 }
 
+// newIterator returns an iterator over the buffered rows. See iterMu.
+func (n *bufferNode) newIterator(ctx context.Context) *bufferIterator {
+	n.iterMu.Lock()
+	defer n.iterMu.Unlock()
+	return &bufferIterator{
+		iter: newRowContainerIterator(ctx, n.rows),
+		buf:  n,
+	}
+}
+
+// bufferIterator is a rowContainerIterator handed out by newIterator and owned
+// by the single scanBufferNode that asked for it. Next runs unsynchronized;
+// only creation and Close take the buffer's iterMu, serializing them against
+// the other scanBufferNodes iterating the same buffer. See bufferNode.iterMu
+// for why that is where the boundary sits.
+//
+// rowContainerIterator is wrapped rather than embedded: were it embedded, a
+// method added to it later would join this type's API automatically and
+// unsynchronized. Forwarding makes each one a deliberate choice.
+type bufferIterator struct {
+	iter *rowContainerIterator
+	buf  *bufferNode
+}
+
+func (i *bufferIterator) Next() (tree.Datums, error) {
+	return i.iter.Next()
+}
+
+func (i *bufferIterator) Close() {
+	i.buf.iterMu.Lock()
+	defer i.buf.iterMu.Unlock()
+	i.iter.Close()
+}
+
 // scanBufferNode behaves like an iterator into the bufferNode it is
 // referencing. The bufferNode can be iterated over multiple times
 // simultaneously, however, a new scanBufferNode is needed.
 type scanBufferNode struct {
 	zeroInputPlanNode
 
-	// mu, if non-nil, protects access buffer as well as creation and closure of
-	// iterator (rowcontainer.RowIterator which is wrapped by
-	// rowContainerIterator is safe for concurrent usage outside of creation and
-	// closure).
-	mu *syncutil.Mutex
-
 	buffer *bufferNode
 
-	iterator   *rowContainerIterator
+	iterator   *bufferIterator
 	currentRow tree.Datums
 
 	// label is a string used to describe the node in an EXPLAIN plan.
 	label string
 }
 
-// makeConcurrencySafe can be called to synchronize access to bufferNode across
-// scanBufferNodes that run in parallel.
-func (n *scanBufferNode) makeConcurrencySafe(mu *syncutil.Mutex) {
-	n.mu = mu
-}
-
 func (n *scanBufferNode) startExec(params runParams) error {
-	if n.mu != nil {
-		n.mu.Lock()
-		defer n.mu.Unlock()
-	}
-	n.iterator = newRowContainerIterator(params.ctx, n.buffer.rows)
+	n.iterator = n.buffer.newIterator(params.ctx)
 	return nil
 }
 
@@ -114,10 +141,6 @@ func (n *scanBufferNode) Values() tree.Datums {
 }
 
 func (n *scanBufferNode) Close(context.Context) {
-	if n.mu != nil {
-		n.mu.Lock()
-		defer n.mu.Unlock()
-	}
 	if n.iterator != nil {
 		n.iterator.Close()
 		n.iterator = nil
