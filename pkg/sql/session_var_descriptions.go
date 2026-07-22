@@ -158,6 +158,7 @@ var sessionVarDescriptions = map[string]string{
 	"optimizer_use_exists_filter_hoist_rule":                          "Controls whether the optimizer hoists filters out of EXISTS subqueries.",
 	"optimizer_use_forecasts":                                         "Controls whether the optimizer should use statistics forecasts for cardinality estimation.",
 	"optimizer_use_histograms":                                        "Controls whether the optimizer should use histogram statistics for cardinality estimation.",
+	"optimizer_use_histograms_for_multi_span_const_columns":           "Controls whether the optimizer uses histogram statistics for columns constrained to a single constant value in every span of a multi-span index constraint, even when an earlier index column is not constrained to a single value.",
 	"optimizer_use_improved_computed_column_filters_derivation":       "Enables the optimizer to derive filters on computed columns in more cases beyond simple single-column equations.",
 	"optimizer_use_improved_disjunction_stats":                        "Controls whether the optimizer should use improved statistics calculations for disjunctive filters.",
 	"optimizer_use_improved_distinct_on_limit_hint_costing":           "Controls whether the optimizer should use an improved costing estimate for DistinctOn operators with limit hints.",

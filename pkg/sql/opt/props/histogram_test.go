@@ -77,14 +77,18 @@ func TestCanFilter(t *testing.T) {
 	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	// The histogram column ID is 1 for all test cases. CanFilter should only
-	// return true for constraints in which column ID 1 is part of the exact
-	// prefix or the first column after.
-	testData := []struct {
+	type testCase struct {
 		constraint string
 		canFilter  bool
 		colIdx     int
-	}{
+	}
+
+	// The histogram column ID is 1 for all test cases. In these cases,
+	// CanFilter should only return true for constraints in which column ID 1
+	// is part of the exact prefix or the first column after it. The results
+	// do not depend on optimizer_use_histograms_for_multi_span_const_columns;
+	// cases that do are in testDataConstCols below.
+	testData := []testCase{
 		{
 			constraint: "/1: [/0 - /0]",
 			canFilter:  true,
@@ -108,10 +112,6 @@ func TestCanFilter(t *testing.T) {
 			constraint: "/1/2: [/0/3 - /0/3] [/2/3 - /2/3]",
 			canFilter:  true,
 			colIdx:     0,
-		},
-		{
-			constraint: "/2/-1: [/0/3 - /0/3] [/2/3 - /2/3]",
-			canFilter:  false,
 		},
 		{
 			constraint: "/2/1: [/0/3 - /0/3] [/0/5 - /0/5]",
@@ -138,27 +138,95 @@ func TestCanFilter(t *testing.T) {
 		},
 	}
 
+	// Test cases in which column ID 1 lies beyond the exact prefix and can
+	// only filter the histogram as a constant column, which requires
+	// optimizer_use_histograms_for_multi_span_const_columns to be enabled.
+	testDataConstCols := []testCase{
+		// Column ID 1 is constrained to the same single value in every span.
+		{
+			constraint: "/2/1: [/0/3 - /0/3] [/1/3 - /1/3]",
+			canFilter:  true,
+			colIdx:     1,
+		},
+		{
+			constraint: "/2/-1: [/0/3 - /0/3] [/2/3 - /2/3]",
+			canFilter:  true,
+			colIdx:     1,
+		},
+		{
+			constraint: "/2/1/3: [/0/3/1 - /0/3/1] [/1/3/5 - /1/3/5]",
+			canFilter:  true,
+			colIdx:     1,
+		},
+		{
+			constraint: "/2/3/1: [/0/1/5 - /0/1/5] [/0/2/5 - /0/2/5]",
+			canFilter:  true,
+			colIdx:     2,
+		},
+		// NULL counts as a constant value, matching the exact-prefix path.
+		{
+			constraint: "/2/1: [/0/NULL - /0/NULL] [/1/NULL - /1/NULL]",
+			canFilter:  true,
+			colIdx:     1,
+		},
+		// Column ID 1 is constrained to different values in different spans.
+		{
+			constraint: "/2/1: [/0/3 - /0/3] [/1/4 - /1/4]",
+			canFilter:  false,
+		},
+		// The span is not restricted to a single value of column ID 2, so
+		// column ID 1 can take on any value within the span, e.g., /0/100.
+		{
+			constraint: "/2/1: [/0/3 - /1/3]",
+			canFilter:  false,
+		},
+	}
+
 	h := Histogram{}
 	h.Init(&evalCtx, opt.ColumnID(1), []cat.HistogramBucket{}, 0 /* resolution */)
-	for _, tc := range testData {
-		c := constraint.ParseConstraint(&evalCtx, tc.constraint)
-		colIdx, _, ok := h.CanFilter(ctx, &c)
-		if ok != tc.canFilter {
-			t.Fatalf(
-				"for constraint %s, expected canFilter=%v but found %v", tc.constraint, tc.canFilter, ok,
-			)
-		}
-		if ok && colIdx != tc.colIdx {
-			t.Fatalf(
-				"for constraint %s, expected colIdx=%d but found %d", tc.constraint, tc.colIdx, colIdx,
-			)
+	runTests := func(testData []testCase) {
+		for _, tc := range testData {
+			c := constraint.ParseConstraint(&evalCtx, tc.constraint)
+			colIdx, _, ok := h.CanFilter(ctx, &c)
+			if ok != tc.canFilter {
+				t.Fatalf(
+					"for constraint %s, expected canFilter=%v but found %v", tc.constraint, tc.canFilter, ok,
+				)
+			}
+			if ok && colIdx != tc.colIdx {
+				t.Fatalf(
+					"for constraint %s, expected colIdx=%d but found %d", tc.constraint, tc.colIdx, colIdx,
+				)
+			}
 		}
 	}
+	runTests(testData)
+
+	// With the setting disabled, no constant column beyond the exact prefix
+	// can filter the histogram.
+	testDataConstColsDisabled := make([]testCase, len(testDataConstCols))
+	for i, tc := range testDataConstCols {
+		testDataConstColsDisabled[i] = testCase{constraint: tc.constraint, canFilter: false}
+	}
+	evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns = false
+	runTests(testDataConstColsDisabled)
+
+	evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns = true
+	runTests(testDataConstCols)
+
+	// Enabling the setting does not change the results for columns admitted
+	// via the exact prefix.
+	runTests(testData)
 }
 
 func TestHistogram(t *testing.T) {
 	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	// Enable filtering by constant columns beyond the exact prefix, needed by
+	// the constant-column test cases below. The setting has no effect on
+	// columns admitted via the exact prefix, so it is safe to enable for all
+	// cases.
+	evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns = true
 
 	//   0  1  3  3   4  5   0  0   40  35
 	// <--- 1 --- 10 --- 25 --- 30 ---- 42
@@ -366,6 +434,44 @@ func TestHistogram(t *testing.T) {
 			maxDistinct:  1,
 			distinct:     1,
 			maxFrequency: 5.71,
+		},
+		// The histogram column is beyond the exact prefix but is constrained
+		// to the same single value in every span, so the result is the same
+		// as filtering with a single-column, single-value constraint.
+		{
+			constraint: "/2/1: [/0/40 - /0/40] [/2/40 - /2/40]",
+			//   0 5.7143
+			// <---- 40 -
+			buckets: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 5.71, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
+			},
+			count:        5.71,
+			maxDistinct:  1,
+			distinct:     1,
+			maxFrequency: 5.71,
+		},
+		{
+			constraint: "/2/1: [/1/25 - /1/25] [/3/25 - /3/25]",
+			//   0  5
+			// <--- 25
+			buckets: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 5, DistinctRange: 0, UpperBound: tree.NewDInt(25)},
+			},
+			count:        5,
+			maxDistinct:  1,
+			distinct:     1,
+			maxFrequency: 5,
+		},
+		// The histogram column is constrained to NULL in every span, which
+		// filters the same as the single-column constraint /1: [/NULL - /NULL].
+		// The histogram has no NULL bucket, so the result is empty.
+		{
+			constraint:   "/2/1: [/0/NULL - /0/NULL] [/2/NULL - /2/NULL]",
+			buckets:      nil,
+			count:        0,
+			maxDistinct:  0,
+			distinct:     0,
+			maxFrequency: 0,
 		},
 	}
 
