@@ -2533,11 +2533,10 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 				(len(plan.checkPlans)-checksIdx) > 1 && !checksContainLocking &&
 				dsp.parallelChecksSem.ApproximateQuota() > 0
 			if runParallelChecks {
-				// At the moment, we rely on not using the newer DistSQL spec factory to
-				// enable parallelization.
-				// TODO(yuzefovich): the planObserver logic in
-				// planAndRunChecksInParallel will need to be adjusted when we switch to
-				// using the DistSQL spec factory.
+				// We currently only parallelize checks that use the planNode
+				// representation.
+				// TODO(yuzefovich): evaluate whether checks planned with the
+				// DistSQL spec factory can be run in parallel as well.
 				for i := checksIdx; i < len(plan.checkPlans); i++ {
 					if plan.checkPlans[i].plan.isPhysicalPlan() {
 						runParallelChecks = false
@@ -2809,9 +2808,6 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 // planAndRunChecksInParallel executes all checkPlans in parallel. The function
 // blocks until all checks that start executing return (i.e. when this function
 // returns, it is guaranteed that the txn is no longer used by the checks).
-//
-// Note that it is assumed that all check plans use the old planNode
-// representation.
 func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	ctx context.Context,
 	checkPlans []checkPlan,
@@ -2827,33 +2823,6 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	// operations are pretty quick and occur at different points throughout the
 	// checks' execution, so there should be effectively no mutex contention.
 	var mu syncutil.Mutex
-	// For parallel checks we must make all `scanBufferNode`s in the plans
-	// concurrency-safe. (The need to be able to walk the planNode tree is why
-	// we currently disable the usage of the new DistSQL spec factory.)
-	var makeScanBuffersConcurrencySafe func(p planNode) error
-	makeScanBuffersConcurrencySafe = func(p planNode) error {
-		if s, ok := p.(*scanBufferNode); ok {
-			s.makeConcurrencySafe(&mu)
-		}
-		for i, n := 0, p.InputCount(); i < n; i++ {
-			input, err := p.Input(i)
-			if err != nil {
-				return err
-			}
-			if err := makeScanBuffersConcurrencySafe(input); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	for i := range checkPlans {
-		if checkPlans[i].plan.isPhysicalPlan() {
-			return errors.AssertionFailedf("unexpectedly physical plan is used for a parallel CHECK")
-		}
-		if err := makeScanBuffersConcurrencySafe(checkPlans[i].plan.planNode); err != nil {
-			return err
-		}
-	}
 	var getSaveFlowsFunc func() SaveFlowsFunc
 	if planner.instrumentation.ShouldSaveFlows() {
 		// getDefaultSaveFlowsFunc returns a concurrency-unsafe function, so we
