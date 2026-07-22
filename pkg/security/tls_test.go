@@ -362,4 +362,3 @@ func TestTLSCipherRestrictDoesNotSerializeHandshakes(t *testing.T) {
 	close(stalled.release)
 	<-stalledDone
 }
-
