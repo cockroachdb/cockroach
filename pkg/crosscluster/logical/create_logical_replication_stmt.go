@@ -155,6 +155,17 @@ func createLogicalReplicationStreamPlanHook(
 			return errors.Wrapf(err, "failed privilege check: table or system level REPLICATIONDEST privilege required")
 		}
 
+		configUri, err := streamclient.ParseConfigUri(from)
+		if err != nil {
+			return err
+		}
+		if !configUri.IsExternalOrTestScheme() {
+			return errors.New("uri must be an external connection")
+		}
+		if err := checkSourceExternalConnectionUsage(ctx, p, configUri); err != nil {
+			return err
+		}
+
 		if !p.ExtendedEvalContext().TxnIsSingleStmt {
 			return errors.New("cannot CREATE LOGICAL REPLICATION STREAM in a multi-statement transaction")
 		}
@@ -192,14 +203,6 @@ func createLogicalReplicationStreamPlanHook(
 				resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
 				return nil
 			}
-		}
-
-		configUri, err := streamclient.ParseConfigUri(from)
-		if err != nil {
-			return err
-		}
-		if !configUri.IsExternalOrTestScheme() {
-			return errors.New("uri must be an external connection")
 		}
 
 		clusterUri, err := configUri.AsClusterUri(ctx, p.ExecCfg().InternalDB)
@@ -779,4 +782,20 @@ func checkReplicationPrivileges(
 		}
 	}
 	return nil
+}
+
+// checkSourceExternalConnectionUsage requires the caller to hold USAGE on the
+// external connection named as the LDR source. A non-external source has no
+// connection to check and is a no-op.
+func checkSourceExternalConnectionUsage(
+	ctx context.Context, p sql.PlanHookState, configUri streamclient.ConfigUri,
+) error {
+	name, ok := configUri.ExternalConnectionName()
+	if !ok {
+		return nil
+	}
+	ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
+		ConnectionName: name,
+	}
+	return p.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE)
 }
