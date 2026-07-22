@@ -73,8 +73,10 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 
 	// Postgres requires ownership of the relation to rename it. Accepting the
 	// DROP privilege is an intentional divergence so that renaming can be
-	// delegated without granting full ownership.
-	if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
+	// delegated without granting full ownership. Schema owners hold DROP
+	// implicitly on relations in their schema, matching the declarative schema
+	// changer.
+	if err := p.checkDropPrivilegeOrSchemaOwnership(ctx, tableDesc); err != nil {
 		return nil, err
 	}
 
