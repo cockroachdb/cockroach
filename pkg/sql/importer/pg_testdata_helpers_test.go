@@ -12,14 +12,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	_ "github.com/lib/pq"
 )
@@ -63,42 +61,14 @@ var simplePostgresTestRows = func() []simpleTestRow {
 	return testRows
 }()
 
-func getSimplePostgresDumpTestdata(t *testing.T) ([]simpleTestRow, string) {
-	dest := datapathutils.TestDataPath(t, "pgdump", "simple.sql")
-	if rewritePostgresTestData {
-		genSimplePostgresTestdata(t, func() { pgdump(t, dest, "simple") })
-	}
-	return simplePostgresTestRows, dest
-}
-
-func getSecondPostgresDumpTestdata(t *testing.T) (int, string) {
-	dest := datapathutils.TestDataPath(t, "pgdump", "second.sql")
-	if rewritePostgresTestData {
-		genSecondPostgresTestdata(t, func() { pgdump(t, dest, "second") })
-	}
-	return secondTableRows, dest
-}
-
-func getMultiTablePostgresDumpTestdata(t *testing.T) string {
-	dest := datapathutils.TestDataPath(t, "pgdump", "db.sql")
-	if rewritePostgresTestData {
-		genSequencePostgresTestdata(t, func() {
-			genSecondPostgresTestdata(t, func() {
-				genSimplePostgresTestdata(t, func() { pgdump(t, dest) })
-			})
-		})
-	}
-	return dest
-}
-
-type pgCopyDumpCfg struct {
+type pgCopyCfg struct {
 	name     string
 	filename string
 	opts     roachpb.PgCopyOptions
 }
 
-func getPgCopyTestdata(t *testing.T) ([]simpleTestRow, []pgCopyDumpCfg) {
-	configs := []pgCopyDumpCfg{
+func getPgCopyTestdata(t *testing.T) ([]simpleTestRow, []pgCopyCfg) {
+	configs := []pgCopyCfg{
 		{
 			name: "default",
 			opts: roachpb.PgCopyOptions{
@@ -183,38 +153,6 @@ func genSimplePostgresTestdata(t *testing.T, dump func()) {
 	dump()
 }
 
-func genSecondPostgresTestdata(t *testing.T, dump func()) {
-	defer genPostgresTestdata(t,
-		"second",
-		`i INT PRIMARY KEY, s TEXT`,
-		func(db *gosql.DB) {
-			for i := 0; i < secondTableRows; i++ {
-				if _, err := db.Exec(`INSERT INTO second VALUES ($1, $2)`, i, strconv.Itoa(i)); err != nil {
-					t.Fatal(err)
-				}
-			}
-		},
-	)()
-	dump()
-}
-
-func genSequencePostgresTestdata(t *testing.T, dump func()) {
-	defer genPostgresTestdata(t,
-		"seqtable",
-		`a INT, b INT`,
-		func(sqlDB *gosql.DB) {
-			db := sqlutils.MakeSQLRunner(sqlDB)
-			db.Exec(t, `DROP SEQUENCE IF EXISTS a_seq`)
-			db.Exec(t, `CREATE SEQUENCE a_seq`)
-			db.Exec(t, `ALTER TABLE seqtable ALTER COLUMN a SET DEFAULT nextval('a_seq'::REGCLASS)`)
-			for i := 0; i < secondTableRows; i++ {
-				db.Exec(t, `INSERT INTO seqtable (b) VALUES ($1 * 10)`, i)
-			}
-		},
-	)()
-	dump()
-}
-
 // genPostgresTestdata connects to the a local postgres, creates the passed
 // table and calls the passed `load` func to populate it and returns a
 // cleanup func.
@@ -247,23 +185,5 @@ func genPostgresTestdata(t *testing.T, name, schema string, load func(*gosql.DB)
 		); err != nil {
 			t.Fatal(err)
 		}
-	}
-}
-
-func pgdump(t *testing.T, dest string, tables ...string) {
-	if err := os.MkdirAll(filepath.Dir(dest), 0777); err != nil {
-		t.Fatal(err)
-	}
-
-	args := []string{`-U`, `postgres`, `-h`, `127.0.0.1`, `-d`, `test`}
-	for _, table := range tables {
-		args = append(args, `-t`, table)
-	}
-	out, err := exec.Command(`pg_dump`, args...).CombinedOutput()
-	if err != nil {
-		t.Fatalf("%s: %s", err, out)
-	}
-	if err := os.WriteFile(dest, out, 0666); err != nil {
-		t.Fatal(err)
 	}
 }
