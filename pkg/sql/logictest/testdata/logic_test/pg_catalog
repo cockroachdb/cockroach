@@ -3110,6 +3110,7 @@ optimizer_use_delete_range_fast_path                             on             
 optimizer_use_exists_filter_hoist_rule                           on                  NULL      NULL        NULL        string
 optimizer_use_forecasts                                          on                  NULL      NULL        NULL        string
 optimizer_use_histograms                                         on                  NULL      NULL        NULL        string
+optimizer_use_histograms_for_multi_span_const_columns            off                 NULL      NULL        NULL        string
 optimizer_use_histograms_for_with_scans                          off                 NULL      NULL        NULL        string
 optimizer_use_improved_computed_column_filters_derivation        on                  NULL      NULL        NULL        string
 optimizer_use_improved_disjunction_stats                         on                  NULL      NULL        NULL        string
@@ -3364,6 +3365,7 @@ optimizer_use_delete_range_fast_path                             on             
 optimizer_use_exists_filter_hoist_rule                           on                  NULL  user     NULL      on                  on
 optimizer_use_forecasts                                          on                  NULL  user     NULL      on                  on
 optimizer_use_histograms                                         on                  NULL  user     NULL      on                  on
+optimizer_use_histograms_for_multi_span_const_columns            off                 NULL  user     NULL      off                 off
 optimizer_use_histograms_for_with_scans                          off                 NULL  user     NULL      off                 off
 optimizer_use_improved_computed_column_filters_derivation        on                  NULL  user     NULL      on                  on
 optimizer_use_improved_disjunction_stats                         on                  NULL  user     NULL      on                  on
@@ -3609,6 +3611,7 @@ optimizer_use_delete_range_fast_path                             NULL    NULL   
 optimizer_use_exists_filter_hoist_rule                           NULL    NULL     NULL     NULL        NULL
 optimizer_use_forecasts                                          NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                                         NULL    NULL     NULL     NULL        NULL
+optimizer_use_histograms_for_multi_span_const_columns            NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms_for_with_scans                          NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_computed_column_filters_derivation        NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_disjunction_stats                         NULL    NULL     NULL     NULL        NULL
