@@ -194,6 +194,7 @@ type Memo struct {
 	trigramSimilarityThreshold                 float64
 	splitScanLimit                             int32
 	spanLimit                                  int32
+	maxDisjunctionSplitCount                   int32
 	useImprovedZigzagJoinCosting               bool
 	useImprovedMultiColumnSelectivityEstimate  bool
 	proveImplicationWithVirtualComputedCols    bool
@@ -344,6 +345,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		trigramSimilarityThreshold:                 evalCtx.SessionData().TrigramSimilarityThreshold,
 		splitScanLimit:                             evalCtx.SessionData().OptSplitScanLimit,
 		spanLimit:                                  evalCtx.SessionData().OptimizerSpanLimit,
+		maxDisjunctionSplitCount:                   evalCtx.SessionData().OptimizerMaxDisjunctionSplitCount,
 		useImprovedZigzagJoinCosting:               evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting,
 		useImprovedMultiColumnSelectivityEstimate:  evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate,
 		proveImplicationWithVirtualComputedCols:    evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns,
@@ -535,6 +537,7 @@ func (m *Memo) IsStale(
 		m.trigramSimilarityThreshold != evalCtx.SessionData().TrigramSimilarityThreshold ||
 		m.splitScanLimit != evalCtx.SessionData().OptSplitScanLimit ||
 		m.spanLimit != evalCtx.SessionData().OptimizerSpanLimit ||
+		m.maxDisjunctionSplitCount != evalCtx.SessionData().OptimizerMaxDisjunctionSplitCount ||
 		m.useImprovedZigzagJoinCosting != evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting ||
 		m.useImprovedMultiColumnSelectivityEstimate != evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate ||
 		m.proveImplicationWithVirtualComputedCols != evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns ||

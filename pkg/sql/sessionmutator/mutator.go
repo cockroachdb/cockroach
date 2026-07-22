@@ -620,6 +620,10 @@ func (m *SessionDataMutator) SetOptimizerSpanLimit(val int32) {
 	m.Data.OptimizerSpanLimit = val
 }
 
+func (m *SessionDataMutator) SetOptimizerMaxDisjunctionSplitCount(val int32) {
+	m.Data.OptimizerMaxDisjunctionSplitCount = val
+}
+
 func (m *SessionDataMutator) SetStreamReplicationEnabled(val bool) {
 	m.Data.EnableStreamReplication = val
 }
