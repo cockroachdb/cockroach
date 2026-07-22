@@ -9,6 +9,7 @@ import (
 	"archive/zip"
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"sort"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -132,6 +134,30 @@ func TestDebugJobTrace(t *testing.T) {
 	_, err := c.RunWithCaptureArgs([]string{`debug`, `job-trace`, args[0], fmt.Sprintf(`--url=%s`, pgURL.String()), `--format=csv`})
 	require.NoError(t, err)
 	checkBundle(t, id, "node1-trace.txt", "node1-jaeger.json")
+}
+
+// TestDebugJobTraceNoTraceID verifies that getJobTraceID returns a clear,
+// actionable error when a job has no recorded trace-id, rather than failing
+// while probing for it. A job only records a trace-id once it has been adopted
+// and started running, so a job that is not running has no row in
+// system.job_message and must produce the explanatory message.
+func TestDebugJobTraceNoTraceID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	pgURL, cleanup := pgurlutils.PGUrl(t, srv.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanup()
+
+	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, pgURL.String())
+	defer func() { _ = conn.Close() }()
+
+	const jobID = 1234567890
+	_, err := getJobTraceID(conn, jobID)
+	require.ErrorContains(t, err, fmt.Sprintf("no trace available for job %d; it may not be running", jobID))
 }
 
 func checkBundle(t *testing.T, jobID jobspb.JobID, expectedFiles ...string) {
