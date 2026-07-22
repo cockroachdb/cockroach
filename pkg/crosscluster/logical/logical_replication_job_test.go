@@ -2134,6 +2134,11 @@ func TestUserPrivileges(t *testing.T) {
 	dbB.Exec(t, "CREATE USER testuser3")
 	dbBURL2 := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"), serverutils.User(username.TestUser+"3"))
 
+	dbA.Exec(t, fmt.Sprintf(`GRANT USAGE ON EXTERNAL CONNECTION "%s" TO %s, %s`,
+		dbBURL.Host, username.TestUser, username.TestUser+"2"))
+	dbA.Exec(t, fmt.Sprintf(`GRANT USAGE ON EXTERNAL CONNECTION "%s" TO %s`,
+		dbBURL2.Host, username.TestUser))
+
 	var jobAID jobspb.JobID
 	createStmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab"
 	testuser2.QueryRow(t, createStmt, dbBURL.String()).Scan(&jobAID)
@@ -2224,13 +2229,13 @@ func TestUserPrivileges(t *testing.T) {
 		dbA.Exec(t, fmt.Sprintf(`REVOKE REPLICATIONDEST ON TABLE tab2 FROM %s`, username.TestUser))
 	})
 	t.Run("db-create-replication-dest", func(t *testing.T) {
-		createStmt := "CREATE LOGICALLY REPLICATED TABLES (tab_clone, tab2_clone) FROM TABLES (tab, tab2) ON $1 WITH UNIDIRECTIONAL"
+		createTablesStmt := "CREATE LOGICALLY REPLICATED TABLES (tab_clone, tab2_clone) FROM TABLES (tab, tab2) ON $1 WITH UNIDIRECTIONAL"
 		// First try without CREATE privilege on destination database - should fail
-		testuser.ExpectErr(t, "user testuser does not have CREATE privilege on database a", createStmt, dbBURL.String())
+		testuser.ExpectErr(t, "user testuser does not have CREATE privilege on database a", createTablesStmt, dbBURL.String())
 
 		// Grant CREATE privilege on destination database - should now succeed
 		dbA.Exec(t, `GRANT CREATE ON DATABASE a TO testuser`)
-		testuser.QueryRow(t, createStmt, dbBURL.String()).Scan(&jobAID)
+		testuser.QueryRow(t, createTablesStmt, dbBURL.String()).Scan(&jobAID)
 		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
 
 		dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"), serverutils.User(username.TestUser))
@@ -2241,6 +2246,11 @@ func TestUserPrivileges(t *testing.T) {
 
 		dbB.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser+"3"))
 
+		// The reverse stream runs as testuser3, the source-side identity, so it
+		// needs USAGE on the reverse source connection.
+		dbA.Exec(t, fmt.Sprintf(`GRANT USAGE ON EXTERNAL CONNECTION "%s" TO %s`,
+			dbAURL.Host, username.TestUser+"3"))
+
 		var jobAID2 jobspb.JobID
 		testuser.QueryRow(t, createStmtBidi, dbBURL2.String(), dbAURL.String()).Scan(&jobAID2)
 		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID2)
@@ -2248,6 +2258,19 @@ func TestUserPrivileges(t *testing.T) {
 		// Ensure the reverse job advances as well
 		reverseJobID := GetReverseJobID(ctx, t, dbA, jobAID2)
 		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, reverseJobID)
+	})
+	t.Run("ldr-source-requires-usage-on-external-connection", func(t *testing.T) {
+		usageURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
+		testuser2.ExpectErr(t,
+			fmt.Sprintf("user %s does not have USAGE privilege on external_connection %s",
+				username.TestUser+"2", usageURL.Host),
+			createStmt, usageURL.String())
+
+		dbA.Exec(t, fmt.Sprintf(`GRANT USAGE ON EXTERNAL CONNECTION "%s" TO %s`,
+			usageURL.Host, username.TestUser+"2"))
+		var usageJobID jobspb.JobID
+		testuser2.QueryRow(t, createStmt, usageURL.String()).Scan(&usageJobID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, usageJobID)
 	})
 }
 
@@ -2929,6 +2952,9 @@ func TestLogicalReplicationExternalConnWithoutDBName(t *testing.T) {
 	dbBURL := replicationtestutils.GetExternalConnectionURI(
 		t, s, s, serverutils.ClientCerts(false), serverutils.UserPassword("userB", "123"),
 	)
+
+	dbA.Exec(t, fmt.Sprintf(`GRANT USAGE ON EXTERNAL CONNECTION "%s" TO userB`, dbAURL.Host))
+	dbA.Exec(t, fmt.Sprintf(`GRANT USAGE ON EXTERNAL CONNECTION "%s" TO userA`, dbBURL.Host))
 
 	dbBAsUser := sqlutils.MakeSQLRunner(s.SQLConn(
 		t,
