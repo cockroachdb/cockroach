@@ -152,9 +152,12 @@ func (sp *parquetWriterProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produ
 			continue
 
 		case exportContinueChunk:
-			// If the bytes.Buffer sink exceeds the target size of a Parquet
-			// file, we flush before exporting any additional rows.
-			if int64(sp.buf.Len()) >= sp.spec.ChunkSize {
+			// Rotate to a new file once the buffered data reaches the target
+			// size. sp.buf.Len() is not usable here: bytes only reach sp.buf
+			// when the row group is closed at flush time, so it stays 0 while a
+			// chunk is being written. The estimate is uncompressed, so for
+			// compressed exports ChunkSize is approximate.
+			if sp.writer.BufferedBytesEstimate() >= sp.spec.ChunkSize {
 				sp.runningState = exportFlushChunk
 				continue
 			}

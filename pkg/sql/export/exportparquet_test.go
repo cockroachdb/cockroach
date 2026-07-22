@@ -8,6 +8,7 @@ package export_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -392,6 +393,35 @@ INDEX (y))`)
 		err := validateParquetFile(t, ctx, ie, test)
 		require.NoError(t, err, "failed to validate parquet file")
 	}
+}
+
+// TestParquetChunkSize verifies that the chunk_size option rotates parquet
+// files by size. File rotation is driven by the writer's buffered-bytes
+// estimate, not sp.buf.Len(), which stays 0 until a row group is flushed.
+func TestParquetChunkSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	// Export with a 1KiB chunk_size and no chunk_rows limit, so rotation is
+	// driven purely by size. Each row (an INT plus a 36-char UUID string) is
+	// tens of bytes, so a 1KiB chunk holds a few dozen rows and 500 rows
+	// produce several files instead of the buggy single file.
+	sqlDB.Exec(t, `EXPORT INTO PARQUET 'nodelocal://1/parquet_chunk' WITH chunk_size='1KB'
+FROM SELECT i, gen_random_uuid()::STRING AS s FROM generate_series(1, 500) AS i`)
+
+	// Rotation by size produces several files. See cockroachdb/cockroach#172695.
+	files, err := os.ReadDir(filepath.Join(dir, "parquet_chunk"))
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(files), 5)
+	require.LessOrEqual(t, len(files), 10)
 }
 
 func TestMemoryMonitor(t *testing.T) {
