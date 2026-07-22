@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -264,4 +265,100 @@ func TestTLSCipherRestrict(t *testing.T) {
 			}
 		})
 	}
+}
+
+// blockingConn wraps a net.Conn and pauses on its first Read until release is
+// closed, closing readStarted to announce that first read. The TLS server
+// handshake reads the ClientHello before doing anything else, so pausing the
+// first read lets a test hold a handshake at a controllable point.
+type blockingConn struct {
+	net.Conn
+	readStarted chan struct{}
+	release     chan struct{}
+	once        sync.Once
+}
+
+func (c *blockingConn) Read(b []byte) (int, error) {
+	c.once.Do(func() { close(c.readStarted) })
+	<-c.release
+	return 0, io.EOF
+}
+
+// newBlockingTLSServerConn returns a TLS server connection whose handshake
+// pauses on its first read until the returned blockingConn's release channel is
+// closed, along with the blockingConn used to control it.
+func newBlockingTLSServerConn(t *testing.T, cfg *tls.Config) (*tls.Conn, *blockingConn) {
+	t.Helper()
+	srv, clt := net.Pipe()
+	t.Cleanup(func() {
+		_ = srv.Close()
+		_ = clt.Close()
+	})
+	bc := &blockingConn{
+		Conn:        srv,
+		readStarted: make(chan struct{}),
+		release:     make(chan struct{}),
+	}
+	return tls.Server(bc, cfg), bc
+}
+
+// TestTLSCipherRestrictDoesNotSerializeHandshakes is a regression test for a
+// lock convoy in TLSCipherRestrict. When a cipher-suite allowlist is
+// configured, TLSCipherRestrict runs a TLS handshake to inspect the negotiated
+// cipher. It previously held a process-global lock across that blocking
+// handshake, so a single stalled handshake (e.g. a client that never finishes
+// the handshake on a degraded network) blocked all new TLS connections on the
+// node. This test verifies that a fast handshake is not serialized behind a
+// stalled one.
+func TestTLSCipherRestrictDoesNotSerializeHandshakes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Configure an allowlist so that TLSCipherRestrict takes the handshake path.
+	require.NoError(t, security.SetTLSCipherSuitesConfigured(
+		[]string{"TLS_AES_128_GCM_SHA256"}))
+	defer func() {
+		require.NoError(t, security.SetTLSCipherSuitesConfigured([]string{}))
+	}()
+
+	cm, err := security.NewCertificateManager(
+		certnames.EmbeddedCertsDir, security.CommandTLSSettings{})
+	require.NoError(t, err)
+	serverCfg, err := cm.GetServerTLSConfig()
+	require.NoError(t, err)
+
+	// The stalled connection blocks forever in its handshake. In the buggy code
+	// it holds the global cipher-restrict lock for the entire stall.
+	stalledConn, stalled := newBlockingTLSServerConn(t, serverCfg)
+	stalledDone := make(chan struct{})
+	go func() {
+		defer close(stalledDone)
+		_ = security.TLSCipherRestrict(stalledConn)
+	}()
+	// Wait until the stalled handshake has actually started reading. At this
+	// point the buggy implementation is holding the lock.
+	<-stalled.readStarted
+
+	// The fast connection's handshake fails immediately (its first read returns
+	// EOF), so the only thing that could delay TLSCipherRestrict here is
+	// contention on the global lock held by the stalled connection.
+	fastConn, fast := newBlockingTLSServerConn(t, serverCfg)
+	close(fast.release)
+	fastDone := make(chan struct{})
+	go func() {
+		defer close(fastDone)
+		_ = security.TLSCipherRestrict(fastConn)
+	}()
+
+	select {
+	case <-fastDone:
+		// TLSCipherRestrict completed while another handshake was stalled.
+	case <-time.After(30 * time.Second):
+		t.Fatal("TLSCipherRestrict blocked behind a stalled handshake; the " +
+			"cipher-restrict lock is held across the handshake")
+	}
+
+	// Unblock the stalled handshake so its goroutine exits and leaktest passes.
+	close(stalled.release)
+	<-stalledDone
 }
