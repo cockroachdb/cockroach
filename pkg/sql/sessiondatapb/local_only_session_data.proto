@@ -816,6 +816,10 @@ message LocalOnlySessionData {
   // (e.g. $1) in addition to constants. This enables better index usage
   // in correlated subqueries with placeholder equalities.
   bool optimizer_inline_placeholder_equalities = 210;
+  // OptimizerMaxDisjunctionSplitCount bounds the number of OR-connected filter
+  // conjuncts that the SplitDisjunction exploration rule will split. 0 value
+  // means using the default.
+  int32 optimizer_max_disjunction_split_count = 218;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
