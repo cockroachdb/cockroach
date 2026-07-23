@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"testing"
 
@@ -20,6 +21,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
+
+// doGrantsRequest issues a GET to url with client and returns the response
+// status code and body, failing the test on any transport error.
+func doGrantsRequest(t *testing.T, client *http.Client, url string) (int, string) {
+	t.Helper()
+	req, err := http.NewRequest("GET", url, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp.StatusCode, string(body)
+}
 
 func TestGetDatabaseGrants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -148,11 +163,11 @@ func TestGetDatabaseGrants(t *testing.T) {
 			},
 		},
 		{
-			name:           "No access to no_access_db (no_access_user)",
+			name:           "No access to no_access_db (no_access_user) returns 404",
 			dbID:           noAccessDBID,
 			pageSize:       10,
 			pageNum:        0,
-			expectedStatus: http.StatusOK,
+			expectedStatus: http.StatusNotFound,
 			expectedTotal:  0,
 			client:         &authenticatedClient,
 			expected:       []grantRecord{},
@@ -252,6 +267,39 @@ func TestGetDatabaseGrants(t *testing.T) {
 			require.Equal(t, http.StatusNotFound, resp.StatusCode)
 			require.NoError(t, resp.Body.Close())
 		}
+	})
+
+	// A database the user has no privileges on must be indistinguishable from a
+	// non-existent one: identical 404 status and body, with no name leaked. Tested
+	// at offset 0 and past the last page (offset > 0), since those take different
+	// code paths but must produce the same response.
+	t.Run("Inaccessible database indistinguishable from non-existent", func(t *testing.T) {
+		nonexistentURL := fmt.Sprintf("%s/api/v2/grants/databases/99999/?pageSize=10&pageNum=0", s.AdminURL())
+		wantStatus, wantBody := doGrantsRequest(t, &authenticatedClient, nonexistentURL)
+		require.Equal(t, http.StatusNotFound, wantStatus)
+
+		for _, q := range []string{"pageSize=10&pageNum=0", "pageSize=5&pageNum=100"} {
+			url := fmt.Sprintf("%s/api/v2/grants/databases/%d/?%s", s.AdminURL(), noAccessDBID, q)
+			status, body := doGrantsRequest(t, &authenticatedClient, url)
+			require.Equal(t, wantStatus, status, "query %q", q)
+			require.Equal(t, wantBody, body, "query %q", q)
+			require.NotContains(t, body, "no_access_db", "query %q", q)
+		}
+	})
+
+	// A database the user can access, paged past its last grant, must return a 200
+	// empty page with the name and pagination metadata preserved — not a spurious
+	// 404. no_access_user sees test_db via the public CONNECT privilege.
+	t.Run("Accessible database paged past end returns empty page", func(t *testing.T) {
+		url := fmt.Sprintf("%s/api/v2/grants/databases/%d/?pageSize=5&pageNum=100", s.AdminURL(), testDBID)
+		status, body := doGrantsRequest(t, &authenticatedClient, url)
+		require.Equal(t, http.StatusOK, status)
+		var apiResp databaseGrantsResponseWithPagination
+		require.NoError(t, json.Unmarshal([]byte(body), &apiResp))
+		require.Equal(t, "test_db", apiResp.Name)
+		require.Empty(t, apiResp.Results)
+		require.Equal(t, 5, apiResp.PaginationInfo.PageSize)
+		require.Equal(t, 100, apiResp.PaginationInfo.PageNum)
 	})
 
 	t.Run("Retrieving grants for databases with special names", func(t *testing.T) {
@@ -428,11 +476,11 @@ func TestGetTableGrants(t *testing.T) {
 			},
 		},
 		{
-			name:           "Grants on no_access_db.no_access_table should not be visible",
+			name:           "Grants on no_access_db.no_access_table returns 404 (no name leak)",
 			tableID:        noAccessDbTestTableID,
 			pageSize:       10,
 			pageNum:        0,
-			expectedStatus: http.StatusOK,
+			expectedStatus: http.StatusNotFound,
 			expectedTotal:  0,
 			client:         &authenticatedClient,
 			expected:       []grantRecord{},
@@ -493,14 +541,15 @@ func TestGetTableGrants(t *testing.T) {
 				require.NoError(t, err)
 
 				require.Equal(t, tc.expectedStatus, resp.StatusCode)
+
+				if tc.expectedStatus != http.StatusOK {
+					require.NoError(t, resp.Body.Close())
+					continue
+				}
+
 				var apiResp tableGrantsResponseWithPagination
 				err = json.NewDecoder(resp.Body).Decode(&apiResp)
 				require.NoError(t, err)
-
-				if tc.expectedStatus != http.StatusOK {
-					require.Empty(t, apiResp.TableName)
-					continue
-				}
 
 				require.Equal(t, tc.pageSize, apiResp.PaginationInfo.PageSize)
 				require.Equal(t, tc.pageNum, apiResp.PaginationInfo.PageNum)
@@ -534,6 +583,41 @@ func TestGetTableGrants(t *testing.T) {
 			require.Equal(t, http.StatusNotFound, resp.StatusCode)
 			require.NoError(t, resp.Body.Close())
 		}
+	})
+
+	// A table the user has no privileges on must be indistinguishable from a
+	// non-existent one: identical 404 status and body, with no name leaked. Tested
+	// at offset 0 and past the last page (offset > 0), since those take different
+	// code paths but must produce the same response.
+	t.Run("Inaccessible table indistinguishable from non-existent", func(t *testing.T) {
+		nonexistentURL := fmt.Sprintf("%s/api/v2/grants/tables/99999/?pageSize=10&pageNum=0", s.AdminURL())
+		wantStatus, wantBody := doGrantsRequest(t, &authenticatedClient, nonexistentURL)
+		require.Equal(t, http.StatusNotFound, wantStatus)
+
+		for _, q := range []string{"pageSize=10&pageNum=0", "pageSize=5&pageNum=100"} {
+			url := fmt.Sprintf("%s/api/v2/grants/tables/%d/?%s", s.AdminURL(), noAccessDbTestTableID, q)
+			status, body := doGrantsRequest(t, &authenticatedClient, url)
+			require.Equal(t, wantStatus, status, "query %q", q)
+			require.Equal(t, wantBody, body, "query %q", q)
+			require.NotContains(t, body, "no_access_table", "query %q", q)
+			require.NotContains(t, body, "no_access_db", "query %q", q)
+		}
+	})
+
+	// A table the user can access, paged past its last grant, must return a 200
+	// empty page with the names and pagination metadata preserved — not a spurious
+	// 404. no_access_user sees test_db.test_table via the public CONNECT privilege
+	// on test_db.
+	t.Run("Accessible table paged past end returns empty page", func(t *testing.T) {
+		url := fmt.Sprintf("%s/api/v2/grants/tables/%d/?pageSize=5&pageNum=100", s.AdminURL(), testTableID)
+		status, body := doGrantsRequest(t, &authenticatedClient, url)
+		require.Equal(t, http.StatusOK, status)
+		var apiResp tableGrantsResponseWithPagination
+		require.NoError(t, json.Unmarshal([]byte(body), &apiResp))
+		require.Equal(t, "test_table", apiResp.TableName)
+		require.Empty(t, apiResp.Results)
+		require.Equal(t, 5, apiResp.PaginationInfo.PageSize)
+		require.Equal(t, 100, apiResp.PaginationInfo.PageNum)
 	})
 
 	t.Run("Retrieving grants for tables with special names", func(t *testing.T) {
