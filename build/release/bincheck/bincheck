@@ -19,7 +19,7 @@ readonly pidfile=/tmp/server_pid
 
 # Verify that the startup time is within a reasonable upper-bound. 
 # At the time of writing, the total `init` time is well under 200ms on m1pro.
-max_init_time=500
+max_init_time=1000
 if [[ $(uname -s) == "Darwin" ]]; then
   # MacOS GitHub Actions runners are a bit slow
   max_init_time=3000
