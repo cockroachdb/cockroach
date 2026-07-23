@@ -996,6 +996,7 @@ func (p *planner) resetPlanner(
 	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
+	p.resolvedTypesByOID = nil
 	p.pausablePortal = nil
 	p.routineMetadataForwarder = nil
 	p.autoRetryCounter = 0

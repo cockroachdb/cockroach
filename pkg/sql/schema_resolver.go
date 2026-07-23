@@ -59,6 +59,20 @@ type schemaResolver struct {
 	// will disallow resolution of types that have a parentID != typeResolutionDbID
 	// when it is set.
 	typeResolutionDbID descpb.ID
+
+	// resolvedTypesByOID memoizes hydrated user-defined types within the
+	// resolution of a single statement, keyed by type OID. It exists to avoid
+	// repeatedly resolving and hydrating the same UDT when type-checking
+	// synthesized enum check constraints (col IN (v1..vN)), where every IN-list
+	// element resolves the same type by OID. Lazily allocated; cleared per
+	// statement in planner.resetPlanner. Only populated on the cached
+	// (non-skipDescriptorCache) resolution path with no database restriction;
+	// see ResolveTypeByOID.
+	//
+	// Callers must treat the returned types as read-only: the same *types.T is
+	// handed to every resolution of an OID within the statement, so mutating it
+	// in place would alias across all callers.
+	resolvedTypesByOID map[oid.Oid]*types.T
 }
 
 // GetObjectNamesAndIDs implements the resolver.SchemaResolver interface.
@@ -362,8 +376,30 @@ func (sr *schemaResolver) ResolveType(
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
 // Note: Type resolution only works for OIDs of user-defined types. Builtin
 // types do not need to be hydrated.
-func (sr *schemaResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
-	return typedesc.ResolveHydratedTByOID(ctx, oid, sr)
+func (sr *schemaResolver) ResolveTypeByOID(ctx context.Context, typeOID oid.Oid) (*types.T, error) {
+	// Only cache on the default resolution path. When skipDescriptorCache is set,
+	// callers require reading descriptors within the txn; when typeResolutionDbID
+	// is set (inside runWithOptions), resolution is restricted to a single
+	// database via WithoutOtherParent, so a cache shared with the unrestricted
+	// path would be unsound. Both are temporarily toggled by runWithOptions and
+	// are false/invalid on the hot synthesized-check-constraint path.
+	canCache := !sr.skipDescriptorCache && sr.typeResolutionDbID == descpb.InvalidID
+	if canCache {
+		if t, ok := sr.resolvedTypesByOID[typeOID]; ok {
+			return t, nil
+		}
+	}
+	t, err := typedesc.ResolveHydratedTByOID(ctx, typeOID, sr)
+	if err != nil {
+		return nil, err
+	}
+	if canCache {
+		if sr.resolvedTypesByOID == nil {
+			sr.resolvedTypesByOID = make(map[oid.Oid]*types.T)
+		}
+		sr.resolvedTypesByOID[typeOID] = t
+	}
+	return t, nil
 }
 
 // GetTypeDescriptor implements the catalog.TypeDescriptorResolver interface.
