@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//pkg/ui/workspaces/e2e-tests:eslint/package_json.bzl", eslint_bin = "bin")
+
+npm_link_all_packages(name = "node_modules")
+
+eslint_bin.eslint_test(
+    name = "lint",
+    args = [
+        "--ext .ts",
+        "-c",
+        ".eslintrc.json",
+        "cypress",
+        "cypress.config.ts",
+    ],
+    chdir = package_name(),
+    data = [
+        ".eslintrc.json",
+        "cypress.config.ts",
+        ":node_modules",
+        "//pkg/ui/workspaces/eslint-plugin-crdb",
+    ] + glob(
+        include = [
+            "cypress/e2e/**",
+            "cypress/support/**",
+        ],
+    ),
+)
+
+go_library(
+    name = "e2e-tests",
+    srcs = ["embed.go"],
+    embedsrcs = [
+        "cypress.config.ts",
+        "cypress/e2e/health-check/authenticated.cy.ts",
+        "cypress/e2e/health-check/unauthenticated.cy.ts",
+        "cypress/e2e/statementBundles/statementBundles.cy.ts",
+        "cypress/fixtures/users.json",
+        "cypress/support/commands.ts",
+        "cypress/support/e2e.ts",
+        "cypress/support/index.ts",
+        "cypress/support/types.ts",
+        "package.json",
+        "tsconfig.json",
+        "cypress/e2e/pages/databases.cy.ts",
+        "cypress/e2e/pages/metrics.cy.ts",
+        "cypress/e2e/pages/overview.cy.ts",
+        "cypress/support/commonChecks.ts",
+        "cypress/e2e/pages/insights.cy.ts",
+        "cypress/e2e/pages/jobs.cy.ts",
+        "cypress/e2e/pages/network.cy.ts",
+        "cypress/e2e/pages/schedules.cy.ts",
+        "cypress/e2e/pages/sqlActivity.cy.ts",
+        "cypress/e2e/pages/topRanges.cy.ts",
+        "cypress/support/utils.ts",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ui/workspaces/e2e-tests",
+    visibility = ["//visibility:public"],
+)

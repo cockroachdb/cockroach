@@ -1,0 +1,19 @@
+# Ensure that the system tenant entirely ignores span config limits.
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1(i INT PRIMARY KEY);
+----
+
+override limit=3
+----
+
+exec-sql
+CREATE TABLE db.t2(i INT PRIMARY KEY);
+----
+
+query-sql
+SELECT table_name FROM [SHOW TABLES FROM db];
+----
+t1
+t2

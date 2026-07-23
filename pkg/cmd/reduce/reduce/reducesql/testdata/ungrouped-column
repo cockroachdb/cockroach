@@ -1,0 +1,82 @@
+contains
+subquery uses ungrouped column "col1" from outer query
+----
+
+reduce
+CREATE TABLE table0 (col0 STRING NOT NULL, col1 FLOAT4 NULL, col2 REGTYPE NULL, col3 INT8 NOT NULL, col4 BIT(44), col5 TIME NOT NULL, FAMILY fam0 (col2), FAMILY fam1 (col4), FAMILY fam2 (col5), FAMILY fam3 (col0), FAMILY fam4 (col3), FAMILY fam5 (col1), PRIMARY KEY (col2));
+
+CREATE TABLE table1 (col0 DECIMAL NOT NULL, col1 BYTES NULL, col2 REGPROCEDURE NOT NULL, col3 UUID NOT NULL, col4 REGPROC NULL, col5 INT4 NULL, col6 CHAR, col7 REGTYPE, FAMILY fam0 (col1), FAMILY fam1 (col2, col0), FAMILY fam2 (col6, col5), FAMILY fam3 (col4), FAMILY fam4 (col7, col3), PRIMARY KEY (col1 DESC), UNIQUE (col0 ASC, col3 ASC, col6, col2 DESC, col4 ASC, col7), UNIQUE (col7 ASC, col3 DESC, col1, col5, col0 ASC, col4 DESC, col2, col6 DESC), UNIQUE (col3, col7, col4 ASC, col0, col5 ASC, col1), INDEX (col2, col5 ASC, col0 DESC), UNIQUE (col7 ASC, col6), INDEX (col0 ASC, col5 ASC, col1 ASC, col2 ASC, col6 DESC, col7 DESC), UNIQUE (col1, col5, col3 DESC), UNIQUE (col4 DESC, col0 DESC, col5 DESC, col2));
+
+WITH
+	with_273 (col_3485, col_3486, col_3487, col_3488, col_3489, col_3490, col_3491, col_3492, col_3493)
+		AS (
+			SELECT
+				(-6623365040095722935):::INT8 AS col_3485,
+				false AS col_3486,
+				tab_1229.col1 AS col_3487,
+				tab_1229.col6 AS col_3488,
+				'1993-06-15':::DATE AS col_3489,
+				'`rV':::STRING AS col_3490,
+				tab_1229.col4 AS col_3491,
+				B'0110011001100' AS col_3492,
+				tab_1229.col0 AS col_3493
+			FROM
+				(
+					SELECT
+						tab_1222.col5 AS col_3477,
+						tab_1222.col4 AS col_3478,
+						max(tab_1222.col3::UUID)::UUID AS col_3479,
+						stddev(tab_1222.col5::INT8)::DECIMAL AS col_3480
+					FROM
+						defaultdb.public.table1@primary AS tab_1222
+					WHERE
+						false
+					GROUP BY
+						tab_1222.col0, tab_1222.col4, tab_1222.col5, tab_1222.col3
+					HAVING
+						inet_same_family(((SELECT set_masklen('4ac:ded4:393a:a371:7690:9d0f:4817:3371/43':::INET::INET, tab_1226.col5::INT8)::INET AS col_3476 FROM defaultdb.public.table1 AS tab_1223 RIGHT JOIN (SELECT tab_1222.col1 AS col_3470, tab_1222.col0 AS col_3471, tab_1222.col3 AS col_3472 LIMIT 5:::INT8) AS tab_1224 (col_3473, col_3474, col_3475) JOIN defaultdb.public.table0 AS tab_1225 RIGHT JOIN defaultdb.public.table1 AS tab_1226 ON NULL FULL JOIN defaultdb.public.table1 AS tab_1227 ON false ON similar_to_escape(tab_1222.col6::STRING, NULL::STRING, tab_1222.col6::STRING)::BOOL ON inet_contains_or_equals(set_masklen('198f:60f5:287a:8163:c091:2a95:afdc:ae8b/108':::INET::INET, (-4475677368810664623):::INT8::INT8)::INET::INET, '6d38:61ce:1af7:9283:cf0d:beb2:23e0:d7f/109':::INET::INET)::BOOL ORDER BY tab_1226.col7 DESC LIMIT 1:::INT8)::INET - tab_1222.col5::INT8)::INET::INET, NULL::INET)::BOOL
+				)
+					AS tab_1228 (col_3481, col_3482, col_3483, col_3484),
+				defaultdb.public.table1 AS tab_1229,
+				defaultdb.public.table1 AS tab_1230
+		)
+SELECT
+	'c':::STRING AS col_3494,
+	e'\x00':::STRING AS col_3495,
+	tab_1232.col2 AS col_3496,
+	tab_1232.col3 AS col_3497,
+	3.4028234663852886e+38:::FLOAT8 AS col_3498,
+	NULL AS col_3499
+FROM
+	defaultdb.public.table1 AS tab_1231,
+	defaultdb.public.table0 AS tab_1232,
+	with_273,
+	defaultdb.public.table0 AS tab_1233
+WHERE
+	with_273.col_3486
+ORDER BY
+	tab_1233.col0 DESC, tab_1232.col4 ASC, with_273.col_3490 ASC
+LIMIT
+	23:::INT8;
+----
+----
+CREATE TABLE table1 (col1 BYTES, col5 INT4);
+
+SELECT
+	NULL
+FROM
+	table1 AS tab_1222
+HAVING
+	inet_same_family(
+		(
+			SELECT
+				NULL
+			FROM
+				(SELECT tab_1222.col1)
+					AS tab_1224 (col_3473)
+		)::INET
+		- tab_1222.col5,
+		NULL::INET
+	);
+----
+----

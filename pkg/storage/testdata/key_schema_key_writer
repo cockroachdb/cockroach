@@ -1,0 +1,139 @@
+init
+----
+
+# Add a "MVCC" key with no version.
+
+write
+foo
+----
+Parse("foo") = hex:666f6f00
+00: ComparePrev("foo"): PrefixLen=4; CommonPrefixLen=0; UserKeyComparison=1
+00: WriteKey(0, "foo", PrefixLen=4, CommonPrefixLen=0)
+00: MaterializeKey(_, 0) = hex:666f6f00
+
+# Test writing two MVCC keys that are equal except for the logical time. The
+# PrefixLen and CommonPrefixLen should be 4 (inclusive of the 0x00 separator
+# byte).
+
+write
+foo@3.000000000,1
+foo@3.000000000,0
+----
+Parse("foo@3.000000000,1") = hex:666f6f0000000000b2d05e00000000010d
+00: ComparePrev("foo@3.000000000,1"): PrefixLen=4; CommonPrefixLen=4; UserKeyComparison=1
+00: WriteKey(1, "foo@3.000000000,1", PrefixLen=4, CommonPrefixLen=4)
+00: MaterializeKey(_, 1) = hex:666f6f0000000000b2d05e00000000010d
+Parse("foo@3.000000000,0") = hex:666f6f0000000000b2d05e0009
+01: ComparePrev("foo@3.000000000,0"): PrefixLen=4; CommonPrefixLen=4; UserKeyComparison=1
+01: WriteKey(2, "foo@3.000000000,0", PrefixLen=4, CommonPrefixLen=4)
+01: MaterializeKey(_, 2) = hex:666f6f0000000000b2d05e0009
+
+# Write a longer key that has the previous key's roachpb.Key as a prefix. The
+# CommonPrefixLen should be 3 (exclusive of the 0x00 separator byte).
+
+write
+food@9.000000000,0
+----
+Parse("food@9.000000000,0") = hex:666f6f64000000000218711a0009
+00: ComparePrev("food@9.000000000,0"): PrefixLen=5; CommonPrefixLen=3; UserKeyComparison=1
+00: WriteKey(3, "food@9.000000000,0", PrefixLen=5, CommonPrefixLen=3)
+00: MaterializeKey(_, 3) = hex:666f6f64000000000218711a0009
+
+# Write the same key again. This is possible internally within Pebble (eg, a DEL
+# and a SET separated by a snapshot). UserKeyComparison should be zero.
+# CommonPrefixLen should be the entirety of the prefix.
+
+write
+food@9.000000000,0
+----
+Parse("food@9.000000000,0") = hex:666f6f64000000000218711a0009
+00: ComparePrev("food@9.000000000,0"): PrefixLen=5; CommonPrefixLen=5; UserKeyComparison=0
+00: WriteKey(4, "food@9.000000000,0", PrefixLen=5, CommonPrefixLen=5)
+00: MaterializeKey(_, 4) = hex:666f6f64000000000218711a0009
+
+finish
+----
++------+------------+---------+---------+
+| KEY  |    WALL    | LOGICAL | UNTYPED |
++------+------------+---------+---------+
+| foo  |          0 |       0 |         |
+| foo  | 3000000000 |       1 |         |
+| foo  | 3000000000 |       0 |         |
+| food | 9000000000 |       0 |         |
+| food | 9000000000 |       0 |         |
++------+------------+---------+---------+
+
+init
+----
+
+# Write a lock table key. Its suffix will be unconsidered 'untyped'.
+
+write
+poi@Exclusive,2a84b329-b76b-4616-ac15-1047f0a3fe9c
+----
+Parse("poi@Exclusive,2a84b329-b76b-4616-ac15-1047f0a3fe9c") = hex:017a6b12706f69000100022a84b329b76b4616ac151047f0a3fe9c12
+00: ComparePrev("poi@Exclusive,2a84b329-b76b-4616-ac15-1047f0a3fe9c"): PrefixLen=10; CommonPrefixLen=0; UserKeyComparison=1
+00: WriteKey(0, "poi@Exclusive,2a84b329-b76b-4616-ac15-1047f0a3fe9c", PrefixLen=10, CommonPrefixLen=0)
+00: MaterializeKey(_, 0) = hex:017a6b12706f69000100022a84b329b76b4616ac151047f0a3fe9c12
+
+# Write a lock table key with a later uuid.
+
+write
+poi@Exclusive,073a83c4-5688-420e-af97-824255790f1e
+----
+Parse("poi@Exclusive,073a83c4-5688-420e-af97-824255790f1e") = hex:017a6b12706f6900010002073a83c45688420eaf97824255790f1e12
+00: ComparePrev("poi@Exclusive,073a83c4-5688-420e-af97-824255790f1e"): PrefixLen=10; CommonPrefixLen=10; UserKeyComparison=1
+00: WriteKey(1, "poi@Exclusive,073a83c4-5688-420e-af97-824255790f1e", PrefixLen=10, CommonPrefixLen=10)
+00: MaterializeKey(_, 1) = hex:017a6b12706f6900010002073a83c45688420eaf97824255790f1e12
+
+# Write a MVCC key to the same block. This is okay.
+
+write
+/MVCC/poi@1.000000000,3
+----
+Parse("/MVCC/poi@1.000000000,3") = hex:2f4d5643432f706f6900000000003b9aca00000000030d
+00: ComparePrev("/MVCC/poi@1.000000000,3"): PrefixLen=10; CommonPrefixLen=0; UserKeyComparison=1
+00: WriteKey(2, "/MVCC/poi@1.000000000,3", PrefixLen=10, CommonPrefixLen=0)
+00: MaterializeKey(_, 2) = hex:2f4d5643432f706f6900000000003b9aca00000000030d
+
+finish
+----
++------------------------+------------+---------+------------------------------------+
+|          KEY           |    WALL    | LOGICAL |              UNTYPED               |
++------------------------+------------+---------+------------------------------------+
+| hex:017a6b12706f690001 |          0 |       0 | 022a84b329b76b4616ac151047f0a3fe9c |
+| hex:017a6b12706f690001 |          0 |       0 | 02073a83c45688420eaf97824255790f1e |
+| /MVCC/poi              | 1000000000 |       3 |                                    |
++------------------------+------------+---------+------------------------------------+
+
+# Regression test for #134053.
+#
+# Write consecutive keys where the engine key prefix of the 1st key (including
+# the sentinel byte) is a byte prefix of the 2nd key, but the two keys have
+# different MVCC prefixes. Previously, ComparePrev would return the wrong value
+# for CommonPrefixLen, omitting the sentinel byte of the previous prefix.
+
+init
+----
+
+write
+hex:fa00180512db93969eee09
+hex:fa0000180512db93c71f7409
+----
+Parse("hex:fa00180512db93969eee09") = hex:fa00180512db93969eee09
+00: ComparePrev("hex:fa00180512db93969eee09"): PrefixLen=2; CommonPrefixLen=0; UserKeyComparison=1
+00: WriteKey(0, "hex:fa00180512db93969eee09", PrefixLen=2, CommonPrefixLen=0)
+00: MaterializeKey(_, 0) = hex:fa00180512db93969eee09
+Parse("hex:fa0000180512db93c71f7409") = hex:fa0000180512db93c71f7409
+01: ComparePrev("hex:fa0000180512db93c71f7409"): PrefixLen=3; CommonPrefixLen=2; UserKeyComparison=1
+01: WriteKey(1, "hex:fa0000180512db93c71f7409", PrefixLen=3, CommonPrefixLen=2)
+01: MaterializeKey(_, 1) = hex:fa0000180512db93c71f7409
+
+finish
+----
++----------+---------------------+---------+---------+
+|   KEY    |        WALL         | LOGICAL | UNTYPED |
++----------+---------------------+---------+---------+
+| hex:fa   | 1730810366077083374 |       0 |         |
+| hex:fa00 | 1730810366080262004 |       0 |         |
++----------+---------------------+---------+---------+

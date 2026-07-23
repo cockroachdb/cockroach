@@ -1,0 +1,131 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.storagepb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb";
+
+import "roachpb/data.proto";
+import "kv/kvserver/liveness/livenesspb/liveness.proto";
+import "util/hlc/timestamp.proto";
+
+import "gogoproto/gogo.proto";
+
+enum LeaseState {
+  // ERROR indicates that the lease can't be used or acquired. The state is
+  // not a definitive indication of the lease's validity. Rather, it is an
+  // indication that the validity is indeterminate; it may be valid or it
+  // may not be.
+  //
+  // The ERROR state is returned in the following cases:
+  // 1. An epoch lease has a reference to a node liveness record which the
+  //    lease status evaluator is not aware of. This can happen when gossip
+  //    is down and node liveness information is not available for the lease
+  //    holder. In such cases, it would be unsafe to use the lease because
+  //    the evaluator cannot determine the lease's expiration, so it may
+  //    have expired. However, it would also be unsafe to replace the lease,
+  //    because it may still be valid.
+  // 2. A leader lease is evaluated on a replica that is not the raft leader
+  //    and is not aware of a successor raft leader at a future term (either
+  //    itself or some other replica). In such cases, the lease may be valid
+  //    or it may have expired. The raft leader (+leaseholder) itself would
+  //    be able to tell, but the only way for a follower replica to tell is
+  //    for it to try to become the raft leader, while respecting raft
+  //    fortification rules. In the meantime, it is best for the follower
+  //    replica to redirect any requests to the raft leader (+leaseholder).
+  ERROR = 0;
+  // VALID indicates that the lease is not expired at the current clock
+  // time and can be used to serve a given request.
+  VALID = 1;
+  // UNUSABLE indicates that a lease has not expired at the current clock
+  // time, but cannot be used to serve a given request. A lease may be
+  // unusable for one of two reasons.
+  //
+  // First, if the request operates at a timestamp in the future, it is
+  // possible for the request's timestamp to fall outside of the lease's
+  // validity window, even if the lease is not yet expired at the current
+  // clock time. In such cases, the lease must be extended past the
+  // request's timestamp before the request can be served under the lease.
+  //
+  // Second, even if the request does not operate at a timestamp in the
+  // future and operates fully within the lease's validity window, it may
+  // operate at a time too close to the lease's expiration to be served
+  // safely due to clock uncertainty. We refer to the period at the end of
+  // each lease, immediately before its expiration, as its stasis period.
+  //
+  // The point of the stasis period is to prevent reads on the old
+  // leaseholder (the one whose stasis we're talking about) from missing
+  // to see writes performed under the next lease (held by someone else)
+  // when these writes should fall in the uncertainty window. Even without
+  // the stasis, writes performed by the new leaseholder are guaranteed to
+  // have higher timestamps than any reads served by the old leaseholder.
+  // However, a read at timestamp T needs to observe all writes at
+  // timestamps [T, T+maxOffset] and so, without the stasis, only the new
+  // leaseholder might have some of these writes. In other words, without
+  // the stasis, a new leaseholder with a fast clock could start
+  // performing writes ordered in real time before the old leaseholder
+  // considers its lease to have expired.
+  //
+  // An UNUSABLE lease may become VALID for the same leaseholder after a
+  // successful RequestLease (for expiration-based leases) or Heartbeat
+  // (for epoch-based leases), each of which serve as forms of "lease
+  // extension".
+  UNUSABLE = 2;
+  // EXPIRED indicates that the current clock time is past the lease's
+  // expiration time. An expired lease may become VALID for the same
+  // leaseholder on RequestLease or Heartbeat, or it may be replaced by a
+  // new leaseholder with a RequestLease (for expiration-based leases) or
+  // IncrementEpoch+RequestLease (for epoch-based leases).
+  //
+  // Only an EXPIRED lease may change hands non-cooperatively.
+  EXPIRED = 3;
+  // PROSCRIBED indicates that the lease's proposed timestamp is earlier
+  // than allowed and can't be used to serve a request. This is used to
+  // detect node restarts: a node that has restarted will see its former
+  // incarnation's leases as PROSCRIBED so it will renew them before using
+  // them. This state also used during a lease transfer, to prevent the
+  // outgoing leaseholder from serving any other requests under its old
+  // lease. Note that the PROSCRIBED state is only visible to the
+  // leaseholder; other nodes may see this as a VALID lease.
+  PROSCRIBED = 4;
+}
+
+// LeaseStatus holds the lease state, the current clock time at which the
+// state is accurate, the request time at which the status is accurate, the
+// lease itself, and optionally the liveness if the lease is epoch-based.
+//
+// LeaseStatus is not persisted anywhere. However, it is part of the
+// serverpb.RangeInfo proto.
+message LeaseStatus {
+  // Lease which this status describes.
+  roachpb.Lease lease = 1 [(gogoproto.nullable) = false];
+  // Clock timestamp that the lease was evaluated at.
+  util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  // Timestamp for the request operating under the lease.
+  util.hlc.Timestamp request_time = 5 [(gogoproto.nullable) = false];
+  // State of the lease at now for a request at request_time.
+  LeaseState state = 3;
+  // If state == ERROR, this provides more info about the error.
+  string err_info = 6;
+  // Liveness if this is an epoch-based lease.
+  kv.kvserver.liveness.livenesspb.Liveness liveness = 4 [(gogoproto.nullable) = false];
+  // The minimum observed timestamp on a transaction that is respected by this lease.
+  util.hlc.Timestamp min_valid_observed_timestamp = 7 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  // Raft leadership support, if this is a leader lease for a leader lease's
+  // associated term.
+  RaftLeaderSupport leader_support = 8 [(gogoproto.nullable) = false];
+}
+
+// RaftLeaderSupport holds the leader lease state.
+message RaftLeaderSupport {
+  // Term is the current raft term known to the local replica.
+  uint64 term = 1;
+  // LeadSupportUntil is the timestamp at which the local replica, if leader,
+  // knows it has support to remain leader until. If the leader has not yet
+  // fortified its leadership, this will be the zero timestamp.
+  util.hlc.Timestamp lead_support_until = 2 [(gogoproto.nullable) = false];
+}

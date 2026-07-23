@@ -1,0 +1,64 @@
+# This file contains the definitions needed to expose cockroachdb in a namespace
+# other than the one it's running in.
+# To use this file:
+# 1. Replace "YOUR_ZONE_HERE" in this file with the name of the namespace that
+#    cockroachdb is running in in the given cluster.
+# 2. Create a secret containing the certificates in the namespace that you want
+#    to expose the service in (the "default" namespace is assumed by the
+#    certificate creation commands in setup.py):
+#      kubectl create secret generic cockroachdb.client.root --namespace=YOUR_ZONE_HERE --from-file=certs
+# 3. Create the resources in this cluster:
+#      kubectl apply -f external-name-svc.yaml
+#
+# After completing these steps, you should be able to access the cockroachdb
+# cluster at the name `cockroachdb-public` in the default Kubernetes namespace
+# (or at the name `cockroachdb-public.default` from any namespace).
+#
+# Note that the ServiceAccount and roles defined below are only needed for
+# accessing the Secret containing the root client certificate. If you are
+# managing client certificates (or passwords) some other way, you can do away
+# with everything in this file other than the Service.
+kind: Service
+apiVersion: v1
+metadata:
+  name: cockroachdb-public
+spec:
+  type: ExternalName
+  externalName: cockroachdb-public.YOUR_ZONE_HERE.svc.cluster.local
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cockroachdb
+  labels:
+    app: cockroachdb
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cockroachdb
+  labels:
+    app: cockroachdb
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cockroachdb
+  labels:
+    app: cockroachdb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cockroachdb
+subjects:
+- kind: ServiceAccount
+  name: cockroachdb
+  namespace: default

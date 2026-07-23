@@ -1,0 +1,110 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+
+build
+SELECT * FROM (VALUES (1, 2), (3, 4), (NULL, 5))
+----
+values
+ ├── columns: column1:1(int) column2:2(int!null)
+ ├── cardinality: [3 - 3]
+ ├── immutable
+ ├── prune: (1,2)
+ ├── tuple [type=tuple{int, int}]
+ │    ├── const: 1 [type=int]
+ │    └── const: 2 [type=int]
+ ├── tuple [type=tuple{int, int}]
+ │    ├── const: 3 [type=int]
+ │    └── const: 4 [type=int]
+ └── tuple [type=tuple{int, int}]
+      ├── cast: INT8 [type=int]
+      │    └── null [type=unknown]
+      └── const: 5 [type=int]
+
+build
+SELECT * FROM (VALUES (1, 2), (3, 4), (5, 6))
+----
+values
+ ├── columns: column1:1(int!null) column2:2(int!null)
+ ├── cardinality: [3 - 3]
+ ├── prune: (1,2)
+ ├── tuple [type=tuple{int, int}]
+ │    ├── const: 1 [type=int]
+ │    └── const: 2 [type=int]
+ ├── tuple [type=tuple{int, int}]
+ │    ├── const: 3 [type=int]
+ │    └── const: 4 [type=int]
+ └── tuple [type=tuple{int, int}]
+      ├── const: 5 [type=int]
+      └── const: 6 [type=int]
+
+build
+SELECT * FROM (VALUES (NULL, 2), (3, NULL), (5, 6))
+----
+values
+ ├── columns: column1:1(int) column2:2(int)
+ ├── cardinality: [3 - 3]
+ ├── immutable
+ ├── prune: (1,2)
+ ├── tuple [type=tuple{int, int}]
+ │    ├── cast: INT8 [type=int]
+ │    │    └── null [type=unknown]
+ │    └── const: 2 [type=int]
+ ├── tuple [type=tuple{int, int}]
+ │    ├── const: 3 [type=int]
+ │    └── cast: INT8 [type=int]
+ │         └── null [type=unknown]
+ └── tuple [type=tuple{int, int}]
+      ├── const: 5 [type=int]
+      └── const: 6 [type=int]
+
+# Propagate outer columns.
+build
+SELECT (VALUES (x), (y+1)) FROM xy
+----
+project
+ ├── columns: column1:6(int)
+ ├── immutable
+ ├── prune: (6)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ └── projections
+      └── subquery [as=column1:6, type=int, outer=(1,2), immutable, correlated-subquery]
+           └── max1-row
+                ├── columns: column1:5(int)
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── outer: (1,2)
+                ├── cardinality: [1 - 1]
+                ├── immutable
+                ├── key: ()
+                ├── fd: ()-->(5)
+                └── values
+                     ├── columns: column1:5(int)
+                     ├── outer: (1,2)
+                     ├── cardinality: [2 - 2]
+                     ├── immutable
+                     ├── prune: (5)
+                     ├── tuple [type=tuple{int}]
+                     │    └── variable: x:1 [type=int]
+                     └── tuple [type=tuple{int}]
+                          └── plus [type=int]
+                               ├── variable: y:2 [type=int]
+                               └── const: 1 [type=int]
+
+# Single row.
+build
+SELECT * FROM (VALUES (1, 2))
+----
+values
+ ├── columns: column1:1(int!null) column2:2(int!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── prune: (1,2)
+ └── tuple [type=tuple{int, int}]
+      ├── const: 1 [type=int]
+      └── const: 2 [type=int]

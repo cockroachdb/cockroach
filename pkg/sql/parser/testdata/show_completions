@@ -1,0 +1,47 @@
+parse
+SHOW COMPLETIONS AT OFFSET 1 FOR 'creat'
+----
+SHOW COMPLETIONS AT OFFSET 1 FOR 'creat'
+SHOW COMPLETIONS AT OFFSET 1 FOR ('creat') -- fully parenthesized
+SHOW COMPLETIONS AT OFFSET 1 FOR '_' -- literals removed
+SHOW COMPLETIONS AT OFFSET 1 FOR 'creat' -- identifiers removed
+
+parse
+SHOW COMPLETIONS AT OFFSET 1 FOR 'creat'
+----
+SHOW COMPLETIONS AT OFFSET 1 FOR 'creat'
+SHOW COMPLETIONS AT OFFSET 1 FOR ('creat') -- fully parenthesized
+SHOW COMPLETIONS AT OFFSET 1 FOR '_' -- literals removed
+SHOW COMPLETIONS AT OFFSET 1 FOR 'creat' -- identifiers removed
+
+parse
+SHOW COMPLETIONS AT OFFSET 1 FOR 'CREAT'
+----
+SHOW COMPLETIONS AT OFFSET 1 FOR 'CREAT'
+SHOW COMPLETIONS AT OFFSET 1 FOR ('CREAT') -- fully parenthesized
+SHOW COMPLETIONS AT OFFSET 1 FOR '_' -- literals removed
+SHOW COMPLETIONS AT OFFSET 1 FOR 'CREAT' -- identifiers removed
+
+parse
+SHOW COMPLETIONS AT OFFSET 7 FOR 'SELECT 1'
+----
+SHOW COMPLETIONS AT OFFSET 7 FOR 'SELECT 1'
+SHOW COMPLETIONS AT OFFSET 7 FOR ('SELECT 1') -- fully parenthesized
+SHOW COMPLETIONS AT OFFSET 7 FOR '_' -- literals removed
+SHOW COMPLETIONS AT OFFSET 7 FOR 'SELECT 1' -- identifiers removed
+
+parse
+show completions at offset 10 for 'select * fro'
+----
+SHOW COMPLETIONS AT OFFSET 10 FOR 'select * fro' -- normalized!
+SHOW COMPLETIONS AT OFFSET 10 FOR ('select * fro') -- fully parenthesized
+SHOW COMPLETIONS AT OFFSET 10 FOR '_' -- literals removed
+SHOW COMPLETIONS AT OFFSET 10 FOR 'select * fro' -- identifiers removed
+
+parse
+SHOW COMPLETIONS AT OFFSET 4 FOR e'\'se\'';
+----
+SHOW COMPLETIONS AT OFFSET 4 FOR e'\'se\'' -- normalized!
+SHOW COMPLETIONS AT OFFSET 4 FOR (e'\'se\'') -- fully parenthesized
+SHOW COMPLETIONS AT OFFSET 4 FOR '_' -- literals removed
+SHOW COMPLETIONS AT OFFSET 4 FOR e'\'se\'' -- identifiers removed

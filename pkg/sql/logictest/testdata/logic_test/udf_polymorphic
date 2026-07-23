@@ -1,0 +1,575 @@
+statement ok
+CREATE TYPE greetings AS ENUM('hi', 'hello', 'yo');
+CREATE TYPE foo AS ENUM('bar', 'baz');
+CREATE TYPE typ AS (x INT, y INT);
+
+subtest poly_in
+
+# Polymorphic ANYELEMENT parameter and non-polymorphic return type.
+statement ok
+CREATE FUNCTION f(x ANYELEMENT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f(1);
+SELECT f('foo'::TEXT);
+SELECT f(False);
+SELECT f(NULL::INT);
+SELECT f('hi'::greetings);
+SELECT f(ARRAY[1, 2, 3]);
+
+# TODO(#94718): Postgres returns an error here.
+statement ok
+SELECT f('foo');
+
+statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+SELECT f(NULL);
+
+# Polymorphic ANYARRAY parameter and non-polymorphic return type.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYARRAY) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f(ARRAY[1, 2, 3]);
+SELECT f(ARRAY['one', 'two', 'three']);
+SELECT f(NULL::INT[]);
+SELECT f('{1, 2, 3}'::INT[]);
+
+# TODO(#94718): Postgres returns a different error here.
+statement error pgcode 42883 pq: unknown signature: public.f\(string\)
+SELECT f('{1, 2, 3}');
+
+statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+SELECT f(NULL);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(int\)
+SELECT f(1);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(greetings\)
+SELECT f('hi'::greetings);
+
+# TODO(#123048): uncomment these.
+## Polymorphic ANYENUM parameter and non-polymorphic return type.
+#statement ok
+#DROP FUNCTION f;
+#CREATE FUNCTION f(x ANYENUM) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+#
+#statement ok
+#SELECT f('hi'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('hi');
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(1);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(ARRAY[1, 2, 3]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(ROW(1, 2)::typ);
+
+# The supplied arguments for ANYELEMENT parameters must have the same type.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYELEMENT, y ANYELEMENT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f(1, 2);
+SELECT f(NULL, 1);
+SELECT f(ARRAY[1, 2], ARRAY[3, 4]);
+SELECT f('hi'::greetings, 'hello'::greetings);
+
+# TODO(#94718): this should succeed.
+statement error pgcode 42883 pq: unknown signature: public.f\(int, string\)
+SELECT f(1, '2');
+
+# TODO(#94718): this should succeed.
+statement error pgcode 42883 pq: unknown signature: public.f\(greetings, string\)
+SELECT f('hi'::greetings, 'hello');
+
+# TODO(#94718): this should fail with unknown type error.
+# statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+statement ok
+SELECT f('1', '2');
+
+statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+SELECT f(NULL, NULL);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(int, bool\)
+SELECT f(1, False);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(int\[\], bool\[\]\)
+SELECT f(ARRAY[1, 2], ARRAY[False, True]);
+
+# The supplied arguments for ANYARRAY parameters must have the same type, and
+# be part of the ARRAY family.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYARRAY, y ANYARRAY) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f(ARRAY[1, 2, 3], ARRAY[4, 5, 6]);
+SELECT f(ARRAY[True, False], ARRAY[False, NULL]);
+SELECT f(NULL, ARRAY[1, 2]);
+SELECT f(ARRAY['hi'::greetings, 'hello'::greetings], ARRAY['yo'::greetings, NULL]);
+SELECT f(ARRAY[ROW(1, 2)::typ, NULL], ARRAY[ROW(3, 4)::typ]);
+
+statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+SELECT f(NULL, NULL);
+
+# TODO(#94718): this should fail with unknown type error.
+statement error pgcode 42883 pq: unknown signature: public.f\(string, string\)
+SELECT f('{1, 2}', '{3, 4}');
+
+statement error pgcode 42883 pq: unknown signature: public.f\(int, int\)
+SELECT f(1, 2);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(int\[\], int\)
+SELECT f(ARRAY[1, 2], 3);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(greetings, greetings\)
+SELECT f('hi'::greetings, 'hello'::greetings);
+
+# TODO(#123048): uncomment these.
+## The supplied arguments for ANYENUM parameters must have the same type, and
+## be part of the ENUM family.
+#statement ok
+#DROP FUNCTION f;
+#CREATE FUNCTION f(x ANYENUM, y ANYENUM) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+#
+#statement ok
+#SELECT f('hi'::greetings, 'hello'::greetings);
+#SELECT f('hi', 'hello'::greetings);
+#SELECT f('hi'::greetings, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(NULL, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('hi', 'hello');
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(1, 2);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(ARRAY[1, 2], ARRAY[3, 4]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(ROW(1, 2)::typ, ROW(3, 4)::typ);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('hi'::greetings, 'bar'::foo);
+
+# The supplied element type of an ANYARRAY parameter must match the concrete
+# type of an ANYELEMENT parameter.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYARRAY, y ANYELEMENT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f(ARRAY[1, 2], 1);
+SELECT f(ARRAY[1, 2], NULL);
+SELECT f(NULL, 1);
+SELECT f(ARRAY[True], False);
+SELECT f(ARRAY['hi'], 'hello');
+SELECT f(ARRAY['hi'::greetings], 'hello'::greetings);
+SELECT f(ARRAY['hi']::greetings[], 'hello'::greetings);
+
+# TODO(#94718): this should succeed.
+statement error pgcode 42883 pq: unknown signature: public.f\(int\[\], string\)
+SELECT f(ARRAY[1, 2], '1');
+
+statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+SELECT f(NULL, NULL);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(string\[\], greetings\)
+SELECT f(ARRAY['hi'], 'hello'::greetings);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(greetings, string\[\]\)
+SELECT f('hello'::greetings, ARRAY['hi']);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(int, int\)
+SELECT f(1, 2);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(int\[\], int\[\]\)
+SELECT f(ARRAY[1, 2], ARRAY[3, 4]);
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYELEMENT, y ANYARRAY) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f(1, ARRAY[1, 2]);
+SELECT f(NULL, ARRAY[1, 2]);
+SELECT f(1, NULL);
+SELECT f(False, ARRAY[True]);
+SELECT f('hello', ARRAY['hi']);
+SELECT f('hello'::greetings, ARRAY['hi'::greetings]);
+SELECT f('hello'::greetings, ARRAY['hi']::greetings[]);
+
+# TODO(#94718): this should succeed.
+statement error pgcode 42883 pq: unknown signature: public.f\(string, int\[\]\)
+SELECT f('1', ARRAY[1, 2]);
+
+statement error pgcode 42804 pq: could not determine polymorphic type because input has type unknown
+SELECT f(NULL, NULL);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(string\[\], greetings\)
+SELECT f(ARRAY['hi'], 'hello'::greetings);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(greetings, string\[\]\)
+SELECT f('hello'::greetings, ARRAY['hi']);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(int, int\)
+SELECT f(1, 2);
+
+statement error pgcode 42883 pq: unknown signature: public.f\(int\[\], int\[\]\)
+SELECT f(ARRAY[1, 2], ARRAY[3, 4]);
+
+# TODO(#123048): uncomment these.
+## The concrete type of an ANYELEMENT parameter must match that of an
+## ANYENUM parameter.
+#statement ok
+#DROP FUNCTION f;
+#CREATE FUNCTION f(x ANYENUM, y ANYELEMENT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+#
+#statement ok
+#SELECT f('hi'::greetings, 'hello'::greetings);
+#SELECT f('hi'::greetings, 'hello');
+#SELECT f('hi'::greetings, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(NULL, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('hello', 'hi');
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('hello'::greetings, 1);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(1, 'hello'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('hello'::greetings, ARRAY[1, 2]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(ARRAY[1, 2], 'hello'::greetings);
+#
+#statement ok
+#DROP FUNCTION f;
+#CREATE FUNCTION f(x ANYELEMENT, y ANYENUM) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+#
+#statement ok
+#SELECT f('hi'::greetings, 'hello'::greetings);
+#SELECT f('hi', 'hello'::greetings);
+#SELECT f(NULL, 'hi'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(NULL, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('hello', 'hi');
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('hello'::greetings, 1);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(1, 'hello'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('hello'::greetings, ARRAY[1, 2]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(ARRAY[1, 2], 'hello'::greetings);
+#
+## The supplied element type of an ANYARRAY parameter must match the supplied
+## type of an ANYENUM parameter.
+#statement ok
+#DROP FUNCTION f;
+#CREATE FUNCTION f(x ANYARRAY, y ANYENUM) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+#
+#statement ok
+#SELECT f(ARRAY['hi'::greetings], 'hello'::greetings);
+#SELECT f(ARRAY['hi']::greetings[], 'hello'::greetings);
+#SELECT f(ARRAY['hi']::greetings[], 'hello');
+#SELECT f(NULL, 'hi'::greetings);
+#SELECT f(ARRAY['hi'::greetings], NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(NULL, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('hello'::greetings, 'hi'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(ARRAY['hello']::greetings[], ARRAY['hi'::greetings]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(ARRAY[1, 2], 'hi'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(ARRAY['hi'::greetings], 10);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(ARRAY['hi'::greetings], 'bar'::foo);
+#
+#statement ok
+#DROP FUNCTION f;
+#CREATE FUNCTION f(x ANYENUM, y ANYARRAY) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+#
+#statement ok
+#SELECT f('hello'::greetings, ARRAY['hi'::greetings]);
+#SELECT f('hello'::greetings, ARRAY['hi']::greetings[]);
+#SELECT f('hello', ARRAY['hi']::greetings[]);
+#SELECT f('hi'::greetings, NULL);
+#SELECT f(NULL, ARRAY['hi'::greetings]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(NULL, NULL);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('hello'::greetings, 'hi'::greetings);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(ARRAY['hello']::greetings[], ARRAY['hi'::greetings]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('hi'::greetings, ARRAY[1, 2]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f(10, ARRAY['hi'::greetings]);
+#
+#statement error pgcode 42883 pq: unknown signature
+#SELECT f('bar'::foo, ARRAY['hi'::greetings]);
+
+# It's possible to return using a polymorphic parameter type, but the actual
+# argument type must match the return type.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYELEMENT) RETURNS INT LANGUAGE SQL AS $$ SELECT x; $$;
+
+query III
+SELECT f(1), f(2), f(NULL::INT);
+----
+1  2  NULL
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return int
+SELECT f('foo'::TEXT);
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return int
+SELECT f(True);
+
+statement ok
+DROP FUNCTION f;
+
+subtest poly_out
+
+# Polymorphic return type with no polymorphic IN parameter.
+statement error pgcode 42P13 pq: cannot determine result data type\nDETAIL: A result of type anyelement requires
+CREATE FUNCTION f(x INT) RETURNS ANYELEMENT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+# Polymorphic ANYARRAY return type with no polymorphic IN parameter.
+statement error pgcode 42P13 pq: cannot determine result data type\nDETAIL: A result of type anyarray requires
+CREATE FUNCTION f(x INT) RETURNS ANYARRAY LANGUAGE SQL AS $$ SELECT 1; $$;
+
+# Polymorphic OUT parameter with no polymorphic IN parameter.
+statement error pgcode 42P13 pq: cannot determine result data type
+CREATE FUNCTION f(OUT x ANYELEMENT) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+# Polymorphic OUT parameter and non-polymorphic IN parameter.
+statement error pgcode 42P13 pq: cannot determine result data type
+CREATE FUNCTION f(x INT, OUT y ANYELEMENT) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+# Polymorphic OUT parameters and non-polymorphic IN parameter.
+statement error pgcode 42P13 pq: cannot determine result data type
+CREATE FUNCTION f(x INT, OUT y ANYARRAY, OUT z ANYELEMENT) LANGUAGE SQL AS $$ SELECT 1; $$;
+
+subtest poly_in_out
+
+# Polymorphic parameter and polymorphic return type.
+statement ok
+CREATE FUNCTION f(x ANYELEMENT) RETURNS ANYELEMENT LANGUAGE SQL AS $$ SELECT x; $$;
+
+query IBT
+SELECT f(1), f(True), f(ARRAY[1, 2]);
+----
+1  true  {1,2}
+
+# ANYELEMENT parameter is used to determine final type of ANYARRAY return type.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYELEMENT) RETURNS ANYARRAY LANGUAGE SQL AS $$ SELECT ARRAY[x]; $$;
+
+query TT
+SELECT f(1), f(True);
+----
+{1}  {t}
+
+statement error pgcode 42704 pq: could not find array type for data type int\[\]
+SELECT f(ARRAY[1, 2]);
+
+# ANYARRAY parameter is used to determine final type of ANYELEMENT return type.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYARRAY) RETURNS ANYELEMENT LANGUAGE SQL AS $$ SELECT x[1]; $$;
+
+query IB
+SELECT f(ARRAY[1, 2]), f(ARRAY[True, False]);
+----
+1  true
+
+# Polymorphic INOUT parameter.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(INOUT x ANYELEMENT) LANGUAGE SQL AS $$ SELECT x; $$;
+
+query IBT
+SELECT f(1), f(True), f(ARRAY[1, 2]);
+----
+1  true  {1,2}
+
+# Polymorphic IN parameter and polymorphic OUT parameter.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYELEMENT, OUT y ANYELEMENT) LANGUAGE SQL AS $$ SELECT x; $$;
+
+query IBT
+SELECT f(1), f(True), f(ARRAY[1, 2]);
+----
+1  true  {1,2}
+
+subtest default_values
+
+# Polymorphic parameter with a default value.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYELEMENT DEFAULT 1) RETURNS ANYELEMENT LANGUAGE SQL AS $$ SELECT x; $$;
+
+query IBT
+SELECT f(), f(True), f('foo'::TEXT);
+----
+1  true  foo
+
+# Second polymorphic parameter has a default value.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYELEMENT, y ANYELEMENT DEFAULT 1) RETURNS ANYELEMENT LANGUAGE SQL AS $$ SELECT y; $$;
+
+query IITB
+SELECT f(1), f(1, 2), f('foo'::TEXT, 'bar'::TEXT), f(True, False);
+----
+1  2  bar  false
+
+statement error pgcode 42804 pq: arguments declared \"anyelement\" are not all alike
+SELECT f(True);
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYARRAY, y ANYARRAY DEFAULT ARRAY[1, 2]) RETURNS ANYARRAY LANGUAGE SQL AS $$ SELECT y; $$;
+
+query T
+SELECT f(ARRAY[4, 5]);
+----
+{1,2}
+
+statement error pgcode 42804 pq: arguments declared \"anyarray\" are not all alike
+SELECT f(ARRAY[True]);
+
+# TODO(#123048): uncomment this case.
+#statement error pgcode 42804 pq: arguments declared \"anyenum\" are not all alike
+#DROP FUNCTION f;
+#CREATE FUNCTION f(x ANYENUM, y ANYENUM DEFAULT 'hello'::greetings) RETURNS ANYENUM LANGUAGE SQL AS $$ SELECT y; $$;
+#SELECT f('bar'::foo);
+
+# Two default values with incompatible types.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYELEMENT DEFAULT True, y ANYELEMENT DEFAULT 1) RETURNS ANYELEMENT LANGUAGE SQL AS $$ SELECT x; $$;
+
+query II
+SELECT f(10), f(10, 100);
+----
+10  10
+
+statement error pgcode 42804 pq: arguments declared \"anyelement\" are not all alike
+SELECT f();
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYELEMENT DEFAULT 10, y ANYARRAY DEFAULT ARRAY[1, 2]) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f();
+SELECT f(1);
+SELECT f(1, ARRAY[100]);
+SELECT f(True, ARRAY[False]);
+
+statement error pgcode 42804 pq: argument declared anyarray is not consistent with argument declared anyelement
+SELECT f(True);
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x ANYELEMENT DEFAULT True, y ANYARRAY DEFAULT ARRAY[1, 2]) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+SELECT f(1);
+SELECT f(1, ARRAY[100]);
+SELECT f(True, ARRAY[False]);
+
+statement error pgcode 42804 pq: argument declared anyarray is not consistent with argument declared anyelement
+SELECT f();
+
+statement ok
+DROP FUNCTION f;
+
+statement error pgcode 42804 pq: argument of DEFAULT must be type anyarray, not type int
+CREATE FUNCTION f(x ANYARRAY DEFAULT 1) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+subtest drop_function
+
+statement ok
+CREATE FUNCTION f(x ANYELEMENT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement error pgcode 42883 pq: function f\(int\) does not exist
+DROP FUNCTION f(INT);
+
+statement error pgcode 42883 pq: function f\(string\) does not exist
+DROP FUNCTION f(TEXT);
+
+statement error pgcode 42883 pq: function f\(\) does not exist
+DROP FUNCTION f();
+
+statement error pgcode 42883 pq: function f\(anyarray\) does not exist
+DROP FUNCTION f(ANYARRAY);
+
+statement ok
+DROP FUNCTION f(ANYELEMENT);
+
+statement ok
+CREATE FUNCTION f(x INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement error pgcode 42883 pq: function f\(anyarray\) does not exist
+DROP FUNCTION f(ANYARRAY);
+
+statement error pgcode 42883 pq: function f\(anyelement\) does not exist
+DROP FUNCTION f(ANYELEMENT);
+
+statement ok
+DROP FUNCTION f(INT);
+
+subtest regression_123239
+
+statement ok
+CREATE OR REPLACE FUNCTION dup (INOUT f2 ANYELEMENT, OUT f3 ANYARRAY) AS 'SELECT $1, ARRAY[$1,$1]' LANGUAGE SQL;
+
+query T
+SELECT dup(22);
+----
+(22,"{22,22}")
+
+subtest end

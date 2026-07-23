@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pgwirecancel",
+    srcs = ["backend_key_data.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/base"],
+)
+
+go_test(
+    name = "pgwirecancel_test",
+    srcs = [
+        "backend_key_data_test.go",
+        "cancel_test.go",
+        "main_test.go",
+    ],
+    embed = [":pgwirecancel"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//conditions:default": {"test.Pool": "default"},
+    }),
+    deps = [
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/security/username",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog/descs",
+        "//pkg/testutils/pgurlutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_stretchr_testify//require",
+    ],
+)

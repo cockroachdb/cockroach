@@ -1,0 +1,81 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "rowflow",
+    srcs = [
+        "input_sync.go",
+        "routers.go",
+        "row_based_flow.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/rowflow",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execopnode",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/flowinfra",
+        "//pkg/sql/rowcontainer",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/rowexec",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/admission",
+        "//pkg/util/buildutil",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@io_opentelemetry_go_otel//attribute",
+    ],
+)
+
+go_test(
+    name = "rowflow_test",
+    size = "small",
+    srcs = [
+        "input_sync_test.go",
+        "routers_test.go",
+    ],
+    embed = [":rowflow"],
+    deps = [
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/randgen",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/storage",
+        "//pkg/testutils",
+        "//pkg/testutils/distsqlutils",
+        "//pkg/util/encoding",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/randutil",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+disallowed_imports_test(
+    "rowflow",
+    [
+        "//pkg/sql/colflow",
+        "//pkg/sql/distsql",
+    ],
+)

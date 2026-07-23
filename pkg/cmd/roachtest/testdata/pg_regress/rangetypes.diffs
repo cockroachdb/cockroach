@@ -1,0 +1,2710 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangetypes.out --label=/mnt/data1/postgres/src/test/regress/results/rangetypes.out /mnt/data1/postgres/src/test/regress/expected/rangetypes.out /mnt/data1/postgres/src/test/regress/results/rangetypes.out
+--- /mnt/data1/postgres/src/test/regress/expected/rangetypes.out
++++ /mnt/data1/postgres/src/test/regress/results/rangetypes.out
+@@ -5,1500 +5,1041 @@
+ --
+ -- negative tests; should fail
+ select ''::textrange;
+-ERROR:  malformed range literal: ""
+-LINE 1: select ''::textrange;
+-               ^
+-DETAIL:  Missing left parenthesis or bracket.
++ERROR:  type "textrange" does not exist
+ select '-[a,z)'::textrange;
+-ERROR:  malformed range literal: "-[a,z)"
+-LINE 1: select '-[a,z)'::textrange;
+-               ^
+-DETAIL:  Missing left parenthesis or bracket.
++ERROR:  type "textrange" does not exist
+ select '[a,z) - '::textrange;
+-ERROR:  malformed range literal: "[a,z) - "
+-LINE 1: select '[a,z) - '::textrange;
+-               ^
+-DETAIL:  Junk after right parenthesis or bracket.
++ERROR:  type "textrange" does not exist
+ select '(",a)'::textrange;
+-ERROR:  malformed range literal: "(",a)"
+-LINE 1: select '(",a)'::textrange;
+-               ^
+-DETAIL:  Unexpected end of input.
++ERROR:  type "textrange" does not exist
+ select '(,,a)'::textrange;
+-ERROR:  malformed range literal: "(,,a)"
+-LINE 1: select '(,,a)'::textrange;
+-               ^
+-DETAIL:  Too many commas.
++ERROR:  type "textrange" does not exist
+ select '(),a)'::textrange;
+-ERROR:  malformed range literal: "(),a)"
+-LINE 1: select '(),a)'::textrange;
+-               ^
+-DETAIL:  Missing comma after lower bound.
++ERROR:  type "textrange" does not exist
+ select '(a,))'::textrange;
+-ERROR:  malformed range literal: "(a,))"
+-LINE 1: select '(a,))'::textrange;
+-               ^
+-DETAIL:  Junk after right parenthesis or bracket.
++ERROR:  type "textrange" does not exist
+ select '(],a)'::textrange;
+-ERROR:  malformed range literal: "(],a)"
+-LINE 1: select '(],a)'::textrange;
+-               ^
+-DETAIL:  Missing comma after lower bound.
++ERROR:  type "textrange" does not exist
+ select '(a,])'::textrange;
+-ERROR:  malformed range literal: "(a,])"
+-LINE 1: select '(a,])'::textrange;
+-               ^
+-DETAIL:  Junk after right parenthesis or bracket.
++ERROR:  type "textrange" does not exist
+ select '[z,a]'::textrange;
+-ERROR:  range lower bound must be less than or equal to range upper bound
+-LINE 1: select '[z,a]'::textrange;
+-               ^
++ERROR:  type "textrange" does not exist
+ -- should succeed
+ select '  empty  '::textrange;
+- textrange 
+------------
+- empty
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select ' ( empty, empty )  '::textrange;
+-      textrange       
+-----------------------
+- (" empty"," empty ")
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select ' ( " a " " a ", " z " " z " )  '::textrange;
+-        textrange         
+---------------------------
+- ("  a   a ","  z   z  ")
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '(a,)'::textrange;
+- textrange 
+------------
+- (a,)
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '[,z]'::textrange;
+- textrange 
+------------
+- (,z]
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '[a,]'::textrange;
+- textrange 
+------------
+- [a,)
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '(,)'::textrange;
+- textrange 
+------------
+- (,)
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '[ , ]'::textrange;
+- textrange 
+------------
+- [" "," "]
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '["",""]'::textrange;
+- textrange 
+------------
+- ["",""]
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '[",",","]'::textrange;
+- textrange 
+------------
+- [",",","]
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '["\\","\\"]'::textrange;
+-  textrange  
+--------------
+- ["\\","\\"]
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '(\\,a)'::textrange;
+- textrange 
+------------
+- ("\\",a)
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '((,z)'::textrange;
+- textrange 
+------------
+- ("(",z)
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '([,z)'::textrange;
+- textrange 
+------------
+- ("[",z)
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '(!,()'::textrange;
+- textrange 
+------------
+- (!,"(")
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '(!,[)'::textrange;
+- textrange 
+------------
+- (!,"[")
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '[a,a]'::textrange;
+- textrange 
+------------
+- [a,a]
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ -- these are allowed but normalize to empty:
+ select '[a,a)'::textrange;
+- textrange 
+------------
+- empty
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '(a,a]'::textrange;
+- textrange 
+------------
+- empty
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ select '(a,a)'::textrange;
+- textrange 
+------------
+- empty
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ -- Also try it with non-error-throwing API
+ select pg_input_is_valid('(1,4)', 'int4range');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select pg_input_is_valid('(1,4', 'int4range');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select * from pg_input_error_info('(1,4', 'int4range');
+-             message             |          detail          | hint | sql_error_code 
+----------------------------------+--------------------------+------+----------------
+- malformed range literal: "(1,4" | Unexpected end of input. |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ select pg_input_is_valid('(4,1)', 'int4range');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select * from pg_input_error_info('(4,1)', 'int4range');
+-                              message                              | detail | hint | sql_error_code 
+--------------------------------------------------------------------+--------+------+----------------
+- range lower bound must be less than or equal to range upper bound |        |      | 22000
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ select pg_input_is_valid('(4,zed)', 'int4range');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select * from pg_input_error_info('(4,zed)', 'int4range');
+-                   message                    | detail | hint | sql_error_code 
+-----------------------------------------------+--------+------+----------------
+- invalid input syntax for type integer: "zed" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ select pg_input_is_valid('[1,2147483647]', 'int4range');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select * from pg_input_error_info('[1,2147483647]', 'int4range');
+-       message        | detail | hint | sql_error_code 
+-----------------------+--------+------+----------------
+- integer out of range |        |      | 22003
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ select pg_input_is_valid('[2000-01-01,5874897-12-31]', 'daterange');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select * from pg_input_error_info('[2000-01-01,5874897-12-31]', 'daterange');
+-      message      | detail | hint | sql_error_code 
+--------------------+--------+------+----------------
+- date out of range |        |      | 22008
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ --
+ -- create some test data and test the operators
+ --
+ CREATE TABLE numrange_test (nr NUMRANGE);
++ERROR:  type "numrange" does not exist
+ create index numrange_test_btree on numrange_test(nr);
++ERROR:  relation "numrange_test" does not exist
+ INSERT INTO numrange_test VALUES('[,)');
++ERROR:  relation "numrange_test" does not exist
+ INSERT INTO numrange_test VALUES('[3,]');
++ERROR:  relation "numrange_test" does not exist
+ INSERT INTO numrange_test VALUES('[, 5)');
++ERROR:  relation "numrange_test" does not exist
+ INSERT INTO numrange_test VALUES(numrange(1.1, 2.2));
++ERROR:  relation "numrange_test" does not exist
+ INSERT INTO numrange_test VALUES('empty');
++ERROR:  relation "numrange_test" does not exist
+ INSERT INTO numrange_test VALUES(numrange(1.7, 1.7, '[]'));
++ERROR:  relation "numrange_test" does not exist
+ SELECT nr, isempty(nr), lower(nr), upper(nr) FROM numrange_test;
+-    nr     | isempty | lower | upper 
+------------+---------+-------+-------
+- (,)       | f       |       |      
+- [3,)      | f       |     3 |      
+- (,5)      | f       |       |     5
+- [1.1,2.2) | f       |   1.1 |   2.2
+- empty     | t       |       |      
+- [1.7,1.7] | f       |   1.7 |   1.7
+-(6 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ SELECT nr, lower_inc(nr), lower_inf(nr), upper_inc(nr), upper_inf(nr) FROM numrange_test;
+-    nr     | lower_inc | lower_inf | upper_inc | upper_inf 
+------------+-----------+-----------+-----------+-----------
+- (,)       | f         | t         | f         | t
+- [3,)      | t         | f         | f         | t
+- (,5)      | f         | t         | f         | f
+- [1.1,2.2) | t         | f         | f         | f
+- empty     | f         | f         | f         | f
+- [1.7,1.7] | t         | f         | t         | f
+-(6 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ SELECT * FROM numrange_test WHERE range_contains(nr, numrange(1.9,1.91));
+-    nr     
+------------
+- (,)
+- (,5)
+- [1.1,2.2)
+-(3 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ SELECT * FROM numrange_test WHERE nr @> numrange(1.0,10000.1);
+- nr  
+------
+- (,)
+-(1 row)
+-
++ERROR:  relation "numrange_test" does not exist
+ SELECT * FROM numrange_test WHERE range_contained_by(numrange(-1e7,-10000.1), nr);
+-  nr  
+-------
+- (,)
+- (,5)
+-(2 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ SELECT * FROM numrange_test WHERE 1.9 <@ nr;
+-    nr     
+------------
+- (,)
+- (,5)
+- [1.1,2.2)
+-(3 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr = 'empty';
+-  nr   
+--------
+- empty
+-(1 row)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr = '(1.1, 2.2)';
+- nr 
+-----
+-(0 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr = '[1.1, 2.2)';
+-    nr     
+------------
+- [1.1,2.2)
+-(1 row)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr < 'empty';
+- nr 
+-----
+-(0 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr < numrange(-1000.0, -1000.0,'[]');
+-  nr   
+--------
+- (,)
+- (,5)
+- empty
+-(3 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr < numrange(0.0, 1.0,'[]');
+-  nr   
+--------
+- (,)
+- (,5)
+- empty
+-(3 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr < numrange(1000.0, 1001.0,'[]');
+-    nr     
+------------
+- (,)
+- [3,)
+- (,5)
+- [1.1,2.2)
+- empty
+- [1.7,1.7]
+-(6 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr <= 'empty';
+-  nr   
+--------
+- empty
+-(1 row)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr >= 'empty';
+-    nr     
+------------
+- (,)
+- [3,)
+- (,5)
+- [1.1,2.2)
+- empty
+- [1.7,1.7]
+-(6 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr > 'empty';
+-    nr     
+------------
+- (,)
+- [3,)
+- (,5)
+- [1.1,2.2)
+- [1.7,1.7]
+-(5 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr > numrange(-1001.0, -1000.0,'[]');
+-    nr     
+------------
+- [3,)
+- [1.1,2.2)
+- [1.7,1.7]
+-(3 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr > numrange(0.0, 1.0,'[]');
+-    nr     
+------------
+- [3,)
+- [1.1,2.2)
+- [1.7,1.7]
+-(3 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ select * from numrange_test where nr > numrange(1000.0, 1000.0,'[]');
+- nr 
+-----
+-(0 rows)
+-
++ERROR:  relation "numrange_test" does not exist
+ select numrange(2.0, 1.0);
+-ERROR:  range lower bound must be less than or equal to range upper bound
++ERROR:  unknown function: numrange()
+ select numrange(2.0, 3.0) -|- numrange(3.0, 4.0);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select numrange(2.0, 3.0) -|- numrange(3.0, 4.0)
++                           ^
+ select range_adjacent(numrange(2.0, 3.0), numrange(3.1, 4.0));
+- range_adjacent 
+-----------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: range_adjacent()
+ select range_adjacent(numrange(2.0, 3.0), numrange(3.1, null));
+- range_adjacent 
+-----------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: range_adjacent()
+ select numrange(2.0, 3.0, '[]') -|- numrange(3.0, 4.0, '()');
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select numrange(2.0, 3.0, '[]') -|- numrange(3.0, 4.0, '()')
++                                 ^
+ select numrange(1.0, 2.0) -|- numrange(2.0, 3.0,'[]');
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select numrange(1.0, 2.0) -|- numrange(2.0, 3.0,'[]')
++                           ^
+ select range_adjacent(numrange(2.0, 3.0, '(]'), numrange(1.0, 2.0, '(]'));
+- range_adjacent 
+-----------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: range_adjacent()
+ select numrange(1.1, 3.3) <@ numrange(0.1,10.1);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(0.1, 10.1) <@ numrange(1.1,3.3);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.1, 2.2) - numrange(2.0, 3.0);
+- ?column?  
+------------
+- [1.1,2.0)
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.1, 2.2) - numrange(2.2, 3.0);
+- ?column?  
+------------
+- [1.1,2.2)
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.1, 2.2,'[]') - numrange(2.0, 3.0);
+- ?column?  
+------------
+- [1.1,2.0)
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select range_minus(numrange(10.1,12.2,'[]'), numrange(110.0,120.2,'(]'));
+- range_minus 
+--------------
+- [10.1,12.2]
+-(1 row)
+-
++ERROR:  unknown function: range_minus()
+ select range_minus(numrange(10.1,12.2,'[]'), numrange(0.0,120.2,'(]'));
+- range_minus 
+--------------
+- empty
+-(1 row)
+-
++ERROR:  unknown function: range_minus()
+ select numrange(4.5, 5.5, '[]') && numrange(5.5, 6.5);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.0, 2.0) << numrange(3.0, 4.0);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.0, 3.0,'[]') << numrange(3.0, 4.0,'[]');
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.0, 3.0,'()') << numrange(3.0, 4.0,'()');
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.0, 2.0) >> numrange(3.0, 4.0);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(3.0, 70.0) &< numrange(6.6, 100.0);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select numrange(3.0, 70.0) &< numrange(6.6, 100.0)
++                            ^
+ select numrange(1.1, 2.2) < numrange(1.0, 200.2);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.1, 2.2) < numrange(1.1, 1.2);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.0, 2.0) + numrange(2.0, 3.0);
+- ?column?  
+------------
+- [1.0,3.0)
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.0, 2.0) + numrange(1.5, 3.0);
+- ?column?  
+------------
+- [1.0,3.0)
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.0, 2.0) + numrange(2.5, 3.0); -- should fail
+-ERROR:  result of range union would not be contiguous
++ERROR:  unknown function: numrange()
+ select range_merge(numrange(1.0, 2.0), numrange(2.0, 3.0));
+- range_merge 
+--------------
+- [1.0,3.0)
+-(1 row)
+-
++ERROR:  unknown function: range_merge()
+ select range_merge(numrange(1.0, 2.0), numrange(1.5, 3.0));
+- range_merge 
+--------------
+- [1.0,3.0)
+-(1 row)
+-
++ERROR:  unknown function: range_merge()
+ select range_merge(numrange(1.0, 2.0), numrange(2.5, 3.0)); -- shouldn't fail
+- range_merge 
+--------------
+- [1.0,3.0)
+-(1 row)
+-
++ERROR:  unknown function: range_merge()
+ select numrange(1.0, 2.0) * numrange(2.0, 3.0);
+- ?column? 
+-----------
+- empty
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.0, 2.0) * numrange(1.5, 3.0);
+- ?column?  
+------------
+- [1.5,2.0)
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1.0, 2.0) * numrange(2.5, 3.0);
+- ?column? 
+-----------
+- empty
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select range_intersect_agg(nr) from numrange_test;
+- range_intersect_agg 
+----------------------
+- empty
+-(1 row)
+-
++ERROR:  relation "numrange_test" does not exist
+ select range_intersect_agg(nr) from numrange_test where false;
+- range_intersect_agg 
+----------------------
+- 
+-(1 row)
+-
++ERROR:  relation "numrange_test" does not exist
+ select range_intersect_agg(nr) from numrange_test where nr @> 4.0;
+- range_intersect_agg 
+----------------------
+- [3,5)
+-(1 row)
+-
++ERROR:  relation "numrange_test" does not exist
+ analyze numrange_test;
++ERROR:  relation "numrange_test" does not exist
+ create table numrange_test2(nr numrange);
++ERROR:  type "numrange" does not exist
+ create index numrange_test2_hash_idx on numrange_test2 using hash (nr);
++ERROR:  at or near "hash": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create index numrange_test2_hash_idx on numrange_test2 using hash (nr)
++                                                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO numrange_test2 VALUES('[, 5)');
++ERROR:  relation "numrange_test2" does not exist
+ INSERT INTO numrange_test2 VALUES(numrange(1.1, 2.2));
++ERROR:  relation "numrange_test2" does not exist
+ INSERT INTO numrange_test2 VALUES(numrange(1.1, 2.2));
++ERROR:  relation "numrange_test2" does not exist
+ INSERT INTO numrange_test2 VALUES(numrange(1.1, 2.2,'()'));
++ERROR:  relation "numrange_test2" does not exist
+ INSERT INTO numrange_test2 VALUES('empty');
++ERROR:  relation "numrange_test2" does not exist
+ select * from numrange_test2 where nr = 'empty'::numrange;
+-  nr   
+--------
+- empty
+-(1 row)
+-
++ERROR:  relation "numrange_test2" does not exist
+ select * from numrange_test2 where nr = numrange(1.1, 2.2);
+-    nr     
+------------
+- [1.1,2.2)
+- [1.1,2.2)
+-(2 rows)
+-
++ERROR:  relation "numrange_test2" does not exist
+ select * from numrange_test2 where nr = numrange(1.1, 2.3);
+- nr 
+-----
+-(0 rows)
+-
++ERROR:  relation "numrange_test2" does not exist
+ set enable_nestloop=t;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_hashjoin=f;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_mergejoin=f;
+-select * from numrange_test natural join numrange_test2 order by nr;
+-    nr     
+------------
+- empty
+- (,5)
+- [1.1,2.2)
+- [1.1,2.2)
+-(4 rows)
++ERROR:  unimplemented: the configuration setting "enable_mergejoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
++select * from numrange_test natural join numrange_test2 order by nr;
++ERROR:  relation "numrange_test" does not exist
+ set enable_nestloop=f;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_hashjoin=t;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_mergejoin=f;
+-select * from numrange_test natural join numrange_test2 order by nr;
+-    nr     
+------------
+- empty
+- (,5)
+- [1.1,2.2)
+- [1.1,2.2)
+-(4 rows)
++ERROR:  unimplemented: the configuration setting "enable_mergejoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++select * from numrange_test natural join numrange_test2 order by nr;
++ERROR:  relation "numrange_test" does not exist
+ set enable_nestloop=f;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_hashjoin=f;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_mergejoin=t;
+-select * from numrange_test natural join numrange_test2 order by nr;
+-    nr     
+------------
+- empty
+- (,5)
+- [1.1,2.2)
+- [1.1,2.2)
+-(4 rows)
++ERROR:  unimplemented: the configuration setting "enable_mergejoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++select * from numrange_test natural join numrange_test2 order by nr;
++ERROR:  relation "numrange_test" does not exist
+ set enable_nestloop to default;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_hashjoin to default;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_mergejoin to default;
++ERROR:  unimplemented: the configuration setting "enable_mergejoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- keep numrange_test around to help exercise dump/reload
+ DROP TABLE numrange_test2;
++ERROR:  relation "numrange_test2" does not exist
+ --
+ -- Apply a subset of the above tests on a collatable type, too
+ --
+ CREATE TABLE textrange_test (tr textrange);
++ERROR:  type "textrange" does not exist
+ create index textrange_test_btree on textrange_test(tr);
++ERROR:  relation "textrange_test" does not exist
+ INSERT INTO textrange_test VALUES('[,)');
++ERROR:  relation "textrange_test" does not exist
+ INSERT INTO textrange_test VALUES('["a",]');
++ERROR:  relation "textrange_test" does not exist
+ INSERT INTO textrange_test VALUES('[,"q")');
++ERROR:  relation "textrange_test" does not exist
+ INSERT INTO textrange_test VALUES(textrange('b', 'g'));
++ERROR:  relation "textrange_test" does not exist
+ INSERT INTO textrange_test VALUES('empty');
++ERROR:  relation "textrange_test" does not exist
+ INSERT INTO textrange_test VALUES(textrange('d', 'd', '[]'));
++ERROR:  relation "textrange_test" does not exist
+ SELECT tr, isempty(tr), lower(tr), upper(tr) FROM textrange_test;
+-  tr   | isempty | lower | upper 
+--------+---------+-------+-------
+- (,)   | f       |       | 
+- [a,)  | f       | a     | 
+- (,q)  | f       |       | q
+- [b,g) | f       | b     | g
+- empty | t       |       | 
+- [d,d] | f       | d     | d
+-(6 rows)
+-
++ERROR:  relation "textrange_test" does not exist
+ SELECT tr, lower_inc(tr), lower_inf(tr), upper_inc(tr), upper_inf(tr) FROM textrange_test;
+-  tr   | lower_inc | lower_inf | upper_inc | upper_inf 
+--------+-----------+-----------+-----------+-----------
+- (,)   | f         | t         | f         | t
+- [a,)  | t         | f         | f         | t
+- (,q)  | f         | t         | f         | f
+- [b,g) | t         | f         | f         | f
+- empty | f         | f         | f         | f
+- [d,d] | t         | f         | t         | f
+-(6 rows)
+-
++ERROR:  relation "textrange_test" does not exist
+ SELECT * FROM textrange_test WHERE range_contains(tr, textrange('f', 'fx'));
+-  tr   
+--------
+- (,)
+- [a,)
+- (,q)
+- [b,g)
+-(4 rows)
+-
++ERROR:  relation "textrange_test" does not exist
+ SELECT * FROM textrange_test WHERE tr @> textrange('a', 'z');
+-  tr  
+-------
+- (,)
+- [a,)
+-(2 rows)
+-
++ERROR:  relation "textrange_test" does not exist
+ SELECT * FROM textrange_test WHERE range_contained_by(textrange('0','9'), tr);
+-  tr  
+-------
+- (,)
+- (,q)
+-(2 rows)
+-
++ERROR:  relation "textrange_test" does not exist
+ SELECT * FROM textrange_test WHERE 'e'::text <@ tr;
+-  tr   
+--------
+- (,)
+- [a,)
+- (,q)
+- [b,g)
+-(4 rows)
+-
++ERROR:  relation "textrange_test" does not exist
+ select * from textrange_test where tr = 'empty';
+-  tr   
+--------
+- empty
+-(1 row)
+-
++ERROR:  relation "textrange_test" does not exist
+ select * from textrange_test where tr = '("b","g")';
+- tr 
+-----
+-(0 rows)
+-
++ERROR:  relation "textrange_test" does not exist
+ select * from textrange_test where tr = '["b","g")';
+-  tr   
+--------
+- [b,g)
+-(1 row)
+-
++ERROR:  relation "textrange_test" does not exist
+ select * from textrange_test where tr < 'empty';
+- tr 
+-----
+-(0 rows)
+-
++ERROR:  relation "textrange_test" does not exist
+ -- test canonical form for int4range
+ select int4range(1, 10, '[]');
+- int4range 
+------------
+- [1,11)
+-(1 row)
+-
++ERROR:  unknown function: int4range()
+ select int4range(1, 10, '[)');
+- int4range 
+------------
+- [1,10)
+-(1 row)
+-
++ERROR:  unknown function: int4range()
+ select int4range(1, 10, '(]');
+- int4range 
+------------
+- [2,11)
+-(1 row)
+-
++ERROR:  unknown function: int4range()
+ select int4range(1, 10, '()');
+- int4range 
+------------
+- [2,10)
+-(1 row)
+-
++ERROR:  unknown function: int4range()
+ select int4range(1, 2, '()');
+- int4range 
+------------
+- empty
+-(1 row)
+-
++ERROR:  unknown function: int4range()
+ -- test canonical form for daterange
+ select daterange('2000-01-10'::date, '2000-01-20'::date, '[]');
+-        daterange        
+--------------------------
+- [01-10-2000,01-21-2000)
+-(1 row)
+-
++ERROR:  unknown function: daterange()
+ select daterange('2000-01-10'::date, '2000-01-20'::date, '[)');
+-        daterange        
+--------------------------
+- [01-10-2000,01-20-2000)
+-(1 row)
+-
++ERROR:  unknown function: daterange()
+ select daterange('2000-01-10'::date, '2000-01-20'::date, '(]');
+-        daterange        
+--------------------------
+- [01-11-2000,01-21-2000)
+-(1 row)
+-
++ERROR:  unknown function: daterange()
+ select daterange('2000-01-10'::date, '2000-01-20'::date, '()');
+-        daterange        
+--------------------------
+- [01-11-2000,01-20-2000)
+-(1 row)
+-
++ERROR:  unknown function: daterange()
+ select daterange('2000-01-10'::date, '2000-01-11'::date, '()');
+- daterange 
+------------
+- empty
+-(1 row)
+-
++ERROR:  unknown function: daterange()
+ select daterange('2000-01-10'::date, '2000-01-11'::date, '(]');
+-        daterange        
+--------------------------
+- [01-11-2000,01-12-2000)
+-(1 row)
+-
++ERROR:  unknown function: daterange()
+ select daterange('-infinity'::date, '2000-01-01'::date, '()');
+-       daterange        
+-------------------------
+- (-infinity,01-01-2000)
+-(1 row)
+-
++ERROR:  unknown function: daterange()
+ select daterange('-infinity'::date, '2000-01-01'::date, '[)');
+-       daterange        
+-------------------------
+- [-infinity,01-01-2000)
+-(1 row)
+-
++ERROR:  unknown function: daterange()
+ select daterange('2000-01-01'::date, 'infinity'::date, '[)');
+-       daterange       
+------------------------
+- [01-01-2000,infinity)
+-(1 row)
+-
++ERROR:  unknown function: daterange()
+ select daterange('2000-01-01'::date, 'infinity'::date, '[]');
+-       daterange       
+------------------------
+- [01-01-2000,infinity]
+-(1 row)
+-
++ERROR:  unknown function: daterange()
+ -- test GiST index that's been built incrementally
+ create table test_range_gist(ir int4range);
++ERROR:  type "int4range" does not exist
+ create index test_range_gist_idx on test_range_gist using gist (ir);
++ERROR:  relation "test_range_gist" does not exist
+ insert into test_range_gist select int4range(g, g+10) from generate_series(1,2000) g;
++ERROR:  relation "test_range_gist" does not exist
+ insert into test_range_gist select 'empty'::int4range from generate_series(1,500) g;
++ERROR:  relation "test_range_gist" does not exist
+ insert into test_range_gist select int4range(g, g+10000) from generate_series(1,1000) g;
++ERROR:  relation "test_range_gist" does not exist
+ insert into test_range_gist select 'empty'::int4range from generate_series(1,500) g;
++ERROR:  relation "test_range_gist" does not exist
+ insert into test_range_gist select int4range(NULL,g*10,'(]') from generate_series(1,100) g;
++ERROR:  relation "test_range_gist" does not exist
+ insert into test_range_gist select int4range(g*10,NULL,'(]') from generate_series(1,100) g;
++ERROR:  relation "test_range_gist" does not exist
+ insert into test_range_gist select int4range(g, g+10) from generate_series(1,2000) g;
++ERROR:  relation "test_range_gist" does not exist
+ -- test statistics and selectivity estimation as well
+ --
+ -- We don't check the accuracy of selectivity estimation, but at least check
+ -- it doesn't fall.
+ analyze test_range_gist;
++ERROR:  relation "test_range_gist" does not exist
+ -- first, verify non-indexed results
+ SET enable_seqscan    = t;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET enable_indexscan  = f;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET enable_bitmapscan = f;
+-select count(*) from test_range_gist where ir @> 'empty'::int4range;
+- count 
+--------
+-  6200
+-(1 row)
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
+-select count(*) from test_range_gist where ir = int4range(10,20);
+- count 
+--------
+-     2
+-(1 row)
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
+-select count(*) from test_range_gist where ir @> 10;
+- count 
+--------
+-   130
+-(1 row)
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
+-select count(*) from test_range_gist where ir @> int4range(10,20);
+- count 
+--------
+-   111
+-(1 row)
++We appreciate your feedback.
+ 
++select count(*) from test_range_gist where ir @> 'empty'::int4range;
++ERROR:  relation "test_range_gist" does not exist
++select count(*) from test_range_gist where ir = int4range(10,20);
++ERROR:  relation "test_range_gist" does not exist
++select count(*) from test_range_gist where ir @> 10;
++ERROR:  relation "test_range_gist" does not exist
++select count(*) from test_range_gist where ir @> int4range(10,20);
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir && int4range(10,20);
+- count 
+--------
+-   158
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir <@ int4range(10,50);
+- count 
+--------
+-  1062
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir << int4range(100,500);
+- count 
+--------
+-   189
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir >> int4range(100,500);
+- count 
+--------
+-  3554
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir &< int4range(100,500);
+- count 
+--------
+-  1029
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir &< int4range(100,500)
++                                               ^
+ select count(*) from test_range_gist where ir &> int4range(100,500);
+- count 
+--------
+-  4794
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir &> int4range(100,500)
++                                               ^
+ select count(*) from test_range_gist where ir -|- int4range(100,500);
+- count 
+--------
+-     5
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir -|- int4range(100,500)
++                                               ^
+ select count(*) from test_range_gist where ir @> '{}'::int4multirange;
+- count 
+--------
+-  6200
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir @> int4multirange(int4range(10,20), int4range(30,40));
+- count 
+--------
+-   107
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir && '{(10,20),(30,40),(50,60)}'::int4multirange;
+- count 
+--------
+-   271
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir <@ '{(10,30),(40,60),(70,90)}'::int4multirange;
+- count 
+--------
+-  1060
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir << int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-   189
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir >> int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  3554
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir &< int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  1029
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir &< int4multirange(int4range(100,200), int4range(400,500))
++                                               ^
+ select count(*) from test_range_gist where ir &> int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  4794
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir &> int4multirange(int4range(100,200), int4range(400,500))
++                                               ^
+ select count(*) from test_range_gist where ir -|- int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-     5
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir -|- int4multirange(int4range(100,200), int4range(400,500))
++                                               ^
+ -- now check same queries using index
+ SET enable_seqscan    = f;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET enable_indexscan  = t;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET enable_bitmapscan = f;
+-select count(*) from test_range_gist where ir @> 'empty'::int4range;
+- count 
+--------
+-  6200
+-(1 row)
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
+-select count(*) from test_range_gist where ir = int4range(10,20);
+- count 
+--------
+-     2
+-(1 row)
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
+-select count(*) from test_range_gist where ir @> 10;
+- count 
+--------
+-   130
+-(1 row)
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
+-select count(*) from test_range_gist where ir @> int4range(10,20);
+- count 
+--------
+-   111
+-(1 row)
++We appreciate your feedback.
+ 
++select count(*) from test_range_gist where ir @> 'empty'::int4range;
++ERROR:  relation "test_range_gist" does not exist
++select count(*) from test_range_gist where ir = int4range(10,20);
++ERROR:  relation "test_range_gist" does not exist
++select count(*) from test_range_gist where ir @> 10;
++ERROR:  relation "test_range_gist" does not exist
++select count(*) from test_range_gist where ir @> int4range(10,20);
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir && int4range(10,20);
+- count 
+--------
+-   158
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir <@ int4range(10,50);
+- count 
+--------
+-  1062
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir << int4range(100,500);
+- count 
+--------
+-   189
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir >> int4range(100,500);
+- count 
+--------
+-  3554
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir &< int4range(100,500);
+- count 
+--------
+-  1029
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir &< int4range(100,500)
++                                               ^
+ select count(*) from test_range_gist where ir &> int4range(100,500);
+- count 
+--------
+-  4794
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir &> int4range(100,500)
++                                               ^
+ select count(*) from test_range_gist where ir -|- int4range(100,500);
+- count 
+--------
+-     5
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir -|- int4range(100,500)
++                                               ^
+ select count(*) from test_range_gist where ir @> '{}'::int4multirange;
+- count 
+--------
+-  6200
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir @> int4multirange(int4range(10,20), int4range(30,40));
+- count 
+--------
+-   107
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir && '{(10,20),(30,40),(50,60)}'::int4multirange;
+- count 
+--------
+-   271
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir <@ '{(10,30),(40,60),(70,90)}'::int4multirange;
+- count 
+--------
+-  1060
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir << int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-   189
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir >> int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  3554
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir &< int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  1029
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir &< int4multirange(int4range(100,200), int4range(400,500))
++                                               ^
+ select count(*) from test_range_gist where ir &> int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  4794
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir &> int4multirange(int4range(100,200), int4range(400,500))
++                                               ^
+ select count(*) from test_range_gist where ir -|- int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-     5
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir -|- int4multirange(int4range(100,200), int4range(400,500))
++                                               ^
+ -- now check same queries using a bulk-loaded index
+ drop index test_range_gist_idx;
++ERROR:  index "test_range_gist_idx" does not exist
+ create index test_range_gist_idx on test_range_gist using gist (ir);
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir @> 'empty'::int4range;
+- count 
+--------
+-  6200
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir = int4range(10,20);
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir @> 10;
+- count 
+--------
+-   130
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir @> int4range(10,20);
+- count 
+--------
+-   111
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir && int4range(10,20);
+- count 
+--------
+-   158
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir <@ int4range(10,50);
+- count 
+--------
+-  1062
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir << int4range(100,500);
+- count 
+--------
+-   189
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir >> int4range(100,500);
+- count 
+--------
+-  3554
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir &< int4range(100,500);
+- count 
+--------
+-  1029
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir &< int4range(100,500)
++                                               ^
+ select count(*) from test_range_gist where ir &> int4range(100,500);
+- count 
+--------
+-  4794
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir &> int4range(100,500)
++                                               ^
+ select count(*) from test_range_gist where ir -|- int4range(100,500);
+- count 
+--------
+-     5
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir -|- int4range(100,500)
++                                               ^
+ select count(*) from test_range_gist where ir @> '{}'::int4multirange;
+- count 
+--------
+-  6200
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir @> int4multirange(int4range(10,20), int4range(30,40));
+- count 
+--------
+-   107
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir && '{(10,20),(30,40),(50,60)}'::int4multirange;
+- count 
+--------
+-   271
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir <@ '{(10,30),(40,60),(70,90)}'::int4multirange;
+- count 
+--------
+-  1060
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir << int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-   189
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir >> int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  3554
+-(1 row)
+-
++ERROR:  relation "test_range_gist" does not exist
+ select count(*) from test_range_gist where ir &< int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  1029
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir &< int4multirange(int4range(100,200), int4range(400,500))
++                                               ^
+ select count(*) from test_range_gist where ir &> int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  4794
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir &> int4multirange(int4range(100,200), int4range(400,500))
++                                               ^
+ select count(*) from test_range_gist where ir -|- int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-     5
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_gist where ir -|- int4multirange(int4range(100,200), int4range(400,500))
++                                               ^
+ -- test SP-GiST index that's been built incrementally
+ create table test_range_spgist(ir int4range);
++ERROR:  type "int4range" does not exist
+ create index test_range_spgist_idx on test_range_spgist using spgist (ir);
++ERROR:  at or near "spgist": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create index test_range_spgist_idx on test_range_spgist using spgist (ir)
++                                                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ insert into test_range_spgist select int4range(g, g+10) from generate_series(1,2000) g;
++ERROR:  relation "test_range_spgist" does not exist
+ insert into test_range_spgist select 'empty'::int4range from generate_series(1,500) g;
++ERROR:  relation "test_range_spgist" does not exist
+ insert into test_range_spgist select int4range(g, g+10000) from generate_series(1,1000) g;
++ERROR:  relation "test_range_spgist" does not exist
+ insert into test_range_spgist select 'empty'::int4range from generate_series(1,500) g;
++ERROR:  relation "test_range_spgist" does not exist
+ insert into test_range_spgist select int4range(NULL,g*10,'(]') from generate_series(1,100) g;
++ERROR:  relation "test_range_spgist" does not exist
+ insert into test_range_spgist select int4range(g*10,NULL,'(]') from generate_series(1,100) g;
++ERROR:  relation "test_range_spgist" does not exist
+ insert into test_range_spgist select int4range(g, g+10) from generate_series(1,2000) g;
++ERROR:  relation "test_range_spgist" does not exist
+ -- first, verify non-indexed results
+ SET enable_seqscan    = t;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET enable_indexscan  = f;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET enable_bitmapscan = f;
+-select count(*) from test_range_spgist where ir @> 'empty'::int4range;
+- count 
+--------
+-  6200
+-(1 row)
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
+-select count(*) from test_range_spgist where ir = int4range(10,20);
+- count 
+--------
+-     2
+-(1 row)
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
+-select count(*) from test_range_spgist where ir @> 10;
+- count 
+--------
+-   130
+-(1 row)
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
+-select count(*) from test_range_spgist where ir @> int4range(10,20);
+- count 
+--------
+-   111
+-(1 row)
++We appreciate your feedback.
+ 
++select count(*) from test_range_spgist where ir @> 'empty'::int4range;
++ERROR:  relation "test_range_spgist" does not exist
++select count(*) from test_range_spgist where ir = int4range(10,20);
++ERROR:  relation "test_range_spgist" does not exist
++select count(*) from test_range_spgist where ir @> 10;
++ERROR:  relation "test_range_spgist" does not exist
++select count(*) from test_range_spgist where ir @> int4range(10,20);
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir && int4range(10,20);
+- count 
+--------
+-   158
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir <@ int4range(10,50);
+- count 
+--------
+-  1062
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir << int4range(100,500);
+- count 
+--------
+-   189
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir >> int4range(100,500);
+- count 
+--------
+-  3554
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir &< int4range(100,500);
+- count 
+--------
+-  1029
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_spgist where ir &< int4range(100,500)
++                                                 ^
+ select count(*) from test_range_spgist where ir &> int4range(100,500);
+- count 
+--------
+-  4794
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_spgist where ir &> int4range(100,500)
++                                                 ^
+ select count(*) from test_range_spgist where ir -|- int4range(100,500);
+- count 
+--------
+-     5
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_spgist where ir -|- int4range(100,500)
++                                                 ^
+ -- now check same queries using index
+ SET enable_seqscan    = f;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET enable_indexscan  = t;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET enable_bitmapscan = f;
+-select count(*) from test_range_spgist where ir @> 'empty'::int4range;
+- count 
+--------
+-  6200
+-(1 row)
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
+-select count(*) from test_range_spgist where ir = int4range(10,20);
+- count 
+--------
+-     2
+-(1 row)
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
+-select count(*) from test_range_spgist where ir @> 10;
+- count 
+--------
+-   130
+-(1 row)
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
+-select count(*) from test_range_spgist where ir @> int4range(10,20);
+- count 
+--------
+-   111
+-(1 row)
++We appreciate your feedback.
+ 
++select count(*) from test_range_spgist where ir @> 'empty'::int4range;
++ERROR:  relation "test_range_spgist" does not exist
++select count(*) from test_range_spgist where ir = int4range(10,20);
++ERROR:  relation "test_range_spgist" does not exist
++select count(*) from test_range_spgist where ir @> 10;
++ERROR:  relation "test_range_spgist" does not exist
++select count(*) from test_range_spgist where ir @> int4range(10,20);
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir && int4range(10,20);
+- count 
+--------
+-   158
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir <@ int4range(10,50);
+- count 
+--------
+-  1062
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir << int4range(100,500);
+- count 
+--------
+-   189
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir >> int4range(100,500);
+- count 
+--------
+-  3554
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir &< int4range(100,500);
+- count 
+--------
+-  1029
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_spgist where ir &< int4range(100,500)
++                                                 ^
+ select count(*) from test_range_spgist where ir &> int4range(100,500);
+- count 
+--------
+-  4794
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_spgist where ir &> int4range(100,500)
++                                                 ^
+ select count(*) from test_range_spgist where ir -|- int4range(100,500);
+- count 
+--------
+-     5
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_spgist where ir -|- int4range(100,500)
++                                                 ^
+ -- now check same queries using a bulk-loaded index
+ drop index test_range_spgist_idx;
++ERROR:  index "test_range_spgist_idx" does not exist
+ create index test_range_spgist_idx on test_range_spgist using spgist (ir);
+-select count(*) from test_range_spgist where ir @> 'empty'::int4range;
+- count 
+--------
+-  6200
+-(1 row)
++ERROR:  at or near "spgist": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create index test_range_spgist_idx on test_range_spgist using spgist (ir)
++                                                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
+-select count(*) from test_range_spgist where ir = int4range(10,20);
+- count 
+--------
+-     2
+-(1 row)
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
+-select count(*) from test_range_spgist where ir @> 10;
+- count 
+--------
+-   130
+-(1 row)
++We appreciate your feedback.
+ 
++select count(*) from test_range_spgist where ir @> 'empty'::int4range;
++ERROR:  relation "test_range_spgist" does not exist
++select count(*) from test_range_spgist where ir = int4range(10,20);
++ERROR:  relation "test_range_spgist" does not exist
++select count(*) from test_range_spgist where ir @> 10;
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir @> int4range(10,20);
+- count 
+--------
+-   111
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir && int4range(10,20);
+- count 
+--------
+-   158
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir <@ int4range(10,50);
+- count 
+--------
+-  1062
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir << int4range(100,500);
+- count 
+--------
+-   189
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir >> int4range(100,500);
+- count 
+--------
+-  3554
+-(1 row)
+-
++ERROR:  relation "test_range_spgist" does not exist
+ select count(*) from test_range_spgist where ir &< int4range(100,500);
+- count 
+--------
+-  1029
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_spgist where ir &< int4range(100,500)
++                                                 ^
+ select count(*) from test_range_spgist where ir &> int4range(100,500);
+- count 
+--------
+-  4794
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_spgist where ir &> int4range(100,500)
++                                                 ^
+ select count(*) from test_range_spgist where ir -|- int4range(100,500);
+- count 
+--------
+-     5
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_range_spgist where ir -|- int4range(100,500)
++                                                 ^
+ -- test index-only scans
+ explain (costs off)
+ select ir from test_range_spgist where ir -|- int4range(10,20) order by ir;
+-                               QUERY PLAN                               
+-------------------------------------------------------------------------
+- Sort
+-   Sort Key: ir
+-   ->  Index Only Scan using test_range_spgist_idx on test_range_spgist
+-         Index Cond: (ir -|- '[10,20)'::int4range)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select ir from test_range_spgist where ir -|- int4range(10,20) order by ir;
+-     ir     
+-------------
+- [20,30)
+- [20,30)
+- [20,10020)
+-(3 rows)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select ir from test_range_spgist where ir -|- int4range(10,20) order by ir
++                                           ^
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ RESET enable_indexscan;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- test elem <@ range operator
+ create table test_range_elem(i int4);
+ create index test_range_elem_idx on test_range_elem (i);
+ insert into test_range_elem select i from generate_series(1,100) i;
+ SET enable_seqscan    = f;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ select count(*) from test_range_elem where i <@ int4range(10,50);
+- count 
+--------
+-    40
+-(1 row)
+-
++ERROR:  unknown function: int4range()
+ -- also test spgist index on anyrange expression
+ create index on test_range_elem using spgist(int4range(i,i+10));
++ERROR:  at or near "spgist": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create index on test_range_elem using spgist(int4range(i,i+10))
++                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ explain (costs off)
+ select count(*) from test_range_elem where int4range(i,i+10) <@ int4range(10,30);
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Aggregate
+-   ->  Index Scan using test_range_elem_int4range_idx on test_range_elem
+-         Index Cond: (int4range(i, (i + 10)) <@ '[10,30)'::int4range)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from test_range_elem where int4range(i,i+10) <@ int4range(10,30);
+- count 
+--------
+-    11
+-(1 row)
+-
++ERROR:  unknown function: int4range()
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ drop table test_range_elem;
+ --
+ -- Btree_gist is not included by default, so to test exclusion
+@@ -1512,40 +1053,41 @@
+   exclude using gist (room with =, during with &&),
+   exclude using gist (speaker with =, during with &&)
+ );
++ERROR:  at or near "gist": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table test_range_excl(
++  room int4range,
++  speaker int4range,
++  during tsrange,
++  exclude using gist (room with =, during with &&),
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46657/_version_
+ insert into test_range_excl
+   values(int4range(123, 123, '[]'), int4range(1, 1, '[]'), '[2010-01-02 10:00, 2010-01-02 11:00)');
++ERROR:  relation "test_range_excl" does not exist
+ insert into test_range_excl
+   values(int4range(123, 123, '[]'), int4range(2, 2, '[]'), '[2010-01-02 11:00, 2010-01-02 12:00)');
++ERROR:  relation "test_range_excl" does not exist
+ insert into test_range_excl
+   values(int4range(123, 123, '[]'), int4range(3, 3, '[]'), '[2010-01-02 10:10, 2010-01-02 11:00)');
+-ERROR:  conflicting key value violates exclusion constraint "test_range_excl_room_during_excl"
+-DETAIL:  Key (room, during)=([123,124), ["Sat Jan 02 10:10:00 2010","Sat Jan 02 11:00:00 2010")) conflicts with existing key (room, during)=([123,124), ["Sat Jan 02 10:00:00 2010","Sat Jan 02 11:00:00 2010")).
++ERROR:  relation "test_range_excl" does not exist
+ insert into test_range_excl
+   values(int4range(124, 124, '[]'), int4range(3, 3, '[]'), '[2010-01-02 10:10, 2010-01-02 11:10)');
++ERROR:  relation "test_range_excl" does not exist
+ insert into test_range_excl
+   values(int4range(125, 125, '[]'), int4range(1, 1, '[]'), '[2010-01-02 10:10, 2010-01-02 11:00)');
+-ERROR:  conflicting key value violates exclusion constraint "test_range_excl_speaker_during_excl"
+-DETAIL:  Key (speaker, during)=([1,2), ["Sat Jan 02 10:10:00 2010","Sat Jan 02 11:00:00 2010")) conflicts with existing key (speaker, during)=([1,2), ["Sat Jan 02 10:00:00 2010","Sat Jan 02 11:00:00 2010")).
++ERROR:  relation "test_range_excl" does not exist
+ -- test bigint ranges
+ select int8range(10000000000::int8, 20000000000::int8,'(]');
+-         int8range         
+----------------------------
+- [10000000001,20000000001)
+-(1 row)
+-
++ERROR:  unknown function: int8range()
+ -- test tstz ranges
+ set timezone to '-08';
+ select '[2010-01-01 01:00:00 -05, 2010-01-01 02:00:00 -08)'::tstzrange;
+-                            tstzrange                            
+------------------------------------------------------------------
+- ["Thu Dec 31 22:00:00 2009 -08","Fri Jan 01 02:00:00 2010 -08")
+-(1 row)
+-
++ERROR:  type "tstzrange" does not exist
+ -- should fail
+ select '[2010-01-01 01:00:00 -08, 2010-01-01 02:00:00 -05)'::tstzrange;
+-ERROR:  range lower bound must be less than or equal to range upper bound
+-LINE 1: select '[2010-01-01 01:00:00 -08, 2010-01-01 02:00:00 -05)':...
+-               ^
++ERROR:  type "tstzrange" does not exist
+ set timezone to default;
+ --
+ -- Test user-defined range of floats
+@@ -1553,284 +1095,293 @@
+ --
+ --should fail
+ create type bogus_float8range as range (subtype=float8, subtype_diff=float4mi);
+-ERROR:  function float4mi(double precision, double precision) does not exist
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type bogus_float8range as range (subtype=float8, subtype_diff=float4mi)
++                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ select '[123.001, 5.e9)'::float8range @> 888.882::float8;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "float8range" does not exist
+ create table float8range_test(f8r float8range, i int);
++ERROR:  type "float8range" does not exist
+ insert into float8range_test values(float8range(-100.00007, '1.111113e9'), 42);
++ERROR:  relation "float8range_test" does not exist
+ select * from float8range_test;
+-           f8r           | i  
+--------------------------+----
+- [-100.00007,1111113000) | 42
+-(1 row)
+-
++ERROR:  relation "float8range_test" does not exist
+ drop table float8range_test;
++ERROR:  relation "float8range_test" does not exist
+ --
+ -- Test range types over domains
+ --
+ create domain mydomain as int4;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain mydomain as int4
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create type mydomainrange as range(subtype=mydomain);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type mydomainrange as range(subtype=mydomain)
++                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ select '[4,50)'::mydomainrange @> 7::mydomain;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "mydomainrange" does not exist
+ drop domain mydomain;  -- fail
+-ERROR:  cannot drop type mydomain because other objects depend on it
+-DETAIL:  type mydomainrange depends on type mydomain
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  at or near "mydomain": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain mydomain
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain mydomain cascade;
+-NOTICE:  drop cascades to type mydomainrange
++ERROR:  at or near "mydomain": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain mydomain cascade
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ --
+ -- Test domains over range types
+ --
+ create domain restrictedrange as int4range check (upper(value) < 10);
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain restrictedrange as int4range check (upper(value) < 10)
++                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ select '[4,5)'::restrictedrange @> 7;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  type "restrictedrange" does not exist
+ select '[4,50)'::restrictedrange @> 7; -- should fail
+-ERROR:  value for domain restrictedrange violates check constraint "restrictedrange_check"
++ERROR:  type "restrictedrange" does not exist
+ drop domain restrictedrange;
++ERROR:  at or near "restrictedrange": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain restrictedrange
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ --
+ -- Test multiple range types over the same subtype
+ --
+ create type textrange1 as range(subtype=text, collation="C");
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type textrange1 as range(subtype=text, collation="C")
++                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ create type textrange2 as range(subtype=text, collation="C");
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type textrange2 as range(subtype=text, collation="C")
++                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ select textrange1('a','Z') @> 'b'::text;
+-ERROR:  range lower bound must be less than or equal to range upper bound
++ERROR:  unknown function: textrange1()
+ select textrange2('a','z') @> 'b'::text;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: textrange2()
+ drop type textrange1;
++ERROR:  type "textrange1" does not exist
+ drop type textrange2;
++ERROR:  type "textrange2" does not exist
+ --
+ -- Test polymorphic type system
+ --
+ create function anyarray_anyrange_func(a anyarray, r anyrange)
+   returns anyelement as 'select $1[1] + lower($2);' language sql;
++ERROR:  type "anyrange" does not exist
+ select anyarray_anyrange_func(ARRAY[1,2], int4range(10,20));
+- anyarray_anyrange_func 
+-------------------------
+-                     11
+-(1 row)
+-
++ERROR:  unknown function: anyarray_anyrange_func()
+ -- should fail
+ select anyarray_anyrange_func(ARRAY[1,2], numrange(10,20));
+-ERROR:  function anyarray_anyrange_func(integer[], numrange) does not exist
+-LINE 1: select anyarray_anyrange_func(ARRAY[1,2], numrange(10,20));
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  unknown function: anyarray_anyrange_func()
+ drop function anyarray_anyrange_func(anyarray, anyrange);
++ERROR:  unknown function: anyarray_anyrange_func()
+ -- should fail
+ create function bogus_func(anyelement)
+   returns anyrange as 'select int4range(1,10)' language sql;
+-ERROR:  cannot determine result data type
+-DETAIL:  A result of type anyrange requires at least one input of type anyrange or anymultirange.
++ERROR:  type "anyrange" does not exist
+ -- should fail
+ create function bogus_func(int)
+   returns anyrange as 'select int4range(1,10)' language sql;
+-ERROR:  cannot determine result data type
+-DETAIL:  A result of type anyrange requires at least one input of type anyrange or anymultirange.
++ERROR:  type "anyrange" does not exist
+ create function range_add_bounds(anyrange)
+   returns anyelement as 'select lower($1) + upper($1)' language sql;
++ERROR:  type "anyrange" does not exist
+ select range_add_bounds(int4range(1, 17));
+- range_add_bounds 
+-------------------
+-               18
+-(1 row)
+-
++ERROR:  unknown function: range_add_bounds()
+ select range_add_bounds(numrange(1.0001, 123.123));
+- range_add_bounds 
+-------------------
+-         124.1231
+-(1 row)
+-
++ERROR:  unknown function: range_add_bounds()
+ create function rangetypes_sql(q anyrange, b anyarray, out c anyelement)
+   as $$ select upper($1) + $2[1] $$
+   language sql;
++ERROR:  type "anyrange" does not exist
+ select rangetypes_sql(int4range(1,10), ARRAY[2,20]);
+- rangetypes_sql 
+-----------------
+-             12
+-(1 row)
+-
++ERROR:  unknown function: rangetypes_sql()
+ select rangetypes_sql(numrange(1,10), ARRAY[2,20]);  -- match failure
+-ERROR:  function rangetypes_sql(numrange, integer[]) does not exist
+-LINE 1: select rangetypes_sql(numrange(1,10), ARRAY[2,20]);
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  unknown function: rangetypes_sql()
+ create function anycompatiblearray_anycompatiblerange_func(a anycompatiblearray, r anycompatiblerange)
+   returns anycompatible as 'select $1[1] + lower($2);' language sql;
++ERROR:  type "anycompatiblearray" does not exist
+ select anycompatiblearray_anycompatiblerange_func(ARRAY[1,2], int4range(10,20));
+- anycompatiblearray_anycompatiblerange_func 
+---------------------------------------------
+-                                         11
+-(1 row)
+-
++ERROR:  unknown function: anycompatiblearray_anycompatiblerange_func()
+ select anycompatiblearray_anycompatiblerange_func(ARRAY[1,2], numrange(10,20));
+- anycompatiblearray_anycompatiblerange_func 
+---------------------------------------------
+-                                         11
+-(1 row)
+-
++ERROR:  unknown function: anycompatiblearray_anycompatiblerange_func()
+ -- should fail
+ select anycompatiblearray_anycompatiblerange_func(ARRAY[1.1,2], int4range(10,20));
+-ERROR:  function anycompatiblearray_anycompatiblerange_func(numeric[], int4range) does not exist
+-LINE 1: select anycompatiblearray_anycompatiblerange_func(ARRAY[1.1,...
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  unknown function: anycompatiblearray_anycompatiblerange_func()
+ drop function anycompatiblearray_anycompatiblerange_func(anycompatiblearray, anycompatiblerange);
++ERROR:  unknown function: anycompatiblearray_anycompatiblerange_func()
+ -- should fail
+ create function bogus_func(anycompatible)
+   returns anycompatiblerange as 'select int4range(1,10)' language sql;
+-ERROR:  cannot determine result data type
+-DETAIL:  A result of type anycompatiblerange requires at least one input of type anycompatiblerange or anycompatiblemultirange.
++ERROR:  type "anycompatible" does not exist
+ --
+ -- Arrays of ranges
+ --
+ select ARRAY[numrange(1.1, 1.2), numrange(12.3, 155.5)];
+-            array             
+-------------------------------
+- {"[1.1,1.2)","[12.3,155.5)"}
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ create table i8r_array (f1 int, f2 int8range[]);
++ERROR:  type "int8range" does not exist
+ insert into i8r_array values (42, array[int8range(1,10), int8range(2,20)]);
++ERROR:  relation "i8r_array" does not exist
+ select * from i8r_array;
+- f1 |         f2          
+-----+---------------------
+- 42 | {"[1,10)","[2,20)"}
+-(1 row)
+-
++ERROR:  relation "i8r_array" does not exist
+ drop table i8r_array;
++ERROR:  relation "i8r_array" does not exist
+ --
+ -- Ranges of arrays
+ --
+ create type arrayrange as range (subtype=int4[]);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type arrayrange as range (subtype=int4[])
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ select arrayrange(ARRAY[1,2], ARRAY[2,1]);
+-    arrayrange     
+--------------------
+- ["{1,2}","{2,1}")
+-(1 row)
+-
++ERROR:  unknown function: arrayrange()
+ select arrayrange(ARRAY[2,1], ARRAY[1,2]);  -- fail
+-ERROR:  range lower bound must be less than or equal to range upper bound
++ERROR:  unknown function: arrayrange()
+ select array[1,1] <@ arrayrange(array[1,2], array[2,1]);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: arrayrange()
+ select array[1,3] <@ arrayrange(array[1,2], array[2,1]);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: arrayrange()
+ --
+ -- Ranges of composites
+ --
+ create type two_ints as (a int, b int);
+ create type two_ints_range as range (subtype = two_ints);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type two_ints_range as range (subtype = two_ints)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ -- with debug_parallel_query on, this exercises tqueue.c's range remapping
+ select *, row_to_json(upper(t)) as u from
+   (values (two_ints_range(row(1,2), row(3,4))),
+           (two_ints_range(row(5,6), row(7,8)))) v(t);
+-         t         |       u       
+--------------------+---------------
+- ["(1,2)","(3,4)") | {"a":3,"b":4}
+- ["(5,6)","(7,8)") | {"a":7,"b":8}
+-(2 rows)
+-
++ERROR:  unknown function: two_ints_range()
+ -- this must be rejected to avoid self-inclusion issues:
+ alter type two_ints add attribute c two_ints_range;
+-ERROR:  composite type two_ints cannot be made a member of itself
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter type two_ints add attribute c two_ints_range
++                                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48701/_version_
+ drop type two_ints cascade;
+-NOTICE:  drop cascades to type two_ints_range
++ERROR:  unimplemented: DROP TYPE CASCADE is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/51480/_version_
+ --
+ -- Check behavior when subtype lacks a hash function
+ --
+ create type cashrange as range (subtype = money);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type cashrange as range (subtype = money)
++                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ set enable_sort = off;  -- try to make it pick a hash setop implementation
+-select '(2,5)'::cashrange except select '(5,6)'::cashrange;
+-   cashrange   
+----------------
+- ($2.00,$5.00)
+-(1 row)
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
++We appreciate your feedback.
++
++select '(2,5)'::cashrange except select '(5,6)'::cashrange;
++ERROR:  type "cashrange" does not exist
+ reset enable_sort;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- OUT/INOUT/TABLE functions
+ --
+ -- infer anyrange from anyrange
+ create function outparam_succeed(i anyrange, out r anyrange, out t text)
+   as $$ select $1, 'foo'::text $$ language sql;
++ERROR:  type "anyrange" does not exist
+ select * from outparam_succeed(int4range(1,2));
+-   r   |  t  
+--------+-----
+- [1,2) | foo
+-(1 row)
+-
++ERROR:  unknown function: outparam_succeed()
+ create function outparam2_succeed(r anyrange, out lu anyarray, out ul anyarray)
+   as $$ select array[lower($1), upper($1)], array[upper($1), lower($1)] $$
+   language sql;
++ERROR:  type "anyrange" does not exist
+ select * from outparam2_succeed(int4range(1,11));
+-   lu   |   ul   
+---------+--------
+- {1,11} | {11,1}
+-(1 row)
+-
++ERROR:  unknown function: outparam2_succeed()
+ -- infer anyarray from anyrange
+ create function outparam_succeed2(i anyrange, out r anyarray, out t text)
+   as $$ select ARRAY[upper($1)], 'foo'::text $$ language sql;
++ERROR:  type "anyrange" does not exist
+ select * from outparam_succeed2(int4range(int4range(1,2)));
+-  r  |  t  
+------+-----
+- {2} | foo
+-(1 row)
+-
++ERROR:  unknown function: outparam_succeed2()
+ -- infer anyelement from anyrange
+ create function inoutparam_succeed(out i anyelement, inout r anyrange)
+   as $$ select upper($1), $1 $$ language sql;
++ERROR:  type "anyrange" does not exist
+ select * from inoutparam_succeed(int4range(1,2));
+- i |   r   
+----+-------
+- 2 | [1,2)
+-(1 row)
+-
++ERROR:  unknown function: inoutparam_succeed()
+ create function table_succeed(r anyrange)
+   returns table(l anyelement, u anyelement)
+   as $$ select lower($1), upper($1) $$
+   language sql;
++ERROR:  type "anyrange" does not exist
+ select * from table_succeed(int4range(1,11));
+- l | u  
+----+----
+- 1 | 11
+-(1 row)
+-
++ERROR:  unknown function: table_succeed()
+ -- should fail
+ create function outparam_fail(i anyelement, out r anyrange, out t text)
+   as $$ select '[1,10]', 'foo' $$ language sql;
+-ERROR:  cannot determine result data type
+-DETAIL:  A result of type anyrange requires at least one input of type anyrange or anymultirange.
++ERROR:  type "anyrange" does not exist
+ --should fail
+ create function inoutparam_fail(inout i anyelement, out r anyrange)
+   as $$ select $1, '[1,10]' $$ language sql;
+-ERROR:  cannot determine result data type
+-DETAIL:  A result of type anyrange requires at least one input of type anyrange or anymultirange.
++ERROR:  type "anyrange" does not exist
+ --should fail
+ create function table_fail(i anyelement) returns table(i anyelement, r anyrange)
+   as $$ select $1, '[1,10]' $$ language sql;
+-ERROR:  cannot determine result data type
+-DETAIL:  A result of type anyrange requires at least one input of type anyrange or anymultirange.
++ERROR:  type "anyrange" does not exist

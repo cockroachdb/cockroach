@@ -1,0 +1,87 @@
+setup
+CREATE SEQUENCE defaultdb.sq1;
+----
+
+build
+ALTER SEQUENCE defaultdb.sq1 INCREMENT BY 2
+----
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[SequenceOption:{DescID: 104, Name: INCREMENT, Value: 2}, PUBLIC], ABSENT]
+  {key: INCREMENT, sequenceId: 104, value: "2"}
+- [[SequenceValue:{DescID: 104}, TRANSIENT_ABSENT], ABSENT]
+  {prevIncrement: "1", prevMaxValue: "9223372036854775807", prevMinValue: "1", prevStart: "1", sequenceId: 104, updatedIncrement: "2", updatedMaxValue: "9223372036854775807", updatedMinValue: "1", updatedStart: "1"}
+
+build
+ALTER SEQUENCE defaultdb.sq1 MINVALUE 10 MAXVALUE 1000 START WITH 50
+----
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[SequenceOption:{DescID: 104, Name: MINVALUE, Value: 10}, PUBLIC], ABSENT]
+  {key: MINVALUE, sequenceId: 104, value: "10"}
+- [[SequenceOption:{DescID: 104, Name: MAXVALUE, Value: 1000}, PUBLIC], ABSENT]
+  {key: MAXVALUE, sequenceId: 104, value: "1000"}
+- [[SequenceOption:{DescID: 104, Name: START, Value: 50}, PUBLIC], ABSENT]
+  {key: START, sequenceId: 104, value: "50"}
+- [[SequenceValue:{DescID: 104}, TRANSIENT_ABSENT], ABSENT]
+  {prevIncrement: "1", prevMaxValue: "9223372036854775807", prevMinValue: "1", prevStart: "1", sequenceId: 104, updatedIncrement: "1", updatedMaxValue: "1000", updatedMinValue: "10", updatedStart: "50"}
+
+build
+ALTER SEQUENCE defaultdb.sq1 RESTART WITH 100
+----
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[SequenceOption:{DescID: 104, Name: RESTART, Value: 99}, TRANSIENT_ABSENT], ABSENT]
+  {key: RESTART, sequenceId: 104, value: "99"}
+
+build
+ALTER SEQUENCE defaultdb.sq1 CACHE 10
+----
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[SequenceOption:{DescID: 104, Name: PER NODE CACHE, Value: 10}, PUBLIC], ABSENT]
+  {key: PER NODE CACHE, sequenceId: 104, value: "10"}
+
+build
+ALTER SEQUENCE IF EXISTS defaultdb.sq1 INCREMENT BY 3
+----
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[SequenceOption:{DescID: 104, Name: INCREMENT, Value: 3}, PUBLIC], ABSENT]
+  {key: INCREMENT, sequenceId: 104, value: "3"}
+- [[SequenceValue:{DescID: 104}, TRANSIENT_ABSENT], ABSENT]
+  {prevIncrement: "1", prevMaxValue: "9223372036854775807", prevMinValue: "1", prevStart: "1", sequenceId: 104, updatedIncrement: "3", updatedMaxValue: "9223372036854775807", updatedMinValue: "1", updatedStart: "1"}
+
+build
+ALTER SEQUENCE IF EXISTS nonexistent INCREMENT BY 5
+----
+
+setup
+CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, val INT);
+----
+
+build
+ALTER SEQUENCE defaultdb.sq1 OWNED BY defaultdb.t1.val
+----
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
+- [[SequenceOwner:{DescID: 105, ColumnID: 2, ReferencedDescID: 104}, PUBLIC], ABSENT]
+  {columnId: 2, sequenceId: 104, tableId: 105}
+
+build
+ALTER SEQUENCE defaultdb.sq1 OWNED BY NONE
+----
+
+build
+ALTER SEQUENCE defaultdb.sq1 AS INT2
+----
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[SequenceOption:{DescID: 104, Name: AS, Value: INT2}, PUBLIC], ABSENT]
+  {key: AS, sequenceId: 104, value: INT2}
+- [[SequenceOption:{DescID: 104, Name: MAXVALUE, Value: 32767}, PUBLIC], ABSENT]
+  {key: MAXVALUE, sequenceId: 104, value: "32767"}
+- [[SequenceValue:{DescID: 104}, TRANSIENT_ABSENT], ABSENT]
+  {prevIncrement: "1", prevMaxValue: "9223372036854775807", prevMinValue: "1", prevStart: "1", sequenceId: 104, updatedIncrement: "1", updatedMaxValue: "32767", updatedMinValue: "1", updatedStart: "1"}

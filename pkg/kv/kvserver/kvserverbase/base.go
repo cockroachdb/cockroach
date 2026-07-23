@@ -1,0 +1,479 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package kvserverbase
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/redact"
+)
+
+// LeaseQueueEnabled is a setting that controls whether the lease queue
+// is enabled.
+var LeaseQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lease_queue.enabled",
+	"whether the lease queue is enabled",
+	true,
+)
+
+// MergeQueueEnabled is a setting that controls whether the merge queue is
+// enabled.
+var MergeQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.range_merge.queue_enabled",
+	"whether the automatic merge queue is enabled",
+	true,
+	settings.WithName("kv.range_merge.queue.enabled"),
+)
+
+// ReplicateQueueEnabled is a setting that controls whether the replicate queue
+// is enabled.
+var ReplicateQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.replicate_queue.enabled",
+	"whether the replicate queue is enabled",
+	true,
+)
+
+// ReplicaGCQueueEnabled is a setting that controls whether the replica GC queue
+// is enabled.
+var ReplicaGCQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.replica_gc_queue.enabled",
+	"whether the replica gc queue is enabled",
+	true,
+)
+
+// RaftLogQueueEnabled is a setting that controls whether the raft log queue is
+// enabled.
+var RaftLogQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.raft_log_queue.enabled",
+	"whether the raft log queue is enabled",
+	true,
+)
+
+// RaftSnapshotQueueEnabled is a setting that controls whether the raft snapshot
+// queue is enabled.
+var RaftSnapshotQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.raft_snapshot_queue.enabled",
+	"whether the raft snapshot queue is enabled",
+	true,
+)
+
+// ConsistencyQueueEnabled is a setting that controls whether the consistency
+// queue is enabled.
+var ConsistencyQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.consistency_queue.enabled",
+	"whether the consistency queue is enabled",
+	true,
+)
+
+// TimeSeriesMaintenanceQueueEnabled is a setting that controls whether the
+// timeseries maintenance queue is enabled.
+var TimeSeriesMaintenanceQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.timeseries_maintenance_queue.enabled",
+	"whether the timeseries maintenance queue is enabled",
+	true,
+)
+
+// SplitQueueEnabled is a setting that controls whether the split queue is
+// enabled.
+var SplitQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.split_queue.enabled",
+	"whether the split queue is enabled",
+	true,
+)
+
+// MVCCGCQueueEnabled is a setting that controls whether the MVCC GC queue is
+// enabled.
+var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.mvcc_gc_queue.enabled",
+	"whether the MVCC GC queue is enabled",
+	true,
+)
+
+// loadBasedRebalancingMode controls whether range rebalancing takes
+// additional variables such as write load and disk usage into account.
+// If disabled, rebalancing is done purely based on replica count.
+//
+// The "auto" value defers the choice between the legacy load-based
+// rebalancer and the multi-metric allocator (MMA) to the cluster version:
+// pre-finalization clusters get the legacy behavior, post-finalization
+// clusters get MMA. See GetLoadBasedRebalancingMode.
+var loadBasedRebalancingMode = settings.RegisterEnumSetting(
+	settings.SystemOnly,
+	"kv.allocator.load_based_rebalancing",
+	"whether to rebalance based on the distribution of load across stores",
+	"auto",
+	map[LBRebalancingMode]string{
+		LBRebalancingOff:                 LBRebalancingOff.String(),
+		LBRebalancingLeasesOnly:          LBRebalancingLeasesOnly.String(),
+		LBRebalancingLeasesAndReplicas:   LBRebalancingLeasesAndReplicas.String(),
+		LBRebalancingMultiMetricOnly:     LBRebalancingMultiMetricOnly.String(),
+		LBRebalancingMultiMetricAndCount: LBRebalancingMultiMetricAndCount.String(),
+		LBRebalancingAuto:                LBRebalancingAuto.String(),
+	},
+	settings.WithPublic,
+)
+
+// disableMMA is an emergency kill switch that prevents MMA modes from being
+// used. When set and the cluster setting is an MMA mode, the mode falls back
+// to LBRebalancingLeasesAndReplicas. Non-MMA modes are returned as-is.
+// Use when MMA causes crashes too frequent to change the setting.
+var disableMMA = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_MMA", false)
+
+// GetLoadBasedRebalancingMode returns the resolved load-based rebalancing
+// mode.
+//
+// LBRebalancingAuto is resolved against the cluster version: once the v26.3
+// version gate is active (i.e. upgrade finalization has reached v26.3), auto
+// resolves to LBRebalancingMultiMetricAndCount; otherwise it resolves to
+// LBRebalancingLeasesAndReplicas. This deferral ensures MMA is not enabled in
+// mixed-version clusters where some nodes may not yet understand the MMA
+// path.
+//
+// If COCKROACH_DISABLE_MMA is set and the resolved mode is an MMA mode, the
+// mode is forced back to LBRebalancingLeasesAndReplicas. The kill-switch is
+// applied after auto resolution so it overrides both explicit MMA modes and
+// auto-derived MMA.
+func GetLoadBasedRebalancingMode(ctx context.Context, st *cluster.Settings) LBRebalancingMode {
+	mode := loadBasedRebalancingMode.Get(&st.SV)
+	if mode == LBRebalancingAuto {
+		// Use ActiveVersionOrEmpty rather than IsActive so callers with an
+		// uninitialized version handle (e.g. the asim simulator) get the
+		// conservative legacy behavior instead of fataling. The zero
+		// ClusterVersion is Less-than every real version, so the comparison
+		// below naturally falls to the legacy branch.
+		ver := st.Version.ActiveVersionOrEmpty(ctx)
+		if !ver.Less(clusterversion.V26_3.Version()) {
+			mode = LBRebalancingMultiMetricAndCount
+		} else {
+			mode = LBRebalancingLeasesAndReplicas
+		}
+	}
+	if disableMMA && mode.IsMMA() {
+		return LBRebalancingLeasesAndReplicas
+	}
+	return mode
+}
+
+// OverrideLoadBasedRebalancingMode overrides the load-based rebalancing
+// mode. Intended for use in tests.
+func OverrideLoadBasedRebalancingMode(
+	ctx context.Context, sv *settings.Values, mode LBRebalancingMode,
+) {
+	loadBasedRebalancingMode.Override(ctx, sv, mode)
+}
+
+// LoadBasedRebalancingModeIsMMA returns true if the load-based rebalancing mode
+// uses the multi-metric store rebalancer.
+var LoadBasedRebalancingModeIsMMA = func(ctx context.Context, st *cluster.Settings) bool {
+	return GetLoadBasedRebalancingMode(ctx, st).IsMMA()
+}
+
+// LBRebalancingMode controls if and when we do store-level rebalancing
+// based on load.
+type LBRebalancingMode int64
+
+const (
+	// LBRebalancingOff means that we do not do store-level rebalancing
+	// based on load statistics.
+	LBRebalancingOff LBRebalancingMode = iota
+	// LBRebalancingLeasesOnly means that we rebalance leases based on
+	// store-level load imbalances.
+	LBRebalancingLeasesOnly
+	// LBRebalancingLeasesAndReplicas means that we rebalance both leases and
+	// replicas based on store-level load imbalances.
+	LBRebalancingLeasesAndReplicas
+	// LBRebalancingMultiMetricOnly means that the store rebalancer yields to the
+	// multi-metric store rebalancer, balancing both leases and replicas based on
+	// store-level load imbalances. Note that this disables replica-count and
+	// lease-count based rebalancing.
+	LBRebalancingMultiMetricOnly
+	// LBRebalancingMultiMetricAndCount means that both multi-metric store
+	// rebalancer and count based rebalancing via lease queue and replicate queue
+	// are enabled, balancing lease count, replica count, and store-level load
+	// across stores. Note that this might cause more thrashing since lease and
+	// replica counts goal may be in conflict with the store-level load goal.
+	LBRebalancingMultiMetricAndCount
+	// LBRebalancingAuto defers the choice to the cluster version: once the
+	// v26.3 version gate is active, this resolves to
+	// LBRebalancingMultiMetricAndCount; otherwise it resolves to
+	// LBRebalancingLeasesAndReplicas. Used as the default value to roll MMA
+	// out at upgrade finalization without overriding explicit operator
+	// preferences. Resolution happens in GetLoadBasedRebalancingMode; this
+	// value is never returned from there.
+	LBRebalancingAuto
+)
+
+// IsMMA returns true if the mode uses the multi-metric store rebalancer.
+func (m LBRebalancingMode) IsMMA() bool {
+	return m == LBRebalancingMultiMetricOnly || m == LBRebalancingMultiMetricAndCount
+}
+
+func (m LBRebalancingMode) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m LBRebalancingMode) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch m {
+	case LBRebalancingOff:
+		w.Print("off")
+	case LBRebalancingLeasesOnly:
+		w.Print("leases")
+	case LBRebalancingLeasesAndReplicas:
+		w.Print("leases and replicas")
+	case LBRebalancingMultiMetricOnly:
+		w.Print("multi-metric only")
+	case LBRebalancingMultiMetricAndCount:
+		w.Print("multi-metric and count")
+	case LBRebalancingAuto:
+		w.Print("auto")
+	default:
+		w.Printf("unknown(%d)", int64(m))
+	}
+}
+
+// RangeFeedRefreshInterval is injected from kvserver to avoid import cycles
+// when accessed from kvcoord.
+var RangeFeedRefreshInterval *settings.DurationSetting
+
+// CmdIDKey is a Raft command id. This will be logged unredacted - keep it random.
+type CmdIDKey string
+
+// SafeFormat implements redact.SafeFormatter.
+func (s CmdIDKey) SafeFormat(sp redact.SafePrinter, verb rune) {
+	sp.Printf("%x", redact.SafeString(s))
+}
+
+func (s CmdIDKey) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+var _ redact.SafeFormatter = CmdIDKey("")
+
+// FilterArgs groups the arguments to a ReplicaCommandFilter.
+type FilterArgs struct {
+	Ctx          context.Context
+	CmdID        CmdIDKey
+	Index        int
+	Sid          roachpb.StoreID
+	Req          kvpb.Request
+	Hdr          kvpb.Header
+	AdmissionHdr kvpb.AdmissionHeader
+	Version      roachpb.Version
+	Err          error // only used for TestingPostEvalFilter
+}
+
+// ProposalFilterArgs groups the arguments to ReplicaProposalFilter.
+type ProposalFilterArgs struct {
+	Ctx        context.Context
+	RangeID    roachpb.RangeID
+	StoreID    roachpb.StoreID
+	ReplicaID  roachpb.ReplicaID
+	Cmd        *kvserverpb.RaftCommand
+	QuotaAlloc *quotapool.IntAlloc
+	CmdID      CmdIDKey
+	SeedID     CmdIDKey
+	Req        *kvpb.BatchRequest
+}
+
+// ApplyFilterArgs groups the arguments to a ReplicaApplyFilter.
+type ApplyFilterArgs struct {
+	kvserverpb.ReplicatedEvalResult
+	CmdID       CmdIDKey
+	Cmd         kvserverpb.RaftCommand
+	Entry       raftpb.Entry
+	RangeID     roachpb.RangeID
+	StoreID     roachpb.StoreID
+	ReplicaID   roachpb.ReplicaID
+	Ephemeral   bool
+	Req         *kvpb.BatchRequest // only set on the leaseholder
+	ForcedError *kvpb.Error
+}
+
+// InRaftCmd returns true if the filter is running in the context of a Raft
+// command (it could be running outside of one, for example for a read).
+func (f *FilterArgs) InRaftCmd() bool {
+	return f.CmdID != ""
+}
+
+// ReplicaRequestFilter can be used in testing to influence the error returned
+// from a request before it is evaluated. Return nil to continue with regular
+// processing or non-nil to terminate processing with the returned error.
+type ReplicaRequestFilter func(context.Context, *kvpb.BatchRequest) *kvpb.Error
+
+// ReplicaConcurrencyRetryFilter can be used to examine a concurrency retry
+// error before it is handled and its batch is re-evaluated.
+type ReplicaConcurrencyRetryFilter func(context.Context, *kvpb.BatchRequest, *kvpb.Error)
+
+// ReplicaCommandFilter may be used in tests through the StoreTestingKnobs to
+// intercept the handling of commands and artificially generate errors. Return
+// nil to continue with regular processing or non-nil to terminate processing
+// with the returned error.
+type ReplicaCommandFilter func(args FilterArgs) *kvpb.Error
+
+// ReplicaProposalFilter can be used in testing to influence the error returned
+// from proposals after a request is evaluated but before it is proposed.
+type ReplicaProposalFilter func(args ProposalFilterArgs) *kvpb.Error
+
+// A ReplicaApplyFilter is a testing hook into raft command application.
+// See StoreTestingKnobs.
+type ReplicaApplyFilter func(args ApplyFilterArgs) (int, *kvpb.Error)
+
+// ReplicaResponseFilter is used in unittests to modify the outbound
+// response returned to a waiting client after a replica command has
+// been processed. This filter is invoked only by the command proposer.
+type ReplicaResponseFilter func(context.Context, *kvpb.BatchRequest, *kvpb.BatchResponse) *kvpb.Error
+
+// ReplicaRangefeedFilter is used in unit tests to modify the request, inject
+// responses, or return errors from rangefeeds.
+type ReplicaRangefeedFilter func(
+	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink,
+) *kvpb.Error
+
+// ContainsKey returns whether this range contains the specified key.
+func ContainsKey(desc *roachpb.RangeDescriptor, key roachpb.Key) bool {
+	if bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
+		return bytes.HasPrefix(key, keys.MakeRangeIDPrefix(desc.RangeID))
+	}
+	keyAddr, err := keys.Addr(key)
+	if err != nil {
+		return false
+	}
+	return desc.ContainsKey(keyAddr)
+}
+
+// ContainsKeyRange returns whether this range contains the specified key range
+// from start to end.
+func ContainsKeyRange(desc *roachpb.RangeDescriptor, start, end roachpb.Key) bool {
+	startKeyAddr, err := keys.Addr(start)
+	if err != nil {
+		return false
+	}
+	endKeyAddr, err := keys.Addr(end)
+	if err != nil {
+		return false
+	}
+	return desc.ContainsKeyRange(startKeyAddr, endKeyAddr)
+}
+
+// IntersectSpan takes an span and a descriptor. It then splits the span
+// into up to three pieces: A first piece which is contained in the Range,
+// and a slice of up to two further spans which are outside of the key
+// range. An span for which [Key, EndKey) is empty does not result in any
+// spans; thus IntersectSpan only applies to span ranges and point keys will
+// cause the function to panic.
+//
+// A range-local span range is never split: It's returned as either
+// belonging to or outside of the descriptor's key range, and passing an
+// span which begins range-local but ends non-local results in a panic.
+//
+// TODO(tschottdorf): move to proto, make more gen-purpose - kv.truncate does
+// some similar things.
+func IntersectSpan(
+	span roachpb.Span, desc *roachpb.RangeDescriptor,
+) (middle *roachpb.Span, outside []roachpb.Span) {
+	start, end := desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey()
+	if len(span.EndKey) == 0 {
+		panic("unsupported point key")
+	}
+	if bytes.Compare(span.Key, keys.LocalRangeMax) < 0 {
+		if bytes.Compare(span.EndKey, keys.LocalRangeMax) >= 0 {
+			panic(fmt.Sprintf("a local intent range may not have a non-local portion: %s", span))
+		}
+		if ContainsKeyRange(desc, span.Key, span.EndKey) {
+			return &span, nil
+		}
+		return nil, append(outside, span)
+	}
+	// From now on, we're dealing with plain old key ranges - no more local
+	// addressing.
+	if bytes.Compare(span.Key, start) < 0 {
+		// Span spans a part to the left of [start, end).
+		iCopy := span
+		if bytes.Compare(start, span.EndKey) < 0 {
+			iCopy.EndKey = start
+		}
+		span.Key = iCopy.EndKey
+		outside = append(outside, iCopy)
+	}
+	if bytes.Compare(span.Key, span.EndKey) < 0 && bytes.Compare(end, span.EndKey) < 0 {
+		// Span spans a part to the right of [start, end).
+		iCopy := span
+		if bytes.Compare(iCopy.Key, end) < 0 {
+			iCopy.Key = end
+		}
+		span.EndKey = iCopy.Key
+		outside = append(outside, iCopy)
+	}
+	if bytes.Compare(span.Key, span.EndKey) < 0 && bytes.Compare(span.Key, start) >= 0 && bytes.Compare(end, span.EndKey) >= 0 {
+		middle = &span
+	}
+	return
+}
+
+// SplitByLoadMergeDelay wraps "kv.range_split.by_load_merge_delay".
+var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
+	settings.SystemVisible, // used by TRUNCATE in SQL
+	"kv.range_split.by_load_merge_delay",
+	"the delay that range splits created due to load will wait before considering being merged away",
+	5*time.Minute,
+	settings.DurationWithMinimum(5*time.Second),
+)
+
+const (
+	// MaxCommandSizeDefault is the default for the kv.raft.command.max_size
+	// cluster setting.
+	MaxCommandSizeDefault = 64 << 20 // 64 MB
+
+	// MaxCommandSizeFloor is the minimum allowed value for the
+	// kv.raft.command.max_size cluster setting.
+	MaxCommandSizeFloor = 4 << 20 // 4 MB
+)
+
+// MaxCommandSize wraps "kv.raft.command.max_size".
+var MaxCommandSize = settings.RegisterByteSizeSetting(
+	settings.SystemVisible, // used by SQL/bulk to determine mutation batch sizes
+	"kv.raft.command.max_size",
+	"maximum size of a raft command",
+	MaxCommandSizeDefault,
+	settings.ByteSizeWithMinimum(MaxCommandSizeFloor),
+)
+
+// DefaultRangefeedEventCap is the channel capacity of the rangefeed processor
+// and each registration. It is also used to calculate the default capacity
+// limit for the buffered sender.
+//
+// The size of an event is 72 bytes, so this will result in an allocation on the
+// order of ~300KB per RangeFeed. That's probably ok given the number of ranges
+// on a node that we'd like to support with active rangefeeds, but it's
+// certainly on the upper end of the range.
+//
+// Note that processors also must reserve memory from one of two memory monitors
+// for each event.
+const DefaultRangefeedEventCap = 4096

@@ -1,0 +1,88 @@
+exec-ddl
+CREATE TABLE abc (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  INDEX idx_c (c) STORING (b) WHERE (b IS NOT NULL),
+  INDEX idx_b (b)
+)
+----
+
+exec-ddl
+CREATE TABLE def (
+  d INT PRIMARY KEY,
+  e INT,
+  f INT
+)
+----
+
+# Verify that we request null rejection on b, which allows use of the partial
+# index.
+norm
+SELECT a, b, d FROM abc JOIN def ON b=d
+----
+inner-join (hash)
+ ├── columns: a:1!null b:2!null d:6!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: (1)-->(2), (2)==(6), (6)==(2)
+ ├── prune: (1)
+ ├── interesting orderings: (+1) (+2,+1) (+6)
+ ├── select
+ │    ├── columns: a:1!null b:2!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1)
+ │    ├── interesting orderings: (+1) (+2,+1)
+ │    ├── scan abc
+ │    │    ├── columns: a:1!null b:2
+ │    │    ├── partial index predicates
+ │    │    │    └── idx_c: filters
+ │    │    │         └── b:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── prune: (1,2)
+ │    │    ├── reject-nulls: (2)
+ │    │    └── interesting orderings: (+1) (+2,+1)
+ │    └── filters
+ │         └── b:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ ├── scan def
+ │    ├── columns: d:6!null
+ │    ├── key: (6)
+ │    ├── prune: (6)
+ │    ├── interesting orderings: (+6)
+ │    └── unfiltered-cols: (6-10)
+ └── filters
+      └── b:2 = d:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+# Regression test for #64661: don't request null rejection on a non-nullable
+# scan column.
+opt
+SELECT * FROM abc JOIN def ON b = 1 AND a = d AND b < f
+----
+inner-join (lookup abc)
+ ├── columns: a:1!null b:2!null c:3 d:6!null e:7 f:8!null
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (6)
+ ├── fd: ()-->(2), (1)-->(3), (6)-->(7,8), (1)==(6), (6)==(1)
+ ├── prune: (3,7)
+ ├── interesting orderings: (+1 opt(2)) (+3,+1 opt(2)) (+6)
+ ├── inner-join (lookup def)
+ │    ├── columns: a:1!null b:2!null d:6!null e:7 f:8!null
+ │    ├── key columns: [1] = [6]
+ │    ├── lookup columns are key
+ │    ├── key: (6)
+ │    ├── fd: ()-->(2), (6)-->(7,8), (1)==(6), (6)==(1)
+ │    ├── prune: (7)
+ │    ├── interesting orderings: (+1 opt(2)) (+6)
+ │    ├── scan abc@idx_b
+ │    │    ├── columns: a:1!null b:2!null
+ │    │    ├── constraint: /2/1: [/1 - /1]
+ │    │    ├── key: (1)
+ │    │    ├── fd: ()-->(2)
+ │    │    ├── prune: (1,2)
+ │    │    └── interesting orderings: (+1 opt(2))
+ │    └── filters
+ │         └── b:2 < f:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+ └── filters (true)

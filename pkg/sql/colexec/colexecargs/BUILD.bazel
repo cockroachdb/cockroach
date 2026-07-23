@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "colexecargs",
+    srcs = [
+        "closer_registry.go",
+        "monitor_registry.go",
+        "op_creation.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/colcontainer",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execreleasable",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_marusama_semaphore//:semaphore",
+    ],
+)

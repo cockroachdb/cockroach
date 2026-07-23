@@ -1,0 +1,186 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+/**
+ Variables
+*/
+$crl-primary-header-height: 50px;
+$crl-border-radius: 3px;
+$crl-border-radius-lg: 6px;
+$crl-border-radius-xlg: 9px;
+$crl-input-height: 40px;
+$crl-input-height-small: 32px;
+$crl-transition-duration: 0.15s;
+
+@mixin crl-white-space-pre-wrap() {
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+
+@mixin crl-height-fit-content() {
+  /**
+    Desc:
+      Helper for using `fit-content` setting for `height` property.
+
+    Example usage:
+      ```
+      .my-css-class {
+        @include crl-height-fit-content();
+      }
+      ```
+  */
+  height: fit-content;
+}
+
+@mixin crl-width-fit-content() {
+  /**
+    Desc:
+      Helper for using `fit-content` setting for `width` property.
+
+    Example usage:
+      ```
+      .my-css-class {
+        @include crl-width-fit-content();
+      }
+      ```
+  */
+  width: fit-content;
+}
+
+@mixin crl-transition($props_...) {
+  /**
+    Desc:
+      Helper for maintaining consistent transitions.
+
+    Example usage:
+      ```
+      .my-css-class {
+        @include crl-transition(color, border-color, height);
+      }
+      ```
+  */
+  transition-property: $props_;
+  transition-duration: $crl-transition-duration;
+  transition-timing-function: ease-in-out;
+}
+
+@mixin crl-box-shadow($offset_h_, $offset_v_, $blur_, $spread_, $color_) {
+  /**
+    Desc:
+      Helper for cross-browser box-shadows.
+
+    Example usage:
+      ```
+      .my-css-class {
+        @include crl-box-shadows(0, 2px, 4px, 0, $color-core-blue-5);
+      }
+      ```
+  */
+  -webkit-box-shadow: $offset_h_ $offset_v_ $blur_ $spread_ $color_;
+  -moz-box-shadow: $offset_h_ $offset_v_ $blur_ $spread_ $color_;
+  box-shadow: $offset_h_ $offset_v_ $blur_ $spread_ $color_;
+}
+
+/**
+ Functions
+*/
+@function crl-borders($width_: 1px, $color_: $color-core-neutral-3) {
+  /**
+    Desc:
+      Helper for maintaining consistent border styling.
+
+    Example usage:
+      ```
+      .my-container {
+        border-top: crl-borders();
+        border-bottom: crl-borders(2px, $color-base-red);
+      }
+      ```
+  */
+  @return $width_ solid $color_;
+}
+
+@function crl-lighten($color) {
+  /**
+    Desc:
+      Helper for consistent lightening of default tone,
+      for example in lightening a button in a disabled state.
+    Example usage:
+      ```
+      .my-css-class {
+        background-color: crl-lighten($color-base-green);
+      }
+      ```
+  */
+  @return mix($color-core-neutral-0, $color, 95%);
+}
+
+@function crl-darken($color) {
+  /**
+    Desc:
+      Helper for consistent darkening of default tone,
+      for example in darkening a button in a hovered or active state.
+    Example usage:
+      ```
+      .my-css-class {
+        background-color: crl-darken($color-base-green);
+      }
+      ```
+  */
+  @return mix(black, $color, 10%);
+}
+
+
+
+// Spacing
+
+/**
+ Variables
+*/
+// This variable reflects the base gutter value
+// specified by our design system.
+$crl-gutters: 8px;
+
+$crl-cluster-creation-step-max-width: 625px;
+
+/**
+ Functions
+*/
+@function crl-gutters($n_: 1) {
+  /**
+    Desc:
+      Use this function when spacing elements to preserve
+      consistent spacing in multiples of our gutter value
+      established in the CRL design system.
+
+      Only use explict values (e.g. `margin: 5px;`) in CSS
+      when setting a one-off value that is used for fine-tuning
+      an element position (e.g. such as aligning an SVG icon).
+
+    Example usage:
+      ```
+      .my-css-class {
+        padding-top: crl-gutters(3);
+        margin-bottom: crl-gutters(1);
+      }
+      ```
+  */
+  @if $n_ {
+    @return $n_ * $crl-gutters;
+  } @else {
+    @return 0;
+  }
+}
+
+// Text
+$crl-base-text: $color-font-3;
+$crl-base-text--light: $color-font-4;
+$crl-base-text--dark: $color-font-2;
+
+// UI elements
+$crl-base-divider: $color-font-4;

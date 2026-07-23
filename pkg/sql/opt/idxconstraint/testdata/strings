@@ -1,0 +1,257 @@
+index-constraints vars=(a string) index=a
+a LIKE 'ABC'
+----
+[/'ABC' - /'ABC']
+
+# A backslash that isn't escaping anything is just removed from pattern.
+index-constraints vars=(a string) index=a
+a LIKE '\aABC%'
+----
+[/'aABC' - /'aABD')
+
+# A backslash that isn't escaping anything is just removed from pattern.
+index-constraints vars=(a string) index=a
+a LIKE 'A\BC%'
+----
+[/'ABC' - /'ABD')
+
+# A backslash escaping a backslash just becomes a backslash.
+index-constraints vars=(a string) index=a
+a LIKE '\\ABC%'
+----
+[/e'\\ABC' - /e'\\ABD')
+
+# A backslash escaping a backslash just becomes a backslash.
+index-constraints vars=(a string) index=a
+a LIKE '\\ABC\\%'
+----
+[/e'\\ABC\\' - /e'\\ABC]')
+
+# Currently we punt on custom ESCAPE clauses.
+index-constraints vars=(a string) index=a
+a LIKE '\aABC%' ESCAPE '|'
+----
+[ - ]
+Remaining filter: like_escape(a, e'\\aABC%', '|')
+
+# Single char wildcard requires remaining filter.
+index-constraints vars=(a string) index=a
+a LIKE '\aABC_'
+----
+[/'aABC' - /'aABD')
+Remaining filter: a LIKE e'\\aABC_'
+
+# Ending with wildcard with other wildcards present isn't tight.
+index-constraints vars=(a string) index=a
+a LIKE 'AB_C%'
+----
+[/'AB' - /'AC')
+Remaining filter: a LIKE 'AB_C%'
+
+# Ignore zero prefix (wildcard at beginning).
+index-constraints vars=(a string) index=a
+a LIKE '%ABC'
+----
+(/NULL - ]
+Remaining filter: a LIKE '%ABC'
+
+# Ignore zero prefix (wildcard at beginning).
+index-constraints vars=(a string) index=a
+a LIKE '_ABC'
+----
+(/NULL - ]
+Remaining filter: a LIKE '_ABC'
+
+# A backslash that is escaping a wildcard becomes equality.
+index-constraints vars=(a string) index=a
+a LIKE 'ABC\%'
+----
+[/'ABC%' - /'ABC%']
+
+# A backslash that is escaping a wildcard becomes equality.
+index-constraints vars=(a string) index=a
+a LIKE 'ABC\_'
+----
+[/'ABC_' - /'ABC_']
+
+# A backslash that is escaping a wildcard becomes equality.
+index-constraints vars=(a string) index=a
+a LIKE 'ABC\_Z'
+----
+[/'ABC_Z' - /'ABC_Z']
+
+# A backslash that is escaping a wildcard becomes equality.
+index-constraints vars=(a string) index=a
+a LIKE '\%ABC'
+----
+[/'%ABC' - /'%ABC']
+
+# A backslash that is escaping a wildcard becomes equality.
+index-constraints vars=(a string) index=a
+a LIKE '\_ABC'
+----
+[/'_ABC' - /'_ABC']
+
+# A backslash that is escaping a backslash becomes equality.
+index-constraints vars=(a string) index=a
+a LIKE '\\ABC'
+----
+[/e'\\ABC' - /e'\\ABC']
+
+# Invalid pattern does not generate index constraints.
+index-constraints vars=(a string) index=a
+a LIKE 'ABC\'
+----
+(/NULL - ]
+Remaining filter: a LIKE e'ABC\\'
+
+index-constraints vars=(a string) index=a
+a LIKE 'ABC%'
+----
+[/'ABC' - /'ABD')
+
+index-constraints vars=(a string) index=a
+a LIKE 'ABC_'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a LIKE 'ABC_'
+
+index-constraints vars=(a string) index=a
+a LIKE 'ABC%Z'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a LIKE 'ABC%Z'
+
+index-constraints vars=(a string) index=a
+a LIKE 'ABC'
+----
+[/'ABC' - /'ABC']
+
+index-constraints vars=(a string) index=a
+a LIKE '%'
+----
+(/NULL - ]
+Remaining filter: a LIKE '%'
+
+index-constraints vars=(a string) index=a
+a LIKE '%XY'
+----
+(/NULL - ]
+Remaining filter: a LIKE '%XY'
+
+index-constraints vars=(a string) index=(a desc)
+a LIKE 'ABC%'
+----
+(/'ABD' - /'ABC']
+
+index-constraints vars=(a int, b string) index=(a, b desc)
+a = 1 AND b LIKE 'ABC%'
+----
+(/1/'ABD' - /1/'ABC']
+
+index-constraints vars=(a int, b string) index=(a, b desc)
+a >= 1 AND a <= 4 AND b LIKE 'ABC%'
+----
+(/1/'ABD' - /4/'ABC']
+Remaining filter: b LIKE 'ABC%'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO 'ABC.*'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a SIMILAR TO 'ABC.*'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO 'ABC.*Z'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a SIMILAR TO 'ABC.*Z'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO 'ABC%Z'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a SIMILAR TO 'ABC%Z'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO 'ABC_Z'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a SIMILAR TO 'ABC_Z'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO 'ABC'
+----
+[/'ABC' - /'ABC']
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO '(ABC|ABCDEF).*'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a SIMILAR TO '(ABC|ABCDEF).*'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO '.*'
+----
+[/'' - ]
+Remaining filter: a SIMILAR TO '.*'
+
+index-constraints vars=(a string) index=(a)
+a ~ '^foo'
+----
+[/'foo' - /'fop')
+
+# This could be converted to simple equality.
+index-constraints vars=(a string) index=(a)
+a ~ '^foo$'
+----
+[/'foo' - /'fop')
+Remaining filter: a ~ '^foo$'
+
+index-constraints vars=(a string) index=(a)
+a ~ '^foo[a-z]'
+----
+[/'foo' - /'fop')
+Remaining filter: a ~ '^foo[a-z]'
+
+index-constraints vars=(a string) index=(a)
+a ~ '^foo.*bar'
+----
+[/'foo' - /'fop')
+Remaining filter: a ~ '^foo.*bar'
+
+index-constraints vars=(a string) index=(a)
+a ~ '^(abx|aby|abz)'
+----
+[/'ab' - /'ac')
+Remaining filter: a ~ '^(abx|aby|abz)'
+
+index-constraints vars=(a string) index=(a)
+a ~ '^?fo*'
+----
+(/NULL - ]
+Remaining filter: a ~ '^?fo*'
+
+index-constraints vars=(a string) index=(a)
+a ~ 'foo'
+----
+(/NULL - ]
+Remaining filter: a ~ 'foo'
+
+# Case insensitive matches cannot get a span.
+index-constraints vars=(a string) index=(a)
+a ~* '^foo'
+----
+(/NULL - ]
+Remaining filter: a ~* '^foo'
+
+index-constraints vars=(a string) index=(a)
+a = 'eu' OR (a > 'eu' AND a < 'us')
+----
+[/'eu' - /'us')
+
+index-constraints vars=(a string, b string) index=(a, b)
+(a = 'us' AND b = 'cali') OR (a = 'eu') OR (a > 'eu' AND a < 'us')
+----
+[/'eu' - /'us')
+[/'us'/'cali' - /'us'/'cali']

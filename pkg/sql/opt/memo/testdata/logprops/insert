@@ -1,0 +1,341 @@
+exec-ddl
+CREATE TABLE abcde (
+    a INT NOT NULL,
+    b INT,
+    c INT NOT NULL DEFAULT (10),
+    d INT AS (b + c + 1) STORED,
+    "e:write-only" INT
+)
+----
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8 NOT NULL,
+    z FLOAT8
+)
+----
+
+# Properties with no RETURNING clause.
+build
+INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z LIMIT 10
+----
+insert abcde
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── y:10 => a:1
+ │    ├── y:10 => b:2
+ │    ├── c_default:14 => c:3
+ │    ├── d_comp:17 => d:4
+ │    ├── rowid_default:15 => rowid:5
+ │    └── e_default:16 => e:6
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: d_comp:17(int!null) y:10(int!null) c_default:14(int!null) rowid_default:15(int) e_default:16(int)
+      ├── cardinality: [0 - 10]
+      ├── volatile
+      ├── fd: ()-->(14,16), (10)-->(17)
+      ├── prune: (10,14-17)
+      ├── interesting orderings: (+10 opt(14,16))
+      ├── project
+      │    ├── columns: c_default:14(int!null) rowid_default:15(int) e_default:16(int) y:10(int!null)
+      │    ├── cardinality: [0 - 10]
+      │    ├── volatile
+      │    ├── fd: ()-->(14,16)
+      │    ├── prune: (10,14-16)
+      │    ├── interesting orderings: (+10 opt(14,16))
+      │    ├── limit
+      │    │    ├── columns: y:10(int!null) z:11(float)
+      │    │    ├── internal-ordering: +10,+11
+      │    │    ├── cardinality: [0 - 10]
+      │    │    ├── interesting orderings: (+10,+11)
+      │    │    ├── sort
+      │    │    │    ├── columns: y:10(int!null) z:11(float)
+      │    │    │    ├── ordering: +10,+11
+      │    │    │    ├── limit hint: 10.00
+      │    │    │    ├── prune: (10,11)
+      │    │    │    └── project
+      │    │    │         ├── columns: y:10(int!null) z:11(float)
+      │    │    │         ├── prune: (10,11)
+      │    │    │         └── scan xyz
+      │    │    │              ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+      │    │    │              ├── key: (9)
+      │    │    │              ├── fd: (9)-->(10-13)
+      │    │    │              ├── prune: (9-13)
+      │    │    │              └── interesting orderings: (+9)
+      │    │    └── const: 10 [type=int]
+      │    └── projections
+      │         ├── const: 10 [as=c_default:14, type=int]
+      │         ├── function: unique_rowid [as=rowid_default:15, type=int, volatile]
+      │         └── cast: INT8 [as=e_default:16, type=int, immutable]
+      │              └── null [type=unknown]
+      └── projections
+           └── plus [as=d_comp:17, type=int, outer=(10,14), immutable]
+                ├── plus [type=int]
+                │    ├── variable: y:10 [type=int]
+                │    └── variable: c_default:14 [type=int]
+                └── const: 1 [type=int]
+
+# Properties with RETURNING clause.
+build
+INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z LIMIT 10 RETURNING *
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
+ ├── cardinality: [0 - 10]
+ ├── volatile, mutations
+ ├── fd: ()-->(3), (1)-->(4), (1)==(2), (2)==(1)
+ ├── prune: (1-4)
+ └── insert abcde
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
+      ├── insert-mapping:
+      │    ├── y:10 => a:1
+      │    ├── y:10 => b:2
+      │    ├── c_default:14 => c:3
+      │    ├── d_comp:17 => d:4
+      │    ├── rowid_default:15 => rowid:5
+      │    └── e_default:16 => e:6
+      ├── return-mapping:
+      │    ├── y:10 => a:1
+      │    ├── y:10 => b:2
+      │    ├── c_default:14 => c:3
+      │    ├── d_comp:17 => d:4
+      │    └── rowid_default:15 => rowid:5
+      ├── cardinality: [0 - 10]
+      ├── volatile, mutations
+      ├── fd: ()-->(3), (1)-->(4), (1)==(2), (2)==(1)
+      └── project
+           ├── columns: d_comp:17(int!null) y:10(int!null) c_default:14(int!null) rowid_default:15(int) e_default:16(int)
+           ├── cardinality: [0 - 10]
+           ├── volatile
+           ├── fd: ()-->(14,16), (10)-->(17)
+           ├── prune: (10,14-17)
+           ├── interesting orderings: (+10 opt(14,16))
+           ├── project
+           │    ├── columns: c_default:14(int!null) rowid_default:15(int) e_default:16(int) y:10(int!null)
+           │    ├── cardinality: [0 - 10]
+           │    ├── volatile
+           │    ├── fd: ()-->(14,16)
+           │    ├── prune: (10,14-16)
+           │    ├── interesting orderings: (+10 opt(14,16))
+           │    ├── limit
+           │    │    ├── columns: y:10(int!null) z:11(float)
+           │    │    ├── internal-ordering: +10,+11
+           │    │    ├── cardinality: [0 - 10]
+           │    │    ├── interesting orderings: (+10,+11)
+           │    │    ├── sort
+           │    │    │    ├── columns: y:10(int!null) z:11(float)
+           │    │    │    ├── ordering: +10,+11
+           │    │    │    ├── limit hint: 10.00
+           │    │    │    ├── prune: (10,11)
+           │    │    │    └── project
+           │    │    │         ├── columns: y:10(int!null) z:11(float)
+           │    │    │         ├── prune: (10,11)
+           │    │    │         └── scan xyz
+           │    │    │              ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+           │    │    │              ├── key: (9)
+           │    │    │              ├── fd: (9)-->(10-13)
+           │    │    │              ├── prune: (9-13)
+           │    │    │              └── interesting orderings: (+9)
+           │    │    └── const: 10 [type=int]
+           │    └── projections
+           │         ├── const: 10 [as=c_default:14, type=int]
+           │         ├── function: unique_rowid [as=rowid_default:15, type=int, volatile]
+           │         └── cast: INT8 [as=e_default:16, type=int, immutable]
+           │              └── null [type=unknown]
+           └── projections
+                └── plus [as=d_comp:17, type=int, outer=(10,14), immutable]
+                     ├── plus [type=int]
+                     │    ├── variable: y:10 [type=int]
+                     │    └── variable: c_default:14 [type=int]
+                     └── const: 1 [type=int]
+
+# Properties with RETURNING clause.
+build
+INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z RETURNING *
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
+ ├── volatile, mutations
+ ├── fd: ()-->(3), (1)-->(4), (1)==(2), (2)==(1)
+ ├── prune: (1-4)
+ └── insert abcde
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
+      ├── insert-mapping:
+      │    ├── y:10 => a:1
+      │    ├── y:10 => b:2
+      │    ├── c_default:14 => c:3
+      │    ├── d_comp:17 => d:4
+      │    ├── rowid_default:15 => rowid:5
+      │    └── e_default:16 => e:6
+      ├── return-mapping:
+      │    ├── y:10 => a:1
+      │    ├── y:10 => b:2
+      │    ├── c_default:14 => c:3
+      │    ├── d_comp:17 => d:4
+      │    └── rowid_default:15 => rowid:5
+      ├── volatile, mutations
+      ├── fd: ()-->(3), (1)-->(4), (1)==(2), (2)==(1)
+      └── project
+           ├── columns: d_comp:17(int!null) y:10(int!null) c_default:14(int!null) rowid_default:15(int) e_default:16(int)
+           ├── volatile
+           ├── fd: ()-->(14,16), (10)-->(17)
+           ├── prune: (10,14-17)
+           ├── project
+           │    ├── columns: c_default:14(int!null) rowid_default:15(int) e_default:16(int) y:10(int!null)
+           │    ├── volatile
+           │    ├── fd: ()-->(14,16)
+           │    ├── prune: (10,14-16)
+           │    ├── project
+           │    │    ├── columns: y:10(int!null) z:11(float)
+           │    │    ├── prune: (10,11)
+           │    │    └── scan xyz
+           │    │         ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+           │    │         ├── key: (9)
+           │    │         ├── fd: (9)-->(10-13)
+           │    │         ├── prune: (9-13)
+           │    │         └── interesting orderings: (+9)
+           │    └── projections
+           │         ├── const: 10 [as=c_default:14, type=int]
+           │         ├── function: unique_rowid [as=rowid_default:15, type=int, volatile]
+           │         └── cast: INT8 [as=e_default:16, type=int, immutable]
+           │              └── null [type=unknown]
+           └── projections
+                └── plus [as=d_comp:17, type=int, outer=(10,14), immutable]
+                     ├── plus [type=int]
+                     │    ├── variable: y:10 [type=int]
+                     │    └── variable: c_default:14 [type=int]
+                     └── const: 1 [type=int]
+
+# Input is cardinality 1 VALUES expression.
+build
+INSERT INTO abcde (a, b) (VALUES (1, 2)) RETURNING *, rowid;
+----
+insert abcde
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
+ ├── insert-mapping:
+ │    ├── column1:9 => a:1
+ │    ├── column2:10 => b:2
+ │    ├── c_default:11 => c:3
+ │    ├── d_comp:14 => d:4
+ │    ├── rowid_default:12 => rowid:5
+ │    └── e_default:13 => e:6
+ ├── return-mapping:
+ │    ├── column1:9 => a:1
+ │    ├── column2:10 => b:2
+ │    ├── c_default:11 => c:3
+ │    ├── d_comp:14 => d:4
+ │    └── rowid_default:12 => rowid:5
+ ├── cardinality: [1 - 1]
+ ├── volatile, mutations
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── project
+      ├── columns: d_comp:14(int!null) column1:9(int!null) column2:10(int!null) c_default:11(int!null) rowid_default:12(int) e_default:13(int)
+      ├── cardinality: [1 - 1]
+      ├── volatile
+      ├── key: ()
+      ├── fd: ()-->(9-14)
+      ├── prune: (9-14)
+      ├── project
+      │    ├── columns: c_default:11(int!null) rowid_default:12(int) e_default:13(int) column1:9(int!null) column2:10(int!null)
+      │    ├── cardinality: [1 - 1]
+      │    ├── volatile
+      │    ├── key: ()
+      │    ├── fd: ()-->(9-13)
+      │    ├── prune: (9-13)
+      │    ├── values
+      │    │    ├── columns: column1:9(int!null) column2:10(int!null)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(9,10)
+      │    │    ├── prune: (9,10)
+      │    │    └── tuple [type=tuple{int, int}]
+      │    │         ├── const: 1 [type=int]
+      │    │         └── const: 2 [type=int]
+      │    └── projections
+      │         ├── const: 10 [as=c_default:11, type=int]
+      │         ├── function: unique_rowid [as=rowid_default:12, type=int, volatile]
+      │         └── cast: INT8 [as=e_default:13, type=int, immutable]
+      │              └── null [type=unknown]
+      └── projections
+           └── plus [as=d_comp:14, type=int, outer=(10,11), immutable]
+                ├── plus [type=int]
+                │    ├── variable: column2:10 [type=int]
+                │    └── variable: c_default:11 [type=int]
+                └── const: 1 [type=int]
+
+# Filter FD set.
+build
+INSERT INTO abcde (a, b) SELECT y, (z+1)::int FROM xyz WHERE y=1 RETURNING a, c;
+----
+project
+ ├── columns: a:1(int!null) c:3(int!null)
+ ├── volatile, mutations
+ ├── fd: ()-->(1,3)
+ ├── prune: (1,3)
+ └── insert abcde
+      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) rowid:5(int!null)
+      ├── insert-mapping:
+      │    ├── y:10 => a:1
+      │    ├── int8:14 => b:2
+      │    ├── c_default:15 => c:3
+      │    ├── d_comp:18 => d:4
+      │    ├── rowid_default:16 => rowid:5
+      │    └── e_default:17 => e:6
+      ├── return-mapping:
+      │    ├── y:10 => a:1
+      │    ├── int8:14 => b:2
+      │    ├── c_default:15 => c:3
+      │    ├── d_comp:18 => d:4
+      │    └── rowid_default:16 => rowid:5
+      ├── volatile, mutations
+      ├── fd: ()-->(1,3), (2)-->(4)
+      └── project
+           ├── columns: d_comp:18(int) y:10(int!null) int8:14(int) c_default:15(int!null) rowid_default:16(int) e_default:17(int)
+           ├── volatile
+           ├── fd: ()-->(10,15,17), (14)-->(18)
+           ├── prune: (10,14-18)
+           ├── project
+           │    ├── columns: c_default:15(int!null) rowid_default:16(int) e_default:17(int) y:10(int!null) int8:14(int)
+           │    ├── volatile
+           │    ├── fd: ()-->(10,15,17)
+           │    ├── prune: (10,14-17)
+           │    ├── project
+           │    │    ├── columns: int8:14(int) y:10(int!null)
+           │    │    ├── immutable
+           │    │    ├── fd: ()-->(10)
+           │    │    ├── prune: (10,14)
+           │    │    ├── select
+           │    │    │    ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+           │    │    │    ├── key: (9)
+           │    │    │    ├── fd: ()-->(10), (9)-->(11-13)
+           │    │    │    ├── prune: (9,11-13)
+           │    │    │    ├── interesting orderings: (+9 opt(10))
+           │    │    │    ├── scan xyz
+           │    │    │    │    ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+           │    │    │    │    ├── key: (9)
+           │    │    │    │    ├── fd: (9)-->(10-13)
+           │    │    │    │    ├── prune: (9-13)
+           │    │    │    │    └── interesting orderings: (+9)
+           │    │    │    └── filters
+           │    │    │         └── eq [type=bool, outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+           │    │    │              ├── variable: y:10 [type=int]
+           │    │    │              └── const: 1 [type=int]
+           │    │    └── projections
+           │    │         └── cast: INT8 [as=int8:14, type=int, outer=(11), immutable]
+           │    │              └── plus [type=float]
+           │    │                   ├── variable: z:11 [type=float]
+           │    │                   └── const: 1.0 [type=float]
+           │    └── projections
+           │         ├── const: 10 [as=c_default:15, type=int]
+           │         ├── function: unique_rowid [as=rowid_default:16, type=int, volatile]
+           │         └── cast: INT8 [as=e_default:17, type=int, immutable]
+           │              └── null [type=unknown]
+           └── projections
+                └── plus [as=d_comp:18, type=int, outer=(14,15), immutable]
+                     ├── plus [type=int]
+                     │    ├── variable: int8:14 [type=int]
+                     │    └── variable: c_default:15 [type=int]
+                     └── const: 1 [type=int]

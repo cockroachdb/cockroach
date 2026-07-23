@@ -1,0 +1,44 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.storage; // HACK
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver";
+
+import "kv/kvserver/kvserverpb/raft.proto";
+import "kv/kvserver/api.proto";
+
+service MultiRaft {
+    rpc RaftMessageBatch (stream cockroach.kv.kvserver.kvserverpb.RaftMessageRequestBatch) returns (stream cockroach.kv.kvserver.kvserverpb.RaftMessageResponse) {}
+    // RaftSnapshot asks the server to accept and apply a range snapshot.
+    // The client is expected to initially send a message consisting solely of
+    // a Header, upon which the server will respond with a message with status
+    // ACCEPTED, or ERROR if it cannot accept the snapshot. Once accepted, the
+    // client will send multiple messages with KVBatch data followed by a
+    // terminal message with the final flag set to true. Once finalized,
+    // the server will ultimately send a message back with status APPLIED, or
+    // ERROR, including any collected traces from processing.
+    rpc RaftSnapshot (stream cockroach.kv.kvserver.kvserverpb.SnapshotRequest) returns (stream cockroach.kv.kvserver.kvserverpb.SnapshotResponse) {}
+    // DelegateRaftSnapshot asks the server to send a range snapshot to a target
+    // (so the client delegates the sending of the snapshot to the server). This
+    // is a "single-shot" stream today that sends a single request and returns a
+    // single response, however the expectation is that in the future the
+    // throttling/permit reservation will be separated out from the actual
+    // sending.
+    rpc DelegateRaftSnapshot(stream cockroach.kv.kvserver.kvserverpb.DelegateSnapshotRequest) returns (stream cockroach.kv.kvserver.kvserverpb.DelegateSnapshotResponse) {}
+}
+
+service PerReplica {
+    rpc CollectChecksum(cockroach.kv.kvserver.CollectChecksumRequest) returns (cockroach.kv.kvserver.CollectChecksumResponse) {}
+    rpc WaitForApplication(cockroach.kv.kvserver.WaitForApplicationRequest) returns (cockroach.kv.kvserver.WaitForApplicationResponse) {}
+    rpc WaitForReplicaInit(cockroach.kv.kvserver.WaitForReplicaInitRequest) returns (cockroach.kv.kvserver.WaitForReplicaInitResponse) {}
+}
+
+service PerStore {
+    rpc CompactEngineSpan(cockroach.kv.kvserver.CompactEngineSpanRequest) returns (cockroach.kv.kvserver.CompactEngineSpanResponse) {}
+    rpc GetTableMetrics(cockroach.kv.kvserver.GetTableMetricsRequest) returns (cockroach.kv.kvserver.GetTableMetricsResponse) {}
+    rpc ScanStorageInternalKeys(cockroach.kv.kvserver.ScanStorageInternalKeysRequest) returns (cockroach.kv.kvserver.ScanStorageInternalKeysResponse) {}
+    rpc SetCompactionConcurrency(cockroach.kv.kvserver.CompactionConcurrencyRequest) returns (cockroach.kv.kvserver.CompactionConcurrencyResponse) {}
+}

@@ -1,0 +1,355 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "./application.module.scss";
+
+.crl-table {
+  width: 100%;
+  background: $color-base-white;
+  border-radius: $crl-border-radius;
+  color: $crl-base-text;
+
+  &--has-header {
+    padding-top: crl-gutters(2);
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    height: fit-content;
+    padding: 0 crl-gutters(2);
+
+    &-title {
+      @include crl-type-heading-5;
+      color: $crl-base-text;
+    }
+
+    &-action-buttons {
+      margin-left: auto;
+    }
+  }
+
+  &__state-template {
+    display: flex;
+    flex-direction: column;
+    padding: crl-gutters(7) 0;
+    text-align: center;
+    align-items: center;
+
+    &-icon-container {
+      margin-bottom: crl-gutters(1.5);
+    }
+
+    &-heading {
+      color: $color-base-black;
+    }
+
+    &-message {
+      max-width: 400px;
+      margin-bottom: crl-gutters(2);
+
+      & a {
+        @include crl-type-link--small;
+      }
+    }
+
+    &-action {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    &-help-text {
+      margin-top: crl-gutters(8);
+    }
+  }
+
+  &__loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 250px;
+    width: 100%;
+    background-color: $color-core-neutral-0;
+  }
+
+  &__inner-container {
+    padding-bottom: crl-gutters(1);
+  }
+
+  .crdb-ant-table-thead {
+    > tr > th {
+      border-bottom: crl-borders();
+
+      &.crl-table__column--with-sorter-tooltip {
+        .crdb-ant-table-column-title {
+          text-decoration: underline dashed $color-core-neutral-4;
+          text-underline-offset: 4px;
+        }
+      }
+
+      &.crdb-ant-table-cell {
+        padding: crl-gutters(2.5) crl-gutters(2) crl-gutters(1);
+        @include crl-type-body--strong;
+      }
+
+      &.crl-table__data--right-align {
+        text-align: right;
+      }
+
+      .crdb-ant-table-column-sorters {
+        padding: 0;
+
+        > span:not(.crdb-ant-table-column-sorter-full) {
+          @include crl-type-body--strong;
+        }
+      }
+
+      .crdb-ant-table-column-sorter {
+        margin-left: 5px;
+
+        &-inner-full {
+          margin-top: -5px;
+        }
+      }
+    }
+  }
+
+  .crdb-ant-table-tbody {
+    > tr {
+      &:last-child {
+        > td {
+          border-bottom: none;
+        }
+      }
+
+      &:not(:last-child) {
+        > td {
+          border-bottom: crl-borders();
+        }
+      }
+
+      > td {
+        padding: crl-gutters(2);
+        @include crl-type-body;
+
+        a {
+          @include crl-type-body;
+        }
+      }
+    }
+  }
+
+  .crdb-ant-table-wrapper {
+    height: 100%;
+    overflow: auto;
+  }
+
+  .crdb-ant-table-column-title {
+    padding: 0;
+    @include crl-type-body--strong;
+  }
+
+  .crdb-ant-table .crdb-ant-table-row-indent + .crdb-ant-table-row-expand-icon {
+    margin-right: crl-gutters(1.5);
+  }
+
+  // Interim darkmode before a more complicated theming system is integrated. This is just
+  // an override of previous styles using the `--darkmode` selector, and is placed after it
+  // to avoid any !important tags.
+  &--darkmode {
+    background: $color-core-neutral-8;
+
+    .crdb-ant-table {
+      background: $color-core-neutral-8;
+    }
+
+    .crdb-ant-table-thead {
+      > tr {
+        &:hover {
+          > th {
+            background: $color-core-neutral-8;
+          }
+        }
+
+        > th {
+          background: $color-core-neutral-8;
+
+          &.crdb-ant-table-column-sort {
+            background: $color-core-neutral-8;
+          }
+
+          &.crdb-ant-table-cell {
+            color: $color-base-white;
+            span {
+              color: $color-base-white;
+            }
+
+            &:hover {
+              background: $color-core-neutral-8;
+            }
+          }
+        }
+      }
+    }
+
+    .crdb-ant-table-tbody {
+      > tr {
+        &:hover {
+          > td {
+            background: $color-core-neutral-8 !important;
+          }
+        }
+
+        > td {
+          color: $color-base-white;
+
+          &.crdb-ant-table-column-sort {
+            background: $color-core-neutral-8;
+          }
+
+          span {
+            color: $color-base-white;
+          }
+        }
+      }
+    }
+
+    .crdb-ant-table-cell-row-hover {
+      background: $color-core-neutral-7;
+    }
+
+    .crdb-ant-pagination {
+      .crdb-ant-pagination-item {
+        a {
+          color: $color-base-white;
+        }
+      }
+
+      .crdb-ant-pagination-item-container {
+        .crdb-ant-pagination-item-ellipsis {
+          color: $color-base-white;
+        }
+      }
+
+      .crdb-ant-pagination-item-link {
+        color: $color-base-white;
+      }
+
+      .crdb-ant-pagination-item-active {
+        background-color: $color-core-neutral-7;
+      }
+    }
+  }
+}
+
+.nested-table-container {
+  .crl-table__inner-container {
+    padding: 0; // Remove padding added by cockroach container;
+  }
+
+  .crdb-ant-table-content {
+    padding: 5px; // Allows the box shadow to take effect on Right/Left/Bottom
+  }
+
+  // Use very specific .crl-table selectors to override selectors in AntD without the use
+  // of !important tags.
+  .crl-table .crdb-ant-table-thead {
+    & > tr > .crdb-ant-table-cell {
+      padding-bottom: 0; // Only remove the padding in the header row;
+      border-bottom: 0;
+    }
+
+    &::after {
+      content: "@"; // Allows the box shadow to take effect on the top of tbody. (Prevents cutting off)
+      height: 1px;
+      color: $color-base-white;
+    }
+  }
+
+  .crl-table .crdb-ant-table-tbody {
+    outline: 1px solid $color-core-neutral-3;
+    border-radius: $crl-border-radius;
+
+    // Because we are overriding the colors of the td elements, we need to
+    // apply border radius styling to the colored items. In the case of the
+    // top of the table, we can search for the first and last td elements in
+    // the first row. This prevents the coloring from going over the border
+    // radius.
+    tr:first-child {
+      td:first-child {
+        border-top-left-radius: 6px;
+      }
+
+      td:last-child {
+        border-top-right-radius: 6px;
+      }
+    }
+  }
+
+  .crl-table .crdb-ant-table-expanded-row > td {
+    padding: 0; // Remove default padding of an expanded row. This is the padding for the inner table.
+  }
+
+  // Note: "!important" is necessary here due to an enormous selector on AntD's side.
+  .crdb-ant-table-cell::before {
+    width: 0 !important; // Remove a border line between cells without a sorter.
+  }
+
+  // Use a more specific selector to override the !important coming from
+  // table.scss. This allows us to apply a custom background color for
+  // an expanded row, when the "+" button is clicked.
+  //
+  // Note: "!important" is necessary here due to table.scss having one.
+  .crl-table .crdb-ant-table-tbody > .expanded-row > td {
+    background-color: $color-core-neutral-2 !important;
+  }
+}
+
+.nested-inner-table-container {
+  animation-name: fade-in;
+  animation-duration: 0.3s; // Same transition length as the background color change for the selected row.
+
+  .crl-table__inner-container {
+    padding: 0; // Remove padding added by cockroach container;
+  }
+
+  .crl-table .crdb-ant-table-content {
+    padding: 0 crl-gutters(2) crl-gutters(2) crl-gutters(2);
+    background-color: $color-core-neutral-1;
+  }
+
+  .crl-table .crdb-ant-table-tbody {
+    outline: 0;
+
+    .crdb-ant-table-cell {
+      // Ensure that the inner table remains the same background on hover.
+      // Note: "!important" is necessary here due to table.scss having one.
+      background: $color-core-neutral-1 !important;
+    }
+  }
+
+  .crl-table .crdb-ant-table-thead {
+    .crdb-ant-table-cell {
+      // Ensure that the inner table remains the same background on hover.
+      background: $color-core-neutral-1 !important;
+      transition: background-color 0.3s; // Copy AntD background transition;
+    }
+
+    &::after {
+      content: "" !important; // Remove the spacing between the thead and tbody.
+    }
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}

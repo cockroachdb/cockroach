@@ -1,0 +1,266 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package sqlclustersettings
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/errors"
+)
+
+// DefaultPrimaryRegionClusterSettingName is the name of the cluster setting
+// that returns the default primary region.
+const DefaultPrimaryRegionClusterSettingName = "sql.defaults.primary_region"
+
+// DefaultPrimaryRegion is a cluster setting that contains the default primary region.
+var DefaultPrimaryRegion = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	DefaultPrimaryRegionClusterSettingName,
+	`if not empty, all databases created without a PRIMARY REGION will `+
+		`implicitly have the given PRIMARY REGION`,
+	"",
+	settings.WithPublic)
+
+// PublicSchemaCreatePrivilegeEnabled is the cluster setting that determines
+// whether the CREATE privilege is given to the `public` role on the `public`
+// schema at the time the schema is created.
+var PublicSchemaCreatePrivilegeEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.public_schema_create_privilege.enabled",
+	"determines whether to grant all users the CREATE privileges on the public "+
+		"schema when it is created",
+	true,
+	settings.WithPublic)
+
+// RestrictAccessToSystemInterface restricts access to certain SQL
+// features from the system tenant/interface. This restriction exists
+// to prevent the following UX surprise:
+//
+//   - end-user desires to achieve a certain outcome in a virtual cluster;
+//   - however, they mess up their connection string and connect to the
+//     system tenant instead;
+//   - without this setting, the resulting SQL would succeed in the
+//     system tenant and the user would not realize they were not
+//     connected to the right place.
+var RestrictAccessToSystemInterface = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"sql.restrict_system_interface.enabled",
+	"if enabled, certain statements produce errors or warnings when run from the system interface to encourage use of a virtual cluster",
+	false)
+
+// SecondaryTenantZoneConfigsEnabled controls if secondary tenants are allowed
+// to set zone configurations. It has no effect for the system tenant.
+//
+// This setting has no effect on zone configurations that have already been set.
+var SecondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"sql.zone_configs.allow_for_secondary_tenant.enabled",
+	"enable the use of ALTER CONFIGURE ZONE in virtual clusters",
+	true,
+	settings.WithName("sql.virtual_cluster.feature_access.zone_configs.enabled"),
+)
+
+// SecondaryTenantsAllZoneConfigsEnabled is an extension of
+// SecondaryTenantZoneConfigsEnabled that allows virtual clusters to modify all
+// type of constraints in zone configs (i.e. not only zones and regions).
+var SecondaryTenantsAllZoneConfigsEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled",
+	"enable unrestricted usage of ALTER CONFIGURE ZONE in virtual clusters",
+	true,
+)
+
+// MultiRegionSystemDatabaseEnabled controls if system tenants are allowed
+// to be set up to be multi-region.
+var MultiRegionSystemDatabaseEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"sql.multiregion.system_database_multiregion.enabled",
+	"enable option to set up system database as multi-region",
+	false,
+)
+
+// ApproxMaxSchemaObjectCount is the approximate maximum number of schema
+// objects allowed in the cluster. This is a guardrail to prevent unbounded
+// growth of the descriptor table. The check uses cached table statistics when
+// available, so the actual count may slightly exceed this limit.
+var ApproxMaxSchemaObjectCount = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.schema.approx_max_object_count",
+	"approximate maximum number of schema objects allowed in the cluster; "+
+		"the check uses cached statistics, so the actual count may slightly exceed this limit; "+
+		"set to 0 to disable",
+	20000,
+	settings.NonNegativeInt,
+	settings.WithPublic,
+)
+
+// SchemaLockedAutoUnlockEnabled controls whether DDL operations will
+// attempt to automatically unlock and re-lock schema_locked tables.
+// When false, DDL on schema-locked tables is blocked unless the user
+// manually unlocks the table first.
+var SchemaLockedAutoUnlockEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.schema.auto_unlock.enabled",
+	"controls whether DDL operations will attempt to automatically unlock "+
+		"and re-lock schema_locked tables. When this setting is false, DDL on "+
+		"schema_locked tables is blocked unless the user manually unlocks the "+
+		"table first. The schema_locked storage parameter improves changefeed "+
+		"performance by locking the table's schema from the perspective of the "+
+		"changefeed.",
+	true,
+	settings.WithPublic)
+
+// RequireSystemTenantOrClusterSetting returns a setting disabled error if
+// executed from inside a secondary tenant that does not have the specified
+// cluster setting.
+func RequireSystemTenantOrClusterSetting(
+	codec keys.SQLCodec, settings *cluster.Settings, setting *settings.BoolSetting,
+) error {
+	if codec.ForSystemTenant() || setting.Get(&settings.SV) {
+		return nil
+	}
+	return errors.WithDetailf(errors.WithHint(
+		errors.New("operation is disabled within a virtual cluster"),
+		"Feature was disabled by the system operator."),
+		"Feature flag: %s", setting.Name())
+}
+
+// InferRegionUsingConstraintEnabled is used to enable and disable setting a
+// foreign key constraint for looking up the region column in a REGIONAL BY ROW
+// table.
+var InferRegionUsingConstraintEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"feature.infer_rbr_region_col_using_constraint.enabled",
+	"set to true to enable looking up the region column via a foreign key constraint in a "+
+		"REGIONAL BY ROW table, false to disable; default is false",
+	false,
+	settings.WithPublic,
+)
+
+// CachedSequencesCacheSizeSetting is the default cache size used when
+// SessionNormalizationMode is SerialUsesCachedSQLSequences or
+// SerialUsesCachedNodeSQLSequences.
+var CachedSequencesCacheSizeSetting = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.defaults.serial_sequences_cache_size",
+	"the default cache size when the session's serial normalization mode is set to cached sequences"+
+		"A cache size of 1 means no caching. Any cache size less than 1 is invalid.",
+	256,
+	settings.PositiveInt,
+)
+
+type LDRWriterType string
+
+const (
+	// LDRWriterTypeSQL uses the SQL layer to write replicated rows.
+	LDRWriterTypeSQL LDRWriterType = "sql"
+	// LDRWriterTypeLegacyKV uses the legacy KV layer to write rows. The KV writer
+	// is deprecated because it does not support the full set of features of the
+	// SQL writer.
+	LDRWriterTypeLegacyKV LDRWriterType = "legacy-kv"
+	// writerTypeCRUD is the shiny new sql writer that uses explicit reads,
+	// inserts, updates, and deletes instead of upserts.
+	LDRWriterTypeCRUD LDRWriterType = "crud"
+	// LDRWriterTypeTxn uses the transaction writer which applies rows using the
+	// SQL layer with explicit CRUD operations and savepoint-based conflict
+	// handling.
+	LDRWriterTypeTxn LDRWriterType = "txn"
+)
+
+var LDRImmediateModeWriter = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.immediate_mode_writer",
+	"the writer to use when in immediate mode",
+	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(LDRWriterTypeCRUD), string(LDRWriterTypeLegacyKV), string(LDRWriterTypeSQL), string(LDRWriterTypeTxn)),
+	settings.WithValidateString(func(sv *settings.Values, val string) error {
+		switch LDRWriterType(val) {
+		case LDRWriterTypeSQL, LDRWriterTypeLegacyKV, LDRWriterTypeCRUD, LDRWriterTypeTxn:
+			return nil
+		default:
+			return errors.Newf("immediate mode writer must be 'sql', 'legacy-kv', 'crud', or 'txn', got '%s'", val)
+		}
+	}),
+)
+
+// UseInstanceInfoForSQLInstances controls whether to use sqlinstance.InstanceInfo
+// instead of roachpb.NodeDescriptor when retrieving SQL instance information.
+// This is necessary for proper handling of SQL instances in multi-tenant
+// environments where SQL instances may not have corresponding KV nodes.
+var UseInstanceInfoForSQLInstances = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.instance_info.use_instance_resolver.enabled",
+	"use sqlinstance.InstanceInfo instead of NodeDescriptor for SQL instance lookups; "+
+		"enables proper handling of SQL instances in serverless environments",
+	metamorphic.ConstantWithTestBool("sql.instance_info.use_instance_resolver.enabled", true))
+
+var PLpgSQLProcedureLateBinding = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.procedures.plpgsql.late_binding.enabled",
+	"when true, PL/pgSQL procedure bodies are not resolved at creation time; "+
+		"references are resolved at CALL time instead, matching PostgreSQL "+
+		"PL/pgSQL semantics. Does not affect LANGUAGE SQL procedures or "+
+		"functions",
+	false,
+	settings.WithPublic,
+)
+
+// PLpgSQLProcedureLateBindingEnabled returns true when both the V26_3 version
+// gate and the cluster setting permit PL/pgSQL procedure late binding. All
+// late-binding call sites must use this helper.
+func PLpgSQLProcedureLateBindingEnabled(ctx context.Context, st *cluster.Settings) bool {
+	return st.Version.IsActive(ctx, clusterversion.V26_3) &&
+		PLpgSQLProcedureLateBinding.Get(&st.SV)
+}
+
+// SkipUnderlyingViewPrivilegeChecks controls whether privilege checks on underlying
+// tables are skipped when selecting from a view. By default (false), the view
+// owner's privileges are checked on the underlying tables, and the owner's
+// row-level security (RLS) policies are enforced. When enabled, all privilege
+// checks on the underlying tables are skipped and the invoker RLS is enforced.
+// This means that any user with SELECT privileges on the view can query it
+// regardless of the underlying table privileges. This restores the pre-v26.2 behavior.
+var SkipUnderlyingViewPrivilegeChecks = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.skip_underlying_view_privilege_checks.enabled",
+	"determines whether to skip privilege checks on tables underlying views. "+
+		"When enabled, users with SELECT privileges on a view can query it regardless of "+
+		"their privileges on the underlying tables, and row-level security "+
+		"policies are evaluated as the invoking user rather than the view owner. "+
+		"This restores pre-v26.2 behavior.",
+	false,
+	settings.WithPublic)
+
+// AllowSubsetUniqueFKs gates creation of subset-unique foreign keys: a
+// CockroachDB extension that lets an FK be backed by a unique constraint
+// covering only some of the FK's referenced columns (e.g. a parent with
+// UNIQUE(a) can back an FK that references (a, b)). When this setting is
+// false, only exact matches between the FK's referenced columns and a
+// parent unique constraint are accepted at creation time.
+//
+// Mixed-version safety is enforced separately by clusterversion.V26_3.
+// This setting is what operators can flip once V26_3 has been finalized,
+// either as a kill switch if a regression appears or to enforce
+// SQL standard/PostgreSQL-compatible strict matching cluster-wide.
+//
+// The setting governs creation only. Once a subset-unique FK exists in the
+// catalog, lookups that resolve it for validation or back-reference
+// handling continue to honor subset matching regardless of the setting
+// so that flipping the setting off cannot break any existing FKs.
+var AllowSubsetUniqueFKs = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.subset_unique_fks.enabled",
+	"if true, foreign keys may be backed by a unique constraint that covers "+
+		"only a strict subset of the foreign key's referenced columns (e.g. a "+
+		"parent with UNIQUE(a) can back an FK that references (a, b)); set to "+
+		"false to require strict matching, as required by the SQL standard "+
+		"and PostgreSQL",
+	true,
+	settings.WithPublic)

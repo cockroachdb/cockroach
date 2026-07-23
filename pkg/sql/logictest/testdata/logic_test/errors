@@ -1,0 +1,20 @@
+statement error pgcode 42P01 relation "fake1" does not exist
+ALTER TABLE fake1 DROP COLUMN a
+
+statement error pgcode 42P01 relation "fake2" does not exist
+CREATE INDEX i ON fake2 (a)
+
+statement error pgcode 42P01 relation "fake3" does not exist
+DROP INDEX fake3@i
+
+statement error pgcode 42P01 relation "fake4" does not exist
+DROP TABLE fake4
+
+statement error pgcode 42P01 relation "fake5" does not exist
+SHOW COLUMNS FROM fake5
+
+statement error pgcode 42P01 relation "fake6" does not exist
+INSERT INTO fake6 VALUES (1, 2)
+
+statement error pgcode 42P01 relation "fake7" does not exist
+SELECT * FROM fake7

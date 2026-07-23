@@ -1,0 +1,128 @@
+# format:
+#
+# <table dump name>
+# <column>\t<encoded value>
+# ...
+# ----
+# <decoded value>
+# ...
+
+crdb_internal.system_jobs.txt
+progress  \x10bdb9a5929b9f8a03aa0200
+progress  \x10f5d5f4949b9f8a03b2010c0a0a08c098af8786ec838818
+progress  \x10effdc3929b9f8a030d0000803fa8019984a0c1e09cd9e3486a0d1204000000002a010032003a00
+----
+{"Progress":null,"modified_micros":1733902763383997,"Details":{"table_metadata_cache":{}},"trace_id":0}
+{"Progress":null,"modified_micros":1733902768876277,"Details":{"AutoSpanConfigReconciliation":{"checkpoint":{"wall_time":1733902763154984000}}},"trace_id":0}
+{"Progress":{"fraction_completed":1},"modified_micros":1733902763884271,"Details":{"import":{"read_progress":[0],"span_progress":null,"resume_pos":[0],"sequence_details":[{}],"summary":{}}},"trace_id":5244271230238327321}
+
+
+system.tenants.txt
+info  \x080110001a0020002a004200
+----
+{"deprecated_id":1,"deprecated_data_state":0,"dropped_name":"","physical_replication_consumer_job_id":0,"capabilities":{},"last_revert_tenant_timestamp":{}}
+
+system.statement_statistics_limit_5000.txt
+fingerprint_id	\x0069f90926c070b5
+transaction_fingerprint_id	\x3b78e4a8d5fbb7ae
+plan_hash \x73761d939a82b2be
+----
+"78303036-3966-3930-3932-366330373062"
+"78336237-3865-3461-3864-356662623761"
+"78373337-3631-6439-3339-613832623262"
+
+
+system.sql_instances.txt
+session_id	\x010180a02ce496977a492f83fe04b7961c126c
+----
+"78303130-3138-3061-3032-636534393639"
+
+
+system.sqlliveness.txt
+session_id	\x0101800fd1b2a2f6004f608256705bbaef3f84
+crdb_region	\x80
+crdb_region	us-east1
+----
+"78303130-3138-3030-6664-316232613266"
+null
+"us-east1"
+
+
+system.eventlog.txt
+uniqueID	\x8c3cfa9c789b40438675af0a91017f7a
+----
+"78386333-6366-6139-6337-383962343034"
+
+
+system.descriptor.txt
+descriptor	\x12450a0673797374656d10011a250a0d0a0561646d696e1080101880100a0c0a04726f6f7410801018801012046e6f646518032200280140004a006a0808181002180020167000
+----
+{"Union":{"database":{"name":"system","id":1,"modification_time":{},"version":1,"privileges":{"users":[{"user_proto":"admin","privileges":2048,"with_grant_option":2048},{"user_proto":"root","privileges":2048,"with_grant_option":2048}],"owner_proto":"node","version":3},"schemas":null,"state":0,"offline_reason":"","system_database_schema_version":{"major":24,"minor":2,"patch":0,"internal":22},"replicated_pcr_version":0}}}
+
+
+crdb_internal.node_txn_execution_insights.txt
+txn_fingerprint_id	\x49b155010237c9b5
+----
+"78343962-3135-3530-3130-323337633962"
+
+
+crdb_internal.node_execution_insights.txt
+txn_fingerprint_id	\x49b155010237c9b5
+stmt_fingerprint_id	\x7a77813da47e05e1
+----
+"78343962-3135-3530-3130-323337633962"
+"78376137-3738-3133-6461-343765303565"
+
+
+crdb_internal.kv_session_based_leases.txt
+session_id	\x01018008f8bcbead5c424c8f22d1000ea851ca
+crdb_region	\x80
+crdb_region	us-east1
+----
+"78303130-3138-3030-3866-386263626561"
+null
+"us-east1"
+
+
+system.scheduled_jobs.txt
+schedule_state	\x
+schedule_state	\x0a09737563636565646564
+schedule_details	\x08021a105fd818f3cead470098747a4e2e368092220a12080818100218002016
+execution_args	\x0a4b0a49747970652e676f6f676c65617069732e636f6d2f636f636b726f6163682e73716c2e5363686564756c656453514c5374617473436f6d706163746f72457865637574696f6e41726773
+----
+{}
+{"status":"succeeded"}
+{"wait":2,"cluster_id":"5fd818f3-cead-4700-9874-7a4e2e368092","creation_cluster_version":{"active_version":{"major":24,"minor":2,"patch":0,"internal":22}}}
+{"args":{"type_url":"type.googleapis.com/cockroach.sql.ScheduledSQLStatsCompactorExecutionArgs"}}
+
+
+system.span_configurations.txt
+start_key	\x88
+start_key	\x04006c6976656e6573732d
+end_key	\x04ff7379732d73636667
+config	\x08808080401080808080021a0308901c2805
+----
+"/Table/0"
+"/System/NodeLiveness"
+"/System/SystemSpanConfigKeys"
+{"range_min_bytes":134217728,"range_max_bytes":536870912,"gc_policy":{"ttl_seconds":3600,"protection_policies":null},"num_replicas":5,"constraints":null,"voter_constraints":null,"lease_preferences":null}
+
+
+crdb_internal.transaction_contention_events.txt
+blocking_txn_fingerprint_id	\xee12d3af7ca02346
+waiting_stmt_fingerprint_id	\x62c29177ea079a33
+waiting_txn_fingerprint_id	\xee12d3af7ca02346
+----
+"78656531-3264-3361-6637-636130323334"
+"78363263-3239-3137-3765-613037396133"
+"78656531-3264-3361-6637-636130323334"
+
+
+crdb_internal.transaction_contention_events.fallback.txt
+blocking_txn_fingerprint_id	\xee12d3af7ca02346
+waiting_stmt_fingerprint_id	\x62c29177ea079a33
+waiting_txn_fingerprint_id	\xee12d3af7ca02346
+----
+"78656531-3264-3361-6637-636130323334"
+"78363263-3239-3137-3765-613037396133"
+"78656531-3264-3361-6637-636130323334"

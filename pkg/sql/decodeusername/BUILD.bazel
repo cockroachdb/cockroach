@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "decodeusername",
+    srcs = ["role_spec.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/decodeusername",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/security/username",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "decodeusername_test",
+    srcs = ["role_spec_test.go"],
+    embed = [":decodeusername"],
+    deps = [
+        "//pkg/security/username",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+    ],
+)

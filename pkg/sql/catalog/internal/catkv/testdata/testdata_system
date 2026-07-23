@@ -1,0 +1,611 @@
+setup
+SET use_declarative_schema_changer = off;
+SET create_table_with_schema_locked=false;
+
+ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 7200;
+CREATE SCHEMA sc;
+CREATE TYPE sc.greeting AS ENUM('hi', 'hello');
+CREATE FUNCTION sc.identityfun(val INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$ SELECT val $$;
+CREATE TABLE kv (k INT PRIMARY KEY, v STRING);
+ALTER TABLE kv ADD CONSTRAINT ck CHECK (k > 0);
+CREATE MATERIALIZED VIEW mv AS SELECT k, v FROM kv;
+CREATE INDEX idx ON mv(v);
+ALTER TABLE kv CONFIGURE ZONE USING gc.ttlseconds = 3600;
+COMMENT ON DATABASE defaultdb IS 'this is the default database';
+COMMENT ON SCHEMA sc IS 'this is a schema';
+COMMENT ON SCHEMA public IS 'this is the public schema';
+COMMENT ON TABLE kv IS 'this is a table';
+COMMENT ON INDEX mv@idx IS 'this is an index';
+COMMENT ON CONSTRAINT ck ON kv IS 'this is a check constraint';
+COMMENT ON CONSTRAINT kv_pkey ON kv IS 'this is a primary key constraint';
+
+-- below queries are for scan_descriptors_in_span tests
+CREATE TABLE scan_test_1(main SERIAL PRIMARY KEY, alternate VARCHAR UNIQUE);
+CREATE TABLE scan_test_2(main INT PRIMARY KEY, alternate VARCHAR UNIQUE);
+
+INSERT INTO scan_test_1(alternate) VALUES ('a');
+INSERT INTO scan_test_1(alternate) VALUES ('c');
+INSERT INTO scan_test_1(alternate) VALUES ('f');
+
+INSERT INTO scan_test_2(main, alternate) VALUES (1, 'b');
+INSERT INTO scan_test_2(main, alternate) VALUES (4, 'c');
+INSERT INTO scan_test_2(main, alternate) VALUES (9, 'd');
+----
+
+scan_namespace_for_databases
+----
+catalog:
+  "001":
+    namespace: (0, 0, "system")
+    num_objects: 0
+  "100":
+    namespace: (0, 0, "defaultdb")
+  "102":
+    namespace: (0, 0, "postgres")
+trace:
+- Scan /NamespaceTable/30/1/0/0
+
+is_name_in_cache name_key=(0,0,system)
+----
+true
+
+is_name_in_cache name_key=(1,29,jobs)
+----
+false
+
+# System tables are not in the cached catalog, but their names are not
+# read from storage either if a system database cache is present.
+get_by_names name_key=(1,29,jobs)
+----
+catalog:
+  "015":
+    namespace: (1, 29, "jobs")
+trace:
+- Get /NamespaceTable/30/1/1/29/"jobs"/4/1
+cached:
+- Get /NamespaceTable/30/1/1/29/"jobs"/4/1
+
+# After a lookup the result is always cached regardless of the above.
+is_name_in_cache name_key=(1,29,jobs)
+----
+true
+
+scan_namespace_for_database_schemas_and_objects db_id=100
+----
+catalog:
+  "101":
+    namespace: (100, 0, "public")
+  "104":
+    namespace: (100, 0, "sc")
+  "105":
+    namespace: (100, 104, "greeting")
+  "106":
+    namespace: (100, 104, "_greeting")
+  "108":
+    namespace: (100, 101, "kv")
+  "109":
+    namespace: (100, 101, "mv")
+  "110":
+    namespace: (100, 101, "scan_test_1")
+  "111":
+    namespace: (100, 101, "scan_test_2")
+trace:
+- Scan /NamespaceTable/30/1/100
+
+# The results should be cached from the previous call.
+scan_namespace_for_database_schemas db_id=100
+----
+catalog:
+  "101":
+    namespace: (100, 0, "public")
+  "104":
+    namespace: (100, 0, "sc")
+trace:
+- Scan /NamespaceTable/30/1/100/0
+cached:
+- Scan /NamespaceTable/30/1/100/0
+
+is_name_in_cache name_key=(100,101,kv)
+----
+true
+
+# Same as above.
+scan_namespace_for_schema_objects db_id=100 sc_id=104
+----
+catalog:
+  "105":
+    namespace: (100, 104, "greeting")
+  "106":
+    namespace: (100, 104, "_greeting")
+trace:
+- Scan /NamespaceTable/30/1/100/104
+cached:
+- Scan /NamespaceTable/30/1/100/104
+
+# We exhaustively know all the name -> ID mappings in the database.
+is_desc_id_known_to_not_exist id=123 maybe_parent_id=100
+----
+true
+
+# Descriptor, comments and zone config should be present.
+get_by_ids id=108
+----
+catalog:
+  "108":
+    comments:
+      constraint_1: this is a primary key constraint
+      constraint_2: this is a check constraint
+      table: this is a table
+    descriptor: relation
+    zone: gc.ttlseconds=3600
+trace:
+- Get /Table/3/1/108/2/1
+- Scan /Table/24/1/0/108
+- Scan /Table/24/1/1/108
+- Scan /Table/24/1/2/108
+- Scan /Table/24/1/3/108
+- Scan /Table/24/1/4/108
+- Scan /Table/24/1/5/108
+- Scan /Table/24/1/6/108
+- Scan /Table/24/1/7/108
+- Get /Table/5/1/108/2/1
+
+# Zone config, but no descriptor should be present.
+get_by_ids id=0
+----
+catalog:
+  "000":
+    zone: gc.ttlseconds=14400
+trace:
+- Get /Table/3/1/0/2/1
+- Scan /Table/24/1/0/0
+- Scan /Table/24/1/1/0
+- Scan /Table/24/1/2/0
+- Scan /Table/24/1/3/0
+- Scan /Table/24/1/4/0
+- Scan /Table/24/1/5/0
+- Scan /Table/24/1/6/0
+- Scan /Table/24/1/7/0
+- Get /Table/5/1/0/2/1
+
+get_by_ids id=104 id=105 id=106 id=107
+----
+catalog:
+  "104":
+    comments:
+      schema: this is a schema
+    descriptor: schema
+  "105":
+    descriptor: type
+  "106":
+    descriptor: type
+  "107":
+    descriptor: function
+trace:
+- Scan Range /Table/3/1/104/2/1 /Table/3/1/108/2/1
+- Scan Range /Table/24/1/0/104 /Table/24/1/0/108
+- Scan Range /Table/24/1/1/104 /Table/24/1/1/108
+- Scan Range /Table/24/1/2/104 /Table/24/1/2/108
+- Scan Range /Table/24/1/3/104 /Table/24/1/3/108
+- Scan Range /Table/24/1/4/104 /Table/24/1/4/108
+- Scan Range /Table/24/1/5/104 /Table/24/1/5/108
+- Scan Range /Table/24/1/6/104 /Table/24/1/6/108
+- Scan Range /Table/24/1/7/104 /Table/24/1/7/108
+- Scan Range /Table/5/1/104/2/1 /Table/5/1/108/2/1
+
+is_id_in_cache id=107
+----
+true
+
+# Reset the cache.
+reset
+----
+
+is_id_in_cache id=107
+----
+false
+
+# System database cache should be preserved after reset.
+get_by_names name_key=(1,29,jobs)
+----
+catalog:
+  "015":
+    namespace: (1, 29, "jobs")
+trace:
+- Get /NamespaceTable/30/1/1/29/"jobs"/4/1
+cached:
+- Get /NamespaceTable/30/1/1/29/"jobs"/4/1
+
+scan_all
+----
+catalog:
+  "000":
+    zone: gc.ttlseconds=14400
+  "001":
+    descriptor: database
+    namespace: (0, 0, "system")
+    num_objects: 74
+    zone: gc.ttlseconds=14400
+  "016":
+    zone: gc.ttlseconds=3600
+  "017":
+    zone: gc.ttlseconds=14400
+  "018":
+    zone: gc.ttlseconds=14400
+  "022":
+    zone: gc.ttlseconds=600
+  "100":
+    comments:
+      database: this is the default database
+    descriptor: database
+    namespace: (0, 0, "defaultdb")
+    zone: gc.ttlseconds=7200
+  "101":
+    comments:
+      schema: this is the public schema
+    descriptor: schema
+    namespace: (100, 0, "public")
+  "102":
+    descriptor: database
+    namespace: (0, 0, "postgres")
+  "103":
+    descriptor: schema
+    namespace: (102, 0, "public")
+  "104":
+    comments:
+      schema: this is a schema
+    descriptor: schema
+    namespace: (100, 0, "sc")
+  "105":
+    descriptor: type
+    namespace: (100, 104, "greeting")
+  "106":
+    descriptor: type
+    namespace: (100, 104, "_greeting")
+  "107":
+    descriptor: function
+  "108":
+    comments:
+      constraint_1: this is a primary key constraint
+      constraint_2: this is a check constraint
+      table: this is a table
+    descriptor: relation
+    namespace: (100, 101, "kv")
+    zone: gc.ttlseconds=3600
+  "109":
+    comments:
+      index_2: this is an index
+    descriptor: relation
+    namespace: (100, 101, "mv")
+  "110":
+    descriptor: relation
+    namespace: (100, 101, "scan_test_1")
+  "111":
+    descriptor: relation
+    namespace: (100, 101, "scan_test_2")
+trace:
+- Scan /Table/3/1
+- Scan /NamespaceTable/30/1
+- Scan /Table/24/1
+- Scan /Table/5/1
+
+# After scanning everything we also know what doesn't exist.
+is_desc_id_known_to_not_exist id=123
+----
+true
+
+# Make sure scan_all properly updated the cache.
+is_id_in_cache id=107
+----
+true
+
+is_id_in_cache id=108
+----
+true
+
+# Get* queries involving IDs or names which don't exist after a
+# ScanAll should bypass storage in the cached CatalogReader.
+get_by_ids id=456
+----
+catalog: {}
+trace:
+- Get /Table/3/1/456/2/1
+- Scan /Table/24/1/0/456
+- Scan /Table/24/1/1/456
+- Scan /Table/24/1/2/456
+- Scan /Table/24/1/3/456
+- Scan /Table/24/1/4/456
+- Scan /Table/24/1/5/456
+- Scan /Table/24/1/6/456
+- Scan /Table/24/1/7/456
+- Get /Table/5/1/456/2/1
+cached:
+- Get /Table/3/1/456/2/1
+- Scan /Table/24/1/0/456
+- Scan /Table/24/1/1/456
+- Scan /Table/24/1/2/456
+- Scan /Table/24/1/3/456
+- Scan /Table/24/1/4/456
+- Scan /Table/24/1/5/456
+- Scan /Table/24/1/6/456
+- Scan /Table/24/1/7/456
+- Get /Table/5/1/456/2/1
+
+get_by_names name_key=(123,456,foo)
+----
+catalog: {}
+trace:
+- Get /NamespaceTable/30/1/123/456/"foo"/4/1
+cached:
+- Get /NamespaceTable/30/1/123/456/"foo"/4/1
+
+# Reset to clear any caching
+reset
+----
+
+# Scanning all comments after resetting should only
+# give us comments belonging to the db with db_id=100 -
+# alongside the system.comments table
+scan_all_comments db_id=100
+----
+catalog:
+  "100":
+    comments:
+      database: this is the default database
+  "101":
+    comments:
+      schema: this is the public schema
+    namespace: (100, 0, "public")
+  "104":
+    comments:
+      schema: this is a schema
+    namespace: (100, 0, "sc")
+  "105":
+    namespace: (100, 104, "greeting")
+  "106":
+    namespace: (100, 104, "_greeting")
+  "108":
+    comments:
+      constraint_1: this is a primary key constraint
+      constraint_2: this is a check constraint
+      table: this is a table
+    namespace: (100, 101, "kv")
+  "109":
+    comments:
+      index_2: this is an index
+    namespace: (100, 101, "mv")
+  "110":
+    namespace: (100, 101, "scan_test_1")
+  "111":
+    namespace: (100, 101, "scan_test_2")
+trace:
+- Scan /NamespaceTable/30/1/100
+- Scan /Table/24/1
+
+# Reset to clear any caching
+reset
+----
+
+# On a nil database descriptor (pg_catalog.pg_shdescription),
+# scanning comments should only involve looking at all databases -
+# alongside the system.comments table
+scan_all_comments_nil_db
+----
+catalog:
+  "001":
+    namespace: (0, 0, "system")
+    num_objects: 0
+  "100":
+    comments:
+      database: this is the default database
+    namespace: (0, 0, "defaultdb")
+  "101":
+    comments:
+      schema: this is the public schema
+  "102":
+    namespace: (0, 0, "postgres")
+  "104":
+    comments:
+      schema: this is a schema
+  "108":
+    comments:
+      constraint_1: this is a primary key constraint
+      constraint_2: this is a check constraint
+      table: this is a table
+  "109":
+    comments:
+      index_2: this is an index
+trace:
+- Scan /NamespaceTable/30/1/0
+- Scan /Table/24/1
+
+# The below tests test the many circumstances for scanning a set
+# of descriptors within a span.
+#
+# For this test, there are two relevant tables, 'scan_test_1' and 'scan_test_2'
+# with two indexes each on columns main and secondary, denoted
+# by the below notation:
+# T1I1 (scan_test_1, main), T1I2, T2I1, T2I2
+#
+# The boundaries will be marked by keys on either side of it <left>/<right>.
+#
+# Indexes =      └────T1I1────┴────T1I2───┴────T2I1────┴────T2I2───┘
+# Keys    =   min/1          3/a         f/1          9/b         d/max
+#
+# Args 'start' and 'end' take the format "<tableId>/<indexId>(/<key>?)"
+
+# start key after end key should panic
+# disabled because the panic seems to appear in a different goroutine
+# scan_descriptors_in_span start=111/1 end=110/1 panics=true
+# ----
+
+# # same start and end key should return first descriptor
+# disabled because it panics if the same key is passed
+# scan_descriptors_in_span start=110/1 end=110/1
+# ----
+
+# test with only table prefix
+scan_descriptors_in_span start=110 end=111
+----
+catalog:
+  "110":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/111/2/1
+
+# start and end are one key away from each other
+scan_descriptors_in_span start=110/1/1 end=110/1/2
+----
+catalog:
+  "110":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/111/2/1
+
+# scan with the start at the prefix, the end in the table span
+scan_descriptors_in_span start=110/1 end=110/1/1
+----
+catalog:
+  "110":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/111/2/1
+
+# end after the first index
+scan_descriptors_in_span start=110/1 end=110/2
+----
+catalog:
+  "110":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/111/2/1
+
+
+# end in the second index
+scan_descriptors_in_span start=110/1 end=110/2/a
+----
+catalog:
+  "110":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/111/2/1
+
+
+# end on a value which doesn't exist
+scan_descriptors_in_span start=110/1 end=110/2/b
+----
+catalog:
+  "110":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/111/2/1
+
+
+# end on the last value in the second index
+scan_descriptors_in_span start=110/1 end=110/2/f
+----
+catalog:
+  "110":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/111/2/1
+
+
+# start on the last value in the second index
+scan_descriptors_in_span start=110/1 end=110/2/f
+----
+catalog:
+  "110":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/111/2/1
+
+
+# end directly on first index is exclusive
+scan_descriptors_in_span start=110/1 end=111/1
+----
+catalog:
+  "110":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/111/2/1
+
+
+# end on the first key of the second table is inclusive
+scan_descriptors_in_span start=110/1 end=111/1/0
+----
+catalog:
+  "110":
+    descriptor: relation
+  "111":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/112/2/1
+
+# end on an absurd key
+scan_descriptors_in_span start=110/2/f end=9000/1
+----
+catalog:
+  "110":
+    descriptor: relation
+  "111":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/9000/2/1
+
+# start in the middle of the first table
+scan_descriptors_in_span start=110/1/1 end=112/1
+----
+catalog:
+  "110":
+    descriptor: relation
+  "111":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/112/2/1
+
+# start on the last key of the first table
+scan_descriptors_in_span start=110/2/f end=112/1
+----
+catalog:
+  "110":
+    descriptor: relation
+  "111":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/112/2/1
+
+# start on the first key of the second table
+scan_descriptors_in_span start=111/1 end=112/1
+----
+catalog:
+  "111":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/111/2/1 /Table/3/1/112/2/1
+
+# verify that multiple span scanning works
+scan_descriptors_in_multiple_spans first=(110/1,111/1) second=(111/1,112/1)
+----
+catalog:
+  "110":
+    descriptor: relation
+  "111":
+    descriptor: relation
+trace:
+- Scan Range /Table/3/1/110/2/1 /Table/3/1/111/2/1
+- Scan Range /Table/3/1/111/2/1 /Table/3/1/112/2/1
+
+# verify that passing a zero length span returns nothing
+scan_descriptors_in_span start=111/1 end=111/1
+----
+catalog: {}
+trace: []
+
+# verify that passing a negative length span throws an error
+scan_descriptors_in_span start=112/1 end=111/1
+----
+catalog: {}
+error: 'failed to verify keys for Scan: end key /Table/3/1/111/2/1 must be greater than start /Table/3/1/112/2/1'
+trace:
+- Scan Range /Table/3/1/112/2/1 /Table/3/1/111/2/1

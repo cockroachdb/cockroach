@@ -1,0 +1,285 @@
+# Test cases for defining default privileges on the schema.
+
+statement error pq: cannot use IN SCHEMA clause when using GRANT/REVOKE ON SCHEMAS
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SCHEMAS TO root
+
+statement error pq: crdb_internal is not a physical schema
+ALTER DEFAULT PRIVILEGES IN SCHEMA crdb_internal GRANT SELECT ON TABLES TO root
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+user testuser
+
+# Test on public schema.
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA public GRANT SELECT ON TABLES TO testuser2
+
+statement ok
+CREATE TABLE t1()
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON t1
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t1          admin      ALL             true
+test           public       t1          root       ALL             true
+test           public       t1          testuser   ALL             true
+test           public       t1          testuser2  SELECT          false
+
+# When creating an object, take the union of the default privileges on
+# the schema and the database.
+# In the following test cases, testuser2 should have INSERT and SELECT.
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT INSERT ON TABLES TO testuser2
+
+statement ok
+CREATE TABLE t2()
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON t2
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t2          admin      ALL             true
+test           public       t2          root       ALL             true
+test           public       t2          testuser   ALL             true
+test           public       t2          testuser2  INSERT          false
+test           public       t2          testuser2  SELECT          false
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT ALL ON TABLES TO testuser2
+
+statement ok
+CREATE TABLE t3()
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON t3
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t3          admin      ALL             true
+test           public       t3          root       ALL             true
+test           public       t3          testuser   ALL             true
+test           public       t3          testuser2  ALL             false
+
+# Revoke default privileges in schema.
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TABLES FROM testuser2
+
+statement ok
+CREATE TABLE t4()
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON t4
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t4          admin      ALL             true
+test           public       t4          root       ALL             true
+test           public       t4          testuser   ALL             true
+test           public       t4          testuser2  SELECT          false
+
+# Multiple schemas.
+statement ok
+CREATE SCHEMA s
+
+statement ok
+GRANT CREATE, USAGE ON SCHEMA s TO testuser
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA s, public GRANT ALL ON TABLES TO testuser2
+
+statement ok
+CREATE TABLE public.t5();
+CREATE TABLE s.t6();
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON public.t5
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t5          admin      ALL             true
+test           public       t5          root       ALL             true
+test           public       t5          testuser   ALL             true
+test           public       t5          testuser2  ALL             false
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON s.t6
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           s            t6          admin      ALL             true
+test           s            t6          root       ALL             true
+test           s            t6          testuser   ALL             true
+test           s            t6          testuser2  ALL             false
+
+# In schema for all roles.
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA s, public REVOKE ALL ON TABLES FROM testuser2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA s, public GRANT SELECT ON TABLES TO testuser2;
+
+user testuser
+
+statement ok
+CREATE TABLE public.t7();
+CREATE TABLE s.t8();
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON public.t7
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t7          admin      ALL             true
+test           public       t7          root       ALL             true
+test           public       t7          testuser   ALL             true
+test           public       t7          testuser2  SELECT          false
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON s.t8
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           s            t8          admin      ALL             true
+test           s            t8          root       ALL             true
+test           s            t8          testuser   ALL             true
+test           s            t8          testuser2  SELECT          false
+
+# Switch user to root, since we defined it on FOR ALL ROLES, the privileges
+# should be the same on tables we create.
+
+user root
+
+statement ok
+CREATE TABLE public.t9();
+CREATE TABLE s.t10();
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON public.t9
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t9          admin      ALL             true
+test           public       t9          root       ALL             true
+test           public       t9          testuser2  SELECT          false
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON s.t10
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           s            t10         admin      ALL             true
+test           s            t10         root       ALL             true
+test           s            t10         testuser2  SELECT          false
+
+# Revoking default privileges for the user creating the object is valid.
+user testuser
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TABLES FROM testuser;
+
+statement ok
+CREATE TABLE t11()
+
+# Note that testuser still has CREATE because testuser has CREATE on the parent
+# database.
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON t11
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t11         admin      ALL             true
+test           public       t11         root       ALL             true
+test           public       t11         testuser   ALL             true
+test           public       t11         testuser2  SELECT          false
+
+# Default privileges for schemas have no defaults - no privileges are defined
+# initially.
+statement ok
+CREATE SCHEMA s2
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TABLES FROM testuser;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TABLES FROM testuser2
+
+statement ok
+CREATE TABLE s2.t12()
+
+# Note that testuser still has CREATE because testuser has CREATE on the parent
+# database.
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON s2.t12
+----
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+test           s2           t12         admin     ALL             true
+test           s2           t12         root      ALL             true
+test           s2           t12         testuser  ALL             true
+
+query TTTBTTTB colnames,rowsort
+SELECT * FROM crdb_internal.default_privileges WHERE schema_name IS NOT NULL
+----
+database_name  schema_name  role  for_all_roles  object_type  grantee    privilege_type  is_grantable
+test           public       NULL  true           tables       testuser2  SELECT          false
+test           s            NULL  true           tables       testuser2  SELECT          false
+
+query TBTTTB colnames
+SHOW DEFAULT PRIVILEGES IN SCHEMA public
+----
+role  for_all_roles  object_type  grantee  privilege_type  is_grantable
+
+query TBTTTB colnames
+SHOW DEFAULT PRIVILEGES IN SCHEMA s
+----
+role  for_all_roles  object_type  grantee  privilege_type  is_grantable
+
+query TBTTTB colnames
+SHOW DEFAULT PRIVILEGES IN SCHEMA s2
+----
+role  for_all_roles  object_type  grantee  privilege_type  is_grantable
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA public GRANT ALL ON TABLES TO testuser;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA s GRANT USAGE ON TYPES TO testuser2;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA s2 GRANT SELECT, UPDATE, DROP ON TABLES TO testuser2
+
+query TTTBTTTB colnames,rowsort
+SELECT * FROM crdb_internal.default_privileges WHERE schema_name IS NOT NULL
+----
+database_name  schema_name  role      for_all_roles  object_type  grantee    privilege_type  is_grantable
+test           public       testuser  false          tables       testuser   ALL             false
+test           public       NULL      true           tables       testuser2  SELECT          false
+test           s            testuser  false          types        testuser2  USAGE           false
+test           s            NULL      true           tables       testuser2  SELECT          false
+test           s2           testuser  false          tables       testuser2  DROP            false
+test           s2           testuser  false          tables       testuser2  SELECT          false
+test           s2           testuser  false          tables       testuser2  UPDATE          false
+
+
+query TBTTTB colnames
+SHOW DEFAULT PRIVILEGES IN SCHEMA public
+----
+role      for_all_roles  object_type  grantee   privilege_type  is_grantable
+testuser  false          tables       testuser  ALL             false
+
+query TBTTTB colnames
+SHOW DEFAULT PRIVILEGES IN SCHEMA s
+----
+role      for_all_roles  object_type  grantee    privilege_type  is_grantable
+testuser  false          types        testuser2  USAGE           false
+
+query TBTTTB colnames,rowsort
+SHOW DEFAULT PRIVILEGES IN SCHEMA s2
+----
+role      for_all_roles  object_type  grantee    privilege_type  is_grantable
+testuser  false          tables       testuser2  DROP            false
+testuser  false          tables       testuser2  SELECT          false
+testuser  false          tables       testuser2  UPDATE          false
+
+user root
+
+query TBTTTB colnames,rowsort
+SHOW DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA s2
+----
+role      for_all_roles  object_type  grantee    privilege_type  is_grantable
+testuser  false          tables       testuser2  DROP            false
+testuser  false          tables       testuser2  SELECT          false
+testuser  false          tables       testuser2  UPDATE          false
+
+query TBTTTB colnames
+SHOW DEFAULT PRIVILEGES IN SCHEMA "'; drop database test; SELECT '";
+----
+role  for_all_roles  object_type  grantee  privilege_type  is_grantable

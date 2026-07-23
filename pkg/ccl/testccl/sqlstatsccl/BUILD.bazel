@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "sqlstatsccl_test",
+    size = "medium",
+    srcs = [
+        "main_test.go",
+        "sql_stats_test.go",
+    ],
+    exec_properties = {"test.Pool": "large"},
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

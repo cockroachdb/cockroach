@@ -1,0 +1,17 @@
+# Tests for predicates containing combinations of conjunctions and disjunctions.
+
+predtest vars=(a bool, b bool, c bool, d bool)
+(a OR b) AND (c OR d)
+=>
+(d OR c) AND (b OR a)
+----
+true
+└── remaining filters: (a OR b) AND (c OR d)
+
+predtest vars=(a int, b int)
+(a < 1 OR a > 10) AND (b < 2 OR b > 20)
+=>
+(a < 3 OR a > 9) AND (b < 4 OR b > 19)
+----
+true
+└── remaining filters: ((a < 1) OR (a > 10)) AND ((b < 2) OR (b > 20))

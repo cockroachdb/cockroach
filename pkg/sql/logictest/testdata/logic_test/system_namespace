@@ -1,0 +1,21 @@
+query IITI rowsort
+SELECT * FROM system.namespace WHERE id >= 100 OR name IN ('comments', 'locations', 'descriptor_id_seq')
+----
+0    0   defaultdb          100
+0    0   postgres           102
+0    0   test               104
+1    29  comments           24
+1    29  descriptor_id_seq  7
+1    29  locations          21
+100  0   public             101
+102  0   public             103
+104  0   public             105
+
+# Verify format of system tables.
+query TTBTTTB rowsort
+SHOW COLUMNS FROM system.namespace
+----
+parentID        INT8    false  NULL  ·  {primary}  false
+parentSchemaID  INT8    false  NULL  ·  {primary}  false
+name            STRING  false  NULL  ·  {primary}  false
+id              INT8    true   NULL  ·  {primary}  false

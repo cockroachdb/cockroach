@@ -1,0 +1,278 @@
+# Test the wait_elsewhere wait state. The test sets up a lock table with a very
+# low limit on the number of locks. The limit is exceeded, causing the lock
+# table to be cleared. This will cause a waiter to move to the wait_elsewhere
+# state.
+
+# Low lock-table limit.
+debug-set-max-locks n=1
+----
+
+new-txn name=txnWriter ts=10,1 epoch=0
+----
+
+new-request name=reqFirstLock txn=txnWriter ts=10,1
+  put key=k value=val1
+----
+
+new-request name=reqSecondLock txn=txnWriter ts=10,1
+  put key=k2 value=val1
+----
+
+new-txn name=txnWaiter ts=20,1 epoch=0
+----
+
+new-request name=reqWaiter txn=txnWaiter ts=20,1
+  put key=k value=val2
+----
+
+sequence req=reqFirstLock
+----
+[1] sequence reqFirstLock: sequencing request
+[1] sequence reqFirstLock: acquiring latches
+[1] sequence reqFirstLock: scanning lock table for conflicting locks
+[1] sequence reqFirstLock: sequencing complete, returned guard
+
+on-lock-acquired req=reqFirstLock key=k dur=r
+----
+[-] acquire lock: txn 00000001 acquiring Replicated Intent lock on ‹"k"›
+
+finish req=reqFirstLock
+----
+[-] finish reqFirstLock: finishing request
+
+sequence req=reqWaiter
+----
+[2] sequence reqWaiter: sequencing request
+[2] sequence reqWaiter: acquiring latches
+[2] sequence reqWaiter: scanning lock table for conflicting locks
+[2] sequence reqWaiter: sequencing complete, returned guard
+
+# Simulate that the replicated lock was discovered, so it's added to the lock
+# table.
+handle-lock-conflict-error req=reqWaiter lease-seq=1
+  lock txn=txnWriter key=k
+----
+[3] handle lock conflict error reqWaiter: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
+
+sequence req=reqWaiter
+----
+[4] sequence reqWaiter: re-sequencing request
+[4] sequence reqWaiter: acquiring latches
+[4] sequence reqWaiter: scanning lock table for conflicting locks
+[4] sequence reqWaiter: waiting in lock wait-queues
+[4] sequence reqWaiter: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence reqWaiter: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[4] sequence reqWaiter: pushing txn 00000001 to abort
+[4] sequence reqWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: true req: 2, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+sequence req=reqSecondLock
+----
+[5] sequence reqSecondLock: sequencing request
+[5] sequence reqSecondLock: acquiring latches
+[5] sequence reqSecondLock: scanning lock table for conflicting locks
+[5] sequence reqSecondLock: sequencing complete, returned guard
+
+on-lock-acquired req=reqSecondLock key=k2 dur=u
+----
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k2"›
+[4] sequence reqWaiter: lock wait-queue event: wait elsewhere for txn 00000001 @ key ‹"k"›
+[4] sequence reqWaiter: pushing txn 00000001 to abort
+[4] sequence reqWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+finish req=reqSecondLock
+----
+[-] finish reqSecondLock: finishing request
+
+debug-advance-clock ts=123
+----
+
+# Abort the writing txn. This will cause the blocked request to unblock. Note
+# that we expect the "conflicted with" contention event after the push. This
+# shows that the event is emitted only after the request exits the waitFor
+# state.
+on-txn-updated txn=txnWriter status=aborted
+----
+[-] update txn: aborting txnWriter
+[4] sequence reqWaiter: resolving intent ‹"k"› for txn 00000001 with ABORTED status
+[4] sequence reqWaiter: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 123.000s
+[4] sequence reqWaiter: acquiring latches
+[4] sequence reqWaiter: scanning lock table for conflicting locks
+[4] sequence reqWaiter: sequencing complete, returned guard
+
+finish req=reqWaiter
+----
+[-] finish reqWaiter: finishing request
+
+# ---------------------------------------------------------------------------------
+# Exercise the case where the lock table is cleared due to a lock limit while a
+# request's lock table guard is holding a tree snapshot. The removed lockStates
+# should be emptied and ignored by requests. This is a regression test against
+# the bug described in #99635.
+#
+# To test this, we sequence a read such that it discovers locks at key "k1" and
+# "k2" without exceeding the lock limit. We then re-sequence the read such that
+# it captures a lock table tree snapshot and blocks on a lock at key "k1" first.
+# Next, we instruct a second read to discover another lock that overflows the
+# lock table's lock limit, causing the lock table to be cleared. Finally, we
+# release the lock at key "k1" and watch whether the read starts waiting on key
+# "k2". If it did, it would get stranded and stall indefinitely.
+# ---------------------------------------------------------------------------------
+
+debug-set-max-locks n=2
+----
+
+new-txn name=txnThreeKeyWriter ts=10,1 epoch=0
+----
+
+new-request name=reqThreeKeyWriter txn=txnThreeKeyWriter ts=10,1
+  put key=k1 value=val1
+  put key=k2 value=val2
+  put key=k3 value=val3
+----
+
+new-request name=reqTwoKeyWaiter txn=txnWaiter ts=20,1
+  scan key=k1 endkey=k3
+----
+
+new-request name=reqThreeKeyWaiter txn=txnWaiter ts=20,1
+  scan key=k1 endkey=k4
+----
+
+sequence req=reqThreeKeyWriter
+----
+[6] sequence reqThreeKeyWriter: sequencing request
+[6] sequence reqThreeKeyWriter: acquiring latches
+[6] sequence reqThreeKeyWriter: scanning lock table for conflicting locks
+[6] sequence reqThreeKeyWriter: sequencing complete, returned guard
+
+on-lock-acquired req=reqThreeKeyWriter key=k1 dur=r
+----
+[-] acquire lock: txn 00000003 acquiring Replicated Intent lock on ‹"k1"›
+
+on-lock-acquired req=reqThreeKeyWriter key=k2 dur=r
+----
+[-] acquire lock: txn 00000003 acquiring Replicated Intent lock on ‹"k2"›
+
+on-lock-acquired req=reqThreeKeyWriter key=k3 dur=r
+----
+[-] acquire lock: txn 00000003 acquiring Replicated Intent lock on ‹"k3"›
+
+finish req=reqThreeKeyWriter
+----
+[-] finish reqThreeKeyWriter: finishing request
+
+debug-lock-table
+----
+num=0
+
+sequence req=reqTwoKeyWaiter
+----
+[7] sequence reqTwoKeyWaiter: sequencing request
+[7] sequence reqTwoKeyWaiter: acquiring latches
+[7] sequence reqTwoKeyWaiter: scanning lock table for conflicting locks
+[7] sequence reqTwoKeyWaiter: sequencing complete, returned guard
+
+sequence req=reqThreeKeyWaiter
+----
+[8] sequence reqThreeKeyWaiter: sequencing request
+[8] sequence reqThreeKeyWaiter: acquiring latches
+[8] sequence reqThreeKeyWaiter: scanning lock table for conflicting locks
+[8] sequence reqThreeKeyWaiter: sequencing complete, returned guard
+
+# Simulate that the replicated locks were discovered, so they are added to the
+# lock table.
+handle-lock-conflict-error req=reqTwoKeyWaiter lease-seq=1
+  lock txn=txnThreeKeyWriter key=k1
+  lock txn=txnThreeKeyWriter key=k2
+----
+[9] handle lock conflict error reqTwoKeyWaiter: added 2 discovered lock(s) to lock table: conflicting locks on ‹"k1"›, ‹"k2"›
+
+sequence req=reqTwoKeyWaiter
+----
+[10] sequence reqTwoKeyWaiter: re-sequencing request
+[10] sequence reqTwoKeyWaiter: acquiring latches
+[10] sequence reqTwoKeyWaiter: scanning lock table for conflicting locks
+[10] sequence reqTwoKeyWaiter: waiting in lock wait-queues
+[10] sequence reqTwoKeyWaiter: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"k1"› (queuedLockingRequests: 0, queuedReaders: 1)
+[10] sequence reqTwoKeyWaiter: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[10] sequence reqTwoKeyWaiter: pushing timestamp of txn 00000003 above 20.000000000,1
+[10] sequence reqTwoKeyWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+num=2
+ lock: "k1"
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   waiting readers:
+    req: 5, txn: 00000002-0000-0000-0000-000000000000
+ lock: "k2"
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+
+# Simulate that the replicated locks were discovered, so they are added to the
+# lock table. Keys "k1" and "k2" were previously discovered, but "k3" is new.
+handle-lock-conflict-error req=reqThreeKeyWaiter lease-seq=1
+  lock txn=txnThreeKeyWriter key=k1
+  lock txn=txnThreeKeyWriter key=k2
+  lock txn=txnThreeKeyWriter key=k3
+----
+[11] handle lock conflict error reqThreeKeyWaiter: added 3 discovered lock(s) to lock table: conflicting locks on ‹"k1"›, ‹"k2"›, ‹"k3"›
+
+sequence req=reqThreeKeyWaiter
+----
+[12] sequence reqThreeKeyWaiter: re-sequencing request
+[12] sequence reqThreeKeyWaiter: acquiring latches
+[12] sequence reqThreeKeyWaiter: scanning lock table for conflicting locks
+[12] sequence reqThreeKeyWaiter: waiting in lock wait-queues
+[12] sequence reqThreeKeyWaiter: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"k1"› (queuedLockingRequests: 0, queuedReaders: 2)
+[12] sequence reqThreeKeyWaiter: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[12] sequence reqThreeKeyWaiter: pushing timestamp of txn 00000003 above 20.000000000,1
+[12] sequence reqThreeKeyWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+num=1
+ lock: "k1"
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   waiting readers:
+    req: 6, txn: 00000002-0000-0000-0000-000000000000
+    req: 5, txn: 00000002-0000-0000-0000-000000000000
+
+# Before #99635 was fixed, reqTwoKeyWaiter would move on to waiting on key k2
+# and get stuck in lockTableWaiterImpl.WaitOn. Even after it resolved the intent
+# at the pushed timestamp, its lock table guard would not be notified because it
+# was enqueued in a leaked lock wait-queue (one attached to a lock that had been
+# removed from the lockTable btree).
+on-txn-updated txn=txnThreeKeyWriter status=pending ts=20,2
+----
+[-] update txn: increasing timestamp of txnThreeKeyWriter
+[10] sequence reqTwoKeyWaiter: resolving intent ‹"k1"› for txn 00000003 with PENDING status and clock observation {1 246.000000000,1}
+[10] sequence reqTwoKeyWaiter: lock wait-queue event: done waiting
+[10] sequence reqTwoKeyWaiter: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"k1"› for 0.000s
+[10] sequence reqTwoKeyWaiter: acquiring latches
+[10] sequence reqTwoKeyWaiter: scanning lock table for conflicting locks
+[10] sequence reqTwoKeyWaiter: sequencing complete, returned guard
+[12] sequence reqThreeKeyWaiter: resolving intent ‹"k1"› for txn 00000003 with PENDING status and clock observation {1 246.000000000,3}
+[12] sequence reqThreeKeyWaiter: lock wait-queue event: done waiting
+[12] sequence reqThreeKeyWaiter: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"k1"› for 0.000s
+[12] sequence reqThreeKeyWaiter: acquiring latches
+[12] sequence reqThreeKeyWaiter: scanning lock table for conflicting locks
+[12] sequence reqThreeKeyWaiter: sequencing complete, returned guard
+
+finish req=reqTwoKeyWaiter
+----
+[-] finish reqTwoKeyWaiter: finishing request
+
+finish req=reqThreeKeyWaiter
+----
+[-] finish reqThreeKeyWaiter: finishing request
+
+reset
+----

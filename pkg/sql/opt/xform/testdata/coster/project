@@ -1,0 +1,46 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, s STRING, d DECIMAL NOT NULL)
+----
+
+opt
+SELECT k, i, s || 'foo' FROM a
+----
+project
+ ├── columns: k:1!null i:2 "?column?":7
+ ├── immutable
+ ├── stats: [rows=1000]
+ ├── cost: 1118.74
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2,7)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 s:3
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1098.72
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── projections
+      └── s:3 || 'foo' [as="?column?":7, outer=(3), immutable]
+
+opt
+SELECT k, k+2, i*d FROM a
+----
+project
+ ├── columns: k:1!null "?column?":7!null "?column?":8
+ ├── immutable
+ ├── stats: [rows=1000]
+ ├── cost: 1128.74
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(7,8)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 d:4!null
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1098.72
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,4)
+ └── projections
+      ├── k:1 + 2 [as="?column?":7, outer=(1), immutable]
+      └── i:2 * d:4 [as="?column?":8, outer=(2,4), immutable]

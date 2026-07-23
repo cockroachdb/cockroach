@@ -1,0 +1,141 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
+
+# Split the index into 5 parts, as if numbers were in the range 1 to 100.
+statement ok
+ALTER INDEX t@v SPLIT AT SELECT (i * 10)::int FROM generate_series(1, 4) AS g(i)
+
+# Relocate the five parts to the five nodes.
+retry
+statement ok
+ALTER INDEX t@v EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i+1], (i * 10)::int FROM generate_series(0, 4) AS g(i)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM INDEX t@v WITH DETAILS]
+ORDER BY 1
+----
+start_key           end_key       replicas  lease_holder
+<before:/Table/XX>  …/10          {1}       1
+…/10                …/20          {2}       2
+…/20                …/30          {3}       3
+…/30                …/40          {4}       4
+…/40                <after:/Max>  {5}       5
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50
+----
+distribution: local
+·
+• filter
+│ filter: (v > 10) AND (v < 50)
+│
+└── • scan
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUV1r2zAUfd-vEOcpGQqVMwZDTy2Nywxp2sWGDTZTNPs2E1EsT5KbleD_PmzX_WIt630Q3HOuzj06OsD_NpCIv10uT5IVmyySNEu_LKcsjZfxacbes7P1xTkL7OvneB2zyQ370QjxgVgkpuxktbhHCvZRTMFR2ZJWakce8jsi5By1swV5b10HHfqBpPwDKTh0VTehg3OOwjqCPCDoYAgSmfppaE2qJHckwFFSUNr0suE4XNVbugXHqTXNrvKSbTm74WwPjrRWHTBD3nLYJjys8EFtCDJ65ClZQIqW_7-tM20COXJH0VNPAy7Z5Hj-EJGUMllln-6SGpkuqpF50eT8mcnoLSbX5GtbeXpi8aVN4tmmWdTmHFRuaPgwbxtX0KWzRT87tBe9UA-U5MPARkOTVCPlgyO1u8_4sVL0qtL8NaWc49rY_ZUuISHuavaPYyx0F9TGdxGlv-y-l81u6-6B18p44jhXW1pQILfTlfZBF5DBNdS27_4GAAD__-k_-Zs=
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v
+----
+distribution: local
+·
+• sort
+│ order: +v
+│
+└── • filter
+    │ filter: (v > 10) AND (v < 50)
+    │
+    └── • scan
+          missing stats
+          table: t@t_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklGLm0AUhd_7Ky73KWknxDEUyjxlu7pUyCZbFdrSyjLVu6nEOHZmTLoE_3tRN7ub0IRmHoQ593rOx9Edmt8FCvS_3s2ugjkMvCCKo8-zIUT-zL-O4S3chItbsPDlkx_6MNjAj9pxJgTcGcLV3HtWUnjvDGERen4IH7_BBhmWKqO5XJNB8R05JgwrrVIyRulW2nULQfYHhcMwL6vatnLCMFWaUOzQ5rYgFBjLnwWFJDPSYwcZZmRlXnS2dmrvqxU9IsNrVdTr0ghYMdgw2CLDqJKtMMKkYahq-xJhrFwSCv6KKfBQOA37f6ybvLCkSY_5IVOvCxhM3Ze2hBDBPP7wVNp-0ra2n5yEdI8g-SWQkdKW9Ng9RJy6707GTY7i3EviQjKVKg0dxJ1Kco6SRrxJGFK2pP7_MKrWKd1plXa7_XXRGXVCRsb2U95fgnI_MlaTXD9_0tdO_KyTe9qJHzu5Z50m55gShg-F2t7nGQp0ns7oH4_9wfYFuTRt2dEvte1s48eqrepBFoYY3soVeWRJr_MyNzZPUVhdU9O8-RsAAP__fho41Q==
+
+# Here we care about ordering by v, but v is not otherwise used.
+query T
+EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 10 AND v < 50 ORDER BY v
+----
+distribution: local
+·
+• sort
+│ order: +v
+│
+└── • filter
+    │ filter: (v > 10) AND (v < 50)
+    │
+    └── • scan
+          missing stats
+          table: t@t_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklFr2zAUhd_3Ky73KWEKkRwGQ0_pGpcZ0qSzDdvYTNHs28zUsTxJTlaC__uw3bRNWEKrB8M9V_7O4dg7tH8KlOh_u5lfBAsYzIIojr7MhxD5c_8yhi1chctrcPD1sx_6MNjAz5rzCYHgQ7hYzJ6UFD7wISzDmR_Cp--wQYalzmih1mRR_kCBCcPK6JSs1aaVdt2FIPuLkjPMy6p2rZwwTLUhlDt0uSsIJcbqV0EhqYzMmCPDjJzKiw7rpu62uqcHZHipi3pdWgkbBltkGFWqnUaYNAx17Z751qkVoRQvAgUzlLxhr890lReODJmxOAzU6xIGU_FclZQyWMQfHxvbb9rK9puTIb2jkOItISNtHJmxdxhxKt4jw2XtJEy9k8aTI2PvLcYh2UqXlg6MTznxI6eRaBKGlK2o_02srk1KN0an3d1-XHagTsjIun4r-iEo9yvrDKn108d9SRJnSd5pkjgmeWdJk3OZEoZ3hd7e5hlK5I9n9J_H_mD7glrZtuzot9522Pihaqu6U4UlhtfqnmbkyKzzMrcuT1E6U1PTvPsXAAD__2gQOtw=
+
+# The single join reader should be on node 5, and doesn't need to output v.
+query T
+EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 40 AND v < 50 ORDER BY v
+----
+distribution: full
+·
+• index join
+│ table: t@t_pkey
+│
+└── • scan
+      missing stats
+      table: t@v
+      spans: [/41 - /49]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklFv2jAQx9_3KU73VCQj7FBe_NSuybRMFLoEaZs2VHnJlUWEOLMdWIXy3aeYllE02OqHSHe--_9_d84W7c8SJUaf78bX8QQuwjidpR_HPUijcXQzgw28S6a34ODT-yiJ4GIN3xrOhwSXvAfXk3CfyWDEezBNwiiBt19gjQwrndNErcii_IoCGY5wzrA2OiNrtenSW18U579QcoZFVTeuS88ZZtoQyi26wpWEEie6r-tBgAxzcqoofVnLUDfuT5N1akEohwcucYgyaNmBkThvNFPfS0pI5WQG_IUduqturBtdNqvKSlgyP2Zaqy4aXIr-YNR1TBsn4UrgKTxxhMdfg_dBF9UTnTimc_f1kh4PEdcMNnui4CRRcEQkXhD942USsrWuLP3X0_Ajp75o5wwpX9Dud7C6MRndGZ352l049UI-kZN1u9vhLoir5yvrDKnVfqGHSuKsUvAKpeCsEj-t5Od8KPXmvshRIn86_b98ng92DWphu2WnP_TGy84e625VD6q0xPBWLSkkR2ZVVIV1RYbSmYba9s3vAAAA__-AEDZj
+
+statement ok
+CREATE TABLE abc (
+    a INT,
+    b INT,
+    c INT,
+    INDEX (c, b)
+);
+
+query T
+EXPLAIN SELECT * FROM abc WHERE b between 1 AND 3 ORDER BY c, b LIMIT 2;
+----
+distribution: full
+·
+• top-k
+│ order: +c,+b
+│ k: 2
+│
+└── • filter
+    │ filter: (b >= 1) AND (b <= 3)
+    │
+    └── • scan
+          missing stats
+          table: abc@abc_pkey
+          spans: FULL SCAN
+
+statement ok
+SET unconstrained_non_covering_index_scan_enabled = true;
+
+# The cluster setting should allow generation of an unconstrained index scan.
+query T
+EXPLAIN SELECT * FROM abc WHERE b between 1 AND 3 ORDER BY c, b LIMIT 2;
+----
+distribution: full
+·
+• limit
+│ count: 2
+│
+└── • filter
+    │ filter: (b >= 1) AND (b <= 3)
+    │
+    └── • index join
+        │ table: abc@abc_pkey
+        │
+        └── • scan
+              missing stats
+              table: abc@abc_c_b_idx
+              spans: FULL SCAN (SOFT LIMIT)

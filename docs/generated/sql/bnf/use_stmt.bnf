@@ -1,0 +1,2 @@
+use_stmt ::=
+	'USE' var_value

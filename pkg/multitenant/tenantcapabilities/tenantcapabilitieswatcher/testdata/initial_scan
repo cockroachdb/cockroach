@@ -1,0 +1,58 @@
+# Test initial scans work correctly over pre-existing capability state.
+# We also ensure that initial scans see the most recent state when they're
+# started.
+
+upsert ten=10 name=foo data=ready can_admin_unsplit=true
+----
+ok
+
+upsert ten=11 name=bar service=external can_admin_unsplit=false
+----
+ok
+
+upsert ten=15 name=baz service=shared can_admin_unsplit=false
+----
+ok
+
+delete ten=10
+----
+ok
+
+upsert ten=15 name=woo can_admin_unsplit=true
+----
+ok
+
+# Try reading capabilities before the Watcher is started.
+get-capabilities ten=15
+----
+not-found
+
+get-capabilities ten=10
+----
+not-found
+
+start
+----
+ok
+
+updates
+----
+update: ten=11 name=bar state=add service=external cap={default}
+update: ten=15 name=woo state=add service=none cap={can_admin_unsplit:true}
+
+flush-state
+----
+ten=11 name=bar state=add service=external cap={default}
+ten=15 name=woo state=add service=none cap={can_admin_unsplit:true}
+
+get-capabilities ten=10
+----
+not-found
+
+get-capabilities ten=15
+----
+ten=15 name=woo state=add service=none cap={can_admin_unsplit:true}
+
+upsert ten=15 span_config_bounds={}
+----
+ok

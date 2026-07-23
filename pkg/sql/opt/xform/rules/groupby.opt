@@ -1,0 +1,418 @@
+# =============================================================================
+# groupby.opt contains exploration rules for the groupby operators.
+# =============================================================================
+
+# ReplaceScalarMinMaxWithScalarSubqueries replaces a scalar group by having a
+# single ScanExpr and n > 1 MIN/MAX expressions with n scalar subqueries, so
+# that each subquery may take advantage of the ReplaceScalarMinMaxWithLimit
+# rule.
+# NOTE: The input relation must be a simple scan as currently no other cases,
+#       such as joins, can take advantage of this rewrite.
+[ReplaceScalarMinMaxWithScalarSubqueries, Explore]
+(ScalarGroupBy
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    $aggregations:* & (TwoOrMoreMinOrMax $aggregations)
+    $groupingPrivate:* & (IsCanonicalGroupBy $groupingPrivate)
+)
+=>
+(MakeMinMaxScalarSubqueries $scanPrivate $aggregations)
+
+# ReplaceFilteredScalarMinMaxWithSubqueries replaces a scalar group by from a
+# SelectExpr with a ScanExpr as input and n > 1 MIN/MAX expressions with n
+# scalar subqueries, so that each subquery may take advantage of the
+# ReplaceScalarMinMaxWithLimit rule.
+# NOTE: The input relation must be a select from a simple scan as currently no
+#       other cases, such as joins, can take advantage of this rewrite.
+[ReplaceFilteredScalarMinMaxWithSubqueries, Explore]
+(ScalarGroupBy
+    (Select
+        (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+        $filters:*
+    )
+    $aggregations:* & (TwoOrMoreMinOrMax $aggregations)
+    $groupingPrivate:* & (IsCanonicalGroupBy $groupingPrivate)
+)
+=>
+(MakeMinMaxScalarSubqueriesWithFilter
+    $scanPrivate
+    $aggregations
+    $filters
+)
+
+# ReplaceScalarMinMaxWithLimit replaces a min or max group by aggregation with a
+# limit 1 on an ordered set. This rule may result in a lower cost plan if the
+# aggregated column (e.g. the "x" in min(x)) is indexed.
+[ReplaceScalarMinMaxWithLimit, Explore]
+(ScalarGroupBy
+    $input:*
+    [
+        (AggregationsItem
+            $agg:(Min | Max $variable:(Variable $col:*))
+            $aggPrivate:*
+        )
+    ]
+    $groupingPrivate:* & (IsCanonicalGroupBy $groupingPrivate)
+)
+=>
+(ScalarGroupBy
+    (Limit
+        (Select
+            $input
+            [ (FiltersItem (IsNot $variable (Null (AnyType)))) ]
+        )
+        (IntConst (DInt 1))
+        (MakeOrderingChoiceFromColumn (OpName $agg) $col)
+    )
+    [ (AggregationsItem (ConstAgg $variable) $aggPrivate) ]
+    $groupingPrivate
+)
+
+# ReplaceMinWithLimit replaces a Min group-by expression with a limit 1, in the
+# case where the group-by returns zero or one groups (i.e. the grouping columns
+# are constant). In this situation, the group-by can be entirely replaced by a
+# project, similar to this:
+#
+#   SELECT w, min(k) FROM kw WHERE w = 5 GROUP BY w
+#   =>
+#   SELECT w, k FROM kw@wk WHERE w = 5 LIMIT 1
+#
+# This rule may result in a lower cost plan if the column min(k) is applied to
+# is indexed.
+#
+# NOTE: This rule is not fully symmetric with ReplaceMaxWithLimit. This is
+# because NULL values sort first in CRDB. This can interfere with the
+# calculation of the Min function, because NULL values need to be ignored unless
+# the group contains only NULL values (in which case the function returns NULL).
+# Therefore, this rule only works when the MIN column is NOT NULL, as only in
+# that case is one input row always sufficient to calculate MIN.
+[ReplaceMinWithLimit, Explore]
+(GroupBy
+    $input:*
+    $aggregations:[
+            ...
+            $item:(AggregationsItem
+                (Min $variable:(Variable $col:*))
+            )
+            ...
+        ] &
+        (IsColNotNull $col $input) &
+        (OtherAggsAreConst $aggregations $item)
+    $groupingPrivate:* &
+        (IsCanonicalGroupBy $groupingPrivate) &
+        (ColsAreConst
+            $groupingCols:(GroupingCols $groupingPrivate)
+            $input
+        )
+)
+=>
+(MakeProjectFromPassthroughAggs
+    (Limit
+        $input
+        (IntConst (DInt 1))
+        (MakeOrderingChoiceFromColumn Min $col)
+    )
+    $aggregations
+    $groupingCols
+)
+
+# ReplaceMaxWithLimit is analogous to the ReplaceMinWithLimit rule, except that
+# it works when the Max function's operand can be NULL. See the header comment
+# for ReplaceMinWithLimit for more details.
+[ReplaceMaxWithLimit, Explore]
+(GroupBy
+    $input:*
+    $aggregations:[
+            ...
+            $item:(AggregationsItem
+                (Max $variable:(Variable $col:*))
+            )
+            ...
+        ] &
+        (OtherAggsAreConst $aggregations $item)
+    $groupingPrivate:* &
+        (IsCanonicalGroupBy $groupingPrivate) &
+        (ColsAreConst
+            $groupingCols:(GroupingCols $groupingPrivate)
+            $input
+        )
+)
+=>
+(MakeProjectFromPassthroughAggs
+    (Limit
+        $input
+        (IntConst (DInt 1))
+        (MakeOrderingChoiceFromColumn Max $col)
+    )
+    $aggregations
+    $groupingCols
+)
+
+# GenerateStreamingGroupBy creates variants of a GroupBy, DistinctOn,
+# EnsureDistinctOn, UpsertDistinctOn, or EnsureUpsertDistinctOn that require
+# more specific orderings on the grouping columns, using the interesting
+# orderings property. When we have orderings on grouping columns, we can execute
+# aggregations in a streaming fashion, which is more efficient.
+[GenerateStreamingGroupBy, Explore]
+(GroupBy | DistinctOn | EnsureDistinctOn | UpsertDistinctOn
+        | EnsureUpsertDistinctOn
+    $input:*
+    $aggs:*
+    $private:* & (IsCanonicalGroupBy $private)
+)
+=>
+(GenerateStreamingGroupBy (OpName) $input $aggs $private)
+
+# SplitGroupByScanIntoUnionScans splits a non-inverted scan under a GroupBy,
+# DistinctOn, or EnsureUpsertDistinctOn into a UnionAll of scans, where each
+# scan can provide an ordering on the grouping columns.
+#
+# This is useful because the GenerateStreamingGroupBy rule can then create a
+# streaming grouping operation, which is more efficient.
+# GenerateStreamingGroupBy will use the new interesting orderings provided by
+# the UnionAll of scans to build the streaming operation.
+#
+# Example:
+#
+#    CREATE TABLE tab (
+#      region STRING NOT NULL CHECK (region IN ('ASIA', 'EUROPE')),
+#      data INT NOT NULL,
+#      INDEX (region, data)
+#    );
+#
+#    SELECT DISTINCT data
+#    FROM tab;
+#
+#    =>
+#
+#    SELECT DISTINCT data
+#    FROM (SELECT * FROM tab WHERE region='ASIA')
+#    UNION ALL (SELECT * FROM tab WHERE region='EUROPE');
+#
+# TODO(rytaft): add support for ensure-distinct-on and upsert-distinct-on
+# if a use case is found.
+[SplitGroupByScanIntoUnionScans, Explore]
+(GroupBy | DistinctOn | EnsureUpsertDistinctOn
+    $scan:(Scan $scanPrivate:*) &
+        ^(ScanIsLimited $scanPrivate) &
+        ^(ScanIsInverted $scanPrivate)
+    $aggs:*
+    $private:* &
+        (IsCanonicalGroupBy $private) &
+        (Let
+            ($unionScans $ok):(SplitGroupByScanIntoUnionScans
+                $scan
+                $scanPrivate
+                $private
+            )
+            $ok
+        )
+)
+=>
+((OpName) $unionScans $aggs $private)
+
+# SplitGroupByFilteredScanIntoUnionScans is like SplitGroupByScanIntoUnionScans,
+# but the scan is wrapped in a Select.
+#
+# This transformation is important for ensuring that validation of the
+# unique constraint in an implicitly-partitioned unique index is efficient. The
+# validation query to verify that (a, b) is UNIQUE on table tbl looks like this:
+#
+#    SELECT a, b
+#    FROM tbl
+#    WHERE a IS NOT NULL AND b IS NOT NULL
+#    GROUP BY a, b
+#    HAVING count(*) > 1
+#    LIMIT 1;
+#
+# Without SplitGroupByFilteredScanIntoUnionScans, this query would require an
+# inefficient and memory-intensive hash group by operation. Note that the
+# previous rule, SplitGroupByScanIntoUnionScans, is also needed since it would
+# apply in cases where a and b are not nullable (the IS NOT NULL filters would
+# be eliminated during normalization).
+#
+# See the comment above SplitGroupByScanIntoUnionScans for additional details.
+#
+# TODO(rytaft): add support for ensure-distinct-on and upsert-distinct-on
+# if a use case is found.
+[SplitGroupByFilteredScanIntoUnionScans, Explore]
+(GroupBy | DistinctOn | EnsureUpsertDistinctOn
+    (Select
+        $scan:(Scan $scanPrivate:*) &
+            ^(ScanIsLimited $scanPrivate) &
+            ^(ScanIsInverted $scanPrivate)
+        $filters:*
+    )
+    $aggs:*
+    $private:* &
+        (IsCanonicalGroupBy $private) &
+        (Let
+            ($unionScans $ok):(SplitGroupByScanIntoUnionScans
+                $scan
+                $scanPrivate
+                $private
+            )
+            $ok
+        )
+)
+=>
+((OpName) (Select $unionScans $filters) $aggs $private)
+
+# EliminateIndexJoinOrProjectInsideGroupBy removes an IndexJoin or Project
+# operator if it can be proven that the removal does not affect the output of
+# the parent grouping operator. This is the case if:
+#
+# 1. Only columns from the index join/project's input are being used by the
+#    grouping operator.
+#
+# 2. The OrderingChoice of the grouping operator can be expressed with only
+#    columns from the index join/project's input. Or in other words, at least
+#    one column in every ordering group is one of the output columns from the
+#    index join/project's input.
+#
+# This rule is useful when using partial indexes. When generating partial index
+# scans, expressions can be removed from filters because they exactly match
+# expressions in partial index predicates and there is no need to apply the
+# filter after the scan. Columns referenced in the removed expressions may no
+# longer need to be fetched.
+#
+# Consider the example:
+#
+#   CREATE TABLE t (i INT, s STRING, INDEX (i) WHERE s IN ('foo','bar'))
+#
+#   SELECT DISTINCT i FROM t WHERE s IN ('foo','bar')
+#
+# The normalized expression for the SELECT query is:
+#
+#   distinct-on
+#    ├── columns: i:1
+#    ├── grouping columns: i:1
+#    └── select
+#         ├── columns: i:1 s:2!null
+#         ├── scan t
+#         │    └── columns: i:1 s:2
+#         └── filters
+#              └── s:2 IN ('foo','bar')
+#
+# GeneratePartialIndexScans will generate this expression:
+#
+#   distinct-on
+#    ├── columns: i:1
+#    ├── grouping columns: i:1
+#    └── index-join t
+#         ├── columns: i:1 s:2!null
+#         └── scan t@secondary,partial
+#              └── columns: i:1 rowid:4!null
+#
+# The IndexJoin is created because the Select expression in the previous
+# expression required s in order to apply the (s IN ('foo','bar')) filter.
+# However, because rows in the partial index are already filtered by
+# (s IN ('foo','bar')), column s does not need to be fetched. The IndexJoin
+# can be eliminated, resulting in the expression:
+#
+#   distinct-on
+#    ├── columns: i:1
+#    ├── grouping columns: i:1
+#    └── scan t@secondary,partial
+#         └── columns: i:1 rowid:4!null
+#
+# A Project is created in cases where the partial index predicate constrains
+# some columns to be constant, and therefore provides those columns as constant
+# projections instead of using an IndexJoin. The Project can be eliminated for
+# the same reasons as the IndexJoin.
+[EliminateIndexJoinOrProjectInsideGroupBy, Explore]
+(GroupBy | ScalarGroupBy | DistinctOn | EnsureUpsertDistinctOn
+    (IndexJoin | Project $input:*)
+    $aggs:*
+    $private:* &
+        (OrderingCanProjectCols
+            $ordering:(GroupingOrdering $private)
+            $inputCols:(OutputCols $input)
+        ) &
+        (ColsAreSubset
+            (UnionCols
+                $groupingCols:(GroupingColumns $private)
+                (AggregationOuterCols $aggs)
+            )
+            $inputCols
+        )
+)
+=>
+((OpName)
+    $input
+    $aggs
+    (MakeGroupingPrivate
+        $groupingCols
+        (PruneOrdering $ordering $inputCols)
+        (NullsAreDistinct $private)
+        (ErrorOnDup $private)
+    )
+)
+
+# GenerateLimitedGroupByScans generates a set of Scan alternatives for
+# each matching index on the scanned table, and an IndexJoin to supply columns
+# missing from the index. This differs from GenerateIndexScans, which does not
+# generate index joins for non-covering indexes.
+#
+# This rule is useful when we have a partially ordered GROUP BY column and a
+# LIMIT that limits how many rows to aggregate, as in the following example:
+#
+# CREATE TABLE t (a INT, b INT, INDEX (a))
+# SELECT a, b, count(*) FROM t GROUP BY a, b LIMIT 10
+#
+# Without this rule, the following expression with a full scan would be
+# generated:
+#  limit
+#   ├── columns: a:1 b:2 count:6!null
+#   ├── group-by
+#   │    ├── columns: a:1 b:2 count_rows:6!null
+#   │    ├── grouping columns: a:1 b:2
+#   │    ├── limit hint: 10.00
+#   │    ├── scan t
+#   │    │    └── columns: a:1 b:2
+#   │    └── aggregations
+#   │         └── count-rows [as=count_rows:6]
+#   └── 10
+#
+# When GenerateLimitedGroupByScans is applied, we can explore the following
+# expression:
+#  limit
+#   ├── columns: a:1 b:2 count:6!null
+#   ├── group-by
+#   │    ├── columns: a:1 b:2 count_rows:6!null
+#   │    ├── grouping columns: a:1 b:2
+#   │    ├── limit hint: 10.00
+#   │    ├── index-join t
+#   │    │    ├── columns: a:1 b:2
+#   │    │    ├── ordering: +1
+#   │    │    ├── limit hint: 10.00
+#   │    │    └── scan t@secondary
+#   │    │         ├── columns: a:1 rowid:3!null
+#   │    │         ├── ordering: +1
+#   │    │         └── limit hint: 10.00
+#   │    └── aggregations
+#   │         └── count-rows [as=count_rows:6]
+#   └── 10
+#
+# This can have better performance than the original expression, since this
+# allows us to explore a group by with partially ordered grouping columns
+# provided by the index and use an index join to supply the remaining grouping
+# columns. Then we would not necessarily need a full scan on t due to the limit
+# hint.
+[GenerateLimitedGroupByScans, Explore]
+(Limit
+    (GroupBy
+        (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+        $aggs:*
+        $groupbyPrivate:* & (IsCanonicalGroupBy $groupbyPrivate)
+    )
+    $limitExpr:(Const $limit:*) & (IsPositiveInt $limit)
+    $ordering:*
+)
+=>
+(GenerateLimitedGroupByScans
+    $scanPrivate
+    $aggs
+    $groupbyPrivate
+    $limitExpr
+    $ordering
+)

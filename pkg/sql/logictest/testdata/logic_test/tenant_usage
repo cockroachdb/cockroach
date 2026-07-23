@@ -1,0 +1,40 @@
+# LogicTest: local
+# Only run this test in local mode due to its interaction with the default
+# tenant.
+
+query error tenant "13" does not exist
+SELECT crdb_internal.update_tenant_resource_limits(13, 1000, 100, 0, now(), 0)
+
+query I
+SELECT crdb_internal.create_tenant(5)
+----
+5
+
+# TODO(radu): inspect internal tenant_usage state.
+
+statement ok
+SELECT crdb_internal.update_tenant_resource_limits(5, 1000, 100, 0, now(), 0)
+
+# TODO(radu): inspect internal tenant_usage state.
+
+# Note this marks the tenant as dropped. The GC will not delete the tenant
+# until after the ttl expires.
+statement ok
+ALTER TENANT [5] STOP SERVICE
+
+statement ok
+DROP TENANT [5]
+
+query error tenant "5" is not active
+SELECT crdb_internal.update_tenant_resource_limits(5, 1000, 100, 0, now(), 0)
+
+statement ok
+CREATE TENANT 'apptenant'
+
+statement ok
+SELECT crdb_internal.update_tenant_resource_limits('apptenant', 1000, 100, 0)
+
+user testuser
+
+statement error user testuser does not have REPAIRCLUSTER system privilege
+SELECT crdb_internal.update_tenant_resource_limits(5, 1000, 100, 0, now(), 0)

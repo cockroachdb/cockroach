@@ -1,0 +1,1095 @@
+# tests adapted from logictest -- union
+
+build
+VALUES (1), (1), (1), (2), (2) UNION VALUES (1), (3), (1)
+----
+union
+ ├── columns: column1:3!null
+ ├── left columns: column1:1
+ ├── right columns: column1:2
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (2,)
+ └── values
+      ├── columns: column1:2!null
+      ├── (1,)
+      ├── (3,)
+      └── (1,)
+
+build
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)
+----
+union-all
+ ├── columns: column1:3!null
+ ├── left columns: column1:1
+ ├── right columns: column1:2
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (2,)
+ └── values
+      ├── columns: column1:2!null
+      ├── (1,)
+      ├── (3,)
+      └── (1,)
+
+build
+VALUES (1), (1), (1), (2), (2) INTERSECT VALUES (1), (3), (1)
+----
+intersect
+ ├── columns: column1:1!null
+ ├── left columns: column1:1!null
+ ├── right columns: column1:2
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (2,)
+ └── values
+      ├── columns: column1:2!null
+      ├── (1,)
+      ├── (3,)
+      └── (1,)
+
+build
+VALUES (1), (1), (1), (2), (2) INTERSECT ALL VALUES (1), (3), (1)
+----
+intersect-all
+ ├── columns: column1:1!null
+ ├── left columns: column1:1!null
+ ├── right columns: column1:2
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (2,)
+ └── values
+      ├── columns: column1:2!null
+      ├── (1,)
+      ├── (3,)
+      └── (1,)
+
+build
+VALUES (1), (1), (1), (2), (2) EXCEPT VALUES (1), (3), (1)
+----
+except
+ ├── columns: column1:1!null
+ ├── left columns: column1:1!null
+ ├── right columns: column1:2
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (2,)
+ └── values
+      ├── columns: column1:2!null
+      ├── (1,)
+      ├── (3,)
+      └── (1,)
+
+build
+VALUES (1), (1), (1), (2), (2) EXCEPT ALL VALUES (1), (3), (1)
+----
+except-all
+ ├── columns: column1:1!null
+ ├── left columns: column1:1!null
+ ├── right columns: column1:2
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (2,)
+ └── values
+      ├── columns: column1:2!null
+      ├── (1,)
+      ├── (3,)
+      └── (1,)
+
+build
+VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1)
+----
+union
+ ├── columns: column1:5!null column2:6!null
+ ├── left columns: column1:1 column2:2
+ ├── right columns: column1:3 column2:4
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null
+ │    ├── (1, 2)
+ │    ├── (1, 1)
+ │    ├── (1, 2)
+ │    ├── (2, 1)
+ │    └── (2, 1)
+ └── values
+      ├── columns: column1:3!null column2:4!null
+      ├── (1, 3)
+      ├── (3, 4)
+      └── (1, 1)
+
+build
+(VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)) ORDER BY 1 DESC LIMIT 2
+----
+limit
+ ├── columns: column1:3!null
+ ├── internal-ordering: -3
+ ├── ordering: -3
+ ├── union-all
+ │    ├── columns: column1:3!null
+ │    ├── left columns: column1:1
+ │    ├── right columns: column1:2
+ │    ├── ordering: -3
+ │    ├── limit hint: 2.00
+ │    ├── sort
+ │    │    ├── columns: column1:1!null
+ │    │    ├── ordering: -1
+ │    │    ├── limit hint: 2.00
+ │    │    └── values
+ │    │         ├── columns: column1:1!null
+ │    │         ├── (1,)
+ │    │         ├── (1,)
+ │    │         ├── (1,)
+ │    │         ├── (2,)
+ │    │         └── (2,)
+ │    └── sort
+ │         ├── columns: column1:2!null
+ │         ├── ordering: -2
+ │         ├── limit hint: 2.00
+ │         └── values
+ │              ├── columns: column1:2!null
+ │              ├── (1,)
+ │              ├── (3,)
+ │              └── (1,)
+ └── 2
+
+# The ORDER BY and LIMIT apply to the UNION, not the last VALUES.
+build
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LIMIT 2
+----
+limit
+ ├── columns: column1:3!null
+ ├── internal-ordering: -3
+ ├── ordering: -3
+ ├── union-all
+ │    ├── columns: column1:3!null
+ │    ├── left columns: column1:1
+ │    ├── right columns: column1:2
+ │    ├── ordering: -3
+ │    ├── limit hint: 2.00
+ │    ├── sort
+ │    │    ├── columns: column1:1!null
+ │    │    ├── ordering: -1
+ │    │    ├── limit hint: 2.00
+ │    │    └── values
+ │    │         ├── columns: column1:1!null
+ │    │         ├── (1,)
+ │    │         ├── (1,)
+ │    │         ├── (1,)
+ │    │         ├── (2,)
+ │    │         └── (2,)
+ │    └── sort
+ │         ├── columns: column1:2!null
+ │         ├── ordering: -2
+ │         ├── limit hint: 2.00
+ │         └── values
+ │              ├── columns: column1:2!null
+ │              ├── (1,)
+ │              ├── (3,)
+ │              └── (1,)
+ └── 2
+
+# UNION with NULL columns in operands works.
+build
+VALUES (NULL) UNION ALL VALUES (1) ORDER BY 1
+----
+union-all
+ ├── columns: column1:4
+ ├── left columns: column1:3
+ ├── right columns: column1:2
+ ├── ordering: +4
+ ├── project
+ │    ├── columns: column1:3
+ │    ├── values
+ │    │    ├── columns: column1:1
+ │    │    └── (NULL,)
+ │    └── projections
+ │         └── column1:1::INT8 [as=column1:3]
+ └── values
+      ├── columns: column1:2!null
+      └── (1,)
+
+build
+VALUES (NULL) UNION ALL VALUES (NULL)
+----
+union-all
+ ├── columns: column1:3
+ ├── left columns: column1:1
+ ├── right columns: column1:2
+ ├── values
+ │    ├── columns: column1:1
+ │    └── (NULL,)
+ └── values
+      ├── columns: column1:2
+      └── (NULL,)
+
+build
+SELECT x, pg_typeof(y) FROM (SELECT 1 AS a, NULL AS b UNION ALL SELECT 2 AS a, 4 AS b) AS t(x, y)
+----
+project
+ ├── columns: x:6!null pg_typeof:8
+ ├── union-all
+ │    ├── columns: a:6!null b:7
+ │    ├── left columns: a:1 b:5
+ │    ├── right columns: a:3 b:4
+ │    ├── project
+ │    │    ├── columns: b:5 a:1!null
+ │    │    ├── project
+ │    │    │    ├── columns: a:1!null b:2
+ │    │    │    ├── values
+ │    │    │    │    └── ()
+ │    │    │    └── projections
+ │    │    │         ├── 1 [as=a:1]
+ │    │    │         └── NULL [as=b:2]
+ │    │    └── projections
+ │    │         └── b:2::INT8 [as=b:5]
+ │    └── project
+ │         ├── columns: a:3!null b:4!null
+ │         ├── values
+ │         │    └── ()
+ │         └── projections
+ │              ├── 2 [as=a:3]
+ │              └── 4 [as=b:4]
+ └── projections
+      └── pg_typeof(b:7) [as=pg_typeof:8]
+
+build
+SELECT x, pg_typeof(y) FROM (SELECT 1 AS a, 3 AS b UNION ALL SELECT 2 AS a, NULL AS b) AS t(x, y)
+----
+project
+ ├── columns: x:5!null pg_typeof:7
+ ├── union-all
+ │    ├── columns: a:5!null b:6
+ │    ├── left columns: a:1 b:2
+ │    ├── right columns: a:3 b:4
+ │    ├── project
+ │    │    ├── columns: a:1!null b:2!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         ├── 1 [as=a:1]
+ │    │         └── 3 [as=b:2]
+ │    └── project
+ │         ├── columns: a:3!null b:4
+ │         ├── values
+ │         │    └── ()
+ │         └── projections
+ │              ├── 2 [as=a:3]
+ │              └── NULL::INT8 [as=b:4]
+ └── projections
+      └── pg_typeof(b:6) [as=pg_typeof:7]
+
+exec-ddl
+CREATE TABLE uniontest (
+  k INT,
+  v INT
+)
+----
+
+build
+SELECT v FROM uniontest WHERE k = 1 UNION SELECT v FROM uniontest WHERE k = 2
+----
+union
+ ├── columns: v:11
+ ├── left columns: uniontest.v:2
+ ├── right columns: uniontest.v:7
+ ├── project
+ │    ├── columns: uniontest.v:2
+ │    └── select
+ │         ├── columns: k:1!null uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         ├── scan uniontest
+ │         │    └── columns: k:1 uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         └── filters
+ │              └── k:1 = 1
+ └── project
+      ├── columns: uniontest.v:7
+      └── select
+           ├── columns: k:6!null uniontest.v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           ├── scan uniontest
+           │    └── columns: k:6 uniontest.v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           └── filters
+                └── k:6 = 2
+
+build
+SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2
+----
+union-all
+ ├── columns: v:11
+ ├── left columns: uniontest.v:2
+ ├── right columns: uniontest.v:7
+ ├── project
+ │    ├── columns: uniontest.v:2
+ │    └── select
+ │         ├── columns: k:1!null uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         ├── scan uniontest
+ │         │    └── columns: k:1 uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         └── filters
+ │              └── k:1 = 1
+ └── project
+      ├── columns: uniontest.v:7
+      └── select
+           ├── columns: k:6!null uniontest.v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           ├── scan uniontest
+           │    └── columns: k:6 uniontest.v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           └── filters
+                └── k:6 = 2
+
+build
+SELECT v FROM uniontest WHERE k = 1 INTERSECT SELECT v FROM uniontest WHERE k = 2
+----
+intersect
+ ├── columns: v:2
+ ├── left columns: v:2
+ ├── right columns: v:7
+ ├── project
+ │    ├── columns: v:2
+ │    └── select
+ │         ├── columns: k:1!null v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         ├── scan uniontest
+ │         │    └── columns: k:1 v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         └── filters
+ │              └── k:1 = 1
+ └── project
+      ├── columns: v:7
+      └── select
+           ├── columns: k:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           ├── scan uniontest
+           │    └── columns: k:6 v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           └── filters
+                └── k:6 = 2
+
+build
+SELECT v FROM uniontest WHERE k = 1 INTERSECT ALL SELECT v FROM uniontest WHERE k = 2
+----
+intersect-all
+ ├── columns: v:2
+ ├── left columns: v:2
+ ├── right columns: v:7
+ ├── project
+ │    ├── columns: v:2
+ │    └── select
+ │         ├── columns: k:1!null v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         ├── scan uniontest
+ │         │    └── columns: k:1 v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         └── filters
+ │              └── k:1 = 1
+ └── project
+      ├── columns: v:7
+      └── select
+           ├── columns: k:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           ├── scan uniontest
+           │    └── columns: k:6 v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           └── filters
+                └── k:6 = 2
+
+build
+SELECT v FROM uniontest WHERE k = 1 EXCEPT SELECT v FROM uniontest WHERE k = 2
+----
+except
+ ├── columns: v:2
+ ├── left columns: v:2
+ ├── right columns: v:7
+ ├── project
+ │    ├── columns: v:2
+ │    └── select
+ │         ├── columns: k:1!null v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         ├── scan uniontest
+ │         │    └── columns: k:1 v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         └── filters
+ │              └── k:1 = 1
+ └── project
+      ├── columns: v:7
+      └── select
+           ├── columns: k:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           ├── scan uniontest
+           │    └── columns: k:6 v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           └── filters
+                └── k:6 = 2
+
+build
+SELECT v FROM uniontest WHERE k = 1 EXCEPT ALL SELECT v FROM uniontest WHERE k = 2
+----
+except-all
+ ├── columns: v:2
+ ├── left columns: v:2
+ ├── right columns: v:7
+ ├── project
+ │    ├── columns: v:2
+ │    └── select
+ │         ├── columns: k:1!null v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         ├── scan uniontest
+ │         │    └── columns: k:1 v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         └── filters
+ │              └── k:1 = 1
+ └── project
+      ├── columns: v:7
+      └── select
+           ├── columns: k:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           ├── scan uniontest
+           │    └── columns: k:6 v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           └── filters
+                └── k:6 = 2
+
+build
+(SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2) ORDER BY 1 DESC LIMIT 2
+----
+limit
+ ├── columns: v:11
+ ├── internal-ordering: -11
+ ├── ordering: -11
+ ├── union-all
+ │    ├── columns: v:11
+ │    ├── left columns: uniontest.v:2
+ │    ├── right columns: uniontest.v:7
+ │    ├── ordering: -11
+ │    ├── limit hint: 2.00
+ │    ├── sort
+ │    │    ├── columns: uniontest.v:2
+ │    │    ├── ordering: -2
+ │    │    ├── limit hint: 2.00
+ │    │    └── project
+ │    │         ├── columns: uniontest.v:2
+ │    │         └── select
+ │    │              ├── columns: k:1!null uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    │              ├── scan uniontest
+ │    │              │    └── columns: k:1 uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    │              └── filters
+ │    │                   └── k:1 = 1
+ │    └── sort
+ │         ├── columns: uniontest.v:7
+ │         ├── ordering: -7
+ │         ├── limit hint: 2.00
+ │         └── project
+ │              ├── columns: uniontest.v:7
+ │              └── select
+ │                   ├── columns: k:6!null uniontest.v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │                   ├── scan uniontest
+ │                   │    └── columns: k:6 uniontest.v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │                   └── filters
+ │                        └── k:6 = 2
+ └── 2
+
+# The ORDER BY and LIMIT apply to the UNION, not the last SELECT.
+build
+SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2 ORDER BY 1 DESC LIMIT 2
+----
+limit
+ ├── columns: v:11
+ ├── internal-ordering: -11
+ ├── ordering: -11
+ ├── union-all
+ │    ├── columns: v:11
+ │    ├── left columns: uniontest.v:2
+ │    ├── right columns: uniontest.v:7
+ │    ├── ordering: -11
+ │    ├── limit hint: 2.00
+ │    ├── sort
+ │    │    ├── columns: uniontest.v:2
+ │    │    ├── ordering: -2
+ │    │    ├── limit hint: 2.00
+ │    │    └── project
+ │    │         ├── columns: uniontest.v:2
+ │    │         └── select
+ │    │              ├── columns: k:1!null uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    │              ├── scan uniontest
+ │    │              │    └── columns: k:1 uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    │              └── filters
+ │    │                   └── k:1 = 1
+ │    └── sort
+ │         ├── columns: uniontest.v:7
+ │         ├── ordering: -7
+ │         ├── limit hint: 2.00
+ │         └── project
+ │              ├── columns: uniontest.v:7
+ │              └── select
+ │                   ├── columns: k:6!null uniontest.v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │                   ├── scan uniontest
+ │                   │    └── columns: k:6 uniontest.v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │                   └── filters
+ │                        └── k:6 = 2
+ └── 2
+
+build
+SELECT v FROM uniontest UNION SELECT k FROM uniontest
+----
+union
+ ├── columns: v:11
+ ├── left columns: uniontest.v:2
+ ├── right columns: k:6
+ ├── project
+ │    ├── columns: uniontest.v:2
+ │    └── scan uniontest
+ │         └── columns: k:1 uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── project
+      ├── columns: k:6
+      └── scan uniontest
+           └── columns: k:6 uniontest.v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+
+build
+SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
+----
+union-all
+ ├── columns: v:11
+ ├── left columns: uniontest.v:2
+ ├── right columns: k:6
+ ├── project
+ │    ├── columns: uniontest.v:2
+ │    └── scan uniontest
+ │         └── columns: k:1 uniontest.v:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── project
+      ├── columns: k:6
+      └── scan uniontest
+           └── columns: k:6 uniontest.v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+
+build
+SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
+----
+left-join (hash)
+ ├── columns: column1:1!null column1:4
+ ├── values
+ │    ├── columns: column1:1!null
+ │    └── (1,)
+ ├── union
+ │    ├── columns: column1:4!null
+ │    ├── left columns: column1:2
+ │    ├── right columns: column1:3
+ │    ├── values
+ │    │    ├── columns: column1:2!null
+ │    │    └── (1,)
+ │    └── values
+ │         ├── columns: column1:3!null
+ │         └── (2,)
+ └── filters
+      └── column1:1 = column1:4
+
+build
+SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1;
+----
+left-join (hash)
+ ├── columns: column1:1!null column1:4
+ ├── values
+ │    ├── columns: column1:1!null
+ │    └── (1,)
+ ├── union
+ │    ├── columns: column1:4!null
+ │    ├── left columns: column1:2
+ │    ├── right columns: column1:3
+ │    ├── values
+ │    │    ├── columns: column1:2!null
+ │    │    └── (1,)
+ │    └── values
+ │         ├── columns: column1:3!null
+ │         └── (2,)
+ └── filters
+      └── column1:1 = column1:4
+
+build
+SELECT 1, 2 UNION SELECT 3
+----
+error (42601): each UNION query must have the same number of columns: 2 vs 1
+
+build
+SELECT 1, 2 INTERSECT SELECT 3
+----
+error (42601): each INTERSECT query must have the same number of columns: 2 vs 1
+
+build
+SELECT 1, 2 EXCEPT SELECT 3
+----
+error (42601): each EXCEPT query must have the same number of columns: 2 vs 1
+
+build
+SELECT 1 UNION SELECT '3'
+----
+union
+ ├── columns: "?column?":3!null
+ ├── left columns: "?column?":1
+ ├── right columns: "?column?":2
+ ├── project
+ │    ├── columns: "?column?":1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as="?column?":1]
+ └── project
+      ├── columns: "?column?":2!null
+      ├── values
+      │    └── ()
+      └── projections
+           └── 3 [as="?column?":2]
+
+build
+SELECT 1 INTERSECT SELECT '3'
+----
+intersect
+ ├── columns: "?column?":1!null
+ ├── left columns: "?column?":1!null
+ ├── right columns: "?column?":2
+ ├── project
+ │    ├── columns: "?column?":1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as="?column?":1]
+ └── project
+      ├── columns: "?column?":2!null
+      ├── values
+      │    └── ()
+      └── projections
+           └── 3 [as="?column?":2]
+
+build
+SELECT 1 EXCEPT SELECT '3'
+----
+except
+ ├── columns: "?column?":1!null
+ ├── left columns: "?column?":1!null
+ ├── right columns: "?column?":2
+ ├── project
+ │    ├── columns: "?column?":1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as="?column?":1]
+ └── project
+      ├── columns: "?column?":2!null
+      ├── values
+      │    └── ()
+      └── projections
+           └── 3 [as="?column?":2]
+
+build
+SELECT 1 UNION SELECT 3 ORDER BY z
+----
+error (42703): column "z" does not exist
+
+build
+SELECT ARRAY[1] UNION ALL SELECT ARRAY['foo']
+----
+error (22P02): could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+build
+SELECT ARRAY['foo'] UNION ALL SELECT ARRAY[1]
+----
+error (42804): UNION types string[] and int[] cannot be matched
+
+build
+SELECT ARRAY[1] UNION ALL SELECT ARRAY[1.2]
+----
+error (42804): UNION types int[] and decimal[] cannot be matched
+
+exec-ddl
+CREATE TABLE t.xy (x STRING NOT NULL, y STRING NOT NULL)
+----
+
+exec-ddl
+CREATE TABLE t.abc (
+  a string,
+  b string NOT NULL,
+  c string NOT NULL
+)
+----
+
+build
+(SELECT x, x, y FROM xy) UNION (SELECT a, b, c FROM abc)
+----
+union
+ ├── columns: x:12 x:13!null y:14!null
+ ├── left columns: xy.x:1 xy.x:1 xy.y:2
+ ├── right columns: a:6 b:7 c:8
+ ├── project
+ │    ├── columns: xy.x:1!null xy.y:2!null
+ │    └── scan xy
+ │         └── columns: xy.x:1!null xy.y:2!null xy.rowid:3!null xy.crdb_internal_mvcc_timestamp:4 xy.tableoid:5
+ └── project
+      ├── columns: a:6 b:7!null c:8!null
+      └── scan abc
+           └── columns: a:6 b:7!null c:8!null abc.rowid:9!null abc.crdb_internal_mvcc_timestamp:10 abc.tableoid:11
+
+build
+(SELECT a FROM abc ORDER BY b) UNION ALL (SELECT b FROM abc) ORDER BY a
+----
+union-all
+ ├── columns: a:13
+ ├── left columns: abc.a:1
+ ├── right columns: b:8
+ ├── ordering: +13
+ ├── sort
+ │    ├── columns: abc.a:1 b:2!null
+ │    ├── ordering: +1
+ │    └── project
+ │         ├── columns: abc.a:1 b:2!null
+ │         └── scan abc
+ │              └── columns: abc.a:1 b:2!null c:3!null rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ └── sort
+      ├── columns: b:8!null
+      ├── ordering: +8
+      └── project
+           ├── columns: b:8!null
+           └── scan abc
+                └── columns: abc.a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+
+build
+(SELECT a FROM abc ORDER BY b) UNION ALL (SELECT a FROM abc ORDER BY c) ORDER BY a
+----
+union-all
+ ├── columns: a:13
+ ├── left columns: abc.a:1
+ ├── right columns: abc.a:7
+ ├── ordering: +13
+ ├── sort
+ │    ├── columns: abc.a:1 b:2!null
+ │    ├── ordering: +1
+ │    └── project
+ │         ├── columns: abc.a:1 b:2!null
+ │         └── scan abc
+ │              └── columns: abc.a:1 b:2!null c:3!null rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ └── sort
+      ├── columns: abc.a:7 c:9!null
+      ├── ordering: +7
+      └── project
+           ├── columns: abc.a:7 c:9!null
+           └── scan abc
+                └── columns: abc.a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+
+build
+(SELECT a FROM abc ORDER BY b) EXCEPT (SELECT b FROM abc ORDER BY c, b, a)
+----
+except
+ ├── columns: a:1
+ ├── left columns: a:1
+ ├── right columns: b:8
+ ├── project
+ │    ├── columns: a:1 b:2!null
+ │    └── scan abc
+ │         └── columns: a:1 b:2!null c:3!null rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ └── project
+      ├── columns: a:7 b:8!null c:9!null
+      └── scan abc
+           └── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+
+# Tests for type propagation.
+
+build
+VALUES (NULL, NULL), (NULL, 'x') UNION VALUES (1, 'a'), (2, 'b')
+----
+union
+ ├── columns: column1:6 column2:7
+ ├── left columns: column1:5 column2:2
+ ├── right columns: column1:3 column2:4
+ ├── project
+ │    ├── columns: column1:5 column2:2
+ │    ├── values
+ │    │    ├── columns: column1:1 column2:2
+ │    │    ├── (NULL, NULL::STRING)
+ │    │    └── (NULL, 'x')
+ │    └── projections
+ │         └── column1:1::INT8 [as=column1:5]
+ └── values
+      ├── columns: column1:3!null column2:4!null
+      ├── (1, 'a')
+      └── (2, 'b')
+
+build
+VALUES (3, NULL), (NULL, 'x') INTERSECT VALUES (1, NULL), (2, NULL)
+----
+intersect
+ ├── columns: column1:1 column2:2
+ ├── left columns: column1:1 column2:2
+ ├── right columns: column1:3 column2:4
+ ├── values
+ │    ├── columns: column1:1 column2:2
+ │    ├── (3, NULL::STRING)
+ │    └── (NULL::INT8, 'x')
+ └── values
+      ├── columns: column1:3!null column2:4
+      ├── (1, NULL::STRING)
+      └── (2, NULL::STRING)
+
+build
+VALUES (NULL, NULL), (NULL, 'x') UNION ALL VALUES (1, NULL), (2, NULL)
+----
+union-all
+ ├── columns: column1:6 column2:7
+ ├── left columns: column1:5 column2:2
+ ├── right columns: column1:3 column2:4
+ ├── project
+ │    ├── columns: column1:5 column2:2
+ │    ├── values
+ │    │    ├── columns: column1:1 column2:2
+ │    │    ├── (NULL, NULL::STRING)
+ │    │    └── (NULL, 'x')
+ │    └── projections
+ │         └── column1:1::INT8 [as=column1:5]
+ └── values
+      ├── columns: column1:3!null column2:4
+      ├── (1, NULL::STRING)
+      └── (2, NULL::STRING)
+
+build
+VALUES (NULL, NULL), (NULL, NULL) UNION ALL VALUES (NULL, NULL), (NULL, NULL)
+----
+union-all
+ ├── columns: column1:5 column2:6
+ ├── left columns: column1:1 column2:2
+ ├── right columns: column1:3 column2:4
+ ├── values
+ │    ├── columns: column1:1 column2:2
+ │    ├── (NULL, NULL)
+ │    └── (NULL, NULL)
+ └── values
+      ├── columns: column1:3 column2:4
+      ├── (NULL, NULL)
+      └── (NULL, NULL)
+
+exec-ddl
+CREATE TABLE a (a INT PRIMARY KEY)
+----
+
+# Regression test for #34524.
+build
+(SELECT NULL FROM a) EXCEPT (VALUES((SELECT 1 FROM a LIMIT 1)), (1))
+----
+except
+ ├── columns: "?column?":10
+ ├── left columns: "?column?":10
+ ├── right columns: column1:9
+ ├── project
+ │    ├── columns: "?column?":10
+ │    ├── project
+ │    │    ├── columns: "?column?":4
+ │    │    ├── scan a
+ │    │    │    └── columns: a:1!null crdb_internal_mvcc_timestamp:2 tableoid:3
+ │    │    └── projections
+ │    │         └── NULL [as="?column?":4]
+ │    └── projections
+ │         └── "?column?":4::INT8 [as="?column?":10]
+ └── values
+      ├── columns: column1:9
+      ├── tuple
+      │    └── subquery
+      │         └── max1-row
+      │              ├── columns: "?column?":8!null
+      │              └── limit
+      │                   ├── columns: "?column?":8!null
+      │                   ├── project
+      │                   │    ├── columns: "?column?":8!null
+      │                   │    ├── limit hint: 1.00
+      │                   │    ├── scan a
+      │                   │    │    ├── columns: a:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      │                   │    │    └── limit hint: 1.00
+      │                   │    └── projections
+      │                   │         └── 1 [as="?column?":8]
+      │                   └── 1
+      └── (1,)
+
+# Verify that we add casts for equivalent, but not identical types.
+exec-ddl
+CREATE TABLE ab (i8 INT8, i4 INT4, f8 FLOAT, f4 FLOAT4, d DECIMAL)
+----
+
+build
+SELECT i4 FROM ab UNION SELECT i8 FROM ab
+----
+union
+ ├── columns: i4:18
+ ├── left columns: i4:17
+ ├── right columns: i8:9
+ ├── project
+ │    ├── columns: i4:17
+ │    ├── project
+ │    │    ├── columns: ab.i4:2
+ │    │    └── scan ab
+ │    │         └── columns: i8:1 ab.i4:2 f8:3 f4:4 d:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    └── projections
+ │         └── ab.i4:2::INT8 [as=i4:17]
+ └── project
+      ├── columns: i8:9
+      └── scan ab
+           └── columns: i8:9 ab.i4:10 f8:11 f4:12 d:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+
+build
+SELECT i8 FROM ab UNION SELECT i4 FROM ab
+----
+union
+ ├── columns: i8:18
+ ├── left columns: ab.i8:1
+ ├── right columns: i4:17
+ ├── project
+ │    ├── columns: ab.i8:1
+ │    └── scan ab
+ │         └── columns: ab.i8:1 ab.i4:2 f8:3 f4:4 d:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ └── project
+      ├── columns: i4:17
+      ├── project
+      │    ├── columns: ab.i4:10
+      │    └── scan ab
+      │         └── columns: ab.i8:9 ab.i4:10 f8:11 f4:12 d:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+      └── projections
+           └── ab.i4:10::INT8 [as=i4:17]
+
+build
+SELECT f4 FROM ab UNION SELECT f8 FROM ab
+----
+union
+ ├── columns: f4:18
+ ├── left columns: f4:17
+ ├── right columns: f8:11
+ ├── project
+ │    ├── columns: f4:17
+ │    ├── project
+ │    │    ├── columns: ab.f4:4
+ │    │    └── scan ab
+ │    │         └── columns: i8:1 i4:2 f8:3 ab.f4:4 d:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    └── projections
+ │         └── ab.f4:4::FLOAT8 [as=f4:17]
+ └── project
+      ├── columns: f8:11
+      └── scan ab
+           └── columns: i8:9 i4:10 f8:11 ab.f4:12 d:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+
+build
+SELECT i8 FROM ab UNION SELECT f4 FROM ab
+----
+union
+ ├── columns: i8:18
+ ├── left columns: i8:17
+ ├── right columns: f4:12
+ ├── project
+ │    ├── columns: i8:17
+ │    ├── project
+ │    │    ├── columns: ab.i8:1
+ │    │    └── scan ab
+ │    │         └── columns: ab.i8:1 i4:2 f8:3 f4:4 d:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    └── projections
+ │         └── ab.i8:1::FLOAT4 [as=i8:17]
+ └── project
+      ├── columns: f4:12
+      └── scan ab
+           └── columns: ab.i8:9 i4:10 f8:11 f4:12 d:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+
+build
+SELECT i8 FROM ab UNION SELECT d FROM ab
+----
+union
+ ├── columns: i8:18
+ ├── left columns: i8:17
+ ├── right columns: d:13
+ ├── project
+ │    ├── columns: i8:17
+ │    ├── project
+ │    │    ├── columns: ab.i8:1
+ │    │    └── scan ab
+ │    │         └── columns: ab.i8:1 i4:2 f8:3 f4:4 d:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    └── projections
+ │         └── ab.i8:1::DECIMAL [as=i8:17]
+ └── project
+      ├── columns: d:13
+      └── scan ab
+           └── columns: ab.i8:9 i4:10 f8:11 f4:12 d:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+
+build
+SELECT d FROM ab UNION SELECT f8 FROM ab
+----
+union
+ ├── columns: d:18
+ ├── left columns: ab.d:5
+ ├── right columns: f8:17
+ ├── project
+ │    ├── columns: ab.d:5
+ │    └── scan ab
+ │         └── columns: i8:1 i4:2 ab.f8:3 f4:4 ab.d:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ └── project
+      ├── columns: f8:17
+      ├── project
+      │    ├── columns: ab.f8:11
+      │    └── scan ab
+      │         └── columns: i8:9 i4:10 ab.f8:11 f4:12 ab.d:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+      └── projections
+           └── ab.f8:11::DECIMAL [as=f8:17]
+
+# Regression test for #68702. When a column is projected twice on the left side,
+# assign new column IDs for the output columns.
+exec-ddl
+CREATE TABLE t68702 (a INT, b INT, c INT, INDEX (a, b, c DESC))
+----
+
+# This is the same error as Postgres.
+build
+SELECT a, b, b FROM t68702 EXCEPT SELECT a, b, c FROM t68702 ORDER by a, b
+----
+error (42P09): ORDER BY "b" is ambiguous
+
+build
+SELECT a, b AS b1, b AS b2 FROM t68702 EXCEPT SELECT a, b, c FROM t68702 ORDER by a, b1
+----
+sort
+ ├── columns: a:13 b1:14 b2:15
+ ├── ordering: +13,+14
+ └── except
+      ├── columns: a:13 b1:14 b2:15
+      ├── left columns: t68702.a:1 b:2 b:2
+      ├── right columns: t68702.a:7 b:8 c:9
+      ├── project
+      │    ├── columns: t68702.a:1 b:2
+      │    └── scan t68702
+      │         └── columns: t68702.a:1 b:2 c:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── project
+           ├── columns: t68702.a:7 b:8 c:9
+           └── scan t68702
+                └── columns: t68702.a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+
+build
+SELECT a, b AS b1, b AS b2 FROM t68702 INTERSECT SELECT a, c, b FROM t68702 ORDER by a, b2
+----
+sort
+ ├── columns: a:13 b1:14 b2:15
+ ├── ordering: +13,+15
+ └── intersect
+      ├── columns: a:13 b1:14 b2:15
+      ├── left columns: t68702.a:1 b:2 b:2
+      ├── right columns: t68702.a:7 c:9 b:8
+      ├── project
+      │    ├── columns: t68702.a:1 b:2
+      │    └── scan t68702
+      │         └── columns: t68702.a:1 b:2 c:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── project
+           ├── columns: t68702.a:7 b:8 c:9
+           └── scan t68702
+                └── columns: t68702.a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+
+
+# Regression test for #70831. Do not add non-existent casts to match types on
+# either side of a set operation.
+# NOTE: In Postgres this example successfully returns a result. Our tuple typing
+# and casting logic doesn't match Postgres's semantics exactly, so we return a
+# user error. See
+# https://github.com/cockroachdb/cockroach/issues/70831#issuecomment-929547297.
+build
+SELECT * FROM (VALUES (ARRAY[(true, NULL)])) AS v1
+EXCEPT ALL
+SELECT * FROM (VALUES (ARRAY[]::RECORD[])) AS v2
+----
+error (42804): EXCEPT types tuple{bool, unknown}[] and tuple[] cannot be matched

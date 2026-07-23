@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "grunning",
+    srcs = [
+        "enabled.go",
+        "grunning.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/grunning",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "grunning_test",
+    srcs = ["enabled_test.go"],
+    deps = [
+        ":grunning",
+        "//pkg/testutils/skip",
+        "//pkg/util/syncutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

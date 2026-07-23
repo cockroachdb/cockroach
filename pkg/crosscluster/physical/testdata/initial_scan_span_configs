@@ -1,0 +1,89 @@
+# This test asserts that when the source cluster updates their span configs while the replication
+# job is paused, these updates will replicate when the replication job resumes.
+
+create-replication-clusters
+----
+
+exec-sql as=source-system
+ALTER TENANT ALL SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '10ms'
+----
+
+
+exec-sql as=source-tenant
+CREATE TABLE d.x (id INT PRIMARY KEY, n INT);
+----
+
+exec-sql as=source-tenant
+CREATE TABLE d.x2 (id INT PRIMARY KEY, n INT);
+----
+
+
+# Get the mininum and maximum user table id
+let $min_table_id  as=source-tenant
+SELECT 'd.x'::regclass::oid::int::string
+----
+
+let $max_table_id  as=source-tenant
+SELECT 'd.x2'::regclass::oid::int::string
+----
+
+
+start-replication-stream
+----
+
+# TODO(adityamaru): This is a hack until we have the time we started replicating
+# from persisted in the replication job details.
+let $start as=source-system
+SELECT clock_timestamp()::timestamp::string
+----
+
+wait-until-replicated-time ts=$start
+----
+
+list-ttls as=source-system min_table_id=$min_table_id max_table_id=$max_table_id
+----
+14400
+14400
+
+list-ttls as=destination-system min_table_id=$min_table_id max_table_id=$max_table_id
+----
+14400
+14400
+
+job as=destination-system pause
+----
+
+job as=destination-system wait-for-state=paused
+----
+
+exec-sql as=source-tenant
+ALTER TABLE d.x CONFIGURE ZONE USING gc.ttlseconds=1234;
+----
+
+list-ttls as=source-system min_table_id=$min_table_id max_table_id=$max_table_id
+----
+1234
+14400
+
+job as=destination-system resume
+----
+
+job as=destination-system wait-for-state=running
+----
+
+
+list-ttls as=destination-system min_table_id=$min_table_id max_table_id=$max_table_id
+----
+1234
+14400
+
+let $cutover as=source-system
+SELECT clock_timestamp()::timestamp::string
+----
+
+cutover ts=$cutover
+----
+
+start-replicated-tenant
+----
+

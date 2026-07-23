@@ -1,0 +1,27 @@
+subtest default_size
+
+statement error DELETE BATCH not implemented
+DELETE BATCH FROM tbl;
+
+subtest end
+
+subtest constant_size
+
+statement error DELETE BATCH \(SIZE <size>\) not implemented
+DELETE BATCH (SIZE 1) FROM tbl;
+
+subtest end
+
+subtest subquery_size
+
+statement error DELETE BATCH \(SIZE <size>\) not implemented
+DELETE BATCH (SIZE (SELECT 1)) FROM tbl;
+
+subtest end
+
+subtest multiple_sizes
+
+statement error invalid parameter at index 1, SIZE already specified
+DELETE BATCH (SIZE 1, SIZE 1) FROM tbl;
+
+subtest end

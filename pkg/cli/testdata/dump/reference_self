@@ -1,0 +1,124 @@
+# Test dumping in the presence of cycles.
+# This used to crash before with stack overflow due to an infinite loop before:
+# https://github.com/cockroachdb/cockroach/pull/20255
+
+sql
+CREATE DATABASE d;
+CREATE TABLE d.t (
+	PRIMARY KEY (id),
+	FOREIGN KEY (next_id) REFERENCES d.t(id),
+	id INT,
+	next_id INT
+);
+INSERT INTO d.t VALUES (
+	1,
+	NULL
+);
+----
+INSERT 1
+
+dump d t
+----
+----
+CREATE TABLE public.t (
+	id INT8 NOT NULL,
+	next_id INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, next_id)
+);
+
+INSERT INTO public.t (id, next_id) VALUES
+	(1, NULL);
+
+ALTER TABLE public.t ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY (next_id) REFERENCES public.t(id);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+ALTER TABLE public.t VALIDATE CONSTRAINT fk_next_id_ref_t;
+----
+----
+
+# Now make a reference forces the dump to add the FKs after the data has been inserted.
+
+sql
+UPDATE d.t SET next_id = 1
+----
+UPDATE 1
+
+dump d t
+----
+----
+CREATE TABLE public.t (
+	id INT8 NOT NULL,
+	next_id INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, next_id)
+);
+
+INSERT INTO public.t (id, next_id) VALUES
+	(1, 1);
+
+ALTER TABLE public.t ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY (next_id) REFERENCES public.t(id);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+ALTER TABLE public.t VALIDATE CONSTRAINT fk_next_id_ref_t;
+----
+----
+
+# Make some weirdo identifiers and the second FK.
+
+sql
+ALTER TABLE d.t RENAME COLUMN next_id TO "'";
+ALTER TABLE d.t RENAME TO "table";
+----
+RENAME TABLE
+
+dump d table
+----
+----
+CREATE TABLE public."table" (
+	id INT8 NOT NULL,
+	"'" INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, "'")
+);
+
+INSERT INTO public."table" (id, "'") VALUES
+	(1, 1);
+
+ALTER TABLE public."table" ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY ("'") REFERENCES public."table"(id);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+ALTER TABLE public."table" VALIDATE CONSTRAINT fk_next_id_ref_t;
+----
+----
+
+# Dumping only the schema doesn't need to use the ALTER TABLE FK stuff.
+
+dump d --dump-mode=schema
+----
+----
+CREATE TABLE public."table" (
+	id INT8 NOT NULL,
+	"'" INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, "'")
+);
+
+ALTER TABLE public."table" ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY ("'") REFERENCES public."table"(id);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+ALTER TABLE public."table" VALIDATE CONSTRAINT fk_next_id_ref_t;
+----
+----
+
+# Dumping only the data shouldn't have the ALTER stuff either.
+
+dump d --dump-mode=data
+noroundtrip
+----
+----
+
+INSERT INTO public."table" (id, "'") VALUES
+	(1, 1);
+----
+----

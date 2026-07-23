@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cluster",
+    srcs = ["cluster_settings.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/settings/cluster",
+    visibility = ["//visibility:public"],
+    x_defs = {
+        "github.com/cockroachdb/cockroach/pkg/settings/cluster.telemetryOptOutCompTimeString": "{STABLE_TELEMETRY_DISABLED}",
+    },
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/util/envutil",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ptprovider",
+    srcs = ["provider.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/protectedts",
+        "//pkg/kv/kvserver/protectedts/ptreconcile",
+        "//pkg/kv/kvserver/protectedts/ptstorage",
+        "//pkg/settings/cluster",
+        "//pkg/sql/isql",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

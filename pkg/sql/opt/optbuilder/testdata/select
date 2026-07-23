@@ -1,0 +1,1745 @@
+# tests adapted from logictest -- select
+
+# These statements must be first - the numeric reference tests assume that
+# these are the first tables defined. Cockroach numeric references start after
+# 53 for user tables. See opt/testutils/testcat/create_table.go:117 for more
+# info on 53 as a magic number.
+
+exec-ddl
+CREATE TABLE tab53 (a INT PRIMARY KEY, y INT, b INT, c INT, INDEX bc (b,c))
+----
+
+exec-ddl
+CREATE TABLE tab54 (x INT, y INT)
+----
+
+exec-ddl
+CREATE TABLE tab55 (a INT PRIMARY KEY, b INT NOT NULL, CONSTRAINT foo CHECK (a+b < 10))
+----
+
+exec-ddl
+CREATE TABLE tab56 (
+  a INT PRIMARY KEY,
+  b INT,
+  "c:write-only" INT,
+  "d:delete-only" INT
+)
+----
+
+# SELECT with no table.
+
+build
+SELECT 1
+----
+project
+ ├── columns: "?column?":1!null
+ ├── values
+ │    └── ()
+ └── projections
+      └── 1 [as="?column?":1]
+
+build
+SELECT NULL
+----
+project
+ ├── columns: "?column?":1
+ ├── values
+ │    └── ()
+ └── projections
+      └── NULL [as="?column?":1]
+
+build
+SELECT 1+1 AS two, 2+2 AS four
+----
+project
+ ├── columns: two:1!null four:2!null
+ ├── values
+ │    └── ()
+ └── projections
+      ├── 1 + 1 [as=two:1]
+      └── 2 + 2 [as=four:2]
+
+# SELECT expression tests.
+
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+----
+
+build
+SELECT * FROM abc WHERE 'hello'
+----
+error (22P02): could not parse "hello" as type bool: invalid bool value
+
+build
+SELECT * FROM abc
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ └── scan abc
+      └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT NULL AS r, * FROM abc
+----
+project
+ ├── columns: r:6 a:1!null b:2 c:3
+ ├── scan abc
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── projections
+      └── NULL [as=r:6]
+
+
+# synonym for SELECT * FROM abc
+build
+TABLE abc
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ └── scan abc
+      └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT * FROM abc WHERE NULL
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ └── select
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── NULL::BOOL
+
+build
+SELECT * FROM abc WHERE a = NULL
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ └── select
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── NULL::BOOL
+
+build
+SELECT *,* FROM abc
+----
+project
+ ├── columns: a:1!null b:2 c:3 a:1!null b:2 c:3
+ └── scan abc
+      └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT a,a,a,a FROM abc
+----
+project
+ ├── columns: a:1!null a:1!null a:1!null a:1!null
+ └── scan abc
+      └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT a,c FROM abc
+----
+project
+ ├── columns: a:1!null c:3
+ └── scan abc
+      └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT a+b+c AS foo FROM abc
+----
+project
+ ├── columns: foo:6
+ ├── scan abc
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── projections
+      └── (a:1 + b:2) + c:3 [as=foo:6]
+
+build
+SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
+----
+project
+ ├── columns: a:1!null b:2
+ └── select
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── CASE WHEN a:1 != 0 THEN (b:2 / a:1) > 1.5 ELSE false END
+
+# SELECT of NULL value.
+
+exec-ddl
+CREATE TABLE kv (k CHAR PRIMARY KEY, v CHAR)
+----
+
+build
+SELECT * FROM kv
+----
+project
+ ├── columns: k:1!null v:2
+ └── scan kv
+      └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT k,v FROM kv
+----
+project
+ ├── columns: k:1!null v:2
+ └── scan kv
+      └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT v||'foo' AS r FROM kv
+----
+project
+ ├── columns: r:5
+ ├── scan kv
+ │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── v:2 || 'foo' [as=r:5]
+
+build
+SELECT lower(v) FROM kv
+----
+project
+ ├── columns: lower:5
+ ├── scan kv
+ │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── lower(v:2) [as=lower:5]
+
+build
+SELECT k FROM kv
+----
+project
+ ├── columns: k:1!null
+ └── scan kv
+      └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT kv.K,KV.v FROM kv
+----
+project
+ ├── columns: k:1!null v:2
+ └── scan kv
+      └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT kv.* FROM kv
+----
+project
+ ├── columns: k:1!null v:2
+ └── scan kv
+      └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT row_to_json(kv) FROM kv
+----
+project
+ ├── columns: row_to_json:5
+ ├── scan kv
+ │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── row_to_json(((k:1, v:2) AS k, v)) [as=row_to_json:5]
+
+build
+SELECT kv FROM kv
+----
+project
+ ├── columns: kv:5
+ ├── scan kv
+ │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── ((k:1, v:2) AS k, v) [as=kv:5]
+
+build
+SELECT log(kv) FROM kv
+----
+error (42883): unknown signature: log(tuple{char AS k, char AS v})
+
+build
+SELECT (kv.*) AS r FROM kv
+----
+project
+ ├── columns: r:5
+ ├── scan kv
+ │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── ((k:1, v:2) AS k, v) [as=r:5]
+
+build
+SELECT (SELECT t.*) FROM (VALUES (1)) AS t(x)
+----
+project
+ ├── columns: "?column?":3
+ ├── values
+ │    ├── columns: column1:1!null
+ │    └── (1,)
+ └── projections
+      └── subquery [as="?column?":3]
+           └── max1-row
+                ├── columns: x:2
+                └── project
+                     ├── columns: x:2
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── column1:1 [as=x:2]
+
+build
+SELECT foo.* FROM kv
+----
+error (42P01): no data source matches pattern: foo.*
+
+build
+SELECT *
+----
+error (42602): cannot use "*" without a FROM clause
+
+build
+SELECT kv.* AS foo FROM kv
+----
+error (42601): "kv.*" cannot be aliased
+
+build
+SELECT bar.kv.* FROM kv
+----
+error (42P01): no data source matches pattern: bar.kv.*
+
+# Don't panic with invalid names (#8024)
+build
+SELECT kv.*[1] FROM kv
+----
+error (42804): cannot subscript type tuple{char AS k, char AS v} because it is not an array or json object
+
+build
+SELECT ARRAY[]
+----
+error (42P18): cannot determine type of empty array. Consider casting to the desired type, for example ARRAY[]::int[]
+
+build
+SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
+----
+project
+ ├── columns: k:1!null
+ └── select
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan kv [as=foo]
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── k:1 = 'a'
+
+build
+SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
+----
+project
+ ├── columns: v:2
+ └── select
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan kv [as=foo]
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── k:1 = 'a'
+
+exec-ddl
+CREATE TABLE kw ("from" INT PRIMARY KEY)
+----
+
+build
+SELECT *, "from", kw."from" FROM kw
+----
+project
+ ├── columns: from:1!null from:1!null from:1!null
+ └── scan kw
+      └── columns: from:1!null crdb_internal_mvcc_timestamp:2 tableoid:3
+
+exec-ddl
+CREATE TABLE xyzw (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  w INT,
+  INDEX foo (z, y)
+)
+----
+
+# SELECT with index hints.
+
+build
+SELECT * FROM xyzw@xyzw_pkey
+----
+project
+ ├── columns: x:1!null y:2 z:3 w:4
+ └── scan xyzw
+      ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── flags: force-index=xyzw_pkey
+
+build
+SELECT * FROM xyzw@foo
+----
+project
+ ├── columns: x:1!null y:2 z:3 w:4
+ └── scan xyzw
+      ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── flags: force-index=foo
+
+build
+SELECT * FROM xyzw@{FORCE_INDEX=foo,ASC}
+----
+project
+ ├── columns: x:1!null y:2 z:3 w:4
+ └── scan xyzw
+      ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── flags: force-index=foo,fwd
+
+build
+SELECT * FROM xyzw@{FORCE_INDEX=foo,DESC}
+----
+project
+ ├── columns: x:1!null y:2 z:3 w:4
+ └── scan xyzw,rev
+      ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── flags: force-index=foo,rev
+
+build
+SELECT * FROM xyzw@{NO_INDEX_JOIN}
+----
+project
+ ├── columns: x:1!null y:2 z:3 w:4
+ └── scan xyzw
+      ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── flags: no-index-join
+
+build
+SELECT * FROM xyzw LIMIT x
+----
+error (42703): column "x" does not exist
+
+build
+SELECT * FROM xyzw OFFSET 1 + y
+----
+error (42703): column "y" does not exist
+
+build
+SELECT * FROM xyzw LIMIT 3.3
+----
+error (42804): argument of LIMIT must be type int, not type decimal
+
+build
+SELECT * FROM xyzw ORDER BY 1 LIMIT '1'
+----
+limit
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── ordering: +1
+ │    ├── limit hint: 1.00
+ │    └── scan xyzw
+ │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── ordering: +1
+ │         └── limit hint: 1.00
+ └── 1
+
+build
+SELECT * FROM xyzw OFFSET 1.5
+----
+error (42804): argument of OFFSET must be type int, not type decimal
+
+# At execution time, this will cause the error: negative value for LIMIT
+build
+SELECT * FROM xyzw LIMIT -100
+----
+limit
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── limit hint: 1.00
+ │    └── scan xyzw
+ │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         └── limit hint: 1.00
+ └── -100
+
+# At execution time, this will cause the error: negative value for OFFSET
+build
+SELECT * FROM xyzw OFFSET -100
+----
+offset
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    └── scan xyzw
+ │         └── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ └── -100
+
+build
+SELECT * FROM xyzw ORDER BY x OFFSET 1 + 0.0
+----
+offset
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── ordering: +1
+ │    └── scan xyzw
+ │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         └── ordering: +1
+ └── 1 + 0
+
+build
+SELECT (x,y) AS r FROM xyzw
+----
+project
+ ├── columns: r:7
+ ├── scan xyzw
+ │    └── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ └── projections
+      └── (x:1, y:2) [as=r:7]
+
+build
+SELECT * FROM xyzw LIMIT 0
+----
+limit
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── limit hint: 1.00
+ │    └── scan xyzw
+ │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         └── limit hint: 1.00
+ └── 0
+
+build
+SELECT * FROM xyzw ORDER BY x LIMIT 1
+----
+limit
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── ordering: +1
+ │    ├── limit hint: 1.00
+ │    └── scan xyzw
+ │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── ordering: +1
+ │         └── limit hint: 1.00
+ └── 1
+
+build
+SELECT * FROM xyzw ORDER BY x LIMIT 1 OFFSET 1
+----
+limit
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── offset
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── internal-ordering: +1
+ │    ├── ordering: +1
+ │    ├── limit hint: 1.00
+ │    ├── project
+ │    │    ├── columns: x:1!null y:2 z:3 w:4
+ │    │    ├── ordering: +1
+ │    │    ├── limit hint: 2.00
+ │    │    └── scan xyzw
+ │    │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ │    │         ├── ordering: +1
+ │    │         └── limit hint: 2.00
+ │    └── 1
+ └── 1
+
+build
+SELECT * FROM xyzw ORDER BY y OFFSET 1
+----
+offset
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── internal-ordering: +2
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── ordering: +2
+ │    └── project
+ │         ├── columns: x:1!null y:2 z:3 w:4
+ │         └── scan xyzw
+ │              └── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ └── 1
+
+build
+SELECT * FROM xyzw ORDER BY y OFFSET 1 LIMIT 1
+----
+limit
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── internal-ordering: +2
+ ├── ordering: +2
+ ├── offset
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── internal-ordering: +2
+ │    ├── ordering: +2
+ │    ├── limit hint: 1.00
+ │    ├── sort
+ │    │    ├── columns: x:1!null y:2 z:3 w:4
+ │    │    ├── ordering: +2
+ │    │    ├── limit hint: 2.00
+ │    │    └── project
+ │    │         ├── columns: x:1!null y:2 z:3 w:4
+ │    │         └── scan xyzw
+ │    │              └── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ │    └── 1
+ └── 1
+
+build
+SELECT * FROM xyzw LIMIT (SELECT count(*) FROM abc) * 2 OFFSET (SELECT count(*) FROM abc) * 3
+----
+limit
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── offset
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── project
+ │    │    ├── columns: x:1!null y:2 z:3 w:4
+ │    │    └── scan xyzw
+ │    │         └── columns: x:1!null y:2 z:3 w:4 xyzw.crdb_internal_mvcc_timestamp:5 xyzw.tableoid:6
+ │    └── mult
+ │         ├── subquery
+ │         │    └── max1-row
+ │         │         ├── columns: count_rows:12!null
+ │         │         └── scalar-group-by
+ │         │              ├── columns: count_rows:12!null
+ │         │              ├── project
+ │         │              │    └── scan abc
+ │         │              │         └── columns: a:7!null b:8 c:9 abc.crdb_internal_mvcc_timestamp:10 abc.tableoid:11
+ │         │              └── aggregations
+ │         │                   └── count-rows [as=count_rows:12]
+ │         └── 3
+ └── mult
+      ├── subquery
+      │    └── max1-row
+      │         ├── columns: count_rows:18!null
+      │         └── scalar-group-by
+      │              ├── columns: count_rows:18!null
+      │              ├── project
+      │              │    └── scan abc
+      │              │         └── columns: a:13!null b:14 c:15 abc.crdb_internal_mvcc_timestamp:16 abc.tableoid:17
+      │              └── aggregations
+      │                   └── count-rows [as=count_rows:18]
+      └── 2
+
+build
+((SELECT x FROM xyzw LIMIT 1)) LIMIT 1
+----
+error (42601): multiple LIMIT clauses not allowed
+
+build
+SELECT * FROM (SELECT * FROM xyzw LIMIT 5) OFFSET 5
+----
+offset
+ ├── columns: x:1!null y:2 z:3 w:4
+ ├── limit
+ │    ├── columns: x:1!null y:2 z:3 w:4
+ │    ├── project
+ │    │    ├── columns: x:1!null y:2 z:3 w:4
+ │    │    ├── limit hint: 5.00
+ │    │    └── scan xyzw
+ │    │         ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ │    │         └── limit hint: 5.00
+ │    └── 5
+ └── 5
+
+build
+SELECT * FROM xyzw@foo
+----
+project
+ ├── columns: x:1!null y:2 z:3 w:4
+ └── scan xyzw
+      ├── columns: x:1!null y:2 z:3 w:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── flags: force-index=foo
+
+exec-ddl
+CREATE TABLE boolean_table (
+  id INTEGER PRIMARY KEY NOT NULL,
+  value BOOLEAN
+)
+----
+
+build
+SELECT value FROM boolean_table
+----
+project
+ ├── columns: value:2
+ └── scan boolean_table
+      └── columns: id:1!null value:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT CASE WHEN NULL THEN 1 ELSE 2 END
+----
+project
+ ├── columns: case:1
+ ├── values
+ │    └── ()
+ └── projections
+      └── CASE WHEN NULL THEN 1 ELSE 2 END [as=case:1]
+
+build
+SELECT 0 * b AS r, b % 1 AS s, 0 % b AS t from abc
+----
+project
+ ├── columns: r:6 s:7 t:8
+ ├── scan abc
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── projections
+      ├── 0 * b:2 [as=r:6]
+      ├── b:2 % 1 [as=s:7]
+      └── 0 % b:2 [as=t:8]
+
+# Regression tests for #22670.
+build
+SELECT 1 IN (1, 2) AS r
+----
+project
+ ├── columns: r:1!null
+ ├── values
+ │    └── ()
+ └── projections
+      └── 1 IN (1, 2) [as=r:1]
+
+build
+SELECT NULL IN (1, 2) AS r
+----
+project
+ ├── columns: r:1
+ ├── values
+ │    └── ()
+ └── projections
+      └── NULL IN (1, 2) [as=r:1]
+
+build
+SELECT 1 IN (NULL, 2) AS r
+----
+project
+ ├── columns: r:1
+ ├── values
+ │    └── ()
+ └── projections
+      └── 1 IN (NULL, 2) [as=r:1]
+
+build
+SELECT (1, NULL) IN ((1, 1)) AS r
+----
+project
+ ├── columns: r:1
+ ├── values
+ │    └── ()
+ └── projections
+      └── (1, NULL) IN ((1, 1),) [as=r:1]
+
+# Tests with a tuple coming from a subquery.
+build
+ SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a)) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:2]
+           ├── values
+           │    ├── columns: column1:1!null
+           │    └── (1,)
+           └── NULL::INT8
+
+build
+SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b)) AS r
+----
+project
+ ├── columns: r:4
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:4]
+           ├── project
+           │    ├── columns: column3:3!null
+           │    ├── values
+           │    │    ├── columns: column1:1!null column2:2!null
+           │    │    └── (1, 1)
+           │    └── projections
+           │         └── (column1:1, column2:2) [as=column3:3]
+           └── (1, NULL::INT8)
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a)) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── not [as=r:2]
+           └── any: eq
+                ├── values
+                │    ├── columns: column1:1!null
+                │    └── (1,)
+                └── NULL::INT8
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b)) AS r
+----
+project
+ ├── columns: r:4
+ ├── values
+ │    └── ()
+ └── projections
+      └── not [as=r:4]
+           └── any: eq
+                ├── project
+                │    ├── columns: column3:3!null
+                │    ├── values
+                │    │    ├── columns: column1:1!null column2:2!null
+                │    │    └── (1, 1)
+                │    └── projections
+                │         └── (column1:1, column2:2) [as=column3:3]
+                └── (1, NULL::INT8)
+
+# Tests with an empty IN tuple.
+build
+SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:2]
+           ├── select
+           │    ├── columns: column1:1!null
+           │    ├── values
+           │    │    ├── columns: column1:1!null
+           │    │    └── (1,)
+           │    └── filters
+           │         └── column1:1 > 1
+           └── NULL::INT8
+
+build
+SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:4
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:4]
+           ├── project
+           │    ├── columns: column3:3!null
+           │    ├── select
+           │    │    ├── columns: column1:1!null column2:2!null
+           │    │    ├── values
+           │    │    │    ├── columns: column1:1!null column2:2!null
+           │    │    │    └── (1, 1)
+           │    │    └── filters
+           │    │         └── column1:1 > 1
+           │    └── projections
+           │         └── (column1:1, column2:2) [as=column3:3]
+           └── (1, NULL::INT8)
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── not [as=r:2]
+           └── any: eq
+                ├── select
+                │    ├── columns: column1:1!null
+                │    ├── values
+                │    │    ├── columns: column1:1!null
+                │    │    └── (1,)
+                │    └── filters
+                │         └── column1:1 > 1
+                └── NULL::INT8
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:4
+ ├── values
+ │    └── ()
+ └── projections
+      └── not [as=r:4]
+           └── any: eq
+                ├── project
+                │    ├── columns: column3:3!null
+                │    ├── select
+                │    │    ├── columns: column1:1!null column2:2!null
+                │    │    ├── values
+                │    │    │    ├── columns: column1:1!null column2:2!null
+                │    │    │    └── (1, 1)
+                │    │    └── filters
+                │    │         └── column1:1 > 1
+                │    └── projections
+                │         └── (column1:1, column2:2) [as=column3:3]
+                └── (1, NULL::INT8)
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── not [as=r:2]
+           └── any: eq
+                ├── select
+                │    ├── columns: column1:1!null
+                │    ├── values
+                │    │    ├── columns: column1:1!null
+                │    │    └── (1,)
+                │    └── filters
+                │         └── column1:1 > 1
+                └── NULL::INT8
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:4
+ ├── values
+ │    └── ()
+ └── projections
+      └── not [as=r:4]
+           └── any: eq
+                ├── project
+                │    ├── columns: column3:3!null
+                │    ├── select
+                │    │    ├── columns: column1:1!null column2:2!null
+                │    │    ├── values
+                │    │    │    ├── columns: column1:1!null column2:2!null
+                │    │    │    └── (1, 1)
+                │    │    └── filters
+                │    │         └── column1:1 > 1
+                │    └── projections
+                │         └── (column1:1, column2:2) [as=column3:3]
+                └── (1, NULL::INT8)
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── not [as=r:2]
+           └── any: eq
+                ├── select
+                │    ├── columns: column1:1!null
+                │    ├── values
+                │    │    ├── columns: column1:1!null
+                │    │    └── (1,)
+                │    └── filters
+                │         └── column1:1 > 1
+                └── NULL::INT8
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:4
+ ├── values
+ │    └── ()
+ └── projections
+      └── not [as=r:4]
+           └── any: eq
+                ├── project
+                │    ├── columns: column3:3!null
+                │    ├── select
+                │    │    ├── columns: column1:1!null column2:2!null
+                │    │    ├── values
+                │    │    │    ├── columns: column1:1!null column2:2!null
+                │    │    │    └── (1, 1)
+                │    │    └── filters
+                │    │         └── column1:1 > 1
+                │    └── projections
+                │         └── (column1:1, column2:2) [as=column3:3]
+                └── (1, NULL::INT8)
+
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y FLOAT)
+----
+
+build
+SELECT * FROM a
+----
+project
+ ├── columns: x:1!null y:2
+ └── scan a
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT * FROM a WHERE x > 10
+----
+project
+ ├── columns: x:1!null y:2
+ └── select
+      ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan a
+      │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── x:1 > 10
+
+build
+SELECT * FROM a WHERE (x > 10 AND (x < 20 AND x != 13))
+----
+project
+ ├── columns: x:1!null y:2
+ └── select
+      ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan a
+      │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── (x:1 > 10) AND ((x:1 < 20) AND (x:1 != 13))
+
+build
+SELECT * FROM a WHERE x IN (1, 2, 3)
+----
+project
+ ├── columns: x:1!null y:2
+ └── select
+      ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan a
+      │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── x:1 IN (1, 2, 3)
+
+build
+SELECT * FROM a AS A(X, Y)
+----
+project
+ ├── columns: x:1!null y:2
+ └── scan a
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT @1 AS r, @2 AS s FROM a
+----
+error (01P01): invalid syntax @1
+
+build set=allow_ordinal_column_references=true
+SELECT @1 AS r, @2 AS s FROM a
+----
+project
+ ├── columns: r:5!null s:6
+ ├── scan a
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      ├── x:1 [as=r:5]
+      └── y:2 [as=s:6]
+
+build
+SELECT * FROM a WHERE (x > 10)::bool
+----
+project
+ ├── columns: x:1!null y:2
+ └── select
+      ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan a
+      │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── x:1 > 10
+
+build
+SELECT * FROM a WHERE (x > 10)::INT[]
+----
+error (42846): invalid cast: bool -> int[]
+
+build
+SELECT * FROM a WHERE x = $1
+----
+project
+ ├── columns: x:1!null y:2
+ └── select
+      ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan a
+      │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── x:1 = $1
+
+# This is slightly funky, because the AS OF SYSTEM TIME timestamp only gets
+# interpreted by the executor, which obviously is not at play in these tests.
+build
+SELECT * FROM a AS OF SYSTEM TIME '-1000ms'
+----
+error (42601): AS OF SYSTEM TIME must be provided on a top-level statement
+
+build
+SELECT * FROM a AS t(a, b, c)
+----
+error (42P10): source "t" has 2 columns available but 3 columns specified
+
+build
+SELECT (x).e, (x).f, (x).g
+FROM (
+  SELECT ((1,'2',true) AS e,f,g) AS x
+)
+----
+project
+ ├── columns: e:2 f:3 g:4
+ ├── project
+ │    ├── columns: x:1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── ((1, '2', true) AS e, f, g) [as=x:1]
+ └── projections
+      ├── (x:1).e [as=e:2]
+      ├── (x:1).f [as=f:3]
+      └── (x:1).g [as=g:4]
+
+build
+SELECT (((x, y) AS x, y)).x FROM a
+----
+project
+ ├── columns: x:1!null
+ └── scan a
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+
+# Numeric Reference Tests
+# Cockroach numeric references start after 53 for user tables.
+# See opt/testutils/testcat/create_table.go:117 for more info on
+# 53 as a magic number.
+
+build
+SELECT * FROM [53 AS t]
+----
+project
+ ├── columns: a:1!null y:2 b:3 c:4
+ └── scan tab53 [as=t]
+      └── columns: a:1!null y:2 b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+
+build
+SELECT * FROM [53(1) AS t]
+----
+scan tab53 [as=t]
+ └── columns: a:1!null
+
+build
+SELECT * FROM [53(1,2) AS t]
+----
+scan tab53 [as=t]
+ └── columns: a:1!null y:2
+
+build
+SELECT * FROM [53(4) AS t]
+----
+scan tab53 [as=t]
+ └── columns: c:4
+
+build
+SELECT * FROM [53(5) AS t]
+----
+project
+ └── scan tab53 [as=t]
+      └── columns: crdb_internal_mvcc_timestamp:5
+
+build
+SELECT * FROM [53(2,4) AS t]
+----
+scan tab53 [as=t]
+ └── columns: y:2 c:4
+
+build
+SELECT * FROM [53(2,3) AS t(col1,col2)]
+----
+scan tab53 [as=t]
+ └── columns: col1:2 col2:3
+
+build
+SELECT * FROM [53() AS t]
+----
+error (42601): an explicit list of column IDs must include at least one column
+
+# Test that hidden columns are not presented
+build
+SELECT * FROM [54 AS t]
+----
+project
+ ├── columns: x:1 y:2
+ └── scan tab54 [as=t]
+      └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+
+# Verify that we force the given index.
+build
+SELECT * FROM [53 AS t]@[1]
+----
+project
+ ├── columns: a:1!null y:2 b:3 c:4
+ └── scan tab53 [as=t]
+      ├── columns: a:1!null y:2 b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── flags: force-index=tab53_pkey
+
+build
+SELECT * FROM [53 AS t]@[2]
+----
+project
+ ├── columns: a:1!null y:2 b:3 c:4
+ └── scan tab53 [as=t]
+      ├── columns: a:1!null y:2 b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── flags: force-index=bc
+
+# Test that hidden columns are not presented.
+build
+SELECT * FROM [54(1,3) AS t]
+----
+project
+ ├── columns: x:1
+ └── scan tab54 [as=t]
+      └── columns: x:1 rowid:3!null
+
+build
+SELECT rowid FROM [54(3) as t]
+----
+scan tab54 [as=t]
+ └── columns: rowid:3!null
+
+
+# Test that we don't error out due to check constraints that involve unselected
+# columns.
+build
+SELECT * FROM [55(1) as t(a)]
+----
+scan tab55 [as=t]
+ ├── columns: a:1!null
+ └── check constraint expressions
+      └── (a:1 + b:2) < 10
+
+# Test that we error out if we refer to a mutation column,
+build
+SELECT * FROM [56(1,3) AS t(a, b)]
+----
+error (42703): column [3] does not exist
+
+build
+SELECT * FROM [56(1,4) AS t(a, b)]
+----
+error (42703): column [4] does not exist
+
+build
+INSERT INTO [56(1,3) AS t(a,b)] VALUES (1,2)
+----
+error (42703): column [3] does not exist
+
+# Regression test for #28388. Ensure that selecting from a table with no
+# columns does not cause a panic.
+exec-ddl
+CREATE TABLE no_cols_table ()
+----
+
+build
+SELECT * FROM no_cols_table
+----
+project
+ └── scan no_cols_table
+      └── columns: rowid:1!null crdb_internal_mvcc_timestamp:2 tableoid:3
+
+build
+SELECT * FROM [54(3) as t]
+----
+project
+ └── scan tab54 [as=t]
+      └── columns: rowid:3!null
+
+# Non-referenced CTE with mutation.
+build
+WITH cte AS (SELECT b FROM [INSERT INTO abc VALUES (1) RETURNING *] LIMIT 1) SELECT * FROM abc
+----
+with &1
+ ├── columns: a:11!null b:12 c:13
+ ├── insert abc
+ │    ├── columns: abc.a:1!null abc.b:2 abc.c:3
+ │    ├── insert-mapping:
+ │    │    ├── column1:6 => abc.a:1
+ │    │    ├── b_default:7 => abc.b:2
+ │    │    └── b_default:7 => abc.c:3
+ │    ├── return-mapping:
+ │    │    ├── column1:6 => abc.a:1
+ │    │    ├── b_default:7 => abc.b:2
+ │    │    └── b_default:7 => abc.c:3
+ │    └── project
+ │         ├── columns: b_default:7 column1:6!null
+ │         ├── values
+ │         │    ├── columns: column1:6!null
+ │         │    └── (1,)
+ │         └── projections
+ │              └── NULL::INT8 [as=b_default:7]
+ └── with &2 (cte)
+      ├── columns: abc.a:11!null abc.b:12 abc.c:13
+      ├── limit
+      │    ├── columns: b:9
+      │    ├── project
+      │    │    ├── columns: b:9
+      │    │    ├── limit hint: 1.00
+      │    │    └── with-scan &1
+      │    │         ├── columns: a:8!null b:9 c:10
+      │    │         ├── mapping:
+      │    │         │    ├──  abc.a:1 => a:8
+      │    │         │    ├──  abc.b:2 => b:9
+      │    │         │    └──  abc.c:3 => c:10
+      │    │         └── limit hint: 1.00
+      │    └── 1
+      └── project
+           ├── columns: abc.a:11!null abc.b:12 abc.c:13
+           └── scan abc
+                └── columns: abc.a:11!null abc.b:12 abc.c:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+
+# Tests for the square bracket syntax.
+build
+SELECT * FROM [SELECT * FROM abc]
+----
+with &1
+ ├── columns: a:6!null b:7 c:8
+ ├── project
+ │    ├── columns: abc.a:1!null abc.b:2 abc.c:3
+ │    └── scan abc
+ │         └── columns: abc.a:1!null abc.b:2 abc.c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── with-scan &1
+      ├── columns: a:6!null b:7 c:8
+      └── mapping:
+           ├──  abc.a:1 => a:6
+           ├──  abc.b:2 => b:7
+           └──  abc.c:3 => c:8
+
+build
+SELECT * FROM [INSERT INTO abc VALUES (1, 2, 3) RETURNING a]
+----
+with &1
+ ├── columns: a:9!null
+ ├── project
+ │    ├── columns: abc.a:1!null
+ │    └── insert abc
+ │         ├── columns: abc.a:1!null b:2!null c:3!null
+ │         ├── insert-mapping:
+ │         │    ├── column1:6 => abc.a:1
+ │         │    ├── column2:7 => b:2
+ │         │    └── column3:8 => c:3
+ │         ├── return-mapping:
+ │         │    ├── column1:6 => abc.a:1
+ │         │    ├── column2:7 => b:2
+ │         │    └── column3:8 => c:3
+ │         └── values
+ │              ├── columns: column1:6!null column2:7!null column3:8!null
+ │              └── (1, 2, 3)
+ └── with-scan &1
+      ├── columns: a:9!null
+      └── mapping:
+           └──  abc.a:1 => a:9
+
+# Statement inside brackets cannot refer to outer column.
+build
+SELECT a, b FROM abc WHERE b = (SELECT x FROM [SELECT * FROM xyzw WHERE x = a])
+----
+error (42703): column "a" does not exist
+
+build
+SELECT a, b FROM abc, LATERAL (SELECT * FROM [SELECT * FROM xyzw WHERE a = x])
+----
+error (42703): column "a" does not exist
+
+# Statement inside brackets cannot refer to outer CTEs.
+build
+WITH cte AS (VALUES (1), (2))
+SELECT * FROM (VALUES (3)) AS t (x), [SELECT * FROM cte]
+----
+error (42P01): no data source matches prefix: "cte"
+
+# Projection list should still be able to refer to outer columns or CTEs.
+build
+WITH cte AS (SELECT 1) SELECT 1 + (SELECT * FROM cte) FROM [SELECT * from xyzw]
+----
+with &1 (cte)
+ ├── columns: "?column?":13
+ ├── project
+ │    ├── columns: "?column?":1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as="?column?":1]
+ └── with &2
+      ├── columns: "?column?":13
+      ├── project
+      │    ├── columns: xyzw.x:2!null xyzw.y:3 xyzw.z:4 xyzw.w:5
+      │    └── scan xyzw
+      │         └── columns: xyzw.x:2!null xyzw.y:3 xyzw.z:4 xyzw.w:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+      └── project
+           ├── columns: "?column?":13
+           ├── with-scan &2
+           │    ├── columns: x:8!null y:9 z:10 w:11
+           │    └── mapping:
+           │         ├──  xyzw.x:2 => x:8
+           │         ├──  xyzw.y:3 => y:9
+           │         ├──  xyzw.z:4 => z:10
+           │         └──  xyzw.w:5 => w:11
+           └── projections
+                └── plus [as="?column?":13]
+                     ├── 1
+                     └── subquery
+                          └── max1-row
+                               ├── columns: "?column?":12!null
+                               └── with-scan &1 (cte)
+                                    ├── columns: "?column?":12!null
+                                    └── mapping:
+                                         └──  "?column?":1 => "?column?":12
+
+build
+SELECT a, (SELECT a+x FROM [SELECT * from xyzw]) FROM abc
+----
+with &1
+ ├── columns: a:1!null "?column?":17
+ ├── project
+ │    ├── columns: xyzw.x:6!null xyzw.y:7 xyzw.z:8 xyzw.w:9
+ │    └── scan xyzw
+ │         └── columns: xyzw.x:6!null xyzw.y:7 xyzw.z:8 xyzw.w:9 xyzw.crdb_internal_mvcc_timestamp:10 xyzw.tableoid:11
+ └── project
+      ├── columns: "?column?":17 a:1!null
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 abc.crdb_internal_mvcc_timestamp:4 abc.tableoid:5
+      └── projections
+           └── subquery [as="?column?":17]
+                └── max1-row
+                     ├── columns: "?column?":16
+                     └── project
+                          ├── columns: "?column?":16
+                          ├── with-scan &1
+                          │    ├── columns: x:12!null y:13 z:14 w:15
+                          │    └── mapping:
+                          │         ├──  xyzw.x:6 => x:12
+                          │         ├──  xyzw.y:7 => y:13
+                          │         ├──  xyzw.z:8 => z:14
+                          │         └──  xyzw.w:9 => w:15
+                          └── projections
+                               └── a:1 + x:12 [as="?column?":16]
+
+exec-ddl
+CREATE TABLE inaccessible (
+    k INT PRIMARY KEY,
+    "v:inaccessible" INT
+)
+----
+
+build
+SELECT * FROM inaccessible
+----
+project
+ ├── columns: k:1!null
+ └── scan inaccessible
+      └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT v FROM inaccessible
+----
+error (42703): column "v" does not exist
+
+build
+SELECT inaccessible.v FROM inaccessible
+----
+error (42703): column "inaccessible.v" does not exist
+
+build
+INSERT INTO inaccessible VALUES (1)
+----
+insert inaccessible
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => k:1
+ │    └── v_default:6 => v:2
+ └── project
+      ├── columns: v_default:6 column1:5!null
+      ├── values
+      │    ├── columns: column1:5!null
+      │    └── (1,)
+      └── projections
+           └── NULL::INT8 [as=v_default:6]
+
+build
+INSERT INTO inaccessible VALUES (1) RETURNING v
+----
+error (42703): column "v" does not exist
+
+build
+INSERT INTO inaccessible VALUES (1) RETURNING inaccessible.v
+----
+error (42703): column "inaccessible.v" does not exist
+
+build
+INSERT INTO inaccessible(k, v) VALUES (1, 1)
+----
+error (42703): column "v" does not exist
+
+build
+UPSERT INTO inaccessible(k, v) VALUES (1, 1)
+----
+error (42703): column "v" does not exist
+
+build
+UPDATE inaccessible SET k=k+1
+----
+update inaccessible
+ ├── columns: <none>
+ ├── fetch columns: k:5 v:6
+ ├── update-mapping:
+ │    └── k_new:9 => k:1
+ └── project
+      ├── columns: k_new:9!null k:5!null v:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      ├── scan inaccessible
+      │    ├── columns: k:5!null v:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    └── flags: avoid-full-scan
+      └── projections
+           └── k:5 + 1 [as=k_new:9]
+
+build
+UPDATE inaccessible SET k=k+1 WHERE v=1
+----
+error (42703): column "v" does not exist
+
+build
+UPDATE inaccessible SET k=k+1 WHERE inaccessible.v=1
+----
+error (42703): column "inaccessible.v" does not exist
+
+build
+UPDATE inaccessible SET k=v+1
+----
+error (42703): column "v" does not exist
+
+build
+UPDATE inaccessible SET k=inaccessible.v+1
+----
+error (42703): column "inaccessible.v" does not exist
+
+build
+UPDATE inaccessible SET v=1
+----
+error (42703): column "v" does not exist
+
+build
+DELETE FROM inaccessible WHERE v=1
+----
+error (42703): column "v" does not exist
+
+build
+DELETE FROM inaccessible WHERE inaccessible.v=1
+----
+error (42703): column "inaccessible.v" does not exist
+
+build
+DELETE FROM inaccessible RETURNING v
+----
+error (42703): column "v" does not exist
+
+build
+DELETE FROM inaccessible RETURNING inaccessible.v
+----
+error (42703): column "inaccessible.v" does not exist
+
+exec-ddl
+CREATE TABLE same_name (
+  same_name TEXT PRIMARY KEY,
+  b INT
+)
+----
+
+build
+SELECT same_name FROM same_name
+----
+project
+ ├── columns: same_name:1!null
+ └── scan same_name
+      └── columns: same_name:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT row_to_json(same_name) FROM same_name
+----
+error (42883): unknown signature: row_to_json(string)
+
+build
+SELECT log(same_name) FROM same_name
+----
+error (42883): unknown signature: log(string)
+
+build
+SELECT t FROM (VALUES (1,2), (3,4)) t(x, y);
+----
+project
+ ├── columns: t:3!null
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null
+ │    ├── (1, 2)
+ │    └── (3, 4)
+ └── projections
+      └── ((column1:1, column2:2) AS x, y) [as=t:3]
+
+# Regression test for #127365. Synthesized CHECK expressions should be allowed
+# to reference inaccessible columns.
+exec-ddl
+CREATE TABLE t127365 (
+  k INT PRIMARY KEY,
+  a INT,
+  -- Simulate an expression index on an ENUM column by creating an
+  -- inaccessible virtual column with a check constraint.
+  "crdb_internal_idx_expr:inaccessible" INT AS (a + 1) VIRTUAL,
+  CHECK ("crdb_internal_idx_expr" IN (10, 20, 30)),
+  INDEX ("crdb_internal_idx_expr")
+)
+----
+
+build
+SELECT * FROM t127365
+----
+project
+ ├── columns: k:1!null a:2
+ └── project
+      ├── columns: crdb_internal_idx_expr:3 k:1!null a:2 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan t127365
+      │    ├── columns: k:1!null a:2 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    └── computed column expressions
+      │         └── crdb_internal_idx_expr:3
+      │              └── a:2 + 1
+      └── projections
+           └── a:2 + 1 [as=crdb_internal_idx_expr:3]
+
+build
+INSERT INTO t127365 VALUES (1, 10)
+----
+insert t127365
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => k:1
+ │    ├── column2:7 => a:2
+ │    └── crdb_internal_idx_expr_comp:8 => crdb_internal_idx_expr:3
+ ├── check columns: check1:9
+ └── project
+      ├── columns: check1:9!null column1:6!null column2:7!null crdb_internal_idx_expr_comp:8!null
+      ├── project
+      │    ├── columns: crdb_internal_idx_expr_comp:8!null column1:6!null column2:7!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null
+      │    │    └── (1, 10)
+      │    └── projections
+      │         └── column2:7 + 1 [as=crdb_internal_idx_expr_comp:8]
+      └── projections
+           └── crdb_internal_idx_expr_comp:8 IN (10, 20, 30) [as=check1:9]
+
+build
+UPSERT INTO t127365 VALUES (1, 10)
+----
+upsert t127365
+ ├── arbiter indexes: t127365_pkey
+ ├── columns: <none>
+ ├── canary column: k:9
+ ├── fetch columns: k:9 a:10 crdb_internal_idx_expr:11
+ ├── insert-mapping:
+ │    ├── column1:6 => k:1
+ │    ├── column2:7 => a:2
+ │    └── crdb_internal_idx_expr_comp:8 => crdb_internal_idx_expr:3
+ ├── update-mapping:
+ │    ├── column2:7 => a:2
+ │    └── crdb_internal_idx_expr_comp:8 => crdb_internal_idx_expr:3
+ ├── check columns: check1:15
+ └── project
+      ├── columns: check1:15!null column1:6!null column2:7!null crdb_internal_idx_expr_comp:8!null k:9 a:10 crdb_internal_idx_expr:11 crdb_internal_mvcc_timestamp:12 tableoid:13 upsert_k:14
+      ├── project
+      │    ├── columns: upsert_k:14 column1:6!null column2:7!null crdb_internal_idx_expr_comp:8!null k:9 a:10 crdb_internal_idx_expr:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null crdb_internal_idx_expr_comp:8!null k:9 a:10 crdb_internal_idx_expr:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null crdb_internal_idx_expr_comp:8!null
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: crdb_internal_idx_expr_comp:8!null column1:6!null column2:7!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    └── (1, 10)
+      │    │    │    │    └── projections
+      │    │    │    │         └── column2:7 + 1 [as=crdb_internal_idx_expr_comp:8]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         └── first-agg [as=crdb_internal_idx_expr_comp:8]
+      │    │    │              └── crdb_internal_idx_expr_comp:8
+      │    │    ├── project
+      │    │    │    ├── columns: crdb_internal_idx_expr:11 k:9!null a:10 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    ├── scan t127365
+      │    │    │    │    ├── columns: k:9!null a:10 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── crdb_internal_idx_expr:11
+      │    │    │    │    │         └── a:10 + 1
+      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    │    └── projections
+      │    │    │         └── a:10 + 1 [as=crdb_internal_idx_expr:11]
+      │    │    └── filters
+      │    │         └── column1:6 = k:9
+      │    └── projections
+      │         └── CASE WHEN k:9 IS NULL THEN column1:6 ELSE k:9 END [as=upsert_k:14]
+      └── projections
+           └── crdb_internal_idx_expr_comp:8 IN (10, 20, 30) [as=check1:15]
+
+build
+UPDATE t127365 SET a = 20 WHERE k = 1
+----
+update t127365
+ ├── columns: <none>
+ ├── fetch columns: k:6 a:7 crdb_internal_idx_expr:8
+ ├── update-mapping:
+ │    ├── a_new:11 => a:2
+ │    └── crdb_internal_idx_expr_comp:12 => crdb_internal_idx_expr:3
+ ├── check columns: check1:13
+ └── project
+      ├── columns: check1:13!null k:6!null a:7 crdb_internal_idx_expr:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null crdb_internal_idx_expr_comp:12!null
+      ├── project
+      │    ├── columns: crdb_internal_idx_expr_comp:12!null k:6!null a:7 crdb_internal_idx_expr:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      │    ├── project
+      │    │    ├── columns: a_new:11!null k:6!null a:7 crdb_internal_idx_expr:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    ├── select
+      │    │    │    ├── columns: k:6!null a:7 crdb_internal_idx_expr:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: crdb_internal_idx_expr:8 k:6!null a:7 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │    │    ├── scan t127365
+      │    │    │    │    │    ├── columns: k:6!null a:7 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    └── crdb_internal_idx_expr:8
+      │    │    │    │    │    │         └── a:7 + 1
+      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── projections
+      │    │    │    │         └── a:7 + 1 [as=crdb_internal_idx_expr:8]
+      │    │    │    └── filters
+      │    │    │         └── k:6 = 1
+      │    │    └── projections
+      │    │         └── 20 [as=a_new:11]
+      │    └── projections
+      │         └── a_new:11 + 1 [as=crdb_internal_idx_expr_comp:12]
+      └── projections
+           └── crdb_internal_idx_expr_comp:12 IN (10, 20, 30) [as=check1:13]
+
+build
+DELETE FROM t127365
+----
+delete t127365
+ ├── columns: <none>
+ ├── fetch columns: k:6 a:7 crdb_internal_idx_expr:8
+ └── project
+      ├── columns: crdb_internal_idx_expr:8 k:6!null a:7 crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── scan t127365
+      │    ├── columns: k:6!null a:7 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── computed column expressions
+      │    │    └── crdb_internal_idx_expr:8
+      │    │         └── a:7 + 1
+      │    └── flags: avoid-full-scan
+      └── projections
+           └── a:7 + 1 [as=crdb_internal_idx_expr:8]

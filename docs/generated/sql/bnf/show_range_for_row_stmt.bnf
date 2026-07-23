@@ -1,0 +1,3 @@
+show_range_for_row_stmt ::=
+	'SHOW' 'RANGE' 'FROM' 'TABLE' table_name 'FOR' 'ROW' '(' row_vals ( ( ',' row_vals ) )* ')'
+	| 'SHOW' 'RANGE' 'FROM' 'INDEX' table_index_name 'FOR' 'ROW' '(' row_vals ( ( ',' row_vals ) )* ')'

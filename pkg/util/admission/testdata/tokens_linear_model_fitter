@@ -1,0 +1,104 @@
+# TODO(sumeer): it would be easier to confirm that the new model was a better
+# fit for the latest stats if we printed the error for the existing model and
+# the new model (see the comment at
+# https://github.com/cockroachdb/cockroach/pull/85059#pullrequestreview-1065876690).
+# One small problem with that is that tokensLinearModelFitter has heuristics
+# that it uses to ignore accounted-bytes when 0. Such problems are
+# surmountable.
+
+# Model with multiplier interval [1,2], like the model for regular writes.
+init mult-min=1 mult-max=2
+----
+int: 0.00x+0 smoothed: 1.50x+1 per-work-accounted: 1
+
+# The per-work-accounted will not change, since accounted-bytes=0, so we use
+# a*1+b*2=100, and minimize b, which results in a=2, b=48.
+update accounted-bytes=0 actual-bytes=100 work-count=2
+----
+int: 2.00x+48 smoothed: 1.75x+24 per-work-accounted: 1
+
+# Same update, so same interval model. The smoothed model is trending higher
+# due to exponential smoothing.
+update accounted-bytes=0 actual-bytes=100 work-count=2
+----
+int: 2.00x+48 smoothed: 1.88x+36 per-work-accounted: 1
+
+# Can't compute an interval model, so scale down the constant in the smoothed
+# model.
+update accounted-bytes=10 actual-bytes=0 work-count=4
+----
+int: 0.00x+0 smoothed: 1.88x+18 per-work-accounted: 1
+
+# Can't compute an interval model, so scale down the constant in the smoothed
+# model.
+update accounted-bytes=10 actual-bytes=10 work-count=1
+----
+int: 0.00x+0 smoothed: 1.88x+9 per-work-accounted: 1
+
+# Minimal constant is 1, so 4 bytes accounted by the additive term, and the
+# remaining 176 bytes are accounted by using a multiplier against 100.
+update accounted-bytes=100 actual-bytes=180 work-count=4
+----
+int: 1.76x+1 smoothed: 1.82x+5 per-work-accounted: 13
+
+update accounted-bytes=50 actual-bytes=10 work-count=2
+----
+int: 1.00x+1 smoothed: 1.41x+3 per-work-accounted: 19
+
+# Accounted bytes is zero, even though there were multiple units of work. Use
+# the smoothed per-work accounted bytes for the interval model.
+update accounted-bytes=0 actual-bytes=100 work-count=4
+----
+int: 1.26x+1 smoothed: 1.34x+2 per-work-accounted: 19
+
+# Model with multiplier [0.01,1], like the model for ingested bytes.
+init mult-min=0.01 mult-max=1 ingested-model=true
+----
+int: 0.00x+0 smoothed: 0.51x+1 per-work-accounted: 1
+
+update accounted-bytes=0 actual-bytes=100 work-count=2
+----
+int: 1.00x+49 smoothed: 0.75x+25 per-work-accounted: 1
+
+update accounted-bytes=100 actual-bytes=110 work-count=10
+----
+int: 1.00x+1 smoothed: 0.88x+13 per-work-accounted: 5
+
+update accounted-bytes=10000 actual-bytes=11000 work-count=100
+----
+int: 1.00x+10 smoothed: 0.94x+11 per-work-accounted: 52
+
+# Accounted bytes is zero, even though there were multiple units of work. Use
+# the smoothed per-work accounted bytes for the interval model.
+update accounted-bytes=0 actual-bytes=10000 work-count=100
+----
+int: 1.00x+48 smoothed: 0.97x+29 per-work-accounted: 52
+
+update accounted-bytes=20000 actual-bytes=10000 work-count=100
+----
+int: 0.49x+1 smoothed: 0.73x+15 per-work-accounted: 126
+
+update accounted-bytes=20000 actual-bytes=10000 work-count=100
+----
+int: 0.49x+1 smoothed: 0.61x+8 per-work-accounted: 163
+
+# Model is not updated because work-count is 1, except constant is halved.
+update accounted-bytes=1000 actual-bytes=500 work-count=1
+----
+int: 0.00x+0 smoothed: 0.61x+4 per-work-accounted: 163
+
+# Model is not updated because both bytes are zero, except constant is halved.
+update accounted-bytes=0 actual-bytes=0 work-count=5
+----
+int: 0.00x+0 smoothed: 0.61x+2 per-work-accounted: 163
+
+# Model is updated even though actual-bytes is 0, since accounted-bytes is >
+# 0. This can happen when all ingested bytes go into levels below L0.
+update accounted-bytes=1000 actual-bytes=0 work-count=2
+----
+int: 0.01x+1 smoothed: 0.31x+1 per-work-accounted: 331
+
+# Repeat of the previous.
+update accounted-bytes=1000 actual-bytes=0 work-count=2
+----
+int: 0.01x+1 smoothed: 0.16x+1 per-work-accounted: 415

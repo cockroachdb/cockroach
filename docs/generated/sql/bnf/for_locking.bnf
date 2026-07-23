@@ -1,0 +1,9 @@
+for_locking_item ::=
+	'FOR' 'UPDATE' 'OF' table_name_list 'SKIP' 'LOCKED'
+	| 'FOR' 'UPDATE' 'OF' table_name_list 'NOWAIT'
+	| 'FOR' 'NO' 'KEY' 'UPDATE' 'OF' table_name_list 'SKIP' 'LOCKED'
+	| 'FOR' 'NO' 'KEY' 'UPDATE' 'OF' table_name_list 'NOWAIT'
+	| 'FOR' 'SHARE' 'OF' table_name_list 'SKIP' 'LOCKED'
+	| 'FOR' 'SHARE' 'OF' table_name_list 'NOWAIT'
+	| 'FOR' 'KEY' 'SHARE' 'OF' table_name_list 'SKIP' 'LOCKED'
+	| 'FOR' 'KEY' 'SHARE' 'OF' table_name_list 'NOWAIT'

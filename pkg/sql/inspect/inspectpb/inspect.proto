@@ -1,0 +1,40 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.sql.inspect.inspectpb;
+
+import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/inspect/inspectpb";
+
+message InspectProgressDetails {
+  InspectProcessorProgress progress = 1; // Progress update from an inspect processor.
+  InspectProcessorSpanCheckData span_check_data = 2; // Check data accumulated from an inspect processor.
+}
+
+// InspectProcessorProgress is the per-processor progress for an INSPECT job.
+message InspectProcessorProgress {
+  int64 checks_completed = 1; // Number of checks completed since last update.
+  bool finished = 2; // Processor finished all checks.
+
+  // SpanStarted indicates a span has begun processing. When set, the
+  // coordinator should set up protected timestamp protection for this span.
+  roachpb.Span span_started = 3 [(gogoproto.nullable) = false];
+
+  // StartedAt timestamp is the "now" timestamp chosen for this span.
+  util.hlc.Timestamp started_at = 4 [(gogoproto.nullable) = false];
+}
+
+message InspectProcessorSpanCheckData {
+  uint64 span_row_count = 1; // Number of rows in the span processed.
+}
+
+// InspectSpanCheckData persists check-specific data accumulated during span processing.
+message InspectSpanCheckData {
+  uint64 row_count = 1; // Number of rows in the table.
+}

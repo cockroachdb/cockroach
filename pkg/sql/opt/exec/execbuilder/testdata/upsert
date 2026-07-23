@@ -1,0 +1,1424 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+# Use implicit target columns (which can use blind KV Put).
+query T
+EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC LIMIT 2
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: kv(k, v)
+│ auto commit
+│
+└── • project
+    │ columns: (k, v, v)
+    │
+    └── • top-k
+        │ columns: (k, v)
+        │ estimated row count: 2 (missing stats)
+        │ order: -v
+        │ k: 2
+        │
+        └── • scan
+              columns: (k, v)
+              estimated row count: 1,000 (missing stats)
+              table: kv@kv_pkey
+              spans: FULL SCAN
+
+# Use explicit target columns (which can use blind KV Put).
+query T
+EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: kv(k, v)
+│ auto commit
+│
+└── • project
+    │ columns: (k, v, v)
+    │
+    └── • top-k
+        │ columns: (k, v)
+        │ estimated row count: 2 (missing stats)
+        │ order: -v
+        │ k: 2
+        │
+        └── • scan
+              columns: (k, v)
+              estimated row count: 1,000 (missing stats)
+              table: kv@kv_pkey
+              spans: FULL SCAN
+
+# Add RETURNING clause (should still use blind KV Put).
+query T
+EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2 RETURNING *
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: (k, v)
+│ estimated row count: 2 (missing stats)
+│ into: kv(k, v)
+│ auto commit
+│
+└── • project
+    │ columns: (k, v, v)
+    │
+    └── • top-k
+        │ columns: (k, v)
+        │ estimated row count: 2 (missing stats)
+        │ order: -v
+        │ k: 2
+        │
+        └── • scan
+              columns: (k, v)
+              estimated row count: 1,000 (missing stats)
+              table: kv@kv_pkey
+              spans: FULL SCAN
+
+# Use subset of explicit target columns (which cannot use blind KV Put).
+query T
+EXPLAIN (VERBOSE) UPSERT INTO kv (k) SELECT k FROM kv ORDER BY v DESC LIMIT 2
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: kv(k, v)
+│ auto commit
+│ arbiter indexes: kv_pkey
+│
+└── • render
+    │ columns: (k, v_default, k)
+    │ render v_default: CAST(NULL AS INT8)
+    │ render k: k
+    │ render k: k
+    │
+    └── • top-k
+        │ columns: (k, v)
+        │ estimated row count: 2 (missing stats)
+        │ order: -v
+        │ k: 2
+        │
+        └── • scan
+              columns: (k, v)
+              estimated row count: 1,000 (missing stats)
+              table: kv@kv_pkey
+              spans: FULL SCAN
+
+# Use Upsert with indexed table, default columns, computed columns, and check
+# columns.
+statement ok
+CREATE TABLE indexed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT DEFAULT(10),
+  d INT AS (a + c) STORED,
+  FAMILY (a, b, c, d),
+  UNIQUE INDEX secondary (d, b),
+  CHECK (c > 0)
+)
+
+# Should fetch existing values since there is a secondary index.
+query T
+EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
+        │ render check1: c_default > 0
+        │ render column1: column1
+        │ render b_default: b_default
+        │ render c_default: c_default
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, b_default, c_default, d_comp, a, b, c, d)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, b_default, c_default, d_comp)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: CAST(NULL AS INT8)
+            │     row 0, expr 2: 10
+            │     row 0, expr 3: 11
+            │
+            └── • scan
+                  columns: (a, b, c, d)
+                  estimated row count: 1 (missing stats)
+                  table: indexed@indexed_pkey
+                  spans: /1/0
+                  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1), (2), (3), (4)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
+        │ render check1: c_default > 0
+        │ render column1: column1
+        │ render b_default: b_default
+        │ render c_default: c_default
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │
+        └── • lookup join (left outer)
+            │ columns: (d_comp, b_default, c_default, column1, a, b, c, d)
+            │ estimated row count: 4 (missing stats)
+            │ table: indexed@indexed_pkey
+            │ equality: (column1) = (a)
+            │ equality cols are key
+            │ locking strength: for update
+            │ parallel
+            │
+            └── • render
+                │ columns: (d_comp, b_default, c_default, column1)
+                │ render d_comp: column1 + 10
+                │ render b_default: CAST(NULL AS INT8)
+                │ render c_default: 10
+                │ render column1: column1
+                │
+                └── • values
+                      columns: (column1)
+                      size: 1 column, 4 rows
+                      row 0, expr 0: 1
+                      row 1, expr 0: 2
+                      row 2, expr 0: 3
+                      row 3, expr 0: 4
+
+query T
+EXPLAIN (VERBOSE)
+INSERT INTO indexed
+VALUES (1, 2, 3)
+ON CONFLICT (a)
+DO UPDATE SET b = 2, c = 3
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, column2, column3, d_comp, a, b, c, d, upsert_b, upsert_c, upsert_d, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, column2, column3, d_comp, a, b, c, d, upsert_b, upsert_c, upsert_d)
+        │ render check1: upsert_c > 0
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │ render upsert_b: upsert_b
+        │ render upsert_c: upsert_c
+        │ render upsert_d: upsert_d
+        │
+        └── • render
+            │ columns: (upsert_b, upsert_c, upsert_d, column1, column2, column3, d_comp, a, b, c, d)
+            │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE 2 END
+            │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE 3 END
+            │ render upsert_d: CASE WHEN a IS NULL THEN d_comp ELSE a + 3 END
+            │ render column1: column1
+            │ render column2: column2
+            │ render column3: column3
+            │ render d_comp: d_comp
+            │ render a: a
+            │ render b: b
+            │ render c: c
+            │ render d: d
+            │
+            └── • cross join (left outer)
+                │ columns: (column1, column2, column3, d_comp, a, b, c, d)
+                │ estimated row count: 1 (missing stats)
+                │
+                ├── • values
+                │     columns: (column1, column2, column3, d_comp)
+                │     size: 4 columns, 1 row
+                │     row 0, expr 0: 1
+                │     row 0, expr 1: 2
+                │     row 0, expr 2: 3
+                │     row 0, expr 3: 4
+                │
+                └── • scan
+                      columns: (a, b, c, d)
+                      estimated row count: 1 (missing stats)
+                      table: indexed@indexed_pkey
+                      spans: /1/0
+                      locking strength: for update
+
+# Use index hints.
+query T
+EXPLAIN (VERBOSE) UPSERT INTO indexed@secondary VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
+        │ render check1: c_default > 0
+        │ render column1: column1
+        │ render b_default: b_default
+        │ render c_default: c_default
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, b_default, c_default, d_comp, a, b, c, d)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, b_default, c_default, d_comp)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: CAST(NULL AS INT8)
+            │     row 0, expr 2: 10
+            │     row 0, expr 3: 11
+            │
+            └── • filter
+                │ columns: (a, b, c, d)
+                │ estimated row count: 1 (missing stats)
+                │ filter: a = 1
+                │
+                └── • index join
+                    │ columns: (a, b, c, d)
+                    │ estimated row count: 1,000 (missing stats)
+                    │ table: indexed@indexed_pkey
+                    │ key columns: a
+                    │ parallel
+                    │
+                    └── • scan
+                          columns: (a, b, d)
+                          estimated row count: 1,000 (missing stats)
+                          table: indexed@secondary
+                          spans: FULL SCAN
+
+statement ok
+SET avoid_full_table_scans_in_mutations = false
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO indexed@{NO_FULL_SCAN} VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
+        │ render check1: c_default > 0
+        │ render column1: column1
+        │ render b_default: b_default
+        │ render c_default: c_default
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, b_default, c_default, d_comp, a, b, c, d)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, b_default, c_default, d_comp)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: CAST(NULL AS INT8)
+            │     row 0, expr 2: 10
+            │     row 0, expr 3: 11
+            │
+            └── • scan
+                  columns: (a, b, c, d)
+                  estimated row count: 1 (missing stats)
+                  table: indexed@indexed_pkey
+                  spans: /1/0
+                  locking strength: for update
+
+query error could not produce a query plan conforming to the NO_FULL_SCAN hint
+EXPLAIN (VERBOSE) UPSERT INTO indexed@{FORCE_INDEX=secondary,NO_FULL_SCAN} VALUES (1)
+
+# AVOID_FULL_SCAN also works to ensure a constrained scan, and does not error if
+# one is not possible.
+query T
+EXPLAIN (VERBOSE) UPSERT INTO indexed@{AVOID_FULL_SCAN} VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
+        │ render check1: c_default > 0
+        │ render column1: column1
+        │ render b_default: b_default
+        │ render c_default: c_default
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, b_default, c_default, d_comp, a, b, c, d)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, b_default, c_default, d_comp)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: CAST(NULL AS INT8)
+            │     row 0, expr 2: 10
+            │     row 0, expr 3: 11
+            │
+            └── • scan
+                  columns: (a, b, c, d)
+                  estimated row count: 1 (missing stats)
+                  table: indexed@indexed_pkey
+                  spans: /1/0
+                  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO indexed@{FORCE_INDEX=secondary,AVOID_FULL_SCAN} VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
+        │ render check1: c_default > 0
+        │ render column1: column1
+        │ render b_default: b_default
+        │ render c_default: c_default
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, b_default, c_default, d_comp, a, b, c, d)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, b_default, c_default, d_comp)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: CAST(NULL AS INT8)
+            │     row 0, expr 2: 10
+            │     row 0, expr 3: 11
+            │
+            └── • filter
+                │ columns: (a, b, c, d)
+                │ estimated row count: 1 (missing stats)
+                │ filter: a = 1
+                │
+                └── • index join
+                    │ columns: (a, b, c, d)
+                    │ estimated row count: 1,000 (missing stats)
+                    │ table: indexed@indexed_pkey
+                    │ key columns: a
+                    │ parallel
+                    │
+                    └── • scan
+                          columns: (a, b, d)
+                          estimated row count: 1,000 (missing stats)
+                          table: indexed@secondary
+                          spans: FULL SCAN
+
+# We also avoid the full scan using the session setting
+# avoid_full_table_scans_in_mutations.
+statement ok
+SET avoid_full_table_scans_in_mutations = true
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
+        │ render check1: c_default > 0
+        │ render column1: column1
+        │ render b_default: b_default
+        │ render c_default: c_default
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, b_default, c_default, d_comp, a, b, c, d)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, b_default, c_default, d_comp)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: CAST(NULL AS INT8)
+            │     row 0, expr 2: 10
+            │     row 0, expr 3: 11
+            │
+            └── • scan
+                  columns: (a, b, c, d)
+                  estimated row count: 1 (missing stats)
+                  table: indexed@indexed_pkey
+                  spans: /1/0
+                  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE)
+INSERT INTO indexed@indexed_pkey AS indexed_pk
+VALUES (1, 2, 3)
+ON CONFLICT (a)
+DO UPDATE SET b = 2, c = 3
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, column2, column3, d_comp, a, b, c, d, upsert_b, upsert_c, upsert_d, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, column2, column3, d_comp, a, b, c, d, upsert_b, upsert_c, upsert_d)
+        │ render check1: upsert_c > 0
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │ render upsert_b: upsert_b
+        │ render upsert_c: upsert_c
+        │ render upsert_d: upsert_d
+        │
+        └── • render
+            │ columns: (upsert_b, upsert_c, upsert_d, column1, column2, column3, d_comp, a, b, c, d)
+            │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE 2 END
+            │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE 3 END
+            │ render upsert_d: CASE WHEN a IS NULL THEN d_comp ELSE a + 3 END
+            │ render column1: column1
+            │ render column2: column2
+            │ render column3: column3
+            │ render d_comp: d_comp
+            │ render a: a
+            │ render b: b
+            │ render c: c
+            │ render d: d
+            │
+            └── • cross join (left outer)
+                │ columns: (column1, column2, column3, d_comp, a, b, c, d)
+                │ estimated row count: 1 (missing stats)
+                │
+                ├── • values
+                │     columns: (column1, column2, column3, d_comp)
+                │     size: 4 columns, 1 row
+                │     row 0, expr 0: 1
+                │     row 0, expr 1: 2
+                │     row 0, expr 2: 3
+                │     row 0, expr 3: 4
+                │
+                └── • scan
+                      columns: (a, b, c, d)
+                      estimated row count: 1 (missing stats)
+                      table: indexed@indexed_pkey
+                      spans: /1/0
+                      locking strength: for update
+
+let $t_id
+SELECT id FROM system.namespace WHERE name='indexed'
+
+query T
+EXPLAIN (VERBOSE)
+INSERT INTO [$t_id AS t]@{NO_FULL_SCAN}
+VALUES (1, 2, 3)
+ON CONFLICT DO NOTHING
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey, secondary
+│
+└── • render
+    │ columns: (column1, column2, column3, d_comp, check1)
+    │ render check1: column3 > 0
+    │ render column1: column1
+    │ render column2: column2
+    │ render column3: column3
+    │ render d_comp: d_comp
+    │
+    └── • lookup join (anti)
+        │ columns: (column1, column2, column3, d_comp)
+        │ estimated row count: 1 (missing stats)
+        │ table: indexed@secondary
+        │ equality: (d_comp, column2) = (d, b)
+        │ equality cols are key
+        │ parallel
+        │
+        └── • cross join (anti)
+            │ columns: (column1, column2, column3, d_comp)
+            │ estimated row count: 0 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, column2, column3, d_comp)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: 2
+            │     row 0, expr 2: 3
+            │     row 0, expr 3: 4
+            │
+            └── • scan
+                  columns: (a)
+                  estimated row count: 1 (missing stats)
+                  table: indexed@indexed_pkey
+                  spans: /1/0
+
+# Drop index and verify that existing values no longer need to be fetched.
+statement ok
+DROP INDEX indexed@secondary CASCADE
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1) RETURNING *
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: (a, b, c, d)
+│ estimated row count: 1
+│ into: indexed(a, b, c, d)
+│ auto commit
+│
+└── • project
+    │ columns: (column1, b_default, c_default, d_comp, b_default, c_default, d_comp, check1)
+    │
+    └── • values
+          columns: (column1, b_default, c_default, d_comp, check1)
+          size: 5 columns, 1 row
+          row 0, expr 0: 1
+          row 0, expr 1: CAST(NULL AS INT8)
+          row 0, expr 2: 10
+          row 0, expr 3: 11
+          row 0, expr 4: true
+
+subtest regression_32473
+
+statement ok
+CREATE TABLE customers (
+  customer_id serial PRIMARY KEY,
+  name VARCHAR UNIQUE,
+  email VARCHAR NOT NULL
+);
+
+statement ok
+INSERT INTO customers (name, email) VALUES ('bob', 'bob@email.com') ON CONFLICT (name)
+  DO UPDATE SET (name, email) = (
+    SELECT 'bob', 'otherbob@email.com'
+  )
+
+query TT
+SELECT name, email FROM customers
+----
+bob  bob@email.com
+
+# This statement only works with the optimizer enabled.
+statement ok
+INSERT INTO customers (name, email) VALUES ('bob', 'bob@email.com') ON CONFLICT (name)
+  DO UPDATE SET (name, email) = (
+    SELECT 'bob2', 'otherbob@email.com'
+  )
+
+query TT
+SELECT name, email FROM customers
+----
+bob2  otherbob@email.com
+
+statement ok
+DROP TABLE customers
+
+# The CBO behaves differently than the HP and PG in this case. It only checks
+# constraints if an insert or update actually occurs. In this case, the DO
+# NOTHING clause skips the update, so there is no need to check the constraint.
+statement ok
+CREATE TABLE t5 (k INT PRIMARY KEY, a INT, b int CHECK (a > b))
+
+statement ok
+INSERT INTO t5 VALUES (1, 10, 9) ON CONFLICT (k) DO NOTHING
+
+statement ok
+INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
+
+# Regression test for #35564: make sure we use the Upsert's input required
+# ordering for the internal projection.
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
+
+statement ok
+CREATE TABLE xyz (x INT, y INT, z INT)
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM [UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (z)
+│
+├── • sort
+│   │ columns: (z)
+│   │ estimated row count: 1,000 (missing stats)
+│   │ order: +z
+│   │
+│   └── • scan buffer
+│         columns: (z)
+│         estimated row count: 1,000 (missing stats)
+│         label: buffer 1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z
+    │ exec mode: discard all rows
+    │
+    └── • buffer
+        │ columns: (z)
+        │ label: buffer 1
+        │
+        └── • project
+            │ columns: (z)
+            │
+            └── • upsert
+                │ columns: (z, rowid)
+                │ estimated row count: 1,000 (missing stats)
+                │ into: xyz(x, y, z, rowid)
+                │
+                └── • project
+                    │ columns: (a, b, c, rowid_default, a, b, c)
+                    │
+                    └── • render
+                        │ columns: (rowid_default, a, b, c)
+                        │ render rowid_default: unique_rowid()
+                        │ render a: a
+                        │ render b: b
+                        │ render c: c
+                        │
+                        └── • scan
+                              columns: (a, b, c)
+                              estimated row count: 1,000 (missing stats)
+                              table: abc@abc_pkey
+                              spans: FULL SCAN
+
+# ------------------------------------------------------------------------------
+# Regression for #35364. This tests behavior that is different between the CBO
+# and the HP. The CBO will (deliberately) round any input columns *before*
+# evaluating any computed columns, as well as rounding the output.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE t35364(
+    x DECIMAL(10,0) CHECK(round(x) = x) PRIMARY KEY,
+    y DECIMAL(10,0) DEFAULT (1.5),
+    z DECIMAL(10,0) AS (x+y+2.5) STORED CHECK(z >= 7)
+)
+
+query TTT
+UPSERT INTO t35364 (x) VALUES (1.5) RETURNING *
+----
+2  2  7
+
+query TTT
+UPSERT INTO t35364 (x, y) VALUES (1.5, 2.5) RETURNING *
+----
+2  3  8
+
+query TTT
+INSERT INTO t35364 (x) VALUES (1.5) ON CONFLICT (x) DO UPDATE SET x=2.5 RETURNING *
+----
+3  3  9
+
+statement error pq: failed to satisfy CHECK constraint \(z >= 7:::DECIMAL\)
+UPSERT INTO t35364 (x) VALUES (0)
+
+# ------------------------------------------------------------------------------
+# Regression for #38627. Combined with the equivalent logic test, make sure that
+# UPSERT in the presence of column mutations uses a lookup join without a
+# problem.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE table38627 (a INT PRIMARY KEY, b INT, FAMILY (a, b)) WITH (schema_locked = false); INSERT INTO table38627 VALUES(1,1)
+
+statement ok
+BEGIN;
+SET LOCAL autocommit_before_ddl=off;
+ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO table38627 SELECT * FROM table38627 WHERE a=1
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: table38627(a, b)
+│ arbiter indexes: table38627_pkey
+│
+└── • project
+    │ columns: (a, b, a, b, c, b, a)
+    │
+    └── • lookup join (inner)
+        │ columns: (a, b, a, b, c)
+        │ estimated row count: 1 (missing stats)
+        │ table: table38627@table38627_pkey
+        │ equality: (a) = (a)
+        │ equality cols are key
+        │ parallel
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 1 (missing stats)
+              table: table38627@table38627_pkey
+              spans: /1/0
+
+statement ok
+COMMIT
+
+# ------------------------------------------------------------------------------
+# Show UPSERT plans with Distinct execution operator.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE tdup (x INT PRIMARY KEY, y INT, z INT, UNIQUE (y, z))
+
+# Show unsorted upsert-distinct-on. Plan should not contain "order key".
+# Ensure this test stays synchronized to the test in logic_test/upsert.
+query T
+EXPLAIN (VERBOSE)
+INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (z, y) DO UPDATE SET z=1
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: tdup(x, y, z)
+│ auto commit
+│ arbiter indexes: tdup_y_z_key
+│
+└── • project
+    │ columns: (column1, column2, column3, x, y, z, upsert_z, x)
+    │
+    └── • render
+        │ columns: (upsert_z, column1, column2, column3, x, y, z)
+        │ render upsert_z: CASE WHEN x IS NULL THEN column3 ELSE 1 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render x: x
+        │ render y: y
+        │ render z: z
+        │
+        └── • lookup join (left outer)
+            │ columns: (column1, column2, column3, x, y, z)
+            │ estimated row count: 2 (missing stats)
+            │ table: tdup@tdup_y_z_key
+            │ equality: (column2, column3) = (y, z)
+            │ equality cols are key
+            │ parallel
+            │
+            └── • distinct
+                │ columns: (column1, column2, column3)
+                │ estimated row count: 2
+                │ distinct on: column2, column3
+                │ nulls are distinct
+                │ error on duplicate
+                │
+                └── • values
+                      columns: (column1, column2, column3)
+                      size: 3 columns, 2 rows
+                      row 0, expr 0: 2
+                      row 0, expr 1: 2
+                      row 0, expr 2: 2
+                      row 1, expr 0: 3
+                      row 1, expr 1: 2
+                      row 1, expr 2: 2
+
+statement ok
+CREATE TABLE target (a INT PRIMARY KEY, b INT, c INT, UNIQUE (b, c))
+
+statement ok
+CREATE TABLE source (x INT PRIMARY KEY, y INT, z INT, INDEX (y, z))
+
+# Show sorted upsert-distinct-on. "order key = y, z" should be set below.
+# Ensure this test stays synchronized to the test in logic_test/upsert.
+query T
+EXPLAIN (VERBOSE)
+INSERT INTO target SELECT x, y, z FROM source WHERE (y IS NULL OR y > 0) AND x <> 1
+ON CONFLICT (b, c) DO UPDATE SET b=5
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: target(a, b, c)
+│ auto commit
+│ arbiter indexes: target_b_c_key
+│
+└── • project
+    │ columns: (x, y, z, a, b, c, upsert_b, a)
+    │
+    └── • render
+        │ columns: (upsert_b, x, y, z, a, b, c)
+        │ render upsert_b: CASE WHEN a IS NULL THEN y ELSE 5 END
+        │ render x: x
+        │ render y: y
+        │ render z: z
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • lookup join (left outer)
+            │ columns: (x, y, z, a, b, c)
+            │ estimated row count: 311 (missing stats)
+            │ table: target@target_b_c_key
+            │ equality: (y, z) = (b, c)
+            │ equality cols are key
+            │ parallel
+            │
+            └── • distinct
+                │ columns: (x, y, z)
+                │ estimated row count: 311 (missing stats)
+                │ distinct on: y, z
+                │ nulls are distinct
+                │ error on duplicate
+                │ order key: y, z
+                │
+                └── • filter
+                    │ columns: (x, y, z)
+                    │ ordering: +y,+z
+                    │ estimated row count: 311 (missing stats)
+                    │ filter: x != 1
+                    │
+                    └── • scan
+                          columns: (x, y, z)
+                          ordering: +y,+z
+                          estimated row count: 333 (missing stats)
+                          table: source@source_y_z_idx
+                          spans: /NULL-/!NULL /1-
+
+# Regression test for #25726.
+# UPSERT over tables with column families, on the fast path, use the
+# INSERT logic. This has special casing for column families of 1
+# column, and another special casing for column families of 2+
+# columns. The special casing is only for families that do not include
+# the primary key. So we need a table with 3 families: 1 for the PK, 1
+# with just 1 col, and 1 with 2+ cols.
+statement ok
+CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
+  INSERT INTO tu VALUES (1, 2, 3, 4)
+
+# Force the leasing of the `tu` descriptor, otherwise the trace below is
+# polluted.
+statement ok
+SELECT 1 FROM tu;
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO tu VALUES (1, NULL, NULL, NULL); SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+Put (locking) /Table/117/1/1/0 -> /TUPLE/
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
+rows affected: 1
+
+# KV operations.
+statement ok
+CREATE DATABASE t; CREATE TABLE t.kv(k INT PRIMARY KEY, v INT, FAMILY "primary" (k, v))
+
+statement ok
+CREATE UNIQUE INDEX woo ON t.kv(v)
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,3); SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+  AND operation NOT LIKE 'kv.DistSender: sending pre-commit query intents%'
+----
+colbatchscan  Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
+upsert        CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
+upsert        CPut /Table/120/2/3/0 -> /BYTES/0x8a
+sql query     rows affected: 1
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+----
+colbatchscan  Scan /Table/120/1/1/0 lock Exclusive (Block, Unreplicated)
+upsert        CPut /Table/120/1/1/0 -> /TUPLE/2:2:Int/2
+upsert        CPut /Table/120/2/2/0 -> /BYTES/0x89
+sql query     rows affected: 1
+
+statement error duplicate key value
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
+
+query TT
+set tracing=off;
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+----
+colbatchscan  Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
+colbatchscan  fetched: /kv/kv_pkey/2/v -> /3
+upsert        Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
+upsert        Del (locking) /Table/120/2/3/0
+upsert        CPut /Table/120/2/2/0 -> /BYTES/0x8a
+sql query     execution failed after 0 rows: duplicate key value violates unique constraint "woo"
+
+# Test that implicit SELECT FOR UPDATE doesn't spread to subqueries.
+statement ok
+CREATE TABLE t121322_ab (a int PRIMARY KEY, b int, INDEX (b))
+
+statement ok
+CREATE TABLE t121322_c (c int PRIMARY KEY)
+
+query T
+EXPLAIN UPSERT INTO t121322_ab SELECT 1, (SELECT sum(c) FROM t121322_c)
+----
+distribution: local
+·
+• root
+│
+├── • upsert
+│   │ into: t121322_ab(a, b)
+│   │ auto commit
+│   │ arbiter indexes: t121322_ab_pkey
+│   │
+│   └── • cross join (left outer)
+│       │
+│       ├── • values
+│       │     size: 2 columns, 1 row
+│       │
+│       └── • scan
+│             missing stats
+│             table: t121322_ab@t121322_ab_pkey
+│             spans: [/1 - /1]
+│             locking strength: for update
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT sum(c) FROM t121322_c)
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • scan
+              missing stats
+              table: t121322_c@t121322_c_pkey
+              spans: FULL SCAN
+
+# Test that FOR UPDATE locks are applied to reads in generic query plans.
+
+statement ok
+CREATE TABLE t137352 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE INDEX (a),
+  FAMILY (k, a, b)
+)
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+PREPARE p AS UPSERT INTO t137352 VALUES ($1, $2, $3)
+
+query T
+EXPLAIN ANALYZE EXECUTE p(1, 10, 100)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• upsert
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 1
+│ into: t137352(k, a, b)
+│ auto commit
+│ arbiter indexes: t137352_pkey
+│
+└── • lookup join (left outer)
+    │ sql nodes: <hidden>
+    │ kv nodes: <hidden>
+    │ regions: <hidden>
+    │ KV time: 0µs
+    │ KV rows decoded: 0
+    │ execution time: 0µs
+    │ actual row count: 1
+    │ table: t137352@t137352_pkey
+    │ equality: (column1) = (k)
+    │ equality cols are key
+    │ locking strength: for update
+    │
+    └── • values
+          sql nodes: <hidden>
+          regions: <hidden>
+          execution time: 0µs
+          actual row count: 1
+          size: 3 columns, 1 row
+
+# Only need to update 'b' - no need to modify the secondary index.
+query T kvtrace
+EXECUTE p(1, 10, 101)
+----
+Scan /Table/123/1/1/0 lock Exclusive (Block, Unreplicated)
+Put /Table/123/1/1/0 -> /TUPLE/2:2:Int/10/1:3:Int/101
+
+# Updating both 'a' and 'b' - need to modify the secondary index.
+query T kvtrace
+EXECUTE p(1, 11, 102)
+----
+Scan /Table/123/1/1/0 lock Exclusive (Block, Unreplicated)
+Put /Table/123/1/1/0 -> /TUPLE/2:2:Int/11/1:3:Int/102
+Del (locking) /Table/123/2/10/0
+CPut /Table/123/2/11/0 -> /BYTES/0x89
+
+statement ok
+DEALLOCATE p
+
+statement count 1
+DELETE FROM t137352 WHERE true
+
+statement ok
+PREPARE p AS INSERT INTO t137352 VALUES ($1, $2, $3) ON CONFLICT (a) DO UPDATE SET b = $3
+
+query T
+EXPLAIN ANALYZE EXECUTE p(1, 10, 100)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• upsert
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 1
+│ into: t137352(k, a, b)
+│ auto commit
+│ arbiter indexes: t137352_a_key
+│
+└── • render
+    │ execution time: 0µs
+    │ actual row count: 1
+    │
+    └── • lookup join (left outer)
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ KV time: 0µs
+        │ KV rows decoded: 0
+        │ execution time: 0µs
+        │ actual row count: 1
+        │ table: t137352@t137352_pkey
+        │ equality: (k) = (k)
+        │ equality cols are key
+        │ locking strength: for update
+        │
+        └── • lookup join (left outer)
+            │ sql nodes: <hidden>
+            │ kv nodes: <hidden>
+            │ regions: <hidden>
+            │ KV time: 0µs
+            │ KV rows decoded: 0
+            │ execution time: 0µs
+            │ actual row count: 1
+            │ table: t137352@t137352_a_key
+            │ equality: (column2) = (a)
+            │ equality cols are key
+            │ locking strength: for update
+            │
+            └── • values
+                  sql nodes: <hidden>
+                  regions: <hidden>
+                  execution time: 0µs
+                  actual row count: 1
+                  size: 3 columns, 1 row
+
+# Conflict on 'a', so we're only updating the value of 'b'.
+query T kvtrace
+EXECUTE p(2, 10, 101)
+----
+Scan /Table/123/2/10/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/123/1/1/0 lock Exclusive (Block, Unreplicated)
+Put /Table/123/1/1/0 -> /TUPLE/2:2:Int/10/1:3:Int/101
+
+# No conflict, so we're performing an INSERT.
+query T kvtrace
+EXECUTE p(3, 11, 101)
+----
+Scan /Table/123/2/11/0 lock Exclusive (Block, Unreplicated)
+CPut /Table/123/1/3/0 -> /TUPLE/2:2:Int/11/1:3:Int/101
+CPut /Table/123/2/11/0 -> /BYTES/0x8b
+
+# Regression test for #136458. The canary column ordinal should be correctly
+# selected when the canary column is also a partial index DEL column.
+
+statement ok
+CREATE TABLE t136458 (c BOOL PRIMARY KEY, INDEX (c) WHERE c)
+
+statement ok
+UPSERT INTO t136458 (c) VALUES (false)
+
+statement ok
+CREATE TABLE t139105 (k INT PRIMARY KEY, v INT, FAMILY (k, v));
+
+query T
+EXPLAIN UPSERT INTO t139105 VALUES (1, 1)
+----
+distribution: local
+·
+• upsert
+│ into: t139105(k, v)
+│ auto commit
+│
+└── • values
+      size: 2 columns, 1 row
+
+# Upsert fast-path - we need locking Put.
+query T kvtrace
+UPSERT INTO t139105 VALUES (1, 1)
+----
+Put (locking) /Table/125/1/1/0 -> /TUPLE/2:2:Int/1
+
+statement ok
+CREATE TABLE t139160 (
+  k INT PRIMARY KEY,
+  i INT,
+  u INT,
+  v INT,
+  INDEX (i) STORING (u),
+  UNIQUE INDEX (u) STORING (i),
+  FAMILY (k, i, u, v)
+);
+
+# Effectively an INSERT.
+query T kvtrace
+UPSERT INTO t139160 VALUES (1, 1, 1, 1)
+----
+Scan /Table/20/1/12{6-7}
+Scan /Table/126/1/1/0 lock Exclusive (Block, Unreplicated)
+CPut /Table/126/1/1/0 -> /TUPLE/2:2:Int/1/1:3:Int/1/1:4:Int/1
+Put /Table/126/2/1/1/0 -> /BYTES/0x3302
+CPut /Table/126/3/1/0 -> /BYTES/0x892302
+
+# The PK is scanned and locked.
+query T
+EXPLAIN UPSERT INTO t139160 VALUES (1, 2, 3, 4)
+----
+distribution: local
+·
+• upsert
+│ into: t139160(k, i, u, v)
+│ auto commit
+│ arbiter indexes: t139160_pkey
+│
+└── • cross join (left outer)
+    │
+    ├── • values
+    │     size: 4 columns, 1 row
+    │
+    └── • scan
+          missing stats
+          table: t139160@t139160_pkey
+          spans: [/1 - /1]
+          locking strength: for update
+
+query T kvtrace
+UPSERT INTO t139160 VALUES (1, 2, 3, 4)
+----
+Scan /Table/126/1/1/0 lock Exclusive (Block, Unreplicated)
+Put /Table/126/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3/1:4:Int/4
+Del /Table/126/2/1/1/0
+Put /Table/126/2/2/1/0 -> /BYTES/0x3306
+Del (locking) /Table/126/3/1/0
+CPut /Table/126/3/3/0 -> /BYTES/0x892304
+
+# Both primary and unique secondary indexes are scanned but are not locked. The
+# locking improvement is tracked by #143111.
+query T
+EXPLAIN INSERT INTO t139160 VALUES (11, 12, 3, 14) ON CONFLICT (u) DO UPDATE SET k = 11, i = 12, v = 14;
+----
+distribution: local
+·
+• upsert
+│ into: t139160(k, i, u, v)
+│ auto commit
+│ arbiter indexes: t139160_u_key
+│
+└── • render
+    │
+    └── • cross join (left outer)
+        │
+        ├── • values
+        │     size: 4 columns, 1 row
+        │
+        └── • index join
+            │ table: t139160@t139160_pkey
+            │
+            └── • scan
+                  missing stats
+                  table: t139160@t139160_u_key
+                  spans: [/3 - /3]
+
+query T kvtrace
+INSERT INTO t139160 VALUES (11, 12, 3, 14) ON CONFLICT (u) DO UPDATE SET k = 11, i = 12, v = 14;
+----
+Scan /Table/126/3/3/0
+Scan /Table/126/1/1/0
+Del (locking) /Table/126/1/1/0
+Del /Table/126/2/2/1/0
+Del (locking) /Table/126/3/3/0
+CPut /Table/126/1/11/0 -> /TUPLE/2:2:Int/12/1:3:Int/3/1:4:Int/14
+Put /Table/126/2/12/11/0 -> /BYTES/0x3306
+CPut /Table/126/3/3/0 -> /BYTES/0x932318

@@ -1,0 +1,59 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT);
+CREATE FUNCTION f_trigger() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  SELECT j FROM t WHERE j = 1;
+  RETURN NULL;
+END;
+$$;
+CREATE TRIGGER trg AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION f_trigger();
+INSERT INTO t VALUES(-1);
+INSERT INTO t VALUES(-2);
+INSERT INTO t VALUES(-3);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES($stageKey);
+INSERT INTO t VALUES($stageKey + 1);
+UPDATE t SET k=$stageKey;
+UPDATE t SET k=i;
+DELETE FROM t WHERE i=-1;
+DELETE FROM t WHERE i=$stageKey;
+INSERT INTO t VALUES($stageKey);
+INSERT INTO t VALUES(-1);
+----
+
+# Each insert will be injected twice per stage, plus 3 injected
+# at the start.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=($successfulStageCount*2)+3 FROM t;
+----
+true
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t VALUES($stageKey);
+INSERT INTO t VALUES($stageKey + 1);
+UPDATE t SET k=$stageKey;
+UPDATE t SET k=i;
+DELETE FROM t WHERE i=-1;
+DELETE FROM t WHERE i=$stageKey;
+INSERT INTO t VALUES($stageKey);
+INSERT INTO t VALUES(-1);
+----
+
+# Each insert will be injected twice per stage, plus 3 injected
+# at the start.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=($successfulStageCount*2)+3 FROM t;
+----
+true
+
+# Verify the trigger is gone after the schema change completes.
+stage-query phase=PostCommitNonRevertiblePhase stage=4
+SELECT count(*) FROM [SHOW TRIGGERS FROM t];
+----
+0
+
+test
+ALTER TABLE t DROP COLUMN j CASCADE
+----

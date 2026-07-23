@@ -1,0 +1,304 @@
+# =============================================================================
+# inline.opt contains normalization patterns that replace variable or function
+# references with the expression to which the variable or function is bound. For
+# example:
+#
+#   SELECT x2+1 FROM (SELECT x+1 AS x2 FROM a)
+#
+# becomes:
+#
+#   SELECT (x+1)+1 FROM a
+#
+# Inlining variables can result in the simplification or even complete
+# elimination of operators, or at least in the ability to more freely reorder
+# them within the larger relational expression tree. This allows pushing filters
+# further down the tree, as well as with pulling them up in the decorrelation
+# case.
+# =============================================================================
+
+# InlineConstVar inlines variables which are restricted to be constant, as in
+#   SELECT * FROM foo WHERE a = 4 AND a IN (1, 2, 3, 4).
+# =>
+#   SELECT * FROM foo WHERE a = 4 AND 4 IN (1, 2, 3, 4).
+# Note that a single iteration of this rule might not be sufficient to inline
+# all variables, in which case it will trigger itself again.
+#
+# This rule is high priority so that it runs before filter pushdown.
+[InlineConstVar, Normalize, HighPriority]
+(Select $input:* $filters:* & (CanInlineConstVar $filters))
+=>
+(Select $input (InlineConstVar $filters))
+
+# InlineProjectConstants finds variable references in Projections expressions
+# that refer to constant input values, and then inlines those constant values
+# in place of the corresponding variable references. This sometimes allows
+# further simplifications such as constant folding or Project merging.
+[InlineProjectConstants, Normalize]
+(Project
+    $input:* &
+        ^(ColsAreEmpty
+            $constCols:(FindInlinableConstants $input)
+        )
+    $projections:[
+        ...
+        $item:* & (ColsIntersect (OuterCols $item) $constCols)
+        ...
+    ]
+    $passthrough:*
+)
+=>
+(Project
+    $input
+    (InlineProjectionConstants $projections $input $constCols)
+    $passthrough
+)
+
+# InlineSelectConstants finds variable references in Filters expressions that
+# refer to constant input values, and then inlines those constant values in
+# place of the corresponding variable references. This sometimes allows further
+# simplifications such as constant folding or generation of constrained scans.
+[InlineSelectConstants, Normalize]
+(Select
+    $input:* &
+        ^(ColsAreEmpty
+            $constCols:(FindInlinableConstants $input)
+        )
+    $filters:[
+        ...
+        $item:* & (ColsIntersect (OuterCols $item) $constCols)
+        ...
+    ]
+)
+=>
+(Select
+    $input
+    (InlineFilterConstants $filters $input $constCols)
+)
+
+# InlineJoinConstantsLeft finds variable references in a join condition that
+# refers to constant values projected by the left input. It then inlines those
+# constant values in place of the corresponding variable references. This
+# sometimes allows further simplifications such as constant folding or filter
+# pushdown.
+[InlineJoinConstantsLeft, Normalize]
+(Join
+    $left:* &
+        ^(ColsAreEmpty $constCols:(FindInlinableConstants $left))
+    $right:*
+    $on:[
+        ...
+        $item:* & (ColsIntersect (OuterCols $item) $constCols)
+        ...
+    ]
+    $private:* & (NoJoinHints $private)
+)
+=>
+((OpName)
+    $left
+    $right
+    (InlineFilterConstants $on $left $constCols)
+    $private
+)
+
+# InlineJoinConstantsRight finds variable references in a join condition that
+# refers to constant values projected by the right input. It then inlines those
+# constant values in place of the corresponding variable references. This
+# sometimes allows further simplifications such as constant folding or filter
+# pushdown.
+[InlineJoinConstantsRight, Normalize]
+(Join
+    $left:*
+    $right:* &
+        ^(ColsAreEmpty
+            $constCols:(FindInlinableConstants $right)
+        )
+    $on:[
+        ...
+        $item:* & (ColsIntersect (OuterCols $item) $constCols)
+        ...
+    ]
+    $private:* & (NoJoinHints $private)
+)
+=>
+((OpName)
+    $left
+    $right
+    (InlineFilterConstants $on $right $constCols)
+    $private
+)
+
+# PushSelectIntoInlinableProject pushes the Select operator into a Project, even
+# though the filter references it. This is made possible by inlining the
+# references to projected columns so that the Select becomes independent of the
+# Project, and therefore can be reordered. This normalization is important for
+# enabling Any filter conditions to be pushed down into scans.
+#
+# This rule is low priority so that it runs after the PushSelectIntoProject
+# and MergeProjectProject rules, since those rules are cheaper to match and
+# replace.
+#
+# Example:
+#   SELECT * FROM (SELECT x+1 AS x2 FROM xy) WHERE x2=10
+#   =>
+#   SELECT x+1 AS x2 FROM (SELECT * FROM xy WHERE (x+1)=10)
+#
+[PushSelectIntoInlinableProject, Normalize, LowPriority]
+(Select
+    (Project
+        $input:*
+        $projections:* & (CanInlineProjections $projections)
+        $passthrough:*
+    )
+    $filters:* & ^(FilterHasCorrelatedSubquery $filters)
+)
+=>
+(Project
+    (Select $input (InlineSelectProject $filters $projections))
+    $projections
+    $passthrough
+)
+
+# InlineSelectVirtualColumns pushes Select filters referencing virtual columns
+# into a Project by inlining the virtual column expressions. This makes the
+# Select independent of the Project. Because these filters are pushed below the
+# Project, exploration rules that match on the (Select (Scan)) pattern can
+# generate plans that use indexes on virtual columns.
+#
+# Filters on non-virtual projected columns are not inlined because the
+# expression would be executed twice (once in the filter and once in the
+# projection), adding overhead without any chance of a secondary index on a
+# virtual column being used in the optimized plan.
+#
+# Notice that this rule is similar to PushSelectIntoInlinableProject. The key
+# difference is that PushSelectIntoInlinableProject only inlines simple
+# expressions that will add negligible overhead when computing twice.
+# Conversely, InlineSelectVirtualColumns does not discriminate by the type of
+# expression. It will inline all virtual columns in the hopes that inlining will
+# lead to a query plan that uses a virtual column index.
+#
+# Also, PushSelectIntoInlinableProject will inline filters if and only if all of
+# the filter items are inlinable (by its definition), whereas
+# InlineSelectVirtualColumns will split the input filters into two groups: one
+# to inline below the Project, and one to leave above the Project. This allows
+# filters on virtual columns to be pushed down in more cases.
+#
+# For example, consider the table and query:
+#
+#   CREATE TABLE t (
+#     a INT,
+#     b INT,
+#     v INT AS (abs(a)) VIRTUAL,
+#     INDEX (v)
+#   )
+#   SELECT v, w FROM (
+#     SELECT v, abs(b) AS w FROM t
+#   ) WHERE v = 5 AND w = 10
+#
+# The partially normalized expression for the SELECT query before
+# InlineSelectVirtualColumns is applied is:
+#
+#   select
+#    ├── columns: v:3 w:6
+#    ├── project
+#    │    ├── columns: w:6 v:3
+#    │    ├── scan t
+#    │    │    └── columns: a:1 b:2
+#    │    └── projections
+#    │         ├── abs(b:2) [as=w:6]
+#    │         └── abs(a:1) [as=v:3]
+#    └── filters
+#         ├── v:3 = 5
+#         └── w:6 = 10
+#
+# InlineSelectVirtualColumns will push only the (v = 5) filter below the Project
+# as (abs(a) = 5) because v is a virtual column. The (w = 10) filter remains
+# above the Project. Notice the (Select (Scan)) pattern that will allow a
+# constrained scan over the secondary index to be generated.
+#
+#   select
+#    ├── columns: v:3 w:6
+#    ├── project
+#    │    ├── columns: w:6 v:3
+#    │    ├── select
+#    │    │    ├── columns: a:1 b:2
+#    │    │    ├── scan t
+#    │    │    │    └── columns: a:1 b:2
+#    │    │    └── filters
+#    │    │         └── abs(a:1) = 5
+#    │    └── projections
+#    │         ├── abs(b:2) [as=w:6]
+#    │         └── abs(a:1) [as=v:3]
+#    └── filters
+#         └── w:6 = 10
+#
+# This rule has no explicit priority so that it runs before
+# PushSelectIntoInlinableProject (which is low priority). It must run before
+# PushSelectIntoInlinableProject in order to match the (Select (Project (Scan)))
+# pattern which is produced by optbuilder for a filter on a table with virtual
+# columns.
+[InlineSelectVirtualColumns, Normalize]
+(Select
+    (Project
+        $scan:(Scan $scanPrivate:*)
+        $projections:*
+        $passthrough:*
+    )
+    $filters:* &
+        ^(ColsAreEmpty
+            $virtualColumns:(VirtualColumns $scanPrivate)
+        ) &
+        ^(IsFilterEmpty
+            $inlinableFilters:(InlinableVirtualColumnFilters
+                $filters
+                $virtualColumns
+            )
+        )
+)
+=>
+(Select
+    (Project
+        (Select
+            $scan
+            (InlineSelectProject $inlinableFilters $projections)
+        )
+        $projections
+        $passthrough
+    )
+    (DiffFilters $filters $inlinableFilters)
+)
+
+# InlineProjectInProject folds an inner Project operator into an outer Project
+# that references each inner synthesized column no more than one time. If there
+# are no duplicate references, then there's no benefit to keeping the multiple
+# nested projections. This rule simplifies the relational expression tree and
+# makes it more likely that other normalization rules will match.
+#
+# This rule is low priority so that it runs after the MergeProjects rule, since
+# that rule is cheaper to match and replace.
+#
+# Example:
+#   SELECT x2*2 FROM (SELECT x+1 AS x2 FROM xy)
+#   =>
+#   SELECT (x+1)*2 FROM xy
+#
+[InlineProjectInProject, Normalize, LowPriority]
+(Project
+    $input:(Project * $innerProjections:*)
+    $projections:*
+    $passthrough:* &
+        ^(HasDuplicateRefs
+            $projections
+            $passthrough
+            (ProjectionCols $innerProjections)
+        )
+)
+=>
+(InlineProjectProject $input $projections $passthrough)
+
+# InlineUDF converts a UDF to a subquery. A UDF can only be inlined if it is
+# non-volatile and has a single statement in the function body. See
+# IsInlinableUDF for more details.
+[InlineUDF, Normalize]
+(UDFCall $args:* $private:* & (IsInlinableUDF $args $private))
+=>
+(ConvertUDFToSubquery $args $private)

@@ -1,0 +1,251 @@
+define
+lock k=a str=intent    txn=1
+lock k=b str=exclusive txn=2
+lock k=c str=shared    txn=1
+lock k=c str=shared    txn=2
+lock k=d str=intent    txn=3
+lock k=d str=exclusive txn=3
+lock k=d str=shared    txn=3
+----
+
+# filter by txn ids
+iter upper=z match-txn-id=1
+seek-ge k=a
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=c str=shared txn=1
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+iter upper=z match-txn-id=2
+seek-ge k=a
+next
+next
+stats
+----
+seek-ge k=a: output: k=b str=exclusive txn=2
+next: output: k=c str=shared txn=2
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+iter upper=z match-txn-id=3
+seek-ge k=a
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=d str=intent txn=3
+next: output: k=d str=exclusive txn=3
+next: output: k=d str=shared txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+# filter by minimum lock strengths
+iter upper=z match-min-str=shared
+seek-ge k=a
+next
+next
+next
+next
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=b str=exclusive txn=2
+next: output: k=c str=shared txn=2
+next: output: k=c str=shared txn=1
+next: output: k=d str=intent txn=3
+next: output: k=d str=exclusive txn=3
+next: output: k=d str=shared txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+iter upper=z match-min-str=exclusive
+seek-ge k=a
+next
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=b str=exclusive txn=2
+next: output: k=d str=intent txn=3
+next: output: k=d str=exclusive txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+iter upper=z match-min-str=intent
+seek-ge k=a
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=d str=intent txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+# filter by txn ids and minimum lock strengths
+iter upper=z match-txn-id=1 match-min-str=shared
+seek-ge k=a
+next
+next
+next
+next
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=b str=exclusive txn=2
+next: output: k=c str=shared txn=2
+next: output: k=c str=shared txn=1
+next: output: k=d str=intent txn=3
+next: output: k=d str=exclusive txn=3
+next: output: k=d str=shared txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+iter upper=z match-txn-id=1 match-min-str=exclusive
+seek-ge k=a
+next
+next
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=b str=exclusive txn=2
+next: output: k=c str=shared txn=1
+next: output: k=d str=intent txn=3
+next: output: k=d str=exclusive txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+iter upper=z match-txn-id=1 match-min-str=intent
+seek-ge k=a
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=c str=shared txn=1
+next: output: k=d str=intent txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+iter upper=z match-txn-id=2 match-min-str=shared
+seek-ge k=a
+next
+next
+next
+next
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=b str=exclusive txn=2
+next: output: k=c str=shared txn=2
+next: output: k=c str=shared txn=1
+next: output: k=d str=intent txn=3
+next: output: k=d str=exclusive txn=3
+next: output: k=d str=shared txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+iter upper=z match-txn-id=2 match-min-str=exclusive
+seek-ge k=a
+next
+next
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=b str=exclusive txn=2
+next: output: k=c str=shared txn=2
+next: output: k=d str=intent txn=3
+next: output: k=d str=exclusive txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+iter upper=z match-txn-id=2 match-min-str=intent
+seek-ge k=a
+next
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=b str=exclusive txn=2
+next: output: k=c str=shared txn=2
+next: output: k=d str=intent txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+iter upper=z match-txn-id=3 match-min-str=shared
+seek-ge k=a
+next
+next
+next
+next
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=b str=exclusive txn=2
+next: output: k=c str=shared txn=2
+next: output: k=c str=shared txn=1
+next: output: k=d str=intent txn=3
+next: output: k=d str=exclusive txn=3
+next: output: k=d str=shared txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+iter upper=z match-txn-id=3 match-min-str=exclusive
+seek-ge k=a
+next
+next
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=b str=exclusive txn=2
+next: output: k=d str=intent txn=3
+next: output: k=d str=exclusive txn=3
+next: output: k=d str=shared txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)
+
+iter upper=z match-txn-id=3 match-min-str=intent
+seek-ge k=a
+next
+next
+next
+next
+stats
+----
+seek-ge k=a: output: k=a str=intent txn=1
+next: output: k=d str=intent txn=3
+next: output: k=d str=exclusive txn=3
+next: output: k=d str=shared txn=3
+next: output: . (exhausted)
+stats: seeked 1 times (1 internal); stepped 7 times (7 internal)

@@ -1,0 +1,25 @@
+genrule(
+    name = "settings",
+    outs = ["settings.html"],
+    cmd = """
+    $(location //pkg/cmd/cockroach-short) gen settings-list \
+    --show-class --format=rawhtml --class-header-label 'Supported Deployments' \
+    --class-labels 'Advanced/Self-Hosted,Advanced/Self-hosted (read-write); Basic/Standard (read-only),Basic/Standard/Advanced/Self-Hosted' > $@
+    """,
+    tools = ["//pkg/cmd/cockroach-short"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+genrule(
+    name = "settings_for_tenants",
+    outs = ["settings-for-tenants.txt"],
+    cmd = "$(location //pkg/cmd/cockroach-short) gen settings-list --show-class --without-system-only > $@",
+    tools = ["//pkg/cmd/cockroach-short"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)

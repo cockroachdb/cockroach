@@ -1,0 +1,339 @@
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  INDEX b_idx (b) STORING (c, d),
+  UNIQUE INDEX c_idx (c) STORING (b, d)
+)
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM t
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+t           b_idx       true        1             b            b           ASC        false    false     true     1
+t           b_idx       true        2             c            c           N/A        true     false     true     1
+t           b_idx       true        3             d            d           N/A        true     false     true     1
+t           b_idx       true        4             a            a           ASC        false    true      true     1
+t           c_idx       false       1             c            c           ASC        false    false     true     1
+t           c_idx       false       2             b            b           N/A        true     false     true     1
+t           c_idx       false       3             d            d           N/A        true     false     true     1
+t           c_idx       false       4             a            a           ASC        true     true      true     1
+t           t_pkey      false       1             a            a           ASC        false    false     true     1
+t           t_pkey      false       2             b            b           N/A        true     false     true     1
+t           t_pkey      false       3             c            c           N/A        true     false     true     1
+t           t_pkey      false       4             d            d           N/A        true     false     true     1
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3, 4)
+
+query IIII
+SELECT a, b, c, d FROM t@b_idx
+----
+1 2 3 4
+
+query IIII
+SELECT a, b, c, d FROM t@c_idx
+----
+1 2 3 4
+
+# Test index backfill for UNIQUE and non-UNIQUE indexes with STORING columns.
+
+statement ok
+CREATE INDEX d_idx ON t (d) STORING ( b)
+
+query III
+SELECT a, b, d FROM t@d_idx
+----
+1 2 4
+
+statement error index "error" already contains column "d"
+CREATE INDEX error ON t (d) STORING (d)
+
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+query T noticetrace
+CREATE INDEX pk_stored_idx ON t (d) STORING (a)
+----
+NOTICE: index "pk_stored_idx" already contains column "a" which is part of the primary key and therefore implicit in all indexes
+
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+statement ok
+DROP INDEX pk_stored_idx
+
+onlyif config local-legacy-schema-changer
+statement ok
+CREATE INDEX pk_stored_idx ON t (d) STORING (a)
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP INDEX pk_stored_idx
+
+onlyif config weak-iso-level-configs
+statement ok
+CREATE INDEX pk_stored_idx ON t (d) STORING (a)
+
+onlyif config weak-iso-level-configs
+statement ok
+DROP INDEX pk_stored_idx
+
+statement disable-cf-mutator ok
+CREATE TABLE t30984 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  INDEX b_idx (b) STORING (c, a)
+) WITH (schema_locked = false)
+
+query TTBITTTBBBF rowsort
+SELECT * FROM [SHOW INDEXES FROM t30984] WHERE index_name = 'b_idx'
+----
+t30984      b_idx       true        1             b            b           ASC        false    false     true     1
+t30984      b_idx       true        2             c            c           N/A        true     false     true     1
+t30984      b_idx       true        3             a            a           ASC        false    true      true     1
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t30984]
+----
+CREATE TABLE public.t30984 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  CONSTRAINT t30984_pkey PRIMARY KEY (a ASC),
+  INDEX b_idx (b ASC) STORING (c)
+);
+
+statement ok
+DROP TABLE t30984
+
+statement disable-cf-mutator ok
+CREATE TABLE t30984 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  UNIQUE INDEX b_idx (b) STORING (c, a)
+) WITH (schema_locked = false)
+
+query TTBITTTBBBF rowsort
+SELECT * FROM [SHOW INDEXES FROM t30984] WHERE index_name = 'b_idx'
+----
+t30984      b_idx       false       1             b            b           ASC        false    false     true     1
+t30984      b_idx       false       2             c            c           N/A        true     false     true     1
+t30984      b_idx       false       3             a            a           ASC        true     true      true     1
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t30984]
+----
+CREATE TABLE public.t30984 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  CONSTRAINT t30984_pkey PRIMARY KEY (a ASC),
+  UNIQUE INDEX b_idx (b ASC) STORING (c)
+);
+
+statement ok
+DROP TABLE t30984
+
+statement disable-cf-mutator ok
+CREATE TABLE t30984 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, d),
+  UNIQUE INDEX b_idx (b) STORING (c, d)
+) WITH (schema_locked = false)
+
+query TTBITTTBBBF rowsort
+SELECT * FROM [SHOW INDEXES FROM t30984] WHERE index_name = 'b_idx'
+----
+t30984      b_idx       false       1             b            b           ASC        false    false     true     1
+t30984      b_idx       false       2             c            c           N/A        true     false     true     1
+t30984      b_idx       false       3             a            a           ASC        true     true      true     1
+t30984      b_idx       false       4             d            d           ASC        true     true      true     1
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t30984]
+----
+CREATE TABLE public.t30984 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NOT NULL,
+  CONSTRAINT t30984_pkey PRIMARY KEY (a ASC, d ASC),
+  UNIQUE INDEX b_idx (b ASC) STORING (c)
+);
+
+statement ok
+DROP TABLE t30984
+
+statement disable-cf-mutator ok
+CREATE TABLE t30984 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, d),
+  INDEX b_idx (b) STORING (c, a, d)
+) WITH (schema_locked = false)
+
+query TTBITTTBBBF rowsort
+SELECT * FROM [SHOW INDEXES FROM t30984] WHERE index_name = 'b_idx'
+----
+t30984      b_idx       true        1             b            b           ASC        false    false     true     1
+t30984      b_idx       true        2             c            c           N/A        true     false     true     1
+t30984      b_idx       true        3             a            a           ASC        false    true      true     1
+t30984      b_idx       true        4             d            d           ASC        false    true      true     1
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t30984]
+----
+CREATE TABLE public.t30984 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NOT NULL,
+  CONSTRAINT t30984_pkey PRIMARY KEY (a ASC, d ASC),
+  INDEX b_idx (b ASC) STORING (c)
+);
+
+statement ok
+DROP TABLE t30984
+
+statement ok
+CREATE UNIQUE INDEX a_idx ON t (a) STORING (b)
+
+# Regression test for #14601.
+
+statement ok
+CREATE TABLE t14601 (a STRING, b BOOL)
+
+statement ok
+CREATE INDEX i14601 ON t14601 (a) STORING (b)
+
+statement ok
+INSERT INTO t14601 VALUES
+  ('a', FALSE),
+  ('b', FALSE),
+  ('c', FALSE)
+
+statement count 1
+DELETE FROM t14601 WHERE a > 'a' AND a < 'c'
+
+query T
+SELECT a FROM t14601 ORDER BY a
+----
+a
+c
+
+statement ok
+DROP INDEX i14601
+
+query T
+SELECT a FROM t14601 ORDER BY a
+----
+a
+c
+
+# Updates were broken too.
+
+statement ok
+CREATE TABLE t14601a (
+  a STRING,
+  b BOOL,
+  c INT,
+  FAMILY f1 (a),
+  FAMILY f2 (b),
+  FAMILY f3 (c)
+)
+
+statement ok
+CREATE INDEX i14601a ON t14601a (a) STORING (b, c)
+
+statement ok
+INSERT INTO t14601a VALUES
+  ('a', FALSE, 1),
+  ('b', TRUE, 2),
+  ('c', FALSE, 3)
+
+statement ok
+UPDATE t14601a SET b = NOT b WHERE a > 'a' AND a < 'c'
+
+query TB
+SELECT a, b FROM t14601a ORDER BY a
+----
+a  false
+b  false
+c  false
+
+statement ok
+DROP INDEX i14601a
+
+query TB
+SELECT a, b FROM t14601a ORDER BY a
+----
+a  false
+b  false
+c  false
+
+statement count 3
+DELETE FROM t14601a
+
+statement ok
+CREATE UNIQUE INDEX i14601a ON t14601a (a) STORING (b)
+
+statement ok
+INSERT INTO t14601a VALUES
+  ('a', FALSE),
+  ('b', TRUE),
+  ('c', FALSE)
+
+statement ok
+UPDATE t14601a SET b = NOT b WHERE a > 'a' AND a < 'c'
+
+query TB
+SELECT a, b FROM t14601a ORDER BY a
+----
+a  false
+b  false
+c  false
+
+statement ok
+DROP INDEX i14601a CASCADE
+
+query TB
+SELECT a, b FROM t14601a ORDER BY a
+----
+a  false
+b  false
+c  false
+
+# Test that unspecified storing values are treated like NULL values.
+statement ok
+INSERT INTO t (a) VALUES (2)
+
+statement ok
+INSERT INTO t VALUES (3)
+
+# Regression test for #30984: indirectly ensure that index descriptors don't
+# get recreated every time any other schema change occurs.
+
+statement ok
+CREATE TABLE a(a INT, b INT, c INT, PRIMARY KEY(a, b))
+
+statement ok
+CREATE UNIQUE INDEX foo ON a(a) STORING(c)
+
+statement ok
+INSERT INTO a VALUES(1,2,3)
+
+statement ok
+CREATE UNIQUE INDEX ON a(a) STORING(c)
+
+query III
+SELECT * FROM a@foo
+----
+1 2 3

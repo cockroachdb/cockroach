@@ -1,0 +1,566 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  f FLOAT,
+  d DECIMAL,
+  s STRING,
+  b BOOL,
+  FAMILY (k, v, w, f, b),
+  FAMILY (d),
+  FAMILY (s)
+)
+
+statement ok
+INSERT INTO kv VALUES
+(1, 2, 3, 1.0, 1, 'a', true),
+(3, 4, 5, 2, 8, 'a', true),
+(5, NULL, 5, 9.9, -321, NULL, false),
+(6, 2, 3, 4.4, 4.4, 'b', true),
+(7, 2, 2, 6, 7.9, 'b', true),
+(8, 4, 2, 3, 3, 'A', false)
+
+statement ok
+SET tracing = on,kv,results; SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k; SET tracing = off
+
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv/kv_pkey/1/v:cf=0 -> /2
+fetched: /kv/kv_pkey/1/d:cf=1 -> 1
+fetched: /kv/kv_pkey/1:cf=2 -> <undecoded>
+fetched: /kv/kv_pkey/3/v:cf=0 -> /4
+fetched: /kv/kv_pkey/3/d:cf=1 -> 8
+fetched: /kv/kv_pkey/3:cf=2 -> <undecoded>
+fetched: /kv/kv_pkey/5:cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/5/d:cf=1 -> -321
+fetched: /kv/kv_pkey/6/v:cf=0 -> /2
+fetched: /kv/kv_pkey/6/d:cf=1 -> 4.4
+fetched: /kv/kv_pkey/6:cf=2 -> <undecoded>
+fetched: /kv/kv_pkey/7/v:cf=0 -> /2
+fetched: /kv/kv_pkey/7/d:cf=1 -> 7.9
+fetched: /kv/kv_pkey/7:cf=2 -> <undecoded>
+fetched: /kv/kv_pkey/8/v:cf=0 -> /4
+fetched: /kv/kv_pkey/8/d:cf=1 -> 3
+fetched: /kv/kv_pkey/8:cf=2 -> <undecoded>
+output row: [5 NULL]
+output row: [1 3.4501207708330056853]
+output row: [6 3.4501207708330056853]
+output row: [7 3.4501207708330056853]
+output row: [3 3.5355339059327376220]
+output row: [8 3.5355339059327376220]
+
+query T
+EXPLAIN (VERBOSE) SELECT ntile(1) OVER () FROM kv
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (ntile)
+│
+└── • window
+    │ columns: (ntile_1_arg1, ntile)
+    │ estimated row count: 1,000 (missing stats)
+    │ window 0: ntile(ntile_1_arg1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    │
+    └── • render
+        │ columns: (ntile_1_arg1)
+        │ render ntile_1_arg1: 1
+        │
+        └── • scan
+              columns: ()
+              estimated row count: 1,000 (missing stats)
+              table: kv@kv_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT nth_value(1, 2) OVER () FROM kv
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (nth_value)
+│
+└── • window
+    │ columns: (nth_value_1_arg1, nth_value_1_arg2, nth_value)
+    │ estimated row count: 1,000 (missing stats)
+    │ window 0: nth_value(nth_value_1_arg1, nth_value_1_arg2) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    │
+    └── • render
+        │ columns: (nth_value_1_arg1, nth_value_1_arg2)
+        │ render nth_value_1_arg1: 1
+        │ render nth_value_1_arg2: 2
+        │
+        └── • scan
+              columns: ()
+              estimated row count: 1,000 (missing stats)
+              table: kv@kv_pkey
+              spans: FULL SCAN
+
+statement error column "v" must appear in the GROUP BY clause or be used in an aggregate function
+EXPLAIN (VERBOSE) SELECT max(v) OVER (), min(v) FROM kv ORDER BY 1
+
+query T
+EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
+----
+distribution: local
+·
+• sort
+│ order: +variance,+k
+│
+└── • window
+    │
+    └── • scan
+          missing stats
+          table: kv@kv_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (k int, stddev decimal)
+│
+└── • sort
+    │ columns: (k int, stddev decimal, variance decimal)
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +variance,+k
+    │
+    └── • project
+        │ columns: (k int, stddev decimal, variance decimal)
+        │
+        └── • window
+            │ columns: (k int, v int, d decimal, stddev decimal, variance decimal)
+            │ estimated row count: 1,000 (missing stats)
+            │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
+            │ window 1: (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
+            │
+            └── • scan
+                  columns: (k int, v int, d decimal)
+                  estimated row count: 1,000 (missing stats)
+                  table: kv@kv_pkey
+                  spans: FULL SCAN
+
+query T
+EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (k int, stddev decimal)
+│
+└── • sort
+    │ columns: (k int, stddev decimal, variance decimal)
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +variance,+k
+    │
+    └── • project
+        │ columns: (k int, stddev decimal, variance decimal)
+        │
+        └── • window
+            │ columns: (k int, v int, d decimal, stddev decimal, variance decimal)
+            │ estimated row count: 1,000 (missing stats)
+            │ window 0: (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
+            │
+            └── • window
+                │ columns: (k int, v int, d decimal, stddev decimal)
+                │ estimated row count: 1,000 (missing stats)
+                │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
+                │
+                └── • scan
+                      columns: (k int, v int, d decimal)
+                      estimated row count: 1,000 (missing stats)
+                      table: kv@kv_pkey
+                      spans: FULL SCAN
+
+query T
+EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY k
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (k int, stddev decimal)
+│ estimated row count: 1,000 (missing stats)
+│ order: +k
+│
+└── • project
+    │ columns: (k int, stddev decimal)
+    │
+    └── • window
+        │ columns: (k int, v int, d decimal, stddev decimal)
+        │ estimated row count: 1,000 (missing stats)
+        │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
+        │
+        └── • scan
+              columns: (k int, v int, d decimal)
+              estimated row count: 1,000 (missing stats)
+              table: kv@kv_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (k int, "?column?" decimal)
+│
+└── • sort
+    │ columns: ("?column?" decimal, k int, variance decimal)
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +variance,+k
+    │
+    └── • render
+        │ columns: ("?column?" decimal, k int, variance decimal)
+        │ render ?column?: ((k)[int] + (stddev)[decimal])[decimal]
+        │ render k: (k)[int]
+        │ render variance: (variance)[decimal]
+        │
+        └── • window
+            │ columns: (k int, v int, d decimal, stddev decimal, variance decimal)
+            │ estimated row count: 1,000 (missing stats)
+            │ window 0: (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
+            │
+            └── • window
+                │ columns: (k int, v int, d decimal, stddev decimal)
+                │ estimated row count: 1,000 (missing stats)
+                │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
+                │
+                └── • scan
+                      columns: (k int, v int, d decimal)
+                      estimated row count: 1,000 (missing stats)
+                      table: kv@kv_pkey
+                      spans: FULL SCAN
+
+query T
+EXPLAIN (TYPES) SELECT max(k), max(k) + stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY variance(d) OVER (PARTITION BY v, 100)
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (max int, "?column?" decimal)
+│
+└── • sort
+    │ columns: ("?column?" decimal, max int, variance decimal)
+    │ estimated row count: 1,000 (missing stats)
+    │ order: +variance
+    │
+    └── • render
+        │ columns: ("?column?" decimal, max int, variance decimal)
+        │ render ?column?: ((max)[int] + (stddev)[decimal])[decimal]
+        │ render max: (max)[int]
+        │ render variance: (variance)[decimal]
+        │
+        └── • window
+            │ columns: (v int, d decimal, max int, stddev decimal, variance decimal)
+            │ estimated row count: 1,000 (missing stats)
+            │ window 0: (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
+            │
+            └── • window
+                │ columns: (v int, d decimal, max int, stddev decimal)
+                │ estimated row count: 1,000 (missing stats)
+                │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
+                │
+                └── • group (hash)
+                    │ columns: (v int, d decimal, max int)
+                    │ estimated row count: 1,000 (missing stats)
+                    │ aggregate 0: max(k)
+                    │ group by: v, d
+                    │
+                    └── • scan
+                          columns: (k int, v int, d decimal)
+                          estimated row count: 1,000 (missing stats)
+                          table: kv@kv_pkey
+                          spans: FULL SCAN
+
+query T
+EXPLAIN (TYPES) SELECT max(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY 1
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (max int, stddev decimal)
+│ estimated row count: 1,000 (missing stats)
+│ order: +max
+│
+└── • project
+    │ columns: (max int, stddev decimal)
+    │
+    └── • window
+        │ columns: (v int, d decimal, max int, stddev decimal)
+        │ estimated row count: 1,000 (missing stats)
+        │ window 0: (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]
+        │
+        └── • group (hash)
+            │ columns: (v int, d decimal, max int)
+            │ estimated row count: 1,000 (missing stats)
+            │ aggregate 0: max(k)
+            │ group by: v, d
+            │
+            └── • scan
+                  columns: (k int, v int, d decimal)
+                  estimated row count: 1,000 (missing stats)
+                  table: kv@kv_pkey
+                  spans: FULL SCAN
+
+# Partition
+
+query T
+EXPLAIN (VERBOSE) SELECT lag(1) OVER (PARTITION BY 2), lead(2) OVER (PARTITION BY 1) FROM kv
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (lag, lead)
+│
+└── • window
+    │ columns: (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1, lead)
+    │ estimated row count: 1,000 (missing stats)
+    │ window 0: lead(lag_1_partition_1, lag_1_arg1, lag_1_arg3) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    │
+    └── • window
+        │ columns: (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1)
+        │ estimated row count: 1,000 (missing stats)
+        │ window 0: lag(lag_1_arg1, lag_1_arg1, lag_1_arg3) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        │
+        └── • render
+            │ columns: (lag_1_arg1, lag_1_arg3, lag_1_partition_1)
+            │ render lag_1_arg1: 1
+            │ render lag_1_arg3: CAST(NULL AS INT8)
+            │ render lag_1_partition_1: 2
+            │
+            └── • scan
+                  columns: ()
+                  estimated row count: 1,000 (missing stats)
+                  table: kv@kv_pkey
+                  spans: FULL SCAN
+
+# Ordering
+
+query T
+EXPLAIN (VERBOSE) SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (k, v, rank)
+│ estimated row count: 1,000 (missing stats)
+│ order: +k
+│
+└── • window
+    │ columns: (k, v, rank)
+    │ estimated row count: 1,000 (missing stats)
+    │ window 0: rank() OVER (ORDER BY k ASC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    │
+    └── • scan
+          columns: (k, v)
+          estimated row count: 1,000 (missing stats)
+          table: kv@kv_pkey
+          spans: FULL SCAN
+
+
+# Frames
+
+query T
+EXPLAIN (VERBOSE) SELECT avg(k) OVER () FROM kv
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (avg)
+│
+└── • window
+    │ columns: (k, avg)
+    │ estimated row count: 1,000 (missing stats)
+    │ window 0: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    │
+    └── • scan
+          columns: (k)
+          estimated row count: 1,000 (missing stats)
+          table: kv@kv_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM kv
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (avg)
+│
+└── • window
+    │ columns: (k, avg)
+    │ estimated row count: 1,000 (missing stats)
+    │ window 0: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+    │
+    └── • scan
+          columns: (k)
+          estimated row count: 1,000 (missing stats)
+          table: kv@kv_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM kv
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (avg)
+│
+└── • window
+    │ columns: (k, avg)
+    │ estimated row count: 1,000 (missing stats)
+    │ window 0: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    │
+    └── • scan
+          columns: (k)
+          estimated row count: 1,000 (missing stats)
+          table: kv@kv_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE)
+    SELECT
+        avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+        avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+        avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+        avg(k) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW),
+        avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+        avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+        avg(k) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+        avg(k) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW),
+        avg(k) OVER (ORDER BY k GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+        avg(k) OVER (ORDER BY k GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+        avg(k) OVER (ORDER BY k GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+        avg(k) OVER (ORDER BY k GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)
+    FROM
+        kv
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)
+│
+└── • window
+    │ columns: (k, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)
+    │ estimated row count: 1,000 (missing stats)
+    │ window 0: avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+    │ window 1: avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    │ window 2: avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+    │ window 3: avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)
+    │
+    └── • window
+        │ columns: (k, avg, avg, avg, avg, avg, avg, avg, avg)
+        │ estimated row count: 1,000 (missing stats)
+        │ window 0: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+        │ window 1: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        │ window 2: avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+        │ window 3: avg(k) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)
+        │ window 4: avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+        │ window 5: avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        │ window 6: avg(k) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+        │ window 7: avg(k) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)
+        │
+        └── • scan
+              columns: (k)
+              estimated row count: 1,000 (missing stats)
+              table: kv@kv_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE)
+    SELECT
+        avg(v) OVER (
+            PARTITION BY
+                w
+            ROWS
+                BETWEEN (SELECT count(*) FROM kv) PRECEDING AND 1 FOLLOWING
+        )
+    FROM
+        kv
+----
+distribution: local
+·
+• root
+│ columns: (avg)
+│
+├── • project
+│   │ columns: (avg)
+│   │
+│   └── • window
+│       │ columns: (v, w, avg)
+│       │ estimated row count: 1,000 (missing stats)
+│       │ window 0: avg(v) OVER (PARTITION BY w ROWS BETWEEN @S1 PRECEDING AND 1 FOLLOWING)
+│       │
+│       └── • scan
+│             columns: (v, w)
+│             estimated row count: 1,000 (missing stats)
+│             table: kv@kv_pkey
+│             spans: FULL SCAN
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT count(*) FROM kv)
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │ columns: (count_rows)
+        │ estimated row count: 1 (missing stats)
+        │ aggregate 0: count_rows()
+        │
+        └── • scan
+              columns: ()
+              estimated row count: 1,000 (missing stats)
+              table: kv@kv_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE)
+    SELECT
+        avg(k) OVER (RANGE UNBOUNDED PRECEDING EXCLUDE CURRENT ROW),
+        avg(k) OVER (RANGE UNBOUNDED PRECEDING EXCLUDE GROUP),
+        avg(k) OVER (RANGE UNBOUNDED PRECEDING EXCLUDE TIES),
+        avg(k) OVER (RANGE UNBOUNDED PRECEDING EXCLUDE NO OTHERS)
+    FROM
+        kv
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (avg, avg, avg, avg)
+│
+└── • window
+    │ columns: (k, avg, avg, avg, avg)
+    │ estimated row count: 1,000 (missing stats)
+    │ window 0: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW)
+    │ window 1: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE GROUP)
+    │ window 2: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE TIES)
+    │ window 3: avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    │
+    └── • scan
+          columns: (k)
+          estimated row count: 1,000 (missing stats)
+          table: kv@kv_pkey
+          spans: FULL SCAN

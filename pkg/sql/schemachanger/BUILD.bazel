@@ -1,0 +1,104 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/sql/schemachanger/sctest/sctestgen:gen.bzl", "sctest_gen")
+
+go_library(
+    name = "schemachanger",
+    srcs = ["doc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "end_to_end_testdata_definitions",
+    srcs = glob(["testdata/end_to_end/*/*.definition"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "end_to_end_testdata",
+    srcs = glob(["testdata/end_to_end/**"]),
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "schemachanger_test",
+    size = "enormous",
+    srcs = [
+        "dml_injection_test.go",
+        "main_test.go",
+        "schemachanger_test.go",
+        ":test_gen",  # keep
+    ],
+    data = glob(["testdata/**"]) + [
+        "//pkg/sql/logictest:testdata",
+    ],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "large"},
+    }),
+    shard_count = 48,
+    deps = [
+        "//pkg/base",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/backfill",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scplan",
+        "//pkg/sql/schemachanger/sctest",  # keep
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/log/eventlog",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_lib_pq//:pq",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+sctest_gen(
+    name = "test_gen",
+    out = "sctest_generated_test.go",
+    ccl = False,
+    new_cluster_factory = "sctest.SingleNodeTestClusterFactory{}",
+    package = "schemachanger",
+    test_data = [
+        ":end_to_end_testdata_definitions",
+    ],
+    tests = [
+        "EndToEndSideEffects",
+        "ExecuteWithDMLInjection",
+        "GenerateSchemaChangeCorpus",
+        "Pause",
+        "PauseMixedVersion",
+        "Rollback",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)

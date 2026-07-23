@@ -1,0 +1,406 @@
+# LogicTest: local
+
+# This test file verifies that the lookup and index joins don't fetch too many
+# rows eagerly in the presence of limit hints.
+
+statement ok
+CREATE TABLE a (x INT PRIMARY KEY, y INT, z INT, INDEX (y), FAMILY (x, y, z));
+CREATE TABLE b (x INT PRIMARY KEY);
+INSERT INTO a VALUES (1, 1, 1), (2, 1, 1), (3, 2, 2), (4, 2, 2);
+INSERT INTO b VALUES (1), (2), (3), (4);
+CREATE TABLE xy (x INT, y INT, PRIMARY KEY(x, y));
+INSERT INTO xy VALUES (1, 1), (1, 2), (1, 3), (2, 1);
+
+# Query with an index join and a limit hint.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM (SELECT * FROM a WHERE y = 1 UNION ALL SELECT * FROM a WHERE y = 2) LIMIT 1
+----
+limit
+ ├── columns: x:15 y:16 z:17
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 160.090001
+ ├── cost-flags: unbounded-cardinality
+ ├── key: ()
+ ├── fd: ()-->(15-17)
+ ├── distribution: test
+ ├── prune: (15,17)
+ ├── union-all
+ │    ├── columns: x:15 y:16 z:17
+ │    ├── left columns: a.x:1 a.y:2 a.z:3
+ │    ├── right columns: a.x:8 a.y:9 a.z:10
+ │    ├── stats: [rows=20]
+ │    ├── cost: 160.070001
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── limit hint: 1.00
+ │    ├── distribution: test
+ │    ├── prune: (15,17)
+ │    ├── index-join a
+ │    │    ├── columns: a.x:1 a.y:2 a.z:3
+ │    │    ├── stats: [rows=10, distinct(2)=1, null(2)=0]
+ │    │    ├── cost: 80.0200006
+ │    │    ├── cost-flags: unbounded-cardinality
+ │    │    ├── key: (1)
+ │    │    ├── fd: ()-->(2), (1)-->(3)
+ │    │    ├── limit hint: 1.00
+ │    │    ├── distribution: test
+ │    │    ├── prune: (1,3)
+ │    │    └── scan a@a_y_idx
+ │    │         ├── columns: a.x:1 a.y:2
+ │    │         ├── constraint: /2/1: [/1 - /1]
+ │    │         ├── stats: [rows=10, distinct(2)=1, null(2)=0]
+ │    │         ├── cost: 19.1
+ │    │         ├── cost-flags: unbounded-cardinality
+ │    │         ├── key: (1)
+ │    │         ├── fd: ()-->(2)
+ │    │         ├── limit hint: 1.00
+ │    │         └── distribution: test
+ │    └── index-join a
+ │         ├── columns: a.x:8 a.y:9 a.z:10
+ │         ├── stats: [rows=10, distinct(9)=1, null(9)=0]
+ │         ├── cost: 80.0200006
+ │         ├── cost-flags: unbounded-cardinality
+ │         ├── key: (8)
+ │         ├── fd: ()-->(9), (8)-->(10)
+ │         ├── limit hint: 1.00
+ │         ├── distribution: test
+ │         ├── prune: (8,10)
+ │         └── scan a@a_y_idx
+ │              ├── columns: a.x:8 a.y:9
+ │              ├── constraint: /9/8: [/2 - /2]
+ │              ├── stats: [rows=10, distinct(9)=1, null(9)=0]
+ │              ├── cost: 19.1
+ │              ├── cost-flags: unbounded-cardinality
+ │              ├── key: (8)
+ │              ├── fd: ()-->(9)
+ │              ├── limit hint: 1.00
+ │              └── distribution: test
+ └── 1
+
+# Run through the vectorized engine. Make sure that only a single row is scanned
+# and then a single row is looked up by the index join.
+query T
+EXPLAIN ANALYZE SELECT * FROM (SELECT * FROM a WHERE y = 1 UNION ALL SELECT * FROM a WHERE y = 2) LIMIT 1
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+regions: <hidden>
+·
+• limit
+│ count: 1
+│
+└── • union all
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 1
+    │
+    ├── • index join (streamer)
+    │   │ sql nodes: <hidden>
+    │   │ kv nodes: <hidden>
+    │   │ regions: <hidden>
+    │   │ KV time: 0µs
+    │   │ KV rows decoded: 1
+    │   │ actual row count: 1
+    │   │ table: a@a_pkey
+    │   │
+    │   └── • scan
+    │         sql nodes: <hidden>
+    │         kv nodes: <hidden>
+    │         regions: <hidden>
+    │         KV time: 0µs
+    │         KV rows decoded: 1
+    │         actual row count: 1
+    │         missing stats
+    │         table: a@a_y_idx
+    │         spans: [/1 - /1]
+    │
+    └── • index join (streamer)
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ KV time: 0µs
+        │ KV rows decoded: 0
+        │ actual row count: 0
+        │ table: a@a_pkey
+        │
+        └── • scan
+              sql nodes: <hidden>
+              regions: <hidden>
+              KV time: 0µs
+              KV rows decoded: 0
+              actual row count: 0
+              missing stats
+              table: a@a_y_idx
+              spans: [/2 - /2]
+
+statement ok
+SET vectorize = off
+
+# Run through the row-by-row engine. Make sure that only a single row is scanned
+# and then a single row is looked up by the index join.
+query T
+EXPLAIN ANALYZE SELECT * FROM (SELECT * FROM a WHERE y = 1 UNION ALL SELECT * FROM a WHERE y = 2) LIMIT 1
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+regions: <hidden>
+·
+• limit
+│ count: 1
+│
+└── • union all
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 1
+    │
+    ├── • index join (streamer)
+    │   │ sql nodes: <hidden>
+    │   │ kv nodes: <hidden>
+    │   │ regions: <hidden>
+    │   │ KV time: 0µs
+    │   │ KV rows decoded: 1
+    │   │ actual row count: 1
+    │   │ table: a@a_pkey
+    │   │
+    │   └── • scan
+    │         sql nodes: <hidden>
+    │         kv nodes: <hidden>
+    │         regions: <hidden>
+    │         KV time: 0µs
+    │         KV rows decoded: 1
+    │         actual row count: 1
+    │         missing stats
+    │         table: a@a_y_idx
+    │         spans: [/1 - /1]
+    │
+    └── • index join (streamer)
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ KV time: 0µs
+        │ KV rows decoded: 0
+        │ actual row count: 0
+        │ table: a@a_pkey
+        │
+        └── • scan
+              sql nodes: <hidden>
+              regions: <hidden>
+              KV time: 0µs
+              KV rows decoded: 0
+              actual row count: 0
+              missing stats
+              table: a@a_y_idx
+              spans: [/2 - /2]
+
+statement ok
+RESET vectorize
+
+# Inject such stats that the query below will have a limit hint of 1 for the
+# scan.
+statement ok
+ALTER TABLE a INJECT STATISTICS '[
+      {
+          "avg_size": 1,
+          "columns": ["x"],
+          "created_at": "2022-03-22 00:00:00",
+          "distinct_count": 1,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1
+      },
+       {
+           "avg_size": 1,
+           "columns": ["y"],
+           "created_at": "2022-03-22 00:00:00",
+           "distinct_count": 1,
+           "name": "__auto__",
+           "null_count": 0,
+           "row_count": 1
+       },
+       {
+           "avg_size": 1,
+           "columns": ["z"],
+           "created_at": "2022-03-22 00:00:00",
+           "distinct_count": 1,
+           "name": "__auto__",
+           "null_count": 0,
+           "row_count": 1
+       }
+  ]'
+
+# Query with a lookup join and a limit hint.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT b.x FROM a, b WHERE a.x = b.x LIMIT 1
+----
+project
+ ├── columns: x:8
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 29.145
+ ├── cost-flags: unbounded-cardinality
+ ├── key: ()
+ ├── fd: ()-->(8)
+ ├── distribution: test
+ ├── prune: (8)
+ └── limit
+      ├── columns: a.x:1 b.x:8
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 29.125
+      ├── cost-flags: unbounded-cardinality
+      ├── key: ()
+      ├── fd: ()-->(1,8), (1)==(8), (8)==(1)
+      ├── distribution: test
+      ├── inner-join (lookup b)
+      │    ├── columns: a.x:1 b.x:8
+      │    ├── key columns: [1] = [8]
+      │    ├── lookup columns are key
+      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
+      │    ├── cost: 29.105
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (8)
+      │    ├── fd: (1)==(8), (8)==(1)
+      │    ├── limit hint: 1.00
+      │    ├── distribution: test
+      │    ├── scan a@a_y_idx
+      │    │    ├── columns: a.x:1
+      │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+      │    │    ├── cost: 19.035
+      │    │    ├── cost-flags: unbounded-cardinality
+      │    │    ├── key: (1)
+      │    │    ├── limit hint: 1.00
+      │    │    ├── distribution: test
+      │    │    ├── prune: (1)
+      │    │    ├── interesting orderings: (+1)
+      │    │    └── unfiltered-cols: (1-7)
+      │    └── filters (true)
+      └── 1
+
+# Perform a lookup join. Make sure that a single row is scanned and then a
+# single row is looked up.
+query T
+EXPLAIN ANALYZE SELECT b.x FROM a, b WHERE a.x = b.x LIMIT 1
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+regions: <hidden>
+·
+• limit
+│ count: 1
+│
+└── • lookup join (streamer)
+    │ sql nodes: <hidden>
+    │ kv nodes: <hidden>
+    │ regions: <hidden>
+    │ KV time: 0µs
+    │ KV rows decoded: 1
+    │ execution time: 0µs
+    │ actual row count: 1
+    │ table: b@b_pkey
+    │ equality: (x) = (x)
+    │ equality cols are key
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 1
+          actual row count: 1
+          estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+          table: a@a_y_idx
+          spans: FULL SCAN (SOFT LIMIT)
+
+# Query with a lookup join and a limit. The lookup join has to preserve the
+# input ordering.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT a.x, a.y, xy.x, xy.y FROM a INNER LOOKUP JOIN xy ON xy.x = a.x ORDER BY a.y, a.x LIMIT 2
+----
+limit
+ ├── columns: x:1 y:2 x:8 y:9
+ ├── internal-ordering: +2,+(1|8)
+ ├── cardinality: [0 - 2]
+ ├── stats: [rows=2]
+ ├── cost: 63.99
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (8,9)
+ ├── fd: (1)-->(2), (1)==(8), (8)==(1)
+ ├── ordering: +2,+(1|8) [actual: +2,+1]
+ ├── distribution: test
+ ├── prune: (9)
+ ├── interesting orderings: (+2,+1)
+ ├── inner-join (lookup xy)
+ │    ├── columns: a.x:1 a.y:2 xy.x:8 xy.y:9
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [8]
+ │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
+ │    ├── cost: 63.96
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (8,9)
+ │    ├── fd: (1)-->(2), (1)==(8), (8)==(1)
+ │    ├── ordering: +2,+(1|8) [actual: +2,+1]
+ │    ├── limit hint: 2.00
+ │    ├── distribution: test
+ │    ├── prune: (2,9)
+ │    ├── interesting orderings: (+1) (+2,+1) (+8,+9)
+ │    ├── scan a@a_y_idx
+ │    │    ├── columns: a.x:1 a.y:2
+ │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │    │    ├── cost: 19.04
+ │    │    ├── cost-flags: unbounded-cardinality
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── ordering: +2,+1
+ │    │    ├── limit hint: 1.00
+ │    │    ├── distribution: test
+ │    │    ├── prune: (1,2)
+ │    │    ├── interesting orderings: (+1) (+2,+1)
+ │    │    └── unfiltered-cols: (1-7)
+ │    └── filters (true)
+ └── 2
+
+# Perform a lookup join that preserves its input ordering. Make sure that only
+# two rows are read from kv.
+query T
+EXPLAIN ANALYZE SELECT a.x, a.y, xy.x, xy.y FROM a INNER LOOKUP JOIN xy ON xy.x = a.x ORDER BY a.y, a.x LIMIT 2
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
+regions: <hidden>
+·
+• limit
+│ count: 2
+│
+└── • lookup join (streamer)
+    │ sql nodes: <hidden>
+    │ kv nodes: <hidden>
+    │ regions: <hidden>
+    │ KV time: 0µs
+    │ KV rows decoded: 2
+    │ execution time: 0µs
+    │ actual row count: 2
+    │ table: xy@xy_pkey
+    │ equality: (x) = (x)
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 2
+          actual row count: 2
+          estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+          table: a@a_y_idx
+          spans: FULL SCAN (SOFT LIMIT)

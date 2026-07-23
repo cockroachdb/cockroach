@@ -1,0 +1,430 @@
+# LogicTest: !3node-tenant-default-configs
+
+query IBIT colnames
+SELECT id, active, length(info), name FROM system.tenants ORDER BY id
+----
+id  active  length  name
+1   true    12      system
+
+# Create a few tenants.
+
+statement ok
+CREATE TENANT "tenant-one"
+
+statement ok
+CREATE TENANT "two"
+
+statement error invalid tenant name
+CREATE TENANT "ABC"
+
+statement error invalid tenant name
+CREATE TENANT "-a-"
+
+# More than 100 characters.
+statement error invalid tenant name
+CREATE TENANT "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"
+
+statement error invalid tenant name
+CREATE TENANT "invalid_name"
+
+statement error invalid tenant name
+CREATE TENANT "invalid.name"
+
+statement ok
+CREATE TENANT three
+
+query IBT colnames
+SELECT id, active, name
+FROM system.tenants
+ORDER BY id
+----
+id  active  name
+1   true    system
+3   true    tenant-one
+4   true    two
+5   true    three
+
+query ITTT colnames
+SHOW TENANT system
+----
+id  name    data_state  service_mode
+1   system  ready       shared
+
+query ITTT colnames
+SHOW TENANT "tenant-one"
+----
+id  name        data_state  service_mode
+3   tenant-one  ready       none
+
+query ITTT colnames
+SHOW TENANT "two"
+----
+id  name  data_state  service_mode
+4   two   ready       none
+
+query ITTT colnames
+SHOW TENANT two
+----
+id  name  data_state  service_mode
+4   two   ready       none
+
+query ITTT colnames
+SHOW TENANT three
+----
+id  name   data_state  service_mode
+5   three  ready       none
+
+query ITTT colnames,rowsort
+SHOW TENANTS
+----
+id  name        data_state  service_mode
+1   system      ready       shared
+3   tenant-one  ready       none
+4   two         ready       none
+5   three       ready       none
+
+statement error tenant name cannot be empty
+ALTER TENANT [5] RENAME TO ""
+
+statement error tenant name cannot be NULL
+ALTER TENANT [5] RENAME TO NULL
+
+statement error invalid tenant name
+ALTER TENANT [5] RENAME TO "a.b"
+
+statement ok
+ALTER TENANT [5] RENAME TO blux
+
+statement ok
+ALTER TENANT blux RENAME TO 'blix'
+
+query ITTT colnames
+SELECT * FROM [SHOW TENANTS] WHERE id = 4
+----
+id  name  data_state  service_mode
+4   two   ready       none
+
+statement ok
+ALTER TENANT blix RENAME TO three
+
+query ITTT colnames
+SELECT * FROM [SHOW TENANTS] WHERE id = 4
+----
+id  name  data_state  service_mode
+4   two   ready       none
+
+query ITT colnames
+SELECT id, name, source_tenant_name FROM [SHOW TENANTS WITH REPLICATION STATUS] WHERE id = 4
+----
+id  name  source_tenant_name
+4   two   NULL
+
+statement error tenant "seven" does not exist
+SHOW TENANT seven
+
+# Test creating a tenant with the same name as an existing tenant, but a unique
+# ID.
+statement error tenant with name "three" already exists
+CREATE TENANT three
+
+# Ignore duplicates (this is a no-op because "three" already exists).
+statement ok
+CREATE TENANT IF NOT EXISTS three
+
+statement ok
+set default_transaction_read_only = on;
+
+statement error cannot execute CREATE VIRTUAL CLUSTER in a read-only transaction
+CREATE TENANT four;
+
+statement ok
+set default_transaction_read_only = off;
+
+user testuser
+
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
+CREATE TENANT four
+
+subtest drop_tenant
+user root
+
+statement error tenant "dne" does not exist
+DROP TENANT dne
+
+statement ok
+DROP TENANT IF EXISTS dne
+
+statement ok
+CREATE TENANT four
+
+query IBT colnames
+SELECT id, active, name
+FROM system.tenants WHERE name = 'four'
+ORDER BY id
+----
+id  active  name
+6   true    four
+
+statement ok
+DROP TENANT four
+
+query IBT colnames
+SELECT id, active, name
+FROM system.tenants WHERE name = 'four'
+ORDER BY id
+----
+id  active  name
+
+statement error tenant "four" does not exist
+SHOW TENANT four
+
+statement ok
+CREATE TENANT "five-requiring-quotes"
+
+statement ok
+DROP TENANT "five-requiring-quotes"
+
+statement ok
+set default_transaction_read_only = on;
+
+statement error cannot execute DROP VIRTUAL CLUSTER in a read-only transaction
+DROP TENANT three
+
+statement ok
+set default_transaction_read_only = off;
+
+user testuser
+
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
+DROP TENANT three
+
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
+SHOW TENANTS
+
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
+SHOW TENANT 'two'
+
+user root
+
+statement ok
+GRANT SYSTEM MANAGEVIRTUALCLUSTER TO testuser
+
+user testuser
+
+query ITTT colnames,rowsort
+SHOW TENANTS
+----
+id  name        data_state  service_mode
+1   system      ready       shared
+3   tenant-one  ready       none
+4   two         ready       none
+5   three       ready       none
+
+query ITTT colnames
+SHOW TENANT two
+----
+id  name  data_state  service_mode
+4   two   ready       none
+
+user root
+
+statement ok
+REVOKE SYSTEM MANAGEVIRTUALCLUSTER FROM testuser
+
+# Sanity check that using the original "internal key" privilege name is
+# respected.
+statement ok
+GRANT SYSTEM MANAGETENANT TO testuser
+
+user testuser
+
+statement ok
+SHOW TENANTS
+
+user root
+
+statement ok
+REVOKE SYSTEM MANAGETENANT FROM testuser
+
+subtest read_only
+
+statement ok
+SET default_transaction_read_only = true
+
+statement error cannot execute.*in a read-only transaction
+DROP TENANT three
+
+statement error cannot execute.*in a read-only transaction
+ALTER TENANT three RENAME TO blah
+
+statement error cannot execute.*in a read-only transaction
+CREATE TENANT "read-only"
+
+statement ok
+SET default_transaction_read_only = false
+
+subtest reclaim_name
+
+statement ok
+CREATE TENANT "to-be-reclaimed"
+
+statement ok
+DROP TENANT "to-be-reclaimed"
+
+statement ok
+CREATE TENANT "to-be-reclaimed"
+
+query IBTTT colnames
+SELECT
+  id,
+  active,
+  name,
+  json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState') AS deprecated_data_state,
+  json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') AS dropped_name
+FROM system.tenants
+ORDER BY id
+----
+id  active  name             deprecated_data_state  dropped_name
+1   true    system           READY                  ·
+3   true    tenant-one       READY                  ·
+4   true    two              READY                  ·
+5   true    three            READY                  ·
+6   false   NULL             DROP                   four
+7   false   NULL             DROP                   five-requiring-quotes
+8   false   NULL             DROP                   to-be-reclaimed
+9   true    to-be-reclaimed  READY                  ·
+
+# More valid tenant names.
+statement ok
+CREATE TENANT "1";
+CREATE TENANT "a-b";
+CREATE TENANT "hello-100"
+
+query ITTT colnames,rowsort
+SHOW TENANTS
+----
+id  name             data_state  service_mode
+1   system           ready       shared
+3   tenant-one       ready       none
+4   two              ready       none
+5   three            ready       none
+9   to-be-reclaimed  ready       none
+10  1                ready       none
+11  a-b              ready       none
+12  hello-100        ready       none
+
+subtest service_mode
+
+statement ok
+ALTER TENANT 'tenant-one' START SERVICE EXTERNAL
+
+# operation is idempotent
+statement ok
+ALTER TENANT 'tenant-one' START SERVICE EXTERNAL
+
+statement ok
+ALTER TENANT two START SERVICE SHARED
+
+statement ok
+ALTER TENANT two START SERVICE SHARED
+
+statement error cannot change service mode external to shared directly
+ALTER TENANT 'tenant-one' START SERVICE SHARED
+
+statement error cannot change service mode shared to external directly
+ALTER TENANT two START SERVICE EXTERNAL
+
+statement error cannot drop tenant.*in service mode shared
+DROP TENANT two
+
+statement error cannot drop tenant.*in service mode external
+DROP TENANT 'tenant-one'
+
+query ITTT colnames,rowsort
+SHOW TENANTS
+----
+id  name             data_state  service_mode
+1   system           ready       shared
+3   tenant-one       ready       external
+4   two              ready       shared
+5   three            ready       none
+9   to-be-reclaimed  ready       none
+10  1                ready       none
+11  a-b              ready       none
+12  hello-100        ready       none
+
+statement ok
+ALTER TENANT two STOP SERVICE
+
+statement ok
+ALTER TENANT 'tenant-one' STOP SERVICE
+
+query ITTT colnames,rowsort
+SHOW TENANTS
+----
+id  name             data_state  service_mode
+1   system           ready       shared
+3   tenant-one       ready       none
+4   two              ready       none
+5   three            ready       none
+9   to-be-reclaimed  ready       none
+10  1                ready       none
+11  a-b              ready       none
+12  hello-100        ready       none
+
+statement ok
+DROP TENANT two
+
+statement ok
+DROP TENANT 'tenant-one'
+
+subtest regression_105115
+
+statement ok
+CREATE TENANT noservice
+
+statement ok
+SET CLUSTER SETTING server.controller.default_target_cluster = noservice
+
+statement ok
+DROP TENANT noservice;
+CREATE TENANT withservice;
+
+statement ok
+ALTER TENANT withservice START SERVICE SHARED
+
+statement ok
+SET CLUSTER SETTING server.controller.default_target_cluster = withservice
+
+statement ok
+ALTER TENANT withservice STOP SERVICE
+
+# clean up
+statement ok
+RESET CLUSTER SETTING server.controller.default_target_cluster
+
+statement ok
+DROP TENANT withservice
+
+subtest restrict_system_access
+
+statement ok
+SET CLUSTER SETTING sql.restrict_system_interface.enabled = true
+
+statement error blocked update to application-level cluster setting.*\nHINT:.*\nTry changing the setting from a virtual cluster
+SET CLUSTER SETTING ui.display_timezone = 'America/New_York'
+
+statement error blocked DDL execution from the system interface.*\nHINT:.*\nTry running the DDL from a virtual cluster
+CREATE TABLE foo(x INT)
+
+statement error blocked DDL execution from the system interface.*\nHINT:.*\nTry running the DDL from a virtual cluster
+CREATE DATABASE foo
+
+statement error blocked DDL execution from the system interface.*\nHINT:.*\nTry running the DDL from a virtual cluster
+CREATE SCHEMA foo
+
+statement error blocked DDL execution from the system interface.*\nHINT:.*\nTry running the DDL from a virtual cluster
+CREATE VIEW foo AS SELECT latitude,longitude FROM system.locations
+
+statement ok
+RESET CLUSTER SETTING sql.restrict_system_interface.enabled

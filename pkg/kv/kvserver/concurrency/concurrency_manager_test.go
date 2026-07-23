@@ -1,0 +1,1453 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package concurrency_test
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"math"
+	"reflect"
+	"regexp"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/maruel/panicparse/v2/stack"
+	"github.com/petermattis/goid"
+)
+
+// TestConcurrencyManagerBasic verifies that sequences of requests interacting
+// with a concurrency manager perform properly.
+//
+// The input files use the following DSL:
+//
+// new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [iso=<level>] [priority=<priority>] [uncertainty-limit=<int>[,<int>]] [observed-ts=<nodeID>@<ts>]
+// new-request name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [wait-policy=<policy>] [lock-timeout]
+// [deadlock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
+//
+//	<proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
+//
+// sequence     req=<req-name> [eval-kind=<pess|opt|pess-after-opt]
+// poison       req=<req-name>
+// finish       req=<req-name>
+//
+// handle-lock-conflict-error  req=<req-name> txn=<txn-name> key=<key> lease-seq=<seq>
+// handle-txn-push-error       req=<req-name> txn=<txn-name> key=<key>  TODO(nvanbenschoten): implement this
+//
+// check-opt-no-conflicts            req=<req-name>
+// is-key-locked-by-conflicting-txn  req=<req-name> key=<key> strength=<strength>
+//
+// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u] [str=<strength>]
+// on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]] [ignored-seqs=<int>[-<int>][,<int>[-<int>]]
+// on-txn-updated    txn=<txn-name> status=[committed|aborted|pending] [ts=<int>[,<int>]]
+//
+// on-lease-updated  leaseholder=<bool> lease-seq=<seq>
+// on-split
+// on-merge
+// on-snapshot-applied
+//
+// debug-latch-manager
+// debug-lock-table
+// debug-disable-txn-pushes
+// debug-set-clock           ts=<secs>
+// debug-advance-clock       ts=<secs>
+// debug-set-discovered-locks-threshold-to-consult-txn-status-cache n=<count>
+// debug-set-batch-pushed-lock-resolution-enabled ok=<enabled>
+// debug-set-push-using-cached-clock-observation-enabled ok=<enabled>
+// debug-set-max-locks n=<count>
+// debug-set-virtual-intent-resolution-enabled ok=<enabled>
+// reset [namespace|force]
+func TestConcurrencyManagerBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "concurrency_manager"), func(t *testing.T, path string) {
+		c := newCluster()
+		c.enableTxnPushes()
+		// Keep virtualized intent resolution off, unless tests enable it
+		// explicitly. When it becomes on by default, there will be some test churn
+		// in these data-driven tests.
+		c.setVirtualIntentResolutionEnabled(false)
+		m := concurrency.NewManager(c.makeConfig())
+		m.OnRangeLeaseUpdated(1, true /* isLeaseholder */) // enable
+		c.m = m
+		mon := newMonitor()
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "new-txn":
+				txnName := dd.ScanArg[string](t, d, "name")
+				ts := scanTimestamp(t, d)
+				epoch := dd.ScanArgOr[enginepb.TxnEpoch](t, d, "epoch", 0)
+				iso := concurrency.ScanIsoLevel(t, d)
+				priority := scanTxnPriority(t, d)
+
+				uncertaintyLimit := ts
+				if d.HasArg("uncertainty-limit") {
+					uncertaintyLimit = scanTimestampWithName(t, d, "uncertainty-limit")
+				}
+
+				txn, ok := c.txnsByName[txnName]
+				var id uuid.UUID
+				if ok {
+					id = txn.ID
+				} else {
+					id = c.newTxnID()
+				}
+				txn = &roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{
+						ID:             id,
+						IsoLevel:       iso,
+						Epoch:          epoch,
+						WriteTimestamp: ts,
+						MinTimestamp:   ts,
+						Priority:       priority,
+					},
+					ReadTimestamp:          ts,
+					GlobalUncertaintyLimit: uncertaintyLimit,
+				}
+				// Add observed timestamp if specified. Format: "nodeID@ts"
+				if d.HasArg("observed-ts") {
+					obsStr := dd.ScanArg[string](t, d, "observed-ts")
+					parts := strings.Split(obsStr, "@")
+					nodeID, err := strconv.Atoi(parts[0])
+					if err != nil {
+						d.Fatalf(t, "invalid node ID in observed-ts: %s", obsStr)
+					}
+					obsTs, err := hlc.ParseTimestamp(parts[1])
+					if err != nil {
+						d.Fatalf(t, "invalid timestamp in observed-ts: %s", obsStr)
+					}
+					txn.UpdateObservedTimestamp(
+						roachpb.NodeID(nodeID),
+						obsTs.UnsafeToClockTimestamp(),
+					)
+				}
+				c.registerTxn(txnName, txn)
+				return ""
+
+			case "new-request":
+				reqName := dd.ScanArg[string](t, d, "name")
+				if _, ok := c.requestsByName[reqName]; ok {
+					d.Fatalf(t, "duplicate request: %s", reqName)
+				}
+
+				txnName := dd.ScanArg[string](t, d, "txn")
+				txn, ok := c.txnsByName[txnName]
+				if !ok && txnName != "none" {
+					d.Fatalf(t, "unknown txn %s", txnName)
+				}
+
+				ts := scanTimestamp(t, d)
+				if txn != nil {
+					txn = txn.Clone()
+					txn.ReadTimestamp = ts
+					txn.WriteTimestamp = ts
+				}
+
+				readConsistency := kvpb.CONSISTENT
+				if d.HasArg("inconsistent") {
+					readConsistency = kvpb.INCONSISTENT
+				}
+
+				priority := scanUserPriority(t, d)
+				waitPolicy := scanWaitPolicy(t, d, false /* required */)
+
+				var lockTimeout time.Duration
+				if d.HasArg("lock-timeout") {
+					// A lock timeout of 1ns will be considered immediately expired
+					// without a delay by the lockTableWaiter, ensuring that the lock
+					// timeout logic deterministically fires.
+					// See (*lockTableWaiterImpl).timeUntilDeadline.
+					lockTimeout = 1 * time.Nanosecond
+				}
+
+				maxLockWaitQueueLength := dd.ScanArgOr(t, d, "max-lock-wait-queue-length", 0)
+				deadlockTimeout := dd.ScanArgOr[time.Duration](t, d, "deadlock-timeout", 0)
+
+				ba := &kvpb.BatchRequest{}
+				pp := scanPoisonPolicy(t, d)
+
+				// Each kvpb.Request is provided on an indented line.
+				reqs, reqUnions := scanRequests(t, d, c)
+				ba.Txn = txn
+				ba.Timestamp = ts
+				ba.UserPriority = priority
+				ba.ReadConsistency = readConsistency
+				ba.WaitPolicy = waitPolicy
+				ba.LockTimeout = lockTimeout
+				ba.DeadlockTimeout = deadlockTimeout
+				ba.Requests = reqUnions
+				latchSpans, lockSpans := c.collectSpans(t, txn, ts, waitPolicy, reqs)
+
+				c.requestsByName[reqName] = concurrency.Request{
+					Txn:                    ba.Txn,
+					Timestamp:              ba.Timestamp,
+					NonTxnPriority:         ba.UserPriority,
+					ReadConsistency:        ba.ReadConsistency,
+					WaitPolicy:             ba.WaitPolicy,
+					LockTimeout:            ba.LockTimeout,
+					DeadlockTimeout:        ba.DeadlockTimeout,
+					Requests:               ba.Requests,
+					MaxLockWaitQueueLength: maxLockWaitQueueLength,
+					LatchSpans:             latchSpans,
+					LockSpans:              lockSpans,
+					PoisonPolicy:           pp,
+					Batch:                  ba,
+				}
+				return ""
+
+			case "sequence":
+				reqName := dd.ScanArg[string](t, d, "req")
+				req, ok := c.requestsByName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+				evalKind := concurrency.PessimisticEval
+				if kind, ok := dd.ScanArgOpt[string](t, d, "eval-kind"); ok {
+					switch kind {
+					case "pess":
+						evalKind = concurrency.PessimisticEval
+					case "opt":
+						evalKind = concurrency.OptimisticEval
+					case "pess-after-opt":
+						evalKind = concurrency.PessimisticAfterFailedOptimisticEval
+					default:
+						d.Fatalf(t, "unknown eval-kind: %s", kind)
+					}
+				}
+
+				// Copy the request's latch and lock spans before handing them to
+				// SequenceReq, because they may be destroyed once handed to the
+				// concurrency manager.
+				req.LatchSpans = req.LatchSpans.Copy()
+				req.LockSpans = req.LockSpans.Copy()
+
+				c.mu.Lock()
+				prev := c.guardsByReqName[reqName]
+				delete(c.guardsByReqName, reqName)
+				c.mu.Unlock()
+
+				opName := fmt.Sprintf("sequence %s", reqName)
+				mon.runAsync(opName, func(ctx context.Context) {
+					guard, resp, err := m.SequenceReq(ctx, prev, req, evalKind)
+					if err != nil {
+						log.Eventf(ctx, "sequencing complete, returned error: %v", err)
+					} else if resp != nil {
+						log.Eventf(ctx, "sequencing complete, returned response: %v", resp)
+					} else if guard != nil {
+						log.Event(ctx, "sequencing complete, returned guard")
+						c.mu.Lock()
+						c.guardsByReqName[reqName] = guard
+						c.mu.Unlock()
+					} else {
+						log.Event(ctx, "sequencing complete, returned no guard")
+					}
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "finish":
+				reqName := dd.ScanArg[string](t, d, "req")
+				guard, ok := c.guardsByReqName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+
+				opName := fmt.Sprintf("finish %s", reqName)
+				mon.runSync(opName, func(ctx context.Context) {
+					log.Event(ctx, "finishing request")
+					m.FinishReq(ctx, guard)
+					c.mu.Lock()
+					delete(c.guardsByReqName, reqName)
+					c.mu.Unlock()
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "poison":
+				reqName := dd.ScanArg[string](t, d, "req")
+				guard, ok := c.guardsByReqName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+
+				opName := fmt.Sprintf("poison %s", reqName)
+				mon.runSync(opName, func(ctx context.Context) {
+					log.Event(ctx, "poisoning request")
+					m.PoisonReq(guard)
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "handle-lock-conflict-error":
+				reqName := dd.ScanArg[string](t, d, "req")
+				prev, ok := c.guardsByReqName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+
+				leaseSeq := dd.ScanArg[roachpb.LeaseSequence](t, d, "lease-seq")
+
+				// Each roachpb.Lock is provided on an indented line.
+				var locks []roachpb.Lock
+				singleReqLines := strings.Split(d.Input, "\n")
+				for _, line := range singleReqLines {
+					var err error
+					d.Cmd, d.CmdArgs, err = datadriven.ParseLine(line)
+					if err != nil {
+						d.Fatalf(t, "error parsing single lock: %v", err)
+					}
+					if d.Cmd != "lock" {
+						d.Fatalf(t, "expected \"lock\", found %s", d.Cmd)
+					}
+
+					txnName := dd.ScanArg[string](t, d, "txn")
+					txn, ok := c.txnsByName[txnName]
+					if !ok {
+						d.Fatalf(t, "unknown txn %s", txnName)
+					}
+					key := dd.ScanArg[string](t, d, "key")
+
+					str := lock.Intent
+					if d.HasArg("str") {
+						str = scanLockStrength(t, d)
+					}
+					locks = append(locks, roachpb.MakeLock(&txn.TxnMeta, roachpb.Key(key), str))
+				}
+
+				opName := fmt.Sprintf("handle lock conflict error %s", reqName)
+				mon.runAsync(opName, func(ctx context.Context) {
+					lcErr := &kvpb.LockConflictError{Locks: locks}
+					guard, err := m.HandleLockConflictError(ctx, prev, leaseSeq, lcErr)
+					if err != nil {
+						log.Eventf(ctx, "returned error: %v", err)
+						c.mu.Lock()
+						delete(c.guardsByReqName, reqName)
+						c.mu.Unlock()
+					} else {
+						c.mu.Lock()
+						c.guardsByReqName[reqName] = guard
+						c.mu.Unlock()
+					}
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "check-opt-no-conflicts":
+				reqName := dd.ScanArg[string](t, d, "req")
+				g, ok := c.guardsByReqName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+				reqs, _ := scanRequests(t, d, c)
+				latchSpans, lockSpans := c.collectSpans(t, g.Req().Txn, g.Req().Timestamp, g.Req().WaitPolicy, reqs)
+				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(latchSpans, lockSpans))
+
+			case "is-key-locked-by-conflicting-txn":
+				reqName := dd.ScanArg[string](t, d, "req")
+				g, ok := c.guardsByReqName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+				key := dd.ScanArg[string](t, d, "key")
+				// TODO(nvanbenschoten): replace with scanLockStrength.
+				strength := concurrency.ScanLockStrength(t, d)
+				ok, txn, err := g.IsKeyLockedByConflictingTxn(context.Background(), roachpb.Key(key), strength)
+				if err != nil {
+					return err.Error()
+				}
+				if ok {
+					holder := "<nil>"
+					if txn != nil {
+						holder = txn.ID.String()
+					}
+					return fmt.Sprintf("locked: true, holder: %s", holder)
+				}
+				return "locked: false"
+
+			case "on-lock-acquired":
+				reqName := dd.ScanArg[string](t, d, "req")
+				guard, ok := c.guardsByReqName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+				txn := guard.Req().Txn
+
+				key := dd.ScanArg[string](t, d, "key")
+				seqNum := dd.ScanArgOr[enginepb.TxnSeq](t, d, "seq", 0)
+
+				// Consider locks to be unreplicated if unspecified.
+				dur := lock.Unreplicated
+				if d.HasArg("dur") {
+					dur = scanLockDurability(t, d)
+				}
+				var str lock.Strength
+				if d.HasArg("str") {
+					str = scanLockStrength(t, d)
+				} else {
+					// If no lock strength is provided in the test, infer it from the
+					// durability.
+					switch dur {
+					case lock.Unreplicated:
+						str = lock.Exclusive
+					case lock.Replicated:
+						str = lock.Intent
+					default:
+						t.Fatal("unknown durability")
+					}
+				}
+				// Confirm that the request has a corresponding write request.
+				found := false
+				for _, ru := range guard.Req().Requests {
+					req := ru.GetInner()
+					keySpan := roachpb.Span{Key: roachpb.Key(key)}
+					if kvpb.IsLocking(req) &&
+						req.Header().Span().Contains(keySpan) &&
+						req.Header().Sequence == seqNum {
+						found = true
+						break
+					}
+				}
+				if !found {
+					d.Fatalf(t, "missing corresponding write request")
+				}
+
+				txnAcquire := txn.Clone()
+				txnAcquire.Sequence = seqNum
+
+				mon.runSync("acquire lock", func(ctx context.Context) {
+					acq := roachpb.MakeLockAcquisition(txnAcquire.TxnMeta, roachpb.Key(key), dur, str, nil)
+					m.OnLockAcquired(ctx, &acq)
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "on-lock-updated":
+				reqName := dd.ScanArg[string](t, d, "req")
+				guard, ok := c.guardsByReqName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+
+				txnName := dd.ScanArg[string](t, d, "txn")
+				txn, ok := c.txnsByName[txnName]
+				if !ok {
+					d.Fatalf(t, "unknown txn %s", txnName)
+				}
+				key := dd.ScanArg[string](t, d, "key")
+
+				status, verb := scanTxnStatus(t, d)
+				var ts hlc.Timestamp
+				if d.HasArg("ts") {
+					ts = scanTimestamp(t, d)
+				}
+				ignoredSeqNums := concurrency.ScanIgnoredSeqNumbers(t, d)
+
+				// Confirm that the request has a corresponding ResolveIntent.
+				found := false
+				for _, ru := range guard.Req().Requests {
+					if riReq := ru.GetResolveIntent(); riReq != nil &&
+						riReq.IntentTxn.ID == txn.ID &&
+						riReq.Key.Equal(roachpb.Key(key)) &&
+						riReq.Status == status {
+						found = true
+						break
+					}
+				}
+				if !found {
+					d.Fatalf(t, "missing corresponding resolve intent request")
+				}
+
+				txnUpdate := txn.Clone()
+				txnUpdate.Status = status
+				txnUpdate.WriteTimestamp.Forward(ts)
+
+				mon.runSync("update lock", func(ctx context.Context) {
+					log.Eventf(ctx, "%s txn %s @ %s", verb, txn.Short(), key)
+					span := roachpb.Span{Key: roachpb.Key(key)}
+					up := roachpb.MakeLockUpdate(txnUpdate, span)
+					up.IgnoredSeqNums = ignoredSeqNums
+					m.OnLockUpdated(ctx, &up)
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "on-txn-updated":
+				txnName := dd.ScanArg[string](t, d, "txn")
+				txn, ok := c.txnsByName[txnName]
+				if !ok {
+					d.Fatalf(t, "unknown txn %s", txnName)
+				}
+
+				status, verb := scanTxnStatus(t, d)
+				var ts hlc.Timestamp
+				if d.HasArg("ts") {
+					ts = scanTimestamp(t, d)
+				}
+
+				mon.runSync("update txn", func(ctx context.Context) {
+					log.Eventf(ctx, "%s %s", verb, redact.Safe(txnName))
+					if err := c.updateTxnRecord(txn.ID, status, ts); err != nil {
+						d.Fatalf(t, "%s", err)
+					}
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "on-lease-transfer-eval":
+				mon.runSync("eval transfer lease", func(ctx context.Context) {
+					locksToWrite, _ := m.OnRangeLeaseTransferEval()
+					if len(locksToWrite) > 0 {
+						log.Eventf(ctx, "locks to propose as replicated: %d", len(locksToWrite))
+					}
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "on-lease-updated":
+				isLeaseholder := dd.ScanArgOr(t, d, "leaseholder", false)
+				leaseSeq := dd.ScanArgOr[roachpb.LeaseSequence](t, d, "lease-seq", 0)
+
+				mon.runSync("transfer lease", func(ctx context.Context) {
+					if isLeaseholder {
+						log.Event(ctx, "acquired")
+					} else {
+						log.Event(ctx, "released")
+					}
+					m.OnRangeLeaseUpdated(leaseSeq, isLeaseholder)
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "on-split":
+				mon.runSync("split range", func(ctx context.Context) {
+					log.Event(ctx, "complete")
+					endKeyStr := dd.ScanArg[string](t, d, "key")
+					locks := m.OnRangeSplit(roachpb.Key(endKeyStr))
+					if len(locks) > 0 {
+						log.Eventf(ctx, "range split returned %d locks for re-acquistion", len(locks))
+					}
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "on-merge":
+				mon.runSync("merge range", func(ctx context.Context) {
+					log.Event(ctx, "complete")
+					m.OnRangeMerge()
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "on-snapshot-applied":
+				mon.runSync("snapshot replica", func(ctx context.Context) {
+					log.Event(ctx, "applied")
+					m.OnReplicaSnapshotApplied()
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "on-replica-removal":
+				mon.runSync("remove replica", func(ctx context.Context) {
+					log.Event(ctx, "complete")
+					m.OnReplicaRemoval()
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "debug-latch-manager":
+				metrics := m.LatchMetrics()
+				output := []string{
+					fmt.Sprintf("write count: %d", metrics.WriteCount),
+					fmt.Sprintf(" read count: %d", metrics.ReadCount),
+				}
+				return strings.Join(output, "\n")
+
+			case "debug-lock-table":
+				return m.TestingLockTableString()
+
+			case "debug-disable-txn-pushes":
+				c.disableTxnPushes()
+				return ""
+
+			case "debug-set-clock":
+				secs := dd.ScanArg[int64](t, d, "ts")
+				if secs < c.manual.Now().Unix() {
+					d.Fatalf(t, "manual clock must advance")
+				}
+				c.manual.MustAdvanceTo(timeutil.Unix(secs, 0))
+				return ""
+
+			case "debug-advance-clock":
+				secs := dd.ScanArg[int64](t, d, "ts")
+				c.manual.Advance(time.Duration(secs) * time.Second)
+				return ""
+
+			case "debug-set-discovered-locks-threshold-to-consult-txn-status-cache":
+				n := dd.ScanArg[int](t, d, "n")
+				c.setDiscoveredLocksThresholdToConsultTxnStatusCache(n)
+				return ""
+
+			case "debug-set-batch-pushed-lock-resolution-enabled":
+				ok := dd.ScanArg[bool](t, d, "ok")
+				c.setBatchPushedLockResolutionEnabled(ok)
+				return ""
+
+			case "debug-set-push-using-cached-clock-observation-enabled":
+				ok := dd.ScanArg[bool](t, d, "ok")
+				c.setPushUsingCachedClockObservationEnabled(ok)
+				return ""
+
+			case "debug-set-virtual-intent-resolution-enabled":
+				ok := dd.ScanArg[bool](t, d, "ok")
+				c.setVirtualIntentResolutionEnabled(ok)
+				return ""
+
+			case "debug-set-max-locks":
+				n := dd.ScanArg[int64](t, d, "n")
+				m.SetMaxLockTableSize(n)
+				return ""
+
+			case "reset":
+				if n := mon.numMonitored(); n > 0 {
+					if d.HasArg("force") {
+						for gs := range mon.gs {
+							gs.ctxCancel()
+						}
+					} else {
+						d.Fatalf(t, "%d requests still in flight", n)
+					}
+				}
+				mon.resetSeqNums()
+				if err := c.reset(); err != nil {
+					d.Fatalf(t, "could not reset cluster: %v", err)
+				}
+				// Reset request and txn namespace?
+				if d.HasArg("namespace") {
+					c.resetNamespace()
+				}
+				return ""
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+	})
+}
+
+func scanRequests(
+	t *testing.T, d *datadriven.TestData, c *cluster,
+) ([]kvpb.Request, []kvpb.RequestUnion) {
+	// Each kvpb.Request is provided on an indented line.
+	var reqs []kvpb.Request
+	singleReqLines := strings.Split(d.Input, "\n")
+	for _, line := range singleReqLines {
+		req := scanSingleRequest(t, d, line, c.txnsByName)
+		reqs = append(reqs, req)
+	}
+	reqUnions := make([]kvpb.RequestUnion, len(reqs))
+	for i, req := range reqs {
+		reqUnions[i].MustSetInner(req)
+	}
+	return reqs, reqUnions
+}
+
+// cluster encapsulates the state of a running cluster and a set of requests.
+// It serves as the test harness in TestConcurrencyManagerBasic - maintaining
+// transaction and request declarations, recording the state of in-flight
+// requests as they flow through the concurrency manager, and mocking out the
+// interfaces that the concurrency manager interacts with.
+type cluster struct {
+	nodeDesc  *roachpb.NodeDescriptor
+	rangeDesc *roachpb.RangeDescriptor
+	st        *clustersettings.Settings
+	manual    *timeutil.ManualTime
+	clock     *hlc.Clock
+	m         concurrency.Manager
+
+	// Definitions.
+	txnCounter     uint32
+	txnsByName     map[string]*roachpb.Transaction
+	requestsByName map[string]concurrency.Request
+
+	// Request state. Cleared on reset.
+	mu              syncutil.Mutex
+	guardsByReqName map[string]concurrency.Guard
+	txnRecords      map[uuid.UUID]*txnRecord
+	txnPushes       map[uuid.UUID]*txnPush
+}
+
+type txnRecord struct {
+	mu               syncutil.Mutex
+	sig              chan struct{}
+	txn              *roachpb.Transaction // immutable, modify fields below
+	updatedStatus    roachpb.TransactionStatus
+	updatedTimestamp hlc.Timestamp
+}
+
+type txnPush struct {
+	ctx            context.Context
+	pusher, pushee uuid.UUID
+	count          int
+}
+
+func newCluster() *cluster {
+	return newClusterWithSettings(clustersettings.MakeTestingClusterSettings())
+}
+
+func newClusterWithSettings(st *clustersettings.Settings) *cluster {
+	// Set the latch manager's long latch hold and slow latch request thresholds
+	// to infinity to disable logging, which could cause a test to erroneously
+	// fail when wall-clock time exceeds the threshold.
+	spanlatch.LongLatchHoldThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
+	spanlatch.SlowLatchRequestThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
+	concurrency.UnreplicatedLockReliabilitySplit.Override(context.Background(), &st.SV, true)
+	concurrency.UnreplicatedLockReliabilityMerge.Override(context.Background(), &st.SV, true)
+	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(context.Background(), &st.SV, true)
+	manual := timeutil.NewManualTime(timeutil.Unix(123, 0))
+	return &cluster{
+		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},
+		rangeDesc: &roachpb.RangeDescriptor{RangeID: 1},
+		st:        st,
+		manual:    manual,
+		clock:     hlc.NewClockForTesting(manual),
+
+		txnsByName:      make(map[string]*roachpb.Transaction),
+		requestsByName:  make(map[string]concurrency.Request),
+		guardsByReqName: make(map[string]concurrency.Guard),
+		txnRecords:      make(map[uuid.UUID]*txnRecord),
+		txnPushes:       make(map[uuid.UUID]*txnPush),
+	}
+}
+
+func (c *cluster) makeConfig() concurrency.Config {
+	m := concurrency.TestingMakeLockTableMetricsCfg()
+	return concurrency.Config{
+		NodeDesc:                          c.nodeDesc,
+		RangeDesc:                         c.rangeDesc,
+		Settings:                          c.st,
+		Clock:                             c.clock,
+		IntentResolver:                    c,
+		TxnWaitMetrics:                    txnwait.NewMetrics(time.Minute),
+		LocksShedDueToMemoryLimit:         m.LocksShedDueToMemoryLimit,
+		NumLockShedDueToMemoryLimitEvents: m.NumLockShedDueToMemoryLimitEvents,
+		VirtualResolveCondenseCount:       m.VirtualResolveCondenseCount,
+		VirtualResolveDisabledCount:       m.VirtualResolveDisabledCount,
+	}
+}
+
+// PushTransaction implements the concurrency.IntentResolver interface.
+func (c *cluster) PushTransaction(
+	ctx context.Context, pushee *enginepb.TxnMeta, h kvpb.Header, pushType kvpb.PushTxnType,
+) (*roachpb.Transaction, bool, *kvpb.Error) {
+	pusheeRecord, err := c.getTxnRecord(pushee.ID)
+	if err != nil {
+		return nil, false, kvpb.NewError(err)
+	}
+	var pusherRecord *txnRecord
+	if h.Txn != nil {
+		pusherID := h.Txn.ID
+		pusherRecord, err = c.getTxnRecord(pusherID)
+		if err != nil {
+			return nil, false, kvpb.NewError(err)
+		}
+
+		push, err := c.registerPush(ctx, pusherID, pushee.ID)
+		if err != nil {
+			return nil, false, kvpb.NewError(err)
+		}
+		defer c.unregisterPush(push)
+	}
+	var pusherIso isolation.Level
+	var pusherPri enginepb.TxnPriority
+	if h.Txn != nil {
+		pusherIso = h.Txn.IsoLevel
+		pusherPri = h.Txn.Priority
+	} else {
+		pusherIso = isolation.Serializable
+		pusherPri = roachpb.MakePriority(h.UserPriority)
+	}
+	pushTo := h.Timestamp.Next()
+	for {
+		// Is the pushee pushed?
+		pusheeTxn, pusheeRecordSig := pusheeRecord.asTxn()
+		pusheeIso := pusheeTxn.IsoLevel
+		pusheePri := pusheeTxn.Priority
+		pusheeStatus := pusheeTxn.Status
+		// NOTE: this logic is adapted from cmd_push_txn.go.
+		var pusherWins bool
+		switch {
+		case pusheeStatus.IsFinalized():
+			// Already finalized.
+			return pusheeTxn, false, nil
+		case pushType == kvpb.PUSH_TIMESTAMP && pushTo.LessEq(pusheeTxn.WriteTimestamp):
+			// Already pushed.
+			return pusheeTxn, false, nil
+		case pushType == kvpb.PUSH_TOUCH:
+			pusherWins = false
+		case txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri, pusheeStatus):
+			pusherWins = true
+		default:
+			pusherWins = false
+		}
+		if pusherWins {
+			switch pushType {
+			case kvpb.PUSH_ABORT:
+				log.Eventf(ctx, "pusher aborted pushee")
+				err = c.updateTxnRecord(pusheeTxn.ID, roachpb.ABORTED, pusheeTxn.WriteTimestamp)
+			case kvpb.PUSH_TIMESTAMP:
+				log.Eventf(ctx, "pusher pushed pushee to %s", pushTo)
+				err = c.updateTxnRecord(pusheeTxn.ID, pusheeTxn.Status, pushTo)
+			default:
+				err = errors.Errorf("unexpected push type: %s", pushType)
+			}
+			if err != nil {
+				return nil, false, kvpb.NewError(err)
+			}
+			pusheeTxn, _ = pusheeRecord.asTxn()
+			return pusheeTxn, false, nil
+		}
+		// If PUSH_TOUCH or WaitPolicy_Error, return error instead of waiting.
+		if pushType == kvpb.PUSH_TOUCH || h.WaitPolicy == lock.WaitPolicy_Error {
+			log.Eventf(ctx, "pushee not abandoned")
+			err := kvpb.NewTransactionPushError(*pusheeTxn)
+			return nil, false, kvpb.NewError(err)
+		}
+		// Or the pusher aborted?
+		var pusherRecordSig chan struct{}
+		if pusherRecord != nil {
+			var pusherTxn *roachpb.Transaction
+			pusherTxn, pusherRecordSig = pusherRecord.asTxn()
+			if pusherTxn.Status == roachpb.ABORTED {
+				log.Eventf(ctx, "detected pusher aborted")
+				err := kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_PUSHER_ABORTED)
+				return nil, false, kvpb.NewError(err)
+			}
+		}
+		// Wait until either record is updated.
+		select {
+		case <-pusheeRecordSig:
+		case <-pusherRecordSig:
+		case <-ctx.Done():
+			return nil, false, kvpb.NewError(ctx.Err())
+		}
+	}
+}
+
+// ResolveIntent implements the concurrency.IntentResolver interface.
+func (c *cluster) ResolveIntent(
+	ctx context.Context, intent roachpb.LockUpdate, _ intentresolver.ResolveOptions,
+) *kvpb.Error {
+	c.m.OnLockUpdated(ctx, &intent)
+	return nil
+}
+
+// ResolveIntents implements the concurrency.IntentResolver interface.
+func (c *cluster) ResolveIntents(
+	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
+) *kvpb.Error {
+	for _, intent := range intents {
+		if err := c.ResolveIntent(ctx, intent, opts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *cluster) newTxnID() uuid.UUID {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return nextUUID(&c.txnCounter)
+}
+
+func (c *cluster) registerTxn(name string, txn *roachpb.Transaction) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.txnsByName[name] = txn
+	r := &txnRecord{txn: txn, sig: make(chan struct{})}
+	c.txnRecords[txn.ID] = r
+}
+
+func (c *cluster) getTxnRecord(id uuid.UUID) (*txnRecord, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r, ok := c.txnRecords[id]
+	if !ok {
+		return nil, errors.Errorf("unknown txn %v: %v", id, c.txnRecords)
+	}
+	return r, nil
+}
+
+func (c *cluster) updateTxnRecord(
+	id uuid.UUID, status roachpb.TransactionStatus, ts hlc.Timestamp,
+) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r, ok := c.txnRecords[id]
+	if !ok {
+		return errors.Errorf("unknown txn %v: %v", id, c.txnRecords)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.updatedStatus = status
+	r.updatedTimestamp = ts
+	// Notify all listeners. This is a poor man's composable cond var.
+	close(r.sig)
+	r.sig = make(chan struct{})
+	return nil
+}
+
+func (r *txnRecord) asTxn() (*roachpb.Transaction, chan struct{}) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	txn := r.txn.Clone()
+	if r.updatedStatus > txn.Status {
+		txn.Status = r.updatedStatus
+	}
+	txn.WriteTimestamp.Forward(r.updatedTimestamp)
+	return txn, r.sig
+}
+
+func (c *cluster) registerPush(ctx context.Context, pusher, pushee uuid.UUID) (*txnPush, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if p, ok := c.txnPushes[pusher]; ok {
+		if pushee != p.pushee {
+			return nil, errors.Errorf("pusher %s can't push two txns %s and %s at the same time",
+				pusher.Short(), pushee.Short(), p.pushee.Short(),
+			)
+		}
+		p.count++
+		return p, nil
+	}
+	p := &txnPush{
+		ctx:    ctx,
+		count:  1,
+		pusher: pusher,
+		pushee: pushee,
+	}
+	c.txnPushes[pusher] = p
+	return p, nil
+}
+
+func (c *cluster) unregisterPush(push *txnPush) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	p, ok := c.txnPushes[push.pusher]
+	if !ok {
+		return
+	}
+	p.count--
+	if p.count == 0 {
+		delete(c.txnPushes, push.pusher)
+	}
+	if p.count < 0 {
+		panic(fmt.Sprintf("negative count: %+v", p))
+	}
+}
+
+// detectDeadlocks looks at all in-flight transaction pushes and determines
+// whether any are blocked due to dependency cycles within transactions. If so,
+// the method logs an event on the contexts of each of the members of the cycle.
+func (c *cluster) detectDeadlocks() {
+	// This cycle detection algorithm it not particularly efficient - at worst
+	// it runs in O(n ^ 2) time. However, it's simple and effective at assigning
+	// each member of each cycle a unique view of the cycle that it's a part of.
+	// This works because we currently only allow a transaction to push a single
+	// other transaction at a time.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var chain []uuid.UUID
+	seen := make(map[uuid.UUID]struct{})
+	for orig, origPush := range c.txnPushes {
+		pusher := orig
+		chain = append(chain[:0], orig)
+		for id := range seen {
+			delete(seen, id)
+		}
+		seen[pusher] = struct{}{}
+		for {
+			push, ok := c.txnPushes[pusher]
+			if !ok {
+				break
+			}
+			pusher = push.pushee
+			chain = append(chain, pusher)
+			if _, ok := seen[pusher]; ok {
+				// Cycle detected!
+				if pusher == orig {
+					// The cycle we were looking for (i.e. starting at orig).
+					var chainBuf strings.Builder
+					for i, id := range chain {
+						if i > 0 {
+							chainBuf.WriteString("->")
+						}
+						chainBuf.WriteString(id.Short().String())
+					}
+					log.Eventf(origPush.ctx, "dependency cycle detected %s", redact.Safe(chainBuf.String()))
+				}
+				break
+			}
+			seen[pusher] = struct{}{}
+		}
+	}
+}
+
+func (c *cluster) enableTxnPushes() {
+	concurrency.LockTableDeadlockOrLivenessDetectionPushDelay.Override(context.Background(), &c.st.SV, 0*time.Millisecond)
+}
+
+func (c *cluster) disableTxnPushes() {
+	concurrency.LockTableDeadlockOrLivenessDetectionPushDelay.Override(context.Background(), &c.st.SV, time.Hour)
+}
+
+func (c *cluster) setDiscoveredLocksThresholdToConsultTxnStatusCache(n int) {
+	concurrency.DiscoveredLocksThresholdToConsultTxnStatusCache.Override(context.Background(), &c.st.SV, int64(n))
+}
+
+func (c *cluster) setBatchPushedLockResolutionEnabled(ok bool) {
+	concurrency.BatchPushedLockResolution.Override(context.Background(), &c.st.SV, ok)
+}
+
+func (c *cluster) setPushUsingCachedClockObservationEnabled(ok bool) {
+	concurrency.PushUsingCachedClockObservation.Override(context.Background(), &c.st.SV, ok)
+}
+
+func (c *cluster) setVirtualIntentResolutionEnabled(ok bool) {
+	concurrency.VirtualIntentResolution.Override(context.Background(), &c.st.SV, ok)
+}
+
+// reset clears all request state in the cluster. This avoids portions of tests
+// leaking into one another and also serves as an assertion that a sequence of
+// commands has completed without leaking any requests.
+func (c *cluster) reset() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Reset all transactions to their original state.
+	for id := range c.txnRecords {
+		r := c.txnRecords[id]
+		r.mu.Lock()
+		r.updatedStatus = roachpb.PENDING
+		r.updatedTimestamp = hlc.Timestamp{}
+		r.mu.Unlock()
+	}
+	// There should be no remaining concurrency guards.
+	for name := range c.guardsByReqName {
+		return errors.Errorf("unfinished guard for request: %s", name)
+	}
+	// There should be no outstanding latches.
+	metrics := c.m.LatchMetrics()
+	if metrics.ReadCount+metrics.WriteCount > 0 {
+		return errors.Errorf("outstanding latches")
+	}
+	// Clear the lock table by transferring the lease away and reacquiring it.
+	c.m.OnRangeLeaseUpdated(1, false /* isLeaseholder */)
+	c.m.OnRangeLeaseUpdated(1, true /* isLeaseholder */)
+	return nil
+}
+
+// resetNamespace resets the entire cluster namespace, clearing both request
+// definitions and transaction definitions.
+func (c *cluster) resetNamespace() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.txnCounter = 0
+	c.txnsByName = make(map[string]*roachpb.Transaction)
+	c.requestsByName = make(map[string]concurrency.Request)
+	c.txnRecords = make(map[uuid.UUID]*txnRecord)
+}
+
+// collectSpans collects the declared spans for a set of requests.
+// Its logic mirrors that in Replica.collectSpans.
+func (c *cluster) collectSpans(
+	t *testing.T, txn *roachpb.Transaction, ts hlc.Timestamp, wp lock.WaitPolicy, reqs []kvpb.Request,
+) (latchSpans *spanset.SpanSet, lockSpans *lockspanset.LockSpanSet) {
+	latchSpans, lockSpans = &spanset.SpanSet{}, &lockspanset.LockSpanSet{}
+	h := kvpb.Header{Txn: txn, Timestamp: ts, WaitPolicy: wp}
+	for _, req := range reqs {
+		if cmd, ok := batcheval.LookupCommand(req.Method()); ok {
+			err := cmd.DeclareKeys(c.rangeDesc, &h, req, latchSpans, lockSpans, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			t.Fatalf("unrecognized command %s", req.Method())
+		}
+	}
+
+	// Commands may create a large number of duplicate spans. De-duplicate
+	// them to reduce the number of spans we pass to the {spanlatch,Lock}Manager.
+	latchSpans.SortAndDedup()
+	lockSpans.SortAndDeDup()
+	if err := latchSpans.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := lockSpans.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	return latchSpans, lockSpans
+}
+
+func (c *cluster) waitAndCollect(t *testing.T, m *monitor) string {
+	m.waitForAsyncGoroutinesToStall(t)
+	c.detectDeadlocks()
+	return m.collectRecordings()
+}
+
+// monitor tracks a set of running goroutines as they execute and captures
+// tracing recordings from them. It is capable of watching its set of goroutines
+// until they all mutually stall.
+//
+// It is NOT safe to use multiple monitors concurrently.
+type monitor struct {
+	seq int
+	gs  map[*monitoredGoroutine]struct{}
+	tr  *tracing.Tracer
+	buf []byte // avoids allocations
+}
+
+type monitoredGoroutine struct {
+	opSeq    int
+	opName   string
+	gID      int64
+	finished int32
+
+	ctx        context.Context
+	ctxCancel  func()
+	collect    func() tracingpb.Recording
+	cancel     func()
+	prevEvents int
+}
+
+func newMonitor() *monitor {
+	tr := tracing.NewTracer()
+	tr.SetRedactable(true)
+	return &monitor{
+		tr: tr,
+		gs: make(map[*monitoredGoroutine]struct{}),
+	}
+}
+
+func (m *monitor) runSync(opName string, fn func(context.Context)) {
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	ctx, sp := m.tr.StartSpanCtx(ctx, opName, tracing.WithRecording(tracingpb.RecordingVerbose))
+	g := &monitoredGoroutine{
+		opSeq:     0, // synchronous
+		opName:    opName,
+		ctx:       ctx,
+		ctxCancel: ctxCancel,
+		collect: func() tracingpb.Recording {
+			return sp.GetConfiguredRecording()
+		},
+		cancel: sp.Finish,
+	}
+	m.gs[g] = struct{}{}
+	fn(ctx)
+	atomic.StoreInt32(&g.finished, 1)
+}
+
+func (m *monitor) runAsync(opName string, fn func(context.Context)) (cancel func()) {
+	m.seq++
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	ctx, sp := m.tr.StartSpanCtx(ctx, opName, tracing.WithRecording(tracingpb.RecordingVerbose))
+	g := &monitoredGoroutine{
+		opSeq:     m.seq,
+		opName:    opName,
+		ctx:       ctx,
+		ctxCancel: ctxCancel,
+		collect: func() tracingpb.Recording {
+			return sp.GetConfiguredRecording()
+		},
+		cancel: sp.Finish,
+	}
+	m.gs[g] = struct{}{}
+	go func() {
+		atomic.StoreInt64(&g.gID, goid.Get())
+		fn(ctx)
+		atomic.StoreInt32(&g.finished, 1)
+	}()
+	return cancel
+}
+
+func (m *monitor) numMonitored() int {
+	return len(m.gs)
+}
+
+func (m *monitor) resetSeqNums() {
+	m.seq = 0
+}
+
+func (m *monitor) collectRecordings() string {
+	// Collect trace recordings from each goroutine.
+	type logRecord struct {
+		g     *monitoredGoroutine
+		value string
+	}
+	var logs []logRecord
+	for g := range m.gs {
+		prev := g.prevEvents
+		rec := g.collect()
+		for _, span := range rec {
+			for _, log := range span.Logs {
+				if prev > 0 {
+					prev--
+					continue
+				}
+				logs = append(logs, logRecord{
+					g: g, value: string(log.Msg()),
+				})
+				g.prevEvents++
+			}
+		}
+		if atomic.LoadInt32(&g.finished) == 1 {
+			g.cancel()
+			delete(m.gs, g)
+		}
+	}
+
+	// Sort logs by g.opSeq. This will sort synchronous goroutines before
+	// asynchronous goroutines. Use a stable sort to break ties within
+	// goroutines and keep logs in event order.
+	sort.SliceStable(logs, func(i int, j int) bool {
+		return logs[i].g.opSeq < logs[j].g.opSeq
+	})
+
+	var buf strings.Builder
+	for i, log := range logs {
+		if i > 0 {
+			buf.WriteByte('\n')
+		}
+		seq := "-"
+		if log.g.opSeq != 0 {
+			seq = strconv.Itoa(log.g.opSeq)
+		}
+		logValue := stripFileLinePrefix(log.value)
+		fmt.Fprintf(&buf, "[%s] %s: %s", seq, log.g.opName, logValue)
+	}
+	return buf.String()
+}
+
+func stripFileLinePrefix(s string) string {
+	return reFileLinePrefix.ReplaceAllString(s, "")
+}
+
+var reFileLinePrefix = regexp.MustCompile(`^[^:]+:\d+ `)
+
+func (m *monitor) hasNewEvents(g *monitoredGoroutine) bool {
+	events := 0
+	rec := g.collect()
+	for _, span := range rec {
+		events += len(span.Logs)
+	}
+	return events > g.prevEvents
+}
+
+// waitForAsyncGoroutinesToStall waits for all goroutines that were launched by
+// the monitor's runAsync method to stall due to cross-goroutine synchronization
+// dependencies. For instance, it waits for all goroutines to stall while
+// receiving from channels. When the method returns, the caller has exclusive
+// access to any memory that it shares only with monitored goroutines until it
+// performs an action that may unblock any of the goroutines.
+func (m *monitor) waitForAsyncGoroutinesToStall(t *testing.T) {
+	// Iterate until we see two iterations in a row that both observe all
+	// monitored goroutines to be stalled and also both observe the exact same
+	// goroutine state. The goroutine dump provides a consistent snapshot of all
+	// goroutine states and statuses (runtime.Stack(all=true) stops the world).
+	var status []*stack.Goroutine
+	filter := funcName((*monitor).runAsync)
+	testutils.SucceedsSoon(t, func() error {
+		// Add a small fixed delay after each iteration. This is sufficient to
+		// prevents false detection of stalls in a few cases, like when
+		// receiving on a buffered channel that already has an element in it.
+		defer time.Sleep(5 * time.Millisecond)
+
+		prevStatus := status
+		status = goroutineStatus(t, filter, &m.buf)
+		if len(status) == 0 {
+			// No monitored goroutines.
+			return nil
+		}
+
+		if prevStatus == nil {
+			// First iteration.
+			return errors.Errorf("previous status unset")
+		}
+
+		// Check whether all monitored goroutines are stalled. If not, retry.
+		for _, stat := range status {
+			stalled, ok := goroutineStalledStates[stat.State]
+			if !ok {
+				// NB: this will help us avoid rotting on Go runtime changes.
+				t.Fatalf("unknown goroutine state: %s", stat.State)
+			}
+			if !stalled {
+				return errors.Errorf("goroutine %d is not stalled; status %s", stat.ID, stat.State)
+			}
+		}
+
+		// Make sure the goroutines haven't changed since the last iteration.
+		// This ensures that the goroutines stay stable for some amount of time.
+		// NB: status and lastStatus are sorted by goroutine id.
+		if !reflect.DeepEqual(status, prevStatus) {
+			return errors.Errorf("goroutines rapidly changing")
+		}
+		return nil
+	})
+
+	// Add a trace event indicating where each stalled goroutine is waiting.
+	byID := make(map[int64]*monitoredGoroutine, len(m.gs))
+	for g := range m.gs {
+		byID[atomic.LoadInt64(&g.gID)] = g
+	}
+	for _, stat := range status {
+		g, ok := byID[int64(stat.ID)]
+		if !ok {
+			// If we're not tracking this goroutine, just ignore it. This can
+			// happen when goroutines from earlier subtests haven't finished
+			// yet.
+			continue
+		}
+		// If the goroutine hasn't produced any new events, don't create a new
+		// "blocked on" trace event. It likely hasn't moved since the last one.
+		if !m.hasNewEvents(g) {
+			continue
+		}
+		stalledCall := firstNonStdlib(stat.Stack.Calls)
+		log.Eventf(g.ctx, "blocked on %s in %s.%s",
+			redact.Safe(stat.State), redact.Safe(stalledCall.Func.DirName), redact.Safe(stalledCall.Func.Name))
+	}
+}
+
+func funcName(f interface{}) string {
+	return runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
+}
+
+// goroutineStalledStates maps all goroutine states as reported by runtime.Stack
+// to a boolean representing whether that state indicates a stalled goroutine. A
+// stalled goroutine is one that is waiting on a change on another goroutine in
+// order for it to make forward progress itself. If all goroutines enter stalled
+// states simultaneously, a process would encounter a deadlock.
+var goroutineStalledStates = map[string]bool{
+	// See gStatusStrings in runtime/traceback.go and associated comments about
+	// the corresponding G statuses in runtime/runtime2.go.
+	"idle":      false,
+	"runnable":  false,
+	"running":   false,
+	"syscall":   false,
+	"waiting":   true,
+	"dead":      false,
+	"copystack": false,
+	"preempted": false,
+	"???":       false, // catch-all in runtime.goroutineheader
+
+	// runtime.goroutineheader may override these G statuses with a waitReason.
+	// See waitReasonStrings in runtime/runtime2.go.
+	"GC assist marking":       false,
+	"IO wait":                 false,
+	"chan receive (nil chan)": true,
+	"chan send (nil chan)":    true,
+	"dumping heap":            false,
+	"garbage collection":      false,
+	"garbage collection scan": false,
+	"panicwait":               false,
+	"select":                  true,
+	"select (no cases)":       true,
+	"GC assist wait":          false,
+	"GC sweep wait":           false,
+	"GC scavenge wait":        false,
+	"chan receive":            true,
+	"chan send":               true,
+	"finalizer wait":          false,
+	"force gc (idle)":         false,
+	// Perhaps surprisingly, we mark "semacquire" as a non-stalled state. This
+	// is because it is possible to see goroutines briefly enter this state when
+	// performing fine-grained memory synchronization, occasionally in the Go
+	// runtime itself. No request-level synchronization points use mutexes to
+	// wait for state transitions by other requests, so it is safe to ignore
+	// this state and wait for it to exit.
+	"semacquire":     false,
+	"sleep":          false,
+	"sync.Cond.Wait": true,
+	// Similar to "semaquire" above, we mark the following three mutex states as
+	// non-stalled, assuming that they are transient states.
+	"sync.Mutex.Lock":        false,
+	"sync.RWMutex.RLock":     false,
+	"sync.RWMutex.Lock":      false,
+	"trace reader (blocked)": false,
+	"wait for GC cycle":      false,
+	"GC worker (idle)":       false,
+	"GC worker (active)":     false,
+	// "preempted" is already included above as part of gStatusStrings.
+	"debug call":          false,
+	"GC mark termination": false,
+	"stopping the world":  false,
+}
+
+// goroutineStatus returns a stack trace for each goroutine whose stack frame
+// matches the provided filter. It uses the provided buffer to avoid repeat
+// allocations.
+func goroutineStatus(t *testing.T, filter string, buf *[]byte) []*stack.Goroutine {
+	b := stacks(buf)
+	s, _, err := stack.ScanSnapshot(bytes.NewBuffer(b), io.Discard, stack.DefaultOpts())
+	if err != io.EOF {
+		t.Fatalf("could not parse goroutine dump: %v", err)
+		return nil
+	}
+
+	matching := s.Goroutines[:0]
+	for _, g := range s.Goroutines {
+		for _, call := range g.Stack.Calls {
+			if strings.Contains(call.Func.Complete, filter) {
+				matching = append(matching, g)
+				break
+			}
+		}
+	}
+	return matching
+}
+
+// stacks is a wrapper for runtime.Stack that attempts to recover the data for
+// all goroutines. It uses the provided buffer to avoid repeat allocations.
+func stacks(buf *[]byte) []byte {
+	// We don't know how big the buffer needs to be to collect all the
+	// goroutines. Start with 64 KB and try a few times, doubling each time.
+	// NB: This is inspired by runtime/pprof/pprof.go:writeGoroutineStacks.
+	if len(*buf) == 0 {
+		*buf = make([]byte, 1<<16)
+	}
+	*buf = allstacks.GetWithBuf(*buf)
+	return *buf
+}
+
+func firstNonStdlib(calls []stack.Call) stack.Call {
+	for _, call := range calls {
+		if call.Location != stack.Stdlib {
+			return call
+		}
+	}
+	panic("unexpected")
+}

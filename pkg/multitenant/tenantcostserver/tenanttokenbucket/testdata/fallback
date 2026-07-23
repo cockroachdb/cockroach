@@ -1,0 +1,45 @@
+# Tests for the fallback rate.
+
+reconfigure
+limit: 1000
+rate: 1000
+current: 0
+----
+Burst Limit: 1000
+Refill Rate: 1000
+Current Tokens: 0
+Average Tokens: 0
+
+# Fallback rate should be just the base rate 1000.
+request
+tokens: 10
+----
+Granted: 10 tokens
+Trickle duration: 10s
+Fallback rate: 1000 tokens/s
+Burst Limit: 1000
+Refill Rate: 1000
+Current Tokens: -10
+Average Tokens: 0
+
+reconfigure
+limit: 5000000
+rate: 500
+current: 3600000
+----
+Burst Limit: 5000000
+Refill Rate: 500
+Current Tokens: 3600000
+Average Tokens: 0
+
+# Fallback rate should be the base rate 500 plus 1000.
+request
+tokens: 10
+----
+Granted: 10 tokens
+Trickle duration: 0s
+Fallback rate: 1500 tokens/s
+Burst Limit: 5000000
+Refill Rate: 500
+Current Tokens: 3599990
+Average Tokens: 900000

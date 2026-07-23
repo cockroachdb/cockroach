@@ -1,0 +1,2412 @@
+# tests adapted from logictest -- subquery
+
+# Tests for subqueries (SELECT statements which are part of a bigger statement).
+
+build
+SELECT (SELECT 1 a) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── subquery [as=r:2]
+           └── max1-row
+                ├── columns: a:1!null
+                └── project
+                     ├── columns: a:1!null
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── 1 [as=a:1]
+
+build
+SELECT 1 IN (SELECT 1 a) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:2]
+           ├── project
+           │    ├── columns: a:1!null
+           │    ├── values
+           │    │    └── ()
+           │    └── projections
+           │         └── 1 [as=a:1]
+           └── 1
+
+build
+SELECT 1 IN ((((SELECT 1 a)))) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:2]
+           ├── project
+           │    ├── columns: a:1!null
+           │    ├── values
+           │    │    └── ()
+           │    └── projections
+           │         └── 1 [as=a:1]
+           └── 1
+
+build
+SELECT ARRAY(((((VALUES (1), (2))))))[2]
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── indirection [as=array:2]
+           ├── array-flatten
+           │    └── values
+           │         ├── columns: column1:1!null
+           │         ├── (1,)
+           │         └── (2,)
+           └── 2
+
+build
+SELECT 1 + (SELECT 1 a) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── plus [as=r:2]
+           ├── 1
+           └── subquery
+                └── max1-row
+                     ├── columns: a:1!null
+                     └── project
+                          ├── columns: a:1!null
+                          ├── values
+                          │    └── ()
+                          └── projections
+                               └── 1 [as=a:1]
+
+build
+SELECT 1 + (SELECT 1 AS a, 2 AS b) AS r
+----
+error (22023): unsupported binary operator: <int> + <tuple{int AS a, int AS b}>
+
+build
+SELECT (1, 2, 3) IN (SELECT 1 AS a, 2 AS b, 3 AS c) AS r
+----
+project
+ ├── columns: r:5
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:5]
+           ├── project
+           │    ├── columns: column4:4!null
+           │    ├── project
+           │    │    ├── columns: a:1!null b:2!null c:3!null
+           │    │    ├── values
+           │    │    │    └── ()
+           │    │    └── projections
+           │    │         ├── 1 [as=a:1]
+           │    │         ├── 2 [as=b:2]
+           │    │         └── 3 [as=c:3]
+           │    └── projections
+           │         └── (a:1, b:2, c:3) [as=column4:4]
+           └── (1, 2, 3)
+
+build
+SELECT (1, 2, 3) = (SELECT 1 AS a, 2 AS b, 3 AS c) AS r
+----
+project
+ ├── columns: r:5
+ ├── values
+ │    └── ()
+ └── projections
+      └── eq [as=r:5]
+           ├── (1, 2, 3)
+           └── subquery
+                └── max1-row
+                     ├── columns: column4:4!null
+                     └── project
+                          ├── columns: column4:4!null
+                          ├── project
+                          │    ├── columns: a:1!null b:2!null c:3!null
+                          │    ├── values
+                          │    │    └── ()
+                          │    └── projections
+                          │         ├── 1 [as=a:1]
+                          │         ├── 2 [as=b:2]
+                          │         └── 3 [as=c:3]
+                          └── projections
+                               └── (a:1, b:2, c:3) [as=column4:4]
+
+build
+SELECT (1, 2, 3) != (SELECT 1 AS a, 2 AS b, 3 AS c) AS r
+----
+project
+ ├── columns: r:5
+ ├── values
+ │    └── ()
+ └── projections
+      └── ne [as=r:5]
+           ├── (1, 2, 3)
+           └── subquery
+                └── max1-row
+                     ├── columns: column4:4!null
+                     └── project
+                          ├── columns: column4:4!null
+                          ├── project
+                          │    ├── columns: a:1!null b:2!null c:3!null
+                          │    ├── values
+                          │    │    └── ()
+                          │    └── projections
+                          │         ├── 1 [as=a:1]
+                          │         ├── 2 [as=b:2]
+                          │         └── 3 [as=c:3]
+                          └── projections
+                               └── (a:1, b:2, c:3) [as=column4:4]
+
+build
+SELECT (SELECT 1 AS x, 2 AS y, 3 AS z) = (SELECT 1 AS a, 2 AS b, 3 AS c) AS r
+----
+project
+ ├── columns: r:9
+ ├── values
+ │    └── ()
+ └── projections
+      └── eq [as=r:9]
+           ├── subquery
+           │    └── max1-row
+           │         ├── columns: column7:7!null
+           │         └── project
+           │              ├── columns: column7:7!null
+           │              ├── project
+           │              │    ├── columns: x:1!null y:2!null z:3!null
+           │              │    ├── values
+           │              │    │    └── ()
+           │              │    └── projections
+           │              │         ├── 1 [as=x:1]
+           │              │         ├── 2 [as=y:2]
+           │              │         └── 3 [as=z:3]
+           │              └── projections
+           │                   └── (x:1, y:2, z:3) [as=column7:7]
+           └── subquery
+                └── max1-row
+                     ├── columns: column8:8!null
+                     └── project
+                          ├── columns: column8:8!null
+                          ├── project
+                          │    ├── columns: a:4!null b:5!null c:6!null
+                          │    ├── values
+                          │    │    └── ()
+                          │    └── projections
+                          │         ├── 1 [as=a:4]
+                          │         ├── 2 [as=b:5]
+                          │         └── 3 [as=c:6]
+                          └── projections
+                               └── (a:4, b:5, c:6) [as=column8:8]
+
+build
+SELECT (SELECT 1 x) IN (SELECT 1 y) AS z
+----
+project
+ ├── columns: z:3
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=z:3]
+           ├── project
+           │    ├── columns: y:2!null
+           │    ├── values
+           │    │    └── ()
+           │    └── projections
+           │         └── 1 [as=y:2]
+           └── subquery
+                └── max1-row
+                     ├── columns: x:1!null
+                     └── project
+                          ├── columns: x:1!null
+                          ├── values
+                          │    └── ()
+                          └── projections
+                               └── 1 [as=x:1]
+
+build
+SELECT (SELECT 1 a) IN (1) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── in [as=r:2]
+           ├── subquery
+           │    └── max1-row
+           │         ├── columns: a:1!null
+           │         └── project
+           │              ├── columns: a:1!null
+           │              ├── values
+           │              │    └── ()
+           │              └── projections
+           │                   └── 1 [as=a:1]
+           └── (1,)
+
+# NB: Cockroach has different behavior from Postgres on a few esoteric
+# subqueries. The Cockroach behavior seems more sensical and
+# supporting the specific Postgres behavior appears onerous. Fingers
+# crossed this doesn't bite us down the road.
+
+# Postgres cannot handle this query (but MySQL can), even though it
+# seems sensical:
+#   ERROR:  subquery must return only one column
+#   LINE 1: select (select 1, 2) IN (select 1, 2);
+#                  ^
+build
+SELECT (SELECT 1 AS a, 2 AS b) IN (SELECT 1 AS c, 2 AS d) AS r
+----
+project
+ ├── columns: r:7
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:7]
+           ├── project
+           │    ├── columns: column5:5!null
+           │    ├── project
+           │    │    ├── columns: c:3!null d:4!null
+           │    │    ├── values
+           │    │    │    └── ()
+           │    │    └── projections
+           │    │         ├── 1 [as=c:3]
+           │    │         └── 2 [as=d:4]
+           │    └── projections
+           │         └── (c:3, d:4) [as=column5:5]
+           └── subquery
+                └── max1-row
+                     ├── columns: column6:6!null
+                     └── project
+                          ├── columns: column6:6!null
+                          ├── project
+                          │    ├── columns: a:1!null b:2!null
+                          │    ├── values
+                          │    │    └── ()
+                          │    └── projections
+                          │         ├── 1 [as=a:1]
+                          │         └── 2 [as=b:2]
+                          └── projections
+                               └── (a:1, b:2) [as=column6:6]
+
+# Postgres cannot handle this query, even though it seems sensical:
+#   ERROR:  subquery must return only one column
+#   LINE 1: select (select 1, 2) IN ((1, 2));
+#                  ^
+build
+SELECT (SELECT 1 AS a, 2 AS b) IN ((1, 2)) AS r
+----
+project
+ ├── columns: r:4
+ ├── values
+ │    └── ()
+ └── projections
+      └── in [as=r:4]
+           ├── subquery
+           │    └── max1-row
+           │         ├── columns: column3:3!null
+           │         └── project
+           │              ├── columns: column3:3!null
+           │              ├── project
+           │              │    ├── columns: a:1!null b:2!null
+           │              │    ├── values
+           │              │    │    └── ()
+           │              │    └── projections
+           │              │         ├── 1 [as=a:1]
+           │              │         └── 2 [as=b:2]
+           │              └── projections
+           │                   └── (a:1, b:2) [as=column3:3]
+           └── ((1, 2),)
+
+# Postgres cannot handle this query, even though it seems sensical:
+#   ERROR:  subquery has too many columns
+#   LINE 1: select (select (1, 2)) IN (select 1, 2);
+#                                  ^
+build
+SELECT (SELECT (1, 2) AS a) IN (SELECT 1 AS b, 2 AS c) AS r
+----
+project
+ ├── columns: r:5
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:5]
+           ├── project
+           │    ├── columns: column4:4!null
+           │    ├── project
+           │    │    ├── columns: b:2!null c:3!null
+           │    │    ├── values
+           │    │    │    └── ()
+           │    │    └── projections
+           │    │         ├── 1 [as=b:2]
+           │    │         └── 2 [as=c:3]
+           │    └── projections
+           │         └── (b:2, c:3) [as=column4:4]
+           └── subquery
+                └── max1-row
+                     ├── columns: a:1!null
+                     └── project
+                          ├── columns: a:1!null
+                          ├── values
+                          │    └── ()
+                          └── projections
+                               └── (1, 2) [as=a:1]
+
+build
+SELECT (SELECT (1, 2) a) IN ((1, 2)) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── in [as=r:2]
+           ├── subquery
+           │    └── max1-row
+           │         ├── columns: a:1!null
+           │         └── project
+           │              ├── columns: a:1!null
+           │              ├── values
+           │              │    └── ()
+           │              └── projections
+           │                   └── (1, 2) [as=a:1]
+           └── ((1, 2),)
+
+# Postgres cannot handle this query, even though it seems sensical:
+#   ERROR:  subquery must return only one column
+#   LINE 1: select (select 1, 2) in (select (1, 2));
+#                  ^
+build
+SELECT (SELECT 1 AS a, 2 AS b) IN (SELECT (1, 2) AS c) AS r
+----
+project
+ ├── columns: r:5
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:5]
+           ├── project
+           │    ├── columns: c:3!null
+           │    ├── values
+           │    │    └── ()
+           │    └── projections
+           │         └── (1, 2) [as=c:3]
+           └── subquery
+                └── max1-row
+                     ├── columns: column4:4!null
+                     └── project
+                          ├── columns: column4:4!null
+                          ├── project
+                          │    ├── columns: a:1!null b:2!null
+                          │    ├── values
+                          │    │    └── ()
+                          │    └── projections
+                          │         ├── 1 [as=a:1]
+                          │         └── 2 [as=b:2]
+                          └── projections
+                               └── (a:1, b:2) [as=column4:4]
+
+build
+SELECT (SELECT (1, 2) a) IN (SELECT (1, 2) b) AS r
+----
+project
+ ├── columns: r:3
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:3]
+           ├── project
+           │    ├── columns: b:2!null
+           │    ├── values
+           │    │    └── ()
+           │    └── projections
+           │         └── (1, 2) [as=b:2]
+           └── subquery
+                └── max1-row
+                     ├── columns: a:1!null
+                     └── project
+                          ├── columns: a:1!null
+                          ├── values
+                          │    └── ()
+                          └── projections
+                               └── (1, 2) [as=a:1]
+
+build
+SELECT 1 = ANY(SELECT 1 a) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:2]
+           ├── project
+           │    ├── columns: a:1!null
+           │    ├── values
+           │    │    └── ()
+           │    └── projections
+           │         └── 1 [as=a:1]
+           └── 1
+
+build
+SELECT (1, 2) = ANY(SELECT 1 AS a, 2 AS b) AS r
+----
+project
+ ├── columns: r:4
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:4]
+           ├── project
+           │    ├── columns: column3:3!null
+           │    ├── project
+           │    │    ├── columns: a:1!null b:2!null
+           │    │    ├── values
+           │    │    │    └── ()
+           │    │    └── projections
+           │    │         ├── 1 [as=a:1]
+           │    │         └── 2 [as=b:2]
+           │    └── projections
+           │         └── (a:1, b:2) [as=column3:3]
+           └── (1, 2)
+
+build
+SELECT 1 = SOME(SELECT 1 a) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:2]
+           ├── project
+           │    ├── columns: a:1!null
+           │    ├── values
+           │    │    └── ()
+           │    └── projections
+           │         └── 1 [as=a:1]
+           └── 1
+
+build
+SELECT (1, 2) = SOME(SELECT 1 AS a, 2 AS b) AS r
+----
+project
+ ├── columns: r:4
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:4]
+           ├── project
+           │    ├── columns: column3:3!null
+           │    ├── project
+           │    │    ├── columns: a:1!null b:2!null
+           │    │    ├── values
+           │    │    │    └── ()
+           │    │    └── projections
+           │    │         ├── 1 [as=a:1]
+           │    │         └── 2 [as=b:2]
+           │    └── projections
+           │         └── (a:1, b:2) [as=column3:3]
+           └── (1, 2)
+
+build
+SELECT 1 = ALL(SELECT 1 a) AS r
+----
+project
+ ├── columns: r:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── not [as=r:2]
+           └── any: ne
+                ├── project
+                │    ├── columns: a:1!null
+                │    ├── values
+                │    │    └── ()
+                │    └── projections
+                │         └── 1 [as=a:1]
+                └── 1
+
+build
+SELECT (1, 2) = ALL(SELECT 1 AS a, 2 AS b) AS r
+----
+project
+ ├── columns: r:4
+ ├── values
+ │    └── ()
+ └── projections
+      └── not [as=r:4]
+           └── any: ne
+                ├── project
+                │    ├── columns: column3:3!null
+                │    ├── project
+                │    │    ├── columns: a:1!null b:2!null
+                │    │    ├── values
+                │    │    │    └── ()
+                │    │    └── projections
+                │    │         ├── 1 [as=a:1]
+                │    │         └── 2 [as=b:2]
+                │    └── projections
+                │         └── (a:1, b:2) [as=column3:3]
+                └── (1, 2)
+
+build
+SELECT (SELECT 1 AS a, 2 AS b) AS r
+----
+error (42601): subquery must return only one column, found 2
+
+# Return the same error as Postgres.
+build
+SELECT 1 IN (SELECT 1 AS a, 2 AS b) AS r
+----
+error (42601): subquery has too many columns
+
+# Return the same error as Postgres.
+build
+SELECT (1, 2) IN (SELECT 1 AS a) AS r
+----
+error (42601): subquery has too few columns
+
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+----
+
+# Return the same error as Postgres.
+build
+SELECT (1, 2) IN (SELECT * FROM abc) AS r
+----
+error (42601): subquery has too many columns
+
+build
+SELECT (1, 2) IN (SELECT a, b FROM abc) AS r
+----
+project
+ ├── columns: r:7
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:7]
+           ├── project
+           │    ├── columns: column6:6
+           │    ├── project
+           │    │    ├── columns: a:1!null b:2
+           │    │    └── scan abc
+           │    │         └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           │    └── projections
+           │         └── (a:1, b:2) [as=column6:6]
+           └── (1, 2)
+
+build
+SELECT (1, 2) IN (SELECT a, b FROM abc WHERE false) AS r
+----
+project
+ ├── columns: r:7
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:7]
+           ├── project
+           │    ├── columns: column6:6
+           │    ├── project
+           │    │    ├── columns: a:1!null b:2
+           │    │    └── select
+           │    │         ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           │    │         ├── scan abc
+           │    │         │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           │    │         └── filters
+           │    │              └── false
+           │    └── projections
+           │         └── (a:1, b:2) [as=column6:6]
+           └── (1, 2)
+
+build
+SELECT (SELECT * FROM abc)
+----
+error (42601): subquery must return only one column, found 3
+
+build
+SELECT (SELECT a FROM abc)
+----
+project
+ ├── columns: a:6
+ ├── values
+ │    └── ()
+ └── projections
+      └── subquery [as=a:6]
+           └── max1-row
+                ├── columns: abc.a:1!null
+                └── project
+                     ├── columns: abc.a:1!null
+                     └── scan abc
+                          └── columns: abc.a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT EXISTS (SELECT a FROM abc)
+----
+project
+ ├── columns: exists:7
+ ├── values
+ │    └── ()
+ └── projections
+      └── exists [as=exists:7]
+           └── project
+                ├── columns: a:1!null
+                └── scan abc
+                     └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT true = EXISTS (SELECT 1)
+----
+project
+ ├── columns: "?column?":3
+ ├── values
+ │    └── ()
+ └── projections
+      └── eq [as="?column?":3]
+           ├── true
+           └── exists
+                └── project
+                     ├── columns: "?column?":1!null
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── 1 [as="?column?":1]
+
+build
+SELECT (SELECT a FROM abc WHERE false)
+----
+project
+ ├── columns: a:6
+ ├── values
+ │    └── ()
+ └── projections
+      └── subquery [as=a:6]
+           └── max1-row
+                ├── columns: abc.a:1!null
+                └── project
+                     ├── columns: abc.a:1!null
+                     └── select
+                          ├── columns: abc.a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+                          ├── scan abc
+                          │    └── columns: abc.a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+                          └── filters
+                               └── false
+
+exec-ddl
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+----
+
+build
+SELECT (SELECT abc.k FROM abc) FROM kv AS abc
+----
+error (42703): column "abc.k" does not exist
+
+build
+VALUES (1, (SELECT (2) AS a))
+----
+values
+ ├── columns: column1:2!null column2:3
+ └── tuple
+      ├── 1
+      └── subquery
+           └── max1-row
+                ├── columns: a:1!null
+                └── project
+                     ├── columns: a:1!null
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── 2 [as=a:1]
+
+build
+SELECT * FROM abc WHERE a = 7
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ └── select
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── a:1 = 7
+
+exec-ddl
+CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT)
+----
+
+build
+SELECT * FROM xyz
+----
+project
+ ├── columns: x:1!null y:2 z:3
+ └── scan xyz
+      └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT 1 IN (SELECT x FROM xyz ORDER BY x DESC) AS r
+----
+project
+ ├── columns: r:6
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as=r:6]
+           ├── project
+           │    ├── columns: x:1!null
+           │    └── scan xyz
+           │         └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           └── 1
+
+build
+SELECT * FROM xyz WHERE x = (SELECT min(x) FROM xyz)
+----
+project
+ ├── columns: x:1!null y:2 z:3
+ └── select
+      ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan xyz
+      │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── eq
+                ├── x:1
+                └── subquery
+                     └── max1-row
+                          ├── columns: min:11
+                          └── scalar-group-by
+                               ├── columns: min:11
+                               ├── project
+                               │    ├── columns: x:6!null
+                               │    └── scan xyz
+                               │         └── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                               └── aggregations
+                                    └── min [as=min:11]
+                                         └── x:6
+
+build
+SELECT * FROM xyz WHERE x = (SELECT max(x) FROM xyz)
+----
+project
+ ├── columns: x:1!null y:2 z:3
+ └── select
+      ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan xyz
+      │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── eq
+                ├── x:1
+                └── subquery
+                     └── max1-row
+                          ├── columns: max:11
+                          └── scalar-group-by
+                               ├── columns: max:11
+                               ├── project
+                               │    ├── columns: x:6!null
+                               │    └── scan xyz
+                               │         └── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                               └── aggregations
+                                    └── max [as=max:11]
+                                         └── x:6
+
+# Drop previous table with same name, but different schema.
+exec-ddl
+DROP TABLE kv
+----
+
+exec-ddl
+CREATE TABLE kv (k INT PRIMARY KEY, v STRING)
+----
+
+build
+SELECT * FROM kv WHERE k = (SELECT k FROM kv WHERE (k, v) = (1, 'one'))
+----
+project
+ ├── columns: k:1!null v:2
+ └── select
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan kv
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── eq
+                ├── k:1
+                └── subquery
+                     └── max1-row
+                          ├── columns: k:5!null
+                          └── project
+                               ├── columns: k:5!null
+                               └── select
+                                    ├── columns: k:5!null v:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+                                    ├── scan kv
+                                    │    └── columns: k:5!null v:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+                                    └── filters
+                                         └── (k:5, v:6) = (1, 'one')
+
+build
+SELECT EXISTS(SELECT 1 r FROM kv AS x WHERE x.k = 1)
+----
+project
+ ├── columns: exists:7
+ ├── values
+ │    └── ()
+ └── projections
+      └── exists [as=exists:7]
+           └── project
+                ├── columns: r:5!null
+                ├── select
+                │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                │    ├── scan kv [as=x]
+                │    │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                │    └── filters
+                │         └── k:1 = 1
+                └── projections
+                     └── 1 [as=r:5]
+
+build
+SELECT EXISTS(SELECT 1 r FROM kv WHERE k = 2)
+----
+project
+ ├── columns: exists:7
+ ├── values
+ │    └── ()
+ └── projections
+      └── exists [as=exists:7]
+           └── project
+                ├── columns: r:5!null
+                ├── select
+                │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                │    ├── scan kv
+                │    │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                │    └── filters
+                │         └── k:1 = 2
+                └── projections
+                     └── 1 [as=r:5]
+
+
+# Tests for subquery in the FROM part of a SELECT
+
+build
+SELECT * FROM (VALUES (1, 2)) AS foo
+----
+values
+ ├── columns: column1:1!null column2:2!null
+ └── (1, 2)
+
+build
+SELECT * FROM (VALUES (1, 2))
+----
+values
+ ├── columns: column1:1!null column2:2!null
+ └── (1, 2)
+
+build
+SELECT * FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS foo
+----
+values
+ ├── columns: column1:1!null column2:2!null
+ ├── (1, 'one')
+ ├── (2, 'two')
+ └── (3, 'three')
+
+build
+SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo
+----
+values
+ ├── columns: column1:1!null column2:2!null column3:3!null
+ ├── (1, 2, 3)
+ └── (4, 5, 6)
+
+build
+SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo (foo1, foo2, foo3)
+----
+values
+ ├── columns: foo1:1!null foo2:2!null foo3:3!null
+ ├── (1, 2, 3)
+ └── (4, 5, 6)
+
+build
+SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo (foo1, foo2)
+----
+values
+ ├── columns: foo1:1!null foo2:2!null column3:3!null
+ ├── (1, 2, 3)
+ └── (4, 5, 6)
+
+build
+SELECT * FROM (SELECT * FROM xyz) AS foo WHERE x < 7
+----
+select
+ ├── columns: x:1!null y:2 z:3
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3
+ │    └── scan xyz
+ │         └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── filters
+      └── x:1 < 7
+
+build
+SELECT * FROM (SELECT * FROM xyz) AS foo (foo1) WHERE foo1 < 7
+----
+select
+ ├── columns: foo1:1!null y:2 z:3
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3
+ │    └── scan xyz
+ │         └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── filters
+      └── x:1 < 7
+
+build
+SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3)) as foo (foo1) WHERE foo1 < 7
+----
+select
+ ├── columns: foo1:1!null moo2:2 moo3:3
+ ├── project
+ │    ├── columns: moo1:1!null moo2:2 moo3:3
+ │    └── scan xyz [as=moo]
+ │         └── columns: moo1:1!null moo2:2 moo3:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── filters
+      └── moo1:1 < 7
+
+build
+SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) WHERE foo1 < 7
+----
+select
+ ├── columns: foo1:1!null moo2:2 moo3:3
+ ├── project
+ │    ├── columns: moo1:1!null moo2:2 moo3:3
+ │    └── scan xyz [as=moo]
+ │         └── columns: moo1:1!null moo2:2 moo3:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── filters
+      └── moo1:1 < 7
+
+build
+SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) WHERE foo1 < 7 ORDER BY moo2 DESC
+----
+sort
+ ├── columns: foo1:1!null moo2:2 moo3:3
+ ├── ordering: -2
+ └── select
+      ├── columns: moo1:1!null moo2:2 moo3:3
+      ├── project
+      │    ├── columns: moo1:1!null moo2:2 moo3:3
+      │    └── scan xyz [as=moo]
+      │         └── columns: moo1:1!null moo2:2 moo3:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── moo1:1 < 7
+
+build
+SELECT * FROM (SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS moo (moo1, moo2, moo3) WHERE moo1 = 4) as foo (foo1)
+----
+select
+ ├── columns: foo1:1!null moo2:2!null moo3:3!null
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null column3:3!null
+ │    ├── (1, 2, 3)
+ │    └── (4, 5, 6)
+ └── filters
+      └── column1:1 = 4
+
+build
+SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
+----
+sort
+ ├── columns: foo1:1!null moo2:2!null moo3:3!null
+ ├── ordering: +1
+ └── values
+      ├── columns: column1:1!null column2:2!null column3:3!null
+      ├── (1, 8, 8)
+      ├── (3, 1, 1)
+      └── (2, 4, 4)
+
+build
+SELECT a, b FROM (VALUES (1, 2, 3), (3, 4, 7), (5, 6, 10)) AS foo (a, b, c) WHERE a + b = c
+----
+project
+ ├── columns: a:1!null b:2!null
+ └── select
+      ├── columns: column1:1!null column2:2!null column3:3!null
+      ├── values
+      │    ├── columns: column1:1!null column2:2!null column3:3!null
+      │    ├── (1, 2, 3)
+      │    ├── (3, 4, 7)
+      │    └── (5, 6, 10)
+      └── filters
+           └── (column1:1 + column2:2) = column3:3
+
+build
+SELECT foo.a FROM (VALUES (1), (2), (3)) AS foo (a)
+----
+values
+ ├── columns: a:1!null
+ ├── (1,)
+ ├── (2,)
+ └── (3,)
+
+build
+SELECT foo.a, a, column2, foo.column2 FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS foo (a)
+----
+values
+ ├── columns: a:1!null a:1!null column2:2!null column2:2!null
+ ├── (1, 'one')
+ ├── (2, 'two')
+ └── (3, 'three')
+
+build
+SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz WHERE x = 7)
+----
+project
+ ├── columns: x:1!null
+ └── select
+      ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan xyz
+      │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: x:6!null
+                │    └── select
+                │         ├── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                │         ├── scan xyz
+                │         │    └── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                │         └── filters
+                │              └── x:6 = 7
+                └── x:1
+
+build
+SELECT x FROM xyz WHERE x = 7 LIMIT (SELECT x FROM xyz WHERE x = 1)
+----
+limit
+ ├── columns: x:1!null
+ ├── project
+ │    ├── columns: x:1!null
+ │    └── select
+ │         ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         ├── scan xyz
+ │         │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         └── filters
+ │              └── x:1 = 7
+ └── subquery
+      └── max1-row
+           ├── columns: x:6!null
+           └── project
+                ├── columns: x:6!null
+                └── select
+                     ├── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                     ├── scan xyz
+                     │    └── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                     └── filters
+                          └── x:6 = 1
+
+build
+SELECT x FROM xyz ORDER BY x OFFSET (SELECT x FROM xyz WHERE x = 1)
+----
+offset
+ ├── columns: x:1!null
+ ├── internal-ordering: +1
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: x:1!null
+ │    ├── ordering: +1
+ │    └── scan xyz
+ │         ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         └── ordering: +1
+ └── subquery
+      └── max1-row
+           ├── columns: x:6!null
+           └── project
+                ├── columns: x:6!null
+                └── select
+                     ├── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                     ├── scan xyz
+                     │    └── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                     └── filters
+                          └── x:6 = 1
+
+# check that residual filters are not expanded twice
+build
+SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz)
+----
+project
+ ├── columns: x:1!null
+ └── select
+      ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan xyz
+      │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: x:6!null
+                │    └── scan xyz
+                │         └── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                └── x:1
+
+# This test checks that the double sub-query plan expansion caused by a
+# sub-expression being shared by two or more plan nodes does not
+# panic.
+exec-ddl
+CREATE TABLE tab4 (col0 INTEGER, col1 FLOAT, col3 INTEGER, col4 FLOAT, INDEX idx_tab4_0 (col4,col0))
+----
+
+build
+SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
+----
+project
+ ├── columns: col0:1!null
+ └── select
+      ├── columns: col0:1!null col1:2 col3:3 col4:4!null rowid:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      ├── scan tab4
+      │    └── columns: col0:1 col1:2 col3:3 col4:4 rowid:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      └── filters
+           └── or
+                ├── (col0:1 <= 0) AND (col4:4 <= 5.38)
+                └── and
+                     ├── any: eq
+                     │    ├── project
+                     │    │    ├── columns: col1:9!null
+                     │    │    └── select
+                     │    │         ├── columns: col0:8 col1:9!null col3:10 col4:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+                     │    │         ├── scan tab4
+                     │    │         │    └── columns: col0:8 col1:9 col3:10 col4:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+                     │    │         └── filters
+                     │    │              └── col1:9 > 8.27
+                     │    └── col4:4
+                     └── (col3:3 <= 5) AND ((col3:3 >= 7) AND (col3:3 <= 9))
+
+# Multiple subqueries in same projection list.
+build
+SELECT (SELECT 1 a), (SELECT 2 b)
+----
+project
+ ├── columns: a:3 b:4
+ ├── values
+ │    └── ()
+ └── projections
+      ├── subquery [as=a:3]
+      │    └── max1-row
+      │         ├── columns: a:1!null
+      │         └── project
+      │              ├── columns: a:1!null
+      │              ├── values
+      │              │    └── ()
+      │              └── projections
+      │                   └── 1 [as=a:1]
+      └── subquery [as=b:4]
+           └── max1-row
+                ├── columns: b:2!null
+                └── project
+                     ├── columns: b:2!null
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── 2 [as=b:2]
+
+# Reuse duplicate subquery columns.
+build
+SELECT (SELECT 1 a), (SELECT a FROM abc), (SELECT 1 a), (SELECT a FROM abc)
+----
+project
+ ├── columns: a:13 a:14 a:13 a:14
+ ├── values
+ │    └── ()
+ └── projections
+      ├── subquery [as=a:13]
+      │    └── max1-row
+      │         ├── columns: a:1!null
+      │         └── project
+      │              ├── columns: a:1!null
+      │              ├── values
+      │              │    └── ()
+      │              └── projections
+      │                   └── 1 [as=a:1]
+      └── subquery [as=a:14]
+           └── max1-row
+                ├── columns: abc.a:2!null
+                └── project
+                     ├── columns: abc.a:2!null
+                     └── scan abc
+                          └── columns: abc.a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+
+# Multiple nested subqueries in same column list.
+build
+SELECT (SELECT (SELECT 1 AS x) AS  a) AS r, (SELECT (SELECT 1 AS x) AS a) AS s, (SELECT 1 AS x) AS t
+----
+project
+ ├── columns: r:6 s:6 t:7
+ ├── values
+ │    └── ()
+ └── projections
+      ├── subquery [as=r:6]
+      │    └── max1-row
+      │         ├── columns: a:2
+      │         └── project
+      │              ├── columns: a:2
+      │              ├── values
+      │              │    └── ()
+      │              └── projections
+      │                   └── subquery [as=a:2]
+      │                        └── max1-row
+      │                             ├── columns: x:1!null
+      │                             └── project
+      │                                  ├── columns: x:1!null
+      │                                  ├── values
+      │                                  │    └── ()
+      │                                  └── projections
+      │                                       └── 1 [as=x:1]
+      └── subquery [as=t:7]
+           └── max1-row
+                ├── columns: x:5!null
+                └── project
+                     ├── columns: x:5!null
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── 1 [as=x:5]
+
+# Test that the source name is found correctly in the subquery.
+build
+SELECT (SELECT akv.k) FROM kv akv
+----
+project
+ ├── columns: k:6
+ ├── scan kv [as=akv]
+ │    └── columns: akv.k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── subquery [as=k:6]
+           └── max1-row
+                ├── columns: k:5
+                └── project
+                     ├── columns: k:5
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── akv.k:1 [as=k:5]
+
+exec-ddl
+CREATE TABLE db1.kv (k INT PRIMARY KEY, v INT)
+----
+
+build fully-qualify-names
+SELECT (SELECT t.kv.k) FROM db1.kv, kv
+----
+project
+ ├── columns: k:10
+ ├── inner-join (cross)
+ │    ├── columns: db1.public.kv.k:1!null db1.public.kv.v:2 db1.public.kv.crdb_internal_mvcc_timestamp:3 db1.public.kv.tableoid:4 t.public.kv.k:5!null t.public.kv.v:6 t.public.kv.crdb_internal_mvcc_timestamp:7 t.public.kv.tableoid:8
+ │    ├── scan db1.public.kv
+ │    │    └── columns: db1.public.kv.k:1!null db1.public.kv.v:2 db1.public.kv.crdb_internal_mvcc_timestamp:3 db1.public.kv.tableoid:4
+ │    ├── scan t.public.kv
+ │    │    └── columns: t.public.kv.k:5!null t.public.kv.v:6 t.public.kv.crdb_internal_mvcc_timestamp:7 t.public.kv.tableoid:8
+ │    └── filters (true)
+ └── projections
+      └── subquery [as=k:10]
+           └── max1-row
+                ├── columns: k:9
+                └── project
+                     ├── columns: k:9
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── t.public.kv.k:5 [as=k:9]
+
+# Ambiguity in parent scope.
+build fully-qualify-names
+SELECT (SELECT kv.k) FROM db1.kv, kv
+----
+error (42P09): ambiguous source name: "kv"
+
+# Name not found after searching multiple scopes.
+build fully-qualify-names
+SELECT (SELECT kv1.k) FROM db1.kv, kv
+----
+error (42P01): no data source matches prefix: kv1 in this context
+
+build fully-qualify-names
+SELECT (SELECT kv1.k) FROM db1.kv AS kv1, kv
+----
+project
+ ├── columns: k:10
+ ├── inner-join (cross)
+ │    ├── columns: db1.public.kv.k:1!null db1.public.kv.v:2 db1.public.kv.crdb_internal_mvcc_timestamp:3 db1.public.kv.tableoid:4 t.public.kv.k:5!null t.public.kv.v:6 t.public.kv.crdb_internal_mvcc_timestamp:7 t.public.kv.tableoid:8
+ │    ├── scan db1.public.kv [as=kv1]
+ │    │    └── columns: db1.public.kv.k:1!null db1.public.kv.v:2 db1.public.kv.crdb_internal_mvcc_timestamp:3 db1.public.kv.tableoid:4
+ │    ├── scan t.public.kv
+ │    │    └── columns: t.public.kv.k:5!null t.public.kv.v:6 t.public.kv.crdb_internal_mvcc_timestamp:7 t.public.kv.tableoid:8
+ │    └── filters (true)
+ └── projections
+      └── subquery [as=k:10]
+           └── max1-row
+                ├── columns: k:9
+                └── project
+                     ├── columns: k:9
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── db1.public.kv.k:1 [as=k:9]
+
+# Check that the inner kv is chosen when there are matching names in both
+# scopes.
+build fully-qualify-names
+SELECT (SELECT kv.k FROM db1.kv) FROM kv
+----
+project
+ ├── columns: k:9
+ ├── scan t.public.kv
+ │    └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.crdb_internal_mvcc_timestamp:3 t.public.kv.tableoid:4
+ └── projections
+      └── subquery [as=k:9]
+           └── max1-row
+                ├── columns: db1.public.kv.k:5!null
+                └── project
+                     ├── columns: db1.public.kv.k:5!null
+                     └── scan db1.public.kv
+                          └── columns: db1.public.kv.k:5!null db1.public.kv.v:6 db1.public.kv.crdb_internal_mvcc_timestamp:7 db1.public.kv.tableoid:8
+
+# 2 nested scopes, mixed scope references.
+build fully-qualify-names
+SELECT (SELECT (SELECT t.kv.k + k AS r) FROM db1.kv) FROM kv
+----
+project
+ ├── columns: r:11
+ ├── scan t.public.kv
+ │    └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.crdb_internal_mvcc_timestamp:3 t.public.kv.tableoid:4
+ └── projections
+      └── subquery [as=r:11]
+           └── max1-row
+                ├── columns: r:10
+                └── project
+                     ├── columns: r:10
+                     ├── scan db1.public.kv
+                     │    └── columns: db1.public.kv.k:5!null db1.public.kv.v:6 db1.public.kv.crdb_internal_mvcc_timestamp:7 db1.public.kv.tableoid:8
+                     └── projections
+                          └── subquery [as=r:10]
+                               └── max1-row
+                                    ├── columns: r:9
+                                    └── project
+                                         ├── columns: r:9
+                                         ├── values
+                                         │    └── ()
+                                         └── projections
+                                              └── t.public.kv.k:1 + db1.public.kv.k:5 [as=r:9]
+
+build
+SELECT (SELECT k FROM kv ORDER BY v)
+----
+project
+ ├── columns: k:5
+ ├── values
+ │    └── ()
+ └── projections
+      └── subquery [as=k:5]
+           └── max1-row
+                ├── columns: kv.k:1!null
+                └── project
+                     ├── columns: kv.k:1!null
+                     └── project
+                          ├── columns: kv.k:1!null v:2
+                          └── scan kv
+                               └── columns: kv.k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+exec-ddl
+CREATE TABLE t1 (a INT, b INT)
+----
+
+exec-ddl
+CREATE TABLE t2 (a INT, b INT)
+----
+
+exec-ddl
+CREATE TABLE t3 (a INT, b INT)
+----
+
+build
+SELECT (SELECT (SELECT DISTINCT t3.a FROM t1) FROM t2) FROM t3
+----
+project
+ ├── columns: a:18
+ ├── scan t3
+ │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.crdb_internal_mvcc_timestamp:4 t3.tableoid:5
+ └── projections
+      └── subquery [as=a:18]
+           └── max1-row
+                ├── columns: a:17
+                └── project
+                     ├── columns: a:17
+                     ├── scan t2
+                     │    └── columns: t2.a:6 t2.b:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+                     └── projections
+                          └── subquery [as=a:17]
+                               └── max1-row
+                                    ├── columns: a:16
+                                    └── distinct-on
+                                         ├── columns: a:16
+                                         ├── grouping columns: a:16
+                                         └── project
+                                              ├── columns: a:16
+                                              ├── scan t1
+                                              │    └── columns: t1.a:11 t1.b:12 t1.rowid:13!null t1.crdb_internal_mvcc_timestamp:14 t1.tableoid:15
+                                              └── projections
+                                                   └── t3.a:1 [as=a:16]
+
+build
+SELECT (SELECT (SELECT count(*) FROM t1 GROUP BY t3.a) FROM t2) FROM t3
+----
+project
+ ├── columns: count:19
+ ├── scan t3
+ │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.crdb_internal_mvcc_timestamp:4 t3.tableoid:5
+ └── projections
+      └── subquery [as=count:19]
+           └── max1-row
+                ├── columns: count:18
+                └── project
+                     ├── columns: count:18
+                     ├── scan t2
+                     │    └── columns: t2.a:6 t2.b:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+                     └── projections
+                          └── subquery [as=count:18]
+                               └── max1-row
+                                    ├── columns: count_rows:16!null
+                                    └── project
+                                         ├── columns: count_rows:16!null
+                                         └── group-by (hash)
+                                              ├── columns: count_rows:16!null a:17
+                                              ├── grouping columns: a:17
+                                              ├── project
+                                              │    ├── columns: a:17
+                                              │    ├── scan t1
+                                              │    │    └── columns: t1.a:11 t1.b:12 t1.rowid:13!null t1.crdb_internal_mvcc_timestamp:14 t1.tableoid:15
+                                              │    └── projections
+                                              │         └── t3.a:1 [as=a:17]
+                                              └── aggregations
+                                                   └── count-rows [as=count_rows:16]
+
+build
+SELECT (SELECT (SELECT t2.a + t3.a AS x FROM t1 GROUP BY t2.a + t3.a) AS y FROM t2) AS z FROM t3
+----
+project
+ ├── columns: z:18
+ ├── scan t3
+ │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.crdb_internal_mvcc_timestamp:4 t3.tableoid:5
+ └── projections
+      └── subquery [as=z:18]
+           └── max1-row
+                ├── columns: y:17
+                └── project
+                     ├── columns: y:17
+                     ├── scan t2
+                     │    └── columns: t2.a:6 t2.b:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+                     └── projections
+                          └── subquery [as=y:17]
+                               └── max1-row
+                                    ├── columns: column16:16
+                                    └── group-by (hash)
+                                         ├── columns: column16:16
+                                         ├── grouping columns: column16:16
+                                         └── project
+                                              ├── columns: column16:16
+                                              ├── scan t1
+                                              │    └── columns: t1.a:11 t1.b:12 t1.rowid:13!null t1.crdb_internal_mvcc_timestamp:14 t1.tableoid:15
+                                              └── projections
+                                                   └── t2.a:6 + t3.a:1 [as=column16:16]
+
+build
+SELECT (SELECT (SELECT t2.a + t3.a AS r FROM t1 GROUP BY t2.a, t3.a HAVING t2.a > t3.a) FROM t2) FROM t3
+----
+project
+ ├── columns: r:20
+ ├── scan t3
+ │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.crdb_internal_mvcc_timestamp:4 t3.tableoid:5
+ └── projections
+      └── subquery [as=r:20]
+           └── max1-row
+                ├── columns: r:19
+                └── project
+                     ├── columns: r:19
+                     ├── scan t2
+                     │    └── columns: t2.a:6 t2.b:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+                     └── projections
+                          └── subquery [as=r:19]
+                               └── max1-row
+                                    ├── columns: r:18!null
+                                    └── project
+                                         ├── columns: r:18!null
+                                         ├── select
+                                         │    ├── columns: a:16!null a:17!null
+                                         │    ├── group-by (hash)
+                                         │    │    ├── columns: a:16 a:17
+                                         │    │    ├── grouping columns: a:16 a:17
+                                         │    │    └── project
+                                         │    │         ├── columns: a:16 a:17
+                                         │    │         ├── scan t1
+                                         │    │         │    └── columns: t1.a:11 t1.b:12 t1.rowid:13!null t1.crdb_internal_mvcc_timestamp:14 t1.tableoid:15
+                                         │    │         └── projections
+                                         │    │              ├── t2.a:6 [as=a:16]
+                                         │    │              └── t3.a:1 [as=a:17]
+                                         │    └── filters
+                                         │         └── a:16 > a:17
+                                         └── projections
+                                              └── a:16 + a:17 [as=r:18]
+
+build
+SELECT (SELECT ARRAY[count(*), t1.a, t2.a] FROM t1 GROUP BY t1.a, t2.a HAVING t2.a > 5) FROM t2
+----
+project
+ ├── columns: array:14
+ ├── scan t2
+ │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null t2.crdb_internal_mvcc_timestamp:4 t2.tableoid:5
+ └── projections
+      └── subquery [as=array:14]
+           └── max1-row
+                ├── columns: array:13
+                └── project
+                     ├── columns: array:13
+                     ├── select
+                     │    ├── columns: t1.a:6 count_rows:11!null a:12!null
+                     │    ├── group-by (hash)
+                     │    │    ├── columns: t1.a:6 count_rows:11!null a:12
+                     │    │    ├── grouping columns: t1.a:6 a:12
+                     │    │    ├── project
+                     │    │    │    ├── columns: a:12 t1.a:6
+                     │    │    │    ├── scan t1
+                     │    │    │    │    └── columns: t1.a:6 t1.b:7 t1.rowid:8!null t1.crdb_internal_mvcc_timestamp:9 t1.tableoid:10
+                     │    │    │    └── projections
+                     │    │    │         └── t2.a:1 [as=a:12]
+                     │    │    └── aggregations
+                     │    │         └── count-rows [as=count_rows:11]
+                     │    └── filters
+                     │         └── a:12 > 5
+                     └── projections
+                          └── ARRAY[count_rows:11, t1.a:6, a:12] [as=array:13]
+
+build
+SELECT (SELECT (SELECT max(t3.a) / min(t3.a) AS r FROM t1 GROUP BY t2.a) FROM t2) FROM t3
+----
+project
+ ├── columns: r:23
+ ├── scalar-group-by
+ │    ├── columns: max:17 min:19
+ │    ├── project
+ │    │    ├── columns: a:16 a:18
+ │    │    ├── scan t3
+ │    │    │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.crdb_internal_mvcc_timestamp:4 t3.tableoid:5
+ │    │    └── projections
+ │    │         ├── t3.a:1 [as=a:16]
+ │    │         └── t3.a:1 [as=a:18]
+ │    └── aggregations
+ │         ├── max [as=max:17]
+ │         │    └── a:16
+ │         └── min [as=min:19]
+ │              └── a:18
+ └── projections
+      └── subquery [as=r:23]
+           └── max1-row
+                ├── columns: r:22
+                └── project
+                     ├── columns: r:22
+                     ├── scan t2
+                     │    └── columns: t2.a:6 t2.b:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+                     └── projections
+                          └── subquery [as=r:22]
+                               └── max1-row
+                                    ├── columns: r:21
+                                    └── project
+                                         ├── columns: r:21
+                                         ├── group-by (hash)
+                                         │    ├── columns: a:20
+                                         │    ├── grouping columns: a:20
+                                         │    └── project
+                                         │         ├── columns: a:20
+                                         │         ├── scan t1
+                                         │         │    └── columns: t1.a:11 t1.b:12 t1.rowid:13!null t1.crdb_internal_mvcc_timestamp:14 t1.tableoid:15
+                                         │         └── projections
+                                         │              └── t2.a:6 [as=a:20]
+                                         └── projections
+                                              └── max:17 / min:19 [as=r:21]
+
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+----
+
+# Regression test for #27330. Ensure that the subquery only returns one column
+# and is correctly typed.
+build
+SELECT *
+FROM a
+WHERE 'bar'=(SELECT max(s) FROM a GROUP BY i ORDER BY i LIMIT 1)
+----
+project
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+      ├── scan a
+      │    └── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+      └── filters
+           └── eq
+                ├── 'bar'
+                └── subquery
+                     └── max1-row
+                          ├── columns: max:15
+                          └── project
+                               ├── columns: max:15
+                               └── limit
+                                    ├── columns: i:9 max:15
+                                    ├── internal-ordering: +9
+                                    ├── sort
+                                    │    ├── columns: i:9 max:15
+                                    │    ├── ordering: +9
+                                    │    ├── limit hint: 1.00
+                                    │    └── group-by (hash)
+                                    │         ├── columns: i:9 max:15
+                                    │         ├── grouping columns: i:9
+                                    │         ├── project
+                                    │         │    ├── columns: i:9 s:11
+                                    │         │    └── scan a
+                                    │         │         └── columns: k:8!null i:9 f:10 s:11 j:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+                                    │         └── aggregations
+                                    │              └── max [as=max:15]
+                                    │                   └── s:11
+                                    └── 1
+
+exec-ddl
+CREATE TABLE t (a string)
+----
+
+exec-ddl
+CREATE TABLE u (b string)
+----
+
+# Regression test for #27846. Ensure that an aggregate combined with ANY does
+# not cause a panic.
+build
+SELECT max(a) FROM t HAVING max(a) < ANY(SELECT b FROM u)
+----
+select
+ ├── columns: max:5
+ ├── scalar-group-by
+ │    ├── columns: max:5
+ │    ├── project
+ │    │    ├── columns: a:1
+ │    │    └── scan t
+ │    │         └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+ │    └── aggregations
+ │         └── max [as=max:5]
+ │              └── a:1
+ └── filters
+      └── any: lt
+           ├── project
+           │    ├── columns: b:6
+           │    └── scan u
+           │         └── columns: b:6 u.rowid:7!null u.crdb_internal_mvcc_timestamp:8 u.tableoid:9
+           └── max:5
+
+build
+SELECT min(a) IN (SELECT b FROM u) FROM t
+----
+project
+ ├── columns: "?column?":10
+ ├── scalar-group-by
+ │    ├── columns: min:5
+ │    ├── project
+ │    │    ├── columns: a:1
+ │    │    └── scan t
+ │    │         └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+ │    └── aggregations
+ │         └── min [as=min:5]
+ │              └── a:1
+ └── projections
+      └── any: eq [as="?column?":10]
+           ├── project
+           │    ├── columns: b:6
+           │    └── scan u
+           │         └── columns: b:6 u.rowid:7!null u.crdb_internal_mvcc_timestamp:8 u.tableoid:9
+           └── min:5
+
+# Regression test for #28240. Make sure that the tuple labels are stripped from
+# the subquery.
+build
+SELECT (1, 2, 3) IN (SELECT 1, 2, 3)
+----
+project
+ ├── columns: "?column?":5
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as="?column?":5]
+           ├── project
+           │    ├── columns: column4:4!null
+           │    ├── project
+           │    │    ├── columns: "?column?":1!null "?column?":2!null "?column?":3!null
+           │    │    ├── values
+           │    │    │    └── ()
+           │    │    └── projections
+           │    │         ├── 1 [as="?column?":1]
+           │    │         ├── 2 [as="?column?":2]
+           │    │         └── 3 [as="?column?":3]
+           │    └── projections
+           │         └── ("?column?":1, "?column?":2, "?column?":3) [as=column4:4]
+           └── (1, 2, 3)
+
+# Test aggregates at different scoping levels.
+build
+SELECT (SELECT (SELECT max(t3.a) FROM t1) FROM t2) FROM t3
+----
+project
+ ├── columns: max:20
+ ├── scalar-group-by
+ │    ├── columns: max:17
+ │    ├── project
+ │    │    ├── columns: a:16
+ │    │    ├── scan t3
+ │    │    │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.crdb_internal_mvcc_timestamp:4 t3.tableoid:5
+ │    │    └── projections
+ │    │         └── t3.a:1 [as=a:16]
+ │    └── aggregations
+ │         └── max [as=max:17]
+ │              └── a:16
+ └── projections
+      └── subquery [as=max:20]
+           └── max1-row
+                ├── columns: max:19
+                └── project
+                     ├── columns: max:19
+                     ├── scan t2
+                     │    └── columns: t2.a:6 t2.b:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+                     └── projections
+                          └── subquery [as=max:19]
+                               └── max1-row
+                                    ├── columns: max:18
+                                    └── project
+                                         ├── columns: max:18
+                                         ├── scan t1
+                                         │    └── columns: t1.a:11 t1.b:12 t1.rowid:13!null t1.crdb_internal_mvcc_timestamp:14 t1.tableoid:15
+                                         └── projections
+                                              └── max:17 [as=max:18]
+
+build
+SELECT (
+        SELECT (SELECT row(max(t1.a), max(t2.a), max(t1.a + t3.a)) FROM t1)
+        FROM t2
+       )
+FROM t3;
+----
+project
+ ├── columns: row:23
+ ├── scan t3
+ │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.crdb_internal_mvcc_timestamp:4 t3.tableoid:5
+ └── projections
+      └── subquery [as=row:23]
+           └── max1-row
+                ├── columns: row:22
+                └── project
+                     ├── columns: row:22
+                     ├── scalar-group-by
+                     │    ├── columns: max:18
+                     │    ├── project
+                     │    │    ├── columns: a:17
+                     │    │    ├── scan t2
+                     │    │    │    └── columns: t2.a:6 t2.b:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+                     │    │    └── projections
+                     │    │         └── t2.a:6 [as=a:17]
+                     │    └── aggregations
+                     │         └── max [as=max:18]
+                     │              └── a:17
+                     └── projections
+                          └── subquery [as=row:22]
+                               └── max1-row
+                                    ├── columns: row:21
+                                    └── project
+                                         ├── columns: row:21
+                                         ├── scalar-group-by
+                                         │    ├── columns: max:16 max:20
+                                         │    ├── project
+                                         │    │    ├── columns: column19:19 t1.a:11
+                                         │    │    ├── scan t1
+                                         │    │    │    └── columns: t1.a:11 t1.b:12 t1.rowid:13!null t1.crdb_internal_mvcc_timestamp:14 t1.tableoid:15
+                                         │    │    └── projections
+                                         │    │         └── t1.a:11 + t3.a:1 [as=column19:19]
+                                         │    └── aggregations
+                                         │         ├── max [as=max:16]
+                                         │         │    └── t1.a:11
+                                         │         └── max [as=max:20]
+                                         │              └── column19:19
+                                         └── projections
+                                              └── (max:16, max:18, max:20) [as=row:21]
+
+build
+SELECT (SELECT row(max(t1.a), max(t2.a), max(t1.a + t2.a)) FROM t1) FROM t2;
+----
+error (42803): subquery uses ungrouped column "a" from outer query
+
+build
+SELECT (SELECT row(max(t1.a), max(t2.a), max(t1.a + t2.a)) FROM t1) FROM t2 GROUP BY t2.a;
+----
+project
+ ├── columns: row:17
+ ├── group-by (hash)
+ │    ├── columns: t2.a:1 max:13
+ │    ├── grouping columns: t2.a:1
+ │    ├── project
+ │    │    ├── columns: a:12 t2.a:1
+ │    │    ├── scan t2
+ │    │    │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null t2.crdb_internal_mvcc_timestamp:4 t2.tableoid:5
+ │    │    └── projections
+ │    │         └── t2.a:1 [as=a:12]
+ │    └── aggregations
+ │         └── max [as=max:13]
+ │              └── a:12
+ └── projections
+      └── subquery [as=row:17]
+           └── max1-row
+                ├── columns: row:16
+                └── project
+                     ├── columns: row:16
+                     ├── scalar-group-by
+                     │    ├── columns: max:11 max:15
+                     │    ├── project
+                     │    │    ├── columns: column14:14 t1.a:6
+                     │    │    ├── scan t1
+                     │    │    │    └── columns: t1.a:6 t1.b:7 t1.rowid:8!null t1.crdb_internal_mvcc_timestamp:9 t1.tableoid:10
+                     │    │    └── projections
+                     │    │         └── t1.a:6 + t2.a:1 [as=column14:14]
+                     │    └── aggregations
+                     │         ├── max [as=max:11]
+                     │         │    └── t1.a:6
+                     │         └── max [as=max:15]
+                     │              └── column14:14
+                     └── projections
+                          └── (max:11, max:13, max:15) [as=row:16]
+
+build
+SELECT
+    (SELECT max(t1.a) FROM t1 GROUP BY t2.b),
+    (SELECT max(t2.a) FROM t1 GROUP BY t2.b)
+FROM
+    t2;
+----
+error (42803): subquery uses ungrouped column "b" from outer query
+
+build
+SELECT
+    ARRAY (SELECT max(t1.a) FROM t1 GROUP BY t2.b),
+    ARRAY (SELECT max(t2.a) FROM t1 GROUP BY t2.b)
+FROM
+    t2;
+----
+error (42803): subquery uses ungrouped column "b" from outer query
+
+build
+SELECT
+    5 IN (SELECT max(t1.a) FROM t1 GROUP BY t2.b),
+    100 < ANY (SELECT max(t2.a) FROM t1 GROUP BY t2.b)
+FROM
+    t2;
+----
+error (42803): subquery uses ungrouped column "b" from outer query
+
+build
+SELECT
+    (SELECT max(t1.a) FROM t1 GROUP BY t1.b),
+    (SELECT max(t2.a) FROM t1 GROUP BY t1.b)
+FROM
+    t2;
+----
+project
+ ├── columns: max:20 max:21
+ ├── scalar-group-by
+ │    ├── columns: max:18
+ │    ├── project
+ │    │    ├── columns: a:17
+ │    │    ├── scan t2
+ │    │    │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null t2.crdb_internal_mvcc_timestamp:4 t2.tableoid:5
+ │    │    └── projections
+ │    │         └── t2.a:1 [as=a:17]
+ │    └── aggregations
+ │         └── max [as=max:18]
+ │              └── a:17
+ └── projections
+      ├── subquery [as=max:20]
+      │    └── max1-row
+      │         ├── columns: max:11
+      │         └── project
+      │              ├── columns: max:11
+      │              └── group-by (hash)
+      │                   ├── columns: t1.b:7 max:11
+      │                   ├── grouping columns: t1.b:7
+      │                   ├── project
+      │                   │    ├── columns: t1.a:6 t1.b:7
+      │                   │    └── scan t1
+      │                   │         └── columns: t1.a:6 t1.b:7 t1.rowid:8!null t1.crdb_internal_mvcc_timestamp:9 t1.tableoid:10
+      │                   └── aggregations
+      │                        └── max [as=max:11]
+      │                             └── t1.a:6
+      └── subquery [as=max:21]
+           └── max1-row
+                ├── columns: max:19
+                └── project
+                     ├── columns: max:19
+                     ├── group-by (hash)
+                     │    ├── columns: t1.b:13
+                     │    ├── grouping columns: t1.b:13
+                     │    └── project
+                     │         ├── columns: t1.b:13
+                     │         └── scan t1
+                     │              └── columns: t1.a:12 t1.b:13 t1.rowid:14!null t1.crdb_internal_mvcc_timestamp:15 t1.tableoid:16
+                     └── projections
+                          └── max:18 [as=max:19]
+
+build
+SELECT
+    ARRAY (SELECT max(t1.a) FROM t1),
+    ARRAY (SELECT max(t2.a) FROM t1)
+FROM
+    t2
+GROUP BY t2.b;
+----
+project
+ ├── columns: array:20 array:21
+ ├── group-by (hash)
+ │    ├── columns: t2.b:2 max:18
+ │    ├── grouping columns: t2.b:2
+ │    ├── project
+ │    │    ├── columns: a:17 t2.b:2
+ │    │    ├── scan t2
+ │    │    │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null t2.crdb_internal_mvcc_timestamp:4 t2.tableoid:5
+ │    │    └── projections
+ │    │         └── t2.a:1 [as=a:17]
+ │    └── aggregations
+ │         └── max [as=max:18]
+ │              └── a:17
+ └── projections
+      ├── array-flatten [as=array:20]
+      │    └── scalar-group-by
+      │         ├── columns: max:11
+      │         ├── project
+      │         │    ├── columns: t1.a:6
+      │         │    └── scan t1
+      │         │         └── columns: t1.a:6 t1.b:7 t1.rowid:8!null t1.crdb_internal_mvcc_timestamp:9 t1.tableoid:10
+      │         └── aggregations
+      │              └── max [as=max:11]
+      │                   └── t1.a:6
+      └── array-flatten [as=array:21]
+           └── project
+                ├── columns: max:19
+                ├── scan t1
+                │    └── columns: t1.a:12 t1.b:13 t1.rowid:14!null t1.crdb_internal_mvcc_timestamp:15 t1.tableoid:16
+                └── projections
+                     └── max:18 [as=max:19]
+
+build
+SELECT
+    ARRAY (SELECT max(t1.a) FROM t1 GROUP BY t2.b),
+    ARRAY (SELECT max(t2.a) FROM t1 GROUP BY t2.b),
+    ARRAY (SELECT max(t1.a + t2.a) FROM t1 GROUP BY t2.b)
+FROM
+    t2
+GROUP BY t2.a, t2.b;
+----
+project
+ ├── columns: array:30 array:31 array:32
+ ├── group-by (hash)
+ │    ├── columns: t2.a:1 t2.b:2 max:19
+ │    ├── grouping columns: t2.a:1 t2.b:2
+ │    ├── project
+ │    │    ├── columns: a:18 t2.a:1 t2.b:2
+ │    │    ├── scan t2
+ │    │    │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null t2.crdb_internal_mvcc_timestamp:4 t2.tableoid:5
+ │    │    └── projections
+ │    │         └── t2.a:1 [as=a:18]
+ │    └── aggregations
+ │         └── max [as=max:19]
+ │              └── a:18
+ └── projections
+      ├── array-flatten [as=array:30]
+      │    └── project
+      │         ├── columns: max:11
+      │         └── group-by (hash)
+      │              ├── columns: max:11 b:12
+      │              ├── grouping columns: b:12
+      │              ├── project
+      │              │    ├── columns: b:12 t1.a:6
+      │              │    ├── scan t1
+      │              │    │    └── columns: t1.a:6 t1.b:7 t1.rowid:8!null t1.crdb_internal_mvcc_timestamp:9 t1.tableoid:10
+      │              │    └── projections
+      │              │         └── t2.b:2 [as=b:12]
+      │              └── aggregations
+      │                   └── max [as=max:11]
+      │                        └── t1.a:6
+      ├── array-flatten [as=array:31]
+      │    └── project
+      │         ├── columns: max:21
+      │         ├── group-by (hash)
+      │         │    ├── columns: b:20
+      │         │    ├── grouping columns: b:20
+      │         │    └── project
+      │         │         ├── columns: b:20
+      │         │         ├── scan t1
+      │         │         │    └── columns: t1.a:13 t1.b:14 t1.rowid:15!null t1.crdb_internal_mvcc_timestamp:16 t1.tableoid:17
+      │         │         └── projections
+      │         │              └── t2.b:2 [as=b:20]
+      │         └── projections
+      │              └── max:19 [as=max:21]
+      └── array-flatten [as=array:32]
+           └── project
+                ├── columns: max:28
+                └── group-by (hash)
+                     ├── columns: max:28 b:29
+                     ├── grouping columns: b:29
+                     ├── project
+                     │    ├── columns: column27:27 b:29
+                     │    ├── scan t1
+                     │    │    └── columns: t1.a:22 t1.b:23 t1.rowid:24!null t1.crdb_internal_mvcc_timestamp:25 t1.tableoid:26
+                     │    └── projections
+                     │         ├── t1.a:22 + t2.a:1 [as=column27:27]
+                     │         └── t2.b:2 [as=b:29]
+                     └── aggregations
+                          └── max [as=max:28]
+                               └── column27:27
+
+build
+SELECT
+    (SELECT (SELECT (SELECT (max(t1.a * t2.a), max(t3.a)) FROM t1 GROUP BY t3.b) FROM t2))
+FROM
+    t3;
+----
+error (42803): subquery uses ungrouped column "b" from outer query
+
+build
+SELECT
+    (
+        SELECT
+            (t2.a < ALL (SELECT max((SELECT max(a) FROM t1 GROUP BY t3.b)) FROM t1), max(t3.a))
+        FROM
+            t2
+    )
+FROM
+    t3;
+----
+project
+ ├── columns: "?column?":29
+ ├── scalar-group-by
+ │    ├── columns: max:12 max:26
+ │    ├── project
+ │    │    ├── columns: a:11 column25:25
+ │    │    ├── scan t3
+ │    │    │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.crdb_internal_mvcc_timestamp:4 t3.tableoid:5
+ │    │    └── projections
+ │    │         ├── t3.a:1 [as=a:11]
+ │    │         └── subquery [as=column25:25]
+ │    │              └── max1-row
+ │    │                   ├── columns: max:23
+ │    │                   └── project
+ │    │                        ├── columns: max:23
+ │    │                        └── group-by (hash)
+ │    │                             ├── columns: max:23 b:24
+ │    │                             ├── grouping columns: b:24
+ │    │                             ├── project
+ │    │                             │    ├── columns: b:24 t1.a:18
+ │    │                             │    ├── scan t1
+ │    │                             │    │    └── columns: t1.a:18 t1.b:19 t1.rowid:20!null t1.crdb_internal_mvcc_timestamp:21 t1.tableoid:22
+ │    │                             │    └── projections
+ │    │                             │         └── t3.b:2 [as=b:24]
+ │    │                             └── aggregations
+ │    │                                  └── max [as=max:23]
+ │    │                                       └── t1.a:18
+ │    └── aggregations
+ │         ├── max [as=max:12]
+ │         │    └── a:11
+ │         └── max [as=max:26]
+ │              └── column25:25
+ └── projections
+      └── subquery [as="?column?":29]
+           └── max1-row
+                ├── columns: "?column?":28
+                └── project
+                     ├── columns: "?column?":28
+                     ├── scan t2
+                     │    └── columns: t2.a:6 t2.b:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+                     └── projections
+                          └── tuple [as="?column?":28]
+                               ├── not
+                               │    └── any: ge
+                               │         ├── project
+                               │         │    ├── columns: max:27
+                               │         │    ├── scan t1
+                               │         │    │    └── columns: t1.a:13 t1.b:14 t1.rowid:15!null t1.crdb_internal_mvcc_timestamp:16 t1.tableoid:17
+                               │         │    └── projections
+                               │         │         └── max:26 [as=max:27]
+                               │         └── t2.a:6
+                               └── max:12
+
+exec-ddl
+CREATE TABLE v (x INT)
+----
+
+exec-ddl
+CREATE TABLE w (y INT[])
+----
+
+# Regression test for #30191. Ensure ArrayFlatten returns correct type.
+build
+SELECT * FROM w WHERE y = ARRAY(SELECT x FROM v ORDER BY x)
+----
+project
+ ├── columns: y:1!null
+ └── select
+      ├── columns: y:1!null w.rowid:2!null w.crdb_internal_mvcc_timestamp:3 w.tableoid:4
+      ├── scan w
+      │    └── columns: y:1 w.rowid:2!null w.crdb_internal_mvcc_timestamp:3 w.tableoid:4
+      └── filters
+           └── eq
+                ├── y:1
+                └── array-flatten
+                     └── sort
+                          ├── columns: x:5
+                          ├── ordering: +5
+                          └── project
+                               ├── columns: x:5
+                               └── scan v
+                                    └── columns: x:5 v.rowid:6!null v.crdb_internal_mvcc_timestamp:7 v.tableoid:8
+
+# Regression test for #30424. Aggregate function in the WHERE subquery
+# is aggregated in the outer scope, so it's not allowed.
+build
+SELECT s FROM a WHERE (SELECT count(i) >= 100) GROUP BY s
+----
+error (42803): aggregate functions are not allowed in WHERE
+
+# Aggregate function in the WHERE subquery is aggregated in the subquery scope,
+# so it's allowed.
+build
+SELECT s FROM a WHERE (SELECT count(i) >= 100 FROM a) GROUP BY s
+----
+group-by (hash)
+ ├── columns: s:4
+ ├── grouping columns: s:4
+ └── project
+      ├── columns: s:4
+      └── select
+           ├── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+           ├── scan a
+           │    └── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+           └── filters
+                └── subquery
+                     └── max1-row
+                          ├── columns: "?column?":16!null
+                          └── project
+                               ├── columns: "?column?":16!null
+                               ├── scalar-group-by
+                               │    ├── columns: count:15!null
+                               │    ├── project
+                               │    │    ├── columns: i:9
+                               │    │    └── scan a
+                               │    │         └── columns: k:8!null i:9 f:10 s:11 j:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+                               │    └── aggregations
+                               │         └── count [as=count:15]
+                               │              └── i:9
+                               └── projections
+                                    └── count:15 >= 100 [as="?column?":16]
+
+exec-ddl
+CREATE TABLE xyzs (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z));
+----
+
+exec-ddl
+CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING);
+----
+
+# Regression test for #29114.
+build
+SELECT * FROM xyzs WHERE (SELECT sum(x) FROM (SELECT u FROM kuv) GROUP BY u) > 100;
+----
+error (42803): aggregate functions are not allowed in WHERE
+
+# Regression test for #37263.
+build
+SELECT 3::decimal IN (SELECT 1)
+----
+project
+ ├── columns: "?column?":2
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as="?column?":2]
+           ├── project
+           │    ├── columns: "?column?":1!null
+           │    ├── values
+           │    │    └── ()
+           │    └── projections
+           │         └── 1 [as="?column?":1]
+           └── 3
+
+build
+SELECT 3::decimal IN (SELECT 1::int)
+----
+error (22023): unsupported comparison operator: <decimal> IN <tuple{int}>
+
+# Regression test for #47467 - we weren't correctly identifying a.x as an outer column.
+build
+SELECT 1 FROM (VALUES (1)) AS a(x) HAVING (SELECT true FROM (VALUES (a.x)) AS b(y))
+----
+error (42803): subquery uses ungrouped column "x" from outer query
+
+build
+SELECT ((1, 2), (3, 4)) = ANY (VALUES (('foo', 'bar')))
+----
+error (22023): unsupported comparison operator: <tuple{tuple{int, int}, tuple{int, int}}> = ANY <tuple{tuple{string, string}}>
+
+# Regression test for #61229 - detect uncomparable tuple types.
+build
+SELECT (1, 1) = ANY (VALUES ('foo', 'bar'))
+----
+error (22023): unsupported comparison operator: <tuple{int, int}> = ANY <tuple{tuple{string AS column1, string AS column2}}>
+
+build
+SELECT ARRAY[1, 2] = ANY (VALUES (ARRAY['foo', 'bar']))
+----
+error (22023): unsupported comparison operator: <int[]> = ANY <tuple{string[]}>
+
+build
+SELECT (1, 1) = ANY (VALUES (1, 2, 3))
+----
+error (22023): unsupported comparison operator: <tuple{int, int}> = ANY <tuple{tuple{int AS column1, int AS column2, int AS column3}}>
+
+# Regression test for #95470. Ensure that using an alias for a data source does
+# not cause us to falsely conclude a subquery has outer columns.
+exec-ddl
+CREATE TABLE t95470 (a STRING)
+----
+
+exec-ddl
+CREATE VIEW v95470 (a) AS
+SELECT a FROM t95470, ROWS FROM (upper(a)) AS alias1
+----
+
+build
+SELECT count((SELECT a FROM v95470))
+----
+scalar-group-by
+ ├── columns: count:7!null
+ ├── project
+ │    ├── columns: column6:6
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── subquery [as=column6:6]
+ │              └── max1-row
+ │                   ├── columns: a:1
+ │                   └── project
+ │                        ├── columns: a:1
+ │                        └── inner-join-apply
+ │                             ├── columns: a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 upper:5
+ │                             ├── scan t95470
+ │                             │    └── columns: a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │                             ├── project-set
+ │                             │    ├── columns: upper:5
+ │                             │    ├── values
+ │                             │    │    └── ()
+ │                             │    └── zip
+ │                             │         └── upper(a:1)
+ │                             └── filters (true)
+ └── aggregations
+      └── count [as=count:7]
+           └── column6:6
+
+exec-ddl
+CREATE TABLE xy (x INT, y INT)
+----
+
+exec-ddl
+CREATE TABLE ab (a INT, b INT)
+----
+
+build
+SELECT * FROM ab WHERE (a, b) IN (SELECT x+1, y+1 FROM xy)
+----
+project
+ ├── columns: a:1 b:2
+ └── select
+      ├── columns: a:1 b:2 ab.rowid:3!null ab.crdb_internal_mvcc_timestamp:4 ab.tableoid:5
+      ├── scan ab
+      │    └── columns: a:1 b:2 ab.rowid:3!null ab.crdb_internal_mvcc_timestamp:4 ab.tableoid:5
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: column13:13
+                │    ├── project
+                │    │    ├── columns: "?column?":11 "?column?":12
+                │    │    ├── scan xy
+                │    │    │    └── columns: x:6 y:7 xy.rowid:8!null xy.crdb_internal_mvcc_timestamp:9 xy.tableoid:10
+                │    │    └── projections
+                │    │         ├── x:6 + 1 [as="?column?":11]
+                │    │         └── y:7 + 1 [as="?column?":12]
+                │    └── projections
+                │         └── ("?column?":11, "?column?":12) [as=column13:13]
+                └── (a:1, b:2)
+
+build
+SELECT * FROM ab WHERE ((a,b), (1, 1)) IN (SELECT (x+1, y+1), (x, y) FROM xy)
+----
+project
+ ├── columns: a:1 b:2
+ └── select
+      ├── columns: a:1 b:2 ab.rowid:3!null ab.crdb_internal_mvcc_timestamp:4 ab.tableoid:5
+      ├── scan ab
+      │    └── columns: a:1 b:2 ab.rowid:3!null ab.crdb_internal_mvcc_timestamp:4 ab.tableoid:5
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: column13:13
+                │    ├── project
+                │    │    ├── columns: "?column?":11 "?column?":12
+                │    │    ├── scan xy
+                │    │    │    └── columns: x:6 y:7 xy.rowid:8!null xy.crdb_internal_mvcc_timestamp:9 xy.tableoid:10
+                │    │    └── projections
+                │    │         ├── (x:6 + 1, y:7 + 1) [as="?column?":11]
+                │    │         └── (x:6, y:7) [as="?column?":12]
+                │    └── projections
+                │         └── ("?column?":11, "?column?":12) [as=column13:13]
+                └── ((a:1, b:2), (1, 1))
+
+build
+SELECT (SELECT 2, 2) IN (SELECT x+1, y+1 FROM xy)
+----
+project
+ ├── columns: "?column?":11
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as="?column?":11]
+           ├── project
+           │    ├── columns: column9:9
+           │    ├── project
+           │    │    ├── columns: "?column?":7 "?column?":8
+           │    │    ├── scan xy
+           │    │    │    └── columns: x:2 y:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           │    │    └── projections
+           │    │         ├── x:2 + 1 [as="?column?":7]
+           │    │         └── y:3 + 1 [as="?column?":8]
+           │    └── projections
+           │         └── ("?column?":7, "?column?":8) [as=column9:9]
+           └── subquery
+                └── max1-row
+                     ├── columns: column10:10!null
+                     └── project
+                          ├── columns: column10:10!null
+                          ├── project
+                          │    ├── columns: "?column?":1!null
+                          │    ├── values
+                          │    │    └── ()
+                          │    └── projections
+                          │         └── 2 [as="?column?":1]
+                          └── projections
+                               └── ("?column?":1, "?column?":1) [as=column10:10]

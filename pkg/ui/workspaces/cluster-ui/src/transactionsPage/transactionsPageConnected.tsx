@@ -1,0 +1,166 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
+import { Dispatch } from "redux";
+
+import { SqlStatsSortType } from "src/api/statementsApi";
+import { AppState } from "src/store";
+
+import { Filters } from "../queryFilter";
+import { actions as analyticsActions } from "../store/analytics";
+import {
+  actions as localStorageActions,
+  updateTxnsPageLimitAction,
+  updateTxnsPageReqSortAction,
+} from "../store/localStorage";
+import {
+  selectTxnsPageLimit,
+  selectTxnsPageReqSort,
+  selectTimeScale,
+} from "../store/utils/selectors";
+import { TimeScale } from "../timeScaleDropdown";
+
+import {
+  TransactionsPageStateProps,
+  TransactionsPageDispatchProps,
+} from "./transactionsPage";
+import {
+  selectTxnColumns,
+  selectSortSetting,
+  selectFilters,
+  selectSearch,
+  selectRequestTime,
+} from "./transactionsPage.selectors";
+import {
+  TransactionsPageRoot,
+  TransactionsPageRootProps,
+} from "./transactionsPageRoot";
+
+type StateProps = {
+  fingerprintsPageProps: TransactionsPageStateProps & RouteComponentProps;
+};
+
+type DispatchProps = {
+  fingerprintsPageProps: TransactionsPageDispatchProps;
+};
+
+export const TransactionsPageConnected = withRouter(
+  connect<
+    StateProps,
+    DispatchProps,
+    RouteComponentProps,
+    TransactionsPageRootProps,
+    AppState
+  >(
+    (state: AppState, props) => ({
+      fingerprintsPageProps: {
+        ...props,
+        columns: selectTxnColumns(state),
+        timeScale: selectTimeScale(state),
+        filters: selectFilters(state),
+        search: selectSearch(state),
+        sortSetting: selectSortSetting(state),
+        limit: selectTxnsPageLimit(state),
+        reqSortSetting: selectTxnsPageReqSort(state),
+        requestTime: selectRequestTime(state),
+      },
+    }),
+    (dispatch: Dispatch) => ({
+      fingerprintsPageProps: {
+        onTimeScaleChange: (ts: TimeScale) => {
+          dispatch(
+            localStorageActions.updateTimeScale({
+              value: ts,
+            }),
+          );
+        },
+        // We use `null` when the value was never set and it will show all columns.
+        // If the user modifies the selection and no columns are selected,
+        // the function will save the value as a blank space, otherwise
+        // it gets saved as `null`.
+        onColumnsChange: (selectedColumns: string[]) =>
+          dispatch(
+            localStorageActions.update({
+              key: "showColumns/TransactionPage",
+              value:
+                selectedColumns.length === 0 ? " " : selectedColumns.join(","),
+            }),
+          ),
+        onSortingChange: (
+          tableName: string,
+          columnName: string,
+          ascending: boolean,
+        ) => {
+          dispatch(
+            localStorageActions.update({
+              key: "sortSetting/TransactionsPage",
+              value: { columnTitle: columnName, ascending: ascending },
+            }),
+          );
+        },
+        onFilterChange: (value: Filters) => {
+          dispatch(
+            analyticsActions.track({
+              name: "Filter Clicked",
+              page: "Transactions",
+              filterName: "filters",
+              value: value.toString(),
+            }),
+          );
+          dispatch(
+            localStorageActions.update({
+              key: "filters/TransactionsPage",
+              value: value,
+            }),
+          );
+        },
+        onSearchComplete: (query: string) => {
+          dispatch(
+            analyticsActions.track({
+              name: "Keyword Searched",
+              page: "Transactions",
+            }),
+          );
+          dispatch(
+            localStorageActions.update({
+              key: "search/TransactionsPage",
+              value: query,
+            }),
+          );
+        },
+        onChangeLimit: (limit: number) =>
+          dispatch(updateTxnsPageLimitAction(limit)),
+        onChangeReqSort: (sort: SqlStatsSortType) =>
+          dispatch(updateTxnsPageReqSortAction(sort)),
+        onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) =>
+          dispatch(
+            analyticsActions.track({
+              name: "Apply Search Criteria",
+              page: "Transactions",
+              tsValue: ts.key,
+              limitValue: limit,
+              sortValue: sort,
+            }),
+          ),
+        onRequestTimeChange: (t: moment.Moment) => {
+          dispatch(
+            localStorageActions.update({
+              key: "requestTime/StatementsPage",
+              value: t,
+            }),
+          );
+        },
+      },
+    }),
+    (stateProps, dispatchProps) => ({
+      fingerprintsPageProps: {
+        ...stateProps.fingerprintsPageProps,
+        ...dispatchProps.fingerprintsPageProps,
+      },
+    }),
+  )(TransactionsPageRoot),
+);

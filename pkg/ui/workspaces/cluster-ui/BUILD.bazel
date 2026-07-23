@@ -1,0 +1,176 @@
+load("@aspect_rules_jest//jest:defs.bzl", "jest_test")
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+load("@aspect_rules_js//npm:defs.bzl", "npm_package")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//pkg/ui/workspaces/cluster-ui:eslint/package_json.bzl", eslint_bin = "bin")
+load("@npm//pkg/ui/workspaces/cluster-ui:typescript/package_json.bzl", typescript_bin = "bin")
+load("@npm//pkg/ui/workspaces/cluster-ui:webpack-cli/package_json.bzl", webpack_bin = "bin")
+
+npm_link_all_packages(name = "node_modules")
+
+WEBPACK_SRCS = glob(
+    [
+        "src/**",
+        "build/**",
+    ],
+    exclude = [
+        "src/**/*.stories.tsx",
+        "src/**/*.spec.tsx",
+        "src/**/*.spec.ts",
+    ],
+)
+
+ts_project(
+    name = "ts_project",
+    srcs = WEBPACK_SRCS,
+    declaration = True,
+    emit_declaration_only = True,
+    out_dir = "dist/types",
+    root_dir = "src",
+    supports_workers = 0,
+    tsconfig = "tsconfig.json",
+    validate = False,
+    deps = [":node_modules"],
+)
+
+webpack_bin.webpack_cli(
+    name = "webpack",
+    srcs = [
+        ".babelrc",
+        "tsconfig.json",
+        "webpack.config.js",
+    ] + WEBPACK_SRCS + [":node_modules"],
+    outs = [
+        "dist/js/main.js",
+        "dist/js/main.js.map",
+    ],
+    args = [
+        "--config",
+        "webpack.config.js",
+        "--env",
+        "is_bazel_build=true",
+        "--mode",
+        "production",
+    ],
+    chdir = package_name(),
+)
+
+js_library(
+    name = "cluster-ui-lib",
+    srcs = [
+        "package.json",
+        ":dist/js/main.js",
+        ":dist/js/main.js.map",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":ts_project",
+    ],
+)
+
+eslint_bin.eslint_test(
+    name = "eslint",
+    args = [
+        "--ext .ts",
+        "--ext .js",
+        "--ext .tsx",
+        "--ignore-path",
+        ".eslintignore",
+        "-c",
+        ".eslintrc.json",
+        "--format=codeframe",
+        "src",
+    ],
+    chdir = package_name(),
+    data = [
+        ".eslintignore",
+        ".eslintrc.json",
+        ".prettierignore",
+        "eslint-local-rules.js",
+        "prettier.config.js",
+        "tsconfig.json",
+        ":node_modules/@cockroachlabs/eslint-config",
+        ":node_modules/@typescript-eslint/eslint-plugin",
+        ":node_modules/@typescript-eslint/parser",
+        ":node_modules/eslint-config-prettier",
+        ":node_modules/eslint-formatter-codeframe",
+        ":node_modules/eslint-plugin-import",
+        ":node_modules/eslint-plugin-local-rules",
+        ":node_modules/eslint-plugin-prettier",
+        ":node_modules/eslint-plugin-react",
+        ":node_modules/eslint-plugin-react-hooks",
+        ":node_modules/prettier",
+        ":node_modules/typescript",
+    ] + glob([
+        "src/**/*.js",
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "build/eslint/**",
+    ]),
+)
+
+build_test(
+    # NB: Type-checking is done as part of building ts_project.
+    name = "typecheck",
+    targets = [
+        ":ts_project",
+    ],
+)
+
+test_suite(
+    name = "lint",
+    tests = [
+        ":eslint",
+        ":typecheck",
+    ],
+)
+
+jest_test(
+    name = "jest",
+    size = "enormous",
+    args = [
+        "--ci",
+    ],
+    chdir = package_name(),
+    config = ":jest.config.js",
+    data = glob([
+        ".jest/**",
+    ]) + glob(
+        ["src/**"],
+        exclude = [
+            "src/**/*.woff",
+            "src/**/*.woff2",
+        ],
+    ) + [
+        ".eslintignore",
+        ".eslintrc.json",
+        "babel.config.js",
+        "jest.config.js",
+        "package.json",
+        "tsconfig.json",
+        ":node_modules",
+    ],
+    exec_properties = {
+        "test.Pool": "large",
+    },
+    node_modules = ":node_modules",
+)
+
+npm_package(
+    name = "cluster-ui",
+    srcs = [
+        "package.json",
+        ":cluster-ui-lib",
+    ],
+    package = "@cockroachlabs/cluster-ui",
+    visibility = ["//visibility:public"],
+)
+
+# rules_js 2.x expects npm_package targets to be named 'pkg' by default
+alias(
+    name = "pkg",
+    actual = ":cluster-ui",
+    visibility = ["//visibility:public"],
+)

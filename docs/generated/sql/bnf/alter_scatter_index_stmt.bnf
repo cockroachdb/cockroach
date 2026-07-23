@@ -1,0 +1,3 @@
+alter_scatter_index_stmt ::=
+	'ALTER' 'INDEX' table_index_name 'SCATTER'
+	| 'ALTER' 'INDEX' table_index_name 'SCATTER' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')'

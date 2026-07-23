@@ -1,0 +1,65 @@
+send
+Query {"String": "DROP TABLE IF EXISTS unknown_test"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE unknown_test (i INT8, t TEXT, f FLOAT8)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# 'S' for Statement
+# ParameterFormatCodes = [0] for text format, [1] for binary format
+send
+Parse {"Name": "s1", "Query": "INSERT INTO unknown_test VALUES($1, $2, $3)", "ParameterOIDs":[705, 705, 705]}
+Describe {"ObjectType": "S", "Name": "s1"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [0,0,0], "Parameters": [{"text":"1"}, {"text":"one"}, {"text":"1.5"}]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[20,25,701]}
+{"Type":"NoData"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [1,1,1], "Parameters": [{"binary":"0000000000000004"}, {"binary":"46"}, {"binary": "bff3333333333333"}]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT * FROM unknown_test"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"i","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"t","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0},{"Name":"f","TableOID":0,"TableAttributeNumber":3,"DataTypeOID":701,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"one"},{"text":"1.5"}]}
+{"Type":"DataRow","Values":[{"text":"4"},{"text":"F"},{"text":"-1.2"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

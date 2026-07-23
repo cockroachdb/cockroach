@@ -1,0 +1,142 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package sqltelemetry
+
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+)
+
+var (
+	// CreateMultiRegionDatabaseCounter is to be incremented when a multi-region
+	// database is created.
+	CreateMultiRegionDatabaseCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.create_database",
+	)
+	// SetInitialPrimaryRegionCounter is to be incremented when
+	// a multi-region database is created using ALTER DATABASE ... PRIMARY KEY.
+	SetInitialPrimaryRegionCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.alter_database.set_primary_region.initial_multiregion",
+	)
+	// SwitchPrimaryRegionCounter is to be incremented when
+	// a multi-region database has its primary region changed.
+	SwitchPrimaryRegionCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.alter_database.set_primary_region.switch_primary_region",
+	)
+
+	// AlterDatabaseAddRegionCounter is to be incremented when a region is
+	// added to a database.
+	AlterDatabaseAddRegionCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.add_region",
+	)
+
+	// AlterDatabaseDropRegionCounter is to be incremented when a non-primary
+	// region is dropped from a database.
+	AlterDatabaseDropRegionCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.drop_region",
+	)
+
+	// AlterDatabaseDropPrimaryRegionCounter is to be incremented when a primary
+	// region is dropped from a database.
+	AlterDatabaseDropPrimaryRegionCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.drop_primary_region",
+	)
+
+	// ImportIntoMultiRegionDatabaseCounter is to be incremented when an import
+	// statement is run against a multi-region database.
+	ImportIntoMultiRegionDatabaseCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.import",
+	)
+
+	// OverrideMultiRegionZoneConfigurationUser is to be incremented when a
+	// multi-region zone configuration is overridden by the user.
+	OverrideMultiRegionZoneConfigurationUser = telemetry.GetCounterOnce(
+		"sql.multiregion.zone_configuration.override.user",
+	)
+
+	// OverrideMultiRegionDatabaseZoneConfigurationSystem is to be incremented
+	// when a multi-region database zone configuration is overridden by the
+	// system.
+	OverrideMultiRegionDatabaseZoneConfigurationSystem = telemetry.GetCounterOnce(
+		"sql.multiregion.zone_configuration.override.system.database",
+	)
+
+	// OverrideMultiRegionTableZoneConfigurationSystem is to be incremented when
+	// a multi-region table/index/partition zone configuration is overridden by
+	// the system.
+	OverrideMultiRegionTableZoneConfigurationSystem = telemetry.GetCounterOnce(
+		"sql.multiregion.zone_configuration.override.system.table",
+	)
+
+	// AlterDatabaseAddSuperRegionCounter is to be incremented when a super
+	// region is added to a database.
+	AlterDatabaseAddSuperRegionCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.add_super_region",
+	)
+
+	// AlterDatabaseDropSuperRegionCounter is to be incremented when a super
+	// region is dropped from a database.
+	AlterDatabaseDropSuperRegionCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.drop_super_region",
+	)
+
+	// AlterDatabaseAlterSuperRegionCounter is to be incremented when a super
+	// region's regions are altered.
+	AlterDatabaseAlterSuperRegionCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.alter_super_region",
+	)
+
+	// AlterDatabaseAlterSuperRegionSurvivalGoalCounter is to be incremented
+	// when a super region's survival goal is altered.
+	AlterDatabaseAlterSuperRegionSurvivalGoalCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.alter_super_region.survival_goal",
+	)
+)
+
+// CreateDatabaseSurvivalGoalCounter is to be incremented when the survival goal
+// on a multi-region database is being set.
+func CreateDatabaseSurvivalGoalCounter(goal string) telemetry.Counter {
+	return telemetry.GetCounter(fmt.Sprintf("sql.multiregion.create_database.survival_goal.%s", goal))
+}
+
+// AlterDatabaseSurvivalGoalCounter is to be incremented when the survival goal
+// on a multi-region database is being altered.
+func AlterDatabaseSurvivalGoalCounter(goal string) telemetry.Counter {
+	return telemetry.GetCounter(fmt.Sprintf("sql.multiregion.alter_database.survival_goal.%s", goal))
+}
+
+// CreateDatabasePlacementCounter is to be incremented when a placement policy
+// is set on a new multi-region database.
+func CreateDatabasePlacementCounter(placement string) telemetry.Counter {
+	return telemetry.GetCounter(
+		fmt.Sprintf("sql.multiregion.create_database.placement.%s", placement),
+	)
+}
+
+// AlterDatabasePlacementCounter is to be incremented when the placement policy
+// on a multi-region database is being altered.
+func AlterDatabasePlacementCounter(placement string) telemetry.Counter {
+	return telemetry.GetCounter(
+		fmt.Sprintf("sql.multiregion.alter_database.placement.%s", placement),
+	)
+}
+
+// CreateTableLocalityCounter is to be incremented every time a locality
+// is set on a table.
+func CreateTableLocalityCounter(locality string) telemetry.Counter {
+	return telemetry.GetCounter(
+		fmt.Sprintf("sql.multiregion.create_table.locality.%s", locality),
+	)
+}
+
+// AlterTableLocalityCounter is to be incremented every time a locality
+// is changed on a table.
+func AlterTableLocalityCounter(from, to string) telemetry.Counter {
+	return telemetry.GetCounter(
+		fmt.Sprintf("sql.multiregion.alter_table.locality.from.%s.to.%s", from, to),
+	)
+}

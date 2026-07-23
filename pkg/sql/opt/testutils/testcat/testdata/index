@@ -1,0 +1,244 @@
+exec-ddl
+CREATE TABLE kv (
+    k INT PRIMARY KEY,
+    v INT
+)
+----
+
+exec-ddl
+CREATE INDEX idx ON kv (v)
+----
+
+exec-ddl
+SHOW CREATE kv
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX kv_pkey
+ │    └── k int not null
+ └── INDEX idx
+      ├── v int
+      └── k int not null
+
+exec-ddl
+CREATE INDEX idx2 ON kv (v)
+----
+
+exec-ddl
+DROP INDEX idx
+----
+
+exec-ddl
+DROP INDEX idx2
+----
+
+exec-ddl
+CREATE TABLE ab (
+    a INT PRIMARY KEY,
+    b INT,
+    INDEX idx (b)
+)
+----
+
+exec-ddl
+CREATE INDEX idx ON kv (v) STORING (k) WHERE v > 1
+----
+
+exec-ddl
+SHOW CREATE kv
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX kv_pkey
+ │    └── k int not null
+ └── INDEX idx
+      ├── v int
+      ├── k int not null
+      └── WHERE v > 1
+
+exec-ddl
+CREATE TABLE g (
+    k INT PRIMARY KEY,
+    a INT,
+    b INT,
+    geog GEOGRAPHY,
+    INVERTED INDEX (a, geog),
+    INVERTED INDEX (a, b, geog)
+)
+----
+
+exec-ddl
+SHOW CREATE g
+----
+TABLE g
+ ├── k int not null
+ ├── a int
+ ├── b int
+ ├── geog geography
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── geog_inverted_key encodedkey not null [inverted]
+ ├── geog_inverted_key encodedkey not null [inverted]
+ ├── PRIMARY INDEX g_pkey
+ │    └── k int not null
+ ├── INVERTED INDEX g_a_geog_idx
+ │    ├── a int
+ │    ├── geog_inverted_key encodedkey not null [inverted]
+ │    └── k int not null
+ └── INVERTED INDEX g_a_b_geog_idx
+      ├── a int
+      ├── b int
+      ├── geog_inverted_key encodedkey not null [inverted]
+      └── k int not null
+
+# Test for expression index columns.
+exec-ddl
+CREATE TABLE xyz (
+    x INT PRIMARY KEY,
+    y INT,
+    z STRING,
+    j JSON,
+    INDEX idx1 (lower(z)),
+    INDEX idx2 (lower(z), y),
+    INDEX idx3 ((y+1), lower(z)),
+    INVERTED INDEX idx4 ((j->'a')),
+    INVERTED INDEX idx5 (y, z, (j->'a'))
+)
+----
+
+exec-ddl
+CREATE INDEX idx6 ON xyz ((x+y), y) STORING (z) WHERE v > 1
+----
+
+exec-ddl
+CREATE INVERTED INDEX idx7 ON xyz ((x+y), (j->'a')) WHERE v > 1
+----
+
+exec-ddl
+SHOW CREATE xyz
+----
+TABLE xyz
+ ├── x int not null
+ ├── y int
+ ├── z string
+ ├── j jsonb
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_idx_expr string as (lower(z)) virtual [inaccessible]
+ ├── crdb_internal_idx_expr_1 int as (y + 1) virtual [inaccessible]
+ ├── crdb_internal_idx_expr_2 jsonb as (j->'a') virtual [inaccessible]
+ ├── crdb_internal_idx_expr_2_inverted_key encodedkey not null [inverted]
+ ├── crdb_internal_idx_expr_2_inverted_key encodedkey not null [inverted]
+ ├── crdb_internal_idx_expr_3 int as (x + y) virtual [inaccessible]
+ ├── crdb_internal_idx_expr_2_inverted_key encodedkey not null [inverted]
+ ├── PRIMARY INDEX xyz_pkey
+ │    └── x int not null
+ ├── INDEX idx1
+ │    ├── crdb_internal_idx_expr string as (lower(z)) virtual [inaccessible]
+ │    └── x int not null
+ ├── INDEX idx2
+ │    ├── crdb_internal_idx_expr string as (lower(z)) virtual [inaccessible]
+ │    ├── y int
+ │    └── x int not null
+ ├── INDEX idx3
+ │    ├── crdb_internal_idx_expr_1 int as (y + 1) virtual [inaccessible]
+ │    ├── crdb_internal_idx_expr string as (lower(z)) virtual [inaccessible]
+ │    └── x int not null
+ ├── INVERTED INDEX idx4
+ │    ├── crdb_internal_idx_expr_2_inverted_key encodedkey not null [inverted]
+ │    └── x int not null
+ ├── INVERTED INDEX idx5
+ │    ├── y int
+ │    ├── z string
+ │    ├── crdb_internal_idx_expr_2_inverted_key encodedkey not null [inverted]
+ │    └── x int not null
+ ├── INDEX idx6
+ │    ├── crdb_internal_idx_expr_3 int as (x + y) virtual [inaccessible]
+ │    ├── y int
+ │    ├── x int not null
+ │    ├── z string (storing)
+ │    └── WHERE v > 1
+ └── INVERTED INDEX idx7
+      ├── crdb_internal_idx_expr_3 int as (x + y) virtual [inaccessible]
+      ├── crdb_internal_idx_expr_2_inverted_key encodedkey not null [inverted]
+      ├── x int not null
+      └── WHERE v > 1
+
+exec-ddl
+CREATE TABLE t_invisible (k INT PRIMARY KEY, v INT, i INT, INDEX idx_v_visible(v) VISIBLE, INDEX idx_i_invisible(i) NOT VISIBLE)
+----
+
+exec-ddl
+CREATE INDEX idx_v_invisible ON t_invisible(v) NOT VISIBLE
+----
+
+exec-ddl
+SHOW CREATE t_invisible
+----
+TABLE t_invisible
+ ├── k int not null
+ ├── v int
+ ├── i int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t_invisible_pkey
+ │    └── k int not null
+ ├── INDEX idx_v_visible
+ │    ├── v int
+ │    └── k int not null
+ ├── INDEX idx_i_invisible NOT VISIBLE
+ │    ├── i int
+ │    └── k int not null
+ └── INDEX idx_v_invisible NOT VISIBLE
+      ├── v int
+      └── k int not null
+
+exec-ddl
+CREATE TABLE t_vec (k INT PRIMARY KEY, v VECTOR(1024), VECTOR INDEX (v))
+----
+
+exec-ddl
+SHOW CREATE t_vec
+----
+TABLE t_vec
+ ├── k int not null
+ ├── v vector
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t_vec_pkey
+ │    └── k int not null
+ └── VECTOR INDEX t_vec_v_idx
+      ├── v vector
+      └── k int not null
+
+exec-ddl
+DROP TABLE t_vec
+----
+
+exec-ddl
+CREATE TABLE t (k INT PRIMARY KEY, v INT)
+----
+
+exec-ddl
+CREATE VECTOR INDEX ON t (v)
+----
+
+exec-ddl
+SHOW CREATE t
+----
+TABLE t
+ ├── k int not null
+ ├── v int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t_pkey
+ │    └── k int not null
+ └── VECTOR INDEX t_v_idx
+      ├── v int
+      └── k int not null

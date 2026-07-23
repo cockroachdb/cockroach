@@ -1,0 +1,6 @@
+*.config.js
+dist/
+node_modules
+README.md
+*.scss
+src/js

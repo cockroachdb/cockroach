@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "besteffort",
+    srcs = [
+        "besteffort.go",
+        "override.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/besteffort",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/buildutil",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "besteffort_test",
+    srcs = ["besteffort_test.go"],
+    embed = [":besteffort"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

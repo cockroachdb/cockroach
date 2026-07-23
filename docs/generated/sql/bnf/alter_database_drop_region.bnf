@@ -1,0 +1,3 @@
+alter_database_drop_region_stmt ::=
+	'ALTER' 'DATABASE' database_name 'DROP' 'REGION' region_name
+	| 'ALTER' 'DATABASE' database_name 'DROP' 'REGION' 'IF' 'EXISTS' region_name

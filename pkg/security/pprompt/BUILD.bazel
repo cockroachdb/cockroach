@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "pprompt",
+    srcs = ["password.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/pprompt",
+    visibility = ["//visibility:public"],
+    deps = ["@org_golang_x_term//:term"],
+)

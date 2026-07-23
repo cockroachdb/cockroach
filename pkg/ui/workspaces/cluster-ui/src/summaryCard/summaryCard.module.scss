@@ -1,0 +1,113 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "../core/index.module";
+
+.summary--card {
+  display: flex;
+  flex-direction: column;
+  row-gap: 10px;
+  height: 100%;
+  border-radius: 3px;
+  box-shadow: 0 0 1px 0 rgba(67, 90, 111, 0.41);
+  background-color: $adminui-white;
+  padding: 24px;
+  font-family: $font-family--base;
+  font-size: $font-size--medium;
+  h4 {
+    @include text--body-strong;
+    color: $colors--neutral-7;
+  }
+  p {
+    @include text--body;
+  }
+  &__divider {
+    width: 100%;
+    height: 1px;
+    margin: 8px 0;
+    background: $table-border;
+    &--large {
+      @extend .summary--card__divider;
+      margin: 16px 0;
+    }
+  }
+  &__title {
+    font-family: $font-family--base;
+    font-size: 20px;
+    line-height: 1.6;
+    letter-spacing: -0.2px;
+    color: $popover-color;
+    margin-bottom: 25px;
+  }
+  &__counting {
+    &--value {
+      font-family: $font-family--base;
+      font-size: 20pt;
+      line-height: 1.6;
+      letter-spacing: -0.2px;
+      color: $text-color;
+      margin-bottom: 15px;
+    }
+    &--label {
+      font-family: $font-family--base;
+      font-size: 14pt;
+      line-height: 1.67;
+      letter-spacing: 0.3px;
+      color: $secondary-text-color;
+      margin-bottom: 0;
+    }
+  }
+  &__item {
+    display: flex;
+    justify-content: space-between;
+    &--label {
+      font-family: $font-family--base;
+      font-size: 14px;
+      font-weight: $font-weight--bold;
+      line-height: 1.57;
+      letter-spacing: 0.1px;
+      color: $colors--neutral-6;
+      margin-right: 5px;
+      margin-bottom: 0;
+    }
+    &--value {
+      font-family: $font-family--base;
+      font-size: 14px;
+      font-weight: $font-weight--medium;
+      line-height: 1.71;
+      letter-spacing: 0.1px;
+      color: $popover-color;
+      margin-bottom: 0;
+      &-red {
+        color: $alert-color;
+      }
+      a,
+      span {
+        font-family: $font-family--base;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.71;
+        letter-spacing: 0.1px;
+        margin-bottom: 0;
+      }
+      a {
+        color: $colors--link;
+        &:hover {
+          color: $colors--link;
+          text-decoration: underline;
+        }
+      }
+    }
+  }
+
+  .summary-small-info {
+    color: $colors--neutral-7;
+    display: flex;
+    font-size: 13px;
+    font-weight: $font-weight--light;
+    justify-content: right;
+    margin-top: -13px;
+  }
+}

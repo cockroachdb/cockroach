@@ -1,0 +1,21 @@
+exec-sql
+CREATE DATABASE IF NOT EXISTS db;
+CREATE TABLE IF NOT EXISTS db.tbl (a INT PRIMARY KEY);
+ALTER TABLE db.tbl PARTITION BY RANGE (a) (
+  PARTITION p4 VALUES FROM (MINVALUE) TO (4),
+  PARTITION p5 VALUES FROM (4) TO (5),
+  PARTITION px VALUES FROM (5) TO (MAXVALUE)
+);
+ALTER TABLE db.tbl CONFIGURE ZONE DISCARD;
+ALTER PARTITION p4 OF INDEX db.tbl@tbl_pkey CONFIGURE ZONE USING constraints = '[+n1]';
+ALTER PARTITION p5 OF INDEX db.tbl@tbl_pkey CONFIGURE ZONE USING constraints = '[+n2]';
+ALTER PARTITION px OF INDEX db.tbl@tbl_pkey CONFIGURE ZONE USING constraints = '[+n3]';
+----
+
+translate database=db table=tbl
+----
+/Table/106{-/1}                            range default
+/Table/106/1{-/4}                          constraints=[+n1]
+/Table/106/1/{4-5}                         constraints=[+n2]
+/Table/106/{1/5-2}                         constraints=[+n3]
+/Table/10{6/2-7}                           range default

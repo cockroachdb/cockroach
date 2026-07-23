@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# Sets up disk staller support (dmsetup) for /mnt/data1.
+# NOTE - This uses CLUSTER environment variable, if not set the script fails
+
+if [ -z "${CLUSTER}" ]; then
+  echo "environment CLUSTER is not set"
+  exit 1
+fi
+
+# Create and upload the setup script to the remote cluster
+roachprod ssh "$CLUSTER" -- "tee setup_dmsetup.sh > /dev/null << 'EOF'
+#!/bin/bash
+
+DEVICE=\$(df -kh | grep \"/data1\" | cut -d\" \" -f1)
+
+sudo apt-get purge -y snapd
+sudo umount -f /mnt/data1
+sudo dmsetup remove_all
+sudo tune2fs -O ^has_journal \${DEVICE}
+echo \"0 \$(sudo blockdev --getsz \"\${DEVICE}\") linear \"\${DEVICE}\" 0\" | sudo dmsetup create data1
+sudo mount /dev/mapper/data1 /mnt/data1
+EOF"
+
+# Make the script executable and run it
+roachprod ssh "$CLUSTER" -- "chmod +x setup_dmsetup.sh && ./setup_dmsetup.sh"

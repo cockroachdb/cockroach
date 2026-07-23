@@ -1,0 +1,40 @@
+zip
+----
+debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info=false --validate-zip-file=false /dev/null
+[cluster] discovering virtual clusters... done
+[cluster] creating output file /dev/null... done
+[cluster] establishing RPC connection to ...
+[cluster] using SQL address: ...
+[cluster] requesting data for debug/events... received response... writing JSON output: debug/events.json... done
+[cluster] requesting data for debug/rangelog... received response... writing JSON output: debug/rangelog.json... done
+[cluster] requesting data for debug/settings... received response... writing JSON output: debug/settings.json... done
+<dumping SQL tables>
+[cluster] requesting nodes... received response... writing JSON output: debug/nodes.json... done
+[cluster] requesting liveness... received response... writing JSON output: debug/liveness.json... done
+[cluster] collecting the inflight traces for jobs... received response... done
+[cluster] requesting CPU profiles
+[cluster] profiles generated
+[cluster] profile for node 1... writing binary output: debug/nodes/1/cpu.pprof... done
+[node 1] node status... writing JSON output: debug/nodes/1/status.json... done
+[node 1] using SQL connection URL: postgresql://...
+<dumping SQL tables>
+[node 1] requesting data for debug/nodes/1/details... received response... writing JSON output: debug/nodes/1/details.json... done
+[node 1] requesting data for debug/nodes/1/gossip... received response... writing JSON output: debug/nodes/1/gossip.json... done
+[node 1] requesting data for debug/nodes/1/mma_state... received response... writing JSON output: debug/nodes/1/mma_state.json... done
+[node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
+[node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
+[node 1] requesting goroutine profile... received response... writing binary output: debug/nodes/1/stacks.pprof... done
+[node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
+[node 1] requesting engine stats... received response... writing binary output: debug/nodes/1/lsm.txt... done
+[node 1] requesting heap profile list... received response... done
+[node ?] ? heap profiles found
+[node 1] requesting goroutine dump list... received response... done
+[node ?] ? goroutine dumps found
+[node 1] requesting cpu profile list... received response... done
+[node ?] ? cpu profiles found
+[node 1] requesting execution trace list... received response... done
+[node ?] ? execution traces found
+[node 1] requesting log files list... received response... done
+[node ?] ? log files found
+[cluster] pprof summary script... writing binary output: debug/pprof-summary.sh... done
+[cluster] capture debug zip flags... writing binary output: debug/debug_zip_command_flags.txt... done

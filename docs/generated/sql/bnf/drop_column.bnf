@@ -1,0 +1,13 @@
+alter_onetable_stmt ::=
+	'ALTER' 'TABLE' table_name 'DROP' 'COLUMN' 'IF' 'EXISTS' name 'CASCADE'
+	| 'ALTER' 'TABLE' table_name 'DROP' 'COLUMN' 'IF' 'EXISTS' name 'RESTRICT'
+	| 'ALTER' 'TABLE' table_name 'DROP' 'COLUMN' 'IF' 'EXISTS' name 
+	| 'ALTER' 'TABLE' table_name 'DROP' 'COLUMN' name 'CASCADE'
+	| 'ALTER' 'TABLE' table_name 'DROP' 'COLUMN' name 'RESTRICT'
+	| 'ALTER' 'TABLE' table_name 'DROP' 'COLUMN' name 
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'DROP' 'COLUMN' 'IF' 'EXISTS' name 'CASCADE'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'DROP' 'COLUMN' 'IF' 'EXISTS' name 'RESTRICT'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'DROP' 'COLUMN' 'IF' 'EXISTS' name 
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'DROP' 'COLUMN' name 'CASCADE'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'DROP' 'COLUMN' name 'RESTRICT'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'DROP' 'COLUMN' name 

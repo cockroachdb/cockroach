@@ -1,0 +1,265 @@
+index-constraints vars=(a int) index=(a)
+NULL
+----
+
+index-constraints vars=(a int) index=(a)
+false
+----
+
+index-constraints vars=(a int) index=(a)
+true
+----
+[ - ]
+
+index-constraints vars=(a int) index=(a)
+a
+----
+[ - ]
+Remaining filter: a
+
+index-constraints vars=(a int) index=(a)
+a > 2
+----
+[/3 - ]
+
+index-constraints vars=(a int) index=(a)
+NOT (a <= 2)
+----
+[/3 - ]
+
+index-constraints vars=(a int) index=(a desc)
+a > 2
+----
+[ - /3]
+
+index-constraints vars=(a int) index=(a)
+a >= 2
+----
+[/2 - ]
+
+index-constraints vars=(a int) index=(a desc)
+a >= 2
+----
+[ - /2]
+
+index-constraints vars=(a int not null) index=(a)
+a != 2
+----
+[ - /1]
+[/3 - ]
+
+index-constraints vars=(a int not null) index=(a)
+NOT (a = 2)
+----
+[ - /1]
+[/3 - ]
+
+index-constraints vars=(a int not null) index=(a desc)
+a != 2
+----
+[ - /3]
+[/1 - ]
+
+index-constraints vars=(a int not null) index=(a)
+a < 2
+----
+[ - /1]
+
+index-constraints vars=(a int not null) index=(a desc)
+a < 2
+----
+[/1 - ]
+
+index-constraints vars=(a int not null) index=(a)
+a = 2
+----
+[/2 - /2]
+
+index-constraints vars=(a int not null) index=(a desc)
+a = 2
+----
+[/2 - /2]
+
+index-constraints vars=(a int) index=(a)
+a != 2
+----
+(/NULL - /1]
+[/3 - ]
+
+index-constraints vars=(a int) index=(a desc)
+a != 2
+----
+[ - /3]
+[/1 - /NULL)
+
+index-constraints vars=(a int) index=(a)
+a < 2
+----
+(/NULL - /1]
+
+index-constraints vars=(a int) index=(a desc)
+a < 2
+----
+[/1 - /NULL)
+
+index-constraints vars=(a int) index=(a)
+a = 2
+----
+[/2 - /2]
+
+index-constraints vars=(a int) index=(a desc)
+a = 2
+----
+[/2 - /2]
+
+index-constraints vars=(a int) index=(a)
+NULL
+----
+
+index-constraints vars=(a int) index=(a)
+a > NULL
+----
+
+index-constraints vars=(a int) index=(a)
+a < NULL
+----
+
+index-constraints vars=(a int) index=(a)
+a >= NULL
+----
+
+index-constraints vars=(a int) index=(a)
+a >= NULL
+----
+
+index-constraints vars=(a int) index=(a)
+a = NULL
+----
+
+index-constraints vars=(a int) index=(a)
+a != NULL
+----
+
+index-constraints vars=(a bool) index=(a)
+a
+----
+[/true - /true]
+
+index-constraints vars=(a bool) index=(a)
+NOT a
+----
+[/false - /false]
+
+index-constraints vars=(a bool) index=(a)
+a != true
+----
+[/false - /false]
+
+index-constraints vars=(a bool) index=(a)
+a != false
+----
+[/true - /true]
+
+index-constraints vars=(a bool) index=(a)
+a IS TRUE
+----
+[/true - /true]
+
+index-constraints vars=(a bool) index=(a)
+a IS FALSE
+----
+[/false - /false]
+
+index-constraints vars=(a bool) index=(a)
+a IS NOT TRUE
+----
+[ - /false]
+
+index-constraints vars=(a bool) index=(a)
+a IS NOT FALSE
+----
+[ - /false)
+[/true - ]
+
+index-constraints vars=(a int) index=(a)
+a IS NOT DISTINCT FROM 5
+----
+[/5 - /5]
+
+index-constraints vars=(a int) index=(a)
+a IS DISTINCT FROM 5
+----
+[ - /4]
+[/6 - ]
+
+index-constraints vars=(a bool) index=(a desc)
+a != true
+----
+[/false - /false]
+
+index-constraints vars=(a bool) index=(a desc)
+a != false
+----
+[/true - /true]
+
+index-constraints vars=(a bool) index=(a desc)
+a IS TRUE
+----
+[/true - /true]
+
+index-constraints vars=(a bool) index=(a desc)
+a IS FALSE
+----
+[/false - /false]
+
+index-constraints vars=(a bool) index=(a desc)
+a IS NOT TRUE
+----
+[/false - ]
+
+index-constraints vars=(a bool) index=(a desc)
+a IS NOT FALSE
+----
+[ - /true]
+(/false - ]
+
+index-constraints vars=(a int) index=(a desc)
+a IS NOT DISTINCT FROM 5
+----
+[/5 - /5]
+
+index-constraints vars=(a int) index=(a)
+a = -1
+----
+[/-1 - /-1]
+
+index-constraints vars=(a decimal) index=(a)
+a = -2.0
+----
+[/-2.0 - /-2.0]
+
+index-constraints vars=(a int) index=(a desc)
+a IS DISTINCT FROM 5
+----
+[ - /6]
+[/4 - ]
+
+index-constraints vars=(a bool not null) index=(a)
+a IS NOT TRUE
+----
+[ - /false]
+
+index-constraints vars=(a bool not null) index=(a)
+a IS NOT FALSE
+----
+[/true - ]
+
+index-constraints vars=(a bool not null) index=(a desc)
+a IS NOT TRUE
+----
+[/false - ]
+
+index-constraints vars=(a bool not null) index=(a desc)
+a IS NOT FALSE
+----
+[ - /true]

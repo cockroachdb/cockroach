@@ -1,0 +1,100 @@
+## A simple txn that commits.
+
+run trace ok
+with t=A
+  txn_begin  ts=11
+  with       k=a
+    put      v=abc
+    get
+    resolve_intent
+----
+>> txn_begin ts=11 t=A
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 gul=0,0
+>> put v=abc k=a t=A
+put: lock acquisition = {span=a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+meta: "a"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/11.000000000,0 -> /BYTES/abc
+>> get k=a t=A
+get: "a" -> /BYTES/abc @11.000000000,0
+>> resolve_intent k=a t=A
+called SingleClearEngineKey(/Local/Lock"a"/0300000001000000000000000000000000)
+resolve_intent: "a" -> resolved key = true
+data: "a"/11.000000000,0 -> /BYTES/abc
+
+run ok
+with t=A resolve
+  put   k=a/1 v=eee
+  put   k=b   v=fff
+  put   k=b/2 v=ggg
+  put   k=c   v=hhh
+  txn_remove
+----
+put: lock acquisition = {span=a/1 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+resolve_intent: "a/1" -> resolved key = true
+put: lock acquisition = {span=b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+resolve_intent: "b" -> resolved key = true
+put: lock acquisition = {span=b/2 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+resolve_intent: "b/2" -> resolved key = true
+put: lock acquisition = {span=c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+resolve_intent: "c" -> resolved key = true
+>> at end:
+data: "a"/11.000000000,0 -> /BYTES/abc
+data: "a/1"/11.000000000,0 -> /BYTES/eee
+data: "b"/11.000000000,0 -> /BYTES/fff
+data: "b/2"/11.000000000,0 -> /BYTES/ggg
+data: "c"/11.000000000,0 -> /BYTES/hhh
+
+# Reads previous writes, transactional.
+
+run ok
+with t=A
+  txn_begin  ts=11
+  get   k=a
+----
+get: "a" -> /BYTES/abc @11.000000000,0
+>> at end:
+txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 gul=0,0
+
+run trace ok
+with t=A
+  scan k=a end==b
+  scan k=a end=+a
+  scan k=a end=-a
+  scan k=a end=+b
+  scan k=a end==b
+  scan k=a end=-b
+  txn_remove
+----
+>> scan k=a end==b t=A
+scan: "a" -> /BYTES/abc @11.000000000,0
+scan: "a/1" -> /BYTES/eee @11.000000000,0
+>> scan k=a end=+a t=A
+scan: "a" -> /BYTES/abc @11.000000000,0
+>> scan k=a end=-a t=A
+scan: "a" -> /BYTES/abc @11.000000000,0
+scan: "a/1" -> /BYTES/eee @11.000000000,0
+>> scan k=a end=+b t=A
+scan: "a" -> /BYTES/abc @11.000000000,0
+scan: "a/1" -> /BYTES/eee @11.000000000,0
+scan: "b" -> /BYTES/fff @11.000000000,0
+>> scan k=a end==b t=A
+scan: "a" -> /BYTES/abc @11.000000000,0
+scan: "a/1" -> /BYTES/eee @11.000000000,0
+>> scan k=a end=-b t=A
+scan: "a" -> /BYTES/abc @11.000000000,0
+scan: "a/1" -> /BYTES/eee @11.000000000,0
+scan: "b" -> /BYTES/fff @11.000000000,0
+scan: "b/2" -> /BYTES/ggg @11.000000000,0
+>> txn_remove t=A
+
+
+## A simple txn anchored at some arbitrary key.
+
+run trace ok
+with t=A k=a
+  txn_begin ts=1
+  txn_remove
+----
+>> txn_begin ts=1 t=A k=a
+txn: "A" meta={id=00000003 key="a" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 gul=0,0
+>> txn_remove t=A k=a

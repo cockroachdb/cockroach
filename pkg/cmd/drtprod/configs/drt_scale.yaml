@@ -1,0 +1,175 @@
+# Yaml for creating and configuring the drt-scale cluster. This also configures Datadog.
+# Build the roachprod and roachtest binaries (using --cross) before running this script
+environment:
+  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
+  ROACHPROD_DNS: drt.crdb.io
+  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
+  ROACHPROD_GCE_DNS_ZONE: drt
+  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
+  CLUSTER: drt-scale
+  WORKLOAD_CLUSTER: workload-scale
+  CLUSTER_NODES: 150
+  WORKLOAD_NODES: 9
+  COCKROACH_VERSION: v24.3.0-beta.2
+
+targets:
+  # crdb cluster specs
+  - target_name: $CLUSTER
+    steps:
+      - command: create
+        args:
+          - $CLUSTER
+        flags:
+          clouds: gce
+          gce-managed: true
+          gce-enable-multiple-stores: true
+          gce-zones: "us-central1-a"
+          nodes: $CLUSTER_NODES
+          gce-machine-type: n2-standard-16
+          local-ssd: false
+          gce-pd-volume-size: 375
+          gce-pd-volume-type: pd-ssd
+          gce-pd-volume-count: 4
+          os-volume-size: 100
+          username: drt
+          lifetime: 8760h
+          gce-image: "ubuntu-2204-jammy-v20240319"
+      - command: sync
+        flags:
+          clouds: gce
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - wget https://binaries.cockroachdb.com/cockroach-${COCKROACH_VERSION}.linux-amd64.tgz
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - tar -xvzf cockroach-${COCKROACH_VERSION}.linux-amd64.tgz
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - mv cockroach-${COCKROACH_VERSION}.linux-amd64/* .
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - rm -rf cockroach-${COCKROACH_VERSION}.linux-amd64*
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
+      - command: start
+        args:
+          - $CLUSTER
+          - "--binary"
+          - "./cockroach"
+        flags:
+          # add flag to set provisioned throughput on each store according to their cloud provider limits
+          enable-fluent-sink: true
+          store-count: 4
+          args: --wal-failover=among-stores
+          restart: false
+          sql-port: 26257
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
+  # workload cluster specs
+  - target_name: $WORKLOAD_CLUSTER
+    steps:
+      - command: create
+        args:
+          - $WORKLOAD_CLUSTER
+        flags:
+          clouds: gce
+          gce-zones: "us-central1-a"
+          nodes: $WORKLOAD_NODES
+          gce-machine-type: n2-standard-8
+          os-volume-size: 100
+          username: workload
+          lifetime: 8760h
+        on_rollback:
+          - command: destroy
+            args:
+              - $WORKLOAD_CLUSTER
+      - command: sync
+        flags:
+          clouds: gce
+      - command: stage
+        args:
+          - $WORKLOAD_CLUSTER
+          - cockroach
+      - command: stage
+        args:
+          - $WORKLOAD_CLUSTER
+          - workload
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
+  - target_name: post_tasks
+    dependent_targets:
+      - $CLUSTER
+      - $WORKLOAD_CLUSTER
+    steps:
+      - script: rm
+        args:
+          - -rf
+          - certs-$CLUSTER
+      - command: get
+        args:
+          - $CLUSTER:1
+          - certs
+          - certs-$CLUSTER
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - certs-$CLUSTER
+          - certs
+      - command: ssh
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - chmod
+          - 600
+          - './certs/*'
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachprod
+          - roachprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachtest
+          - roachtest-operations
+      - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
+        args:
+          - cct_tpcc_400k # suffix added to script name tpcc_init_cct_tpcc_400k.sh
+          - false # determines whether to execute the script immediately on workload node
+        flags:
+          warehouses: 400000
+          db: cct_tpcc
+      - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
+        args:
+          - cct_tpcc_2000k # suffix added to script name tpcc_init_cct_tpcc_2000k.sh
+          - false # determines whether to execute the script immediately on workload node
+        flags:
+          warehouses: 2000000
+          db: cct_tpcc_big
+      - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
+        args:
+          - cct_tpcc_400k # suffix added to script name tpcc_run_400k.sh
+          - false # determines whether to execute the script immediately on workload node
+        flags:
+          db: cct_tpcc
+          warehouses: 400000
+          max-rate: 1000
+          workers: 400000
+          conns: 5000
+          duration: 12h
+          ramp: 10m
+          wait: 0
+      - script: "pkg/cmd/drtprod/scripts/generate_tpch_run.sh"
+        args:
+          - scale_factor_1000
+        flags:
+          scale-factor: 1000

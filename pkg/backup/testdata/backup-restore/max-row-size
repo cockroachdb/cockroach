@@ -1,0 +1,59 @@
+new-cluster name=m1
+----
+
+exec-sql
+CREATE DATABASE orig;
+USE orig;
+CREATE TABLE maxrow (i INT PRIMARY KEY, s STRING);
+INSERT INTO maxrow VALUES (1, repeat('x', 20000));
+----
+
+query-sql
+SELECT i, pg_column_size(s) FROM maxrow ORDER BY i;
+----
+1 20004
+
+exec-sql
+SET CLUSTER SETTING sql.guardrails.max_row_size_err = '16KiB';
+----
+
+exec-sql expect-error-regex=(row larger than max row size: table .* family 0 primary key .*/Table/.*/1/2/0 size .*)
+INSERT INTO maxrow VALUES (2, repeat('x', 20000))
+----
+regex matches error
+
+exec-sql
+BACKUP maxrow INTO 'nodelocal://1/maxrow';
+----
+
+exec-sql
+CREATE DATABASE d2;
+----
+
+exec-sql
+RESTORE maxrow FROM LATEST IN 'nodelocal://1/maxrow' WITH into_db='d2';
+----
+
+query-sql
+SELECT i, pg_column_size(s) FROM d2.maxrow ORDER BY i;
+----
+1 20004
+
+exec-sql expect-error-regex=(row larger than max row size: table .* family 0 primary key .*/Table/.*/1/2/0 size .*)
+INSERT INTO d2.maxrow VALUES (2, repeat('y', 20000));
+----
+regex matches error
+
+exec-sql
+SET CLUSTER SETTING sql.guardrails.max_row_size_err = DEFAULT;
+----
+
+exec-sql
+INSERT INTO d2.maxrow VALUES (2, repeat('y', 20000));
+----
+
+query-sql
+SELECT i, pg_column_size(s) FROM d2.maxrow ORDER BY i;
+----
+1 20004
+2 20004

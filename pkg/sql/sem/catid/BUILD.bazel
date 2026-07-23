@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "catid",
+    srcs = [
+        "constraint_id_set.go",
+        "ids.go",
+        "index_id_set.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/oidext",
+        "//pkg/util/intsets",
+        "@com_github_lib_pq//oid",
+    ],
+)

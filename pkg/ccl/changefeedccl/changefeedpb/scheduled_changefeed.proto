@@ -1,0 +1,13 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.ccl.changefeedccl;
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb";
+
+// ScheduledExportExecutionArgs is the arguments to the scheduled backup executor.
+message ScheduledChangefeedExecutionArgs {
+  string changefeed_statement = 1;
+}

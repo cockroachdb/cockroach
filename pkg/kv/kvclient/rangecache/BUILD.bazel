@@ -1,0 +1,47 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rangecache",
+    srcs = ["range_cache.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util",
+        "//pkg/util/cache",
+        "//pkg/util/grpcutil",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/syncutil/singleflight",
+        "//pkg/util/timeutil",
+        "@com_github_biogo_store//llrb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)
+
+go_test(
+    name = "rangecache_test",
+    size = "small",
+    srcs = ["range_cache_test.go"],
+    embed = [":rangecache"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/tracing",
+        "@com_github_biogo_store//llrb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,2259 @@
+# LogicTest: !local-prepared
+statement ok
+CREATE TABLE t (
+  a TIMESTAMP PRIMARY KEY,
+  b DATE,
+  c INTERVAL,
+  UNIQUE (b),
+  UNIQUE (c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c)
+)
+
+statement ok
+INSERT INTO t VALUES
+  ('2015-08-30 03:34:45.34567', '2015-08-30', '34h2s'),
+  ('2015-08-25 04:45:45.53453', '2015-08-25', '2h45m2s234ms'),
+  ('2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms')
+
+# Spot-check date math.
+query T
+SELECT b + '6 month' from t order by a desc
+----
+2016-02-29 00:00:00 +0000 +0000
+2016-02-29 00:00:00 +0000 +0000
+2016-02-25 00:00:00 +0000 +0000
+
+query TTT
+SELECT * FROM t WHERE a = '2015-08-25 04:45:45.53453+01:00'::timestamp
+----
+2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 00:00:00 +0000 +0000  02:45:02.234
+
+# insert duplicate value with different time zone offset
+statement error duplicate key value violates unique constraint "t_pkey"\nDETAIL: Key \(a\)=\('2015-08-30 03:34:45\.34567'\) already exists\.
+INSERT INTO t VALUES
+  ('2015-08-30 03:34:45.34567-07:00', '2015-08-31', '35h2s')
+
+# Check that time/date/interval representations outside of the index are okay.
+statement ok
+CREATE TABLE u (
+  a BIGINT PRIMARY KEY,
+  b TIMESTAMP,
+  c TIMESTAMPTZ,
+  d DATE,
+  e INTERVAL
+)
+
+statement ok
+INSERT INTO u VALUES
+  (123, '2015-08-30 03:34:45.34567', '2015-08-30 03:34:45.34567', '2015-08-30', '34h2s'),
+  (234, '2015-08-25 04:45:45.53453-02:00', '2015-08-25 04:45:45.53453-02:00', '2015-08-25', '2h45m2s234ms')
+
+statement ok
+SET TIME ZONE -5
+
+query TTT
+SELECT DATE '2000-01-01', DATE '2000-12-31', DATE '1993-05-16'
+----
+2000-01-01 00:00:00 +0000 +0000     2000-12-31 00:00:00 +0000 +0000     1993-05-16 00:00:00 +0000 +0000
+
+statement ok
+INSERT INTO u VALUES
+  (345, '2015-08-29 23:10:09.98763', '2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms'),
+  (456, '2015-08-29 23:10:09.98763 UTC', '2015-08-29 23:10:09.98763 UTC', '2015-08-29', '234h45m2s234ms')
+
+query ITTTT
+SELECT * FROM u ORDER BY a
+----
+123  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-29 22:34:45.34567 -0500 -0500  2015-08-30 00:00:00 +0000 +0000  34:00:02
+234  2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 01:45:45.53453 -0500 -0500  2015-08-25 00:00:00 +0000 +0000  02:45:02.234
+345  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 23:10:09.98763 -0500 -0500  2015-08-29 00:00:00 +0000 +0000  234:45:02.234
+456  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 18:10:09.98763 -0500 -0500  2015-08-29 00:00:00 +0000 +0000  234:45:02.234
+
+statement ok
+SET TIME ZONE UTC
+
+query ITTTT
+SELECT * FROM u ORDER BY a
+----
+123  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 03:34:45.34567 +0000 UTC  2015-08-30 00:00:00 +0000 +0000  34:00:02
+234  2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 06:45:45.53453 +0000 UTC  2015-08-25 00:00:00 +0000 +0000  02:45:02.234
+345  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-30 04:10:09.98763 +0000 UTC  2015-08-29 00:00:00 +0000 +0000  234:45:02.234
+456  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 23:10:09.98763 +0000 UTC  2015-08-29 00:00:00 +0000 +0000  234:45:02.234
+
+statement ok
+SET TIME ZONE -5
+
+query TTTT
+SELECT max(b), max(c), max(d), max(e) FROM u
+----
+2015-08-30 03:34:45.34567 +0000 +0000  2015-08-29 23:10:09.98763 -0500 -0500  2015-08-30 00:00:00 +0000 +0000  234:45:02.234
+
+query TTTT
+SELECT min(b), min(c), min(d), min(e) FROM u
+----
+2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 01:45:45.53453 -0500 -0500  2015-08-25 00:00:00 +0000 +0000  02:45:02.234
+
+query BB
+SELECT now() < now() + '1m'::interval, now() <= now() + '1m'::interval
+----
+true true
+
+query BB
+SELECT now() + '1m'::interval > now(), now() + '1m'::interval >= now()
+----
+true true
+
+# Date sentinel values.
+
+query TTT
+SELECT 'epoch'::date, 'infinity'::date, '-infinity'::date
+----
+1970-01-01 00:00:00 +0000 +0000  infinity  -infinity
+
+# Date edge cases.
+
+statement error only positive years are permitted in AD/BC notation
+SELECT '0000-01-01 BC'::date
+
+query TTTTT
+SELECT '4714-11-24 BC'::date, '5874897-12-31'::date, '2000-01-01'::date, '0001-01-01'::date, '0001-12-13 BC'::date
+----
+-4713-11-24 00:00:00 +0000 +0000  5874897-12-31 00:00:00 +0000 +0000  2000-01-01 00:00:00 +0000 +0000  0001-01-01 00:00:00 +0000 +0000  0000-12-13 00:00:00 +0000 +0000
+
+# Also test as strings because lib/pq marshals the previous results to
+# time.Times, which don't stringify the same.
+query TTTTT
+SELECT '4714-11-24 BC'::date::string, '5874897-12-31'::date::string, '2000-01-01'::date::string, '0001-01-01'::date::string, '0001-12-13 BC'::date::string
+----
+4714-11-24 BC  5874897-12-31  2000-01-01  0001-01-01  0001-12-13 BC
+
+statement error date is out of range
+SELECT '4714-11-24 BC'::date - 1
+
+statement error date is out of range
+SELECT '5874897-12-31'::date + 1
+
+query TT
+SELECT ('4714-11-24 BC'::date + 1)::string, ('5874897-12-31'::date - 1)::string
+----
+4714-11-25 BC  5874897-12-30
+
+query TTTT
+SELECT 'infinity'::date + 1, 'infinity'::date - 1, '-infinity'::date + 1, '-infinity'::date - 1
+----
+infinity  infinity  -infinity  -infinity
+
+statement error cannot subtract infinite dates
+SELECT 'infinity'::date - 'infinity'::date
+
+query I
+SELECT '5874897-12-31'::date - '4714-11-24 BC'::date
+----
+2147483493
+
+# TIMESTAMP/DATE builtins.
+
+query T
+SELECT age('2001-04-10 22:06:45', '1957-06-13')
+----
+43 years 9 mons 27 days 22:06:45
+
+query B
+SELECT age('1957-06-13') - age(now(), '1957-06-13') = interval '0s'
+----
+true
+
+query T
+select age('2017-12-10'::timestamptz, '2017-12-01'::timestamptz)
+----
+9 days
+
+query B
+SELECT now() - timestamp '2015-06-13' > interval '100h'
+----
+true
+
+query TT
+SELECT now()::timestamp - now(), now() - now()::timestamp
+----
+00:00:00  00:00:00
+
+query BB
+SELECT now() = now()::timestamp, now()::timestamp = now()
+----
+true true
+
+query BB
+SELECT now()::timestamp < now(), now() < now()::timestamp
+----
+false false
+
+query BB
+SELECT now()::timestamp <= now(), now() <= now()::timestamp
+----
+true true
+
+query B
+SELECT current_date - current_date() = 0
+----
+true
+
+query B
+SELECT now() - current_timestamp() = interval '0s'
+----
+true
+
+query B
+SELECT now() - current_timestamp = interval '0s'
+----
+true
+
+query B
+SELECT now() - statement_timestamp() < interval '10s'
+----
+true
+
+query B
+SELECT clock_timestamp() - statement_timestamp() < interval '10s'
+----
+true
+
+query B
+SELECT now() - transaction_timestamp() = interval '0s'
+----
+true
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+statement ok
+CREATE TABLE kv (
+  k CHAR PRIMARY KEY,
+  v TIMESTAMPTZ
+)
+
+statement ok
+INSERT INTO kv (k,v) VALUES ('a', transaction_timestamp())
+
+query T
+SELECT k FROM kv
+----
+a
+
+query T
+SELECT k FROM kv where v = transaction_timestamp()
+----
+a
+
+statement ok
+COMMIT TRANSACTION
+
+# Changing timezones changes the output of current_date().
+
+statement ok
+RESET TIME ZONE
+
+query BBB
+SELECT
+    d = tz, d = t, d = n
+FROM
+    (
+        SELECT
+            current_date()::DATE AS d,
+            current_date()::TIMESTAMPTZ::DATE AS tz,
+            current_date()::TIMESTAMP::DATE AS t,
+            now():::DATE AS n
+    )
+----
+true true true
+
+query B
+SELECT now() - current_date()::timestamptz < interval '24h10s'
+----
+true
+
+statement ok
+SET TIME ZONE 48
+
+query B
+SELECT now() - current_date()::timestamptz < interval '24h10s'
+----
+true
+
+query BBB
+SELECT
+    d = tz, d = t, d = n
+FROM
+    (
+        SELECT
+            current_date()::DATE AS d,
+            current_date()::TIMESTAMPTZ::DATE AS tz,
+            current_date()::TIMESTAMP::DATE AS t,
+            now():::DATE AS n
+    )
+----
+true true true
+
+statement ok
+RESET TIME ZONE
+
+# Check that the current_timestamp, now and transaction_timestamp are the same.
+# Test that the transaction_timestamp can differ from the statement_timestamp.
+# Check that the transaction_timestamp changes with each transaction.
+# We use, SELECT * FROM kv, to insert delays of more than a microsecond.
+statement ok
+BEGIN;
+INSERT INTO kv (k,v) VALUES ('b', transaction_timestamp());
+SELECT * FROM kv;
+INSERT INTO kv (k,v) VALUES ('c', transaction_timestamp());
+SELECT * FROM kv;
+INSERT INTO kv (k,v) VALUES ('d', current_timestamp());
+SELECT * FROM kv;
+INSERT INTO kv (k,v) VALUES ('e', current_timestamp());
+SELECT * FROM kv;
+INSERT INTO kv (k,v) VALUES ('f', now());
+SELECT * FROM kv;
+INSERT INTO kv (k,v) VALUES ('g', now());
+SELECT * FROM kv;
+INSERT INTO kv (k,v) VALUES ('h', statement_timestamp());
+SELECT * FROM kv;
+COMMIT;
+SELECT * FROM kv;
+BEGIN;
+SELECT * FROM KV;
+INSERT INTO kv (k,v) VALUES ('i', transaction_timestamp());
+COMMIT
+
+query I
+SELECT count(DISTINCT (v)) FROM kv
+----
+4
+
+# Test that transaction_timestamp() is consistent in transaction
+# spanning multiple batches of statements.
+statement count 9
+DELETE FROM kv
+
+statement ok
+BEGIN;
+INSERT INTO kv (k,v) VALUES ('a', transaction_timestamp());
+SELECT * FROM kv
+
+statement ok
+INSERT INTO kv (k,v) VALUES ('b', transaction_timestamp());
+SELECT * FROM kv;
+COMMIT
+
+statement ok
+BEGIN;
+SELECT * FROM KV;
+INSERT INTO kv (k,v) VALUES ('c', transaction_timestamp());
+COMMIT
+
+query I
+SELECT count(DISTINCT (v)) FROM kv
+----
+2
+
+statement ok
+DROP TABLE kv
+
+statement ok
+CREATE TABLE kv (
+   k INT PRIMARY KEY,
+   v DECIMAL
+)
+
+# Test that cluster_logical_timestamp() is consistent in transactions
+# spanning multiple batches of statements.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+INSERT INTO kv (k,v) VALUES (1, cluster_logical_timestamp());
+SELECT * FROM kv
+
+statement ok
+INSERT INTO kv (k,v) VALUES (2, cluster_logical_timestamp());
+SELECT * FROM kv;
+COMMIT
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SELECT * FROM kv;
+INSERT INTO kv (k,v) VALUES (3, cluster_logical_timestamp());
+COMMIT
+
+query I
+SELECT count(DISTINCT (v)) FROM kv
+----
+2
+
+statement count 3
+DELETE FROM kv
+
+let $old_default_transaction_isolation
+SHOW default_transaction_isolation
+
+statement ok
+SET default_transaction_isolation = 'serializable'
+
+statement ok
+CREATE TABLE m (mints DECIMAL)
+
+statement ok
+INSERT INTO m VALUES (cluster_logical_timestamp())
+
+# Test that cluster_logical_timestamp() is monotonic in transaction order
+statement ok
+INSERT INTO kv (k,v) VALUES (1, cluster_logical_timestamp()-(select mints from m));
+SELECT * FROM kv
+
+statement ok
+INSERT INTO kv (k,v) VALUES (2, cluster_logical_timestamp()-(select mints from m));
+SELECT * FROM kv
+
+statement ok
+INSERT INTO kv (k,v) VALUES (3, cluster_logical_timestamp()-(select mints from m));
+SELECT * FROM kv
+
+statement ok
+INSERT INTO kv (k,v) VALUES (4, cluster_logical_timestamp()-(select mints from m));
+SELECT * FROM kv
+
+statement ok
+INSERT INTO kv (k,v) VALUES (5, cluster_logical_timestamp()-(select mints from m));
+SELECT * FROM kv
+
+statement ok
+INSERT INTO kv (k,v) VALUES (6, cluster_logical_timestamp()-(select mints from m));
+SELECT * FROM kv
+
+statement ok
+SET default_transaction_isolation = '$old_default_transaction_isolation'
+
+query I
+SELECT k FROM kv ORDER BY v
+----
+1
+2
+3
+4
+5
+6
+
+statement ok
+SET TIME ZONE UTC
+
+statement ok
+CREATE TABLE ex (
+  k BIGINT PRIMARY KEY,
+  element STRING,
+  input TIMESTAMPTZ,
+  extract_result FLOAT,
+  date_trunc_result TIMESTAMPTZ
+)
+
+statement ok
+INSERT INTO ex VALUES
+  (1,  'year',         '2001-04-10 12:04:59',              2001,              '2001-01-01 00:00:00'),
+  (2,  'year',         '2016-02-10 19:46:33.306157519',    2016,              '2016-01-01 00:00:00'),
+  (3,  'years',        '2016-02-10 19:46:33.306157519',    2016,              '2016-01-01 00:00:00'),
+  (4,  'quarter',      '2001-04-10 12:04:59',              2,                 '2001-04-01 00:00:00'),
+  (5,  'quarter',      '2016-02-10 19:46:33.306157519',    1,                 '2016-01-01 00:00:00'),
+  (6,  'quarter',      '2016-05-10 19:46:33.306157519',    2,                 '2016-04-01 00:00:00'),
+  (7,  'quarter',      '2016-09-09 19:46:33.306157519',    3,                 '2016-07-01 00:00:00'),
+  (8,  'quarter',      '2016-10-10 19:46:33.306157519',    4,                 '2016-10-01 00:00:00'),
+  (9,  'month',        '2001-04-10 12:04:59',              4,                 '2001-04-01 00:00:00'),
+  (10, 'month',        '2016-02-10 19:46:33.306157519',    2,                 '2016-02-01 00:00:00'),
+  (11, 'months',       '2016-02-10 19:46:33.306157519',    2,                 '2016-02-01 00:00:00'),
+  (12, 'week',         '2001-04-10 12:04:59',              15,                '2001-04-09 00:00:00'),
+  (13, 'weeks',        '2001-01-05 12:04:59',              1,                 '2001-01-01 00:00:00'),
+  (14, 'day',          '2001-04-10 12:04:59',              10,                '2001-04-10 00:00:00'),
+  (15, 'day',          '2016-02-10 19:46:33.306157519',    10,                '2016-02-10 00:00:00'),
+  (16, 'days',         '2016-02-10 19:46:33.306157519',    10,                '2016-02-10 00:00:00'),
+  (17, 'dayofweek',    '2001-04-10 12:04:59',              2,                 null),
+  (18, 'dow',          '2001-04-12 12:04:59',              4,                 null),
+  (19, 'dayofyear',    '2001-04-10 12:04:59',              100,               null),
+  (20, 'doy',          '2001-04-12 12:04:59',              102,               null),
+  (21, 'epoch',        '1970-01-02 00:00:01.000001',       86401.000001,      null),
+  (22, 'epoch',        '1970-01-02 00:00:01.000001-04',    100801.000001,     null),
+  (23, 'epoch',        '2001-04-10 12:04:59',              986904299,         null),
+  (24, 'hour',         '2001-04-10 12:04:59',              12,                '2001-04-10 12:00:00'),
+  (25, 'hour',         '2016-02-10 19:46:33.306157519',    19,                '2016-02-10 19:00:00'),
+  (26, 'hour',         '2016-02-10 19:46:33.306157519-04', 23,                '2016-02-10 19:00:00-04'),
+  (27, 'hours',        '2016-02-10 19:46:33.306157519',    19,                '2016-02-10 19:00:00'),
+  (28, 'hours',        '2016-02-10 19:46:33.306157519-04', 23,                '2016-02-10 19:00:00-04'),
+  (29, 'minute',       '2001-04-10 12:04:59',              4,                 '2001-04-10 12:04:00'),
+  (30, 'minute',       '2016-02-10 19:46:33.306157519',    46,                '2016-02-10 19:46:00'),
+  (31, 'minutes',      '2016-02-10 19:46:33.306157519',    46,                '2016-02-10 19:46:00'),
+  (32, 'second',       '2001-04-10 12:04:59.234',          59.234,            '2001-04-10 12:04:59'),
+  (33, 'second',       '2016-02-10 19:46:33.306157519',    33.306158,         '2016-02-10 19:46:33'),
+  (34, 'seconds',      '2016-02-10 19:46:33.306157519',    33.306158,         '2016-02-10 19:46:33'),
+  (35, 'millisecond',  '2001-04-10 12:04:59.234567',       59234.567,         '2001-04-10 12:04:59.234'),
+  (36, 'millisecond',  '2016-02-10 19:46:33.306157519',    33306.158,         '2016-02-10 19:46:33.306'),
+  (37, 'milliseconds', '2016-02-10 19:46:33.306157519',    33306.158,         '2016-02-10 19:46:33.306'),
+  (38, 'microsecond',  '2001-04-10 12:04:59.34565423',     59345654,          '2001-04-10 12:04:59.345654'),
+  (39, 'microsecond',  '2016-02-10 19:46:33.306157519',    33306158,          '2016-02-10 19:46:33.306158'),
+  (40, 'microseconds', '2016-02-10 19:46:33.306157519',    33306158,          '2016-02-10 19:46:33.306158'),
+  (41, 'isodow',       '2001-04-10 12:04:59',              2,                 null),
+  (42, 'isodow',       '2001-04-08 12:04:59',              7,                 null),
+  (43, 'isoyear',      '2007-12-31 12:04:59',              2008,              null),
+  (44, 'isoyear',      '2008-01-01 12:04:59',              2008,              null),
+  (45, 'decade',       '2001-04-10 12:04:59',              200,               '2000-01-01 00:00:00'),
+  (46, 'decade',       '2016-02-10 19:46:33.306157519 BC', -202,              '2021-01-01 00:00:00 BC'),
+  (47, 'century',      '2016-02-10 19:46:33.306157519',    21,                '2001-01-01 00:00:00'),
+  (48, 'century',      '0004-02-10 19:46:33.306157519 BC', -1,                '0100-01-01 00:00:00 BC'),
+  (49, 'millennium',   '2016-02-10 19:46:33.306157519',    3,                 '2001-01-01 00:00:00'),
+  (50, 'millennium',   '1004-02-10 19:46:33.306157519 BC', -2,                '2000-01-01 00:00:00 BC'),
+  (51, 'julian',       '4714-11-24 BC',                     0,                null),
+  (52, 'julian',       '2016-02-10 19:46:33.306157519',    2457429.823996599, null)
+
+query IBBR
+SELECT k, extract(element, input::timestamp) = extract_result, date_part(element, input::timestamp) = extract_result, extract(element, input::timestamp) FROM ex ORDER BY k
+----
+1   true  true  2001
+2   true  true  2016
+3   true  true  2016
+4   true  true  2
+5   true  true  1
+6   true  true  2
+7   true  true  3
+8   true  true  4
+9   true  true  4
+10  true  true  2
+11  true  true  2
+12  true  true  15
+13  true  true  1
+14  true  true  10
+15  true  true  10
+16  true  true  10
+17  true  true  2
+18  true  true  4
+19  true  true  100
+20  true  true  102
+21  true  true  86401.000001
+22  true  true  100801.000001
+23  true  true  9.86904299e+08
+24  true  true  12
+25  true  true  19
+26  true  true  23
+27  true  true  19
+28  true  true  23
+29  true  true  4
+30  true  true  46
+31  true  true  46
+32  true  true  59.234
+33  true  true  33.306158
+34  true  true  33.306158
+35  true  true  59234.567
+36  true  true  33306.158
+37  true  true  33306.158
+38  true  true  5.9345654e+07
+39  true  true  3.3306158e+07
+40  true  true  3.3306158e+07
+41  true  true  2
+42  true  true  7
+43  true  true  2008
+44  true  true  2008
+45  true  true  200
+46  true  true  -202
+47  true  true  21
+48  true  true  -1
+49  true  true  3
+50  true  true  -2
+51  true  true  0
+52  true  true  2.457429823996599e+06
+
+query error unsupported timespan: nansecond
+SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamp)
+
+query error unknown unit "nanosecond"
+SELECT INTERVAL '1 nanosecond';
+
+query error unknown unit "ns"
+SELECT INTERVAL '1 ns';
+
+query IBR
+SELECT k, extract(element, input::timestamptz) = extract_result, extract(element, input::timestamptz) FROM ex ORDER BY k
+----
+1   true  2001
+2   true  2016
+3   true  2016
+4   true  2
+5   true  1
+6   true  2
+7   true  3
+8   true  4
+9   true  4
+10  true  2
+11  true  2
+12  true  15
+13  true  1
+14  true  10
+15  true  10
+16  true  10
+17  true  2
+18  true  4
+19  true  100
+20  true  102
+21  true  86401.000001
+22  true  100801.000001
+23  true  9.86904299e+08
+24  true  12
+25  true  19
+26  true  23
+27  true  19
+28  true  23
+29  true  4
+30  true  46
+31  true  46
+32  true  59.234
+33  true  33.306158
+34  true  33.306158
+35  true  59234.567
+36  true  33306.158
+37  true  33306.158
+38  true  5.9345654e+07
+39  true  3.3306158e+07
+40  true  3.3306158e+07
+41  true  2
+42  true  7
+43  true  2008
+44  true  2008
+45  true  200
+46  true  -202
+47  true  21
+48  true  -1
+49  true  3
+50  true  -2
+51  true  0
+52  true  2.457429823996599e+06
+
+query error unsupported timespan: nansecond
+SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamptz)
+
+query R
+SELECT extract(hour from '2016-02-10 19:46:33.306157519-04'::timestamptz)
+----
+23
+
+query R
+SELECT extract(hours from '2016-02-10 19:46:33.306157519-04'::timestamptz)
+----
+23
+
+query ITTBT
+SELECT k, element, input, date_trunc(element, input::timestamp) = date_trunc_result, date_trunc(element, input::timestamp)::string
+FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
+----
+1   year          2001-04-10 12:04:59 +0000 UTC          true  2001-01-01 00:00:00
+2   year          2016-02-10 19:46:33.306158 +0000 UTC   true  2016-01-01 00:00:00
+3   years         2016-02-10 19:46:33.306158 +0000 UTC   true  2016-01-01 00:00:00
+4   quarter       2001-04-10 12:04:59 +0000 UTC          true  2001-04-01 00:00:00
+5   quarter       2016-02-10 19:46:33.306158 +0000 UTC   true  2016-01-01 00:00:00
+6   quarter       2016-05-10 19:46:33.306158 +0000 UTC   true  2016-04-01 00:00:00
+7   quarter       2016-09-09 19:46:33.306158 +0000 UTC   true  2016-07-01 00:00:00
+8   quarter       2016-10-10 19:46:33.306158 +0000 UTC   true  2016-10-01 00:00:00
+9   month         2001-04-10 12:04:59 +0000 UTC          true  2001-04-01 00:00:00
+10  month         2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-01 00:00:00
+11  months        2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-01 00:00:00
+12  week          2001-04-10 12:04:59 +0000 UTC          true  2001-04-09 00:00:00
+13  weeks         2001-01-05 12:04:59 +0000 UTC          true  2001-01-01 00:00:00
+14  day           2001-04-10 12:04:59 +0000 UTC          true  2001-04-10 00:00:00
+15  day           2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 00:00:00
+16  days          2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 00:00:00
+24  hour          2001-04-10 12:04:59 +0000 UTC          true  2001-04-10 12:00:00
+25  hour          2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 19:00:00
+26  hour          2016-02-10 23:46:33.306158 +0000 UTC   true  2016-02-10 23:00:00
+27  hours         2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 19:00:00
+28  hours         2016-02-10 23:46:33.306158 +0000 UTC   true  2016-02-10 23:00:00
+29  minute        2001-04-10 12:04:59 +0000 UTC          true  2001-04-10 12:04:00
+30  minute        2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 19:46:00
+31  minutes       2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 19:46:00
+32  second        2001-04-10 12:04:59.234 +0000 UTC      true  2001-04-10 12:04:59
+33  second        2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 19:46:33
+34  seconds       2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 19:46:33
+35  millisecond   2001-04-10 12:04:59.234567 +0000 UTC   true  2001-04-10 12:04:59.234
+36  millisecond   2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 19:46:33.306
+37  milliseconds  2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 19:46:33.306
+38  microsecond   2001-04-10 12:04:59.345654 +0000 UTC   true  2001-04-10 12:04:59.345654
+39  microsecond   2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 19:46:33.306158
+40  microseconds  2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 19:46:33.306158
+45  decade        2001-04-10 12:04:59 +0000 UTC          true  2000-01-01 00:00:00
+46  decade        -2015-02-10 19:46:33.306158 +0000 UTC  true  2021-01-01 00:00:00 BC
+47  century       2016-02-10 19:46:33.306158 +0000 UTC   true  2001-01-01 00:00:00
+48  century       -0003-02-10 19:46:33.306158 +0000 UTC  true  0100-01-01 00:00:00 BC
+49  millennium    2016-02-10 19:46:33.306158 +0000 UTC   true  2001-01-01 00:00:00
+50  millennium    -1003-02-10 19:46:33.306158 +0000 UTC  true  2000-01-01 00:00:00 BC
+
+query IBT
+SELECT k, date_trunc(element, input::timestamptz) = date_trunc_result, date_trunc(element, input::timestamptz)::string
+FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
+----
+1   true  2001-01-01 00:00:00+00
+2   true  2016-01-01 00:00:00+00
+3   true  2016-01-01 00:00:00+00
+4   true  2001-04-01 00:00:00+00
+5   true  2016-01-01 00:00:00+00
+6   true  2016-04-01 00:00:00+00
+7   true  2016-07-01 00:00:00+00
+8   true  2016-10-01 00:00:00+00
+9   true  2001-04-01 00:00:00+00
+10  true  2016-02-01 00:00:00+00
+11  true  2016-02-01 00:00:00+00
+12  true  2001-04-09 00:00:00+00
+13  true  2001-01-01 00:00:00+00
+14  true  2001-04-10 00:00:00+00
+15  true  2016-02-10 00:00:00+00
+16  true  2016-02-10 00:00:00+00
+24  true  2001-04-10 12:00:00+00
+25  true  2016-02-10 19:00:00+00
+26  true  2016-02-10 23:00:00+00
+27  true  2016-02-10 19:00:00+00
+28  true  2016-02-10 23:00:00+00
+29  true  2001-04-10 12:04:00+00
+30  true  2016-02-10 19:46:00+00
+31  true  2016-02-10 19:46:00+00
+32  true  2001-04-10 12:04:59+00
+33  true  2016-02-10 19:46:33+00
+34  true  2016-02-10 19:46:33+00
+35  true  2001-04-10 12:04:59.234+00
+36  true  2016-02-10 19:46:33.306+00
+37  true  2016-02-10 19:46:33.306+00
+38  true  2001-04-10 12:04:59.345654+00
+39  true  2016-02-10 19:46:33.306158+00
+40  true  2016-02-10 19:46:33.306158+00
+45  true  2000-01-01 00:00:00+00
+46  true  2021-01-01 00:00:00+00 BC
+47  true  2001-01-01 00:00:00+00
+48  true  0100-01-01 00:00:00+00 BC
+49  true  2001-01-01 00:00:00+00
+50  true  2000-01-01 00:00:00+00 BC
+
+query T
+SELECT date_trunc('millennia', '2000-02-10 19:46:33.306157519-04'::timestamptz)::string
+----
+1001-01-01 00:00:00+00
+
+query T
+SELECT date_trunc('centuries', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
+----
+2001-01-01 00:00:00+00
+
+query T
+SELECT date_trunc('decades', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
+----
+2010-01-01 00:00:00+00
+
+query T
+SELECT date_trunc('hour', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
+----
+2016-02-10 23:00:00+00
+
+query T
+SELECT date_trunc('hours', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
+----
+2016-02-10 23:00:00+00
+
+query IBT
+SELECT k, date_trunc(element, input::date) = date_trunc_result::date, date_trunc(element, input::date)::string
+FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
+----
+1   true  2001-01-01 00:00:00+00
+2   true  2016-01-01 00:00:00+00
+3   true  2016-01-01 00:00:00+00
+4   true  2001-04-01 00:00:00+00
+5   true  2016-01-01 00:00:00+00
+6   true  2016-04-01 00:00:00+00
+7   true  2016-07-01 00:00:00+00
+8   true  2016-10-01 00:00:00+00
+9   true  2001-04-01 00:00:00+00
+10  true  2016-02-01 00:00:00+00
+11  true  2016-02-01 00:00:00+00
+12  true  2001-04-09 00:00:00+00
+13  true  2001-01-01 00:00:00+00
+14  true  2001-04-10 00:00:00+00
+15  true  2016-02-10 00:00:00+00
+16  true  2016-02-10 00:00:00+00
+24  true  2001-04-10 00:00:00+00
+25  true  2016-02-10 00:00:00+00
+26  true  2016-02-10 00:00:00+00
+27  true  2016-02-10 00:00:00+00
+28  true  2016-02-10 00:00:00+00
+29  true  2001-04-10 00:00:00+00
+30  true  2016-02-10 00:00:00+00
+31  true  2016-02-10 00:00:00+00
+32  true  2001-04-10 00:00:00+00
+33  true  2016-02-10 00:00:00+00
+34  true  2016-02-10 00:00:00+00
+35  true  2001-04-10 00:00:00+00
+36  true  2016-02-10 00:00:00+00
+37  true  2016-02-10 00:00:00+00
+38  true  2001-04-10 00:00:00+00
+39  true  2016-02-10 00:00:00+00
+40  true  2016-02-10 00:00:00+00
+45  true  2000-01-01 00:00:00+00
+46  true  2021-01-01 00:00:00+00 BC
+47  true  2001-01-01 00:00:00+00
+48  true  0100-01-01 00:00:00+00 BC
+49  true  2001-01-01 00:00:00+00
+50  true  2000-01-01 00:00:00+00 BC
+
+query T
+SELECT (timestamp '2016-02-10 19:46:33.306157519')::string
+----
+2016-02-10 19:46:33.306158
+
+query T
+SELECT (timestamptz '2016-02-10 19:46:33.306157519')::string
+----
+2016-02-10 19:46:33.306158+00
+
+# Test SET TIME ZONE
+
+# default time zone of UTC
+query T
+SELECT '2015-08-25 05:45:45.53453'::timestamp
+----
+2015-08-25 05:45:45.53453 +0000 +0000
+
+query T
+SELECT '2015-08-25 05:45:45.53453'::timestamp
+----
+2015-08-25 05:45:45.53453 +0000 +0000
+
+statement ok
+SET TIME ZONE 'Europe/Rome'
+
+# Timezone abbreviations (e.g. CET) parse to a fixed offset via
+# pg_catalog.pg_timezone_abbrevs. Display uses the session timezone, which is
+# Europe/Rome here, so the +01:00 input renders as +02:00 (CEST) on Aug 25.
+query T
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz
+----
+2015-08-25 06:45:45.53453 +0200 CEST
+
+statement ok
+SET TIME ZONE +1
+
+query T
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz
+----
+2015-08-25 05:45:45.53453 +0100 +0100
+
+query T
+SELECT '2015-08-25 05:45:45.53453'::timestamp
+----
+2015-08-25 05:45:45.53453 +0000 +0000
+
+query T
+SELECT '2015-08-25 05:45:45.53453'::timestamptz
+----
+2015-08-25 05:45:45.53453 +0100 +0100
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamp
+----
+2015-08-25 05:45:45 +0000 +0000
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamp::timestamptz
+----
+2015-08-25 05:45:45 +0100 +0100
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamptz::timestamp
+----
+2015-08-25 07:45:45 +0000 +0000
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamptz
+----
+2015-08-25 07:45:45 +0100 +0100
+
+# alias test: TIMEZONE instead of TIME ZONE
+statement ok
+SET TIMEZONE = +2
+
+query T
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz
+----
+2015-08-25 06:45:45.53453 +0200 +0200
+
+query T
+SELECT '2015-08-25 05:45:45.53453'::timestamp
+----
+2015-08-25 05:45:45.53453 +0000 +0000
+
+query T
+SELECT '2015-08-25 05:45:45.53453'::timestamptz
+----
+2015-08-25 05:45:45.53453 +0200 +0200
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamp
+----
+2015-08-25 05:45:45 +0000 +0000
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamp::timestamptz
+----
+2015-08-25 05:45:45 +0200 +0200
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamptz::timestamp
+----
+2015-08-25 08:45:45 +0000 +0000
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamptz
+----
+2015-08-25 08:45:45 +0200 +0200
+
+statement ok
+SET TIME ZONE -5
+
+query T
+SELECT '2015-08-24 23:45:45.53453'::timestamp
+----
+2015-08-24 23:45:45.53453 +0000 +0000
+
+query T
+SELECT '2015-08-24 23:45:45.53453'::timestamptz
+----
+2015-08-24 23:45:45.53453 -0500 -0500
+
+query T
+SELECT '2015-08-24 23:45:45.53453 UTC'::timestamp
+----
+2015-08-24 23:45:45.53453 +0000 +0000
+
+query T
+SELECT '2015-08-24 23:45:45.53453 UTC'::timestamptz
+----
+2015-08-24 18:45:45.53453 -0500 -0500
+
+query T
+SELECT '2015-08-24 23:45:45.53453-02:00'::timestamp
+----
+2015-08-24 23:45:45.53453 +0000 +0000
+
+query T
+SELECT '2015-08-24 23:45:45.53453-02:00'::timestamptz
+----
+2015-08-24 20:45:45.53453 -0500 -0500
+
+query T
+SELECT '2015-08-24 23:45:45.53453-05:00'::timestamptz
+----
+2015-08-24 23:45:45.53453 -0500 -0500
+
+query T
+SELECT '2015-08-24 23:45:45.534 -02:00'::timestamp
+----
+2015-08-24 23:45:45.534 +0000 +0000
+
+query T
+SELECT '2015-08-24 23:45:45.534 -02:00'::timestamptz
+----
+2015-08-24 20:45:45.534 -0500 -0500
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamp::timestamptz
+----
+2015-08-25 05:45:45 -0500 -0500
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamptz::timestamp
+----
+2015-08-25 01:45:45 +0000 +0000
+
+# using Eastern instead of fixed -5 should handle DST.
+statement ok
+SET TIME ZONE 'America/New_York'
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamp::timestamptz
+----
+2015-08-25 05:45:45 -0400 EDT
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamptz::timestamp
+----
+2015-08-25 02:45:45 +0000 +0000
+
+
+statement error cannot find time zone "foobar"
+SET TIME ZONE 'foobar'
+
+statement ok
+SET TIME ZONE default
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 +0000 UTC
+
+statement ok
+SET TIME ZONE local
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 +0000 UTC
+
+statement ok
+SET TIME ZONE 'DEFAULT'
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 +0000 UTC
+
+statement ok
+SET TIME ZONE ''
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 +0000 UTC
+
+
+statement ok
+SET TIME ZONE INTERVAL '-7h'
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamp
+----
+2015-08-24 21:45:45.53453 +0000 +0000
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 -0700 -0700
+
+statement ok
+SET TIME ZONE -7.5
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamp
+----
+2015-08-24 21:45:45.53453 +0000 +0000
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 -0730 -0730
+
+query T
+SELECT '2015-08-24 21:45:45.53453 UTC'::timestamptz
+----
+2015-08-24 14:15:45.53453 -0730 -0730
+
+statement ok
+SET TIME ZONE LOCAL
+
+query T
+SELECT '2015-08-25 04:45:45.53453'::timestamp
+----
+2015-08-25 04:45:45.53453 +0000 +0000
+
+statement ok
+SET TIME ZONE DEFAULT
+
+query T
+SELECT '2015-08-25 04:45:45.53453'::timestamp
+----
+2015-08-25 04:45:45.53453 +0000 +0000
+
+# reset for what follows.
+statement ok
+SET TIME ZONE 'UTC'
+
+# Check that casting from a timestamp to a date and vice versa
+# uses the time zone.
+query TTTT
+SELECT b, b::date, c, c::date FROM u WHERE a = 123
+----
+2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 00:00:00 +0000 +0000  2015-08-30 03:34:45.34567 +0000 UTC  2015-08-30 00:00:00 +0000 +0000
+
+query T
+SELECT d::timestamp FROM u WHERE a = 123
+----
+2015-08-30 00:00:00 +0000 +0000
+
+statement ok
+SET TIME ZONE -5
+
+query TTTT
+SELECT b, b::date, c, c::date FROM u WHERE a = 123
+----
+2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 00:00:00 +0000 +0000  2015-08-29 22:34:45.34567 -0500 -0500  2015-08-29 00:00:00 +0000 +0000
+
+query T
+SELECT d::timestamp FROM u WHERE a = 123
+----
+2015-08-30 00:00:00 +0000 +0000
+
+statement ok
+SET TIME ZONE UTC
+
+# TODO(mjibson): Remove family definition once #41283 is fixed.
+statement ok
+CREATE TABLE tz (
+  a INT PRIMARY KEY,
+  b TIMESTAMP,
+  c TIMESTAMPTZ,
+  d TIMESTAMPTZ,
+  FAMILY "primary" (a, b, c, d)
+)
+
+query TTBTTTB rowsort
+SHOW COLUMNS FROM tz
+----
+a  INT8         false  NULL  ·  {tz_pkey}  false
+b  TIMESTAMP    true   NULL  ·  {tz_pkey}  false
+c  TIMESTAMPTZ  true   NULL  ·  {tz_pkey}  false
+d  TIMESTAMPTZ  true   NULL  ·  {tz_pkey}  false
+
+statement ok
+INSERT INTO tz VALUES
+  (1, timestamp '2015-08-30 03:34:45', timestamptz '2015-08-30 03:34:45',  timestamptz '2015-08-30 03:34:45'),
+  (2, timestamp '2015-08-30 03:34:45+01:00', timestamptz '2015-08-30 03:34:45+01:00',  timestamptz '2015-08-30 03:34:45')
+
+statement ok
+SET TIME ZONE -2
+
+query ITT
+SELECT a, b, c FROM tz ORDER BY a
+----
+1   2015-08-30 03:34:45 +0000 +0000     2015-08-30 01:34:45 -0200 -0200
+2   2015-08-30 03:34:45 +0000 +0000     2015-08-30 00:34:45 -0200 -0200
+
+query TTTT
+SELECT b + interval '1m', interval '1m' + b, c + interval '1m', interval '1m' + c FROM tz WHERE a = 1
+----
+2015-08-30 03:35:45 +0000 +0000		2015-08-30 03:35:45 +0000 +0000		2015-08-30 01:35:45 -0200 -0200		2015-08-30 01:35:45 -0200 -0200
+
+query I
+SELECT a FROM tz WHERE c = d
+----
+1
+
+query I rowsort
+SELECT a FROM tz WHERE c <= d
+----
+1
+2
+
+query I
+SELECT a FROM tz WHERE c < d
+----
+2
+
+
+query I rowsort
+SELECT a FROM tz WHERE b = c::timestamp
+----
+
+query I rowsort
+SELECT a FROM tz WHERE c = d::timestamp
+----
+1
+
+# reset for what follows.
+statement ok
+SET TIME ZONE 'UTC'
+
+statement ok
+SET TIME ZONE -5
+
+query T
+SHOW TIME ZONE
+----
+<-05>+05
+
+statement ok
+SET TIME ZONE INTERVAL '+04:00' HOUR TO MINUTE
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 +0400 +0400
+
+statement ok
+SET TIME ZONE INTERVAL '-04:00' MINUTE TO SECOND
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 -0004 -0004
+
+# alias test: TIMEZONE instead of TIME ZONE
+statement ok
+SET TIMEZONE TO INTERVAL '+05:00' HOUR TO MINUTE
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 +0500 +0500
+
+statement ok
+SET TIMEZONE TO INTERVAL '-05:00' MINUTE TO SECOND
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 -0005 -0005
+
+statement ok
+SET TIME ZONE 0
+
+query T
+SHOW TIME ZONE
+----
+<-00>+00
+
+query T
+SELECT DATE '1999-01-01' + INTERVAL '4 minutes'
+----
+1999-01-01 00:04:00 +0000 +0000
+
+query T
+SELECT INTERVAL '4 minutes' + DATE '1999-01-01'
+----
+1999-01-01 00:04:00 +0000 +0000
+
+query T
+SELECT DATE '1999-01-01' - INTERVAL '4 minutes'
+----
+1998-12-31 23:56:00 +0000 +0000
+
+query B
+SELECT DATE '1999-01-02' < TIMESTAMPTZ '1999-01-01'
+----
+false
+
+query B
+SELECT DATE '1999-01-02' < TIMESTAMP '1999-01-01'
+----
+false
+
+query B
+SELECT DATE '1999-01-02' <= TIMESTAMPTZ '1999-01-01'
+----
+false
+
+query B
+SELECT DATE '1999-01-02' <= TIMESTAMP '1999-01-01'
+----
+false
+
+query B
+SELECT DATE '1999-01-02' <= TIMESTAMPTZ '1999-01-02'
+----
+true
+
+query B
+SELECT DATE '1999-01-02' <= TIMESTAMP '1999-01-02'
+----
+true
+
+query B
+SELECT DATE '1999-01-02' > TIMESTAMPTZ '1999-01-01'
+----
+true
+
+query B
+SELECT DATE '1999-01-02' > TIMESTAMP '1999-01-01'
+----
+true
+
+query B
+SELECT DATE '1999-01-02' >= TIMESTAMPTZ '1999-01-01'
+----
+true
+
+query B
+SELECT DATE '1999-01-02' >= TIMESTAMP '1999-01-01'
+----
+true
+
+query B
+SELECT DATE '1999-01-02' = TIMESTAMPTZ '1999-01-01'
+----
+false
+
+query B
+SELECT DATE '1999-01-01' = TIMESTAMP '1999-01-01'
+----
+true
+
+## Test parsing of unitless interval constants with field specifiers
+query TTTTT
+SELECT INTERVAL '5', INTERVAL '5' SECOND, INTERVAL '5' MINUTE TO SECOND, INTERVAL '5' HOUR TO SECOND, INTERVAL '5' DAY TO SECOND;
+----
+00:00:05  00:00:05  00:00:05  00:00:05  00:00:05
+
+query TTT
+SELECT INTERVAL '5' MINUTE, INTERVAL '5' HOUR TO MINUTE, INTERVAL '5' DAY TO MINUTE;
+----
+00:05:00  00:05:00  00:05:00
+
+query TT
+SELECT INTERVAL '5' HOUR, INTERVAL '5' DAY TO HOUR;
+----
+05:00:00  05:00:00
+
+query T
+SELECT INTERVAL '5' DAY;
+----
+5 days
+
+query TT
+SELECT INTERVAL '5' MONTH, INTERVAL '5' YEAR TO MONTH;
+----
+5 mons  5 mons
+
+query T
+SELECT INTERVAL '5' YEAR
+----
+5 years
+
+## Test truncation via field specifiers
+query TTTT
+SELECT INTERVAL '1-2 3 4:5:6' SECOND, INTERVAL '1-2 3 4:5:6' MINUTE TO SECOND, INTERVAL '1-2 3 4:5:6' HOUR TO SECOND, INTERVAL '1-2 3 4:5:6' DAY TO SECOND;
+----
+1 year 2 mons 3 days 04:05:06  1 year 2 mons 3 days 04:05:06  1 year 2 mons 3 days 04:05:06  1 year 2 mons 3 days 04:05:06
+
+query TTT
+SELECT INTERVAL '1-2 3 4:5:6' MINUTE, INTERVAL '1-2 3 4:5:6' HOUR TO MINUTE, INTERVAL '1-2 3 4:5:6' DAY TO MINUTE;
+----
+1 year 2 mons 3 days 04:05:00  1 year 2 mons 3 days 04:05:00  1 year 2 mons 3 days 04:05:00
+
+query TT
+SELECT INTERVAL '1-2 3 4:5:6' HOUR, INTERVAL '1-2 3 4:5:6' DAY TO HOUR
+----
+1 year 2 mons 3 days 04:00:00  1 year 2 mons 3 days 04:00:00
+
+query T
+SELECT INTERVAL '1-2 3 4:5:6' DAY;
+----
+1 year 2 mons 3 days
+
+query TT
+SELECT INTERVAL '1-2 3 4:5:6' MONTH, INTERVAL '1-2 3 4:5:6' YEAR TO MONTH;
+----
+1 year 2 mons  1 year 2 mons
+
+query T
+SELECT INTERVAL '1-2 3 4:5:6' YEAR
+----
+1 year
+
+
+# Test regression, #20464. When a built-in returns a datum that does not
+# match the function signature, distSQL will panic on table scans.
+
+statement ok
+CREATE TABLE topics (
+  ts TIMESTAMP,
+  tstz TIMESTAMPTZ,
+  "date" DATE
+);
+
+statement ok
+INSERT INTO topics VALUES (
+  '2017-12-05 04:04:04.913231+00:00',
+  '2017-12-05 04:04:04.913231+00:00',
+  '2017-12-05 04:04:04.913231+00:00'
+);
+
+query T
+SELECT date_trunc('month', ts) AS date_trunc_month_created_at FROM "topics";
+----
+2017-12-01 00:00:00 +0000 +0000
+
+query T
+SELECT date_trunc('month', tstz) AS date_trunc_month_created_at FROM "topics";
+----
+2017-12-01 00:00:00 +0000 +0000
+
+query T
+SELECT date_trunc('month', "date") AS date_trunc_month_created_at FROM "topics";
+----
+2017-12-01 00:00:00 +0000 +0000
+
+# Test date_trunc works when timestamp zone changes.
+subtest regression_41663
+
+query T
+select date_trunc('day', '2011-01-01 22:30:00'::date);
+----
+2011-01-01 00:00:00 +0000 +0000
+
+query T
+select date_trunc('day', '2011-01-01 22:30:00+01:00'::timestamptz);
+----
+2011-01-01 00:00:00 +0000 +0000
+
+statement ok
+SET TIME ZONE 'Africa/Nairobi'
+
+query T
+select date_trunc('day', '2011-01-01 22:30:00'::date)
+----
+2011-01-01 00:00:00 +0300 EAT
+
+query T
+select date_trunc('day', '2011-01-02 01:30:00'::timestamp)
+----
+2011-01-02 00:00:00 +0000 +0000
+
+query T
+select date_trunc('day', '2011-01-01 22:30:00+01:00'::timestamptz)
+----
+2011-01-02 00:00:00 +0300 EAT
+
+statement ok
+SET TIME ZONE -5
+
+query TT
+select date_trunc('day', '2011-01-02 01:30:00'::date), pg_typeof(date_trunc('day', '2011-01-02 01:30:00'::date))
+----
+2011-01-02 00:00:00 -0500 -0500  timestamp with time zone
+
+query TT
+select date_trunc('day', '2011-01-02 01:30:00'::timestamp), pg_typeof(date_trunc('day', '2011-01-02 01:30:00'::timestamp))
+----
+2011-01-02 00:00:00 +0000 +0000  timestamp without time zone
+
+query TT
+select date_trunc('day', '2011-01-02 01:30:00+00:00'::timestamptz), pg_typeof(date_trunc('day', '2011-01-02 01:30:00+00:00'::timestamptz))
+----
+2011-01-01 00:00:00 -0500 -0500  timestamp with time zone
+
+statement ok
+SET TIME ZONE 0
+
+# Test casting timestamptz to time works in the presence of time zones.
+
+statement ok
+SET TIME ZONE 'UTC'
+
+statement ok
+CREATE TABLE django_37 (a TIMESTAMPTZ); INSERT INTO django_37 VALUES ('2018-09-28T12:42:10.234567-05:00'::TIMESTAMPTZ)
+
+query T
+SELECT a::TIME FROM django_37
+----
+0000-01-01 17:42:10.234567 +0000 UTC
+
+statement ok
+SET TIME ZONE 'America/Chicago'
+
+query T
+SELECT a::TIME FROM django_37
+----
+0000-01-01 12:42:10.234567 +0000 UTC
+
+# Test negative years to ensure they can round-trip through the parser.
+# Also ensure that we don't trigger any of the "convenience" rules.
+# Update: dates now have a much more limited range such that the original
+# dates from this issue are no longer possible to express.
+subtest regression_35255
+
+statement error date is out of range
+SELECT '-56325279622-12-26'::DATE
+
+statement error date is out of range
+SELECT '-5632-12-26'::DATE
+
+query T
+SELECT '-563-12-26'::DATE
+----
+-0563-12-26 00:00:00 +0000 +0000
+
+query T
+SELECT '6-12-26 BC'::DATE
+----
+-0025-06-12 00:00:00 +0000 +0000
+
+query T
+SELECT '5-12-26 BC'::DATE
+----
+-0025-05-12 00:00:00 +0000 +0000
+
+# Update: dates now have a much more limited range such that the original
+# dates from this issue are no longer possible to express.
+subtest regression_36146
+
+statement error out of range
+WITH
+    w (c) AS (VALUES (NULL), (NULL))
+SELECT
+    '1971-03-18'::DATE + 300866802885581286
+FROM
+    w
+ORDER BY
+    c
+
+statement error out of range
+SELECT
+    '1971-03-18'::DATE + 300866802885581286
+
+# Update: dates now have a much more limited range such that the original
+# dates from this issue are no longer possible to express.
+subtest regression_36557
+
+statement error out of range
+SELECT 7133080445639580613::INT8 + '1977-11-03'::DATE
+
+statement error out of range
+SELECT '-239852040018-04-28':::DATE
+
+statement error out of range
+SELECT(7133080445639580613::INT8 + '1977-11-03'::DATE) = '-239852040018-04-28':::DATE
+
+subtest interval_math
+
+query TTTTTTT
+SELECT
+    i,
+    i / 2::INT8,
+    i * 2::INT8,
+    i / 2::FLOAT8,
+    i * 2::FLOAT8,
+    i / .2362::FLOAT8,
+    i * .2362::FLOAT8
+FROM
+    (
+        VALUES
+            ('1 day'::INTERVAL),
+            ('1 month'::INTERVAL),
+            ('1 hour'::INTERVAL),
+            ('1 month 2 days 4 hours'::INTERVAL)
+    )
+        AS v (i)
+ORDER BY
+    i
+----
+01:00:00               00:30:00          02:00:00                00:30:00          02:00:00                04:14:01.320914                 00:14:10.32
+1 day                  12:00:00          2 days                  12:00:00          2 days                  4 days 05:36:31.701948          05:40:07.68
+1 mon                  15 days           2 mons                  15 days           2 mons                  4 mons 7 days 00:15:51.0912     7 days 02:03:50.4
+1 mon 2 days 04:00:00  16 days 02:00:00  2 mons 4 days 08:00:00  16 days 02:00:00  2 mons 4 days 08:00:00  4 mons 15 days 28:24:59.778753  7 days 14:20:47.04
+
+subtest tz_utc_normalization
+
+# This is a special case, pending resolution of #36864.
+query T
+SET timezone = 'utc'; SHOW timezone
+----
+UTC
+
+subtest regression_42244
+
+statement ok
+SET TIME ZONE -5
+
+# Check date is still configured correctly from day.
+query R
+select extract(day from '2019-01-15'::date) as final
+----
+15
+
+# Check other usages of MakeDTimestampTZFromDate
+
+query TT
+select ('2019-01-15'::date + '16:17:18'::time), pg_typeof('2019-01-15'::date + '16:17:18'::time)
+----
+2019-01-15 16:17:18 +0000 +0000  timestamp without time zone
+
+query TT
+select ('16:17:18'::time + '2019-01-15'::date), pg_typeof(('16:17:18'::time + '2019-01-15'::date))
+----
+2019-01-15 16:17:18 +0000 +0000  timestamp without time zone
+
+query TT
+select ('2019-01-15'::date + '1 hour'::interval), pg_typeof('2019-01-15'::date + '1 hour'::interval)
+----
+2019-01-15 01:00:00 +0000 +0000  timestamp without time zone
+
+query TT
+select ('1 hour'::interval + '2019-01-15'::date), pg_typeof('1 hour'::interval + '2019-01-15'::date)
+----
+2019-01-15 01:00:00 +0000 +0000  timestamp without time zone
+
+query TT
+select ('2019-01-15'::date - '16:17:18'::time), pg_typeof('2019-01-15'::date - '16:17:18'::time)
+----
+2019-01-14 07:42:42 +0000 +0000  timestamp without time zone
+
+query TT
+select ('2019-01-15'::date - '1 hour'::interval), pg_typeof('2019-01-15'::date - '1 hour'::interval)
+----
+2019-01-14 23:00:00 +0000 +0000  timestamp without time zone
+
+query B
+select '2019-01-01'::date > '2019-01-01 00:00:00+00'::timestamptz
+----
+true
+
+query B
+select '2019-01-01 00:00:00+00'::timestamptz < '2019-01-01'::date
+----
+true
+
+query B
+select '2019-01-01'::date = '2019-01-01 00:00:00'::timestamp
+----
+true
+
+query B
+select '2019-01-01 00:00:00'::timestamp = '2019-01-01'::date
+----
+true
+
+query B
+select '2019-01-01'::date = '2019-01-01'::date
+----
+true
+
+# Check logic works on a table.
+
+statement ok
+SET TIME ZONE 0
+
+statement ok
+CREATE TABLE date_test (date_val date, time_val time, interval_val interval)
+
+statement ok
+INSERT INTO date_test VALUES ('2019-01-15'::date, '16:17:18'::time, '1 hour'::interval)
+
+statement ok
+SET TIME ZONE -5
+
+query TT
+select (date_test.date_val + date_test.time_val), pg_typeof(date_test.date_val + date_test.time_val) from date_test
+----
+2019-01-15 16:17:18 +0000 +0000  timestamp without time zone
+
+query TT
+select (date_test.time_val + date_test.date_val), pg_typeof((date_test.time_val + date_test.date_val)) from date_test
+----
+2019-01-15 16:17:18 +0000 +0000  timestamp without time zone
+
+query TT
+select (date_test.date_val + date_test.interval_val), pg_typeof(date_test.date_val + date_test.interval_val) from date_test
+----
+2019-01-15 01:00:00 +0000 +0000  timestamp without time zone
+
+query TT
+select (date_test.interval_val + date_test.date_val), pg_typeof(date_test.interval_val + date_test.date_val) from date_test
+----
+2019-01-15 01:00:00 +0000 +0000  timestamp without time zone
+
+query TT
+select (date_test.date_val - date_test.time_val), pg_typeof(date_test.date_val - date_test.time_val) from date_test
+----
+2019-01-14 07:42:42 +0000 +0000  timestamp without time zone
+
+query TT
+select (date_test.date_val - date_test.interval_val), pg_typeof(date_test.date_val - date_test.interval_val) from date_test
+----
+2019-01-14 23:00:00 +0000 +0000  timestamp without time zone
+
+query I
+select count(1) from date_test where date_test.date_val > '2019-01-15 00:00:00+00'::timestamptz
+----
+1
+
+query I
+select count(1) from date_test where '2019-01-15 00:00:00+00'::timestamptz < date_test.date_val
+----
+1
+
+query I
+select count(1) from date_test where '2019-01-15 00:00:00'::timestamp = date_test.date_val
+----
+1
+
+query I
+select count(1) from date_test where date_test.date_val = '2019-01-15 00:00:00'::timestamp
+----
+1
+
+query I
+select count(1) from date_test where date_test.date_val = '2019-01-15'::date
+----
+1
+
+statement ok
+SET TIME ZONE +5
+
+query I
+select count(1) from date_test where date_test.date_val < '2019-01-15 00:00:00+00'::timestamptz
+----
+1
+
+query I
+select count(1) from date_test where '2019-01-15 00:00:00+00'::timestamptz > date_test.date_val
+----
+1
+
+query I
+select count(1) from date_test where date_test.date_val = '2019-01-15 00:00:00'::timestamp
+----
+1
+
+query I
+select count(1) from date_test where date_test.date_val = '2019-01-15'::date
+----
+1
+
+statement ok
+SET TIME ZONE 0
+
+subtest infinity_time
+
+query TT
+SELECT 'infinity'::timestamp, '-infinity'::timestamptz
+----
+infinity  -infinity
+
+# Verify that parse_timestamp can be used in computed column expressions.
+statement ok
+CREATE TABLE timestamps (s STRING, ts TIMESTAMP AS (parse_timestamp(s)) STORED)
+
+query error relative timestamps are not supported
+INSERT INTO timestamps VALUES ('tomorrow')
+
+statement ok
+INSERT INTO timestamps VALUES ('2020-01-02 01:02:03'), ('2015-08-25 04:45:45.53453+01:00'), (NULL)
+
+query TT colnames
+SELECT * FROM timestamps ORDER BY s
+----
+s                                ts
+NULL                             NULL
+2015-08-25 04:45:45.53453+01:00  2015-08-25 04:45:45.53453 +0000 +0000
+2020-01-02 01:02:03              2020-01-02 01:02:03 +0000 +0000
+
+statement ok
+SET TIME ZONE 'America/New_York'
+
+# Insert the same values again (stored columns are computed on insert).
+statement ok
+INSERT INTO timestamps VALUES ('2020-01-02 01:02:03'), ('2015-08-25 04:45:45.53453+01:00'), (NULL)
+
+query TT colnames
+SELECT * FROM timestamps ORDER BY s
+----
+s                                ts
+NULL                             NULL
+NULL                             NULL
+2015-08-25 04:45:45.53453+01:00  2015-08-25 04:45:45.53453 +0000 +0000
+2015-08-25 04:45:45.53453+01:00  2015-08-25 04:45:45.53453 +0000 +0000
+2020-01-02 01:02:03              2020-01-02 01:02:03 +0000 +0000
+2020-01-02 01:02:03              2020-01-02 01:02:03 +0000 +0000
+
+statement ok
+RESET TIME ZONE
+
+# Regression test for panicking when comparing an infinite date coming from a
+# subquery to a timestamp (#64015).
+query B
+SELECT ((SELECT '-infinity'::DATE)) < '2021-04-21':::TIMESTAMP
+----
+true
+
+subtest datestyle_order
+
+# Setting datestyle is always allowed in 22.1.
+statement ok
+set datestyle = 'dmy'
+
+statement ok
+set datestyle = 'ymd'
+
+statement ok
+reset datestyle
+
+statement error context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: TIMESTAMP to STRING casts are dependent on DateStyle; consider using to_char\(timestamp\) instead\.
+CREATE TABLE invalid_table (
+  invalid_col string AS ('2020-05-12 10:12:13'::timestamp::string) STORED
+)
+
+statement error context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: DATE to STRING casts are dependent on DateStyle; consider using to_char\(date\) instead\.
+CREATE TABLE invalid_table (
+  invalid_col string AS ('2020-05-12 10:12:13'::date::string) STORED
+)
+
+statement error context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: STRING to TIMESTAMP casts are context-dependent because of relative timestamp strings like 'now' and session settings such as DateStyle; use parse_timestamp\(string\) instead\.
+CREATE TABLE invalid_table (
+  invalid_col timestamp AS ('2020-05-12 10:12:13'::string::timestamp) STORED
+)
+
+statement error context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: STRING to DATE casts depend on session DateStyle; use parse_date\(string\) instead
+CREATE TABLE invalid_table (
+  invalid_col date AS ('2020-05-12 10:12:13'::string::date) STORED
+)
+
+statement error context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: STRING to TIME casts depend on session DateStyle; use parse_time\(string\) instead
+CREATE TABLE invalid_table (
+  invalid_col time AS ('2020-05-12 10:12:13'::string::time) STORED
+)
+
+statement error context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: STRING to TIMETZ casts depend on session DateStyle; use parse_timetz\(string\) instead
+CREATE TABLE invalid_table (
+  invalid_col timetz AS ('2020-05-12 10:12:13'::string::timetz) STORED
+)
+
+statement ok
+set datestyle = 'dmy'
+
+query T
+SELECT '05-07-2020'::date
+----
+2020-07-05 00:00:00 +0000 +0000
+
+query TTTTT
+SELECT
+  t::timestamptz,
+  t::timestamp,
+  t::timetz,
+  t::time,
+  t::date
+FROM ( VALUES
+  ('2020-09-15 15:17:19.123'),
+  ('15-09-2020 15:17:19.123'),
+  ('03-04-95 15:16:19.123'),
+  ('09-05-2020 15:17:19.123')
+) tbl(t)
+ORDER BY 1
+----
+1995-04-03 15:16:19.123 +0000 UTC  1995-04-03 15:16:19.123 +0000 +0000  0000-01-01 15:16:19.123 +0000 UTC  0000-01-01 15:16:19.123 +0000 UTC  1995-04-03 00:00:00 +0000 +0000
+2020-05-09 15:17:19.123 +0000 UTC  2020-05-09 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-05-09 00:00:00 +0000 +0000
+2020-09-15 15:17:19.123 +0000 UTC  2020-09-15 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-15 00:00:00 +0000 +0000
+2020-09-15 15:17:19.123 +0000 UTC  2020-09-15 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-15 00:00:00 +0000 +0000
+
+statement ok
+set datestyle = 'ymd'
+
+statement error field day value 2020 is out of range\nHINT: Perhaps you need a different "datestyle" setting.
+SELECT '05-07-2020'::date
+
+query TTTTT
+SELECT
+  t::timestamptz,
+  t::timestamp,
+  t::timetz,
+  t::time,
+  t::date
+FROM ( VALUES
+  ('2020-09-15 15:17:19.123'),
+  ('95-03-04 15:16:19.123')
+) tbl(t)
+ORDER BY 1
+----
+1995-03-04 15:16:19.123 +0000 UTC  1995-03-04 15:16:19.123 +0000 +0000  0000-01-01 15:16:19.123 +0000 UTC  0000-01-01 15:16:19.123 +0000 UTC  1995-03-04 00:00:00 +0000 +0000
+2020-09-15 15:17:19.123 +0000 UTC  2020-09-15 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-15 00:00:00 +0000 +0000
+
+statement ok
+set datestyle = 'mdy'
+
+query T
+SELECT '05-07-2020'::date
+----
+2020-05-07 00:00:00 +0000 +0000
+
+query TTTTT
+SELECT
+  t::timestamptz,
+  t::timestamp,
+  t::timetz,
+  t::time,
+  t::date
+FROM ( VALUES
+  ('2020-09-15 15:17:19.123'),
+  ('09-15-2020 15:17:19.123'),
+  ('03-04-95 15:16:19.123'),
+  ('09-05-2020 15:17:19.123')
+) tbl(t)
+ORDER BY 1
+----
+1995-03-04 15:16:19.123 +0000 UTC  1995-03-04 15:16:19.123 +0000 +0000  0000-01-01 15:16:19.123 +0000 UTC  0000-01-01 15:16:19.123 +0000 UTC  1995-03-04 00:00:00 +0000 +0000
+2020-09-05 15:17:19.123 +0000 UTC  2020-09-05 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-05 00:00:00 +0000 +0000
+2020-09-15 15:17:19.123 +0000 UTC  2020-09-15 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-15 00:00:00 +0000 +0000
+2020-09-15 15:17:19.123 +0000 UTC  2020-09-15 15:17:19.123 +0000 +0000  0000-01-01 15:17:19.123 +0000 UTC  0000-01-01 15:17:19.123 +0000 UTC  2020-09-15 00:00:00 +0000 +0000
+
+statement error only ISO style is supported
+SELECT parse_timestamp('01-02-2020 01:02:03', 'postgres')
+
+query error could not parse
+SELECT parse_timestamp('foo')
+
+query error relative timestamps are not supported
+SELECT parse_timestamp('now')
+
+query error relative timestamps are not supported
+SELECT parse_timestamp('tomorrow')
+
+query error relative timestamps are not supported
+SELECT parse_timestamp('now', 'mdy')
+
+statement error only ISO style is supported
+SELECT to_char_with_style(now()::timestamp, 'postgres')
+
+query TT
+SELECT
+  to_char('2020-01-02 01:02:03'::timestamp),
+  to_char_with_style('2020-01-02 01:02:03'::timestamp, 'DMY')
+----
+2020-01-02 01:02:03  2020-01-02 01:02:03
+
+statement ok
+CREATE TABLE timestamp_datestyle_parse(pk SERIAL PRIMARY KEY, s string);
+
+statement ok
+INSERT INTO timestamp_datestyle_parse VALUES
+  (1, '07-09-12 11:30:45.123'),
+  (2, '07-09-12')
+
+query TTTT
+SELECT
+  parse_timestamp(s),
+  parse_timestamp(s, 'iso,mdy'),
+  parse_timestamp(s, 'iso,dmy'),
+  parse_timestamp(s, 'iso,ymd')
+FROM timestamp_datestyle_parse
+ORDER BY pk
+----
+2012-07-09 11:30:45.123 +0000 +0000  2012-07-09 11:30:45.123 +0000 +0000  2012-09-07 11:30:45.123 +0000 +0000  2007-09-12 11:30:45.123 +0000 +0000
+2012-07-09 00:00:00 +0000 +0000      2012-07-09 00:00:00 +0000 +0000      2012-09-07 00:00:00 +0000 +0000      2007-09-12 00:00:00 +0000 +0000
+
+statement error only ISO style is supported
+SELECT parse_date('01-02-2020 01:02:03', 'postgres')
+
+query error relative dates are not supported
+SELECT parse_date('now')
+
+query error relative dates are not supported
+SELECT parse_date('tomorrow', 'iso,mdy')
+
+query TTTT
+SELECT
+  parse_date(s),
+  parse_date(s, 'iso,mdy'),
+  parse_date(s, 'iso,dmy'),
+  parse_date(s, 'iso,ymd')
+FROM timestamp_datestyle_parse
+ORDER BY pk
+----
+2012-07-09 00:00:00 +0000 +0000  2012-07-09 00:00:00 +0000 +0000  2012-09-07 00:00:00 +0000 +0000  2007-09-12 00:00:00 +0000 +0000
+2012-07-09 00:00:00 +0000 +0000  2012-07-09 00:00:00 +0000 +0000  2012-09-07 00:00:00 +0000 +0000  2007-09-12 00:00:00 +0000 +0000
+
+statement error only ISO style is supported
+SELECT to_char_with_style(now()::date, 'postgres')
+
+query TTT
+SELECT
+  to_char('2020-01-02 01:02:03'::date),
+  to_char('2020-01-02'::date, 'YYYY-MM-DD HH24:MI:SS.FF6'),
+  to_char_with_style('2020-01-02 01:02:03'::date, 'DMY')
+----
+2020-01-02  2020-01-02 00:00:00.000000  2020-01-02
+
+statement ok
+CREATE TABLE time_datestyle_parse(pk SERIAL PRIMARY KEY, s string);
+
+statement ok
+INSERT INTO time_datestyle_parse VALUES
+  (1, '2007-09-12 11:30:45.123+06'),
+  (2, '2007-09-12 11:30:45.123+03')
+
+statement error only ISO style is supported
+SELECT parse_time('01-02-2020 01:02:03', 'postgres')
+
+query TTTT
+SELECT
+  parse_time(s),
+  parse_time(s, 'iso,mdy'),
+  parse_time(s, 'iso,dmy'),
+  parse_time(s, 'iso,ymd')
+FROM time_datestyle_parse
+ORDER BY pk
+----
+0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC
+0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC  0000-01-01 11:30:45.123 +0000 UTC
+
+statement error only ISO style is supported
+SELECT parse_timetz('01-02-2020 01:02:03', 'postgres')
+
+query TTTT
+SELECT
+  parse_timetz(s),
+  parse_timetz(s, 'iso,mdy'),
+  parse_timetz(s, 'iso,dmy'),
+  parse_timetz(s, 'iso,ymd')
+FROM time_datestyle_parse
+ORDER BY pk
+----
+0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600  0000-01-01 11:30:45.123 +0600 +0600
+0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300
+
+# Regression test for #71776 -- intervalstyle should apply to pg_catalog.
+
+statement ok
+SET intervalstyle = iso_8601;
+
+statement ok
+CREATE TABLE table_71776 (interval_col interval DEFAULT 'P3Y')
+
+query TTT
+SELECT a.attname,
+    format_type(a.atttypid, a.atttypmod),
+    pg_get_expr(d.adbin, d.adrelid)
+FROM pg_attribute a
+    LEFT JOIN pg_attrdef d ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+WHERE a.attrelid = 'table_71776'::regclass
+    AND a.attnum > 0
+    AND NOT a.attisdropped
+ORDER BY a.attnum
+----
+interval_col  interval  'P3Y'::interval
+rowid         bigint    unique_rowid()
+
+statement error pq: unsupported comparison operator: <tuple> < <string>
+SELECT * FROM ex WHERE () < '1970-01-02 00:00:01.000001-04';
+
+statement error pq: could not parse \"1970-01-02 00:00:01.000001-04\" as type tuple{timestamptz}: record must be enclosed in \( and \)
+SELECT * FROM ex WHERE ROW('1970-01-02 00:00:01.000001-04'::TIMESTAMPTZ) < '1970-01-02 00:00:01.000001-04';
+
+query TTTTT
+SELECT * FROM ex WHERE ROW('1970-01-03 00:00:01.000001-04'::TIMESTAMPTZ) < ROW('1970-01-02 00:00:01.000001-04');
+----
+
+subtest make_date
+
+query T colnames,rowsort
+SELECT make_date(2013, 7, 15)::string
+----
+make_date
+2013-07-15
+
+# Cast to text on the server so the assertion exercises the postgres-style
+# BC wire format and matches what real postgres outputs. See #149950.
+query T colnames,rowsort
+SELECT make_date(-2013, 7, 15)::string
+----
+make_date
+2013-07-15 BC
+
+# Boundary: -1 maps to 1 BC, matching postgres (no year zero in SQL semantics).
+query T colnames,rowsort
+SELECT make_date(-1, 1, 1)::string
+----
+make_date
+0001-01-01 BC
+
+statement error pgcode 22008 pq: year value of 0 is not valid
+SELECT make_date(0, 11, 11)
+
+subtest end
+
+subtest make_timestamp
+
+query T colnames,rowsort
+SELECT make_timestamp(2013, 7, 15, 8, 15, 23.5)::string
+----
+make_timestamp
+2013-07-15 08:15:23.5
+
+query T colnames,rowsort
+SELECT make_timestamp(-2013, 7, 15, 8, 15, 23.5)::string
+----
+make_timestamp
+2013-07-15 08:15:23.5 BC
+
+# Boundary: -1 maps to 1 BC.
+query T colnames,rowsort
+SELECT make_timestamp(-1, 1, 1, 0, 0, 0)::string
+----
+make_timestamp
+0001-01-01 00:00:00 BC
+
+query T colnames,rowsort
+SELECT make_timestamp(2013, 7, 15, 8, 15, 23.5231231244234)::string
+----
+make_timestamp
+2013-07-15 08:15:23.523123
+
+# Test with seconds < 1.
+
+query T
+select make_timestamp(1, 1, 1, 0, 0, 0);
+----
+0001-01-01 00:00:00 +0000 +0000
+
+query T
+select make_timestamp(1, 1, 1, 0, 0, 0.1234);
+----
+0001-01-01 00:00:00.1234 +0000 +0000
+
+statement error pgcode 22008 pq: year value of 0 is not valid
+SELECT make_timestamp(0, 7, 15, 8, 15, 23.5);
+
+subtest end
+
+subtest make_timestamptz
+
+statement ok
+SET TIME ZONE 'EST';
+
+query T colnames,rowsort
+SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5)
+----
+make_timestamptz
+2013-07-15 08:15:23.5 -0500 EST
+
+# Cast to text on the server so the result doesn't depend on the client's
+# tzdata: lib/pq cannot preserve a named timezone (e.g. EST) when scanning
+# BCE timestamptz values into Go's time.Time on systems where the local
+# tzdata reports an LMT offset for the BCE instant.
+query T colnames,rowsort
+SELECT make_timestamptz(-2013, 7, 15, 8, 15, 23.5)::text
+----
+make_timestamptz
+2013-07-15 08:15:23.5-05 BC
+
+query T colnames,rowsort
+SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5231231244234)
+----
+make_timestamptz
+2013-07-15 08:15:23.523123 -0500 EST
+
+query T colnames,rowsort
+SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5, 'America/New_York')
+----
+make_timestamptz
+2013-07-15 07:15:23.5 -0500 EST
+
+# Test with seconds < 1.
+
+query T
+select make_timestamptz(2020, 1, 1, 0, 0, 0, 'America/New_York');
+----
+2020-01-01 00:00:00 -0500 EST
+
+query T
+select make_timestamptz(2020, 1, 1, 0, 0, 0.1234, 'America/New_York');
+----
+2020-01-01 00:00:00.1234 -0500 EST
+
+statement error pgcode 22008 pq: year value of 0 is not valid
+SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5);
+
+statement error pgcode 22008 pq: year value of 0 is not valid
+SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'America/New_York');
+
+statement error pgcode 22023 pq: could not parse "No" as time zone
+SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'No');
+
+subtest end
+
+subtest timezone_abbreviation_parsing
+
+# Timestamp literals with PostgreSQL-recognized timezone abbreviations resolve
+# to a fixed offset via pg_catalog.pg_timezone_abbrevs, regardless of the host
+# system's IANA tzdata. Previously these returned unimplemented (#31710).
+
+query T
+SELECT '2014-07-15 08:15:23 EST'::timestamptz::text;
+----
+2014-07-15 08:15:23-05
+
+query T
+SELECT '2014-07-15 08:15:23 PST'::timestamptz::text;
+----
+2014-07-15 11:15:23-05
+
+# Abbreviations that have no IANA zone counterpart still resolve. EAT (East
+# Africa Time) is +03:00.
+query T
+SELECT '2014-07-15 08:15:23 EAT'::timestamptz::text;
+----
+2014-07-15 00:15:23-05
+
+# Lowercase input is accepted.
+query T
+SELECT '2014-07-15 08:15:23 est'::timestamptz::text;
+----
+2014-07-15 08:15:23-05
+
+subtest end
+
+subtest date_trunc_withtz
+
+query T
+SELECT date_trunc('day', '2001-02-16 20:38:40+00'::timestamptz, 'Australia/Sydney')
+----
+2001-02-16 08:00:00 -0500 EST
+
+statement error pgcode 22008 pq: date_trunc\(\): parsing as type timestamp: field month value 0 is out of range
+SELECT date_trunc('day', '0-02-16 20:38:40+00'::timestamptz, 'Australia/Sydney');
+
+statement error pgcode 22023 pq: could not parse "No" as time zone
+SELECT date_trunc('day', '4-02-16 20:38:40+00'::timestamptz, 'No');
+
+subtest end
+
+# Regression test for using empty eval.Context in formatting expressions
+# (#97643).
+statement ok
+CREATE TABLE t97643 (c1 STRING, CHECK (parse_time('abc') = parse_time('abc')));
+
+query T rowsort
+SELECT details FROM [SHOW CONSTRAINTS FROM t97643];
+----
+PRIMARY KEY (rowid ASC)
+CHECK ((parse_time('abc'::text) = parse_time('abc'::text)))
+NOT NULL
+
+subtest experimental_strftime_year_padding
+
+# Regression test for #45884: %Y must zero-pad to at least 4 digits, matching
+# POSIX/glibc/BSD strftime and Postgres's to_char(YYYY).
+query TTTTT
+SELECT
+  experimental_strftime('0001-01-01 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('0099-06-15 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('0999-12-31 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('2024-01-02 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('10001-01-01 00:00:00'::timestamp, '%Y-%m-%d')
+----
+0001-01-01  0099-06-15  0999-12-31  2024-01-02  10001-01-01
+
+# %y should still print only the last two digits, zero-padded.
+query TTT
+SELECT
+  experimental_strftime('0001-01-01 00:00:00'::timestamp, '%y'),
+  experimental_strftime('0099-01-01 00:00:00'::timestamp, '%y'),
+  experimental_strftime('2024-01-01 00:00:00'::timestamp, '%y')
+----
+01  99  24
+
+# %C%y should keep producing the same output it did before the fix.
+query TTT
+SELECT
+  experimental_strftime('0001-01-01 00:00:00'::timestamp, '%C%y-%m-%d'),
+  experimental_strftime('0099-01-01 00:00:00'::timestamp, '%C%y-%m-%d'),
+  experimental_strftime('2024-01-02 00:00:00'::timestamp, '%C%y-%m-%d')
+----
+0001-01-01  0099-01-01  2024-01-02
+
+subtest end

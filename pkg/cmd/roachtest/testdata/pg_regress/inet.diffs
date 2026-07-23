@@ -1,0 +1,1237 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inet.out --label=/mnt/data1/postgres/src/test/regress/results/inet.out /mnt/data1/postgres/src/test/regress/expected/inet.out /mnt/data1/postgres/src/test/regress/results/inet.out
+--- /mnt/data1/postgres/src/test/regress/expected/inet.out
++++ /mnt/data1/postgres/src/test/regress/results/inet.out
+@@ -3,201 +3,81 @@
+ --
+ -- prepare the table...
+ DROP TABLE INET_TBL;
+-ERROR:  table "inet_tbl" does not exist
++ERROR:  relation "inet_tbl" does not exist
+ CREATE TABLE INET_TBL (c cidr, i inet);
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE INET_TBL (c cidr, i inet)
++                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ INSERT INTO INET_TBL (c, i) VALUES ('192.168.1', '192.168.1.226/24');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('192.168.1.0/26', '192.168.1.226');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('192.168.1', '192.168.1.0/24');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('192.168.1', '192.168.1.0/25');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('192.168.1', '192.168.1.255/24');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('192.168.1', '192.168.1.255/25');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('10', '10.1.2.3/8');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('10.0.0.0', '10.1.2.3/8');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('10.1.2.3', '10.1.2.3/32');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('10.1.2', '10.1.2.3/24');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('10.1', '10.1.2.3/16');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('10', '10.1.2.3/8');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('10', '11.1.2.3/8');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('10', '9.1.2.3/8');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('10:23::f1', '10:23::f1/64');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('10:23::8000/113', '10:23::ffff');
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('::ffff:1.2.3.4', '::4.3.2.1/24');
++ERROR:  relation "inet_tbl" does not exist
+ -- check that CIDR rejects invalid input:
+ INSERT INTO INET_TBL (c, i) VALUES ('192.168.1.2/30', '192.168.1.226');
+-ERROR:  invalid cidr value: "192.168.1.2/30"
+-LINE 1: INSERT INTO INET_TBL (c, i) VALUES ('192.168.1.2/30', '192.1...
+-                                            ^
+-DETAIL:  Value has bits set to right of mask.
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES ('1234::1234::1234', '::1.2.3.4');
+-ERROR:  invalid input syntax for type cidr: "1234::1234::1234"
+-LINE 1: INSERT INTO INET_TBL (c, i) VALUES ('1234::1234::1234', '::1...
+-                                            ^
++ERROR:  relation "inet_tbl" does not exist
+ -- check that CIDR rejects invalid input when converting from text:
+ INSERT INTO INET_TBL (c, i) VALUES (cidr('192.168.1.2/30'), '192.168.1.226');
+-ERROR:  invalid cidr value: "192.168.1.2/30"
+-LINE 1: INSERT INTO INET_TBL (c, i) VALUES (cidr('192.168.1.2/30'), ...
+-                                                 ^
+-DETAIL:  Value has bits set to right of mask.
++ERROR:  relation "inet_tbl" does not exist
+ INSERT INTO INET_TBL (c, i) VALUES (cidr('ffff:ffff:ffff:ffff::/24'), '::192.168.1.226');
+-ERROR:  invalid cidr value: "ffff:ffff:ffff:ffff::/24"
+-LINE 1: INSERT INTO INET_TBL (c, i) VALUES (cidr('ffff:ffff:ffff:fff...
+-                                                 ^
+-DETAIL:  Value has bits set to right of mask.
++ERROR:  relation "inet_tbl" does not exist
+ SELECT c AS cidr, i AS inet FROM INET_TBL;
+-        cidr        |       inet       
+---------------------+------------------
+- 192.168.1.0/24     | 192.168.1.226/24
+- 192.168.1.0/26     | 192.168.1.226
+- 192.168.1.0/24     | 192.168.1.0/24
+- 192.168.1.0/24     | 192.168.1.0/25
+- 192.168.1.0/24     | 192.168.1.255/24
+- 192.168.1.0/24     | 192.168.1.255/25
+- 10.0.0.0/8         | 10.1.2.3/8
+- 10.0.0.0/32        | 10.1.2.3/8
+- 10.1.2.3/32        | 10.1.2.3
+- 10.1.2.0/24        | 10.1.2.3/24
+- 10.1.0.0/16        | 10.1.2.3/16
+- 10.0.0.0/8         | 10.1.2.3/8
+- 10.0.0.0/8         | 11.1.2.3/8
+- 10.0.0.0/8         | 9.1.2.3/8
+- 10:23::f1/128      | 10:23::f1/64
+- 10:23::8000/113    | 10:23::ffff
+- ::ffff:1.2.3.4/128 | ::4.3.2.1/24
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ -- now test some support functions
+ SELECT i AS inet, host(i), text(i), family(i) FROM INET_TBL;
+-       inet       |     host      |       text       | family 
+-------------------+---------------+------------------+--------
+- 192.168.1.226/24 | 192.168.1.226 | 192.168.1.226/24 |      4
+- 192.168.1.226    | 192.168.1.226 | 192.168.1.226/32 |      4
+- 192.168.1.0/24   | 192.168.1.0   | 192.168.1.0/24   |      4
+- 192.168.1.0/25   | 192.168.1.0   | 192.168.1.0/25   |      4
+- 192.168.1.255/24 | 192.168.1.255 | 192.168.1.255/24 |      4
+- 192.168.1.255/25 | 192.168.1.255 | 192.168.1.255/25 |      4
+- 10.1.2.3/8       | 10.1.2.3      | 10.1.2.3/8       |      4
+- 10.1.2.3/8       | 10.1.2.3      | 10.1.2.3/8       |      4
+- 10.1.2.3         | 10.1.2.3      | 10.1.2.3/32      |      4
+- 10.1.2.3/24      | 10.1.2.3      | 10.1.2.3/24      |      4
+- 10.1.2.3/16      | 10.1.2.3      | 10.1.2.3/16      |      4
+- 10.1.2.3/8       | 10.1.2.3      | 10.1.2.3/8       |      4
+- 11.1.2.3/8       | 11.1.2.3      | 11.1.2.3/8       |      4
+- 9.1.2.3/8        | 9.1.2.3       | 9.1.2.3/8        |      4
+- 10:23::f1/64     | 10:23::f1     | 10:23::f1/64     |      6
+- 10:23::ffff      | 10:23::ffff   | 10:23::ffff/128  |      6
+- ::4.3.2.1/24     | ::4.3.2.1     | ::4.3.2.1/24     |      6
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT c AS cidr, abbrev(c) FROM INET_TBL;
+-        cidr        |       abbrev       
+---------------------+--------------------
+- 192.168.1.0/24     | 192.168.1/24
+- 192.168.1.0/26     | 192.168.1.0/26
+- 192.168.1.0/24     | 192.168.1/24
+- 192.168.1.0/24     | 192.168.1/24
+- 192.168.1.0/24     | 192.168.1/24
+- 192.168.1.0/24     | 192.168.1/24
+- 10.0.0.0/8         | 10/8
+- 10.0.0.0/32        | 10.0.0.0/32
+- 10.1.2.3/32        | 10.1.2.3/32
+- 10.1.2.0/24        | 10.1.2/24
+- 10.1.0.0/16        | 10.1/16
+- 10.0.0.0/8         | 10/8
+- 10.0.0.0/8         | 10/8
+- 10.0.0.0/8         | 10/8
+- 10:23::f1/128      | 10:23::f1/128
+- 10:23::8000/113    | 10:23::8000/113
+- ::ffff:1.2.3.4/128 | ::ffff:1.2.3.4/128
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT c AS cidr, broadcast(c),
+   i AS inet, broadcast(i) FROM INET_TBL;
+-        cidr        |    broadcast     |       inet       |               broadcast               
+---------------------+------------------+------------------+---------------------------------------
+- 192.168.1.0/24     | 192.168.1.255/24 | 192.168.1.226/24 | 192.168.1.255/24
+- 192.168.1.0/26     | 192.168.1.63/26  | 192.168.1.226    | 192.168.1.226
+- 192.168.1.0/24     | 192.168.1.255/24 | 192.168.1.0/24   | 192.168.1.255/24
+- 192.168.1.0/24     | 192.168.1.255/24 | 192.168.1.0/25   | 192.168.1.127/25
+- 192.168.1.0/24     | 192.168.1.255/24 | 192.168.1.255/24 | 192.168.1.255/24
+- 192.168.1.0/24     | 192.168.1.255/24 | 192.168.1.255/25 | 192.168.1.255/25
+- 10.0.0.0/8         | 10.255.255.255/8 | 10.1.2.3/8       | 10.255.255.255/8
+- 10.0.0.0/32        | 10.0.0.0         | 10.1.2.3/8       | 10.255.255.255/8
+- 10.1.2.3/32        | 10.1.2.3         | 10.1.2.3         | 10.1.2.3
+- 10.1.2.0/24        | 10.1.2.255/24    | 10.1.2.3/24      | 10.1.2.255/24
+- 10.1.0.0/16        | 10.1.255.255/16  | 10.1.2.3/16      | 10.1.255.255/16
+- 10.0.0.0/8         | 10.255.255.255/8 | 10.1.2.3/8       | 10.255.255.255/8
+- 10.0.0.0/8         | 10.255.255.255/8 | 11.1.2.3/8       | 11.255.255.255/8
+- 10.0.0.0/8         | 10.255.255.255/8 | 9.1.2.3/8        | 9.255.255.255/8
+- 10:23::f1/128      | 10:23::f1        | 10:23::f1/64     | 10:23::ffff:ffff:ffff:ffff/64
+- 10:23::8000/113    | 10:23::ffff/113  | 10:23::ffff      | 10:23::ffff
+- ::ffff:1.2.3.4/128 | ::ffff:1.2.3.4   | ::4.3.2.1/24     | 0:ff:ffff:ffff:ffff:ffff:ffff:ffff/24
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT c AS cidr, network(c) AS "network(cidr)",
+   i AS inet, network(i) AS "network(inet)" FROM INET_TBL;
+-        cidr        |   network(cidr)    |       inet       |  network(inet)   
+---------------------+--------------------+------------------+------------------
+- 192.168.1.0/24     | 192.168.1.0/24     | 192.168.1.226/24 | 192.168.1.0/24
+- 192.168.1.0/26     | 192.168.1.0/26     | 192.168.1.226    | 192.168.1.226/32
+- 192.168.1.0/24     | 192.168.1.0/24     | 192.168.1.0/24   | 192.168.1.0/24
+- 192.168.1.0/24     | 192.168.1.0/24     | 192.168.1.0/25   | 192.168.1.0/25
+- 192.168.1.0/24     | 192.168.1.0/24     | 192.168.1.255/24 | 192.168.1.0/24
+- 192.168.1.0/24     | 192.168.1.0/24     | 192.168.1.255/25 | 192.168.1.128/25
+- 10.0.0.0/8         | 10.0.0.0/8         | 10.1.2.3/8       | 10.0.0.0/8
+- 10.0.0.0/32        | 10.0.0.0/32        | 10.1.2.3/8       | 10.0.0.0/8
+- 10.1.2.3/32        | 10.1.2.3/32        | 10.1.2.3         | 10.1.2.3/32
+- 10.1.2.0/24        | 10.1.2.0/24        | 10.1.2.3/24      | 10.1.2.0/24
+- 10.1.0.0/16        | 10.1.0.0/16        | 10.1.2.3/16      | 10.1.0.0/16
+- 10.0.0.0/8         | 10.0.0.0/8         | 10.1.2.3/8       | 10.0.0.0/8
+- 10.0.0.0/8         | 10.0.0.0/8         | 11.1.2.3/8       | 11.0.0.0/8
+- 10.0.0.0/8         | 10.0.0.0/8         | 9.1.2.3/8        | 9.0.0.0/8
+- 10:23::f1/128      | 10:23::f1/128      | 10:23::f1/64     | 10:23::/64
+- 10:23::8000/113    | 10:23::8000/113    | 10:23::ffff      | 10:23::ffff/128
+- ::ffff:1.2.3.4/128 | ::ffff:1.2.3.4/128 | ::4.3.2.1/24     | ::/24
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT c AS cidr, masklen(c) AS "masklen(cidr)",
+   i AS inet, masklen(i) AS "masklen(inet)" FROM INET_TBL;
+-        cidr        | masklen(cidr) |       inet       | masklen(inet) 
+---------------------+---------------+------------------+---------------
+- 192.168.1.0/24     |            24 | 192.168.1.226/24 |            24
+- 192.168.1.0/26     |            26 | 192.168.1.226    |            32
+- 192.168.1.0/24     |            24 | 192.168.1.0/24   |            24
+- 192.168.1.0/24     |            24 | 192.168.1.0/25   |            25
+- 192.168.1.0/24     |            24 | 192.168.1.255/24 |            24
+- 192.168.1.0/24     |            24 | 192.168.1.255/25 |            25
+- 10.0.0.0/8         |             8 | 10.1.2.3/8       |             8
+- 10.0.0.0/32        |            32 | 10.1.2.3/8       |             8
+- 10.1.2.3/32        |            32 | 10.1.2.3         |            32
+- 10.1.2.0/24        |            24 | 10.1.2.3/24      |            24
+- 10.1.0.0/16        |            16 | 10.1.2.3/16      |            16
+- 10.0.0.0/8         |             8 | 10.1.2.3/8       |             8
+- 10.0.0.0/8         |             8 | 11.1.2.3/8       |             8
+- 10.0.0.0/8         |             8 | 9.1.2.3/8        |             8
+- 10:23::f1/128      |           128 | 10:23::f1/64     |            64
+- 10:23::8000/113    |           113 | 10:23::ffff      |           128
+- ::ffff:1.2.3.4/128 |           128 | ::4.3.2.1/24     |            24
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT c AS cidr, masklen(c) AS "masklen(cidr)",
+   i AS inet, masklen(i) AS "masklen(inet)" FROM INET_TBL
+   WHERE masklen(c) <= 8;
+-    cidr    | masklen(cidr) |    inet    | masklen(inet) 
+-------------+---------------+------------+---------------
+- 10.0.0.0/8 |             8 | 10.1.2.3/8 |             8
+- 10.0.0.0/8 |             8 | 10.1.2.3/8 |             8
+- 10.0.0.0/8 |             8 | 11.1.2.3/8 |             8
+- 10.0.0.0/8 |             8 | 9.1.2.3/8  |             8
+-(4 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT c AS cidr, i AS inet FROM INET_TBL
+   WHERE c = i;
+-      cidr      |      inet      
+-----------------+----------------
+- 192.168.1.0/24 | 192.168.1.0/24
+- 10.1.2.3/32    | 10.1.2.3
+-(2 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT i, c,
+   i < c AS lt, i <= c AS le, i = c AS eq,
+   i >= c AS ge, i > c AS gt, i <> c AS ne,
+@@ -205,570 +85,308 @@
+   i >> c AS sup, i >>= c AS spe,
+   i && c AS ovr
+   FROM INET_TBL;
+-        i         |         c          | lt | le | eq | ge | gt | ne | sb | sbe | sup | spe | ovr 
+-------------------+--------------------+----+----+----+----+----+----+----+-----+-----+-----+-----
+- 192.168.1.226/24 | 192.168.1.0/24     | f  | f  | f  | t  | t  | t  | f  | t   | f   | t   | t
+- 192.168.1.226    | 192.168.1.0/26     | f  | f  | f  | t  | t  | t  | f  | f   | f   | f   | f
+- 192.168.1.0/24   | 192.168.1.0/24     | f  | t  | t  | t  | f  | f  | f  | t   | f   | t   | t
+- 192.168.1.0/25   | 192.168.1.0/24     | f  | f  | f  | t  | t  | t  | t  | t   | f   | f   | t
+- 192.168.1.255/24 | 192.168.1.0/24     | f  | f  | f  | t  | t  | t  | f  | t   | f   | t   | t
+- 192.168.1.255/25 | 192.168.1.0/24     | f  | f  | f  | t  | t  | t  | t  | t   | f   | f   | t
+- 10.1.2.3/8       | 10.0.0.0/8         | f  | f  | f  | t  | t  | t  | f  | t   | f   | t   | t
+- 10.1.2.3/8       | 10.0.0.0/32        | t  | t  | f  | f  | f  | t  | f  | f   | t   | t   | t
+- 10.1.2.3         | 10.1.2.3/32        | f  | t  | t  | t  | f  | f  | f  | t   | f   | t   | t
+- 10.1.2.3/24      | 10.1.2.0/24        | f  | f  | f  | t  | t  | t  | f  | t   | f   | t   | t
+- 10.1.2.3/16      | 10.1.0.0/16        | f  | f  | f  | t  | t  | t  | f  | t   | f   | t   | t
+- 10.1.2.3/8       | 10.0.0.0/8         | f  | f  | f  | t  | t  | t  | f  | t   | f   | t   | t
+- 11.1.2.3/8       | 10.0.0.0/8         | f  | f  | f  | t  | t  | t  | f  | f   | f   | f   | f
+- 9.1.2.3/8        | 10.0.0.0/8         | t  | t  | f  | f  | f  | t  | f  | f   | f   | f   | f
+- 10:23::f1/64     | 10:23::f1/128      | t  | t  | f  | f  | f  | t  | f  | f   | t   | t   | t
+- 10:23::ffff      | 10:23::8000/113    | f  | f  | f  | t  | t  | t  | t  | t   | f   | f   | t
+- ::4.3.2.1/24     | ::ffff:1.2.3.4/128 | t  | t  | f  | f  | f  | t  | f  | f   | t   | t   | t
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT max(i) AS max, min(i) AS min FROM INET_TBL;
+-     max     |    min    
+--------------+-----------
+- 10:23::ffff | 9.1.2.3/8
+-(1 row)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT max(c) AS max, min(c) AS min FROM INET_TBL;
+-       max       |    min     
+------------------+------------
+- 10:23::8000/113 | 10.0.0.0/8
+-(1 row)
+-
++ERROR:  relation "inet_tbl" does not exist
+ -- check the conversion to/from text and set_netmask
+ SELECT set_masklen(inet(text(i)), 24) FROM INET_TBL;
+-   set_masklen    
+-------------------
+- 192.168.1.226/24
+- 192.168.1.226/24
+- 192.168.1.0/24
+- 192.168.1.0/24
+- 192.168.1.255/24
+- 192.168.1.255/24
+- 10.1.2.3/24
+- 10.1.2.3/24
+- 10.1.2.3/24
+- 10.1.2.3/24
+- 10.1.2.3/24
+- 10.1.2.3/24
+- 11.1.2.3/24
+- 9.1.2.3/24
+- 10:23::f1/24
+- 10:23::ffff/24
+- ::4.3.2.1/24
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ -- check that btree index works correctly
+ CREATE INDEX inet_idx1 ON inet_tbl(i);
++ERROR:  relation "inet_tbl" does not exist
+ SET enable_seqscan TO off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ EXPLAIN (COSTS OFF)
+ SELECT * FROM inet_tbl WHERE i<<'192.168.1.0/24'::cidr;
+-                                  QUERY PLAN                                   
+--------------------------------------------------------------------------------
+- Index Scan using inet_idx1 on inet_tbl
+-   Index Cond: ((i > '192.168.1.0/24'::inet) AND (i <= '192.168.1.255'::inet))
+-   Filter: (i << '192.168.1.0/24'::inet)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT * FROM inet_tbl WHERE i<<'192.168.1.0/24'::cidr;
+-       c        |        i         
+-----------------+------------------
+- 192.168.1.0/24 | 192.168.1.0/25
+- 192.168.1.0/24 | 192.168.1.255/25
+- 192.168.1.0/26 | 192.168.1.226
+-(3 rows)
+-
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i<<'192.168.1.0/24'::cidr
++                                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ EXPLAIN (COSTS OFF)
+ SELECT * FROM inet_tbl WHERE i<<='192.168.1.0/24'::cidr;
+-                                   QUERY PLAN                                   
+---------------------------------------------------------------------------------
+- Index Scan using inet_idx1 on inet_tbl
+-   Index Cond: ((i >= '192.168.1.0/24'::inet) AND (i <= '192.168.1.255'::inet))
+-   Filter: (i <<= '192.168.1.0/24'::inet)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT * FROM inet_tbl WHERE i<<='192.168.1.0/24'::cidr;
+-       c        |        i         
+-----------------+------------------
+- 192.168.1.0/24 | 192.168.1.0/24
+- 192.168.1.0/24 | 192.168.1.226/24
+- 192.168.1.0/24 | 192.168.1.255/24
+- 192.168.1.0/24 | 192.168.1.0/25
+- 192.168.1.0/24 | 192.168.1.255/25
+- 192.168.1.0/26 | 192.168.1.226
+-(6 rows)
+-
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i<<='192.168.1.0/24'::cidr
++                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ EXPLAIN (COSTS OFF)
+ SELECT * FROM inet_tbl WHERE '192.168.1.0/24'::cidr >>= i;
+-                                   QUERY PLAN                                   
+---------------------------------------------------------------------------------
+- Index Scan using inet_idx1 on inet_tbl
+-   Index Cond: ((i >= '192.168.1.0/24'::inet) AND (i <= '192.168.1.255'::inet))
+-   Filter: ('192.168.1.0/24'::inet >>= i)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT * FROM inet_tbl WHERE '192.168.1.0/24'::cidr >>= i;
+-       c        |        i         
+-----------------+------------------
+- 192.168.1.0/24 | 192.168.1.0/24
+- 192.168.1.0/24 | 192.168.1.226/24
+- 192.168.1.0/24 | 192.168.1.255/24
+- 192.168.1.0/24 | 192.168.1.0/25
+- 192.168.1.0/24 | 192.168.1.255/25
+- 192.168.1.0/26 | 192.168.1.226
+-(6 rows)
+-
++ERROR:  at or near ">": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE '192.168.1.0/24'::cidr >>= i
++                                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ EXPLAIN (COSTS OFF)
+ SELECT * FROM inet_tbl WHERE '192.168.1.0/24'::cidr >> i;
+-                                  QUERY PLAN                                   
+--------------------------------------------------------------------------------
+- Index Scan using inet_idx1 on inet_tbl
+-   Index Cond: ((i > '192.168.1.0/24'::inet) AND (i <= '192.168.1.255'::inet))
+-   Filter: ('192.168.1.0/24'::inet >> i)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT * FROM inet_tbl WHERE '192.168.1.0/24'::cidr >> i;
+-       c        |        i         
+-----------------+------------------
+- 192.168.1.0/24 | 192.168.1.0/25
+- 192.168.1.0/24 | 192.168.1.255/25
+- 192.168.1.0/26 | 192.168.1.226
+-(3 rows)
+-
++ERROR:  at or near ">": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE '192.168.1.0/24'::cidr >> i
++                                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SET enable_seqscan TO on;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ DROP INDEX inet_idx1;
++ERROR:  index "inet_idx1" does not exist
+ -- check that gist index works correctly
+ CREATE INDEX inet_idx2 ON inet_tbl using gist (i inet_ops);
++ERROR:  relation "inet_tbl" does not exist
+ SET enable_seqscan TO off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SELECT * FROM inet_tbl WHERE i << '192.168.1.0/24'::cidr ORDER BY i;
+-       c        |        i         
+-----------------+------------------
+- 192.168.1.0/24 | 192.168.1.0/25
+- 192.168.1.0/24 | 192.168.1.255/25
+- 192.168.1.0/26 | 192.168.1.226
+-(3 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i << '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i <<= '192.168.1.0/24'::cidr ORDER BY i;
+-       c        |        i         
+-----------------+------------------
+- 192.168.1.0/24 | 192.168.1.0/24
+- 192.168.1.0/24 | 192.168.1.226/24
+- 192.168.1.0/24 | 192.168.1.255/24
+- 192.168.1.0/24 | 192.168.1.0/25
+- 192.168.1.0/24 | 192.168.1.255/25
+- 192.168.1.0/26 | 192.168.1.226
+-(6 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i <<= '192.168.1.0/24'::cidr ORDER BY i
++                                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i && '192.168.1.0/24'::cidr ORDER BY i;
+-       c        |        i         
+-----------------+------------------
+- 192.168.1.0/24 | 192.168.1.0/24
+- 192.168.1.0/24 | 192.168.1.226/24
+- 192.168.1.0/24 | 192.168.1.255/24
+- 192.168.1.0/24 | 192.168.1.0/25
+- 192.168.1.0/24 | 192.168.1.255/25
+- 192.168.1.0/26 | 192.168.1.226
+-(6 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i && '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i >>= '192.168.1.0/24'::cidr ORDER BY i;
+-       c        |        i         
+-----------------+------------------
+- 192.168.1.0/24 | 192.168.1.0/24
+- 192.168.1.0/24 | 192.168.1.226/24
+- 192.168.1.0/24 | 192.168.1.255/24
+-(3 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i >>= '192.168.1.0/24'::cidr ORDER BY i
++                                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i >> '192.168.1.0/24'::cidr ORDER BY i;
+- c | i 
+----+---
+-(0 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i >> '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i < '192.168.1.0/24'::cidr ORDER BY i;
+-      c      |      i      
+--------------+-------------
+- 10.0.0.0/8  | 9.1.2.3/8
+- 10.0.0.0/32 | 10.1.2.3/8
+- 10.0.0.0/8  | 10.1.2.3/8
+- 10.0.0.0/8  | 10.1.2.3/8
+- 10.1.0.0/16 | 10.1.2.3/16
+- 10.1.2.0/24 | 10.1.2.3/24
+- 10.1.2.3/32 | 10.1.2.3
+- 10.0.0.0/8  | 11.1.2.3/8
+-(8 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i < '192.168.1.0/24'::cidr ORDER BY i
++                                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i <= '192.168.1.0/24'::cidr ORDER BY i;
+-       c        |       i        
+-----------------+----------------
+- 10.0.0.0/8     | 9.1.2.3/8
+- 10.0.0.0/8     | 10.1.2.3/8
+- 10.0.0.0/32    | 10.1.2.3/8
+- 10.0.0.0/8     | 10.1.2.3/8
+- 10.1.0.0/16    | 10.1.2.3/16
+- 10.1.2.0/24    | 10.1.2.3/24
+- 10.1.2.3/32    | 10.1.2.3
+- 10.0.0.0/8     | 11.1.2.3/8
+- 192.168.1.0/24 | 192.168.1.0/24
+-(9 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i <= '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i = '192.168.1.0/24'::cidr ORDER BY i;
+-       c        |       i        
+-----------------+----------------
+- 192.168.1.0/24 | 192.168.1.0/24
+-(1 row)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i = '192.168.1.0/24'::cidr ORDER BY i
++                                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i >= '192.168.1.0/24'::cidr ORDER BY i;
+-         c          |        i         
+---------------------+------------------
+- 192.168.1.0/24     | 192.168.1.0/24
+- 192.168.1.0/24     | 192.168.1.226/24
+- 192.168.1.0/24     | 192.168.1.255/24
+- 192.168.1.0/24     | 192.168.1.0/25
+- 192.168.1.0/24     | 192.168.1.255/25
+- 192.168.1.0/26     | 192.168.1.226
+- ::ffff:1.2.3.4/128 | ::4.3.2.1/24
+- 10:23::f1/128      | 10:23::f1/64
+- 10:23::8000/113    | 10:23::ffff
+-(9 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i >= '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i > '192.168.1.0/24'::cidr ORDER BY i;
+-         c          |        i         
+---------------------+------------------
+- 192.168.1.0/24     | 192.168.1.226/24
+- 192.168.1.0/24     | 192.168.1.255/24
+- 192.168.1.0/24     | 192.168.1.0/25
+- 192.168.1.0/24     | 192.168.1.255/25
+- 192.168.1.0/26     | 192.168.1.226
+- ::ffff:1.2.3.4/128 | ::4.3.2.1/24
+- 10:23::f1/128      | 10:23::f1/64
+- 10:23::8000/113    | 10:23::ffff
+-(8 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i > '192.168.1.0/24'::cidr ORDER BY i
++                                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i <> '192.168.1.0/24'::cidr ORDER BY i;
+-         c          |        i         
+---------------------+------------------
+- 10.0.0.0/8         | 9.1.2.3/8
+- 10.0.0.0/8         | 10.1.2.3/8
+- 10.0.0.0/32        | 10.1.2.3/8
+- 10.0.0.0/8         | 10.1.2.3/8
+- 10.1.0.0/16        | 10.1.2.3/16
+- 10.1.2.0/24        | 10.1.2.3/24
+- 10.1.2.3/32        | 10.1.2.3
+- 10.0.0.0/8         | 11.1.2.3/8
+- 192.168.1.0/24     | 192.168.1.226/24
+- 192.168.1.0/24     | 192.168.1.255/24
+- 192.168.1.0/24     | 192.168.1.0/25
+- 192.168.1.0/24     | 192.168.1.255/25
+- 192.168.1.0/26     | 192.168.1.226
+- ::ffff:1.2.3.4/128 | ::4.3.2.1/24
+- 10:23::f1/128      | 10:23::f1/64
+- 10:23::8000/113    | 10:23::ffff
+-(16 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i <> '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ -- test index-only scans
+ EXPLAIN (COSTS OFF)
+ SELECT i FROM inet_tbl WHERE i << '192.168.1.0/24'::cidr ORDER BY i;
+-                    QUERY PLAN                     
+----------------------------------------------------
+- Sort
+-   Sort Key: i
+-   ->  Index Only Scan using inet_idx2 on inet_tbl
+-         Index Cond: (i << '192.168.1.0/24'::inet)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT i FROM inet_tbl WHERE i << '192.168.1.0/24'::cidr ORDER BY i;
+-        i         
+-------------------
+- 192.168.1.0/25
+- 192.168.1.255/25
+- 192.168.1.226
+-(3 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT i FROM inet_tbl WHERE i << '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SET enable_seqscan TO on;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ DROP INDEX inet_idx2;
++ERROR:  index "inet_idx2" does not exist
+ -- check that spgist index works correctly
+ CREATE INDEX inet_idx3 ON inet_tbl using spgist (i);
++ERROR:  at or near "spgist": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX inet_idx3 ON inet_tbl using spgist (i)
++                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET enable_seqscan TO off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SELECT * FROM inet_tbl WHERE i << '192.168.1.0/24'::cidr ORDER BY i;
+-       c        |        i         
+-----------------+------------------
+- 192.168.1.0/24 | 192.168.1.0/25
+- 192.168.1.0/24 | 192.168.1.255/25
+- 192.168.1.0/26 | 192.168.1.226
+-(3 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i << '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i <<= '192.168.1.0/24'::cidr ORDER BY i;
+-       c        |        i         
+-----------------+------------------
+- 192.168.1.0/24 | 192.168.1.0/24
+- 192.168.1.0/24 | 192.168.1.226/24
+- 192.168.1.0/24 | 192.168.1.255/24
+- 192.168.1.0/24 | 192.168.1.0/25
+- 192.168.1.0/24 | 192.168.1.255/25
+- 192.168.1.0/26 | 192.168.1.226
+-(6 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i <<= '192.168.1.0/24'::cidr ORDER BY i
++                                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i && '192.168.1.0/24'::cidr ORDER BY i;
+-       c        |        i         
+-----------------+------------------
+- 192.168.1.0/24 | 192.168.1.0/24
+- 192.168.1.0/24 | 192.168.1.226/24
+- 192.168.1.0/24 | 192.168.1.255/24
+- 192.168.1.0/24 | 192.168.1.0/25
+- 192.168.1.0/24 | 192.168.1.255/25
+- 192.168.1.0/26 | 192.168.1.226
+-(6 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i && '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i >>= '192.168.1.0/24'::cidr ORDER BY i;
+-       c        |        i         
+-----------------+------------------
+- 192.168.1.0/24 | 192.168.1.0/24
+- 192.168.1.0/24 | 192.168.1.226/24
+- 192.168.1.0/24 | 192.168.1.255/24
+-(3 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i >>= '192.168.1.0/24'::cidr ORDER BY i
++                                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i >> '192.168.1.0/24'::cidr ORDER BY i;
+- c | i 
+----+---
+-(0 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i >> '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i < '192.168.1.0/24'::cidr ORDER BY i;
+-      c      |      i      
+--------------+-------------
+- 10.0.0.0/8  | 9.1.2.3/8
+- 10.0.0.0/32 | 10.1.2.3/8
+- 10.0.0.0/8  | 10.1.2.3/8
+- 10.0.0.0/8  | 10.1.2.3/8
+- 10.1.0.0/16 | 10.1.2.3/16
+- 10.1.2.0/24 | 10.1.2.3/24
+- 10.1.2.3/32 | 10.1.2.3
+- 10.0.0.0/8  | 11.1.2.3/8
+-(8 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i < '192.168.1.0/24'::cidr ORDER BY i
++                                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i <= '192.168.1.0/24'::cidr ORDER BY i;
+-       c        |       i        
+-----------------+----------------
+- 10.0.0.0/8     | 9.1.2.3/8
+- 10.0.0.0/8     | 10.1.2.3/8
+- 10.0.0.0/32    | 10.1.2.3/8
+- 10.0.0.0/8     | 10.1.2.3/8
+- 10.1.0.0/16    | 10.1.2.3/16
+- 10.1.2.0/24    | 10.1.2.3/24
+- 10.1.2.3/32    | 10.1.2.3
+- 10.0.0.0/8     | 11.1.2.3/8
+- 192.168.1.0/24 | 192.168.1.0/24
+-(9 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i <= '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i = '192.168.1.0/24'::cidr ORDER BY i;
+-       c        |       i        
+-----------------+----------------
+- 192.168.1.0/24 | 192.168.1.0/24
+-(1 row)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i = '192.168.1.0/24'::cidr ORDER BY i
++                                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i >= '192.168.1.0/24'::cidr ORDER BY i;
+-         c          |        i         
+---------------------+------------------
+- 192.168.1.0/24     | 192.168.1.0/24
+- 192.168.1.0/24     | 192.168.1.226/24
+- 192.168.1.0/24     | 192.168.1.255/24
+- 192.168.1.0/24     | 192.168.1.0/25
+- 192.168.1.0/24     | 192.168.1.255/25
+- 192.168.1.0/26     | 192.168.1.226
+- ::ffff:1.2.3.4/128 | ::4.3.2.1/24
+- 10:23::f1/128      | 10:23::f1/64
+- 10:23::8000/113    | 10:23::ffff
+-(9 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i >= '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i > '192.168.1.0/24'::cidr ORDER BY i;
+-         c          |        i         
+---------------------+------------------
+- 192.168.1.0/24     | 192.168.1.226/24
+- 192.168.1.0/24     | 192.168.1.255/24
+- 192.168.1.0/24     | 192.168.1.0/25
+- 192.168.1.0/24     | 192.168.1.255/25
+- 192.168.1.0/26     | 192.168.1.226
+- ::ffff:1.2.3.4/128 | ::4.3.2.1/24
+- 10:23::f1/128      | 10:23::f1/64
+- 10:23::8000/113    | 10:23::ffff
+-(8 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i > '192.168.1.0/24'::cidr ORDER BY i
++                                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SELECT * FROM inet_tbl WHERE i <> '192.168.1.0/24'::cidr ORDER BY i;
+-         c          |        i         
+---------------------+------------------
+- 10.0.0.0/8         | 9.1.2.3/8
+- 10.0.0.0/8         | 10.1.2.3/8
+- 10.0.0.0/32        | 10.1.2.3/8
+- 10.0.0.0/8         | 10.1.2.3/8
+- 10.1.0.0/16        | 10.1.2.3/16
+- 10.1.2.0/24        | 10.1.2.3/24
+- 10.1.2.3/32        | 10.1.2.3
+- 10.0.0.0/8         | 11.1.2.3/8
+- 192.168.1.0/24     | 192.168.1.226/24
+- 192.168.1.0/24     | 192.168.1.255/24
+- 192.168.1.0/24     | 192.168.1.0/25
+- 192.168.1.0/24     | 192.168.1.255/25
+- 192.168.1.0/26     | 192.168.1.226
+- ::ffff:1.2.3.4/128 | ::4.3.2.1/24
+- 10:23::f1/128      | 10:23::f1/64
+- 10:23::8000/113    | 10:23::ffff
+-(16 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT * FROM inet_tbl WHERE i <> '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ -- test index-only scans
+ EXPLAIN (COSTS OFF)
+ SELECT i FROM inet_tbl WHERE i << '192.168.1.0/24'::cidr ORDER BY i;
+-                    QUERY PLAN                     
+----------------------------------------------------
+- Sort
+-   Sort Key: i
+-   ->  Index Only Scan using inet_idx3 on inet_tbl
+-         Index Cond: (i << '192.168.1.0/24'::inet)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT i FROM inet_tbl WHERE i << '192.168.1.0/24'::cidr ORDER BY i;
+-        i         
+-------------------
+- 192.168.1.0/25
+- 192.168.1.255/25
+- 192.168.1.226
+-(3 rows)
+-
++ERROR:  at or near "order": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT i FROM inet_tbl WHERE i << '192.168.1.0/24'::cidr ORDER BY i
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ SET enable_seqscan TO on;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ DROP INDEX inet_idx3;
++ERROR:  index "inet_idx3" does not exist
+ -- simple tests of inet boolean and arithmetic operators
+ SELECT i, ~i AS "~i" FROM inet_tbl;
+-        i         |                     ~i                     
+-------------------+--------------------------------------------
+- 192.168.1.226/24 | 63.87.254.29/24
+- 192.168.1.226    | 63.87.254.29
+- 192.168.1.0/24   | 63.87.254.255/24
+- 192.168.1.0/25   | 63.87.254.255/25
+- 192.168.1.255/24 | 63.87.254.0/24
+- 192.168.1.255/25 | 63.87.254.0/25
+- 10.1.2.3/8       | 245.254.253.252/8
+- 10.1.2.3/8       | 245.254.253.252/8
+- 10.1.2.3         | 245.254.253.252
+- 10.1.2.3/24      | 245.254.253.252/24
+- 10.1.2.3/16      | 245.254.253.252/16
+- 10.1.2.3/8       | 245.254.253.252/8
+- 11.1.2.3/8       | 244.254.253.252/8
+- 9.1.2.3/8        | 246.254.253.252/8
+- 10:23::f1/64     | ffef:ffdc:ffff:ffff:ffff:ffff:ffff:ff0e/64
+- 10:23::ffff      | ffef:ffdc:ffff:ffff:ffff:ffff:ffff:0
+- ::4.3.2.1/24     | ffff:ffff:ffff:ffff:ffff:ffff:fbfc:fdfe/24
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT i, c, i & c AS "and" FROM inet_tbl;
+-        i         |         c          |      and       
+-------------------+--------------------+----------------
+- 192.168.1.226/24 | 192.168.1.0/24     | 192.168.1.0/24
+- 192.168.1.226    | 192.168.1.0/26     | 192.168.1.0
+- 192.168.1.0/24   | 192.168.1.0/24     | 192.168.1.0/24
+- 192.168.1.0/25   | 192.168.1.0/24     | 192.168.1.0/25
+- 192.168.1.255/24 | 192.168.1.0/24     | 192.168.1.0/24
+- 192.168.1.255/25 | 192.168.1.0/24     | 192.168.1.0/25
+- 10.1.2.3/8       | 10.0.0.0/8         | 10.0.0.0/8
+- 10.1.2.3/8       | 10.0.0.0/32        | 10.0.0.0
+- 10.1.2.3         | 10.1.2.3/32        | 10.1.2.3
+- 10.1.2.3/24      | 10.1.2.0/24        | 10.1.2.0/24
+- 10.1.2.3/16      | 10.1.0.0/16        | 10.1.0.0/16
+- 10.1.2.3/8       | 10.0.0.0/8         | 10.0.0.0/8
+- 11.1.2.3/8       | 10.0.0.0/8         | 10.0.0.0/8
+- 9.1.2.3/8        | 10.0.0.0/8         | 8.0.0.0/8
+- 10:23::f1/64     | 10:23::f1/128      | 10:23::f1
+- 10:23::ffff      | 10:23::8000/113    | 10:23::8000
+- ::4.3.2.1/24     | ::ffff:1.2.3.4/128 | ::0.2.2.0
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT i, c, i | c AS "or" FROM inet_tbl;
+-        i         |         c          |        or        
+-------------------+--------------------+------------------
+- 192.168.1.226/24 | 192.168.1.0/24     | 192.168.1.226/24
+- 192.168.1.226    | 192.168.1.0/26     | 192.168.1.226
+- 192.168.1.0/24   | 192.168.1.0/24     | 192.168.1.0/24
+- 192.168.1.0/25   | 192.168.1.0/24     | 192.168.1.0/25
+- 192.168.1.255/24 | 192.168.1.0/24     | 192.168.1.255/24
+- 192.168.1.255/25 | 192.168.1.0/24     | 192.168.1.255/25
+- 10.1.2.3/8       | 10.0.0.0/8         | 10.1.2.3/8
+- 10.1.2.3/8       | 10.0.0.0/32        | 10.1.2.3
+- 10.1.2.3         | 10.1.2.3/32        | 10.1.2.3
+- 10.1.2.3/24      | 10.1.2.0/24        | 10.1.2.3/24
+- 10.1.2.3/16      | 10.1.0.0/16        | 10.1.2.3/16
+- 10.1.2.3/8       | 10.0.0.0/8         | 10.1.2.3/8
+- 11.1.2.3/8       | 10.0.0.0/8         | 11.1.2.3/8
+- 9.1.2.3/8        | 10.0.0.0/8         | 11.1.2.3/8
+- 10:23::f1/64     | 10:23::f1/128      | 10:23::f1
+- 10:23::ffff      | 10:23::8000/113    | 10:23::ffff
+- ::4.3.2.1/24     | ::ffff:1.2.3.4/128 | ::ffff:5.3.3.5
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT i, i + 500 AS "i+500" FROM inet_tbl;
+-        i         |      i+500       
+-------------------+------------------
+- 192.168.1.226/24 | 192.168.3.214/24
+- 192.168.1.226    | 192.168.3.214
+- 192.168.1.0/24   | 192.168.2.244/24
+- 192.168.1.0/25   | 192.168.2.244/25
+- 192.168.1.255/24 | 192.168.3.243/24
+- 192.168.1.255/25 | 192.168.3.243/25
+- 10.1.2.3/8       | 10.1.3.247/8
+- 10.1.2.3/8       | 10.1.3.247/8
+- 10.1.2.3         | 10.1.3.247
+- 10.1.2.3/24      | 10.1.3.247/24
+- 10.1.2.3/16      | 10.1.3.247/16
+- 10.1.2.3/8       | 10.1.3.247/8
+- 11.1.2.3/8       | 11.1.3.247/8
+- 9.1.2.3/8        | 9.1.3.247/8
+- 10:23::f1/64     | 10:23::2e5/64
+- 10:23::ffff      | 10:23::1:1f3
+- ::4.3.2.1/24     | ::4.3.3.245/24
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT i, i - 500 AS "i-500" FROM inet_tbl;
+-        i         |                 i-500                  
+-------------------+----------------------------------------
+- 192.168.1.226/24 | 192.167.255.238/24
+- 192.168.1.226    | 192.167.255.238
+- 192.168.1.0/24   | 192.167.255.12/24
+- 192.168.1.0/25   | 192.167.255.12/25
+- 192.168.1.255/24 | 192.168.0.11/24
+- 192.168.1.255/25 | 192.168.0.11/25
+- 10.1.2.3/8       | 10.1.0.15/8
+- 10.1.2.3/8       | 10.1.0.15/8
+- 10.1.2.3         | 10.1.0.15
+- 10.1.2.3/24      | 10.1.0.15/24
+- 10.1.2.3/16      | 10.1.0.15/16
+- 10.1.2.3/8       | 10.1.0.15/8
+- 11.1.2.3/8       | 11.1.0.15/8
+- 9.1.2.3/8        | 9.1.0.15/8
+- 10:23::f1/64     | 10:22:ffff:ffff:ffff:ffff:ffff:fefd/64
+- 10:23::ffff      | 10:23::fe0b
+- ::4.3.2.1/24     | ::4.3.0.13/24
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT i, c, i - c AS "minus" FROM inet_tbl;
+-        i         |         c          |      minus       
+-------------------+--------------------+------------------
+- 192.168.1.226/24 | 192.168.1.0/24     |              226
+- 192.168.1.226    | 192.168.1.0/26     |              226
+- 192.168.1.0/24   | 192.168.1.0/24     |                0
+- 192.168.1.0/25   | 192.168.1.0/24     |                0
+- 192.168.1.255/24 | 192.168.1.0/24     |              255
+- 192.168.1.255/25 | 192.168.1.0/24     |              255
+- 10.1.2.3/8       | 10.0.0.0/8         |            66051
+- 10.1.2.3/8       | 10.0.0.0/32        |            66051
+- 10.1.2.3         | 10.1.2.3/32        |                0
+- 10.1.2.3/24      | 10.1.2.0/24        |                3
+- 10.1.2.3/16      | 10.1.0.0/16        |              515
+- 10.1.2.3/8       | 10.0.0.0/8         |            66051
+- 11.1.2.3/8       | 10.0.0.0/8         |         16843267
+- 9.1.2.3/8        | 10.0.0.0/8         |        -16711165
+- 10:23::f1/64     | 10:23::f1/128      |                0
+- 10:23::ffff      | 10:23::8000/113    |            32767
+- ::4.3.2.1/24     | ::ffff:1.2.3.4/128 | -281470631346435
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ SELECT '127.0.0.1'::inet + 257;
+  ?column?  
+ -----------
+@@ -819,13 +437,13 @@
+ 
+ -- these should give overflow errors:
+ SELECT '127.0.0.1'::inet + 10000000000;
+-ERROR:  result is out of range
++ERROR:  result out of range
+ SELECT '127.0.0.1'::inet - 10000000000;
+-ERROR:  result is out of range
++ERROR:  result out of range
+ SELECT '126::1'::inet - '127::2'::inet;
+-ERROR:  result is out of range
++ERROR:  result out of range
+ SELECT '127::1'::inet - '126::2'::inet;
+-ERROR:  result is out of range
++ERROR:  result out of range
+ -- but not these
+ SELECT '127::1'::inet + 10000000000;
+      ?column?     
+@@ -841,32 +459,13 @@
+ 
+ -- insert one more row with addressed from different families
+ INSERT INTO INET_TBL (c, i) VALUES ('10', '10::/8');
++ERROR:  relation "inet_tbl" does not exist
+ -- now, this one should fail
+ SELECT inet_merge(c, i) FROM INET_TBL;
+-ERROR:  cannot merge addresses from different families
++ERROR:  relation "inet_tbl" does not exist
+ -- fix it by inet_same_family() condition
+ SELECT inet_merge(c, i) FROM INET_TBL WHERE inet_same_family(c, i);
+-   inet_merge    
+------------------
+- 192.168.1.0/24
+- 192.168.1.0/24
+- 192.168.1.0/24
+- 192.168.1.0/24
+- 192.168.1.0/24
+- 192.168.1.0/24
+- 10.0.0.0/8
+- 10.0.0.0/8
+- 10.1.2.3/32
+- 10.1.2.0/24
+- 10.1.0.0/16
+- 10.0.0.0/8
+- 10.0.0.0/7
+- 8.0.0.0/6
+- 10:23::/64
+- 10:23::8000/113
+- ::/24
+-(17 rows)
+-
++ERROR:  relation "inet_tbl" does not exist
+ -- Test inet sortsupport with a variety of boundary inputs:
+ SELECT a FROM (VALUES
+   ('0.0.0.0/0'::inet),
+@@ -981,13 +580,16 @@
+  255.255.255.255/0
+  0.0.0.0/1
+  0.0.0.1/1
+- 0.0.0.0
+  192.168.1.3/1
+  255.255.255.255/1
+  192.168.1.1/5
+  192.168.1.255/5
+  192.168.1.1/6
+  192.168.1.255/6
++ 255.255.0.0/15
++ 255.255.0.0/16
++ 255.255.255.255/16
++ 255.255.255.255/16
+  192.168.1.1/23
+  192.168.1.2/23
+  192.168.1.3/23
+@@ -997,19 +599,16 @@
+  192.168.1.2/25
+  192.168.1.1/26
+  192.168.1.2/26
+- 255.255.0.0/15
+- 255.255.0.0/16
+- 255.255.255.255/16
+- 255.255.255.255/16
+  255.255.255.1/31
+- 255.255.255.0
+- 255.255.255.1
+  255.255.255.2/31
+  255.255.255.3/31
++ 255.255.255.255/31
++ 0.0.0.0
++ 255.255.255.0
++ 255.255.255.1
+  255.255.255.3
+  255.255.255.252
+  255.255.255.253
+- 255.255.255.255/31
+  255.255.255.254
+  255.255.255.255
+  ::/0
+@@ -1024,33 +623,33 @@
+  ffff:ffff:ffff:fffd:ffff:ffff:ffff:ffff/0
+  ffff:ffff:ffff:fffe:ffff:ffff:ffff:ffff/0
+  ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/0
++ 8000::/1
++ ffff:a0c7:82d3:24de:f762:6e1f:316d:3fb2/23
+  ::4:3:2:0/24
+  ::4:3:2:1/24
+  ::4:3:2:2/24
+- ::
+- ::1
+- ::1:ffff:ffff:ffff:ffff
+- ::2:ffff:ffff:ffff:ffff
++ ffff:ffff:ffff:ffff:4:3:2:0/24
++ ffff:ffff:ffff:ffff:4:3:2:1/24
++ ffff:ffff:ffff:ffff:4:3:2:2/24
++ ffff:84b0:4775:536e:c3ed:7116:a6d6:34f0/44
+  10:23::f1/64
+  10:23::f1/65
+- 10:23::ffff
+- 127::1
+- 127::2
+- 8000::/1
+- ffff:83e7:f118:57dc:6093:6d92:689d:58cf/70
+- ffff:84b0:4775:536e:c3ed:7116:a6d6:34f0/44
+  ffff:8566:f84:5867:47f1:7867:d2ba:8a1a/69
++ ffff:83e7:f118:57dc:6093:6d92:689d:58cf/70
+  ffff:8883:f028:7d2:4d68:d510:7d6b:ac43/73
++ ffff:9e86:79ea:f16e:df31:8e4d:7783:532e/88
+  ffff:8ae8:7c14:65b3:196:8e4a:89ae:fb30/89
+  ffff:8dd0:646:694c:7c16:7e35:6a26:171/104
++ ffff:9597:c69c:8b24:57a:8639:ec78:6026/111
+  ffff:8eef:cbf:700:eda3:ae32:f4b4:318b/121
+  ffff:90e7:e744:664:a93:8efe:1f25:7663/122
+- ffff:9597:c69c:8b24:57a:8639:ec78:6026/111
+- ffff:9e86:79ea:f16e:df31:8e4d:7783:532e/88
+- ffff:a0c7:82d3:24de:f762:6e1f:316d:3fb2/23
+- ffff:ffff:ffff:ffff:4:3:2:0/24
+- ffff:ffff:ffff:ffff:4:3:2:1/24
+- ffff:ffff:ffff:ffff:4:3:2:2/24
++ ::
++ ::1
++ ::1:ffff:ffff:ffff:ffff
++ ::2:ffff:ffff:ffff:ffff
++ 10:23::ffff
++ 127::1
++ 127::2
+  ffff:ffff:ffff:fffd::
+  ffff:ffff:ffff:fffe::
+  ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+@@ -1058,38 +657,14 @@
+ 
+ -- test non-error-throwing API for some core types
+ SELECT pg_input_is_valid('1234', 'cidr');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('1234', 'cidr');
+-                  message                   | detail | hint | sql_error_code 
+---------------------------------------------+--------+------+----------------
+- invalid input syntax for type cidr: "1234" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT pg_input_is_valid('192.168.198.200/24', 'cidr');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('192.168.198.200/24', 'cidr');
+-                 message                  |                detail                | hint | sql_error_code 
+-------------------------------------------+--------------------------------------+------+----------------
+- invalid cidr value: "192.168.198.200/24" | Value has bits set to right of mask. |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT pg_input_is_valid('1234', 'inet');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('1234', 'inet');
+-                  message                   | detail | hint | sql_error_code 
+---------------------------------------------+--------+------+----------------
+- invalid input syntax for type inet: "1234" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()

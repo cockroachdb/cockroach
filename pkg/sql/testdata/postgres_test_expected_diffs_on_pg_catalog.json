@@ -1,0 +1,23 @@
+{
+  "version": "18.3",
+  "diffSummary": {
+    "TotalTables": 144,
+    "TotalColumns": 1423,
+    "MissingTables": 0,
+    "MissingColumns": 0,
+    "DatatypeMismatches": 1
+  },
+  "diffs": {
+    "pg_statistic_ext_data": {
+      "stxdexpr": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expectedOid": 10028,
+        "expectedDataType": "_pg_statistic"
+      }
+    }
+  },
+  "unimplementedTypes": {
+    "10028": "_pg_statistic"
+  }
+}

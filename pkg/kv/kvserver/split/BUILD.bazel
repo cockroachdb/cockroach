@@ -1,0 +1,50 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "split",
+    srcs = [
+        "decider.go",
+        "objective.go",
+        "unweighted_finder.go",
+        "weighted_finder.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/split",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "split_test",
+    size = "medium",
+    srcs = [
+        "decider_test.go",
+        "load_based_splitter_test.go",
+        "unweighted_finder_test.go",
+        "weighted_finder_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":split"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/dd",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "//pkg/workload/workloadimpl",
+        "//pkg/workload/ycsb",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

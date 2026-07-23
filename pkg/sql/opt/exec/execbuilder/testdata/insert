@@ -1,0 +1,778 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE kv (
+  k VARCHAR PRIMARY KEY,
+  v VARCHAR,
+  UNIQUE INDEX a (v),
+  FAMILY (k),
+  FAMILY (v)
+)
+
+statement ok
+INSERT INTO kv VALUES ('A');
+INSERT INTO kv (k) VALUES ('nil1');
+INSERT INTO kv (k) VALUES ('nil2');
+INSERT INTO kv VALUES ('nil3', NULL);
+INSERT INTO kv VALUES ('nil4', NULL);
+INSERT INTO kv (k,v) VALUES ('a', 'b'), ('c', 'd');
+
+query T rowsort
+SELECT v || 'hello' FROM [INSERT INTO kv VALUES ('e', 'f'), ('g', '') RETURNING v]
+----
+fhello
+hello
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv/kv_pkey/'A':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'a':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'a'/v:cf=1 -> 'b'
+fetched: /kv/kv_pkey/'c':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'c'/v:cf=1 -> 'd'
+fetched: /kv/kv_pkey/'e':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'e'/v:cf=1 -> 'f'
+fetched: /kv/kv_pkey/'g':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'g'/v:cf=1 -> ''
+fetched: /kv/kv_pkey/'nil1':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'nil2':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'nil3':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'nil4':cf=0 -> <undecoded>
+output row: ['A' NULL]
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['g' '']
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv@a; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv/a/NULL -> /'A'
+fetched: /kv/a/NULL -> /'nil1'
+fetched: /kv/a/NULL -> /'nil2'
+fetched: /kv/a/NULL -> /'nil3'
+fetched: /kv/a/NULL -> /'nil4'
+fetched: /kv/a/'' -> /'g'
+fetched: /kv/a/'b' -> /'a'
+fetched: /kv/a/'d' -> /'c'
+fetched: /kv/a/'f' -> /'e'
+output row: ['A' NULL]
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+output row: ['g' '']
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+
+statement error pgcode 23505 duplicate key value violates unique constraint "a"\nDETAIL: Key \(v\)=\('f'\) already exists\.
+INSERT INTO kv VALUES ('h', 'f')
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv/kv_pkey/'A':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'a':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'a'/v:cf=1 -> 'b'
+fetched: /kv/kv_pkey/'c':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'c'/v:cf=1 -> 'd'
+fetched: /kv/kv_pkey/'e':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'e'/v:cf=1 -> 'f'
+fetched: /kv/kv_pkey/'g':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'g'/v:cf=1 -> ''
+fetched: /kv/kv_pkey/'nil1':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'nil2':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'nil3':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'nil4':cf=0 -> <undecoded>
+output row: ['A' NULL]
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['g' '']
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv@a; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv/a/NULL -> /'A'
+fetched: /kv/a/NULL -> /'nil1'
+fetched: /kv/a/NULL -> /'nil2'
+fetched: /kv/a/NULL -> /'nil3'
+fetched: /kv/a/NULL -> /'nil4'
+fetched: /kv/a/'' -> /'g'
+fetched: /kv/a/'b' -> /'a'
+fetched: /kv/a/'d' -> /'c'
+fetched: /kv/a/'f' -> /'e'
+output row: ['A' NULL]
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+output row: ['g' '']
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+
+statement ok
+INSERT INTO kv VALUES ('f', 'g')
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv/kv_pkey/'A':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'a':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'a'/v:cf=1 -> 'b'
+fetched: /kv/kv_pkey/'c':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'c'/v:cf=1 -> 'd'
+fetched: /kv/kv_pkey/'e':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'e'/v:cf=1 -> 'f'
+fetched: /kv/kv_pkey/'f':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'f'/v:cf=1 -> 'g'
+fetched: /kv/kv_pkey/'g':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'g'/v:cf=1 -> ''
+fetched: /kv/kv_pkey/'nil1':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'nil2':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'nil3':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'nil4':cf=0 -> <undecoded>
+output row: ['A' NULL]
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+output row: ['g' '']
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv@a; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv/a/NULL -> /'A'
+fetched: /kv/a/NULL -> /'nil1'
+fetched: /kv/a/NULL -> /'nil2'
+fetched: /kv/a/NULL -> /'nil3'
+fetched: /kv/a/NULL -> /'nil4'
+fetched: /kv/a/'' -> /'g'
+fetched: /kv/a/'b' -> /'a'
+fetched: /kv/a/'d' -> /'c'
+fetched: /kv/a/'f' -> /'e'
+fetched: /kv/a/'g' -> /'f'
+output row: ['A' NULL]
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+output row: ['g' '']
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+
+statement error duplicate key value violates unique constraint "a"\nDETAIL: Key \(v\)=\('g'\) already exists\.
+INSERT INTO kv VALUES ('h', 'g')
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv/kv_pkey/'A':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'a':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'a'/v:cf=1 -> 'b'
+fetched: /kv/kv_pkey/'c':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'c'/v:cf=1 -> 'd'
+fetched: /kv/kv_pkey/'e':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'e'/v:cf=1 -> 'f'
+fetched: /kv/kv_pkey/'f':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'f'/v:cf=1 -> 'g'
+fetched: /kv/kv_pkey/'g':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'g'/v:cf=1 -> ''
+fetched: /kv/kv_pkey/'nil1':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'nil2':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'nil3':cf=0 -> <undecoded>
+fetched: /kv/kv_pkey/'nil4':cf=0 -> <undecoded>
+output row: ['A' NULL]
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+output row: ['g' '']
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv@a; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv/a/NULL -> /'A'
+fetched: /kv/a/NULL -> /'nil1'
+fetched: /kv/a/NULL -> /'nil2'
+fetched: /kv/a/NULL -> /'nil3'
+fetched: /kv/a/NULL -> /'nil4'
+fetched: /kv/a/'' -> /'g'
+fetched: /kv/a/'b' -> /'a'
+fetched: /kv/a/'d' -> /'c'
+fetched: /kv/a/'f' -> /'e'
+fetched: /kv/a/'g' -> /'f'
+output row: ['A' NULL]
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+output row: ['g' '']
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+
+statement ok
+CREATE TABLE kv5 (
+  k CHAR PRIMARY KEY,
+  v CHAR,
+  UNIQUE INDEX a (v, k),
+  FAMILY (k, v)
+)
+
+statement ok
+INSERT INTO kv5 VALUES ('a', NULL)
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv5@a; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv5/a/NULL/'a' -> <undecoded>
+output row: ['a' NULL]
+
+statement ok
+CREATE TABLE insert_t (x INT, v INT)
+
+statement ok
+CREATE TABLE select_t (x INT, v INT)
+
+# Check that INSERT supports ORDER BY (MySQL extension)
+query T
+EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 10
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: insert_t(x, v, rowid)
+│ auto commit
+│
+└── • render
+    │ columns: (x, v, rowid_default)
+    │ render rowid_default: unique_rowid()
+    │ render x: x
+    │ render v: v
+    │
+    └── • top-k
+        │ columns: (x, v)
+        │ estimated row count: 10 (missing stats)
+        │ order: -v
+        │ k: 10
+        │
+        └── • scan
+              columns: (x, v)
+              estimated row count: 1,000 (missing stats)
+              table: select_t@select_t_pkey
+              spans: FULL SCAN
+
+# Check that INSERT supports LIMIT (MySQL extension)
+query T
+EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: insert_t(x, v, rowid)
+│ auto commit
+│
+└── • render
+    │ columns: (x, v, rowid_default)
+    │ render rowid_default: unique_rowid()
+    │ render x: x
+    │ render v: v
+    │
+    └── • scan
+          columns: (x, v)
+          estimated row count: 1 (missing stats)
+          table: select_t@select_t_pkey
+          spans: LIMITED SCAN
+          limit: 1
+
+# Check the grouping of LIMIT and ORDER BY
+query T
+EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
+----
+distribution: local
+·
+• insert
+│ into: insert_t(x, v, rowid)
+│ auto commit
+│
+└── • render
+    │
+    └── • limit
+        │ count: 1
+        │
+        └── • values
+              size: 2 columns, 2 rows
+
+query T
+EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
+----
+distribution: local
+·
+• insert
+│ into: insert_t(x, v, rowid)
+│ auto commit
+│
+└── • render
+    │
+    └── • top-k
+        │ estimated row count: 1
+        │ order: +column2
+        │ k: 1
+        │
+        └── • values
+              size: 2 columns, 2 rows
+
+query T
+EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
+----
+distribution: local
+·
+• insert
+│ into: insert_t(x, v, rowid)
+│ auto commit
+│
+└── • render
+    │
+    └── • top-k
+        │ estimated row count: 1
+        │ order: +column2
+        │ k: 1
+        │
+        └── • values
+              size: 2 columns, 2 rows
+
+query T
+EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
+----
+distribution: local
+·
+• insert
+│ into: insert_t(x, v, rowid)
+│ auto commit
+│
+└── • render
+    │
+    └── • top-k
+        │ estimated row count: 1
+        │ order: +column2
+        │ k: 1
+        │
+        └── • values
+              size: 2 columns, 2 rows
+
+# ORDER BY expression that's not inserted into table.
+query T
+EXPLAIN (VERBOSE)
+INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v LIMIT 10) RETURNING x+v
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ render ?column?: x + v
+│
+└── • insert
+    │ columns: (x, v, rowid)
+    │ estimated row count: 10 (missing stats)
+    │ into: insert_t(x, v, rowid)
+    │
+    └── • render
+        │ columns: (length, "?column?", rowid_default)
+        │ render rowid_default: unique_rowid()
+        │ render length: length
+        │ render ?column?: "?column?"
+        │
+        └── • top-k
+            │ columns: (length, "?column?", column16)
+            │ estimated row count: 10 (missing stats)
+            │ order: +column16
+            │ k: 10
+            │
+            └── • render
+                │ columns: (length, "?column?", column16)
+                │ render length: length(k)
+                │ render ?column?: 2
+                │ render column16: k || v
+                │
+                └── • scan
+                      columns: (k, v)
+                      estimated row count: 1,000 (missing stats)
+                      table: kv@kv_pkey
+                      spans: FULL SCAN
+
+# Index hints should be a no-op for normal inserts without ON CONFLICT.
+query T
+EXPLAIN (PLAN) INSERT INTO kv@a VALUES (1,1), (2,2)
+----
+distribution: local
+·
+• insert fast path
+  into: kv(k, v)
+  auto commit
+  size: 2 columns, 2 rows
+
+# ------------------------------------------------------------------------------
+# Insert rows into table during schema changes.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE mutation(x INT, y INT NOT NULL DEFAULT(10)) WITH (schema_locked=false); INSERT INTO mutation VALUES (1, 1)
+
+statement ok
+BEGIN;
+SET LOCAL autocommit_before_ddl=off;
+ALTER TABLE mutation DROP COLUMN y
+
+# Ensure that default value is still inserted into y, since y is write-only.
+query T
+EXPLAIN (VERBOSE) INSERT INTO mutation(x) VALUES (2) RETURNING *
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (x)
+│
+└── • insert fast path
+      columns: (x, rowid)
+      estimated row count: 1
+      into: mutation(x, rowid, y)
+      size: 3 columns, 1 row
+      row 0, expr 0: 2
+      row 0, expr 1: unique_rowid()
+      row 0, expr 2: 10
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN;
+SET LOCAL autocommit_before_ddl=off;
+ALTER TABLE mutation ADD COLUMN z INT AS (x + y) STORED
+
+# Ensure that value is *not* inserted into z, since z is delete-only.
+query T
+EXPLAIN (VERBOSE) INSERT INTO mutation(x, y) VALUES (2, 2)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: mutation(x, y, rowid)
+  size: 3 columns, 1 row
+  row 0, expr 0: 2
+  row 0, expr 1: 2
+  row 0, expr 2: unique_rowid()
+
+statement ok
+ROLLBACK
+
+# ------------------------------------------------------------------------------
+# Insert fast path.
+# ------------------------------------------------------------------------------
+
+# Do not plan insert fast path when VALUES clause has a subquery.
+# statement ok
+query T
+EXPLAIN INSERT INTO kv VALUES (1, (SELECT v FROM kv))
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: kv(k, v)
+│   │ auto commit
+│   │
+│   └── • values
+│         size: 2 columns, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT v FROM kv)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ estimated row count: 1
+        │
+        └── • scan
+              missing stats
+              table: kv@kv_pkey
+              spans: FULL SCAN
+
+statement ok
+CREATE FUNCTION foo() RETURNS VARCHAR LANGUAGE SQL AS 'SELECT v FROM kv'
+
+# Do not plan insert fast path when VALUES clause invokes a UDF.
+query T
+EXPLAIN INSERT INTO kv VALUES (1, foo())
+----
+distribution: local
+·
+• insert
+│ into: kv(k, v)
+│ auto commit
+│
+└── • values
+      size: 2 columns, 1 row
+
+# Regression test for #35564: make sure we use the Insert's input required
+# ordering for the internal projection.
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
+
+statement ok
+CREATE TABLE xyz (x INT, y INT, z INT)
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM [INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (z)
+│
+├── • sort
+│   │ columns: (z)
+│   │ estimated row count: 1,000 (missing stats)
+│   │ order: +z
+│   │
+│   └── • scan buffer
+│         columns: (z)
+│         estimated row count: 1,000 (missing stats)
+│         label: buffer 1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z
+    │ exec mode: discard all rows
+    │
+    └── • buffer
+        │ columns: (z)
+        │ label: buffer 1
+        │
+        └── • project
+            │ columns: (z)
+            │
+            └── • insert
+                │ columns: (z, rowid)
+                │ estimated row count: 1,000 (missing stats)
+                │ into: xyz(x, y, z, rowid)
+                │
+                └── • render
+                    │ columns: (a, b, c, rowid_default)
+                    │ render rowid_default: unique_rowid()
+                    │ render a: a
+                    │ render b: b
+                    │ render c: c
+                    │
+                    └── • scan
+                          columns: (a, b, c)
+                          estimated row count: 1,000 (missing stats)
+                          table: abc@abc_pkey
+                          spans: FULL SCAN
+
+# ------------------------------------------------------------------------------
+# Regression for #35364. This tests behavior that is different between the CBO
+# and the HP. The CBO will (deliberately) round any input columns *before*
+# evaluating any computed columns, as well as rounding the output.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE t35364(
+    x DECIMAL(10,0) CHECK(round(x) = x) PRIMARY KEY,
+    y DECIMAL(10,0) DEFAULT (1.5),
+    z DECIMAL(10,0) AS (x+y+2.5) STORED CHECK(z >= 7)
+)
+
+query TTT
+INSERT INTO t35364 (x) VALUES (1.5) RETURNING *
+----
+2  2  7
+
+# Regression test for #62270: make sure the fast path is used when not
+# providing values for some columns.
+statement ok
+CREATE TABLE t62270_parent (id INT PRIMARY KEY);
+CREATE TABLE t62270_child (c UUID DEFAULT (gen_random_uuid()), p INT REFERENCES t62270_parent (id));
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t62270_child (p) VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t62270_child(c, p, rowid)
+  auto commit
+  FK check: t62270_parent@t62270_parent_pkey
+  size: 3 columns, 1 row
+  row 0, expr 0: gen_random_uuid()
+  row 0, expr 1: 1
+  row 0, expr 2: unique_rowid()
+
+# Sanity check the KV operations on an INSERT as well as the session variable
+# behavior.
+statement ok
+CREATE TABLE t139160 (
+  k INT PRIMARY KEY,
+  i INT,
+  u INT,
+  v INT NOT NULL,
+  w INT,
+  INDEX (i) STORING (u),
+  UNIQUE INDEX (u) STORING (i),
+  UNIQUE INDEX (v),
+  FAMILY (k, i, u, v, w)
+);
+
+query T kvtrace
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+----
+Scan /Table/20/1/11{7-8}
+CPut /Table/117/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3/1:4:Int/4/1:5:Int/5
+Put /Table/117/2/2/1/0 -> /BYTES/0x3306
+CPut /Table/117/3/3/0 -> /BYTES/0x892304
+CPut /Table/117/4/4/0 -> /BYTES/0x89
+
+statement count 1
+DELETE FROM t139160 WHERE k = 1;
+
+statement ok
+SET use_cputs_on_non_unique_indexes = true;
+
+query T kvtrace
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+----
+CPut /Table/117/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3/1:4:Int/4/1:5:Int/5
+CPut /Table/117/2/2/1/0 -> /BYTES/0x3306
+CPut /Table/117/3/3/0 -> /BYTES/0x892304
+CPut /Table/117/4/4/0 -> /BYTES/0x89
+
+statement ok
+RESET use_cputs_on_non_unique_indexes;
+
+# Regression test for incorrectly reusing existing column that has a different
+# type (#163911).
+statement ok
+CREATE TABLE t163911 (a INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE t163911 ADD COLUMN new1 STRING DEFAULT (true);
+
+statement ok
+ALTER TABLE t163911 ADD COLUMN new2 STRING CHECK (true);
+
+query T
+EXPLAIN (OPT, TYPES) INSERT INTO t163911 VALUES (1);
+----
+insert t163911
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => a:1
+ │    ├── new1_cast:11 => new1:2
+ │    └── new2_default:10 => new2:3
+ ├── check columns: check1:12(bool)
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 0.03
+ ├── distribution: test
+ └── values
+      ├── columns: column1:8(int!null) new2_default:10(string) new1_cast:11(string!null) check1:12(bool!null)
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 0.02
+      ├── key: ()
+      ├── fd: ()-->(8,10-12)
+      ├── distribution: test
+      └── tuple [type=tuple{int, string, string, bool}]
+           ├── const: 1 [type=int]
+           ├── null [type=string]
+           ├── const: 'true' [type=string]
+           └── true [type=bool]
+
+# Also run the statement to ensure it doesn't hit an internal error.
+statement ok
+INSERT INTO t163911 VALUES (1);

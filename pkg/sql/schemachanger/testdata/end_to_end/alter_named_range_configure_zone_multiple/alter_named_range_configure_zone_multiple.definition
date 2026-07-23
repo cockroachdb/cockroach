@@ -1,0 +1,5 @@
+test
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 7;
+ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 10000;
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10;
+----

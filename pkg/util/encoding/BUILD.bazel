@@ -1,0 +1,96 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "encoding",
+    srcs = [
+        "complement_fast.go",
+        "complement_safe.go",
+        "decimal.go",
+        "encoding.go",
+        "float.go",
+        ":gen-type-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/encoding",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geopb",
+        "//pkg/util/bitarray",
+        "//pkg/util/duration",
+        "//pkg/util/encoding/encodingtype",
+        "//pkg/util/ipaddr",
+        "//pkg/util/ltree",
+        "//pkg/util/protoutil",
+        "//pkg/util/timeofday",
+        "//pkg/util/timetz",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "encoding_test",
+    size = "small",
+    srcs = [
+        "decimal_test.go",
+        "encoding_test.go",
+        "float_test.go",
+        "main_test.go",
+        "pretty_print_test.go",
+        "printer_test.go",
+    ],
+    embed = [":encoding"],
+    # A test in this package allocates a 2GB array so we need the extra memory.
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "large"},
+    }),
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geographiclib",
+        "//pkg/geo/geopb",
+        "//pkg/roachpb",
+        "//pkg/sql/rowenc/valueside",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/skip",
+        "//pkg/util/bitarray",
+        "//pkg/util/duration",
+        "//pkg/util/ipaddr",
+        "//pkg/util/json",
+        "//pkg/util/log",
+        "//pkg/util/ltree",
+        "//pkg/util/randutil",
+        "//pkg/util/timeofday",
+        "//pkg/util/timetz",
+        "//pkg/util/timeutil",
+        "//pkg/util/timeutil/pgdate",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+genrule(
+    name = "gen-type-stringer",
+    srcs = [
+        "encoding.go",
+    ],
+    outs = ["type_string.go"],
+    cmd = """
+       sed -e 's/type Type encodingtype.T/type Type int/' $(location encoding.go) > encoding_tmp.go && \
+         $(location //pkg/build/bazel/util/tinystringer) -output=$@ -type=Type encoding_tmp.go
+    """,
+    tools = [
+        "//pkg/build/bazel/util/tinystringer",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)

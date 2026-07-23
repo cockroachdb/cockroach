@@ -1,0 +1,9 @@
+setup
+CREATE DATABASE db;
+----
+
+test
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7;
+ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 10000;
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 10;
+----

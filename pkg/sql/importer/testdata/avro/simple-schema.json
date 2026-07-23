@@ -1,0 +1,10 @@
+{ "type": "record",
+  "name": "simple",
+  "fields":
+    [
+      { "name": "i", "type": "int" },
+      { "name": "s", "type": "string" },
+      { "name": "b", "type": ["null", "bytes"] }
+    ]
+}
+

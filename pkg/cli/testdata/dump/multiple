@@ -1,0 +1,54 @@
+sql
+create database t;
+create table t.f (x int, y int);
+insert into t.f values (42, 69);
+create table t.g (x int, y int);
+insert into t.g values (3, 4)
+----
+INSERT 1
+
+dump t f g
+----
+----
+CREATE TABLE public.f (
+	x INT8 NULL,
+	y INT8 NULL,
+	FAMILY "primary" (x, y, rowid)
+);
+
+CREATE TABLE public.g (
+	x INT8 NULL,
+	y INT8 NULL,
+	FAMILY "primary" (x, y, rowid)
+);
+
+INSERT INTO public.f (x, y) VALUES
+	(42, 69);
+
+INSERT INTO public.g (x, y) VALUES
+	(3, 4);
+----
+----
+
+dump t 
+----
+----
+CREATE TABLE public.f (
+	x INT8 NULL,
+	y INT8 NULL,
+	FAMILY "primary" (x, y, rowid)
+);
+
+CREATE TABLE public.g (
+	x INT8 NULL,
+	y INT8 NULL,
+	FAMILY "primary" (x, y, rowid)
+);
+
+INSERT INTO public.f (x, y) VALUES
+	(42, 69);
+
+INSERT INTO public.g (x, y) VALUES
+	(3, 4);
+----
+----

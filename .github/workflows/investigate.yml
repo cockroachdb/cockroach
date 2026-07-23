@@ -1,0 +1,476 @@
+# Investigate Test Failure
+#
+# Triggers when a collaborator comments `/investigate` on a test failure
+# issue. Invokes Claude to autonomously analyze the failure and post
+# findings as a comment.
+#
+# Model selection: the first words after `/investigate` pick the model
+# and the reasoning effort:
+#
+#   /investigate                Opus 4.8 at high effort (the default)
+#   /investigate sonnet         Sonnet 5 (cheaper)
+#   /investigate fable          Claude Fable 5 (most capable, 2x Opus price)
+#   /investigate fable xhigh    ...at raised reasoning effort
+#
+# Effort is one of low, medium, high (default), xhigh, max.
+#
+# Manual testing via workflow_dispatch:
+#
+#   Changes to this workflow (especially to permissions, allowed tools,
+#   or the agent prompt) should be reviewed by SecEng before testing or
+#   merging, as public-facing AI workflows require sign-off.
+#
+#   Use --ref to point at a branch containing the workflow file:
+#
+#     gh workflow run investigate.yml \
+#       --repo cockroachdb/cockroach \
+#       --ref your-branch-name \
+#       -f issue_number=163542
+#
+#   When triggered via dispatch, findings are uploaded as a workflow
+#   artifact (visible in the run's "Artifacts" section) but not posted
+#   as a comment. The artifact is uploaded regardless of trigger type.
+#
+#   To test on a personal fork (where Vertex AI OIDC is unavailable):
+#
+#   1. Add an ANTHROPIC_API_KEY repository secret to the fork. The
+#      workflow detects this and uses the API key directly instead of
+#      Vertex.
+#
+#   2. Copy the test failure issue to your fork (the agent reads the
+#      issue by number from the workflow's own repo):
+#
+#        BODY=$(gh issue view 163542 --repo cockroachdb/cockroach --json body -q .body)
+#        gh issue create --repo <you>/cockroach --title "..." --body "$BODY"
+#
+#   3. The checkout is a blobless clone with full history, so git log
+#      and git blame work without deepening. The failure SHA must still
+#      be reachable from the fork's remote. Push it to a throwaway
+#      branch if needed:
+#
+#        git push <your-fork-remote> <failure-sha>:refs/heads/investigate-sha
+#
+#   4. Trigger the workflow. Dispatch defaults to Opus 4.8 at high
+#      effort; pass a trigger comment to pick another model or effort:
+#
+#        gh workflow run investigate.yml \
+#          --repo <you>/cockroach \
+#          --ref agent-workflow-investigate \
+#          -f issue_number=<fork-issue-number> \
+#          -f comment_body='/investigate sonnet xhigh'
+
+name: Investigate Test Failure
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to investigate'
+        required: true
+      comment_body:
+        description: 'Simulated trigger comment (selects model and effort)'
+        default: '/investigate'
+      smoke_test:
+        description: 'Run a tool smoke test instead of a real investigation'
+        type: boolean
+        default: false
+
+jobs:
+  investigate:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.pull_request == null &&
+       (github.event.comment.body == '/investigate' ||
+        startsWith(github.event.comment.body, '/investigate ')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    env:
+      ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
+      COMMENT_BODY: ${{ inputs.comment_body || github.event.comment.body }}
+      HAS_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      # Repository to check out the code from. Issues and comments use github.repository.
+      CODE_REPO: ${{ secrets.CODE_REPO }}
+    steps:
+      # Authorization cannot live in the job-level `if:` expression because
+      # checking effective permissions requires an API call. The
+      # author_association field available in expressions reports MEMBER only
+      # for users whose org membership is public, so private members would be
+      # rejected as CONTRIBUTOR. workflow_dispatch needs no check: triggering
+      # it already requires write access.
+      - name: Verify commenter has write permissions
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          PERM=$(gh api "repos/${{ github.repository }}/collaborators/${COMMENTER}/permission" \
+            --jq '.permission' 2>/dev/null || echo "none")
+          case "$PERM" in
+            admin|write)
+              echo "User ${COMMENTER} has ${PERM} permission - authorized to trigger an investigation"
+              ;;
+            *)
+              echo "::error::User ${COMMENTER} does not have write access (permission: ${PERM}). Only collaborators with write access can trigger an investigation."
+              exit 1
+              ;;
+          esac
+
+      - name: Acknowledge trigger
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
+            -f content=eyes
+
+      # Blobless clone: fetches the full commit graph (so git log,
+      # git blame, etc. work immediately) but defers downloading file
+      # contents until they're actually accessed. Much faster than a
+      # full clone of the cockroach repo while still giving the agent
+      # full history without manual deepening.
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.HAS_API_KEY == 'true' && github.repository || env.CODE_REPO }}
+          token: ${{ env.HAS_API_KEY == 'true' && secrets.GITHUB_TOKEN || secrets.INVESTIGATE_PAT }}
+          filter: blob:none
+          fetch-depth: 0
+
+      - name: Create helper scripts
+        run: |
+          cat > /usr/local/bin/fetch-url <<'WRAPPER'
+          #!/bin/bash
+          set -euo pipefail
+          url="${1:?Usage: fetch-url URL [OUTPUT_FILE]}"
+          if [ -n "${2:-}" ]; then
+            exec curl -fsSL -o "$2" "$url"
+          else
+            exec curl -fsSL "$url"
+          fi
+          WRAPPER
+          chmod +x /usr/local/bin/fetch-url
+
+          # snapshot-fetch SHA — import a single commit's complete snapshot
+          # into this repo's object store.
+          #
+          # A plain `git checkout <sha>` in a blobless clone triggers a
+          # partial-clone lazy fetch of the commit's blobs (`want <blob-oid>`).
+          # GitHub's on-demand object serving rejects that with "not our ref"
+          # for commits not reachable from the checked-out repo's default
+          # branch (e.g. release-branch SHAs), which is most failure SHAs we
+          # investigate. To avoid that path, fetch the commit's snapshot in an
+          # isolated repo — there the request is `want <commit-sha>` with no
+          # haves, which GitHub serves reliably for any reachable commit — and
+          # import those objects so later reads need no network access.
+          #
+          # This runs in a workflow step (not inside the agent), while the
+          # actions/checkout credentials are still in place. The agent step
+          # never has working credentials for CODE_REPO: cockroachdb/claude-
+          # code-action's configureGitAuth strips the actions/checkout auth
+          # header and repoints origin at the workflow repo, so any git fetch
+          # the agent attempts hits the wrong repository. That is why the
+          # checkout is done here rather than by the agent.
+          cat > /usr/local/bin/snapshot-fetch <<'WRAPPER'
+          #!/bin/bash
+          set -euo pipefail
+          sha="${1:?Usage: snapshot-fetch SHA}"
+          git_dir=$(/usr/bin/git rev-parse --absolute-git-dir)
+          url=$(/usr/bin/git config --get remote.origin.url)
+          auth=$(/usr/bin/git config --get http.https://github.com/.extraheader || true)
+
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          /usr/bin/git -C "$tmp" init -q
+          if [ -n "$auth" ]; then
+            /usr/bin/git -C "$tmp" config http.https://github.com/.extraheader "$auth"
+          fi
+          # fetch.unpackLimit=1 keeps the result as a packfile (instead of
+          # loose objects) regardless of object count, so the copy below has
+          # a stable source.
+          /usr/bin/git -C "$tmp" -c fetch.unpackLimit=1 fetch -q --depth=1 "$url" "$sha"
+          cp "$tmp"/.git/objects/pack/pack-*.pack \
+             "$tmp"/.git/objects/pack/pack-*.idx \
+             "$git_dir/objects/pack/"
+          WRAPPER
+          chmod +x /usr/local/bin/snapshot-fetch
+
+          # checkout-sha SHA — import the commit's snapshot, then check it out.
+          cat > /usr/local/bin/checkout-sha <<'WRAPPER'
+          #!/bin/bash
+          set -euo pipefail
+          sha="${1:?Usage: checkout-sha SHA}"
+          snapshot-fetch "$sha"
+          git -c advice.detachedHead=false checkout --force "$sha"
+          WRAPPER
+          chmod +x /usr/local/bin/checkout-sha
+
+      # Pin the worktree to the failure commit while the actions/checkout
+      # credentials for the checked-out repo are still active. The agent step
+      # cannot do this itself: cockroachdb/claude-code-action's configureGitAuth
+      # strips that auth header and repoints origin at the workflow repo, so any
+      # fetch the agent attempts (e.g. a lazy blob fetch on `git checkout`) hits
+      # the wrong repository and fails with "not our ref". We therefore resolve
+      # and check out the SHA here and pass it to the agent. On any failure we
+      # leave the worktree at the default-branch tip; the agent emits a warning.
+      - name: Check out failure SHA
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+
+          # An explicit SHA in the trigger comment ("/investigate <sha>") wins.
+          sha=""
+          if [[ "$COMMENT_BODY" =~ /investigate[[:space:]]+([0-9a-f]{40}) ]]; then
+            sha="${BASH_REMATCH[1]}"
+          fi
+
+          # Otherwise take the most recent failure SHA. Failures are filed by
+          # cockroach-teamcity (the issue body for the first, a comment for each
+          # subsequent one), each linking to .../commits/<sha>. Prefer the
+          # latest cockroach-teamcity post; fall back to the latest commit link
+          # from any author.
+          if [ -z "$sha" ]; then
+            sha=$(gh issue view "$ISSUE_NUMBER" --repo "${{ github.repository }}" \
+              --json author,body,comments --jq '
+                ([{a: .author.login, b: .body}] + [.comments[] | {a: .author.login, b: .body}]) as $posts
+                | ([ $posts[] | select(.a=="cockroach-teamcity") | .b | [scan("commits?/([0-9a-f]{40})")] | (.[0][0] // empty) ]) as $tc
+                | ([ $posts[] | .b | [scan("commits?/([0-9a-f]{40})")] | (.[0][0] // empty) ]) as $any
+                | (if ($tc|length)>0 then ($tc|last) else ($any|last // empty) end)
+              ' 2>/dev/null) || sha=""
+          fi
+
+          if [ -z "$sha" ]; then
+            echo "::warning::Could not determine a failure SHA from issue $ISSUE_NUMBER; leaving worktree at default-branch tip."
+            echo "FAILURE_SHA=" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          echo "Determined failure SHA: $sha"
+          if checkout-sha "$sha"; then
+            echo "Checked out $sha"
+            echo "FAILURE_SHA=$sha" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Failed to check out failure SHA $sha; leaving worktree at default-branch tip."
+            echo "FAILURE_SHA=" >> "$GITHUB_ENV"
+          fi
+
+      # Vertex AI auth for cockroachdb/cockroach. Skipped when an
+      # ANTHROPIC_API_KEY secret is set (e.g. on a personal fork).
+      - name: Authenticate to Google Cloud
+        if: env.HAS_API_KEY != 'true'
+        uses: 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093' # v3
+        with:
+          project_id: 'vertex-model-runners'
+          service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
+          workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
+
+      - name: Retrieve EngFlow certificates
+        if: env.HAS_API_KEY != 'true'
+        id: engflow-certs
+        run: |
+          CERT_DIR=$(mktemp -d)
+          if gcloud secrets versions access 2 --secret=engflow-mesolite-key --project=crl-github-actions > "$CERT_DIR/engflow.key" 2>/dev/null &&
+             gcloud secrets versions access 2 --secret=engflow-mesolite-crt --project=crl-github-actions > "$CERT_DIR/engflow.crt" 2>/dev/null; then
+            chmod 600 "$CERT_DIR/engflow.key" "$CERT_DIR/engflow.crt"
+            echo "ENGFLOW_CERT_FILE=$CERT_DIR/engflow.crt" >> "$GITHUB_ENV"
+            echo "ENGFLOW_KEY_FILE=$CERT_DIR/engflow.key" >> "$GITHUB_ENV"
+            echo "has_engflow=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Could not retrieve EngFlow certificates — EngFlow artifact access will be unavailable"
+            echo "has_engflow=false" >> "$GITHUB_OUTPUT"
+            rm -rf "$CERT_DIR"
+          fi
+
+      # Model and effort selection from the trigger comment (see the
+      # header comment for the syntax). Only the second and third word
+      # of the comment's first line are considered, and unrecognized
+      # words are ignored, so trailing free text in the comment is
+      # harmless. The comment body is read from the environment rather
+      # than interpolated into the script, so comment content cannot
+      # inject shell.
+      - name: Select model
+        run: |
+          model='claude-opus-4-8'
+          effort='high'
+          # GitHub delivers comment bodies with CRLF line endings; strip the
+          # carriage return so the first line's last word matches the case
+          # arms below.
+          line1=$(printf '%s' "$COMMENT_BODY" | head -n1 | tr -d '\r')
+          arg1=$(printf '%s' "$line1" | awk '{print tolower($2)}')
+          arg2=$(printf '%s' "$line1" | awk '{print tolower($3)}')
+          for arg in "$arg1" "$arg2"; do
+            case "$arg" in
+              sonnet|sonnet-5) model='claude-sonnet-5' ;;
+              fable|fable-5)   model='claude-fable-5' ;;
+              low|medium|high|xhigh|max) effort="$arg" ;;
+            esac
+          done
+          echo "Selected model: $model, effort: $effort"
+          echo "CLAUDE_MODEL=$model" >> "$GITHUB_ENV"
+          echo "CLAUDE_EFFORT=$effort" >> "$GITHUB_ENV"
+
+      # claude-code-action@v1 would install Claude Code 1.0.127
+      # (Sep 2025), which predates the --effort flag (the CLI errors on
+      # unknown options) as well as the Sonnet 5 and Fable 5 models.
+      # Install a pinned recent version instead and hand it to the
+      # action via path_to_claude_code_executable below.
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash -s 2.1.209
+          echo "CLAUDE_BIN=$HOME/.local/bin/claude" >> "$GITHUB_ENV"
+
+      - name: Investigate
+        id: investigate
+        uses: cockroachdb/claude-code-action@fa7e2f0a29a126f0b81cdcf360561b36e44cf608 # v1.0.180
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: ${{ env.HAS_API_KEY != 'true' && 'vertex-model-runners' || '' }}
+          CLOUD_ML_REGION: ${{ env.HAS_API_KEY != 'true' && 'global' || '' }}
+          # The checkout is a different repo than this one; point the
+          # agent's gh commands at this repo's issue tracker.
+          GH_REPO: ${{ github.repository }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          use_vertex: ${{ env.HAS_API_KEY != 'true' && 'true' || 'false' }}
+          path_to_claude_code_executable: ${{ env.CLAUDE_BIN }}
+          # Permissions are passed via --allowedTools using the colon
+          # format (Bash(cmd:args)) because cockroachdb/claude-code-action@v1
+          # (Claude Code 2.0.1) ignores permissions set via the `settings`
+          # input — tools end up denied even though settings.json is written
+          # correctly. The newer space format (Bash(cmd args)) and settings-
+          # based permissions may work after upgrading the action.
+          #
+          # Posting to GitHub is the Post findings step's job, never the
+          # agent's. The posting commands are explicitly denied — rather
+          # than merely left off the allowlist — because an unlisted
+          # command fails with "requires approval", which the agent
+          # treats as retryable; an explicit deny is terminal and makes
+          # it fall back to writing artifacts/findings.md. gh api is
+          # included because it can post comments too.
+          claude_args: |
+            --model ${{ env.CLAUDE_MODEL }}
+            --effort ${{ env.CLAUDE_EFFORT }}
+            --allowedTools "Write,Read,Grep,Glob,WebFetch,Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(grep:*),Bash(rg:*),Bash(awk:*),Bash(cut:*),Bash(tr:*),Bash(sort:*),Bash(uniq:*),Bash(wc:*),Bash(tee:*),Bash(diff:*),Bash(file:*),Bash(strings:*),Bash(jq:*),Bash(ls:*),Bash(find:*),Bash(tree:*),Bash(stat:*),Bash(du:*),Bash(mkdir:*),Bash(git:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr diff:*),Bash(gh search:*),Bash(fetch-url:*),Bash(unzip:*),Bash(tar x*),Bash(tar -x*),Bash(tar --extract:*),Bash(go mod download:*),Bash(go env:*),Bash(.claude/skills/engflow-artifacts/run.sh:*),Bash(go tool pprof:*),Bash(go run ./pkg/cmd/tsdump2duck:*),Bash(duckdb:*)"
+            --disallowedTools "Bash(gh issue comment:*),Bash(gh pr comment:*),Bash(gh api:*)"
+          prompt: |
+            Read and follow the instructions in the prompt file
+            `.github/prompts/${{ inputs.smoke_test == true && 'investigate-smoke' || 'investigate' }}.md`.
+
+            ISSUE_REPO: ${{ github.repository }}
+            CODE_REPO: ${{ env.HAS_API_KEY == 'true' && github.repository || env.CODE_REPO }}
+            ISSUE NUMBER: ${{ env.ISSUE_NUMBER }}
+            TRIGGER COMMENT: ${{ env.COMMENT_BODY }}
+            CHECKED OUT SHA: ${{ env.FAILURE_SHA }}
+            WORKFLOW RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Use ISSUE_REPO for all gh issue/pr/search commands. Use
+            CODE_REPO when building source links (blob/permalink URLs).
+
+            The working tree is already checked out at CHECKED OUT SHA (the
+            failure commit). If CHECKED OUT SHA is empty, the working tree is
+            at the default-branch tip instead. Do not run `git checkout` — the
+            agent's git credentials cannot fetch from CODE_REPO.
+
+            Your only deliverable is the file `artifacts/findings.md`; a
+            later workflow step posts it to the issue. Commands that post
+            to GitHub (`gh issue comment`, `gh pr comment`, `gh api`) are
+            denied unconditionally. If any command is denied, do not retry
+            it or look for another way to run it — note it in the Tooling
+            Feedback section of your findings and move on.
+
+      # The agent is instructed to write its report to artifacts/findings.md,
+      # which the steps below upload and post. It occasionally finishes a
+      # successful investigation without writing the file — e.g. it tries to
+      # post the comment itself, which the sandbox denies, and gives up. Its
+      # final summary is still captured in the action's execution-output JSON,
+      # so recover it into artifacts/findings.md as a fallback. This keeps a
+      # single source of truth for the upload and post steps, and means a
+      # missing file reflects a genuinely empty investigation rather than the
+      # agent delivering its findings the wrong way.
+      - name: Recover findings from agent output
+        if: always()
+        env:
+          OUTPUT_FILE: ${{ steps.investigate.outputs.execution_file }}
+        run: |
+          set -uo pipefail
+
+          if [ -s artifacts/findings.md ]; then
+            exit 0
+          fi
+          if [ -z "${OUTPUT_FILE:-}" ] || [ ! -s "$OUTPUT_FILE" ]; then
+            echo "No execution output file to recover findings from."
+            exit 0
+          fi
+
+          # The file is a JSON array of turn objects; the agent's final summary
+          # is the `result` field of the terminating `result` turn.
+          summary=$(jq -r '[.[] | select(.type? == "result") | .result? // empty] | last // empty' \
+            "$OUTPUT_FILE" 2>/dev/null || true)
+          if [ -z "$summary" ]; then
+            echo "Execution output contained no result summary to recover."
+            exit 0
+          fi
+
+          mkdir -p artifacts
+          {
+            echo "> **Note:** Recovered from the agent's final message; the"
+            echo "> investigation did not write \`artifacts/findings.md\` directly."
+            echo
+            echo "$summary"
+          } > artifacts/findings.md
+          echo "Recovered findings from execution output."
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: investigation-findings
+          path: artifacts/findings.md
+          if-no-files-found: ignore
+
+      - name: Post findings
+        if: always() && github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Empty if the job failed before the Select model step.
+          : "${CLAUDE_MODEL:=unknown}" "${CLAUDE_EFFORT:=unknown}"
+          # Footer identifying the model, plus a pointer at the deeper
+          # settings (omitted when this run already used them). The
+          # suggested setting is strictly deeper than any run that sees
+          # the hint, since fable-5 at max is excluded above.
+          hint=''
+          if [ "$CLAUDE_MODEL" != 'claude-fable-5' ] || [ "$CLAUDE_EFFORT" != 'max' ]; then
+            hint=' Use `/investigate fable-5 max` to go deeper.'
+          fi
+          if [ -s artifacts/findings.md ]; then
+            # Append the footers here rather than asking the agent to write
+            # them, so the prompt never has to describe the report as a
+            # posted comment (which tempted it to post directly).
+            {
+              cat artifacts/findings.md
+              printf '\n\n---\n*Generated by `%s` at `%s` effort.%s*\n\n' \
+                "$CLAUDE_MODEL" "$CLAUDE_EFFORT" "$hint"
+              printf '[Workflow run](%s) · Was this investigation helpful? Leave a 👍 or 👎 on this comment.\n' "$run_url"
+            } > "${RUNNER_TEMP:-/tmp}/comment_body.md"
+            gh issue comment "$ISSUE_NUMBER" \
+              --repo ${{ github.repository }} \
+              --body-file "${RUNNER_TEMP:-/tmp}/comment_body.md"
+          else
+            gh issue comment "$ISSUE_NUMBER" \
+              --repo ${{ github.repository }} \
+              --body "Investigation (model \`$CLAUDE_MODEL\`, effort \`$CLAUDE_EFFORT\`) did not produce findings. Check the [workflow run]($run_url) for details."
+          fi
+
+      - name: Clean up EngFlow certificates
+        if: always() && steps.engflow-certs.outputs.has_engflow == 'true'
+        run: |
+          rm -f "$ENGFLOW_CERT_FILE" "$ENGFLOW_KEY_FILE"
+          rmdir "$(dirname "$ENGFLOW_CERT_FILE")" 2>/dev/null || true

@@ -1,0 +1,118 @@
+# Test a bunch of list partitioned tables.
+
+exec-sql
+CREATE DATABASE db;
+----
+
+# A single default partition's splits should look no different than a table
+# with a single primary index.
+exec-sql
+CREATE TABLE db.list_default(N1 INT PRIMARY KEY) PARTITION BY LIST (N1) (
+  PARTITION every_thing VALUES IN (DEFAULT)
+);
+----
+
+splits database=db table=list_default
+----
++ 1  between start of table and start of 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 1  for 1st partition-by-list value
+    + 1  between end of 1st partition-by-list value span and end of index
++ 3  for 1st index
++ 1  between end of 1st index and end of table
+= 5
+
+# Test partitioning by list, across unordered partitioning values, both
+# contiguous and otherwise. While here, also test for the default partition.
+exec-sql
+CREATE TABLE db.list_partitions(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+  PARTITION one_and_five    VALUES IN (2, 5),
+  PARTITION four_and_three  VALUES IN (4, 3),
+  PARTITION just_nine       VALUES IN (9),
+  PARTITION everything_else VALUES IN (DEFAULT)
+);
+----
+
+# We should see subpartitions in the primary index for each value we're
+# partitioning by.
+splits database=db table=list_partitions
+----
++ 1  between start of table and start of 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 1  for 1st partition-by-list value
+    + 1  for 2nd partition-by-list value
+    + 1  for 3rd partition-by-list value
+    + 1  for 4th partition-by-list value
+    + 1  for 5th partition-by-list value
+    + 1  for 6th partition-by-list value
+    + 5  gap(s) between 6 partition-by-list value spans
+    + 1  between end of 6th partition-by-list value span and end of index
++ 13 for 1st index
++ 1  between end of 1st index and end of table
+= 15
+
+
+# Try the same thing on a secondary index.
+exec-sql
+CREATE INDEX idx ON db.list_partitions (j);
+----
+
+exec-sql
+ALTER INDEX db.list_partitions@idx PARTITION BY LIST (j) (
+  PARTITION one_and_five    VALUES IN (2, 5),
+  PARTITION four_and_three  VALUES IN (4, 3),
+  PARTITION just_nine       VALUES IN (9),
+  PARTITION everything_else VALUES IN (DEFAULT)
+);
+----
+
+splits database=db table=list_partitions
+----
++ 1  between start of table and start of 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 1  for 1st partition-by-list value
+    + 1  for 2nd partition-by-list value
+    + 1  for 3rd partition-by-list value
+    + 1  for 4th partition-by-list value
+    + 1  for 5th partition-by-list value
+    + 1  for 6th partition-by-list value
+    + 5  gap(s) between 6 partition-by-list value spans
+    + 1  between end of 6th partition-by-list value span and end of index
++ 13 for 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 1  for 1st partition-by-list value
+    + 1  for 2nd partition-by-list value
+    + 1  for 3rd partition-by-list value
+    + 1  for 4th partition-by-list value
+    + 1  for 5th partition-by-list value
+    + 1  for 6th partition-by-list value
+    + 5  gap(s) between 6 partition-by-list value spans
+    + 1  between end of 6th partition-by-list value span and end of index
++ 13 for 2nd index
++ 1  gap(s) between 2 indexes
++ 1  between end of 2nd index and end of table
+= 29
+
+# Try the same thing but with only contiguous values.
+exec-sql
+CREATE TABLE db.list_partitions_contiguous(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+  PARTITION three                   VALUES IN (3),
+  PARTITION four_and_five           VALUES IN (4, 5),
+  PARTITION six_and_everything_else VALUES IN (6, default)
+);
+----
+
+splits database=db table=list_partitions_contiguous
+----
++ 1  between start of table and start of 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 1  for 1st partition-by-list value
+    + 1  for 2nd partition-by-list value
+    + 1  for 3rd partition-by-list value
+    + 1  for 4th partition-by-list value
+    + 1  for 5th partition-by-list value
+    + 4  gap(s) between 5 partition-by-list value spans
+    + 1  between end of 5th partition-by-list value span and end of index
++ 11 for 1st index
++ 1  between end of 1st index and end of table
+= 13

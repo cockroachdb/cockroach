@@ -1,0 +1,231 @@
+init
+----
+
+# One request at priority=-128 sees high latency. Requests at priority 0, 127
+# do not see high latency. So FIFO priority is set >= -127.
+request-received priority=127
+----
+lowest-priority: 127
+
+update priority=127 delay-millis=10
+----
+lowest-priority: 127 (pri: 127, delay-millis: 10, admitted: 1)
+
+request-received priority=-128
+----
+lowest-priority: -128 (pri: 127, delay-millis: 10, admitted: 1)
+
+update priority=-128 delay-millis=106
+----
+lowest-priority: -128 (pri: -128, delay-millis: 106, admitted: 1) (pri: 127, delay-millis: 10, admitted: 1)
+
+request-received priority=0
+----
+lowest-priority: -128 (pri: -128, delay-millis: 106, admitted: 1) (pri: 127, delay-millis: 10, admitted: 1)
+
+update priority=0 delay-millis=20
+----
+lowest-priority: -128 (pri: -128, delay-millis: 106, admitted: 1) (pri: 0, delay-millis: 20, admitted: 1) (pri: 127, delay-millis: 10, admitted: 1)
+
+get-threshold
+----
+threshold: -127
+
+# The latency seen by priority=-128 decreases but not below the threshold
+# needed to return to FIFO. So FIFO priority continues to be >= -127.
+request-received priority=-128
+----
+lowest-priority: -128
+
+update priority=-128 delay-millis=11
+----
+lowest-priority: -128 (pri: -128, delay-millis: 11, admitted: 1)
+
+get-threshold
+----
+threshold: -127
+
+# The latency seen by priority=-128 is low enough to return to FIFO.
+request-received priority=-128
+----
+lowest-priority: -128
+
+update priority=-128 delay-millis=10
+----
+lowest-priority: -128 (pri: -128, delay-millis: 10, admitted: 1)
+
+get-threshold
+----
+threshold: -128
+
+# Priority=127 sees high latency. FIFO priority is now >= 128.
+request-received priority=127
+----
+lowest-priority: 127
+
+update priority=127 delay-millis=106
+----
+lowest-priority: 127 (pri: 127, delay-millis: 106, admitted: 1)
+
+get-threshold
+----
+threshold: 128
+
+# Both priority 24 and 127 see high latency. FIFO priority stays at >=128.
+request-received priority=127
+----
+lowest-priority: 127
+
+update priority=127 delay-millis=106
+----
+lowest-priority: 127 (pri: 127, delay-millis: 106, admitted: 1)
+
+request-received priority=24
+----
+lowest-priority: 24 (pri: 127, delay-millis: 106, admitted: 1)
+
+update priority=24 delay-millis=107
+----
+lowest-priority: 24 (pri: 24, delay-millis: 107, admitted: 1) (pri: 127, delay-millis: 106, admitted: 1)
+
+get-threshold
+----
+threshold: 128
+
+# Priority -5 and 20 see high latency. There are no requests at any other
+# priority. The FIFO priority threshold reduces to >= 21.
+request-received priority=20
+----
+lowest-priority: 20
+
+update priority=20 delay-millis=111
+----
+lowest-priority: 20 (pri: 20, delay-millis: 111, admitted: 1)
+
+request-received priority=-5
+----
+lowest-priority: -5 (pri: 20, delay-millis: 111, admitted: 1)
+
+update priority=-5 delay-millis=110
+----
+lowest-priority: -5 (pri: -5, delay-millis: 110, admitted: 1) (pri: 20, delay-millis: 111, admitted: 1)
+
+get-threshold
+----
+threshold: 21
+
+# Priority 0 is LIFO and sees latency that is not low enough to return it to
+# FIFO. The FIFO priority threshold reduces to >= 1.
+request-received priority=0
+----
+lowest-priority: 0
+
+update priority=0 delay-millis=11
+----
+lowest-priority: 0 (pri: 0, delay-millis: 11, admitted: 1)
+
+get-threshold
+----
+threshold: 1
+
+# Priority -128 is LIFO and sees latency that is not low enough to return it
+# to FIFO. The FIFO priority threshold reduces to >= -127.
+request-received priority=-128
+----
+lowest-priority: -128
+
+update priority=-128 delay-millis=11
+----
+lowest-priority: -128 (pri: -128, delay-millis: 11, admitted: 1)
+
+get-threshold
+----
+threshold: -127
+
+# Priority -128 is LIFO and sees very low latency and switches back to FIFO.
+request-received priority=-128
+----
+lowest-priority: -128
+
+update priority=-128 delay-millis=9
+----
+lowest-priority: -128 (pri: -128, delay-millis: 9, admitted: 1)
+
+get-threshold
+----
+threshold: -128
+
+# Priority 0 is FIFO and sees a canceled request that does not meet the
+# latency threshold to switch to LIFO. It stays as FIFO.
+request-received priority=0
+----
+lowest-priority: 0
+
+update priority=0 delay-millis=20 canceled=true
+----
+lowest-priority: 0 (pri: 0, delay-millis: 20, admitted: 0)
+
+get-threshold
+----
+threshold: -128
+
+# Priority 0 is FIFO and sees a canceled request with very high latency, so
+# switched to LIFO.
+request-received priority=0
+----
+lowest-priority: 0
+
+update priority=0 delay-millis=120 canceled=true
+----
+lowest-priority: 0 (pri: 0, delay-millis: 120, admitted: 0)
+
+get-threshold
+----
+threshold: 1
+
+# Priority 0 receives a request, but nothing exits admission control, so it
+# stays as LIFO.
+request-received priority=0
+----
+lowest-priority: 0
+
+get-threshold
+----
+threshold: 1
+
+# Priority 10 sees a request with low latency. Priority 0 has a request that
+# does not exit admission control. Priority 0 stays as LIFO.
+request-received priority=10
+----
+lowest-priority: 10
+
+update priority=10 delay-millis=5
+----
+lowest-priority: 10 (pri: 10, delay-millis: 5, admitted: 1)
+
+request-received priority=0
+----
+lowest-priority: 0 (pri: 10, delay-millis: 5, admitted: 1)
+
+get-threshold
+----
+threshold: 1
+
+# Priority -10 sees a request with low enough latency to switch back to FIFO.
+# Priority 0 has a request that does not exit admission control. Because of
+# the observation at priority=-10 we switch everything back to FIFO.
+request-received priority=-10
+----
+lowest-priority: -10
+
+update priority=-10 delay-millis=5
+----
+lowest-priority: -10 (pri: -10, delay-millis: 5, admitted: 1)
+
+request-received priority=0
+----
+lowest-priority: -10 (pri: -10, delay-millis: 5, admitted: 1)
+
+get-threshold
+----
+threshold: -128

@@ -1,0 +1,40 @@
+initsql = """
+DROP TABLE IF EXISTS tab_orig;
+
+CREATE TABLE tab_orig AS
+    SELECT
+        g::INT8 AS _int8,
+        g::FLOAT8 AS _float8,
+        '2001-01-01'::DATE + g AS _date,
+        '2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp,
+        '2001-01-01'::TIMESTAMPTZ + g * '1 day'::INTERVAL AS _timestamptz,
+        g * '1 day'::INTERVAL AS _interval,
+        g % 2 = 1 AS _bool,
+        g::DECIMAL AS _decimal,
+        g::TEXT AS _string,
+        g::TEXT::BYTEA AS _bytes,
+        substring('00000000-0000-0000-0000-' || g::TEXT || '00000000000', 1, 36)::UUID AS _uuid,
+        '0.0.0.0'::INET + g AS _inet,
+        g::TEXT::JSONB AS _jsonb
+    FROM
+        generate_series(1, 5) AS g;
+
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT, y INT, z INT);
+
+SET statement_timeout = '9s';
+"""
+smither = "cockroach"
+seed = 0
+postgres = true
+
+[databases.cockroach]
+addr = "postgresql://root@localhost:26257/postgres?sslmode=disable"
+allowmutations = true
+initsql = """
+DROP DATABASE IF EXISTS postgres;
+CREATE DATABASE postgres;
+"""
+
+[databases.postgres]
+addr = "postgresql://postgres@localhost:5432?sslmode=disable"

@@ -1,0 +1,93 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+----
+
+exec-ddl
+CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
+----
+
+# --------------------------------------------------
+# EliminateMax1Row
+# --------------------------------------------------
+norm expect=EliminateMax1Row
+SELECT (SELECT i FROM a LIMIT 1) > 5 AS r
+----
+values
+ ├── columns: r:8
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(8)
+ └── tuple
+      └── gt
+           ├── subquery
+           │    └── limit
+           │         ├── columns: i:2
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(2)
+           │         ├── scan a
+           │         │    ├── columns: i:2
+           │         │    └── limit hint: 1.00
+           │         └── 1
+           └── 5
+
+norm expect=EliminateMax1Row
+SELECT (SELECT count(*) FROM a) > 100 AS r
+----
+values
+ ├── columns: r:9
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(9)
+ └── tuple
+      └── gt
+           ├── subquery
+           │    └── scalar-group-by
+           │         ├── columns: count_rows:8!null
+           │         ├── cardinality: [1 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(8)
+           │         ├── scan a
+           │         └── aggregations
+           │              └── count-rows [as=count_rows:8]
+           └── 100
+
+norm expect=EliminateMax1Row
+SELECT (SELECT i FROM a LIMIT 0) > 5 AS r
+----
+values
+ ├── columns: r:8
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(8)
+ └── tuple
+      └── gt
+           ├── subquery
+           │    └── values
+           │         ├── columns: i:2!null
+           │         ├── cardinality: [0 - 0]
+           │         ├── key: ()
+           │         └── fd: ()-->(2)
+           └── 5
+
+# Don't remove the Max1Row operator.
+norm expect-not=EliminateMax1Row
+SELECT (SELECT i FROM a) > 5 AS r
+----
+values
+ ├── columns: r:8
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(8)
+ └── tuple
+      └── gt
+           ├── subquery
+           │    └── max1-row
+           │         ├── columns: i:2
+           │         ├── error: "more than one row returned by a subquery used as an expression"
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(2)
+           │         └── scan a
+           │              └── columns: i:2
+           └── 5

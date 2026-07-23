@@ -1,0 +1,26 @@
+exec-sql db=udf_test app-name=plpgsql
+CREATE TABLE IF NOT EXISTS test(a int);
+  CREATE OR REPLACE PROCEDURE insert_incremental(n INT)
+  LANGUAGE plpgsql
+  AS $$
+  DECLARE
+    i INT := 0;
+    next_val INT;
+  BEGIN
+    WHILE i < n LOOP
+      SELECT coalesce(max(a), 0) + 1 INTO next_val FROM test;
+      INSERT INTO test(a) VALUES (next_val);
+      i := i + 1;
+    END LOOP;
+  END;
+  $$;
+CALL insert_incremental(5);
+----
+
+show-stats db=udf_test app-name=plpgsql
+----
+{"count": "1", "fingerprint_id": "4057632793bd4769", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "CREATE OR REPLACE PROCEDURE insert_incremental(n INT8)\n\tLANGUAGE plpgsql\n\tAS $$_$$", "run_lat_not_zero": true, "sql_type": "TypeDDL", "summary": "CREATE OR REPLACE PROCEDURE insert_incremental(n INT8)\n\tLANGUAGE plpgsql\n\tAS $$_$$", "svc_lat_not_zero": true, "transaction_fingerprint_id": "bff7d3a40f7d190b"}
+{"count": "1", "fingerprint_id": "8c317651ff701c49", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "CALL insert_incremental(_)", "run_lat_not_zero": true, "sql_type": "TypeTCL", "summary": "CALL insert_incremental(_)", "svc_lat_not_zero": true, "transaction_fingerprint_id": "bff7d3a40f7d190b"}
+{"count": "5", "fingerprint_id": "a457fd0c13d1514f", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": true, "plan_hash_set": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT COALESCE(max(a), _) + _ FROM udf_test.public.test", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT COALESCE(max(a)...)... FROM udf_test.public.test", "svc_lat_not_zero": true, "transaction_fingerprint_id": "bff7d3a40f7d190b"}
+{"count": "1", "fingerprint_id": "f17c354bb29f8432", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "CREATE TABLE IF NOT EXISTS test (a INT8)", "run_lat_not_zero": true, "sql_type": "TypeDDL", "summary": "CREATE TABLE IF NOT EXISTS test (a INT8)", "svc_lat_not_zero": true, "transaction_fingerprint_id": "5e1f8807349e33ed"}
+{"count": "5", "fingerprint_id": "f71d046ecfc2a04f", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "INSERT INTO udf_test.public.test(a) VALUES (next_val)", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "INSERT INTO udf_test.public.test(a)", "svc_lat_not_zero": true, "transaction_fingerprint_id": "bff7d3a40f7d190b"}

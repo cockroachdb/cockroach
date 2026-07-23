@@ -1,0 +1,131 @@
+norm
+SELECT * FROM (VALUES (1, 2), (1, 2), (1, 3), (2, 3)) AS q(x, y) WHERE x = 5 AND y = 3
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── cardinality: [0 - 4]
+ ├── stats: [rows=1.3, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: column1:1(int!null) column2:2(int!null)
+ │    ├── cardinality: [4 - 4]
+ │    ├── stats: [rows=4, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0, distinct(1,2)=3, null(1,2)=0]
+ │    ├── (1, 2) [type=tuple{int, int}]
+ │    ├── (1, 2) [type=tuple{int, int}]
+ │    ├── (1, 3) [type=tuple{int, int}]
+ │    └── (2, 3) [type=tuple{int, int}]
+ └── filters
+      ├── column1:1 = 5 [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+      └── column2:2 = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+
+norm
+SELECT x, y
+FROM (VALUES (1, 2), (1, 2), (1, 3), (2, 3), (unique_rowid(), 4)) AS q(x, y)
+GROUP BY x, y
+----
+distinct-on
+ ├── columns: x:1(int) y:2(int!null)
+ ├── grouping columns: column1:1(int) column2:2(int!null)
+ ├── cardinality: [1 - 5]
+ ├── volatile
+ ├── stats: [rows=4, distinct(1,2)=4, null(1,2)=0]
+ ├── key: (1,2)
+ └── values
+      ├── columns: column1:1(int) column2:2(int!null)
+      ├── cardinality: [5 - 5]
+      ├── volatile
+      ├── stats: [rows=5, distinct(1,2)=4, null(1,2)=0]
+      ├── (1, 2) [type=tuple{int, int}]
+      ├── (1, 2) [type=tuple{int, int}]
+      ├── (1, 3) [type=tuple{int, int}]
+      ├── (2, 3) [type=tuple{int, int}]
+      └── (unique_rowid(), 4) [type=tuple{int, int}]
+
+norm
+SELECT * FROM (VALUES (1), (1), (1), (2))
+----
+values
+ ├── columns: column1:1(int!null)
+ ├── cardinality: [4 - 4]
+ ├── stats: [rows=4]
+ ├── (1,) [type=tuple{int}]
+ ├── (1,) [type=tuple{int}]
+ ├── (1,) [type=tuple{int}]
+ └── (2,) [type=tuple{int}]
+
+norm
+SELECT * FROM (VALUES (1), (1), (1), (2)) AS q(x) WHERE x = 1
+----
+select
+ ├── columns: x:1(int!null)
+ ├── cardinality: [0 - 4]
+ ├── stats: [rows=2, distinct(1)=1, null(1)=0]
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [4 - 4]
+ │    ├── stats: [rows=4, distinct(1)=2, null(1)=0]
+ │    ├── (1,) [type=tuple{int}]
+ │    ├── (1,) [type=tuple{int}]
+ │    ├── (1,) [type=tuple{int}]
+ │    └── (2,) [type=tuple{int}]
+ └── filters
+      └── column1:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+norm colstat=1
+SELECT * FROM (VALUES (1), (NULL), (NULL), (2))
+----
+values
+ ├── columns: column1:1(int)
+ ├── cardinality: [4 - 4]
+ ├── stats: [rows=4, distinct(1)=3, null(1)=2]
+ ├── (1,) [type=tuple{int}]
+ ├── (NULL,) [type=tuple{int}]
+ ├── (NULL,) [type=tuple{int}]
+ └── (2,) [type=tuple{int}]
+
+norm colstat=1
+SELECT * FROM (VALUES (NULL), (NULL), (NULL), (NULL))
+----
+values
+ ├── columns: column1:1(unknown)
+ ├── cardinality: [4 - 4]
+ ├── stats: [rows=4, distinct(1)=1, null(1)=4]
+ ├── (NULL,) [type=tuple{unknown}]
+ ├── (NULL,) [type=tuple{unknown}]
+ ├── (NULL,) [type=tuple{unknown}]
+ └── (NULL,) [type=tuple{unknown}]
+
+norm colstat=(1,2)
+SELECT * FROM (VALUES (NULL,1), (1,NULL), (NULL,NULL), (1,2))
+----
+values
+ ├── columns: column1:1(int) column2:2(int)
+ ├── cardinality: [4 - 4]
+ ├── stats: [rows=4, distinct(1,2)=4, null(1,2)=1]
+ ├── (NULL, 1) [type=tuple{int, int}]
+ ├── (1, NULL) [type=tuple{int, int}]
+ ├── (NULL, NULL) [type=tuple{int, int}]
+ └── (1, 2) [type=tuple{int, int}]
+
+# Regression test for #35715.
+norm colstat=1 colstat=2
+SELECT * FROM (VALUES (NULL, 1))
+----
+values
+ ├── columns: column1:1(unknown) column2:2(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=1, distinct(2)=1, null(2)=0]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ └── (NULL, 1) [type=tuple{unknown, int}]
+
+norm colstat=1 colstat=2 colstat=(1,2)
+SELECT * FROM (VALUES (NULL, 2), (2, NULL))
+----
+values
+ ├── columns: column1:1(int) column2:2(int)
+ ├── cardinality: [2 - 2]
+ ├── stats: [rows=2, distinct(1)=2, null(1)=1, distinct(2)=2, null(2)=1, distinct(1,2)=2, null(1,2)=0]
+ ├── (NULL, 2) [type=tuple{int, int}]
+ └── (2, NULL) [type=tuple{int, int}]

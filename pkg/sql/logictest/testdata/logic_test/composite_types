@@ -1,0 +1,467 @@
+statement ok
+CREATE TYPE t AS (a INT, b INT)
+
+statement ok
+DROP TYPE t
+
+statement ok
+CREATE TYPE t AS (a INT, b INT)
+
+statement error pq: relation "t" does not exist
+SELECT * FROM t
+
+statement error pq: type "test.public.t" already exists
+CREATE TABLE t (x INT)
+
+statement error pq: type "test.public.t" already exists
+CREATE TYPE t AS (a INT)
+
+statement ok
+CREATE TABLE torename (x INT)
+
+statement error pq: type "test.public.t" already exists
+ALTER TABLE torename RENAME TO t
+
+query TII
+SELECT (1, 2)::t, ((1, 2)::t).a, ((1, 2)::t).b
+----
+(1,2)  1  2
+
+statement error could not identify column \"foo\"
+SELECT ((1, 2)::t).foo
+
+statement ok
+CREATE TABLE tab (a t, i int default 0)
+
+statement ok
+INSERT INTO tab VALUES (NULL), ((1, 2))
+
+statement ok
+INSERT INTO tab VALUES ((1, NULL))
+
+# TODO(jordan): this should work fine, but is blocked behind a type-system issue:
+# see #93349.
+statement error VALUES types tuple{int, unknown} and tuple{int, int} cannot be matched
+INSERT INTO tab VALUES ((1, 2)), ((1, NULL))
+
+query TII rowsort
+SELECT a, (a).a, (a).b FROM tab
+----
+NULL   NULL  NULL
+(1,2)  1     2
+(1,)   1     NULL
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+# Test array types within composite type definitions.
+statement ok
+CREATE TYPE arr_composite AS (a INT[], b TEXT[])
+
+query TTTT
+SELECT database_name, schema_name, descriptor_name, create_statement
+FROM crdb_internal.create_type_statements WHERE descriptor_name = 'arr_composite'
+----
+test  public  arr_composite  CREATE TYPE public.arr_composite AS (a INT8[], b STRING[])
+
+statement ok
+CREATE TABLE arr_composite_tab (x arr_composite)
+
+statement ok
+INSERT INTO arr_composite_tab VALUES ((ARRAY[1, 2, 3], ARRAY['a', 'b']))
+
+statement ok
+INSERT INTO arr_composite_tab VALUES (ROW(ARRAY[4, 5], ARRAY['c', 'd', 'e']))
+
+query T rowsort
+SELECT * FROM arr_composite_tab
+----
+("{1,2,3}","{a,b}")
+("{4,5}","{c,d,e}")
+
+query TT rowsort
+SELECT (x).a, (x).b FROM arr_composite_tab
+----
+{1,2,3}  {a,b}
+{4,5}    {c,d,e}
+
+statement ok
+DROP TABLE arr_composite_tab
+
+statement ok
+DROP TYPE arr_composite
+
+# Test arrays of composite types.
+statement disable-cf-mutator ok
+CREATE TABLE atyp(a t[])
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE atyp
+----
+atyp  CREATE TABLE public.atyp (
+        a public.t[] NULL,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT atyp_pkey PRIMARY KEY (rowid ASC)
+      );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE atyp
+----
+atyp  CREATE TABLE public.atyp (
+        a public.t[] NULL,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT atyp_pkey PRIMARY KEY (rowid ASC)
+      ) WITH (schema_locked = true);
+
+statement ok
+INSERT INTO atyp VALUES(ARRAY[(1, 2), (3, 4), NULL, (5, NULL)])
+
+query T
+SELECT * FROM atyp
+----
+{"(1,2)","(3,4)",NULL,"(5,)"}
+
+statement ok
+DROP TABLE atyp
+
+# Nested types not supported. #91779
+statement error composite types that reference user-defined types not yet supported
+CREATE TYPE t2 AS (t1 t, t2 t)
+
+# Uncomment the below when #91779 is resolved.
+
+#statement ok
+#CREATE TABLE tab2 (a t2)
+#
+#query TTT
+#SELECT ((1, 2), (3, 4))::t2, (((1, 2), (3, 4))::t2).t1, (((1, 2), (3, 4))::t2).t2
+#----
+#("(1,2)","(3,4)")  (1,2)  (3,4)
+#
+#query II
+#SELECT ((((1, 2), (3, 4))::t2).t1).a, ((((1, 2), (3, 4))::t2).t1).b
+#----
+#1  2
+#
+## TODO(jordan): this syntax works in Postgres.
+#query error syntax error
+#SELECT (((1, 2), (3, 4))::t2).t1.a
+#
+#statement ok
+#INSERT INTO tab2 VALUES(((1, 2), (3, 4)))
+#
+#query TTII
+#SELECT a, (a).t1, ((a).t1).a, ((a).t1).b FROM tab2
+#----
+#("(1,2)","(3,4)")  (1,2)  1  2
+#
+## Can't drop type t because tab, tab2, and t2 depend on it
+#statement error cannot drop type \"t\" because other objects .* still depend on it
+#DROP TYPE t
+#
+## Can't drop type t2 because tab2 depends on it
+#statement error cannot drop type \"t2\" because other objects .* still depend on it
+#DROP TYPE t2
+#
+#statement ok
+#DROP TABLE tab2
+
+statement ok
+DROP TABLE tab
+
+query TTTT
+SELECT database_name, schema_name, descriptor_name, create_statement FROM crdb_internal.create_type_statements
+----
+test  public  t   CREATE TYPE public.t AS (a INT8, b INT8)
+
+## Can't drop type t because t2 depends on it
+#statement error cannot drop type \"t\" because other objects .* still depend on it
+#DROP TYPE t
+#
+#statement ok
+#DROP TYPE t2
+
+statement ok
+DROP TYPE t
+
+# An empty type is valid.
+statement ok
+CREATE TYPE t AS ()
+
+statement ok
+DROP TYPE t
+
+# Composite types which reference other types of UDTs are not yet supported.
+statement ok
+CREATE TYPE e AS ENUM ('a', 'b', 'c')
+
+# We'll use tab to check the implicit table alias type.
+statement ok
+CREATE TABLE tab (a INT, b INT)
+
+statement error composite types that reference user-defined types not yet supported
+CREATE TYPE t AS (e e)
+
+# This should fail - we shouldn't persist implicit table types.
+statement error composite types that reference user-defined types not yet supported
+CREATE TYPE t AS (a tab)
+
+statement error composite types that reference user-defined types not yet supported
+CREATE TYPE t AS (a pg_catalog.pg_class)
+
+statement ok
+DROP TYPE e
+
+# Test that if an composite type value is being used by a default expression or
+# computed column, we disallow dropping it.
+subtest drop_used_composite_type_values
+
+statement ok
+CREATE TYPE t AS (a INT, b TEXT)
+
+statement ok
+CREATE TABLE a (a INT DEFAULT (((1, 'hi')::t).a))
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE a ALTER COLUMN a SET DEFAULT 3
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TYPE t
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TYPE t AS (a INT, b TEXT)
+
+statement ok
+DROP TABLE a;
+CREATE TABLE a (a INT ON UPDATE (((1, 'hi')::t).a))
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE a ALTER COLUMN a SET ON UPDATE 3
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TYPE t
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TYPE t AS (a INT, b TEXT)
+
+statement ok
+DROP TABLE a
+
+statement ok
+CREATE TABLE a (a INT AS (((1, 'hi')::t).a) STORED)
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE a ALTER COLUMN a DROP STORED
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TYPE t
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TYPE t AS (a INT, b TEXT)
+
+statement ok
+DROP TABLE a;
+CREATE TABLE a (a INT, INDEX (a) WHERE a > (((1, 'hi')::t).a))
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+statement ok
+DROP TABLE a;
+DROP TYPE t;
+CREATE TYPE t AS (a INT, b TEXT);
+CREATE TABLE a (a INT CHECK (a > (((1, 'hi')::t).a)))
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+statement ok
+ALTER TABLE a DROP CONSTRAINT check_a
+
+statement ok
+DROP TYPE t;
+DROP TABLE a
+
+subtest show_types
+
+statement ok
+CREATE TYPE ct1 AS (a INT, b TEXT);
+CREATE TYPE et1 AS ENUM ('a', 'b', 'c');
+CREATE SCHEMA sc1;
+CREATE TYPE sc1.ct2 AS (x INT, y INT);
+CREATE TYPE sc1.ct3 AS ();
+
+query TTT nosort
+SHOW TYPES
+----
+public  ct1   root
+public  et1   root
+sc1     ct2   root
+sc1     ct3   root
+
+statement ok
+DROP TYPE sc1.ct3;
+DROP TYPE sc1.ct2;
+DROP SCHEMA sc1;
+DROP TYPE et1;
+DROP TYPE ct1;
+
+statement ok
+CREATE DATABASE "CaseSensitiveDatabase";
+USE "CaseSensitiveDatabase";
+CREATE TYPE ct4 AS (a INT, b TEXT); 
+CREATE TYPE et5 AS ENUM ('a', 'b', 'c');
+
+query TTT nosort
+SHOW TYPES
+----
+public  ct4   root
+public  et5   root
+
+statement ok
+DROP DATABASE "CaseSensitiveDatabase";
+USE test;
+
+subtest composite_alter
+
+statement ok
+CREATE TYPE comp_t AS (a INT, b TEXT)
+
+# RENAME on a composite type.
+statement ok
+ALTER TYPE comp_t RENAME TO comp_t2
+
+query T
+SELECT pg_typeof(((1, 'x')::comp_t2))
+----
+public.comp_t2
+
+# The old name should no longer resolve.
+statement error pq: pg_typeof\(\): type "comp_t" does not exist
+SELECT pg_typeof(((1, 'x')::comp_t))
+
+# SET SCHEMA on a composite type — array type should follow.
+statement ok
+CREATE SCHEMA cs1
+
+statement ok
+ALTER TYPE comp_t2 SET SCHEMA cs1
+
+query T
+SELECT pg_typeof(((1, 'x')::cs1.comp_t2))
+----
+cs1.comp_t2
+
+query T
+SELECT pg_typeof(ARRAY[(1, 'x')::cs1.comp_t2])
+----
+cs1.comp_t2[]
+
+# The type should no longer resolve in public.
+statement error pq: pg_typeof\(\): type "comp_t2" does not exist
+SELECT pg_typeof(((1, 'x')::comp_t2))
+
+statement ok
+DROP TYPE cs1.comp_t2;
+DROP SCHEMA cs1
+
+# Enum-only ALTER subcommands should be rejected on a composite type with
+# the same "is not an enum" message as Postgres and the legacy schema changer.
+statement ok
+CREATE TYPE comp_enumop AS (a INT, b TEXT)
+
+statement error pq: "comp_enumop" is not an enum
+ALTER TYPE comp_enumop ADD VALUE 'x'
+
+statement error pq: "comp_enumop" is not an enum
+ALTER TYPE comp_enumop DROP VALUE 'x'
+
+statement error pq: "comp_enumop" is not an enum
+ALTER TYPE comp_enumop RENAME VALUE 'a' TO 'b'
+
+statement ok
+DROP TYPE comp_enumop
+
+# OWNER TO on a composite type — array type owner should follow.
+statement ok
+CREATE TYPE comp_owner AS (a INT, b TEXT)
+
+statement error pq: role/user "fake_user" does not exist
+ALTER TYPE comp_owner OWNER TO fake_user
+
+statement ok
+CREATE USER comp_owner_user
+
+statement ok
+GRANT CREATE ON SCHEMA public TO comp_owner_user
+
+statement ok
+ALTER TYPE comp_owner OWNER TO comp_owner_user
+
+query TT rowsort
+SELECT typname, pg_get_userbyid(typowner)
+FROM pg_type WHERE typname IN ('comp_owner', '_comp_owner')
+----
+comp_owner   comp_owner_user
+_comp_owner  comp_owner_user
+
+# Non-owner, non-admin users cannot alter the owner.
+user testuser
+
+statement error must be owner of type comp_owner
+ALTER TYPE comp_owner OWNER TO testuser
+
+user root
+
+statement ok
+DROP TYPE comp_owner;
+REVOKE CREATE ON SCHEMA public FROM comp_owner_user;
+DROP USER comp_owner_user
+
+# Accessing a field of a composite-typed column without parens is rejected by
+# the SQL grammar (the parser interprets `name1.name2` as `relation.column`).
+# Postgres has the same limitation. Verify we emit the helpful HINT pointing
+# at the parenthesized workaround.
+subtest unparenthesized_field_access_hint
+
+statement ok
+CREATE TYPE comp_field AS (x INT, y INT);
+
+statement ok
+CREATE TABLE comp_field_t (v comp_field);
+
+statement ok
+INSERT INTO comp_field_t VALUES (ROW(1, 2));
+
+query I
+SELECT (v).x FROM comp_field_t;
+----
+1
+
+query error pgcode 42P01 pq: no data source matches prefix: v in this context\nHINT: to access a field of a composite-typed column, surround the column name in parentheses: \(colName\)\.fieldName
+SELECT v.x FROM comp_field_t;
+
+statement ok
+DROP TABLE comp_field_t; DROP TYPE comp_field;
+
+subtest end

@@ -1,0 +1,11 @@
+/* setup */
+CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL);
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+----
+Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
+	RETURNS INT8
+	LANGUAGE SQL
+	AS $$SELECT ‹1›;$$;
+ └── execute 1 system table mutations transaction

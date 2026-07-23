@@ -1,0 +1,179 @@
+statement ok
+CREATE TABLE test (
+  t CHAR(4),
+  UNIQUE INDEX a (t)
+)
+
+statement ok
+INSERT INTO test VALUES ('a')
+
+statement ok
+INSERT INTO test VALUES ('ab')
+
+statement ok
+INSERT INTO test VALUES ('abcd')
+
+statement error value too long for type CHAR\(4\)
+INSERT INTO test VALUES ('abcdef')
+
+statement ok
+INSERT INTO test VALUES ('áááá')
+
+statement error value too long
+INSERT INTO test VALUES ('ááááß')
+
+statement ok
+UPDATE test SET t = 'b' WHERE t = 'abcde'
+
+statement error value too long
+UPDATE test SET t = 'cdefg' WHERE t = 'ab'
+
+statement ok
+CREATE TABLE tb (
+  b BIT(3),
+  UNIQUE INDEX a (b)
+)
+
+statement ok
+INSERT INTO tb VALUES (B'001')
+
+statement ok
+INSERT INTO tb VALUES (B'011')
+
+statement ok
+INSERT INTO tb VALUES (B'111')
+
+statement error bit string length 4 does not match type BIT\(3\)
+INSERT INTO tb VALUES (B'1111')
+
+statement ok
+UPDATE tb SET b = B'010' WHERE b = B'111'
+
+statement error bit string length 5 does not match type BIT\(3\)
+UPDATE tb SET b = B'10000' WHERE b = B'010'
+
+statement ok
+CREATE TABLE tc (
+  b INT2,
+  UNIQUE INDEX a (b)
+)
+
+statement ok
+INSERT INTO tc VALUES (50)
+
+statement ok
+INSERT INTO tc VALUES (-32768)
+
+statement ok
+INSERT INTO tc VALUES (32767)
+
+# Note that neither of these value are INT2, but we only check
+# on insert and update, not mathematical operations
+statement ok
+INSERT INTO tc VALUES (60000-59999)
+
+statement error integer out of range for type int2
+INSERT INTO tc VALUES (-32769)
+
+statement error integer out of range for type int2
+INSERT INTO tc VALUES (32768)
+
+statement ok
+UPDATE tc SET b = 80 WHERE b = 50
+
+statement error integer out of range for type int2
+UPDATE tc SET b = 32768 WHERE b = 32767
+
+statement ok
+CREATE TABLE tc1 (
+  b INT4,
+  UNIQUE INDEX a (b)
+)
+
+statement ok
+INSERT INTO tc1 VALUES (50)
+
+statement ok
+INSERT INTO tc1 VALUES (-2147483648)
+
+statement ok
+INSERT INTO tc1 VALUES (2147483647)
+
+statement error integer out of range for type int4
+INSERT INTO tc1 VALUES (-2147483649)
+
+statement error integer out of range for type int4
+INSERT INTO tc1 VALUES (2147483648)
+
+statement ok
+UPDATE tc1 SET b = 80 WHERE b = 50
+
+statement error integer out of range for type int4
+UPDATE tc1 SET b = 2147483648 WHERE b = 2147483647
+
+statement ok
+CREATE TABLE td (
+  d DECIMAL(3, 2),
+  UNIQUE INDEX b (d)
+)
+
+statement ok
+INSERT INTO td VALUES (DECIMAL '3.1')
+
+statement ok
+INSERT INTO td VALUES (DECIMAL '3.14')
+
+statement error duplicate
+INSERT INTO td VALUES (DECIMAL '3.1415')
+
+statement error type DECIMAL\(3,2\): value with precision 3, scale 2 must round to an absolute value less than 10\^1
+INSERT INTO td VALUES (DECIMAL '13.1415')
+
+query R rowsort
+SELECT d FROM td
+----
+3.10
+3.14
+
+statement error must round
+UPDATE td SET d = DECIMAL '101.414' WHERE d = DECIMAL '3.14'
+
+statement ok
+UPDATE td SET d = DECIMAL '1.414' WHERE d = DECIMAL '3.14'
+
+statement error duplicate
+UPDATE td SET d = DECIMAL '1.41' WHERE d = DECIMAL '3.1'
+
+query R rowsort
+SELECT d FROM td
+----
+3.10
+1.41
+
+statement ok
+CREATE TABLE td2 (x DECIMAL(3), y DECIMAL)
+
+statement ok
+INSERT INTO td2 VALUES (DECIMAL '123.1415', DECIMAL '123.1415')
+
+query RR
+select x, y FROM td2
+----
+123 123.1415
+
+
+# Ensure decimal columns greater than 16 precision are supported.
+
+statement ok
+CREATE TABLE td3 (a decimal, b decimal(3, 1), c decimal(20, 10))
+
+statement ok
+INSERT INTO td3 VALUES (123456789012.123456789012, 12.3, 1234567890.1234567890)
+
+query RRR
+select * from td3
+----
+123456789012.123456789012 12.3 1234567890.1234567890
+
+statement error must round
+INSERT INTO td3 (c) VALUES (12345678901)

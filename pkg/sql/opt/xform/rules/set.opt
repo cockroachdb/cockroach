@@ -1,0 +1,19 @@
+# =============================================================================
+# set.opt contains exploration rules for set operators.
+# =============================================================================
+
+# GenerateStreamingSetOp creates variants of set operations which require more
+# specific orderings on the input columns, using the interesting orderings
+# property. When we have orderings on the input columns, we can execute set
+# operations in a streaming fashion which is more efficient.
+#
+# Note that we do not apply this rule in the case of UNION ALL, because there
+# is no efficiency gain for streaming in this case.
+[GenerateStreamingSetOp, Explore]
+(Union | Intersect | IntersectAll | Except | ExceptAll
+    $left:*
+    $right:*
+    $private:* & (IsCanonicalSetOp $private)
+)
+=>
+(GenerateStreamingSetOp (OpName) $left $right $private)

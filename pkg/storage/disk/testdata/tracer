@@ -1,0 +1,57 @@
+# Query empty trace.
+
+record capacity=3
+----
+
+rolling-window time=2024-03-27T12:00:00.5Z
+----
+
+latest
+----
+"0001-01-01T00:00:00Z\t\t0\t0\t0\t0s\t0\t0\t0\t0s\t0\t0s\t0s\t0\t0\t0\t0s\t0\t0s\tnil"
+
+trace
+----
+
+# Query trace with space remaining in buffer.
+
+record capacity=3
+2024-03-27T12:00:00.0Z sda 10 0 100 2ms 0 0 0 0s 0 15ms 2ms
+2024-03-27T12:00:00.5Z sda 12 0 120 5ms 0 0 0 0s 0 25ms 5ms
+----
+
+latest
+----
+"2024-03-27T12:00:00.5Z\tsda\t12\t0\t120\t5ms\t0\t0\t0\t0s\t0\t25ms\t5ms\t0\t0\t0\t0s\t0\t0s\tnil"
+
+trace
+----
+Time                    Device Name  Reads Completed  Reads Merged  Sectors Read  Read Duration  Writes Completed  Writes Merged  Sectors Written  Write Duration  IO in Progress  IO Duration  Weighted IO Duration  Discards Completed  Discards Merged  Sectors Discarded  Discard Duration  Flushes Completed  Flush Duration  Error
+2024-03-27T12:00:00.5Z  sda          2                0             20            3ms            0                 0              0                0s              0               10ms         3ms                   0                   0                0                  0s                0                  0s              nil
+
+# Query trace with event overflow.
+
+record capacity=3
+2024-03-27T12:00:00.0Z sda 10 0 100 2ms 0 0 0 0s 0 15ms 2ms
+2024-03-27T12:00:00.1Z sda 12 0 120 5ms 0 0 0 0s 0 25ms 5ms
+2024-03-27T12:00:00.2Z sda 14 0 150 7ms 0 0 0 0s 0 35ms 7ms
+2024-03-27T12:00:00.3Z sda 14 0 150 7ms 10 0 20 5ms 2 45ms 9ms
+----
+
+rolling-window time=2024-03-27T12:00:00.15Z
+----
+"2024-03-27T12:00:00.2Z\tsda\t14\t0\t150\t7ms\t0\t0\t0\t0s\t0\t35ms\t7ms\t0\t0\t0\t0s\t0\t0s\tnil"
+"2024-03-27T12:00:00.3Z\tsda\t14\t0\t150\t7ms\t10\t0\t20\t5ms\t2\t45ms\t9ms\t0\t0\t0\t0s\t0\t0s\tnil"
+
+rolling-window time=2024-03-27T12:00:00.4Z
+----
+
+latest
+----
+"2024-03-27T12:00:00.3Z\tsda\t14\t0\t150\t7ms\t10\t0\t20\t5ms\t2\t45ms\t9ms\t0\t0\t0\t0s\t0\t0s\tnil"
+
+trace
+----
+Time                    Device Name  Reads Completed  Reads Merged  Sectors Read  Read Duration  Writes Completed  Writes Merged  Sectors Written  Write Duration  IO in Progress  IO Duration  Weighted IO Duration  Discards Completed  Discards Merged  Sectors Discarded  Discard Duration  Flushes Completed  Flush Duration  Error
+2024-03-27T12:00:00.2Z  sda          2                0             30            2ms            0                 0              0                0s              0               10ms         2ms                   0                   0                0                  0s                0                  0s              nil
+2024-03-27T12:00:00.3Z  sda          0                0             0             0s             10                0              20               5ms             2               10ms         2ms                   0                   0                0                  0s                0                  0s              nil

@@ -1,0 +1,154 @@
+# Smoke test.
+inspect
+select
+----
+input: "select"
+0  6     SELECT  IDENT  "select"  selec…
+6  6     EOF     EOF    "EOF"     🛇
+
+# Keyword followed by space.
+# Verify that the end position is below the space.
+inspect
+select   🛇
+----
+input: "select   🛇"
+0  6     SELECT  IDENT  "select"  selec…
+9  9     EOF     EOF    "EOF"     🛇
+
+# Keywords. Verify the start positions skip the space.
+inspect
+select    select
+----
+input: "select    select"
+0   6      SELECT  IDENT  "select"  selec…
+10  16     SELECT  IDENT  "select"  selec…
+16  16     EOF     EOF    "EOF"     🛇
+
+# Identifier.
+inspect
+unrecognized select
+----
+input: "unrecognized select"
+0   12     IDENT   IDENT  "unrecognized"  unrec…
+13  19     SELECT  IDENT  "select"        selec…
+19  19     EOF     EOF    "EOF"           🛇
+
+# Quoted identifier.
+inspect
+"hello "" world
+and universe" select
+----
+input: "\"hello \"\" world\nand universe\" select"
+0   30  q  IDENT   IDENT  "hello \" world\nand universe"  "hell…
+30  36     SELECT  IDENT  "select"                        selec…
+36  36     EOF     EOF    "EOF"                           🛇
+
+# Quoted identifer separated by a newline.
+inspect
+"hello"
+"world"
+----
+input: "\"hello\"\n\"world\""
+0   8   q  IDENT  IDENT  "hello"  "hell…
+8   15  q  IDENT  IDENT  "world"  "worl…
+15  15     EOF    EOF    "EOF"    🛇
+
+
+# Single-quoted string separated by a newline.
+inspect
+'hello'
+'world'
+----
+input: "'hello'\n'world'"
+0   15     SCONST  SCONST  "helloworld"  'hell…
+15  15     EOF     EOF     "EOF"         🛇
+
+
+# Incomplete identifier.
+inspect
+"incomplete
+----
+input: "\"incomplete"
+0   11  q  ERROR  IDENT  "incomplete"  "inco…
+11  11     EOF    EOF    "EOF"         🛇
+
+# Incomplete quoted identifier containing
+# double quote character. We verify that
+# the identifier gets unescaped.
+inspect
+"incomplete "" world
+----
+input: "\"incomplete \"\" world"
+0   20  q  ERROR  IDENT  "incomplete \" world"  "inco…
+20  20     EOF    EOF    "EOF"                  🛇
+
+# Incomplete identifier ending in space.
+# We verify the trailing spaces are preserved.
+inspect
+"incomplete   🛇
+----
+input: "\"incomplete   🛇"
+0   14  q  ERROR  IDENT  "incomplete   "  "inco…
+14  14     EOF    EOF    "EOF"            🛇
+
+
+# Literal string.
+inspect
+select 'hello' select
+----
+input: "select 'hello' select"
+0   6      SELECT  IDENT   "select"  selec…
+7   15     SCONST  SCONST  "hello"   'hell…
+15  21     SELECT  IDENT   "select"  selec…
+21  21     EOF     EOF     "EOF"     🛇
+
+# Incomplete literal string.
+inspect
+select 'hello select
+----
+input: "select 'hello select"
+0  6      SELECT  IDENT   "select"               selec…
+7  20     ERROR   SCONST  "unterminated string"  'hell…
+
+# Composite name.
+inspect
+select a.b.c
+----
+input: "select a.b.c"
+0   6      SELECT  IDENT  "select"  selec…
+7   8      IDENT   IDENT  "a"       a
+8   9      46      46     "."       .
+9   10     IDENT   IDENT  "b"       b
+10  11     46      46     "."       .
+11  12     IDENT   IDENT  "c"       c
+12  12     EOF     EOF    "EOF"     🛇
+
+# Composite name with quotes.
+inspect
+select "a.b".c
+----
+input: "select \"a.b\".c"
+0   6      SELECT  IDENT  "select"  selec…
+7   12  q  IDENT   IDENT  "a.b"     "a.b"
+12  13     46      46     "."       .
+13  14     IDENT   IDENT  "c"       c
+14  14     EOF     EOF    "EOF"     🛇
+
+# Composite name with unterminated identifier.
+inspect
+select a."b
+----
+input: "select a.\"b"
+0   6      SELECT  IDENT  "select"  selec…
+7   8      IDENT   IDENT  "a"       a
+8   9      46      46     "."       .
+9   11  q  ERROR   IDENT  "b"       "b
+11  11     EOF     EOF    "EOF"     🛇
+
+# Unterminated number.
+inspect
+select 3.2e
+----
+input: "select 3.2e"
+0  6      SELECT  IDENT   "select"                          selec…
+7  11     ERROR   ICONST  "invalid floating point literal"  3.2e

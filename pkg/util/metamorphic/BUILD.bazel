@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "metamorphic",
+    srcs = [
+        "constants.go",
+        "constants_metamorphic_disable.go",  # keep
+        "constants_metamorphic_enable.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/metamorphic",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/util/buildutil",
+        "//pkg/util/envutil",
+        "//pkg/util/metamorphic/metamorphicutil",
+        "//pkg/util/randutil",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "metamorphic_test",
+    srcs = [
+        "constants_test.go",
+        "main_test.go",
+    ],
+    embed = [":metamorphic"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

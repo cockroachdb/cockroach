@@ -1,0 +1,211 @@
+# Tests for computed columns.
+
+# Test for identity computed column (regression test for #161978) When a
+# computed column is defined as identical to another column (e.g., v AS
+# x), and the base column is in the equality set, the constraint builder
+# should properly replace the column reference in the projection.
+lookup-constraints left=(a int, b int) right=(x int not null, v int not null as (x) stored) index=(v, x)
+x = a
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a [type=INT8]
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) stored) index=(v, x)
+x = a
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a + 10 [type=INT8]
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual) index=(v, x)
+x = a
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a + 10 [type=INT8]
+
+# TODO(mgartner): The x=a remaining filter is not necessary.
+lookup-constraints left=(a int, b int) right=(x int, y INT, v int not null as (x + 10) virtual) index=(v, y)
+x = a AND y = 10
+----
+key cols:
+  v = v_eq
+  y = lookup_join_const_col_@7
+input projections:
+  v_eq = a + 10 [type=INT8]
+  lookup_join_const_col_@7 = 10 [type=INT8]
+remaining filters:
+  x = a
+
+# TODO(mgartner): The x=a remaining filter is not necessary.
+lookup-constraints left=(a int, b int) right=(x int, y INT, v int not null as (x + 10) virtual) index=(v, y)
+x = a
+optional: y = 10
+----
+key cols:
+  v = v_eq
+  y = lookup_join_const_col_@7
+input projections:
+  v_eq = a + 10 [type=INT8]
+  lookup_join_const_col_@7 = 10 [type=INT8]
+remaining filters:
+  x = a
+
+lookup-constraints left=(a int, b int) right=(x int, y INT, v int not null as (x + 10) virtual) index=(v, y)
+y = 10
+optional: x = 1
+----
+lookup join not possible
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, y INT, z INT) index=(v, x, y)
+x = a AND y = 0 AND z = 3
+----
+key cols:
+  v = v_eq
+  x = a
+  y = lookup_join_const_col_@8
+input projections:
+  v_eq = a + 10 [type=INT8]
+  lookup_join_const_col_@8 = 0 [type=INT8]
+remaining filters:
+  z = 3
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int, v int not null as (x + 10) virtual) index=(v, x, y)
+x = a
+optional: y = 0 AND z = 3
+----
+key cols:
+  v = v_eq
+  x = a
+  y = lookup_join_const_col_@7
+input projections:
+  v_eq = a + 10 [type=INT8]
+  lookup_join_const_col_@7 = 0 [type=INT8]
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, y INT) index=(v, y, x)
+x = a
+optional: y IN (10, 20)
+----
+input projections:
+  v_eq = a + 10 [type=INT8]
+lookup expression:
+  ((y IN (10, 20)) AND (v_eq = v)) AND (a = x)
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, y INT, z INT) index=(v, y, x, z)
+x = a AND z > 0
+optional: y IN (10, 20)
+----
+input projections:
+  v_eq = a + 10 [type=INT8]
+lookup expression:
+  (((y IN (10, 20)) AND (z > 0)) AND (v_eq = v)) AND (a = x)
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, y INT, w INT) index=(v, y, x)
+x = a AND w > 0
+optional: y IN (10, 20)
+----
+input projections:
+  v_eq = a + 10 [type=INT8]
+lookup expression:
+  ((y IN (10, 20)) AND (v_eq = v)) AND (a = x)
+remaining filters:
+  w > 0
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, z INT) index=(v, x, z)
+x = a
+optional: z IN (10, 20)
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a + 10 [type=INT8]
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, z INT) index=(v, x, z)
+x = a
+optional: z > 0
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a + 10 [type=INT8]
+
+# TODO(mgartner): We should be able to generate a lookup join by determining
+# that v is not null because the filter demands that x is not null, and v is
+# calculated from x.
+lookup-constraints left=(a int, b int) right=(x int, v int as (x + 10) virtual) index=(v, x)
+x = a
+----
+lookup join not possible
+
+lookup-constraints left=(a int, b int) right=(x int, y int, v int not null as (x + 10) virtual) index=(v, x, y)
+x = a AND y = b
+----
+key cols:
+  v = v_eq
+  x = a
+  y = b
+input projections:
+  v_eq = a + 10 [type=INT8]
+
+lookup-constraints left=(a int, b int) right=(x int, y int, v int not null as (x + 10) virtual) index=(v, x, y)
+x = a AND y = 1
+----
+key cols:
+  v = v_eq
+  x = a
+  y = lookup_join_const_col_@7
+input projections:
+  v_eq = a + 10 [type=INT8]
+  lookup_join_const_col_@7 = 1 [type=INT8]
+
+lookup-constraints left=(a int, b int) right=(x int, y int, v int not null as (x + 10) virtual) index=(v, x, y)
+x = a AND y IN (1, 2)
+----
+input projections:
+  v_eq = a + 10 [type=INT8]
+lookup expression:
+  ((y IN (1, 2)) AND (v_eq = v)) AND (a = x)
+
+lookup-constraints left=(a int, b int) right=(x int, y int, v int not null as (x + 10) virtual) index=(v, x, y)
+x = a AND y > 0
+----
+input projections:
+  v_eq = a + 10 [type=INT8]
+lookup expression:
+  ((y > 0) AND (v_eq = v)) AND (a = x)
+
+# Regression test for #124732: Computed columns cannot be remapped unless the
+# column types are identical.
+lookup-constraints left=(a regclass, b int) right=(x oid, v string not null as (x::string) stored) index=(v, x)
+x = a
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a::OID::STRING [type=STRING]
+
+# Computed columns cannot be remapped if the expression is composite-sensitive.
+lookup-constraints left=(a decimal, b int) right=(x decimal, v int not null as (x::int) stored) index=(v, x)
+x = a
+----
+lookup join not possible
+
+# Case with a composite-insensitive computed column expression.
+lookup-constraints left=(a decimal, b int) right=(x decimal, v decimal not null as (x + 2.5) stored) index=(v, x)
+x = a
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a + 2.5 [type=DECIMAL]

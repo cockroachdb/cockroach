@@ -1,0 +1,83 @@
+setup
+CREATE DOMAIN defaultdb.d AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0);
+----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d OWNER TO root
+----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d OWNER TO testuser
+----
+- [[Owner:{DescID: 104}, PUBLIC], ABSENT]
+  {descriptorId: 104, owner: testuser}
+- [[Owner:{DescID: 105}, PUBLIC], ABSENT]
+  {descriptorId: 105, owner: testuser}
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d SET SCHEMA public
+----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d RENAME TO d2
+----
+- [[Namespace:{DescID: 104, Name: d, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 104, name: d, schemaId: 101}
+- [[Namespace:{DescID: 104, Name: d2, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 104, name: d2, schemaId: 101}
+- [[Namespace:{DescID: 105, Name: _d, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 105, name: _d, schemaId: 101}
+- [[Namespace:{DescID: 105, Name: _d2, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 105, name: _d2, schemaId: 101}
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d SET NOT NULL
+----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d DROP NOT NULL
+----
+- [[DomainNotNull:{DescID: 104, ConstraintID: 2}, ABSENT], PUBLIC]
+  {constraintId: 2, typeId: 104}
+- [[DomainConstraintName:{DescID: 104, Name: d_not_null, ConstraintID: 2}, ABSENT], PUBLIC]
+  {constraintId: 2, name: d_not_null, typeId: 104}
+
+setup
+CREATE DOMAIN defaultdb.d_no_nn AS INT DEFAULT 0;
+----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d_no_nn SET NOT NULL
+----
+- [[DomainNotNull:{DescID: 106, ConstraintID: 1}, PUBLIC], ABSENT]
+  {constraintId: 1, typeId: 106}
+- [[DomainConstraintName:{DescID: 106, Name: d_no_nn_not_null, ConstraintID: 1}, PUBLIC], ABSENT]
+  {constraintId: 1, name: d_no_nn_not_null, typeId: 106}
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d_no_nn DROP NOT NULL
+----
+
+setup
+CREATE SCHEMA s;
+----
+
+build skip=sql_dependencies
+ALTER DOMAIN defaultdb.d SET SCHEMA s
+----
+- [[Namespace:{DescID: 104, Name: d, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 104, name: d, schemaId: 101}
+- [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 104, schemaId: 101}
+- [[Namespace:{DescID: 105, Name: _d, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 105, name: _d, schemaId: 101}
+- [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 105, schemaId: 101}
+- [[Namespace:{DescID: 104, Name: d, ReferencedDescID: 100, IntValue: 108}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 104, name: d, schemaId: 108}
+- [[SchemaChild:{DescID: 104, ReferencedDescID: 108}, PUBLIC], ABSENT]
+  {childObjectId: 104, schemaId: 108}
+- [[Namespace:{DescID: 105, Name: _d, ReferencedDescID: 100, IntValue: 108}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 105, name: _d, schemaId: 108}
+- [[SchemaChild:{DescID: 105, ReferencedDescID: 108}, PUBLIC], ABSENT]
+  {childObjectId: 105, schemaId: 108}

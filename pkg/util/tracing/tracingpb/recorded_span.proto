@@ -1,0 +1,191 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.util.tracing.tracingpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "util/tracing/tracingpb/tracing.proto";
+
+// LogRecord is a log message recorded in a traced span.
+message LogRecord {
+  // Time of the log record.
+  google.protobuf.Timestamp time = 1 [(gogoproto.nullable) = false,
+                                     (gogoproto.stdtime) = true];
+  message Field {
+    string key = 1;
+    string value = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+  }
+  // The log message.
+  string message = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+
+  reserved 2;
+}
+
+// StructuredRecord is a structured message recorded in a traced span.
+message StructuredRecord {
+  // Time of the structured record.
+  google.protobuf.Timestamp time = 1 [(gogoproto.nullable) = false,
+                                     (gogoproto.stdtime) = true];
+  google.protobuf.Any payload = 2;
+}
+
+// OperationMetadata captures information corresponding to the operation that
+// a span is started with.
+message OperationMetadata {
+  option (gogoproto.goproto_stringer) = false;
+
+  // Duration represents the total time spent by spans tracing the operation.
+  int64 duration = 1 [(gogoproto.casttype) = "time.Duration"];
+  // Count represents the number of spans tracing the operation.
+  int64 count = 2;
+  // ContainsUnfinished is true if the OperationMetadata contains information
+  // about unfinished spans tracing the operation.
+  bool contains_unfinished = 3;
+}
+
+
+// RecordedSpan is the data recorded by a trace span. It
+// needs to be able to cross RPC boundaries so that the
+// complete recording of the trace can be constructed.
+message RecordedSpan {
+  option (gogoproto.goproto_stringer) = false;
+
+  // ID of the trace; spans that are part of the same hierarchy share
+  // the same trace ID.
+  uint64 trace_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "TraceID"];
+  // ID of the span.
+  uint64 span_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SpanID", (gogoproto.customtype) = "SpanID"];
+  // ID of the parent span.
+  uint64 parent_span_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentSpanID", (gogoproto.customtype) = "SpanID"];
+  // Operation name.
+  string operation = 4;
+
+  // tag_groups describes tags associated with the span, potentially in a
+  // shallow structured hierarchy.
+  //
+  // A span may have at most one "anonymous" tag group, that is, a tag group
+  // without a Name. This is not enforced in the protobuf definition, but is
+  // expected in code.
+  //
+  // The tags in an anonymous group are not necessarily related, and should
+  // instead be treated as independent, top-level items. These tags are
+  // stored in a tag group for convenience.
+  repeated TagGroup tag_groups = 18 [(gogoproto.nullable) = false];
+
+  // Time when the span was started.
+  google.protobuf.Timestamp start_time = 7 [(gogoproto.nullable) = false,
+                                            (gogoproto.stdtime) = true];
+  // The span's duration, measured from start to Finish().
+  //
+  // A span whose recording is collected before it's finished will have the
+  // duration set as the "time of collection - start time". Such a span will
+  // have an "unfinished" tag and a `finished` boolean value of false in this
+  // recording.
+  google.protobuf.Duration duration = 8 [(gogoproto.nullable) = false,
+                                         (gogoproto.stdduration) = true];
+
+  // Events logged in the span.
+  repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
+  // verbose indicates whether the span was recording in verbose mode at the
+  // time the recording was produced.
+  //
+  // This field is deprecated; it can be removed in 23.1. Use recording_mode
+  // instead.
+  bool verbose = 16;
+  // recording_mode indicates the recording mode of the span at the the
+  // recording was produced.
+  RecordingMode recording_mode = 17;
+
+  // The ID of the goroutine on which the span was created.
+  uint64 goroutine_id = 12 [(gogoproto.customname) = "GoroutineID"];
+
+  // True if the span has been Finish()ed, false otherwise.
+  bool finished = 13;
+
+  // StructuredRecords contains StructuredRecord events recorded either in this
+  // span, or in children spans that have finished while our span was not
+  // recording verbosely.
+  //
+  // A StructuredRecord wraps the Payload with a RecordedAt timestamp to expose
+  // information about when this event occurred.
+  repeated StructuredRecord structured_records = 14 [(gogoproto.nullable) = false];
+  // structured_records_size_bytes represents the total size of the logs in
+  // structured_records.
+  int64 structured_records_size_bytes = 20;
+
+  // ChildrenMetadata is a mapping from operation to the aggregated metadata of
+  // that operation.
+  //
+  // When a child of this span is Finish()ed, it updates the map with all the
+  // children in its Recording. ChildrenMetadata therefore provides a bucketed
+  // view of the various operations that are being traced as part of a span.
+  map<string, OperationMetadata> children_metadata = 19 [(gogoproto.nullable) = false];
+
+  reserved 5,6,10,11,15;
+}
+
+message TagGroup {
+  // May be empty. If so, indicates that contained Tags should be treated as
+  // top-level.
+  //
+  // If a value is instead present here, indicates that this group is a
+  // structured collection of related tags.
+  string name = 1;
+
+  repeated Tag tags = 2 [(gogoproto.nullable) = false];
+}
+
+message Tag {
+  // key is the name of the tag. This is a safe value.
+  string key = 1;
+  // value is the value of the tag. This is NOT a safe value.
+  // It may contain PII or other sensitive information.
+  // TODO(knz): we should deprecate this field, and define
+  // a new value field with type RedactableString.
+  string value = 2;
+}
+
+// NormalizedSpan is a representation of a RecordedSpan from a trace with all
+// its children embedded, recursively. This JSON serialization of this proto is
+// used in the system.statement_diagnostics.trace column.
+//
+// See RecordedSpan for the description of the fields.
+message NormalizedSpan {
+  string operation = 1;
+
+  // Deprecated. Avoid new uses. Prefer tag_groups.
+  // TODO(benbardin): Deprecate the tags field for 23.1.
+  map<string, string> tags = 2;
+
+  repeated TagGroup tag_groups = 8 [(gogoproto.nullable) = false];
+  google.protobuf.Timestamp start_time = 3 [(gogoproto.nullable) = false,
+                                           (gogoproto.stdtime) = true];
+  google.protobuf.Duration duration = 4 [(gogoproto.nullable) = false,
+                                        (gogoproto.stdduration) = true];
+  repeated LogRecord logs = 5 [(gogoproto.nullable) = false];
+  repeated StructuredRecord structured_records = 7 [(gogoproto.nullable) = false];
+  map<string, OperationMetadata> children_metadata = 9 [(gogoproto.nullable) = false];
+  repeated NormalizedSpan children = 6 [(gogoproto.nullable) = false];
+}
+
+message CapturedStack {
+  option (gogoproto.goproto_stringer) = false;
+  // Stack is the strack trace, or distinct prefix of the stack trace if a previous
+  // capture of this stack is also being recorded.
+  string stack = 1;
+  // SharedSuffix indicates the length of the elided suffix of this stack that 
+  // was identical to the previous capture of this stack.
+  int32 shared_suffix = 2;
+  // SharedLines indicated how many newlines were in the elided shared suffix.
+  int32 shared_lines = 3;
+  // Age indicates the duration prior to being recorded that this stack was captured.
+  int64 age = 4 [(gogoproto.casttype) = "time.Duration"];
+  // NEXT ID: 5.
+}

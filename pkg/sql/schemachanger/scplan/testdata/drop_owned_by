@@ -1,0 +1,2024 @@
+setup
+CREATE ROLE r;
+CREATE TABLE tab();
+GRANT ALL ON tab TO r;
+GRANT CREATE ON DATABASE defaultdb TO r WITH GRANT OPTION;
+SET ROLE r;
+CREATE SCHEMA s;
+CREATE SEQUENCE public.sq;
+CREATE SEQUENCE s.sq;
+CREATE TABLE s.t (id INT PRIMARY KEY, name VARCHAR(256), val INT DEFAULT nextval('s.sq'));
+CREATE TABLE public.t (id INT PRIMARY KEY, name VARCHAR(256), val INT DEFAULT nextval('public.sq'));
+CREATE VIEW s.v1 AS (SELECT name FROM s.t);
+CREATE TYPE s.typ AS ENUM('a');
+CREATE VIEW s.v2 AS (SELECT 'a'::s.typ::string AS k, name FROM s.v1);
+----
+
+ops
+DROP OWNED BY r
+----
+StatementPhase stage 1 of 1 with 203 MutationType ops
+  transitions:
+    [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100, IntValue: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Schema:{DescID: 105}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaParent:{DescID: 105, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: r}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 106, Name: sq, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Sequence:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 109, Name: t, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Table:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [106], Expr: nextval(106:::REGCLASS)}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 109, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 109, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 109, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 107, Name: sq, ReferencedDescID: 100, IntValue: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 108, Name: t, ReferencedDescID: 100, IntValue: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Table:{DescID: 108}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 108, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 108, ColumnID: 3, ReferencedSequenceIDs: [107], Expr: nextval(107:::REGCLASS)}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 108, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 108, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 108, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 108, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 110, Name: v1, ReferencedDescID: 100, IntValue: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 110}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 110, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 110, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 110, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 110, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 110, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 110, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100, IntValue: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[EnumType:{DescID: 111}, ABSENT], PUBLIC] -> DROPPED
+    [[EnumTypeValue:{DescID: 111, Name: a}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 111, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100, IntValue: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 112}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 112, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 112, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 113, Name: v2, ReferencedDescID: 100, IntValue: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 113}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 113}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 113, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 113, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 113, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 113, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 113, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 113, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 113, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 113, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.RemoveUserPrivileges
+      DescriptorID: 100
+      User: r
+    *scop.RemoveUserPrivileges
+      DescriptorID: 104
+      User: r
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 106
+    *scop.RemoveObjectParent
+      ObjectID: 106
+      ParentSchemaID: 101
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 109
+    *scop.RemoveObjectParent
+      ObjectID: 109
+      ParentSchemaID: 101
+    *scop.MakePublicColumnNotNullValidated
+      ColumnID: 1
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 3
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 109
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 3
+      TableID: 109
+    *scop.UpdateTableBackReferencesInSequences
+      BackReferencedColumnID: 3
+      BackReferencedTableID: 109
+      SequenceIDs:
+      - 106
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 109
+    *scop.MakeColumnVisible
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 109
+    *scop.MakeColumnVisible
+      ColumnID: 4294967294
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967293
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 4294967293
+      Name: crdb_internal_column_4294967293_name_placeholder
+      TableID: 109
+    *scop.MakeColumnVisible
+      ColumnID: 4294967293
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967292
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 4294967292
+      Name: crdb_internal_column_4294967292_name_placeholder
+      TableID: 109
+    *scop.MakeColumnVisible
+      ColumnID: 4294967292
+      TableID: 109
+    *scop.MakePublicPrimaryIndexWriteOnly
+      IndexID: 1
+      TableID: 109
+    *scop.SetIndexName
+      IndexID: 1
+      Name: crdb_internal_index_1_name_placeholder
+      TableID: 109
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 107
+    *scop.RemoveObjectParent
+      ObjectID: 107
+      ParentSchemaID: 105
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 108
+    *scop.RemoveObjectParent
+      ObjectID: 108
+      ParentSchemaID: 105
+    *scop.MakePublicColumnNotNullValidated
+      ColumnID: 1
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 108
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 3
+      TableID: 108
+    *scop.UpdateTableBackReferencesInSequences
+      BackReferencedColumnID: 3
+      BackReferencedTableID: 108
+      SequenceIDs:
+      - 107
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 108
+    *scop.MakeColumnVisible
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 108
+    *scop.MakeColumnVisible
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967293
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967293
+      Name: crdb_internal_column_4294967293_name_placeholder
+      TableID: 108
+    *scop.MakeColumnVisible
+      ColumnID: 4294967293
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967292
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967292
+      Name: crdb_internal_column_4294967292_name_placeholder
+      TableID: 108
+    *scop.MakeColumnVisible
+      ColumnID: 4294967292
+      TableID: 108
+    *scop.MakePublicPrimaryIndexWriteOnly
+      IndexID: 1
+      TableID: 108
+    *scop.SetIndexName
+      IndexID: 1
+      Name: crdb_internal_index_1_name_placeholder
+      TableID: 108
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 110
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 110
+      RelationIDs:
+      - 108
+    *scop.RemoveObjectParent
+      ObjectID: 110
+      ParentSchemaID: 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 110
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 110
+    *scop.MakeColumnVisible
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 110
+    *scop.MakeColumnVisible
+      ColumnID: 4294967294
+      TableID: 110
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967293
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 4294967293
+      Name: crdb_internal_column_4294967293_name_placeholder
+      TableID: 110
+    *scop.MakeColumnVisible
+      ColumnID: 4294967293
+      TableID: 110
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967292
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 4294967292
+      Name: crdb_internal_column_4294967292_name_placeholder
+      TableID: 110
+    *scop.MakeColumnVisible
+      ColumnID: 4294967292
+      TableID: 110
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 111
+    *scop.DemoteEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 111
+    *scop.RemoveObjectParent
+      ObjectID: 111
+      ParentSchemaID: 105
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 112
+    *scop.RemoveObjectParent
+      ObjectID: 112
+      ParentSchemaID: 105
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 113
+    *scop.RemoveBackReferenceInTypes
+      BackReferencedDescriptorID: 113
+      TypeIDs:
+      - 111
+      - 112
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 113
+      RelationIDs:
+      - 110
+    *scop.RemoveObjectParent
+      ObjectID: 113
+      ParentSchemaID: 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 113
+    *scop.MakeColumnVisible
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 113
+    *scop.MakeColumnVisible
+      ColumnID: 4294967294
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967293
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 4294967293
+      Name: crdb_internal_column_4294967293_name_placeholder
+      TableID: 113
+    *scop.MakeColumnVisible
+      ColumnID: 4294967293
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967292
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 4294967292
+      Name: crdb_internal_column_4294967292_name_placeholder
+      TableID: 113
+    *scop.MakeColumnVisible
+      ColumnID: 4294967292
+      TableID: 113
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 105
+    *scop.RemoveSchemaParent
+      Parent:
+        ParentDatabaseID: 100
+        SchemaID: 105
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 106
+        Name: sq
+        SchemaID: 101
+    *scop.RemoveOwner
+      DescriptorID: 106
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 109
+        Name: t
+        SchemaID: 101
+    *scop.RemoveOwner
+      DescriptorID: 109
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: root
+    *scop.RemoveColumnNotNull
+      ColumnID: 1
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 3
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967293
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967292
+      TableID: 109
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 107
+        Name: sq
+        SchemaID: 105
+    *scop.RemoveOwner
+      DescriptorID: 107
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 108
+        Name: t
+        SchemaID: 105
+    *scop.RemoveOwner
+      DescriptorID: 108
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: root
+    *scop.RemoveColumnNotNull
+      ColumnID: 1
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967293
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967292
+      TableID: 108
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 110
+        Name: v1
+        SchemaID: 105
+    *scop.RemoveOwner
+      DescriptorID: 110
+    *scop.RemoveUserPrivileges
+      DescriptorID: 110
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 110
+      User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967293
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967292
+      TableID: 110
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 111
+        Name: typ
+        SchemaID: 105
+    *scop.RemoveOwner
+      DescriptorID: 111
+    *scop.RemoveUserPrivileges
+      DescriptorID: 111
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 111
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 111
+      User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 112
+        Name: _typ
+        SchemaID: 105
+    *scop.RemoveOwner
+      DescriptorID: 112
+    *scop.RemoveUserPrivileges
+      DescriptorID: 112
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 112
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 112
+      User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 113
+        Name: v2
+        SchemaID: 105
+    *scop.RemoveOwner
+      DescriptorID: 113
+    *scop.RemoveUserPrivileges
+      DescriptorID: 113
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 113
+      User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967293
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967292
+      TableID: 113
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 105
+        Name: s
+    *scop.RemoveOwner
+      DescriptorID: 105
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: root
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967293
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967292
+      TableID: 109
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 1
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967293
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967292
+      TableID: 108
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 1
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967293
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967292
+      TableID: 110
+    *scop.RemoveEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 111
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967293
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967292
+      TableID: 113
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 109
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 1
+      TableID: 109
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 1
+      Kind: 2
+      TableID: 109
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
+      IndexID: 1
+      Kind: 2
+      Ordinal: 1
+      TableID: 109
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 109
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 1
+      TableID: 108
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 1
+      Kind: 2
+      TableID: 108
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
+      IndexID: 1
+      Kind: 2
+      Ordinal: 1
+      TableID: 108
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 3
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 3
+      TableID: 108
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100, IntValue: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[Schema:{DescID: 105}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaParent:{DescID: 105, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 104, Name: r}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 106, Name: sq, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 106}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[Sequence:{DescID: 106}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 109, Name: t, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[Table:{DescID: 109}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 109, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [106], Expr: nextval(106:::REGCLASS)}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 109, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 109, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 109, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 109, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 109, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 109, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 109, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 109, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[IndexName:{DescID: 109, Name: t_pkey, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 107, Name: sq, ReferencedDescID: 100, IntValue: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 107}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[Sequence:{DescID: 107}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 108, Name: t, ReferencedDescID: 100, IntValue: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 108}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[Table:{DescID: 108}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 108, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 108, Name: id, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 108, Name: name, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 108, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 108, Name: val, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnDefaultExpression:{DescID: 108, ColumnID: 3, ReferencedSequenceIDs: [107], Expr: nextval(107:::REGCLASS)}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 108, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 108, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 108, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 108, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 108, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 108, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 108, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 108, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 108, ColumnID: 3, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[IndexName:{DescID: 108, Name: t_pkey, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 110, Name: v1, ReferencedDescID: 100, IntValue: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 110}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[View:{DescID: 110}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 110, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 110, Name: name, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 110, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 110, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 110, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 110, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 110, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 110, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 110, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 110, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100, IntValue: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 111}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[EnumType:{DescID: 111}, ABSENT], DROPPED] -> PUBLIC
+    [[EnumTypeValue:{DescID: 111, Name: a}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 111, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100, IntValue: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 112}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 112, Name: public}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 112, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 113, Name: v2, ReferencedDescID: 100, IntValue: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 113}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[View:{DescID: 113}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 113, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 113, Name: name, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 113, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 113, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 113, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 113, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 113, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 113, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 113, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnHidden:{DescID: 113, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 215 MutationType ops
+  transitions:
+    [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100, IntValue: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Schema:{DescID: 105}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaParent:{DescID: 105, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: r}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 106, Name: sq, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Sequence:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 109, Name: t, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Table:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [106], Expr: nextval(106:::REGCLASS)}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 109, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 109, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 109, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 107, Name: sq, ReferencedDescID: 100, IntValue: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 108, Name: t, ReferencedDescID: 100, IntValue: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Table:{DescID: 108}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 108, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 108, ColumnID: 3, ReferencedSequenceIDs: [107], Expr: nextval(107:::REGCLASS)}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 108, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 108, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 108, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 108, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 108, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 110, Name: v1, ReferencedDescID: 100, IntValue: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 110}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 110, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 110, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 110, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 110, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 110, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 110, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100, IntValue: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[EnumType:{DescID: 111}, ABSENT], PUBLIC] -> DROPPED
+    [[EnumTypeValue:{DescID: 111, Name: a}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 111, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100, IntValue: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 112}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 112, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 112, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 113, Name: v2, ReferencedDescID: 100, IntValue: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 113}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 113}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 113, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 113, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 113, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 113, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 113, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 113, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 113, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 113, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.RemoveUserPrivileges
+      DescriptorID: 100
+      User: r
+    *scop.RemoveUserPrivileges
+      DescriptorID: 104
+      User: r
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 106
+    *scop.RemoveObjectParent
+      ObjectID: 106
+      ParentSchemaID: 101
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 109
+    *scop.RemoveObjectParent
+      ObjectID: 109
+      ParentSchemaID: 101
+    *scop.MakePublicColumnNotNullValidated
+      ColumnID: 1
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 3
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 109
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 3
+      TableID: 109
+    *scop.UpdateTableBackReferencesInSequences
+      BackReferencedColumnID: 3
+      BackReferencedTableID: 109
+      SequenceIDs:
+      - 106
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 109
+    *scop.MakeColumnVisible
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 109
+    *scop.MakeColumnVisible
+      ColumnID: 4294967294
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967293
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 4294967293
+      Name: crdb_internal_column_4294967293_name_placeholder
+      TableID: 109
+    *scop.MakeColumnVisible
+      ColumnID: 4294967293
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967292
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 4294967292
+      Name: crdb_internal_column_4294967292_name_placeholder
+      TableID: 109
+    *scop.MakeColumnVisible
+      ColumnID: 4294967292
+      TableID: 109
+    *scop.MakePublicPrimaryIndexWriteOnly
+      IndexID: 1
+      TableID: 109
+    *scop.SetIndexName
+      IndexID: 1
+      Name: crdb_internal_index_1_name_placeholder
+      TableID: 109
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 107
+    *scop.RemoveObjectParent
+      ObjectID: 107
+      ParentSchemaID: 105
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 108
+    *scop.RemoveObjectParent
+      ObjectID: 108
+      ParentSchemaID: 105
+    *scop.MakePublicColumnNotNullValidated
+      ColumnID: 1
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 108
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 3
+      TableID: 108
+    *scop.UpdateTableBackReferencesInSequences
+      BackReferencedColumnID: 3
+      BackReferencedTableID: 108
+      SequenceIDs:
+      - 107
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 108
+    *scop.MakeColumnVisible
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 108
+    *scop.MakeColumnVisible
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967293
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967293
+      Name: crdb_internal_column_4294967293_name_placeholder
+      TableID: 108
+    *scop.MakeColumnVisible
+      ColumnID: 4294967293
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967292
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967292
+      Name: crdb_internal_column_4294967292_name_placeholder
+      TableID: 108
+    *scop.MakeColumnVisible
+      ColumnID: 4294967292
+      TableID: 108
+    *scop.MakePublicPrimaryIndexWriteOnly
+      IndexID: 1
+      TableID: 108
+    *scop.SetIndexName
+      IndexID: 1
+      Name: crdb_internal_index_1_name_placeholder
+      TableID: 108
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 110
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 110
+      RelationIDs:
+      - 108
+    *scop.RemoveObjectParent
+      ObjectID: 110
+      ParentSchemaID: 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 110
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 110
+    *scop.MakeColumnVisible
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 110
+    *scop.MakeColumnVisible
+      ColumnID: 4294967294
+      TableID: 110
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967293
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 4294967293
+      Name: crdb_internal_column_4294967293_name_placeholder
+      TableID: 110
+    *scop.MakeColumnVisible
+      ColumnID: 4294967293
+      TableID: 110
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967292
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 4294967292
+      Name: crdb_internal_column_4294967292_name_placeholder
+      TableID: 110
+    *scop.MakeColumnVisible
+      ColumnID: 4294967292
+      TableID: 110
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 111
+    *scop.DemoteEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 111
+    *scop.RemoveObjectParent
+      ObjectID: 111
+      ParentSchemaID: 105
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 112
+    *scop.RemoveObjectParent
+      ObjectID: 112
+      ParentSchemaID: 105
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 113
+    *scop.RemoveBackReferenceInTypes
+      BackReferencedDescriptorID: 113
+      TypeIDs:
+      - 111
+      - 112
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 113
+      RelationIDs:
+      - 110
+    *scop.RemoveObjectParent
+      ObjectID: 113
+      ParentSchemaID: 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 113
+    *scop.MakeColumnVisible
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 113
+    *scop.MakeColumnVisible
+      ColumnID: 4294967294
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967293
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 4294967293
+      Name: crdb_internal_column_4294967293_name_placeholder
+      TableID: 113
+    *scop.MakeColumnVisible
+      ColumnID: 4294967293
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967292
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 4294967292
+      Name: crdb_internal_column_4294967292_name_placeholder
+      TableID: 113
+    *scop.MakeColumnVisible
+      ColumnID: 4294967292
+      TableID: 113
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 105
+    *scop.RemoveSchemaParent
+      Parent:
+        ParentDatabaseID: 100
+        SchemaID: 105
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 106
+        Name: sq
+        SchemaID: 101
+    *scop.RemoveOwner
+      DescriptorID: 106
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 109
+        Name: t
+        SchemaID: 101
+    *scop.RemoveOwner
+      DescriptorID: 109
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: root
+    *scop.RemoveColumnNotNull
+      ColumnID: 1
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 3
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967293
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967292
+      TableID: 109
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 107
+        Name: sq
+        SchemaID: 105
+    *scop.RemoveOwner
+      DescriptorID: 107
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 108
+        Name: t
+        SchemaID: 105
+    *scop.RemoveOwner
+      DescriptorID: 108
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: root
+    *scop.RemoveColumnNotNull
+      ColumnID: 1
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967293
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967292
+      TableID: 108
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 110
+        Name: v1
+        SchemaID: 105
+    *scop.RemoveOwner
+      DescriptorID: 110
+    *scop.RemoveUserPrivileges
+      DescriptorID: 110
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 110
+      User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967293
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967292
+      TableID: 110
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 111
+        Name: typ
+        SchemaID: 105
+    *scop.RemoveOwner
+      DescriptorID: 111
+    *scop.RemoveUserPrivileges
+      DescriptorID: 111
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 111
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 111
+      User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 112
+        Name: _typ
+        SchemaID: 105
+    *scop.RemoveOwner
+      DescriptorID: 112
+    *scop.RemoveUserPrivileges
+      DescriptorID: 112
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 112
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 112
+      User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 113
+        Name: v2
+        SchemaID: 105
+    *scop.RemoveOwner
+      DescriptorID: 113
+    *scop.RemoveUserPrivileges
+      DescriptorID: 113
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 113
+      User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967293
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967292
+      TableID: 113
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 105
+        Name: s
+    *scop.RemoveOwner
+      DescriptorID: 105
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: root
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967293
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967292
+      TableID: 109
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 1
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967293
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967292
+      TableID: 108
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 1
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967293
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967292
+      TableID: 110
+    *scop.RemoveEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 111
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967293
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967292
+      TableID: 113
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 109
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 1
+      TableID: 109
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 1
+      Kind: 2
+      TableID: 109
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
+      IndexID: 1
+      Kind: 2
+      Ordinal: 1
+      TableID: 109
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 109
+    *scop.AssertColumnFamilyIsRemoved
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 1
+      TableID: 108
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 1
+      Kind: 2
+      TableID: 108
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
+      IndexID: 1
+      Kind: 2
+      Ordinal: 1
+      TableID: 108
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 3
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 3
+      TableID: 108
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 100
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 105
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 106
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 107
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 108
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 109
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 110
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 111
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 112
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 113
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        AppName: $ internal-test
+        UserName: root
+      DescriptorIDs:
+      - 100
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      JobID: 1
+      NonCancelable: true
+      RunningStatus: 'Pending: Updating schema metadata (11 operations) — PostCommitNonRevertible phase (stage 1 of 1).'
+      Statements:
+      - statement: DROP OWNED BY r
+        redactedstatement: DROP OWNED BY r
+        statementtag: DROP OWNED BY
+PostCommitNonRevertiblePhase stage 1 of 1 with 23 MutationType ops
+  transitions:
+    [[Schema:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
+    [[Sequence:{DescID: 106}, ABSENT], DROPPED] -> ABSENT
+    [[TableData:{DescID: 106, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Table:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
+    [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TableData:{DescID: 109, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Sequence:{DescID: 107}, ABSENT], DROPPED] -> ABSENT
+    [[TableData:{DescID: 107, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Table:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
+    [[IndexData:{DescID: 108, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TableData:{DescID: 108, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 110}, ABSENT], DROPPED] -> ABSENT
+    [[EnumType:{DescID: 111}, ABSENT], DROPPED] -> ABSENT
+    [[AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 113}, ABSENT], DROPPED] -> ABSENT
+  ops:
+    *scop.DeleteDescriptor
+      DescriptorID: 105
+    *scop.CreateGCJobForTable
+      DatabaseID: 100
+      StatementForDropJob:
+        Statement: DROP OWNED BY r
+      TableID: 106
+    *scop.CreateGCJobForTable
+      DatabaseID: 100
+      StatementForDropJob:
+        Statement: DROP OWNED BY r
+      TableID: 109
+    *scop.CreateGCJobForTable
+      DatabaseID: 100
+      StatementForDropJob:
+        Statement: DROP OWNED BY r
+      TableID: 107
+    *scop.CreateGCJobForTable
+      DatabaseID: 100
+      StatementForDropJob:
+        Statement: DROP OWNED BY r
+      TableID: 108
+    *scop.DeleteDescriptor
+      DescriptorID: 110
+    *scop.DeleteDescriptor
+      DescriptorID: 111
+    *scop.DeleteDescriptor
+      DescriptorID: 112
+    *scop.DeleteDescriptor
+      DescriptorID: 113
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: DROP OWNED BY r
+      TableID: 109
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: DROP OWNED BY r
+      TableID: 108
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 100
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 104
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 105
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 106
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 107
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 108
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 109
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 110
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 111
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 112
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 113
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 100
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      IsNonCancelable: true
+      JobID: 1

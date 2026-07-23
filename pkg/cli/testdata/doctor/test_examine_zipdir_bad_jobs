@@ -1,0 +1,4 @@
+debug doctor examine zipdir testdata/doctor/debugzip-bad-jobs 21.1-5
+----
+debug doctor examine zipdir testdata/doctor/debugzip-bad-jobs 21.1-52
+ERROR: expected at least 6 fields, got 3 in crdb_internal.system_jobs.txt

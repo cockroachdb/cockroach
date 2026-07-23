@@ -1,0 +1,732 @@
+statement ok
+CREATE TABLE ab (a INT, b INT);
+
+subtest nested_block
+
+# Verify the following:
+# * variables from outer blocks are visible in nested blocks
+# * nested blocks can assign to variables from outer blocks
+# * assignments made in nested blocks should be visible after control returns
+statement ok
+CREATE PROCEDURE p(x INT) AS $$
+  DECLARE
+    y INT := 10;
+  BEGIN
+    x := x + 1;
+    y := y + 1;
+    RAISE NOTICE '% %', x, y;
+    DECLARE
+      z INT := 100;
+    BEGIN
+      x := x + 1;
+      y := y + 1;
+      z := z + 1;
+      RAISE NOTICE '% % %', x, y, z;
+    END;
+    x := x + 1;
+    y := y + 1;
+    RAISE NOTICE '% %', x, y;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p(1);
+----
+NOTICE: 2 11
+NOTICE: 3 12 101
+NOTICE: 4 13
+
+# Case with mutually nested blocks and IF statements, as well as RETURN
+# statements within nested blocks.
+statement ok
+CREATE FUNCTION f(x INT) RETURNS TEXT AS $$
+  BEGIN
+    IF x = 0 THEN
+      RETURN 'a';
+    ELSIF x = 1 THEN
+      DECLARE
+        y TEXT;
+      BEGIN
+        y := 'b';
+        RETURN y;
+      END;
+    END IF;
+    DECLARE
+      y INT := x * 2;
+    BEGIN
+      IF y >= 10 THEN
+        RETURN y::TEXT;
+      END IF;
+    END;
+    RETURN 'c';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query TTTT
+SELECT f(0), f(1), f(2), f(5);
+----
+a  b  c  10
+
+# Case with nested block with a loop.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x INT) AS $$
+  BEGIN
+    DECLARE
+      i INT := 0;
+    BEGIN
+      WHILE i < x LOOP
+        DECLARE
+          j INT := 0;
+        BEGIN
+          WHILE j < i LOOP
+            RAISE NOTICE '%, %', i, j;
+            j := j + 1;
+          END LOOP;
+          RAISE NOTICE 'final j: %', j;
+        END;
+        i := i + 1;
+      END LOOP;
+      RAISE NOTICE 'final i: %', i;
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p(0);
+----
+NOTICE: final i: 0
+
+query T noticetrace
+CALL p(1);
+----
+NOTICE: final j: 0
+NOTICE: final i: 1
+
+query T noticetrace
+CALL p(3);
+----
+NOTICE: final j: 0
+NOTICE: 1, 0
+NOTICE: final j: 1
+NOTICE: 2, 0
+NOTICE: 2, 1
+NOTICE: final j: 2
+NOTICE: final i: 3
+
+# Regression test for #122278 - a nested block with an exception handler inside
+# a loop should only rollback mutations from the current iteration.
+statement ok
+CREATE TABLE t122278(x INT);
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 5 LOOP
+      i := i + 1;
+      BEGIN
+        INSERT INTO t122278 VALUES (i);
+        IF i = 3 THEN
+          SELECT 1 // 0;
+        END IF;
+      EXCEPTION WHEN division_by_zero THEN
+        RAISE NOTICE 'saw exception';
+      END;
+    END LOOP;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: saw exception
+
+query I rowsort
+SELECT * FROM t122278;
+----
+1
+2
+4
+5
+
+statement ok
+DROP TABLE t122278 CASCADE;
+
+subtest nested_block_cursors
+
+statement ok
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    curs1 CURSOR FOR SELECT 1 FROM generate_series(1, 10);
+    curs2 CURSOR FOR SELECT 2 FROM generate_series(1, 10);
+    curs3 REFCURSOR;
+    curs4 REFCURSOR;
+    scratch INT;
+  BEGIN
+    OPEN curs1;
+    OPEN curs3 FOR SELECT 3 FROM generate_series(1, 10);
+    RAISE NOTICE 'a%', scratch;
+    FETCH curs1 INTO scratch;
+    RAISE NOTICE 'a%', scratch;
+    FETCH curs3 INTO scratch;
+    RAISE NOTICE 'a%', scratch;
+    DECLARE
+      curs5 CURSOR FOR SELECT 5 FROM generate_series(1, 10);
+      curs6 REFCURSOR;
+    BEGIN
+      OPEN curs2;
+      OPEN curs4 FOR SELECT 4 FROM generate_series(1, 10);
+      OPEN curs5;
+      OPEN curs6 FOR SELECT 6 FROM generate_series(1, 10);
+      FETCH curs1 INTO scratch;
+      RAISE NOTICE 'a%', scratch;
+      FETCH curs2 INTO scratch;
+      RAISE NOTICE 'a%', scratch;
+      FETCH curs3 INTO scratch;
+      RAISE NOTICE 'a%', scratch;
+      FETCH curs4 INTO scratch;
+      RAISE NOTICE 'a%', scratch;
+      FETCH curs5 INTO scratch;
+      RAISE NOTICE 'a%', scratch;
+      FETCH curs6 INTO scratch;
+      RAISE NOTICE 'a%', scratch;
+    END;
+    BEGIN
+      FETCH curs1 INTO scratch;
+      RAISE NOTICE 'a%', scratch;
+      FETCH curs2 INTO scratch;
+      RAISE NOTICE 'a%', scratch;
+      FETCH curs3 INTO scratch;
+      RAISE NOTICE 'a%', scratch;
+      FETCH curs4 INTO scratch;
+      RAISE NOTICE 'a%', scratch;
+    END;
+    FETCH curs1 INTO scratch;
+    RAISE NOTICE 'a%', scratch;
+    FETCH curs2 INTO scratch;
+    RAISE NOTICE 'a%', scratch;
+    FETCH curs3 INTO scratch;
+    RAISE NOTICE 'a%', scratch;
+    FETCH curs4 INTO scratch;
+    RAISE NOTICE 'a%', scratch;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: a<NULL>
+NOTICE: a1
+NOTICE: a3
+NOTICE: a1
+NOTICE: a2
+NOTICE: a3
+NOTICE: a4
+NOTICE: a5
+NOTICE: a6
+NOTICE: a1
+NOTICE: a2
+NOTICE: a3
+NOTICE: a4
+NOTICE: a1
+NOTICE: a2
+NOTICE: a3
+NOTICE: a4
+
+# Regression test for #122278 - all cursors within the scope of a block
+# (including those in nested blocks or routines) should be closed when the block
+# catches an exception.
+statement ok
+CREATE PROCEDURE p_nested(curs REFCURSOR) AS $$
+  BEGIN
+    OPEN curs FOR SELECT -100;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    x REFCURSOR;
+    y REFCURSOR;
+  BEGIN
+    OPEN x FOR SELECT 100;
+    BEGIN
+      OPEN y FOR SELECT 200;
+      IF n = 0 THEN
+        RETURN 1 // 0;
+      END IF;
+      CALL p_nested('foo');
+      IF n = 1 THEN
+        RETURN 1 // 0;
+      END IF;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        RETURN (SELECT count(*) FROM pg_cursors);
+    END;
+    CALL p_nested('bar');
+    IF n = 2 THEN
+      RETURN 1 // 0;
+    END IF;
+    RETURN (SELECT count(*) FROM pg_cursors);
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN (SELECT count(*) FROM pg_cursors);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CLOSE ALL;
+
+query I
+SELECT f(0);
+----
+1
+
+statement ok
+CLOSE ALL;
+
+query I
+SELECT f(1);
+----
+1
+
+statement ok
+CLOSE ALL;
+
+query I
+SELECT f(2);
+----
+0
+
+statement ok
+CLOSE ALL;
+
+query I
+SELECT f(3);
+----
+4
+
+statement ok
+CLOSE ALL;
+
+subtest nested_block_exceptions
+
+# Don't catch an exception thrown from the variable declarations.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    RAISE NOTICE '%', x;
+    DECLARE
+      y INT := 1 // x;
+    BEGIN
+      RAISE NOTICE '% %', x, y;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        RAISE NOTICE 'oops!';
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22012 pq: division by zero
+CALL p();
+
+# Catch an exception thrown from the nested block's body statements.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    RAISE NOTICE '%', x;
+    DECLARE
+      y INT;
+    BEGIN
+      y := 1 // x;
+      RAISE NOTICE '% %', x, y;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        RAISE NOTICE 'oops!';
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: 0
+NOTICE: oops!
+
+# If an exception is thrown and caught within an inner block, the outer block
+# is not rolled back, and execution can continue.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    INSERT INTO ab VALUES (1, 2);
+    BEGIN
+      INSERT INTO ab VALUES (3, 4);
+      SELECT 1 // 0;
+      INSERT INTO ab VALUES (5, 6);
+    EXCEPTION WHEN division_by_zero THEN
+      RAISE NOTICE 'saw exception';
+    END;
+    INSERT INTO ab VALUES (7, 8);
+    RAISE NOTICE 'finished execution of outer block';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II rowsort
+SELECT * FROM ab;
+----
+
+query T noticetrace
+CALL p()
+----
+NOTICE: saw exception
+NOTICE: finished execution of outer block
+
+query II rowsort
+SELECT * FROM ab;
+----
+1  2
+7  8
+
+# A variable assignment within a nested block's exception handler should be
+# visible when control returns to the outer block.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    RAISE NOTICE '%', x;
+    BEGIN
+      SELECT 1 // 0;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        x := 100;
+    END;
+    RAISE NOTICE '%', x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: 0
+NOTICE: 100
+
+# Cursors opened in a nested block should be closed when the block handles an
+# exception. Cursors opened in the outer block should remain open.
+# A cursor opened in a nested block's exception handler should be visible
+# in the outer block.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p(x INT) AS $$
+  DECLARE
+    curs1 REFCURSOR;
+    curs2 REFCURSOR;
+    curs3 REFCURSOR;
+  BEGIN
+    OPEN curs1 FOR SELECT 1;
+    BEGIN
+      OPEN curs2 FOR SELECT 2;
+      SELECT 1 // 0;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        OPEN curs3 FOR SELECT 3;
+    END;
+    IF x = 1 THEN
+      FETCH curs1 INTO x;
+    ELSIF x = 2 THEN
+      FETCH curs2 INTO x;
+    ELSE
+      FETCH curs3 INTO x;
+    END IF;
+    RAISE NOTICE '%', x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p(1);
+----
+NOTICE: 1
+
+statement error pgcode 34000 pq: cursor \"<unnamed portal .*>\" does not exist
+CALL p(2);
+
+query T noticetrace
+CALL p(3);
+----
+NOTICE: 3
+
+# A block can be nested in an exception handler.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    BEGIN
+      SELECT 1 // 0;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        RAISE NOTICE 'outer handler';
+        DECLARE
+          x INT := 100;
+        BEGIN
+          RAISE NOTICE 'inner block x=%', x;
+        END;
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: outer handler
+NOTICE: inner block x=100
+
+# A block nested in an exception handler can have its own exception handler.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  BEGIN
+    BEGIN
+      SELECT 1 // 0;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        RAISE NOTICE 'outer handler';
+        DECLARE
+          x INT := 100;
+        BEGIN
+          RAISE NOTICE 'inner block';
+          SELECT 1 // 0;
+        EXCEPTION WHEN division_by_zero THEN
+          RAISE NOTICE 'inner handler x=%', x;
+        END;
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: outer handler
+NOTICE: inner block
+NOTICE: inner handler x=100
+
+# A block can be nested inside another block that has an exception handler.
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    RAISE NOTICE 'outer block: %', x;
+    BEGIN
+      x := x + 1;
+      RAISE NOTICE 'inner block: %', x;
+      SELECT 1 // 0;
+    EXCEPTION WHEN division_by_zero THEN
+      x := x + 1;
+      RAISE NOTICE 'inner handler: %', x;
+      SELECT 1 // 0;
+    END;
+  EXCEPTION WHEN division_by_zero THEN
+    x := x + 1;
+    RAISE NOTICE 'outer handler: %', x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: outer block: 0
+NOTICE: inner block: 1
+NOTICE: inner handler: 2
+NOTICE: outer handler: 3
+
+# Regression test for #122278 - calling f(1) should result in the second
+# exception handler being triggered.
+statement ok
+CREATE TABLE t122278(x INT);
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    BEGIN
+      IF n = 0 THEN
+        RETURN 1 // 0;
+      END IF;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        RETURN (SELECT 100 + count(*) FROM t122278);
+    END;
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN (SELECT 200 + count(*) FROM t122278);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(0);
+----
+100
+
+query I
+SELECT f(1);
+----
+200
+
+subtest error
+
+statement ok
+DROP PROCEDURE IF EXISTS p();
+DROP FUNCTION IF EXISTS f();
+
+# Detect duplicate declarations in a block.
+statement error pgcode 42601 pq: duplicate declaration at or near \"x\"
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    x INT := 0;
+    x INT := 1;
+  BEGIN
+    RAISE NOTICE '%', x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# A variable declared in an inner block falls out of scope when control returns
+# to the outer block.
+statement error pgcode 42703 pq: column \"y\" does not exist
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    DECLARE
+      y INT := 1;
+    BEGIN
+      RAISE NOTICE '% %', x, y;
+    END;
+    RAISE NOTICE '% %', x, y;
+  END
+$$ LANGUAGE PLpgSQL;
+
+subtest unimplemented
+
+statement ok
+DROP PROCEDURE IF EXISTS p;
+
+# Variable shadowing is not yet allowed (tracked in #117508).
+statement error pgcode 0A000 pq: unimplemented: variable shadowing is not yet implemented
+CREATE PROCEDURE p() AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    DECLARE
+      x INT := 1;
+    BEGIN
+      RAISE NOTICE '%', x;
+    END;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Regression test for the internal error in #119492.
+subtest regression_119492
+
+statement ok
+CREATE FUNCTION somefunc() RETURNS integer AS $$
+DECLARE
+    outer_quantity integer := 30;
+BEGIN
+    RAISE NOTICE 'Quantity here is %', outer_quantity;  -- Prints 30
+    outer_quantity := 50;
+    --
+    -- Create a subblock
+    --
+    DECLARE
+        inner_quantity integer := 80;
+    BEGIN
+        RAISE NOTICE 'Quantity here is %', inner_quantity;  -- Prints 80
+        RAISE NOTICE 'Outer quantity here is %', outer_quantity;  -- Prints 50
+    END;
+    RAISE NOTICE 'Quantity here is %', outer_quantity;  -- Prints 50
+    RETURN outer_quantity;
+END;
+$$ LANGUAGE plpgsql;
+
+query T noticetrace
+SELECT somefunc();
+----
+NOTICE: Quantity here is 30
+NOTICE: Quantity here is 80
+NOTICE: Outer quantity here is 50
+NOTICE: Quantity here is 50
+
+subtest end
+
+# Regression test for not popping the continuation after having built the
+# corresponding block (#122873).
+statement ok
+CREATE FUNCTION func_122873() RETURNS INT4 AS $$
+DECLARE
+  decl_24 BOOL := false;
+BEGIN
+  IF decl_24 THEN
+    NULL;
+  ELSIF false THEN
+    DECLARE
+      decl_33 INT2;
+    BEGIN
+      BEGIN
+        RETURN decl_33;
+      END;
+      RETURN decl_33;
+    END;
+  END IF;
+END;
+$$ LANGUAGE PLpgSQL;
+
+subtest multi_declare
+
+statement ok
+DROP FUNCTION IF EXISTS f;
+
+statement ok
+CREATE FUNCTION f() RETURNS INT AS $$
+DECLARE
+  x INT := 0;
+DECLARE
+  y INT := x + 1;
+BEGIN
+  RAISE NOTICE '% %', x, y;
+  RETURN 0;
+END;
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: 0 1
+
+statement ok
+DROP FUNCTION IF EXISTS f;
+
+statement error pgcode 42601 pq: duplicate declaration at or near "x"
+CREATE FUNCTION f() RETURNS INT AS $$
+DECLARE
+  x INT := 0;
+DECLARE
+  x INT := 1;
+BEGIN
+  RAISE NOTICE '%', x;
+  RETURN 0;
+END;
+$$ LANGUAGE PLpgSQL;

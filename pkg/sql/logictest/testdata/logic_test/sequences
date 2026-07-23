@@ -1,0 +1,2569 @@
+# LogicTest: !local-prepared
+
+# see also files `drop_sequence`, `alter_sequence`, `rename_sequence`
+
+# USING THE `lastval` FUNCTION
+# (at the top because it requires a session in which `lastval` has never been called)
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = TRUE
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
+
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE SEQUENCE lastval_test
+
+statement ok
+CREATE SEQUENCE lastval_test_2 START WITH 10
+
+statement error pgcode 55000 pq: lastval is not yet defined in this session
+SELECT lastval()
+
+query I
+SELECT nextval('lastval_test')
+----
+1
+
+query I
+SELECT lastval()
+----
+1
+
+query I
+SELECT nextval('lastval_test_2')
+----
+10
+
+query I
+SELECT lastval()
+----
+10
+
+query I
+SELECT nextval('lastval_test')
+----
+2
+
+query I
+SELECT lastval()
+----
+2
+
+query I
+SELECT nextval('lastval_test_2')
+----
+11
+
+query I
+SELECT lastval()
+----
+11
+
+let $lastval_test_id
+SELECT 'lastval_test'::regclass::int
+
+query I
+SELECT nextval($lastval_test_id::regclass)
+----
+3
+
+query I
+SELECT lastval()
+----
+3
+
+let $lastval_test_2_id
+SELECT 'lastval_test_2'::regclass::int
+
+query I
+SELECT nextval($lastval_test_2_id::regclass)
+----
+12
+
+query I
+SELECT lastval()
+----
+12
+
+# SEQUENCE CREATION
+
+statement ok
+CREATE SEQUENCE foo
+
+# A sequence with the same name can't be created again.
+statement error pgcode 42P07 relation "test.public.foo" already exists
+CREATE SEQUENCE foo
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS foo
+
+statement error pgcode 42601 conflicting or redundant options
+CREATE SEQUENCE bar INCREMENT 5 MAXVALUE 1000 INCREMENT 2
+
+# Sequences are in the same namespace as tables.
+statement error pgcode 42P07 relation "test.public.foo" already exists
+CREATE TABLE foo (k BYTES PRIMARY KEY, v BYTES)
+
+# You can't create with 0 increment.
+statement error pgcode 22023 INCREMENT must not be zero
+CREATE SEQUENCE zero_test INCREMENT 0
+
+statement ok
+CREATE SEQUENCE high_minvalue_test MINVALUE 5
+
+# Verify validation of START vs MINVALUE/MAXVALUE.
+
+statement error pgcode 22023 START value \(11\) cannot be greater than MAXVALUE \(10\)
+CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 11
+
+statement error pgcode 22023 START value \(5\) cannot be less than MINVALUE \(10\)
+CREATE SEQUENCE limit_test MINVALUE 10 START WITH 5
+
+statement error pgcode 0A000 CYCLE option is not supported
+CREATE SEQUENCE cycle_test CYCLE
+
+statement ok
+CREATE SEQUENCE ignored_options_test NO CYCLE
+
+# Verify presence in crdb_internal.create_statements.
+
+statement ok
+CREATE SEQUENCE show_create_test
+
+query ITTITTTTTTTTTBBBB colnames
+SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
+----
+database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                                     state   create_nofks                                                                                         rls_statements  fk_statements  validate_statements  create_redactable                                                                                    has_partitions  is_multi_region  is_virtual  is_temporary
+104          test           public       111            sequence         show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}              {}                {}                   CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  false           false            false       false
+
+query TT colnames
+SHOW CREATE SEQUENCE show_create_test
+----
+table_name        create_statement
+show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+
+# DML ERRORS
+
+statement error pgcode 42809 "foo" is not a table
+INSERT INTO foo VALUES (1, 2, 3)
+
+statement error pgcode 42809 "foo" is not a table
+UPDATE foo SET value = 5
+
+statement error pgcode 42809 "foo" is not a table
+DELETE FROM foo
+
+statement error pgcode 42809 "foo" is not a table
+TRUNCATE foo
+
+# Drop table on sequences doesn't work; you have to use DROP SEQUENCE.
+statement error pgcode 42809 "foo" is not a table
+DROP TABLE foo
+
+# Create a sequence on another schema
+statement ok
+CREATE SCHEMA other_schema
+
+statement ok
+CREATE SEQUENCE other_schema.seq
+
+# List sequences with SHOW
+
+query TT rowsort
+SHOW SEQUENCES
+----
+public        foo
+public        high_minvalue_test
+public        ignored_options_test
+public        lastval_test
+public        lastval_test_2
+other_schema  seq
+public        show_create_test
+
+statement ok
+CREATE DATABASE seqdb; USE seqdb; CREATE SEQUENCE otherseq; USE test
+
+query TT rowsort
+SHOW SEQUENCES FROM seqdb
+----
+public  otherseq
+
+# You can select from a sequence to get its value.
+
+statement ok
+CREATE SEQUENCE select_test
+
+query IIB colnames
+SELECT * FROM select_test
+----
+last_value log_cnt is_called
+0          0       true
+
+# Test selecting just last_value.
+query I
+SELECT last_value FROM select_test
+----
+0
+
+statement ok
+SELECT nextval('select_test')
+
+query I
+SELECT last_value FROM select_test
+----
+1
+
+# Since this is a custom plan node, verify that column validation works.
+statement error pq: column "foo" does not exist
+SELECT foo from select_test
+
+# USING THE `nextval` AND `currval` FUNCTIONS
+
+statement error pgcode 55000 pq: currval of sequence "test.public.foo" is not yet defined in this session
+SELECT currval('foo')
+
+query I
+SELECT nextval('foo')
+----
+1
+
+query I
+SELECT nextval('foo')
+----
+2
+
+query I
+SELECT currval('foo')
+----
+2
+
+let $foo_id
+SELECT 'foo'::regclass::int
+
+query I
+SELECT nextval($foo_id::regclass)
+----
+3
+
+query I
+SELECT currval($foo_id::regclass)
+----
+3
+
+query T
+SELECT pg_sequence_parameters('foo'::regclass::oid)
+----
+(1,1,9223372036854775807,1,f,1,20)
+
+# You can create a sequence with different increment.
+
+statement ok
+CREATE SEQUENCE bar INCREMENT 5
+
+query I
+SELECT nextval('bar')
+----
+1
+
+query I
+SELECT nextval('bar')
+----
+6
+
+query T
+SELECT pg_sequence_parameters('bar'::regclass::oid)
+----
+(1,1,9223372036854775807,5,f,1,20)
+
+# You can create a sequence with different start and increment.
+
+statement ok
+CREATE SEQUENCE baz START 2 INCREMENT 5
+
+query I
+SELECT nextval('baz')
+----
+2
+
+query I
+SELECT nextval('baz')
+----
+7
+
+let $baz_id
+SELECT 'baz'::regclass::int
+
+query I
+SELECT nextval($baz_id::regclass)
+----
+12
+
+query T
+SELECT pg_sequence_parameters('baz'::regclass::oid)
+----
+(2,1,9223372036854775807,5,f,1,20)
+
+# You can create a sequence that goes down.
+
+statement ok
+CREATE SEQUENCE down_test INCREMENT BY -1 START -5
+
+query I
+SELECT nextval('down_test')
+----
+-5
+
+query I
+SELECT nextval('down_test')
+----
+-6
+
+let $down_test_id
+SELECT 'down_test'::regclass::int
+
+query I
+SELECT nextval($down_test_id::regclass)
+----
+-7
+
+query T
+SELECT pg_sequence_parameters('down_test'::regclass::oid)
+----
+(-5,-9223372036854775808,-1,-1,f,1,20)
+
+
+# You can create and use a sequence with special characters.
+
+statement ok
+CREATE SEQUENCE spécial
+
+query I
+SELECT nextval('spécial')
+----
+1
+
+# You can't call nextval on a table.
+
+statement ok
+CREATE TABLE kv (k bytes primary key, v bytes)
+
+statement error pgcode 42809 "test.public.kv" is not a sequence
+SELECT nextval('kv')
+
+# This matches PG's error.
+statement error pq: relation "@#%@!324234" does not exist
+SELECT nextval('@#%@!324234')
+
+# You can create and find sequences from other databases.
+
+statement ok
+CREATE DATABASE other_db
+
+statement ok
+SET DATABASE = other_db
+
+statement ok
+CREATE SEQUENCE other_db_test
+
+statement ok
+SET DATABASE = test
+
+# Sequence names are resolved based on the search path.
+
+statement ok
+CREATE DATABASE foo
+
+statement ok
+CREATE DATABASE bar
+
+statement ok
+CREATE SEQUENCE foo.x
+
+statement ok
+SET DATABASE = bar
+
+query I
+SELECT nextval('foo.x')
+----
+1
+
+query I
+SELECT nextval('other_db.other_db_test')
+----
+1
+
+# USING THE `setval` FUNCTION
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE SEQUENCE setval_test
+
+query I
+SELECT nextval('setval_test')
+----
+1
+
+query I
+SELECT nextval('setval_test')
+----
+2
+
+query I
+SELECT setval('setval_test', 10, false)
+----
+10
+
+# Calling setval with is_called=false doesn't affect currval or lastval; they
+# return the last value obtained with nextval.
+query I
+SELECT currval('setval_test')
+----
+2
+
+query I
+SELECT lastval()
+----
+2
+
+query I
+SELECT nextval('setval_test')
+----
+10
+
+query I
+SELECT currval('setval_test')
+----
+10
+
+query I
+SELECT lastval()
+----
+10
+
+let $setval_test_id
+SELECT 'setval_test'::regclass::int
+
+query I
+SELECT setval($setval_test_id::regclass, 20, true)
+----
+20
+
+# Calling setval with is_called=true does affect currval and lastval.
+query I
+SELECT currval($setval_test_id::regclass)
+----
+20
+
+query I
+SELECT lastval()
+----
+20
+
+query I
+SELECT nextval($setval_test_id::regclass)
+----
+21
+
+# setval doesn't let you set values outside the bounds.
+
+statement ok
+CREATE SEQUENCE setval_bounds_test MINVALUE 5 MAXVALUE 10
+
+query I
+SELECT nextval('setval_bounds_test')
+----
+5
+
+statement error pgcode 22003 pq: value 11 is out of bounds for sequence "setval_bounds_test" \(5\.\.10\)
+SELECT setval('setval_bounds_test', 11)
+
+statement error pgcode 22003 pq: value 0 is out of bounds for sequence "setval_bounds_test" \(5\.\.10\)
+SELECT setval('setval_bounds_test', 0)
+
+# nextval fails with nonexistent sequences.
+
+statement error pgcode 42P01 relation "nonexistent_seq" does not exist
+SELECT nextval('nonexistent_seq')
+
+# The three-argument variant of setval lets you set the next value to be retrieved from nextval().
+
+statement ok
+CREATE SEQUENCE setval_is_called_test
+
+query I
+SELECT setval('setval_is_called_test', 10, false)
+----
+10
+
+query I
+SELECT nextval('setval_is_called_test')
+----
+10
+
+query I
+SELECT nextval('setval_is_called_test')
+----
+11
+
+query I
+SELECT setval('setval_is_called_test', 20, true)
+----
+20
+
+query I
+SELECT nextval('setval_is_called_test')
+----
+21
+
+query I
+SELECT nextval('setval_is_called_test')
+----
+22
+
+let $setval_is_called_test_id
+SELECT 'setval_is_called_test'::regclass::int
+
+query I
+SELECT setval($setval_is_called_test_id::regclass, 30, false)
+----
+30
+
+query I
+SELECT nextval($setval_is_called_test_id::regclass)
+----
+30
+
+query I
+SELECT nextval($setval_is_called_test_id::regclass)
+----
+31
+
+query I
+SELECT setval($setval_is_called_test_id::regclass, 30, true)
+----
+30
+
+query I
+SELECT nextval($setval_is_called_test_id::regclass)
+----
+31
+
+query I
+SELECT nextval($setval_is_called_test_id::regclass)
+----
+32
+
+# You can use setval to reset to minvalue.
+
+statement ok
+CREATE SEQUENCE setval_minval_test MINVALUE 10
+
+query I
+SELECT nextval('setval_minval_test')
+----
+10
+
+query I
+SELECT nextval('setval_minval_test')
+----
+11
+
+query I
+SELECT setval('setval_minval_test', 10, false)
+----
+10
+
+query I
+SELECT nextval('setval_minval_test')
+----
+10
+
+query I
+SELECT setval('setval_minval_test', 10, true)
+----
+10
+
+query I
+SELECT nextval('setval_minval_test')
+----
+11
+
+# BEHAVIOR UPON HITTING LIMITS (minvalue, maxvalue)
+
+statement ok
+CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 9
+
+query I
+SELECT nextval('limit_test')
+----
+9
+
+query I
+SELECT nextval('limit_test')
+----
+10
+
+statement error pgcode 2200H pq: reached maximum value of sequence "limit_test" \(10\)
+SELECT nextval('limit_test')
+
+let $limit_test_id
+SELECT 'limit_test'::regclass::int
+
+statement error pgcode 2200H pq: reached maximum value of sequence "limit_test" \(10\)
+SELECT nextval($limit_test_id::regclass)
+
+query I
+SELECT currval('limit_test')
+----
+10
+
+statement ok
+CREATE SEQUENCE downward_limit_test INCREMENT BY -1 MINVALUE -10 START WITH -10
+
+query I
+SELECT nextval('downward_limit_test')
+----
+-10
+
+statement error pgcode 2200H pq: reached minimum value of sequence "downward_limit_test" \(-10\)
+SELECT nextval('downward_limit_test')
+
+# Verify that it still works with integer overflows and underflows.
+
+statement ok
+CREATE SEQUENCE overflow_test START WITH 9223372036854775807
+
+query I
+SELECT nextval('overflow_test')
+----
+9223372036854775807
+
+statement error pgcode 2200H pq: reached maximum value of sequence "overflow_test" \(9223372036854775807\)
+SELECT nextval('overflow_test')
+
+statement ok
+CREATE SEQUENCE underflow_test MINVALUE -9223372036854775808 START WITH -9223372036854775808 INCREMENT -1
+
+query I
+SELECT nextval('underflow_test')
+----
+-9223372036854775808
+
+statement error pgcode 2200H pq: reached minimum value of sequence "underflow_test" \(-9223372036854775808\)
+SELECT nextval('underflow_test')
+
+# USE WITH TABLES
+
+# You can use a sequence in a DEFAULT expression to create an auto-incrementing primary key.
+
+statement ok
+CREATE SEQUENCE blog_posts_id_seq
+
+statement ok
+CREATE TABLE blog_posts (id INT PRIMARY KEY DEFAULT nextval('blog_posts_id_seq'), title text)
+
+statement ok
+INSERT INTO blog_posts (title) values ('foo')
+
+statement ok
+INSERT INTO blog_posts (title) values ('bar')
+
+query I
+SELECT id FROM blog_posts ORDER BY id
+----
+1
+2
+
+# USE WITH (DEPRECATED) PARALLEL STATEMENTS
+
+# Both accesses to the sequence value in the KV layer and the sequenceState struct in
+# the Session are serialized, so after the last parallel statement you'll get the last value.
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO blog_posts (title) VALUES ('par_test_1') RETURNING NOTHING
+
+statement ok
+INSERT INTO blog_posts (title) VALUES ('par_test_2') RETURNING NOTHING
+
+statement ok
+INSERT INTO blog_posts (title) VALUES ('par_test_3') RETURNING NOTHING
+
+query I
+SELECT lastval()
+----
+5
+
+statement ok
+COMMIT
+
+# BEHAVIOR WITH TRANSACTIONS
+
+# Verify that sequence updates are not rolled back with their corresponding transactions, leaving a gap.
+
+statement ok
+CREATE SEQUENCE txn_test_seq;
+
+statement ok
+CREATE TABLE txn_test (id INT PRIMARY KEY DEFAULT nextval('txn_test_seq'), something text)
+
+statement ok
+INSERT INTO txn_test (something) VALUES ('foo')
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO txn_test (something) VALUES ('bar')
+
+statement ok
+ROLLBACK
+
+statement ok
+INSERT INTO txn_test (something) VALUES ('baz')
+
+query IT rowsort
+SELECT * FROM txn_test
+----
+1 foo
+3 baz
+
+# PREVENTION OF DROPPING A SEQUENCE WHICH IS BEING USED
+
+statement ok
+CREATE SEQUENCE drop_prevention_test
+
+statement ok
+CREATE TABLE drop_prevention_test_tbl (id INT PRIMARY KEY DEFAULT nextval('drop_prevention_test'))
+
+statement error pq: cannot drop sequence drop_prevention_test because other objects depend on it
+DROP SEQUENCE drop_prevention_test
+
+# Giving a nonexistent function doesn't mess up the nextval-detection algorithm.
+
+statement error pq: unknown function: nxtvl()
+CREATE TABLE seq_using_table (id INT PRIMARY KEY DEFAULT nxtvl('foo'))
+
+# Sequence deletion is allowed once the sequence-using column is removed.
+
+statement ok
+CREATE SEQUENCE drop_col_test_seq
+
+statement ok
+CREATE TABLE drop_col_test_tbl (id INT PRIMARY KEY, foo INT DEFAULT nextval('drop_col_test_seq'))
+
+statement ok
+ALTER TABLE drop_col_test_tbl DROP COLUMN foo
+
+statement ok
+DROP SEQUENCE drop_col_test_seq
+
+# Sequence deletion is prevented when a sequence-using column is added to a table.
+
+statement ok
+CREATE TABLE add_col_test_tbl (id INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE add_col_test_seq
+
+statement ok
+ALTER TABLE add_col_test_tbl ADD COLUMN foo INT DEFAULT nextval('add_col_test_seq')
+
+statement error pq: cannot drop sequence add_col_test_seq because other objects depend on it
+DROP SEQUENCE add_col_test_seq
+
+# Sequence deletion is prevented when a column is altered to depend on the sequence.
+
+statement ok
+CREATE TABLE set_default_test_tbl (id INT PRIMARY KEY, foo INT)
+
+statement ok
+CREATE SEQUENCE set_default_test_seq
+
+statement ok
+ALTER TABLE set_default_test_tbl ALTER COLUMN foo SET DEFAULT nextval('set_default_test_seq')
+
+statement error pq: cannot drop sequence set_default_test_seq because other objects depend on it
+DROP SEQUENCE set_default_test_seq
+
+# When a column's DEFAULT is altered from using seq A to using seq B,
+# A can now be dropped, and B can't.
+
+statement ok
+CREATE SEQUENCE initial_seq
+
+statement ok
+CREATE SEQUENCE changed_to_seq
+
+statement ok
+CREATE TABLE set_default_test (id INT PRIMARY KEY DEFAULT nextval('initial_seq'))
+
+statement error pq: cannot drop sequence initial_seq because other objects depend on it
+DROP SEQUENCE initial_seq
+
+statement ok
+ALTER TABLE set_default_test ALTER COLUMN id SET DEFAULT nextval('changed_to_seq')
+
+statement ok
+DROP SEQUENCE initial_seq
+
+statement error pq: cannot drop sequence changed_to_seq because other objects depend on it
+DROP SEQUENCE changed_to_seq
+
+# Sequence deletion is allowed after a column's usage of a sequence is dropped with DROP DEFAULT.
+
+statement ok
+CREATE SEQUENCE drop_default_test_seq
+
+statement ok
+CREATE TABLE drop_default_test_tbl (id INT PRIMARY KEY DEFAULT nextval('drop_default_test_seq'))
+
+statement ok
+ALTER TABLE drop_default_test_tbl ALTER COLUMN id DROP DEFAULT
+
+statement ok
+DROP SEQUENCE drop_default_test_seq
+
+# Verify that a new default can be added.
+
+statement ok
+CREATE SEQUENCE drop_default_test_seq_2
+
+statement ok
+ALTER TABLE drop_default_test_tbl ALTER COLUMN id SET DEFAULT nextval('drop_default_test_seq_2')
+
+# Test that dependencies are recorded correctly when a column uses multiple sequences.
+
+statement ok
+CREATE SEQUENCE multiple_seq_test1
+
+statement ok
+CREATE SEQUENCE multiple_seq_test2
+
+statement ok
+CREATE TABLE multiple_seq_test_tbl (
+  id INT PRIMARY KEY DEFAULT nextval('multiple_seq_test1') + nextval('multiple_seq_test2')
+)
+
+statement error pq: cannot drop sequence multiple_seq_test1 because other objects depend on it
+DROP SEQUENCE multiple_seq_test1
+
+statement error pq: cannot drop sequence multiple_seq_test2 because other objects depend on it
+DROP SEQUENCE multiple_seq_test2
+
+# This should remove both sequence dependencies.
+statement ok
+ALTER TABLE multiple_seq_test_tbl ALTER COLUMN id SET DEFAULT unique_rowid()
+
+statement ok
+DROP SEQUENCE multiple_seq_test1
+
+statement ok
+DROP SEQUENCE multiple_seq_test2
+
+# Test that dependencies are recorded when multiple columns in a table use sequences.
+
+statement ok
+CREATE SEQUENCE multiple_usage_test_1
+
+statement ok
+CREATE SEQUENCE multiple_usage_test_2
+
+statement ok
+CREATE TABLE multiple_usage_test_tbl (
+  id INT PRIMARY KEY DEFAULT nextval('multiple_usage_test_1'),
+  other_id INT DEFAULT nextval('multiple_usage_test_2')
+)
+
+# We're prevented from dropping the first sequence until the dep is removed.
+
+statement error pq: cannot drop sequence multiple_usage_test_1 because other objects depend on it
+DROP SEQUENCE multiple_usage_test_1
+
+statement ok
+ALTER TABLE multiple_usage_test_tbl ALTER COLUMN id DROP DEFAULT
+
+statement ok
+DROP SEQUENCE multiple_usage_test_1
+
+# We're prevented from dropping the second sequence until the dep is removed.
+
+statement error pq: cannot drop sequence multiple_usage_test_2 because other objects depend on it
+DROP SEQUENCE multiple_usage_test_2
+
+statement ok
+ALTER TABLE multiple_usage_test_tbl ALTER COLUMN other_id DROP DEFAULT
+
+statement ok
+DROP SEQUENCE multiple_usage_test_2
+
+# Verify that deps are removed when a sequence-using table is dropped.
+
+statement ok
+CREATE SEQUENCE drop_test
+
+statement ok
+CREATE TABLE drop_test_tbl (id INT PRIMARY KEY DEFAULT nextval('drop_test'))
+
+statement error pq: cannot drop sequence drop_test because other objects depend on it
+DROP SEQUENCE drop_test
+
+statement ok
+DROP TABLE drop_test_tbl
+
+statement ok
+DROP SEQUENCE drop_test
+
+# Test that sequences can only be:
+# - created with CREATE permission on the parent schema,
+# - modified with the UPDATE permission,
+# - read with the SELECT permission.
+
+statement ok
+CREATE SEQUENCE priv_test
+
+statement ok
+CREATE DATABASE another_db;
+
+statement ok
+CREATE SCHEMA another_db.seq_schema_allow;
+CREATE SCHEMA another_db.seq_schema_deny;
+
+statement ok
+GRANT CREATE ON SCHEMA another_db.seq_schema_allow TO testuser
+
+user testuser
+
+statement ok
+CREATE SEQUENCE another_db.seq_schema_allow.seq;
+
+statement error user testuser does not have CREATE privilege on schema seq_schema_deny
+CREATE SEQUENCE another_db.seq_schema_deny.seq;
+
+statement error pq: user testuser does not have SELECT privilege on relation priv_test
+SELECT * FROM priv_test
+
+statement error pq: user testuser does not have UPDATE or USAGE privilege on relation priv_test
+SELECT nextval('priv_test')
+
+statement error pq: user testuser does not have UPDATE privilege on relation priv_test
+SELECT setval('priv_test', 5)
+
+user root
+
+# Verify that the value hasn't been changed.
+query I
+SELECT last_value FROM priv_test
+----
+0
+
+statement ok
+GRANT UPDATE, SELECT ON priv_test TO testuser
+
+user testuser
+
+# After the grant, testuser can select, increment, and set.
+
+query I
+SELECT nextval('priv_test')
+----
+1
+
+statement ok
+SELECT setval('priv_test', 5, true)
+
+query I
+SELECT last_value FROM priv_test
+----
+5
+
+user root
+
+subtest virtual_sequences
+
+statement ok
+CREATE SEQUENCE sv VIRTUAL
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE sv]
+----
+CREATE SEQUENCE public.sv MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL;
+
+statement ok
+CREATE TABLE svals(x INT)
+
+statement ok
+BEGIN;
+  INSERT INTO svals VALUES(nextval('sv'));
+  INSERT INTO svals VALUES(lastval());
+  INSERT INTO svals VALUES(currval('sv'));
+END
+
+# Check that lastval returns the last auto-generated virtual value.
+query I
+SELECT count(DISTINCT x) FROM svals
+----
+1
+
+# Check that the KV trace is empty. The two "rows affected: 1" rows are from
+# the user-issued nextval and from the internal pg_catalog lookup that the
+# 'sv'::regclass cast runs to compute the search-path-aware regclass name.
+statement ok
+BEGIN;
+  SELECT nextval('sv'); -- acquire the lease, so that doesn't go to the KV trace
+  SET tracing = on; SELECT nextval('sv'); SET tracing = off;
+  COMMIT
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+----
+rows affected: 1
+rows affected: 1
+
+statement ok
+DROP SEQUENCE sv
+
+# Check that generators can be interrupted by statement timeouts.
+subtest generator_timeout
+
+statement ok
+SET statement_timeout = 10
+
+statement error pq: query execution canceled due to statement timeout
+select * from generate_series(1,10000000) where generate_series = 0;
+
+# Clean up
+statement ok
+SET statement_timeout = 0
+
+# Test that multiple columns associated with the same sequence follow correct
+# dependency behavior. Regression test for #40852
+
+statement ok
+SET sql_safe_updates = false
+
+statement ok
+CREATE SEQUENCE seq;
+
+statement ok
+CREATE TABLE abc(a INT DEFAULT nextval('seq'), b INT default nextval('seq'), c int)
+
+statement error pq: cannot drop sequence seq because other objects depend on it
+DROP SEQUENCE seq;
+
+statement ok
+ALTER TABLE abc DROP COLUMN b;
+
+statement error pq: cannot drop sequence seq because other objects depend on it
+DROP SEQUENCE seq;
+
+statement ok
+ALTER TABLE abc DROP COLUMN a;
+
+statement ok
+DROP SEQUENCE seq;
+
+# Sequence Ownership tests
+
+# Sequence can be owned be owned by a table column
+
+statement ok
+CREATE TABLE owner(owner_col INT)
+
+statement ok
+CREATE SEQUENCE owned_seq OWNED BY owner.owner_col
+
+query TTT
+SELECT seqclass.relname AS sequence_name,
+       depclass.relname AS table_name,
+       attrib.attname   as column_name
+FROM   pg_class AS seqclass
+       JOIN pg_depend AS dep
+         ON seqclass.oid = dep.objid
+       JOIN pg_class AS depclass
+         ON dep.refobjid = depclass.oid
+       JOIN pg_attribute AS attrib
+         ON attrib.attnum = dep.refobjsubid
+              AND attrib.attrelid = dep.refobjid
+WHERE seqclass.relkind = 'S';
+----
+owned_seq  owner  owner_col
+
+# Sequence owner can be removed
+
+statement ok
+ALTER SEQUENCE owned_seq OWNED BY NONE
+
+statement count 0
+SELECT seqclass.relname AS sequence_name,
+       depclass.relname AS table_name,
+       attrib.attname   as column_name
+FROM   pg_class AS seqclass
+       JOIN pg_depend AS dep
+         ON seqclass.oid = dep.objid
+       JOIN pg_class AS depclass
+         ON dep.refobjid = depclass.oid
+       JOIN pg_attribute AS attrib
+         ON attrib.attnum = dep.refobjsubid
+              AND attrib.attrelid = dep.refobjid
+WHERE seqclass.relkind = 'S';
+
+# cleanup
+statement ok
+DROP TABLE owner
+
+statement ok
+DROP SEQUENCE owned_seq
+
+
+# Sequence is dropped when its owner is dropped
+statement ok
+CREATE SEQUENCE owned_seq;
+
+statement ok
+CREATE TABLE a(a INT DEFAULT nextval('owned_seq'));
+
+statement ok
+ALTER SEQUENCE owned_seq OWNED BY a.a;
+
+statement ok
+DROP TABLE a;
+
+statement error relation "owned_seq" does not exist
+DROP SEQUENCE owned_seq;
+
+
+# DROP TABLE and ALTER TABLE ... DROP COLUMN work correctly with multiple sequence dependencies
+# and Ownership scenarios
+
+statement ok
+CREATE SEQUENCE owned_seq;
+
+statement ok
+CREATE TABLE ab(a INT DEFAULT nextval('owned_seq'), b INT DEFAULT nextval('owned_seq'));
+
+statement ok
+ALTER SEQUENCE owned_seq OWNED BY ab.a;
+
+statement error cannot drop column a of table ab because other objects depend on it
+ALTER TABLE ab DROP COLUMN a;
+
+statement ok
+DROP TABLE ab
+
+statement error relation "owned_seq" does not exist
+DROP SEQUENCE owned_seq;
+
+
+# Test changing owners works correctly by ensuring sequence is not dropped
+# when previous owners are dropped.
+statement ok
+CREATE TABLE a(a INT);
+
+statement ok
+CREATE TABLE b(b INT);
+
+statement ok
+CREATE SEQUENCE seq OWNED BY a.a;
+
+statement ok
+ALTER SEQUENCE seq OWNED BY a.a;
+
+statement ok
+ALTER SEQUENCE seq OWNED BY b.b;
+
+statement ok
+DROP TABLE a;
+
+statement ok
+ALTER SEQUENCE seq OWNED BY NONE;
+
+statement ok
+DROP TABLE b;
+
+statement ok
+DROP SEQUENCE seq;
+
+
+# Test a table/column can not be dropped if it owns a Sequence that is used
+# by another table.
+
+statement ok
+CREATE TABLE a(a INT);
+
+statement ok
+CREATE SEQUENCE seq OWNED BY a.a;
+
+statement ok
+CREATE TABLE b(b INT DEFAULT nextval('seq'));
+
+statement error cannot drop table a because other objects depend on it
+DROP TABLE a
+
+statement error cannot drop column a of table a because other objects depend on it
+ALTER TABLE a DROP COLUMN a;
+
+statement ok
+DROP TABLE b;
+
+statement ok
+DROP TABLE a;
+
+# A dependency on a sequence should be added if the sequence is used in a
+# currval call. (Regression #50033)
+
+statement ok
+CREATE SEQUENCE currval_dep_test;
+CREATE TABLE c(a INT DEFAULT(currval('currval_dep_test')))
+
+statement error pq: cannot drop sequence currval_dep_test because other objects depend on it
+DROP SEQUENCE currval_dep_test
+
+subtest regression_50649
+
+statement ok
+CREATE TABLE t_50649(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50649 OWNED BY t_50649.a
+
+statement ok
+DROP SEQUENCE seq_50649
+
+statement ok
+DROP TABLE t_50649
+
+subtest regression_50712
+
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE db_50712.t_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE db_50712.seq_50712 OWNED BY db_50712.t_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+# Same test like above, except the table is lexicographically less than the
+# sequence, which results in drop database dropping the table before the
+# sequence.
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE db_50712.a_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE db_50712.seq_50712 OWNED BY db_50712.a_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+# Same test like above, except the db is switched as the current db
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+SET DATABASE = db_50712
+
+statement ok
+CREATE TABLE a_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50712 OWNED BY a_50712.a
+
+statement ok
+DROP DATABASE db_50712
+
+statement ok
+SET DATABASE = test
+
+# Tests db drop.
+# Sequence: outside db.
+# Owner: inside db.
+# The sequence should be automatically dropped.
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE db_50712.t_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50712 OWNED BY db_50712.t_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+query I
+SELECT count(*) FROM system.namespace WHERE name LIKE 'seq_50712'
+----
+0
+
+# Tests db drop.
+# Sequence: inside db
+# Owner: outside db
+# It should be possible to drop the table later.
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE t_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE db_50712.seq_50712 OWNED BY t_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+statement ok
+DROP TABLE t_50712
+
+# previously, changing ownership of a sequence between columns of the same table
+# was causing the sequenceID to appear in multiple column's ownedSequences list.
+# This makes it impossible to drop the affected columns/table once the sequence
+# has been dropped. This tests for these scenarios and ensures the table/columns
+# remain drop-able.
+subtest regression_50711
+
+statement ok
+CREATE TABLE t_50711(a int, b int)
+
+statement ok
+CREATE SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.b
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+DROP SEQUENCE seq_50711
+
+statement ok
+DROP TABLE t_50711
+
+statement ok
+CREATE TABLE t_50711(a int, b int)
+
+statement ok
+CREATE SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.b
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+DROP SEQUENCE seq_50711
+
+statement ok
+ALTER TABLE t_50711 DROP COLUMN a
+
+statement ok
+ALTER TABLE t_50711 DROP COLUMN b
+
+# Verify that we don't allow OWNED BY to refer to other databases (depending on
+# the cluster setting).
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = FALSE
+
+statement ok
+CREATE DATABASE db1
+
+statement ok
+CREATE DATABASE db2
+
+statement ok
+CREATE TABLE db1.t (a INT)
+
+statement ok
+CREATE SEQUENCE db1.seq OWNED BY db1.t.a
+
+statement error OWNED BY cannot refer to other databases
+CREATE SEQUENCE db2.seq OWNED BY db1.t.a
+
+statement ok
+CREATE TABLE db2.t (a INT)
+
+statement ok
+CREATE SEQUENCE db2.seq OWNED BY db2.t.a
+
+statement error OWNED BY cannot refer to other databases
+ALTER SEQUENCE db2.seq OWNED BY db1.t.a
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = TRUE
+
+statement ok
+ALTER SEQUENCE db2.seq OWNED BY db1.t.a
+
+statement ok
+CREATE SEQUENCE db2.seq2 OWNED BY db1.t.a
+
+statement error invalid OWNED BY option
+ALTER SEQUENCE db2.seq2 OWNED BY doesntexist
+
+# Test that passing a descriptor other than a sequence
+# returns an appropriate error.
+subtest invalid_ids
+
+statement ok
+CREATE TABLE t (i SERIAL PRIMARY KEY)
+
+let $t_id
+SELECT 't'::regclass::int
+
+statement error pgcode 42809 "test.public.t" is not a sequence
+SELECT nextval($t_id::regclass)
+
+statement error pgcode 42809 "test.public.t" is not a sequence
+SELECT setval($t_id::regclass, 30, false)
+
+statement error pgcode 42809 "test.public.t" is not a sequence
+SELECT currval($t_id::regclass)
+
+statement ok
+CREATE VIEW v AS (SELECT i FROM t)
+
+let $v_id
+SELECT 'v'::regclass::int
+
+statement error pgcode 42809 "test.public.v" is not a sequence
+SELECT nextval($v_id::regclass)
+
+statement error pgcode 42809 "test.public.v" is not a sequence
+SELECT setval($v_id::regclass, 30, false)
+
+statement error pgcode 42809 "test.public.v" is not a sequence
+SELECT currval($v_id::regclass)
+
+statement ok
+CREATE SCHEMA sc
+
+let $sc_id
+SELECT id FROM system.namespace WHERE name='sc'
+
+statement error does not exist
+SELECT nextval($sc_id::regclass)
+
+statement error does not exist
+SELECT setval($sc_id::regclass, 30, false)
+
+statement error does not exist
+SELECT currval($sc_id::regclass)
+
+statement ok
+CREATE DATABASE db
+
+let $db_id
+SELECT id FROM system.namespace WHERE name='db'
+
+statement error does not exist
+SELECT nextval($db_id::regclass)
+
+statement error does not exist
+SELECT setval($db_id::regclass, 30, false)
+
+statement error does not exist
+SELECT currval($db_id::regclass)
+
+statement ok
+CREATE TYPE e AS ENUM ('foo', 'bar')
+
+let $e_id
+SELECT id FROM system.namespace WHERE name='e'
+
+statement error does not exist
+SELECT nextval($e_id::regclass)
+
+statement error does not exist
+SELECT setval($e_id::regclass, 30, false)
+
+statement error does not exist
+SELECT currval($e_id::regclass)
+
+statement error does not exist
+SELECT nextval(12345::regclass) # Bogus ID
+
+statement error does not exist
+SELECT setval(12345::regclass, 30, false) # Bogus ID
+
+statement error does not exist
+SELECT currval(12345::regclass) # Bogus ID
+
+subtest cached_sequences
+
+statement error pgcode 22023 CACHE \(-1\) must be greater than zero
+CREATE SEQUENCE cache_test CACHE -1
+
+statement error pgcode 22023 CACHE \(0\) must be greater than zero
+CREATE SEQUENCE cache_test CACHE 0
+
+statement ok
+CREATE SEQUENCE cache_test CACHE 10 INCREMENT 1
+
+query TT
+SHOW CREATE SEQUENCE cache_test
+----
+cache_test  CREATE SEQUENCE public.cache_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 PER NODE CACHE 10;
+
+# Verify cache invalidation with schema changes.
+
+# 10 values (1,2,...,10) are cached, and the underlying sequence is incremented to 10.
+query I
+SELECT nextval('cache_test')
+----
+1
+
+# sanity checks
+query I
+SELECT lastval()
+----
+1
+
+query I
+SELECT currval('cache_test')
+----
+1
+
+query I
+SELECT last_value FROM cache_test
+----
+10
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+statement ok
+ALTER SEQUENCE cache_test INCREMENT 5
+
+# The cache is invalidated due to the above schema change, and 10 new values (15,20,...,60) are cached.
+query I
+SELECT nextval('cache_test')
+----
+15
+
+# Rollback the schema change to use the old INCREMENT amount.
+statement ok
+ABORT
+
+# The underlying sequence was still incremented despite the txn being aborted.
+query I
+SELECT last_value FROM cache_test
+----
+60
+
+# 10 new values (61,62,...,70) are cached.
+query I
+SELECT nextval('cache_test')
+----
+61
+
+query I
+SELECT last_value FROM cache_test
+----
+70
+
+statement ok
+DROP SEQUENCE cache_test
+
+subtest cached_sequences_with_bounds_increasing
+
+statement ok
+CREATE SEQUENCE cached_upper_bound_test MAXVALUE 4 START WITH 2 CACHE 5 INCREMENT BY 2;
+
+# Without this MAXVALUE CONSTRAINT, the values 2,4,6,8,10 would be cached
+# and the underlying sequence would be set to 10. Given the constraint, only
+# 2 and 4 are cached, but the underlying sequence is still set to 10.
+
+query I
+SELECT nextval('cached_upper_bound_test');
+----
+2
+
+query I
+SELECT nextval('cached_upper_bound_test');
+----
+4
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+10
+
+# nextval() should return errors while still incrementing the underlying sequence
+# by 10 each time (cache size of 5 * increment of 2). Despite the underlying sequence changing,
+# currval() and lastval() should not change.
+
+statement error pgcode 2200H pq: reached maximum value of sequence "cached_upper_bound_test" \(4\)
+SELECT nextval('cached_upper_bound_test');
+
+statement error pgcode 2200H pq: reached maximum value of sequence "cached_upper_bound_test" \(4\)
+SELECT nextval('cached_upper_bound_test');
+
+query I
+SELECT lastval();
+----
+4
+
+query I
+SELECT currval('cached_upper_bound_test');
+----
+4
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+30
+
+# Performing a schema change on the sequence to increase the bounds should reset the underlying
+# sequence to its original MAXVALUE.
+
+statement ok
+ALTER SEQUENCE cached_upper_bound_test MAXVALUE 100;
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+4
+
+# Calling nextval() should cache the values 6,8,10,12,14 while incrementing
+# the underlying sequence to 14.
+
+query I
+SELECT nextval('cached_upper_bound_test');
+----
+6
+
+query I
+SELECT last_value FROM cached_upper_bound_test;
+----
+14
+
+query I
+SELECT lastval();
+----
+6
+
+query I
+SELECT currval('cached_upper_bound_test');
+----
+6
+
+statement ok
+drop sequence cached_upper_bound_test;
+
+# This test is the same as cached_sequences_with_bounds_increasing, except it uses negative values.
+subtest cached_sequences_with_bounds_decreasing
+
+statement ok
+CREATE SEQUENCE cached_lower_bound_test MINVALUE -4 START WITH -2 CACHE 5 INCREMENT BY -2;
+
+query I
+SELECT nextval('cached_lower_bound_test');
+----
+-2
+
+
+query I
+SELECT nextval('cached_lower_bound_test');
+----
+-4
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-10
+
+statement error pgcode 2200H pq: reached minimum value of sequence "cached_lower_bound_test" \(-4\)
+SELECT nextval('cached_lower_bound_test');
+
+statement error pgcode 2200H pq: reached minimum value of sequence "cached_lower_bound_test" \(-4\)
+SELECT nextval('cached_lower_bound_test');
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-30
+
+statement ok
+ALTER SEQUENCE cached_lower_bound_test MINVALUE -100;
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-4
+
+query I
+SELECT nextval('cached_lower_bound_test');
+----
+-6
+
+query I
+SELECT last_value FROM cached_lower_bound_test;
+----
+-14
+
+statement ok
+DROP SEQUENCE cached_lower_bound_test;
+
+# This test is the same as cached_sequences_with_bounds_decreasing, except it uses both positive and negative values.
+subtest cached_sequences_with_bounds_middle
+
+statement ok
+CREATE SEQUENCE cached_lower_bound_test_2 MINVALUE -2 MAXVALUE 2 START WITH 2 CACHE 5 INCREMENT BY -2;
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+2
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+0
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+-2
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-6
+
+statement error pgcode 2200H pq: reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
+SELECT nextval('cached_lower_bound_test_2');
+
+statement error pgcode 2200H pq: reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
+SELECT nextval('cached_lower_bound_test_2');
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-26
+
+statement ok
+ALTER SEQUENCE cached_lower_bound_test_2 MINVALUE -100;
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-2
+
+query I
+SELECT nextval('cached_lower_bound_test_2');
+----
+-4
+
+query I
+SELECT last_value FROM cached_lower_bound_test_2;
+----
+-12
+
+statement ok
+DROP SEQUENCE cached_lower_bound_test_2;
+
+# Validate that cross DB sequences are detected by internal tables
+subtest cross_db_sequences
+
+statement ok
+CREATE DATABASE db3;
+
+statement ok
+CREATE SEQUENCE db3.s;
+
+statement ok
+CREATE TABLE tDb3Ref (i INT PRIMARY KEY DEFAULT (nextval('db3.s')));
+
+query TTTTTTT
+SELECT * FROM "".crdb_internal.cross_db_references ORDER BY 3
+----
+db2  public  seq   db1  public  t  sequences owning table
+db2  public  seq2  db1  public  t  sequences owning table
+test  public  tdb3ref  db3  public  s  table column refers to sequence
+
+# Testing parsing empty string for currval issue #34527.
+statement error pq: invalid table name:
+SELECT currval('')
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = FALSE
+
+# Validate that cross DB sequences are detected by internal tables
+statement ok
+CREATE DATABASE db4;
+
+statement ok
+CREATE SEQUENCE db4.s;
+
+statement error pq: sequence references cannot come from other databases; \(see the 'sql\.cross_db_sequence_references\.enabled' cluster setting\)
+CREATE TABLE tDb4Ref (i INT PRIMARY KEY DEFAULT (nextval('db4.s')));
+
+subtest cached_sequences_invalidate
+
+# Test for #71135 -- make sure that setval invalidates the session cached sequence
+# values.
+
+statement ok
+CREATE SEQUENCE seq71135 PER SESSION CACHE 100
+
+query I
+SELECT nextval('seq71135')
+----
+1
+
+query I
+SELECT setval('seq71135', 200, true)
+----
+200
+
+query I
+SELECT lastval()
+----
+200
+
+query I
+SELECT currval('seq71135')
+----
+200
+
+query I
+SELECT nextval('seq71135')
+----
+201
+
+# The 2-parameter version of setval uses is_called=true.
+query I
+SELECT setval('seq71135'::regclass::oid, 500)
+----
+500
+
+query I
+SELECT lastval()
+----
+500
+
+query I
+SELECT currval('seq71135')
+----
+500
+
+query I
+SELECT nextval('seq71135')
+----
+501
+
+subtest sequence_in_txn
+
+# Make sure that setval and next work even if the transaction is rolled back;
+# they do not respect transaction boundaries.
+
+statement ok
+CREATE SEQUENCE seq_txn
+
+# Validate that cross DB sequences are detected by internal tables
+subtest cross_db_sequences
+
+statement ok
+BEGIN
+
+query I
+SELECT setval('seq_txn', 600, true)
+----
+600
+
+statement ok
+ROLLBACK
+
+query I
+SELECT nextval('seq_txn')
+----
+601
+
+statement ok
+BEGIN
+
+query I
+SELECT setval('seq_txn', 610, true)
+----
+610
+
+query I
+SELECT nextval('seq_txn')
+----
+611
+
+statement ok
+ROLLBACK
+
+query I
+SELECT nextval('seq_txn')
+----
+612
+
+# Sequence used for regression test for issue #63147
+statement ok
+CREATE SEQUENCE s63147
+
+statement ok
+CREATE TABLE t63147 (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t63147 (a) VALUES (1), (2)
+
+statement error pgcode 0A000 cannot evaluate scalar expressions containing sequence operations in this context
+ALTER TABLE t63147 ADD b INT DEFAULT nextval('s63147')
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
+
+statement ok
+DROP TABLE t63147
+
+statement ok
+CREATE TABLE t63147 (a INT PRIMARY KEY, b INT DEFAULT (nextval('s63147')))
+
+statement ok
+CREATE VIEW v63147 AS SELECT nextval('s63147') FROM t63147
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
+
+statement ok
+ALTER TABLE t63147 DROP COLUMN b CASCADE
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
+
+# Verify CREATE SEQUENCE ... AS works as expected.
+statement ok
+CREATE SEQUENCE seqas_0 AS smallint
+
+statement ok
+CREATE SEQUENCE seqas_1 AS int4
+
+statement ok
+CREATE SEQUENCE seqas_2 AS bigint
+
+statement ok
+CREATE SEQUENCE public.seqas_3 AS int2 START WITH -4 INCREMENT BY -3
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_3
+----
+table_name  create_statement
+seqas_3     CREATE SEQUENCE public.seqas_3 AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -3 START -4;
+
+statement ok
+CREATE SEQUENCE seqas_4 AS integer
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_4
+----
+table_name  create_statement
+seqas_4     CREATE SEQUENCE public.seqas_4 AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+
+statement ok
+CREATE SEQUENCE seqas_5 AS int8
+
+statement error pgcode 22023 pq: MAXVALUE \(2000000\) must be less than \(32767\) for type INT2
+CREATE SEQUENCE public.seqas_6 AS smallint MAXVALUE 2000000
+
+statement error pgcode 22023 pq: MINVALUE \(-2000000\) must be greater than \(-32768\) for type INT2
+CREATE SEQUENCE public.seqas_7 AS smallint MINVALUE -2000000
+
+statement error pgcode 22023 pq: MINVALUE \(-9999999999999999\) must be greater than \(-2147483648\) for type INT4
+CREATE SEQUENCE seqas_8 as int4 INCREMENT BY -1 MINVALUE -9999999999999999;
+
+statement ok
+SET default_int_size=4
+
+statement ok
+CREATE SEQUENCE seqas_9 AS integer
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_9
+----
+table_name  create_statement
+seqas_9     CREATE SEQUENCE public.seqas_9 AS INT4 MINVALUE 1 MAXVALUE 2147483647 INCREMENT 1 START 1;
+
+statement ok
+ALTER SEQUENCE seqas_9 AS smallint
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_9
+----
+table_name  create_statement
+seqas_9     CREATE SEQUENCE public.seqas_9 AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1;
+
+statement ok
+CREATE SEQUENCE seqas_10
+AS integer
+START WITH 1
+INCREMENT BY 1
+MAXVALUE 9001
+CACHE 1
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_10
+----
+table_name  create_statement
+seqas_10    CREATE SEQUENCE public.seqas_10 AS INT4 MINVALUE 1 MAXVALUE 9001 INCREMENT 1 START 1;
+
+statement ok
+CREATE SEQUENCE seqas_11 AS integer
+				START WITH 2
+				INCREMENT BY 1
+				MINVALUE 0
+				MAXVALUE 234567
+				CACHE 1
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seqas_11]
+----
+CREATE SEQUENCE public.seqas_11 AS INT4 MINVALUE 0 MAXVALUE 234567 INCREMENT 1 START 2;
+
+statement ok
+CREATE SEQUENCE seqas_12 AS smallint
+  START WITH -4
+  INCREMENT BY -3
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seqas_12]
+----
+CREATE SEQUENCE public.seqas_12 AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -3 START -4;
+
+statement ok
+CREATE SEQUENCE seqas_13
+  AS integer
+  START WITH 1
+  INCREMENT BY 1
+  MAXVALUE 9001
+  CACHE 1
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seqas_13]
+----
+CREATE SEQUENCE public.seqas_13 AS INT4 MINVALUE 1 MAXVALUE 9001 INCREMENT 1 START 1;
+
+statement error START value \(45678\) cannot be greater than MAXVALUE \(32767\)
+CREATE SEQUENCE seq_error AS smallint
+  START WITH 45678
+  INCREMENT BY 1
+
+statement error syntax error: invalid integer type: STRING
+CREATE SEQUENCE seqas_error
+  AS string
+  START WITH 1
+  INCREMENT BY 1
+  CACHE 1
+
+statement error MINVALUE \(-1000000\) must be greater than \(-32768\) for type INT2
+CREATE SEQUENCE seqas_error
+  AS smallint
+  START WITH 1
+  INCREMENT BY 1
+  MINVALUE -1000000
+  CACHE 1
+
+statement error pq: MAXVALUE \(123456\) must be less than \(32767\) for type INT2
+CREATE SEQUENCE seqas_error
+  AS smallint
+  START WITH 1
+  INCREMENT BY 1
+  MAXVALUE 123456
+  CACHE 1
+
+subtest sequence_in_transaction
+
+# We're using explicit transactions, so we might hit retries.
+
+skip_on_retry
+
+# create a sequence and nextval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE nextval_txn_seq
+
+query I
+SELECT nextval('nextval_txn_seq')
+----
+1
+
+statement ok
+END
+
+query I
+SELECT nextval('nextval_txn_seq')
+----
+2
+
+# create a sequence and setval in the same transaction then nextval
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_nextval_seq
+
+query I
+SELECT setval('setval_txn_nextval_seq', 2)
+----
+2
+
+statement ok
+END
+
+query I
+SELECT nextval('setval_txn_nextval_seq')
+----
+3
+
+# create a sequence and setval then nextval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_nextval_txn_seq
+
+query I
+SELECT setval('setval_nextval_txn_seq', 2)
+----
+2
+
+query I
+SELECT nextval('setval_nextval_txn_seq')
+----
+3
+
+statement ok
+END
+
+# create a sequence and setval in the same transaction then currval
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_currval_seq
+
+query I
+SELECT setval('setval_txn_currval_seq', 1)
+----
+1
+
+statement ok
+END
+
+query I
+SELECT currval('setval_txn_currval_seq')
+----
+1
+
+# create a sequence and setval then currval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_currval_txn_seq
+
+query I
+SELECT setval('setval_currval_txn_seq', 1)
+----
+1
+
+query I
+SELECT currval('setval_currval_txn_seq')
+----
+1
+
+statement ok
+END
+
+# create a sequence and setval in the same transaction then lastval
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_lastval_seq
+
+query I
+SELECT setval('setval_txn_lastval_seq', 101)
+----
+101
+
+statement ok
+END
+
+query I
+SELECT lastval()
+----
+101
+
+# create a sequence and setval then lastval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_lastval_txn_seq
+
+query I
+SELECT setval('setval_lastval_txn_seq', 202)
+----
+202
+
+query I
+SELECT lastval()
+----
+202
+
+statement ok
+END
+
+# Create sequence restart should work, and the RESTART value takes precedence
+# over START WITH
+statement ok
+CREATE SEQUENCE restart_seq START WITH 50 RESTART 100
+
+query I
+SELECT nextval('restart_seq')
+----
+100
+
+query I
+SELECT nextval('restart_seq')
+----
+101
+
+# If the sequence is restarted now, then it goes back to the START WITH value.
+statement ok
+ALTER SEQUENCE restart_seq RESTART
+
+query I
+SELECT nextval('restart_seq')
+----
+50
+
+# Create a sequence with restart and check that the value can be selected
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE restart_txn_seq RESTART 100
+
+query I
+SELECT nextval('restart_txn_seq')
+----
+100
+
+statement ok
+END
+
+# Regression test for #74127. Assert that out-of-range sequence values are not returned.
+
+# The value value(12) is out-of-bounds
+statement ok
+CREATE SEQUENCE customer_seq_check_cache_and_bounds_1 INCREMENT  BY 3  MINVALUE 6 MAXVALUE 10
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_1')
+----
+6
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_1')
+----
+9
+
+statement error pgcode 2200H pq: reached maximum value of sequence "customer_seq_check_cache_and_bounds_1" \(10\)
+SELECT nextval('customer_seq_check_cache_and_bounds_1')
+
+# Set the cache to 5
+statement ok
+CREATE SEQUENCE customer_seq_check_cache_and_bounds_2 MINVALUE -2 MAXVALUE 2 START WITH 1 CACHE 5 INCREMENT BY -2
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_2')
+----
+1
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_2')
+----
+-1
+
+statement error pgcode 2200H pq: reached minimum value of sequence "customer_seq_check_cache_and_bounds_2" \(-2\)
+SELECT nextval('customer_seq_check_cache_and_bounds_2')
+
+# The value value(12) is equal with MAXVALUE(12)
+statement ok
+CREATE SEQUENCE customer_seq_check_cache_and_bounds_3 INCREMENT  BY 3  MINVALUE 6 MAXVALUE 12
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_3')
+----
+6
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_3')
+----
+9
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_3')
+----
+12
+
+statement error pgcode 2200H pq: reached maximum value of sequence "customer_seq_check_cache_and_bounds_3" \(12\)
+SELECT nextval('customer_seq_check_cache_and_bounds_3')
+
+subtest pg_sequence_last_value
+
+statement ok
+CREATE SEQUENCE seq_test_last_value START WITH 2 INCREMENT BY 3
+
+query I
+SELECT pg_sequence_last_value('seq_test_last_value'::regclass)
+----
+NULL
+
+query I
+SELECT nextval('seq_test_last_value')
+----
+2
+
+query I
+SELECT pg_sequence_last_value('seq_test_last_value'::regclass)
+----
+2
+
+query I
+SELECT nextval('seq_test_last_value')
+----
+5
+
+query I
+SELECT pg_sequence_last_value('seq_test_last_value'::regclass)
+----
+5
+
+statement ok
+CREATE SEQUENCE seq_test_last_value_cached START WITH 1 INCREMENT BY 2 CACHE 5
+
+query I
+SELECT pg_sequence_last_value('seq_test_last_value_cached'::regclass)
+----
+NULL
+
+query I
+SELECT nextval('seq_test_last_value_cached')
+----
+1
+
+# Matches PostgreSQL behavior for cached sequences.
+query I
+SELECT pg_sequence_last_value('seq_test_last_value_cached'::regclass)
+----
+9
+
+query I
+SELECT nextval('seq_test_last_value_cached')
+----
+3
+
+# Matches PostgreSQL behavior for cached sequences.
+query I
+SELECT pg_sequence_last_value('seq_test_last_value_cached'::regclass)
+----
+9
+
+statement error relation \"\[123456\]\" does not exist
+SELECT pg_sequence_last_value(123456)
+
+statement error pgcode 42809 \"test.public.multiple_seq_test_tbl\" is not a sequence
+SELECT pg_sequence_last_value('multiple_seq_test_tbl'::regclass)
+
+subtest end
+
+# For #106302 we had cases where internal errors could be returned in the prefix
+# did not resolve properly
+subtest create_prefix
+
+statement error pgcode 3F000 cannot create \"timestamptz.primary.is\" because the target database or schema does not exist
+CREATE SEQUENCE TIMESTAMPTZ . PRIMARY . IS;
+
+statement error pgcode 3F000 cannot create \"timestamptz.is\" because the target database or schema does not exist
+CREATE SEQUENCE TIMESTAMPTZ . IS;
+
+# The following subtest ensures OWNED BY option returns a reasonable user error
+# when the table name is missing.
+subtest regression_106838
+
+statement error pgcode 42601 pq: invalid OWNED BY option
+CREATE SEQUENCE s_106838 OWNED BY col;
+
+subtest sequence_type_name_conflict
+
+statement ok
+SET serial_normalization = 'sql_sequence';
+SET default_int_size=8;
+
+statement ok
+CREATE TYPE t72820_i_seq AS enum ('a')
+
+statement ok
+CREATE TABLE t72820 (i SERIAL PRIMARY KEY)
+
+onlyif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t72820]
+----
+CREATE TABLE public.t72820 (
+  i INT8 NOT NULL DEFAULT nextval('public.t72820_i_seq1'::REGCLASS),
+  CONSTRAINT t72820_pkey PRIMARY KEY (i ASC)
+);
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t72820]
+----
+CREATE TABLE public.t72820 (
+  i INT8 NOT NULL DEFAULT nextval('public.t72820_i_seq1'::REGCLASS),
+  CONSTRAINT t72820_pkey PRIMARY KEY (i ASC)
+) WITH (schema_locked = true);
+
+# Also make sure that creating a sequence directly handles the name conflict.
+skipif config local-legacy-schema-changer
+statement error relation "test.public.t72820_i_seq" already exists
+CREATE SEQUENCE t72820_i_seq
+
+onlyif config local-legacy-schema-changer
+statement error type "test.public.t72820_i_seq" already exists
+CREATE SEQUENCE t72820_i_seq
+
+statement ok
+RESET serial_normalization;
+RESET default_int_size;
+
+subtest end
+
+# The following subtest ensures sequences do not have any unexpected columns
+# on creation. Previously, we were incorrectly creating a rowid column.
+subtest regression_119108
+
+statement ok
+CREATE SEQUENCE sq_119108;
+
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor)->'table'->'columns' FROM system.descriptor WHERE id = 'sq_119108'::REGCLASS::OID;
+----
+[{"id": 1, "name": "value", "type": {"family": "IntFamily", "oid": 20, "width": 64}}]
+
+subtest end
+
+subtest geo_types
+
+onlyif config local-legacy-schema-changer
+statement error type "geography" already exists
+CREATE SEQUENCE geography
+
+onlyif config local-legacy-schema-changer
+statement error type "geometry" already exists
+CREATE SEQUENCE geometry
+
+onlyif config local-legacy-schema-changer
+statement error type "box2d" already exists
+CREATE SEQUENCE box2d
+
+skipif config local-legacy-schema-changer
+statement error geography is a built-in type and cannot be modified
+CREATE SEQUENCE geography
+
+skipif config local-legacy-schema-changer
+statement error geometry is a built-in type and cannot be modified
+CREATE SEQUENCE geometry
+
+skipif config local-legacy-schema-changer
+statement error box2d is a built-in type and cannot be modified
+CREATE SEQUENCE box2d
+
+subtest end
+
+subtest temp_sequence
+
+statement error temporary tables are only supported experimentally
+CREATE TEMP SEQUENCE temp_seq
+
+statement ok
+SET experimental_enable_temp_tables = true
+
+statement ok
+CREATE TEMP SEQUENCE temp_seq
+
+query TT
+SELECT substring(sequence_schema FOR 7), sequence_name FROM [SHOW SEQUENCES] WHERE sequence_name = 'temp_seq'
+----
+pg_temp  temp_seq
+
+subtest end
+
+
+subtest incorrect_cleanup_of_owned_by
+
+statement ok
+CREATE TABLE t_seq_owner (id BIGSERIAL NOT NULL);
+
+statement ok
+CREATE SEQUENCE id_seq_owned OWNED BY t_seq_owner.id;
+
+statement ok
+ALTER TABLE t_seq_owner ALTER COLUMN id SET DEFAULT nextval('id_seq_owned');
+
+# Confirm the sequence still exists.
+query I
+SELECT count(*) FROM pg_sequences WHERE sequencename='id_seq_owned';
+----
+1
+
+
+statement ok
+drop table t_seq_owner;
+
+# Confirm the sequence is dropped.
+query I
+SELECT count(*) FROM pg_sequences WHERE sequencename='id_seq_owned';
+----
+0
+
+# Confirm the table is dropped.
+query I
+SELECT count(*) FROM pg_tables WHERE tablename='t_seq_owner';
+----
+0
+
+subtest end

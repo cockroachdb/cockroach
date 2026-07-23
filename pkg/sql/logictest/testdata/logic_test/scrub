@@ -1,0 +1,2 @@
+statement notice NOTICE: EXPERIMENTAL SCRUB is deprecated. Use INSPECT instead for data consistency validation.
+EXPERIMENTAL SCRUB TABLE t;

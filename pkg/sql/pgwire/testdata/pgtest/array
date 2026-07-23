@@ -1,0 +1,60 @@
+# Send a bad OID (the "1, 1, 1, 1" are the 4 OID bytes).
+send
+Parse {"Query": "SELECT $1::INTERVAL[]"}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary": "0000000100000000010101010000000100000000"}]}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::TEXT[], $2::INT8[], $3::NAME[]"}
+Bind {"Parameters": [{"text": "{key1, subkey1}"}, {"text": "{11,  22}"}, {"text": "{UnQuoted,  \"Quoted\"}"}]}
+Describe {"ObjectType": "P"}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"text","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1009,"DataTypeSize":-1,"TypeModifier":-1,"Format":0},{"Name":"int8","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1016,"DataTypeSize":-1,"TypeModifier":-1,"Format":0},{"Name":"name","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1003,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{key1,subkey1}"},{"text":"{11,22}"},{"text":"{UnQuoted,Quoted}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression test for panicking due to not having binary serialization of
+# multidimensional arrays (#118206).
+# "ResultFormatCodes": [1] = binary
+send
+Parse {"Name": "s", "Query": "SELECT ARRAY[ARRAY[1], ARRAY[2]]"}
+Bind {"PreparedStatement": "s", "ResultFormatCodes": [1]}
+Execute
+Sync
+----
+
+until crdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"0A000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"0000000200000000000000170000000200000001000000010000000100000004000000010000000400000002"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

@@ -1,0 +1,23 @@
+/* setup */
+
+/* test */
+EXPLAIN (DDL) ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 7;
+----
+Schema change plan for ALTER RANGE ‹meta› CONFIGURE ZONE USING ‹num_replicas› = ‹7›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC NamedRangeZoneConfig:{DescID: 16 (#16), SeqNum: 1}
+ │         └── 1 Mutation operation
+ │              └── AddNamedRangeZoneConfig {"RangeName":"meta"}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── PUBLIC → ABSENT NamedRangeZoneConfig:{DescID: 16 (#16), SeqNum: 1}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── ABSENT → PUBLIC NamedRangeZoneConfig:{DescID: 16 (#16), SeqNum: 1}
+           └── 1 Mutation operation
+                └── AddNamedRangeZoneConfig {"RangeName":"meta"}

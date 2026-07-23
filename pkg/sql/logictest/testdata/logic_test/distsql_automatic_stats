@@ -1,0 +1,188 @@
+# LogicTest: !metamorphic-batch-sizes
+
+# Speed up job adoption.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '10ms'
+
+# Enable automatic stats for this table.
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c), INDEX d_idx (d)) WITH (sql_stats_automatic_collection_enabled = true)
+
+# Generate all combinations of values 1 to 10.
+statement ok
+INSERT INTO data SELECT a, b, c::FLOAT, NULL FROM
+   generate_series(1, 10) AS a(a),
+   generate_series(1, 10) AS b(b),
+   generate_series(1, 10) AS c(c)
+
+# The query uses DISTINCT ON and ORDER BY to only show the latest statistic
+# available for each set of column names. This is important in order to
+# tolerate the rare case of multiple auto stats jobs running between two retry
+# iterations.
+query TTIII colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a}           1000       10              0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {b}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {d}           1000       1               1000
+
+# Disable automatic stats
+statement ok
+ALTER TABLE data SET (sql_stats_automatic_collection_enabled = false)
+
+# Update more than 20% of the table.
+statement ok
+UPDATE data SET d = 10 WHERE (a = 1 OR a = 2 OR a = 3) AND b > 1
+
+# There should be no change to stats.
+query TTIII colnames
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a}           1000       10              0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {b}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {d}           1000       1               1000
+
+# Enable automatic stats
+statement ok
+ALTER TABLE data SET (sql_stats_automatic_collection_enabled = true)
+
+# Update more than 20% of the table.
+statement ok
+UPDATE data SET d = 12 WHERE d = 10
+
+# Note: this statement is flaky on 3node-tenant (which is why that config is
+# disabled). Normally, the entire UPDATE in the previous statement is performed
+# as a single batch, since the total number of rows updated is 270, which is
+# less than the kv batch size of 100k rows (the kv batch size doesn't change in
+# this test since the metamorphic config is disabled). The target row count to
+# trigger a stats refresh is 205, since 20% of 1000 rows is 200, and
+# sql.stats.automatic_collection.min_stale_rows is set to 5 for logictests.
+# Since 270 > 205, we should always trigger a refresh.
+#
+# For some reason, 3node-tenant occasionally splits the UPDATE into 4 pieces,
+# with each one affecting at most 88 rows. Since 88 < 205, the refresh is not
+# guaranteed, making this test flaky.
+skipif config 3node-tenant-default-configs
+query TTIII colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a}           1000       10              0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {b}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {d}           1000       2               730
+
+# Upsert more than 20% of the table.
+statement ok
+UPSERT INTO data SELECT a, b, c::FLOAT, 1 FROM
+generate_series(1, 11) AS a(a),
+generate_series(1, 10) AS b(b),
+generate_series(1, 5) AS c(c)
+
+query TTIII colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a}           1050       11              0
+__auto__         {a,b}         1050       110             0
+__auto__         {a,b,c}       1050       1050            0
+__auto__         {b}           1050       10              0
+__auto__         {c}           1050       10              0
+__auto__         {d}           1050       3               365
+
+# Delete more than 20% of the table.
+statement count 500
+DELETE FROM data WHERE c > 5
+
+query TTIII colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a}           550        11              0
+__auto__         {a,b}         550        110             0
+__auto__         {a,b,c}       550        550             0
+__auto__         {b}           550        10              0
+__auto__         {c}           550        5               0
+__auto__         {d}           550        1               0
+
+# Test CREATE TABLE ... AS
+statement ok
+CREATE TABLE copy WITH (sql_stats_automatic_collection_enabled = true) AS SELECT * FROM data
+
+# Distinct count for rowid can be flaky, so don't show it. The estimate is
+# almost always 550, but occasionally it is 549...
+query TTII colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, null_count
+FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names ASC, created DESC
+----
+statistics_name  column_names  row_count  null_count
+__auto__         {a}           550        0
+__auto__         {b}           550        0
+__auto__         {c}           550        0
+__auto__         {d}           550        0
+__auto__         {rowid}       550        0
+
+statement ok
+CREATE TABLE test_create (x INT PRIMARY KEY, y CHAR) WITH (sql_stats_automatic_collection_enabled = true)
+
+query TTIII colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE test_create] ORDER BY column_names ASC, created DESC
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {x}           0          0               0
+__auto__         {y}           0          0               0
+
+# Test fast path delete.
+statement count 550
+DELETE FROM copy WHERE true
+
+query TTII colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, null_count
+FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names ASC, created DESC
+----
+statistics_name  column_names  row_count  null_count
+__auto__         {a}           0          0
+__auto__         {b}           0          0
+__auto__         {c}           0          0
+__auto__         {d}           0          0
+__auto__         {rowid}       0          0
+
+# Test user-defined schemas.
+
+# Disable automatic stats
+statement ok
+CREATE SCHEMA my_schema;
+CREATE TABLE my_schema.my_table (k INT PRIMARY KEY, v STRING) WITH (sql_stats_automatic_collection_enabled = false)
+
+# Enable automatic stats
+statement ok
+ALTER TABLE my_schema.my_table SET (sql_stats_automatic_collection_enabled = true)
+
+# Insert 10 rows.
+statement ok
+INSERT INTO my_schema.my_table SELECT k, NULL FROM
+   generate_series(1, 10) AS k(k)
+
+query TTIII colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE my_schema.my_table] ORDER BY column_names ASC, created DESC
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {k}           10         10              0
+__auto__         {v}           10         1               10

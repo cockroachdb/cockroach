@@ -1,0 +1,32 @@
+name: "Microbenchmark Run"
+description: "Runs microbenchmarks."
+inputs:
+  base:
+    description: "Base SHA"
+    required: true
+  pkg:
+    description: "Test packages required for the run"
+    required: true
+  group:
+    description: "Runner group"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Unique Build ID
+      run: echo "BUILD_ID=${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_ENV
+      shell: bash
+    - run: ./build/github/get-engflow-keys.sh
+      shell: bash
+    - name: Run benchmarks
+      run: ./build/github/microbenchmarks/run.sh
+      shell: bash
+      env:
+        BASE_SHA: ${{ inputs.base }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        TEST_PACKAGES: ${{ inputs.pkg }}
+        GROUP: ${{ inputs.group }}
+    - name: Clean up
+      run: ./build/github/cleanup-engflow-keys.sh
+      shell: bash
+      if: always()

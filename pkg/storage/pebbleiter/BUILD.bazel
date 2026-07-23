@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+# gazelle:exclude gen-crdb_test_off.go
+# gazelle:exclude gen-crdb_test_on.go
+
+# keep
+go_library(
+    name = "pebbleiter",
+    srcs = ["pebbleiter.go"] + select({
+        "//build/toolchains:crdb_test": [":gen-crdb-test-on"],
+        "//conditions:default": [":gen-crdb-test-off"],
+    }),
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/pebbleiter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//:pebble",
+    ],
+)
+
+REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
+
+genrule(
+    name = "gen-crdb-test-on",
+    srcs = ["crdb_test_on.go"],
+    outs = ["gen-crdb_test_on.go"],
+    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
+)
+
+genrule(
+    name = "gen-crdb-test-off",
+    srcs = ["crdb_test_off.go"],
+    outs = ["gen-crdb_test_off.go"],
+    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
+)
+
+go_test(
+    name = "pebbleiter_test",
+    srcs = ["crdb_test_test.go"],
+    embed = [":pebbleiter"],  # keep
+    deps = ["@com_github_stretchr_testify//require"],
+)

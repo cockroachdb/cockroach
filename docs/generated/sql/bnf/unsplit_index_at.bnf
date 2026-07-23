@@ -1,0 +1,5 @@
+alter_unsplit_index_stmt ::=
+	'ALTER' 'INDEX' table_name '@' index_name 'UNSPLIT' 'AT' select_stmt
+	| 'ALTER' 'INDEX' index_name 'UNSPLIT' 'AT' select_stmt
+	| 'ALTER' 'INDEX' table_name '@' index_name 'UNSPLIT' 'ALL'
+	| 'ALTER' 'INDEX' index_name 'UNSPLIT' 'ALL'

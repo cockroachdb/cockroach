@@ -1,0 +1,67 @@
+# LogicTest: default-configs 3node-tenant
+
+statement ok
+CREATE DATABASE d
+
+statement ok
+USE d
+
+query T colnames
+SHOW CREATE ALL SCHEMAS
+----
+create_statement
+CREATE SCHEMA public;
+
+statement ok
+CREATE SCHEMA test
+
+query T colnames,rowsort
+SHOW CREATE ALL SCHEMAS
+----
+create_statement
+CREATE SCHEMA public;
+CREATE SCHEMA test;
+
+statement ok
+CREATE SCHEMA test2
+
+query T colnames,rowsort
+SHOW CREATE ALL SCHEMAS
+----
+create_statement
+CREATE SCHEMA public;
+CREATE SCHEMA test;
+CREATE SCHEMA test2;
+
+statement ok
+DROP SCHEMA test
+
+query T colnames,rowsort
+SHOW CREATE ALL SCHEMAS
+----
+create_statement
+CREATE SCHEMA public;
+CREATE SCHEMA test2;
+
+statement ok
+COMMENT ON SCHEMA public IS 'test comment';
+
+query T colnames,nosort
+SHOW CREATE ALL SCHEMAS
+----
+create_statement
+CREATE SCHEMA public;
+COMMENT ON SCHEMA public IS 'test comment';
+CREATE SCHEMA test2;
+
+# Make sure database names with hyphens work well.
+statement ok
+CREATE DATABASE "d-d";
+USE "d-d";
+SHOW CREATE ALL SCHEMAS;
+
+# Make sure database names with quotes work well.
+statement ok
+CREATE DATABASE "a""bc";
+USE "a""bc";
+SHOW CREATE ALL SCHEMAS;

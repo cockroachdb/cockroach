@@ -1,0 +1,18 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.storage.enginepb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/storage/enginepb";
+
+import "storage/enginepb/key_registry.proto";
+
+// EncryptionStatus contains encryption-related information.
+message EncryptionStatus {
+  // Information about the active store key, if any.
+  KeyInfo active_store_key = 1;
+  // Information about the active data key, if any.
+  KeyInfo active_data_key = 2;
+}

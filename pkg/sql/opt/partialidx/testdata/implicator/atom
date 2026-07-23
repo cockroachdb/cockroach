@@ -1,0 +1,778 @@
+# Tests for predicates with only atoms.
+
+# No variables
+
+predtest
+true
+=>
+true
+----
+true
+└── remaining filters: none
+
+predtest
+true
+=>
+false
+----
+false
+
+predtest
+true
+=>
+NULL
+----
+false
+
+predtest
+NULL
+=>
+false
+----
+true
+└── remaining filters: none
+
+predtest
+false
+=>
+NULL
+----
+true
+└── remaining filters: none
+
+predtest
+1 = 1
+=>
+2 = 2
+----
+true
+└── remaining filters: none
+
+predtest
+true = false
+=>
+false = true
+----
+true
+└── remaining filters: none
+
+predtest
+false
+=>
+true
+----
+true
+└── remaining filters: false
+
+predtest
+NULL
+=>
+true
+----
+true
+└── remaining filters: false
+
+predtest
+false
+=>
+false
+----
+true
+└── remaining filters: none
+
+predtest
+1 = 3
+=>
+2 = 2
+----
+true
+└── remaining filters: false
+
+# Boolean filters
+
+predtest vars=(a bool)
+a
+=>
+a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a bool)
+NOT a
+=>
+NOT a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a bool)
+a
+=>
+a = true
+----
+true
+└── remaining filters: none
+
+predtest vars=(a bool)
+a
+=>
+a IN (true)
+----
+true
+└── remaining filters: none
+
+predtest vars=(a bool)
+false
+=>
+a
+----
+true
+└── remaining filters: false
+
+predtest vars=(a bool)
+NULL
+=>
+a
+----
+true
+└── remaining filters: false
+
+predtest vars=(a bool)
+NOT a
+=>
+a
+----
+false
+
+predtest vars=(a bool)
+a
+=>
+false
+----
+false
+
+predtest vars=(a bool)
+a
+=>
+true
+----
+true
+└── remaining filters: a
+
+predtest vars=(a bool)
+a
+=>
+NULL
+----
+false
+
+predtest vars=(a bool)
+true
+=>
+a
+----
+false
+
+# Equality filters
+
+predtest vars=(a string)
+a = 'foo'
+=>
+a = 'foo'
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int)
+a = 10
+=>
+a = 10
+----
+true
+└── remaining filters: none
+
+predtest vars=(a string)
+a = 'foo'
+=>
+a = 'bar'
+----
+false
+
+predtest vars=(a int)
+a = 2
+=>
+a IN (0, 2, 4)
+----
+true
+└── remaining filters: a = 2
+
+predtest vars=(a int)
+a = 2
+=>
+a > 1
+----
+true
+└── remaining filters: a = 2
+
+predtest vars=(a int, b int)
+a = b
+=>
+a = b
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int, b int)
+a = b
+=>
+b = a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int, b int)
+a = b
+=>
+a <= b
+----
+true
+└── remaining filters: a = b
+
+predtest vars=(a int, b int)
+a = b
+=>
+a >= b
+----
+true
+└── remaining filters: a = b
+
+predtest vars=(a int)
+a = 1
+=>
+a > 1
+----
+false
+
+# Inequality filters
+
+predtest vars=(a int)
+a > 10
+=>
+a > 10
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int)
+a > 10
+=>
+a > 0
+----
+true
+└── remaining filters: a > 10
+
+predtest vars=(a int)
+a > 17
+=>
+a >= 18
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int, b int)
+a > b
+=>
+a > b
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int, b int)
+a < b
+=>
+b > a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int, b int)
+a < b
+=>
+a <= b
+----
+true
+└── remaining filters: a < b
+
+predtest vars=(a int, b int)
+a < b
+=>
+b >= a
+----
+true
+└── remaining filters: a < b
+
+predtest vars=(a int, b int)
+a < b
+=>
+a != b
+----
+true
+└── remaining filters: a < b
+
+predtest vars=(a int, b int)
+a < b
+=>
+b != a
+----
+true
+└── remaining filters: a < b
+
+predtest vars=(a int, b int)
+a <= b
+=>
+b >= a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int, b int)
+a > b
+=>
+b < a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int, b int)
+a > b
+=>
+a >= b
+----
+true
+└── remaining filters: a > b
+
+predtest vars=(a int, b int)
+a > b
+=>
+b <= a
+----
+true
+└── remaining filters: a > b
+
+predtest vars=(a int, b int)
+a > b
+=>
+a != b
+----
+true
+└── remaining filters: a > b
+
+predtest vars=(a int, b int)
+a > b
+=>
+b != a
+----
+true
+└── remaining filters: a > b
+
+predtest vars=(a int, b int)
+a >= b
+=>
+b <= a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int, b int)
+a != b
+=>
+b != a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int)
+a > 10
+=>
+a > 15
+----
+false
+
+predtest vars=(a int)
+a > 1
+=>
+a = 1
+----
+false
+
+predtest vars=(a int, b int)
+a >= 2
+=>
+(a, b) > (2, 0)
+----
+false
+
+# IS (NOT) NULL
+
+predtest vars=(a int)
+a IS NULL
+=>
+a IS NULL
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int)
+a IS NOT NULL
+=>
+a IS NOT NULL
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int)
+a < 5
+=>
+a IS NOT NULL
+----
+true
+└── remaining filters: a < 5
+
+predtest vars=(a string)
+a = 'foo'
+=>
+a IS NOT NULL
+----
+true
+└── remaining filters: a = 'foo'
+
+predtest vars=(a int)
+a IS NULL
+=>
+a IS NOT NULL
+----
+false
+
+predtest vars=(a int, b int)
+a = b
+=>
+a IS NOT NULL
+----
+true
+└── remaining filters: a = b
+
+predtest vars=(a int, b int)
+a > b
+=>
+a IS NOT NULL
+----
+true
+└── remaining filters: a > b
+
+predtest vars=(a int, b int)
+a > b
+=>
+b IS NOT NULL
+----
+true
+└── remaining filters: a > b
+
+# TODO(mgartner): We could prove implication in this case if we constructed a
+# (/NULL - ] constraint for a.
+predtest vars=(a int, b int, c int)
+a IN (b, c)
+=>
+a IS NOT NULL
+----
+false
+
+predtest vars=(a int, b int, c int)
+a IN (b, c)
+=>
+b IS NOT NULL
+----
+false
+
+# Functions
+
+predtest vars=(a string)
+lower(a) = 'foo'
+=>
+lower(a) = 'foo'
+----
+true
+└── remaining filters: none
+
+predtest vars=(a string)
+lower(a) = 'foo'
+=>
+lower(a) = 'bar'
+----
+false
+
+# LIKE
+
+predtest vars=(a string)
+a LIKE '%foo%'
+=>
+a LIKE '%foo%'
+----
+true
+└── remaining filters: none
+
+predtest vars=(a string)
+a LIKE '%foo%'
+=>
+a LIKE 'foo'
+----
+false
+
+# IN filters
+
+predtest vars=(a int)
+a IN (1, 2, 3)
+=>
+a IN (1, 2, 3)
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int)
+a IN (2, 6)
+=>
+a IN (0, 2, 5, 6)
+----
+true
+└── remaining filters: a IN (2, 6)
+
+predtest vars=(a int)
+a IN (2, 3)
+=>
+a > 1
+----
+true
+└── remaining filters: a IN (2, 3)
+
+predtest vars=(a int)
+a IN (2, 6)
+=>
+a IN (2, 4)
+----
+false
+
+predtest vars=(a int)
+a IN (1, 2, 3)
+=>
+a IN (1, 2)
+----
+false
+
+# Tuple filters
+
+predtest vars=(a int, b int)
+(a, b) = (2, 0)
+=>
+(a, b) = (2, 0)
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int, b int)
+(a, b) > (2, 0)
+=>
+(a, b) > (2, 0)
+----
+true
+└── remaining filters: none
+
+predtest vars=(a int, b int)
+(a, b) > (2, 0)
+=>
+(a, b) > (1, 3)
+----
+true
+└── remaining filters: (a, b) > (2, 0)
+
+predtest vars=(a int, b int)
+(a, b) > (2, 0)
+=>
+a >= 2
+----
+true
+└── remaining filters: (a, b) > (2, 0)
+
+predtest vars=(a int, b int)
+(a, b) > (2, 0)
+=>
+a > 2
+----
+false
+
+predtest vars=(a int, b int)
+(a, b) = (2, 0)
+=>
+(a, b) = (1, 3)
+----
+false
+
+predtest vars=(a int, b int)
+(a, b) > (2, 1)
+=>
+(a, b) > (3, 0)
+----
+false
+
+# Conjunction filters
+
+predtest vars=(a bool, b bool)
+a AND b
+=>
+a
+----
+true
+└── remaining filters: b
+
+predtest vars=(a bool, b bool)
+a AND b
+=>
+b
+----
+true
+└── remaining filters: a
+
+predtest vars=(a bool, b bool)
+a AND a AND b
+=>
+a
+----
+true
+└── remaining filters: b
+
+predtest vars=(a string, b string, c string)
+a = b AND c = 'foo'
+=>
+b = a
+----
+true
+└── remaining filters: c = 'foo'
+
+predtest vars=(a string, b string, c string)
+a = b AND c = a
+=>
+a = c
+----
+true
+└── remaining filters: a = b
+
+predtest vars=(a bool, b bool)
+a AND NOT b
+=>
+b
+----
+false
+
+# Range filters
+
+predtest vars=(a int)
+a > 10 AND a < 100
+=>
+a > 10
+----
+true
+└── remaining filters: a < 100
+
+predtest vars=(a int)
+a > 10 AND a < 100
+=>
+a > 0
+----
+true
+└── remaining filters: (a > 10) AND (a < 100)
+
+predtest vars=(a int, b bool)
+a > 10 AND b AND a < 100
+=>
+b
+----
+true
+└── remaining filters: (a > 10) AND (a < 100)
+
+predtest vars=(a int, b bool)
+a > 10 AND b AND a < 100
+=>
+a > 0
+----
+true
+└── remaining filters: ((a > 10) AND (a < 100)) AND b
+
+predtest vars=(a int)
+a > 15 AND a < 100
+=>
+a > 10
+----
+true
+└── remaining filters: (a > 15) AND (a < 100)
+
+predtest vars=(a int)
+a > 10 AND a < 100
+=>
+a > 20
+----
+false
+
+predtest vars=(a int, b bool)
+a > 10 AND b AND a < 100
+=>
+a > 20
+----
+false
+
+# Disjunction filters
+
+predtest vars=(a bool)
+a OR a
+=>
+a
+----
+true
+└── remaining filters: none
+
+predtest vars=(a string)
+a = 'foo' OR a = 'bar'
+=>
+a IN ('foo', 'bar')
+----
+true
+└── remaining filters: (a = 'foo') OR (a = 'bar')
+
+# Regression tests for #54649. Atoms that are contradictions, like NULL, should
+# not cause panics.
+predtest vars=(a bool)
+(a OR NULL) OR a
+=>
+a
+----
+true
+└── remaining filters: (a OR CAST(NULL AS BOOL)) OR a
+
+predtest vars=(a bool, b bool)
+(a OR NULL) OR a
+=>
+b
+----
+false
+
+predtest vars=(a int)
+a < 10 OR a > 100
+=>
+a < 10
+----
+false
+
+predtest vars=(a bool, b bool)
+a OR b
+=>
+b
+----
+false

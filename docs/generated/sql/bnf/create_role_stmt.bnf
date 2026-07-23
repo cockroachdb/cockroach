@@ -1,0 +1,9 @@
+create_role_stmt ::=
+	'CREATE' 'ROLE' role_spec opt_with role_options
+	| 'CREATE' 'ROLE' role_spec 
+	| 'CREATE' 'USER' role_spec opt_with role_options
+	| 'CREATE' 'USER' role_spec 
+	| 'CREATE' 'ROLE' 'IF' 'NOT' 'EXISTS' role_spec opt_with role_options
+	| 'CREATE' 'ROLE' 'IF' 'NOT' 'EXISTS' role_spec 
+	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' role_spec opt_with role_options
+	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' role_spec 

@@ -1,0 +1,5 @@
+BenchmarkWithNameConflict 120 120 ns/op 120 B/op 120 allocs/op
+BenchmarkWithNameConflict 121 121 ns/op 121 B/op 121 allocs/op
+BenchmarkWithNameConflict 122 122 ns/op 122 B/op 122 allocs/op
+BenchmarkWithNameConflict 123 123 ns/op 123 B/op 123 allocs/op
+BenchmarkWithNameConflict 124 124 ns/op 124 B/op 124 allocs/op

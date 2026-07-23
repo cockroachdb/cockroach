@@ -1,0 +1,4577 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+
+exec-ddl
+CREATE TABLE b (x INT, z INT NOT NULL)
+----
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 4000,
+    "distinct_count": 400
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE b INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["z"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["rowid"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+norm
+SELECT * FROM a WHERE true
+----
+scan a
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=4000]
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+norm
+SELECT * FROM a WHERE false
+----
+values
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ ├── key: ()
+ └── fd: ()-->(1,2)
+
+# Distinct values calculation with constraints.
+norm
+SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
+----
+project
+ ├── columns: x:1(int!null) z:2(int!null)
+ ├── cardinality: [0 - 4]
+ ├── stats: [rows=1]
+ ├── fd: ()-->(1,2)
+ └── select
+      ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
+      ├── cardinality: [0 - 4]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1,2)=1, null(1,2)=0, distinct(1-3)=1, null(1-3)=0]
+      ├── key: (3)
+      ├── fd: ()-->(1,2)
+      ├── scan b
+      │    ├── columns: x:1(int) z:2(int!null) rowid:3(int!null)
+      │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=10000, null(3)=0, distinct(1,2)=10000, null(1,2)=0, distinct(1-3)=10000, null(1-3)=0]
+      │    ├── key: (3)
+      │    └── fd: (3)-->(1,2)
+      └── filters
+           ├── (rowid:3 >= 5) AND (rowid:3 <= 8) [type=bool, outer=(3), constraints=(/3: [/5 - /8]; tight)]
+           ├── x:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           └── z:2 = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+
+# Can't determine stats from filter.
+norm
+SELECT * FROM a WHERE x + y < 10
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
+ ├── stats: [rows=1333.33]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── stats: [rows=4000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── (x:1 + y:2) < 10 [type=bool, outer=(1,2), immutable]
+
+# Remaining filter.
+norm
+SELECT * FROM a WHERE y = 5 AND x + y < 10
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── stats: [rows=3.33333, distinct(1)=3.33333, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=3.33333, null(1,2)=0]
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, distinct(2)=400, null(2)=0, distinct(1,2)=4000, null(1,2)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      ├── y:2 = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+      └── x:1 < 5 [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
+
+# Contradiction.
+norm disable=SimplifyIsNullCondition
+SELECT * FROM a WHERE x IS NULL
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── x:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+
+norm
+SELECT sum(x) FROM b WHERE x > 1000 AND x <= 2000 GROUP BY z
+----
+project
+ ├── columns: sum:6(decimal!null)
+ ├── stats: [rows=100]
+ └── group-by (hash)
+      ├── columns: z:2(int!null) sum:6(decimal!null)
+      ├── grouping columns: z:2(int!null)
+      ├── stats: [rows=100, distinct(2)=100, null(2)=0]
+      ├── key: (2)
+      ├── fd: (2)-->(6)
+      ├── select
+      │    ├── columns: x:1(int!null) z:2(int!null)
+      │    ├── stats: [rows=2000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=0]
+      │    ├── scan b
+      │    │    ├── columns: x:1(int) z:2(int!null)
+      │    │    └── stats: [rows=10000, distinct(1)=5000, null(1)=0, distinct(2)=100, null(2)=0]
+      │    └── filters
+      │         └── (x:1 > 1000) AND (x:1 <= 2000) [type=bool, outer=(1), constraints=(/1: [/1001 - /2000]; tight)]
+      └── aggregations
+           └── sum [as=sum:6, type=decimal, outer=(1)]
+                └── x:1 [type=int]
+
+# Regression: statistics builder panics when end key is NULL when it's trying
+# to compute start/end int boundaries.
+exec-ddl
+CREATE TABLE idx (x INT PRIMARY KEY, y INT, z INT, INDEX yz (y DESC, z))
+----
+
+opt
+SELECT y FROM idx WHERE y < 5 AND z < 10
+----
+project
+ ├── columns: y:2(int!null)
+ ├── stats: [rows=311.111]
+ └── select
+      ├── columns: y:2(int!null) z:3(int!null)
+      ├── stats: [rows=311.111, distinct(2)=33.3333, null(2)=0, distinct(3)=33.3333, null(3)=0, distinct(2,3)=311.111, null(2,3)=0]
+      ├── scan idx@yz
+      │    ├── columns: y:2(int!null) z:3(int)
+      │    ├── constraint: /-2/3/1: (/4/NULL - /NULL)
+      │    └── stats: [rows=333.333, distinct(2)=33.3333, null(2)=0]
+      └── filters
+           └── z:3 < 10 [type=bool, outer=(3), constraints=(/3: (/NULL - /9]; tight)]
+
+# Regression: certain queries could cause a NaN expected number of rows via a divide-by-zero.
+exec-ddl
+CREATE TABLE tab0(pk INTEGER PRIMARY KEY, col0 INTEGER, col1 FLOAT, col2 TEXT, col3 INTEGER, col4 FLOAT, col5 TEXT)
+----
+
+# Note: it's not clear that this still tests the above issue, but I have left
+# it here anyway as an interesting test case. I've added another query below
+# to regression-test the divide-by-zero issue.
+opt
+SELECT pk FROM tab0 WHERE
+  col0 = 1 AND
+  col0 = 2 AND
+  (col0 = 1 OR col0 IN (SELECT col3 FROM tab0)) AND
+  (col0 = 1 OR col0 IN (SELECT col3 FROM tab0))
+----
+values
+ ├── columns: pk:1(int!null)
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+exec-ddl
+ALTER TABLE tab0 INJECT STATISTICS '[
+{
+  "columns": ["col0"],
+  "created_at": "2018-01-01 1:00:00.00000+00:00",
+  "row_count": 100,
+  "distinct_count": 0,
+  "null_count": 100
+},
+{
+  "columns": ["col3"],
+  "created_at": "2018-01-01 1:00:00.00000+00:00",
+  "row_count": 100,
+  "distinct_count": 10
+}
+]'
+----
+
+opt
+SELECT count(*) FROM (SELECT * FROM tab0 WHERE col3 = 10) GROUP BY col0
+----
+project
+ ├── columns: count:10(int!null)
+ ├── stats: [rows=0.999973]
+ └── group-by (hash)
+      ├── columns: col0:2(int) count_rows:10(int!null)
+      ├── grouping columns: col0:2(int)
+      ├── stats: [rows=0.999973, distinct(2)=0.999973, null(2)=0.999973]
+      ├── key: (2)
+      ├── fd: (2)-->(10)
+      ├── select
+      │    ├── columns: col0:2(int) col3:5(int!null)
+      │    ├── stats: [rows=10, distinct(2)=0.999973, null(2)=10, distinct(5)=1, null(5)=0]
+      │    ├── fd: ()-->(5)
+      │    ├── scan tab0
+      │    │    ├── columns: col0:2(int) col3:5(int)
+      │    │    └── stats: [rows=100, distinct(2)=1, null(2)=100, distinct(5)=10, null(5)=0]
+      │    └── filters
+      │         └── col3:5 = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
+      └── aggregations
+           └── count-rows [as=count_rows:10, type=int]
+
+
+exec-ddl
+CREATE TABLE customers (id INT PRIMARY KEY, name STRING, state STRING)
+----
+
+exec-ddl
+CREATE TABLE order_history (order_id INT, item_id INT, customer_id INT, year INT)
+----
+
+exec-ddl
+CREATE TABLE district (d_id INT, d_w_id INT, d_name STRING, PRIMARY KEY(d_id, d_w_id))
+----
+
+exec-ddl
+ALTER TABLE district INJECT STATISTICS '[
+{
+  "columns": ["d_id"],
+  "created_at": "2018-01-01 1:00:00.00000+00:00",
+  "row_count": 100,
+  "distinct_count": 10
+},
+{
+  "columns": ["d_w_id"],
+  "created_at": "2018-01-01 1:30:00.00000+00:00",
+  "row_count": 100,
+  "distinct_count": 10
+},
+{
+  "columns": ["d_name"],
+  "created_at": "2018-01-01 1:30:00.00000+00:00",
+  "row_count": 100,
+  "distinct_count": 100
+}
+]'
+----
+
+# This tests selectivityFromReducedCols.
+# Since the reduced column set is (d_id, d_name), and
+# both columns have distinct count 1, we expect this
+# to calculate selectivity through selectivityFromReducedCols.
+# The output is the same as the naive approach.
+norm
+SELECT * FROM district WHERE d_id = 1 AND d_name='bobs_burgers'
+----
+select
+ ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string!null)
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(3)=1, null(3)=0, distinct(1,3)=1, null(1,3)=0]
+ ├── key: (2)
+ ├── fd: ()-->(1,3)
+ ├── scan district
+ │    ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string)
+ │    ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=100, null(3)=0, distinct(1,3)=100, null(1,3)=0]
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ └── filters
+      ├── d_id:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── d_name:3 = 'bobs_burgers' [type=bool, outer=(3), constraints=(/3: [/'bobs_burgers' - /'bobs_burgers']; tight), fd=()-->(3)]
+
+norm
+SELECT * FROM district WHERE d_id = 1 and d_name LIKE 'bob'
+----
+select
+ ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string!null)
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(3)=1, null(3)=0, distinct(1,3)=1, null(1,3)=0]
+ ├── key: (2)
+ ├── fd: ()-->(1,3)
+ ├── scan district
+ │    ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string)
+ │    ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=100, null(3)=0, distinct(1,3)=100, null(1,3)=0]
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ └── filters
+      ├── d_id:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── d_name:3 LIKE 'bob' [type=bool, outer=(3), constraints=(/3: [/'bob' - /'bob']; tight), fd=()-->(3)]
+
+# This tests selectivityFromReducedCols.
+# Since (1,2)-->(3) in order to use selectivityFromReducedCols,
+# both (1,2) must have distinct=1 after applying the filter. Since
+# d_id is a range constraint, this fails, and we fall back to the
+# naive estimation for selectivity.
+norm
+SELECT * FROM district WHERE d_id > 1 AND d_id < 10 AND d_w_id=10 AND d_name='bobs_burgers'
+----
+select
+ ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string!null)
+ ├── cardinality: [0 - 8]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0, distinct(1-3)=1, null(1-3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ ├── scan district
+ │    ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string)
+ │    ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=100, null(3)=0, distinct(2,3)=100, null(2,3)=0, distinct(1-3)=100, null(1-3)=0]
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ └── filters
+      ├── (d_id:1 > 1) AND (d_id:1 < 10) [type=bool, outer=(1), constraints=(/1: [/2 - /9]; tight)]
+      ├── d_w_id:2 = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      └── d_name:3 = 'bobs_burgers' [type=bool, outer=(3), constraints=(/3: [/'bobs_burgers' - /'bobs_burgers']; tight), fd=()-->(3)]
+
+# This tests selectivityFromReducedCols
+# We don't apply the selectivity on d_name since (1,2)-->3.
+norm
+SELECT * FROM district WHERE d_id = 1 AND d_w_id=10 AND d_name='hello'
+----
+select
+ ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1,2)=1, null(1,2)=0]
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── scan district
+ │    ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string)
+ │    ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=100, null(3)=0, distinct(1,2)=100, null(1,2)=0]
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ └── filters
+      ├── d_id:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      ├── d_w_id:2 = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      └── d_name:3 = 'hello' [type=bool, outer=(3), constraints=(/3: [/'hello' - /'hello']; tight), fd=()-->(3)]
+
+exec-ddl
+ALTER TABLE customers INJECT STATISTICS '[
+{
+  "columns": ["name"],
+  "created_at": "2018-01-01 1:00:00.00000+00:00",
+  "row_count": 10000,
+  "distinct_count": 500
+},
+{
+  "columns": ["id"],
+  "created_at": "2018-01-01 1:30:00.00000+00:00",
+  "row_count": 10000,
+  "distinct_count": 10000
+}
+]'
+----
+
+# This tests selectivityFromReducedCols
+# The following two tests cases are paired together. The first has
+# one constraint, one on single non-key column. The second  query has two
+# constraints on columns which form a determinant, dependent FD pair.
+# The dependent column in this FD pair is from the first test case.
+# This series of tests demonstrates that the selectivity
+# contribution for a pair of (determinant, dependent) FDs is the
+# selectivity of the determinant.
+# 1/2 join-subquery-selectivityFromReducedCols tests
+
+build
+SELECT * FROM (SELECT * FROM customers, order_history WHERE id = customer_id)
+WHERE name='andy'
+----
+select
+ ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int)
+ ├── stats: [rows=2.29713, distinct(2)=1, null(2)=0]
+ ├── fd: ()-->(2), (1)-->(3), (1)==(8), (8)==(1)
+ ├── project
+ │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int)
+ │    ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(2)=430.972, null(2)=0, distinct(8)=99, null(8)=0]
+ │    ├── fd: (1)-->(2,3), (1)==(8), (8)==(1)
+ │    └── select
+ │         ├── columns: id:1(int!null) name:2(string) state:3(string) customers.crdb_internal_mvcc_timestamp:4(decimal) customers.tableoid:5(oid) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int) rowid:10(int!null) order_history.crdb_internal_mvcc_timestamp:11(decimal) order_history.tableoid:12(oid)
+ │         ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(2)=430.972, null(2)=0, distinct(8)=99, null(8)=0]
+ │         ├── key: (10)
+ │         ├── fd: (1)-->(2-5), (10)-->(6-9,11,12), (1)==(8), (8)==(1)
+ │         ├── inner-join (cross)
+ │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) customers.crdb_internal_mvcc_timestamp:4(decimal) customers.tableoid:5(oid) order_id:6(int) item_id:7(int) customer_id:8(int) year:9(int) rowid:10(int!null) order_history.crdb_internal_mvcc_timestamp:11(decimal) order_history.tableoid:12(oid)
+ │         │    ├── stats: [rows=1e+07, distinct(1)=10000, null(1)=0, distinct(2)=500, null(2)=0, distinct(8)=100, null(8)=100000, distinct(10)=1000, null(10)=0]
+ │         │    ├── key: (1,10)
+ │         │    ├── fd: (1)-->(2-5), (10)-->(6-9,11,12)
+ │         │    ├── scan customers
+ │         │    │    ├── columns: id:1(int!null) name:2(string) state:3(string) customers.crdb_internal_mvcc_timestamp:4(decimal) customers.tableoid:5(oid)
+ │         │    │    ├── stats: [rows=10000, distinct(1)=10000, null(1)=0, distinct(2)=500, null(2)=0]
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2-5)
+ │         │    ├── scan order_history
+ │         │    │    ├── columns: order_id:6(int) item_id:7(int) customer_id:8(int) year:9(int) rowid:10(int!null) order_history.crdb_internal_mvcc_timestamp:11(decimal) order_history.tableoid:12(oid)
+ │         │    │    ├── stats: [rows=1000, distinct(8)=100, null(8)=10, distinct(10)=1000, null(10)=0]
+ │         │    │    ├── key: (10)
+ │         │    │    └── fd: (10)-->(6-9,11,12)
+ │         │    └── filters (true)
+ │         └── filters
+ │              └── id:1 = customer_id:8 [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ └── filters
+      └── name:2 = 'andy' [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight), fd=()-->(2)]
+
+# This tests selectivityFromReducedCols
+# The previous tests case and the following are paired together. The first has
+# one constraint, one on single non-key column. The second  query has two
+# constraints on columns which form a determinant, dependent FD pair.
+# The dependent column in this FD pair is from the first test case.
+# This series of tests demonstrates that the selectivity
+# contribution for a pair of (determinant, dependent) FDs is the
+# selectivity of the determinant.
+# 2/2 join-subquery-selectivityFromReducedCols tests
+
+build
+SELECT * FROM (SELECT * FROM customers, order_history WHERE id = customer_id)
+WHERE id = 1 AND name='andy'
+----
+select
+ ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int)
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
+ ├── fd: ()-->(1-3,8), (1)==(8), (8)==(1)
+ ├── project
+ │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int)
+ │    ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(2)=430.972, null(2)=0, distinct(8)=99, null(8)=0]
+ │    ├── fd: (1)-->(2,3), (1)==(8), (8)==(1)
+ │    └── select
+ │         ├── columns: id:1(int!null) name:2(string) state:3(string) customers.crdb_internal_mvcc_timestamp:4(decimal) customers.tableoid:5(oid) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int) rowid:10(int!null) order_history.crdb_internal_mvcc_timestamp:11(decimal) order_history.tableoid:12(oid)
+ │         ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(2)=430.972, null(2)=0, distinct(8)=99, null(8)=0]
+ │         ├── key: (10)
+ │         ├── fd: (1)-->(2-5), (10)-->(6-9,11,12), (1)==(8), (8)==(1)
+ │         ├── inner-join (cross)
+ │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) customers.crdb_internal_mvcc_timestamp:4(decimal) customers.tableoid:5(oid) order_id:6(int) item_id:7(int) customer_id:8(int) year:9(int) rowid:10(int!null) order_history.crdb_internal_mvcc_timestamp:11(decimal) order_history.tableoid:12(oid)
+ │         │    ├── stats: [rows=1e+07, distinct(1)=10000, null(1)=0, distinct(2)=500, null(2)=0, distinct(8)=100, null(8)=100000, distinct(10)=1000, null(10)=0]
+ │         │    ├── key: (1,10)
+ │         │    ├── fd: (1)-->(2-5), (10)-->(6-9,11,12)
+ │         │    ├── scan customers
+ │         │    │    ├── columns: id:1(int!null) name:2(string) state:3(string) customers.crdb_internal_mvcc_timestamp:4(decimal) customers.tableoid:5(oid)
+ │         │    │    ├── stats: [rows=10000, distinct(1)=10000, null(1)=0, distinct(2)=500, null(2)=0]
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2-5)
+ │         │    ├── scan order_history
+ │         │    │    ├── columns: order_id:6(int) item_id:7(int) customer_id:8(int) year:9(int) rowid:10(int!null) order_history.crdb_internal_mvcc_timestamp:11(decimal) order_history.tableoid:12(oid)
+ │         │    │    ├── stats: [rows=1000, distinct(8)=100, null(8)=10, distinct(10)=1000, null(10)=0]
+ │         │    │    ├── key: (10)
+ │         │    │    └── fd: (10)-->(6-9,11,12)
+ │         │    └── filters (true)
+ │         └── filters
+ │              └── id:1 = customer_id:8 [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ └── filters
+      └── (id:1 = 1) AND (name:2 = 'andy') [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/'andy' - /'andy']; tight), fd=()-->(1,2)]
+
+# Test equality conditions where all have distinct count 1.
+norm
+SELECT * FROM order_history WHERE item_id = order_id AND item_id = customer_id AND customer_id = 5
+----
+select
+ ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int!null) year:4(int)
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1-3)=1, null(1-3)=0]
+ ├── fd: ()-->(1-3)
+ ├── scan order_history
+ │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(1-3)=1000, null(1-3)=0.001]
+ └── filters
+      ├── order_id:1 = 5 [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+      ├── item_id:2 = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+      └── customer_id:3 = 5 [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
+
+# Test equality condition with another condition on one of the attributes.
+norm
+SELECT * FROM order_history WHERE item_id = order_id AND item_id < 5 AND item_id > 0
+----
+select
+ ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int) year:4(int)
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
+ ├── fd: (1)==(2), (2)==(1)
+ ├── scan order_history
+ │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
+ └── filters
+      ├── (item_id:2 < 5) AND (item_id:2 > 0) [type=bool, outer=(2), constraints=(/2: [/1 - /4]; tight)]
+      └── item_id:2 = order_id:1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+
+# Test equality condition with another condition on a different attribute.
+norm
+SELECT * FROM order_history WHERE item_id = order_id AND customer_id < 5 AND customer_id > 0
+----
+select
+ ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int!null) year:4(int)
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+ ├── fd: (1)==(2), (2)==(1)
+ ├── scan order_history
+ │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10]
+ └── filters
+      ├── (customer_id:3 < 5) AND (customer_id:3 > 0) [type=bool, outer=(3), constraints=(/3: [/1 - /4]; tight)]
+      └── item_id:2 = order_id:1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+
+# Test equality condition with another filter condition without a constraint.
+norm
+SELECT * FROM order_history WHERE item_id = order_id AND customer_id % 2 = 0
+----
+select
+ ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int) year:4(int)
+ ├── immutable
+ ├── stats: [rows=3.267, distinct(1)=3.267, null(1)=0, distinct(2)=3.267, null(2)=0]
+ ├── fd: (1)==(2), (2)==(1)
+ ├── scan order_history
+ │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
+ └── filters
+      ├── item_id:2 = order_id:1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+      └── (customer_id:3 % 2) = 0 [type=bool, outer=(3), immutable]
+
+exec-ddl
+CREATE TABLE c (x INT, z INT NOT NULL, UNIQUE INDEX x_idx (x))
+----
+
+# Test that the distinct and null counts for x are estimated correctly (since it's a weak
+# key).
+norm
+SELECT * FROM c WHERE x >= 0 AND x < 100
+----
+select
+ ├── columns: x:1(int!null) z:2(int!null)
+ ├── cardinality: [0 - 100]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan c
+ │    ├── columns: x:1(int) z:2(int!null)
+ │    ├── stats: [rows=1000, distinct(1)=991, null(1)=10, distinct(2)=100, null(2)=0]
+ │    ├── lax-key: (1,2)
+ │    └── fd: (1)~~>(2)
+ └── filters
+      └── (x:1 >= 0) AND (x:1 < 100) [type=bool, outer=(1), constraints=(/1: [/0 - /99]; tight)]
+
+exec-ddl
+CREATE TABLE uvw (u INT, v INT, w INT)
+----
+
+# Test selectivity calculations by applying the two constraints in different
+# orders.
+norm
+SELECT * FROM uvw WHERE u=v AND u=10
+----
+select
+ ├── columns: u:1(int!null) v:2(int!null) w:3(int)
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
+ ├── fd: ()-->(1,2)
+ ├── scan uvw
+ │    ├── columns: u:1(int) v:2(int) w:3(int)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10, distinct(1,2)=1000, null(1,2)=0.1]
+ └── filters
+      ├── v:2 = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      └── u:1 = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+
+norm disable=MergeSelects
+SELECT * FROM (SELECT * FROM uvw WHERE u=10) WHERE u=v
+----
+select
+ ├── columns: u:1(int!null) v:2(int!null) w:3(int)
+ ├── stats: [rows=1.03537, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
+ ├── fd: ()-->(1,2), (1)==(2), (2)==(1)
+ ├── select
+ │    ├── columns: u:1(int!null) v:2(int) w:3(int)
+ │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(2)=9.56179, null(2)=0.1]
+ │    ├── fd: ()-->(1)
+ │    ├── scan uvw
+ │    │    ├── columns: u:1(int) v:2(int) w:3(int)
+ │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
+ │    └── filters
+ │         └── u:1 = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+ └── filters
+      └── u:1 = v:2 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+
+norm disable=MergeSelects
+SELECT * FROM (SELECT * FROM uvw WHERE u=v) WHERE u=10
+----
+select
+ ├── columns: u:1(int!null) v:2(int!null) w:3(int)
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── fd: ()-->(1,2), (1)==(2), (2)==(1)
+ ├── select
+ │    ├── columns: u:1(int!null) v:2(int!null) w:3(int)
+ │    ├── stats: [rows=9.801, distinct(1)=9.801, null(1)=0, distinct(2)=9.801, null(2)=0]
+ │    ├── fd: (1)==(2), (2)==(1)
+ │    ├── scan uvw
+ │    │    ├── columns: u:1(int) v:2(int) w:3(int)
+ │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
+ │    └── filters
+ │         └── u:1 = v:2 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ └── filters
+      └── u:1 = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+
+exec-ddl
+CREATE TABLE lineitem
+(
+    l_orderkey int NOT NULL,
+    l_partkey int NOT NULL,
+    l_suppkey int NOT NULL,
+    l_linenumber int NOT NULL,
+    l_quantity float NOT NULL,
+    l_extendedprice float NOT NULL,
+    l_discount float NOT NULL,
+    l_tax float NOT NULL,
+    l_returnflag char(1) NOT NULL,
+    l_linestatus char(1) NOT NULL,
+    l_shipdate date NOT NULL,
+    l_commitdate date NOT NULL,
+    l_receiptdate date NOT NULL,
+    l_shipinstruct char(25) NOT NULL,
+    l_shipmode char(10) NOT NULL,
+    l_comment varchar(44) NOT NULL,
+    PRIMARY KEY (l_orderkey, l_linenumber),
+    INDEX l_ok (l_orderkey ASC),
+    INDEX l_pk (l_partkey ASC),
+    INDEX l_sk (l_suppkey ASC),
+    INDEX l_sd (l_shipdate ASC),
+    INDEX l_cd (l_commitdate ASC),
+    INDEX l_rd (l_receiptdate ASC),
+    INDEX l_pk_sk (l_partkey ASC, l_suppkey ASC),
+    INDEX l_sk_pk (l_suppkey ASC, l_partkey ASC)
+);
+----
+
+# We can determine that there are exactly 30 days for this range.
+opt
+SELECT *
+FROM lineitem
+WHERE
+    l_shipdate >= DATE '1995-09-01'
+    AND l_shipdate < DATE '1995-10-01';
+----
+select
+ ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) l_comment:16(varchar!null)
+ ├── stats: [rows=300, distinct(11)=30, null(11)=0]
+ ├── key: (1,4)
+ ├── fd: (1,4)-->(2,3,5-16)
+ ├── scan lineitem
+ │    ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) l_comment:16(varchar!null)
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0, distinct(6)=100, null(6)=0, distinct(7)=100, null(7)=0, distinct(8)=100, null(8)=0, distinct(9)=100, null(9)=0, distinct(10)=100, null(10)=0, distinct(11)=100, null(11)=0, distinct(12)=100, null(12)=0, distinct(13)=100, null(13)=0, distinct(14)=100, null(14)=0, distinct(15)=100, null(15)=0, distinct(16)=100, null(16)=0]
+ │    ├── key: (1,4)
+ │    └── fd: (1,4)-->(2,3,5-16)
+ └── filters
+      └── (l_shipdate:11 >= '1995-09-01') AND (l_shipdate:11 < '1995-10-01') [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-30']; tight)]
+
+# We cannot determine the number of distinct values exactly since the upper
+# bound of the date range is compared to a timestamp rather than a date.
+opt
+SELECT *
+FROM lineitem
+WHERE
+    l_shipdate >= DATE '1995-09-01'
+    AND l_shipdate::timestamptz < DATE '1995-10-01';
+----
+index-join lineitem
+ ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) l_comment:16(varchar!null)
+ ├── stable
+ ├── stats: [rows=111.111, distinct(11)=33.3333, null(11)=0]
+ ├── key: (1,4)
+ ├── fd: (1,4)-->(2,3,5-16)
+ └── select
+      ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null)
+      ├── stable
+      ├── stats: [rows=111.111]
+      ├── key: (1,4)
+      ├── fd: (1,4)-->(11)
+      ├── scan lineitem@l_sd
+      │    ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null)
+      │    ├── constraint: /11/1/4: [/'1995-09-01' - ]
+      │    ├── stats: [rows=333.333, distinct(1)=98.2658, null(1)=0, distinct(4)=98.2658, null(4)=0, distinct(11)=33.3333, null(11)=0]
+      │    ├── key: (1,4)
+      │    └── fd: (1,4)-->(11)
+      └── filters
+           └── l_shipdate:11::TIMESTAMPTZ < '1995-10-01' [type=bool, outer=(11), stable]
+
+# These queries should generate zigzag joins in xform rules. The column statistics
+# should be comparable between the norm'd and fully optimized expressions.
+opt colstat=11 colstat=12 colstat=(11,12)
+SELECT l_shipdate, l_commitdate, l_orderkey, l_linenumber
+FROM lineitem
+WHERE
+    l_shipdate = DATE '1995-09-01'
+    AND l_commitdate = DATE '1995-08-01';
+----
+inner-join (zigzag lineitem@l_sd lineitem@l_cd)
+ ├── columns: l_shipdate:11(date!null) l_commitdate:12(date!null) l_orderkey:1(int!null) l_linenumber:4(int!null)
+ ├── eq columns: [1 4] = [1 4]
+ ├── left fixed columns: [11] = ['1995-09-01']
+ ├── right fixed columns: [12] = ['1995-08-01']
+ ├── stats: [rows=1, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(11,12)=1, null(11,12)=0]
+ ├── key: (1,4)
+ ├── fd: ()-->(11,12)
+ └── filters
+      ├── l_shipdate:11 = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
+      └── l_commitdate:12 = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
+
+norm colstat=11 colstat=12 colstat=(11,12)
+SELECT l_shipdate, l_commitdate, l_orderkey, l_linenumber
+FROM lineitem
+WHERE
+    l_shipdate = DATE '1995-09-01'
+    AND l_commitdate = DATE '1995-08-01';
+----
+select
+ ├── columns: l_shipdate:11(date!null) l_commitdate:12(date!null) l_orderkey:1(int!null) l_linenumber:4(int!null)
+ ├── stats: [rows=1, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(11,12)=1, null(11,12)=0]
+ ├── key: (1,4)
+ ├── fd: ()-->(11,12)
+ ├── scan lineitem
+ │    ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null) l_commitdate:12(date!null)
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0, distinct(11)=100, null(11)=0, distinct(12)=100, null(12)=0, distinct(11,12)=1000, null(11,12)=0]
+ │    ├── key: (1,4)
+ │    └── fd: (1,4)-->(11,12)
+ └── filters
+      ├── l_shipdate:11 = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
+      └── l_commitdate:12 = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
+
+# These queries should also generate zigzag joins in xform rules, like the
+# ones above. These zigzag joins should be nested inside a lookup join on
+# the primary index. Since the zigzag join lies in a new memo group, we will
+# see the zigzag-join-specific stats/logprops build and colStat functions in
+# action. Again, the colstats of the inner zigzag expression should be
+# reasonably close to those of the full normalized select expression.
+opt colstat=11 colstat=12 colstat=(11,12)
+SELECT l_shipdate, l_commitdate, l_orderkey, l_linenumber, l_quantity
+FROM lineitem
+WHERE
+    l_shipdate = DATE '1995-09-01'
+    AND l_commitdate = DATE '1995-08-01';
+----
+inner-join (lookup lineitem)
+ ├── columns: l_shipdate:11(date!null) l_commitdate:12(date!null) l_orderkey:1(int!null) l_linenumber:4(int!null) l_quantity:5(float!null)
+ ├── key columns: [1 4] = [1 4]
+ ├── lookup columns are key
+ ├── stats: [rows=1, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(11,12)=1, null(11,12)=0]
+ ├── key: (1,4)
+ ├── fd: ()-->(11,12), (1,4)-->(5)
+ ├── inner-join (zigzag lineitem@l_sd lineitem@l_cd)
+ │    ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null) l_commitdate:12(date!null)
+ │    ├── eq columns: [1 4] = [1 4]
+ │    ├── left fixed columns: [11] = ['1995-09-01']
+ │    ├── right fixed columns: [12] = ['1995-08-01']
+ │    ├── stats: [rows=1, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(11,12)=1, null(11,12)=0]
+ │    ├── fd: ()-->(11,12)
+ │    └── filters
+ │         ├── l_shipdate:11 = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
+ │         └── l_commitdate:12 = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
+ └── filters (true)
+
+norm colstat=11 colstat=12 colstat=(11,12)
+SELECT l_shipdate, l_commitdate, l_orderkey, l_linenumber, l_quantity
+FROM lineitem
+WHERE
+    l_shipdate = DATE '1995-09-01'
+    AND l_commitdate = DATE '1995-08-01';
+----
+select
+ ├── columns: l_shipdate:11(date!null) l_commitdate:12(date!null) l_orderkey:1(int!null) l_linenumber:4(int!null) l_quantity:5(float!null)
+ ├── stats: [rows=1, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(11,12)=1, null(11,12)=0]
+ ├── key: (1,4)
+ ├── fd: ()-->(11,12), (1,4)-->(5)
+ ├── scan lineitem
+ │    ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_shipdate:11(date!null) l_commitdate:12(date!null)
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0, distinct(11)=100, null(11)=0, distinct(12)=100, null(12)=0, distinct(11,12)=1000, null(11,12)=0]
+ │    ├── key: (1,4)
+ │    └── fd: (1,4)-->(5,11,12)
+ └── filters
+      ├── l_shipdate:11 = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
+      └── l_commitdate:12 = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
+
+# Create a table with an inverted index to test statistics around
+# JSON/Array containment filter operators and zigzag joins.
+exec-ddl
+CREATE TABLE t_json_arr (
+  a INT PRIMARY KEY,
+  b JSON,
+  c JSON,
+  d INT[],
+  INVERTED INDEX b_idx (b)
+)
+----
+
+exec-ddl
+ALTER TABLE t_json_arr INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 2500
+  }
+]'
+----
+
+# Should generate a scan on the inverted index.
+opt
+SELECT * FROM t_json_arr WHERE b @> '{"a":"b"}'
+----
+index-join t_json_arr
+ ├── columns: a:1(int!null) b:2(jsonb!null) c:3(jsonb) d:4(int[])
+ ├── immutable
+ ├── stats: [rows=555.556]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t_json_arr@b_idx,inverted
+      ├── columns: a:1(int!null)
+      ├── inverted constraint: /7/1
+      │    └── spans: ["a"/"b", "a"/"b"]
+      ├── stats: [rows=555.556, distinct(7)=500, null(7)=0]
+      └── key: (1)
+
+# Should generate a zigzag join on the inverted index. Row count should be
+# strictly lower than the above scan.
+opt
+SELECT * FROM t_json_arr WHERE b @> '{"a":"b", "c":"d"}'
+----
+inner-join (lookup t_json_arr)
+ ├── columns: a:1(int!null) b:2(jsonb!null) c:3(jsonb) d:4(int[])
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── immutable
+ ├── stats: [rows=61.7284]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── inner-join (zigzag t_json_arr@b_idx,inverted t_json_arr@b_idx,inverted)
+ │    ├── columns: a:1(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [7] = ['\x3761000112620001']
+ │    ├── right fixed columns: [7] = ['\x3763000112640001']
+ │    ├── stats: [rows=61.7284]
+ │    └── filters (true)
+ └── filters (true)
+
+# Should generate a select on the table with a JSON filter, since c does not
+# have an inverted index.
+opt
+SELECT * FROM t_json_arr WHERE c @> '{"a":"b"}'
+----
+select
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb!null) d:4(int[])
+ ├── immutable
+ ├── stats: [rows=555.556]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan t_json_arr
+ │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[])
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(3)=2500, null(3)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── c:3 @> '{"a": "b"}' [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
+
+# Should have a lower row count than the above case, due to a containment query
+# on 2 json paths.
+opt
+SELECT * FROM t_json_arr WHERE c @> '{"a":"b", "c":"d"}'
+----
+select
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb!null) d:4(int[])
+ ├── immutable
+ ├── stats: [rows=61.7284]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan t_json_arr
+ │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[])
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(3)=2500, null(3)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── c:3 @> '{"a": "b", "c": "d"}' [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
+
+# Tests for array containment.
+opt
+SELECT * FROM t_json_arr WHERE d @> ARRAY[1]
+----
+select
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[]!null)
+ ├── immutable
+ ├── stats: [rows=555.556]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan t_json_arr
+ │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[])
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=2500, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── d:4 @> ARRAY[1] [type=bool, outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+# Should have a lower row count than the above case, due to a containment query
+# on 2 array elements.
+opt
+SELECT * FROM t_json_arr WHERE d @> ARRAY[1,2]
+----
+select
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[]!null)
+ ├── immutable
+ ├── stats: [rows=61.7284]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan t_json_arr
+ │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[])
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=2500, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── d:4 @> ARRAY[1,2] [type=bool, outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+
+# Bump up null counts.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 4000,
+    "distinct_count": 400,
+    "null_count": 1000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE b INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 5000,
+    "null_count": 2000
+  },
+  {
+    "columns": ["z"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["rowid"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE c INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 5000,
+    "null_count": 5000
+  },
+  {
+    "columns": ["z"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+# Distinct values calculation with constraints.
+norm
+SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
+----
+project
+ ├── columns: x:1(int!null) z:2(int!null)
+ ├── cardinality: [0 - 4]
+ ├── stats: [rows=1]
+ ├── fd: ()-->(1,2)
+ └── select
+      ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
+      ├── cardinality: [0 - 4]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1,2)=1, null(1,2)=0, distinct(1-3)=1, null(1-3)=0]
+      ├── key: (3)
+      ├── fd: ()-->(1,2)
+      ├── scan b
+      │    ├── columns: x:1(int) z:2(int!null) rowid:3(int!null)
+      │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2000, distinct(2)=100, null(2)=0, distinct(3)=10000, null(3)=0, distinct(1,2)=10000, null(1,2)=0, distinct(1-3)=10000, null(1-3)=0]
+      │    ├── key: (3)
+      │    └── fd: (3)-->(1,2)
+      └── filters
+           ├── (rowid:3 >= 5) AND (rowid:3 <= 8) [type=bool, outer=(3), constraints=(/3: [/5 - /8]; tight)]
+           ├── x:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           └── z:2 = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+
+# Can't determine stats from filter.
+norm
+SELECT * FROM a WHERE x + y < 10
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
+ ├── stats: [rows=1666.67]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── stats: [rows=5000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── (x:1 + y:2) < 10 [type=bool, outer=(1,2), immutable]
+
+# Remaining filter.
+norm
+SELECT * FROM a WHERE y = 5 AND x + y < 10
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── stats: [rows=3.34169, distinct(1)=3.34169, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=3.34169, null(1,2)=0]
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=1000, distinct(1,2)=5000, null(1,2)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      ├── y:2 = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+      └── x:1 < 5 [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
+
+# Test that the null count for x is propagated correctly (since it's a weak
+# key).
+norm
+SELECT * FROM c WHERE x >= 0 AND x < 100
+----
+select
+ ├── columns: x:1(int!null) z:2(int!null)
+ ├── cardinality: [0 - 100]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan c
+ │    ├── columns: x:1(int) z:2(int!null)
+ │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=5000, distinct(2)=10000, null(2)=0]
+ │    ├── lax-key: (1,2)
+ │    └── fd: (1)~~>(2)
+ └── filters
+      └── (x:1 >= 0) AND (x:1 < 100) [type=bool, outer=(1), constraints=(/1: [/0 - /99]; tight)]
+
+# Bump up null counts
+exec-ddl
+ALTER TABLE customers INJECT STATISTICS '[
+{
+  "columns": ["name"],
+  "created_at": "2018-01-01 1:00:00.00000+00:00",
+  "row_count": 10000,
+  "distinct_count": 500,
+  "null_count": 2000
+},
+{
+  "columns": ["id"],
+  "created_at": "2018-01-01 1:30:00.00000+00:00",
+  "row_count": 10000,
+  "distinct_count": 10000
+}
+]'
+----
+
+# This tests selectivityFromReducedCols
+# The following two tests cases are paired together. The first has
+# one constraint, one on single non-key column. The second  query has two
+# constraints on columns which form a determinant, dependent FD pair.
+# The dependent column in this FD pair is from the first test case.
+# This series of tests demonstrates that the selectivity
+# contribution for a pair of (determinant, dependent) FDs is the
+# selectivity of the determinant.
+# 1/2 join-subquery-selectivityFromReducedCols tests
+
+build
+SELECT * FROM (SELECT * FROM customers, order_history WHERE id = customer_id)
+WHERE name='andy'
+----
+select
+ ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int)
+ ├── stats: [rows=1.84198, distinct(2)=1, null(2)=0]
+ ├── fd: ()-->(2), (1)-->(3), (1)==(8), (8)==(1)
+ ├── project
+ │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int)
+ │    ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(2)=430.972, null(2)=198, distinct(8)=99, null(8)=0]
+ │    ├── fd: (1)-->(2,3), (1)==(8), (8)==(1)
+ │    └── select
+ │         ├── columns: id:1(int!null) name:2(string) state:3(string) customers.crdb_internal_mvcc_timestamp:4(decimal) customers.tableoid:5(oid) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int) rowid:10(int!null) order_history.crdb_internal_mvcc_timestamp:11(decimal) order_history.tableoid:12(oid)
+ │         ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(2)=430.972, null(2)=198, distinct(8)=99, null(8)=0]
+ │         ├── key: (10)
+ │         ├── fd: (1)-->(2-5), (10)-->(6-9,11,12), (1)==(8), (8)==(1)
+ │         ├── inner-join (cross)
+ │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) customers.crdb_internal_mvcc_timestamp:4(decimal) customers.tableoid:5(oid) order_id:6(int) item_id:7(int) customer_id:8(int) year:9(int) rowid:10(int!null) order_history.crdb_internal_mvcc_timestamp:11(decimal) order_history.tableoid:12(oid)
+ │         │    ├── stats: [rows=1e+07, distinct(1)=10000, null(1)=0, distinct(2)=500, null(2)=2e+06, distinct(8)=100, null(8)=100000, distinct(10)=1000, null(10)=0]
+ │         │    ├── key: (1,10)
+ │         │    ├── fd: (1)-->(2-5), (10)-->(6-9,11,12)
+ │         │    ├── scan customers
+ │         │    │    ├── columns: id:1(int!null) name:2(string) state:3(string) customers.crdb_internal_mvcc_timestamp:4(decimal) customers.tableoid:5(oid)
+ │         │    │    ├── stats: [rows=10000, distinct(1)=10000, null(1)=0, distinct(2)=500, null(2)=2000]
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2-5)
+ │         │    ├── scan order_history
+ │         │    │    ├── columns: order_id:6(int) item_id:7(int) customer_id:8(int) year:9(int) rowid:10(int!null) order_history.crdb_internal_mvcc_timestamp:11(decimal) order_history.tableoid:12(oid)
+ │         │    │    ├── stats: [rows=1000, distinct(8)=100, null(8)=10, distinct(10)=1000, null(10)=0]
+ │         │    │    ├── key: (10)
+ │         │    │    └── fd: (10)-->(6-9,11,12)
+ │         │    └── filters (true)
+ │         └── filters
+ │              └── id:1 = customer_id:8 [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ └── filters
+      └── name:2 = 'andy' [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight), fd=()-->(2)]
+
+# This tests selectivityFromReducedCols
+# The previous tests case and the following are paired together. The first has
+# one constraint, one on single non-key column. The second  query has two
+# constraints on columns which form a determinant, dependent FD pair.
+# The dependent column in this FD pair is from the first test case.
+# This series of tests demonstrates that the selectivity
+# contribution for a pair of (determinant, dependent) FDs is the
+# selectivity of the determinant.
+# 2/2 join-subquery-selectivityFromReducedCols tests
+
+build
+SELECT * FROM (SELECT * FROM customers, order_history WHERE id = customer_id)
+WHERE id = 1 AND name='andy'
+----
+select
+ ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int)
+ ├── stats: [rows=8, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
+ ├── fd: ()-->(1-3,8), (1)==(8), (8)==(1)
+ ├── project
+ │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int)
+ │    ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(2)=430.972, null(2)=198, distinct(8)=99, null(8)=0]
+ │    ├── fd: (1)-->(2,3), (1)==(8), (8)==(1)
+ │    └── select
+ │         ├── columns: id:1(int!null) name:2(string) state:3(string) customers.crdb_internal_mvcc_timestamp:4(decimal) customers.tableoid:5(oid) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int) rowid:10(int!null) order_history.crdb_internal_mvcc_timestamp:11(decimal) order_history.tableoid:12(oid)
+ │         ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(2)=430.972, null(2)=198, distinct(8)=99, null(8)=0]
+ │         ├── key: (10)
+ │         ├── fd: (1)-->(2-5), (10)-->(6-9,11,12), (1)==(8), (8)==(1)
+ │         ├── inner-join (cross)
+ │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) customers.crdb_internal_mvcc_timestamp:4(decimal) customers.tableoid:5(oid) order_id:6(int) item_id:7(int) customer_id:8(int) year:9(int) rowid:10(int!null) order_history.crdb_internal_mvcc_timestamp:11(decimal) order_history.tableoid:12(oid)
+ │         │    ├── stats: [rows=1e+07, distinct(1)=10000, null(1)=0, distinct(2)=500, null(2)=2e+06, distinct(8)=100, null(8)=100000, distinct(10)=1000, null(10)=0]
+ │         │    ├── key: (1,10)
+ │         │    ├── fd: (1)-->(2-5), (10)-->(6-9,11,12)
+ │         │    ├── scan customers
+ │         │    │    ├── columns: id:1(int!null) name:2(string) state:3(string) customers.crdb_internal_mvcc_timestamp:4(decimal) customers.tableoid:5(oid)
+ │         │    │    ├── stats: [rows=10000, distinct(1)=10000, null(1)=0, distinct(2)=500, null(2)=2000]
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2-5)
+ │         │    ├── scan order_history
+ │         │    │    ├── columns: order_id:6(int) item_id:7(int) customer_id:8(int) year:9(int) rowid:10(int!null) order_history.crdb_internal_mvcc_timestamp:11(decimal) order_history.tableoid:12(oid)
+ │         │    │    ├── stats: [rows=1000, distinct(8)=100, null(8)=10, distinct(10)=1000, null(10)=0]
+ │         │    │    ├── key: (10)
+ │         │    │    └── fd: (10)-->(6-9,11,12)
+ │         │    └── filters (true)
+ │         └── filters
+ │              └── id:1 = customer_id:8 [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ └── filters
+      └── (id:1 = 1) AND (name:2 = 'andy') [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/'andy' - /'andy']; tight), fd=()-->(1,2)]
+
+exec-ddl
+CREATE TABLE nulls (x INT, y INT);
+----
+
+exec-ddl
+ALTER TABLE nulls INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 0,
+    "null_count": 1000
+  }
+]'
+----
+
+build
+SELECT * FROM nulls WHERE x = y
+----
+project
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── stats: [rows=1]
+ ├── fd: (1)==(2), (2)==(1)
+ └── select
+      ├── columns: x:1(int!null) y:2(int!null) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      ├── stats: [rows=1, distinct(1)=1e-10, null(1)=0, distinct(2)=1e-10, null(2)=0]
+      ├── key: (3)
+      ├── fd: (3)-->(1,2,4,5), (1)==(2), (2)==(1)
+      ├── scan nulls
+      │    ├── columns: x:1(int) y:2(int) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      │    ├── stats: [rows=1000, distinct(1)=1, null(1)=1000, distinct(2)=100, null(2)=10, distinct(3)=1000, null(3)=0]
+      │    ├── key: (3)
+      │    └── fd: (3)-->(1,2,4,5)
+      └── filters
+           └── x:1 = y:2 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+
+build
+SELECT * FROM nulls WHERE x IS NULL
+----
+project
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=1000]
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: x:1(int) y:2(int) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      ├── stats: [rows=1000, distinct(1)=1, null(1)=1000]
+      ├── key: (3)
+      ├── fd: ()-->(1), (3)-->(2,4,5)
+      ├── scan nulls
+      │    ├── columns: x:1(int) y:2(int) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      │    ├── stats: [rows=1000, distinct(1)=1, null(1)=1000, distinct(3)=1000, null(3)=0]
+      │    ├── key: (3)
+      │    └── fd: (3)-->(1,2,4,5)
+      └── filters
+           └── x:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+
+
+# Regression test for #34440. Ensure the null count for x is less than or equal
+# to the row count.
+build colstat=1
+SELECT * FROM nulls WHERE y = 3
+----
+project
+ ├── columns: x:1(int) y:2(int!null)
+ ├── stats: [rows=10, distinct(1)=0.999957, null(1)=10]
+ ├── fd: ()-->(2)
+ └── select
+      ├── columns: x:1(int) y:2(int!null) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      ├── stats: [rows=10, distinct(1)=0.999957, null(1)=10, distinct(2)=1, null(2)=0]
+      ├── key: (3)
+      ├── fd: ()-->(2), (3)-->(1,4,5)
+      ├── scan nulls
+      │    ├── columns: x:1(int) y:2(int) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      │    ├── stats: [rows=1000, distinct(1)=1, null(1)=1000, distinct(2)=100, null(2)=10, distinct(3)=1000, null(3)=0]
+      │    ├── key: (3)
+      │    └── fd: (3)-->(1,2,4,5)
+      └── filters
+           └── y:2 = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+
+# Sample testcase using exprgen.
+expr colstat=1 colstat=2
+(Select
+  (FakeRel
+    [
+      (OutputCols [ (NewColumn "a" "int") (NewColumn "b" "int") (NewColumn "c" "int")] )
+      (Cardinality "-")
+      (stats `[
+        {
+          "columns": ["a"],
+          "distinct_count": 100,
+          "null_count": 0,
+          "row_count": 100,
+          "created_at": "2018-01-01 1:00:00.00000+00:00"
+        },
+        {
+          "columns": ["b"],
+          "distinct_count": 20,
+          "null_count": 5,
+          "row_count": 100,
+          "created_at": "2018-01-01 1:00:00.00000+00:00"
+        }
+      ]`)
+    ]
+  )
+  [ (Eq (Var "b") (Const 1 "int")) ]
+)
+----
+select
+ ├── columns: a:1(int) b:2(int!null) c:3(int)
+ ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=1, null(2)=0]
+ ├── fd: ()-->(2)
+ ├── fake-rel
+ │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=20, null(2)=5]
+ └── filters
+      └── b:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+
+# Regression test for #37754.
+norm
+SELECT
+    1
+FROM
+    (
+        VALUES
+            (true, NULL, B'001000101101110'),
+            (true, e'19\x1e':::STRING, NULL)
+    )
+        AS t (_bool, _string, _bit)
+GROUP BY
+    _string, _bit
+HAVING
+    min(_bool)
+----
+project
+ ├── columns: "?column?":5(int!null)
+ ├── cardinality: [0 - 2]
+ ├── stats: [rows=1]
+ ├── fd: ()-->(5)
+ ├── select
+ │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool!null)
+ │    ├── cardinality: [0 - 2]
+ │    ├── stats: [rows=1, distinct(4)=1, null(4)=0]
+ │    ├── key: (2,3)
+ │    ├── fd: ()-->(4)
+ │    ├── group-by (hash)
+ │    │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool!null)
+ │    │    ├── grouping columns: column2:2(string) column3:3(varbit)
+ │    │    ├── cardinality: [1 - 2]
+ │    │    ├── stats: [rows=2, distinct(4)=2, null(4)=0, distinct(2,3)=2, null(2,3)=0]
+ │    │    ├── key: (2,3)
+ │    │    ├── fd: (2,3)-->(4)
+ │    │    ├── values
+ │    │    │    ├── columns: column1:1(bool!null) column2:2(string) column3:3(varbit)
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── stats: [rows=2, distinct(2,3)=2, null(2,3)=0]
+ │    │    │    ├── (true, NULL, B'001000101101110') [type=tuple{bool, string, varbit}]
+ │    │    │    └── (true, e'19\x1e', NULL) [type=tuple{bool, string, varbit}]
+ │    │    └── aggregations
+ │    │         └── min [as=min:4, type=bool, outer=(1)]
+ │    │              └── column1:1 [type=bool]
+ │    └── filters
+ │         └── min:4 [type=bool, outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+ └── projections
+      └── 1 [as="?column?":5, type=int]
+
+# Test that distinct count estimates are correct for date ranges.
+exec-ddl
+CREATE TABLE date_test (
+    k INT PRIMARY KEY,
+    d1 date NOT NULL,
+    d2 date NOT NULL,
+    d3 date NOT NULL,
+    INDEX d1_idx (d1 ASC),
+    INDEX d2_idx (d2 DESC)
+)
+----
+
+opt
+SELECT d1 FROM date_test WHERE d1 > DATE '1995-10-01' AND d1 < DATE '1995-11-01'
+----
+scan date_test@d1_idx
+ ├── columns: d1:2(date!null)
+ ├── constraint: /2/1: [/'1995-10-02' - /'1995-10-31']
+ └── stats: [rows=300, distinct(2)=30, null(2)=0]
+
+opt
+SELECT d1 FROM date_test WHERE d1 >= DATE '1995-10-01' AND d1 <= DATE '1995-11-01'
+----
+scan date_test@d1_idx
+ ├── columns: d1:2(date!null)
+ ├── constraint: /2/1: [/'1995-10-01' - /'1995-11-01']
+ └── stats: [rows=320, distinct(2)=32, null(2)=0]
+
+opt
+SELECT d2 FROM date_test WHERE d2 > DATE '1903-10-01' AND d2 <= DATE '1903-11-01'
+----
+scan date_test@d2_idx
+ ├── columns: d2:3(date!null)
+ ├── constraint: /-3/1: [/'1903-11-01' - /'1903-10-02']
+ └── stats: [rows=310, distinct(3)=31, null(3)=0]
+
+opt
+SELECT d2 FROM date_test WHERE d2 >= DATE '2003-10-01' AND d2 < DATE '2003-11-01'
+----
+scan date_test@d2_idx
+ ├── columns: d2:3(date!null)
+ ├── constraint: /-3/1: [/'2003-10-31' - /'2003-10-01']
+ └── stats: [rows=310, distinct(3)=31, null(3)=0]
+
+opt
+SELECT d3 FROM date_test WHERE d3 >= DATE '2003-10-01' AND d3 < DATE '2003-11-01'
+----
+select
+ ├── columns: d3:4(date!null)
+ ├── stats: [rows=310, distinct(4)=31, null(4)=0]
+ ├── scan date_test
+ │    ├── columns: d3:4(date!null)
+ │    └── stats: [rows=1000, distinct(4)=100, null(4)=0]
+ └── filters
+      └── (d3:4 >= '2003-10-01') AND (d3:4 < '2003-11-01') [type=bool, outer=(4), constraints=(/4: [/'2003-10-01' - /'2003-10-31']; tight)]
+
+opt
+SELECT d3 FROM date_test WHERE d3 >= DATE '1903-10-01' AND d3 < DATE '2003-10-01'
+----
+select
+ ├── columns: d3:4(date!null)
+ ├── stats: [rows=1000, distinct(4)=100, null(4)=0]
+ ├── scan date_test
+ │    ├── columns: d3:4(date!null)
+ │    └── stats: [rows=1000, distinct(4)=100, null(4)=0]
+ └── filters
+      └── (d3:4 >= '1903-10-01') AND (d3:4 < '2003-10-01') [type=bool, outer=(4), constraints=(/4: [/'1903-10-01' - /'2003-09-30']; tight)]
+
+# Regression test for #38344. Avoid floating point precision errors.
+exec-ddl
+CREATE TABLE t38344 (x BOOL)
+----
+
+exec-ddl
+ALTER TABLE t38344 INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 20000000000,
+    "distinct_count": 1,
+    "null_count": 20000000000
+  }
+]'
+----
+
+norm disable=InlineWith
+WITH t(x) AS (
+  SELECT (t1.x::int << 5533)::bool OR t2.x  AS x
+  FROM t38344 AS t1 LEFT JOIN t38344 AS t2 ON true
+)
+SELECT x FROM t WHERE x
+----
+with &1 (t)
+ ├── columns: x:10(bool!null)
+ ├── immutable
+ ├── stats: [rows=4e+20, distinct(10)=1, null(10)=0]
+ ├── fd: ()-->(10)
+ ├── project
+ │    ├── columns: x:9(bool)
+ │    ├── immutable
+ │    ├── stats: [rows=4e+20, distinct(9)=1, null(9)=0]
+ │    ├── left-join (cross)
+ │    │    ├── columns: t1.x:1(bool) t2.x:5(bool)
+ │    │    ├── stats: [rows=4e+20, distinct(1,5)=1, null(1,5)=4e+20]
+ │    │    ├── scan t38344 [as=t1]
+ │    │    │    ├── columns: t1.x:1(bool)
+ │    │    │    └── stats: [rows=2e+10, distinct(1)=1, null(1)=2e+10]
+ │    │    ├── scan t38344 [as=t2]
+ │    │    │    ├── columns: t2.x:5(bool)
+ │    │    │    └── stats: [rows=2e+10, distinct(5)=1, null(5)=2e+10]
+ │    │    └── filters (true)
+ │    └── projections
+ │         └── (t1.x:1::INT8 << 5533)::BOOL OR t2.x:5 [as=x:9, type=bool, outer=(1,5), immutable]
+ └── select
+      ├── columns: x:10(bool!null)
+      ├── stats: [rows=4e+20, distinct(10)=1, null(10)=0]
+      ├── fd: ()-->(10)
+      ├── with-scan &1 (t)
+      │    ├── columns: x:10(bool)
+      │    ├── mapping:
+      │    │    └──  x:9(bool) => x:10(bool)
+      │    └── stats: [rows=4e+20, distinct(10)=1, null(10)=0]
+      └── filters
+           └── x:10 [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight), fd=()-->(10)]
+
+# Regression test for #38375. Avoid floating point precision errors.
+exec-ddl
+CREATE TABLE t38375 (x INT, y INT)
+----
+
+exec-ddl
+ALTER TABLE t38375 INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 20000000000,
+    "distinct_count": 20000000000,
+    "null_count": 20000000000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 20000000000,
+    "distinct_count": 10,
+    "null_count": 0
+  }
+]'
+----
+
+opt colstat=2
+SELECT * FROM t38375 WHERE x = 1
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=4, distinct(1)=1, null(1)=0, distinct(2)=3.2968, null(2)=0]
+ ├── fd: ()-->(1)
+ ├── scan t38375
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── stats: [rows=2e+10, distinct(1)=2e+10, null(1)=2e+10, distinct(2)=10, null(2)=0]
+ └── filters
+      └── x:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+# Support OR constraints.
+exec-ddl
+CREATE TABLE nation
+(
+    n_nationkey int PRIMARY KEY,
+    n_name char(25) NOT NULL,
+    n_regionkey int NOT NULL,
+    neighbor char(25) NOT NULL,
+    INDEX n_rk (n_regionkey ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE nation INJECT STATISTICS '[
+  {
+    "columns": ["n_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 2,
+    "null_count": 0
+  }
+]'
+----
+
+opt
+SELECT * FROM nation WHERE n_name = 'FRANCE' OR n_name = 'GERMANY'
+----
+select
+ ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
+ ├── stats: [rows=1e+06, distinct(2)=2, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan nation
+ │    ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
+ │    ├── stats: [rows=1e+06, distinct(1)=1e+06, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── (n_name:2 = 'FRANCE') OR (n_name:2 = 'GERMANY') [type=bool, outer=(2), constraints=(/2: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; tight)]
+
+opt
+SELECT * FROM nation WHERE (n_name = 'FRANCE' AND neighbor = 'GERMANY') OR (n_name = 'GERMANY' AND neighbor = 'FRANCE')
+----
+select
+ ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
+ ├── stats: [rows=6.6667, distinct(2)=2, null(2)=0, distinct(4)=2, null(4)=0, distinct(2,4)=2, null(2,4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan nation
+ │    ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
+ │    ├── stats: [rows=1e+06, distinct(1)=1e+06, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0, distinct(2,4)=200000, null(2,4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── ((n_name:2 = 'FRANCE') AND (neighbor:4 = 'GERMANY')) OR ((n_name:2 = 'GERMANY') AND (neighbor:4 = 'FRANCE')) [type=bool, outer=(2,4), constraints=(/2: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /4: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+
+opt
+SELECT * FROM nation WHERE (n_name, neighbor) in (('FRANCE', 'GERMANY'), ('GERMANY', 'FRANCE'))
+----
+select
+ ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
+ ├── stats: [rows=20.0001, distinct(2)=2, null(2)=0, distinct(4)=2, null(4)=0, distinct(2,4)=2, null(2,4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan nation
+ │    ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
+ │    ├── stats: [rows=1e+06, distinct(1)=1e+06, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0, distinct(2,4)=200000, null(2,4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── (n_name:2, neighbor:4) IN (('FRANCE', 'GERMANY'), ('GERMANY', 'FRANCE')) [type=bool, outer=(2,4), constraints=(/2/4: [/'FRANCE'/'GERMANY' - /'FRANCE'/'GERMANY'] [/'GERMANY'/'FRANCE' - /'GERMANY'/'FRANCE']; /4: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; tight)]
+
+# Make sure the that histogram and distinct counts don't interfere with each
+# other during selectivity calculation.
+exec-ddl
+CREATE TABLE hist_and_distinct (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  INDEX idx_a (a)
+)
+----
+
+exec-ddl
+ALTER TABLE hist_and_distinct INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 9, "upper_bound": "20"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 9, "upper_bound": "30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 9, "upper_bound": "40"}
+    ]
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 120
+  }
+]'
+----
+
+norm
+SELECT * FROM hist_and_distinct WHERE a = 10 AND b = 10 AND c = 10 AND d >= 10 AND d < 100
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(1-3)=1, null(1-3)=0, distinct(1-4)=1, null(1-4)=0]
+ │   histogram(1)=  0  1
+ │                <--- 10
+ ├── fd: ()-->(1-3)
+ ├── scan hist_and_distinct
+ │    ├── columns: a:1(int) b:2(int) c:3(int) d:4(int)
+ │    └── stats: [rows=1000, distinct(1)=40, null(1)=0, distinct(2)=5, null(2)=0, distinct(3)=5, null(3)=0, distinct(4)=120, null(4)=0, distinct(1-3)=1000, null(1-3)=0, distinct(1-4)=1000, null(1-4)=0]
+ │        histogram(1)=  0  0  90  10  180  20  270  30  360  40
+ │                     <--- 0 ---- 10 ----- 20 ----- 30 ----- 40
+ └── filters
+      ├── (d:4 >= 10) AND (d:4 < 100) [type=bool, outer=(4), constraints=(/4: [/10 - /99]; tight)]
+      ├── a:1 = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+      ├── b:2 = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      └── c:3 = 10 [type=bool, outer=(3), constraints=(/3: [/10 - /10]; tight), fd=()-->(3)]
+
+# Test that a histogram on a boolean column is used.
+exec-ddl
+CREATE TABLE hist_bool (a INT, b BOOL)
+----
+
+exec-ddl
+ALTER TABLE hist_bool INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 2,
+    "histo_col_type": "BOOL",
+    "histo_buckets": [
+      {"num_eq": 900, "num_range": 0, "distinct_range": 0, "upper_bound": "false"},
+      {"num_eq": 100, "num_range": 0, "distinct_range": 0, "upper_bound": "true"}
+    ]
+  }
+]'
+----
+
+norm
+SELECT * FROM hist_bool WHERE b = false
+----
+select
+ ├── columns: a:1(int) b:2(bool!null)
+ ├── stats: [rows=900, distinct(2)=1, null(2)=0]
+ │   histogram(2)=  0   900
+ │                <--- false
+ ├── fd: ()-->(2)
+ ├── scan hist_bool
+ │    ├── columns: a:1(int) b:2(bool)
+ │    └── stats: [rows=1000, distinct(2)=2, null(2)=0]
+ │        histogram(2)=  0   900   0  100
+ │                     <--- false --- true
+ └── filters
+      └── NOT b:2 [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
+
+exec-ddl
+CREATE TABLE t0(c0 INT)
+----
+
+exec-ddl
+CREATE VIEW v0(c0) AS SELECT CASE WHEN t0.c0 > 0 THEN 1 ELSE t0.rowid END FROM t0
+----
+
+exec-ddl
+ALTER TABLE t0 INJECT STATISTICS '[
+  {
+    "columns": ["c0"],
+    "created_at": "2020-01-28 03:02:57.841772+00:00",
+    "row_count": 3,
+    "distinct_count": 1,
+    "null_count": 3
+  },
+  {
+    "columns": ["rowid"],
+    "created_at": "2020-01-28 03:03:03.012072+00:00",
+    "row_count": 2,
+    "distinct_count": 2,
+    "null_count": 0,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "3"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "4"
+      }
+    ],
+    "histo_col_type": "INT8"
+  }
+]'
+----
+
+# Regression test for #44418. Make sure inconsistent stats don't cause an
+# error.
+norm
+SELECT * FROM v0 WHERE v0.c0 > 0
+----
+project
+ ├── columns: c0:5(int)
+ ├── stats: [rows=1]
+ ├── select
+ │    ├── columns: c0:1(int) t0.rowid:2(int!null)
+ │    ├── stats: [rows=1]
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(1)
+ │    ├── scan t0
+ │    │    ├── columns: c0:1(int) t0.rowid:2(int!null)
+ │    │    ├── stats: [rows=2]
+ │    │    ├── key: (2)
+ │    │    └── fd: (2)-->(1)
+ │    └── filters
+ │         └── CASE WHEN c0:1 > 0 THEN 1 ELSE t0.rowid:2 END > 0 [type=bool, outer=(1,2)]
+ └── projections
+      └── CASE WHEN c0:1 > 0 THEN 1 ELSE t0.rowid:2 END [as=rowid:5, type=int, outer=(1,2)]
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2020-01-28 03:02:57.841772+00:00",
+    "row_count": 3,
+    "distinct_count": 3
+  }
+]'
+----
+
+# Regression test for #44563. Set a lower bound on the distinct count from
+# the multi-span constraint.
+norm
+SELECT * FROM a WHERE x <= 5 OR x = 10 OR x = 15
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=2, distinct(1)=2, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── stats: [rows=3, distinct(1)=3, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── ((x:1 <= 5) OR (x:1 = 10)) OR (x:1 = 15) [type=bool, outer=(1), constraints=(/1: (/NULL - /5] [/10 - /10] [/15 - /15]; tight)]
+
+exec-ddl
+CREATE TABLE data (
+  user_id UUID NOT NULL,
+  name VARCHAR(255) NULL,
+  created TIMESTAMPTZ,
+  INDEX user_id_idx (user_id ASC),
+  INDEX name_idx (name ASC),
+  INDEX created_idx (created ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE data INJECT STATISTICS '[
+  {
+    "columns": ["user_id"],
+    "created_at": "2020-01-28 03:02:57.841772+00:00",
+    "row_count": 10000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "3b57b3e4-a68a-9b47-2752-e365d7d8954e"
+      },
+      {
+        "distinct_range": 499,
+        "num_eq": 1,
+        "num_range": 4998,
+        "upper_bound": "6b49a786-387b-d5a2-6582-4e963eb4d537"
+      },
+      {
+        "distinct_range": 499,
+        "num_eq": 1,
+        "num_range": 4999,
+        "upper_bound": "d9739a48-d5be-9a62-e752-34d877e56ba5"
+      }
+    ],
+    "histo_col_type": "UUID"
+  },
+  {
+    "columns": ["name"],
+    "created_at": "2020-01-28 03:03:03.012072+00:00",
+    "row_count": 10000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "a"
+      },
+      {
+        "distinct_range": 499,
+        "num_eq": 1,
+        "num_range": 4998,
+        "upper_bound": "b"
+      },
+      {
+        "distinct_range": 499,
+        "num_eq": 1,
+        "num_range": 4999,
+        "upper_bound": "c"
+      }
+    ],
+    "histo_col_type": "STRING"
+  },
+  {
+    "columns": ["created"],
+    "created_at": "2020-01-28 03:03:03.012072+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000,
+    "null_count": 0,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "2020-02-11 07:25:00+00:00"
+      },
+      {
+        "distinct_range": 4998,
+        "num_eq": 1,
+        "num_range": 4998,
+        "upper_bound": "2020-03-21 06:45:41+00:00"
+      },
+      {
+        "distinct_range": 4999,
+        "num_eq": 1,
+        "num_range": 4999,
+        "upper_bound": "2020-04-21 06:25:41+00:00"
+      }
+    ],
+    "histo_col_type": "TIMESTAMPTZ"
+  }
+]'
+----
+
+# Make sure that using a histogram produces correct stats with equality
+# predicates on data types such as UUID, string, and timepstamptz.
+norm
+SELECT * FROM data WHERE user_id = '679d3e56-b985-63d2-5442-e4ba7a8479e3'
+----
+select
+ ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)
+ ├── stats: [rows=10.016, distinct(1)=1, null(1)=0]
+ │   histogram(1)=  0                  10.016
+ │                <--- '679d3e56-b985-63d2-5442-e4ba7a8479e3'
+ ├── fd: ()-->(1)
+ ├── scan data
+ │    ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)
+ │    └── stats: [rows=10000, distinct(1)=1000, null(1)=0]
+ │        histogram(1)=  0                    1                     4998                    1                     4999                    1
+ │                     <--- '3b57b3e4-a68a-9b47-2752-e365d7d8954e' ------ '6b49a786-387b-d5a2-6582-4e963eb4d537' ------ 'd9739a48-d5be-9a62-e752-34d877e56ba5'
+ └── filters
+      └── user_id:1 = '679d3e56-b985-63d2-5442-e4ba7a8479e3' [type=bool, outer=(1), constraints=(/1: [/'679d3e56-b985-63d2-5442-e4ba7a8479e3' - /'679d3e56-b985-63d2-5442-e4ba7a8479e3']; tight), fd=()-->(1)]
+
+norm
+SELECT * FROM data WHERE name = 'abc'
+----
+select
+ ├── columns: user_id:1(uuid!null) name:2(varchar!null) created:3(timestamptz)
+ ├── stats: [rows=10.016, distinct(2)=1, null(2)=0]
+ │   histogram(2)=  0 10.016
+ │                <--- 'abc'
+ ├── fd: ()-->(2)
+ ├── scan data
+ │    ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)
+ │    └── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(2)=1000, null(2)=0]
+ │        histogram(1)=  0                    1                     4998                    1                     4999                    1
+ │                     <--- '3b57b3e4-a68a-9b47-2752-e365d7d8954e' ------ '6b49a786-387b-d5a2-6582-4e963eb4d537' ------ 'd9739a48-d5be-9a62-e752-34d877e56ba5'
+ │        histogram(2)=  0   1   4998   1   4999   1
+ │                     <--- 'a' ------ 'b' ------ 'c'
+ └── filters
+      └── name:2 = 'abc' [type=bool, outer=(2), constraints=(/2: [/'abc' - /'abc']; tight), fd=()-->(2)]
+
+norm
+SELECT * FROM data WHERE created = '2020-04-11 06:25:41+00:00'
+----
+select
+ ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz!null)
+ ├── stats: [rows=1, distinct(3)=1, null(3)=0]
+ │   histogram(3)=  0             1
+ │                <--- '2020-04-11 06:25:41+00'
+ ├── fd: ()-->(3)
+ ├── scan data
+ │    ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)
+ │    └── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(3)=10000, null(3)=0]
+ │        histogram(1)=  0                    1                     4998                    1                     4999                    1
+ │                     <--- '3b57b3e4-a68a-9b47-2752-e365d7d8954e' ------ '6b49a786-387b-d5a2-6582-4e963eb4d537' ------ 'd9739a48-d5be-9a62-e752-34d877e56ba5'
+ │        histogram(3)=  0             1              4998             1              4999             1
+ │                     <--- '2020-02-11 07:25:00+00' ------ '2020-03-21 06:45:41+00' ------ '2020-04-21 06:25:41+00'
+ └── filters
+      └── created:3 = '2020-04-11 06:25:41+00' [type=bool, outer=(3), constraints=(/3: [/'2020-04-11 06:25:41+00' - /'2020-04-11 06:25:41+00']; tight), fd=()-->(3)]
+
+# Make sure that using a histogram produces correct stats with range
+# calculations for non-numeric types.
+norm
+SELECT * FROM data WHERE name >= 'bbb'
+----
+select
+ ├── columns: user_id:1(uuid!null) name:2(varchar!null) created:3(timestamptz)
+ ├── stats: [rows=3090.9, distinct(2)=309.433, null(2)=0]
+ │   histogram(2)=  0    0    3089.9   1
+ │                <--- 'bbb' -------- 'c'
+ ├── scan data
+ │    ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)
+ │    └── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(2)=1000, null(2)=0]
+ │        histogram(1)=  0                    1                     4998                    1                     4999                    1
+ │                     <--- '3b57b3e4-a68a-9b47-2752-e365d7d8954e' ------ '6b49a786-387b-d5a2-6582-4e963eb4d537' ------ 'd9739a48-d5be-9a62-e752-34d877e56ba5'
+ │        histogram(2)=  0   1   4998   1   4999   1
+ │                     <--- 'a' ------ 'b' ------ 'c'
+ └── filters
+      └── name:2 >= 'bbb' [type=bool, outer=(2), constraints=(/2: [/'bbb' - ]; tight)]
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2020-05-26 03:02:57.841772+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+----
+
+# Regression test for #48828. Stats for BETWEEN SYMMETRIC should be based on
+# the tight constraint rather than calculated as 1/3rd of the cardinality.
+norm
+SELECT * FROM a WHERE x BETWEEN SYMMETRIC 25 and 50
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── cardinality: [0 - 26]
+ ├── stats: [rows=26, distinct(1)=26, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── ((x:1 >= 25) AND (x:1 <= 50)) OR ((x:1 >= 50) AND (x:1 <= 25)) [type=bool, outer=(1), constraints=(/1: [/25 - /50]; tight)]
+
+exec-ddl
+ALTER TABLE b INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2020-01-28 03:02:57.841772+00:00",
+    "row_count": 10000,
+    "distinct_count": 1000
+  },
+  {
+    "columns": ["z"],
+    "created_at": "2020-01-28 03:02:57.841772+00:00",
+    "row_count": 10000,
+    "distinct_count": 100
+  } ,
+  {
+    "columns": ["x","z"],
+    "created_at": "2020-01-28 03:02:57.841772+00:00",
+    "row_count": 10000,
+    "distinct_count": 1500
+  }
+]'
+----
+
+# Multi-column stats test.
+build
+SELECT * FROM b WHERE x = 1 AND z = 2
+----
+project
+ ├── columns: x:1(int!null) z:2(int!null)
+ ├── stats: [rows=5.65446]
+ ├── fd: ()-->(1,2)
+ └── select
+      ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      ├── stats: [rows=5.65446, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
+      ├── key: (3)
+      ├── fd: ()-->(1,2), (3)-->(4,5)
+      ├── scan b
+      │    ├── columns: x:1(int) z:2(int!null) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=10000, null(3)=0, distinct(1,2)=1500, null(1,2)=0]
+      │    ├── key: (3)
+      │    └── fd: (3)-->(1,2,4,5)
+      └── filters
+           └── (x:1 = 1) AND (z:2 = 2) [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; tight), fd=()-->(1,2)]
+
+exec-ddl
+CREATE TABLE t (
+  c1 INT, c2 INT, c3 INT, c4 INT, c5 INT, c6 INT, c7 INT, c8 INT, c9 INT, c10 INT,
+  c11 INT, c12 INT, c13 INT, c14 INT, c15 INT, c16 INT, c17 INT, c18 INT, c19 INT, c20 INT,
+  c21 INT, c22 INT, c23 INT, c24 INT, c25 INT, c26 INT, c27 INT, c28 INT, c29 INT, c30 INT,
+  c31 INT, c32 INT, c33 INT
+)
+----
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+    {
+        "columns": [
+            "rowid"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "586287403267325953"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c1"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c2"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c3"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c4"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c5"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c6"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c7"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c8"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c9"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c10"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c11"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c12"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c13"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c14"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c15"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c16"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c17"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c18"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c19"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c20"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c21"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c22"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c23"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c24"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c25"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c26"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c27"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c28"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c29"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c30"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c31"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c32"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c33"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    }
+]'
+----
+
+# Regression test for #53311.
+norm
+SELECT * FROM t
+WHERE c1 = 1 AND c2 = 1 AND c3 = 1 AND c4 = 1 AND c5 = 1 AND c6 = 1 AND c7 = 1
+AND c8 = 1 AND c9 = 1 AND c10 = 1 AND c11 = 1 AND c12 = 1 AND c13 = 1 AND c14 = 1
+AND c15 = 1 AND c16 = 1 AND c17 = 1 AND c18 = 1 AND c19 = 1 AND c20 = 1 AND c21 = 1
+AND c22 = 1 AND c23 = 1 AND c24 = 1 AND c25 = 1 AND c26 = 1 AND c27 = 1 AND c28 = 1
+AND c29 = 1 AND c30 = 1 AND c31 = 1 AND c32 = 1 AND c33 = 1
+----
+select
+ ├── columns: c1:1(int!null) c2:2(int!null) c3:3(int!null) c4:4(int!null) c5:5(int!null) c6:6(int!null) c7:7(int!null) c8:8(int!null) c9:9(int!null) c10:10(int!null) c11:11(int!null) c12:12(int!null) c13:13(int!null) c14:14(int!null) c15:15(int!null) c16:16(int!null) c17:17(int!null) c18:18(int!null) c19:19(int!null) c20:20(int!null) c21:21(int!null) c22:22(int!null) c23:23(int!null) c24:24(int!null) c25:25(int!null) c26:26(int!null) c27:27(int!null) c28:28(int!null) c29:29(int!null) c30:30(int!null) c31:31(int!null) c32:32(int!null) c33:33(int!null)
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0, distinct(10)=1, null(10)=0, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0, distinct(18)=1, null(18)=0, distinct(19)=1, null(19)=0, distinct(20)=1, null(20)=0, distinct(21)=1, null(21)=0, distinct(22)=1, null(22)=0, distinct(23)=1, null(23)=0, distinct(24)=1, null(24)=0, distinct(25)=1, null(25)=0, distinct(26)=1, null(26)=0, distinct(27)=1, null(27)=0, distinct(28)=1, null(28)=0, distinct(29)=1, null(29)=0, distinct(30)=1, null(30)=0, distinct(31)=1, null(31)=0, distinct(32)=1, null(32)=0, distinct(33)=1, null(33)=0, distinct(1-33)=1, null(1-33)=0]
+ ├── fd: ()-->(1-33)
+ ├── scan t
+ │    ├── columns: c1:1(int) c2:2(int) c3:3(int) c4:4(int) c5:5(int) c6:6(int) c7:7(int) c8:8(int) c9:9(int) c10:10(int) c11:11(int) c12:12(int) c13:13(int) c14:14(int) c15:15(int) c16:16(int) c17:17(int) c18:18(int) c19:19(int) c20:20(int) c21:21(int) c22:22(int) c23:23(int) c24:24(int) c25:25(int) c26:26(int) c27:27(int) c28:28(int) c29:29(int) c30:30(int) c31:31(int) c32:32(int) c33:33(int)
+ │    └── stats: [rows=1, distinct(1)=1, null(1)=1, distinct(2)=1, null(2)=1, distinct(3)=1, null(3)=1, distinct(4)=1, null(4)=1, distinct(5)=1, null(5)=1, distinct(6)=1, null(6)=1, distinct(7)=1, null(7)=1, distinct(8)=1, null(8)=1, distinct(9)=1, null(9)=1, distinct(10)=1, null(10)=1, distinct(11)=1, null(11)=1, distinct(12)=1, null(12)=1, distinct(13)=1, null(13)=1, distinct(14)=1, null(14)=1, distinct(15)=1, null(15)=1, distinct(16)=1, null(16)=1, distinct(17)=1, null(17)=1, distinct(18)=1, null(18)=1, distinct(19)=1, null(19)=1, distinct(20)=1, null(20)=1, distinct(21)=1, null(21)=1, distinct(22)=1, null(22)=1, distinct(23)=1, null(23)=1, distinct(24)=1, null(24)=1, distinct(25)=1, null(25)=1, distinct(26)=1, null(26)=1, distinct(27)=1, null(27)=1, distinct(28)=1, null(28)=1, distinct(29)=1, null(29)=1, distinct(30)=1, null(30)=1, distinct(31)=1, null(31)=1, distinct(32)=1, null(32)=1, distinct(33)=1, null(33)=1, distinct(1-33)=1, null(1-33)=1]
+ └── filters
+      ├── c1:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      ├── c2:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      ├── c3:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+      ├── c4:4 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+      ├── c5:5 = 1 [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+      ├── c6:6 = 1 [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+      ├── c7:7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      ├── c8:8 = 1 [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+      ├── c9:9 = 1 [type=bool, outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
+      ├── c10:10 = 1 [type=bool, outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+      ├── c11:11 = 1 [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+      ├── c12:12 = 1 [type=bool, outer=(12), constraints=(/12: [/1 - /1]; tight), fd=()-->(12)]
+      ├── c13:13 = 1 [type=bool, outer=(13), constraints=(/13: [/1 - /1]; tight), fd=()-->(13)]
+      ├── c14:14 = 1 [type=bool, outer=(14), constraints=(/14: [/1 - /1]; tight), fd=()-->(14)]
+      ├── c15:15 = 1 [type=bool, outer=(15), constraints=(/15: [/1 - /1]; tight), fd=()-->(15)]
+      ├── c16:16 = 1 [type=bool, outer=(16), constraints=(/16: [/1 - /1]; tight), fd=()-->(16)]
+      ├── c17:17 = 1 [type=bool, outer=(17), constraints=(/17: [/1 - /1]; tight), fd=()-->(17)]
+      ├── c18:18 = 1 [type=bool, outer=(18), constraints=(/18: [/1 - /1]; tight), fd=()-->(18)]
+      ├── c19:19 = 1 [type=bool, outer=(19), constraints=(/19: [/1 - /1]; tight), fd=()-->(19)]
+      ├── c20:20 = 1 [type=bool, outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
+      ├── c21:21 = 1 [type=bool, outer=(21), constraints=(/21: [/1 - /1]; tight), fd=()-->(21)]
+      ├── c22:22 = 1 [type=bool, outer=(22), constraints=(/22: [/1 - /1]; tight), fd=()-->(22)]
+      ├── c23:23 = 1 [type=bool, outer=(23), constraints=(/23: [/1 - /1]; tight), fd=()-->(23)]
+      ├── c24:24 = 1 [type=bool, outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
+      ├── c25:25 = 1 [type=bool, outer=(25), constraints=(/25: [/1 - /1]; tight), fd=()-->(25)]
+      ├── c26:26 = 1 [type=bool, outer=(26), constraints=(/26: [/1 - /1]; tight), fd=()-->(26)]
+      ├── c27:27 = 1 [type=bool, outer=(27), constraints=(/27: [/1 - /1]; tight), fd=()-->(27)]
+      ├── c28:28 = 1 [type=bool, outer=(28), constraints=(/28: [/1 - /1]; tight), fd=()-->(28)]
+      ├── c29:29 = 1 [type=bool, outer=(29), constraints=(/29: [/1 - /1]; tight), fd=()-->(29)]
+      ├── c30:30 = 1 [type=bool, outer=(30), constraints=(/30: [/1 - /1]; tight), fd=()-->(30)]
+      ├── c31:31 = 1 [type=bool, outer=(31), constraints=(/31: [/1 - /1]; tight), fd=()-->(31)]
+      ├── c32:32 = 1 [type=bool, outer=(32), constraints=(/32: [/1 - /1]; tight), fd=()-->(32)]
+      └── c33:33 = 1 [type=bool, outer=(33), constraints=(/33: [/1 - /1]; tight), fd=()-->(33)]
+
+# Estimate statistics for filters with disjunctions by unioning the selectivity
+# of each disjunction. As a result, the optimizer can prefer unions of multiple
+# index scans over full table scans in more cases. See #58744.
+
+exec-ddl
+CREATE TABLE disjunction (
+  k INT PRIMARY KEY,
+  a STRING,
+  b STRING,
+  c STRING,
+  INDEX a_idx (a),
+  INDEX b_idx (b),
+  INDEX c_idx (c)
+)
+----
+
+exec-ddl
+ALTER TABLE disjunction INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  }
+]'
+----
+
+# Disjunction without histograms.
+opt
+SELECT * FROM disjunction WHERE a = 'foo' OR b = 'foo' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=1.9995]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── distinct-on
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +1
+ │    ├── stats: [rows=1.9995]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 5.00
+ │    ├── union-all
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── left columns: k:7(int) a:8(string) b:9(string) c:10(string)
+ │    │    ├── right columns: k:13(int) a:14(string) b:15(string) c:16(string)
+ │    │    ├── stats: [rows=2]
+ │    │    ├── ordering: +1
+ │    │    ├── index-join disjunction
+ │    │    │    ├── columns: k:7(int!null) a:8(string!null) b:9(string) c:10(string)
+ │    │    │    ├── stats: [rows=1, distinct(8)=1, null(8)=0]
+ │    │    │    ├── key: (7)
+ │    │    │    ├── fd: ()-->(8), (7)-->(9,10)
+ │    │    │    ├── ordering: +7 opt(8) [actual: +7]
+ │    │    │    └── scan disjunction@a_idx
+ │    │    │         ├── columns: k:7(int!null) a:8(string!null)
+ │    │    │         ├── constraint: /8/7: [/'foo' - /'foo']
+ │    │    │         ├── stats: [rows=1, distinct(8)=1, null(8)=0]
+ │    │    │         ├── key: (7)
+ │    │    │         ├── fd: ()-->(8)
+ │    │    │         └── ordering: +7 opt(8) [actual: +7]
+ │    │    └── index-join disjunction
+ │    │         ├── columns: k:13(int!null) a:14(string) b:15(string!null) c:16(string)
+ │    │         ├── stats: [rows=1, distinct(15)=1, null(15)=0]
+ │    │         ├── key: (13)
+ │    │         ├── fd: ()-->(15), (13)-->(14,16)
+ │    │         ├── ordering: +13 opt(15) [actual: +13]
+ │    │         └── scan disjunction@b_idx
+ │    │              ├── columns: k:13(int!null) b:15(string!null)
+ │    │              ├── constraint: /15/13: [/'foo' - /'foo']
+ │    │              ├── stats: [rows=1, distinct(15)=1, null(15)=0]
+ │    │              ├── key: (13)
+ │    │              ├── fd: ()-->(15)
+ │    │              └── ordering: +13 opt(15) [actual: +13]
+ │    └── aggregations
+ │         ├── const-agg [as=a:2, type=string, outer=(2)]
+ │         │    └── a:2 [type=string]
+ │         ├── const-agg [as=b:3, type=string, outer=(3)]
+ │         │    └── b:3 [type=string]
+ │         └── const-agg [as=c:4, type=string, outer=(4)]
+ │              └── c:4 [type=string]
+ └── 5 [type=int]
+
+# Multiple disjunctions without histograms.
+opt
+SELECT * FROM disjunction WHERE a = 'foo' OR b = 'foo' OR c = 'foo' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=2.9985]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── distinct-on
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    ├── grouping columns: k:1(int!null)
+ │    ├── internal-ordering: +1
+ │    ├── stats: [rows=2.9985]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 5.00
+ │    ├── union-all
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── left columns: k:7(int) a:8(string) b:9(string) c:10(string)
+ │    │    ├── right columns: k:13(int) a:14(string) b:15(string) c:16(string)
+ │    │    ├── stats: [rows=2.9995]
+ │    │    ├── ordering: +1
+ │    │    ├── index-join disjunction
+ │    │    │    ├── columns: k:7(int!null) a:8(string!null) b:9(string) c:10(string)
+ │    │    │    ├── stats: [rows=1, distinct(8)=1, null(8)=0]
+ │    │    │    ├── key: (7)
+ │    │    │    ├── fd: ()-->(8), (7)-->(9,10)
+ │    │    │    ├── ordering: +7 opt(8) [actual: +7]
+ │    │    │    └── scan disjunction@a_idx
+ │    │    │         ├── columns: k:7(int!null) a:8(string!null)
+ │    │    │         ├── constraint: /8/7: [/'foo' - /'foo']
+ │    │    │         ├── stats: [rows=1, distinct(8)=1, null(8)=0]
+ │    │    │         ├── key: (7)
+ │    │    │         ├── fd: ()-->(8)
+ │    │    │         └── ordering: +7 opt(8) [actual: +7]
+ │    │    └── distinct-on
+ │    │         ├── columns: k:13(int!null) a:14(string) b:15(string) c:16(string)
+ │    │         ├── grouping columns: k:13(int!null)
+ │    │         ├── stats: [rows=1.9995]
+ │    │         ├── key: (13)
+ │    │         ├── fd: (13)-->(14-16)
+ │    │         ├── ordering: +13
+ │    │         ├── union-all
+ │    │         │    ├── columns: k:13(int!null) a:14(string) b:15(string) c:16(string)
+ │    │         │    ├── left columns: k:19(int) a:20(string) b:21(string) c:22(string)
+ │    │         │    ├── right columns: k:25(int) a:26(string) b:27(string) c:28(string)
+ │    │         │    ├── stats: [rows=2]
+ │    │         │    ├── ordering: +13
+ │    │         │    ├── index-join disjunction
+ │    │         │    │    ├── columns: k:19(int!null) a:20(string) b:21(string) c:22(string!null)
+ │    │         │    │    ├── stats: [rows=1, distinct(22)=1, null(22)=0]
+ │    │         │    │    ├── key: (19)
+ │    │         │    │    ├── fd: ()-->(22), (19)-->(20,21)
+ │    │         │    │    ├── ordering: +19 opt(22) [actual: +19]
+ │    │         │    │    └── scan disjunction@c_idx
+ │    │         │    │         ├── columns: k:19(int!null) c:22(string!null)
+ │    │         │    │         ├── constraint: /22/19: [/'foo' - /'foo']
+ │    │         │    │         ├── stats: [rows=1, distinct(22)=1, null(22)=0]
+ │    │         │    │         ├── key: (19)
+ │    │         │    │         ├── fd: ()-->(22)
+ │    │         │    │         └── ordering: +19 opt(22) [actual: +19]
+ │    │         │    └── index-join disjunction
+ │    │         │         ├── columns: k:25(int!null) a:26(string) b:27(string!null) c:28(string)
+ │    │         │         ├── stats: [rows=1, distinct(27)=1, null(27)=0]
+ │    │         │         ├── key: (25)
+ │    │         │         ├── fd: ()-->(27), (25)-->(26,28)
+ │    │         │         ├── ordering: +25 opt(27) [actual: +25]
+ │    │         │         └── scan disjunction@b_idx
+ │    │         │              ├── columns: k:25(int!null) b:27(string!null)
+ │    │         │              ├── constraint: /27/25: [/'foo' - /'foo']
+ │    │         │              ├── stats: [rows=1, distinct(27)=1, null(27)=0]
+ │    │         │              ├── key: (25)
+ │    │         │              ├── fd: ()-->(27)
+ │    │         │              └── ordering: +25 opt(27) [actual: +25]
+ │    │         └── aggregations
+ │    │              ├── const-agg [as=a:14, type=string, outer=(14)]
+ │    │              │    └── a:14 [type=string]
+ │    │              ├── const-agg [as=b:15, type=string, outer=(15)]
+ │    │              │    └── b:15 [type=string]
+ │    │              └── const-agg [as=c:16, type=string, outer=(16)]
+ │    │                   └── c:16 [type=string]
+ │    └── aggregations
+ │         ├── const-agg [as=a:2, type=string, outer=(2)]
+ │         │    └── a:2 [type=string]
+ │         ├── const-agg [as=b:3, type=string, outer=(3)]
+ │         │    └── b:3 [type=string]
+ │         └── const-agg [as=c:4, type=string, outer=(4)]
+ │              └── c:4 [type=string]
+ └── 5 [type=int]
+
+opt
+SELECT * FROM disjunction WHERE (a = 'foo' OR b = 'foo') AND c = 'foo' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string!null)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=1]
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── select
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string!null)
+ │    ├── stats: [rows=1, distinct(4)=1, null(4)=0]
+ │    ├── key: (1)
+ │    ├── fd: ()-->(4), (1)-->(2,3)
+ │    ├── limit hint: 5.00
+ │    ├── index-join disjunction
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: (1)
+ │    │    ├── fd: ()-->(4), (1)-->(2,3)
+ │    │    └── scan disjunction@c_idx
+ │    │         ├── columns: k:1(int!null) c:4(string!null)
+ │    │         ├── constraint: /4/1: [/'foo' - /'foo']
+ │    │         ├── stats: [rows=1, distinct(4)=1, null(4)=0]
+ │    │         ├── key: (1)
+ │    │         └── fd: ()-->(4)
+ │    └── filters
+ │         └── (a:2 = 'foo') OR (b:3 = 'foo') [type=bool, outer=(2,3)]
+ └── 5 [type=int]
+
+exec-ddl
+ALTER TABLE disjunction INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 5010,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "aaa"},
+      {"num_eq": 10, "num_range": 990, "distinct_range": 999, "upper_bound": "foo"},
+      {"num_eq": 990, "num_range": 10, "distinct_range": 9, "upper_bound": "fop"},
+      {"num_eq": 0, "num_range": 8000, "distinct_range": 4000, "upper_bound": "zoo"}
+    ]
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 5010,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "aaa"},
+      {"num_eq": 10, "num_range": 990, "distinct_range": 999, "upper_bound": "foo"},
+      {"num_eq": 990, "num_range": 10, "distinct_range": 9, "upper_bound": "fop"},
+      {"num_eq": 0, "num_range": 8000, "distinct_range": 4000, "upper_bound": "zoo"}
+    ]
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 5010,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "aaa"},
+      {"num_eq": 10, "num_range": 990, "distinct_range": 999, "upper_bound": "foo"},
+      {"num_eq": 990, "num_range": 10, "distinct_range": 9, "upper_bound": "fop"},
+      {"num_eq": 0, "num_range": 8000, "distinct_range": 4000, "upper_bound": "zoo"}
+    ]
+  }
+]'
+----
+
+# Disjunction with histograms.
+opt
+SELECT * FROM disjunction WHERE a LIKE 'foo%' OR b LIKE 'foo%' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=5]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── distinct-on
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    ├── grouping columns: k:1(int!null)
+ │    ├── stats: [rows=39.96]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 5.00
+ │    ├── union-all
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── left columns: k:7(int) a:8(string) b:9(string) c:10(string)
+ │    │    ├── right columns: k:13(int) a:14(string) b:15(string) c:16(string)
+ │    │    ├── stats: [rows=40]
+ │    │    ├── limit hint: 6.44
+ │    │    ├── index-join disjunction
+ │    │    │    ├── columns: k:7(int!null) a:8(string!null) b:9(string) c:10(string)
+ │    │    │    ├── stats: [rows=20, distinct(8)=10, null(8)=0]
+ │    │    │    │   histogram(8)=  0   10    10    0
+ │    │    │    │                <--- 'foo' ---- 'fop'
+ │    │    │    ├── key: (7)
+ │    │    │    ├── fd: (7)-->(8-10)
+ │    │    │    ├── limit hint: 6.44
+ │    │    │    └── scan disjunction@a_idx
+ │    │    │         ├── columns: k:7(int!null) a:8(string!null)
+ │    │    │         ├── constraint: /8/7: [/'foo' - /'fop')
+ │    │    │         ├── stats: [rows=20, distinct(8)=10, null(8)=0]
+ │    │    │         │   histogram(8)=  0   10    10    0
+ │    │    │         │                <--- 'foo' ---- 'fop'
+ │    │    │         ├── key: (7)
+ │    │    │         ├── fd: (7)-->(8)
+ │    │    │         └── limit hint: 6.44
+ │    │    └── index-join disjunction
+ │    │         ├── columns: k:13(int!null) a:14(string) b:15(string!null) c:16(string)
+ │    │         ├── stats: [rows=20, distinct(15)=10, null(15)=0]
+ │    │         │   histogram(15)=  0   10    10    0
+ │    │         │                 <--- 'foo' ---- 'fop'
+ │    │         ├── key: (13)
+ │    │         ├── fd: (13)-->(14-16)
+ │    │         ├── limit hint: 6.44
+ │    │         └── scan disjunction@b_idx
+ │    │              ├── columns: k:13(int!null) b:15(string!null)
+ │    │              ├── constraint: /15/13: [/'foo' - /'fop')
+ │    │              ├── stats: [rows=20, distinct(15)=10, null(15)=0]
+ │    │              │   histogram(15)=  0   10    10    0
+ │    │              │                 <--- 'foo' ---- 'fop'
+ │    │              ├── key: (13)
+ │    │              ├── fd: (13)-->(15)
+ │    │              └── limit hint: 6.44
+ │    └── aggregations
+ │         ├── const-agg [as=a:2, type=string, outer=(2)]
+ │         │    └── a:2 [type=string]
+ │         ├── const-agg [as=b:3, type=string, outer=(3)]
+ │         │    └── b:3 [type=string]
+ │         └── const-agg [as=c:4, type=string, outer=(4)]
+ │              └── c:4 [type=string]
+ └── 5 [type=int]
+
+
+# Multiple disjunctions with histograms.
+opt
+SELECT * FROM disjunction WHERE a LIKE 'foo%' OR b LIKE 'foo%' OR c LIKE 'foo%' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=5]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── distinct-on
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    ├── grouping columns: k:1(int!null)
+ │    ├── stats: [rows=59.8801]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 5.00
+ │    ├── union-all
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── left columns: k:7(int) a:8(string) b:9(string) c:10(string)
+ │    │    ├── right columns: k:13(int) a:14(string) b:15(string) c:16(string)
+ │    │    ├── stats: [rows=59.96]
+ │    │    ├── limit hint: 6.28
+ │    │    ├── index-join disjunction
+ │    │    │    ├── columns: k:7(int!null) a:8(string!null) b:9(string) c:10(string)
+ │    │    │    ├── stats: [rows=20, distinct(8)=10, null(8)=0]
+ │    │    │    │   histogram(8)=  0   10    10    0
+ │    │    │    │                <--- 'foo' ---- 'fop'
+ │    │    │    ├── key: (7)
+ │    │    │    ├── fd: (7)-->(8-10)
+ │    │    │    ├── limit hint: 6.28
+ │    │    │    └── scan disjunction@a_idx
+ │    │    │         ├── columns: k:7(int!null) a:8(string!null)
+ │    │    │         ├── constraint: /8/7: [/'foo' - /'fop')
+ │    │    │         ├── stats: [rows=20, distinct(8)=10, null(8)=0]
+ │    │    │         │   histogram(8)=  0   10    10    0
+ │    │    │         │                <--- 'foo' ---- 'fop'
+ │    │    │         ├── key: (7)
+ │    │    │         ├── fd: (7)-->(8)
+ │    │    │         └── limit hint: 6.28
+ │    │    └── distinct-on
+ │    │         ├── columns: k:13(int!null) a:14(string) b:15(string) c:16(string)
+ │    │         ├── grouping columns: k:13(int!null)
+ │    │         ├── stats: [rows=39.96]
+ │    │         ├── key: (13)
+ │    │         ├── fd: (13)-->(14-16)
+ │    │         ├── limit hint: 6.28
+ │    │         ├── union-all
+ │    │         │    ├── columns: k:13(int!null) a:14(string) b:15(string) c:16(string)
+ │    │         │    ├── left columns: k:19(int) a:20(string) b:21(string) c:22(string)
+ │    │         │    ├── right columns: k:25(int) a:26(string) b:27(string) c:28(string)
+ │    │         │    ├── stats: [rows=40]
+ │    │         │    ├── limit hint: 8.28
+ │    │         │    ├── index-join disjunction
+ │    │         │    │    ├── columns: k:19(int!null) a:20(string) b:21(string) c:22(string!null)
+ │    │         │    │    ├── stats: [rows=20, distinct(22)=10, null(22)=0]
+ │    │         │    │    │   histogram(22)=  0   10    10    0
+ │    │         │    │    │                 <--- 'foo' ---- 'fop'
+ │    │         │    │    ├── key: (19)
+ │    │         │    │    ├── fd: (19)-->(20-22)
+ │    │         │    │    ├── limit hint: 8.28
+ │    │         │    │    └── scan disjunction@c_idx
+ │    │         │    │         ├── columns: k:19(int!null) c:22(string!null)
+ │    │         │    │         ├── constraint: /22/19: [/'foo' - /'fop')
+ │    │         │    │         ├── stats: [rows=20, distinct(22)=10, null(22)=0]
+ │    │         │    │         │   histogram(22)=  0   10    10    0
+ │    │         │    │         │                 <--- 'foo' ---- 'fop'
+ │    │         │    │         ├── key: (19)
+ │    │         │    │         ├── fd: (19)-->(22)
+ │    │         │    │         └── limit hint: 8.28
+ │    │         │    └── index-join disjunction
+ │    │         │         ├── columns: k:25(int!null) a:26(string) b:27(string!null) c:28(string)
+ │    │         │         ├── stats: [rows=20, distinct(27)=10, null(27)=0]
+ │    │         │         │   histogram(27)=  0   10    10    0
+ │    │         │         │                 <--- 'foo' ---- 'fop'
+ │    │         │         ├── key: (25)
+ │    │         │         ├── fd: (25)-->(26-28)
+ │    │         │         ├── limit hint: 8.28
+ │    │         │         └── scan disjunction@b_idx
+ │    │         │              ├── columns: k:25(int!null) b:27(string!null)
+ │    │         │              ├── constraint: /27/25: [/'foo' - /'fop')
+ │    │         │              ├── stats: [rows=20, distinct(27)=10, null(27)=0]
+ │    │         │              │   histogram(27)=  0   10    10    0
+ │    │         │              │                 <--- 'foo' ---- 'fop'
+ │    │         │              ├── key: (25)
+ │    │         │              ├── fd: (25)-->(27)
+ │    │         │              └── limit hint: 8.28
+ │    │         └── aggregations
+ │    │              ├── const-agg [as=a:14, type=string, outer=(14)]
+ │    │              │    └── a:14 [type=string]
+ │    │              ├── const-agg [as=b:15, type=string, outer=(15)]
+ │    │              │    └── b:15 [type=string]
+ │    │              └── const-agg [as=c:16, type=string, outer=(16)]
+ │    │                   └── c:16 [type=string]
+ │    └── aggregations
+ │         ├── const-agg [as=a:2, type=string, outer=(2)]
+ │         │    └── a:2 [type=string]
+ │         ├── const-agg [as=b:3, type=string, outer=(3)]
+ │         │    └── b:3 [type=string]
+ │         └── const-agg [as=c:4, type=string, outer=(4)]
+ │              └── c:4 [type=string]
+ └── 5 [type=int]
+
+# One disjunction filter and one simple filter.
+opt
+SELECT * FROM disjunction WHERE (a LIKE 'foo%' OR b LIKE 'foo%') AND c LIKE 'foo%' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string!null)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=1]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── select
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string!null)
+ │    ├── stats: [rows=1, distinct(4)=1, null(4)=0]
+ │    │   histogram(4)=  0   0.5   0.5    0
+ │    │                <--- 'foo' ----- 'fop'
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 5.00
+ │    ├── index-join disjunction
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── stats: [rows=20]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    └── scan disjunction@c_idx
+ │    │         ├── columns: k:1(int!null) c:4(string!null)
+ │    │         ├── constraint: /4/1: [/'foo' - /'fop')
+ │    │         ├── stats: [rows=20, distinct(4)=10, null(4)=0]
+ │    │         │   histogram(4)=  0   10    10    0
+ │    │         │                <--- 'foo' ---- 'fop'
+ │    │         ├── key: (1)
+ │    │         └── fd: (1)-->(4)
+ │    └── filters
+ │         └── (a:2 LIKE 'foo%') OR (b:3 LIKE 'foo%') [type=bool, outer=(2,3)]
+ └── 5 [type=int]
+
+# The row count should not exceed the number of rows in the table when
+# disjunctions have high selectivity values.
+opt
+SELECT * FROM disjunction WHERE a > 'fop' OR b > 'fop' OR c > 'fop' LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=5]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── select
+ │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    ├── stats: [rows=9920]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 5.00
+ │    ├── scan disjunction
+ │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
+ │    │    ├── stats: [rows=10000, distinct(1)=10000, null(1)=0, distinct(2)=5010, null(2)=0, distinct(3)=5010, null(3)=0, distinct(4)=5010, null(4)=0]
+ │    │    │   histogram(2)=  0    0    990   10    10   990   8000    0
+ │    │    │                <--- 'aaa' ----- 'foo' ---- 'fop' ------ 'zoo'
+ │    │    │   histogram(3)=  0    0    990   10    10   990   8000    0
+ │    │    │                <--- 'aaa' ----- 'foo' ---- 'fop' ------ 'zoo'
+ │    │    │   histogram(4)=  0    0    990   10    10   990   8000    0
+ │    │    │                <--- 'aaa' ----- 'foo' ---- 'fop' ------ 'zoo'
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    └── limit hint: 5.04
+ │    └── filters
+ │         └── ((a:2 > 'fop') OR (b:3 > 'fop')) OR (c:4 > 'fop') [type=bool, outer=(2-4)]
+ └── 5 [type=int]
+
+# Regression test for #67573. Do not over-estimate row counts when columns
+# are highly correlated and selected values are very common according to the
+# histograms.
+exec-ddl
+CREATE TABLE ab (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a,b,c)
+)
+----
+
+exec-ddl
+ALTER TABLE ab INJECT STATISTICS '[
+    {
+        "columns": [ "a" ],
+        "created_at": "2021-07-13 14:04:42.014148",
+        "distinct_count": 20000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 60000,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 20000,
+                "num_eq": 20000,
+                "num_range": 20000,
+                "upper_bound": "40000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 100000
+    },
+    {
+        "columns": [ "b" ],
+        "created_at": "2021-07-13 14:04:42.014148",
+        "distinct_count": 7000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 7000,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 7000,
+                "num_eq": 86000,
+                "num_range": 7000,
+                "upper_bound": "10000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 100000
+    },
+    {
+        "columns": [ "a", "b" ],
+        "created_at": "2021-07-13 14:04:42.014148",
+        "distinct_count": 20000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 100000
+    }
+]';
+----
+
+# Make sure the row count for the outer select is less than the row count
+# for the scan.
+norm
+SELECT * FROM ab WHERE a=1 AND b=1
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── stats: [rows=6658.58, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
+ │   histogram(1)=  0 6658.6
+ │                <---- 1 --
+ │   histogram(2)=  0 6658.6
+ │                <---- 1 --
+ ├── key: (3)
+ ├── fd: ()-->(1,2)
+ ├── scan ab
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── stats: [rows=100000, distinct(1)=20000, null(1)=0, distinct(2)=7000, null(2)=0, distinct(3)=10000, null(3)=0, distinct(1,2)=20000, null(1,2)=0]
+ │    │   histogram(1)=  0 60000 20000  20000
+ │    │                <---- 1 -------- 40000
+ │    │   histogram(2)=  0 7000 7000  86000
+ │    │                <--- 1 ------- 10000
+ │    └── key: (1-3)
+ └── filters
+      ├── a:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── b:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+
+# Check that we have a sane row count estimate when there are a lot of null
+# values.
+exec-ddl
+DROP TABLE nulls
+----
+
+exec-ddl
+CREATE TABLE nulls (x INT, y INT)
+----
+
+exec-ddl
+ALTER TABLE nulls INJECT STATISTICS '[
+    {
+        "columns": [
+            "x"
+        ],
+        "created_at": "2021-06-15 02:06:48.036389",
+        "distinct_count": 3000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 5000,
+                "num_range": 0,
+                "upper_bound": "0"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 5000,
+                "num_range": 0,
+                "upper_bound": "1"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "null_count": 11100000,
+        "row_count": 11110000
+    }
+]'
+----
+
+norm
+SELECT * FROM nulls WHERE x IS NULL
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=1.11e+07, distinct(1)=1, null(1)=1.11e+07]
+ │   histogram(1)=  0 1.11e+07
+ │                <---- NULL -
+ ├── fd: ()-->(1)
+ ├── scan nulls
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── stats: [rows=1.111e+07, distinct(1)=3000, null(1)=1.11e+07]
+ │        histogram(1)=  0 1.11e+07 0 5000 0 5000
+ │                     <---- NULL ---- 0 ---- 1 -
+ └── filters
+      └── x:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+
+exec-ddl
+CREATE TABLE bigtable (x INT, y INT)
+----
+
+exec-ddl
+ALTER TABLE bigtable INJECT STATISTICS '[
+    {
+        "columns": [
+            "x"
+        ],
+        "created_at": "2021-06-15 02:06:48.036389",
+        "distinct_count": 3000000002,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq":         10,
+                "num_range":      0,
+                "upper_bound":    "0"
+            },
+            {
+                "distinct_range": 3000000000,
+                "num_eq":         10,
+                "num_range":      29999999980,
+                "upper_bound":    "100000000000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "row_count": 30000000000
+    }
+]'
+----
+
+# Regression test for #69709. Ensure the row count estimate is correct when
+# we are selecting a relatively small number of rows from a very large table.
+norm
+SELECT * from bigtable WHERE x = 10
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=13, distinct(1)=1, null(1)=0]
+ │   histogram(1)=  0  10
+ │                <--- 10
+ ├── fd: ()-->(1)
+ ├── scan bigtable
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── stats: [rows=3e+10, distinct(1)=3e+09, null(1)=0]
+ │        histogram(1)=  0 10  3e+10       10
+ │                     <--- 0 ------- 100000000000
+ └── filters
+      └── x:1 = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+
+# Regression test for #84478. Avoid error due to selectivity is NaN.
+exec-ddl
+CREATE TABLE t84478 (
+  col0 FLOAT4,
+  col1 REGPROC NULL,
+  col2 BOX2D NOT NULL,
+  col3 TIMESTAMP NULL,
+  col4 FLOAT8 AS (col0 + NULL) VIRTUAL,
+  UNIQUE (col0) STORING (col1, col2, col3)
+)
+----
+
+norm disable=(SimplifyLeftJoinWithZeroRowsRight,EliminateZeroCardSelect,EliminateZeroCardProject)
+SELECT
+  NULL, 1
+FROM
+  t84478 AS t1
+  JOIN t84478 AS t2
+    JOIN t84478 AS t3 ON
+        (t2.col4) = (t3.col0)
+        AND (t2.col3) = (t3.col3)
+        AND (t2.col2) = (t3.col2) ON (t1.tableoid) = (t2.col1)
+  RIGHT JOIN t84478 AS t4 ON
+      isnan(t1.crdb_internal_mvcc_timestamp::DECIMAL)::BOOL
+GROUP BY
+  t1.col2
+----
+project
+ ├── columns: "?column?":33(unknown) "?column?":34(int!null)
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── fd: ()-->(33,34)
+ ├── distinct-on
+ │    ├── columns: col2:3(box2d)
+ │    ├── grouping columns: col2:3(box2d)
+ │    ├── immutable
+ │    ├── stats: [rows=1, distinct(3)=1, null(3)=1]
+ │    ├── key: (3)
+ │    └── left-join (cross)
+ │         ├── columns: col2:3(box2d) crdb_internal_mvcc_timestamp:7(decimal)
+ │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │         ├── immutable
+ │         ├── stats: [rows=1000, distinct(3)=1, null(3)=1000]
+ │         ├── scan t84478
+ │         │    ├── computed column expressions
+ │         │    │    └── col4:29
+ │         │    │         └── CAST(NULL AS FLOAT8) [type=float]
+ │         │    └── stats: [rows=1000]
+ │         ├── select
+ │         │    ├── columns: col2:3(box2d!null) crdb_internal_mvcc_timestamp:7(decimal!null)
+ │         │    ├── cardinality: [0 - 0]
+ │         │    ├── immutable
+ │         │    ├── stats: [rows=0, distinct(3)=0, null(3)=0]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(3,7)
+ │         │    ├── values
+ │         │    │    ├── columns: col2:3(box2d!null) crdb_internal_mvcc_timestamp:7(decimal!null)
+ │         │    │    ├── cardinality: [0 - 0]
+ │         │    │    ├── stats: [rows=0, distinct(3)=0, null(3)=0]
+ │         │    │    ├── key: ()
+ │         │    │    └── fd: ()-->(3,7)
+ │         │    └── filters
+ │         │         └── isnan(crdb_internal_mvcc_timestamp:7) [type=bool, outer=(7), immutable, constraints=(/7: (/NULL - ])]
+ │         └── filters (true)
+ └── projections
+      ├── NULL [as="?column?":33, type=unknown]
+      └── 1 [as="?column?":34, type=int]
+
+# Regression test for #85499. Avoid overflow when calculating distinct count.
+exec-ddl
+CREATE TABLE t85499 (c0 INT);
+----
+
+norm
+SELECT t85499.rowid FROM t85499
+WHERE (t85499.rowid) BETWEEN (0) AND (
+  CASE  WHEN NULL THEN t85499.rowid
+  ELSE IF(NULL, 1, 9223372036854775807) END
+)
+UNION SELECT t85499.rowid FROM t85499;
+----
+union
+ ├── columns: rowid:9(int!null)
+ ├── left columns: t85499.rowid:2(int)
+ ├── right columns: t85499.rowid:6(int)
+ ├── stats: [rows=1111.11, distinct(9)=1111.11, null(9)=0]
+ ├── key: (9)
+ ├── select
+ │    ├── columns: t85499.rowid:2(int!null)
+ │    ├── stats: [rows=111.111, distinct(2)=111.111, null(2)=0]
+ │    ├── key: (2)
+ │    ├── scan t85499
+ │    │    ├── columns: t85499.rowid:2(int!null)
+ │    │    ├── stats: [rows=1000, distinct(2)=1000, null(2)=0]
+ │    │    └── key: (2)
+ │    └── filters
+ │         └── (t85499.rowid:2 >= 0) AND (t85499.rowid:2 <= 9223372036854775807) [type=bool, outer=(2), constraints=(/2: [/0 - /9223372036854775807]; tight)]
+ └── scan t85499
+      ├── columns: t85499.rowid:6(int!null)
+      ├── stats: [rows=1000, distinct(6)=1000, null(6)=0]
+      └── key: (6)
+
+# Regression test for support issue #1821
+exec-ddl
+CREATE TABLE t1821 (
+    n INT8 NOT NULL,
+    a INT8 NULL,
+    b INT8 NULL,
+    c STRING NULL,
+    CONSTRAINT t1_pkey PRIMARY KEY (n ASC),
+    INDEX a_idx (a ASC),
+    INDEX b_idx (b ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE t1821 INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": [
+            "n"
+        ],
+        "created_at": "2022-09-28 15:29:12.909895",
+        "distinct_count": 199241,
+        "null_count": 0,
+        "row_count": 200000
+    },
+    {
+        "avg_size": 3,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2022-09-28 15:29:12.909895",
+        "distinct_count": 100000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "-9223372036854775808"
+            },
+            {
+                "distinct_range": 7.275957614183426E-12,
+                "num_eq": 50000,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 417.004372929906,
+                "num_eq": 16,
+                "num_range": 150000,
+                "upper_bound": "200000"
+            },
+            {
+                "distinct_range": 7.275957614183426E-12,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "9223372036854775807"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 200000
+    },
+    {
+        "avg_size": 3,
+        "columns": [
+            "b"
+        ],
+        "created_at": "2022-09-28 15:29:12.909895",
+        "distinct_count": 100000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "-9223372036854775808"
+            },
+            {
+                "distinct_range": 7.275957614183426E-12,
+                "num_eq": 50000,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 417.004372929906,
+                "num_eq": 16,
+                "num_range": 150000,
+                "upper_bound": "200000"
+            },
+            {
+                "distinct_range": 7.275957614183426E-12,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "9223372036854775807"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 200000
+    },
+    {
+        "avg_size": 3,
+        "columns": [
+            "c"
+        ],
+        "created_at": "2022-09-28 15:29:12.909895",
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 200000,
+                "num_range": 0,
+                "upper_bound": "a"
+            }
+        ],
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 200000
+    }
+]';
+----
+
+opt
+SELECT count(*) FROM t1821 WHERE a = 1 AND b = 1
+----
+scalar-group-by
+ ├── columns: count:7(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── inner-join (zigzag t1821@a_idx t1821@b_idx)
+ │    ├── columns: a:2(int!null) b:3(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [1]
+ │    ├── right fixed columns: [3] = [1]
+ │    ├── stats: [rows=12498, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ │    │   histogram(2)=  0 12498
+ │    │                <---- 1 -
+ │    │   histogram(3)=  0 12498
+ │    │                <---- 1 -
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │         └── b:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+ └── aggregations
+      └── count-rows [as=count_rows:7, type=int]
+
+# Zig-zag join plus index join should not be picked due to high selectivity.
+opt
+SELECT count(c) FROM t1821 WHERE a = 1 AND b = 1
+----
+scalar-group-by
+ ├── columns: count:7(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── select
+ │    ├── columns: a:2(int!null) b:3(int!null) c:4(string)
+ │    ├── stats: [rows=12498, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ │    │   histogram(2)=  0 12498
+ │    │                <---- 1 -
+ │    │   histogram(3)=  0 12498
+ │    │                <---- 1 -
+ │    ├── fd: ()-->(2,3)
+ │    ├── scan t1821
+ │    │    ├── columns: a:2(int) b:3(int) c:4(string)
+ │    │    └── stats: [rows=200000, distinct(2)=100000, null(2)=0, distinct(3)=100000, null(3)=0, distinct(2,3)=200000, null(2,3)=0]
+ │    │        histogram(2)=  0           0            0 49996 1.4999e+05  15.999  0           0
+ │    │                     <--- -9223372036854775808 ---- 1 ------------- 200000 --- 9223372036854775807
+ │    │        histogram(3)=  0           0            0 49996 1.4999e+05  15.999  0           0
+ │    │                     <--- -9223372036854775808 ---- 1 ------------- 200000 --- 9223372036854775807
+ │    └── filters
+ │         ├── a:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │         └── b:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+ └── aggregations
+      └── count [as=count:7, type=int, outer=(4)]
+           └── c:4 [type=string]
+
+# When the zig-zag join is covering, stats come from the Select group.
+opt
+SELECT 1 FROM t1821@{FORCE_ZIGZAG} WHERE a = 1 AND b = 1
+----
+project
+ ├── columns: "?column?":7(int!null)
+ ├── stats: [rows=12498]
+ ├── fd: ()-->(7)
+ ├── inner-join (zigzag t1821@a_idx t1821@b_idx)
+ │    ├── columns: a:2(int!null) b:3(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [1]
+ │    ├── right fixed columns: [3] = [1]
+ │    ├── stats: [rows=12498, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ │    │   histogram(2)=  0 12498
+ │    │                <---- 1 -
+ │    │   histogram(3)=  0 12498
+ │    │                <---- 1 -
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │         └── b:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+ └── projections
+      └── 1 [as="?column?":7, type=int]
+
+# When the zig-zag join is not covering and the stats come from memoizing the
+# zig-zag join, verify that the row count is the same as above.
+opt
+SELECT c FROM t1821@{FORCE_ZIGZAG} WHERE a = 1 AND b = 1
+----
+project
+ ├── columns: c:4(string)
+ ├── stats: [rows=12498]
+ └── inner-join (lookup t1821)
+      ├── columns: a:2(int!null) b:3(int!null) c:4(string)
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── stats: [rows=12498, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      │   histogram(2)=  0 12498
+      │                <---- 1 -
+      │   histogram(3)=  0 12498
+      │                <---- 1 -
+      ├── fd: ()-->(2,3)
+      ├── inner-join (zigzag t1821@a_idx t1821@b_idx)
+      │    ├── columns: n:1(int!null) a:2(int!null) b:3(int!null)
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = [1]
+      │    ├── right fixed columns: [3] = [1]
+      │    ├── stats: [rows=12498, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      │    │   histogram(2)=  0 12498
+      │    │                <---- 1 -
+      │    │   histogram(3)=  0 12498
+      │    │                <---- 1 -
+      │    ├── fd: ()-->(2,3)
+      │    └── filters
+      │         ├── a:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      │         └── b:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+      └── filters (true)
+
+# Regression test for #100582. A bucket with an infinite upper bound should not
+# create NaNs in filtered histograms.
+exec-ddl
+CREATE TABLE t100582 (
+  id INT PRIMARY KEY,
+  s STRING NULL,
+  d DECIMAL NULL
+);
+----
+
+exec-ddl
+ALTER TABLE t100582 INJECT STATISTICS '[
+  {
+    "columns": ["d"],
+    "row_count": 3,
+    "distinct_count": 3,
+    "null_count": 0,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 0,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 1,
+        "num_eq": 0,
+        "num_range": 1,
+        "upper_bound": "Infinity"
+      }
+    ],
+    "histo_col_type": "DECIMAL",
+    "created_at": "2023-04-04 07:47:43.132805",
+    "histo_version": 2
+  }
+]'
+----
+
+# The filtered histogram should not have a numRange of NaN.
+norm
+SELECT s FROM t100582 WHERE d >= 2;
+----
+project
+ ├── columns: s:2(string)
+ ├── immutable
+ ├── stats: [rows=1]
+ └── select
+      ├── columns: s:2(string) d:3(decimal!null)
+      ├── immutable
+      ├── stats: [rows=1, distinct(3)=0.5, null(3)=0]
+      │   histogram(3)=  0  0  0.5     0
+      │                <--- 2 ----- Infinity
+      ├── scan t100582
+      │    ├── columns: s:2(string) d:3(decimal)
+      │    └── stats: [rows=3, distinct(3)=3, null(3)=0]
+      │        histogram(3)=  0  0  0  1  1     0
+      │                     <--- 0 --- 1 --- Infinity
+      └── filters
+           └── d:3 >= 2 [type=bool, outer=(3), immutable, constraints=(/3: [/2 - ]; tight)]
+
+# Regression test for #121397. Do not over-estimate the selectivity of multi-column
+# filters when the multi-column distinct count is high.
+exec-ddl
+CREATE TABLE table1 (
+  col1 STRING NOT NULL,
+  col2 STRING NOT NULL,
+  col3 INT8 NOT NULL,
+  PRIMARY KEY (col1 ASC, col2 ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE table2 (
+  col1 STRING NOT NULL,
+  col2 STRING NOT NULL,
+  col3 INT8 NOT NULL,
+  col4 STRING NOT NULL,
+  col5 STRING NOT NULL,
+  col6 STRING NOT NULL,
+  col7 STRING NOT NULL,
+  PRIMARY KEY (col1 ASC, col2 ASC, col4 ASC, col5 ASC, col6 ASC, col7 ASC),
+  FOREIGN KEY (col4, col5) REFERENCES table1(col1, col2) ON DELETE CASCADE,
+  FOREIGN KEY (col6, col7) REFERENCES table1(col1, col2) ON DELETE CASCADE,
+  INDEX (col4 ASC, col5 ASC),
+  INDEX (col6 ASC, col7 ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE table2 INJECT STATISTICS '[
+    {
+        "avg_size": 40,
+        "columns": [
+            "col1"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 2000000,
+                "num_range": 0,
+                "upper_bound": "a"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 5000,
+                "num_range": 0,
+                "upper_bound": "b"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 500000,
+                "num_range": 0,
+                "upper_bound": "c"
+            }
+        ],
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 43,
+        "columns": [
+            "col1",
+            "col2"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 60,
+        "columns": [
+            "col1",
+            "col2",
+            "col4"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 4,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 130,
+        "columns": [
+            "col1",
+            "col2",
+            "col4",
+            "col5"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 2455000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 150,
+        "columns": [
+            "col1",
+            "col2",
+            "col4",
+            "col5",
+            "col6"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 2465000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 160,
+        "columns": [
+            "col1",
+            "col2",
+            "col4",
+            "col5",
+            "col6",
+            "col7"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 2505000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 3,
+        "columns": [
+            "col2"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 20,
+        "columns": [
+            "col4"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 4,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 90,
+        "columns": [
+            "col4",
+            "col5"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 2505000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 70,
+        "columns": [
+            "col5"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 2405000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 19,
+        "columns": [
+            "col6"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 2000000,
+                "num_range": 0,
+                "upper_bound": "d"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 5000,
+                "num_range": 0,
+                "upper_bound": "e"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 500000,
+                "num_range": 0,
+                "upper_bound": "f"
+            }
+        ],
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 30,
+        "columns": [
+            "col6",
+            "col7"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 2355000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 15,
+        "columns": [
+            "col7"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 2355000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 3000,
+                "num_range": 0,
+                "upper_bound": "x"
+            },
+            {
+                "distinct_range": 2354998,
+                "num_eq": 500,
+                "num_range": 2401500,
+                "upper_bound": "y"
+            }
+        ],
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    },
+    {
+        "avg_size": 2,
+        "columns": [
+            "col3"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2505000
+    }
+]';
+----
+
+exec-ddl
+ALTER TABLE table1 INJECT STATISTICS '[
+    {
+        "avg_size": 20,
+        "columns": [
+            "col1"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 9,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 6000,
+                "num_range": 0,
+                "upper_bound": "d"
+            },
+            {
+                "distinct_range": 6,
+                "num_eq": 2000,
+                "num_range": 20000000,
+                "upper_bound": "e"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 2000,
+                "num_range": 0,
+                "upper_bound": "f"
+            }
+        ],
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 20010000
+    },
+    {
+        "avg_size": 50,
+        "columns": [
+            "col1",
+            "col2"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 20009000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 20010000
+    },
+    {
+        "avg_size": 40,
+        "columns": [
+            "col2"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 20009000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 20010000
+    },
+    {
+        "avg_size": 2,
+        "columns": [
+            "col3"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 20010000
+    }
+]';
+----
+
+opt
+SELECT
+  table1.col1,
+  table1.col2,
+  table1.col3,
+  table2.col1,
+  table2.col2,
+  table2.col3,
+  table2.col4,
+  table2.col5,
+  table2.col6,
+  table2.col7
+FROM
+  (SELECT * FROM table2 WHERE table2.col1 = 'b') AS table2
+  LEFT JOIN (SELECT * FROM table1 WHERE table1.col1  = 'e') AS table1 ON
+      table1.col1 = table2.col4 AND table1.col2 = table2.col5
+WHERE
+  (table2.col6, table2.col7) IN (('f', 'x'))
+----
+left-join (lookup table1)
+ ├── columns: col1:10(string) col2:11(string) col3:12(int) col1:1(string!null) col2:2(string!null) col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
+ ├── key columns: [4 5] = [10 11]
+ ├── lookup columns are key
+ ├── stats: [rows=1.24516, distinct(10)=1, null(10)=0.0814548, distinct(11)=1.16371, null(11)=0.0814548]
+ ├── key: (2,4,5)
+ ├── fd: ()-->(1,6,7), (2,4,5)-->(3,10-12), (11)-->(12)
+ ├── index-join table2
+ │    ├── columns: table2.col1:1(string!null) table2.col2:2(string!null) table2.col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
+ │    ├── stats: [rows=1.24516, distinct(1)=1, null(1)=0, distinct(4)=1.07, null(4)=0, distinct(5)=1.24516, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
+ │    │   histogram(1)=  0 1.2452
+ │    │                <--- 'b' -
+ │    │   histogram(6)=  0 1.2452
+ │    │                <--- 'f' -
+ │    │   histogram(7)=  0 1.2452
+ │    │                <--- 'x' -
+ │    ├── key: (2,4,5)
+ │    ├── fd: ()-->(1,6,7), (2,4,5)-->(3)
+ │    └── scan table2@table2_col6_col7_idx
+ │         ├── columns: table2.col1:1(string!null) table2.col2:2(string!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
+ │         ├── constraint: /6/7/1/2/4/5: [/'f'/'x'/'b' - /'f'/'x'/'b']
+ │         ├── stats: [rows=1.24516, distinct(1)=1, null(1)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
+ │         │   histogram(1)=  0 1.2452
+ │         │                <--- 'b' -
+ │         │   histogram(6)=  0 1.2452
+ │         │                <--- 'f' -
+ │         │   histogram(7)=  0 1.2452
+ │         │                <--- 'x' -
+ │         ├── key: (2,4,5)
+ │         └── fd: ()-->(1,6,7)
+ └── filters
+      └── table1.col1:10 = 'e' [type=bool, outer=(10), constraints=(/10: [/'e' - /'e']; tight), fd=()-->(10)]
+
+# Choose a hash join instead of a lookup join if using the legacy multi-column
+# stats selectivity estimate.
+opt set=optimizer_use_improved_multi_column_selectivity_estimate=false
+SELECT
+  table1.col1,
+  table1.col2,
+  table1.col3,
+  table2.col1,
+  table2.col2,
+  table2.col3,
+  table2.col4,
+  table2.col5,
+  table2.col6,
+  table2.col7
+FROM
+  (SELECT * FROM table2 WHERE table2.col1 = 'b') AS table2
+  LEFT JOIN (SELECT * FROM table1 WHERE table1.col1  = 'e') AS table1 ON
+      table1.col1 = table2.col4 AND table1.col2 = table2.col5
+WHERE
+  (table2.col6, table2.col7) IN (('f', 'x'))
+----
+left-join (hash)
+ ├── columns: col1:10(string) col2:11(string) col3:12(int) col1:1(string!null) col2:2(string!null) col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── stats: [rows=2623.02, distinct(10)=1, null(10)=2122.76, distinct(11)=500.261, null(11)=2122.76]
+ ├── key: (2,4,5)
+ ├── fd: ()-->(1,6,7), (2,4,5)-->(3,10-12), (11)-->(12)
+ ├── select
+ │    ├── columns: table2.col1:1(string!null) table2.col2:2(string!null) table2.col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
+ │    ├── stats: [rows=2623.02, distinct(1)=1, null(1)=0, distinct(4)=4, null(4)=0, distinct(5)=2622.96, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
+ │    │   histogram(1)=  0 2623
+ │    │                <--- 'b'
+ │    │   histogram(6)=  0 2623
+ │    │                <--- 'f'
+ │    │   histogram(7)=  0 2623
+ │    │                <--- 'x'
+ │    ├── key: (2,4,5)
+ │    ├── fd: ()-->(1,6,7), (2,4,5)-->(3)
+ │    ├── scan table2
+ │    │    ├── columns: table2.col1:1(string!null) table2.col2:2(string!null) table2.col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
+ │    │    ├── constraint: /1/2/4/5/6/7: [/'b' - /'b']
+ │    │    ├── stats: [rows=5000, distinct(1)=1, null(1)=0]
+ │    │    │   histogram(1)=  0 5000
+ │    │    │                <--- 'b'
+ │    │    ├── key: (2,4-7)
+ │    │    └── fd: ()-->(1), (2,4-7)-->(3)
+ │    └── filters
+ │         ├── col6:6 = 'f' [type=bool, outer=(6), constraints=(/6: [/'f' - /'f']; tight), fd=()-->(6)]
+ │         └── col7:7 = 'x' [type=bool, outer=(7), constraints=(/7: [/'x' - /'x']; tight), fd=()-->(7)]
+ ├── scan table1
+ │    ├── columns: table1.col1:10(string!null) table1.col2:11(string!null) table1.col3:12(int!null)
+ │    ├── constraint: /10/11: [/'e' - /'e']
+ │    ├── stats: [rows=2001, distinct(10)=1, null(10)=0, distinct(11)=2001, null(11)=0]
+ │    │   histogram(10)=  0 2000
+ │    │                 <--- 'e'
+ │    ├── key: (11)
+ │    └── fd: ()-->(10), (11)-->(12)
+ └── filters
+      ├── table1.col1:10 = col4:4 [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+      └── table1.col2:11 = col5:5 [type=bool, outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ]), fd=(5)==(11), (11)==(5)]
+
+# Regression test for #155282. Do not fail to detect correlated filters when one
+# filtered column has a single distinct value.
+exec-ddl
+CREATE TABLE t155282 (
+  region STRING,
+  a INT,
+  b INT
+)
+----
+
+exec-ddl
+ALTER TABLE t155282 INJECT STATISTICS '[
+  {
+    "columns": ["region"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 1,
+    "null_count": 0,
+    "avg_size": 48,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 10000, "num_range": 0, "distinct_range": 0, "upper_bound": "west"}
+    ]
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100,
+    "null_count": 0,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 100, "num_range": 1900, "distinct_range": 19, "upper_bound": "20"},
+      {"num_eq": 100, "num_range": 1900, "distinct_range": 19, "upper_bound": "40"},
+      {"num_eq": 100, "num_range": 1900, "distinct_range": 19, "upper_bound": "60"},
+      {"num_eq": 100, "num_range": 1900, "distinct_range": 19, "upper_bound": "80"},
+      {"num_eq": 100, "num_range": 1900, "distinct_range": 19, "upper_bound": "100"}
+    ]
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100,
+    "null_count": 0,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 100, "num_range": 1900, "distinct_range": 19, "upper_bound": "200"},
+      {"num_eq": 100, "num_range": 1900, "distinct_range": 19, "upper_bound": "400"},
+      {"num_eq": 100, "num_range": 1900, "distinct_range": 19, "upper_bound": "600"},
+      {"num_eq": 100, "num_range": 1900, "distinct_range": 19, "upper_bound": "800"},
+      {"num_eq": 100, "num_range": 1900, "distinct_range": 19, "upper_bound": "1000"}
+    ]
+  },
+  {
+    "avg_size": 9,
+    "columns": [
+      "region",
+      "a"
+    ],
+    "created_at": "2025-10-14 20:11:28.762303",
+    "distinct_count": 100,
+    "histo_col_type": "",
+    "null_count": 0,
+    "row_count": 10000
+  },
+  {
+    "avg_size": 12,
+    "columns": [
+      "region",
+      "a",
+      "b"
+    ],
+    "created_at": "2025-10-14 20:11:28.762303",
+    "distinct_count": 100,
+    "histo_col_type": "",
+    "null_count": 0,
+    "row_count": 10000
+  }
+]'
+----
+
+# The filters on a and b are correlated, so the row count should be closer to
+# 100 than 1.
+opt format=(show-stats)
+SELECT * FROM t155282 WHERE region = 'west' AND a = 20 AND b = 200
+----
+select
+ ├── columns: region:1(string!null) a:2(int!null) b:3(int!null)
+ ├── stats: [rows=90.1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1-3)=1, null(1-3)=0]
+ │   histogram(1)=  0   90.1
+ │                <--- 'west'
+ │   histogram(2)=  0 90.1
+ │                <--- 20
+ │   histogram(3)=  0 90.1
+ │                <--- 200
+ ├── fd: ()-->(1-3)
+ ├── scan t155282
+ │    ├── columns: region:1(string) a:2(int) b:3(int)
+ │    └── stats: [rows=10000, distinct(1)=1, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0, distinct(1-3)=100, null(1-3)=0]
+ │        histogram(1)=  0  10000
+ │                     <--- 'west'
+ │        histogram(2)=  0  0  1900 100  1900 100  1900 100  1900 100  1900  100
+ │                     <--- 0 ------ 20 ------ 40 ------ 60 ------ 80 ------ 100
+ │        histogram(3)=  0  0  1900  100  1900  100  1900  100  1900  100  1900  100
+ │                     <--- 0 ------ 200 ------ 400 ------ 600 ------ 800 ------ 1000
+ └── filters
+      ├── region:1 = 'west' [type=bool, outer=(1), constraints=(/1: [/'west' - /'west']; tight), fd=()-->(1)]
+      ├── a:2 = 20 [type=bool, outer=(2), constraints=(/2: [/20 - /20]; tight), fd=()-->(2)]
+      └── b:3 = 200 [type=bool, outer=(3), constraints=(/3: [/200 - /200]; tight), fd=()-->(3)]
+
+# Tests for selectivity of disjunctions
+
+exec-ddl
+CREATE TABLE t00 (c0 INT, c1 INT, c2 INT, c3 INT, c4 INT, c5 INT)
+----
+
+# 6 columns with identical stats histograms
+exec-ddl
+ALTER TABLE t00 INJECT STATISTICS '[
+  {
+    "columns": ["c0"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 10,
+    "distinct_count": 10,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 0,
+            "num_range": 0,
+            "upper_bound": "0"
+        },
+        {
+            "distinct_range": 9,
+            "num_eq": 1,
+            "num_range": 9,
+            "upper_bound": "10"
+        }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "null_count": 0,
+    "avg_size": 3
+  },
+  {
+    "columns": ["c1"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 10,
+    "distinct_count": 10,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 0,
+            "num_range": 0,
+            "upper_bound": "0"
+        },
+        {
+            "distinct_range": 9,
+            "num_eq": 1,
+            "num_range": 9,
+            "upper_bound": "10"
+        }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "null_count": 0,
+    "avg_size": 3
+  },
+  {
+    "columns": ["c2"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 10,
+    "distinct_count": 10,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 0,
+            "num_range": 0,
+            "upper_bound": "0"
+        },
+        {
+            "distinct_range": 9,
+            "num_eq": 1,
+            "num_range": 9,
+            "upper_bound": "10"
+        }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "null_count": 0,
+    "avg_size": 3
+  },
+  {
+    "columns": ["c3"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 10,
+    "distinct_count": 10,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 0,
+            "num_range": 0,
+            "upper_bound": "0"
+        },
+        {
+            "distinct_range": 9,
+            "num_eq": 1,
+            "num_range": 9,
+            "upper_bound": "10"
+        }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "null_count": 0,
+    "avg_size": 3
+  },
+  {
+    "columns": ["c4"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 10,
+    "distinct_count": 10,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 0,
+            "num_range": 0,
+            "upper_bound": "0"
+        },
+        {
+            "distinct_range": 9,
+            "num_eq": 1,
+            "num_range": 9,
+            "upper_bound": "10"
+        }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "null_count": 0,
+    "avg_size": 3
+  },
+  {
+    "columns": ["c5"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 10,
+    "distinct_count": 10,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 0,
+            "num_range": 0,
+            "upper_bound": "0"
+        },
+        {
+            "distinct_range": 9,
+            "num_eq": 1,
+            "num_range": 9,
+            "upper_bound": "10"
+        }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "null_count": 0,
+    "avg_size": 3
+  }
+]'
+----
+
+# Expect estimate of 10 rows.
+opt
+SELECT c0 FROM t00 WHERE (c0 IS NOT NULL) OR (1 < ALL (c0, c0))
+----
+select
+ ├── columns: c0:1(int)
+ ├── stats: [rows=10]
+ ├── scan t00
+ │    ├── columns: c0:1(int)
+ │    └── stats: [rows=10, distinct(1)=10, null(1)=0]
+ │        histogram(1)=  0  0  9  1
+ │                     <--- 0 --- 10
+ └── filters
+      └── (c0:1 IS NOT NULL) OR (NOT (1 >= ANY (c0:1, c0:1))) [type=bool, outer=(1)]
+
+# ORed predicate selectivity should be approximately additive.
+opt
+SELECT c0 FROM t00 WHERE (c0 = 1) OR (c1 = 3)
+----
+project
+ ├── columns: c0:1(int)
+ ├── stats: [rows=1.9]
+ └── select
+      ├── columns: c0:1(int) c1:2(int)
+      ├── stats: [rows=1.9]
+      ├── scan t00
+      │    ├── columns: c0:1(int) c1:2(int)
+      │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]
+      │        histogram(1)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(2)=  0  0  9  1
+      │                     <--- 0 --- 10
+      └── filters
+           └── (c0:1 = 1) OR (c1:2 = 3) [type=bool, outer=(1,2)]
+
+# The row counts are slightly different when using legacy disjunction stats
+# calculation.
+opt set=optimizer_use_improved_disjunction_stats=false
+SELECT c0 FROM t00 WHERE (c0 = 1) OR (c1 = 3)
+----
+project
+ ├── columns: c0:1(int)
+ ├── stats: [rows=2]
+ └── select
+      ├── columns: c0:1(int) c1:2(int)
+      ├── stats: [rows=2]
+      ├── scan t00
+      │    ├── columns: c0:1(int) c1:2(int)
+      │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]
+      │        histogram(1)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(2)=  0  0  9  1
+      │                     <--- 0 --- 10
+      └── filters
+           └── (c0:1 = 1) OR (c1:2 = 3) [type=bool, outer=(1,2)]
+
+# ORed predicate selectivity when ANDed with a predicate which selects all rows
+# should not change.
+opt
+SELECT c0 FROM t00 WHERE (c0 BETWEEN 1 AND 10) AND (c0 = 1 OR c1 = 3)
+----
+project
+ ├── columns: c0:1(int!null)
+ ├── stats: [rows=1.9]
+ └── select
+      ├── columns: c0:1(int!null) c1:2(int)
+      ├── stats: [rows=1.9, distinct(1)=1.9, null(1)=0]
+      │   histogram(1)=  0  0  1.71 0.19
+      │                <--- 0 ------ 10
+      ├── scan t00
+      │    ├── columns: c0:1(int) c1:2(int)
+      │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]
+      │        histogram(1)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(2)=  0  0  9  1
+      │                     <--- 0 --- 10
+      └── filters
+           ├── (c0:1 >= 1) AND (c0:1 <= 10) [type=bool, outer=(1), constraints=(/1: [/1 - /10]; tight)]
+           └── (c0:1 = 1) OR (c1:2 = 3) [type=bool, outer=(1,2)]
+
+# Extra zero-cardinality terms should not reduce estimated row count.
+opt
+SELECT c0 FROM t00 WHERE (c0 = 1) OR (c1 = 3) OR
+                         (c0 = -1) OR (c1 = -1)
+----
+project
+ ├── columns: c0:1(int)
+ ├── stats: [rows=1.90162]
+ └── select
+      ├── columns: c0:1(int) c1:2(int)
+      ├── stats: [rows=1.90162]
+      ├── scan t00
+      │    ├── columns: c0:1(int) c1:2(int)
+      │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]
+      │        histogram(1)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(2)=  0  0  9  1
+      │                     <--- 0 --- 10
+      └── filters
+           └── (((c0:1 = 1) OR (c1:2 = 3)) OR (c0:1 = -1)) OR (c1:2 = -1) [type=bool, outer=(1,2)]
+
+# Selectivity should not exceed 1.
+opt
+SELECT c0 FROM t00 WHERE (c0 between 0 and 10) OR (c1 between 0 and 10)
+----
+project
+ ├── columns: c0:1(int)
+ ├── stats: [rows=10]
+ └── select
+      ├── columns: c0:1(int) c1:2(int)
+      ├── stats: [rows=10]
+      ├── scan t00
+      │    ├── columns: c0:1(int) c1:2(int)
+      │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]
+      │        histogram(1)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(2)=  0  0  9  1
+      │                     <--- 0 --- 10
+      └── filters
+           └── ((c0:1 >= 0) AND (c0:1 <= 10)) OR ((c1:2 >= 0) AND (c1:2 <= 10)) [type=bool, outer=(1,2)]
+
+# Selectivity of ORed terms on multiple different columns is roughly additive.
+opt
+SELECT c0 FROM t00 WHERE
+(c0 = 1) OR (c1 = 1) OR (c2 = 1) OR (c3 = 1) OR (c4 = 1) OR (c5 = 1)
+----
+project
+ ├── columns: c0:1(int)
+ ├── stats: [rows=4.68559]
+ └── select
+      ├── columns: c0:1(int) c1:2(int) c2:3(int) c3:4(int) c4:5(int) c5:6(int)
+      ├── stats: [rows=4.68559]
+      ├── scan t00
+      │    ├── columns: c0:1(int) c1:2(int) c2:3(int) c3:4(int) c4:5(int) c5:6(int)
+      │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(4)=10, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0]
+      │        histogram(1)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(2)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(3)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(4)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(5)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(6)=  0  0  9  1
+      │                     <--- 0 --- 10
+      └── filters
+           └── (((((c0:1 = 1) OR (c1:2 = 1)) OR (c2:3 = 1)) OR (c3:4 = 1)) OR (c4:5 = 1)) OR (c5:6 = 1) [type=bool, outer=(1-6)]
+
+# Expected row count 0.19
+opt
+SELECT c0 FROM t00 WHERE (c0 = 1 AND (c1 = 1 OR c2 = 1))
+----
+project
+ ├── columns: c0:1(int!null)
+ ├── stats: [rows=1]
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: c0:1(int!null) c1:2(int) c2:3(int)
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+      │   histogram(1)=  0  1
+      │                <--- 1
+      ├── fd: ()-->(1)
+      ├── scan t00
+      │    ├── columns: c0:1(int) c1:2(int) c2:3(int)
+      │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
+      │        histogram(1)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(2)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(3)=  0  0  9  1
+      │                     <--- 0 --- 10
+      └── filters
+           ├── c0:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           └── (c1:2 = 1) OR (c2:3 = 1) [type=bool, outer=(2,3)]
+
+# The estimated row count here should be approximately twice that of the above
+# query, but the optimizer is currently unable to handle more complex
+# predicates and ends up using the default 1/3 selectivity.
+# TODO(msirek): More work is needed for nested ANDs and ORs.
+opt
+SELECT c0 FROM t00 WHERE (c0 = 1 AND (c1 = 1 OR c2 = 1)) OR
+                         (c3 = 2 AND (c4 = 2 OR c5 = 2))
+----
+project
+ ├── columns: c0:1(int)
+ ├── stats: [rows=3.33333]
+ └── select
+      ├── columns: c0:1(int) c1:2(int) c2:3(int) c3:4(int) c4:5(int) c5:6(int)
+      ├── stats: [rows=3.33333]
+      ├── scan t00
+      │    ├── columns: c0:1(int) c1:2(int) c2:3(int) c3:4(int) c4:5(int) c5:6(int)
+      │    └── stats: [rows=10]
+      └── filters
+           └── ((c0:1 = 1) AND ((c1:2 = 1) OR (c2:3 = 1))) OR ((c3:4 = 2) AND ((c4:5 = 2) OR (c5:6 = 2))) [type=bool, outer=(1-6)]
+
+# End tests for selectivity of disjunctions

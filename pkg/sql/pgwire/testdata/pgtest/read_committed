@@ -1,0 +1,123 @@
+only crdb
+----
+
+send
+Query {"String": "SET default_transaction_isolation = 'read committed'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# This test relies on transactions not being autocommitted.
+send
+Query {"String": "SET autocommit_before_ddl = 'false'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE t1 (a int)"}
+----
+
+until
+ReadyForQuery
+----
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAdjustTxnForDDL","UnknownFields":null}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "CREATE TABLE t2 (a int primary key)"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAdjustTxnForDDL","UnknownFields":null}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# If the first statement is a schema change, then the transaction can be
+# upgraded safely.
+send
+Query {"String": "CREATE TABLE t3 (a int); CREATE TABLE t4 (a int);"}
+----
+
+until
+ReadyForQuery
+----
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAdjustTxnForDDL","UnknownFields":null}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "CREATE TABLE t5 (a int primary key)"}
+Bind
+Execute
+Parse {"Query": "CREATE TABLE t6 (a int primary key)"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAdjustTxnForDDL","UnknownFields":null}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# If the first statement is not a schema change, then it's not safe to upgrade
+# the transaction.
+send
+Query {"String": "SELECT 1; CREATE TABLE t7 (a int);"}
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT 1"}
+Bind
+Execute
+Parse {"Query": "CREATE TABLE t8 (a int primary key)"}
+Bind
+Execute
+Sync
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

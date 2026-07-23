@@ -1,0 +1,845 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, s STRING, d DECIMAL NOT NULL)
+----
+
+opt
+SELECT k, s FROM a
+----
+scan a
+ ├── columns: k:1!null s:3
+ ├── stats: [rows=1000]
+ ├── cost: 1088.62
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(3)
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000
+  }
+]'
+----
+
+# Scan with different row counts but default avg_size.
+opt
+SELECT k, s FROM a
+----
+scan a
+ ├── columns: k:1!null s:3
+ ├── stats: [rows=100000]
+ ├── cost: 106028.62
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(3)
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000,
+    "avg_size": 1
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100,
+    "avg_size": 2
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "avg_size": 11
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "avg_size": 3
+  }
+]'
+----
+
+# Scan with set avg_size values.
+opt
+SELECT k, s FROM a
+----
+scan a
+ ├── columns: k:1!null s:3
+ ├── stats: [rows=100000]
+ ├── cost: 107278.745
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(3)
+
+# The limit hint is propagated to the scan and the cost is slightly more than
+# the limit hint * 2 (the scan soft limit multiplier).
+opt
+SELECT * FROM a WHERE k > 5 AND i IN (1, 3, 5, 7, 9) LIMIT 20
+----
+limit
+ ├── columns: k:1!null i:2!null s:3 d:4!null
+ ├── cardinality: [0 - 20]
+ ├── stats: [rows=20]
+ ├── cost: 464.259997
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── select
+ │    ├── columns: k:1!null i:2!null s:3 d:4!null
+ │    ├── stats: [rows=1666.67, distinct(1)=1666.67, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=1666.67, null(1,2)=0]
+ │    ├── cost: 464.049997
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 20.00
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 s:3 d:4!null
+ │    │    ├── constraint: /1: [/6 - ]
+ │    │    ├── stats: [rows=33333.3, distinct(1)=33333.3, null(1)=0]
+ │    │    ├── cost: 452.019998
+ │    │    ├── cost-flags: unbounded-cardinality
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    └── limit hint: 400.00
+ │    └── filters
+ │         └── i:2 IN (1, 3, 5, 7, 9) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3] [/5 - /5] [/7 - /7] [/9 - /9]; tight)]
+ └── 20
+
+# The limit hint is propagated, but the cost is not multiplied by 2 (the scan
+# soft limit multiplier) since the row count is known to be less than 400 * 2.
+opt
+SELECT * FROM a WHERE k > 0 AND k <= 450 AND i IN (1, 3, 5, 7, 9) LIMIT 20
+----
+limit
+ ├── columns: k:1!null i:2!null s:3 d:4!null
+ ├── cardinality: [0 - 20]
+ ├── stats: [rows=20]
+ ├── cost: 446.739807
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── select
+ │    ├── columns: k:1!null i:2!null s:3 d:4!null
+ │    ├── cardinality: [0 - 450]
+ │    ├── stats: [rows=22.5, distinct(1)=22.5, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=22.5, null(1,2)=0]
+ │    ├── cost: 446.529807
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 20.00
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 s:3 d:4!null
+ │    │    ├── constraint: /1: [/1 - /450]
+ │    │    ├── cardinality: [0 - 450]
+ │    │    ├── stats: [rows=450, distinct(1)=450, null(1)=0]
+ │    │    ├── cost: 442.009807
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    └── limit hint: 400.00
+ │    └── filters
+ │         └── i:2 IN (1, 3, 5, 7, 9) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3] [/5 - /5] [/7 - /7] [/9 - /9]; tight)]
+ └── 20
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 0,
+    "distinct_count": 0,
+    "avg_size": 0
+  }
+]'
+----
+
+# Ensure that we prefer a reverse scan over sorting.
+opt
+SELECT * FROM a ORDER BY k DESC
+----
+scan a,rev
+ ├── columns: k:1!null i:2 s:3 d:4!null
+ ├── stats: [rows=1]
+ ├── cost: 29.9
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── ordering: -1
+
+# Regression test for #35042. Ensure we always prefer constrained scans.
+exec-ddl
+CREATE TABLE speed_test (id INT PRIMARY KEY DEFAULT unique_rowid())
+----
+
+opt
+SELECT id FROM speed_test@speed_test_pkey WHERE id BETWEEN 1 AND 1000 AND ((id % 16) = 0)
+----
+select
+ ├── columns: id:1!null
+ ├── cardinality: [0 - 1000]
+ ├── immutable
+ ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── cost: 1038.03
+ ├── key: (1)
+ ├── scan speed_test
+ │    ├── columns: id:1!null
+ │    ├── constraint: /1: [/1 - /1000]
+ │    ├── flags: force-index=speed_test_pkey
+ │    ├── cardinality: [0 - 1000]
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    ├── cost: 1028.01
+ │    └── key: (1)
+ └── filters
+      └── (id:1 % 16) = 0 [outer=(1), immutable]
+
+opt
+SELECT id FROM speed_test@speed_test_pkey WHERE id BETWEEN 1 AND 2000 AND ((id % 16) = 0)
+----
+select
+ ├── columns: id:1!null
+ ├── cardinality: [0 - 2000]
+ ├── immutable
+ ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── cost: 1043.03
+ ├── key: (1)
+ ├── scan speed_test
+ │    ├── columns: id:1!null
+ │    ├── constraint: /1: [/1 - /2000]
+ │    ├── flags: force-index=speed_test_pkey
+ │    ├── cardinality: [0 - 2000]
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    ├── cost: 1033.01
+ │    └── key: (1)
+ └── filters
+      └── (id:1 % 16) = 0 [outer=(1), immutable]
+
+# Regression test for #60493. Account for the cost of visiting multiple
+# partitions.
+exec-ddl
+CREATE TABLE t60493 (
+  pk INT8 NOT NULL,
+  region STRING NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (region ASC, pk ASC),
+  FAMILY "primary" (pk, region)
+) PARTITION BY LIST (region) (
+  PARTITION useast VALUES IN (('useast')),
+  PARTITION uswest VALUES IN (('uswest')),
+  PARTITION europe VALUES IN (('europe'))
+)
+----
+
+exec-ddl
+ALTER PARTITION useast OF INDEX t60493@primary CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=us-east1: 3}',
+  lease_preferences = '[[+region=us-east1]]'
+----
+
+exec-ddl
+ALTER PARTITION uswest OF INDEX t60493@primary CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=us-west1: 3}',
+  lease_preferences = '[[+region=us-west1]]'
+----
+
+exec-ddl
+ALTER PARTITION europe OF INDEX t60493@primary CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=europe-west1: 3}',
+  lease_preferences = '[[+region=europe-west1]]'
+----
+
+exec-ddl
+ALTER TABLE t60493 INJECT STATISTICS '[
+    {
+        "columns": [
+            "region"
+        ],
+        "created_at": "2021-02-23 04:14:01.849711",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "europe"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "useast"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "uswest"
+            }
+        ],
+        "histo_col_type": "STRING",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3
+    },
+    {
+        "columns": [
+            "pk"
+        ],
+        "created_at": "2021-02-23 04:14:01.849711",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "3"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3
+    },
+    {
+        "columns": [
+            "region",
+            "pk"
+        ],
+        "created_at": "2021-02-23 04:14:01.849711",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3
+    }
+]';
+----
+
+opt
+SELECT * FROM t60493 WHERE region IN ('useast':::STRING, 'uswest':::STRING)
+----
+scan t60493
+ ├── columns: pk:1!null region:2!null
+ ├── constraint: /2/1
+ │    ├── [/'useast' - /'useast']
+ │    └── [/'uswest' - /'uswest']
+ ├── stats: [rows=2, distinct(2)=2, null(2)=0]
+ │   histogram(2)=  0     1      0     1
+ │                <--- 'useast' --- 'uswest'
+ ├── cost: 220.1
+ ├── cost-flags: unbounded-cardinality
+ └── key: (1,2)
+
+# Regression test for #64570. Ensure we always prefer bounded over unbounded scans.
+exec-ddl
+CREATE TABLE t64570 (x INT, y INT, v INT, INDEX (y, v), PRIMARY KEY (x,y))
+----
+
+# Inject stats corresponding to running:
+# INSERT INTO t VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+#
+# These stats are important for the test below, which tries to search for
+# the row (10, 10, 10). That row doesn't exist (and therefore doesn't show up
+# in the histograms).
+exec-ddl
+ALTER TABLE t64570 INJECT STATISTICS '[
+    {
+        "columns": [
+            "x"
+        ],
+        "created_at": "2021-06-28 14:20:18.273949",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "3"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "foo",
+        "null_count": 0,
+        "row_count": 3
+    },
+    {
+        "columns": [
+            "y"
+        ],
+        "created_at": "2021-06-28 14:20:18.273949",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "3"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "foo",
+        "null_count": 0,
+        "row_count": 3
+    },
+    {
+        "columns": [
+            "v"
+        ],
+        "created_at": "2021-06-28 14:20:18.273949",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "3"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "foo",
+        "null_count": 0,
+        "row_count": 3
+    }
+]'
+----
+
+# We should choose a constrained scan of the primary index with cardinality 1,
+# not a constrained scan of the secondary index with unbounded cardinality.
+opt
+UPSERT INTO t64570 VALUES (10, 10, 10)
+----
+upsert t64570
+ ├── arbiter indexes: t64570_pkey
+ ├── columns: <none>
+ ├── canary column: x:9
+ ├── fetch columns: x:9 y:10 v:11
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => v:3
+ ├── update-mapping:
+ │    └── column3:8 => v:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 9.15
+ └── left-join (cross)
+      ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 v:11
+      ├── cardinality: [1 - 1]
+      ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      ├── stats: [rows=1]
+      ├── cost: 9.14
+      ├── key: ()
+      ├── fd: ()-->(6-11)
+      ├── values
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    ├── cardinality: [1 - 1]
+      │    ├── stats: [rows=1]
+      │    ├── cost: 0.02
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    └── (10, 10, 10)
+      ├── scan t64570
+      │    ├── columns: x:9!null y:10!null v:11
+      │    ├── constraint: /9/10: [/10/10 - /10/10]
+      │    ├── flags: avoid-full-scan
+      │    ├── cardinality: [0 - 1]
+      │    ├── stats: [rows=1, distinct(9)=1, null(9)=0, distinct(10)=1, null(10)=0, distinct(9,10)=1, null(9,10)=0]
+      │    │   histogram(9)=
+      │    │   histogram(10)=
+      │    ├── cost: 9.07
+      │    ├── key: ()
+      │    └── fd: ()-->(9-11)
+      └── filters (true)
+
+# Regression test for #68556.
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  INDEX abc (a, b) STORING (c),
+  INDEX bc (b) STORING (c)
+)
+----
+
+# Inject stats for 100k rows where the upper bound of both a and b is 10.
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+    {
+        "columns": [
+            "k"
+        ],
+        "created_at": "2021-06-28 14:20:18.273949",
+        "distinct_count": 3,
+        "histo_col_type": "INT8",
+        "null_count": 0,
+        "row_count": 100000
+    },
+    {
+        "columns": [
+            "a"
+        ],
+        "created_at": "2021-06-28 14:20:18.273949",
+        "distinct_count": 100,
+        "histo_buckets": [
+            {"distinct_range": 0, "num_eq": 0, "num_range": 0, "upper_bound": "0"},
+            {"distinct_range": 100, "num_eq": 0, "num_range": 100000, "upper_bound": "10"}
+        ],
+        "histo_col_type": "INT8",
+        "null_count": 0,
+        "row_count": 100000
+    },
+    {
+        "columns": [
+            "b"
+        ],
+        "created_at": "2021-06-28 14:20:18.273949",
+        "distinct_count": 100,
+        "histo_buckets": [
+            {"distinct_range": 0, "num_eq": 0, "num_range": 0, "upper_bound": "0"},
+            {"distinct_range": 100, "num_eq": 0, "num_range": 100000, "upper_bound": "10"}
+        ],
+        "histo_col_type": "INT8",
+        "null_count": 0,
+        "row_count": 100000
+    }
+]'
+----
+
+# Query for values of a and b that are outside the histogram buckets. A scan on
+# the bc index with an additional filter and index join should not be chosen
+# over a scan on the abc index with no additional filter and no index join.
+opt
+SELECT * FROM t WHERE a = 11 AND b = 11
+----
+scan t@abc
+ ├── columns: k:1!null a:2!null b:3!null c:4
+ ├── constraint: /2/3/1: [/11/11 - /11/11]
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ │   histogram(2)=
+ │   histogram(3)=
+ ├── cost: 19.1
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── fd: ()-->(2,3), (1)-->(4)
+
+# Test that the NO_FULL_SCAN and AVOID_FULL_SCAN hints add a huge cost or
+# penalty for full scans.
+opt
+SELECT * FROM t@{NO_FULL_SCAN}
+----
+scan t
+ ├── columns: k:1!null a:2 b:3 c:4
+ ├── flags: no-full-scan
+ ├── stats: [rows=100000]
+ ├── cost: 1e+100
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2-4)
+
+opt
+SELECT * FROM t@{AVOID_FULL_SCAN}
+----
+scan t
+ ├── columns: k:1!null a:2 b:3 c:4
+ ├── flags: avoid-full-scan
+ ├── stats: [rows=100000]
+ ├── cost: 108028.82
+ ├── cost-flags: full-scan-penalty unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2-4)
+
+exec-ddl
+CREATE INDEX b_partial ON t(b) WHERE c > 0
+----
+
+# The hint only affects partial indexes if the partial index is forced.
+opt
+SELECT * FROM t@{NO_FULL_SCAN} WHERE c > 0
+----
+index-join t
+ ├── columns: k:1!null a:2 b:3 c:4!null
+ ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+ ├── cost: 234671.505
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t@b_partial,partial
+      ├── columns: k:1!null b:3
+      ├── flags: no-full-scan
+      ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+      ├── cost: 34341.4524
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: (1)-->(3)
+
+opt
+SELECT * FROM t@{AVOID_FULL_SCAN} WHERE c > 0
+----
+index-join t
+ ├── columns: k:1!null a:2 b:3 c:4!null
+ ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+ ├── cost: 234671.505
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t@b_partial,partial
+      ├── columns: k:1!null b:3
+      ├── flags: avoid-full-scan
+      ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+      ├── cost: 34341.4524
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: (1)-->(3)
+
+opt
+SELECT * FROM t@{FORCE_INDEX=b_partial,NO_FULL_SCAN} WHERE c > 0
+----
+select
+ ├── columns: k:1!null a:2 b:3 c:4!null
+ ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+ ├── cost: 1e+100
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan t
+ │    ├── columns: k:1!null a:2 b:3 c:4
+ │    ├── partial index predicates
+ │    │    └── b_partial: filters
+ │    │         └── c:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
+ │    ├── flags: force-index=b_partial no-full-scan
+ │    ├── stats: [rows=100000, distinct(1)=3, null(1)=0, distinct(4)=10000, null(4)=1000]
+ │    ├── cost: 1e+100
+ │    ├── cost-flags: huge-cost-penalty unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── c:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
+
+opt
+SELECT * FROM t@{FORCE_INDEX=b_partial,AVOID_FULL_SCAN} WHERE c > 0
+----
+index-join t
+ ├── columns: k:1!null a:2 b:3 c:4!null
+ ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+ ├── cost: 234671.505
+ ├── cost-flags: full-scan-penalty unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t@b_partial,partial
+      ├── columns: k:1!null b:3
+      ├── flags: force-index=b_partial avoid-full-scan
+      ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+      ├── cost: 34341.4524
+      ├── cost-flags: full-scan-penalty unbounded-cardinality
+      ├── key: (1)
+      └── fd: (1)-->(3)
+
+# Test that the FORCE_INVERTED_INDEX hint creates a huge cost for full table
+# scans.
+opt
+SELECT * FROM t@{FORCE_INVERTED_INDEX}
+----
+scan t
+ ├── columns: k:1!null a:2 b:3 c:4
+ ├── partial index predicates
+ │    └── b_partial: filters
+ │         └── c:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
+ ├── flags:
+ ├── stats: [rows=100000]
+ ├── cost: 1e+100
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
+ ├── key: (1)
+ └── fd: (1)-->(2-4)
+
+# Test that the FORCE_INVERTED_INDEX hint creates a huge cost for scans on
+# non-inverted indexes.
+opt
+SELECT * FROM t@{FORCE_INVERTED_INDEX} WHERE b = 0
+----
+select
+ ├── columns: k:1!null a:2 b:3!null c:4
+ ├── stats: [rows=10, distinct(3)=1, null(3)=0]
+ │   histogram(3)=  0  0
+ │                <--- 0
+ ├── cost: 1e+100
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ ├── scan t
+ │    ├── columns: k:1!null a:2 b:3 c:4
+ │    ├── partial index predicates
+ │    │    └── b_partial: filters
+ │    │         └── c:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
+ │    ├── flags:
+ │    ├── stats: [rows=100000, distinct(1)=3, null(1)=0, distinct(3)=100, null(3)=0]
+ │    │   histogram(3)=  0  0  1e+05  0
+ │    │                <--- 0 ------- 10
+ │    ├── cost: 1e+100
+ │    ├── cost-flags: huge-cost-penalty unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── b:3 = 0 [outer=(3), constraints=(/3: [/0 - /0]; tight), fd=()-->(3)]
+
+exec-ddl
+CREATE TABLE inv (
+  k INT PRIMARY KEY,
+  j JSON,
+  INVERTED INDEX (j)
+)
+----
+
+# Test that FORCE_INVERTED_INDEX does not create a huge cost for scans on
+# inverted indexes.
+opt
+SELECT * FROM inv@{FORCE_INVERTED_INDEX} WHERE j->'a' = '1'
+----
+index-join inv
+ ├── columns: k:1!null j:2
+ ├── immutable
+ ├── stats: [rows=111.111]
+ ├── cost: 803.595556
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── scan inv@inv_j_idx,inverted
+      ├── columns: k:1!null
+      ├── inverted constraint: /5/1
+      │    └── spans: ["a"/1, "a"/1]
+      ├── flags:
+      ├── stats: [rows=111.111, distinct(5)=100, null(5)=0]
+      ├── cost: 132.464444
+      ├── cost-flags: unbounded-cardinality
+      └── key: (1)
+
+exec-ddl
+CREATE TABLE b (x INT, y INT, z INT, s STRING, INDEX xs (x, s), INDEX xyz (x, y, z))
+----
+
+exec-ddl
+ALTER TABLE b INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "avg_size": 1
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "avg_size": 2
+  },
+  {
+    "columns": ["z"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "avg_size": 3
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "avg_size": 29
+  }
+]'
+----
+
+# Using the 3-column index has a lower cost than the 2-column index with a large
+# column.
+opt
+SELECT x FROM b
+----
+scan b@xyz
+ ├── columns: x:1
+ ├── stats: [rows=1000]
+ ├── cost: 1055.795
+ └── cost-flags: unbounded-cardinality
+
+# The cost of using index xyz is still lowest for a constrained scan.
+opt
+SELECT x FROM b WHERE x < 13
+----
+scan b@xyz
+ ├── columns: x:1!null
+ ├── constraint: /1/2/3/5: (/NULL - /12]
+ ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── cost: 360.52
+ └── cost-flags: unbounded-cardinality

@@ -1,0 +1,246 @@
+{
+  "endpoints": [
+    {
+      "url": "/_status/certificates/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/details/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/nodes",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/nodes/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/nodes_ui",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/nodes_ui/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/raft",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/ranges/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/tenant_service_status",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/tenant_ranges",
+      "method": "GET",
+      "skip": "needs non trivial validation"
+    },
+    {
+      "url": "/_status/gossip/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/enginestats/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/allocator/node/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/allocator/range/{range_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/sessions",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/local_sessions",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/contention_events",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/local_contention_events",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/distsql_flows",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/local_distsql_flows",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/stacks/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/profile/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/metrics/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/files/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/logfiles/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/logfiles/{node_id}/{file}",
+      "method": "GET",
+      "skip": "needs non trivial validation"
+    },
+    {
+      "url": "/_status/logs/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/problemranges",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/downloadspans",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/range/{range_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/diagnostics/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/stores/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/statements",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/combinedstmts",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/stmtdetails/{fingerprint_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/stmtdiagreports",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/stmtdiag/{statement_diagnostics_id}",
+      "method": "GET",
+      "skip": "needs non trivial validation"
+    },
+    {
+      "url": "/_status/job_registry/{node_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/job/{job_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/indexusagestatistics",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/databases/{database}/tables/{table}/indexstats",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/sqlroles",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/transactioncontentionevents",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/connectivity",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/request_job_profiler_execution_details/{job_id}",
+      "method": "GET",
+      "skip": "needs non trivial validation"
+    },
+    {
+      "url": "/_status/job_profiler_execution_details/{job_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/list_job_profiler_execution_details/{job_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/throttling",
+      "method": "GET"
+    },
+    {
+      "url": "/_status/cancel_query/{node_id}",
+      "method": "POST"
+    },
+    {
+      "url": "/_status/cancel_session/{node_id}",
+      "method": "POST"
+    },
+    {
+      "url": "/_status/span",
+      "method": "POST"
+    },
+    {
+      "url": "/_status/critical_nodes",
+      "method": "POST"
+    },
+    {
+      "url": "/_status/v2/hotranges",
+      "method": "POST"
+    },
+    {
+      "url": "/_status/keyvissamples",
+      "method": "POST"
+    },
+    {
+      "url": "/_status/stmtdiagreports",
+      "method": "POST",
+      "skip": "needs non trivial validation"
+    },
+    {
+      "url": "/_status/stmtdiagreports/cancel",
+      "method": "POST",
+      "skip": "needs non trivial validation"
+    },
+    {
+      "url": "/_status/resetsqlstats",
+      "method": "POST"
+    },
+    {
+      "url": "/_status/resetindexusagestats",
+      "method": "POST"
+    },
+    {
+      "url": "/_status/vars",
+      "method": "GET"
+    }
+  ]
+} 

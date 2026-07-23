@@ -1,0 +1,10 @@
+setup
+CREATE DOMAIN salmon AS INT DEFAULT 0;
+CREATE SCHEMA fish;
+CREATE TABLE t (c salmon);
+CREATE VIEW v AS SELECT c FROM t;
+----
+
+test
+ALTER DOMAIN salmon SET SCHEMA fish;
+----

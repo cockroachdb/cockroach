@@ -1,0 +1,52 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "leases",
+    srcs = [
+        "build.go",
+        "errors.go",
+        "status.go",
+        "verify.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/liveness",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/kv/kvserver/raftutil",
+        "//pkg/raft",
+        "//pkg/raft/raftpb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "leases_test",
+    srcs = [
+        "build_test.go",
+        "status_test.go",
+        "verify_test.go",
+    ],
+    embed = [":leases"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/liveness",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/kv/kvserver/raftutil",
+        "//pkg/raft",
+        "//pkg/raft/raftpb",
+        "//pkg/raft/tracker",
+        "//pkg/roachpb",
+        "//pkg/testutils/zerofields",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

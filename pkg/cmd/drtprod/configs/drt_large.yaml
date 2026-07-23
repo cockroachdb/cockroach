@@ -1,0 +1,188 @@
+# Yaml for creating and configuring the drt-large and workload-large clusters. This also configures the datadog.
+environment:
+  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
+  ROACHPROD_DNS: drt.crdb.io
+  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
+  ROACHPROD_GCE_DNS_ZONE: drt
+  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
+  CLUSTER: drt-large
+  WORKLOAD_CLUSTER: workload-large
+  STORE_COUNT: 8
+
+  # variables used by tpcc_run_multiregion.sh
+  NUM_REGIONS: 3
+  NODES_PER_REGION: 5
+  REGIONS: northamerica-northeast2,us-east5,us-east1
+  TPCC_WAREHOUSES: 150000
+  DB_NAME: cct_tpcc
+  SURVIVAL_GOAL: region
+  RUN_DURATION: 12h
+  NUM_CONNECTIONS: 500
+  NUM_WORKERS: 500
+  MAX_RATE: 500
+
+dependent_file_locations:
+  - artifacts/roachprod
+  - artifacts/roachtest
+  - pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller
+  - pkg/cmd/drtprod/scripts/setup_datadog_cluster
+  - pkg/cmd/drtprod/scripts/create_decommission_node.sh
+  - pkg/cmd/drtprod/scripts/setup_datadog_workload
+  - pkg/cmd/drtprod/scripts/tpcc_init.sh
+  - pkg/cmd/drtprod/scripts/tpcc_run_multiregion.sh
+
+targets:
+  - target_name: $CLUSTER
+    steps:
+      - command: create
+        args:
+          - $CLUSTER
+        flags:
+          clouds: gce
+          gce-managed: true
+          gce-use-spot: true
+          gce-enable-multiple-stores: true
+          gce-zones: "northamerica-northeast2-a:2,northamerica-northeast2-b:2,northamerica-northeast2-c:1,us-east5-a:2,us-east5-b:2,us-east5-c:1,us-east1-b:2,us-east1-c:2,us-east1-d:1"
+          nodes: 15
+          gce-machine-type: n2-standard-16
+          local-ssd: true
+          gce-local-ssd-count: $STORE_COUNT
+          os-volume-size: 100
+          username: drt
+          lifetime: 8760h
+        on_rollback:
+          - command: destroy
+            args:
+              - $CLUSTER
+      - command: sync
+        flags:
+          clouds: gce
+      - command: stage
+        args:
+          - $CLUSTER
+          - cockroach
+      - script: "pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller"
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
+      - command: start
+        args:
+          - $CLUSTER
+          - "--binary"
+          - "./cockroach"
+        flags:
+          enable-fluent-sink: true
+          store-count: $STORE_COUNT
+          args: --wal-failover=among-stores
+          restart: false
+          sql-port: 26257
+        on_rollback:
+          - command: stop
+            args:
+              - $CLUSTER
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
+      - command: sql
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - "ALTER RANGE timeseries CONFIGURE ZONE USING num_replicas=5,num_voters=5"
+      - command: sql
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - "ALTER RANGE default CONFIGURE ZONE USING num_replicas=5,num_voters=5"
+      - command: sql
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - "SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='256 MB'"
+      - script: "pkg/cmd/drtprod/scripts/create_decommission_node.sh"
+  - target_name: $WORKLOAD_CLUSTER
+    steps:
+      - command: create
+        args:
+          - $WORKLOAD_CLUSTER
+        flags:
+          clouds: gce
+          gce-zones: "northamerica-northeast2-a,us-east5-a,us-east1-b"
+          nodes: $NUM_REGIONS
+          gce-machine-type: n2d-standard-4
+          os-volume-size: 100
+          username: workload
+          lifetime: 8760h
+        on_rollback:
+          - command: destroy
+            args:
+              - $WORKLOAD_CLUSTER
+      - command: sync
+        flags:
+          clouds: gce
+      - command: stage
+        args:
+          - $WORKLOAD_CLUSTER
+          - cockroach
+      - command: stage
+        args:
+          - $WORKLOAD_CLUSTER
+          - workload
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachprod
+          - roachprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER:1
+          - artifacts/roachtest
+          - roachtest-operations
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
+  - target_name: post_tasks
+    dependent_targets:
+      - $CLUSTER
+      - $WORKLOAD_CLUSTER
+    steps:
+      - script: rm
+        args:
+          - -rf
+          - certs-$CLUSTER
+      - command: get
+        args:
+          - $CLUSTER:1
+          - certs
+          - certs-$CLUSTER
+      - command: ssh
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - sudo
+          - rm
+          - -rf
+          - certs
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - certs-$CLUSTER
+          - certs
+      - command: ssh
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - chmod
+          - 600
+          - './certs/*'
+      - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
+        args:
+          - cct_tpcc # suffix added to script name tpcc_init_cct_tpcc.sh
+          - true # determines whether to execute the script immediately on workload node
+        flags:
+          warehouses: $TPCC_WAREHOUSES
+          partitions: $NUM_REGIONS
+          db: $DB_NAME
+          survival-goal: $SURVIVAL_GOAL
+          regions: $REGIONS
+      - script: "pkg/cmd/drtprod/scripts/tpcc_run_multiregion.sh"

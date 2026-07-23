@@ -1,0 +1,613 @@
+parse
+CREATE INDEX a ON b (c)
+----
+CREATE INDEX a ON b (c)
+CREATE INDEX a ON b (c) -- fully parenthesized
+CREATE INDEX a ON b (c) -- literals removed
+CREATE INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE INDEX CONCURRENTLY a ON b (c)
+----
+CREATE INDEX CONCURRENTLY a ON b (c)
+CREATE INDEX CONCURRENTLY a ON b (c) -- fully parenthesized
+CREATE INDEX CONCURRENTLY a ON b (c) -- literals removed
+CREATE INDEX CONCURRENTLY _ ON _ (_) -- identifiers removed
+
+parse
+EXPLAIN CREATE INDEX a ON b (c)
+----
+EXPLAIN CREATE INDEX a ON b (c)
+EXPLAIN CREATE INDEX a ON b (c) -- fully parenthesized
+EXPLAIN CREATE INDEX a ON b (c) -- literals removed
+EXPLAIN CREATE INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE INDEX a ON b.c (d)
+----
+CREATE INDEX a ON b.c (d)
+CREATE INDEX a ON b.c (d) -- fully parenthesized
+CREATE INDEX a ON b.c (d) -- literals removed
+CREATE INDEX _ ON _._ (_) -- identifiers removed
+
+parse
+CREATE INDEX ON a (b)
+----
+CREATE INDEX ON a (b)
+CREATE INDEX ON a (b) -- fully parenthesized
+CREATE INDEX ON a (b) -- literals removed
+CREATE INDEX ON _ (_) -- identifiers removed
+
+parse
+CREATE INDEX ON a (b) STORING (c)
+----
+CREATE INDEX ON a (b) STORING (c)
+CREATE INDEX ON a (b) STORING (c) -- fully parenthesized
+CREATE INDEX ON a (b) STORING (c) -- literals removed
+CREATE INDEX ON _ (_) STORING (_) -- identifiers removed
+
+
+parse
+CREATE INDEX ON a (b) COVERING (c)
+----
+CREATE INDEX ON a (b) STORING (c) -- normalized!
+CREATE INDEX ON a (b) STORING (c) -- fully parenthesized
+CREATE INDEX ON a (b) STORING (c) -- literals removed
+CREATE INDEX ON _ (_) STORING (_) -- identifiers removed
+
+parse
+CREATE INDEX ON a (b) INCLUDE (c)
+----
+CREATE INDEX ON a (b) STORING (c) -- normalized!
+CREATE INDEX ON a (b) STORING (c) -- fully parenthesized
+CREATE INDEX ON a (b) STORING (c) -- literals removed
+CREATE INDEX ON _ (_) STORING (_) -- identifiers removed
+
+error
+CREATE INDEX ON a (b) STORING ()
+----
+at or near ")": syntax error
+DETAIL: source SQL:
+CREATE INDEX ON a (b) STORING ()
+                               ^
+HINT: try \h CREATE INDEX
+
+parse
+CREATE INDEX ON a (b) WHERE c > 3
+----
+CREATE INDEX ON a (b) WHERE c > 3
+CREATE INDEX ON a (b) WHERE ((c) > (3)) -- fully parenthesized
+CREATE INDEX ON a (b) WHERE c > _ -- literals removed
+CREATE INDEX ON _ (_) WHERE _ > 3 -- identifiers removed
+
+parse
+CREATE INDEX ON a (b ASC, c DESC)
+----
+CREATE INDEX ON a (b ASC, c DESC)
+CREATE INDEX ON a (b ASC, c DESC) -- fully parenthesized
+CREATE INDEX ON a (b ASC, c DESC) -- literals removed
+CREATE INDEX ON _ (_ ASC, _ DESC) -- identifiers removed
+
+parse
+CREATE INDEX ON a (b NULLS FIRST, c ASC NULLS FIRST, d DESC NULLS LAST)
+----
+CREATE INDEX ON a (b NULLS FIRST, c ASC NULLS FIRST, d DESC NULLS LAST)
+CREATE INDEX ON a (b NULLS FIRST, c ASC NULLS FIRST, d DESC NULLS LAST) -- fully parenthesized
+CREATE INDEX ON a (b NULLS FIRST, c ASC NULLS FIRST, d DESC NULLS LAST) -- literals removed
+CREATE INDEX ON _ (_ NULLS FIRST, _ ASC NULLS FIRST, _ DESC NULLS LAST) -- identifiers removed
+
+parse
+CREATE INDEX IF NOT EXISTS i ON a (b) WHERE c > 3
+----
+CREATE INDEX IF NOT EXISTS i ON a (b) WHERE c > 3
+CREATE INDEX IF NOT EXISTS i ON a (b) WHERE ((c) > (3)) -- fully parenthesized
+CREATE INDEX IF NOT EXISTS i ON a (b) WHERE c > _ -- literals removed
+CREATE INDEX IF NOT EXISTS _ ON _ (_) WHERE _ > 3 -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX a ON b (c)
+----
+CREATE UNIQUE INDEX a ON b (c)
+CREATE UNIQUE INDEX a ON b (c) -- fully parenthesized
+CREATE UNIQUE INDEX a ON b (c) -- literals removed
+CREATE UNIQUE INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX a ON b (c) STORING (d)
+----
+CREATE UNIQUE INDEX a ON b (c) STORING (d)
+CREATE UNIQUE INDEX a ON b (c) STORING (d) -- fully parenthesized
+CREATE UNIQUE INDEX a ON b (c) STORING (d) -- literals removed
+CREATE UNIQUE INDEX _ ON _ (_) STORING (_) -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX a ON b (c) WHERE d > 3
+----
+CREATE UNIQUE INDEX a ON b (c) WHERE d > 3
+CREATE UNIQUE INDEX a ON b (c) WHERE ((d) > (3)) -- fully parenthesized
+CREATE UNIQUE INDEX a ON b (c) WHERE d > _ -- literals removed
+CREATE UNIQUE INDEX _ ON _ (_) WHERE _ > 3 -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX a ON b.c (d)
+----
+CREATE UNIQUE INDEX a ON b.c (d)
+CREATE UNIQUE INDEX a ON b.c (d) -- fully parenthesized
+CREATE UNIQUE INDEX a ON b.c (d) -- literals removed
+CREATE UNIQUE INDEX _ ON _._ (_) -- identifiers removed
+
+parse
+CREATE INVERTED INDEX a ON b (c)
+----
+CREATE INVERTED INDEX a ON b (c)
+CREATE INVERTED INDEX a ON b (c) -- fully parenthesized
+CREATE INVERTED INDEX a ON b (c) -- literals removed
+CREATE INVERTED INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE INVERTED INDEX a ON b.c (d)
+----
+CREATE INVERTED INDEX a ON b.c (d)
+CREATE INVERTED INDEX a ON b.c (d) -- fully parenthesized
+CREATE INVERTED INDEX a ON b.c (d) -- literals removed
+CREATE INVERTED INDEX _ ON _._ (_) -- identifiers removed
+
+parse
+CREATE INVERTED INDEX a ON b (c) STORING (d)
+----
+CREATE INVERTED INDEX a ON b (c) STORING (d)
+CREATE INVERTED INDEX a ON b (c) STORING (d) -- fully parenthesized
+CREATE INVERTED INDEX a ON b (c) STORING (d) -- literals removed
+CREATE INVERTED INDEX _ ON _ (_) STORING (_) -- identifiers removed
+
+
+parse
+CREATE INVERTED INDEX a ON b (c) WHERE d > 3
+----
+CREATE INVERTED INDEX a ON b (c) WHERE d > 3
+CREATE INVERTED INDEX a ON b (c) WHERE ((d) > (3)) -- fully parenthesized
+CREATE INVERTED INDEX a ON b (c) WHERE d > _ -- literals removed
+CREATE INVERTED INDEX _ ON _ (_) WHERE _ > 3 -- identifiers removed
+
+parse
+CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE d > 3
+----
+CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE d > 3
+CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE ((d) > (3)) -- fully parenthesized
+CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE d > _ -- literals removed
+CREATE INVERTED INDEX IF NOT EXISTS _ ON _ (_) WHERE _ > 3 -- identifiers removed
+
+parse
+CREATE INDEX a ON b USING GIN (c)
+----
+CREATE INVERTED INDEX a ON b (c) -- normalized!
+CREATE INVERTED INDEX a ON b (c) -- fully parenthesized
+CREATE INVERTED INDEX a ON b (c) -- literals removed
+CREATE INVERTED INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE INDEX a ON b USING GIST (c)
+----
+CREATE INVERTED INDEX a ON b (c) -- normalized!
+CREATE INVERTED INDEX a ON b (c) -- fully parenthesized
+CREATE INVERTED INDEX a ON b (c) -- literals removed
+CREATE INVERTED INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX a ON b USING GIN (c)
+----
+CREATE UNIQUE INVERTED INDEX a ON b (c) -- normalized!
+CREATE UNIQUE INVERTED INDEX a ON b (c) -- fully parenthesized
+CREATE UNIQUE INVERTED INDEX a ON b (c) -- literals removed
+CREATE UNIQUE INVERTED INDEX _ ON _ (_) -- identifiers removed
+
+# TODO(knz): Arguably the storage parameters under WITH should probably
+# not removed under FmtAnonymize?
+
+parse
+CREATE INDEX a ON b (c) WITH (fillfactor = 100, y_bounds = 50)
+----
+CREATE INDEX a ON b (c) WITH ('fillfactor' = 100, 'y_bounds' = 50) -- normalized!
+CREATE INDEX a ON b (c) WITH ('fillfactor' = (100), 'y_bounds' = (50)) -- fully parenthesized
+CREATE INDEX a ON b (c) WITH ('fillfactor' = _, 'y_bounds' = _) -- literals removed
+CREATE INDEX _ ON _ (_) WITH ('fillfactor' = 100, 'y_bounds' = 50) -- identifiers removed
+
+parse
+CREATE INDEX ON a ((a + b))
+----
+CREATE INDEX ON a ((a + b))
+CREATE INDEX ON a ((((a) + (b)))) -- fully parenthesized
+CREATE INDEX ON a ((a + b)) -- literals removed
+CREATE INDEX ON _ ((_ + _)) -- identifiers removed
+
+parse
+CREATE INDEX ON a (lower(a))
+----
+CREATE INDEX ON a (lower(a))
+CREATE INDEX ON a ((lower((a)))) -- fully parenthesized
+CREATE INDEX ON a (lower(a)) -- literals removed
+CREATE INDEX ON _ (_(_)) -- identifiers removed
+
+parse
+CREATE INDEX ON a (a, lower(b))
+----
+CREATE INDEX ON a (a, lower(b))
+CREATE INDEX ON a (a, (lower((b)))) -- fully parenthesized
+CREATE INDEX ON a (a, lower(b)) -- literals removed
+CREATE INDEX ON _ (_, _(_)) -- identifiers removed
+
+parse
+CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))
+----
+CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))
+CREATE INDEX ON a (((((((lower((a))) || (' ')))) || (lower((b)))))) -- fully parenthesized
+CREATE INDEX ON a (((lower(a) || '_') || lower(b))) -- literals removed
+CREATE INDEX ON _ (((_(_) || ' ') || _(_))) -- identifiers removed
+
+parse
+CREATE INDEX ON a (a, (a + 1), (b + 2))
+----
+CREATE INDEX ON a (a, (a + 1), (b + 2))
+CREATE INDEX ON a (a, (((a) + (1))), (((b) + (2)))) -- fully parenthesized
+CREATE INDEX ON a (a, (a + _), (b + _)) -- literals removed
+CREATE INDEX ON _ (_, (_ + 1), (_ + 2)) -- identifiers removed
+
+parse
+CREATE INDEX ON a (lower(a))
+----
+CREATE INDEX ON a (lower(a))
+CREATE INDEX ON a ((lower((a)))) -- fully parenthesized
+CREATE INDEX ON a (lower(a)) -- literals removed
+CREATE INDEX ON _ (_(_)) -- identifiers removed
+
+parse
+CREATE INDEX ON a (lower(a), lower(b))
+----
+CREATE INDEX ON a (lower(a), lower(b))
+CREATE INDEX ON a ((lower((a))), (lower((b)))) -- fully parenthesized
+CREATE INDEX ON a (lower(a), lower(b)) -- literals removed
+CREATE INDEX ON _ (_(_), _(_)) -- identifiers removed
+
+parse
+CREATE INDEX ON a (a, lower(b))
+----
+CREATE INDEX ON a (a, lower(b))
+CREATE INDEX ON a (a, (lower((b)))) -- fully parenthesized
+CREATE INDEX ON a (a, lower(b)) -- literals removed
+CREATE INDEX ON _ (_, _(_)) -- identifiers removed
+
+parse
+CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))
+----
+CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))
+CREATE INDEX ON a (((((((lower((a))) || (' ')))) || (lower((b)))))) -- fully parenthesized
+CREATE INDEX ON a (((lower(a) || '_') || lower(b))) -- literals removed
+CREATE INDEX ON _ (((_(_) || ' ') || _(_))) -- identifiers removed
+
+parse
+CREATE INDEX ON a (a, (lower(b)))
+----
+CREATE INDEX ON a (a, lower(b)) -- normalized!
+CREATE INDEX ON a (a, (lower((b)))) -- fully parenthesized
+CREATE INDEX ON a (a, lower(b)) -- literals removed
+CREATE INDEX ON _ (_, _(_)) -- identifiers removed
+
+parse
+CREATE INDEX ON a ((lower(a) || ' ' || lower(b)))
+----
+CREATE INDEX ON a (((lower(a) || ' ') || lower(b))) -- normalized!
+CREATE INDEX ON a ((((((lower((a))) || (' '))) || (lower((b)))))) -- fully parenthesized
+CREATE INDEX ON a (((lower(a) || '_') || lower(b))) -- literals removed
+CREATE INDEX ON _ (((_(_) || ' ') || _(_))) -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX ON a ((a + b))
+----
+CREATE UNIQUE INDEX ON a ((a + b))
+CREATE UNIQUE INDEX ON a ((((a) + (b)))) -- fully parenthesized
+CREATE UNIQUE INDEX ON a ((a + b)) -- literals removed
+CREATE UNIQUE INDEX ON _ ((_ + _)) -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX ON a (lower(a))
+----
+CREATE UNIQUE INDEX ON a (lower(a))
+CREATE UNIQUE INDEX ON a ((lower((a)))) -- fully parenthesized
+CREATE UNIQUE INDEX ON a (lower(a)) -- literals removed
+CREATE UNIQUE INDEX ON _ (_(_)) -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX ON a (a, lower(b))
+----
+CREATE UNIQUE INDEX ON a (a, lower(b))
+CREATE UNIQUE INDEX ON a (a, (lower((b)))) -- fully parenthesized
+CREATE UNIQUE INDEX ON a (a, lower(b)) -- literals removed
+CREATE UNIQUE INDEX ON _ (_, _(_)) -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX ON a (((lower(a) || ' ') || lower(b)))
+----
+CREATE UNIQUE INDEX ON a (((lower(a) || ' ') || lower(b)))
+CREATE UNIQUE INDEX ON a (((((((lower((a))) || (' ')))) || (lower((b)))))) -- fully parenthesized
+CREATE UNIQUE INDEX ON a (((lower(a) || '_') || lower(b))) -- literals removed
+CREATE UNIQUE INDEX ON _ (((_(_) || ' ') || _(_))) -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX ON a (a, (a + 1), (b + 2))
+----
+CREATE UNIQUE INDEX ON a (a, (a + 1), (b + 2))
+CREATE UNIQUE INDEX ON a (a, (((a) + (1))), (((b) + (2)))) -- fully parenthesized
+CREATE UNIQUE INDEX ON a (a, (a + _), (b + _)) -- literals removed
+CREATE UNIQUE INDEX ON _ (_, (_ + 1), (_ + 2)) -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX ON a (lower(a))
+----
+CREATE UNIQUE INDEX ON a (lower(a))
+CREATE UNIQUE INDEX ON a ((lower((a)))) -- fully parenthesized
+CREATE UNIQUE INDEX ON a (lower(a)) -- literals removed
+CREATE UNIQUE INDEX ON _ (_(_)) -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX ON a (lower(a), lower(b))
+----
+CREATE UNIQUE INDEX ON a (lower(a), lower(b))
+CREATE UNIQUE INDEX ON a ((lower((a))), (lower((b)))) -- fully parenthesized
+CREATE UNIQUE INDEX ON a (lower(a), lower(b)) -- literals removed
+CREATE UNIQUE INDEX ON _ (_(_), _(_)) -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX ON a (a, lower(b))
+----
+CREATE UNIQUE INDEX ON a (a, lower(b))
+CREATE UNIQUE INDEX ON a (a, (lower((b)))) -- fully parenthesized
+CREATE UNIQUE INDEX ON a (a, lower(b)) -- literals removed
+CREATE UNIQUE INDEX ON _ (_, _(_)) -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX ON a (((lower(a) || ' ') || lower(b)))
+----
+CREATE UNIQUE INDEX ON a (((lower(a) || ' ') || lower(b)))
+CREATE UNIQUE INDEX ON a (((((((lower((a))) || (' ')))) || (lower((b)))))) -- fully parenthesized
+CREATE UNIQUE INDEX ON a (((lower(a) || '_') || lower(b))) -- literals removed
+CREATE UNIQUE INDEX ON _ (((_(_) || ' ') || _(_))) -- identifiers removed
+
+parse
+CREATE INVERTED INDEX ON a ((ARRAY[a, b]))
+----
+CREATE INVERTED INDEX ON a ((ARRAY[a, b]))
+CREATE INVERTED INDEX ON a (((ARRAY[(a), (b)]))) -- fully parenthesized
+CREATE INVERTED INDEX ON a ((ARRAY[a, b])) -- literals removed
+CREATE INVERTED INDEX ON _ ((ARRAY[_, _])) -- identifiers removed
+
+# The following test cases check parsing support for creating a not visible index.
+parse
+CREATE INDEX a ON b (c) VISIBLE
+----
+CREATE INDEX a ON b (c) -- normalized!
+CREATE INDEX a ON b (c) -- fully parenthesized
+CREATE INDEX a ON b (c) -- literals removed
+CREATE INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE INDEX a ON b.c (d) NOT VISIBLE
+----
+CREATE INDEX a ON b.c (d) NOT VISIBLE
+CREATE INDEX a ON b.c (d) NOT VISIBLE -- fully parenthesized
+CREATE INDEX a ON b.c (d) NOT VISIBLE -- literals removed
+CREATE INDEX _ ON _._ (_) NOT VISIBLE -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) INVISIBLE
+----
+CREATE INDEX a ON b (c) NOT VISIBLE -- normalized!
+CREATE INDEX a ON b (c) NOT VISIBLE -- fully parenthesized
+CREATE INDEX a ON b (c) NOT VISIBLE -- literals removed
+CREATE INDEX _ ON _ (_) NOT VISIBLE -- identifiers removed
+
+parse
+CREATE INDEX ON a ((ARRAY[a, b])) STORING (c, d) NOT VISIBLE
+----
+CREATE INDEX ON a ((ARRAY[a, b])) STORING (c, d) NOT VISIBLE
+CREATE INDEX ON a (((ARRAY[(a), (b)]))) STORING (c, d) NOT VISIBLE -- fully parenthesized
+CREATE INDEX ON a ((ARRAY[a, b])) STORING (c, d) NOT VISIBLE -- literals removed
+CREATE INDEX ON _ ((ARRAY[_, _])) STORING (_, _) NOT VISIBLE -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) WITH (fillfactor = 100, y_bounds = 50) NOT VISIBLE
+----
+CREATE INDEX a ON b (c) WITH ('fillfactor' = 100, 'y_bounds' = 50) NOT VISIBLE -- normalized!
+CREATE INDEX a ON b (c) WITH ('fillfactor' = (100), 'y_bounds' = (50)) NOT VISIBLE -- fully parenthesized
+CREATE INDEX a ON b (c) WITH ('fillfactor' = _, 'y_bounds' = _) NOT VISIBLE -- literals removed
+CREATE INDEX _ ON _ (_) WITH ('fillfactor' = 100, 'y_bounds' = 50) NOT VISIBLE -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX idx ON a (((lower(a) || ' ') || lower(b))) NOT VISIBLE
+----
+CREATE UNIQUE INDEX idx ON a (((lower(a) || ' ') || lower(b))) NOT VISIBLE
+CREATE UNIQUE INDEX idx ON a (((((((lower((a))) || (' ')))) || (lower((b)))))) NOT VISIBLE -- fully parenthesized
+CREATE UNIQUE INDEX idx ON a (((lower(a) || '_') || lower(b))) NOT VISIBLE -- literals removed
+CREATE UNIQUE INDEX _ ON _ (((_(_) || ' ') || _(_))) NOT VISIBLE -- identifiers removed
+
+parse
+CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE d > 3 VISIBLE
+----
+CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE d > 3 -- normalized!
+CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE ((d) > (3)) -- fully parenthesized
+CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE d > _ -- literals removed
+CREATE INVERTED INDEX IF NOT EXISTS _ ON _ (_) WHERE _ > 3 -- identifiers removed
+
+parse
+CREATE INDEX geom_idx_2 ON some_spatial_table USING GIST(geom) WITH (s2_max_cells = 20, s2_max_level = 12, s2_level_mod = 3) NOT VISIBLE
+----
+CREATE INVERTED INDEX geom_idx_2 ON some_spatial_table (geom) WITH ('s2_max_cells' = 20, 's2_max_level' = 12, 's2_level_mod' = 3) NOT VISIBLE -- normalized!
+CREATE INVERTED INDEX geom_idx_2 ON some_spatial_table (geom) WITH ('s2_max_cells' = (20), 's2_max_level' = (12), 's2_level_mod' = (3)) NOT VISIBLE -- fully parenthesized
+CREATE INVERTED INDEX geom_idx_2 ON some_spatial_table (geom) WITH ('s2_max_cells' = _, 's2_max_level' = _, 's2_level_mod' = _) NOT VISIBLE -- literals removed
+CREATE INVERTED INDEX _ ON _ (_) WITH ('s2_max_cells' = 20, 's2_max_level' = 12, 's2_level_mod' = 3) NOT VISIBLE -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX IF NOT EXISTS a ON b (c) WHERE d > 3 NOT VISIBLE
+----
+CREATE UNIQUE INDEX IF NOT EXISTS a ON b (c) WHERE d > 3 NOT VISIBLE
+CREATE UNIQUE INDEX IF NOT EXISTS a ON b (c) WHERE ((d) > (3)) NOT VISIBLE -- fully parenthesized
+CREATE UNIQUE INDEX IF NOT EXISTS a ON b (c) WHERE d > _ NOT VISIBLE -- literals removed
+CREATE UNIQUE INDEX IF NOT EXISTS _ ON _ (_) WHERE _ > 3 NOT VISIBLE -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) VISIBILITY 0.2
+----
+CREATE INDEX a ON b (c) VISIBILITY 0.20 -- normalized!
+CREATE INDEX a ON b (c) VISIBILITY 0.20 -- fully parenthesized
+CREATE INDEX a ON b (c) VISIBILITY 0.20 -- literals removed
+CREATE INDEX _ ON _ (_) VISIBILITY 0.20 -- identifiers removed
+
+parse
+CREATE INDEX ON t(a) VISIBILITY 7.379652426127388e-12
+----
+CREATE INDEX ON t (a) VISIBILITY 0.00 -- normalized!
+CREATE INDEX ON t (a) VISIBILITY 0.00 -- fully parenthesized
+CREATE INDEX ON t (a) VISIBILITY 0.00 -- literals removed
+CREATE INDEX ON _ (_) VISIBILITY 0.00 -- identifiers removed
+
+parse
+CREATE VECTOR INDEX ON t(v)
+----
+CREATE VECTOR INDEX ON t (v) -- normalized!
+CREATE VECTOR INDEX ON t (v) -- fully parenthesized
+CREATE VECTOR INDEX ON t (v) -- literals removed
+CREATE VECTOR INDEX ON _ (_) -- identifiers removed
+
+parse
+CREATE VECTOR INDEX a ON b (c)
+----
+CREATE VECTOR INDEX a ON b (c)
+CREATE VECTOR INDEX a ON b (c) -- fully parenthesized
+CREATE VECTOR INDEX a ON b (c) -- literals removed
+CREATE VECTOR INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE VECTOR INDEX a ON b.c (d)
+----
+CREATE VECTOR INDEX a ON b.c (d)
+CREATE VECTOR INDEX a ON b.c (d) -- fully parenthesized
+CREATE VECTOR INDEX a ON b.c (d) -- literals removed
+CREATE VECTOR INDEX _ ON _._ (_) -- identifiers removed
+
+parse
+CREATE VECTOR INDEX a ON b (c) STORING (d)
+----
+CREATE VECTOR INDEX a ON b (c) STORING (d)
+CREATE VECTOR INDEX a ON b (c) STORING (d) -- fully parenthesized
+CREATE VECTOR INDEX a ON b (c) STORING (d) -- literals removed
+CREATE VECTOR INDEX _ ON _ (_) STORING (_) -- identifiers removed
+
+parse
+CREATE VECTOR INDEX a ON b (c) WHERE d > 3
+----
+CREATE VECTOR INDEX a ON b (c) WHERE d > 3
+CREATE VECTOR INDEX a ON b (c) WHERE ((d) > (3)) -- fully parenthesized
+CREATE VECTOR INDEX a ON b (c) WHERE d > _ -- literals removed
+CREATE VECTOR INDEX _ ON _ (_) WHERE _ > 3 -- identifiers removed
+
+parse
+CREATE VECTOR INDEX IF NOT EXISTS a ON b (c) WHERE d > 3
+----
+CREATE VECTOR INDEX IF NOT EXISTS a ON b (c) WHERE d > 3
+CREATE VECTOR INDEX IF NOT EXISTS a ON b (c) WHERE ((d) > (3)) -- fully parenthesized
+CREATE VECTOR INDEX IF NOT EXISTS a ON b (c) WHERE d > _ -- literals removed
+CREATE VECTOR INDEX IF NOT EXISTS _ ON _ (_) WHERE _ > 3 -- identifiers removed
+
+parse
+CREATE INDEX a ON b USING CSPANN (c)
+----
+CREATE VECTOR INDEX a ON b (c) -- normalized!
+CREATE VECTOR INDEX a ON b (c) -- fully parenthesized
+CREATE VECTOR INDEX a ON b (c) -- literals removed
+CREATE VECTOR INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE VECTOR INDEX a ON b (c) WITH (build_beam_size = 16, min_partition_size = 8, max_partition_size = 32)
+----
+CREATE VECTOR INDEX a ON b (c) WITH ('build_beam_size' = 16, 'min_partition_size' = 8, 'max_partition_size' = 32) -- normalized!
+CREATE VECTOR INDEX a ON b (c) WITH ('build_beam_size' = (16), 'min_partition_size' = (8), 'max_partition_size' = (32)) -- fully parenthesized
+CREATE VECTOR INDEX a ON b (c) WITH ('build_beam_size' = _, 'min_partition_size' = _, 'max_partition_size' = _) -- literals removed
+CREATE VECTOR INDEX _ ON _ (_) WITH ('build_beam_size' = 16, 'min_partition_size' = 8, 'max_partition_size' = 32) -- identifiers removed
+
+parse
+CREATE INDEX a ON b USING HNSW (c)
+----
+CREATE VECTOR INDEX a ON b (c) -- normalized!
+CREATE VECTOR INDEX a ON b (c) -- fully parenthesized
+CREATE VECTOR INDEX a ON b (c) -- literals removed
+CREATE VECTOR INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) USING HASH
+----
+CREATE INDEX a ON b (c) USING HASH
+CREATE INDEX a ON b (c) USING HASH -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) USING HASH WITH (bucket_count = 16)
+----
+CREATE INDEX a ON b (c) USING HASH WITH ('bucket_count' = 16) -- normalized!
+CREATE INDEX a ON b (c) USING HASH WITH ('bucket_count' = (16)) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH WITH ('bucket_count' = _) -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH WITH ('bucket_count' = 16) -- identifiers removed
+
+# Also test the legacy way of defining bucket_count.
+# See https://github.com/cockroachdb/cockroach/pull/76112 for a discussion
+# of why we changed the format.
+parse
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = 16
+----
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = 16
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = (16) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = _ -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH WITH BUCKET_COUNT = 16 -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) USING HASH WITH (shard_columns = (c))
+----
+CREATE INDEX a ON b (c) USING HASH WITH ('shard_columns' = (c)) -- normalized!
+CREATE INDEX a ON b (c) USING HASH WITH ('shard_columns' = (((c)))) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH WITH ('shard_columns' = (c)) -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH WITH ('shard_columns' = (_)) -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) USING HASH STORING (d)
+----
+CREATE INDEX a ON b (c) USING HASH STORING (d)
+CREATE INDEX a ON b (c) USING HASH STORING (d) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH STORING (d) -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH STORING (_) -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH (bucket_count = 16)
+----
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH ('bucket_count' = 16) -- normalized!
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH ('bucket_count' = (16)) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH ('bucket_count' = _) -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH STORING (_) WITH ('bucket_count' = 16) -- identifiers removed
+
+# Also test the legacy way of defining bucket_count, which must always be at
+# the end of the statement.
+# See https://github.com/cockroachdb/cockroach/pull/76112 for a discussion
+# of why we changed the format.
+parse
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = 16 STORING (d)
+----
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = 16 STORING (d)
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = (16) STORING (d) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = _ STORING (d) -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH WITH BUCKET_COUNT = 16 STORING (_) -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH (fillfactor = 100, bucket_count = 10)
+----
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH ('fillfactor' = 100, 'bucket_count' = 10) -- normalized!
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH ('fillfactor' = (100), 'bucket_count' = (10)) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH ('fillfactor' = _, 'bucket_count' = _) -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH STORING (_) WITH ('fillfactor' = 100, 'bucket_count' = 10) -- identifiers removed

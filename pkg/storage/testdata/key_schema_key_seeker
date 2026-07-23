@@ -1,0 +1,171 @@
+define-block
+foo@3.000000000,1
+foo@3.000000000,0
+----
+Parse("foo@3.000000000,1") = hex:666f6f0000000000b2d05e00000000010d
+Parse("foo@3.000000000,0") = hex:666f6f0000000000b2d05e0009
+
+is-lower-bound
+abc
+fax@3.000000000,1
+foo@3.000000000,2
+foo@3.000000000,1
+foo@3.000000000,0
+zoo@9.100000000,2
+----
+IsLowerBound("abc", "") = true
+IsLowerBound("fax@3.000000000,1", "") = true
+IsLowerBound("foo@3.000000000,2", "") = true
+IsLowerBound("foo@3.000000000,1", "") = true
+IsLowerBound("foo@3.000000000,0", "") = false
+IsLowerBound("zoo@9.100000000,2", "") = false
+
+seek-ge
+fax@9.000000000,0
+foo@3.000000000,1
+foo@3.000000000,0
+foo@3.000000000,2
+zoo@9.000000000,0
+----
+SeekGE("fax@9.000000000,0", boundRow=-1, searchDir=0) = (row=0, equalPrefix=false) [hex:666f6f0000000000b2d05e00000000010d]
+SeekGE("foo@3.000000000,1", boundRow=-1, searchDir=0) = (row=0, equalPrefix=true) [hex:666f6f0000000000b2d05e00000000010d]
+SeekGE("foo@3.000000000,0", boundRow=-1, searchDir=0) = (row=1, equalPrefix=true) [hex:666f6f0000000000b2d05e0009]
+SeekGE("foo@3.000000000,2", boundRow=-1, searchDir=0) = (row=0, equalPrefix=true) [hex:666f6f0000000000b2d05e00000000010d]
+SeekGE("zoo@9.000000000,0", boundRow=-1, searchDir=0) = (row=2, equalPrefix=false)
+
+define-block
+bar@3.000000000,1
+bax@3.000000000,1
+foo@3.000000000,1
+moo@3.000000000,1
+----
+Parse("bar@3.000000000,1") = hex:6261720000000000b2d05e00000000010d
+Parse("bax@3.000000000,1") = hex:6261780000000000b2d05e00000000010d
+Parse("foo@3.000000000,1") = hex:666f6f0000000000b2d05e00000000010d
+Parse("moo@3.000000000,1") = hex:6d6f6f0000000000b2d05e00000000010d
+
+is-lower-bound
+bar@9.000000000,2
+bar@8.000000000,2
+bar@8.000000000,1
+bar@8.000000000,0
+bar@7.000000000,9
+bar@3.000000000,2
+bar@3.000000000,1
+bar@3.000000000,0
+----
+IsLowerBound("bar@9.000000000,2", "") = true
+IsLowerBound("bar@8.000000000,2", "") = true
+IsLowerBound("bar@8.000000000,1", "") = true
+IsLowerBound("bar@8.000000000,0", "") = true
+IsLowerBound("bar@7.000000000,9", "") = true
+IsLowerBound("bar@3.000000000,2", "") = true
+IsLowerBound("bar@3.000000000,1", "") = true
+IsLowerBound("bar@3.000000000,0", "") = false
+
+is-lower-bound synthetic-suffix=@8.000000000,1
+bar@9.000000000,2
+bar@8.000000000,2
+bar@8.000000000,1
+bar@8.000000000,0
+bar@7.000000000,9
+bar@3.000000000,2
+bar@3.000000000,1
+bar@3.000000000,0
+----
+IsLowerBound("bar@9.000000000,2", "@8.000000000,1") = true
+IsLowerBound("bar@8.000000000,2", "@8.000000000,1") = true
+IsLowerBound("bar@8.000000000,1", "@8.000000000,1") = true
+IsLowerBound("bar@8.000000000,0", "@8.000000000,1") = false
+IsLowerBound("bar@7.000000000,9", "@8.000000000,1") = false
+IsLowerBound("bar@3.000000000,2", "@8.000000000,1") = false
+IsLowerBound("bar@3.000000000,1", "@8.000000000,1") = false
+IsLowerBound("bar@3.000000000,0", "@8.000000000,1") = false
+
+seek-ge
+apple@2.000000000,0
+bar@4.000000000,0
+bar@3.000000000,0
+bar@2.000000000,0
+bax@3.000000000,1
+bax@3.000000000,0
+fax@9.000000000,0
+foo@3.000000000,2
+foo@3.000000000,1
+foo@3.000000000,0
+moo@3.000000001,0
+moo@3.000000000,2
+moo@3.000000000,1
+moo@3.000000000,0
+zoo@9.000000000,0
+----
+SeekGE("apple@2.000000000,0", boundRow=-1, searchDir=0) = (row=0, equalPrefix=false) [hex:6261720000000000b2d05e00000000010d]
+SeekGE("bar@4.000000000,0", boundRow=-1, searchDir=0) = (row=0, equalPrefix=true) [hex:6261720000000000b2d05e00000000010d]
+SeekGE("bar@3.000000000,0", boundRow=-1, searchDir=0) = (row=1, equalPrefix=true) [hex:6261780000000000b2d05e00000000010d]
+SeekGE("bar@2.000000000,0", boundRow=-1, searchDir=0) = (row=1, equalPrefix=true) [hex:6261780000000000b2d05e00000000010d]
+SeekGE("bax@3.000000000,1", boundRow=-1, searchDir=0) = (row=1, equalPrefix=true) [hex:6261780000000000b2d05e00000000010d]
+SeekGE("bax@3.000000000,0", boundRow=-1, searchDir=0) = (row=2, equalPrefix=true) [hex:666f6f0000000000b2d05e00000000010d]
+SeekGE("fax@9.000000000,0", boundRow=-1, searchDir=0) = (row=2, equalPrefix=false) [hex:666f6f0000000000b2d05e00000000010d]
+SeekGE("foo@3.000000000,2", boundRow=-1, searchDir=0) = (row=2, equalPrefix=true) [hex:666f6f0000000000b2d05e00000000010d]
+SeekGE("foo@3.000000000,1", boundRow=-1, searchDir=0) = (row=2, equalPrefix=true) [hex:666f6f0000000000b2d05e00000000010d]
+SeekGE("foo@3.000000000,0", boundRow=-1, searchDir=0) = (row=3, equalPrefix=true) [hex:6d6f6f0000000000b2d05e00000000010d]
+SeekGE("moo@3.000000001,0", boundRow=-1, searchDir=0) = (row=3, equalPrefix=true) [hex:6d6f6f0000000000b2d05e00000000010d]
+SeekGE("moo@3.000000000,2", boundRow=-1, searchDir=0) = (row=3, equalPrefix=true) [hex:6d6f6f0000000000b2d05e00000000010d]
+SeekGE("moo@3.000000000,1", boundRow=-1, searchDir=0) = (row=3, equalPrefix=true) [hex:6d6f6f0000000000b2d05e00000000010d]
+SeekGE("moo@3.000000000,0", boundRow=-1, searchDir=0) = (row=4, equalPrefix=true)
+SeekGE("zoo@9.000000000,0", boundRow=-1, searchDir=0) = (row=4, equalPrefix=false)
+
+materialize-user-key
+0
+1
+2
+3
+----
+MaterializeUserKey(-1, 0) = hex:6261720000000000b2d05e00000000010d
+MaterializeUserKey(0, 1) = hex:6261780000000000b2d05e00000000010d
+MaterializeUserKey(1, 2) = hex:666f6f0000000000b2d05e00000000010d
+MaterializeUserKey(2, 3) = hex:6d6f6f0000000000b2d05e00000000010d
+
+materialize-user-key synthetic-suffix=@8.000000000,9
+0
+1
+2
+3
+----
+MaterializeUserKeyWithSyntheticSuffix(-1, 0, @8.000000000,9) = hex:6261720000000001dcd65000000000090d
+MaterializeUserKeyWithSyntheticSuffix(0, 1, @8.000000000,9) = hex:6261780000000001dcd65000000000090d
+MaterializeUserKeyWithSyntheticSuffix(1, 2, @8.000000000,9) = hex:666f6f0000000001dcd65000000000090d
+MaterializeUserKeyWithSyntheticSuffix(2, 3, @8.000000000,9) = hex:6d6f6f0000000001dcd65000000000090d
+
+materialize-user-key
+3
+2
+0
+1
+----
+MaterializeUserKey(-1, 3) = hex:6d6f6f0000000000b2d05e00000000010d
+MaterializeUserKey(3, 2) = hex:666f6f0000000000b2d05e00000000010d
+MaterializeUserKey(2, 0) = hex:6261720000000000b2d05e00000000010d
+MaterializeUserKey(0, 1) = hex:6261780000000000b2d05e00000000010d
+
+define-block
+moo@3.000000001,0
+moo@3.000000000,2
+moo@3.000000000,1
+moo@3.000000000,0
+----
+Parse("moo@3.000000001,0") = hex:6d6f6f0000000000b2d05e0109
+Parse("moo@3.000000000,2") = hex:6d6f6f0000000000b2d05e00000000020d
+Parse("moo@3.000000000,1") = hex:6d6f6f0000000000b2d05e00000000010d
+Parse("moo@3.000000000,0") = hex:6d6f6f0000000000b2d05e0009
+
+materialize-user-key
+0
+1
+2
+3
+----
+MaterializeUserKey(-1, 0) = hex:6d6f6f0000000000b2d05e0109
+MaterializeUserKey(0, 1) = hex:6d6f6f0000000000b2d05e00000000020d
+MaterializeUserKey(1, 2) = hex:6d6f6f0000000000b2d05e00000000010d
+MaterializeUserKey(2, 3) = hex:6d6f6f0000000000b2d05e0009

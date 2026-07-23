@@ -1,0 +1,10 @@
+opt
+SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6))
+----
+values
+ ├── columns: column1:1!null column2:2!null column3:3!null
+ ├── cardinality: [2 - 2]
+ ├── stats: [rows=2]
+ ├── cost: 0.03
+ ├── (1, 2, 3)
+ └── (4, 5, 6)

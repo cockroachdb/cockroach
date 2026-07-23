@@ -1,0 +1,54 @@
+set-store
+  store-id=1 node-id=1 attrs=orange,black locality-tiers=region=europe
+----
+node-id=1 locality-tiers=region=europe,node=1
+  store-id=1 attrs=orange,black
+
+# Different attributes (though one is present in both).
+set-store
+  store-id=1 node-id=1 attrs=silver,black,tan locality-tiers=region=europe
+----
+node-id=1 locality-tiers=region=europe,node=1
+  store-id=1 attrs=silver,black,tan
+
+# Different locality.
+set-store
+  store-id=1 node-id=1 attrs=silver,black,tan locality-tiers=region=asia
+----
+node-id=1 locality-tiers=region=asia,node=1
+  store-id=1 attrs=silver,black,tan
+
+# Node attributes change from nothing to something.
+set-store
+  store-id=1 node-id=1 node-attrs=hicpu,himem locality-tiers=planet=earth,island=kiribati
+----
+node-id=1 locality-tiers=planet=earth,island=kiribati,node=1 node-attrs=hicpu,himem
+  store-id=1 attrs=
+
+# Node attributes change from something to something else.
+set-store
+  store-id=1 node-id=1 node-attrs=locpu locality-tiers=planet=earth,island=kiribati
+----
+node-id=1 locality-tiers=planet=earth,island=kiribati,node=1 node-attrs=locpu
+  store-id=1 attrs=
+
+# Node attributes change from something to nothing.
+set-store
+  store-id=1 node-id=1 locality-tiers=planet=earth,island=kiribati
+----
+node-id=1 locality-tiers=planet=earth,island=kiribati,node=1
+  store-id=1 attrs=
+
+# Create new store while changing existing store.
+set-store
+  store-id=1 node-id=1 attrs=justanattrlocality-tiers=justaloc
+  store-id=2 node-id=2 attrs=twotwo locality-tiers=region=us-two
+----
+node-id=1 locality-tiers=node=1
+  store-id=1 attrs=justanattrlocality-tiers=justaloc
+node-id=2 locality-tiers=region=us-two,node=2
+  store-id=2 attrs=twotwo
+
+# TODO(during review): we should also be able to print the state of the constraintMatcher
+# here. I only noticed at the end that I wasn't updating the constraintMatcher on changes,
+# but this test didn't realize.

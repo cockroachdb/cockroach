@@ -1,0 +1,63 @@
+parse
+WITH cte AS (SELECT 1) SELECT * FROM cte
+----
+WITH cte AS (SELECT 1) SELECT * FROM cte
+WITH cte AS (SELECT (1)) SELECT (*) FROM cte -- fully parenthesized
+WITH cte AS (SELECT _) SELECT * FROM cte -- literals removed
+WITH _ AS (SELECT 1) SELECT * FROM _ -- identifiers removed
+
+parse
+WITH cte (x) AS (INSERT INTO abc VALUES (1, 2)), cte2 (y) AS (SELECT x + 1 FROM cte) SELECT * FROM cte, cte2
+----
+WITH cte (x) AS (INSERT INTO abc VALUES (1, 2)), cte2 (y) AS (SELECT x + 1 FROM cte) SELECT * FROM cte, cte2
+WITH cte (x) AS (INSERT INTO abc VALUES ((1), (2))), cte2 (y) AS (SELECT ((x) + (1)) FROM cte) SELECT (*) FROM cte, cte2 -- fully parenthesized
+WITH cte (x) AS (INSERT INTO abc VALUES (_, _)), cte2 (y) AS (SELECT x + _ FROM cte) SELECT * FROM cte, cte2 -- literals removed
+WITH _ (_) AS (INSERT INTO _ VALUES (1, 2)), _ (_) AS (SELECT _ + 1 FROM _) SELECT * FROM _, _ -- identifiers removed
+
+parse
+WITH RECURSIVE cte (x) AS (SELECT 1), cte2 (y) AS (SELECT x + 1 FROM cte) SELECT 1
+----
+WITH RECURSIVE cte (x) AS (SELECT 1), cte2 (y) AS (SELECT x + 1 FROM cte) SELECT 1
+WITH RECURSIVE cte (x) AS (SELECT (1)), cte2 (y) AS (SELECT ((x) + (1)) FROM cte) SELECT (1) -- fully parenthesized
+WITH RECURSIVE cte (x) AS (SELECT _), cte2 (y) AS (SELECT x + _ FROM cte) SELECT _ -- literals removed
+WITH RECURSIVE _ (_) AS (SELECT 1), _ (_) AS (SELECT _ + 1 FROM _) SELECT 1 -- identifiers removed
+
+parse
+WITH cte AS MATERIALIZED (SELECT 1) SELECT * FROM cte
+----
+WITH cte AS MATERIALIZED (SELECT 1) SELECT * FROM cte
+WITH cte AS MATERIALIZED (SELECT (1)) SELECT (*) FROM cte -- fully parenthesized
+WITH cte AS MATERIALIZED (SELECT _) SELECT * FROM cte -- literals removed
+WITH _ AS MATERIALIZED (SELECT 1) SELECT * FROM _ -- identifiers removed
+
+parse
+WITH RECURSIVE cte AS MATERIALIZED (SELECT 1) SELECT * FROM cte
+----
+WITH RECURSIVE cte AS MATERIALIZED (SELECT 1) SELECT * FROM cte
+WITH RECURSIVE cte AS MATERIALIZED (SELECT (1)) SELECT (*) FROM cte -- fully parenthesized
+WITH RECURSIVE cte AS MATERIALIZED (SELECT _) SELECT * FROM cte -- literals removed
+WITH RECURSIVE _ AS MATERIALIZED (SELECT 1) SELECT * FROM _ -- identifiers removed
+
+parse
+WITH cte AS NOT MATERIALIZED (SELECT 1) SELECT * FROM cte
+----
+WITH cte AS NOT MATERIALIZED (SELECT 1) SELECT * FROM cte
+WITH cte AS NOT MATERIALIZED (SELECT (1)) SELECT (*) FROM cte -- fully parenthesized
+WITH cte AS NOT MATERIALIZED (SELECT _) SELECT * FROM cte -- literals removed
+WITH _ AS NOT MATERIALIZED (SELECT 1) SELECT * FROM _ -- identifiers removed
+
+parse
+WITH cte (x) AS MATERIALIZED (INSERT INTO abc VALUES (1, 2)), cte2 (y) AS NOT MATERIALIZED (SELECT x + 1 FROM cte) SELECT * FROM cte, cte2
+----
+WITH cte (x) AS MATERIALIZED (INSERT INTO abc VALUES (1, 2)), cte2 (y) AS NOT MATERIALIZED (SELECT x + 1 FROM cte) SELECT * FROM cte, cte2
+WITH cte (x) AS MATERIALIZED (INSERT INTO abc VALUES ((1), (2))), cte2 (y) AS NOT MATERIALIZED (SELECT ((x) + (1)) FROM cte) SELECT (*) FROM cte, cte2 -- fully parenthesized
+WITH cte (x) AS MATERIALIZED (INSERT INTO abc VALUES (_, _)), cte2 (y) AS NOT MATERIALIZED (SELECT x + _ FROM cte) SELECT * FROM cte, cte2 -- literals removed
+WITH _ (_) AS MATERIALIZED (INSERT INTO _ VALUES (1, 2)), _ (_) AS NOT MATERIALIZED (SELECT _ + 1 FROM _) SELECT * FROM _, _ -- identifiers removed
+
+parse
+WITH RECURSIVE cte (x) AS MATERIALIZED (INSERT INTO abc VALUES (1, 2)), cte2 (y) AS NOT MATERIALIZED (SELECT x + 1 FROM cte) SELECT * FROM cte, cte2
+----
+WITH RECURSIVE cte (x) AS MATERIALIZED (INSERT INTO abc VALUES (1, 2)), cte2 (y) AS NOT MATERIALIZED (SELECT x + 1 FROM cte) SELECT * FROM cte, cte2
+WITH RECURSIVE cte (x) AS MATERIALIZED (INSERT INTO abc VALUES ((1), (2))), cte2 (y) AS NOT MATERIALIZED (SELECT ((x) + (1)) FROM cte) SELECT (*) FROM cte, cte2 -- fully parenthesized
+WITH RECURSIVE cte (x) AS MATERIALIZED (INSERT INTO abc VALUES (_, _)), cte2 (y) AS NOT MATERIALIZED (SELECT x + _ FROM cte) SELECT * FROM cte, cte2 -- literals removed
+WITH RECURSIVE _ (_) AS MATERIALIZED (INSERT INTO _ VALUES (1, 2)), _ (_) AS NOT MATERIALIZED (SELECT _ + 1 FROM _) SELECT * FROM _, _ -- identifiers removed

@@ -1,0 +1,282 @@
+# This test exercises WaitForEval when there is a joint configuration, with
+# incoming and outgoing voters. We require quorum of streams with available
+# tokens in both voting sets. A non-voter and learner replica are also added,
+# which should have no consequence for quorum or non-elastic evaluation
+# requests (non-voter requires tokens for elastic).
+init regular_limit=1 regular_init=1 elastic_limit=1 elastic_init=1
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL              state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL              state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_DEMOTING_LEARNER  state=StateReplicate next=1
+  store_id=4 replica_id=4 type=VOTER_INCOMING          state=StateReplicate next=1
+  store_id=5 replica_id=5 type=NON_VOTER               state=StateReplicate next=1
+  store_id=6 replica_id=6 type=LEARNER                 state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3VOTER_DEMOTING_LEARNER,(n4,s4):4VOTER_INCOMING,(n5,s5):5NON_VOTER,(n6,s6):6LEARNER]
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+# Start a happy case normal priority evaluation 'a', all voters have tokens.
+wait_for_eval name=a range_id=1 pri=NormalPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=normal-pri done=true  waited=true  err=<nil>
+
+# Next, remove tokens from the non-leader/leaseholder voter which is in both
+# configurations (s2).
+adjust_tokens
+  store_id=2 pri=HighPri tokens=-1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+# Start another evaluation 'b'. The request should be done immediately, since
+# there is still a quorum of voters with tokens in both configurations.
+wait_for_eval name=b range_id=1 pri=NormalPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=normal-pri done=true  waited=true  err=<nil>
+  name=b pri=normal-pri done=true  waited=true  err=<nil>
+
+# Remove tokens from the incoming voter (s4). Despite the outgoing
+# configuration (s1,s2,s3) having a quorum (s1+s3), the incoming configuration
+# (s1,s2,s4) does not, so the evaluation request 'c' should be blocked.
+adjust_tokens
+  store_id=4 pri=HighPri tokens=-1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+wait_for_eval name=c range_id=1 pri=NormalPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=normal-pri done=true  waited=true  err=<nil>
+  name=b pri=normal-pri done=true  waited=true  err=<nil>
+  name=c pri=normal-pri done=false waited=false err=<nil>
+
+# Add tokens back to the incoming voter (s4). The incoming configuration now
+# has a quorum with available tokens. The evaluation request 'c' should be
+# done.
+adjust_tokens
+  store_id=4 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=normal-pri done=true  waited=true  err=<nil>
+  name=b pri=normal-pri done=true  waited=true  err=<nil>
+  name=c pri=normal-pri done=true  waited=true  err=<nil>
+
+# Now test the case where the outgoing configuration does not have a quorum.
+adjust_tokens
+  store_id=3 pri=HighPri tokens=-1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+wait_for_eval name=d range_id=1 pri=NormalPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=normal-pri done=true  waited=true  err=<nil>
+  name=b pri=normal-pri done=true  waited=true  err=<nil>
+  name=c pri=normal-pri done=true  waited=true  err=<nil>
+  name=d pri=normal-pri done=false waited=false err=<nil>
+
+# Add tokens back to the demoting learner (s3). The outgoing configuration now
+# has a quorum with available tokens. The evaluation request 'd' should be
+# done.
+adjust_tokens
+  store_id=3 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=normal-pri done=true  waited=true  err=<nil>
+  name=b pri=normal-pri done=true  waited=true  err=<nil>
+  name=c pri=normal-pri done=true  waited=true  err=<nil>
+  name=d pri=normal-pri done=true  waited=true  err=<nil>
+
+# Ensure that elastic (LowPri) requests block on all replicas, in both
+# configurations, having elastic tokens. Start with the outgoing voter (s3)
+# having no elastic tokens (also add back the tokens to s2 to reset).
+adjust_tokens
+  store_id=2 pri=HighPri tokens=1
+  store_id=3 pri=LowPri  tokens=-1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+wait_for_eval name=e range_id=1 pri=LowPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=normal-pri done=true  waited=true  err=<nil>
+  name=b pri=normal-pri done=true  waited=true  err=<nil>
+  name=c pri=normal-pri done=true  waited=true  err=<nil>
+  name=d pri=normal-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=false waited=false err=<nil>
+
+# Add tokens back to the outgoing voter (s3). 'e' should be done.
+adjust_tokens
+  store_id=3 pri=LowPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=normal-pri done=true  waited=true  err=<nil>
+  name=b pri=normal-pri done=true  waited=true  err=<nil>
+  name=c pri=normal-pri done=true  waited=true  err=<nil>
+  name=d pri=normal-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+
+# Do the same with the incoming voter (s4) having no elastic tokens.
+adjust_tokens
+  store_id=4 pri=LowPri tokens=-1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+wait_for_eval name=f range_id=1 pri=LowPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=normal-pri done=true  waited=true  err=<nil>
+  name=b pri=normal-pri done=true  waited=true  err=<nil>
+  name=c pri=normal-pri done=true  waited=true  err=<nil>
+  name=d pri=normal-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=low-pri  done=false waited=false err=<nil>
+
+# Add tokens back to the incoming voter (s4). 'f' should be done.
+adjust_tokens
+  store_id=4 pri=LowPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=normal-pri done=true  waited=true  err=<nil>
+  name=b pri=normal-pri done=true  waited=true  err=<nil>
+  name=c pri=normal-pri done=true  waited=true  err=<nil>
+  name=d pri=normal-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=low-pri  done=true  waited=true  err=<nil>
+
+close_rcs
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=normal-pri done=true  waited=true  err=<nil>
+  name=b pri=normal-pri done=true  waited=true  err=<nil>
+  name=c pri=normal-pri done=true  waited=true  err=<nil>
+  name=d pri=normal-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=low-pri  done=true  waited=true  err=<nil>

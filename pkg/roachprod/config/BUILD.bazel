@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "config",
+    srcs = ["config.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/config",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/logger",
+        "//pkg/util/envutil",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+    ],
+)
+
+go_test(
+    name = "config_test",
+    srcs = ["config_test.go"],
+    embed = [":config"],
+)

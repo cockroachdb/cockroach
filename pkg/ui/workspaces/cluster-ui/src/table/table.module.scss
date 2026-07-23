@@ -1,0 +1,124 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module";
+@import "src/sortedtable/tableHead/tableHead.module";
+
+.crl-table-wrapper {
+  :global(.crdb-ant-table) {
+    color: $colors--primary-text;
+  }
+
+  // Table header
+  :global(.crdb-ant-table-thead) {
+    @include table-header-text;
+    background-color: $colors--neutral-0;
+  }
+
+  :global(.crdb-ant-table-thead) > tr > th {
+    color: $colors--neutral-7;
+    background-color: $colors--neutral-0;
+    padding: $spacing-smaller $spacing-smaller;
+    height: $line-height--x-large;
+    &,
+    span {
+      @include table-header-text;
+    }
+    :global {
+      .crdb-ant-table-header-column .crdb-ant-table-column-sorters:hover::before {
+        background-color: $colors--neutral-0;
+      }
+    }
+  }
+
+  // Sorter icons on table's header
+  :global(.crdb-ant-table-thead .crdb-ant-table-column-sorter-inner .anticon) {
+    display: flex;
+    color: $colors--neutral-4;
+    transform: scale(0.91666667) rotate(0deg);
+    font-size: $font-size--small;
+  }
+  // END: Table header
+
+  // Table Column
+  .column--align-right {
+    text-align: end;
+  }
+
+  :global(.column-title) {
+    border-bottom: 1px dashed $colors--neutral-5;
+  }
+  // END: Table Column
+
+  // Table row
+  :global(.crdb-ant-table-row) {
+    @include text--body;
+    height: $line-height--xxx-large;
+  }
+
+  :global(.crdb-ant-table-row) .cell--show-on-hover {
+    visibility: hidden;
+  }
+
+  :global(.crdb-ant-table-row):hover .cell--show-on-hover {
+    visibility: visible;
+  }
+  // END: Table row
+
+  // Table cell
+  :global(.crdb-ant-table-tbody) > tr > td {
+    padding: $spacing-smaller $spacing-smaller;
+    border-bottom-color: $colors--neutral-3;
+  }
+
+  // Increase right padding for columns aligned by right
+  :global(.crdb-ant-table-tbody) > tr > td.column--align-right {
+    padding-right: $spacing-mid-large;
+  }
+
+  // show column with right border
+  :global(.crdb-ant-table-tbody) > tr > td.column--border-right {
+    border-right: $colors--neutral-3 solid 1px;
+  }
+  // END: Table cell
+
+  // Table cell on hover
+  :global {
+    .crdb-ant-table-thead
+      > tr.crdb-ant-table-row-hover:not(.crdb-ant-table-expanded-row):not(.crdb-ant-table-row-selected)
+      > td,
+    .crdb-ant-table-tbody
+      > tr.crdb-ant-table-row-hover:not(.crdb-ant-table-expanded-row):not(.crdb-ant-table-row-selected)
+      > td,
+    .crdb-ant-table-thead
+      > tr:hover:not(.crdb-ant-table-expanded-row):not(.crdb-ant-table-row-selected)
+      > td,
+    .crdb-ant-table-tbody
+      > tr:hover:not(.crdb-ant-table-expanded-row):not(.crdb-ant-table-row-selected)
+      > td {
+      background: $colors--neutral-1;
+    }
+  }
+  // END: Table cell on hover
+
+  :global(.crdb-ant-table-placeholder) {
+    border: $colors--neutral-1 solid 1px;
+  }
+
+  .empty-table__message {
+    @include text--body;
+    text-align: center;
+  }
+
+  &__empty {
+    :global(.crdb-ant-table-placeholder) {
+      border: none;
+    }
+  }
+}
+
+.expand-toggle {
+  margin-right: 8px;
+}

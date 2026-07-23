@@ -1,0 +1,898 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.roachpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/roachpb";
+
+import "kv/kvserver/concurrency/lock/lock_waiter.proto";
+import "kv/kvserver/concurrency/lock/locking.proto";
+import "kv/kvserver/readsummary/rspb/summary.proto";
+import "roachpb/metadata.proto";
+import "storage/enginepb/mvcc.proto";
+import "storage/enginepb/mvcc3.proto";
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
+
+// Span is a key range with an inclusive start Key and an exclusive end Key.
+message Span {
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.populate) = true;
+
+  reserved 1, 2;
+  // The start key of the key range.
+  bytes key = 3 [(gogoproto.casttype) = "Key"];
+  // The end key of the key range. The value is empty if the key range
+  // contains only a single key. Otherwise, it must order strictly after Key.
+  // In such a case, the Span encompasses the key range from Key to EndKey,
+  // including Key and excluding EndKey.
+  bytes end_key = 4 [(gogoproto.casttype) = "Key"];
+}
+
+// ValueType defines a set of type constants placed in the "tag" field of Value
+// messages. These are defined as a protocol buffer enumeration for historical
+// reasons.
+enum ValueType {
+  // This is a subset of the SQL column type values, representing the underlying
+  // storage for various types.
+  UNKNOWN = 0;
+  reserved 7, 8, 9;
+  INT = 1;
+  FLOAT = 2;
+  BYTES = 3;
+  TIME = 4;
+  DECIMAL = 5;
+  DURATION = 6;
+  TIMETZ = 12;
+  GEO = 13;
+  BOX2D = 14;
+
+  // TUPLE represents a DTuple, encoded as repeated pairs of varint field number
+  // followed by a value encoded Datum.
+  TUPLE = 10;
+
+  BITARRAY = 11;
+
+  // TIMESERIES is applied to values which contain InternalTimeSeriesData.
+  TIMESERIES = 100;
+
+  // MVCC_EXTENDED_ENCODING_SENTINEL is a sentinel tag value used in the
+  // MVCCValue extended encoding to indicate that an encoded Value is wrapped
+  // with a header. It should not be used in the Value encoding directly. See
+  // MVCCValue for more details.
+  MVCC_EXTENDED_ENCODING_SENTINEL = 101;
+}
+
+// Value specifies the value at a key. Multiple values at the same key are
+// supported based on timestamp. The data stored within a value is typed
+// (ValueType) and custom encoded into the raw_bytes field. A custom encoding
+// is used instead of separate proto fields to avoid proto overhead and to
+// avoid unnecessary encoding and decoding as the value gets read from disk and
+// passed through the network. The format is:
+//
+//   <4-byte-checksum><1-byte-tag><encoded-data>
+//
+// A CRC-32-IEEE checksum is computed from the associated key, tag and encoded
+// data, in that order.
+//
+// TODO(peter): Is a 4-byte checksum overkill when most (all?) values
+// will be less than 64KB?
+message Value {
+  // raw_bytes contains the encoded value and checksum.
+  //
+  // Its contents may be modified on the next call to Value.SetFoo.
+  bytes raw_bytes = 1;
+  // Timestamp of value.
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+}
+
+// KeyValue is a pair of Key and Value for returned Key/Value pairs
+// from ScanRequest/ScanResponse. It embeds a Key and a Value.
+message KeyValue {
+  bytes key = 1 [(gogoproto.casttype) = "Key"];
+  Value value = 2 [(gogoproto.nullable) = false];
+}
+
+// A StoreIdent uniquely identifies a store in the cluster. The
+// StoreIdent is written to the underlying storage engine at a
+// store-reserved system key (KeyLocalIdent).
+message StoreIdent {
+  bytes cluster_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ClusterID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
+  int32 store_id = 3 [(gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
+}
+
+// A SplitTrigger is run after a successful commit of an AdminSplit
+// command. It provides the updated left hand side of the split's
+// range descriptor (left_desc) and the new range descriptor covering
+// the right hand side of the split (right_desc). This information
+// allows the final bookkeeping for the split to be completed and the
+// new range put into operation.
+message SplitTrigger {
+  // Needed for ReplicatedEvalResult.Equal().
+  option (gogoproto.equal) = true;
+
+  RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
+  RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
+  // Pre-computed stats for the LHS spans corresponding to user data.
+  // Used in splitTrigger to estimate the LHS range's MVCC stats.
+  storage.enginepb.MVCCStats pre_split_left_user_stats = 5 [(gogoproto.nullable) = false];
+  // Pre-computed stats for the entire range.
+  // Used in splitTrigger to fall back to accurate stats computation if these
+  // pre-computed stats differ significantly from the stats retrieved from
+  // disk while holding latches in splitTrigger.
+  storage.enginepb.MVCCStats pre_split_stats = 6 [(gogoproto.nullable) = false];
+
+  reserved 3, 4;
+
+  // UseEstimatesBecauseExternalBytesArePresent is true if we should consider estimating MVCC
+  // stats when calculating them in the splitTrigger.
+  bool use_estimates_because_external_bytes_are_present = 7;
+
+  // ManualSplit indicates that this split is manually triggered via an AdminSplitRequest by a sql client.
+  bool manualSplit = 8;
+}
+
+// A MergeTrigger is run after a successful commit of an AdminMerge
+// command. It provides the updated left hand side of the split's
+// range descriptor (left_desc) that now encompasses what was
+// originally both ranges and the soon-to-be-invalid range descriptor
+// that used to cover the subsumed, right hand side of the merge
+// (right_desc). This information allows the final bookkeeping for the
+// merge to be completed and put into operation.
+message MergeTrigger {
+  // Needed for ReplicatedEvalResult.Equal().
+  option (gogoproto.equal) = true;
+
+  RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
+  RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
+
+  reserved 3;
+
+  storage.enginepb.MVCCStats right_mvcc_stats = 4 [
+    (gogoproto.customname) = "RightMVCCStats",
+    (gogoproto.nullable) = false
+  ];
+
+  storage.enginepb.MVCCStats right_range_id_local_mvcc_stats = 9 [
+    (gogoproto.customname) = "RightRangeIDLocalMVCCStats",
+    (gogoproto.nullable) = false
+  ];
+
+  // FreezeStart is a timestamp that is guaranteed to be greater than the
+  // timestamps at which any requests were serviced by the right-hand side range
+  // before it stopped responding to requests altogether (in anticipation of
+  // being subsumed). It is suitable for use as the timestamp cache's low water
+  // mark for the keys previously owned by the subsumed range, though this role
+  // is largely being... subsumed by the RightReadSummary.
+  util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // right_closed_timestamp is the closed timestamp of the RHS at the moment of
+  // the subsumption. Because the SubsumeRequest synchronizes with all other
+  // requests, the range's closed timestamp does not advance past the snapshot
+  // captured here.
+  //
+  // Like the freeze_start, this is used by the merged range to conditionally
+  // bump the timestamp cache for the keys previously owned by the subsumed
+  // range.
+  //
+  // Note that the closed timestamp is also reflected in the right_read_summary.
+  // However, we carry it explicitly too because, in case the leaseholders of
+  // the two sides are collocated at merge time, we don't need to use the
+  // read_summary and simply use this field.
+  util.hlc.Timestamp right_closed_timestamp = 6 [(gogoproto.nullable) = false];
+
+  // RightReadSummary is a summary of the reads that have been performed on the
+  // right-hand side up to the point of the Subsume request, which serializes
+  // with past reads and begins blocking future reads. It is suitable for use to
+  // update the timestamp cache for the keys previously owned by the subsumed
+  // range.
+  //
+  // RightReadSummary can be used in place of FreezeStart, when available. It
+  // has two distinct advantages:
+  // 1. it can transfer a higher-resolution snapshot of the reads on the range
+  //    through a range merge, to make the merge less disruptive to writes on
+  //    the post-merge range because the timestamp cache won't be bumped as
+  //    high.
+  // 2. it can transfer information about reads with future-time timestamps,
+  //    which are not otherwise captured by the FreezeStart clock timestamp.
+  //
+  // When a RightReadSummary is set in ReplicatedEvalResult.Merge.Trigger, there
+  // is always also a write to the RangePriorReadSummaryKey in the corresponding
+  // RaftCommand.WriteBatch. The persisted summary may be identical to the
+  // summary in this field, but it does not have to be. Notably, we intended for
+  // the summary included in the ReplicatedEvalResult.Merge.Trigger to
+  // eventually be a much higher-resolution version of the ReadSummary than the
+  // version persisted. This scheme of persisting a compressed ReadSummary
+  // indefinitely and including a higher-resolution ReadSummary on the
+  // RaftCommand allows us to optimize for the common case where the merge is
+  // applied on the LHS's leaseholder through Raft log application while
+  // ensuring correctness in the case where the merge is applied on the LHS's
+  // leaseholder through a Raft snapshot.
+  kv.kvserver.readsummary.ReadSummary right_read_summary = 7;
+
+  // WriteGCHint is a version gate to only enable writing GC hints in merge
+  // trigger if cluster was upgraded to required version.
+  // TODO(replication): remove this field in the 23.2 cycle (i.e. on master after
+  // 23.1 has been cut).
+  bool write_gc_hint = 8 [(gogoproto.customname) = "WriteGCHint"];
+}
+
+// ReplicaChangeType is a parameter of ChangeReplicasTrigger.
+enum ReplicaChangeType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  ADD_VOTER = 0;
+  REMOVE_VOTER = 1;
+  ADD_NON_VOTER = 2;
+  REMOVE_NON_VOTER = 3;
+}
+
+// ChangeReplicasTrigger carries out a replication change. The Added() and
+// Removed() methods return the replicas being added and removed, respectively.
+// If more than one change is specified (i.e. len(Added())+len(Removed())
+// exceeds one), this initiates an atomic replication change in which the
+// "removed" replicas are of type VOTER_OUTGOING or VOTER_DEMOTING_{LEARNER,
+// NON_VOTER} (if they are to be turned into learners or non-voters instead); as
+// a caveat a single demotion already counts as two changes (and is tracked as a
+// Removal() only). This joint configuration is left via another
+// ChangeReplicasTrigger which does not specify any additions nor removals.
+message ChangeReplicasTrigger {
+  option (gogoproto.goproto_stringer) = false;
+
+  // The updated range descriptor.
+  RangeDescriptor desc = 5;
+  // The new replicas added to the range descriptor in this change, exactly as
+  // they appear in the updated range descriptor.
+  //
+  // TODO(tbg): rename internal_x_replicas to just x_replicas and remove the getter.
+  repeated ReplicaDescriptor internal_added_replicas = 6 [(gogoproto.nullable) = false];
+  // The replicas whose removal is being initiated in this change. If the
+  // replica is still present as an outgoing voter in the updated descriptor
+  // (i.e. if this is a full atomic replication change), then the replica here
+  // must match that in the descriptor; otherwise it must match the replica
+  // removed from the descriptor in the course of this change (which is itself
+  // not visible to this trigger).
+  repeated ReplicaDescriptor internal_removed_replicas = 7 [(gogoproto.nullable) = false];
+
+  reserved 1 to 4;
+}
+
+// ModifiedSpanTrigger indicates that a specific span has been modified.
+// This can be used to trigger scan-and-gossip for the given span.
+message ModifiedSpanTrigger {
+  reserved 1;
+  // node_liveness_span is set to indicate that node liveness records
+  // need re-gossiping after modification or range lease updates. The
+  // span is set to a single key when nodes update their liveness records
+  // with heartbeats to extend the expiration timestamp. Changes to the
+  // range lease for the range containing node liveness triggers re-gossip
+  // of the entire node liveness key range.
+  Span node_liveness_span = 2;
+}
+
+// StickyBitTrigger indicates that the sticky bit of a range should be changed.
+// This trigger is used in two cases:
+// 1. Unsplitting a range. Note that unsplitting and merging are different
+//    operations. Unsplitting a range will only update the expiration time
+//    associated with the range to hlc.Timestamp{}.
+// 2. Splitting at the start key of a range. In this case, no range is split but
+//    the sticky bit is might be updated, so we need to use this trigger instead
+//    of SplitTrigger.
+//
+// Note that the sticky_bit should always be set to the same timestamp used to
+// update the range descriptor and it's the client's responsibility that the
+// timestamps are aligned.
+message StickyBitTrigger {
+  // Set to nil to remove a RangeDescriptor's sticky bit.
+  util.hlc.Timestamp sticky_bit = 1 [(gogoproto.nullable) = false];
+}
+
+// InternalCommitTrigger encapsulates all of the internal-only commit triggers.
+// Only one may be set.
+message InternalCommitTrigger {
+  // InternalCommitTrigger is always nullable, and these getters are
+  // nil-safe, which is often convenient.
+  option (gogoproto.goproto_getters) = true;
+
+  SplitTrigger split_trigger = 1;
+  MergeTrigger merge_trigger = 2;
+  ChangeReplicasTrigger change_replicas_trigger = 3;
+  ModifiedSpanTrigger modified_span_trigger = 4;
+  StickyBitTrigger sticky_bit_trigger = 5;
+}
+
+// TransactionStatus specifies possible states for a transaction.
+enum TransactionStatus {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // PENDING is the default state for a new transaction. Transactions
+  // move from PENDING to one of PREPARED, STAGING, COMMITTED, or
+  // ABORTED. Mutations made as part of a PENDING transactions are
+  // recorded as "intents" in the underlying MVCC model.
+  PENDING = 0;
+  // PREPARED is the state for a transaction which has been prepared as
+  // part of the XA two-phase commit protocol. Transactions in state
+  // PREPARED can be subsequently moved to either state COMMITTED or
+  // ABORTED. Once a transaction is in state PREPARED, it is guaranteed
+  // to be able to commit if the coordinator node decides to do so;
+  // conflicting transactions cannot prevent it from doing so by pushing
+  // it to a higher timestamp or aborting it.
+  PREPARED = 4;
+  // STAGING is the state for a transaction which has issued all of
+  // its writes and is in the process of committing. Mutations made
+  // as part of a transaction in this state may still be in-flight
+  // and can not be assumed to have succeeded. A transaction may
+  // transition from the STAGING to the COMMITTED state only if all
+  // of its in-flight mutations are confirmed to have succeeded. A
+  // transaction may transition from the STAGING to PENDING or ABORTED
+  // state only if one of its in-flight requests is prevented from ever
+  // succeeding.
+  STAGING = 3;
+  // COMMITTED is the state for a transaction which has been
+  // committed. Mutations made as part of a transaction which is moved
+  // into COMMITTED state become durable and visible to other
+  // transactions, moving from "intents" to permanent versioned
+  // values.
+  COMMITTED = 1;
+  // ABORTED is the state for a transaction which has been aborted.
+  // Mutations made as part of a transaction which is moved into
+  // ABORTED state are deleted and are never made visible to other
+  // transactions.
+  ABORTED = 2;
+}
+
+message ObservedTimestamp {
+  option (gogoproto.populate) = true;
+
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+}
+
+// A Transaction is a unit of work performed on the database.
+// Cockroach transactions always operate at the serializable isolation
+// level. Each Cockroach transaction is assigned a random priority.
+// This priority will be used to decide whether a transaction will be
+// aborted during contention.
+//
+// If you add fields to Transaction you'll need to update
+// Transaction.Clone. Failure to do so will result in test failures.
+message Transaction {
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.populate) = true;
+
+  // The transaction metadata. This field includes the subset of information
+  // that is persisted with every write intent.
+  storage.enginepb.TxnMeta meta = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // A free-text identifier for debug purposes.
+  string name = 2;
+  // The status of the transaction.
+  TransactionStatus status = 4;
+  // The last time that the transaction's record was sent a heartbeat by its
+  // coordinator to indicate client activity. Concurrent transactions will
+  // avoid aborting a transaction if it observes recent-enough activity.
+  //
+  // NOTE: this could use a ClockTimestamp type, but doing so results in a
+  // large diff that doesn't seem worth it, given that we never feed this
+  // timestamp back into a clock.
+  util.hlc.Timestamp last_heartbeat = 5 [(gogoproto.nullable) = false];
+  // The transaction's read timestamp. All reads are performed at this
+  // timestamp, ensuring that the transaction runs on top of a consistent
+  // snapshot of the database.
+  // Writes are performed at the transaction's write timestamp (meta.timestamp).
+  // The write timestamp can diverge from the read timestamp when a write is
+  // "pushed": for example in case a write runs into the timestamp cache, we're
+  // forced to write at a higher timestamp. Being serializable, the transaction
+  // can't commit if the write timestamp diverged from the read timestamp unless
+  // we prove that the read timestamp can also be advanced to match the
+  // write timestamp; it can be advanced if the two timestamps are equivalent
+  // for everything that the transaction has read (meaning that there's no
+  // values in between the read timestamp and the write timestamp for any key in
+  // the txn's read set). We call checking whether the read timestamp can
+  // advance "refreshing the read set". So, the read timestamp advances after a
+  // successful refresh or, if the refresh is unsuccessful, after a transaction
+  // restart.
+  util.hlc.Timestamp read_timestamp = 15 [(gogoproto.nullable) = false];
+  // This flag is set if the transaction's read timestamp is fixed and can not
+  // be modified. If true, this prevents the transaction's timestamp from being
+  // adjusted by a read refresh or, for read committed transactions, by a read
+  // timestamp step.
+  //
+  // For serializable transactions (who do not tolerate write skew), this flag
+  // also has the effect of fixing the transaction's commit timestamp. This
+  // means that the txn can not commit at a higher timestamp than its read
+  // timestamp without resorting to a client-side retry. For this reason, the
+  // flag is set if the transaction's timestamp was "leaked" beyond the
+  // transaction (e.g. via cluster_logical_timestamp()).
+  bool read_timestamp_fixed = 16;
+  // The transaction's global uncertainty limit is its initial timestamp +
+  // maximum cluster-wide clock skew. This value defines the inclusive upper
+  // bound of the transaction's uncertainty interval.
+  //
+  // Reads which encounter values with timestamps between read_timestamp and
+  // global_uncertainty_limit ("within the uncertainty interval") trigger a
+  // retry error (ReadWithinUncertaintyIntervalError). This forces the
+  // transaction to increase its read timestamp, either through a refresh or a
+  // retry, in order to ensure that the transaction observes the "uncertain"
+  // value.
+  //
+  // However, the uncertainty limit applied to values can be reduced when
+  // evaluating a request on a node from which the transaction has acquired an
+  // observed timestamp. This reduced uncertainty limit is reflected in the
+  // local_uncertainty_limit variable at the time of request evaluation.
+  //
+  // See pkg/kv/kvserver/uncertainty for more details.
+  //
+  // The case global_uncertainty_limit < read_timestamp is possible for
+  // transactions which have been pushed or have refreshed; in this case,
+  // global_uncertainty_limit should be ignored.
+  util.hlc.Timestamp global_uncertainty_limit = 7 [(gogoproto.nullable) = false];
+  // A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
+  // as observed from their local clock during this transaction. The purpose
+  // of this list is to allow a transaction to avoid uncertainty related
+  // restarts which occur when reading a value in the near future, per the
+  // global_uncertainty_limit field. The list helps avoid these restarts by
+  // establishing a lower local_uncertainty_limit when evaluating a request on
+  // a node in the list.
+  //
+  // See pkg/kv/kvserver/uncertainty for more details.
+  //
+  // The slice of observed timestamps is kept sorted by NodeID. Use
+  // Transaction.UpdateObservedTimestamp to maintain the sorted order. The
+  // slice should be treated as immutable and all updates should be performed
+  // on a copy of the slice.
+  repeated ObservedTimestamp observed_timestamps = 8 [(gogoproto.nullable) = false];
+
+  // Set of spans that the transaction has acquired locks within. These are
+  // spans which must be resolved on txn completion. Note that these spans
+  // may be condensed to cover aggregate spans if the keys locked by the
+  // transaction exceeded a size threshold.
+  //
+  // The set logically extends to include the keys of all writes in the
+  // in-flight write set. However, those keys are not stored in this set
+  // to avoid duplication. This means that elements that are removed from
+  // that set should be merged into this one.
+  //
+  // The slice is maintained in sorted order and all spans are maximally
+  // merged such that no two spans here overlap each other. It should be
+  // treated as immutable and all updates should be performed on a copy
+  // of the slice.
+  repeated Span lock_spans = 11 [(gogoproto.nullable) = false];
+
+  // Set of in-flight intent writes that have been issued by the transaction but
+  // which may not have succeeded yet. If any in-flight writes are provided, a
+  // committing EndTxn request will move a PENDING transaction to the STAGING
+  // status instead of the COMMITTED status. These in-flight writes must then
+  // all be confirmed as successful before the transaction can be moved from
+  // STAGING to COMMITTED. Because of this, the set will only ever contain
+  // entries when the transaction is STAGING. For more, see txnCommitter.
+  //
+  // The slice is maintained in sorted order by sequence number. It should be
+  // treated as immutable and all updates should be performed on a copy of the
+  // slice.
+  repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
+  // A list of ignored seqnum ranges.
+  //
+  // The slice is maintained as non-overlapping, non-contiguous (i.e. it must
+  // coalesce ranges to avoid situations where a range's end seqnum is equal to
+  // the next range's start seqnum), and sorted in seqnum order. It should be
+  // treated as immutable and all updates should be performed on a copy of the
+  // slice.
+  repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
+
+  // Admission control (AC) fields. AC needs the tuple (TenantID, Priority,
+  // CreateTime). TenantID can be inferred from the key space that is being
+  // operated on (in the future we will generalize the AC concept of TenantID,
+  // but for now this is tied to the serverless concept), so does not need to
+  // be stored. CreateTime is the same as TxnMeta.MinTimestamp. So we only
+  // store the AdmissionPriority.
+
+  // AdmissionPriority is the priority assigned for admission control, at
+  // transaction creation time. It is immutable.
+  //
+  // TODO(sumeer): Use gogoproto.customtype to make this
+  // admissionpb.WorkPriority.
+  sint32 admission_priority = 19;
+
+  // When set to true, all of the transaction's writes will be filtered out by
+  // rangefeeds, and will not be available in changefeeds. This allows users to
+  // choose which writes are exported on a per-transaction basis.
+  bool omit_in_rangefeeds = 20;
+
+  reserved 3, 6, 9, 12, 13, 14;
+}
+
+// A TransactionRecord message contains the subset of the fields in a
+// Transaction message that must be persisted in a transaction record.
+// It can be thought of as a mask for the fields in Transaction that
+// end up persisted in a transaction record.
+//
+// The message type is wire-compatible with persisted Transaction protos,
+// but avoids the overhead of the fields in Transaction that don't need to
+// be persisted in a transaction record. It also serves as a specification
+// for the fields that must be present in a transaction record.
+//
+// NOTE: any changes to this type must be reflected in the AsRecord and
+// AsTransaction methods.
+message TransactionRecord {
+  option (gogoproto.populate) = true;
+
+  // See comments on Transaction proto.
+  storage.enginepb.TxnMeta meta            = 1  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  TransactionStatus status                 = 4;
+  util.hlc.Timestamp last_heartbeat        = 5  [(gogoproto.nullable) = false];
+  repeated Span lock_spans                 = 11 [(gogoproto.nullable) = false];
+  repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
+  repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
+
+  // Fields on Transaction that are not present in a transaction record.
+  reserved 2, 3, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16;
+}
+
+// A Lock is a Key together with a Transaction metadata (the lock holder) and a
+// strength. They are used on the return path of e.g. scans, to report the
+// existence of a locks on a key.
+//
+// Note: avoid constructing Lock directly; use MakeLock or MakeIntent instead.
+message Lock {
+  // SingleKeySpan preserves wire compatibility with an earlier version of this
+  // proto which used a Span. A Lock never spans keys, so there was no need for
+  // this to contain an EndKey.
+  message SingleKeySpan {
+    reserved 1, 2, 4;
+    // The start key of the key range.
+    bytes key = 3 [(gogoproto.casttype) = "Key"];
+  }
+  SingleKeySpan single_key_span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  kv.kvserver.concurrency.lock.Strength strength = 3;
+}
+
+// A LockAcquisition represents the action of a Transaction acquiring a lock
+// with a specified durability level and strength over a Span of keys.
+message LockAcquisition {
+  Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  kv.kvserver.concurrency.lock.Durability durability = 3;
+  kv.kvserver.concurrency.lock.Strength strength = 4;
+  // IgnoredSeqNums is a list of sequence numbers that have been rolled back
+  // by the transaction at the time of the lock acquisition.
+  repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
+}
+
+// A LockUpdate is a Span together with Transaction state. LockUpdate messages
+// are used to update all locks held by the transaction within the span to the
+// transaction's authoritative state. As such, the message is used as input
+// argument to intent resolution, to pass the current txn status, timestamps,
+// ignored seqnum ranges, and clock observations to the resolution algorithm.
+// For details about these arguments, see the comments on ResolveIntentRequest.
+message LockUpdate {
+  Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  TransactionStatus status = 3;
+  repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
+  ObservedTimestamp clock_while_pending = 5 [(gogoproto.nullable) = false];
+}
+
+// A LockStateInfo represents the metadata of a lock tracked in a replica's
+// lock table.  This includes any current lock holder, as well as waiting
+// readers and writers.
+message LockStateInfo {
+  option (gogoproto.goproto_stringer) = false;
+
+  // The range that owns the Lock Table containing this lock.
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  // The key that this lock controls access to.
+  bytes key = 2 [(gogoproto.casttype) = "Key"];
+  // The current lock holder, or nil if the lock is not held.
+  storage.enginepb.TxnMeta lock_holder = 3;
+  // The durability that the lock is held at, or Unreplicated if not held.
+  kv.kvserver.concurrency.lock.Durability durability = 4;
+  // The wall clock duration since this lock was acquired (or zero, if not held).
+  google.protobuf.Duration hold_duration = 5 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
+  // The readers and writers currently waiting on the lock.  Stable ordering
+  // is not guaranteed.
+  repeated kv.kvserver.concurrency.lock.Waiter waiters = 6 [(gogoproto.nullable) = false];
+  // The strength of the lock is being held at.
+  kv.kvserver.concurrency.lock.Strength lock_strength = 7;
+}
+
+// A SequencedWrite is a point write to a key with a certain sequence number.
+message SequencedWrite {
+  option (gogoproto.populate) = true;
+
+  // The key that the write was made at.
+  bytes key = 1 [(gogoproto.casttype) = "Key"];
+  // The sequence number of the request that created the write.
+  int32 sequence = 2 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
+  // The strength with which the lock was acquired at.
+  kv.kvserver.concurrency.lock.Strength strength = 3;
+}
+
+// LeaseAcquisitionType indicates the type of lease acquisition event that
+// resulted in the current lease.
+enum LeaseAcquisitionType {
+  Unspecified = 0;
+  // Transfer indicates that the current lease is a result of a (co-operative)
+  // lease transfer.
+  Transfer = 1;
+  // Request indicates that the current lease is a result of a (non-cooperative)
+  // lease request.
+  Request = 2;
+}
+
+// Lease contains information about range leases including the
+// expiration and lease holder.
+message Lease {
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.populate) = true;
+
+  // The start is a timestamp at which the lease begins. This value
+  // must be greater than the last lease expiration or the lease request
+  // is considered invalid.
+  util.hlc.Timestamp start = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // The expiration is a timestamp at which the lease expires. This means that a
+  // new lease can be granted for a later timestamp. This field is only set for
+  // expiration-based leases.
+  //
+  // This is an exclusive value, i.e. the lease is valid in [start, expiration).
+  util.hlc.Timestamp expiration = 2;
+
+  // The address of the would-be lease holder.
+  ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
+
+  // The start of the lease stasis period. This field is deprecated.
+  //
+  // TODO(erikgrinaker): remove this. Migration:
+  //
+  // - 2016: the field was deprecated (#10305).
+  //
+  // - 24.1: stop reading the field. 23.2 nodes compare the field below Raft in
+  //   Lease.Equal(), so we must populate the field for backwards compatibility.
+  //
+  // - 24.2 or later: remove the field when backwards compatibility with 23.2
+  //   is no longer needed.
+  util.hlc.Timestamp deprecated_start_stasis = 4;
+
+  // The current timestamp when this lease has been proposed. Used after a
+  // transfer and after a node restart to enforce that a node only uses leases
+  // proposed after the time of the said transfer or restart. This is nullable
+  // to help with the rollout (such that a lease applied by some nodes before
+  // the rollout and some nodes after the rollout is serialized the same).
+  util.hlc.Timestamp proposed_ts  = 5 [(gogoproto.customname) = "ProposedTS",
+    (gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // The epoch of the lease holder's node liveness record. The lease inherits
+  // the expiration of the node liveness record for as long as the node liveness
+  // record retains this epoch. The lease is invalid if the node liveness record
+  // is updated with a different epoch.
+  //
+  // This field is only set for epoch-based leases. If this value is non-zero,
+  // the expiration field and the term field must not be set.
+  int64 epoch = 6;
+
+  // A zero-indexed sequence number which is incremented during the acquisition
+  // of each new range lease that is not equivalent to the previous range lease
+  // (i.e. an acquisition that implies a leaseholder change). The sequence
+  // number is used to detect lease changes between command proposal and
+  // application without requiring that we send the entire lease through Raft.
+  // Lease sequence numbers are a reflection of the "lease equivalency" property
+  // (see Lease.Equivalent). Two adjacent leases that are equivalent will have
+  // the same sequence number and two adjacent leases that are not equivalent
+  // will have different sequence numbers.
+  uint64 sequence = 7 [(gogoproto.casttype) = "LeaseSequence"];
+
+  // The type of acquisition event that result in this lease (transfer or
+  // request).
+  LeaseAcquisitionType acquisition_type = 8;
+
+  // The minimum expiration at which the lease expires, independent of any other
+  // expiry condition. This field can be used to place a floor on the expiration
+  // for epoch-based leases and leader leases to prevent expiration regressions
+  // when upgrading from an expiration-based lease. It is not supported for
+  // expiration-based leases.
+  //
+  // Like expiration above, this is an exclusive value, i.e. the lease is valid
+  // in [start, max(min_expiration, <expiration from epoch or term>)).
+  util.hlc.Timestamp min_expiration = 9 [(gogoproto.nullable) = false];
+
+  // The term of the raft leader that a leader lease is associated with. The
+  // lease is valid for as long as the raft leader has a guarantee from store
+  // liveness that it remains the leader under this term. The lease is invalid
+  // if the raft leader loses leadership (i.e. changes its term).
+  //
+  // This field is only set for leader leases. If non-zero, the expiration field
+  // and the epoch field must not be set.
+  uint64 term = 10;
+}
+
+// AbortSpanEntry contains information about a transaction which has
+// been aborted. It's written to a range's AbortSpan if the range
+// may have contained intents of the aborted txn. In the event that
+// the same transaction attempts to read keys it may have written
+// previously, this entry informs the transaction that it has aborted
+// and must start fresh with an updated priority.
+message AbortSpanEntry {
+  option (gogoproto.populate) = true;
+  // We want to compare abort span entries to avoid unnecessary disk writes.
+  option (gogoproto.equal) = true;
+
+  // The key of the associated transaction.
+  bytes key = 1 [(gogoproto.casttype) = "Key"];
+  // The candidate commit timestamp the transaction record held at the time
+  // it was aborted.
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  // The priority of the transaction.
+  int32 priority = 3 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnPriority"];
+}
+
+// BufferedWrite contains information about all writes buffered on the root txn
+// for a given key.
+message BufferedWrite {
+  message Val {
+    Value val = 1 [(gogoproto.nullable) = false];
+    int32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
+  }
+  uint64 id = 1 [(gogoproto.customname) = "ID"];
+  bytes key = 2 [(gogoproto.casttype) = "Key"];
+  repeated Val vals = 3 [(gogoproto.nullable) = false];
+}
+
+// LeafTxnInputState is the state from a transaction coordinator
+// necessary and sufficient to set up a leaf transaction coordinator
+// on another node.
+message LeafTxnInputState {
+  // txn is a copy of the transaction record.
+  Transaction txn = 1 [(gogoproto.nullable) = false];
+  reserved 2, 3, 4, 5, 6;
+  // refresh_invalid indicates that the root txn is not
+  // collecting refresh spans so the leaf should also avoid
+  // collecting them. This is an optimization: it avoids
+  // the collection work in that cases and also possibly
+  // reduces memory usage.
+  bool refresh_invalid = 7;
+  // in_flight_writes stores all writes that are in-flight and have not yet
+  // been proven to have succeeded. Overlapping requests must chain on to
+  // their success using a QueryIntent request.
+  //
+  // If DistSQLUseReducedLeafWriteSets is enabled, then this set might only
+  // include writes overlapping with key spans that the caller will read.
+  repeated SequencedWrite in_flight_writes = 8 [(gogoproto.nullable) = false];
+  // Whether stepping mode is enabled. False indicates synchronous
+  // read-own-writes, where every KV read is able to observe the
+  // latest writes. True indicates that KV reads should be done at the
+  // read_seq_num specified below.
+  bool stepping_mode_enabled = 9;
+  // Current read seqnum. When stepping_mode_enabled is true,
+  // this field becomes the sequence number used for reads,
+  // regardless of the current seqnum generated for writes. This is
+  // updated via the (kv.TxnSender).Step() operation.
+  int32 read_seq_num = 10 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
+  // buffered_writes stores all writes that are buffered on the root txn (on the
+  // gateway node). Overlapping read requests need to be aware of these in order
+  // to support read-your-own-writes.
+  //
+  // If DistSQLUseReducedLeafWriteSets is enabled, then this set might only
+  // include writes overlapping with key spans that the caller will read.
+  repeated BufferedWrite buffered_writes = 11 [(gogoproto.nullable) = false];
+}
+
+// LeafTxnFinalState is the state from a leaf transaction coordinator
+// necessary and sufficient to update a RootTxn on the gateway
+// coordinator.
+message LeafTxnFinalState {
+  // txn is a copy of the transaction record.
+  // TODO(knz,andrei): We don't actually need the fully txn
+  // record. This can be simplified.
+  // See: https://github.com/cockroachdb/cockroach/issues/43192
+  Transaction txn = 1 [(gogoproto.nullable) = false];
+  reserved 2, 3;
+  // refresh_spans contains the key spans read by the leaf. The root will add
+  // them to its own tracking of reads.
+  repeated Span refresh_spans = 4 [(gogoproto.nullable) = false];
+  reserved 5, 6;
+  // refresh_invalid is set if refresh spans have not been collected. In this
+  // case, refresh_spans is empty. It may be set because the leaf was asked not
+  // to collect spans or because the leaf's reads exceeded the tracking memory
+  // budget.
+  bool refresh_invalid = 7;
+  reserved 8;
+}
+
+// RangeClosedTimestampPolicy represents the policy used by the leaseholder of a
+// range to establish and publish closed timestamps. The policy dictates how far
+// in the past (lag) or in the future (lead) MVCC history is closed off.
+enum RangeClosedTimestampPolicy {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // NB: there is a local-only enum value of -1, see `rangecache.UnknownClosedTimestampPolicy`.
+  // This value is used for the range cache as a placeholder.
+  //
+  // Whenever we send a RangeInfo via DistSender, this unknown policy
+  // instead defaults to `kvcoord.defaultSendClosedTimestampPolicy`.
+  //
+  // If we re-did this today, we'd reserve the zero value of the enum
+  // for an UNKNOWN value.
+
+  // LAG_BY_CLUSTER_SETTING indicates that the range's closed timestamp is
+  // configured to lag behind present time by the value configured for the
+  // `kv.closed_timestamp.target_duration` cluster setting.
+  LAG_BY_CLUSTER_SETTING = 0;
+  // LEAD_FOR_GLOBAL_READS indicates that the range's closed timestamp is
+  // configured to lead present time such that all followers of the range are
+  // able to serve consistent, present time reads. Because the policy describes
+  // a goal and not the lead time itself, the lead time is allowed vary as a
+  // function of maximum clock uncertainty and closed timestamp propagation time
+  // (which itself is a function of leaseholder -> follower network latency and
+  // closed timestamp update periodicity).
+  LEAD_FOR_GLOBAL_READS = 1;
+
+  // Keep this sentinel value higher than the rest.
+  MAX_CLOSED_TIMESTAMP_POLICY = 2;
+}
+
+// ClientRangeInfo represents the kvclient's knowledge about the state of the
+// range (i.e. of the range descriptor, lease, and closed timestamp policy). The
+// kvserver checks whether the client's info is up to date and, if it isn't, it
+// will return a RangeInfo with up-to-date information.
+message ClientRangeInfo {
+  int64 descriptor_generation = 1 [(gogoproto.casttype) = "RangeGeneration"];
+  int64 lease_sequence = 2 [(gogoproto.casttype) = "LeaseSequence"];
+  // NB: This field may occasionally be constructed with the (wire-invalid)
+  // value of -1, corresponding to rangecache's unknownClosedTimestampPolicy.
+  // Before attaching to a request, it is coalesced to a valid enum value.
+  //
+  // See: https://github.com/cockroachdb/cockroach/issues/129981.
+  RangeClosedTimestampPolicy closed_timestamp_policy = 3;
+  // ExplicitlyRequested causes range info to be returned even if other fields
+  // are up-to-date or empty.
+  bool explicitly_requested = 4;
+}
+
+// RangeInfo describes a range which executed a request. It contains the range
+// descriptor, lease information, and closed timestamp policy at the time of
+// execution.
+message RangeInfo {
+  option (gogoproto.goproto_stringer) = false;
+
+  RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  Lease lease = 2 [(gogoproto.nullable) = false];
+  RangeClosedTimestampPolicy closed_timestamp_policy = 3;
+}
+
+// A TenantID is a unique ID associated with a tenant in a multi-tenant cluster.
+// Each tenant is granted exclusive access to a portion of the keyspace and a
+// collection of SQL tables in that keyspace which comprise a "logical" cluster.
+//
+// It should be treated as opaque by users, and only created/accessed using the
+// public methods MakeTenantID, ToUint64, etc.
+message TenantID {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
+  // InternalValue should not be set or accessed directly; use ToUint64.
+  uint64 id = 1 [(gogoproto.customname) = "InternalValue"];
+}
+
+// RowCount tracks the size and row/index entry counts.
+message RowCount {
+  int64 data_size = 1;
+  int64 rows = 2;
+  int64 index_entries = 3;
+  reserved 4; // was BulkOpSummary's system_records.
+}

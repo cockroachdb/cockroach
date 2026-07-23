@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "operation",
+    srcs = ["operation_interface.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/option",
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
+    ],
+)

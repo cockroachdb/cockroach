@@ -1,0 +1,156 @@
+upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false can_view_all_metrics=false
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
+----
+client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+
+has-capability-for-batch ten=10 cmds=(Merge)
+----
+client tenant does not have capability "ID(15)" (*kvpb.MergeRequest)
+
+has-node-status-capability ten=10
+----
+client tenant does not have capability to query cluster node metadata
+
+has-tsdb-query-capability ten=10
+----
+client tenant does not have capability to query timeseries data
+
+has-tsdb-all-capability ten=10
+----
+client tenant does not have capability to query non-tenant metrics
+
+# Disable the capability checks by falling back to the v22.2 behavior.
+set-authorizer-mode value=v222
+----
+ok
+
+# Now that the v22.2 behavior is restored, the batch requests
+# available to secondary tenants should succeeds; those
+# reserved to the system tenant should fail; and other
+# type of operations should fail too.
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(Merge)
+----
+client tenant does not have capability "ID(15)" (*kvpb.MergeRequest)
+
+has-node-status-capability ten=10
+----
+client tenant does not have capability to query cluster node metadata
+
+has-tsdb-query-capability ten=10
+----
+client tenant does not have capability to query timeseries data
+
+has-tsdb-all-capability ten=10
+----
+client tenant does not have capability to query non-tenant metrics
+
+# Disable the capability checks by allowing all requests.
+set-authorizer-mode value=allow-all
+----
+ok
+
+# Now that we allow all operations, the previous checks
+# should now succeed.
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
+----
+ok
+
+has-node-status-capability ten=10
+----
+ok
+
+has-tsdb-query-capability ten=10
+----
+ok
+
+has-tsdb-all-capability ten=10
+----
+ok
+
+# Enable the authorizer again and ensure we start failing capability checks
+# again.
+set-authorizer-mode value=on
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
+----
+client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+
+has-node-status-capability ten=10
+----
+client tenant does not have capability to query cluster node metadata
+
+has-tsdb-query-capability ten=10
+----
+client tenant does not have capability to query timeseries data
+
+has-tsdb-all-capability ten=10
+----
+client tenant does not have capability to query non-tenant metrics
+
+# Set the service state to none and make sure we can't send a batch.
+upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false can_view_all_metrics=false service=none
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(Scan)
+----
+operation not allowed when in service mode "none"
+
+# Set the service state to externa and make sure we can send a batch.
+upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false can_view_all_metrics=false service=external
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(Scan)
+----
+ok
+
+# Set the service state to shared and make sure we can send a batch.
+upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false can_view_all_metrics=false service=shared
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(Scan)
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
+----
+ok
+
+# Set the service state to external and make sure we are restricted again.
+upsert ten=10 can_admin_scatter=false can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false can_view_all_metrics=false service=external
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
+----
+client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+
+# Enable tsdb permissions
+upsert ten=10 can_view_tsdb_metrics=true service=external
+----
+ok
+
+has-tsdb-query-capability ten=10
+----
+ok
+
+upsert ten=10 can_view_all_metrics=true service=external
+----
+ok
+
+has-tsdb-all-capability ten=10
+----
+ok

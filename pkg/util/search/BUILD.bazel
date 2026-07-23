@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "search",
+    srcs = ["search.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/search",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)
+
+go_test(
+    name = "search_test",
+    size = "small",
+    srcs = ["search_test.go"],
+    embed = [":search"],
+    deps = [
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

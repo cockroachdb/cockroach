@@ -1,0 +1,439 @@
+# This file contains telemetry tests for sql.plan.* counters.
+
+exec
+CREATE TABLE x (a INT PRIMARY KEY, b INT)
+----
+
+exec
+CREATE TABLE y (a INT PRIMARY KEY, b JSONB, INVERTED INDEX (b))
+----
+
+# Tests for EXPLAIN counters.
+
+feature-list
+sql.plan.explain
+sql.plan.explain-analyze
+sql.plan.explain-opt
+sql.plan.explain-opt-verbose
+sql.plan.explain-distsql
+sql.plan.explain-gist
+----
+
+feature-usage
+EXPLAIN SELECT * FROM x
+----
+sql.plan.explain
+
+feature-usage
+EXPLAIN (DISTSQL) SELECT * FROM x
+----
+sql.plan.explain-distsql
+
+feature-usage
+EXPLAIN ANALYZE SELECT * FROM x
+----
+sql.plan.explain-analyze
+
+feature-usage
+EXPLAIN ANALYZE (DEBUG) SELECT * FROM x
+----
+
+feature-usage
+EXPLAIN (OPT) SELECT * FROM x
+----
+sql.plan.explain-opt
+
+feature-usage
+EXPLAIN (OPT, VERBOSE) SELECT * FROM x
+----
+sql.plan.explain-opt-verbose
+
+feature-usage
+EXPLAIN (GIST) SELECT * FROM x
+----
+sql.plan.explain-gist
+
+# Tests for hints.
+
+feature-list
+sql.plan.hints.*
+----
+
+feature-usage
+SELECT x FROM (VALUES (1)) AS a(x) INNER HASH JOIN (VALUES (1)) AS b(y) ON x = y
+----
+sql.plan.hints.hash-join
+
+feature-usage
+SELECT x FROM (VALUES (1)) AS a(x) INNER MERGE JOIN (VALUES (1)) AS b(y) ON x = y
+----
+sql.plan.hints.merge-join
+
+feature-usage
+SELECT a FROM (VALUES (1)) AS b(y) INNER LOOKUP JOIN x ON y = a
+----
+sql.plan.hints.lookup-join
+
+feature-usage
+SELECT a FROM (VALUES ('{"a": "b"}'::jsonb)) AS a(z) INNER INVERTED JOIN y ON b @> z
+----
+sql.plan.hints.inverted-join
+
+feature-usage
+SELECT x FROM (VALUES (1)) AS a(x) INNER STRAIGHT JOIN (VALUES (1)) AS b(y) ON x = y
+----
+sql.plan.hints.straight-join
+
+feature-usage
+SELECT * FROM x@x_pkey
+----
+sql.plan.hints.index
+sql.plan.hints.index.select
+
+feature-usage
+UPDATE x@x_pkey SET a=1 WHERE a>1
+----
+sql.plan.hints.index
+sql.plan.hints.index.update
+
+feature-usage
+DELETE FROM x@x_pkey WHERE a>1
+----
+sql.plan.hints.index
+sql.plan.hints.index.delete
+
+# Tests for tracking important setting changes.
+
+feature-list
+sql.plan.reorder-joins.*
+sql.plan.automatic-stats.*
+----
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 0
+----
+sql.plan.reorder-joins.set-limit-0
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 3
+----
+sql.plan.reorder-joins.set-limit-3
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 6
+----
+sql.plan.reorder-joins.set-limit-6
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 20
+----
+sql.plan.reorder-joins.set-limit-more
+
+feature-usage
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = on
+----
+sql.plan.automatic-stats.enabled
+
+feature-usage
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off
+----
+sql.plan.automatic-stats.disabled
+
+feature-usage
+RESET CLUSTER SETTING sql.stats.automatic_collection.enabled
+----
+sql.plan.automatic-stats.enabled
+
+# Test telemetry for manual statistics creation.
+feature-list
+sql.plan.stats.created
+----
+
+feature-usage
+CREATE STATISTICS stats FROM x
+----
+sql.plan.stats.created
+
+# Test various planning counters.
+feature-list
+sql.plan.cte.*
+----
+
+feature-usage
+WITH a AS (SELECT 1) SELECT * FROM a
+----
+sql.plan.cte
+
+feature-usage
+WITH RECURSIVE a AS (SELECT 1 UNION ALL SELECT * FROM a WHERE false) SELECT * FROM a
+----
+sql.plan.cte
+sql.plan.cte.recursive
+
+feature-list
+sql.plan.lateral-join
+----
+
+feature-usage
+SELECT * FROM (VALUES (1), (2)) AS a(x), LATERAL (SELECT a.x+1)
+----
+sql.plan.lateral-join
+
+feature-usage
+SELECT * FROM (VALUES (1), (2)) AS a(x) JOIN LATERAL (SELECT a.x+1 AS x) AS b ON a.x < b.x
+----
+sql.plan.lateral-join
+
+feature-list
+sql.plan.subquery
+----
+
+feature-usage
+SELECT 1 = (SELECT a FROM x LIMIT 1)
+----
+sql.plan.subquery
+
+feature-list
+sql.plan.subquery.correlated
+----
+
+feature-usage
+SELECT x FROM (VALUES (1)) AS b(x) WHERE EXISTS(SELECT * FROM (VALUES (1)) AS a(x) WHERE a.x = b.x)
+----
+sql.plan.subquery.correlated
+
+# Test some sql.plan.ops counters, using some esoteric operators unlikely to be
+# executed in background activity).
+feature-list
+sql.plan.ops.cast.string::inet
+sql.plan.ops.bin.jsonb - string
+sql.plan.ops.array.*
+----
+
+feature-usage
+SELECT '1.2.3.4'::STRING::INET
+----
+sql.plan.ops.cast.string::inet
+
+feature-usage
+SELECT '{"a":"b","c":123}'::JSON - 'a'
+----
+sql.plan.ops.bin.jsonb - string
+
+feature-usage
+SELECT ARRAY (SELECT 1)[1]
+----
+sql.plan.ops.array.flatten
+sql.plan.ops.array.ind
+
+feature-usage
+INSERT INTO x SELECT unnest(ARRAY[9, 10, 11, 12])
+----
+sql.plan.ops.array.cons
+
+# Test a few sql.plan.opt.node counters.
+feature-list
+sql.plan.opt.node.project-set
+----
+
+feature-usage
+SELECT EXISTS(SELECT * FROM generate_series(1,2))
+----
+sql.plan.opt.node.project-set
+
+feature-list
+sql.plan.opt.node.join.algo.merge
+sql.plan.opt.node.join.type.inner
+----
+
+feature-usage
+SELECT *
+FROM (SELECT * FROM x WHERE a < 0) AS x1
+NATURAL INNER MERGE JOIN (SELECT * FROM x WHERE a > 0) AS x2
+----
+sql.plan.opt.node.join.algo.merge
+sql.plan.opt.node.join.type.inner
+
+# Tests for partial index counters.
+
+feature-list
+sql.plan.opt.partial-index.scan
+----
+
+exec
+CREATE INDEX i ON x (a) WHERE a > 0
+----
+
+feature-usage
+SELECT a FROM x@i WHERE a > 0
+----
+sql.plan.opt.partial-index.scan
+
+feature-list
+sql.plan.opt.partial-index.scan
+sql.plan.opt.partial-index.lookup-join
+----
+
+feature-usage
+SELECT x1.a FROM x x1 INNER LOOKUP JOIN x x2 ON x1.a = x2.a WHERE x2.a > 0
+----
+sql.plan.opt.partial-index.lookup-join
+sql.plan.opt.partial-index.scan
+
+# ORDER BY nulls non-standard tests.
+
+feature-list
+sql.plan.opt.order-by-nulls-non-standard
+----
+
+feature-usage
+SELECT a FROM x ORDER BY b NULLS LAST
+----
+sql.plan.opt.order-by-nulls-non-standard
+
+feature-usage
+SELECT a FROM x ORDER BY b DESC NULLS FIRST
+----
+sql.plan.opt.order-by-nulls-non-standard
+
+# Should not use non-standard nulls ordering here because it's standard order.
+feature-usage
+SELECT a FROM x ORDER BY b ASC NULLS FIRST
+----
+
+# Test null ordering with null_ordered_last session variable.
+# Expect default ordering to be non-standard.
+exec
+SET null_ordered_last = true
+----
+
+feature-usage
+SELECT a FROM x ORDER BY b
+----
+sql.plan.opt.order-by-nulls-non-standard
+
+feature-usage
+SELECT a FROM x ORDER BY b DESC
+----
+sql.plan.opt.order-by-nulls-non-standard
+
+# Should not use non-standard nulls ordering here because it's standard order.
+feature-usage
+SELECT a FROM x ORDER BY b DESC NULLS LAST
+----
+
+# Test for clamped histogram selectivity.
+
+feature-list
+sql.plan.clamped-histogram-selectivity
+sql.plan.clamped-inequality-selectivity
+----
+
+exec
+SET optimizer_clamp_low_histogram_selectivity = true;
+----
+
+exec
+SET optimizer_clamp_inequality_selectivity = true;
+----
+
+exec
+CREATE TYPE status_enum AS ENUM ('ACKNOWLEDGED', 'DROPPED', 'PENDING', 'SUCCEEDED');
+----
+
+exec
+CREATE TABLE t_large (
+  k INT PRIMARY KEY,
+  i INT,
+  s STRING,
+  e status_enum,
+  INDEX (i),
+  INDEX (s),
+  INDEX (i) WHERE e = 'PENDING'
+)
+----
+
+exec
+ALTER TABLE t_large INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000000,
+    "distinct_count": 1000000000,
+    "null_count": 0,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1, "num_range": 99000000, "distinct_range": 99000000, "upper_bound": "100000000"},
+      {"num_eq": 1, "num_range": 199000000, "distinct_range": 199000000, "upper_bound": "300000000"},
+      {"num_eq": 1, "num_range": 299000000, "distinct_range": 299000000, "upper_bound": "600000000"},
+      {"num_eq": 1, "num_range": 399000000, "distinct_range": 399000000, "upper_bound": "1000000000"}
+    ]
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000000,
+    "distinct_count": 44000000,
+    "null_count": 0,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10000000, "num_range": 90000000, "distinct_range": 10000000, "upper_bound": "100000000"},
+      {"num_eq": 10000000, "num_range": 190000000, "distinct_range": 10000000, "upper_bound": "200000000"},
+      {"num_eq": 20000000, "num_range": 280000000, "distinct_range": 10000000, "upper_bound": "300000000"},
+      {"num_eq": 30000000, "num_range": 370000000, "distinct_range": 10000000, "upper_bound": "400000000"}
+    ]
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000000,
+    "distinct_count": 400000000,
+    "null_count": 0,
+    "avg_size": 3,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 100000000, "num_range": 100000000, "distinct_range": 10000000, "upper_bound": "banana"},
+      {"num_eq": 100000000, "num_range": 100000000, "distinct_range": 10000000, "upper_bound": "cherry"},
+      {"num_eq": 200000000, "num_range": 100000000, "distinct_range": 10000000, "upper_bound": "mango"},
+      {"num_eq": 200000000, "num_range": 100000000, "distinct_range": 10000000, "upper_bound": "pineapple"}
+    ]
+  },
+  {
+    "columns": ["e"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000000,
+    "distinct_count": 4,
+    "null_count": 0,
+    "avg_size": 1,
+    "histo_col_type": "status_enum",
+    "histo_buckets": [
+      {"num_eq": 1000000, "num_range": 0, "distinct_range": 0, "upper_bound": "ACKNOWLEDGED"},
+      {"num_eq": 99000000, "num_range": 0, "distinct_range": 0, "upper_bound": "DROPPED"},
+      {"num_eq": 900000000, "num_range": 0, "distinct_range": 0, "upper_bound": "SUCCEEDED"}
+    ]
+  }
+]'
+----
+
+feature-usage
+SELECT * FROM t_large WHERE e = 'PENDING' AND k IN (110000000, 120000000, 130000000, 140000000)
+----
+sql.plan.clamped-histogram-selectivity
+
+feature-usage
+SELECT * FROM t_large WHERE k IN (100000000, 110000000, 120000000, 130000000) AND i > 500000000
+----
+sql.plan.clamped-histogram-selectivity
+sql.plan.clamped-inequality-selectivity
+
+# Cases where the selectivity clamps do not apply.
+feature-usage
+SELECT * FROM t_large WHERE e = 'SUCCEEDED';
+SELECT * FROM t_large;
+SELECT 1;
+----

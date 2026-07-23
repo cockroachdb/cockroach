@@ -1,0 +1,28 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.util.tracing;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb";
+
+import "gogoproto/gogo.proto";
+import "util/tracing/tracingpb/recorded_span.proto";
+
+message GetSpanRecordingsRequest {
+  uint64 trace_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
+}
+
+message GetSpanRecordingsResponse {
+  message Recording {
+    repeated tracing.tracingpb.RecordedSpan recorded_spans = 1 [(gogoproto.nullable) = false];
+  }
+  repeated Recording recordings = 1 [(gogoproto.nullable) = false];
+}
+
+service Tracing {
+  // GetSpanRecordings contacts a nodes' inflight span registry to return the
+  // tracing.Recordings for each root span with a matching TraceID.
+  rpc GetSpanRecordings(GetSpanRecordingsRequest) returns (GetSpanRecordingsResponse) {}
+}

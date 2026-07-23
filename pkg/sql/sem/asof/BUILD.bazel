@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "asof",
+    srcs = [
+        "as_of.go",
+        "type_check.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/asof",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/normalize",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/duration",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
+    ],
+)
+
+go_test(
+    name = "asof_test",
+    srcs = ["as_of_test.go"],
+    deps = [
+        ":asof",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,31 @@
+send
+Parse {"Query": "SELECT $1::GEOMETRY"}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"0101000020E6100000000000000000F03F000000000000F03F"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0101000020E6100000000000000000F03F000000000000F03F"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::GEOGRAPHY"}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"0101000020E6100000000000000000F03F000000000000F03F"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0101000020E6100000000000000000F03F000000000000F03F"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

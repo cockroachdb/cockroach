@@ -1,0 +1,618 @@
+subtest release
+
+begin
+----
+0 <noignore>
+
+put k a
+----
+
+get k
+----
+"k" -> a
+
+savepoint x
+----
+2 <noignore>
+
+put k b
+----
+
+get k
+----
+"k" -> b
+
+can-use x
+----
+true
+
+release x
+----
+3 <noignore>
+
+get k
+----
+"k" -> b
+
+commit
+----
+
+begin
+----
+0 <noignore>
+
+get k
+----
+"k" -> b
+
+commit
+----
+
+subtest end
+
+
+subtest rollback
+
+begin
+----
+0 <noignore>
+
+put k a
+----
+
+get k
+----
+"k" -> a
+
+savepoint x
+----
+2 <noignore>
+
+put k b
+----
+
+get k
+----
+"k" -> b
+
+can-use x
+----
+true
+
+rollback x
+----
+4 [2-3]
+
+get k
+----
+"k" -> a
+
+commit
+----
+
+begin
+----
+0 <noignore>
+
+get k
+----
+"k" -> a
+
+commit
+----
+
+subtest end
+
+subtest rollback_after_nested_release
+
+begin
+----
+0 <noignore>
+
+put k ar
+----
+
+savepoint x
+----
+2 <noignore>
+
+put k br
+----
+
+savepoint y
+----
+4 <noignore>
+
+put k cr
+----
+
+can-use y
+----
+true
+
+release y
+----
+5 <noignore>
+
+put k dr
+----
+
+can-use x
+----
+true
+
+rollback x
+----
+7 [2-6]
+
+get k
+----
+"k" -> ar
+
+commit
+----
+
+begin
+----
+0 <noignore>
+
+get k
+----
+"k" -> ar
+
+commit
+----
+
+subtest end
+
+subtest disjoin_rollbacks
+
+begin
+----
+0 <noignore>
+
+put a d1
+----
+
+put b d1
+----
+
+savepoint x
+----
+3 <noignore>
+
+put a d2
+----
+
+can-use x
+----
+true
+
+rollback x
+----
+5 [3-4]
+
+put c d1
+----
+
+savepoint x
+----
+7 [3-4]
+
+put b 2
+----
+
+can-use x
+----
+true
+
+rollback x
+----
+9 [3-4][7-8]
+
+put d 1
+----
+
+
+get a
+----
+"a" -> d1
+
+get b
+----
+"b" -> d1
+
+get c
+----
+"c" -> d1
+
+get d
+----
+"d" -> 1
+
+commit
+----
+
+begin
+----
+0 <noignore>
+
+get a
+----
+"a" -> d1
+
+get b
+----
+"b" -> d1
+
+get c
+----
+"c" -> d1
+
+get d
+----
+"d" -> 1
+
+commit
+----
+
+subtest end
+
+
+subtest rollback_with_no_op
+
+begin
+----
+0 <noignore>
+
+put k nop
+----
+
+savepoint x
+----
+2 <noignore>
+
+can-use x
+----
+true
+
+rollback x
+----
+3 [2-2]
+
+can-use x
+----
+true
+
+release x
+----
+3 [2-2]
+
+commit
+----
+
+subtest end
+
+subtest double_rollback_ok
+
+begin
+----
+0 <noignore>
+
+put k init
+----
+
+commit
+----
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+put k da
+----
+
+can-use x
+----
+true
+
+rollback x
+----
+2 [0-1]
+
+rollback x
+----
+3 [0-2]
+
+get k
+----
+"k" -> init
+
+put k db
+----
+
+can-use x
+----
+true
+
+rollback x
+----
+5 [0-4]
+
+commit
+----
+
+begin
+----
+0 <noignore>
+
+get k
+----
+"k" -> init
+
+commit
+----
+
+subtest end
+
+subtest rollback_across_retry
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+retry
+----
+synthetic error: TransactionRetryWithProtoRefreshError: forced retry
+epoch: 0 -> 1
+
+reset
+----
+txn error cleared
+txn id not changed
+
+can-use x
+----
+true
+
+release x
+----
+0 <noignore>
+
+can-use x
+----
+true
+
+rollback x
+----
+0 <noignore>
+
+subtest end
+
+
+
+subtest rollback_after_failed_cput
+# CPut errors are white-listed to allow a rollback to savepoint afterwards.
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+cput k v bogus_expected
+----
+(*kvpb.ConditionFailedError) unexpected value
+
+can-use x
+----
+true
+
+rollback x
+----
+1 <noignore>
+
+subtest end
+
+
+
+subtest rollback_after_wait_policy_write_intent_error
+# Write intent errors are white-listed to allow a rollback to savepoint afterwards.
+# They make their way back up to the kv client when requests are run with an Error
+# wait policy.
+
+# NB: we're going to leak this txn, so write to an otherwise unused key.
+begin
+----
+0 <noignore>
+
+put conflict-key a
+----
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+get conflict-key locking nowait
+----
+(*kvpb.WriteIntentError) conflicting locks on "conflict-key" [reason=wait_policy]
+
+can-use x
+----
+true
+
+rollback x
+----
+0 <noignore>
+
+put conflict-key b nowait
+----
+(*kvpb.WriteIntentError) conflicting locks on "conflict-key" [reason=wait_policy]
+
+can-use x
+----
+true
+
+rollback x
+----
+1 <noignore>
+
+subtest end
+
+
+
+subtest rollback_after_lock_timeout_write_intent_error
+# Write intent errors are white-listed to allow a rollback to savepoint afterwards.
+# They make their way back up to the kv client when requests are run with a lock
+# timeout.
+
+# NB: we're going to leak this txn, so write to an otherwise unused key.
+begin
+----
+0 <noignore>
+
+put conflict-key-2 a
+----
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+get conflict-key-2 lock-timeout
+----
+(*kvpb.WriteIntentError) conflicting locks on "conflict-key-2" [reason=lock_timeout]
+
+can-use x
+----
+true
+
+rollback x
+----
+0 <noignore>
+
+put conflict-key-2 b lock-timeout
+----
+(*kvpb.WriteIntentError) conflicting locks on "conflict-key-2" [reason=lock_timeout]
+
+can-use x
+----
+true
+
+rollback x
+----
+1 <noignore>
+
+subtest end
+
+
+
+subtest rollback_after_random_err
+# Only CPut errors allow rollbacks after them. Any other error results in the rollback failing.
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+inject-error
+----
+injected error
+
+can-use x
+----
+false
+
+rollback x
+----
+(*pgerror.withCandidateCode) unimplemented: cannot rollback to savepoint after error
+
+subtest end
+
+
+
+subtest rollback_across_abort
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+abort
+----
+(*kvpb.TransactionRetryWithProtoRefreshError)
+txn id not changed
+
+reset
+----
+txn error cleared
+txn id changed
+
+can-use x
+----
+true
+
+release x
+----
+0 <noignore>
+
+can-use x
+----
+true
+
+rollback x
+----
+0 <noignore>
+
+subtest end
+
+subtest rollback_across_retry_fails_for_non-initial_savepoint
+# The difference from the previous test is that here we do a write before
+# creating the savepoint.
+begin
+----
+0 <noignore>
+
+put k a
+----
+
+savepoint x
+----
+2 <noignore>
+
+retry
+----
+synthetic error: TransactionRetryWithProtoRefreshError: forced retry
+epoch: 0 -> 1
+
+can-use x
+----
+false
+
+rollback x
+----
+(*kvpb.TransactionRetryWithProtoRefreshError) TransactionRetryWithProtoRefreshError: cannot rollback to savepoint after a transaction restart
+
+subtest end

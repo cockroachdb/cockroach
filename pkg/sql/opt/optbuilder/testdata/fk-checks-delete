@@ -1,0 +1,229 @@
+exec-ddl
+CREATE TABLE parent (x INT, p INT PRIMARY KEY, other INT UNIQUE)
+----
+
+exec-ddl
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
+----
+
+build
+DELETE FROM child WHERE c = 4
+----
+delete child
+ ├── columns: <none>
+ ├── fetch columns: c:5 p:6
+ └── select
+      ├── columns: c:5!null p:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      ├── scan child
+      │    ├── columns: c:5!null p:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    └── flags: avoid-full-scan
+      └── filters
+           └── c:5 = 4
+
+build
+DELETE FROM parent WHERE p = 3
+----
+delete parent
+ ├── columns: <none>
+ ├── fetch columns: x:6 parent.p:7 other:8
+ ├── input binding: &1
+ ├── select
+ │    ├── columns: x:6 parent.p:7!null other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    ├── scan parent
+ │    │    ├── columns: x:6 parent.p:7!null other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    │    └── flags: avoid-full-scan
+ │    └── filters
+ │         └── parent.p:7 = 3
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── semi-join (hash)
+                ├── columns: p:11!null
+                ├── with-scan &1
+                │    ├── columns: p:11!null
+                │    └── mapping:
+                │         └──  parent.p:7 => p:11
+                ├── scan child
+                │    ├── columns: child.p:13!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── p:11 = child.p:13
+
+exec-ddl
+CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other))
+----
+
+build
+DELETE FROM parent WHERE p = 3
+----
+delete parent
+ ├── columns: <none>
+ ├── fetch columns: x:6 parent.p:7 parent.other:8
+ ├── input binding: &1
+ ├── select
+ │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    ├── scan parent
+ │    │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    │    └── flags: avoid-full-scan
+ │    └── filters
+ │         └── parent.p:7 = 3
+ └── f-k-checks
+      ├── f-k-checks-item: child(p) -> parent(p)
+      │    └── semi-join (hash)
+      │         ├── columns: p:11!null
+      │         ├── with-scan &1
+      │         │    ├── columns: p:11!null
+      │         │    └── mapping:
+      │         │         └──  parent.p:7 => p:11
+      │         ├── scan child
+      │         │    ├── columns: child.p:13!null
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         └── filters
+      │              └── p:11 = child.p:13
+      └── f-k-checks-item: child2(p) -> parent(other)
+           └── semi-join (hash)
+                ├── columns: other:16
+                ├── with-scan &1
+                │    ├── columns: other:16
+                │    └── mapping:
+                │         └──  parent.other:8 => other:16
+                ├── scan child2
+                │    ├── columns: child2.p:18!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── other:16 = child2.p:18
+
+exec-ddl
+CREATE TABLE doubleparent (p1 INT, p2 INT, other INT, PRIMARY KEY (p1, p2))
+----
+
+exec-ddl
+CREATE TABLE doublechild (c INT PRIMARY KEY, p1 INT, p2 INT, FOREIGN KEY (p1, p2) REFERENCES doubleparent (p1, p2))
+----
+
+build
+DELETE FROM doubleparent WHERE p1 = 10
+----
+delete doubleparent
+ ├── columns: <none>
+ ├── fetch columns: doubleparent.p1:6 doubleparent.p2:7 other:8
+ ├── input binding: &1
+ ├── select
+ │    ├── columns: doubleparent.p1:6!null doubleparent.p2:7!null other:8 doubleparent.crdb_internal_mvcc_timestamp:9 doubleparent.tableoid:10
+ │    ├── scan doubleparent
+ │    │    ├── columns: doubleparent.p1:6!null doubleparent.p2:7!null other:8 doubleparent.crdb_internal_mvcc_timestamp:9 doubleparent.tableoid:10
+ │    │    └── flags: avoid-full-scan
+ │    └── filters
+ │         └── doubleparent.p1:6 = 10
+ └── f-k-checks
+      └── f-k-checks-item: doublechild(p1,p2) -> doubleparent(p1,p2)
+           └── semi-join (hash)
+                ├── columns: p1:11!null p2:12!null
+                ├── with-scan &1
+                │    ├── columns: p1:11!null p2:12!null
+                │    └── mapping:
+                │         ├──  doubleparent.p1:6 => p1:11
+                │         └──  doubleparent.p2:7 => p2:12
+                ├── scan doublechild
+                │    ├── columns: doublechild.p1:14 doublechild.p2:15
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── p1:11 = doublechild.p1:14
+                     └── p2:12 = doublechild.p2:15
+
+build
+DELETE FROM doublechild WHERE p1 = 10
+----
+delete doublechild
+ ├── columns: <none>
+ ├── fetch columns: c:6 p1:7 p2:8
+ └── select
+      ├── columns: c:6!null p1:7!null p2:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── scan doublechild
+      │    ├── columns: c:6!null p1:7 p2:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    └── flags: avoid-full-scan
+      └── filters
+           └── p1:7 = 10
+
+# Verify that the join hint is set.
+build set=prefer_lookup_joins_for_fks=true
+DELETE FROM parent WHERE p = 3
+----
+delete parent
+ ├── columns: <none>
+ ├── fetch columns: x:6 parent.p:7 parent.other:8
+ ├── input binding: &1
+ ├── select
+ │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    ├── scan parent
+ │    │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    │    └── flags: avoid-full-scan
+ │    └── filters
+ │         └── parent.p:7 = 3
+ └── f-k-checks
+      ├── f-k-checks-item: child(p) -> parent(p)
+      │    └── semi-join (hash)
+      │         ├── columns: p:11!null
+      │         ├── flags: prefer lookup join (into right side)
+      │         ├── with-scan &1
+      │         │    ├── columns: p:11!null
+      │         │    └── mapping:
+      │         │         └──  parent.p:7 => p:11
+      │         ├── scan child
+      │         │    ├── columns: child.p:13!null
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         └── filters
+      │              └── p:11 = child.p:13
+      └── f-k-checks-item: child2(p) -> parent(other)
+           └── semi-join (hash)
+                ├── columns: other:16
+                ├── flags: prefer lookup join (into right side)
+                ├── with-scan &1
+                │    ├── columns: other:16
+                │    └── mapping:
+                │         └──  parent.other:8 => other:16
+                ├── scan child2
+                │    ├── columns: child2.p:18!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── other:16 = child2.p:18
+
+# Verify that we do *not* lock the child, even with implicit FK locking.
+build set=enable_implicit_fk_locking_for_serializable=true
+DELETE FROM parent WHERE p = 3
+----
+delete parent
+ ├── columns: <none>
+ ├── fetch columns: x:6 parent.p:7 parent.other:8
+ ├── input binding: &1
+ ├── select
+ │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    ├── scan parent
+ │    │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    │    └── flags: avoid-full-scan
+ │    └── filters
+ │         └── parent.p:7 = 3
+ └── f-k-checks
+      ├── f-k-checks-item: child(p) -> parent(p)
+      │    └── semi-join (hash)
+      │         ├── columns: p:11!null
+      │         ├── with-scan &1
+      │         │    ├── columns: p:11!null
+      │         │    └── mapping:
+      │         │         └──  parent.p:7 => p:11
+      │         ├── scan child
+      │         │    ├── columns: child.p:13!null
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         └── filters
+      │              └── p:11 = child.p:13
+      └── f-k-checks-item: child2(p) -> parent(other)
+           └── semi-join (hash)
+                ├── columns: other:16
+                ├── with-scan &1
+                │    ├── columns: other:16
+                │    └── mapping:
+                │         └──  parent.other:8 => other:16
+                ├── scan child2
+                │    ├── columns: child2.p:18!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── other:16 = child2.p:18

@@ -1,0 +1,189 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/select_implicit.out --label=/mnt/data1/postgres/src/test/regress/results/select_implicit.out /mnt/data1/postgres/src/test/regress/expected/select_implicit.out /mnt/data1/postgres/src/test/regress/results/select_implicit.out
+--- /mnt/data1/postgres/src/test/regress/expected/select_implicit.out
++++ /mnt/data1/postgres/src/test/regress/results/select_implicit.out
+@@ -44,9 +44,7 @@
+ --   w/o existing GROUP BY target and w/o existing a different ORDER BY target
+ --   failure expected
+ SELECT count(*) FROM test_missing_target GROUP BY a ORDER BY b;
+-ERROR:  column "test_missing_target.b" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: ...ECT count(*) FROM test_missing_target GROUP BY a ORDER BY b;
+-                                                                     ^
++ERROR:  column "b" must appear in the GROUP BY clause or be used in an aggregate function
+ --   w/o existing GROUP BY target and w/o existing same ORDER BY target
+ SELECT count(*) FROM test_missing_target GROUP BY b ORDER BY b;
+  count 
+@@ -117,16 +115,12 @@
+ --   failure expected
+ SELECT c, count(*) FROM test_missing_target GROUP BY 3;
+ ERROR:  GROUP BY position 3 is not in select list
+-LINE 1: SELECT c, count(*) FROM test_missing_target GROUP BY 3;
+-                                                             ^
+ --   group w/o existing GROUP BY and ORDER BY target under ambiguous condition
+ --   failure expected
+ SELECT count(*) FROM test_missing_target x, test_missing_target y
+ 	WHERE x.a = y.a
+ 	GROUP BY b ORDER BY b;
+-ERROR:  column reference "b" is ambiguous
+-LINE 3:  GROUP BY b ORDER BY b;
+-                             ^
++ERROR:  column reference "b" is ambiguous (candidates: x.b, y.b)
+ --   order w/ target under ambiguous condition
+ --   failure NOT expected
+ SELECT a, a FROM test_missing_target
+@@ -149,32 +143,37 @@
+ --   failure NOT expected
+ SELECT a/2, a/2 FROM test_missing_target
+ 	ORDER BY a/2;
+- ?column? | ?column? 
+-----------+----------
+-        0 |        0
+-        0 |        0
+-        1 |        1
+-        1 |        1
+-        2 |        2
+-        2 |        2
+-        3 |        3
+-        3 |        3
+-        4 |        4
+-        4 |        4
++        ?column?        |        ?column?        
++------------------------+------------------------
++                      0 |                      0
++ 0.50000000000000000000 | 0.50000000000000000000
++  1.0000000000000000000 |  1.0000000000000000000
++  1.5000000000000000000 |  1.5000000000000000000
++  2.0000000000000000000 |  2.0000000000000000000
++  2.5000000000000000000 |  2.5000000000000000000
++  3.0000000000000000000 |  3.0000000000000000000
++  3.5000000000000000000 |  3.5000000000000000000
++  4.0000000000000000000 |  4.0000000000000000000
++  4.5000000000000000000 |  4.5000000000000000000
+ (10 rows)
+ 
+ --   group expression w/ target under ambiguous condition
+ --   failure NOT expected
+ SELECT a/2, a/2 FROM test_missing_target
+ 	GROUP BY a/2 ORDER BY a/2;
+- ?column? | ?column? 
+-----------+----------
+-        0 |        0
+-        1 |        1
+-        2 |        2
+-        3 |        3
+-        4 |        4
+-(5 rows)
++        ?column?        |        ?column?        
++------------------------+------------------------
++                      0 |                      0
++ 0.50000000000000000000 | 0.50000000000000000000
++  1.0000000000000000000 |  1.0000000000000000000
++  1.5000000000000000000 |  1.5000000000000000000
++  2.0000000000000000000 |  2.0000000000000000000
++  2.5000000000000000000 |  2.5000000000000000000
++  3.0000000000000000000 |  3.0000000000000000000
++  3.5000000000000000000 |  3.5000000000000000000
++  4.0000000000000000000 |  4.0000000000000000000
++  4.5000000000000000000 |  4.5000000000000000000
++(10 rows)
+ 
+ --   group w/ existing GROUP BY target under ambiguous condition
+ SELECT x.b, count(*) FROM test_missing_target x, test_missing_target y
+@@ -207,6 +206,7 @@
+ FROM test_missing_target x, test_missing_target y
+ 	WHERE x.a = y.a
+ 	GROUP BY x.b ORDER BY x.b;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ SELECT * FROM test_missing_target2;
+  count 
+ -------
+@@ -242,17 +242,16 @@
+ --   w/o existing GROUP BY target and w/o existing a different ORDER BY target
+ --   failure expected
+ SELECT count(a) FROM test_missing_target GROUP BY a ORDER BY b;
+-ERROR:  column "test_missing_target.b" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: ...ECT count(a) FROM test_missing_target GROUP BY a ORDER BY b;
+-                                                                     ^
++ERROR:  column "b" must appear in the GROUP BY clause or be used in an aggregate function
+ --   w/o existing GROUP BY target and w/o existing same ORDER BY target
+ SELECT count(b) FROM test_missing_target GROUP BY b/2 ORDER BY b/2;
+  count 
+ -------
+      1
+-     5
++     2
++     3
+      4
+-(3 rows)
++(4 rows)
+ 
+ --   w/ existing GROUP BY target using a relation name in target
+ SELECT lower(test_missing_target.c), count(c)
+@@ -286,37 +285,36 @@
+ 	GROUP BY (b + 1) / 2 ORDER BY (b + 1) / 2 desc;
+  count 
+ -------
+-     7
++     4
+      3
+-(2 rows)
++     2
++     1
++(4 rows)
+ 
+ --   group w/o existing GROUP BY and ORDER BY target under ambiguous condition
+ --   failure expected
+ SELECT count(x.a) FROM test_missing_target x, test_missing_target y
+ 	WHERE x.a = y.a
+ 	GROUP BY b/2 ORDER BY b/2;
+-ERROR:  column reference "b" is ambiguous
+-LINE 3:  GROUP BY b/2 ORDER BY b/2;
+-                               ^
++ERROR:  column reference "b" is ambiguous (candidates: x.b, y.b)
+ --   group w/ existing GROUP BY target under ambiguous condition
+ SELECT x.b/2, count(x.b) FROM test_missing_target x, test_missing_target y
+ 	WHERE x.a = y.a
+ 	GROUP BY x.b/2 ORDER BY x.b/2;
+- ?column? | count 
+-----------+-------
+-        0 |     1
+-        1 |     5
+-        2 |     4
+-(3 rows)
++        ?column?        | count 
++------------------------+-------
++ 0.50000000000000000000 |     1
++  1.0000000000000000000 |     2
++  1.5000000000000000000 |     3
++  2.0000000000000000000 |     4
++(4 rows)
+ 
+ --   group w/o existing GROUP BY target under ambiguous condition
+ --   failure expected due to ambiguous b in count(b)
+ SELECT count(b) FROM test_missing_target x, test_missing_target y
+ 	WHERE x.a = y.a
+ 	GROUP BY x.b/2;
+-ERROR:  column reference "b" is ambiguous
+-LINE 1: SELECT count(b) FROM test_missing_target x, test_missing_tar...
+-                     ^
++ERROR:  column reference "b" is ambiguous (candidates: x.b, y.b)
+ --   group w/o existing GROUP BY target under ambiguous condition
+ --   into a table
+ CREATE TABLE test_missing_target3 AS
+@@ -324,13 +322,15 @@
+ FROM test_missing_target x, test_missing_target y
+ 	WHERE x.a = y.a
+ 	GROUP BY x.b/2 ORDER BY x.b/2;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ SELECT * FROM test_missing_target3;
+  count 
+ -------
+      1
+-     5
++     2
++     3
+      4
+-(3 rows)
++(4 rows)
+ 
+ --   Cleanup
+ DROP TABLE test_missing_target;

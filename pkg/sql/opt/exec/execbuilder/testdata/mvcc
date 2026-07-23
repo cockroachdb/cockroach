@@ -1,0 +1,69 @@
+# LogicTest: local
+
+# Create a table with different families.
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT, z INT, FAMILY (x), FAMILY (y), FAMILY (z))
+
+# When doing a lookup where we could split families, but the MVCC column is
+# requested, we shouldn't split the family.
+query T
+EXPLAIN SELECT z FROM t WHERE x = 1
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/1 - /1]
+
+query T
+EXPLAIN SELECT crdb_internal_mvcc_timestamp, z FROM t WHERE x = 1
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/1 - /1]
+
+# Ensure that the presence of mutation columns doesn't affect accessing system
+# columns.
+statement ok
+BEGIN;
+ALTER TABLE t ADD COLUMN w INT
+
+query T
+EXPLAIN SELECT x, crdb_internal_mvcc_timestamp FROM t
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: FULL SCAN
+
+statement ok
+ROLLBACK
+
+# Test that we can access system columns by ID.
+let $t_id
+SELECT id FROM system.namespace WHERE name = 't'
+
+query T
+EXPLAIN SELECT * FROM [$t_id(4294967295) AS _]
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: FULL SCAN
+
+# Regression test for #62798. Using crdb_internal_mvcc_timestamp shouldn't cause
+# an index out of range error.
+
+statement error column name \"crdb_internal_mvcc_timestamp\" conflicts with a system column name
+CREATE VIEW v AS SELECT crdb_internal_mvcc_timestamp FROM t
+
+statement ok
+CREATE VIEW v AS SELECT crdb_internal_mvcc_timestamp AS ts FROM t

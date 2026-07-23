@@ -1,0 +1,55 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "nstree",
+    srcs = [
+        "by_id_map.go",
+        "by_name_map.go",
+        "catalog.go",
+        "catalog_entries.go",
+        "catalog_mutable.go",
+        "id_map.go",
+        "name_map.go",
+        "set.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/internal/validate",
+        "//pkg/sql/catalog/zone",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/iterutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_raduberinde_btreemap//:btreemap",
+    ],
+)
+
+go_test(
+    name = "nstree_test",
+    srcs = [
+        "datadriven_test.go",
+        "map_test.go",
+        "mutable_catalog_test.go",
+        "set_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":nstree"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/hlc",
+        "//pkg/util/iterutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)

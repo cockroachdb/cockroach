@@ -1,0 +1,28 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+import React from "react";
+
+import "./debugAnnotation.scss";
+
+export interface DebugAnnotationProps {
+  label: string;
+  value: React.ReactNode;
+}
+
+/**
+ * DebugAnnotation is an indicator showing a bit of information on the debug page.
+ */
+export default function DebugAnnotation({
+  label,
+  value,
+}: DebugAnnotationProps): React.ReactElement {
+  return (
+    <h3>
+      <span className="debug-annotation__label">{label}:</span>{" "}
+      <span className="debug-annotation__value">{value}</span>
+    </h3>
+  );
+}

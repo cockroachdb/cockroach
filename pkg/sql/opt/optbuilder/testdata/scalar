@@ -1,0 +1,1694 @@
+build-scalar
+1
+----
+const: 1 [type=int]
+
+build-scalar
+1 + 2
+----
+plus [type=int]
+ ├── const: 1 [type=int]
+ └── const: 2 [type=int]
+
+build-scalar vars=(a string)
+a
+----
+variable: a:1 [type=string]
+
+build-scalar vars=(a int)
+a + 2
+----
+plus [type=int]
+ ├── variable: a:1 [type=int]
+ └── const: 2 [type=int]
+
+build-scalar vars=(a int, b int)
+a >= 5 AND a <= 10 AND b < 4
+----
+and [type=bool]
+ ├── and [type=bool]
+ │    ├── ge [type=bool]
+ │    │    ├── variable: a:1 [type=int]
+ │    │    └── const: 5 [type=int]
+ │    └── le [type=bool]
+ │         ├── variable: a:1 [type=int]
+ │         └── const: 10 [type=int]
+ └── lt [type=bool]
+      ├── variable: b:2 [type=int]
+      └── const: 4 [type=int]
+
+build-scalar vars=(a int, b int)
+(a, b) = (1, 2)
+----
+eq [type=bool]
+ ├── tuple [type=tuple{int, int}]
+ │    ├── variable: a:1 [type=int]
+ │    └── variable: b:2 [type=int]
+ └── tuple [type=tuple{int, int}]
+      ├── const: 1 [type=int]
+      └── const: 2 [type=int]
+
+build-scalar vars=(a int)
+a IN (1, 2)
+----
+in [type=bool]
+ ├── variable: a:1 [type=int]
+ └── tuple [type=tuple{int, int}]
+      ├── const: 1 [type=int]
+      └── const: 2 [type=int]
+
+build-scalar vars=(a int, b int)
+(a, b) IN ((1, 2), (3, 4))
+----
+in [type=bool]
+ ├── tuple [type=tuple{int, int}]
+ │    ├── variable: a:1 [type=int]
+ │    └── variable: b:2 [type=int]
+ └── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
+      ├── tuple [type=tuple{int, int}]
+      │    ├── const: 1 [type=int]
+      │    └── const: 2 [type=int]
+      └── tuple [type=tuple{int, int}]
+           ├── const: 3 [type=int]
+           └── const: 4 [type=int]
+
+build-scalar vars=(a int, b int, c int, d int)
+(a, b + c, 5 + d * 2) = (b + c, 8, a - d)
+----
+eq [type=bool]
+ ├── tuple [type=tuple{int, int, int}]
+ │    ├── variable: a:1 [type=int]
+ │    ├── plus [type=int]
+ │    │    ├── variable: b:2 [type=int]
+ │    │    └── variable: c:3 [type=int]
+ │    └── plus [type=int]
+ │         ├── const: 5 [type=int]
+ │         └── mult [type=int]
+ │              ├── variable: d:4 [type=int]
+ │              └── const: 2 [type=int]
+ └── tuple [type=tuple{int, int, int}]
+      ├── plus [type=int]
+      │    ├── variable: b:2 [type=int]
+      │    └── variable: c:3 [type=int]
+      ├── const: 8 [type=int]
+      └── minus [type=int]
+           ├── variable: a:1 [type=int]
+           └── variable: d:4 [type=int]
+
+build-scalar vars=(a int, b int, c int, d int)
+((a, b), (c, d)) = ((1, 2), (3, 4))
+----
+eq [type=bool]
+ ├── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
+ │    ├── tuple [type=tuple{int, int}]
+ │    │    ├── variable: a:1 [type=int]
+ │    │    └── variable: b:2 [type=int]
+ │    └── tuple [type=tuple{int, int}]
+ │         ├── variable: c:3 [type=int]
+ │         └── variable: d:4 [type=int]
+ └── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
+      ├── tuple [type=tuple{int, int}]
+      │    ├── const: 1 [type=int]
+      │    └── const: 2 [type=int]
+      └── tuple [type=tuple{int, int}]
+           ├── const: 3 [type=int]
+           └── const: 4 [type=int]
+
+build-scalar vars=(a int, b int, c int, d string)
+(a, (b, 'a'), (c, 'b', 5)) = (9, (a + c, d), (5, d, a))
+----
+eq [type=bool]
+ ├── tuple [type=tuple{int, tuple{int, string}, tuple{int, string, int}}]
+ │    ├── variable: a:1 [type=int]
+ │    ├── tuple [type=tuple{int, string}]
+ │    │    ├── variable: b:2 [type=int]
+ │    │    └── const: 'a' [type=string]
+ │    └── tuple [type=tuple{int, string, int}]
+ │         ├── variable: c:3 [type=int]
+ │         ├── const: 'b' [type=string]
+ │         └── const: 5 [type=int]
+ └── tuple [type=tuple{int, tuple{int, string}, tuple{int, string, int}}]
+      ├── const: 9 [type=int]
+      ├── tuple [type=tuple{int, string}]
+      │    ├── plus [type=int]
+      │    │    ├── variable: a:1 [type=int]
+      │    │    └── variable: c:3 [type=int]
+      │    └── variable: d:4 [type=string]
+      └── tuple [type=tuple{int, string, int}]
+           ├── const: 5 [type=int]
+           ├── variable: d:4 [type=string]
+           └── variable: a:1 [type=int]
+
+build-scalar vars=(a int, b int)
+a IS NULL
+----
+is [type=bool]
+ ├── variable: a:1 [type=int]
+ └── null [type=unknown]
+
+build-scalar vars=(a int, b int)
+a IS NOT DISTINCT FROM NULL
+----
+is [type=bool]
+ ├── variable: a:1 [type=int]
+ └── null [type=unknown]
+
+build-scalar vars=(a int, b int)
+a IS NOT DISTINCT FROM b
+----
+is [type=bool]
+ ├── variable: a:1 [type=int]
+ └── variable: b:2 [type=int]
+
+build-scalar vars=(a int, b int)
+a IS NOT NULL
+----
+is-not [type=bool]
+ ├── variable: a:1 [type=int]
+ └── null [type=unknown]
+
+build-scalar vars=(a int, b int)
+a IS DISTINCT FROM NULL
+----
+is-not [type=bool]
+ ├── variable: a:1 [type=int]
+ └── null [type=unknown]
+
+build-scalar vars=(a int, b int)
+a IS DISTINCT FROM b
+----
+is-not [type=bool]
+ ├── variable: a:1 [type=int]
+ └── variable: b:2 [type=int]
+
+build-scalar vars=(a int, b int)
+(a, b) IS NULL
+----
+is-tuple-null [type=bool]
+ └── tuple [type=tuple{int, int}]
+      ├── variable: a:1 [type=int]
+      └── variable: b:2 [type=int]
+
+build-scalar vars=(a int, b int)
+(a, b) IS NOT NULL
+----
+is-tuple-not-null [type=bool]
+ └── tuple [type=tuple{int, int}]
+      ├── variable: a:1 [type=int]
+      └── variable: b:2 [type=int]
+
+build-scalar vars=(a int, b int)
++ a + (- b)
+----
+plus [type=int]
+ ├── variable: a:1 [type=int]
+ └── unary-minus [type=int]
+      └── variable: b:2 [type=int]
+
+build-scalar vars=(a int, b int)
+CASE WHEN a = 2 THEN 1 ELSE 2 END
+----
+case [type=int]
+ ├── true [type=bool]
+ ├── when [type=int]
+ │    ├── eq [type=bool]
+ │    │    ├── variable: a:1 [type=int]
+ │    │    └── const: 2 [type=int]
+ │    └── const: 1 [type=int]
+ └── const: 2 [type=int]
+
+build-scalar
+if(true, 1, 2)
+----
+case [type=int]
+ ├── true [type=bool]
+ ├── when [type=int]
+ │    ├── true [type=bool]
+ │    └── const: 1 [type=int]
+ └── const: 2 [type=int]
+
+build-scalar
+if(false, NULL, 1)
+----
+case [type=int]
+ ├── false [type=bool]
+ ├── when [type=int]
+ │    ├── true [type=bool]
+ │    └── cast: INT8 [type=int]
+ │         └── null [type=unknown]
+ └── const: 1 [type=int]
+
+build-scalar
+if(true, NULL, 1)
+----
+case [type=int]
+ ├── true [type=bool]
+ ├── when [type=int]
+ │    ├── true [type=bool]
+ │    └── cast: INT8 [type=int]
+ │         └── null [type=unknown]
+ └── const: 1 [type=int]
+
+build-scalar
+if(false, 1, NULL)
+----
+case [type=int]
+ ├── false [type=bool]
+ ├── when [type=int]
+ │    ├── true [type=bool]
+ │    └── const: 1 [type=int]
+ └── cast: INT8 [type=int]
+      └── null [type=unknown]
+
+build-scalar
+nullif(1, 2)
+----
+case [type=int]
+ ├── const: 1 [type=int]
+ ├── when [type=int]
+ │    ├── const: 2 [type=int]
+ │    └── null [type=int]
+ └── const: 1 [type=int]
+
+build-scalar
+nullif(NULL, 0)
+----
+case [type=int]
+ ├── cast: INT8 [type=int]
+ │    └── null [type=unknown]
+ ├── when [type=int]
+ │    ├── const: 0 [type=int]
+ │    └── null [type=int]
+ └── cast: INT8 [type=int]
+      └── null [type=unknown]
+
+build-scalar
+nullif(0, NULL)
+----
+case [type=int]
+ ├── const: 0 [type=int]
+ ├── when [type=int]
+ │    ├── null [type=unknown]
+ │    └── null [type=int]
+ └── const: 0 [type=int]
+
+build-scalar vars=(a string)
+length(a) = 2
+----
+eq [type=bool]
+ ├── function: length [type=int]
+ │    └── variable: a:1 [type=string]
+ └── const: 2 [type=int]
+
+build-scalar vars=(a jsonb)
+a @> '{"a":1}'
+----
+contains [type=bool]
+ ├── variable: a:1 [type=jsonb]
+ └── const: '{"a": 1}' [type=jsonb]
+
+build-scalar vars=(a jsonb)
+'{"a":1}' <@ a
+----
+contained-by [type=bool]
+ ├── const: '{"a": 1}' [type=jsonb]
+ └── variable: a:1 [type=jsonb]
+
+build-scalar vars=(a jsonb)
+a ? 'a'
+----
+json-exists [type=bool]
+ ├── variable: a:1 [type=jsonb]
+ └── const: 'a' [type=string]
+
+build-scalar vars=(a jsonb)
+a ?| ARRAY['a', 'b', 'c']
+----
+json-some-exists [type=bool]
+ ├── variable: a:1 [type=jsonb]
+ └── array: [type=string[]]
+      ├── const: 'a' [type=string]
+      ├── const: 'b' [type=string]
+      └── const: 'c' [type=string]
+
+build-scalar vars=(a jsonb)
+a ?& ARRAY['a', 'b', 'c']
+----
+json-all-exists [type=bool]
+ ├── variable: a:1 [type=jsonb]
+ └── array: [type=string[]]
+      ├── const: 'a' [type=string]
+      ├── const: 'b' [type=string]
+      └── const: 'c' [type=string]
+
+build-scalar
+TRUE
+----
+true [type=bool]
+
+
+build-scalar
+FALSE
+----
+false [type=bool]
+
+build-scalar
+1::decimal
+----
+const: 1 [type=decimal]
+
+build-scalar
+1::float
+----
+const: 1.0 [type=float]
+
+build-scalar
+1.1::int
+----
+cast: INT8 [type=int]
+ └── const: 1.1 [type=decimal]
+
+build-scalar
+'2010-05-12'::timestamp
+----
+const: '2010-05-12 00:00:00' [type=timestamp]
+
+build-scalar
+'now'::timestamp
+----
+cast: TIMESTAMP [type=timestamp]
+ └── const: 'now' [type=string]
+
+build-scalar
+'2010-05-12'::timestamp - 'now'
+----
+minus [type=interval]
+ ├── const: '2010-05-12 00:00:00' [type=timestamp]
+ └── cast: TIMESTAMP [type=timestamp]
+      └── const: 'now' [type=string]
+
+build-scalar
+'123'::int
+----
+const: 123 [type=int]
+
+build-scalar vars=(a int, b int)
+IFNULL(a, b)
+----
+coalesce [type=int]
+ ├── variable: a:1 [type=int]
+ └── variable: b:2 [type=int]
+
+build-scalar vars=(a int, b int, c int)
+COALESCE(a, b, c)
+----
+coalesce [type=int]
+ ├── variable: a:1 [type=int]
+ ├── variable: b:2 [type=int]
+ └── variable: c:3 [type=int]
+
+build-scalar vars=(a int)
+CASE WHEN a > 5 THEN 1 ELSE -1 END
+----
+case [type=int]
+ ├── true [type=bool]
+ ├── when [type=int]
+ │    ├── gt [type=bool]
+ │    │    ├── variable: a:1 [type=int]
+ │    │    └── const: 5 [type=int]
+ │    └── const: 1 [type=int]
+ └── const: -1 [type=int]
+
+build-scalar vars=(a int)
+CASE WHEN a > 5 THEN 1 WHEN a < 0 THEN 2 ELSE -1 END
+----
+case [type=int]
+ ├── true [type=bool]
+ ├── when [type=int]
+ │    ├── gt [type=bool]
+ │    │    ├── variable: a:1 [type=int]
+ │    │    └── const: 5 [type=int]
+ │    └── const: 1 [type=int]
+ ├── when [type=int]
+ │    ├── lt [type=bool]
+ │    │    ├── variable: a:1 [type=int]
+ │    │    └── const: 0 [type=int]
+ │    └── const: 2 [type=int]
+ └── const: -1 [type=int]
+
+build-scalar vars=(a int)
+CASE a WHEN 5 THEN 1 ELSE -1 END
+----
+case [type=int]
+ ├── variable: a:1 [type=int]
+ ├── when [type=int]
+ │    ├── const: 5 [type=int]
+ │    └── const: 1 [type=int]
+ └── const: -1 [type=int]
+
+build-scalar vars=(a int, b int)
+CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END
+----
+case [type=int]
+ ├── plus [type=int]
+ │    ├── variable: a:1 [type=int]
+ │    └── const: 3 [type=int]
+ ├── when [type=int]
+ │    ├── mult [type=int]
+ │    │    ├── const: 5 [type=int]
+ │    │    └── variable: b:2 [type=int]
+ │    └── mod [type=int]
+ │         ├── const: 1 [type=int]
+ │         └── variable: b:2 [type=int]
+ ├── when [type=int]
+ │    ├── const: 6 [type=int]
+ │    └── const: 2 [type=int]
+ └── const: -1 [type=int]
+
+# Tests for CASE with no ELSE statement
+build-scalar vars=(a int)
+CASE WHEN a > 5 THEN 1 END
+----
+case [type=int]
+ ├── true [type=bool]
+ ├── when [type=int]
+ │    ├── gt [type=bool]
+ │    │    ├── variable: a:1 [type=int]
+ │    │    └── const: 5 [type=int]
+ │    └── const: 1 [type=int]
+ └── null [type=int]
+
+build-scalar vars=(a int)
+CASE a WHEN 5 THEN 1 END
+----
+case [type=int]
+ ├── variable: a:1 [type=int]
+ ├── when [type=int]
+ │    ├── const: 5 [type=int]
+ │    └── const: 1 [type=int]
+ └── null [type=int]
+
+build-scalar vars=(a int)
+a BETWEEN 1 AND 4
+----
+and [type=bool]
+ ├── ge [type=bool]
+ │    ├── variable: a:1 [type=int]
+ │    └── const: 1 [type=int]
+ └── le [type=bool]
+      ├── variable: a:1 [type=int]
+      └── const: 4 [type=int]
+
+build-scalar vars=(a int)
+a NOT BETWEEN 1 AND 4
+----
+not [type=bool]
+ └── and [type=bool]
+      ├── ge [type=bool]
+      │    ├── variable: a:1 [type=int]
+      │    └── const: 1 [type=int]
+      └── le [type=bool]
+           ├── variable: a:1 [type=int]
+           └── const: 4 [type=int]
+
+build-scalar vars=(a int)
+a BETWEEN SYMMETRIC 1 AND 4
+----
+or [type=bool]
+ ├── and [type=bool]
+ │    ├── ge [type=bool]
+ │    │    ├── variable: a:1 [type=int]
+ │    │    └── const: 1 [type=int]
+ │    └── le [type=bool]
+ │         ├── variable: a:1 [type=int]
+ │         └── const: 4 [type=int]
+ └── and [type=bool]
+      ├── ge [type=bool]
+      │    ├── variable: a:1 [type=int]
+      │    └── const: 4 [type=int]
+      └── le [type=bool]
+           ├── variable: a:1 [type=int]
+           └── const: 1 [type=int]
+
+build-scalar vars=(a int)
+a NOT BETWEEN SYMMETRIC 1 AND 4
+----
+not [type=bool]
+ └── or [type=bool]
+      ├── and [type=bool]
+      │    ├── ge [type=bool]
+      │    │    ├── variable: a:1 [type=int]
+      │    │    └── const: 1 [type=int]
+      │    └── le [type=bool]
+      │         ├── variable: a:1 [type=int]
+      │         └── const: 4 [type=int]
+      └── and [type=bool]
+           ├── ge [type=bool]
+           │    ├── variable: a:1 [type=int]
+           │    └── const: 4 [type=int]
+           └── le [type=bool]
+                ├── variable: a:1 [type=int]
+                └── const: 1 [type=int]
+
+build-scalar vars=(a int, b int, c int)
+a BETWEEN b AND c
+----
+and [type=bool]
+ ├── ge [type=bool]
+ │    ├── variable: a:1 [type=int]
+ │    └── variable: b:2 [type=int]
+ └── le [type=bool]
+      ├── variable: a:1 [type=int]
+      └── variable: c:3 [type=int]
+
+build-scalar vars=(a int, b int, c int)
+(a + b) BETWEEN (b + c) AND (c + a)
+----
+and [type=bool]
+ ├── ge [type=bool]
+ │    ├── plus [type=int]
+ │    │    ├── variable: a:1 [type=int]
+ │    │    └── variable: b:2 [type=int]
+ │    └── plus [type=int]
+ │         ├── variable: b:2 [type=int]
+ │         └── variable: c:3 [type=int]
+ └── le [type=bool]
+      ├── plus [type=int]
+      │    ├── variable: a:1 [type=int]
+      │    └── variable: b:2 [type=int]
+      └── plus [type=int]
+           ├── variable: c:3 [type=int]
+           └── variable: a:1 [type=int]
+
+build-scalar vars=(a int, b int, c int)
+(a + b) BETWEEN SYMMETRIC (b + c) AND (c + a)
+----
+or [type=bool]
+ ├── and [type=bool]
+ │    ├── ge [type=bool]
+ │    │    ├── plus [type=int]
+ │    │    │    ├── variable: a:1 [type=int]
+ │    │    │    └── variable: b:2 [type=int]
+ │    │    └── plus [type=int]
+ │    │         ├── variable: b:2 [type=int]
+ │    │         └── variable: c:3 [type=int]
+ │    └── le [type=bool]
+ │         ├── plus [type=int]
+ │         │    ├── variable: a:1 [type=int]
+ │         │    └── variable: b:2 [type=int]
+ │         └── plus [type=int]
+ │              ├── variable: c:3 [type=int]
+ │              └── variable: a:1 [type=int]
+ └── and [type=bool]
+      ├── ge [type=bool]
+      │    ├── plus [type=int]
+      │    │    ├── variable: a:1 [type=int]
+      │    │    └── variable: b:2 [type=int]
+      │    └── plus [type=int]
+      │         ├── variable: c:3 [type=int]
+      │         └── variable: a:1 [type=int]
+      └── le [type=bool]
+           ├── plus [type=int]
+           │    ├── variable: a:1 [type=int]
+           │    └── variable: b:2 [type=int]
+           └── plus [type=int]
+                ├── variable: b:2 [type=int]
+                └── variable: c:3 [type=int]
+
+build-scalar vars=(a int, b int, c int)
+(a, b) BETWEEN (1, 2) AND (3, 4)
+----
+and [type=bool]
+ ├── ge [type=bool]
+ │    ├── tuple [type=tuple{int, int}]
+ │    │    ├── variable: a:1 [type=int]
+ │    │    └── variable: b:2 [type=int]
+ │    └── tuple [type=tuple{int, int}]
+ │         ├── const: 1 [type=int]
+ │         └── const: 2 [type=int]
+ └── le [type=bool]
+      ├── tuple [type=tuple{int, int}]
+      │    ├── variable: a:1 [type=int]
+      │    └── variable: b:2 [type=int]
+      └── tuple [type=tuple{int, int}]
+           ├── const: 3 [type=int]
+           └── const: 4 [type=int]
+
+build-scalar vars=(a int, b int, c int)
+(a, b) NOT BETWEEN SYMMETRIC (1, 2) AND (3, 4)
+----
+not [type=bool]
+ └── or [type=bool]
+      ├── and [type=bool]
+      │    ├── ge [type=bool]
+      │    │    ├── tuple [type=tuple{int, int}]
+      │    │    │    ├── variable: a:1 [type=int]
+      │    │    │    └── variable: b:2 [type=int]
+      │    │    └── tuple [type=tuple{int, int}]
+      │    │         ├── const: 1 [type=int]
+      │    │         └── const: 2 [type=int]
+      │    └── le [type=bool]
+      │         ├── tuple [type=tuple{int, int}]
+      │         │    ├── variable: a:1 [type=int]
+      │         │    └── variable: b:2 [type=int]
+      │         └── tuple [type=tuple{int, int}]
+      │              ├── const: 3 [type=int]
+      │              └── const: 4 [type=int]
+      └── and [type=bool]
+           ├── ge [type=bool]
+           │    ├── tuple [type=tuple{int, int}]
+           │    │    ├── variable: a:1 [type=int]
+           │    │    └── variable: b:2 [type=int]
+           │    └── tuple [type=tuple{int, int}]
+           │         ├── const: 3 [type=int]
+           │         └── const: 4 [type=int]
+           └── le [type=bool]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── variable: a:1 [type=int]
+                │    └── variable: b:2 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── const: 2 [type=int]
+
+# The left side of BETWEEN is typed differently in the two comparisons.
+build-scalar
+'' BETWEEN ''::BYTES AND ''
+----
+and [type=bool]
+ ├── ge [type=bool]
+ │    ├── const: '\x' [type=bytes]
+ │    └── const: '\x' [type=bytes]
+ └── le [type=bool]
+      ├── const: '' [type=string]
+      └── const: '' [type=string]
+
+build-scalar
+'' BETWEEN SYMMETRIC ''::BYTES AND ''
+----
+or [type=bool]
+ ├── and [type=bool]
+ │    ├── ge [type=bool]
+ │    │    ├── const: '\x' [type=bytes]
+ │    │    └── const: '\x' [type=bytes]
+ │    └── le [type=bool]
+ │         ├── const: '' [type=string]
+ │         └── const: '' [type=string]
+ └── and [type=bool]
+      ├── ge [type=bool]
+      │    ├── const: '' [type=string]
+      │    └── const: '' [type=string]
+      └── le [type=bool]
+           ├── const: '\x' [type=bytes]
+           └── const: '\x' [type=bytes]
+
+build-scalar
+NULL
+----
+null [type=unknown]
+
+build-scalar
+NULL::int
+----
+cast: INT8 [type=int]
+ └── null [type=unknown]
+
+build-scalar vars=(a int[])
+a = ARRAY[1, 2, 3]
+----
+eq [type=bool]
+ ├── variable: a:1 [type=int[]]
+ └── array: [type=int[]]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar vars=(a int[])
+a = ARRAY[1, 1.0, '1']
+----
+eq [type=bool]
+ ├── variable: a:1 [type=int[]]
+ └── array: [type=int[]]
+      ├── const: 1 [type=int]
+      ├── const: 1 [type=int]
+      └── const: 1 [type=int]
+
+build-scalar vars=(a float[])
+a = ARRAY[1, 1.1, '1.123']
+----
+eq [type=bool]
+ ├── variable: a:1 [type=float[]]
+ └── array: [type=float[]]
+      ├── const: 1.0 [type=float]
+      ├── const: 1.1 [type=float]
+      └── const: 1.123 [type=float]
+
+build-scalar vars=(a int[])
+a = ARRAY[]
+----
+eq [type=bool]
+ ├── variable: a:1 [type=int[]]
+ └── array: [type=int[]]
+
+build-scalar vars=(a string[])
+a = ARRAY['foo', 'bar', 'baz']
+----
+eq [type=bool]
+ ├── variable: a:1 [type=string[]]
+ └── array: [type=string[]]
+      ├── const: 'foo' [type=string]
+      ├── const: 'bar' [type=string]
+      └── const: 'baz' [type=string]
+
+build-scalar
+'{"x": "bar"}' -> 'x'
+----
+fetch-val [type=jsonb]
+ ├── const: '{"x": "bar"}' [type=jsonb]
+ └── const: 'x' [type=string]
+
+build-scalar
+('{"x": "bar"}') -> 'x'
+----
+fetch-val [type=jsonb]
+ ├── const: '{"x": "bar"}' [type=jsonb]
+ └── const: 'x' [type=string]
+
+build-scalar vars=(a json)
+a->>'a' = 'b'
+----
+eq [type=bool]
+ ├── fetch-text [type=string]
+ │    ├── variable: a:1 [type=jsonb]
+ │    └── const: 'a' [type=string]
+ └── const: 'b' [type=string]
+
+build-scalar vars=(a json)
+a->'a' = '"b"'
+----
+eq [type=bool]
+ ├── fetch-val [type=jsonb]
+ │    ├── variable: a:1 [type=jsonb]
+ │    └── const: 'a' [type=string]
+ └── const: '"b"' [type=jsonb]
+
+build-scalar vars=(a json)
+a#>ARRAY['a'] = '"b"'
+----
+eq [type=bool]
+ ├── fetch-val-path [type=jsonb]
+ │    ├── variable: a:1 [type=jsonb]
+ │    └── array: [type=string[]]
+ │         └── const: 'a' [type=string]
+ └── const: '"b"' [type=jsonb]
+
+build-scalar vars=(a json)
+a#>>ARRAY['a'] = 'b'
+----
+eq [type=bool]
+ ├── fetch-text-path [type=string]
+ │    ├── variable: a:1 [type=jsonb]
+ │    └── array: [type=string[]]
+ │         └── const: 'a' [type=string]
+ └── const: 'b' [type=string]
+
+build-scalar vars=(a json, b json)
+a || b
+----
+concat [type=jsonb]
+ ├── variable: a:1 [type=jsonb]
+ └── variable: b:2 [type=jsonb]
+
+build-scalar
+'hello' COLLATE en
+----
+collate locale='en' [type=collatedstring{en}]
+ └── const: 'hello' [type=string]
+
+build-scalar
+'hello' COLLATE en_US
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── const: 'hello' [type=string]
+
+build-scalar
+'hello' COLLATE "en_US"
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── const: 'hello' [type=string]
+
+build-scalar
+'hello' COLLATE "en-US"
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── const: 'hello' [type=string]
+
+build-scalar
+'hello' COLLATE "foo"
+----
+error: invalid locale foo: language: subtag "foo" is well-formed but unknown
+
+build-scalar
+random()
+----
+function: random [type=float]
+
+build-scalar
+ARRAY[1, 2] || NULL
+----
+concat [type=int[]]
+ ├── array: [type=int[]]
+ │    ├── const: 1 [type=int]
+ │    └── const: 2 [type=int]
+ └── cast: INT8[] [type=int[]]
+      └── null [type=unknown]
+
+build-scalar
+NULL || ARRAY[1, 2]
+----
+concat [type=int[]]
+ ├── cast: INT8[] [type=int[]]
+ │    └── null [type=unknown]
+ └── array: [type=int[]]
+      ├── const: 1 [type=int]
+      └── const: 2 [type=int]
+
+build-scalar
+ARRAY[1, 2] || NULL::smallint
+----
+concat [type=int[]]
+ ├── array: [type=int[]]
+ │    ├── const: 1 [type=int]
+ │    └── const: 2 [type=int]
+ └── cast: INT2 [type=int2]
+      └── null [type=unknown]
+
+build-scalar
+NULL::bigint || ARRAY[1, 2]
+----
+concat [type=int[]]
+ ├── cast: INT8 [type=int]
+ │    └── null [type=unknown]
+ └── array: [type=int[]]
+      ├── const: 1 [type=int]
+      └── const: 2 [type=int]
+
+build-scalar
+ARRAY['"foo"'::jsonb]
+----
+array: [type=jsonb[]]
+ └── const: '"foo"' [type=jsonb]
+
+build-scalar
+ARRAY['"foo"'::json]
+----
+array: [type=jsonb[]]
+ └── const: '"foo"' [type=jsonb]
+
+opt
+SELECT -((-9223372036854775808):::int)
+----
+values
+ ├── columns: "?column?":1
+ └── (-(-9223372036854775808),)
+
+# TODO(justin): modify build-scalar to handle subqueries
+# so this can use it.
+build
+SELECT ARRAY(SELECT 1)
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── project
+                ├── columns: "?column?":1!null
+                ├── values
+                │    └── ()
+                └── projections
+                     └── 1 [as="?column?":1]
+
+exec-ddl
+CREATE TABLE x (a INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE y (b INT PRIMARY KEY)
+----
+
+build
+SELECT b, ARRAY(SELECT a FROM x WHERE x.a = y.b) FROM y
+----
+project
+ ├── columns: b:1!null array:7
+ ├── scan y
+ │    └── columns: b:1!null y.crdb_internal_mvcc_timestamp:2 y.tableoid:3
+ └── projections
+      └── array-flatten [as=array:7]
+           └── project
+                ├── columns: a:4!null
+                └── select
+                     ├── columns: a:4!null x.crdb_internal_mvcc_timestamp:5 x.tableoid:6
+                     ├── scan x
+                     │    └── columns: a:4!null x.crdb_internal_mvcc_timestamp:5 x.tableoid:6
+                     └── filters
+                          └── a:4 = b:1
+
+build
+SELECT b, ARRAY(SELECT a FROM x ORDER BY a) FROM y
+----
+project
+ ├── columns: b:1!null array:7
+ ├── scan y
+ │    └── columns: b:1!null y.crdb_internal_mvcc_timestamp:2 y.tableoid:3
+ └── projections
+      └── array-flatten [as=array:7]
+           └── project
+                ├── columns: a:4!null
+                ├── ordering: +4
+                └── scan x
+                     ├── columns: a:4!null x.crdb_internal_mvcc_timestamp:5 x.tableoid:6
+                     └── ordering: +4
+
+build
+SELECT ARRAY(VALUES ('foo'), ('bar'), ('baz'))
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── values
+                ├── columns: column1:1!null
+                ├── ('foo',)
+                ├── ('bar',)
+                └── ('baz',)
+
+build
+SELECT ARRAY(VALUES (ARRAY[1]))
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── values
+                ├── columns: column1:1
+                └── (ARRAY[1],)
+
+build
+SELECT ARRAY(SELECT (1, 2))
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── project
+                ├── columns: "?column?":1!null
+                ├── values
+                │    └── ()
+                └── projections
+                     └── (1, 2) [as="?column?":1]
+
+build
+SELECT ARRAY(VALUES ((1, 2)))
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── values
+                ├── columns: column1:1
+                └── ((1, 2),)
+
+build
+SELECT ARRAY(VALUES ('{}'::JSONB))
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── values
+                ├── columns: column1:1!null
+                └── ('{}',)
+
+build
+SELECT ARRAY(SELECT 1, 2)
+----
+error (42601): subquery must return only one column, found 2
+
+build
+SELECT ARRAY(SELECT generate_series(1,100) ORDER BY 1 DESC)
+----
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── sort
+                ├── columns: generate_series:1
+                ├── ordering: -1
+                └── project-set
+                     ├── columns: generate_series:1
+                     ├── values
+                     │    └── ()
+                     └── zip
+                          └── generate_series(1, 100)
+
+build-scalar
+1 = ANY ARRAY[1, 2, 3]
+----
+any-scalar: eq [type=bool]
+ ├── const: 1 [type=int]
+ └── array: [type=int[]]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar
+1 > ANY ARRAY[1, 2, 3]
+----
+any-scalar: gt [type=bool]
+ ├── const: 1 [type=int]
+ └── array: [type=int[]]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar
+1 = ALL ARRAY[1, 2, 3]
+----
+not [type=bool]
+ └── any-scalar: ne [type=bool]
+      ├── const: 1 [type=int]
+      └── array: [type=int[]]
+           ├── const: 1 [type=int]
+           ├── const: 2 [type=int]
+           └── const: 3 [type=int]
+
+build-scalar
+1 > ALL ARRAY[1, 2, 3]
+----
+not [type=bool]
+ └── any-scalar: le [type=bool]
+      ├── const: 1 [type=int]
+      └── array: [type=int[]]
+           ├── const: 1 [type=int]
+           ├── const: 2 [type=int]
+           └── const: 3 [type=int]
+
+build-scalar
+1 = ANY (1, 2, 3)
+----
+any-scalar: eq [type=bool]
+ ├── const: 1 [type=int]
+ └── tuple [type=tuple{int, int, int}]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar
+'foo' = ANY ('foo', 'bar', 'baz')
+----
+any-scalar: eq [type=bool]
+ ├── const: 'foo' [type=string]
+ └── tuple [type=tuple{string, string, string}]
+      ├── const: 'foo' [type=string]
+      ├── const: 'bar' [type=string]
+      └── const: 'baz' [type=string]
+
+
+build-scalar
+1 = ANY ()
+----
+any-scalar: eq [type=bool]
+ ├── const: 1 [type=int]
+ └── tuple [type=tuple]
+
+build
+SELECT 1 > ALL ARRAY['foo']
+----
+error (22023): unsupported comparison operator: 1 > ALL ARRAY['foo']: could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+build-scalar vars=(a int[], b string[], c float[], d int)
+(a[1], b[1+1], c[d])
+----
+tuple [type=tuple{int, string, float}]
+ ├── indirection [type=int]
+ │    ├── variable: a:1 [type=int[]]
+ │    └── const: 1 [type=int]
+ ├── indirection [type=string]
+ │    ├── variable: b:2 [type=string[]]
+ │    └── plus [type=int]
+ │         ├── const: 1 [type=int]
+ │         └── const: 1 [type=int]
+ └── indirection [type=float]
+      ├── variable: c:3 [type=float[]]
+      └── variable: d:4 [type=int]
+
+build-scalar vars=(a int, b string, c int[])
+(
+    (a IS OF (INT), a IS OF (INT, STRING), a IS OF (STRING)),
+    (a IS NOT OF (INT), a IS NOT OF (INT, STRING), a IS NOT OF (STRING)),
+    (b IS NOT OF (INT), b IS NOT OF (INT, STRING), b IS NOT OF (STRING)),
+    (c IS NOT OF (INT[]), c IS OF (INT[]), c IS OF (STRING[]))
+)
+----
+tuple [type=tuple{tuple{bool, bool, bool}, tuple{bool, bool, bool}, tuple{bool, bool, bool}, tuple{bool, bool, bool}}]
+ ├── tuple [type=tuple{bool, bool, bool}]
+ │    ├── true [type=bool]
+ │    ├── true [type=bool]
+ │    └── false [type=bool]
+ ├── tuple [type=tuple{bool, bool, bool}]
+ │    ├── false [type=bool]
+ │    ├── false [type=bool]
+ │    └── true [type=bool]
+ ├── tuple [type=tuple{bool, bool, bool}]
+ │    ├── true [type=bool]
+ │    ├── false [type=bool]
+ │    └── false [type=bool]
+ └── tuple [type=tuple{bool, bool, bool}]
+      ├── false [type=bool]
+      ├── true [type=bool]
+      └── false [type=bool]
+
+build-scalar vars=(a string)
+a COLLATE en
+----
+collate locale='en' [type=collatedstring{en}]
+ └── variable: a:1 [type=string]
+
+build-scalar vars=(a string)
+a COLLATE en_US
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── variable: a:1 [type=string]
+
+build-scalar vars=(a string)
+a COLLATE "en_US"
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── variable: a:1 [type=string]
+
+build-scalar vars=(a string)
+a COLLATE "en-US"
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── variable: a:1 [type=string]
+
+build-scalar vars=(a string)
+a COLLATE "foo"
+----
+error: invalid locale foo: language: subtag "foo" is well-formed but unknown
+
+exec-ddl
+CREATE TABLE u (x INT)
+----
+
+exec-ddl
+CREATE TABLE v (y INT[])
+----
+
+build
+SELECT ARRAY(SELECT x FROM u ORDER BY x)
+----
+project
+ ├── columns: array:5
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:5]
+           └── sort
+                ├── columns: x:1
+                ├── ordering: +1
+                └── project
+                     ├── columns: x:1
+                     └── scan u
+                          └── columns: x:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT * FROM v WHERE y = ARRAY(SELECT x FROM u ORDER BY x)
+----
+project
+ ├── columns: y:1!null
+ └── select
+      ├── columns: y:1!null v.rowid:2!null v.crdb_internal_mvcc_timestamp:3 v.tableoid:4
+      ├── scan v
+      │    └── columns: y:1 v.rowid:2!null v.crdb_internal_mvcc_timestamp:3 v.tableoid:4
+      └── filters
+           └── eq
+                ├── y:1
+                └── array-flatten
+                     └── sort
+                          ├── columns: x:5
+                          ├── ordering: +5
+                          └── project
+                               ├── columns: x:5
+                               └── scan u
+                                    └── columns: x:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+
+build
+SELECT ARRAY(SELECT (y, 2) FROM u ORDER BY x) FROM v
+----
+project
+ ├── columns: array:10
+ ├── scan v
+ │    └── columns: y:1 v.rowid:2!null v.crdb_internal_mvcc_timestamp:3 v.tableoid:4
+ └── projections
+      └── array-flatten col=9 [as=array:10]
+           └── sort
+                ├── columns: "?column?":9  [hidden: x:5]
+                ├── ordering: +5
+                └── project
+                     ├── columns: "?column?":9 x:5
+                     ├── scan u
+                     │    └── columns: x:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+                     └── projections
+                          └── (y:1, 2) [as="?column?":9]
+
+build
+SELECT ARRAY(SELECT y FROM u ORDER BY x) FROM v
+----
+project
+ ├── columns: array:10
+ ├── scan v
+ │    └── columns: v.y:1 v.rowid:2!null v.crdb_internal_mvcc_timestamp:3 v.tableoid:4
+ └── projections
+      └── array-flatten col=9 [as=array:10]
+           └── sort
+                ├── columns: y:9  [hidden: x:5]
+                ├── ordering: +5
+                └── project
+                     ├── columns: y:9 x:5
+                     ├── scan u
+                     │    └── columns: x:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+                     └── projections
+                          └── v.y:1 [as=y:9]
+
+build-scalar
+ISERROR(1/0)
+----
+if-err [type=bool]
+ └── div [type=decimal]
+      ├── const: 1 [type=int]
+      └── const: 0 [type=int]
+
+build-scalar
+ISERROR(1/0, '22012')
+----
+if-err [type=bool]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ └── err-code
+      └── const: '22012' [type=string]
+
+build-scalar vars=(a decimal)
+IFERROR(1/0, a)
+----
+if-err [type=decimal]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ └── else
+      └── variable: a:1 [type=decimal]
+
+build-scalar vars=(a decimal, b string)
+IFERROR(1/0, a, b)
+----
+if-err [type=decimal]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ ├── else
+ │    └── variable: a:1 [type=decimal]
+ └── err-code
+      └── variable: b:2 [type=string]
+
+build-scalar vars=(a decimal)
+IFERROR(1/0, a, '10000')
+----
+if-err [type=decimal]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ ├── else
+ │    └── variable: a:1 [type=decimal]
+ └── err-code
+      └── const: '10000' [type=string]
+
+# Verify that we build a Coalesce of the correct type when the inputs
+# are NULL (#50978).
+build-scalar
+CASE WHEN true THEN 1234:::OID ELSE COALESCE(NULL, NULL) END
+----
+case [type=oid]
+ ├── true [type=bool]
+ ├── when [type=oid]
+ │    ├── true [type=bool]
+ │    └── const: 1234 [type=oid]
+ └── cast: OID [type=oid]
+      └── coalesce [type=unknown]
+           ├── null [type=unknown]
+           └── null [type=unknown]
+
+# Make sure NULL arguments for AND/OR/NOT are typed as boolean.
+build-scalar
+NULL AND true
+----
+and [type=bool]
+ ├── cast: BOOL [type=bool]
+ │    └── null [type=unknown]
+ └── true [type=bool]
+
+build-scalar
+false OR NULL
+----
+or [type=bool]
+ ├── false [type=bool]
+ └── cast: BOOL [type=bool]
+      └── null [type=unknown]
+
+build-scalar
+NOT NULL
+----
+not [type=bool]
+ └── cast: BOOL [type=bool]
+      └── null [type=unknown]
+
+build-scalar vars=(a geometry, b geometry)
+a ~ b
+----
+b-box-covers [type=bool]
+ ├── variable: a:1 [type=geometry]
+ └── variable: b:2 [type=geometry]
+
+build-scalar vars=(a geometry, b box2d)
+a ~ b
+----
+b-box-covers [type=bool]
+ ├── variable: a:1 [type=geometry]
+ └── variable: b:2 [type=box2d]
+
+build-scalar vars=(a box2d, b geometry)
+a ~ b
+----
+b-box-covers [type=bool]
+ ├── variable: a:1 [type=box2d]
+ └── variable: b:2 [type=geometry]
+
+build-scalar vars=(a box2d, b box2d)
+a ~ b
+----
+b-box-covers [type=bool]
+ ├── variable: a:1 [type=box2d]
+ └── variable: b:2 [type=box2d]
+
+build-scalar vars=(a geometry, b geometry)
+a && b
+----
+b-box-intersects [type=bool]
+ ├── variable: a:1 [type=geometry]
+ └── variable: b:2 [type=geometry]
+
+build-scalar vars=(a geometry, b box2d)
+a && b
+----
+b-box-intersects [type=bool]
+ ├── variable: a:1 [type=geometry]
+ └── variable: b:2 [type=box2d]
+
+build-scalar vars=(a box2d, b geometry)
+a && b
+----
+b-box-intersects [type=bool]
+ ├── variable: a:1 [type=box2d]
+ └── variable: b:2 [type=geometry]
+
+build-scalar vars=(a box2d, b box2d)
+a && b
+----
+b-box-intersects [type=bool]
+ ├── variable: a:1 [type=box2d]
+ └── variable: b:2 [type=box2d]
+
+build-scalar vars=(a string, b string)
+a ~ b
+----
+reg-match [type=bool]
+ ├── variable: a:1 [type=string]
+ └── variable: b:2 [type=string]
+
+build-scalar vars=(a inet, b inet)
+a && b
+----
+overlaps [type=bool]
+ ├── variable: a:1 [type=inet]
+ └── variable: b:2 [type=inet]
+
+build-scalar vars=(a int[], b int[])
+a && b
+----
+overlaps [type=bool]
+ ├── variable: a:1 [type=int[]]
+ └── variable: b:2 [type=int[]]
+
+build-scalar vars=(a geometry[], b geometry[])
+a && b
+----
+overlaps [type=bool]
+ ├── variable: a:1 [type=geometry[]]
+ └── variable: b:2 [type=geometry[]]
+
+build-scalar vars=(a string, b geometry)
+a ~ b
+----
+error: unsupported comparison operator: <string> ~ <geometry>
+
+build-scalar vars=(a geometry[], b geometry)
+a && b
+----
+error: unsupported comparison operator: <geometry[]> && <geometry>
+
+# Regression test for #57959. Ensure that the CASE statement is typed as
+# string[].
+build-scalar vars=(a varbit)
+(CASE WHEN (a) IN (a) THEN ARRAY[] ELSE ARRAY[NULL] END) IS NULL
+----
+is [type=bool]
+ ├── case [type=string[]]
+ │    ├── true [type=bool]
+ │    ├── when [type=string[]]
+ │    │    ├── in [type=bool]
+ │    │    │    ├── variable: a:1 [type=varbit]
+ │    │    │    └── tuple [type=tuple{varbit}]
+ │    │    │         └── variable: a:1 [type=varbit]
+ │    │    └── array: [type=string[]]
+ │    └── array: [type=string[]]
+ │         └── null [type=unknown]
+ └── null [type=unknown]
+
+build-scalar vars=(a varbit)
+(CASE WHEN (a) IN (a) THEN ARRAY[NULL] ELSE ARRAY[] END) IS NULL
+----
+error: incompatible value type: cannot determine type of empty array. Consider casting to the desired type, for example ARRAY[]::int[]
+
+# Regression test for #75365. Do not create invalid casts when building CASE
+# expressions. We build a Select expressions here instead of a scalar so that
+# logical properties are generated, which is required to reproduce the bug.
+build
+SELECT CASE WHEN false THEN ARRAY[]::RECORD[] ELSE ARRAY[('', 0)] END
+----
+project
+ ├── columns: array:1!null
+ ├── values
+ │    └── ()
+ └── projections
+      └── CASE WHEN false THEN ARRAY[] ELSE ARRAY[('', 0)]::RECORD[] END [as=array:1]
+
+build
+SELECT CASE WHEN false THEN ARRAY[('', 0)] WHEN true THEN ARRAY[('', 0)] ELSE ARRAY[]::RECORD[] END
+----
+project
+ ├── columns: array:1!null
+ ├── values
+ │    └── ()
+ └── projections
+      └── CASE WHEN false THEN ARRAY[('', 0)]::RECORD[] WHEN true THEN ARRAY[('', 0)]::RECORD[] ELSE ARRAY[] END [as=array:1]
+
+build
+SELECT CASE WHEN false THEN ARRAY[('', 0)] ELSE ARRAY[]::RECORD[] END
+----
+project
+ ├── columns: array:1!null
+ ├── values
+ │    └── ()
+ └── projections
+      └── CASE WHEN false THEN ARRAY[('', 0)]::RECORD[] ELSE ARRAY[] END [as=array:1]
+
+build
+SELECT CASE WHEN false THEN ARRAY[('', 0)] WHEN true THEN ARRAY[]::RECORD[] ELSE ARRAY[('', 0)] END
+----
+project
+ ├── columns: array:1!null
+ ├── values
+ │    └── ()
+ └── projections
+      └── CASE WHEN false THEN ARRAY[('', 0)]::RECORD[] WHEN true THEN ARRAY[] ELSE ARRAY[('', 0)]::RECORD[] END [as=array:1]
+
+# Regression test for #76807. Do not create invalid casts when building COALESCE
+# and IF expressions.
+build
+SELECT COALESCE(t.v, ARRAY[]:::RECORD[])
+FROM (VALUES (ARRAY[(1, 'foo')])) AS t(v)
+----
+project
+ ├── columns: coalesce:2
+ ├── values
+ │    ├── columns: column1:1
+ │    └── (ARRAY[(1, 'foo')],)
+ └── projections
+      └── COALESCE(column1:1::RECORD[], ARRAY[]) [as=coalesce:2]
+
+build
+SELECT COALESCE(ARRAY[]:::RECORD[], t.v)
+FROM (VALUES (ARRAY[(1, 'foo')])) AS t(v)
+----
+project
+ ├── columns: coalesce:2
+ ├── values
+ │    ├── columns: column1:1
+ │    └── (ARRAY[(1, 'foo')],)
+ └── projections
+      └── COALESCE(ARRAY[], column1:1::RECORD[]) [as=coalesce:2]
+
+build
+SELECT IF(true, t.v, ARRAY[]:::RECORD[])
+FROM (VALUES (ARRAY[(1, 'foo')])) AS t(v)
+----
+project
+ ├── columns: if:2
+ ├── values
+ │    ├── columns: column1:1
+ │    └── (ARRAY[(1, 'foo')],)
+ └── projections
+      └── CASE WHEN true THEN column1:1::RECORD[] ELSE ARRAY[] END [as=if:2]
+
+build
+SELECT IF(true, ARRAY[]:::RECORD[], t.v)
+FROM (VALUES (ARRAY[(1, 'foo')])) AS t(v)
+----
+project
+ ├── columns: if:2
+ ├── values
+ │    ├── columns: column1:1
+ │    └── (ARRAY[(1, 'foo')],)
+ └── projections
+      └── CASE WHEN true THEN ARRAY[] ELSE column1:1::RECORD[] END [as=if:2]
+
+# Regression test for #102110. Ensure that CASE is typed correctly when
+# different types are used in different branches.
+exec-ddl
+CREATE TABLE t102110_1 (t TEXT);
+----
+
+exec-ddl
+CREATE TABLE t102110_2 (c CHAR);
+----
+
+build
+SELECT t102110_1.t FROM t102110_1, t102110_2
+WHERE t102110_1.t NOT BETWEEN t102110_1.t AND
+  (CASE WHEN NULL THEN t102110_2.c ELSE t102110_1.t END);
+----
+project
+ ├── columns: t:1
+ └── select
+      ├── columns: t:1 t102110_1.rowid:2!null t102110_1.crdb_internal_mvcc_timestamp:3 t102110_1.tableoid:4 c:5 t102110_2.rowid:6!null t102110_2.crdb_internal_mvcc_timestamp:7 t102110_2.tableoid:8
+      ├── inner-join (cross)
+      │    ├── columns: t:1 t102110_1.rowid:2!null t102110_1.crdb_internal_mvcc_timestamp:3 t102110_1.tableoid:4 c:5 t102110_2.rowid:6!null t102110_2.crdb_internal_mvcc_timestamp:7 t102110_2.tableoid:8
+      │    ├── scan t102110_1
+      │    │    └── columns: t:1 t102110_1.rowid:2!null t102110_1.crdb_internal_mvcc_timestamp:3 t102110_1.tableoid:4
+      │    ├── scan t102110_2
+      │    │    └── columns: c:5 t102110_2.rowid:6!null t102110_2.crdb_internal_mvcc_timestamp:7 t102110_2.tableoid:8
+      │    └── filters (true)
+      └── filters
+           └── NOT ((t:1 >= t:1) AND (t:1 <= CASE WHEN NULL THEN c:5::STRING ELSE t:1 END))
+
+build
+SELECT t102110_1.t FROM t102110_1, t102110_2
+WHERE t102110_1.t NOT BETWEEN t102110_1.t AND
+  (CASE WHEN NULL THEN t102110_1.t ELSE t102110_2.c END);
+----
+project
+ ├── columns: t:1
+ └── select
+      ├── columns: t:1 t102110_1.rowid:2!null t102110_1.crdb_internal_mvcc_timestamp:3 t102110_1.tableoid:4 c:5 t102110_2.rowid:6!null t102110_2.crdb_internal_mvcc_timestamp:7 t102110_2.tableoid:8
+      ├── inner-join (cross)
+      │    ├── columns: t:1 t102110_1.rowid:2!null t102110_1.crdb_internal_mvcc_timestamp:3 t102110_1.tableoid:4 c:5 t102110_2.rowid:6!null t102110_2.crdb_internal_mvcc_timestamp:7 t102110_2.tableoid:8
+      │    ├── scan t102110_1
+      │    │    └── columns: t:1 t102110_1.rowid:2!null t102110_1.crdb_internal_mvcc_timestamp:3 t102110_1.tableoid:4
+      │    ├── scan t102110_2
+      │    │    └── columns: c:5 t102110_2.rowid:6!null t102110_2.crdb_internal_mvcc_timestamp:7 t102110_2.tableoid:8
+      │    └── filters (true)
+      └── filters
+           └── NOT ((t:1 >= t:1) AND (t:1 <= CASE WHEN NULL THEN t:1::BPCHAR ELSE c:5::BPCHAR END))
+
+# IF is typed differently (Postgres does not support IF).
+build
+SELECT t102110_1.t FROM t102110_1, t102110_2
+WHERE t102110_1.t NOT BETWEEN t102110_1.t AND
+  IF(NULL, t102110_2.c, t102110_1.t);
+----
+project
+ ├── columns: t:1
+ └── select
+      ├── columns: t:1 t102110_1.rowid:2!null t102110_1.crdb_internal_mvcc_timestamp:3 t102110_1.tableoid:4 c:5 t102110_2.rowid:6!null t102110_2.crdb_internal_mvcc_timestamp:7 t102110_2.tableoid:8
+      ├── inner-join (cross)
+      │    ├── columns: t:1 t102110_1.rowid:2!null t102110_1.crdb_internal_mvcc_timestamp:3 t102110_1.tableoid:4 c:5 t102110_2.rowid:6!null t102110_2.crdb_internal_mvcc_timestamp:7 t102110_2.tableoid:8
+      │    ├── scan t102110_1
+      │    │    └── columns: t:1 t102110_1.rowid:2!null t102110_1.crdb_internal_mvcc_timestamp:3 t102110_1.tableoid:4
+      │    ├── scan t102110_2
+      │    │    └── columns: c:5 t102110_2.rowid:6!null t102110_2.crdb_internal_mvcc_timestamp:7 t102110_2.tableoid:8
+      │    └── filters (true)
+      └── filters
+           └── NOT ((t:1 >= t:1) AND (t:1 <= CASE NULL WHEN true THEN c:5 ELSE t:1::BPCHAR END))
+
+exec-ddl
+CREATE TABLE t108360_1 (t TEXT)
+----
+
+exec-ddl
+CREATE TABLE t108360_2 (c CHAR)
+----
+
+build
+SELECT (CASE WHEN t108360_1.t > t108360_2.c THEN t108360_1.t ELSE t108360_2.c END)
+FROM t108360_1, t108360_2
+WHERE t108360_1.t = (CASE WHEN t108360_1.t > t108360_2.c THEN t108360_1.t ELSE t108360_2.c END);
+----
+project
+ ├── columns: c:9
+ ├── select
+ │    ├── columns: t:1!null t108360_1.rowid:2!null t108360_1.crdb_internal_mvcc_timestamp:3 t108360_1.tableoid:4 t108360_2.c:5 t108360_2.rowid:6!null t108360_2.crdb_internal_mvcc_timestamp:7 t108360_2.tableoid:8
+ │    ├── inner-join (cross)
+ │    │    ├── columns: t:1 t108360_1.rowid:2!null t108360_1.crdb_internal_mvcc_timestamp:3 t108360_1.tableoid:4 t108360_2.c:5 t108360_2.rowid:6!null t108360_2.crdb_internal_mvcc_timestamp:7 t108360_2.tableoid:8
+ │    │    ├── scan t108360_1
+ │    │    │    └── columns: t:1 t108360_1.rowid:2!null t108360_1.crdb_internal_mvcc_timestamp:3 t108360_1.tableoid:4
+ │    │    ├── scan t108360_2
+ │    │    │    └── columns: t108360_2.c:5 t108360_2.rowid:6!null t108360_2.crdb_internal_mvcc_timestamp:7 t108360_2.tableoid:8
+ │    │    └── filters (true)
+ │    └── filters
+ │         └── t:1 = CASE WHEN t:1 > t108360_2.c:5 THEN t:1::BPCHAR ELSE t108360_2.c:5::BPCHAR END
+ └── projections
+      └── CASE WHEN t:1 > t108360_2.c:5 THEN t:1::BPCHAR ELSE t108360_2.c:5::BPCHAR END [as=c:9]

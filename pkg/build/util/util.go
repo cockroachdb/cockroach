@@ -1,0 +1,263 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+//
+// This file contains assorted utilities for working with Bazel internals.
+
+package util
+
+import (
+	"encoding/xml"
+	"fmt"
+	"io"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+)
+
+// Below are data structures representing the `test.xml` schema.
+// Ref: https://github.com/bazelbuild/rules_go/blob/master/go/tools/bzltestutil/xml.go
+
+// TestSuites represents the contents of a single test.xml file (<testsuites>).
+type TestSuites struct {
+	XMLName xml.Name    `xml:"testsuites"`
+	Suites  []testSuite `xml:"testsuite"`
+}
+
+type testSuite struct {
+	XMLName   xml.Name    `xml:"testsuite"`
+	TestCases []*testCase `xml:"testcase"`
+	Errors    int         `xml:"errors,attr"`
+	Failures  int         `xml:"failures,attr"`
+	Skipped   int         `xml:"skipped,attr"`
+	Tests     int         `xml:"tests,attr"`
+	Time      float64     `xml:"time,attr"`
+	Name      string      `xml:"name,attr"`
+	Timestamp string      `xml:"timestamp,attr"`
+}
+
+type testCase struct {
+	XMLName xml.Name `xml:"testcase"`
+	// Note that we deliberately exclude the `classname` attribute. It never
+	// contains useful information (always just the name of the package --
+	// this isn't Java so there isn't a classname) and excluding it causes
+	// the TeamCity UI to display the same data in a slightly more coherent
+	// and usable way.
+	Name    string      `xml:"name,attr"`
+	Time    string      `xml:"time,attr"`
+	Failure *XMLMessage `xml:"failure,omitempty"`
+	Error   *XMLMessage `xml:"error,omitempty"`
+	Skipped *XMLMessage `xml:"skipped,omitempty"`
+}
+
+// XMLMessage is a catch-all structure containing details about a test
+// failure.
+type XMLMessage struct {
+	Message  string     `xml:"message,attr"`
+	Attrs    []xml.Attr `xml:",any,attr"`
+	Contents string     `xml:",chardata"`
+}
+
+// AnyFailures returns true iff there are any errors/failures in the test.xml.
+func AnyFailures(suites TestSuites) bool {
+	for _, suite := range suites.Suites {
+		for _, testCase := range suite.TestCases {
+			if testCase.Failure != nil || testCase.Error != nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// OutputOfBinaryRule returns the path of the binary produced by the
+// given build target, relative to bazel-bin. That is,
+//
+//	filepath.Join(bazelBin, OutputOfBinaryRule(target, isWindows)) is the absolute
+//
+// path to the build binary for the target.
+func OutputOfBinaryRule(target string, isWindows bool) string {
+	colon := strings.Index(target, ":")
+	var bin string
+	if colon >= 0 {
+		bin = target[colon+1:]
+	} else {
+		bin = target[strings.LastIndex(target, "/")+1:]
+	}
+	var head string
+	if strings.HasPrefix(target, "@") {
+		doubleSlash := strings.Index(target, "//")
+		joinArgs := []string{"external", target[1:doubleSlash]}
+		joinArgs = append(joinArgs, strings.Split(target[doubleSlash+2:colon], "/")...)
+		head = filepath.Join(joinArgs...)
+	} else if colon >= 0 {
+		head = strings.TrimPrefix(target[:colon], "//")
+	} else {
+		head = strings.TrimPrefix(target, "//")
+	}
+	if isWindows {
+		return filepath.Join(head, bin+"_", bin+".exe")
+	}
+	return filepath.Join(head, bin+"_", bin)
+}
+
+// OutputsOfGenrule lists the outputs of a genrule. The first argument
+// is the name of the target (e.g. //docs/generated/sql), and the second
+// should be the output of `bazel query --output=xml $TARGET`. The
+// returned slice is the list of outputs, all of which are relative
+// paths atop `bazel-bin` as in `OutputOfBinaryRule`.
+func OutputsOfGenrule(target, xmlQueryOutput string) ([]string, error) {
+	// XML parsing is a bit heavyweight here, and encoding/xml
+	// refuses to parse the query output since it's XML 1.1 instead
+	// of 1.0. Have fun with regexes instead.
+	colon := strings.LastIndex(target, ":")
+	if colon < 0 {
+		colon = len(target)
+	}
+	regexStr := fmt.Sprintf("^<rule-output name=\"%s:(?P<Filename>.*)\"/>$", regexp.QuoteMeta(target[:colon]))
+	re, err := regexp.Compile(regexStr)
+	if err != nil {
+		return nil, err
+	}
+	var ret []string
+	for _, line := range strings.Split(xmlQueryOutput, "\n") {
+		line = strings.TrimSpace(line)
+		submatch := re.FindStringSubmatch(line)
+		if submatch == nil {
+			continue
+		}
+		relBinPath := filepath.Join(strings.TrimPrefix(target[:colon], "//"), submatch[1])
+		ret = append(ret, relBinPath)
+	}
+	return ret, nil
+}
+
+// MungeTestXML parses and slightly munges the XML in the source file and writes
+// it to the output file. TeamCity kind of knows how to interpret the schema,
+// but the schema isn't *exactly* what it's expecting. By munging the XML's
+// here we ensure that the TC test view is as useful as possible.
+func MungeTestXML(srcContent []byte, outFile io.Writer) error {
+	// Parse the XML into a TestSuites struct.
+	suites := TestSuites{}
+	err := xml.Unmarshal(srcContent, &suites)
+	// Note that we return an error if parsing fails. This isn't
+	// unexpected -- if we read the XML file before it's been
+	// completely written to disk, that will happen. Returning the
+	// error will cancel the write to disk, which is exactly what we
+	// want.
+	if err != nil {
+		return err
+	}
+	var res testSuite
+	for _, suite := range suites.Suites {
+		res.XMLName = suite.XMLName
+		res.TestCases = append(res.TestCases, suite.TestCases...)
+		if res.Name == "" {
+			i := strings.LastIndexByte(suite.Name, '.')
+			if i < 0 {
+				i = len(suite.Name)
+			}
+			res.Name = suite.Name[0:i]
+		}
+		res.Errors += suite.Errors
+		res.Failures += suite.Failures
+		res.Skipped += suite.Skipped
+		res.Tests += suite.Tests
+		res.Time += suite.Time
+		if res.Timestamp == "" {
+			res.Timestamp = suite.Timestamp
+		} else {
+			res.Timestamp = min(res.Timestamp, suite.Timestamp)
+		}
+	}
+	return writeToFile(res, outFile)
+}
+
+// MergeTestXMLs merges the given list of test suites into a single object,
+// then writes the serialized XML to the given outFile.
+func MergeTestXMLs(suitesToMerge []TestSuites, outFile io.Writer) error {
+	if len(suitesToMerge) == 0 {
+		return fmt.Errorf("expected at least one test suite")
+	}
+	type suiteAndCaseMap struct {
+		suite testSuite
+		cases map[string]*testCase
+	}
+	suitesMap := make(map[string]*suiteAndCaseMap)
+	for _, suites := range suitesToMerge {
+		for _, suite := range suites.Suites {
+			oldSuite, ok := suitesMap[suite.Name]
+			if !ok {
+				cases := make(map[string]*testCase)
+				for _, testCase := range suite.TestCases {
+					cases[testCase.Name] = testCase
+				}
+				suitesMap[suite.Name] = &suiteAndCaseMap{
+					suite: suite,
+					cases: cases,
+				}
+				continue
+			}
+			for _, testCase := range suite.TestCases {
+				oldCase, ok := oldSuite.cases[testCase.Name]
+				if !ok {
+					oldSuite.cases[testCase.Name] = testCase
+					continue
+				}
+				if testCase.Failure != nil {
+					if oldCase.Failure == nil {
+						oldCase.Failure = testCase.Failure
+						oldSuite.suite.Failures += 1
+					} else {
+						oldCase.Failure.Contents = oldCase.Failure.Contents + "\n" + testCase.Failure.Contents
+					}
+				}
+				if testCase.Error != nil {
+					if oldCase.Error == nil {
+						oldCase.Error = testCase.Error
+						oldSuite.suite.Errors += 1
+					} else {
+						oldCase.Error.Contents = oldCase.Error.Contents + "\n" + testCase.Error.Contents
+					}
+				}
+			}
+		}
+	}
+	suitesSlice := make([]string, 0, len(suitesMap))
+	for suiteName := range suitesMap {
+		suitesSlice = append(suitesSlice, suiteName)
+	}
+	slices.Sort(suitesSlice)
+	var res TestSuites
+	for _, suiteName := range suitesSlice {
+		suiteAndCases := suitesMap[suiteName]
+		suite := suiteAndCases.suite
+		suite.TestCases = []*testCase{}
+		casesSlice := make([]string, 0, len(suiteAndCases.cases))
+		for caseName := range suiteAndCases.cases {
+			casesSlice = append(casesSlice, caseName)
+		}
+		slices.Sort(casesSlice)
+		for _, caseName := range casesSlice {
+			suite.TestCases = append(suite.TestCases, suiteAndCases.cases[caseName])
+		}
+		res.Suites = append(res.Suites, suite)
+	}
+	return writeToFile(&res, outFile)
+}
+
+func writeToFile(suite interface{}, outFile io.Writer) error {
+	bytes, err := xml.MarshalIndent(suite, "", "\t")
+	if err != nil {
+		return err
+	}
+	_, err = outFile.Write(bytes)
+	if err != nil {
+		return err
+	}
+	// Insert a newline just to make our lives a little easier.
+	_, err = outFile.Write([]byte("\n"))
+	return err
+}

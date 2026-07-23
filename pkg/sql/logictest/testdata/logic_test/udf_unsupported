@@ -1,0 +1,215 @@
+subtest udf_computed_column_limitations
+
+# The following tests verify that UDF patterns which cannot be inlined
+# for schema change backfill are rejected at DDL time (CREATE TABLE,
+# ALTER TABLE ADD COLUMN). While the optimizer can evaluate these
+# patterns directly, rejecting them upfront prevents creating tables
+# that cannot have schema changes performed on them.
+
+# UDFs with OUT parameters cannot be inlined.
+statement ok
+CREATE FUNCTION cc_udf_out(x INT, OUT result INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT x + 1 $$;
+
+statement error pgcode 0A000 unimplemented: user-defined functions with OUT or INOUT parameters in computed columns cannot be evaluated in this context
+CREATE TABLE cc_udf_out_t (a INT PRIMARY KEY, b INT AS (cc_udf_out(a)) STORED);
+
+# Multi-statement UDFs cannot be inlined.
+statement ok
+CREATE FUNCTION cc_udf_multi_stmt(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x + 1;
+  SELECT x + 2
+$$;
+
+statement error pgcode 0A000 unimplemented: multi-statement user-defined functions in computed columns cannot be evaluated in this context
+CREATE TABLE cc_udf_multi_stmt_t (a INT PRIMARY KEY, b INT AS (cc_udf_multi_stmt(a)) STORED);
+
+# ALTER TABLE ADD COLUMN is also rejected.
+statement ok
+CREATE TABLE cc_udf_multi_stmt_alter_t (a INT PRIMARY KEY);
+
+statement error pgcode 0A000 unimplemented: multi-statement user-defined functions in computed columns cannot be evaluated in this context
+ALTER TABLE cc_udf_multi_stmt_alter_t ADD COLUMN b INT AS (cc_udf_multi_stmt(a)) STORED;
+
+# PL/pgSQL UDFs cannot be inlined.
+statement ok
+CREATE FUNCTION cc_udf_plpgsql(x INT) RETURNS INT IMMUTABLE LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN x + 1;
+  END
+$$;
+
+statement error pgcode 0A000 unimplemented: PL/pgSQL user-defined functions in computed columns cannot be evaluated in this context
+CREATE TABLE cc_udf_plpgsql_t (a INT PRIMARY KEY, b INT AS (cc_udf_plpgsql(a)) STORED);
+
+# Scalar subqueries in UDF body cannot be inlined.
+statement ok
+CREATE FUNCTION cc_udf_subquery(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x + (SELECT 100)
+$$;
+
+statement error pgcode 0A000 unimplemented: user-defined functions with subqueries in computed columns cannot be evaluated in this context
+CREATE TABLE cc_udf_subquery_t (a INT PRIMARY KEY, b INT AS (cc_udf_subquery(a)) STORED);
+
+# CTEs in UDF body cannot be inlined.
+statement ok
+CREATE FUNCTION cc_udf_cte(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  WITH t AS (SELECT x + 10 AS v) SELECT v FROM t
+$$;
+
+statement error pgcode 0A000 unimplemented: user-defined functions with CTEs in computed columns cannot be evaluated in this context
+CREATE TABLE cc_udf_cte_t (a INT PRIMARY KEY, b INT AS (cc_udf_cte(a)) STORED);
+
+# Generator (set-returning) functions inside a UDF body are rejected.
+# The function itself is not SETOF, but its body contains
+# generate_series which is a generator.
+statement ok
+CREATE FUNCTION cc_udf_gen_body(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT generate_series(1, x)
+$$;
+
+statement error set-returning functions are not allowed in STORED COMPUTED COLUMN
+CREATE TABLE cc_udf_gen_body_t (a INT PRIMARY KEY, b INT AS (cc_udf_gen_body(a)) STORED);
+
+# Nested UDF calls cannot be inlined (the inliner does not recurse).
+statement ok
+CREATE FUNCTION cc_udf_inner(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT x * 10 $$;
+
+statement ok
+CREATE FUNCTION cc_udf_outer(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT cc_udf_inner(x) + 1 $$;
+
+statement error pgcode 0A000 unimplemented: nested user-defined function calls in computed columns cannot be evaluated in this context
+CREATE TABLE cc_udf_nested_t (a INT PRIMARY KEY, b INT AS (cc_udf_outer(a)) STORED);
+
+# RECORD-returning UDFs are rejected because the return type (tuple)
+# does not match any valid column type.
+statement ok
+CREATE FUNCTION cc_udf_record(x INT) RETURNS RECORD IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x, x+1
+$$;
+
+statement error expected STORED COMPUTED COLUMN expression to have type int, but .* has type tuple
+CREATE TABLE cc_udf_record_t (a INT PRIMARY KEY, b INT AS (cc_udf_record(a)) STORED);
+
+subtest end
+
+
+subtest cross_db
+
+statement ok
+CREATE DATABASE cross_db1;
+CREATE SCHEMA cross_db1.sc;
+CREATE TYPE cross_db1.sc.workday AS ENUM ('MON');
+CREATE TABLE cross_db1.sc.tbl(a INT PRIMARY KEY, b cross_db1.sc.workday);
+CREATE VIEW cross_db1.sc.v AS SELECT a FROM cross_db1.sc.tbl;
+
+statement error pgcode 0A000 pq: cross database type references are not supported: cross_db1.sc.workday
+CREATE FUNCTION f_cross_db(cross_db1.sc.workday) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 0A000 pq: cross database type references are not supported: cross_db1.sc.workday
+CREATE FUNCTION f_cross_db() RETURNS cross_db1.sc.workday LANGUAGE SQL AS $$ SELECT 'MON'::cross_db1.sc.workday $$;
+
+statement error pgcode 0A000 pq: dependent relation tbl cannot be from another database
+CREATE FUNCTION f_cross_db() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM cross_db1.sc.tbl $$;
+
+statement error pgcode 0A000 pq: dependent relation v cannot be from another database
+CREATE FUNCTION f_cross_db() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM cross_db1.sc.v $$;
+
+subtest end
+
+
+subtest ddl
+
+# DDL is not currently supported in UDF bodies.
+statement error pgcode 0A000 unimplemented: CREATE TABLE usage inside a function definition.*\n.*\n.*issue-v/110080
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'CREATE TABLE t (a INT)'
+
+statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition.*\n.*\n.*issue-v/110080
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'ALTER TABLE t ADD COLUMN b BOOL'
+
+statement error pgcode 0A000 unimplemented: DROP TABLE usage inside a function definition.*\n.*\n.*issue-v/110080
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'DROP TABLE t'
+
+subtest end
+
+
+subtest prepared_statement
+
+# Prepared statements are not currently supported in UDF bodies.
+statement error pgcode 0A000 unimplemented: PREPARE usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'PREPARE p AS SELECT * FROM t'
+
+subtest end
+
+
+subtest recursion
+
+# Recursive UDFs are not currently supported.
+statement error pgcode 42883 unknown function: rec()
+CREATE FUNCTION rec(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT CASE i WHEN 0 THEN 0 ELSE i + rec(i-1) END'
+
+# References to other UDFs in UDF bodies are not currently supported.
+statement ok
+CREATE FUNCTION other_udf() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT other_udf()'
+
+subtest end
+
+
+subtest variadic
+
+# Variadic UDFS are not currently supported.
+statement error pgcode 0A000 unimplemented: this syntax\nHINT.*\n.*88947
+CREATE FUNCTION rec(VARIADIC arr INT[]) RETURNS INT LANGUAGE SQL AS '1'
+
+subtest end
+
+
+# This test ensures the error message is understandable when creating a
+# function under a virtual or temporary schema.
+subtest udf_under_virtual_or_temp_schemas_102964
+
+statement error pgcode 42501 crdb_internal is a virtual schema and cannot be modified
+CREATE FUNCTION crdb_internal.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+statement error pgcode 42501 information_schema is a virtual schema and cannot be modified
+CREATE FUNCTION information_schema.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+statement error pgcode 42501 pg_catalog is a virtual schema and cannot be modified
+CREATE FUNCTION pg_catalog.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+statement error pgcode 42501 pg_extension is a virtual schema and cannot be modified
+CREATE FUNCTION pg_extension.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+statement ok
+SET experimental_enable_temp_tables=on;
+
+statement ok
+CREATE TEMP TABLE t_102964 (i INT PRIMARY KEY);
+
+let $temp_schema_102964
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%';
+
+statement error pgcode 0A000 unimplemented: cannot create user-defined functions under a temporary schema
+CREATE FUNCTION $temp_schema_102964.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+subtest end
+
+subtest call
+
+statement ok
+CREATE FUNCTION f_call() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+# A function cannot be used with CALL.
+statement error pgcode 42809 f_call\(\) is not a procedure\nHINT: To call a function, use SELECT.
+CALL f_call()
+
+statement ok
+CREATE OR REPLACE FUNCTION f_call() RETURNS INT LANGUAGE SQL AS ''
+
+# Same test as above, but with an empty function.
+statement error pgcode 42809 f_call\(\) is not a procedure\nHINT: To call a function, use SELECT.
+CALL f_call()
+
+subtest end

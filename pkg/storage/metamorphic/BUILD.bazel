@@ -1,0 +1,60 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "metamorphic",
+    srcs = [
+        "deck.go",
+        "generator.go",
+        "operands.go",
+        "operations.go",
+        "options.go",
+        "parser.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/metamorphic",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
+        "//pkg/util/hlc",
+        "//pkg/util/randutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/uint128",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_cockroachdb_pebble//objstorage/objstorageprovider",
+        "@com_github_cockroachdb_pebble//sstable/tablefilters/bloom",
+        "@com_github_cockroachdb_pebble//vfs",
+    ],
+)
+
+go_test(
+    name = "metamorphic_test",
+    size = "enormous",
+    srcs = [
+        "main_test.go",
+        "meta_test.go",
+        "parser_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":metamorphic"],
+    exec_properties = {"test.Pool": "large"},
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_stretchr_testify//require",
+    ],
+)

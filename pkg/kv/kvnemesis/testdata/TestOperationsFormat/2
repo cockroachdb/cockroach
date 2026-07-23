@@ -1,0 +1,9 @@
+echo
+----
+···{
+···  b := &kv.Batch{}
+···  b.Get(tk(2))
+···  b.ReverseScanForUpdate(tk(3), tk(5))
+···  b.Get(tk(6))
+···  db0.Run(ctx, b)
+···}

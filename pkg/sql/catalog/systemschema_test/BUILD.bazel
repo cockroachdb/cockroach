@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "systemschema_test_test",
+    srcs = [
+        "main_test.go",
+        "systemschema_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog/schematelemetry",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/randutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "result",
+    srcs = [
+        "intent.go",
+        "metrics.go",
+        "result.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_kr_pretty//:pretty",
+    ],
+)
+
+go_test(
+    name = "result_test",
+    size = "small",
+    srcs = ["result_test.go"],
+    embed = [":result"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,97 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.crosscluster.logical.txnpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnpb";
+
+import "repstream/streampb/stream.proto";
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+// LDRTxnID uniquely identifies a transaction in the transactional LDR
+// pipeline. Ordering is based on the timestamp. The applier_id identifies
+// which applier owns this transaction.
+message LDRTxnID {
+  option (gogoproto.goproto_stringer) = false;
+  util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  int32 applier_id = 2 [(gogoproto.customname) = "ApplierID"];
+}
+
+// EncodedScheduledTransaction is the wire format for a scheduled transaction
+// sent from the coordinator processor to an applier processor. It carries the
+// raw KV bytes (not decoded datums) so that the applier can decode them
+// locally.
+message EncodedScheduledTransaction {
+  LDRTxnID txn_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
+  repeated cockroach.repstream.streampb.StreamEvent.KV encoded_kvs = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "EncodedKVs"];
+  repeated LDRTxnID dependencies = 3 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp event_horizon = 4 [(gogoproto.nullable) = false];
+}
+
+// EncodedCheckpoint is the wire format for a checkpoint timestamp sent from
+// the coordinator to an applier processor.
+message EncodedCheckpoint {
+  util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+}
+
+// LDRApplierEvent is a union type for events the coordinator sends to applier
+// processors over the DistSQL wire.
+message LDRApplierEvent {
+  oneof event {
+    EncodedScheduledTransaction scheduled_txn = 1;
+    EncodedCheckpoint checkpoint = 2;
+  }
+}
+
+// DepResolverWait requests the dep resolver to register the waiting applier
+// as a waiter on each of the listed transactions.
+message DepResolverWait {
+  int32 waiting_id = 1 [(gogoproto.customname) = "WaitingID"];
+  repeated LDRTxnID wait_txns = 2 [(gogoproto.nullable) = false];
+}
+
+// DepResolverWaitHorizon requests the dep resolver to register the waiting
+// applier as blocked until all transactions from depend_id up to txn_horizon
+// have been applied.
+message DepResolverWaitHorizon {
+  int32 waiting_id = 1 [(gogoproto.customname) = "WaitingID"];
+  int32 depend_id = 2 [(gogoproto.customname) = "DependID"];
+  util.hlc.Timestamp txn_horizon = 3 [(gogoproto.nullable) = false];
+}
+
+// DepResolverReady notifies the dep resolver that a transaction has been
+// applied, allowing it to resolve any waiters on that transaction.
+message DepResolverReady {
+  LDRTxnID ready_txn = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp resolved_time = 2 [(gogoproto.nullable) = false];
+}
+
+// DepResolverForwardUpdate carries a DependencyUpdate that should be
+// forwarded to the co-located applier via the loopback backchannel.
+message DepResolverForwardUpdate {
+  LDRTxnID txn_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
+  util.hlc.Timestamp resolved_time = 2 [(gogoproto.nullable) = false];
+}
+
+// LDRDepResolverEvent is the wire format for messages sent from an applier
+// processor to a dep resolver processor via DistSQL routing.
+message LDRDepResolverEvent {
+  oneof event {
+    DepResolverWait wait = 1;
+    DepResolverWaitHorizon wait_horizon = 2;
+    DepResolverReady ready = 3;
+    DepResolverForwardUpdate forward_update = 4;
+  }
+}
+
+// TxnLDRProcProgress carries the frontier timestamp from a transactional LDR
+// applier processor back to the gateway's checkpoint handler. It is serialized
+// into BulkProcessorProgress.ProgressMessage by the applier and deserialized
+// by the gateway's checkpointHandler.
+message TxnLDRProcProgress {
+  int32 applier_id = 1 [(gogoproto.customname) = "ApplierID"];
+  util.hlc.Timestamp checkpoint = 2 [(gogoproto.nullable) = false];
+}

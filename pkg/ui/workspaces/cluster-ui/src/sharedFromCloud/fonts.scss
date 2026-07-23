@@ -1,0 +1,48 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+// Adding Fonts
+//
+// Cockroach Cloud uses Google Fonts to support asynchronously loading fonts for the application.
+// An example PR for adding a new font can be found here: https://github.com/cockroachlabs/managed-service/pull/1066
+// This is done through requesting a link from Google Fonts and adding an SCSS import in `application.scss`.
+
+@mixin font-props {
+  font-style: normal;
+  font-stretch: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/**
+ Source Sans Pro
+*/
+@mixin source-sans-pro-r {
+  font-family: "Source Sans Pro", sans-serif;
+  font-weight: 400;
+  @include font-props;
+}
+
+@mixin source-sans-pro-m {
+  font-family: "Source Sans Pro", sans-serif;
+  font-weight: 600;
+  @include font-props;
+}
+
+/**
+ Monospace
+*/
+@mixin monospace {
+  font-family: monospace;
+  @include font-props;
+}
+
+/**
+ Roboto
+*/
+@mixin roboto {
+  font-family: "Roboto", sans-serif;
+  @include font-props;
+}

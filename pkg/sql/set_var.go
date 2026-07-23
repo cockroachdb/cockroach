@@ -1,0 +1,649 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package sql
+
+import (
+	"context"
+	"math"
+	"strings"
+	"time"
+
+	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
+)
+
+// setVarNode represents a SET {SESSION | LOCAL} statement.
+type setVarNode struct {
+	zeroInputPlanNode
+	name  string
+	local bool
+	v     sessionVar
+	// typedValues == nil means RESET.
+	typedValues []tree.TypedExpr
+}
+
+// resetAllNode represents a RESET ALL statement.
+type resetAllNode struct {
+	zeroInputPlanNode
+}
+
+// SetVar sets session variables.
+// Privileges: None.
+//
+//	Notes: postgres/mysql do not require privileges for session variables (some exceptions).
+func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) {
+	if n.ResetAll {
+		return &resetAllNode{}, nil
+	}
+	if n.Name == "" {
+		// A client has sent the reserved internal syntax SET ROW ...,
+		// or the user entered `SET "" = foo`. Reject it.
+		return nil, pgerror.Newf(pgcode.Syntax,
+			"invalid variable name: %q", n.Name)
+	}
+
+	name := strings.ToLower(n.Name)
+	_, v, err := getSessionVar(name, false /* missingOk */)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok, _ := settings.LookupForLocalAccess(settings.SettingName(name), p.ExecCfg().Codec.ForSystemTenant()); ok {
+		p.BufferClientNotice(
+			ctx,
+			errors.WithHint(
+				pgnotice.Newf("setting custom variable %q", name),
+				"did you mean SET CLUSTER SETTING?",
+			),
+		)
+	}
+
+	var typedValues []tree.TypedExpr
+	if len(n.Values) > 0 {
+		isReset := false
+		if len(n.Values) == 1 {
+			if _, ok := n.Values[0].(tree.DefaultVal); ok {
+				// "SET var = DEFAULT" means RESET.
+				// In that case, we want typedValues to remain nil, so that
+				// the Start() logic recognizes the RESET too.
+				isReset = true
+			}
+		}
+
+		if !isReset {
+			typedValues = make([]tree.TypedExpr, len(n.Values))
+			for i, expr := range n.Values {
+				expr = paramparse.UnresolvedNameToStrVal(expr)
+
+				var dummyHelper tree.IndexedVarHelper
+				typedValue, err := p.analyzeExpr(
+					ctx, expr, dummyHelper, types.String, false, "SET SESSION "+name)
+				if err != nil {
+					return nil, wrapSetVarError(err, name, expr.String())
+				}
+				typedValues[i] = typedValue
+			}
+		}
+	}
+
+	if v.Set == nil && v.RuntimeSet == nil && v.SetWithPlanner == nil {
+		return nil, newCannotChangeParameterError(name)
+	}
+
+	if typedValues == nil {
+		// Statement is RESET. Do we have a default available?
+		// We do not use getDefaultString here because we need to delay
+		// the computation of the default to the execute phase.
+		if _, ok := p.sessionDataMutatorIterator.Defaults[name]; !ok && v.GlobalDefault == nil {
+			return nil, newCannotChangeParameterError(name)
+		}
+	}
+
+	return &setVarNode{name: name, local: n.Local, v: v, typedValues: typedValues}, nil
+}
+
+func (n *setVarNode) startExec(params runParams) error {
+	var strVal string
+
+	if _, ok := DummyVars[n.name]; ok {
+		telemetry.Inc(sqltelemetry.DummySessionVarValueCounter(n.name))
+		params.p.BufferClientNotice(
+			params.ctx,
+			pgnotice.NewWithSeverityf("WARNING", "setting session var %q is a no-op", n.name),
+		)
+	}
+	if n.typedValues != nil {
+		for i, v := range n.typedValues {
+			d, err := eval.Expr(params.ctx, params.EvalContext(), v)
+			if err != nil {
+				return err
+			}
+			n.typedValues[i] = d
+		}
+		var err error
+		if n.v.GetStringVal != nil {
+			strVal, err = n.v.GetStringVal(params.ctx, params.extendedEvalCtx, n.typedValues, params.p.Txn())
+		} else {
+			// No string converter defined, use the default one.
+			strVal, err = getStringVal(params.ctx, params.EvalContext(), n.name, n.typedValues)
+		}
+		if err != nil {
+			return err
+		}
+	} else {
+		// Statement is RESET and we already know we have a default. Find it.
+		_, strVal = getSessionVarDefaultString(
+			n.name,
+			n.v,
+			params.p.sessionDataMutatorIterator.SessionDataMutatorBase,
+		)
+	}
+
+	return params.p.SetSessionVar(params.ctx, n.name, strVal, n.local)
+}
+
+// applyOnSessionDataMutators applies the given function on the relevant
+// sessionmutator.SessionDataMutators based on the scope.
+func (p *planner) applyOnSessionDataMutators(
+	ctx context.Context, scope setScope, applyFunc func(m sessionmutator.SessionDataMutator) error,
+) error {
+	switch scope {
+	case setScopeLocal:
+		// We don't allocate a new SessionData object on implicit transactions.
+		// This no-ops in postgres with a warning, so copy accordingly.
+		if p.extendedEvalCtx.TxnImplicit {
+			p.BufferClientNotice(
+				ctx,
+				pgnotice.NewWithSeverityf(
+					"WARNING",
+					"SET LOCAL can only be used in transaction blocks",
+				),
+			)
+			return nil
+		}
+		return p.sessionDataMutatorIterator.ApplyOnTopMutator(applyFunc)
+	case setScopeStmt:
+		return p.sessionDataMutatorIterator.ApplyOnStmtScopedMutator(applyFunc)
+	default:
+		return p.sessionDataMutatorIterator.ApplyOnEachMutatorError(applyFunc)
+	}
+}
+
+// getSessionVarDefaultString retrieves a string suitable to pass to a
+// session var's Set() method. First return value is false if there is
+// no default.
+func getSessionVarDefaultString(
+	varName string, v sessionVar, m sessionmutator.SessionDataMutatorBase,
+) (bool, string) {
+	if defVal, ok := m.Defaults[varName]; ok {
+		return true, defVal
+	}
+	if v.GlobalDefault != nil {
+		return true, v.GlobalDefault(&m.Settings.SV)
+	}
+	return false, ""
+}
+
+func (n *setVarNode) Next(_ runParams) (bool, error) { return false, nil }
+func (n *setVarNode) Values() tree.Datums            { return nil }
+func (n *setVarNode) Close(_ context.Context)        {}
+
+func (p *planner) resetAllSessionVars(ctx context.Context) error {
+	for varName, v := range varGen {
+		if v.Set == nil && v.RuntimeSet == nil && v.SetWithPlanner == nil {
+			continue
+		}
+		// For Postgres compatibility, don't reset some settings here.
+		if v.NoResetAll {
+			continue
+		}
+		hasDefault, defVal := getSessionVarDefaultString(
+			varName,
+			v,
+			p.sessionDataMutatorIterator.SessionDataMutatorBase,
+		)
+		if !hasDefault {
+			continue
+		}
+		if err := p.SetSessionVar(ctx, varName, defVal, false /* isLocal */); err != nil {
+			return err
+		}
+	}
+	for varName := range p.SessionData().CustomOptions {
+		_, v, err := getSessionVar(varName, false /* missingOK */)
+		if err != nil {
+			return err
+		}
+		_, defVal := getSessionVarDefaultString(
+			varName,
+			v,
+			p.sessionDataMutatorIterator.SessionDataMutatorBase,
+		)
+		if err := p.SetSessionVar(ctx, varName, defVal, false /* isLocal */); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (n *resetAllNode) startExec(params runParams) error {
+	return params.p.resetAllSessionVars(params.ctx)
+}
+
+func (n *resetAllNode) Next(_ runParams) (bool, error) { return false, nil }
+func (n *resetAllNode) Values() tree.Datums            { return nil }
+func (n *resetAllNode) Close(_ context.Context)        {}
+
+func getStringVal(
+	ctx context.Context, evalCtx *eval.Context, name string, values []tree.TypedExpr,
+) (string, error) {
+	if len(values) != 1 {
+		return "", newSingleArgVarError(name)
+	}
+	return paramparse.DatumAsString(ctx, evalCtx, name, values[0])
+}
+
+func getIntVal(
+	ctx context.Context, evalCtx *eval.Context, name string, values []tree.TypedExpr,
+) (int64, error) {
+	if len(values) != 1 {
+		return 0, newSingleArgVarError(name)
+	}
+	return paramparse.DatumAsInt(ctx, evalCtx, name, values[0])
+}
+
+func getFloatVal(
+	ctx context.Context, evalCtx *eval.Context, name string, values []tree.TypedExpr,
+) (float64, error) {
+	if len(values) != 1 {
+		return 0, newSingleArgVarError(name)
+	}
+	return paramparse.DatumAsFloat(ctx, evalCtx, name, values[0])
+}
+
+func timeZoneVarGetStringVal(
+	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, _ *kv.Txn,
+) (string, error) {
+	if len(values) != 1 {
+		return "", newSingleArgVarError("timezone")
+	}
+	d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
+	if err != nil {
+		return "", err
+	}
+
+	var loc *time.Location
+	var offset int64
+	switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
+	case *tree.DString:
+		location := string(*v)
+		loc, err = timeutil.TimeZoneStringToLocation(
+			location,
+			timeutil.TimeZoneStringToLocationISO8601Standard,
+		)
+		if err != nil {
+			return "", wrapSetVarError(errors.Wrapf(err, "cannot find time zone %q", location), "timezone", values[0].String())
+		}
+
+	case *tree.DInterval:
+		offset, _, _, err = v.Duration.Encode()
+		if err != nil {
+			return "", wrapSetVarError(err, "timezone", values[0].String())
+		}
+		offset /= int64(time.Second)
+
+	case *tree.DInt:
+		offset = int64(*v) * 60 * 60
+
+	case *tree.DFloat:
+		offset = int64(float64(*v) * 60.0 * 60.0)
+
+	case *tree.DDecimal:
+		sixty := apd.New(60, 0)
+		ed := apd.MakeErrDecimal(tree.ExactCtx)
+		ed.Mul(sixty, sixty, sixty)
+		ed.Mul(sixty, sixty, &v.Decimal)
+		offset = ed.Int64(sixty)
+		if ed.Err() != nil {
+			return "", wrapSetVarError(errors.Newf("time zone value %s would overflow an int64", sixty), "timezone", values[0].String())
+		}
+
+	default:
+		return "", newVarValueError("timezone", values[0].String())
+	}
+	if loc == nil {
+		loc = timeutil.TimeZoneOffsetToLocation(int(offset))
+	}
+
+	return loc.String(), nil
+}
+
+func timeZoneVarSet(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+	loc, err := timeutil.TimeZoneStringToLocation(
+		s,
+		timeutil.TimeZoneStringToLocationISO8601Standard,
+	)
+	if err != nil {
+		return wrapSetVarError(err, "TimeZone", s)
+	}
+
+	m.SetLocation(loc)
+	return nil
+}
+
+func makeTimeoutVarGetter(
+	varName string,
+) func(
+	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn) (string, error) {
+	return func(
+		ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn,
+	) (string, error) {
+		if len(values) != 1 {
+			return "", newSingleArgVarError(varName)
+		}
+		d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
+		if err != nil {
+			return "", err
+		}
+
+		var timeout time.Duration
+		switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
+		case *tree.DString:
+			return string(*v), nil
+		case *tree.DInterval:
+			timeout, err = durationToTotalNanos(v.Duration)
+			if err != nil {
+				return "", wrapSetVarError(err, varName, values[0].String())
+			}
+		case *tree.DInt:
+			timeout = time.Duration(*v) * time.Millisecond
+		default:
+			return "", newVarValueError(varName, values[0].String())
+		}
+		return timeout.String(), nil
+	}
+}
+
+func validateTimeoutVar(
+	style duration.IntervalStyle, timeString string, varName string,
+) (time.Duration, error) {
+	interval, err := tree.ParseIntervalWithTypeMetadata(
+		style,
+		timeString,
+		types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_MILLISECOND,
+			},
+		},
+	)
+	if err != nil {
+		return 0, wrapSetVarError(err, varName, timeString)
+	}
+	timeout, err := durationToTotalNanos(interval)
+	if err != nil {
+		return 0, wrapSetVarError(err, varName, timeString)
+	}
+
+	if timeout < 0 {
+		return 0, wrapSetVarError(errors.Newf("%v cannot have a negative duration", redact.SafeString(varName)), varName, timeString)
+	}
+
+	return timeout, nil
+}
+
+// makeTCPKeepAliveVarGetter returns a getStringValFn for TCP keepalive
+// session variables. When the user provides a plain integer via SET, it
+// is treated as seconds (for keepalive vars) or milliseconds (for
+// tcp_user_timeout). String and interval values are passed through for
+// parsing in the Set function.
+func makeTCPKeepAliveVarGetter(varName string, defaultUnit time.Duration) getStringValFn {
+	return func(
+		ctx context.Context,
+		evalCtx *extendedEvalContext,
+		values []tree.TypedExpr,
+		txn *kv.Txn,
+	) (string, error) {
+		if len(values) != 1 {
+			return "", newSingleArgVarError(varName)
+		}
+		d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
+		if err != nil {
+			return "", err
+		}
+		switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
+		case *tree.DString:
+			return string(*v), nil
+		case *tree.DInterval:
+			dur, err := durationToTotalNanos(v.Duration)
+			if err != nil {
+				return "", wrapSetVarError(err, varName, values[0].String())
+			}
+			return dur.String(), nil
+		case *tree.DInt:
+			dur := time.Duration(*v) * defaultUnit
+			return dur.String(), nil
+		default:
+			return "", newVarValueError(varName, values[0].String())
+		}
+	}
+}
+
+// parseTCPKeepAliveVar parses a string value for a TCP keepalive session
+// variable. It accepts plain integers (interpreted according to
+// defaultDurationType — seconds or milliseconds) and duration strings
+// (e.g., "1m30s"). The result is truncated to the given unit (seconds
+// or milliseconds) and must be non-negative.
+func parseTCPKeepAliveVar(
+	style duration.IntervalStyle,
+	s string,
+	varName string,
+	defaultDurationType types.IntervalDurationType,
+	truncateUnit time.Duration,
+) (int32, error) {
+	interval, err := tree.ParseIntervalWithTypeMetadata(
+		style,
+		s,
+		types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: defaultDurationType,
+			},
+		},
+	)
+	if err != nil {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"invalid value for parameter %q: %q", redact.SafeString(varName), s)
+	}
+	dur, err := durationToTotalNanos(interval)
+	if err != nil {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"invalid value for parameter %q: %q", redact.SafeString(varName), s)
+	}
+	if dur < 0 {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"%v cannot be negative", redact.SafeString(varName))
+	}
+	// Truncate to the storage unit.
+	result := int64(dur / truncateUnit)
+	if result > math.MaxInt32 {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"value out of range for parameter %q: %q", redact.SafeString(varName), s)
+	}
+	return int32(result), nil
+}
+
+func stmtTimeoutVarSet(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+	timeout, err := validateTimeoutVar(
+		m.Data.GetIntervalStyle(),
+		s,
+		"statement_timeout",
+	)
+	if err != nil {
+		return err
+	}
+
+	m.SetStmtTimeout(timeout)
+	return nil
+}
+
+func lockTimeoutVarSet(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+	timeout, err := validateTimeoutVar(
+		m.Data.GetIntervalStyle(),
+		s,
+		"lock_timeout",
+	)
+	if err != nil {
+		return err
+	}
+
+	m.SetLockTimeout(timeout)
+	return nil
+}
+
+func deadlockTimeoutVarSet(
+	ctx context.Context, m sessionmutator.SessionDataMutator, s string,
+) error {
+	timeout, err := validateTimeoutVar(
+		m.Data.GetIntervalStyle(),
+		s,
+		"deadlock_timeout",
+	)
+	if err != nil {
+		return err
+	}
+
+	m.SetDeadlockTimeout(timeout)
+	return nil
+}
+
+func idleInSessionTimeoutVarSet(
+	ctx context.Context, m sessionmutator.SessionDataMutator, s string,
+) error {
+	timeout, err := validateTimeoutVar(
+		m.Data.GetIntervalStyle(),
+		s,
+		"idle_in_session_timeout",
+	)
+	if err != nil {
+		return err
+	}
+
+	m.SetIdleInSessionTimeout(timeout)
+	return nil
+}
+
+func transactionTimeoutVarSet(
+	ctx context.Context, m sessionmutator.SessionDataMutator, s string,
+) error {
+	timeout, err := validateTimeoutVar(
+		m.Data.GetIntervalStyle(),
+		s,
+		"transaction_timeout",
+	)
+	if err != nil {
+		return err
+	}
+
+	m.SetTransactionTimeout(timeout)
+	return nil
+}
+
+func idleInTransactionSessionTimeoutVarSet(
+	ctx context.Context, m sessionmutator.SessionDataMutator, s string,
+) error {
+	timeout, err := validateTimeoutVar(
+		m.Data.GetIntervalStyle(),
+		s,
+		"idle_in_transaction_session_timeout",
+	)
+	if err != nil {
+		return err
+	}
+
+	m.SetIdleInTransactionSessionTimeout(timeout)
+	return nil
+}
+
+func durationToTotalNanos(duration duration.Duration) (time.Duration, error) {
+	nanos, _, _, err := duration.Encode()
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(nanos), nil
+}
+
+func newSingleArgVarError(varName string) error {
+	return pgerror.Newf(pgcode.InvalidParameterValue,
+		"SET %s takes only one argument", varName)
+}
+
+func wrapSetVarError(cause error, varName, actualValue string) error {
+	return pgerror.Wrapf(
+		cause,
+		pgcode.InvalidParameterValue,
+		"invalid value for parameter %q: %q",
+		redact.SafeString(varName),
+		actualValue,
+	)
+}
+
+func newVarValueError(varName, actualVal string, allowedVals ...string) (err error) {
+	err = pgerror.Newf(pgcode.InvalidParameterValue,
+		"invalid value for parameter %q: %q", varName, actualVal)
+	if len(allowedVals) > 0 {
+		err = errors.WithHintf(err, "Available values: %s", strings.Join(allowedVals, ","))
+	}
+	return err
+}
+
+func newCannotChangeParameterError(varName string) error {
+	return pgerror.Newf(pgcode.CantChangeRuntimeParam,
+		"parameter %q cannot be changed", varName)
+}
+
+func makeByteSizeVarGetter(
+	varName string,
+) func(
+	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn) (string, error) {
+	return func(
+		ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn,
+	) (string, error) {
+		if len(values) != 1 {
+			return "", newSingleArgVarError(varName)
+		}
+		d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
+		if err != nil {
+			return "", err
+		}
+
+		switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
+		case *tree.DString:
+			return string(*v), nil
+		case *tree.DInt:
+			size := int64(*v)
+			if size < 0 {
+				return "", errors.Newf("%s cannot be set to a negative value", varName)
+			}
+			return humanize.IBytes(uint64(size)), nil
+		default:
+			return "", newVarValueError(varName, values[0].String())
+		}
+	}
+}

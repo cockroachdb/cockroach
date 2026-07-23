@@ -1,0 +1,113 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "../core/index.module";
+
+:global(.crdb-ant-dropdown-menu-submenu-popup ul) {
+  padding-bottom: 5px;
+}
+
+:global(.crdb-ant-dropdown-menu-item:hover) {
+  background-color: $colors--primary-blue-8;
+}
+
+:global(.crdb-ant-dropdown-menu-submenu-title:hover) {
+  background-color: $colors--primary-blue-8;
+}
+
+.search-area {
+  border: 1px solid $colors--neutral-3;
+  border-radius: 3px;
+  margin-bottom: 10px;
+  margin-right: 10px;
+  padding: 20px;
+  background-color: white;
+  font-family: $font-family--lato-regular;
+}
+
+.top-area {
+  z-index: 5;
+  background-color: white;
+  font-family: $font-family--lato-regular;
+
+  label {
+    display: block;
+    margin-bottom: 0;
+    font-family: $font-family--lato-regular;
+    font-size: $font-size--medium;
+    font-weight: $font-weight--light;
+
+    :global(.crdb-ant-btn) {
+      border-color: $colors--neutral-4;
+    }
+  }
+
+  ul {
+    margin-bottom: 1em;
+  }
+}
+
+.timescale-small {
+  width: 455px;
+}
+
+.label {
+  color: $colors--neutral-6;
+  font-family: $font-family--semi-bold;
+  font-size: $font-size--medium;
+  line-height: $line-height--medium-small;
+}
+
+.margin-top-btn {
+  margin-top: 22px;
+}
+
+.dropdown-area {
+  align-items: center;
+  border-color: $colors--neutral-4;
+  border-radius: 4px;
+  border-style: solid;
+  border-width: 1px;
+  color: $colors--neutral-6;
+  display: flex;
+  font-family: $font-family--lato-regular;
+  font-weight: $font-weight--light;
+  font-size: $font-size--medium;
+  line-height: $line-height--medium-small;
+  height: 43px;
+  padding-left: 8px;
+}
+
+.small {
+  width: 80px;
+}
+
+.medium {
+  width: 175px;
+}
+
+.large {
+  width: 210px;
+}
+
+.dropdown-value-small {
+  width: 50px;
+}
+
+.dropdown-value-medium {
+  width: 145px;
+}
+
+.arrow-down {
+  fill: $colors--neutral-4;
+}
+
+.options-warning {
+  font-family: $font-family--base;
+  font-size: $font-size--small;
+  color: $colors--neutral-6;
+  padding: 10px;
+  display: inline-block;
+}

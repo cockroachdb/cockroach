@@ -1,0 +1,538 @@
+# IS expressions.
+
+eval
+0 IS NULL
+----
+false
+
+eval
+0 IS NOT NULL
+----
+true
+
+eval
+NULL IS NULL
+----
+true
+
+eval
+NULL IS NOT NULL
+----
+false
+
+eval
+NULL IS UNKNOWN
+----
+true
+
+eval
+NULL IS NOT UNKNOWN
+----
+false
+
+eval
+TRUE IS TRUE
+----
+true
+
+eval
+TRUE IS NOT TRUE
+----
+false
+
+eval
+FALSE IS TRUE
+----
+false
+
+eval
+FALSE IS NOT TRUE
+----
+true
+
+eval
+NULL IS TRUE
+----
+false
+
+eval
+NULL IS NOT TRUE
+----
+true
+
+eval
+TRUE IS FALSE
+----
+false
+
+eval
+TRUE IS NOT FALSE
+----
+true
+
+eval
+FALSE IS FALSE
+----
+true
+
+eval
+FALSE IS NOT FALSE
+----
+false
+
+eval
+NULL IS FALSE
+----
+false
+
+eval
+NULL IS NOT FALSE
+----
+true
+
+# IS (NOT) DISTINCT FROM expressions.
+
+eval
+0 IS NOT DISTINCT FROM NULL
+----
+false
+
+eval
+0 IS DISTINCT FROM NULL
+----
+true
+
+eval
+NULL IS NOT DISTINCT FROM NULL
+----
+true
+
+eval
+NULL IS DISTINCT FROM NULL
+----
+false
+
+eval
+TRUE IS NOT DISTINCT FROM TRUE
+----
+true
+
+eval
+TRUE IS DISTINCT FROM TRUE
+----
+false
+
+eval
+FALSE IS NOT DISTINCT FROM TRUE
+----
+false
+
+eval
+FALSE IS DISTINCT FROM TRUE
+----
+true
+
+eval
+NULL IS NOT DISTINCT FROM TRUE
+----
+false
+
+eval
+NULL IS DISTINCT FROM TRUE
+----
+true
+
+eval
+TRUE IS NOT DISTINCT FROM FALSE
+----
+false
+
+eval
+TRUE IS DISTINCT FROM FALSE
+----
+true
+
+eval
+FALSE IS NOT DISTINCT FROM FALSE
+----
+true
+
+eval
+FALSE IS DISTINCT FROM FALSE
+----
+false
+
+eval
+NULL IS NOT DISTINCT FROM FALSE
+----
+false
+
+eval
+NULL IS DISTINCT FROM FALSE
+----
+true
+
+# IS OF expressions.
+
+eval
+TRUE IS OF (BOOL)
+----
+true
+
+eval
+1 IS OF (INT)
+----
+true
+
+eval
+1.0 IS OF (FLOAT)
+----
+false
+
+eval
+1.0 IS OF (DECIMAL)
+----
+true
+
+eval
+1.0::float IS OF (FLOAT)
+----
+true
+
+eval
+1.0::decimal IS OF (DECIMAL)
+----
+true
+
+eval
+'hello' IS OF (STRING)
+----
+true
+
+eval
+'hello' IS OF (BYTES)
+----
+false
+
+eval
+b'hello' IS OF (STRING)
+----
+false
+
+eval
+b'hello' IS OF (BYTES)
+----
+true
+
+eval
+ARRAY['hello']::STRING[] IS OF (STRING[])
+----
+true
+
+eval
+ARRAY['hello']::STRING[] IS OF (INT[])
+----
+false
+
+eval
+3::INT2 IS OF (INT2)
+----
+true
+
+# TODO(justin): these two are currently incorrect, see #31404.
+
+eval
+3 IS OF (INT2)
+----
+true
+
+eval
+3::INT4 IS OF (INT2)
+----
+true
+
+#
+
+eval
+'2012-09-21'::date IS OF (DATE)
+----
+true
+
+eval
+'12:00:00'::time IS OF (TIME)
+----
+true
+
+eval
+'12:00:00'::timetz IS OF (TIMETZ)
+----
+true
+
+eval
+'2010-09-28 12:00:00.1'::timestamp IS OF (TIMESTAMP)
+----
+true
+
+eval
+'34h'::interval IS OF (INTERVAL)
+----
+true
+
+eval
+'P1Y2M10DT2H29M'::interval IS OF (INTERVAL)
+----
+true
+
+eval
+'1-2'::interval IS OF (INTERVAL)
+----
+true
+
+eval
+'1-2 3'::interval IS OF (INTERVAL)
+----
+true
+
+eval
+'2 4:09'::interval IS OF (INTERVAL)
+----
+true
+
+eval
+'2 4:09:57'::interval IS OF (INTERVAL)
+----
+true
+
+eval
+'1-2 4:09'::interval IS OF (INTERVAL)
+----
+true
+
+eval
+'1-2 3 4:09'::interval IS OF (INTERVAL)
+----
+true
+
+eval
+'1-2 4:09:55'::interval IS OF (INTERVAL)
+----
+true
+
+eval
+'1-2 3 4:09:55'::interval IS OF (INTERVAL)
+----
+true
+
+eval
+'1 hour 2 minutes'::interval IS OF (INTERVAL)
+----
+true
+
+# #13716
+eval
+'1 HOUR 2 MINutES'::interval IS OF (INTERVAL)
+----
+true
+
+eval
+1 IS OF (STRING)
+----
+false
+
+eval
+1 IS OF (BOOL, INT)
+----
+true
+
+eval
+1 IS NOT OF (INT)
+----
+false
+
+eval
+1 IS NOT OF (STRING)
+----
+true
+
+eval
+1 IS NOT OF (BOOL, INT)
+----
+false
+
+# Tuple with no NULLS.
+
+eval
+(1, 1) IS NULL
+----
+false
+
+eval
+(1, 1) IS NOT NULL
+----
+true
+
+eval
+(1, (NULL, NULL)) IS NULL
+----
+false
+
+eval
+(1, (NULL, NULL)) IS NOT NULL
+----
+true
+
+eval
+(1, 1) IS NOT DISTINCT FROM NULL
+----
+false
+
+eval
+(1, 1) IS DISTINCT FROM NULL
+----
+true
+
+eval
+(1, (NULL, NULL)) IS NOT DISTINCT FROM NULL
+----
+false
+
+eval
+(1, (NULL, NULL)) IS DISTINCT FROM NULL
+----
+true
+
+eval
+NOT ((1, 1) IS NULL)
+----
+true
+
+eval
+NOT ((1, 1) IS NOT NULL)
+----
+false
+
+eval
+NOT ((1, 1) IS NOT DISTINCT FROM NULL)
+----
+true
+
+eval
+NOT ((1, 1) IS DISTINCT FROM NULL)
+----
+false
+
+# Tuple with some NULLS.
+
+eval
+(1, NULL) IS NULL
+----
+false
+
+eval
+(1, NULL) IS NOT NULL
+----
+false
+
+eval
+((NULL, NULL), NULL) IS NULL
+----
+false
+
+eval
+((NULL, NULL), NULL) IS NOT NULL
+----
+false
+
+eval
+(1, NULL) IS NOT DISTINCT FROM NULL
+----
+false
+
+eval
+(1, NULL) IS DISTINCT FROM NULL
+----
+true
+
+eval
+((NULL, NULL), NULL) IS NOT DISTINCT FROM NULL
+----
+false
+
+eval
+((NULL, NULL), NULL) IS DISTINcT FROM NULL
+----
+true
+
+eval
+NOT ((1, NULL) IS NULL)
+----
+true
+
+eval
+NOT ((1, NULL) IS NOT NULL)
+----
+true
+
+eval
+NOT ((1, NULL) IS NOT DISTINCT FROM NULL)
+----
+true
+
+eval
+NOT ((1, NULL) IS DISTINCT FROM NULL)
+----
+false
+
+# Tuple with all NULLS.
+
+eval
+(NULL, NULL) IS NULL
+----
+true
+
+eval
+(NULL, NULL) IS NOT NULL
+----
+false
+
+eval
+(NULL, NULL) IS NOT DISTINCT FROM NULL
+----
+false
+
+eval
+(NULL, NULL) IS DISTINCT FROM NULL
+----
+true
+
+eval
+NOT ((NULL, NULL) IS NULL)
+----
+false
+
+eval
+NOT ((NULL, NULL) IS NOT NULL)
+----
+true
+
+eval
+NOT ((NULL, NULL) IS NOT DISTINCT FROM NULL)
+----
+true
+
+eval
+NOT ((NULL, NULL) IS DISTINCT FROM NULL)
+----
+false
+
+# Empty tuples.
+
+eval
+() IS NULL
+----
+true
+
+eval
+() IS NOT NULL
+----
+true

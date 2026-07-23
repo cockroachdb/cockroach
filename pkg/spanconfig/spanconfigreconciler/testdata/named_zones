@@ -1,0 +1,246 @@
+# Test span config behavior with named zones. These affect reserved key spans,
+# can be discarded (except for RANGE DEFAULT), and in the specific case of RANGE
+# DEFAULT, is the top most ancestor of the zone config hierarchy.
+reconcile
+----
+
+mutations discard
+----
+
+state limit=6
+----
+/M{in-eta2}                                ttl_seconds=3600 num_replicas=5
+/{Meta2-System/NodeLiveness}               ttl_seconds=3600 num_replicas=5
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
+/System/{NodeLivenessMax-tsd}              range system
+/System{/tsd-tse}                          range default
+/System{tse-/SystemSpanConfigKeys}         range system
+...
+
+# Adding an explicit zone configuration for the timeseries range should work
+# as expected.
+exec-sql
+ALTER RANGE timeseries CONFIGURE ZONE USING gc.ttlseconds = 42
+----
+
+mutations
+----
+delete /System{/tsd-tse}
+upsert /System{/tsd-tse}                   ttl_seconds=42
+
+# Change a field on the liveness range and ensure it behaves as expected.
+exec-sql
+ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 7
+----
+
+mutations
+----
+delete /System/NodeLiveness{-Max}
+upsert /System/NodeLiveness{-Max}          ttl_seconds=600 num_replicas=7
+
+# Discarding RANGE SYSTEM should re-parent the gaps between RANGE
+# {liveness,timeseries} under RANGE DEFAULT. Note that discarding RANGE DEFAULT
+# isn't allowed.
+exec-sql
+ALTER RANGE system CONFIGURE ZONE DISCARD
+----
+
+mutations
+----
+delete /System/{NodeLivenessMax-tsd}
+upsert /System/{NodeLivenessMax-tsd}       range default
+delete /System{tse-/SystemSpanConfigKeys}
+upsert /System{tse-/SystemSpanConfigKeys}  range default
+
+state limit=6
+----
+/M{in-eta2}                                ttl_seconds=3600 num_replicas=5
+/{Meta2-System/NodeLiveness}               ttl_seconds=3600 num_replicas=5
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
+/System/{NodeLivenessMax-tsd}              range default
+/System{/tsd-tse}                          ttl_seconds=42
+/System{tse-/SystemSpanConfigKeys}         range default
+...
+
+# Ensure that discarding other named zones behave as expected (reparenting them
+# under RANGE DEFAULT).
+exec-sql
+ALTER RANGE meta CONFIGURE ZONE DISCARD;
+ALTER RANGE timeseries CONFIGURE ZONE DISCARD;
+----
+
+mutations
+----
+delete /M{in-eta2}
+upsert /M{in-eta2}                         range default
+delete /{Meta2-System/NodeLiveness}
+upsert /{Meta2-System/NodeLiveness}        range default
+delete /System{/tsd-tse}
+upsert /System{/tsd-tse}                   range default
+
+state limit=6
+----
+/M{in-eta2}                                range default
+/{Meta2-System/NodeLiveness}               range default
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
+/System/{NodeLivenessMax-tsd}              range default
+/System{/tsd-tse}                          range default
+/System{tse-/SystemSpanConfigKeys}         range default
+...
+
+
+# Ensure that changes to RANGE DEFAULT propagate to descendants.
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+----
+
+mutations
+----
+upsert /Table/10{6-7}                      range default
+
+exec-sql
+ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 50;
+----
+
+mutations
+----
+delete /M{in-eta2}
+upsert /M{in-eta2}                         ttl_seconds=50
+delete /{Meta2-System/NodeLiveness}
+upsert /{Meta2-System/NodeLiveness}        ttl_seconds=50
+delete /System/{NodeLivenessMax-tsd}
+upsert /System/{NodeLivenessMax-tsd}       ttl_seconds=50
+delete /System{/tsd-tse}
+upsert /System{/tsd-tse}                   ttl_seconds=50
+delete /System{tse-/SystemSpanConfigKeys}
+upsert /System{tse-/SystemSpanConfigKeys}  ttl_seconds=50
+delete /Table/10{6-7}
+upsert /Table/10{6-7}                      ttl_seconds=50
+
+state limit=6
+----
+/M{in-eta2}                                ttl_seconds=50
+/{Meta2-System/NodeLiveness}               ttl_seconds=50
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
+/System/{NodeLivenessMax-tsd}              ttl_seconds=50
+/System{/tsd-tse}                          ttl_seconds=50
+/System{tse-/SystemSpanConfigKeys}         ttl_seconds=50
+...
+
+state offset=47
+----
+...
+/Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
+/Table/4{6-7}                              database system (host)
+/Table/4{7-8}                              ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
+/Table/4{8-9}                              database system (host)
+/Table/5{0-1}                              database system (host)
+/Table/5{1-2}                              database system (host)
+/Table/5{2-3}                              database system (host)
+/Table/5{3-4}                              database system (host)
+/Table/5{4-5}                              database system (host)
+/Table/5{5-6}                              database system (host)
+/Table/5{6-7}                              database system (host)
+/Table/5{7-8}                              database system (host)
+/Table/5{8-9}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/{59-60}                             database system (host)
+/Table/6{0-1}                              database system (host)
+/Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/6{2-3}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/6{3-4}                              database system (host)
+/Table/6{4-5}                              database system (host)
+/Table/6{5-6}                              database system (host)
+/Table/6{6-7}                              database system (host)
+/Table/6{7-8}                              database system (host)
+/Table/6{8-9}                              database system (host)
+/Table/{69-70}                             database system (host)
+/Table/7{0-1}                              database system (host)
+/Table/7{1-2}                              database system (host)
+/Table/7{2-3}                              database system (host)
+/Table/7{3-4}                              database system (host)
+/Table/7{4-5}                              database system (host)
+/Table/7{5-6}                              database system (host)
+/Table/7{6-7}                              database system (host)
+/Table/7{7-8}                              database system (host)
+/Table/7{8-9}                              database system (host)
+/Table/{79-80}                             database system (host)
+/Table/8{0-1}                              database system (host)
+/Table/8{1-2}                              database system (host)
+/Table/8{2-3}                              database system (host)
+/Table/8{3-4}                              database system (host)
+/Table/10{6-7}                             ttl_seconds=50
+
+# Make sure future descendants observe the same.
+exec-sql
+CREATE TABLE db.t2();
+----
+
+mutations
+----
+upsert /Table/10{7-8}                      ttl_seconds=50
+
+state offset=47
+----
+...
+/Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
+/Table/4{6-7}                              database system (host)
+/Table/4{7-8}                              ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
+/Table/4{8-9}                              database system (host)
+/Table/5{0-1}                              database system (host)
+/Table/5{1-2}                              database system (host)
+/Table/5{2-3}                              database system (host)
+/Table/5{3-4}                              database system (host)
+/Table/5{4-5}                              database system (host)
+/Table/5{5-6}                              database system (host)
+/Table/5{6-7}                              database system (host)
+/Table/5{7-8}                              database system (host)
+/Table/5{8-9}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/{59-60}                             database system (host)
+/Table/6{0-1}                              database system (host)
+/Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/6{2-3}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/6{3-4}                              database system (host)
+/Table/6{4-5}                              database system (host)
+/Table/6{5-6}                              database system (host)
+/Table/6{6-7}                              database system (host)
+/Table/6{7-8}                              database system (host)
+/Table/6{8-9}                              database system (host)
+/Table/{69-70}                             database system (host)
+/Table/7{0-1}                              database system (host)
+/Table/7{1-2}                              database system (host)
+/Table/7{2-3}                              database system (host)
+/Table/7{3-4}                              database system (host)
+/Table/7{4-5}                              database system (host)
+/Table/7{5-6}                              database system (host)
+/Table/7{6-7}                              database system (host)
+/Table/7{7-8}                              database system (host)
+/Table/7{8-9}                              database system (host)
+/Table/{79-80}                             database system (host)
+/Table/8{0-1}                              database system (host)
+/Table/8{1-2}                              database system (host)
+/Table/8{2-3}                              database system (host)
+/Table/8{3-4}                              database system (host)
+/Table/10{6-7}                             ttl_seconds=50
+/Table/10{7-8}                             ttl_seconds=50
+
+exec-sql
+ALTER RANGE system CONFIGURE ZONE USING gc.ttlseconds = 100;
+----
+
+mutations
+----
+delete /System/{NodeLivenessMax-tsd}
+upsert /System/{NodeLivenessMax-tsd}       ttl_seconds=100
+delete /System{tse-/SystemSpanConfigKeys}
+upsert /System{tse-/SystemSpanConfigKeys}  ttl_seconds=100
+
+state limit=6
+----
+/M{in-eta2}                                ttl_seconds=50
+/{Meta2-System/NodeLiveness}               ttl_seconds=50
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
+/System/{NodeLivenessMax-tsd}              ttl_seconds=100
+/System{/tsd-tse}                          ttl_seconds=50
+/System{tse-/SystemSpanConfigKeys}         ttl_seconds=100
+...

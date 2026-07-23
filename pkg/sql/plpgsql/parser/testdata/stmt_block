@@ -1,0 +1,365 @@
+parse
+DECLARE
+BEGIN
+END
+----
+DECLARE
+BEGIN
+END;
+ -- normalized!
+DECLARE
+BEGIN
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+END;
+ -- literals removed
+DECLARE
+BEGIN
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+  DECLARE
+  BEGIN
+  END;
+END
+----
+DECLARE
+BEGIN
+DECLARE
+BEGIN
+END;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+DECLARE
+BEGIN
+END;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+DECLARE
+BEGIN
+END;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+DECLARE
+BEGIN
+END;
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+  BEGIN
+  END;
+END
+----
+DECLARE
+BEGIN
+BEGIN
+END;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+BEGIN
+END;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+BEGIN
+END;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+BEGIN
+END;
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+  x INT;
+BEGIN
+  DECLARE
+    y INT;
+  BEGIN
+    RAISE NOTICE '% %', x, y;
+  END;
+  RAISE NOTICE '%', x;
+END
+----
+DECLARE
+x INT8;
+BEGIN
+DECLARE
+y INT8;
+BEGIN
+RAISE NOTICE '% %', x, y;
+END;
+RAISE NOTICE '%', x;
+END;
+ -- normalized!
+DECLARE
+x INT8;
+BEGIN
+DECLARE
+y INT8;
+BEGIN
+RAISE NOTICE '% %', (x), (y);
+END;
+RAISE NOTICE '%', (x);
+END;
+ -- fully parenthesized
+DECLARE
+x INT8;
+BEGIN
+DECLARE
+y INT8;
+BEGIN
+RAISE NOTICE '_', x, y;
+END;
+RAISE NOTICE '_', x;
+END;
+ -- literals removed
+DECLARE
+_ INT8;
+BEGIN
+DECLARE
+_ INT8;
+BEGIN
+RAISE NOTICE '% %', _, _;
+END;
+RAISE NOTICE '%', _;
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+  x INT;
+BEGIN
+  BEGIN
+    x := 100;
+  END;
+  RAISE NOTICE '%', x;
+END
+----
+DECLARE
+x INT8;
+BEGIN
+BEGIN
+x := 100;
+END;
+RAISE NOTICE '%', x;
+END;
+ -- normalized!
+DECLARE
+x INT8;
+BEGIN
+BEGIN
+x := (100);
+END;
+RAISE NOTICE '%', (x);
+END;
+ -- fully parenthesized
+DECLARE
+x INT8;
+BEGIN
+BEGIN
+x := _;
+END;
+RAISE NOTICE '_', x;
+END;
+ -- literals removed
+DECLARE
+_ INT8;
+BEGIN
+BEGIN
+_ := 100;
+END;
+RAISE NOTICE '%', _;
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+  x INT;
+BEGIN
+  BEGIN
+    x := 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      x := 0;
+  END;
+  RAISE NOTICE '%', x;
+END
+----
+DECLARE
+x INT8;
+BEGIN
+BEGIN
+x := 1 // 0;
+EXCEPTION
+WHEN division_by_zero THEN
+x := 0;
+END;
+RAISE NOTICE '%', x;
+END;
+ -- normalized!
+DECLARE
+x INT8;
+BEGIN
+BEGIN
+x := ((1) // (0));
+EXCEPTION
+WHEN division_by_zero THEN
+x := (0);
+END;
+RAISE NOTICE '%', (x);
+END;
+ -- fully parenthesized
+DECLARE
+x INT8;
+BEGIN
+BEGIN
+x := _ // _;
+EXCEPTION
+WHEN _ THEN
+x := _;
+END;
+RAISE NOTICE '_', x;
+END;
+ -- literals removed
+DECLARE
+_ INT8;
+BEGIN
+BEGIN
+_ := 1 // 0;
+EXCEPTION
+WHEN division_by_zero THEN
+_ := 0;
+END;
+RAISE NOTICE '%', _;
+END;
+ -- identifiers removed
+
+error
+DECLARE
+BEGIN
+  BEGIN
+  END
+END
+----
+at or near "end": syntax error
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  BEGIN
+  END
+END
+^
+
+error
+DECLARE
+  x INT;
+BEGIN
+  BEGIN
+  END
+  RAISE NOTICE '%', x;
+END
+----
+at or near "raise": syntax error: end label "raise" specified for unlabeled block
+DETAIL: source SQL:
+DECLARE
+  x INT;
+BEGIN
+  BEGIN
+  END
+  RAISE NOTICE '%', x;
+  ^
+
+error
+<<foo>>
+BEGIN
+  SELECT 1;
+END bar
+----
+at or near "bar": syntax error: end label "bar" differs from block's label "foo"
+DETAIL: source SQL:
+<<foo>>
+BEGIN
+  SELECT 1;
+END bar
+    ^
+
+error
+BEGIN
+  SELECT 1;
+END foo
+----
+at or near "foo": syntax error: end label "foo" specified for unlabeled block
+DETAIL: source SQL:
+BEGIN
+  SELECT 1;
+END foo
+    ^
+
+pretty
+DECLARE
+x INT;
+BEGIN
+BEGIN
+x := 1 // 0;
+EXCEPTION
+WHEN division_by_zero THEN
+x := 0;
+END;
+RAISE NOTICE '%', x;
+END
+----
+DECLARE
+	x INT8;
+BEGIN
+	BEGIN
+		x := 1 // 0;
+	EXCEPTION
+		WHEN division_by_zero THEN
+			x := 0;
+	END;
+	RAISE NOTICE '%', x;
+END;
+
+pretty
+DECLARE
+x INT;
+BEGIN
+DECLARE
+y INT;
+BEGIN
+RAISE NOTICE '% %', x, y;
+END;
+RAISE NOTICE '%', x;
+END
+----
+DECLARE
+	x INT8;
+BEGIN
+	DECLARE
+		y INT8;
+	BEGIN
+		RAISE NOTICE '% %', x, y;
+	END;
+	RAISE NOTICE '%', x;
+END;

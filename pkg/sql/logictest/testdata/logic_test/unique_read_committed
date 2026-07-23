@@ -1,0 +1,104 @@
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+# Test UNIQUE WITHOUT INDEX with an enum PK. Under read committed isolation this
+# should work, using single-key predicate locks.
+
+statement ok
+CREATE TYPE region AS ENUM ('adriatic', 'aegean', 'black', 'caspian', 'mediterranean', 'persian', 'red')
+
+statement ok
+CREATE TABLE voyage (
+  sea region NOT NULL DEFAULT 'aegean',
+  hero STRING NOT NULL,
+  crew STRING NULL,
+  quest STRING NOT NULL,
+  PRIMARY KEY (sea, hero),
+  UNIQUE INDEX (sea, quest, crew),
+  UNIQUE WITHOUT INDEX (hero),
+  UNIQUE WITHOUT INDEX (quest, crew),
+  FAMILY (sea, hero, crew, quest)
+)
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# Test non-conflicting INSERT.
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+INSERT INTO voyage VALUES ('caspian', 'hercules', 'argonauts', 'golden fleece')
+
+# Test the (quest, crew) uniqueness constraint.
+
+# The Argonauts searching for the golden fleece should fail the (quest, crew)
+# uniqueness check, even with a different sea.
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+INSERT INTO voyage
+VALUES (DEFAULT, 'odysseus', 'nobody', 'penelope'), ('black', 'jason', 'argonauts', 'golden fleece')
+
+# Only Odysseus should be inserted.
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+INSERT INTO voyage
+VALUES ('mediterranean', 'odysseus', 'nobody', 'penelope'), ('black', 'jason', 'argonauts', 'golden fleece')
+ON CONFLICT (quest, crew) DO NOTHING
+
+query TTTT
+SELECT * FROM voyage ORDER BY hero, crew, quest
+----
+
+# Test the (hero) uniqueness constraint.
+
+# Hercules should fail the (hero) uniqueness check, even with a different sea.
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+INSERT INTO voyage (hero, quest) VALUES ('perseus', 'medusa'), ('hercules', 'geryon')
+
+# Only Perseus should be inserted.
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+INSERT INTO voyage (hero, quest) VALUES ('perseus', 'medusa'), ('hercules', 'geryon')
+ON CONFLICT (hero) DO NOTHING
+
+query TTTT
+SELECT * FROM voyage ORDER BY hero, crew, quest
+----
+
+# Test conflicting UPSERT.
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+UPSERT INTO voyage VALUES ('black', 'jason', 'argonauts', 'golden fleece')
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+UPSERT INTO voyage (hero, quest) VALUES ('hercules', 'geryon')
+
+# Test conflicting UPDATE.
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+UPDATE voyage SET crew = 'argonauts', quest = 'golden fleece' WHERE hero = 'perseus'
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+UPDATE voyage SET hero = 'hercules' WHERE hero = 'odysseus'
+
+# Test conflicting INSERT ON CONFLICT DO UPDATE.
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+INSERT INTO voyage VALUES ('black', 'jason', 'argonauts', 'golden fleece')
+ON CONFLICT (quest, crew) DO UPDATE SET quest = 'penelope', crew = 'nobody'
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+INSERT INTO voyage (hero, quest) VALUES ('hercules', 'geryon')
+ON CONFLICT (hero) DO UPDATE SET hero = 'perseus'
+
+# Test UNIQUE WITHOUT INDEX with a non-enum PK. Under read committed isolation
+# this will not work until predicate locks are supported on multi-key scans.
+
+statement ok
+CREATE TABLE titan (
+  name STRING NOT NULL,
+  domain STRING NOT NULL,
+  children STRING[],
+  PRIMARY KEY (name),
+  UNIQUE WITHOUT INDEX (domain),
+  FAMILY (name, domain, children)
+)
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+INSERT INTO titan VALUES ('cronus', 'time', ARRAY['zeus', 'hera', 'hades', 'poseidon', 'demeter', 'hestia'])

@@ -1,0 +1,85 @@
+# stats_differ — Tests the statsDiffer flag from GetTableStatsMaybeStable.
+#
+# When a canary window is active, GetTableStatsMaybeStable returns a
+# statsDiffer bool that indicates whether the fresh and stable stats are
+# different at the given asof timestamp. This flag is later used to indicate
+# that the current execution should be included in the "canary vs stable" metric.
+
+exec
+CREATE TABLE differ_test (id INT PRIMARY KEY) WITH (sql_stats_canary_window = '1h')
+----
+
+# No stats yet — stats should not differ (latestFullStatsTimestamp is empty).
+stats-differ table=differ_test canary-window=1h asof=2025-01-01T10:30:00
+----
+stats_differ: false
+
+exec
+ALTER TABLE differ_test INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2025-01-01 10:00:00.000000",
+    "row_count": 100,
+    "distinct_count": 100,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  }
+]'
+----
+
+# One generation within canary window: stable is empty but canary has stats,
+# so they differ. asof=10:30 is within 1h of created_at=10:00.
+stats-differ table=differ_test canary-window=1h asof=2025-01-01T10:30:00
+----
+stats_differ: true
+
+# One generation but asof is past the canary window
+# (asof=12:00 > 10:00 + 1h), so stats no longer differ.
+stats-differ table=differ_test canary-window=1h asof=2025-01-01T12:00:00
+----
+stats_differ: false
+
+exec
+ALTER TABLE differ_test INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2025-01-01 10:00:00.000000",
+    "row_count": 100,
+    "distinct_count": 100,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  },
+  {
+    "columns": ["id"],
+    "created_at": "2025-01-01 11:00:00.000000",
+    "row_count": 200,
+    "distinct_count": 200,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  }
+]'
+----
+
+# 11:30 < 11:00 + 1h. Two distinct generations → stats differ.
+stats-differ table=differ_test canary-window=1h asof=2025-01-01T11:30:00
+----
+stats_differ: true
+
+# No canary window — stats should not differ even with two generations.
+stats-differ table=differ_test canary-window=0s asof=2025-01-01T11:30:00
+----
+stats_differ: false
+
+# Test warm-cache path: call stats-differ without invalidating the cache
+# first (no-invalidate). The cache-hit branch in getTableStatsFromCache
+# should return the same statsDiffer value.
+stats-differ table=differ_test canary-window=1h no-invalidate asof=2025-01-01T11:30:00
+----
+stats_differ: true
+
+stats-differ table=differ_test canary-window=0s no-invalidate asof=2025-01-01T11:30:00
+----
+stats_differ: false

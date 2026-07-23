@@ -1,0 +1,141 @@
+# Try different limit values
+
+query sort=SERVICE_LAT limit=1
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC LIMIT $1
+--ARGS--
+[1]
+
+query sort=SERVICE_LAT
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC LIMIT $1
+--ARGS--
+[20000]
+
+query sort=SERVICE_LAT limit=10000000
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC LIMIT $1
+--ARGS--
+[10000000]
+
+
+# Check all sort options
+
+query sort=PCT_RUNTIME limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY ((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
+                         (statistics -> 'statistics' ->> 'cnt')::FLOAT) DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=SERVICE_LAT limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=CPU_TIME limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::FLOAT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=EXECUTION_COUNT limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' ->> 'cnt')::INT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=CONTENTION_TIME limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=LATENCY_INFO_MIN limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'latencyInfo' ->> 'min')::FLOAT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=LATENCY_INFO_MAX limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'latencyInfo' ->> 'max')::FLOAT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=ROWS_PROCESSED limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY ((statistics -> 'statistics' -> 'rowsRead' ->> 'mean')::FLOAT + 
+												 (statistics -> 'statistics' -> 'rowsWritten' ->> 'mean')::FLOAT) DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=MAX_MEMORY limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'execution_statistics' -> 'maxMemUsage' ->> 'mean')::FLOAT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=NETWORK limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'execution_statistics' -> 'networkBytes' ->> 'mean')::FLOAT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=RETRIES limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' ->> 'maxRetries')::INT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=LAST_EXEC limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' ->> 'lastExecAt') DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]

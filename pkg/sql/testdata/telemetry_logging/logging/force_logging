@@ -1,0 +1,387 @@
+subtest txn_mode_tracing_on
+# When tracing is on we should log all execution events.
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.max_event_frequency = 10;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 100;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
+----
+
+exec-sql
+CREATE TABLE t()
+----
+
+spy-sql unixSecs=0.1
+SET TRACING = ON;
+----
+
+spy-sql unixSecs=0.1 useRealTracing=true
+SELECT * FROM t LIMIT 1;
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlanGist": "AgHQAQIAAAAAAg==",
+	"ScanCount": 1,
+	"Statement": "SELECT * FROM \"\".\"\".t LIMIT ‹1›",
+	"StatementFingerprintID": "7201809505509488600",
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 0,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		"7201809505509488600"
+	],
+	"TransactionFingerprintID": "14740926831136669703",
+	"User": "root"
+}
+
+spy-sql unixSecs=0.1 useRealTracing=true
+SELECT 1, 2, 3;
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICBgYG",
+	"Statement": "SELECT ‹1›, ‹2›, ‹3›",
+	"StatementFingerprintID": "11549918303946390797",
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 1,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		"11549918303946390797"
+	],
+	"TransactionFingerprintID": "1092739513890900690",
+	"User": "root"
+}
+
+spy-sql unixSecs=0.1 useRealTracing=true
+SELECT 'hello';
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"Statement": "SELECT ‹'hello'›",
+	"StatementFingerprintID": "7708515506933078911",
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 1,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		"7708515506933078911"
+	],
+	"TransactionFingerprintID": "14238582463169801376",
+	"User": "root"
+}
+
+spy-sql unixSecs=0.1
+SET TRACING = off;
+----
+
+subtest end
+
+subtest txn_mode_console_query
+# When tracing is on we should log all execution events.
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.max_event_frequency = 10;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 100;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
+----
+
+spy-sql unixSecs=0.1
+SET application_name = '$ internal-console-app';
+----
+{
+	"ApplicationName": "$ internal-console-app",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlanGist": "Ais=",
+	"Statement": "SET application_name = ‹'$ internal-console-app'›",
+	"StatementFingerprintID": "12121160597728358152",
+	"StmtPosInTxn": 1,
+	"Tag": "SET",
+	"User": "root"
+}
+
+spy-sql unixSecs=0.1
+SELECT * FROM t LIMIT 1;
+----
+{
+	"ApplicationName": "$ internal-console-app",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlanGist": "AgHQAQIAAAAAAg==",
+	"ScanCount": 1,
+	"Statement": "SELECT * FROM \"\".\"\".t LIMIT ‹1›",
+	"StatementFingerprintID": "7201809505509488600",
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "$ internal-console-app",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 0,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 5,
+	"StatementFingerprintIDs": [
+		"7201809505509488600"
+	],
+	"TransactionFingerprintID": "14740926831136669703",
+	"User": "root"
+}
+
+spy-sql unixSecs=0.1
+SELECT 1, 2, 3;
+----
+{
+	"ApplicationName": "$ internal-console-app",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICBgYG",
+	"Statement": "SELECT ‹1›, ‹2›, ‹3›",
+	"StatementFingerprintID": "11549918303946390797",
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "$ internal-console-app",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 1,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		"11549918303946390797"
+	],
+	"TransactionFingerprintID": "1092739513890900690",
+	"User": "root"
+}
+
+spy-sql unixSecs=0.1
+SELECT 'hello';
+----
+{
+	"ApplicationName": "$ internal-console-app",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"Statement": "SELECT ‹'hello'›",
+	"StatementFingerprintID": "7708515506933078911",
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "$ internal-console-app",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 1,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		"7708515506933078911"
+	],
+	"TransactionFingerprintID": "14238582463169801376",
+	"User": "root"
+}
+
+# Reset app name. Note that the sampled_query event
+# will still be logged due to the current application
+# being set to the internal console app name.
+spy-sql unixSecs=0.1
+SET application_name = 'telemetry-logging';
+----
+{
+	"ApplicationName": "telemetry-logging",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlanGist": "Ais=",
+	"Statement": "SET application_name = ‹'telemetry-logging'›",
+	"StatementFingerprintID": "12121160597728358152",
+	"StmtPosInTxn": 1,
+	"Tag": "SET",
+	"User": "root"
+}
+{
+	"ApplicationName": "$ internal-console-app",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 0,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		"12121160597728358152"
+	],
+	"TransactionFingerprintID": "528256080741849303",
+	"User": "root"
+}
+
+subtest end
+
+subtest stmt_mode_force_non_dml_tcl_statements
+# sampled_query events should be force logged if they are not of type DML or TCL
+
+reset-last-sampled
+----
+
+
+reset-telemetry-cluster-settings
+----
+
+
+# This first SELECT statement should be emitted.
+spy-sql unixSecs=1
+SELECT 1;
+----
+{
+	"ApplicationName": "telemetry-logging",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICAgYC",
+	"Statement": "SELECT ‹1›",
+	"StatementFingerprintID": "7708515506933078911",
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+
+# Now we'll execute some statements stubbed at the same time.
+# All statement types that aren't TCL or DML should be logged.
+
+# CREATE statement should always be emitted.
+spy-sql unixSecs=1
+CREATE TABLE foo (a INT, b INT);
+----
+{
+	"ApplicationName": "telemetry-logging",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlanGist": "AiXKAQ==",
+	"Statement": "CREATE TABLE defaultdb.public.foo (a INT8, b INT8)",
+	"StatementFingerprintID": "5900701146812956622",
+	"StmtPosInTxn": 1,
+	"Tag": "CREATE TABLE",
+	"User": "root"
+}
+
+# Skipped due to not enough time elapsed.
+spy-sql unixSecs=1
+SELECT * FROM foo
+----
+
+
+# Skipped due to not enough time elapsed.
+spy-sql unixSecs=1
+BEGIN;
+INSERT INTO foo VALUES (1, 2), (3, 4);
+COMMIT;
+----
+
+
+spy-sql unixSecs=1
+BEGIN;
+SET TRANSACTION PRIORITY HIGH;
+SELECT 1;
+CREATE USER craig;
+GRANT admin TO craig;
+COMMIT;
+----
+{
+	"ApplicationName": "telemetry-logging",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlanGist": "Ais=",
+	"SkippedQueries": 7,
+	"Statement": "CREATE USER craig",
+	"StatementFingerprintID": "10287076373212449411",
+	"StmtPosInTxn": 1,
+	"Tag": "CREATE ROLE",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlanGist": "Ais=",
+	"Statement": "GRANT admin TO craig",
+	"StatementFingerprintID": "13141210421725929372",
+	"StmtPosInTxn": 1,
+	"Tag": "GRANT",
+	"User": "root"
+}
+
+
+subtest end

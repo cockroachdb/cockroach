@@ -1,0 +1,731 @@
+exec-ddl
+CREATE TABLE parent (x INT, p INT PRIMARY KEY, other INT UNIQUE)
+----
+
+exec-ddl
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
+----
+
+build
+UPDATE child SET p = 4
+----
+update child
+ ├── columns: <none>
+ ├── fetch columns: c:5 child.p:6
+ ├── update-mapping:
+ │    └── p_new:9 => child.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: p_new:9!null c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── scan child
+ │    │    ├── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── 4 [as=p_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:10!null
+                ├── with-scan &1
+                │    ├── columns: p:10!null
+                │    └── mapping:
+                │         └──  p_new:9 => p:10
+                ├── scan parent
+                │    ├── columns: parent.p:12!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── p:10 = parent.p:12
+
+build
+UPDATE parent SET p = p+1
+----
+update parent
+ ├── columns: <none>
+ ├── fetch columns: x:6 parent.p:7 other:8
+ ├── update-mapping:
+ │    └── p_new:11 => parent.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: p_new:11!null x:6 parent.p:7!null other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    ├── scan parent
+ │    │    ├── columns: x:6 parent.p:7!null other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── parent.p:7 + 1 [as=p_new:11]
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── semi-join (hash)
+                ├── columns: p:12!null
+                ├── except
+                │    ├── columns: p:12!null
+                │    ├── left columns: p:12!null
+                │    ├── right columns: p:13
+                │    ├── with-scan &1
+                │    │    ├── columns: p:12!null
+                │    │    └── mapping:
+                │    │         └──  parent.p:7 => p:12
+                │    └── with-scan &1
+                │         ├── columns: p:13!null
+                │         └── mapping:
+                │              └──  p_new:11 => p:13
+                ├── scan child
+                │    ├── columns: child.p:15!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── p:12 = child.p:15
+
+exec-ddl
+CREATE TABLE grandchild (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
+----
+
+build
+UPDATE child SET c = 4
+----
+update child
+ ├── columns: <none>
+ ├── fetch columns: child.c:5 p:6
+ ├── update-mapping:
+ │    └── c_new:9 => child.c:1
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: c_new:9!null child.c:5!null p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── scan child
+ │    │    ├── columns: child.c:5!null p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── 4 [as=c_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: grandchild(c) -> child(c)
+           └── semi-join (hash)
+                ├── columns: c:10!null
+                ├── except
+                │    ├── columns: c:10!null
+                │    ├── left columns: c:10!null
+                │    ├── right columns: c:11
+                │    ├── with-scan &1
+                │    │    ├── columns: c:10!null
+                │    │    └── mapping:
+                │    │         └──  child.c:5 => c:10
+                │    └── with-scan &1
+                │         ├── columns: c:11!null
+                │         └── mapping:
+                │              └──  c_new:9 => c:11
+                ├── scan grandchild
+                │    ├── columns: grandchild.c:13!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── c:10 = grandchild.c:13
+
+# This update shouldn't emit checks for c, since it's unchanged.
+build
+UPDATE child SET p = 4
+----
+update child
+ ├── columns: <none>
+ ├── fetch columns: c:5 child.p:6
+ ├── update-mapping:
+ │    └── p_new:9 => child.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: p_new:9!null c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── scan child
+ │    │    ├── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── 4 [as=p_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:10!null
+                ├── with-scan &1
+                │    ├── columns: p:10!null
+                │    └── mapping:
+                │         └──  p_new:9 => p:10
+                ├── scan parent
+                │    ├── columns: parent.p:12!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── p:10 = parent.p:12
+
+build
+UPDATE child SET p = p
+----
+update child
+ ├── columns: <none>
+ ├── fetch columns: c:5 child.p:6
+ ├── update-mapping:
+ │    └── child.p:6 => child.p:2
+ ├── input binding: &1
+ ├── scan child
+ │    ├── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    └── flags: avoid-full-scan
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:9!null
+                ├── with-scan &1
+                │    ├── columns: p:9!null
+                │    └── mapping:
+                │         └──  child.p:6 => p:9
+                ├── scan parent
+                │    ├── columns: parent.p:11!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── p:9 = parent.p:11
+
+build
+UPDATE child SET p = p+1, c = c+1
+----
+update child
+ ├── columns: <none>
+ ├── fetch columns: child.c:5 child.p:6
+ ├── update-mapping:
+ │    ├── c_new:10 => child.c:1
+ │    └── p_new:9 => child.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: p_new:9!null c_new:10!null child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── scan child
+ │    │    ├── columns: child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         ├── child.p:6 + 1 [as=p_new:9]
+ │         └── child.c:5 + 1 [as=c_new:10]
+ └── f-k-checks
+      ├── f-k-checks-item: child(p) -> parent(p)
+      │    └── anti-join (hash)
+      │         ├── columns: p:11!null
+      │         ├── with-scan &1
+      │         │    ├── columns: p:11!null
+      │         │    └── mapping:
+      │         │         └──  p_new:9 => p:11
+      │         ├── scan parent
+      │         │    ├── columns: parent.p:13!null
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         └── filters
+      │              └── p:11 = parent.p:13
+      └── f-k-checks-item: grandchild(c) -> child(c)
+           └── semi-join (hash)
+                ├── columns: c:17!null
+                ├── except
+                │    ├── columns: c:17!null
+                │    ├── left columns: c:17!null
+                │    ├── right columns: c:18
+                │    ├── with-scan &1
+                │    │    ├── columns: c:17!null
+                │    │    └── mapping:
+                │    │         └──  child.c:5 => c:17
+                │    └── with-scan &1
+                │         ├── columns: c:18!null
+                │         └── mapping:
+                │              └──  c_new:10 => c:18
+                ├── scan grandchild
+                │    ├── columns: grandchild.c:20!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── c:17 = grandchild.c:20
+
+exec-ddl
+CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p))
+----
+
+# We don't need the FK check in this case because we are only setting NULL
+# values.
+build
+UPDATE child_nullable SET p = NULL
+----
+update child_nullable
+ ├── columns: <none>
+ ├── fetch columns: c:5 p:6
+ ├── update-mapping:
+ │    └── p_new:9 => p:2
+ └── project
+      ├── columns: p_new:9 c:5!null p:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      ├── scan child_nullable
+      │    ├── columns: c:5!null p:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    └── flags: avoid-full-scan
+      └── projections
+           └── NULL::INT8 [as=p_new:9]
+
+# Multiple grandchild tables
+exec-ddl
+CREATE TABLE grandchild2 (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
+----
+
+build
+UPDATE child SET p = 4
+----
+update child
+ ├── columns: <none>
+ ├── fetch columns: c:5 child.p:6
+ ├── update-mapping:
+ │    └── p_new:9 => child.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: p_new:9!null c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── scan child
+ │    │    ├── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── 4 [as=p_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:10!null
+                ├── with-scan &1
+                │    ├── columns: p:10!null
+                │    └── mapping:
+                │         └──  p_new:9 => p:10
+                ├── scan parent
+                │    ├── columns: parent.p:12!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── p:10 = parent.p:12
+
+exec-ddl
+CREATE TABLE self (x INT PRIMARY KEY, y INT NOT NULL REFERENCES self(x))
+----
+
+build
+UPDATE self SET y = 3
+----
+update self
+ ├── columns: <none>
+ ├── fetch columns: x:5 self.y:6
+ ├── update-mapping:
+ │    └── y_new:9 => self.y:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: y_new:9!null x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    ├── scan self
+ │    │    ├── columns: x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── 3 [as=y_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: self(y) -> self(x)
+           └── anti-join (hash)
+                ├── columns: y:10!null
+                ├── with-scan &1
+                │    ├── columns: y:10!null
+                │    └── mapping:
+                │         └──  y_new:9 => y:10
+                ├── scan self
+                │    ├── columns: x:11!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── y:10 = x:11
+
+build
+UPDATE self SET x = 3
+----
+update self
+ ├── columns: <none>
+ ├── fetch columns: self.x:5 y:6
+ ├── update-mapping:
+ │    └── x_new:9 => self.x:1
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: x_new:9!null self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    ├── scan self
+ │    │    ├── columns: self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── 3 [as=x_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: self(y) -> self(x)
+           └── semi-join (hash)
+                ├── columns: x:10!null
+                ├── except
+                │    ├── columns: x:10!null
+                │    ├── left columns: x:10!null
+                │    ├── right columns: x:11
+                │    ├── with-scan &1
+                │    │    ├── columns: x:10!null
+                │    │    └── mapping:
+                │    │         └──  self.x:5 => x:10
+                │    └── with-scan &1
+                │         ├── columns: x:11!null
+                │         └── mapping:
+                │              └──  x_new:9 => x:11
+                ├── scan self
+                │    ├── columns: y:13!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── x:10 = y:13
+
+exec-ddl
+CREATE TABLE parent_multicol (a INT, b INT, c INT, PRIMARY KEY (a,b,c))
+----
+
+exec-ddl
+CREATE TABLE child_multicol_simple (
+  k INT PRIMARY KEY,
+  a INT, b INT, c INT,
+  CONSTRAINT fk FOREIGN KEY(a,b,c) REFERENCES parent_multicol(a,b,c) MATCH SIMPLE
+)
+----
+
+# With MATCH SIMPLE, we can elide the FK check if any FK column is NULL.
+build
+UPDATE child_multicol_simple SET a = 1, b = NULL, c = 1 WHERE k = 1
+----
+update child_multicol_simple
+ ├── columns: <none>
+ ├── fetch columns: k:7 a:8 b:9 c:10
+ ├── update-mapping:
+ │    ├── a_new:13 => a:2
+ │    ├── b_new:14 => b:3
+ │    └── a_new:13 => c:4
+ └── project
+      ├── columns: a_new:13!null b_new:14 k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      ├── select
+      │    ├── columns: k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── scan child_multicol_simple
+      │    │    ├── columns: k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── k:7 = 1
+      └── projections
+           ├── 1 [as=a_new:13]
+           └── NULL::INT8 [as=b_new:14]
+
+exec-ddl
+CREATE TABLE child_multicol_full (
+  k INT PRIMARY KEY,
+  a INT, b INT, c INT,
+  CONSTRAINT fk FOREIGN KEY(a,b,c) REFERENCES parent_multicol(a,b,c) MATCH FULL
+)
+----
+
+# With MATCH FULL, we can elide the FK check only if all FK columns are NULL.
+build
+UPDATE child_multicol_full SET a = 1, b = NULL, c = 1 WHERE k = 1
+----
+update child_multicol_full
+ ├── columns: <none>
+ ├── fetch columns: k:7 child_multicol_full.a:8 child_multicol_full.b:9 child_multicol_full.c:10
+ ├── update-mapping:
+ │    ├── a_new:13 => child_multicol_full.a:2
+ │    ├── b_new:14 => child_multicol_full.b:3
+ │    └── a_new:13 => child_multicol_full.c:4
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: a_new:13!null b_new:14 k:7!null child_multicol_full.a:8 child_multicol_full.b:9 child_multicol_full.c:10 child_multicol_full.crdb_internal_mvcc_timestamp:11 child_multicol_full.tableoid:12
+ │    ├── select
+ │    │    ├── columns: k:7!null child_multicol_full.a:8 child_multicol_full.b:9 child_multicol_full.c:10 child_multicol_full.crdb_internal_mvcc_timestamp:11 child_multicol_full.tableoid:12
+ │    │    ├── scan child_multicol_full
+ │    │    │    ├── columns: k:7!null child_multicol_full.a:8 child_multicol_full.b:9 child_multicol_full.c:10 child_multicol_full.crdb_internal_mvcc_timestamp:11 child_multicol_full.tableoid:12
+ │    │    │    └── flags: avoid-full-scan
+ │    │    └── filters
+ │    │         └── k:7 = 1
+ │    └── projections
+ │         ├── 1 [as=a_new:13]
+ │         └── NULL::INT8 [as=b_new:14]
+ └── f-k-checks
+      └── f-k-checks-item: child_multicol_full(a,b,c) -> parent_multicol(a,b,c)
+           └── anti-join (hash)
+                ├── columns: a:15!null b:16 c:17!null
+                ├── with-scan &1
+                │    ├── columns: a:15!null b:16 c:17!null
+                │    └── mapping:
+                │         ├──  a_new:13 => a:15
+                │         ├──  b_new:14 => b:16
+                │         └──  a_new:13 => c:17
+                ├── scan parent_multicol
+                │    ├── columns: parent_multicol.a:18!null parent_multicol.b:19!null parent_multicol.c:20!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── a:15 = parent_multicol.a:18
+                     ├── b:16 = parent_multicol.b:19
+                     └── c:17 = parent_multicol.c:20
+
+build
+UPDATE child_multicol_full SET a = NULL, b = NULL, c = NULL WHERE k = 1
+----
+update child_multicol_full
+ ├── columns: <none>
+ ├── fetch columns: k:7 a:8 b:9 c:10
+ ├── update-mapping:
+ │    ├── a_new:13 => a:2
+ │    ├── a_new:13 => b:3
+ │    └── a_new:13 => c:4
+ └── project
+      ├── columns: a_new:13 k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      ├── select
+      │    ├── columns: k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── scan child_multicol_full
+      │    │    ├── columns: k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── k:7 = 1
+      └── projections
+           └── NULL::INT8 [as=a_new:13]
+
+exec-ddl
+CREATE TABLE two (a int, b int, primary key (a, b))
+----
+
+exec-ddl
+CREATE TABLE fam (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  FAMILY (a, b, c),
+  FAMILY (d, e),
+  FOREIGN KEY (c, d) REFERENCES two (a, b)
+)
+----
+
+# Ensure that we fetch all relevant columns for a foreign key.
+
+# NOTE: when we no longer require indexes to be created for FKs, ensure that
+# these still scan all the relevant FK columns.
+norm
+UPDATE fam SET c = 3
+----
+update fam
+ ├── columns: <none>
+ ├── fetch columns: fam.a:9 fam.b:10 fam.c:11 rowid:14
+ ├── update-mapping:
+ │    └── c_new:17 => fam.c:3
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: c_new:17!null fam.a:9 fam.b:10 fam.c:11 fam.d:12 rowid:14!null
+ │    ├── scan fam
+ │    │    ├── columns: fam.a:9 fam.b:10 fam.c:11 fam.d:12 rowid:14!null
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── 3 [as=c_new:17]
+ └── f-k-checks
+      └── f-k-checks-item: fam(c,d) -> two(a,b)
+           └── anti-join (hash)
+                ├── columns: c:18!null d:19!null
+                ├── select
+                │    ├── columns: c:18!null d:19!null
+                │    ├── with-scan &1
+                │    │    ├── columns: c:18!null d:19
+                │    │    └── mapping:
+                │    │         ├──  c_new:17 => c:18
+                │    │         └──  fam.d:12 => d:19
+                │    └── filters
+                │         └── d:19 IS NOT NULL
+                ├── scan two
+                │    ├── columns: two.a:20!null two.b:21!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── c:18 = two.a:20
+                     └── d:19 = two.b:21
+
+norm
+UPDATE fam SET d = 3
+----
+update fam
+ ├── columns: <none>
+ ├── fetch columns: fam.d:12 e:13 rowid:14
+ ├── update-mapping:
+ │    └── d_new:17 => fam.d:4
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: d_new:17!null fam.c:11 fam.d:12 e:13 rowid:14!null
+ │    ├── scan fam
+ │    │    ├── columns: fam.c:11 fam.d:12 e:13 rowid:14!null
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── 3 [as=d_new:17]
+ └── f-k-checks
+      └── f-k-checks-item: fam(c,d) -> two(a,b)
+           └── anti-join (hash)
+                ├── columns: c:18!null d:19!null
+                ├── select
+                │    ├── columns: c:18!null d:19!null
+                │    ├── with-scan &1
+                │    │    ├── columns: c:18 d:19!null
+                │    │    └── mapping:
+                │    │         ├──  fam.c:11 => c:18
+                │    │         └──  d_new:17 => d:19
+                │    └── filters
+                │         └── c:18 IS NOT NULL
+                ├── scan two
+                │    ├── columns: two.a:20!null two.b:21!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── c:18 = two.a:20
+                     └── d:19 = two.b:21
+
+# Verify that the join hint is set.
+build set=prefer_lookup_joins_for_fks=true
+UPDATE child SET p = 4
+----
+update child
+ ├── columns: <none>
+ ├── fetch columns: c:5 child.p:6
+ ├── update-mapping:
+ │    └── p_new:9 => child.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: p_new:9!null c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── scan child
+ │    │    ├── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── 4 [as=p_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:10!null
+                ├── flags: prefer lookup join (into right side)
+                ├── with-scan &1
+                │    ├── columns: p:10!null
+                │    └── mapping:
+                │         └──  p_new:9 => p:10
+                ├── scan parent
+                │    ├── columns: parent.p:12!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── p:10 = parent.p:12
+
+# Verify that we lock the parent when necessary.
+build set=enable_implicit_fk_locking_for_serializable=true
+UPDATE child SET p = p+1, c = c+1
+----
+update child
+ ├── columns: <none>
+ ├── fetch columns: child.c:5 child.p:6
+ ├── update-mapping:
+ │    ├── c_new:10 => child.c:1
+ │    └── p_new:9 => child.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: p_new:9!null c_new:10!null child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── scan child
+ │    │    ├── columns: child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         ├── child.p:6 + 1 [as=p_new:9]
+ │         └── child.c:5 + 1 [as=c_new:10]
+ └── f-k-checks
+      ├── f-k-checks-item: child(p) -> parent(p)
+      │    └── anti-join (hash)
+      │         ├── columns: p:11!null
+      │         ├── with-scan &1
+      │         │    ├── columns: p:11!null
+      │         │    └── mapping:
+      │         │         └──  p_new:9 => p:11
+      │         ├── scan parent
+      │         │    ├── columns: parent.p:13!null
+      │         │    ├── flags: avoid-full-scan disabled not visible index feature
+      │         │    └── locking: for-share
+      │         └── filters
+      │              └── p:11 = parent.p:13
+      ├── f-k-checks-item: grandchild(c) -> child(c)
+      │    └── semi-join (hash)
+      │         ├── columns: c:17!null
+      │         ├── except
+      │         │    ├── columns: c:17!null
+      │         │    ├── left columns: c:17!null
+      │         │    ├── right columns: c:18
+      │         │    ├── with-scan &1
+      │         │    │    ├── columns: c:17!null
+      │         │    │    └── mapping:
+      │         │    │         └──  child.c:5 => c:17
+      │         │    └── with-scan &1
+      │         │         ├── columns: c:18!null
+      │         │         └── mapping:
+      │         │              └──  c_new:10 => c:18
+      │         ├── scan grandchild
+      │         │    ├── columns: grandchild.c:20!null
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         └── filters
+      │              └── c:17 = grandchild.c:20
+      └── f-k-checks-item: grandchild2(c) -> child(c)
+           └── semi-join (hash)
+                ├── columns: c:23!null
+                ├── except
+                │    ├── columns: c:23!null
+                │    ├── left columns: c:23!null
+                │    ├── right columns: c:24
+                │    ├── with-scan &1
+                │    │    ├── columns: c:23!null
+                │    │    └── mapping:
+                │    │         └──  child.c:5 => c:23
+                │    └── with-scan &1
+                │         ├── columns: c:24!null
+                │         └── mapping:
+                │              └──  c_new:10 => c:24
+                ├── scan grandchild2
+                │    ├── columns: grandchild2.c:26!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── c:23 = grandchild2.c:26
+
+build set=enable_implicit_fk_locking_for_serializable=true
+UPDATE self SET y = 3
+----
+update self
+ ├── columns: <none>
+ ├── fetch columns: x:5 self.y:6
+ ├── update-mapping:
+ │    └── y_new:9 => self.y:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: y_new:9!null x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    ├── scan self
+ │    │    ├── columns: x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── 3 [as=y_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: self(y) -> self(x)
+           └── anti-join (hash)
+                ├── columns: y:10!null
+                ├── with-scan &1
+                │    ├── columns: y:10!null
+                │    └── mapping:
+                │         └──  y_new:9 => y:10
+                ├── scan self
+                │    ├── columns: x:11!null
+                │    ├── flags: avoid-full-scan disabled not visible index feature
+                │    └── locking: for-share
+                └── filters
+                     └── y:10 = x:11
+
+build set=enable_implicit_fk_locking_for_serializable=true
+UPDATE self SET x = 3
+----
+update self
+ ├── columns: <none>
+ ├── fetch columns: self.x:5 y:6
+ ├── update-mapping:
+ │    └── x_new:9 => self.x:1
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: x_new:9!null self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    ├── scan self
+ │    │    ├── columns: self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── projections
+ │         └── 3 [as=x_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: self(y) -> self(x)
+           └── semi-join (hash)
+                ├── columns: x:10!null
+                ├── except
+                │    ├── columns: x:10!null
+                │    ├── left columns: x:10!null
+                │    ├── right columns: x:11
+                │    ├── with-scan &1
+                │    │    ├── columns: x:10!null
+                │    │    └── mapping:
+                │    │         └──  self.x:5 => x:10
+                │    └── with-scan &1
+                │         ├── columns: x:11!null
+                │         └── mapping:
+                │              └──  x_new:9 => x:11
+                ├── scan self
+                │    ├── columns: y:13!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── x:10 = y:13

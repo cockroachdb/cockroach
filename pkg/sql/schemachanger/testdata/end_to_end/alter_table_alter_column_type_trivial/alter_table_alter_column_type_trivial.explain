@@ -1,0 +1,30 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j CHAR(10) NOT NULL);
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE t ALTER COLUMN j SET DATA TYPE CHAR(25);
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET DATA TYPE CHAR(25);
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j), TypeName: "CHAR(25)"}
+ │         ├── 1 element transitioning toward ABSENT
+ │         │    └── PUBLIC → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j), TypeName: "CHAR(10)"}
+ │         └── 1 Mutation operation
+ │              └── UpsertColumnType {"ColumnType":{"ColumnID":2,"TableID":104}}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── PUBLIC → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j), TypeName: "CHAR(25)"}
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── ABSENT → PUBLIC ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j), TypeName: "CHAR(10)"}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── ABSENT → PUBLIC ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j), TypeName: "CHAR(25)"}
+           ├── 1 element transitioning toward ABSENT
+           │    └── PUBLIC → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j), TypeName: "CHAR(10)"}
+           └── 1 Mutation operation
+                └── UpsertColumnType {"ColumnType":{"ColumnID":2,"TableID":104}}

@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rulebasedscanner",
+    srcs = [
+        "scanned_input.go",
+        "scanner.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/settings/rulebasedscanner",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)
+
+go_test(
+    name = "rulebasedscanner_test",
+    srcs = ["scanner_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":rulebasedscanner"],
+    deps = [
+        "//pkg/testutils/datapathutils",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_kr_pretty//:pretty",
+    ],
+)

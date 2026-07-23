@@ -1,0 +1,293 @@
+#!/usr/bin/env bash
+
+# Copyright 2023 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
+set -euo pipefail
+
+dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
+source "$dir/teamcity-support.sh"  # For log_into_gcloud
+source "$dir/release/teamcity-support.sh"
+
+tc_start_block "Variable Setup"
+version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
+prerelease=false
+if [[ $version == *"-"* ]]; then
+  # Our pre-release version contains a dash symbol, e.g. v22.2.0-alpha.1
+  prerelease=true
+fi
+
+if ! echo "${version}" | grep -E -o '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[-.0-9A-Za-z]+)?$'; then
+  #                                    ^major           ^minor           ^patch         ^preRelease
+  # Matching the version name regex from within the cockroach code except
+  # for the `metadata` part at the end because Docker tags don't support
+  # `+` in the tag name.
+  # https://github.com/cockroachdb/cockroach/blob/4c6864b44b9044874488cfedee3a31e6b23a6790/pkg/util/version/version.go#L75
+  echo "Invalid version \"${version}\". Must be of the format \"vMAJOR.MINOR.PATCH(-PRERELEASE)?\"."
+  exit 1
+fi
+
+PUBLISH_LATEST=
+if is_latest "$version"; then
+  PUBLISH_LATEST=true
+fi
+
+release_branch=$(echo "${version}" | grep -E -o '^v[0-9]+\.[0-9]+')
+
+if [[ -z "${DRY_RUN}" ]] ; then
+  gcs_bucket="cockroach-release-artifacts-prod"
+  gcs_staged_bucket="cockroach-release-artifacts-staged-prod"
+  if [[ $prerelease == false ]] ; then
+    dockerhub_repository="docker.io/cockroachdb/cockroach"
+  else
+    dockerhub_repository="docker.io/cockroachdb/cockroach-unstable"
+  fi
+  gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/cockroach"
+  gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
+  git_repo_for_tag="cockroachdb/cockroach"
+else
+  gcs_bucket="cockroach-release-artifacts-dryrun"
+  gcs_staged_bucket="cockroach-release-artifacts-staged-dryrun"
+  dockerhub_repository="docker.io/cockroachdb/cockroach-misc"
+  gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach"
+  gcr_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach-test"
+  # In dry-run, only tag if the operator opts in by pointing DRYRUN_TAG_REPO at a
+  # writable fork (e.g. user/cockroach).
+  git_repo_for_tag="${DRYRUN_TAG_REPO:-}"
+fi
+
+# With WIF (GitHub Actions), credentials are handled via the environment.
+# With TeamCity, use the JSON key env vars.
+if [[ -n "${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE:-}" ]]; then
+  export gcs_credentials=""
+  gcr_staged_credentials=""
+  gcr_credentials=""
+else
+  if [[ -z "${DRY_RUN}" ]] ; then
+    export gcs_credentials="$GCS_CREDENTIALS_PROD"
+    gcr_staged_credentials="$GCS_CREDENTIALS_PROD"
+    gcr_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS"
+  else
+    export gcs_credentials="$GCS_CREDENTIALS_DEV"
+    gcr_staged_credentials="$GCS_CREDENTIALS_DEV"
+    gcr_credentials="${GOOGLE_COCKROACH_RELEASE_CREDENTIALS:-$GCS_CREDENTIALS_DEV}"
+  fi
+fi
+
+# Pick git tag remote + auth. TeamCity sets the SSH deploy key and uses
+# SSH; GitHub Actions sets a PAT (GH_TOKEN) and uses HTTPS with the
+# token embedded in the URL. The PAT must authorize git_repo_for_tag —
+# the prod repo for real publishes, and any fork used for dry-run
+# rehearsal. The GHA branch reads GH_TOKEN, not GITHUB_TOKEN: GHA's
+# runner reserves GITHUB_TOKEN for the auto-issued workflow token and
+# may shadow values set in the step's env block, so we use GH_TOKEN
+# both here and in the workflow.
+tag_remote=""
+tag_git_cmd=""
+if [[ -n "${git_repo_for_tag}" ]]; then
+  if [[ -n "${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY:-}" ]]; then
+    github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
+    configure_git_ssh_key
+    tag_remote="ssh://git@github.com/${git_repo_for_tag}.git"
+    tag_git_cmd="git_wrapped"
+  elif [[ -n "${GH_TOKEN:-}" ]]; then
+    tag_remote="https://x-access-token:${GH_TOKEN}@github.com/${git_repo_for_tag}.git"
+    tag_git_cmd="git"
+  else
+    echo "ERROR: tag repo ${git_repo_for_tag} configured but neither GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY nor GH_TOKEN is set"
+    exit 1
+  fi
+fi
+
+tc_end_block "Variable Setup"
+
+tc_start_block "Verify binaries SHA"
+# Make sure that the linux/amd64 source docker image is built using the same version and SHA. 
+# This is a quick check and it assumes that the docker image was built correctly and based on the tarball binaries.
+docker_login_gcr "$gcr_staged_repository" "${gcr_staged_credentials:-}"
+verify_docker_image "${gcr_staged_repository}:${version}" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" false false
+tc_end_block "Verify binaries SHA"
+
+tc_start_block "Check remote tag and tag"
+if [[ -n "${git_repo_for_tag}" ]]; then
+  if "${tag_git_cmd}" ls-remote --exit-code --tags "${tag_remote}" "${version}"; then
+    echo "Tag ${version} already exists"
+    exit 1
+  fi
+  git tag "${version}"
+else
+  echo "No tag repo configured; skipping"
+fi
+tc_end_block "Check remote tag and tag"
+
+
+tc_start_block "Setup dockerhub credentials"
+configure_docker_creds
+docker_login
+tc_end_block "Setup dockerhub credentials"
+
+tc_start_block "Copy binaries"
+export google_credentials="$gcs_credentials"
+log_into_gcloud
+for product in cockroach cockroach-sql; do
+  for platform in linux-amd64 linux-amd64-fips linux-arm64 linux-s390x darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
+      archive_suffix=tgz
+      if [[ $platform == *"windows"* ]]; then 
+          archive_suffix=zip
+      fi
+      archive="$product-$version.$platform.$archive_suffix"
+      gcloud storage cp "gs://$gcs_staged_bucket/$archive" "gs://$gcs_bucket/$archive"
+      gcloud storage cp "gs://$gcs_staged_bucket/$archive.sha256sum" "gs://$gcs_bucket/$archive.sha256sum"
+  done
+done
+tc_end_block "Copy binaries"
+
+
+tc_start_block "Make and push multiarch docker images"
+dockerhub_tag="${dockerhub_repository}:${version}"
+gcr_tag="${gcr_repository}:${version}"
+
+# Create a buildx builder for multi-platform builds.
+docker buildx rm "release-builder-$$" 2>/dev/null || true
+docker buildx create --name "release-builder-$$" --use
+cleanup_buildx() { docker buildx rm "release-builder-$$" || true; }
+tmpdir=$(mktemp -d)
+trap 'cleanup_buildx; rm -rf "$tmpdir"; remove_files_on_exit' EXIT
+
+# The staged image is already multi-arch; buildx pulls the right platform
+# automatically.
+cat > "$tmpdir/Dockerfile" <<DOCKERFILE
+FROM ${gcr_staged_repository}:${version}
+RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum
+DOCKERFILE
+
+# Build and push the multi-arch image to DockerHub. The staged repo (source)
+# is on us-docker.pkg.dev and DockerHub (destination) is on docker.io, so both
+# logins can coexist.
+docker_login_gcr "$gcr_staged_repository" "${gcr_staged_credentials:-}"
+docker buildx build --pull --push --no-cache \
+  --platform linux/amd64,linux/arm64,linux/s390x \
+  --tag "$dockerhub_tag" "$tmpdir"
+
+# Copy the multi-arch manifest from DockerHub to GCR. These are on different
+# hostnames so both logins can coexist.
+docker_login_gcr "$gcr_repository" "${gcr_credentials:-}"
+docker buildx imagetools create -t "$gcr_tag" "$dockerhub_tag"
+
+tc_end_block "Make and push multiarch docker images"
+
+
+tc_start_block "Make and push FIPS docker image"
+gcr_staged_tag_fips="${gcr_staged_repository}:${version}-fips"
+gcr_tag_fips="${gcr_repository}:${version}-fips"
+dockerhub_tag_fips="${dockerhub_repository}:${version}-fips"
+
+cat > "$tmpdir/Dockerfile" <<DOCKERFILE
+FROM $gcr_staged_tag_fips
+RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum
+DOCKERFILE
+
+docker_login_gcr "$gcr_staged_repository" "${gcr_staged_credentials:-}"
+docker buildx build --pull --push --no-cache \
+  --platform linux/amd64 \
+  --tag "$dockerhub_tag_fips" "$tmpdir"
+
+docker_login_gcr "$gcr_repository" "${gcr_credentials:-}"
+docker buildx imagetools create -t "$gcr_tag_fips" "$dockerhub_tag_fips"
+tc_end_block "Make and push FIPS docker image"
+
+
+tc_start_block "Push release tag to GitHub"
+if [[ -n "${git_repo_for_tag}" ]]; then
+  "${tag_git_cmd}" push "${tag_remote}" "$version"
+else
+  echo "No tag repo configured; skipping"
+fi
+tc_end_block "Push release tag to GitHub"
+
+
+tc_start_block "Publish binaries and archive as latest"
+# Only push the "latest" for our most recent release branch.
+# https://github.com/cockroachdb/cockroach/issues/41067
+if [[ -n "${PUBLISH_LATEST}" && $prerelease == false ]]; then
+  for product in cockroach cockroach-sql; do
+    for platform in linux-amd64 linux-amd64-fips linux-arm64 linux-s390x darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
+        archive_suffix=tgz
+        if [[ $platform == *"windows"* ]]; then 
+            archive_suffix=zip
+        fi
+        from="$product-$version.$platform.$archive_suffix"
+        to="$product-latest.$platform.$archive_suffix"
+        gcloud storage cp "gs://$gcs_bucket/$from" "gs://$gcs_bucket/$to"
+        gcloud storage cp "gs://$gcs_bucket/$from.sha256sum" "gs://$gcs_bucket/$to.sha256sum"
+    done
+  done
+else
+  echo "The latest binaries and archive were _not_ updated."
+fi
+tc_end_block "Publish binaries and archive as latest"
+
+
+tc_start_block "Tag docker image as latest-RELEASE_BRANCH"
+if [[ $prerelease == false ]]; then
+  docker buildx imagetools create \
+    -t "${dockerhub_repository}:latest-${release_branch}" "$dockerhub_tag"
+else
+  echo "The ${dockerhub_repository}:latest-${release_branch} docker image tags were _not_ pushed."
+fi
+tc_end_block "Tag docker images as latest-RELEASE_BRANCH"
+
+
+tc_start_block "Tag docker images as latest"
+# Only push the "latest" tag for our most recent release branch and for the
+# latest unstable release
+# https://github.com/cockroachdb/cockroach/issues/41067
+# https://github.com/cockroachdb/cockroach/issues/48309
+if [[ -n "${PUBLISH_LATEST}" || $prerelease == true ]]; then
+  docker buildx imagetools create \
+    -t "${dockerhub_repository}:latest" "$dockerhub_tag"
+else
+  echo "The ${dockerhub_repository}:latest docker image tags were _not_ pushed."
+fi
+tc_end_block "Tag docker images as latest"
+
+
+tc_start_block "Verify docker images"
+error=0
+
+images=("${dockerhub_tag}" "${gcr_tag}")
+if [[ $prerelease == false ]]; then
+  images+=("${dockerhub_repository}:latest-${release_branch}")
+fi
+if [[ -n "${PUBLISH_LATEST}" || $prerelease == true ]]; then
+  images+=("${dockerhub_repository}:latest")
+fi
+
+for img in "${images[@]}"; do
+  for platform_name in amd64 arm64 s390x; do
+    tc_start_block "Verify $img on $platform_name"
+    if ! verify_docker_image "$img" "linux/$platform_name" "$BUILD_VCS_NUMBER" "$version" false false; then
+      error=1
+    fi
+    tc_end_block "Verify $img on $platform_name"
+  done
+done
+
+images=("${dockerhub_tag_fips}" "${gcr_tag_fips}")
+for img in "${images[@]}"; do
+  tc_start_block "Verify $img"
+  if ! verify_docker_image "$img" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" true false; then
+    error=1
+  fi
+  tc_end_block "Verify $img"
+done
+
+if [ $error = 1 ]; then
+  echo "ERROR: Docker image verification failed, see logs above"
+  exit 1
+fi
+
+tc_end_block "Verify docker images"

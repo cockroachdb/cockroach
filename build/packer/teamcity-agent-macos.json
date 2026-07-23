@@ -1,0 +1,56 @@
+{
+  "variables": {
+      "image_id": "teamcity-agent-{{timestamp}}",
+      "aws_access_key": "{{env `AWS_ACCESS_KEY`}}",
+      "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}"
+  },
+  "builders": [
+      {
+          "type": "amazon-ebs",
+          "access_key": "{{user `aws_access_key`}}",
+          "secret_key": "{{user `aws_secret_key`}}",
+          "region": "us-east-1",
+          "availability_zone": "us-east-1c",
+          "source_ami": "ami-01a9da8de3d589094",
+          "ami_virtualization_type": "hvm",
+          "tenancy": "host",
+          "instance_type": "mac2.metal",
+          "ssh_username": "ec2-user",
+          "ssh_timeout": "2h",
+          "aws_polling": {
+              "delay_seconds": 60,
+              "max_attempts": 60
+          },
+          "ami_name": "teamcity-macos-agent-{{timestamp}}",
+          "launch_block_device_mappings": {
+              "device_name": "/dev/sda1",
+              "volume_size": "120",
+              "volume_type": "gp3",
+              "delete_on_termination": true
+          },
+          "assume_role": {
+              "role_arn"    :  "arn:aws:iam::281041075329:role/PackerRole",
+              "session_name":  "PackerBuild-{{timestamp}}"
+          },
+          "vpc_id": "vpc-04f2f61ca45f606ff",
+          "subnet_id": "subnet-02ec752b9fab71d91"
+      }
+  ],
+  "provisioners": [{
+      "type": "shell",
+      "inline": [
+          "PDISK=$(diskutil list physical external | head -n1 | cut -d' ' -f1)",
+          "APFSCONT=$(diskutil list physical external | grep Apple_APFS | tr -s ' ' | cut -d' ' -f8)",
+          "yes | sudo diskutil repairDisk $PDISK",
+          "sudo diskutil apfs resizeContainer $APFSCONT 0"
+      ]
+  },{
+      "type": "shell",
+      "script": "teamcity-agent-macos.sh"
+  },{
+      "type": "shell",
+      "inline": [
+         "sudo /usr/local/bin/ec2-macos-init clean --all"
+      ]
+  }]
+}

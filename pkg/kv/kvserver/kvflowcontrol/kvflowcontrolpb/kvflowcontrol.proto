@@ -1,0 +1,123 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.kvflowcontrol.kvflowcontrolpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb";
+
+import "gogoproto/gogo.proto";
+
+// RaftAdmissionMeta contains information used by admission control for the
+// select raft commands that use replication admission control. It contains a
+// subset of the fields in kvserverpb.RaftCommand to selectively decode
+// state[1]. When marshaling a RaftCommand, we willfully include this data in
+// the prefix of the marshaled byte buffer. Information about whether this data
+// is present is captured in the first byte of the encoded raft proposal -- see
+// raftlog.EntryEncoding.
+//
+// [1]: The field tags and types must be kept identical with what's found there.
+//
+// RaftAdmissionMeta is used by both RACv1 and RACv2 encodings. RACv1 encoding
+// uses all the fields. RACv2 encoding uses only AdmissionPriority and
+// AdmissionCreateTime, and AdmissionPriority is set to the raftpb.Priority.
+message RaftAdmissionMeta {
+  // AdmissionPriority of the command.
+  // - RACv1: maps to admission.WorkPriority
+  // - RACv2: maps to raftpb.Priority
+  // Used within a tenant below-raft for replication admission control.
+  int32 admission_priority = 18;
+  // AdmissionCreateTime is equivalent to Time.UnixNano() at the creation time
+  // of the request, or a parent request, for which this command is a part of.
+  // It's used within a tenant below-raft for replication admission control; see
+  // admission.WorkInfo.CreateTime for details.
+  int64 admission_create_time = 19;
+  // AdmissionOriginNode captures where this raft command originated. It's used
+  // to inform said node of this raft command's (virtual) admission in order for
+  // it to release flow tokens for subsequent commands. Not used by RACv2
+  // encoding.
+  int32 admission_origin_node = 20 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+  // TODO(irfansharif): If the {marshaling,unmarshaling} performance overhead
+  // proves costly, we could:
+  // - For Admission{Priority,CreateTime}, pack them within a single int64 by
+  //   using 8 bits for the priority (we're using an int8 in Go code) and the
+  //   remaining bits for the create timestamp with lower resolution.
+  // - For AdmissionOriginNodeID, we could re-work the MultiRaft streaming RPCs
+  //   to include upfront, during stream setup, which node the subsequent
+  //   RaftMessageRequests are coming from. But this awkward to do with our
+  //   current code layering:
+  //   - We want to find out on a per raftpb.Entry level where it came from, and
+  //     to do it once raft.Ready() tells to persist said entry into our raft log.
+  //   - We're currently encoding this data in the raft entry itself, at the
+  //     sender, so it's easy to decode at the right place in
+  //     raft-ready-handling loop.
+  //   - But if we had to "stitch in" the origin node ID once received off of
+  //     the transport, or tie together raft entries with their origin node IDs
+  //     through some other way (the raft library only wants to "step" through
+  //     message type we can't so easily annotate), we'd have to do a fair bit
+  //     of state tracking.
+  // If it's still too costly, we could rip all this out and coarsen
+  // intra-tenant ordering with respect to Admission{Priority,CreateTime}. We
+  // could instead introduce a WorkQueue-like ordering at the origin where
+  // requests wait for flow tokens for every <tenant,destination-store> it
+  // intends to write to. Below raft we could live with just side-loaded
+  // proposals being marked as admissionpb.BulkNormalPri. Origin-side ordering
+  // would work ok for epoch-LIFO. The coarseness comes from this re-ordering
+  // only happening on individual origin nodes.
+  //
+  // TODO(irfansharif): Get rid of this TODO block after simple performance
+  // benchmarks (say, `cockroach workload run kv` with high concurrency and
+  // small write sizes). The ideas above are too complicated.
+}
+
+// RaftLogPosition is a point on the raft log, identified by a term and an
+// index.
+message RaftLogPosition {
+  option (gogoproto.goproto_stringer) = false;
+
+  uint64 term = 1;
+  uint64 index = 2;
+}
+
+// AdmittedState communicates a replica's vector of admitted log indices at
+// different priorities to the leader of a range.
+//
+// Used only in RACv2.
+message AdmittedState {
+  option (gogoproto.goproto_stringer) = false;
+  // Term is the leader term of the log for which the Admitted indices were
+  // computed. The indices are consistent with this leader's log.
+  uint64 term = 1;
+  // Admitted contains admitted log indices for each priority < NumPriorities.
+  repeated uint64 admitted = 2;
+}
+
+// PiggybackedAdmittedState wraps the AdmittedState with the routing information
+// needed to deliver the admitted vector to a particular leader replica, and for
+// it to know who sent it.
+//
+// Used only in RACv2.
+message PiggybackedAdmittedState {
+  option (gogoproto.goproto_stringer) = false;
+
+  // RangeID is the ID of the range to which this message is related. Used for
+  // routing at the leader node.
+  uint64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // ToStoreID is the store at the leader containing the leader replica. Used
+  // for routing at the leader node.
+  uint64 to_store_id = 2 [(gogoproto.customname) = "ToStoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+
+  // FromReplicaID is the replica sending this message.
+  uint64 from_replica_id = 3 [(gogoproto.customname) = "FromReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+  // ToReplicaID is the leader replica receiving this message.
+  uint64 to_replica_id = 4 [(gogoproto.customname) = "ToReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+
+  // Admitted is the admitted vector at the sending replica.
+  AdmittedState admitted = 5 [(gogoproto.nullable) = false];
+}

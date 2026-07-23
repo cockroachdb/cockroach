@@ -1,0 +1,70 @@
+# Test a bunch of list partitioned tables.
+
+exec-sql
+CREATE DATABASE db;
+----
+
+# Test partitioning by multiple column values, including with DEFAULTs. When
+# using DEFAULT in the second column, we should see splits along the first
+# column value (and the next, to mark its end). With a non-DEFAULT value for
+# the second column we should see it appear explicitly as a split key (and the
+# next value for the second column, to mark its end).
+exec-sql
+CREATE TABLE db.list_multi_column_partitions(i INT, j INT, PRIMARY KEY (i, j)) PARTITION BY LIST (i, j) (
+  PARTITION two_and_default VALUES IN ((2, DEFAULT)),
+  PARTITION six_and_seven VALUES IN ((6, 7)),
+  PARTITION four_and_eight VALUES IN ((4, 8)),
+  PARTITION default_and_default VALUES IN ((DEFAULT, DEFAULT))
+);
+----
+
+splits database=db table=list_multi_column_partitions
+----
++ 1  between start of table and start of 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 1  for 1st partition-by-list value
+    + 1  for 2nd partition-by-list value
+    + 1  for 3rd partition-by-list value
+    + 1  for 4th partition-by-list value
+    + 3  gap(s) between 4 partition-by-list value spans
+    + 1  between end of 4th partition-by-list value span and end of index
++ 9  for 1st index
++ 1  between end of 1st index and end of table
+= 11
+
+# Try the same thing on a secondary index.
+exec-sql
+CREATE INDEX idx ON db.list_multi_column_partitions(i, j);
+----
+
+exec-sql
+ALTER INDEX db.list_multi_column_partitions@idx PARTITION BY LIST (i, j) (
+  PARTITION two_and_default VALUES IN ((2, DEFAULT)),
+  PARTITION six_and_seven VALUES IN ((6, 7)),
+  PARTITION four_and_eight VALUES IN ((4, 8)),
+  PARTITION default_and_default VALUES IN ((DEFAULT, DEFAULT))
+);
+----
+
+splits database=db table=list_multi_column_partitions
+----
++ 1  between start of table and start of 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 1  for 1st partition-by-list value
+    + 1  for 2nd partition-by-list value
+    + 1  for 3rd partition-by-list value
+    + 1  for 4th partition-by-list value
+    + 3  gap(s) between 4 partition-by-list value spans
+    + 1  between end of 4th partition-by-list value span and end of index
++ 9  for 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 1  for 1st partition-by-list value
+    + 1  for 2nd partition-by-list value
+    + 1  for 3rd partition-by-list value
+    + 1  for 4th partition-by-list value
+    + 3  gap(s) between 4 partition-by-list value spans
+    + 1  between end of 4th partition-by-list value span and end of index
++ 9  for 2nd index
++ 1  gap(s) between 2 indexes
++ 1  between end of 2nd index and end of table
+= 21

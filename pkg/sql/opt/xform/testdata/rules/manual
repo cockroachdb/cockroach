@@ -1,0 +1,151 @@
+exec-ddl
+CREATE TABLE abcde (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    e INT,
+    UNIQUE INDEX bc (b, c)
+)
+----
+
+# --------------------------------------------------
+# SimplifyRootOrdering
+# --------------------------------------------------
+opt
+SELECT * FROM abcde ORDER BY a, b, c, d
+----
+scan abcde
+ ├── columns: a:1!null b:2 c:3 d:4 e:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
+ └── ordering: +1
+
+opt
+SELECT * FROM abcde ORDER BY b, c, a, d LIMIT 10
+----
+index-join abcde
+ ├── columns: a:1!null b:2 c:3 d:4 e:5
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
+ ├── ordering: +2,+3,+1
+ └── scan abcde@bc
+      ├── columns: a:1!null b:2 c:3
+      ├── limit: 10
+      ├── key: (1)
+      ├── fd: (1)-->(2,3), (2,3)~~>(1)
+      └── ordering: +2,+3,+1
+
+# d is implied by b+c, so needs to be removed from ORDER BY and scan projection.
+opt
+SELECT a FROM abcde WHERE b=1 AND c IS NOT NULL ORDER BY c, d
+----
+project
+ ├── columns: a:1!null  [hidden: c:3!null]
+ ├── key: (1)
+ ├── fd: (1)-->(3), (3)-->(1)
+ ├── ordering: +3
+ └── scan abcde@bc
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── constraint: /2/3: (/1/NULL - /1]
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3), (3)-->(1)
+      └── ordering: +3 opt(2) [actual: +3]
+
+# d is required for the ordering, so requires a lookup-join.
+opt
+SELECT a FROM abcde WHERE b=1 ORDER BY c, b, d
+----
+sort (segmented)
+ ├── columns: a:1!null  [hidden: b:2!null c:3 d:4]
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3,4), (2,3)~~>(1,4)
+ ├── ordering: +3,+4 opt(2) [actual: +3,+4]
+ └── index-join abcde
+      ├── columns: a:1!null b:2!null c:3 d:4
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3,4), (2,3)~~>(1,4)
+      ├── ordering: +3 opt(2) [actual: +3]
+      └── scan abcde@bc
+           ├── columns: a:1!null b:2!null c:3
+           ├── constraint: /2/3: [/1 - /1]
+           ├── key: (1)
+           ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
+           └── ordering: +3 opt(2) [actual: +3]
+
+# --------------------------------------------------
+# PruneRootCols
+# --------------------------------------------------
+# Remove functionally dependent column that's only used in ordering, which
+# triggers an opportunity to prune output columns, which in turn makes the
+# lookup-join unnecessary.
+opt
+SELECT c FROM abcde ORDER BY b, c, a, d LIMIT 10
+----
+scan abcde@bc
+ ├── columns: c:3  [hidden: a:1!null b:2]
+ ├── limit: 10
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ └── ordering: +2,+3,+1
+
+opt
+SELECT d FROM (SELECT d, d+1 AS one FROM abcde) GROUP BY d, one ORDER BY d, one
+----
+sort
+ ├── columns: d:4
+ ├── key: (4)
+ ├── ordering: +4
+ └── distinct-on
+      ├── columns: d:4
+      ├── grouping columns: d:4
+      ├── key: (4)
+      └── scan abcde
+           └── columns: d:4
+
+# --------------------------------------------------
+# SimplifyProjectOrdering
+# --------------------------------------------------
+# Filter "b", but do not use it in the projection or ORDER BY.
+opt
+SELECT a FROM abcde WHERE b=1 ORDER BY c
+----
+project
+ ├── columns: a:1!null  [hidden: c:3]
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── ordering: +3
+ └── scan abcde@bc
+      ├── columns: a:1!null b:2!null c:3
+      ├── constraint: /2/3: [/1 - /1]
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
+      └── ordering: +3 opt(2) [actual: +3]
+
+# Filter "b", but do not use it in the projection or ORDER BY. Add an additional
+# column to the ordering that triggers lookup-join.
+opt
+SELECT a FROM abcde WHERE b=1 ORDER BY c, d
+----
+sort (segmented)
+ ├── columns: a:1!null  [hidden: c:3 d:4]
+ ├── key: (1)
+ ├── fd: (1)-->(3,4)
+ ├── ordering: +3,+4
+ └── project
+      ├── columns: a:1!null c:3 d:4
+      ├── key: (1)
+      ├── fd: (1)-->(3,4)
+      ├── ordering: +3
+      └── index-join abcde
+           ├── columns: a:1!null b:2!null c:3 d:4
+           ├── key: (1)
+           ├── fd: ()-->(2), (1)-->(3,4), (2,3)~~>(1,4)
+           ├── ordering: +3 opt(2) [actual: +3]
+           └── scan abcde@bc
+                ├── columns: a:1!null b:2!null c:3
+                ├── constraint: /2/3: [/1 - /1]
+                ├── key: (1)
+                ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
+                └── ordering: +3 opt(2) [actual: +3]

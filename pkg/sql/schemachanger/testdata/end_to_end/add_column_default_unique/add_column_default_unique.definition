@@ -1,0 +1,82 @@
+setup
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+----
+
+stage-exec phase=PostCommitPhase stage=1:2 schemaChangeExecError=(.*duplicate key value violates unique constraint.*)
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+----
+
+# Execute deletes to make sure these function correctly.
+stage-exec phase=PostCommitPhase stage=3
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+INSERT INTO db.public.tbl VALUES($stageKey + 2);
+DELETE FROM db.public.tbl WHERE i=$stageKey OR i=$stageKey+1
+----
+
+# Execute a harmless update that will change an existing value.
+stage-exec phase=PostCommitPhase stage=4
+UPDATE db.public.tbl SET i=$stageKey;
+----
+
+
+stage-exec phase=PostCommitPhase stage=5:14 schemaChangeExecError=(.*duplicate key value violates unique constraint.*)
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+----
+
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=1:2
+SELECT count(*) FROM db.public.tbl;
+----
+2
+
+stage-query phase=PostCommitPhase stage=3:4
+SELECT count(*) FROM db.public.tbl;
+----
+1
+
+stage-query phase=PostCommitPhase stage=5:14
+SELECT count(*) FROM db.public.tbl;
+----
+2
+
+stage-exec phase=PostCommitPhase stage=15:
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+----
+duplicate key value violates unique constraint "tbl_j_key".*
+
+# Later on the unique constraint is enforced, so we expect the second
+# insert to fail.
+stage-query phase=PostCommitPhase stage=15:
+SELECT count(*) FROM db.public.tbl;
+----
+1
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=1
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+----
+duplicate key value violates unique constraint "tbl_j_key".*
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=2:
+INSERT INTO db.public.tbl VALUES($stageKey);
+----
+duplicate key value violates unique constraint "tbl_j_key".*
+
+# We will only succeed in inserting a single row, all other rows will be duplicates.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*) FROM db.public.tbl;
+----
+1
+
+# Add a column with a default value such that only a single value will be allowed,
+# we will intentionally use an expression to make things more complex.
+test
+ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT CAST(date_part('year', now()) AS INT);
+----

@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "skip-test_lib",
+    srcs = [
+        "exec.go",
+        "main.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/skip-test",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_go_github//github",
+        "@org_golang_x_oauth2//:oauth2",
+    ],
+)
+
+go_binary(
+    name = "skip-test",
+    embed = [":skip-test_lib"],
+    visibility = ["//visibility:public"],
+)

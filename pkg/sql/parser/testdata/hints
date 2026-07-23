@@ -1,0 +1,333 @@
+parse
+SELECT 'a' FROM t@bar
+----
+SELECT 'a' FROM t@bar
+SELECT ('a') FROM t@bar -- fully parenthesized
+SELECT '_' FROM t@bar -- literals removed
+SELECT 'a' FROM _@_ -- identifiers removed
+
+parse
+SELECT 'a' FROM t@primary
+----
+SELECT 'a' FROM t@primary
+SELECT ('a') FROM t@primary -- fully parenthesized
+SELECT '_' FROM t@primary -- literals removed
+SELECT 'a' FROM _@_ -- identifiers removed
+
+parse
+SELECT 'a' FROM t@like
+----
+SELECT 'a' FROM t@like
+SELECT ('a') FROM t@like -- fully parenthesized
+SELECT '_' FROM t@like -- literals removed
+SELECT 'a' FROM _@_ -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{NO_INDEX_JOIN}
+----
+SELECT 'a' FROM t@{NO_INDEX_JOIN}
+SELECT ('a') FROM t@{NO_INDEX_JOIN} -- fully parenthesized
+SELECT '_' FROM t@{NO_INDEX_JOIN} -- literals removed
+SELECT 'a' FROM _@{NO_INDEX_JOIN} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{NO_ZIGZAG_JOIN}
+----
+SELECT 'a' FROM t@{NO_ZIGZAG_JOIN}
+SELECT ('a') FROM t@{NO_ZIGZAG_JOIN} -- fully parenthesized
+SELECT '_' FROM t@{NO_ZIGZAG_JOIN} -- literals removed
+SELECT 'a' FROM _@{NO_ZIGZAG_JOIN} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{NO_FULL_SCAN}
+----
+SELECT 'a' FROM t@{NO_FULL_SCAN}
+SELECT ('a') FROM t@{NO_FULL_SCAN} -- fully parenthesized
+SELECT '_' FROM t@{NO_FULL_SCAN} -- literals removed
+SELECT 'a' FROM _@{NO_FULL_SCAN} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{AVOID_FULL_SCAN}
+----
+SELECT 'a' FROM t@{AVOID_FULL_SCAN}
+SELECT ('a') FROM t@{AVOID_FULL_SCAN} -- fully parenthesized
+SELECT '_' FROM t@{AVOID_FULL_SCAN} -- literals removed
+SELECT 'a' FROM _@{AVOID_FULL_SCAN} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS}
+----
+SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS}
+SELECT ('a') FROM t@{IGNORE_FOREIGN_KEYS} -- fully parenthesized
+SELECT '_' FROM t@{IGNORE_FOREIGN_KEYS} -- literals removed
+SELECT 'a' FROM _@{IGNORE_FOREIGN_KEYS} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC}
+----
+SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC}
+SELECT ('a') FROM t@{FORCE_INDEX=idx,ASC} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_INDEX=idx,ASC} -- literals removed
+SELECT 'a' FROM _@{FORCE_INDEX=_,ASC} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS,NO_ZIGZAG_JOIN,NO_FULL_SCAN}
+----
+SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC,NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS} -- normalized!
+SELECT ('a') FROM t@{FORCE_INDEX=idx,DESC,NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_INDEX=idx,DESC,NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS} -- literals removed
+SELECT 'a' FROM _@{FORCE_INDEX=_,DESC,NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS,NO_ZIGZAG_JOIN,NO_FULL_SCAN,FORCE_INVERTED_INDEX}
+----
+SELECT 'a' FROM t@{NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS,FORCE_INVERTED_INDEX} -- normalized!
+SELECT ('a') FROM t@{NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS,FORCE_INVERTED_INDEX} -- fully parenthesized
+SELECT '_' FROM t@{NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS,FORCE_INVERTED_INDEX} -- literals removed
+SELECT 'a' FROM _@{NO_ZIGZAG_JOIN,NO_FULL_SCAN,IGNORE_FOREIGN_KEYS,FORCE_INVERTED_INDEX} -- identifiers removed
+
+error
+SELECT a FROM foo@{FORCE_INDEX}
+----
+at or near "}": syntax error
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INDEX}
+                              ^
+HINT: try \h <SOURCE>
+
+error
+SELECT a FROM foo@{FORCE_INDEX=}
+----
+at or near "}": syntax error
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INDEX=}
+                               ^
+HINT: try \h <SOURCE>
+
+error
+SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
+----
+at or near "baz": syntax error: FORCE_INDEX specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
+                                               ^
+
+error
+SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
+----
+at or near "}": syntax error: FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
+                                                ^
+
+error
+SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
+----
+at or near "no_index_join": syntax error: NO_INDEX_JOIN specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
+                                 ^
+
+error
+SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}
+----
+at or near "ignore_foreign_keys": syntax error: IGNORE_FOREIGN_KEYS specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}
+                                       ^
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG}
+----
+SELECT 'a' FROM t@{FORCE_ZIGZAG}
+SELECT ('a') FROM t@{FORCE_ZIGZAG} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_ZIGZAG} -- literals removed
+SELECT 'a' FROM _@{FORCE_ZIGZAG} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=idx}
+----
+SELECT 'a' FROM t@{FORCE_ZIGZAG=idx}
+SELECT ('a') FROM t@{FORCE_ZIGZAG=idx} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_ZIGZAG=idx} -- literals removed
+SELECT 'a' FROM _@{FORCE_ZIGZAG=_} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=idxa,FORCE_ZIGZAG=idxb}
+----
+SELECT 'a' FROM t@{FORCE_ZIGZAG=idxa,FORCE_ZIGZAG=idxb}
+SELECT ('a') FROM t@{FORCE_ZIGZAG=idxa,FORCE_ZIGZAG=idxb} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_ZIGZAG=idxa,FORCE_ZIGZAG=idxb} -- literals removed
+SELECT 'a' FROM _@{FORCE_ZIGZAG=_,FORCE_ZIGZAG=_} -- identifiers removed
+
+error
+SELECT 'a' FROM t@{FORCE_ZIGZAG=1}
+----
+at or near "1": syntax error
+DETAIL: source SQL:
+SELECT 'a' FROM t@{FORCE_ZIGZAG=1}
+                                ^
+HINT: try \h <SOURCE>
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=[1]}
+----
+SELECT 'a' FROM t@{FORCE_ZIGZAG=[1]}
+SELECT ('a') FROM t@{FORCE_ZIGZAG=[1]} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_ZIGZAG=[1]} -- literals removed
+SELECT 'a' FROM _@{FORCE_ZIGZAG=[1]} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[2]}
+----
+SELECT 'a' FROM t@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[2]}
+SELECT ('a') FROM t@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[2]} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[2]} -- literals removed
+SELECT 'a' FROM _@{FORCE_ZIGZAG=[1],FORCE_ZIGZAG=[2]} -- identifiers removed
+
+error
+SELECT a FROM foo@{FORCE_ZIGZAG,NO_INDEX_JOIN}
+----
+at or near "}": syntax error: FORCE_ZIGZAG cannot be specified in conjunction with NO_INDEX_JOIN
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_ZIGZAG,NO_INDEX_JOIN}
+                                             ^
+
+error
+SELECT a FROM foo@{FORCE_ZIGZAG,FORCE_INDEX=a}
+----
+at or near "}": syntax error: FORCE_ZIGZAG cannot be specified in conjunction with FORCE_INDEX
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_ZIGZAG,FORCE_INDEX=a}
+                                             ^
+
+error
+SELECT a FROM foo@{FORCE_ZIGZAG,FORCE_ZIGZAG}
+----
+at or near "}": syntax error: FORCE_ZIGZAG specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_ZIGZAG,FORCE_ZIGZAG}
+                                            ^
+
+error
+SELECT 'a' FROM t@{FORCE_ZIGZAG="",IGNORE_FOREIGN_KEYS}
+----
+at or near "}": syntax error: FORCE_ZIGZAG index name cannot be empty string
+DETAIL: source SQL:
+SELECT 'a' FROM t@{FORCE_ZIGZAG="",IGNORE_FOREIGN_KEYS}
+                                                      ^
+
+error
+SELECT 'a' FROM t@{FORCE_ZIGZAG=[],IGNORE_FOREIGN_KEYS}
+----
+at or near "]": syntax error
+DETAIL: source SQL:
+SELECT 'a' FROM t@{FORCE_ZIGZAG=[],IGNORE_FOREIGN_KEYS}
+                                 ^
+HINT: try \h <SOURCE>
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=a,IGNORE_FOREIGN_KEYS}
+----
+SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a} -- normalized!
+SELECT ('a') FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a} -- fully parenthesized
+SELECT '_' FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a} -- literals removed
+SELECT 'a' FROM _@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=_} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_ZIGZAG=a,FORCE_ZIGZAG=b,IGNORE_FOREIGN_KEYS}
+----
+SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a,FORCE_ZIGZAG=b} -- normalized!
+SELECT ('a') FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a,FORCE_ZIGZAG=b} -- fully parenthesized
+SELECT '_' FROM t@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=a,FORCE_ZIGZAG=b} -- literals removed
+SELECT 'a' FROM _@{IGNORE_FOREIGN_KEYS,FORCE_ZIGZAG=_,FORCE_ZIGZAG=_} -- identifiers removed
+
+error
+SELECT * FROM a@{FORCE_ZIGZAG=} WHERE a = 3 AND b = 7
+----
+at or near "}": syntax error
+DETAIL: source SQL:
+SELECT * FROM a@{FORCE_ZIGZAG=} WHERE a = 3 AND b = 7
+                              ^
+HINT: try \h <SOURCE>
+
+error
+SELECT * FROM a@{FORCE_ZIGZAG=foo,bar} WHERE a = 3 AND b = 7
+----
+at or near "bar": syntax error
+DETAIL: source SQL:
+SELECT * FROM a@{FORCE_ZIGZAG=foo,bar} WHERE a = 3 AND b = 7
+                                  ^
+HINT: try \h <SOURCE>
+
+error
+SELECT a FROM foo@{ASC}
+----
+at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
+DETAIL: source SQL:
+SELECT a FROM foo@{ASC}
+                      ^
+
+error
+SELECT a FROM foo@{DESC}
+----
+at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
+DETAIL: source SQL:
+SELECT a FROM foo@{DESC}
+                       ^
+
+parse
+SELECT 'a' FROM t@{FORCE_INDEX=bar}
+----
+SELECT 'a' FROM t@bar -- normalized!
+SELECT ('a') FROM t@bar -- fully parenthesized
+SELECT '_' FROM t@bar -- literals removed
+SELECT 'a' FROM _@_ -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{ASC,FORCE_INDEX=idx}
+----
+SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC} -- normalized!
+SELECT ('a') FROM t@{FORCE_INDEX=idx,ASC} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_INDEX=idx,ASC} -- literals removed
+SELECT 'a' FROM _@{FORCE_INDEX=_,ASC} -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_INVERTED_INDEX}
+----
+SELECT 'a' FROM t@{FORCE_INVERTED_INDEX}
+SELECT ('a') FROM t@{FORCE_INVERTED_INDEX} -- fully parenthesized
+SELECT '_' FROM t@{FORCE_INVERTED_INDEX} -- literals removed
+SELECT 'a' FROM _@{FORCE_INVERTED_INDEX} -- identifiers removed
+
+error
+SELECT a FROM foo@{FORCE_INVERTED_INDEX,FORCE_INVERTED_INDEX}
+----
+at or near "force_inverted_index": syntax error: FORCE_INVERTED_INDEX specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INVERTED_INDEX,FORCE_INVERTED_INDEX}
+                                        ^
+
+error
+SELECT a FROM foo@{FORCE_INVERTED_INDEX,FORCE_INDEX=a}
+----
+at or near "}": syntax error: FORCE_INVERTED_INDEX cannot be specified in conjunction with FORCE_INDEX
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INVERTED_INDEX,FORCE_INDEX=a}
+                                                     ^
+
+error
+SELECT 'a' FROM t@{FORCE_INVERTED_INDEX,ASC}
+----
+at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
+DETAIL: source SQL:
+SELECT 'a' FROM t@{FORCE_INVERTED_INDEX,ASC}
+                                           ^
+
+error
+SELECT 'a' FROM t@{FORCE_INVERTED_INDEX,DESC}
+----
+at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
+DETAIL: source SQL:
+SELECT 'a' FROM t@{FORCE_INVERTED_INDEX,DESC}
+                                            ^

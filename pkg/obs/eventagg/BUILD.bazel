@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "eventagg",
+    srcs = [
+        "flush.go",
+        "flush_consumer.go",
+        "map_reduce.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obs/eventagg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/envutil",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "eventagg_test",
+    srcs = [
+        "flush_consumer_test.go",
+        "flush_test.go",
+        "map_reduce_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":eventagg"],
+    deps = [
+        "//pkg/obs/logstream",
+        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/log/logpb",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

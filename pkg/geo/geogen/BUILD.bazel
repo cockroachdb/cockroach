@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "geogen",
+    srcs = ["geogen.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geogen",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geopb",
+        "//pkg/geo/geoprojbase",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_twpayne_go_geom//:go-geom",
+    ],
+)
+
+go_test(
+    name = "geogen_test",
+    size = "small",
+    srcs = ["geogen_test.go"],
+    embed = [":geogen"],
+    deps = [
+        "//pkg/geo/geopb",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+        "@com_github_twpayne_go_geom//:go-geom",
+    ],
+)

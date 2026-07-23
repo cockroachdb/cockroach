@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "flagutil",
+    srcs = ["flagutil.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/flagutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)
+
+go_test(
+    name = "flagutil_test",
+    size = "small",
+    srcs = ["flagutil_test.go"],
+    embed = [":flagutil"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)

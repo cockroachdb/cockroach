@@ -1,0 +1,826 @@
+# LogicTest: !local-prepared
+# test we store various types with precision correctly.
+subtest interval_type_storage
+
+statement ok
+CREATE TABLE interval_duration_type (
+  id INTEGER PRIMARY KEY,
+  regular INTERVAL,
+  regular_precision INTERVAL(3),
+  second INTERVAL SECOND,
+  second_precision INTERVAL SECOND(3),
+  minute INTERVAL MINUTE,
+  minute_to_second_precision INTERVAL MINUTE TO SECOND(3)
+)
+
+statement ok
+INSERT INTO interval_duration_type (id, regular, regular_precision, second, second_precision, minute, minute_to_second_precision) VALUES
+  (1, '12:34:56.123456', '12:34:56.123456', '12:34:56.123456', '12:34:56.123456', '12:34:56.123456', '12:34:56.123456'),
+  (2, '12:56.123456', '12:56.123456', '12:56.123456', '12:56.123456', '12:56.123456', '12:56.123456'),
+  (3, '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456'),
+  (4, '1-2 3.1', '1-2 3.1', '1-2 3.1', '1-2 3.1', '1-2 3.1', '1-2 3.1')
+
+query ITTTTTT
+select * from interval_duration_type order by id asc
+----
+1  12:34:56.123456           12:34:56.123              12:34:56.123456           12:34:56.123              12:34:00                12:34:56.123
+2  00:12:56.123456           00:12:56.123              00:12:56.123456           00:12:56.123              00:12:00                00:12:56.123
+3  366 days 12:34:56.123456  366 days 12:34:56.123     366 days 12:34:56.123456  366 days 12:34:56.123     366 days 12:34:00       366 days 12:34:56.123
+4  1 year 2 mons 00:00:03.1  1 year 2 mons 00:00:03.1  1 year 2 mons 00:00:03.1  1 year 2 mons 00:00:03.1  1 year 2 mons 00:03:00  1 year 2 mons 00:00:03.1
+
+subtest interval_extract_tests
+
+query R
+SELECT extract('second', interval '10:55:01.456')
+----
+1.456
+
+query R
+SELECT extract(minute from interval '10:55:01.456')
+----
+55
+
+query R
+SELECT date_part('minute', interval '10:55:01.456')
+----
+55
+
+# tests various typmods of intervals
+# matches subset of tests in src/test/regress/expected/interval.out
+subtest interval_postgres_duration_type_tests
+
+# oversize leading field is ok
+query T
+SELECT interval '999' second
+----
+00:16:39
+
+query T
+SELECT interval '999' minute
+----
+16:39:00
+
+query T
+SELECT interval '999' hour
+----
+999:00:00
+
+query T
+SELECT interval '999' day
+----
+999 days
+
+query T
+SELECT interval '999' month
+----
+83 years 3 mons
+
+# test SQL-spec syntaxes for restricted field sets
+
+query T
+SELECT interval '1' year
+----
+1 year
+
+query T
+SELECT interval '2' month
+----
+2 mons
+
+query T
+SELECT interval '3' day
+----
+3 days
+
+query T
+SELECT interval '4' hour
+----
+04:00:00
+
+query T
+SELECT interval '5' minute
+----
+00:05:00
+
+query T
+SELECT interval '6' second
+----
+00:00:06
+
+query T
+SELECT interval '1' year to month
+----
+1 mon
+
+query T
+SELECT interval '1-2' year to month
+----
+1 year 2 mons
+
+query T
+SELECT interval '1 2' day to hour
+----
+1 day 02:00:00
+
+query T
+SELECT interval '1 2:03' day to hour
+----
+1 day 02:00:00
+
+query T
+SELECT interval '1 2:03:04' day to hour
+----
+1 day 02:00:00
+
+query error could not parse "1 2" as type interval
+SELECT interval '1 2' day to minute
+
+query T
+SELECT interval '1 2:03' day to minute
+----
+1 day 02:03:00
+
+query T
+SELECT interval '1 2:03:04' day to minute
+----
+1 day 02:03:00
+
+query error could not parse "1 2" as type interval
+SELECT interval '1 2' day to second
+
+query T
+SELECT interval '1 2:03' day to second
+----
+1 day 02:03:00
+
+query T
+SELECT interval '1 2:03:04' day to second
+----
+1 day 02:03:04
+
+query error could not parse "1 2" as type interval
+SELECT interval '1 2' hour to minute
+
+query T
+SELECT interval '1 2:03' hour to minute
+----
+1 day 02:03:00
+
+query T
+SELECT interval '1 2:03:04' hour to minute
+----
+1 day 02:03:00
+
+query error could not parse "1 2" as type interval
+SELECT interval '1 2' hour to second
+
+query T
+SELECT interval '1 2:03' hour to second
+----
+1 day 02:03:00
+
+query T
+SELECT interval '1 2:03:04' hour to second
+----
+1 day 02:03:04
+
+query error could not parse "1 2" as type interval
+SELECT interval '1 2' minute to second
+
+query T
+SELECT interval '1 2:03' minute to second
+----
+1 day 00:02:03
+
+query T
+SELECT interval '1 2:03:04' minute to second
+----
+1 day 02:03:04
+
+query T
+SELECT interval '1 +2:03' minute to second
+----
+1 day 00:02:03
+
+query T
+SELECT interval '1 +2:03:04' minute to second
+----
+1 day 02:03:04
+
+query T
+SELECT interval '1 -2:03' minute to second
+----
+1 day -00:02:03
+
+query T
+SELECT interval '1 -2:03:04' minute to second
+----
+1 day -02:03:04
+
+query T
+SELECT interval '123 11' day to hour
+----
+123 days 11:00:00
+
+query error could not parse "123 11" as type interval
+SELECT interval '123 11' day
+
+query error could not parse "123 11" as type interval
+SELECT interval '123 11'
+
+# not ok, redundant hh:mm fields
+query error could not parse "123 2:03 -2:04" as type interval
+SELECT interval '123 2:03 -2:04'
+
+# test syntaxes for restricted precision
+query T
+SELECT interval(0) '1 day 01:23:45.6789'
+----
+1 day 01:23:46
+
+query T
+SELECT interval(2) '1 day 01:23:45.6789'
+----
+1 day 01:23:45.68
+
+query T
+SELECT interval '12:34.5678' minute to second(2)
+----
+00:12:34.57
+
+query T
+SELECT interval '1.234' second
+----
+00:00:01.234
+
+query T
+SELECT interval '1.234' second(2)
+----
+00:00:01.23
+
+query error could not parse "1 2.345" as type interval
+SELECT interval '1 2.345' day to second(2)
+
+query T
+SELECT interval '1 2:03' day to second(2)
+----
+1 day 02:03:00
+
+query T
+SELECT interval '1 2:03.4567' day to second(2)
+----
+1 day 00:02:03.46
+
+query T
+SELECT interval '1 2:03:04.5678' day to second(2)
+----
+1 day 02:03:04.57
+
+query error could not parse "1 2.345" as type interval
+SELECT interval '1 2.345' hour to second(2)
+
+query T
+SELECT interval '1 2:03.45678' hour to second(2)
+----
+1 day 00:02:03.46
+
+query T
+SELECT interval '1 2:03:04.5678' hour to second(2)
+----
+1 day 02:03:04.57
+
+query error could not parse "1 2.3456" as type interval
+SELECT interval '1 2.3456' minute to second(2)
+
+query T
+SELECT interval '1 2:03.5678' minute to second(2)
+----
+1 day 00:02:03.57
+
+query T
+SELECT interval '1 2:03:04.5678' minute to second(2)
+----
+1 day 02:03:04.57
+
+# Extra regression tests found when fixing this bug.
+subtest regression_43074
+
+query T
+SELECT interval '1:02.123456'
+----
+00:01:02.123456
+
+query T
+SELECT interval '-1:02.123456'
+----
+-00:01:02.123456
+
+subtest regression_43079
+
+query T
+SELECT interval '1-2 3' year
+----
+4 years
+
+query T
+SELECT interval '1-2 3' day
+----
+1 year 2 mons 3 days
+
+query T
+SELECT interval '2.1 00:'
+----
+2 days 02:24:00
+
+query T
+SELECT interval ' 5  ' year
+----
+5 years
+
+# Check default types and expressions get truncated on insert / update.
+subtest regression_44774
+
+statement ok
+CREATE TABLE regression_44774 (
+  a interval(3) DEFAULT '1:2:3.123456'
+)
+
+statement ok
+INSERT INTO regression_44774 VALUES (default), ('4:5:6.123456')
+
+query T
+SELECT a FROM regression_44774 ORDER BY a
+----
+01:02:03.123
+04:05:06.123
+
+statement ok
+UPDATE regression_44774
+SET a = '13:14:15.123456'::interval + '1 sec'::interval
+WHERE 1 = 1
+
+query T
+SELECT a FROM regression_44774 ORDER BY a
+----
+13:14:16.123
+13:14:16.123
+
+statement ok
+DROP TABLE regression_44774
+
+# Check error message for out of range intervals.
+subtest regression_62369
+
+query error "10000000000000000000000000000000000": value out of range
+SELECT INTERVAL '10000000000000000000000000000000000 year'
+
+query T nosort
+SELECT i / 2 FROM ( VALUES
+  ('0 days 0.253000 seconds'::interval),
+  (INTERVAL '0.000001'::interval),
+  (INTERVAL '0.000002'::interval),
+  (INTERVAL '0.000003'::interval),
+  (INTERVAL '0.000004'::interval),
+  (INTERVAL '0.000005'::interval),
+  (INTERVAL '0.000006'::interval),
+  (INTERVAL '0.000007'::interval),
+  (INTERVAL '0.000008'::interval),
+  (INTERVAL '0.000009'::interval)
+) regression_66118(i)
+----
+00:00:00.1265
+00:00:00
+00:00:00.000001
+00:00:00.000002
+00:00:00.000002
+00:00:00.000002
+00:00:00.000003
+00:00:00.000004
+00:00:00.000004
+00:00:00.000004
+
+subtest interval_session
+
+statement ok
+SET intervalstyle = 'iso_8601'
+
+statement ok
+SET intervalstyle = 'sql_standard'
+
+statement ok
+SET intervalstyle = DEFAULT
+
+statement error interval::string: context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: INTERVAL to STRING casts depend on IntervalStyle; consider using to_char\(interval\)
+CREATE TABLE invalid_table (
+  invalid_col string AS ('1 hour'::interval::string) STORED
+)
+
+statement error string::interval: context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: STRING to INTERVAL casts depend on session IntervalStyle; use parse_interval\(string\) instead
+CREATE TABLE invalid_table (
+  invalid_col interval AS ('1 hour'::string::interval) STORED
+)
+
+statement ok
+create table intervals ( pk INT PRIMARY KEY, i INTERVAL )
+
+statement ok
+INSERT INTO intervals VALUES
+  (1, '-2 years -11 mons 1 days 04:05:06.123'),
+  (2, '1 day 04:06:08.123'),
+  (3, '2 years 11 mons -2 days +03:25:45.678')
+
+query T
+SELECT '-2 years 11 months 1 day 01:02:03'::interval
+----
+-1 years -1 mons +1 day 01:02:03
+
+statement ok
+create table interval_parsing ( pk INT PRIMARY KEY, i TEXT )
+
+statement ok
+INSERT INTO interval_parsing VALUES
+  (1, '-10 years 22 months 1 day 01:02:03'),
+  (2, '-10 years -22 months 1 day 01:02:03'),
+  (3, '-10 years 22 months -1 day 01:02:03'),
+  (4, '-10 years 22 months -1 day -01:02:03')
+
+query T
+SELECT i FROM intervals ORDER BY pk
+----
+-2 years -11 mons +1 day 04:05:06.123
+1 day 04:06:08.123
+2 years 11 mons -2 days +03:25:45.678
+
+query TTTTBBBB
+WITH tbl(pk, i, pg, iso, sql_std, default_style) AS (
+  SELECT
+    pk,
+    i,
+    to_char_with_style(i, 'postgres') AS pg,
+    to_char_with_style(i, 'iso_8601') AS iso,
+    to_char_with_style(i, 'sql_standard') AS sql_std,
+    to_char(i) AS default_style
+  FROM intervals
+)
+SELECT
+  pg,
+  iso,
+  sql_std,
+  default_style,
+  i = parse_interval(pg, 'postgres'),
+  i = parse_interval(iso, 'iso_8601'),
+  i = parse_interval(sql_std, 'sql_standard'),
+  i = parse_interval(default_style) AND pg = default_style
+FROM tbl
+ORDER BY pk
+----
+-2 years -11 mons +1 day 04:05:06.123  P-2Y-11M1DT4H5M6.123S   -2-11 +1 +4:05:06.123  -2 years -11 mons +1 day 04:05:06.123  true  true  true  true
+1 day 04:06:08.123                     P1DT4H6M8.123S          1 4:06:08.123          1 day 04:06:08.123                     true  true  true  true
+2 years 11 mons -2 days +03:25:45.678  P2Y11M-2DT3H25M45.678S  +2-11 -2 +3:25:45.678  2 years 11 mons -2 days +03:25:45.678  true  true  true  true
+
+query T
+SELECT array_to_string(array_agg(i ORDER BY pk), ' ') FROM intervals
+----
+-2 years -11 mons +1 day 04:05:06.123 1 day 04:06:08.123 2 years 11 mons -2 days +03:25:45.678
+
+query T
+SELECT (array_agg(i ORDER BY pk))::string FROM intervals
+----
+{"-2 years -11 mons +1 day 04:05:06.123","1 day 04:06:08.123","2 years 11 mons -2 days +03:25:45.678"}
+
+query T
+SELECT i::string FROM intervals ORDER BY pk
+----
+-2 years -11 mons +1 day 04:05:06.123
+1 day 04:06:08.123
+2 years 11 mons -2 days +03:25:45.678
+
+query T
+SELECT (i,) FROM intervals ORDER BY pk
+----
+("-2 years -11 mons +1 day 04:05:06.123")
+("1 day 04:06:08.123")
+("2 years 11 mons -2 days +03:25:45.678")
+
+query T
+SELECT row_to_json(intervals) FROM intervals ORDER BY pk
+----
+{"i": "-2 years -11 mons +1 day 04:05:06.123", "pk": 1}
+{"i": "1 day 04:06:08.123", "pk": 2}
+{"i": "2 years 11 mons -2 days +03:25:45.678", "pk": 3}
+
+query TT
+SELECT i, i::INTERVAL FROM interval_parsing ORDER BY pk
+----
+-10 years 22 months 1 day 01:02:03    -8 years -2 mons +1 day 01:02:03
+-10 years -22 months 1 day 01:02:03   -11 years -10 mons +1 day 01:02:03
+-10 years 22 months -1 day 01:02:03   -8 years -2 mons -1 days +01:02:03
+-10 years 22 months -1 day -01:02:03  -8 years -2 mons -1 days -01:02:03
+
+statement ok
+SET intervalstyle = 'iso_8601'
+
+query T
+SELECT '-2 years 11 months 1 day 01:02:03'::interval
+----
+P-1Y-1M1DT1H2M3S
+
+query T
+SELECT i FROM intervals ORDER BY pk
+----
+P-2Y-11M1DT4H5M6.123S
+P1DT4H6M8.123S
+P2Y11M-2DT3H25M45.678S
+
+query T
+SELECT array_to_string(array_agg(i ORDER BY pk), ' ') FROM intervals
+----
+P-2Y-11M1DT4H5M6.123S P1DT4H6M8.123S P2Y11M-2DT3H25M45.678S
+
+query T
+SELECT (array_agg(i ORDER BY pk))::string FROM intervals
+----
+{P-2Y-11M1DT4H5M6.123S,P1DT4H6M8.123S,P2Y11M-2DT3H25M45.678S}
+
+query T
+SELECT i::string FROM intervals ORDER BY pk
+----
+P-2Y-11M1DT4H5M6.123S
+P1DT4H6M8.123S
+P2Y11M-2DT3H25M45.678S
+
+query T
+SELECT (i,) FROM intervals ORDER BY pk
+----
+(P-2Y-11M1DT4H5M6.123S)
+(P1DT4H6M8.123S)
+(P2Y11M-2DT3H25M45.678S)
+
+query T
+SELECT row_to_json(intervals) FROM intervals ORDER BY pk
+----
+{"i": "P-2Y-11M1DT4H5M6.123S", "pk": 1}
+{"i": "P1DT4H6M8.123S", "pk": 2}
+{"i": "P2Y11M-2DT3H25M45.678S", "pk": 3}
+
+query TT
+SELECT i, i::INTERVAL FROM interval_parsing ORDER BY pk
+----
+-10 years 22 months 1 day 01:02:03    P-8Y-2M1DT1H2M3S
+-10 years -22 months 1 day 01:02:03   P-11Y-10M1DT1H2M3S
+-10 years 22 months -1 day 01:02:03   P-8Y-2M-1DT1H2M3S
+-10 years 22 months -1 day -01:02:03  P-8Y-2M-1DT-1H-2M-3S
+
+statement ok
+SET intervalstyle = 'sql_standard'
+
+query T
+SELECT '-2 years 11 months 1 day 01:02:03'::interval
+----
+-2-11 -1 -1:02:03
+
+query T
+SELECT i FROM intervals ORDER BY pk
+----
+-2-11 +1 +4:05:06.123
+1 4:06:08.123
++2-11 -2 +3:25:45.678
+
+query T
+SELECT array_to_string(array_agg(i ORDER BY pk), ' ') FROM intervals
+----
+-2-11 +1 +4:05:06.123 1 4:06:08.123 +2-11 -2 +3:25:45.678
+
+query T
+SELECT (array_agg(i ORDER BY pk))::string FROM intervals
+----
+{"-2-11 +1 +4:05:06.123","1 4:06:08.123","+2-11 -2 +3:25:45.678"}
+
+query T
+SELECT i::string FROM intervals ORDER BY pk
+----
+-2-11 +1 +4:05:06.123
+1 4:06:08.123
++2-11 -2 +3:25:45.678
+
+query T
+SELECT (i,) FROM intervals ORDER BY pk
+----
+("-2-11 +1 +4:05:06.123")
+("1 4:06:08.123")
+("+2-11 -2 +3:25:45.678")
+
+query T
+SELECT row_to_json(intervals) FROM intervals ORDER BY pk
+----
+{"i": "-2-11 +1 +4:05:06.123", "pk": 1}
+{"i": "1 4:06:08.123", "pk": 2}
+{"i": "+2-11 -2 +3:25:45.678", "pk": 3}
+
+query TT
+SELECT i, i::INTERVAL FROM interval_parsing ORDER BY pk
+----
+-10 years 22 months 1 day 01:02:03    -11-10 -1 -1:02:03
+-10 years -22 months 1 day 01:02:03   -11-10 +1 +1:02:03
+-10 years 22 months -1 day 01:02:03   -8-2 -1 +1:02:03
+-10 years 22 months -1 day -01:02:03  -8-2 -1 -1:02:03
+
+# Could not find any regress tests for to_char in PG, so we're making our own up!
+statement ok
+CREATE TABLE intvl_tbl (id SERIAL, d1 INTERVAL);
+INSERT INTO intvl_tbl (d1) VALUES
+  ('355 months 40 days 123:45:12'),
+  ('-400 months -30 days -100:12:13')
+
+query T
+SELECT to_char(d1, 'Y,YYY YYYY YYY YY Y CC Q MM WW DDD DD J')
+   FROM intvl_tbl ORDER BY id
+----
+0,029 0029 029 29 9 00 3 07 1528 10690 40 1731873
+0,-33 -0033 -033 -33 -3 00 0 -04 -1717 -12030 -30 1708823
+
+query T
+SELECT to_char(d1, 'FMY,YYY FMYYYY FMYYY FMYY FMY FMCC FMQ FMMM FMWW FMDDD FMDD FMJ')
+   FROM intvl_tbl ORDER BY id
+----
+0,029 29 29 29 9 0 3 7 1528 10690 40 1731873
+0,-33 -33 -33 -33 -3 0 0 -4 -1717 -12030 -30 1708823
+
+query T
+SELECT to_char(d1, 'HH HH12 HH24 MI SS SSSS')
+   FROM intvl_tbl ORDER BY id
+----
+03 03 123 45 12 445512
+-04 -04 -100 -12 -13 -360733
+
+query T
+SELECT to_char(d1, E'"HH:MI:SS is" HH:MI:SS "\\"text between quote marks\\""')
+   FROM intvl_tbl ORDER BY id
+----
+HH:MI:SS is 03:45:12 "text between quote marks"
+HH:MI:SS is -04:-12:-13 "text between quote marks"
+
+query T
+SELECT to_char(d1, 'HH24--text--MI--text--SS')
+   FROM intvl_tbl ORDER BY id
+----
+123--text--45--text--12
+-100--text---12--text---13
+
+query T
+SELECT to_char(d1, 'YYYYTH YYYYth Jth')
+   FROM intvl_tbl ORDER BY id
+----
+0029TH 0029th 1731873rd
+-0033RD -0033rd 1708823rd
+
+# ISO week format specifiers (IW, IYYY, IYY, IY, I) should work with intervals.
+query T
+SELECT to_char(d1, 'IYYY IYY IY I IW')
+   FROM intvl_tbl ORDER BY id
+----
+0029 029 29 9 32
+-0034 -034 -34 -4 26
+
+# RM (Roman month) with negative intervals. Reset intervalstyle first since
+# it was changed earlier in the test file and affects how interval literals
+# are parsed.
+statement ok
+SET intervalstyle = DEFAULT
+
+query T
+SELECT to_char('-1 month 1 day'::interval, 'FMRM')
+----
+XII
+
+query T
+SELECT to_char('-28 years 1 months'::interval, 'RM')
+----
+II
+
+query T
+SELECT to_char('-45 years 8 months'::interval, 'RM')
+----
+IX
+
+statement ok
+SET intervalstyle = 'sql_standard'
+
+# Test intervalstyle being respected in pg_indexes.
+
+statement ok
+CREATE TABLE intervalstyle_in_index (
+  a INT8 PRIMARY KEY, b INTERVAL,
+  INDEX idx (b) WHERE b > 'P3Y'
+)
+
+query TT
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'intervalstyle_in_index'
+AND indexname = 'idx'
+----
+idx  CREATE INDEX idx ON public.intervalstyle_in_index USING btree (b ASC) WHERE (b > '3-0'::interval)
+
+statement ok
+SET intervalstyle = 'iso_8601'
+
+query TT
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'intervalstyle_in_index'
+AND indexname = 'idx'
+----
+idx  CREATE INDEX idx ON public.intervalstyle_in_index USING btree (b ASC) WHERE (b > 'P3Y'::interval)
+
+# date_trunc
+statement ok
+SET intervalstyle = 'postgres'
+
+statement error pgcode 22023 interval units "invalid" not recognized
+SELECT date_trunc('invalid', interval '1 month')
+
+statement error pgcode 0A000 interval units "week" not supported because months usually have fractional weeks
+SELECT date_trunc('week', interval '1 month')
+
+statement error pgcode 0A000 interval units "weeks" not supported because months usually have fractional weeks
+SELECT date_trunc('weeks', interval '1 month')
+
+query TT nosort
+SELECT timespan, date_trunc(timespan, '1111 year 4 month 1 day 1 hour 1 minute 1 second 1 millisecond 1 microsecond')
+FROM (VALUES
+  ('millennia'),
+  ('millennium'),
+  ('millenniums'),
+  ('century'),
+  ('centuries'),
+  ('decade'),
+  ('decades'),
+  ('quarter'),
+  ('month'),
+  ('months'),
+  ('day'),
+  ('days'),
+  ('hour'),
+  ('hours'),
+  ('minute'),
+  ('minutes'),
+  ('second'),
+  ('seconds'),
+  ('millisecond'),
+  ('milliseconds'),
+  ('microsecond'),
+  ('microseconds'))
+AS t(timespan)
+----
+millennia     1000 years
+millennium    1000 years
+millenniums   1000 years
+century       1100 years
+centuries     1100 years
+decade        1110 years
+decades       1110 years
+quarter       1111 years 3 mons
+month         1111 years 4 mons
+months        1111 years 4 mons
+day           1111 years 4 mons 1 day
+days          1111 years 4 mons 1 day
+hour          1111 years 4 mons 1 day 01:00:00
+hours         1111 years 4 mons 1 day 01:00:00
+minute        1111 years 4 mons 1 day 01:01:00
+minutes       1111 years 4 mons 1 day 01:01:00
+second        1111 years 4 mons 1 day 01:01:01
+seconds       1111 years 4 mons 1 day 01:01:01
+millisecond   1111 years 4 mons 1 day 01:01:01.001
+milliseconds  1111 years 4 mons 1 day 01:01:01.001
+microsecond   1111 years 4 mons 1 day 01:01:01.001001
+microseconds  1111 years 4 mons 1 day 01:01:01.001001
+
+# Regression test for #83756. Interval encoding overflow should be detected
+# correctly.
+statement ok
+CREATE TABLE t83756 (i INTERVAL PRIMARY KEY);
+
+# These intervals do not overflow.
+statement ok
+INSERT INTO t83756 VALUES ('106751 days 23:47:16.854775');
+INSERT INTO t83756 VALUES ('-106751 days -23:47:16.854775');
+
+# These intervals overflow.
+# TODO(#84078): These intervals overflow due to limitations of our INTERVAL key
+# encoding. All values in the range [-178000000 years, 178000000 years] should
+# be allowed.
+statement error overflow during Encode
+INSERT INTO t83756 VALUES ('106751 days 23:47:16.854776');
+
+statement error overflow during Encode
+INSERT INTO t83756 VALUES ('-106751 days -23:47:16.854776');
+
+# These intervals overflow when multiplying the days and the number of
+# nanoseconds in a day, even though the total nanosecond calculation would not
+# overflow.
+statement error overflow during Encode
+INSERT INTO t83756 VALUES ('-3558 months 106752 days');
+
+statement error overflow during Encode
+INSERT INTO t83756 VALUES ('3558 months -106752 days');

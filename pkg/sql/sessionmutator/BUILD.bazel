@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sessionmutator",
+    srcs = ["mutator.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessionmutator",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/lex",
+        "//pkg/sql/pgwire/pgnotice",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/util/duration",
+        "//pkg/util/hlc",
+        "//pkg/util/timeutil",
+        "//pkg/util/timeutil/pgdate",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "sessionmutator_test",
+    srcs = ["mutator_test.go"],
+    embed = [":sessionmutator"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
+        "@com_github_stretchr_testify//require",
+    ],
+)

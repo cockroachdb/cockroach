@@ -1,0 +1,44 @@
+---
+includes:
+- config-override.yaml
+service:
+  flush: 1
+  daemon: off
+  http_server: on
+  http_listen: 127.0.0.1
+  http_port: 2020
+  log_level: info
+  storage.path: /tmp
+  storage.metrics: on
+  storage.max_chunks_up: 30
+  storage.sync: full
+  storage.checksum: on
+  storage.delete_irrecoverable_chunks: on
+  parsers_file: parsers.conf
+  plugins_file: plugins.conf
+pipeline:
+  inputs:
+  - name: tcp
+    tag: cockroachdb
+    listen: 127.0.0.1
+    port: 5170
+    format: json
+    storage.type: filesystem
+    alias: cockroachdb
+  filters:
+  - name: modify
+    match: "*"
+    set:
+    - hostname {{ .Hostname }}
+  outputs:
+  - name: datadog
+    match: cockroachdb
+    host: http-intake.logs.{{ .DatadogSite }}
+    tls: on
+    compress: gzip
+    apikey: {{ .DatadogAPIKey }}
+    dd_source: cockroachdb
+    dd_service: {{ .DatadogService }}
+    dd_tags: {{ join .Tags `,` }}
+    alias: cockroachdb
+    storage.total_limit_size: 25MB

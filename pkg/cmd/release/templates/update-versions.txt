@@ -1,0 +1,8 @@
+Pull requests for {{ .Version }} are waiting for your review and merge. Please approve the following PRs and merge them.
+
+{{ range .PRs }}
+	* {{ . }}
+{{ end }}
+
+Thanks,
+Release Engineering

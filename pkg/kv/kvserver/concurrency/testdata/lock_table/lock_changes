@@ -1,0 +1,221 @@
+# Misc tests where there is a change in state made or attempted for a lock.
+
+new-lock-table maxlocks=10000
+----
+
+# ---------------------------------------------------------------------------------
+# Lock being released is held by a different transaction.
+# ---------------------------------------------------------------------------------
+
+new-txn txn=txn1 ts=10 epoch=0 seq=2
+----
+
+new-txn txn=txn2 ts=10 epoch=0
+----
+
+new-request r=req1 txn=txn1 ts=10 spans=exclusive@a
+----
+
+acquire r=req1 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 2)]
+
+release txn=txn2 span=a,c
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 2)]
+
+# ---------------------------------------------------------------------------------
+# Lock is reacquired at same epoch with lower timestamp. This is allowed,
+# see TestMVCCHistories/put_out_of_order. The new sequence number is added
+# but the timestamp is not regressed.
+# ---------------------------------------------------------------------------------
+
+new-txn txn=txn1 ts=8 epoch=0 seq=3
+----
+
+new-request r=req2 txn=txn1 ts=8 spans=exclusive@a+intent@a
+----
+
+acquire r=req2 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 2)]
+
+# ---------------------------------------------------------------------------------
+# Lock is reacquired at same epoch with lower timestamp and different durability.
+# The lock's timestamp is allowed to regress in this case, because it must never
+# diverge from the replicated state machine.
+#
+# We first add a queued writer because the lockTable currently does not keep track
+# of uncontended replicated locks.
+# ---------------------------------------------------------------------------------
+
+new-request r=reqContend txn=none ts=10 spans=intent@a
+----
+
+scan r=reqContend
+----
+start-waiting: true
+
+acquire r=req2 k=a durability=r strength=intent
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 8.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 2)]
+   queued locking requests:
+    active: true req: 1, strength: Intent, txn: none
+
+dequeue r=reqContend
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 8.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 2)]
+
+# ---------------------------------------------------------------------------------
+# Lock is reacquired at a different epoch. The old sequence numbers are discarded.
+# ---------------------------------------------------------------------------------
+
+new-txn txn=txn1 ts=10 epoch=1 seq=1
+----
+
+new-request r=req3 txn=txn1 ts=10 spans=exclusive@a
+----
+
+acquire r=req3 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 8.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 1)]
+
+# ---------------------------------------------------------------------------------
+# Lock is reacquired at a different epoch with lower timestamp. This is allowed,
+# see TestMVCCHistories/put_new_epoch_lower_timestamp. The old sequence numbers are
+# discarded but the timestamp is not regressed.
+# ---------------------------------------------------------------------------------
+
+new-txn txn=txn1 ts=6 epoch=2 seq=0
+----
+
+new-request r=req4 txn=txn1 ts=6 spans=exclusive@a
+----
+
+acquire r=req4 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 8.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+
+# ---------------------------------------------------------------------------------
+# Reader waits until the timestamp of the lock is updated.
+# ---------------------------------------------------------------------------------
+
+new-request r=req5 txn=txn2 ts=12 spans=none@a
+----
+
+scan r=req5
+----
+start-waiting: true
+
+guard-state r=req5
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 8.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+
+new-txn txn=txn1 ts=14 epoch=2 seq=1
+----
+
+new-request r=req6 txn=txn1 ts=14 spans=intent@a+exclusive@a
+----
+
+acquire r=req6 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 8.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+
+guard-state r=req5
+----
+old: state=waitFor txn=txn1 key="a" held=true guard-strength=None
+
+acquire r=req6 k=a durability=r strength=intent
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 14.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+
+guard-state r=req5
+----
+new: state=doneWaiting
+
+
+# ---------------------------------------------------------------------------------
+# Discovery of replicated lock that was already held as unreplicated. The waiters
+# should be informed. It is unclear whether this can actually happen in the context
+# that the lock table is used.
+# ---------------------------------------------------------------------------------
+
+new-request r=req7 txn=txn2 ts=17 spans=none@a
+----
+
+scan r=req7
+----
+start-waiting: true
+
+guard-state r=req7
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
+
+add-discovered r=req7 k=a txn=txn1
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 14.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 3, txn: 00000000-0000-0000-0000-000000000002
+
+guard-state r=req7
+----
+old: state=waitFor txn=txn1 key="a" held=true guard-strength=None
+
+# ------------------------------------------------------------------------------
+# Try to re-acquire an unreplicated lock that is already held at a higher epoch.
+# This should result in an error, similar to how mvccPutInternal handles this
+# case for intents, as the in-memory lock table is the source of truth for
+# unreplicated locks.
+# ------------------------------------------------------------------------------
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 14.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 3, txn: 00000000-0000-0000-0000-000000000002
+
+new-txn txn=txn1 ts=14 epoch=1 seq=1
+----
+
+new-request r=req8 txn=txn1 ts=14 spans=exclusive@a
+----
+
+scan r=req8
+----
+start-waiting: false
+
+acquire r=req8 k=a durability=u strength=exclusive
+----
+locking request with epoch 1 came after lock(unreplicated) had already been acquired at epoch 2 in txn 00000000-0000-0000-0000-000000000001

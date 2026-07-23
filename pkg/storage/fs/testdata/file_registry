@@ -1,0 +1,415 @@
+check-no-registry-file
+----
+OK
+
+# Open and close a registry on an empty store. Nothing should be written
+# to disk since there are no writes.
+
+load
+----
+open-dir("")
+
+list
+----
+
+close
+----
+close("")
+
+check-no-registry-file
+----
+OK
+
+# Open an empty store and write to the registry. A new registry file should be
+# written, and a marker file should be written alongside it.
+
+load
+----
+open-dir("")
+
+list
+----
+
+set filename=foo settings=bar
+----
+create("COCKROACHDB_REGISTRY_000001")
+write("COCKROACHDB_REGISTRY_000001", <...16 bytes...>)
+sync("COCKROACHDB_REGISTRY_000001")
+create("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+sync("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+close("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+sync("")
+write("COCKROACHDB_REGISTRY_000001", <...23 bytes...>)
+sync("COCKROACHDB_REGISTRY_000001")
+
+list
+----
+name=foo,type=Data,settings=bar
+
+close
+----
+write("COCKROACHDB_REGISTRY_000001", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000001")
+close("")
+
+check-no-registry-file
+----
+Error: file already exists
+
+# Re-opening the store should observe the registry file. It should recognize
+# that the file foo does not exist and rotate the registry to elide it.
+
+load
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY_000001")
+close("COCKROACHDB_REGISTRY_000001")
+stat("foo")
+create("COCKROACHDB_REGISTRY_000002")
+write("COCKROACHDB_REGISTRY_000002", <...32 bytes...>)
+sync("COCKROACHDB_REGISTRY_000002")
+create("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+sync("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+close("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+remove("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+sync("")
+remove("COCKROACHDB_REGISTRY_000001")
+write("COCKROACHDB_REGISTRY_000002", <...14 bytes...>)
+sync("COCKROACHDB_REGISTRY_000002")
+
+list
+----
+
+close
+----
+write("COCKROACHDB_REGISTRY_000002", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000002")
+close("")
+
+# Re-opening the store and writing something to the file registry should
+# cause the records-based registry to be rotated. The existing state
+# should be written to a new file and synced. Then the marker should be
+# updated to point to the new file, and the directory should be synced.
+# Finally, the new edit should be appended to the file.
+#
+# Subsequent writes should not trigger rotations.
+
+load
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY_000002")
+close("COCKROACHDB_REGISTRY_000002")
+
+list
+----
+
+set filename=foo settings=bar
+----
+create("COCKROACHDB_REGISTRY_000003")
+write("COCKROACHDB_REGISTRY_000003", <...16 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+create("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+sync("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+close("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+remove("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+sync("")
+remove("COCKROACHDB_REGISTRY_000002")
+write("COCKROACHDB_REGISTRY_000003", <...23 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+
+list
+----
+name=foo,type=Data,settings=bar
+
+get filename=foo
+----
+bar
+
+set filename=foo settings=helloworld
+----
+write("COCKROACHDB_REGISTRY_000003", <...30 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+
+get filename=foo
+----
+helloworld
+
+close
+----
+write("COCKROACHDB_REGISTRY_000003", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000003")
+close("")
+
+# Re-opening the store again, while there are entries for files (`foo`)
+# that don't exist on the filesystem should trigger a rotation of the
+# registry in order to elide the obsolete entries.
+
+load
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY_000003")
+close("COCKROACHDB_REGISTRY_000003")
+stat("foo")
+create("COCKROACHDB_REGISTRY_000004")
+write("COCKROACHDB_REGISTRY_000004", <...39 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+create("marker.registry.000004.COCKROACHDB_REGISTRY_000004")
+sync("marker.registry.000004.COCKROACHDB_REGISTRY_000004")
+close("marker.registry.000004.COCKROACHDB_REGISTRY_000004")
+remove("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+sync("")
+remove("COCKROACHDB_REGISTRY_000003")
+write("COCKROACHDB_REGISTRY_000004", <...14 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+
+list
+----
+
+get filename=foo
+----
+
+close
+----
+write("COCKROACHDB_REGISTRY_000004", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000004")
+close("")
+
+# Reset the filesystem and start again.
+
+reset
+----
+
+check-no-registry-file
+----
+OK
+
+load
+----
+open-dir("")
+
+list
+----
+
+set filename=foo settings=helloworld
+----
+create("COCKROACHDB_REGISTRY_000001")
+write("COCKROACHDB_REGISTRY_000001", <...16 bytes...>)
+sync("COCKROACHDB_REGISTRY_000001")
+create("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+sync("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+close("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+sync("")
+write("COCKROACHDB_REGISTRY_000001", <...30 bytes...>)
+sync("COCKROACHDB_REGISTRY_000001")
+
+# A second write to the registry should only perform a single write and sync on
+# the incremental registry.
+
+set filename=bar settings=hi
+----
+write("COCKROACHDB_REGISTRY_000001", <...22 bytes...>)
+sync("COCKROACHDB_REGISTRY_000001")
+
+list
+----
+name=bar,type=Data,settings=hi
+name=foo,type=Data,settings=helloworld
+
+close
+----
+write("COCKROACHDB_REGISTRY_000001", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000001")
+close("")
+
+check-no-registry-file
+----
+Error: file already exists
+
+# Re-opening the registry should read the state from the monolithic
+# `COCKROACHDB_REGISTRY` file since it exists.
+
+touch
+foo
+bar
+----
+create("foo")
+close("foo")
+create("bar")
+close("bar")
+
+load
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY_000001")
+close("COCKROACHDB_REGISTRY_000001")
+stat("bar")
+stat("foo")
+
+list
+----
+name=bar,type=Data,settings=hi
+name=foo,type=Data,settings=helloworld
+
+get filename=bar
+----
+hi
+
+set filename=bax settings=hello
+----
+create("COCKROACHDB_REGISTRY_000002")
+write("COCKROACHDB_REGISTRY_000002", <...54 bytes...>)
+sync("COCKROACHDB_REGISTRY_000002")
+create("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+sync("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+close("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+remove("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
+sync("")
+remove("COCKROACHDB_REGISTRY_000001")
+write("COCKROACHDB_REGISTRY_000002", <...25 bytes...>)
+sync("COCKROACHDB_REGISTRY_000002")
+
+list
+----
+name=bar,type=Data,settings=hi
+name=bax,type=Data,settings=hello
+name=foo,type=Data,settings=helloworld
+
+close
+----
+write("COCKROACHDB_REGISTRY_000002", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000002")
+close("")
+
+load soft-max-size=128
+----
+open-dir("")
+open("COCKROACHDB_REGISTRY_000002")
+close("COCKROACHDB_REGISTRY_000002")
+stat("bar")
+stat("bax")
+stat("foo")
+create("COCKROACHDB_REGISTRY_000003")
+write("COCKROACHDB_REGISTRY_000003", <...72 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+create("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+sync("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+close("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+remove("marker.registry.000002.COCKROACHDB_REGISTRY_000002")
+sync("")
+remove("COCKROACHDB_REGISTRY_000002")
+write("COCKROACHDB_REGISTRY_000003", <...14 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+
+set filename=abcd settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000003", <...109 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+
+set filename=abcde settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000003", <...110 bytes...>)
+sync("COCKROACHDB_REGISTRY_000003")
+
+# Triggers a rotation.
+
+set filename=abcdef settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+create("COCKROACHDB_REGISTRY_000004")
+write("COCKROACHDB_REGISTRY_000004", <...259 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+create("marker.registry.000004.COCKROACHDB_REGISTRY_000004")
+sync("marker.registry.000004.COCKROACHDB_REGISTRY_000004")
+close("marker.registry.000004.COCKROACHDB_REGISTRY_000004")
+remove("marker.registry.000003.COCKROACHDB_REGISTRY_000003")
+sync("")
+write("COCKROACHDB_REGISTRY_000003", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000003")
+remove("COCKROACHDB_REGISTRY_000003")
+write("COCKROACHDB_REGISTRY_000004", <...111 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+
+set filename=abcdefg settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000004", <...112 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+
+set filename=abcdefgh settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000004", <...113 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+
+set filename=abcdefghi settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000004", <...114 bytes...>)
+sync("COCKROACHDB_REGISTRY_000004")
+
+# Triggers a rotation.
+
+set filename=abcdefghij settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+create("COCKROACHDB_REGISTRY_000005")
+write("COCKROACHDB_REGISTRY_000005", <...681 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+create("marker.registry.000005.COCKROACHDB_REGISTRY_000005")
+sync("marker.registry.000005.COCKROACHDB_REGISTRY_000005")
+close("marker.registry.000005.COCKROACHDB_REGISTRY_000005")
+remove("marker.registry.000004.COCKROACHDB_REGISTRY_000004")
+sync("")
+write("COCKROACHDB_REGISTRY_000004", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000004")
+remove("COCKROACHDB_REGISTRY_000004")
+write("COCKROACHDB_REGISTRY_000005", <...115 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijk settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...116 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijkl settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...117 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijklm settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...118 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijklmn settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...119 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijklmno settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...120 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijklmnop settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...121 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+set filename=abcdefghijklmnopq settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+write("COCKROACHDB_REGISTRY_000005", <...122 bytes...>)
+sync("COCKROACHDB_REGISTRY_000005")
+
+# Triggers a rotation.
+
+set filename=abcdefghijklmnopqr settings=a-long-string-that-requires-nontrivial-bytes-to-store-so-that-we-hit-the-max-size-sooner
+----
+create("COCKROACHDB_REGISTRY_000006")
+write("COCKROACHDB_REGISTRY_000006", <...1573 bytes...>)
+sync("COCKROACHDB_REGISTRY_000006")
+create("marker.registry.000006.COCKROACHDB_REGISTRY_000006")
+sync("marker.registry.000006.COCKROACHDB_REGISTRY_000006")
+close("marker.registry.000006.COCKROACHDB_REGISTRY_000006")
+remove("marker.registry.000005.COCKROACHDB_REGISTRY_000005")
+sync("")
+write("COCKROACHDB_REGISTRY_000005", <...0 bytes...>)
+close("COCKROACHDB_REGISTRY_000005")
+remove("COCKROACHDB_REGISTRY_000005")
+write("COCKROACHDB_REGISTRY_000006", <...123 bytes...>)
+sync("COCKROACHDB_REGISTRY_000006")

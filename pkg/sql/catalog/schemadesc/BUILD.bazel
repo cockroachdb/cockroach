@@ -1,0 +1,67 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "schemadesc",
+    srcs = [
+        "public_schema_desc.go",
+        "schema_desc.go",
+        "schema_desc_builder.go",
+        "synthetic_schema_desc.go",
+        "temporary_schema_desc.go",
+        "virtual_schema_desc.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/security/username",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/catprivilege",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/parserutils",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/hlc",
+        "//pkg/util/iterutil",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "schemadesc_test",
+    size = "small",
+    srcs = ["schema_desc_test.go"],
+    deps = [
+        ":schemadesc",
+        "//pkg/clusterversion",
+        "//pkg/security/username",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/nstree",
+        "//pkg/sql/privilege",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+disallowed_imports_test(
+    src = "schemadesc",
+    disallowed_list = ["//pkg/sql/parser"],
+)

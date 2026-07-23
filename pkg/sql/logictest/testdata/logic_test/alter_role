@@ -1,0 +1,22 @@
+# Test that no-op alter role command is actually no-op (i.e. does not perform schema change)
+subtest no_op_alter_role
+
+statement ok
+CREATE USER roach
+
+statement ok
+ALTER ROLE roach WITH CREATEDB CREATEROLE NOLOGIN CONTROLJOB
+
+# Remember the current table version for `system.role_options`.
+let $role_options_version
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' FROM system.descriptor WHERE id = 'system.public.role_options'::REGCLASS
+
+# Alter `roach` with the same options (order shuffled), which should be treated as a no-op.
+statement ok
+ALTER ROLE roach WITH CREATEROLE CREATEDB CONTROLJOB NOLOGIN
+
+# Assert that it's indeed a no-op by checking the 'role_options' table's version remains the same
+query B
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' = $role_options_version::STRING FROM system.descriptor WHERE id = 'system.public.role_options'::REGCLASS
+----
+true

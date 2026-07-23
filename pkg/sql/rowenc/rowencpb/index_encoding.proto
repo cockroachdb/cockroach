@@ -1,0 +1,21 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.rowenc;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb";
+
+// Wrapper for the bytes of the value of an index that also contains bit for
+// whether or not the value was deleted. A wrapper of arbitrary index values
+// with the additional delete bit was chosen over a separate index encoding type
+// because there would have to be a separate type for each encoding that we
+// already have for indexes. The alternative would get harder to maintain if we
+// added more index encodings in the future.
+message IndexValueWrapper {
+  bytes value = 1;
+
+  // If deleted is true, value will always be nil.
+  bool deleted = 2;
+}

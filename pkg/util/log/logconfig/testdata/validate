@@ -1,0 +1,1102 @@
+# Empty configuration: use and propagate defaults.
+yaml
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that hashing can be enabled without salt.
+yaml
+redaction:
+  hashing:
+    enabled: true
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+redaction:
+  hashing:
+    enabled: true
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that hashing can be enabled with salt.
+yaml
+redaction:
+  hashing:
+    enabled: true
+    salt: inline-salt
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+redaction:
+  hashing:
+    enabled: true
+    salt: inline-salt
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that salt is rejected when hashing is disabled.
+yaml
+redaction:
+  hashing:
+    enabled: false
+    salt: inline-salt
+----
+ERROR: redaction.hashing.salt requires redaction.hashing.enabled to be true
+
+# Check that defaults propagate to file groups.
+yaml
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that default dir propagates.
+yaml
+file-defaults:
+      dir: /custom
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {INFO: all}
+      dir: /custom
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /custom
+  max-group-size: 100MiB
+
+
+# Check that default severity propagates.
+yaml
+file-defaults:
+  filter: WARNING
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {WARNING: all}
+      filter: WARNING
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that default format propagates.
+yaml
+file-defaults:
+  format: crdb-v1
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {INFO: all}
+      filter: INFO
+      format: crdb-v1
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that default format options propagate.
+yaml
+file-defaults:
+  format-options: {foo: bar}
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {INFO: all}
+      filter: INFO
+      format-options:
+        foo: bar
+  stderr:
+    filter: NONE
+    format-options:
+      foo: bar
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that fluent default network is filled.
+yaml
+sinks:
+   fluent-servers:
+     custom:
+        address: "127.0.0.1:5170"
+        channels: DEV
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  fluent-servers:
+    custom:
+      channels: {INFO: [DEV]}
+      net: tcp
+      address: 127.0.0.1:5170
+      filter: INFO
+      format: json-fluent-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      buffering:
+        max-staleness: 5s
+        flush-trigger-size: 1.0MiB
+        max-buffer-size: 50MiB
+        format: newline
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that it's possible to capture all channels.
+yaml
+sinks:
+   file-groups:
+      custom:
+         channels: all
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that "auditable" is transformed into other file flags.
+yaml
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+      auditable: true
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {INFO: all}
+      buffered-writes: false
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that "auditable" is transformed into other fluent flags.
+yaml
+sinks:
+  fluent-servers:
+    custom:
+      channels: DEV
+      address: localhost:5170
+      auditable: true
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  fluent-servers:
+    custom:
+      channels: {INFO: [DEV]}
+      net: tcp
+      address: localhost:5170
+      filter: INFO
+      format: json-fluent-compact
+      redact: false
+      redactable: true
+      exit-on-error: true
+      buffering:
+        max-staleness: 5s
+        flush-trigger-size: 1.0MiB
+        max-buffer-size: 50MiB
+        format: newline
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that "auditable" is transformed into other stderr
+yaml
+sinks:
+  stderr:
+      channels: DEV
+      exit-on-error: false
+      auditable: true
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that file-defaults format options are transferred to stderr if using the same format (crdb-v2).
+yaml
+file-defaults:
+  format: crdb-v2
+  format-options: {timezone: america/new_york}
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+      format-options:
+        timezone: america/new_york
+  stderr:
+    filter: NONE
+    format-options:
+      timezone: america/new_york
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that file-defaults format options are transferred to stderr if stderr is using the same format (json).
+yaml
+file-defaults:
+  format: json
+  format-options: {datetime-format: rfc3339, datetime-timezone: America/New_York}
+sinks:
+  stderr:
+    format: json
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+      format: json
+      format-options:
+        datetime-format: rfc3339
+        datetime-timezone: America/New_York
+  stderr:
+    filter: NONE
+    format: json
+    format-options:
+      datetime-format: rfc3339
+      datetime-timezone: America/New_York
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that file-defaults format options are NOT transferred to stderr if stderr is NOT using the same format
+# as file-defaults.
+# Note that here, we are using the default stderr format crdb-v2-tty.
+yaml
+file-defaults:
+  format: json
+  format-options: {datetime-format: rfc3339, datetime-timezone: America/New_York}
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+      format: json
+      format-options:
+        datetime-format: rfc3339
+        datetime-timezone: America/New_York
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that file-defaults format options do NOT overwrite format-options if explicitly defined in stderr.
+yaml
+file-defaults:
+  format: crdb-v2
+  format-options: {timezone: america/new_york}
+sinks:
+  stderr:
+    format-options: {timezone: america/chicago}
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+      format-options:
+        timezone: america/new_york
+  stderr:
+    filter: NONE
+    format-options:
+      timezone: america/chicago
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that stderr can accept formats other than crdb-v2-tty.
+yaml
+sinks:
+  stderr:
+    format: crdb-v1-tty
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+    format: crdb-v1-tty
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that NONE filter elides files.
+yaml
+file-defaults: {filter: NONE}
+----
+sinks:
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that missing addr is reported.
+yaml
+sinks:
+   fluent-servers:
+     custom:
+----
+ERROR: fluent server "custom": address cannot be empty
+
+# Check that invalid proto is rejected.
+yaml
+sinks:
+   fluent-servers:
+     custom:
+       address: 'abc'
+       net: 'unknown'
+----
+ERROR: fluent server "custom": unknown protocol: "unknown"
+fluent server "custom": no channel selected
+
+# Check that empty dir is rejected.
+yaml
+file-defaults:
+  dir: ''
+----
+ERROR: file-defaults: log directory cannot be empty; specify '.' for current directory
+
+yaml
+sinks:
+  file-groups:
+    example:
+     dir: ''
+     channels: all
+----
+ERROR: file group "example": log directory cannot be empty; specify '.' for current directory
+
+# Check that home dir is rejected.
+yaml
+file-defaults:
+  dir: '~/foo'
+----
+ERROR: file-defaults: log directory cannot start with '~': ~/foo
+
+yaml
+sinks:
+  file-groups:
+    example:
+     dir: '~/bar'
+----
+ERROR: file group "example": log directory cannot start with '~': ~/bar
+file group "example": no channel selected
+
+# Check that duplicate channel use in filter spec is refused.
+yaml
+sinks:
+  stderr:
+    channels: {INFO: DEV, WARNING: DEV}
+----
+ERROR: stderr sink: cannot use channel DEV at severity WARNING: already listed at severity INFO
+
+# Check that missing DEV sink gets added.
+# The new sink that gets added does not include
+# channels that have sinks already.
+yaml
+sinks:
+  file-groups:
+    custom1:
+      channels: HEALTH
+    custom2:
+      channels: STORAGE
+----
+sinks:
+  file-groups:
+    custom1:
+      channels: {INFO: [HEALTH]}
+      filter: INFO
+    custom2:
+      channels: {INFO: [STORAGE]}
+      filter: INFO
+    default:
+      channels: {INFO: [DEV, OPS, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION, CHANGEFEED, KV_EXEC]}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that a single channel can appear in multiple sinks.
+yaml
+sinks:
+  file-groups:
+    custom1:
+      channels: {WARNING: HEALTH}
+    custom2:
+      channels: {INFO: HEALTH}
+----
+sinks:
+  file-groups:
+    custom1:
+      channels: {WARNING: [HEALTH]}
+      filter: INFO
+    custom2:
+      channels: {INFO: [HEALTH]}
+      filter: INFO
+    default:
+      channels: {INFO: [DEV, OPS, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION, CHANGEFEED, KV_EXEC]}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that if there is a DEV sink already, missing channels get
+# added to it at the configured default filter severity.
+yaml
+sinks:
+  file-groups:
+    custom:
+      channels: {WARNING: DEV}
+      filter: ERROR
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {WARNING: [DEV], ERROR: [OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION, CHANGEFEED, KV_EXEC]}
+      filter: ERROR
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that if there are multiple DEV sinks, the "default" sink gets
+# the missing channels.
+yaml
+sinks:
+  file-groups:
+    default:
+      channels: DEV
+    custom:
+      channels: {WARNING: DEV}
+      filter: ERROR
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {WARNING: [DEV]}
+      filter: ERROR
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that if there are multiple DEV sinks but the "default" sink
+# does not have DEV, the first sink that captures DEV in lexicographic
+# order is used.
+yaml
+sinks:
+  file-groups:
+    default:
+      channels: HEALTH
+    custom2:
+      channels: {WARNING: DEV}
+      filter: ERROR
+    custom1:
+      channels: {ERROR: DEV}
+      filter: ERROR
+----
+sinks:
+  file-groups:
+    custom1:
+      channels: {ERROR: [DEV, OPS, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION, CHANGEFEED, KV_EXEC]}
+      filter: ERROR
+    custom2:
+      channels: {WARNING: [DEV]}
+      filter: ERROR
+    default:
+      channels: {INFO: [HEALTH]}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that if there is no sink that captures DEV yet, but there is a "default"
+# sink that has some channels yet, DEV is added to it and the previous
+# configuration is retained.
+yaml
+sinks:
+  file-groups:
+    default:
+      channels: {WARNING: HEALTH}
+      filter: ERROR
+    custom:
+      channels: STORAGE
+----
+sinks:
+  file-groups:
+    custom:
+      channels: {INFO: [STORAGE]}
+      filter: INFO
+    default:
+      channels: {WARNING: [HEALTH], ERROR: [DEV, OPS, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION, CHANGEFEED, KV_EXEC]}
+      filter: ERROR
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that each component of buffering struct propagates.
+yaml
+fluent-defaults:
+  buffering:
+    max-staleness: 15s
+    flush-trigger-size: 10KiB
+    max-buffer-size: 2MiB
+    format: json-array
+sinks:
+  fluent-servers:
+    a:
+      address: a
+      channels: STORAGE
+      buffering:
+        max-staleness: 10s
+        format: newline
+    b:
+      address: b
+      channels: OPS
+      buffering:
+        flush-trigger-size: 5.0KiB
+    c:
+      address: c
+      channels: HEALTH
+      buffering:
+        max-buffer-size: 3MiB
+    d:
+      address: d
+      channels: SESSIONS
+      buffering: NONE
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  fluent-servers:
+    a:
+      channels: {INFO: [STORAGE]}
+      net: tcp
+      address: a
+      filter: INFO
+      format: json-fluent-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      buffering:
+        max-staleness: 10s
+        flush-trigger-size: 10KiB
+        max-buffer-size: 2.0MiB
+        format: newline
+    b:
+      channels: {INFO: [OPS]}
+      net: tcp
+      address: b
+      filter: INFO
+      format: json-fluent-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      buffering:
+        max-staleness: 15s
+        flush-trigger-size: 5.0KiB
+        max-buffer-size: 2.0MiB
+        format: json-array
+    c:
+      channels: {INFO: [HEALTH]}
+      net: tcp
+      address: c
+      filter: INFO
+      format: json-fluent-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      buffering:
+        max-staleness: 15s
+        flush-trigger-size: 10KiB
+        max-buffer-size: 3.0MiB
+        format: json-array
+    d:
+      channels: {INFO: [SESSIONS]}
+      net: tcp
+      address: d
+      filter: INFO
+      format: json-fluent-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      buffering: NONE
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that each component of buffering struct propagates to http-sinks
+# Ensure servers have gzip compression on by default and headers if set
+yaml
+http-defaults:
+  buffering:
+    max-staleness: 15s
+    flush-trigger-size: 10KiB
+    max-buffer-size: 2MiB
+sinks:
+  http-servers:
+    a:
+      address: a
+      channels: STORAGE
+      headers: {X-CRDB-HEADER: header-value-a}
+      file-based-headers: {X-CRDB-FILE-HEADER: /a/path/to/file}
+      buffering:
+        max-staleness: 10s
+    b:
+      address: b
+      channels: OPS
+      headers: {X-CRDB-HEADER: header-value-b, X-ANOTHER-HEADER: zz-yy-bb}
+      file-based-headers: {X-ANOTHER-FILE-HEADER: /other/path/to/file, X-CRDB-FILE-HEADER: /some/path/to/file}
+      buffering:
+        flush-trigger-size: 5.0KiB
+    c:
+      address: c
+      channels: HEALTH
+      buffering:
+        max-buffer-size: 3MiB
+    d:
+      address: d
+      channels: SESSIONS
+      buffering: NONE
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  http-servers:
+    a:
+      channels: {INFO: [STORAGE]}
+      address: a
+      method: POST
+      unsafe-tls: false
+      timeout: 2s
+      disable-keep-alives: false
+      headers: {X-CRDB-HEADER: header-value-a}
+      file-based-headers: {X-CRDB-FILE-HEADER: /a/path/to/file}
+      compression: gzip
+      filter: INFO
+      format: json-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      auditable: false
+      buffering:
+        max-staleness: 10s
+        flush-trigger-size: 10KiB
+        max-buffer-size: 2.0MiB
+        format: newline
+    b:
+      channels: {INFO: [OPS]}
+      address: b
+      method: POST
+      unsafe-tls: false
+      timeout: 2s
+      disable-keep-alives: false
+      headers: {X-ANOTHER-HEADER: zz-yy-bb, X-CRDB-HEADER: header-value-b}
+      file-based-headers: {X-ANOTHER-FILE-HEADER: /other/path/to/file, X-CRDB-FILE-HEADER: /some/path/to/file}
+      compression: gzip
+      filter: INFO
+      format: json-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      auditable: false
+      buffering:
+        max-staleness: 15s
+        flush-trigger-size: 5.0KiB
+        max-buffer-size: 2.0MiB
+        format: newline
+    c:
+      channels: {INFO: [HEALTH]}
+      address: c
+      method: POST
+      unsafe-tls: false
+      timeout: 2s
+      disable-keep-alives: false
+      compression: gzip
+      filter: INFO
+      format: json-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      auditable: false
+      buffering:
+        max-staleness: 15s
+        flush-trigger-size: 10KiB
+        max-buffer-size: 3.0MiB
+        format: newline
+    d:
+      channels: {INFO: [SESSIONS]}
+      address: d
+      method: POST
+      unsafe-tls: false
+      timeout: 2s
+      disable-keep-alives: false
+      compression: gzip
+      filter: INFO
+      format: json-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      auditable: false
+      buffering: NONE
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that buffering works with file sinks.
+yaml
+file-defaults:
+  buffered-writes: false
+  buffering:
+    max-staleness: 5s
+    flush-trigger-size: 1.0MiB
+    max-buffer-size: 50MiB
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      buffered-writes: false
+      filter: INFO
+      buffering:
+        max-staleness: 5s
+        flush-trigger-size: 1.0MiB
+        max-buffer-size: 50MiB
+        format: none
+  stderr:
+    filter: NONE
+    buffering:
+      max-staleness: 5s
+      flush-trigger-size: 1.0MiB
+      max-buffer-size: 50MiB
+      format: newline
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that buffering and buffered-writes are incompatible together.
+yaml
+file-defaults:
+  buffered-writes: true
+  buffering:
+    max-staleness: 5s
+    flush-trigger-size: 1.0MiB
+    max-buffer-size: 50MiB
+----
+ERROR: Unable to use "buffered-writes" in conjunction with a "buffering" configuration. These configuration options are mutually exclusive.
+
+# Check that auditable and buffered-writes are incompatible together.
+yaml
+file-defaults:
+  buffered-writes: false
+  auditable: true
+  buffering:
+    max-staleness: 5s
+    flush-trigger-size: 1.0MiB
+    max-buffer-size: 50MiB
+----
+ERROR: File-based audit logging cannot coexist with buffering configuration. Disable either the buffering configuration ("buffering") or auditable log ("auditable") configuration.
+
+# Check that missing address in OTLP is reported.
+yaml
+sinks:
+  otlp-servers:
+    custom:
+----
+ERROR: otlp server "custom": address cannot be empty
+
+# Check that invalid compression is rejected.
+yaml
+sinks:
+  otlp-servers:
+    custom:
+      address: localhost:4317
+      channels: all
+      compression: ''
+----
+ERROR: otlp server "custom": compression must be 'gzip' or 'none'
+
+# Check that invalid mode is rejected.
+yaml
+sinks:
+  otlp-servers:
+    custom:
+      address: localhost:4317
+      channels: all
+      mode: ''
+----
+ERROR: otlp server "custom": mode must be 'grpc' or 'http'
+
+# Check that address is valid in http mode
+yaml
+sinks:
+  otlp-servers:
+    custom:
+      address: localhost:4317
+      channels: all
+      mode: http
+----
+ERROR: otlp server "custom": address must start with 'http://' or 'https://'
+
+# Check that invalid content type header is rejected.
+yaml
+sinks:
+  otlp-servers:
+    custom:
+      address: http://localhost:4317
+      channels: all
+      mode: http
+      headers:
+        Content-Type: "protobuf"
+----
+ERROR: otlp server "custom": header Content-Type is not allowed
+
+# Check that invalid content type header with grpc mode is rejected.
+yaml
+sinks:
+  otlp-servers:
+    custom:
+      address: localhost:4317
+      channels: all
+      mode: grpc
+      headers:
+        Content-Type: "protobuf"
+----
+ERROR: otlp server "custom": header Content-Type is not allowed
+
+# Check that invalid content encoding header is rejected.
+yaml
+sinks:
+  otlp-servers:
+    custom:
+      address: http://localhost:4317
+      channels: all
+      mode: http
+      headers:
+        Content-Encoding: "snappy"
+----
+ERROR: otlp server "custom": header Content-Encoding is not allowed
+
+# Basic OTLP sink with HTTP mode
+yaml
+sinks:
+  otlp-servers:
+    custom:
+      address: https://http-dd-log-intake.com
+      channels: all
+      mode: http
+      compression: none
+      headers:
+        X-DD-API: "xxx"
+        X-DD-MODE: "otlp"
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  otlp-servers:
+    custom:
+      channels: {INFO: all}
+      address: https://http-dd-log-intake.com
+      mode: http
+      headers: {X-DD-API: xxx, X-DD-MODE: otlp}
+      compression: none
+      filter: INFO
+      format: json
+      redact: false
+      redactable: true
+      exit-on-error: false
+      auditable: false
+      buffering:
+        max-staleness: 5s
+        flush-trigger-size: 1.0MiB
+        max-buffer-size: 50MiB
+        format: newline
+      sinkname: custom
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Basic OTLP sink with gRPC mode
+yaml
+sinks:
+  otlp-servers:
+    custom:
+      address: localhost:4317
+      channels: all
+      mode: grpc
+      compression: gzip
+      headers:
+        dd-api: "xxx"
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  otlp-servers:
+    custom:
+      channels: {INFO: all}
+      address: localhost:4317
+      mode: grpc
+      headers: {dd-api: xxx}
+      compression: gzip
+      filter: INFO
+      format: json
+      redact: false
+      redactable: true
+      exit-on-error: false
+      auditable: false
+      buffering:
+        max-staleness: 5s
+        flush-trigger-size: 1.0MiB
+        max-buffer-size: 50MiB
+        format: newline
+      sinkname: custom
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB

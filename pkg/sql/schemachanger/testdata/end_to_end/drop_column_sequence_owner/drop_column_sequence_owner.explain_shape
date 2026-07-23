@@ -1,0 +1,22 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT, k int);
+CREATE SEQUENCE sq1 OWNED BY t.j;
+COMMENT ON TABLE t IS 't has a comment';
+COMMENT ON COLUMN t.j IS 'j has a comment';
+INSERT INTO t VALUES(-1);
+INSERT INTO t VALUES(-2);
+INSERT INTO t VALUES(-3);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t DROP COLUMN j;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey- in relation t
+ │    └── into t_pkey+ (i; k)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into t_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ └── execute 4 system table mutations transactions

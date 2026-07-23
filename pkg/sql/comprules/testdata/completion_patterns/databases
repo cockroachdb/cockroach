@@ -1,0 +1,158 @@
+filter
+dbs:
+----
+
+subtest after_ident
+
+comp at=8
+select
+----
+i_
+ ^
+--
+dbs: completing for "" (8,8)
+--sql:
+WITH d AS (SELECT oid, datname FROM pg_catalog.pg_database)
+SELECT datname AS completion,
+       'database' AS category,
+       substr(COALESCE(sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM d
+LEFT OUTER JOIN system.public.comments sc
+    ON d.oid = sc.object_id
+   AND sc.type = 0
+ WHERE left(datname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"", 8, 8}
+
+comp at=8
+select foo
+----
+ii'
+  ^
+--
+dbs: completing for "foo" (7,10)
+--sql:
+WITH d AS (SELECT oid, datname FROM pg_catalog.pg_database)
+SELECT datname AS completion,
+       'database' AS category,
+       substr(COALESCE(sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM d
+LEFT OUTER JOIN system.public.comments sc
+    ON d.oid = sc.object_id
+   AND sc.type = 0
+ WHERE left(datname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"foo", 7, 10}
+
+comp at=8
+select "FOO
+----
+ii'
+  ^
+--
+dbs: completing for "FOO" (7,11)
+--sql:
+WITH d AS (SELECT oid, datname FROM pg_catalog.pg_database)
+SELECT datname AS completion,
+       'database' AS category,
+       substr(COALESCE(sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM d
+LEFT OUTER JOIN system.public.comments sc
+    ON d.oid = sc.object_id
+   AND sc.type = 0
+ WHERE left(datname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"FOO", 7, 11}
+
+
+subtest end
+
+subtest after_comma
+
+comp at=12
+select a,
+----
+ii,_
+   ^
+--
+dbs: completing for "" (12,12)
+--sql:
+WITH d AS (SELECT oid, datname FROM pg_catalog.pg_database)
+SELECT datname AS completion,
+       'database' AS category,
+       substr(COALESCE(sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM d
+LEFT OUTER JOIN system.public.comments sc
+    ON d.oid = sc.object_id
+   AND sc.type = 0
+ WHERE left(datname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"", 12, 12}
+
+comp at=10
+select a,abc
+----
+ii,i'
+    ^
+--
+dbs: completing for "abc" (9,12)
+--sql:
+WITH d AS (SELECT oid, datname FROM pg_catalog.pg_database)
+SELECT datname AS completion,
+       'database' AS category,
+       substr(COALESCE(sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM d
+LEFT OUTER JOIN system.public.comments sc
+    ON d.oid = sc.object_id
+   AND sc.type = 0
+ WHERE left(datname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"abc", 9, 12}
+
+subtest end
+
+subtest only_after_ident_or_comma
+
+comp
+sel
+----
+i'
+ ^
+--
+dbs: not completing
+
+comp at=11
+select foo.
+----
+ii.'
+   ^
+--
+dbs: not completing
+
+comp at=12
+(select foo)
+----
+(ii)'
+    ^
+--
+dbs: not completing
+
+comp at=14
+(select foo)
+----
+(ii)_
+    ^
+--
+dbs: not completing
+
+subtest end

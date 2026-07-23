@@ -1,0 +1,21 @@
+/* setup */
+CREATE TYPE e AS ENUM();
+CREATE TABLE t (i INT PRIMARY KEY, j e);
+----
+...
++object {100 101 e} -> 104
++object {100 101 _e} -> 105
++object {100 101 t} -> 106
+
+/* test */
+ALTER TABLE t ALTER COLUMN j SET DATA TYPE e;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.alter_column_type
+# end StatementPhase
+# begin PreCommitPhase
+# end PreCommitPhase
+commit transaction #1

@@ -1,0 +1,489 @@
+# LogicTest: !local-prepared
+statement ok
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '1ms'
+
+statement error pq: cannot be set to a negative duration
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '-1ms'
+
+statement error pq: invalid cluster setting argument type
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '1'
+
+statement error pq: invalid cluster setting argument type
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '-1'
+
+statement error pq: could not parse "true" as type interval: interval
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = 'true'
+
+statement error pq: invalid cluster setting argument type
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = true
+
+statement error cannot be set to a value lower than 16 KiB
+SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '1b'
+
+statement ok
+SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '64MB'
+
+statement ok
+RESET CLUSTER SETTING sql.conn.max_read_buffer_message_size
+
+# Test permissions for modifying cluster settings.
+
+user testuser
+
+statement error only users with the MODIFYCLUSTERSETTING or MODIFYSQLCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'version'
+SET CLUSTER SETTING version = '22.2'
+
+statement error only users with MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to show cluster setting 'sql.defaults.default_int_size'
+SHOW CLUSTER SETTING sql.defaults.default_int_size
+
+statement error only users with MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to SHOW CLUSTER SETTINGS
+SHOW CLUSTER SETTINGS
+
+statement error only users with MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to SHOW CLUSTER SETTINGS
+SHOW ALL CLUSTER SETTINGS
+
+user root
+
+statement ok
+ALTER USER testuser MODIFYCLUSTERSETTING
+
+user testuser
+
+statement ok
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+query I
+SHOW CLUSTER SETTING sql.defaults.default_int_size
+----
+4
+
+# Users with MODIFYCLUSTERSETTING should be able to see non sql.defaults settings.
+
+query B
+SHOW CLUSTER SETTING diagnostics.reporting.enabled
+----
+true
+
+query TT
+SELECT variable, value FROM [SHOW CLUSTER SETTINGS]
+WHERE variable IN ('sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4
+
+query TT
+SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4
+
+query TTTT
+SELECT variable, value, default_value, origin FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('sql.index_recommendation.drop_unused_duration')
+----
+sql.index_recommendation.drop_unused_duration  168h0m0s 168h0m0s default
+
+statement ok
+SET CLUSTER SETTING sql.index_recommendation.drop_unused_duration = '10s'
+
+query TTTT
+SELECT variable, value, default_value, origin FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('sql.index_recommendation.drop_unused_duration')
+----
+sql.index_recommendation.drop_unused_duration  10s 168h0m0s override
+
+statement ok
+RESET CLUSTER SETTING sql.index_recommendation.drop_unused_duration
+
+query TTTT
+SELECT variable, value, default_value, origin FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('sql.index_recommendation.drop_unused_duration')
+----
+sql.index_recommendation.drop_unused_duration  168h0m0s 168h0m0s default
+
+user host-cluster-root
+
+statement ok
+ALTER TENANT ALL SET CLUSTER SETTING sql.index_recommendation.drop_unused_duration = '50s'
+
+user root
+
+onlyif config 3node-tenant-default-configs
+query TTTT retry
+SELECT variable, value, default_value, origin FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('sql.index_recommendation.drop_unused_duration')
+----
+sql.index_recommendation.drop_unused_duration  50s 168h0m0s external-override
+
+user root
+
+statement ok
+ALTER USER testuser NOMODIFYCLUSTERSETTING
+
+user testuser
+
+statement error only users with the MODIFYCLUSTERSETTING or MODIFYSQLCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+# Users with MODIFYSQLCLUSTERSETTING system privilege should be able to see and modify only sql.defaults settings.
+user root
+
+statement ok
+GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
+
+user testuser
+
+statement ok
+SHOW CLUSTER SETTINGS
+
+statement error pq: only users with MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to show cluster setting 'diagnostics.reporting.enabled'
+SHOW CLUSTER SETTING diagnostics.reporting.enabled
+
+statement ok
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+statement error pq: only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'diagnostics.reporting.enabled'
+SET CLUSTER SETTING diagnostics.reporting.enabled = false
+
+user root
+
+statement ok
+ALTER USER testuser NOMODIFYCLUSTERSETTING
+
+statement ok
+ALTER USER testuser VIEWCLUSTERSETTING
+
+user testuser
+
+# Users with VIEWCLUSTERSETTING should be able to see non sql.defaults settings but not modify regardless if they have sql modify.
+
+statement error pq: only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'diagnostics.reporting.enabled'
+SET CLUSTER SETTING diagnostics.reporting.enabled = false
+
+query B
+SHOW CLUSTER SETTING diagnostics.reporting.enabled
+----
+true
+
+user root
+
+statement ok
+REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
+
+user testuser
+
+query B
+SHOW CLUSTER SETTING diagnostics.reporting.enabled
+----
+true
+
+statement error only users with the MODIFYCLUSTERSETTING or MODIFYSQLCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+query I
+SHOW CLUSTER SETTING sql.defaults.default_int_size
+----
+4
+
+query TT
+SELECT variable, value FROM [SHOW CLUSTER SETTINGS]
+WHERE variable IN ('sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4
+
+query TT
+SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4
+
+user root
+
+statement ok
+ALTER USER testuser NOVIEWCLUSTERSETTING
+
+user testuser
+
+statement error only users with the MODIFYCLUSTERSETTING or MODIFYSQLCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+statement error only users with MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to SHOW CLUSTER SETTINGS
+SHOW CLUSTER SETTINGS
+
+statement error only users with MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to SHOW CLUSTER SETTINGS
+SHOW ALL CLUSTER SETTINGS
+
+user root
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+query TT rowsort
+SELECT variable, value FROM [SHOW CLUSTER SETTINGS]
+WHERE variable IN ( 'sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4
+
+query TT rowsort
+SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4
+
+query B
+SHOW CLUSTER SETTING sql.defaults.stub_catalog_tables.enabled
+----
+true
+
+skipif config 3node-tenant-default-configs
+statement ok
+SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '10Mib'
+
+skipif config 3node-tenant-default-configs
+query T
+SHOW CLUSTER SETTING kv.snapshot_rebalance.max_rate
+----
+10 MiB
+
+skipif config 3node-tenant-default-configs
+query T
+SELECT crdb_internal.cluster_setting_encoded_default('kv.snapshot_rebalance.max_rate')
+----
+33554432
+
+skipif config 3node-tenant-default-configs
+query T
+SELECT crdb_internal.decode_cluster_setting('kv.snapshot_rebalance.max_rate', '33554432')
+----
+32 MiB
+
+onlyif config 3node-tenant-default-configs
+query error unknown cluster setting
+SELECT crdb_internal.cluster_setting_encoded_default('kv.snapshot_rebalance.max_rate')
+
+onlyif config 3node-tenant-default-configs
+query error unknown cluster setting
+SELECT crdb_internal.decode_cluster_setting('kv.snapshot_rebalance.max_rate', '33554432')
+
+onlyif config 3node-tenant-default-configs
+statement error unknown cluster setting
+SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '10Mib'
+
+onlyif config 3node-tenant-default-configs
+statement error unknown setting
+SHOW CLUSTER SETTING kv.snapshot_rebalance.max_rate
+
+# Test a cluster setting which is SystemOnly
+subtest tenant-cluster-settings
+
+# Skip this test when inside a tenant, as this setting won't be visible in
+# there.
+skipif config 3node-tenant-default-configs
+statement error admission.kv.enabled is a system-only setting and must be set in the admin tenant using SET CLUSTER SETTING
+ALTER TENANT [10] SET CLUSTER SETTING admission.kv.enabled=true
+
+onlyif config 3node-tenant-default-configs
+statement error ALTER VIRTUAL CLUSTER can only be called by system operators
+ALTER TENANT [10] SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+
+skipif config 3node-tenant-default-configs
+statement error cannot use this statement to access cluster settings in system tenant
+ALTER TENANT [1] SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+
+skipif config 3node-tenant-default-configs
+statement error cannot set 'version' for tenants
+ALTER TENANT ALL SET CLUSTER SETTING version='23.1'
+
+skipif config 3node-tenant-default-configs
+statement ok
+SELECT crdb_internal.create_tenant(10)
+
+skipif config 3node-tenant-default-configs
+statement error cannot set 'version' for tenants
+ALTER TENANT "cluster-10" SET CLUSTER SETTING version='23.1'
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER TENANT "cluster-10" SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='5M'
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER TENANT [10] SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER TENANT ALL SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER TENANT [10] RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER TENANT "cluster-10" RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER TENANT ALL RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
+
+onlyif config 3node-tenant-default-configs
+statement error SHOW CLUSTER SETTING FOR TENANT can only be called by system operators
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT [10]
+
+skipif config 3node-tenant-default-configs
+query error invalid tenant ID 0
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT [0]
+
+
+skipif config 3node-tenant-default-configs
+query error cannot use this statement to access cluster settings in system tenant
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT [1]
+
+skipif config 3node-tenant-default-configs
+query error tenant "1111" does not exist
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT [1111]
+
+skipif config 3node-tenant-default-configs
+query T
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT [10]
+----
+NULL
+
+skipif config 3node-tenant-default-configs
+query T
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT "cluster-10"
+----
+NULL
+
+onlyif config 3node-tenant-default-configs
+query error SHOW CLUSTER SETTINGS FOR TENANT can only be called by system operators
+SHOW CLUSTER SETTINGS FOR TENANT [10]
+
+skipif config 3node-tenant-default-configs
+query error invalid tenant ID 0
+SHOW CLUSTER SETTINGS FOR TENANT [0]
+
+skipif config 3node-tenant-default-configs
+query error use SHOW CLUSTER SETTINGS to display settings for the system tenant
+SHOW CLUSTER SETTINGS FOR TENANT [1]
+
+skipif config 3node-tenant-default-configs
+query error tenant "1111" does not exist
+SHOW CLUSTER SETTINGS FOR TENANT [1111]
+
+# The IN clause should contain one public and one hidden cluster setting.
+skipif config 3node-tenant-default-configs
+query TTT
+SELECT variable, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
+WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
+----
+jobs.retention_time  d  no-override
+
+skipif config 3node-tenant-default-configs
+query TTT
+SELECT variable, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT "cluster-10"]
+WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
+----
+jobs.retention_time  d  no-override
+
+skipif config 3node-tenant-default-configs
+query TTBT
+SELECT variable, type, public, origin FROM [SHOW ALL CLUSTER SETTINGS FOR TENANT [10]]
+WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
+----
+jobs.retention_time     d  true   no-override
+jobs.scheduler.enabled  b  false  no-override
+
+skipif config 3node-tenant-default-configs
+query TTBT
+SELECT variable, type, public, origin FROM [SHOW ALL CLUSTER SETTINGS FOR TENANT "cluster-10"]
+WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
+----
+jobs.retention_time     d  true   no-override
+jobs.scheduler.enabled  b  false  no-override
+
+statement notice NOTICE: using global default sql.defaults.distsql is not recommended\nHINT: use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: https://www.cockroachlabs.com/docs/.*/alter-role.html#set-default-session-variable-values-for-a-role
+SHOW CLUSTER SETTING sql.defaults.distsql;
+
+query T noticetrace
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+
+subtest deprecated_names
+
+user root
+
+# The following tests exercise  the general mechanism to inform the user
+# of new setting names. It is not specific to the particular setting
+# named below.
+
+query B noticetrace
+SHOW CLUSTER SETTING sql.trace.log_statement_execute
+----
+NOTICE: "sql.trace.log_statement_execute" is now an alias for "sql.log.all_statements.enabled", the preferred setting name
+
+query T noticetrace
+RESET CLUSTER SETTING sql.trace.log_statement_execute
+----
+NOTICE: "sql.trace.log_statement_execute" is now an alias for "sql.log.all_statements.enabled", the preferred setting name
+
+skipif config 3node-tenant-default-configs
+query T noticetrace
+ALTER TENANT ALL RESET CLUSTER SETTING sql.trace.log_statement_execute
+----
+NOTICE: "sql.trace.log_statement_execute" is now an alias for "sql.log.all_statements.enabled", the preferred setting name
+
+
+subtest show_renamed_setting_for_tenant
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER TENANT "cluster-10" SET CLUSTER SETTING sql.explain_analyze.include_ru_estimation.enabled=false;
+
+skipif config 3node-tenant-default-configs
+query B
+SHOW CLUSTER SETTING sql.explain_analyze.include_ru_estimation.enabled FOR TENANT "cluster-10"
+----
+false
+
+subtest notice_on_ttl_default_rate_limit
+
+query T noticetrace
+SET CLUSTER SETTING sql.ttl.default_delete_rate_limit = 90;
+----
+NOTICE: The TTL rate limit is per node per table.
+DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/.../row-level-ttl#ttl-storage-parameters
+
+statement ok
+SET CLUSTER SETTING sql.ttl.default_delete_rate_limit = 100;
+
+query T noticetrace
+SET CLUSTER SETTING sql.ttl.default_select_rate_limit = 100;
+----
+NOTICE: The TTL rate limit is per node per table.
+DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/.../row-level-ttl#ttl-storage-parameters
+
+statement ok
+SET CLUSTER SETTING sql.ttl.default_select_rate_limit = 0;
+
+subtest end
+
+subtest internal_executor_session_overrides_validation
+
+statement ok
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'Database=foo'
+
+statement error unknown or unsupported session variable "bogus"
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'bogus=bar'
+
+statement error invalid override format
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'no_equals_sign'
+
+statement ok
+SET CLUSTER SETTING sql.internal_executor.session_overrides = ''
+
+subtest end

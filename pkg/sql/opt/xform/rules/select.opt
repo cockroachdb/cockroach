@@ -1,0 +1,297 @@
+# =============================================================================
+# select.opt contains exploration rules for the Select operator.
+# =============================================================================
+
+# GeneratePartialIndexScans generates a set of unconstrained Scan expressions,
+# one for each eligible partial index on the scanned table. A partial index is
+# eligible to be scanned if the filters imply the partial index predicate.
+#
+# Note that this rule differs from both the GenerateIndexScans and
+# GenerateConstrainedScans. GenerateIndexScans matches only Scan operators and
+# does not deal with filters. GenerateConstrainedScans does not generate
+# unconstrained scans. These subtle differences require this rule to be
+# separate from the other rules.
+#
+# The resulting Scan expressions can consist of Scans, Selects, and IndexJoins,
+# depending on remaining filters and the columns included in the index. See the
+# comment for the GeneratePartialIndexScans custom method for more details and
+# examples.
+[GeneratePartialIndexScans, Explore]
+(Select
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    $filters:*
+)
+=>
+(GeneratePartialIndexScans $scanPrivate $filters)
+
+# GenerateConstrainedScans generates a set of constrained Scan expressions, one
+# for each matching index on the scanned table. The expressions consist of
+# either a standalone Scan operator (if no remaining filter), or else a Scan
+# wrapped by a Select (with a remaining filter). Or, if a secondary index cannot
+# provide all the output columns, an IndexJoin is introduced to supply them. See
+# the comment for the GenerateConstrainedScans custom method for more details
+# and examples.
+[GenerateConstrainedScans, Explore]
+(Select
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    $filters:*
+)
+=>
+(GenerateConstrainedScans $scanPrivate $filters)
+
+# GenerateInvertedIndexScans creates alternate expressions for filters that can
+# be serviced by an inverted index.
+[GenerateInvertedIndexScans, Explore]
+(Select
+    (Scan
+        $scanPrivate:* &
+            (IsCanonicalScan $scanPrivate) &
+            (HasInvertedIndexes $scanPrivate)
+    )
+    $filters:*
+)
+=>
+(GenerateInvertedIndexScans $scanPrivate $filters)
+
+# GenerateMinimalInvertedIndexScans is similar to GenerateInvertedIndexScans. It
+# differs by trying to generate an inverted index scan that spans the fewest
+# index keys, rather than generating scans that span all index keys in the
+# expression and performing set operations on them before an index-join.
+[GenerateMinimalInvertedIndexScans, Explore]
+(Select
+    $input:(Scan
+        $scanPrivate:* &
+            (IsCanonicalScan $scanPrivate) &
+            (HasInvertedIndexes $scanPrivate)
+    )
+    $filters:*
+)
+=>
+(GenerateMinimalInvertedIndexScans $input $scanPrivate $filters)
+
+# GenerateTrigramSimilarityInvertedIndexScans generates scans on inverted
+# trigram indexes that are constrained by similarity filters (e.g.,
+# `s & % 'foo'`). It is similar conceptually to GenerateInvertedIndexScans, but
+# it produces expression trees optimized specially for similarity filters. See
+# the GenerateSimilarityInvertedIndexScans custom function for more details.
+[GenerateTrigramSimilarityInvertedIndexScans, Explore]
+(Select
+    (Scan
+        $scanPrivate:* &
+            (IsCanonicalScan $scanPrivate) &
+            (HasInvertedIndexes $scanPrivate)
+    )
+    $filters:*
+)
+=>
+(GenerateTrigramSimilarityInvertedIndexScans
+    $scanPrivate
+    $filters
+)
+
+# GenerateZigzagJoins creates ZigzagJoin operators for all index pairs (of the
+# Scan table) where the prefix column(s) of both indexes is/are fixed to
+# constant values in the filters. See comments in GenerateZigzagJoin and
+# sql.rowexec.zigzagJoiner for more details on when a zigzag join can be
+# planned.
+[GenerateZigzagJoins, Explore]
+(Select (Scan $scan:*) & (IsCanonicalScan $scan) $filters:*)
+=>
+(GenerateZigzagJoins $scan $filters)
+
+# GenerateInvertedIndexZigzagJoins creates ZigzagJoin operators for inverted
+# indexes that can be constrained with two or more distinct constant values.
+# Inverted indexes contain one row for each path-to-leaf in a JSON value, so one
+# row in the primary index could generate multiple inverted index keys. This
+# property can be exploited by zigzag joining on the same inverted index, fixed
+# at any two of the JSON paths we are querying for.
+[GenerateInvertedIndexZigzagJoins, Explore]
+(Select
+    (Scan $scan:*) &
+        (IsCanonicalScan $scan) &
+        (HasInvertedIndexes $scan)
+    $filters:*
+)
+=>
+(GenerateInvertedIndexZigzagJoins $scan $filters)
+
+# SplitDisjunction splits disjunctions (Or expressions) into a Union of two
+# Select expressions, the first containing the left sub-expression of the Or
+# expression and the second containing the right sub-expression. All other
+# filter items in the original expression are preserved in the new Select
+# expressions.
+#
+# This can produce better query plans in cases where indexes cover both sides of
+# the Or expression. The execution plan can use both indexes to satisfy both
+# sides of the disjunction and union the results together.
+#
+# Note that this rule only matches Selects with canonical scans. Therefore scan
+# constraints do not need to be duplicated in the left and right scans of the
+# union.
+#
+# Also note that this rule only matches Selects that have non-trivial strict
+# keys. See SplitDisjunctionAddKey which handles Selects that do not have strict
+# keys.
+[SplitDisjunction, Explore]
+(Select
+    $input:(Scan
+            $scanPrivate:* & (IsCanonicalScan $scanPrivate)
+        ) &
+        (HasStrictKey $input) &
+        ^(HasZeroOrOneRow $input)
+    $filters:* &
+        (Let
+            (
+                $leftFilter
+                $rightFilter
+                $itemToReplace
+                $ok
+            ):(SplitDisjunction $scanPrivate $filters)
+            $ok
+        )
+)
+=>
+(DistinctOn
+    (UnionAll
+        (Select
+            $leftScan:(Scan
+                $leftScanPrivate:(DuplicateScanPrivate
+                    $scanPrivate
+                )
+            )
+            (RemapScanColsInFilter
+                (ReplaceFiltersItem
+                    $filters
+                    $itemToReplace
+                    $leftFilter
+                )
+                $scanPrivate
+                $leftScanPrivate
+            )
+        )
+        (Select
+            $rightScan:(Scan
+                $rightScanPrivate:(DuplicateScanPrivate
+                    $scanPrivate
+                )
+            )
+            (RemapScanColsInFilter
+                (ReplaceFiltersItem
+                    $filters
+                    $itemToReplace
+                    $rightFilter
+                )
+                $scanPrivate
+                $rightScanPrivate
+            )
+        )
+        (MakeSetPrivate
+            (OutputCols $leftScan)
+            (OutputCols $rightScan)
+            (OutputCols $input)
+        )
+    )
+    (MakeAggCols ConstAgg (NonKeyCols $input))
+    (MakeGrouping (KeyCols $input) (EmptyOrdering))
+)
+
+# SplitDisjunctionAddKey performs a transformation similar to
+# SplitDisjunction, but it handles the special case when the original Scan
+# does not have a strict key in its ColSet.
+#
+# For this special case, the replace pattern adds primary key columns to the
+# original Scan ColSet. It also adds a Project to remove those columns after the
+# Union operation. Inclusion of the primary keys is required to prevent the
+# generated Union from de-duplicating rows that have the same selected values.
+#
+# To understand why the addition of the primary key columns to the Scans is
+# necessary, consider the following:
+#
+#     CREATE TABLE t (k INT PRIMARY KEY, a INT, b INT)
+#     INSERT INTO t VALUES (1, 1, 3)
+#     INSERT INTO t VALUES (2, 1, 3)
+#     SELECT a, b FROM t WHERE a = 1 OR b = 3
+#
+# The expected result of the Select query is 2 rows, with values (1, 3). Now
+# consider the following query:
+#
+#     SELECT a, b FROM t WHERE a = 1
+#     UNION
+#     SELECT a, b FROM t WHERE b = 3
+#
+# Union de-duplicates all tuples with the same set of values. So, this
+# query returns only a single row.
+#
+# By adding a primary key in the output columns, each input row to the Union is
+# guaranteed to be unique. This prevents incorrect de-duplication and guarantees
+# that the newly generated plan is equivalent to the original plan.
+[SplitDisjunctionAddKey, Explore]
+(Select
+    $input:(Scan
+            $scanPrivate:* & (IsCanonicalScan $scanPrivate)
+        ) &
+        ^(HasStrictKey $input)
+    $filters:* &
+        (Let
+            (
+                $leftFilter
+                $rightFilter
+                $itemToReplace
+                $ok
+            ):(SplitDisjunction $scanPrivate $filters)
+            $ok
+        )
+)
+=>
+(Project
+    (Union
+        (Select
+            $leftScan:(Scan
+                (AddPrimaryKeyColsToScanPrivate
+                    $leftScanPrivate:(DuplicateScanPrivate
+                        $scanPrivate
+                    )
+                )
+            )
+            (RemapScanColsInFilter
+                (ReplaceFiltersItem
+                    $filters
+                    $itemToReplace
+                    $leftFilter
+                )
+                $scanPrivate
+                $leftScanPrivate
+            )
+        )
+        (Select
+            $rightScan:(Scan
+                (AddPrimaryKeyColsToScanPrivate
+                    $rightScanPrivate:(DuplicateScanPrivate
+                        $scanPrivate
+                    )
+                )
+            )
+            (RemapScanColsInFilter
+                (ReplaceFiltersItem
+                    $filters
+                    $itemToReplace
+                    $rightFilter
+                )
+                $scanPrivate
+                $rightScanPrivate
+            )
+        )
+        (MakeSetPrivate
+            (OutputCols $leftScan)
+            (OutputCols $rightScan)
+            (UnionCols
+                (OutputCols $input)
+                (PrimaryKeyCols
+                    (TableIDFromScanPrivate $scanPrivate)
+                )
+            )
+        )
+    )
+    []
+    (OutputCols $input)
+)

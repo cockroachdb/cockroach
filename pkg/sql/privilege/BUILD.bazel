@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "privilege",
+    srcs = [
+        "aclitem.go",
+        "kind.go",
+        "privilege.go",
+        "target_object_type.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/privilege",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/security/username",
+        "//pkg/sql/lexbase",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
+    ],
+)
+
+go_test(
+    name = "privilege_test",
+    size = "small",
+    srcs = [
+        "aclitem_test.go",
+        "main_test.go",
+        "privilege_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":privilege",
+        "//pkg/security/username",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/echotest",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
+    ],
+)

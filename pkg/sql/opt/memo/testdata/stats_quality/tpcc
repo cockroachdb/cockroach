@@ -1,0 +1,1872 @@
+import file=tpcc_schema
+----
+
+import file=tpcc_stats_w10
+----
+
+# --------------------------------------------------
+# 2.4 The New Order Transaction
+#
+# The New-Order business transaction consists of entering a complete order
+# through a single database transaction. It represents a mid-weight, read-write
+# transaction with a high frequency of execution and stringent response time
+# requirements to satisfy on-line users. This transaction is the backbone of
+# the workload. It is designed to place a variable load on the system to
+# reflect on-line database activity as typically found in production
+# environments.
+# --------------------------------------------------
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=new_order_01 ignore-tables=1
+SELECT w_tax FROM warehouse WHERE w_id = 1
+----
+----
+project
+ ├── save-table-name: new_order_01_project_1
+ ├── columns: w_tax:8(decimal)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(8)=1, null(8)=0]
+ ├── key: ()
+ ├── fd: ()-->(8)
+ └── scan warehouse
+      ├── save-table-name: new_order_01_scan_2
+      ├── columns: w_id:1(int!null) w_tax:8(decimal)
+      ├── constraint: /1: [/1 - /1]
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
+      │   histogram(1)=  0  1
+      │                <--- 1
+      ├── key: ()
+      └── fd: ()-->(1,8)
+
+----Stats for new_order_01_scan_2----
+column_names  row_count  distinct_count  null_count
+{w_id}        1          1               0
+{w_tax}       1          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{w_id}        1.00           1.00           1.00                1.00                0.00            1.00
+{w_tax}       1.00           1.00           1.00                1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=new_order_02 ignore-tables=1
+SELECT c_discount, c_last, c_credit
+FROM customer
+WHERE c_w_id = 1 AND c_d_id = 1 AND c_id = 50
+----
+----
+project
+ ├── save-table-name: new_order_02_project_1
+ ├── columns: c_discount:16(decimal) c_last:6(varchar) c_credit:14(char)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(6)=0.999502, null(6)=0, distinct(14)=0.78694, null(14)=0, distinct(16)=0.999902, null(16)=0]
+ ├── key: ()
+ ├── fd: ()-->(6,14,16)
+ └── scan customer
+      ├── save-table-name: new_order_02_scan_2
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_last:6(varchar) c_credit:14(char) c_discount:16(decimal)
+      ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=0.999502, null(6)=0, distinct(14)=0.78694, null(14)=0, distinct(16)=0.999902, null(16)=0, distinct(1-3)=1, null(1-3)=0]
+      │   histogram(1)=  0  1
+      │                <--- 50
+      │   histogram(2)=  0  1
+      │                <--- 1
+      │   histogram(3)=  0  1
+      │                <--- 1
+      ├── key: ()
+      └── fd: ()-->(1-3,6,14,16)
+
+----Stats for new_order_02_scan_2----
+column_names  row_count  distinct_count  null_count
+{c_credit}    1          1               0
+{c_d_id}      1          1               0
+{c_discount}  1          1               0
+{c_id}        1          1               0
+{c_last}      1          1               0
+{c_w_id}      1          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{c_credit}    1.00           1.00           1.00                1.00                0.00            1.00
+{c_d_id}      1.00           1.00           1.00                1.00                0.00            1.00
+{c_discount}  1.00           1.00           1.00                1.00                0.00            1.00
+{c_id}        1.00           1.00           1.00                1.00                0.00            1.00
+{c_last}      1.00           1.00           1.00                1.00                0.00            1.00
+{c_w_id}      1.00           1.00           1.00                1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=new_order_03
+SELECT i_price, i_name, i_data
+FROM item
+WHERE i_id IN (125, 150, 175, 200, 25, 50, 75, 100, 225, 250, 275, 300)
+ORDER BY i_id
+----
+----
+scan item
+ ├── save-table-name: new_order_03_scan_1
+ ├── columns: i_price:4(decimal) i_name:3(varchar) i_data:5(varchar)  [hidden: i_id:1(int!null)]
+ ├── constraint: /1
+ │    ├── [/25 - /25]
+ │    ├── [/50 - /50]
+ │    ├── [/75 - /75]
+ │    ├── [/100 - /100]
+ │    ├── [/125 - /125]
+ │    ├── [/150 - /150]
+ │    ├── [/175 - /175]
+ │    ├── [/200 - /200]
+ │    ├── [/225 - /225]
+ │    ├── [/250 - /250]
+ │    ├── [/275 - /275]
+ │    └── [/300 - /300]
+ ├── cardinality: [0 - 12]
+ ├── stats: [rows=12, distinct(1)=12, null(1)=0, distinct(3)=11.8958, null(3)=0, distinct(4)=11.9934, null(4)=0, distinct(5)=11.9946, null(5)=0]
+ │   histogram(1)=  0  1   0  1   0  1   0   1   0   1   0   1   0   1   0   1   0   1   0   1   0   1   0   1
+ │                <--- 25 --- 50 --- 75 --- 100 --- 125 --- 150 --- 175 --- 200 --- 225 --- 250 --- 275 --- 300
+ ├── key: (1)
+ ├── fd: (1)-->(3-5)
+ └── ordering: +1
+
+----Stats for new_order_03_scan_1----
+column_names  row_count  distinct_count  null_count
+{i_data}      12         12              0
+{i_id}        12         12              0
+{i_name}      12         12              0
+{i_price}     12         12              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{i_data}      12.00          1.00           12.00               1.00                0.00            1.00
+{i_id}        12.00          1.00           12.00               1.00                0.00            1.00
+{i_name}      12.00          1.00           12.00               1.00                0.00            1.00
+{i_price}     12.00          1.00           12.00               1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=new_order_04 ignore-tables=1
+SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_05
+FROM stock
+WHERE (s_i_id, s_w_id) IN ((1000, 4), (900, 4), (1100, 4), (1500, 4), (1400, 4))
+ORDER BY s_i_id
+FOR UPDATE
+----
+----
+project
+ ├── save-table-name: new_order_04_project_1
+ ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar) s_dist_05:8(char)  [hidden: s_i_id:1(int!null)]
+ ├── cardinality: [0 - 5]
+ ├── volatile
+ ├── stats: [rows=4.95204, distinct(1)=4.95204, null(1)=0, distinct(3)=4.81972, null(3)=0, distinct(8)=4.75945, null(8)=0, distinct(14)=0.992931, null(14)=0, distinct(15)=0.992931, null(15)=0, distinct(16)=0.992931, null(16)=0, distinct(17)=4.95177, null(17)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(3,8,14-17)
+ ├── ordering: +1
+ └── scan stock
+      ├── save-table-name: new_order_04_scan_2
+      ├── columns: s_i_id:1(int!null) s_w_id:2(int!null) s_quantity:3(int) s_dist_05:8(char) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar)
+      ├── constraint: /2/1
+      │    ├── [/4/900 - /4/900]
+      │    ├── [/4/1000 - /4/1000]
+      │    ├── [/4/1100 - /4/1100]
+      │    ├── [/4/1400 - /4/1400]
+      │    └── [/4/1500 - /4/1500]
+      ├── locking: for-update
+      ├── cardinality: [0 - 5]
+      ├── volatile
+      ├── stats: [rows=4.95204, distinct(1)=4.95204, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.81972, null(3)=0, distinct(8)=4.75945, null(8)=0, distinct(14)=0.992931, null(14)=0, distinct(15)=0.992931, null(15)=0, distinct(16)=0.992931, null(16)=0, distinct(17)=4.95177, null(17)=0, distinct(1,2)=4.95204, null(1,2)=0]
+      │   histogram(1)=  0 1.0517 0 1.0517 0 1.0517 0 0.89848 0 0.89848
+      │                <--- 900 ---- 1000 --- 1100 --- 1400 ---- 1500 -
+      │   histogram(2)=  0 4.952
+      │                <---- 4 -
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3,8,14-17)
+      └── ordering: +1 opt(2) [actual: +1]
+
+----Stats for new_order_04_scan_2----
+column_names    row_count  distinct_count  null_count
+{s_data}        5          5               0
+{s_dist_05}     5          5               0
+{s_i_id}        5          5               0
+{s_order_cnt}   5          1               0
+{s_quantity}    5          4               0
+{s_remote_cnt}  5          1               0
+{s_w_id}        5          1               0
+{s_ytd}         5          1               0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{s_data}        5.00           1.00           5.00                1.00                0.00            1.00
+{s_dist_05}     5.00           1.00           5.00                1.00                0.00            1.00
+{s_i_id}        5.00           1.00           5.00                1.00                0.00            1.00
+{s_order_cnt}   5.00           1.00           1.00                1.00                0.00            1.00
+{s_quantity}    5.00           1.00           5.00                1.25                0.00            1.00
+{s_remote_cnt}  5.00           1.00           1.00                1.00                0.00            1.00
+{s_w_id}        5.00           1.00           1.00                1.00                0.00            1.00
+{s_ytd}         5.00           1.00           1.00                1.00                0.00            1.00
+----
+----
+
+# --------------------------------------------------
+# 2.5 The Payment Transaction
+#
+# The Payment business transaction updates the customer's balance and reflects
+# the payment on the district and warehouse sales statistics. It represents a
+# light-weight, read-write transaction with a high frequency of execution and
+# stringent response time requirements to satisfy on-line users. In addition,
+# this transaction includes non-primary key access to the CUSTOMER table.
+# --------------------------------------------------
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=payment_01 ignore-tables=1
+SELECT c_id
+FROM customer
+WHERE c_w_id = 1 AND c_d_id = 1 AND c_last = 'ANTIABLEABLE'
+ORDER BY c_first ASC
+----
+----
+project
+ ├── save-table-name: payment_01_project_1
+ ├── columns: c_id:1(int!null)  [hidden: c_first:4(varchar)]
+ ├── stats: [rows=2.19877, distinct(1)=2.19797, null(1)=0, distinct(4)=2.19445, null(4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(4)
+ ├── ordering: +4
+ └── scan customer@customer_idx
+      ├── save-table-name: payment_01_scan_2
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
+      ├── constraint: /3/2/6/4/1: [/1/1/'ANTIABLEABLE' - /1/1/'ANTIABLEABLE']
+      ├── stats: [rows=2.19877, distinct(1)=2.19797, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.19445, null(4)=0, distinct(6)=1, null(6)=0, distinct(2,3,6)=1, null(2,3,6)=0]
+      │   histogram(2)=  0 2.1988
+      │                <---- 1 --
+      │   histogram(3)=  0 2.1988
+      │                <---- 1 --
+      │   histogram(6)=  0      2.1988
+      │                <--- 'ANTIABLEABLE'
+      ├── key: (1)
+      ├── fd: ()-->(2,3,6), (1)-->(4)
+      └── ordering: +4 opt(2,3,6) [actual: +4]
+
+----Stats for payment_01_scan_2----
+column_names  row_count  distinct_count  null_count
+{c_d_id}      2          1               0
+{c_first}     2          2               0
+{c_id}        2          2               0
+{c_last}      2          1               0
+{c_w_id}      2          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{c_d_id}      2.00           1.00           1.00                1.00                0.00            1.00
+{c_first}     2.00           1.00           2.00                1.00                0.00            1.00
+{c_id}        2.00           1.00           2.00                1.00                0.00            1.00
+{c_last}      2.00           1.00           1.00                1.00                0.00            1.00
+{c_w_id}      2.00           1.00           1.00                1.00                0.00            1.00
+----
+----
+
+# --------------------------------------------------
+# 2.6 The Order Status Transaction
+#
+# The Order-Status business transaction queries the status of a customer's last
+# order. It represents a mid-weight read-only database transaction with a low
+# frequency of execution and response time requirement to satisfy on-line
+# users. In addition, this table includes non-primary key access to the
+# CUSTOMER table.
+# --------------------------------------------------
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=order_status_01 ignore-tables=1
+SELECT c_balance, c_first, c_middle, c_last
+FROM customer
+WHERE c_w_id = 1 AND c_d_id = 1 AND c_id = 50
+----
+----
+project
+ ├── save-table-name: order_status_01_project_1
+ ├── columns: c_balance:17(decimal) c_first:4(varchar) c_middle:5(char) c_last:6(varchar)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(4)=0.999106, null(4)=0, distinct(5)=0.632121, null(5)=0, distinct(6)=0.999502, null(6)=0, distinct(17)=0.632121, null(17)=0]
+ ├── key: ()
+ ├── fd: ()-->(4-6,17)
+ └── scan customer
+      ├── save-table-name: order_status_01_scan_2
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar) c_balance:17(decimal)
+      ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=0.999106, null(4)=0, distinct(5)=0.632121, null(5)=0, distinct(6)=0.999502, null(6)=0, distinct(17)=0.632121, null(17)=0, distinct(1-3)=1, null(1-3)=0]
+      │   histogram(1)=  0  1
+      │                <--- 50
+      │   histogram(2)=  0  1
+      │                <--- 1
+      │   histogram(3)=  0  1
+      │                <--- 1
+      ├── key: ()
+      └── fd: ()-->(1-6,17)
+
+----Stats for order_status_01_scan_2----
+column_names  row_count  distinct_count  null_count
+{c_balance}   1          1               0
+{c_d_id}      1          1               0
+{c_first}     1          1               0
+{c_id}        1          1               0
+{c_last}      1          1               0
+{c_middle}    1          1               0
+{c_w_id}      1          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{c_balance}   1.00           1.00           1.00                1.00                0.00            1.00
+{c_d_id}      1.00           1.00           1.00                1.00                0.00            1.00
+{c_first}     1.00           1.00           1.00                1.00                0.00            1.00
+{c_id}        1.00           1.00           1.00                1.00                0.00            1.00
+{c_last}      1.00           1.00           1.00                1.00                0.00            1.00
+{c_middle}    1.00           1.00           1.00                1.00                0.00            1.00
+{c_w_id}      1.00           1.00           1.00                1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=order_status_02 ignore-tables=(1,3)
+SELECT c_id, c_balance, c_first, c_middle
+FROM customer
+WHERE c_w_id = 2 AND c_d_id = 2 AND c_last = 'ANTIBARESE'
+ORDER BY c_first ASC
+----
+----
+project
+ ├── save-table-name: order_status_02_project_1
+ ├── columns: c_id:1(int!null) c_balance:17(decimal) c_first:4(varchar) c_middle:5(char)
+ ├── stats: [rows=2.09255, distinct(1)=2.09182, null(1)=0, distinct(4)=2.08863, null(4)=0, distinct(5)=0.876628, null(5)=0, distinct(17)=0.876628, null(17)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(4,5,17)
+ ├── ordering: +4
+ └── index-join customer
+      ├── save-table-name: order_status_02_index_join_2
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar!null) c_balance:17(decimal)
+      ├── stats: [rows=2.09255, distinct(1)=2.09182, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.08863, null(4)=0, distinct(5)=0.876628, null(5)=0, distinct(6)=1, null(6)=0, distinct(17)=0.876628, null(17)=0, distinct(2,3,6)=1, null(2,3,6)=0]
+      │   histogram(2)=  0 2.0925
+      │                <---- 2 --
+      │   histogram(3)=  0 2.0925
+      │                <---- 2 --
+      │   histogram(6)=  0     2.0925
+      │                <--- 'ANTIBARESE'
+      ├── key: (1)
+      ├── fd: ()-->(2,3,6), (1)-->(4,5,17)
+      ├── ordering: +4 opt(2,3,6) [actual: +4]
+      └── scan customer@customer_idx
+           ├── save-table-name: order_status_02_scan_3
+           ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
+           ├── constraint: /3/2/6/4/1: [/2/2/'ANTIBARESE' - /2/2/'ANTIBARESE']
+           ├── stats: [rows=2.09255, distinct(1)=2.09182, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.08863, null(4)=0, distinct(6)=1, null(6)=0, distinct(2,3,6)=1, null(2,3,6)=0]
+           │   histogram(1)=  0 0.0010463 0.0096257 0.00083702 0.010253 0.0014648 0.010044 0.0010463 0.010253 0.00041851 0.0096257 0.00083702 0.0094165 0.0010463 0.010253 0.00062776 0.010253 0.00041851 0.010253 0.00062776 0.010253 0.00062776 0.010044 0.0010463 0.009835 0.001674 0.010253 0.00041851 0.010253 0.00041851 0.010253 0.00062776 0.010044 0.00062776 0.010044 0.00041851 0.009835 0.00062776 0.0096257 0.0014648 0.010044 0.00083702 0.010253 0.00062776 0.010253 0.00062776 0.0092072 0.0014648 0.009835 0.00083702 0.009835 0.00062776 0.010044 0.00041851 0.0096257 0.0010463 0.0096257 0.00083702 0.010044 0.0012555 0.0096257 0.00083702 0.009835 0.00041851 0.010044 0.00062776 0.0096257 0.00062776 0.009835 0.0010463 0.010044 0.0014648 0.010044 0.00041851 0.010044 0.00062776 0.0092072 0.0012555 0.010044 0.00020925 0.010044 0.00083702 0.0094165 0.0018833 0.0096257 0.0010463 0.010044 0.00020925 0.0096257 0.00083702 0.0092072 0.001674 0.0092072 0.0010463 0.0096257 0.00083702 0.0089979 0.0012555 0.009835 0.00062776 0.010044 0.00041851 0.010044 0.0012555 0.009835 0.0010463 0.0092072 0.001674 0.0094165 0.0012555 0.010044 0.0010463 0.009835 0.00083702 0.0094165 0.0010463 0.010044 0.0012555 0.010044 0.0010463 0.009835 0.0010463 0.0089979 0.0012555 0.009835 0.0010463 0.0094165 0.0012555 0.0096257 0.0012555 0.010044 0.00020925 0.0096257 0.00062776 0.010044 0.00020925 0.010044 0.00083702 0.010044 0.00062776 0.0096257 0.0010463 0.010044 0.00062776 0.0096257 0.00062776 0.0089979 0.0012555 0.0094165 0.00083702 0.0096257 0.00062776 0.009835 0.00041851 0.0094165 0.0010463 0.0089979 0.0012555 0.0094165 0.00083702 0.0092072 0.0018833 0.010044 0.00041851 0.010044 0.0010463 0.0094165 0.0012555 0.009835 0.00083702 0.0089979 0.0014648 0.009835 0.00062776 0.010044 0.00062776 0.009835 0.00062776 0.010044 0.00083702 0.0096257 0.0012555 0.0094165 0.00083702 0.010044 0.0010463 0.010044 0.00062776 0.009835 0.00041851 0.010044 0.0014648 0.0092072 0.0012555 0.0092072 0.0012555 0.009835 0.00041851 0.009835 0.00041851 0.0096257 0.00062776 0.0096257 0.0010463 0.0096257 0.0012555 0.010044 0.00062776 0.009835 0.00041851 0.010044 0.00083702 0.0096257 0.00083702 0.009835 0.00041851 0.0096257 0.00083702 0.0092072 0.0018833 0.0089979 0.0020925 0.010044 0.0012555 0.010044 0.00062776 0.0094165 0.0012555 0.0096257 0.0014648 0.0096257 0.0010463 0.0089979 0.0012555 0.0092072 0.0014648 0.0092072 0.0012555 0.009835 0.0010463 0.0096257 0.00083702 0.0094165 0.0010463 0.010044 0.00083702 0.009835 0.00083702 0.009835 0.0012555 0.0089979 0.0010463 0.0096257 0.0012555 0.0094165 0.00083702 0.0092072 0.0012555 0.009835 0.0010463 0.0092072 0.0010463 0.0096257 0.001674 0.0096257 0.0010463 0.0096257 0.00062776 0.0087887 0.0012555 0.0096257 0.00083702 0.0089979 0.0010463 0.0094165 0.00083702 0.0085794 0.0018833 0.009835 0.0014648 0.0092072 0.0010463 0.0096257 0.00062776 0.0094165 0.0010463 0.0096257 0.0010463 0.0094165 0.00083702 0.0092072 0.00083702 0.0094165 0.00083702 0.0092072 0.00083702 0.0096257 0.00062776 0.009835 0.00062776 0.0094165 0.0012555 0.0096257 0.00062776 0.009835 0.00041851 0.009835 0.00083702 0.009835 0.00062776 0.0096257 0.00041851 0.0096257 0.00083702 0.0096257 0.00041851 0.0094165 0.00083702 0.0085794 0.0014648 0.009835 0.0012555 0.0096257 0.00041851 0.0096257 0.0010463 0.009835 0.00083702 0.0094165 0.0010463 0.0096257 0.0010463 0.0092072 0.0010463 0.0096257 0.00062776 0.0089979 0.0010463 0.0096257 0.00041851 0.0089979 0.00083702 0.0085794 0.0014648 0.0096257 0.00083702 0.0096257 0.00041851 0.0094165 0.00083702 0.0085794 0.0012555 0.0092072 0.00083702 0.0096257 0.00062776 0.0092072 0.00083702 0.0085794 0.0012555 0.0089979 0.0010463 0.0092072 0.00083702 0.0089979 0.0010463 0.0085794 0.0014648 0.0096257 0.00083702 0.0092072 0.00062776 0.0096257 0.00041851 0.0096257 0.0010463 0.0092072 0.00083702 0.0096257 0.00041851 0.0094165 0.0010463 0.0092072 0.00041851 0.0092072 0.00083702 0.0089979 0.00083702 0.0094165 0.00083702 0.0092072 0.00083702 0.0087887 0.00062776 0.0081609 0.001674 0.0083702 0.0014648 0.0079517 0.0010463
+           │                <------ 1 ----------------- 17 --------------- 37 --------------- 55 ---------------- 70 ----------------- 85 ---------------- 101 -------------- 115 --------------- 127 --------------- 144 --------------- 159 --------------- 173 ------------- 191 -------------- 206 --------------- 222 --------------- 236 --------------- 254 --------------- 272 --------------- 286 ---------------- 303 -------------- 317 --------------- 333 --------------- 348 ---------------- 361 -------------- 377 --------------- 390 --------------- 408 ---------------- 421 --------------- 433 --------------- 450 --------------- 466 --------------- 479 --------------- 491 ---------------- 507 --------------- 518 -------------- 533 -------------- 544 --------------- 559 ---------------- 570 -------------- 585 --------------- 602 ---------------- 615 --------------- 630 -------------- 646 ---------------- 664 --------------- 679 --------------- 694 --------------- 711 ---------------- 725 -------------- 737 --------------- 752 --------------- 767 -------------- 782 -------------- 794 --------------- 806 -------------- 824 -------------- 838 ---------------- 854 -------------- 869 -------------- 885 -------------- 902 --------------- 916 -------------- 930 --------------- 945 --------------- 961 -------------- 974 ---------------- 986 --------------- 1001 -------------- 1018 -------------- 1032 -------------- 1048 -------------- 1069 --------------- 1082 -------------- 1095 --------------- 1109 --------------- 1123 -------------- 1143 -------------- 1160 -------------- 1176 --------------- 1193 -------------- 1207 -------------- 1220 ------------- 1236 -------------- 1249 -------------- 1266 -------------- 1280 -------------- 1292 -------------- 1308 -------------- 1326 -------------- 1341 -------------- 1352 --------------- 1366 ------------- 1381 -------------- 1397 -------------- 1412 ------------- 1427 -------------- 1441 -------------- 1454 -------------- 1471 -------------- 1486 --------------- 1499 -------------- 1516 -------------- 1535 -------------- 1551 -------------- 1565 -------------- 1587 --------------- 1602 -------------- 1621 --------------- 1635 -------------- 1649 -------------- 1664 ------------- 1678 -------------- 1694 -------------- 1711 -------------- 1729 -------------- 1741 -------------- 1755 -------------- 1771 -------------- 1786 ------------- 1801 --------------- 1818 -------------- 1834 -------------- 1849 -------------- 1864 ------------- 1883 -------------- 1898 -------------- 1915 --------------- 1931 -------------- 1944 ------------- 1959 -------------- 1974 -------------- 1992 ------------- 2007 --------------- 2024 -------------- 2036 --------------- 2054 -------------- 2070 --------------- 2086 -------------- 2101 ------------- 2119 -------------- 2137 --------------- 2148 -------------- 2161 -------------- 2180 --------------- 2198 --------------- 2213 --------------- 2227 --------------- 2240 --------------- 2255 -------------- 2274 -------------- 2289 --------------- 2303 -------------- 2321 -------------- 2335 -------------- 2350 --------------- 2366 --------------- 2380 --------------- 2391 --------------- 2407 -------------- 2420 ------------- 2434 --------------- 2450 -------------- 2469 -------------- 2489 -------------- 2504 -------------- 2518 -------------- 2530 --------------- 2543 -------------- 2557 --------------- 2572 --------------- 2584 -------------- 2598 --------------- 2614 --------------- 2625 --------------- 2638 -------------- 2650 --------------- 2663 --------------- 2677 --------------- 2691 -------------- 2705 -------------- 2720 --------------- 2735 -------------- 2746 -------------- 2761 --------------- 2776 --------------- 2789 --------------- 2804 -------------- 2821 --------------- 2837 --------------- 2858 -------------- 2872 --------------- 2892 --------------- 2905 --------------- 2919 --------------- 2934 --------------- 2946 --------------- 2959 -------------- 2974 ------------- 2986 -------------- 3000 --
+           │   histogram(2)=  0 2.0925
+           │                <---- 2 --
+           │   histogram(3)=  0 2.0925
+           │                <---- 2 --
+           │   histogram(4)=  0  0.0027203   0.0073239    0.0033481    0.0085794     0.0037666      0.0092072  0.0027203   0.0096257    0.0043943     0.0073239      0.0039758      0.0077424   0.0043943   0.0085794    0.0023018     0.0069054      0.0039758      0.0096257   0.0020925    0.0083702     0.0029296     0.0056499      0.0048129      0.0087887   0.0029296   0.0054406    0.0048129     0.0073239      0.0048129      0.0092072   0.0037666   0.0081609    0.0043943     0.0077424      0.0048129      0.0096257   0.0035573    0.010044     0.0029296      0.0066961  0.0035573   0.0081609    0.0023018    0.010044      0.0048129      0.0064869   0.0037666   0.0064869    0.0039758     0.0089979      0.0037666      0.010044   0.0035573   0.0083702     0.0023018     0.0085794      0.0054406       0.0092072   0.0033481    0.0073239     0.0039758     0.0079517      0.0043943       0.0096257   0.0029296    0.0087887     0.0031388     0.0062776      0.0039758       0.0089979    0.0023018    0.0069054     0.0039758      0.0087887   0.0035573   0.0092072     0.0027203     0.0085794      0.0056499       0.0073239   0.0029296    0.009835     0.0039758      0.0069054  0.0037666   0.009835    0.0033481     0.0069054      0.0062776      0.0092072   0.0029296    0.0062776     0.0037666     0.0075332      0.0025111       0.0081609   0.0035573    0.0075332     0.0039758     0.0087887  0.0029296   0.0062776    0.0043943    0.0085794     0.0033481      0.0052314      0.0048129       0.0069054   0.0035573    0.0075332     0.0031388     0.0083702      0.0035573       0.0071147   0.0035573    0.0066961     0.0039758     0.0079517      0.0039758       0.0060684   0.0041851    0.0094165     0.0031388      0.0083702   0.0046036   0.0085794    0.0048129     0.0064869      0.0035573      0.0077424   0.0041851   0.0062776    0.0035573     0.0077424      0.0041851      0.0064869   0.0035573   0.0094165    0.0031388     0.0071147      0.0052314      0.0075332   0.0033481   0.0039758    0.0060684    0.0060684     0.0037666      0.0071147  0.0039758   0.0092072    0.0039758    0.0043943     0.0054406     0.0041851      0.0054406      0.0062776  0.0043943   0.0079517    0.0043943    0.0081609      0.0039758      0.0071147   0.0056499   0.0075332    0.0041851     0.0085794      0.0029296      0.0062776   0.0033481   0.0085794    0.0043943     0.0092072      0.0041851      0.0081609   0.0050221   0.0069054    0.0041851     0.0081609      0.0039758      0.0073239   0.0020925   0.0075332    0.0031388     0.0081609      0.0031388      0.0071147   0.0025111   0.0060684    0.0035573     0.0066961      0.0031388      0.0081609   0.0050221   0.0081609     0.0037666     0.0066961      0.0033481       0.0075332   0.0035573    0.0071147     0.0058591     0.0089979      0.0043943       0.0075332   0.0035573    0.0081609     0.0039758      0.0087887  0.0037666   0.0062776    0.0031388    0.0085794     0.0046036      0.0069054  0.0023018   0.0079517    0.0023018    0.0064869     0.0041851      0.0066961  0.0041851   0.0081609    0.0037666    0.0046036     0.0046036     0.0069054      0.0039758       0.0056499   0.0041851   0.0064869    0.0048129     0.0083702      0.0050221      0.0083702   0.0052314   0.0073239    0.0046036     0.0073239      0.0025111      0.0056499   0.0046036   0.0073239    0.0023018     0.0077424      0.0033481      0.0079517   0.0035573   0.0083702    0.0046036     0.0052314     0.0043943      0.0075332  0.0035573   0.0079517    0.0035573    0.0071147     0.0037666      0.0062776  0.0027203   0.0052314   0.0048129    0.0073239     0.0048129     0.0058591      0.0037666       0.0056499   0.0031388    0.0081609     0.0037666     0.0064869      0.0043943       0.0077424   0.0039758    0.0069054     0.0027203     0.0043943      0.0048129      0.0075332   0.0033481   0.0060684    0.0054406    0.0069054     0.0039758      0.0077424  0.0035573   0.0052314   0.0041851    0.0073239     0.0035573     0.0058591      0.0041851       0.0048129   0.0043943   0.0073239    0.0031388     0.0069054      0.0031388      0.0075332   0.0031388   0.0048129    0.0031388    0.0039758     0.0039758     0.0073239      0.0025111       0.0033481   0.0060684   0.0050221    0.0043943    0.0071147     0.0025111      0.0073239  0.0048129   0.0069054    0.0041851    0.0071147     0.0041851      0.0033481      0.0048129       0.0048129   0.0029296   0.0071147    0.0033481     0.0043943     0.0041851      0.0062776  0.0037666   0.0033481   0.0041851    0.0037666    0.0035573     0.0039758     0.0046036      0.0050221      0.0029296       0.0041851   0.0031388   0.0060684    0.0033481     0.0062776      0.0033481      0.0031388  0.0041851   0.0066961    0.0043943    0.0054406     0.0033481     0.0039758      0.0058591      0.0050221  0.0035573   0.0041851   0.0031388    0.0033481    0.0035573     0.0039758     0.0031388      0.0041851      0.0039758       0.0043943   0.0058591   0.0060684    0.0041851     0.0043943     0.0035573      0.0048129      0.0031388       0.0035573   0.0043943   0.0027203    0.0035573    0.0035573     0.0033481     0.0033481      0.0035573      0.0033481  0.0035573   0.0046036   0.0048129    0.0029296    0.0033481     0.0027203     0.0037666      0.0037666      0.0041851       0.0035573   0.0023018   0.0041851    0.0025111    0.0037666     0.0041851     0     0.0048129      0      0.0031388      0      0.0039758
+           │                <--- '1U5yraPx' ----------- '1U5yraPxxEL' ----------- '1U5yraPxxELo5B' ----------- '1fcW8Rsa' ----------- '1fcW8RsaCXoE' ----------- '1fcW8RsaCXoEzms' ----------- '3v1U5yraP' ----------- '3v1U5yraPxxE' ----------- '3v1U5yraPxxELo5' ----------- '5B1fcW8Rsa' ----------- '5B1fcW8RsaCXo' ----------- '5B1fcW8RsaCXoEz' ----------- '5yraPxxEL' ----------- '5yraPxxELo5B' ----------- '5yraPxxELo5B1fc' ----------- '6NHnwiwKd' ----------- '6NHnwiwKdcgp' ----------- '6NHnwiwKdcgphy3' ----------- '6rumMmp6NH' ---------- '6rumMmp6NHnwiw' ----------- '8RsaCXoE' ----------- '8RsaCXoEzms' ---------- '8RsaCXoEzmssaF9' ----------- '9cdLXe0Yh' ----------- '9cdLXe0YhgLR' ----------- '9cdLXe0YhgLRrws' ---------- '9m9cdLXe0' ----------- '9m9cdLXe0YhgL' ----------- '9m9cdLXe0YhgLRrw' ----------- 'B1fcW8RsaC' ----------- 'B1fcW8RsaCXoE' ----------- 'B1fcW8RsaCXoEzms' ----------- 'CXoEzmssaF' ----------- 'CXoEzmssaF9m9' ----------- 'CXoEzmssaF9m9cdL' ----------- 'ELo5B1fcW8R' ----------- 'ELo5B1fcW8RsaC' ----------- 'EzmssaF9m' ----------- 'EzmssaF9m9cdL' ----------- 'EzmssaF9m9cdLXe0' ----------- 'F9m9cdLXe0' ---------- 'F9m9cdLXe0YhgL' ----------- 'HnwiwKdc' ---------- 'HnwiwKdcgphy' ----------- 'HnwiwKdcgphy3v1' ----------- 'Kdcgphy3v1' ----------- 'Kdcgphy3v1U5y' ----------- 'Kdcgphy3v1U5yraP' ----------- 'LXe0YhgLRr' ----------- 'LXe0YhgLRrwsm' ----------- 'Lo5B1fcW' ----------- 'Lo5B1fcW8Rs' ----------- 'Lo5B1fcW8RsaCX' ----------- 'Lo5B1fcW8RsaCXoE' ----------- 'Mmp6NHnwiw' ----------- 'Mmp6NHnwiwKdc' ----------- 'Mmp6NHnwiwKdcgph' ----------- 'NHnwiwKdcg' ----------- 'NHnwiwKdcgphy' ----------- 'NHnwiwKdcgphy3v1' ----------- 'PxxELo5B1f' ----------- 'PxxELo5B1fcW8R' ----------- 'RsaCXoEzm' ----------- 'RsaCXoEzmssa' ----------- 'RsaCXoEzmssaF9m' ----------- 'U5yraPxxE' ----------- 'U5yraPxxELo5' ----------- 'U5yraPxxELo5B1f' ----------- 'W8RsaCXoE' ----------- 'W8RsaCXoEzms' ----------- 'W8RsaCXoEzmssaF' ----------- 'Xe0YhgLRr' ----------- 'Xe0YhgLRrws' ----------- 'Xe0YhgLRrwsmd6' ----------- 'XoEzmssa' ----------- 'XoEzmssaF9m' ----------- 'XoEzmssaF9m9c' ----------- 'XoEzmssaF9m9cdL' ----------- 'aCXoEzms' ----------- 'aCXoEzmssaF' ----------- 'aCXoEzmssaF9m9c' ----------- 'aF9m9cdLX' ----------- 'aF9m9cdLXe0Y' ----------- 'aF9m9cdLXe0YhgL' ----------- 'aPxxELo5B' ----------- 'aPxxELo5B1fc' ----------- 'aPxxELo5B1fcW8R' ----------- 'cW8RsaCXo' ----------- 'cW8RsaCXoEzm' ----------- 'cW8RsaCXoEzmssa' ----------- 'cdLXe0Yhg' ----------- 'cdLXe0YhgLRr' ----------- 'cdLXe0YhgLRrwsm' ----------- 'cgphy3v1U' ----------- 'cgphy3v1U5yr' ----------- 'cgphy3v1U5yraPx' ----------- 'dLXe0YhgL' ----------- 'dLXe0YhgLRrws' ----------- 'dLXe0YhgLRrwsmd6' ----------- 'dcgphy3v1U' ----------- 'dcgphy3v1U5yr' ----------- 'dcgphy3v1U5yraPx' ----------- 'fcW8RsaCXo' ----------- 'fcW8RsaCXoEzms' ----------- 'gphy3v1U' ----------- 'gphy3v1U5yr' ----------- 'gphy3v1U5yraPx' ----------- 'hy3v1U5y' ----------- 'hy3v1U5yraP' ----------- 'hy3v1U5yraPxxE' ----------- 'iwKdcgph' ----------- 'iwKdcgphy3v' ----------- 'iwKdcgphy3v1U' ----------- 'iwKdcgphy3v1U5yr' ----------- 'm9cdLXe0Y' ----------- 'm9cdLXe0YhgL' ----------- 'm9cdLXe0YhgLRrw' ----------- 'mMmp6NHnw' ----------- 'mMmp6NHnwiwK' ----------- 'mMmp6NHnwiwKdcg' ----------- 'mp6NHnwiw' ----------- 'mp6NHnwiwKdc' ----------- 'mp6NHnwiwKdcgph' ----------- 'mssaF9m9c' ----------- 'mssaF9m9cdLX' ----------- 'mssaF9m9cdLXe0' ----------- 'nwiwKdcg' ----------- 'nwiwKdcgphy' ----------- 'nwiwKdcgphy3v1' ----------- 'o5B1fcW8' ----------- 'o5B1fcW8Rs' ----------- 'o5B1fcW8RsaCX' ----------- 'o5B1fcW8RsaCXoEz' ----------- 'oEzmssaF9m' ----------- 'oEzmssaF9m9cd' ----------- 'oEzmssaF9m9cdLXe' ----------- 'p6NHnwiwKd' ----------- 'p6NHnwiwKdcgp' ----------- 'p6NHnwiwKdcgphy' ----------- 'phy3v1U5y' ----------- 'phy3v1U5yra' ----------- 'phy3v1U5yraPxx' ----------- 'raPxxELo' ----------- 'raPxxELo5B' ----------- 'raPxxELo5B1fc' ----------- 'raPxxELo5B1fcW8R' ----------- 'rumMmp6NH' ----------- 'rumMmp6NHnwi' ----------- 'rumMmp6NHnwiwKd' ----------- 'saCXoEzms' ----------- 'saCXoEzmssa' ----------- 'saCXoEzmssaF9' ----------- 'saCXoEzmssaF9m9c' ----------- 'saF9m9cdL' ----------- 'saF9m9cdLXe' ----------- 'saF9m9cdLXe0Yh' ----------- 'ssaF9m9c' ----------- 'ssaF9m9cdLX' ----------- 'ssaF9m9cdLXe0Y' ----------- 'ssaF9m9cdLXe0Yhg' ----------- 'umMmp6NHn' ----------- 'umMmp6NHnwiw' ----------- 'umMmp6NHnwiwKd' ----------- 'v1U5yraP' ----------- 'v1U5yraPxx' ----------- 'v1U5yraPxxEL' ----------- 'v1U5yraPxxELo5' ----------- 'v1U5yraPxxELo5B1' ----------- 'wKdcgphy3' ----------- 'wKdcgphy3v1U' ----------- 'wKdcgphy3v1U5yr' ----------- 'wiwKdcgp' ----------- 'wiwKdcgphy3' ----------- 'wiwKdcgphy3v1' ----------- 'wiwKdcgphy3v1U5' ----------- 'xELo5B1f' ----------- 'xELo5B1fcW' ----------- 'xELo5B1fcW8R' ----------- 'xELo5B1fcW8Rsa' ----------- 'xELo5B1fcW8RsaCX' ----------- 'xxELo5B1f' ----------- 'xxELo5B1fcW8' ----------- 'xxELo5B1fcW8Rs' ----------- 'xxELo5B1fcW8RsaC' ----------- 'y3v1U5yra' ----------- 'y3v1U5yraPx' ----------- 'y3v1U5yraPxxE' ----------- 'y3v1U5yraPxxELo' ----------- 'yraPxxEL' ----------- 'yraPxxELo5' ----------- 'yraPxxELo5B1' ----------- 'yraPxxELo5B1fc' ----------- 'yraPxxELo5B1fcW8' ----------- 'zmssaF9m9' ----------- 'zmssaF9m9cd' ----------- 'zmssaF9m9cdLX' --- 'zmssaF9m9cdLXe' --- 'zmssaF9m9cdLXe0' --- 'zmssaF9m9cdLXe0Y'
+           │   histogram(6)=  0     2.0925
+           │                <--- 'ANTIBARESE'
+           ├── key: (1)
+           ├── fd: ()-->(2,3,6), (1)-->(4)
+           └── ordering: +4 opt(2,3,6) [actual: +4]
+
+----Stats for order_status_02_index_join_2----
+column_names  row_count  distinct_count  null_count
+{c_balance}   6          1               0
+{c_d_id}      6          1               0
+{c_first}     6          6               0
+{c_id}        6          6               0
+{c_last}      6          1               0
+{c_middle}    6          1               0
+{c_w_id}      6          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{c_balance}   2.00           3.00 <==       1.00                1.00                0.00            1.00
+{c_d_id}      2.00           3.00 <==       1.00                1.00                0.00            1.00
+{c_first}     2.00           3.00 <==       2.00                3.00 <==            0.00            1.00
+{c_id}        2.00           3.00 <==       2.00                3.00 <==            0.00            1.00
+{c_last}      2.00           3.00 <==       1.00                1.00                0.00            1.00
+{c_middle}    2.00           3.00 <==       1.00                1.00                0.00            1.00
+{c_w_id}      2.00           3.00 <==       1.00                1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=order_status_03 ignore-tables=1
+SELECT o_id, o_entry_d, o_carrier_id
+FROM "order"
+WHERE o_w_id = 4 AND o_d_id = 3 AND o_c_id = 10
+ORDER BY o_id DESC
+LIMIT 1
+----
+----
+project
+ ├── save-table-name: order_status_03_project_1
+ ├── columns: o_id:1(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=0.999835, null(1)=0, distinct(5)=0.632121, null(5)=0, distinct(6)=0.955894, null(6)=0.3]
+ ├── key: ()
+ ├── fd: ()-->(1,5,6)
+ └── scan order@order_idx
+      ├── save-table-name: order_status_03_scan_2
+      ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
+      ├── constraint: /3/2/4/-1: [/4/3/10 - /4/3/10]
+      ├── limit: 1
+      ├── stats: [rows=1, distinct(1)=0.999835, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=0.632121, null(5)=0, distinct(6)=0.955894, null(6)=0.3]
+      ├── key: ()
+      └── fd: ()-->(1-6)
+
+----Stats for order_status_03_scan_2----
+column_names    row_count  distinct_count  null_count
+{o_c_id}        1          1               0
+{o_carrier_id}  1          1               0
+{o_d_id}        1          1               0
+{o_entry_d}     1          1               0
+{o_id}          1          1               0
+{o_w_id}        1          1               0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_c_id}        1.00           1.00           1.00                1.00                0.00            1.00
+{o_carrier_id}  1.00           1.00           1.00                1.00                0.00            1.00
+{o_d_id}        1.00           1.00           1.00                1.00                0.00            1.00
+{o_entry_d}     1.00           1.00           1.00                1.00                0.00            1.00
+{o_id}          1.00           1.00           1.00                1.00                0.00            1.00
+{o_w_id}        1.00           1.00           1.00                1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=order_status_04 ignore-tables=1
+SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d
+FROM order_line
+WHERE ol_w_id = 1 AND ol_d_id = 1 AND ol_o_id = 1000
+----
+----
+project
+ ├── save-table-name: order_status_04_project_1
+ ├── columns: ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_quantity:8(int) ol_amount:9(decimal) ol_delivery_d:7(timestamp)
+ ├── stats: [rows=11.1119, distinct(5)=11.1113, null(5)=0, distinct(6)=6.70833, null(6)=0, distinct(7)=1.99227, null(7)=3.329, distinct(8)=0.999985, null(8)=0, distinct(9)=11.1118, null(9)=0]
+ └── scan order_line
+      ├── save-table-name: order_status_04_scan_2
+      ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_delivery_d:7(timestamp) ol_quantity:8(int) ol_amount:9(decimal)
+      ├── constraint: /3/2/-1/4: [/1/1/1000 - /1/1/1000]
+      ├── stats: [rows=11.1119, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=11.1113, null(5)=0, distinct(6)=6.70833, null(6)=0, distinct(7)=1.99227, null(7)=3.329, distinct(8)=0.999985, null(8)=0, distinct(9)=11.1118, null(9)=0, distinct(1-3)=1, null(1-3)=0]
+      │   histogram(1)=  0 11.112
+      │                <--- 1000
+      │   histogram(2)=  0 11.112
+      │                <---- 1 --
+      │   histogram(3)=  0 11.112
+      │                <---- 1 --
+      └── fd: ()-->(1-3)
+
+----Stats for order_status_04_scan_2----
+column_names      row_count  distinct_count  null_count
+{ol_amount}       12         1               0
+{ol_d_id}         12         1               0
+{ol_delivery_d}   12         1               0
+{ol_i_id}         12         12              0
+{ol_o_id}         12         1               0
+{ol_quantity}     12         1               0
+{ol_supply_w_id}  12         1               0
+{ol_w_id}         12         1               0
+~~~~
+column_names      row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{ol_amount}       11.00          1.09           11.00               11.00 <==           0.00            1.00
+{ol_d_id}         11.00          1.09           1.00                1.00                0.00            1.00
+{ol_delivery_d}   11.00          1.09           2.00                2.00 <==            3.00            +Inf <==
+{ol_i_id}         11.00          1.09           11.00               1.09                0.00            1.00
+{ol_o_id}         11.00          1.09           1.00                1.00                0.00            1.00
+{ol_quantity}     11.00          1.09           1.00                1.00                0.00            1.00
+{ol_supply_w_id}  11.00          1.09           7.00                7.00 <==            0.00            1.00
+{ol_w_id}         11.00          1.09           1.00                1.00                0.00            1.00
+----
+----
+
+# --------------------------------------------------
+# 2.7 The Delivery Transaction
+#
+# The Delivery business transaction consists of processing a batch of 10 new
+# (not yet delivered) orders. Each order is processed (delivered) in full
+# within the scope of a read-write database transaction. The number of orders
+# delivered as a group (or batched) within the same database transaction is
+# implementation specific. The business transaction, comprised of one or more
+# (up to 10) database transactions, has a low frequency of execution and must
+# complete within a relaxed response time requirement.
+#
+# The Delivery transaction is intended to be executed in deferred mode through
+# a queuing mechanism, rather than interactively, with terminal response
+# indicating transaction completion. The result of the deferred execution is
+# recorded into a result file.
+# --------------------------------------------------
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=delivery_01 ignore-tables=1
+SELECT no_o_id
+FROM new_order
+WHERE no_w_id = 7 AND no_d_id = 6
+ORDER BY no_o_id ASC
+LIMIT 1
+FOR UPDATE
+----
+----
+project
+ ├── save-table-name: delivery_01_project_1
+ ├── columns: no_o_id:1(int!null)
+ ├── cardinality: [0 - 1]
+ ├── volatile
+ ├── stats: [rows=1, distinct(1)=0.999675, null(1)=0]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── scan new_order
+      ├── save-table-name: delivery_01_scan_2
+      ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
+      ├── constraint: /3/2/1: [/7/6 - /7/6]
+      ├── limit: 1
+      ├── locking: for-update
+      ├── volatile
+      ├── stats: [rows=1, distinct(1)=0.999675, null(1)=0, distinct(2)=0.632308, null(2)=0, distinct(3)=0.632308, null(3)=0]
+      ├── key: ()
+      └── fd: ()-->(1-3)
+
+----Stats for delivery_01_scan_2----
+column_names  row_count  distinct_count  null_count
+{no_d_id}     1          1               0
+{no_o_id}     1          1               0
+{no_w_id}     1          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{no_d_id}     1.00           1.00           1.00                1.00                0.00            1.00
+{no_o_id}     1.00           1.00           1.00                1.00                0.00            1.00
+{no_w_id}     1.00           1.00           1.00                1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=delivery_02
+SELECT sum(ol_amount)
+FROM order_line
+WHERE ol_w_id = 8 AND ol_d_id = 6 AND ol_o_id = 1000
+----
+----
+scalar-group-by
+ ├── save-table-name: delivery_02_scalar_group_by_1
+ ├── columns: sum:13(decimal)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1, distinct(13)=1, null(13)=0]
+ ├── key: ()
+ ├── fd: ()-->(13)
+ ├── scan order_line
+ │    ├── save-table-name: delivery_02_scan_2
+ │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_amount:9(decimal)
+ │    ├── constraint: /3/2/-1/4: [/8/6/1000 - /8/6/1000]
+ │    ├── stats: [rows=11.8168, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(9)=11.8167, null(9)=0, distinct(1-3)=1, null(1-3)=0]
+ │    │   histogram(1)=  0 11.817
+ │    │                <--- 1000
+ │    │   histogram(2)=  0 11.817
+ │    │                <---- 6 --
+ │    │   histogram(3)=  0 11.817
+ │    │                <---- 8 --
+ │    └── fd: ()-->(1-3)
+ └── aggregations
+      └── sum [as=sum:13, type=decimal, outer=(9)]
+           └── ol_amount:9 [type=decimal]
+
+----Stats for delivery_02_scalar_group_by_1----
+column_names  row_count  distinct_count  null_count
+{sum}         1          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{sum}         1.00           1.00           1.00                1.00                0.00            1.00
+
+----Stats for delivery_02_scan_2----
+column_names  row_count  distinct_count  null_count
+{ol_amount}   7          1               0
+{ol_d_id}     7          1               0
+{ol_o_id}     7          1               0
+{ol_w_id}     7          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{ol_amount}   12.00          1.71           12.00               12.00 <==           0.00            1.00
+{ol_d_id}     12.00          1.71           1.00                1.00                0.00            1.00
+{ol_o_id}     12.00          1.71           1.00                1.00                0.00            1.00
+{ol_w_id}     12.00          1.71           1.00                1.00                0.00            1.00
+----
+----
+
+# --------------------------------------------------
+# 2.8 The Stock-Level Transaction
+#
+# The Stock-Level business transaction determines the number of recently sold
+# items that have a stock level below a specified threshold. It represents a
+# heavy read-only database transaction with a low frequency of execution, a
+# relaxed response time requirement, and relaxed consistency requirements.
+# --------------------------------------------------
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=stock_level_01 ignore-tables=1
+SELECT d_next_o_id
+FROM district
+WHERE d_w_id = 4 AND d_id = 9
+----
+----
+project
+ ├── save-table-name: stock_level_01_project_1
+ ├── columns: d_next_o_id:11(int)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(11)=0.633968, null(11)=0]
+ ├── key: ()
+ ├── fd: ()-->(11)
+ └── scan district
+      ├── save-table-name: stock_level_01_scan_2
+      ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_next_o_id:11(int)
+      ├── constraint: /2/1: [/4/9 - /4/9]
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(11)=0.633968, null(11)=0, distinct(1,2)=1, null(1,2)=0]
+      │   histogram(1)=  0  1
+      │                <--- 9
+      │   histogram(2)=  0  1
+      │                <--- 4
+      ├── key: ()
+      └── fd: ()-->(1,2,11)
+
+----Stats for stock_level_01_scan_2----
+column_names   row_count  distinct_count  null_count
+{d_id}         1          1               0
+{d_next_o_id}  1          1               0
+{d_w_id}       1          1               0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{d_id}         1.00           1.00           1.00                1.00                0.00            1.00
+{d_next_o_id}  1.00           1.00           1.00                1.00                0.00            1.00
+{d_w_id}       1.00           1.00           1.00                1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=stock_level_02
+SELECT count(DISTINCT s_i_id)
+FROM order_line
+JOIN stock
+ON s_i_id=ol_i_id AND s_w_id=ol_w_id
+WHERE ol_w_id = 1
+    AND ol_d_id = 1
+    AND ol_o_id BETWEEN 1000 - 20 AND 1000 - 1
+    AND s_quantity < 15
+----
+----
+scalar-group-by
+ ├── save-table-name: stock_level_02_scalar_group_by_1
+ ├── columns: count:32(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1, distinct(32)=1, null(32)=0]
+ ├── key: ()
+ ├── fd: ()-->(32)
+ ├── distinct-on
+ │    ├── save-table-name: stock_level_02_distinct_on_2
+ │    ├── columns: s_i_id:13(int!null)
+ │    ├── grouping columns: s_i_id:13(int!null)
+ │    ├── stats: [rows=193.186, distinct(13)=193.186, null(13)=0]
+ │    ├── key: (13)
+ │    └── inner-join (lookup stock)
+ │         ├── save-table-name: stock_level_02_lookup_join_3
+ │         ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:13(int!null) s_w_id:14(int!null) s_quantity:15(int!null)
+ │         ├── key columns: [3 5] = [14 13]
+ │         ├── lookup columns are key
+ │         ├── stats: [rows=198.133, distinct(1)=19.999, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=193.186, null(5)=0, distinct(13)=193.186, null(13)=0, distinct(14)=1, null(14)=0, distinct(15)=5, null(15)=0]
+ │         ├── fd: ()-->(2,3,14), (13)-->(15), (5)==(13), (13)==(5), (3)==(14), (14)==(3)
+ │         ├── scan order_line
+ │         │    ├── save-table-name: stock_level_02_scan_4
+ │         │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null)
+ │         │    ├── constraint: /3/2/-1/4: [/1/1/999 - /1/1/980]
+ │         │    ├── stats: [rows=193.368, distinct(1)=20, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=193.186, null(5)=0, distinct(2,3)=1, null(2,3)=0, distinct(1-3)=20, null(1-3)=0]
+ │         │    │   histogram(1)=  0   0   122.13 5.4779 54.8 10.96
+ │         │    │                <--- 979 -------- 993 ------- 999
+ │         │    │   histogram(2)=  0 193.37
+ │         │    │                <---- 1 --
+ │         │    │   histogram(3)=  0 193.37
+ │         │    │                <---- 1 --
+ │         │    └── fd: ()-->(2,3)
+ │         └── filters
+ │              ├── s_w_id:14 = 1 [type=bool, outer=(14), constraints=(/14: [/1 - /1]; tight), fd=()-->(14)]
+ │              └── s_quantity:15 < 15 [type=bool, outer=(15), constraints=(/15: (/NULL - /14]; tight)]
+ └── aggregations
+      └── count-rows [as=count:32, type=int]
+
+----Stats for stock_level_02_scalar_group_by_1----
+column_names  row_count  distinct_count  null_count
+{count}       1          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{count}       1.00           1.00           1.00                1.00                0.00            1.00
+
+----Stats for stock_level_02_distinct_on_2----
+column_names  row_count  distinct_count  null_count
+{s_i_id}      15         15              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{s_i_id}      193.00         12.87 <==      193.00              12.87 <==           0.00            1.00
+
+----Stats for stock_level_02_lookup_join_3----
+column_names  row_count  distinct_count  null_count
+{ol_d_id}     15         1               0
+{ol_i_id}     15         15              0
+{ol_o_id}     15         11              0
+{ol_w_id}     15         1               0
+{s_i_id}      15         15              0
+{s_quantity}  15         5               0
+{s_w_id}      15         1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{ol_d_id}     198.00         13.20 <==      1.00                1.00                0.00            1.00
+{ol_i_id}     198.00         13.20 <==      193.00              12.87 <==           0.00            1.00
+{ol_o_id}     198.00         13.20 <==      20.00               1.82                0.00            1.00
+{ol_w_id}     198.00         13.20 <==      1.00                1.00                0.00            1.00
+{s_i_id}      198.00         13.20 <==      193.00              12.87 <==           0.00            1.00
+{s_quantity}  198.00         13.20 <==      5.00                1.00                0.00            1.00
+{s_w_id}      198.00         13.20 <==      1.00                1.00                0.00            1.00
+
+----Stats for stock_level_02_scan_4----
+column_names  row_count  distinct_count  null_count
+{ol_d_id}     193        1               0
+{ol_i_id}     193        193             0
+{ol_o_id}     193        20              0
+{ol_w_id}     193        1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{ol_d_id}     193.00         1.00           1.00                1.00                0.00            1.00
+{ol_i_id}     193.00         1.00           193.00              1.00                0.00            1.00
+{ol_o_id}     193.00         1.00           20.00               1.00                0.00            1.00
+{ol_w_id}     193.00         1.00           1.00                1.00                0.00            1.00
+----
+----
+
+# --------------------------------------------------
+# Consistency Queries
+#
+# These queries run after TPCC in order to check database consistency.
+# They are not part of the benchmark itself.
+# --------------------------------------------------
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_01
+SELECT count(*)
+FROM warehouse
+FULL OUTER JOIN
+(
+    SELECT d_w_id, sum(d_ytd) as sum_d_ytd
+    FROM district
+    GROUP BY d_w_id
+)
+ON (w_id = d_w_id)
+WHERE w_ytd != sum_d_ytd
+----
+----
+scalar-group-by
+ ├── save-table-name: consistency_01_scalar_group_by_1
+ ├── columns: count:26(int!null)
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── stats: [rows=1, distinct(26)=1, null(26)=0]
+ ├── key: ()
+ ├── fd: ()-->(26)
+ ├── inner-join (merge)
+ │    ├── save-table-name: consistency_01_merge_join_2
+ │    ├── columns: w_id:1(int!null) w_ytd:9(decimal!null) d_w_id:13(int!null) sum:25(decimal!null)
+ │    ├── left ordering: +1
+ │    ├── right ordering: +13
+ │    ├── immutable
+ │    ├── stats: [rows=3.33333, distinct(1)=3.33333, null(1)=0, distinct(9)=1, null(9)=0, distinct(13)=3.33333, null(13)=0, distinct(25)=3.33333, null(25)=0]
+ │    ├── key: (13)
+ │    ├── fd: (1)-->(9), (13)-->(25), (1)==(13), (13)==(1)
+ │    ├── scan warehouse
+ │    │    ├── save-table-name: consistency_01_scan_3
+ │    │    ├── columns: w_id:1(int!null) w_ytd:9(decimal)
+ │    │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(9)=1, null(9)=0]
+ │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │    │   histogram(9)=  0     10
+ │    │    │                <--- 300000.00
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(9)
+ │    │    └── ordering: +1
+ │    ├── group-by (streaming)
+ │    │    ├── save-table-name: consistency_01_group_by_4
+ │    │    ├── columns: d_w_id:13(int!null) sum:25(decimal)
+ │    │    ├── grouping columns: d_w_id:13(int!null)
+ │    │    ├── stats: [rows=10, distinct(13)=10, null(13)=0, distinct(25)=10, null(25)=0]
+ │    │    ├── key: (13)
+ │    │    ├── fd: (13)-->(25)
+ │    │    ├── ordering: +13
+ │    │    ├── scan district
+ │    │    │    ├── save-table-name: consistency_01_scan_5
+ │    │    │    ├── columns: d_w_id:13(int!null) d_ytd:21(decimal)
+ │    │    │    ├── stats: [rows=100, distinct(13)=10, null(13)=0, distinct(21)=1, null(21)=0]
+ │    │    │    │   histogram(13)=  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10
+ │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │    │    │    │   histogram(21)=  0    100
+ │    │    │    │                 <--- 30000.00
+ │    │    │    └── ordering: +13
+ │    │    └── aggregations
+ │    │         └── sum [as=sum:25, type=decimal, outer=(21)]
+ │    │              └── d_ytd:21 [type=decimal]
+ │    └── filters
+ │         └── w_ytd:9 != sum:25 [type=bool, outer=(9,25), immutable, constraints=(/9: (/NULL - ]; /25: (/NULL - ])]
+ └── aggregations
+      └── count-rows [as=count_rows:26, type=int]
+
+----Stats for consistency_01_scalar_group_by_1----
+column_names  row_count  distinct_count  null_count
+{count}       1          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{count}       1.00           1.00           1.00                1.00                0.00            1.00
+
+----Stats for consistency_01_merge_join_2----
+column_names  row_count  distinct_count  null_count
+{d_w_id}      0          0               0
+{sum}         0          0               0
+{w_id}        0          0               0
+{w_ytd}       0          0               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{d_w_id}      3.00           +Inf <==       3.00                +Inf <==            0.00            1.00
+{sum}         3.00           +Inf <==       3.00                +Inf <==            0.00            1.00
+{w_id}        3.00           +Inf <==       3.00                +Inf <==            0.00            1.00
+{w_ytd}       3.00           +Inf <==       1.00                +Inf <==            0.00            1.00
+
+----Stats for consistency_01_scan_3----
+column_names  row_count  distinct_count  null_count
+{w_id}        10         10              0
+{w_ytd}       10         1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{w_id}        10.00          1.00           10.00               1.00                0.00            1.00
+{w_ytd}       10.00          1.00           1.00                1.00                0.00            1.00
+
+----Stats for consistency_01_group_by_4----
+column_names  row_count  distinct_count  null_count
+{d_w_id}      10         10              0
+{sum}         10         1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{d_w_id}      10.00          1.00           10.00               1.00                0.00            1.00
+{sum}         10.00          1.00           10.00               10.00 <==           0.00            1.00
+
+----Stats for consistency_01_scan_5----
+column_names  row_count  distinct_count  null_count
+{d_w_id}      100        10              0
+{d_ytd}       100        1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{d_w_id}      100.00         1.00           10.00               1.00                0.00            1.00
+{d_ytd}       100.00         1.00           1.00                1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_02
+SELECT d_next_o_id
+FROM district
+ORDER BY d_w_id, d_id
+----
+----
+scan district
+ ├── save-table-name: consistency_02_scan_1
+ ├── columns: d_next_o_id:11(int)  [hidden: d_id:1(int!null) d_w_id:2(int!null)]
+ ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0, distinct(11)=1, null(11)=0]
+ │   histogram(1)=  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0  10
+ │                <--- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10
+ │   histogram(2)=  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10
+ │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
+ │   histogram(11)=  0  100
+ │                 <--- 3001
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(11)
+ └── ordering: +2,+1
+
+----Stats for consistency_02_scan_1----
+column_names   row_count  distinct_count  null_count
+{d_id}         100        10              0
+{d_next_o_id}  100        1               0
+{d_w_id}       100        10              0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{d_id}         100.00         1.00           10.00               1.00                0.00            1.00
+{d_next_o_id}  100.00         1.00           1.00                1.00                0.00            1.00
+{d_w_id}       100.00         1.00           10.00               1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_03
+SELECT max(no_o_id)
+FROM new_order
+GROUP BY no_d_id, no_w_id
+ORDER BY no_w_id, no_d_id
+----
+----
+group-by (streaming)
+ ├── save-table-name: consistency_03_group_by_1
+ ├── columns: max:6(int!null)  [hidden: no_d_id:2(int!null) no_w_id:3(int!null)]
+ ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
+ ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=100, null(6)=0, distinct(2,3)=100, null(2,3)=0]
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(6)
+ ├── ordering: +3,+2
+ ├── scan new_order
+ │    ├── save-table-name: consistency_03_scan_2
+ │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
+ │    ├── stats: [rows=90000, distinct(1)=900, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │   histogram(1)=  0   90   351  108   324  144   351  108   387   81   432   63   387   90   387   81   333  117   387  108   369  117   414   90   396  126   369  126   423   90   342   99   378   90   432  126   378  108   369   81   432  144   414   99   423   72   387  126   423   99   378  135   432  108   405   54   423  117   270  189   405   45   432   99   324  126   405  108   378  135   396   99   369   90   360  144   378   90   351   99   423  117   351   99   369   72   396  108   360   90   396  108   387   81   333  117   414   99   396   63   423  135   414   54   333  162   342  144   315  135   396   90   378  144   414   63   378   99   396  153   324  117   297  135   360  117   333  162   369  108   423  117   414   99   315  117   414   81   315  126   387   81   279  153   378   81   360  144   423   90   396   99   360   90   351  126   270  153   414   81   360  144   306  144   297  144   369   99   360   72   351  117   288  135   315  135   405  117   342   99   396  108   396   81   342   99   351   99   405   99   414  108   369   90   414   90   396   99   333  108   297  135   333  117   378   99   387   81   333  135   333  135   297  126   342  108   342  144   342   90   351   63   405   63   396  126   369  153   315  144   279  144   306  126   333  108   252  171   279  135   306  144   297  126   387   45   279  126   369   81   387   81   342  153   315   99   369  126   360  117   387  117   342  126   351   81   360   72   351   99   369   81   306  108   378  126   324  117   387  117   369  135   342   72   324   90   369  108   306  108   351  144   324  117   306   99   360   90   333  117   315   72   288  108   279  117   333   72   288   99   279  117   369   63   279  135   342   72   333  135   252  180   315  171   333   45   270  153   288  108   342   54   342   72   342  135   243  126   351   99   297   81   270  126   324   81   270  144   270   99   360  144   324   54   333  108   306  108   342  135   315   81   315  108   234  126   297  117   279   54   270  126   306   63   189  171   288   99   279   99   243  108   288   99   225  108   261   54   297  153   234   99   216  180   171  135   144   90   0  126
+ │    │                <--- 2101 ----- 2106 ----- 2110 ----- 2115 ----- 2121 ----- 2127 ----- 2132 ----- 2137 ----- 2142 ----- 2146 ----- 2150 ----- 2155 ----- 2160 ----- 2164 ----- 2170 ----- 2175 ----- 2179 ----- 2184 ----- 2189 ----- 2194 ----- 2200 ----- 2205 ----- 2211 ----- 2216 ----- 2221 ----- 2226 ----- 2231 ----- 2236 ----- 2242 ----- 2246 ----- 2251 ----- 2257 ----- 2262 ----- 2266 ----- 2271 ----- 2276 ----- 2280 ----- 2284 ----- 2289 ----- 2293 ----- 2298 ----- 2302 ----- 2307 ----- 2314 ----- 2318 ----- 2323 ----- 2328 ----- 2332 ----- 2337 ----- 2342 ----- 2347 ----- 2352 ----- 2357 ----- 2361 ----- 2365 ----- 2370 ----- 2376 ----- 2382 ----- 2387 ----- 2392 ----- 2397 ----- 2401 ----- 2406 ----- 2411 ----- 2416 ----- 2421 ----- 2427 ----- 2431 ----- 2436 ----- 2441 ----- 2446 ----- 2450 ----- 2455 ----- 2460 ----- 2465 ----- 2470 ----- 2475 ----- 2480 ----- 2484 ----- 2489 ----- 2493 ----- 2497 ----- 2501 ----- 2506 ----- 2510 ----- 2515 ----- 2519 ----- 2524 ----- 2529 ----- 2533 ----- 2538 ----- 2543 ----- 2547 ----- 2551 ----- 2557 ----- 2561 ----- 2565 ----- 2569 ----- 2574 ----- 2578 ----- 2582 ----- 2586 ----- 2591 ----- 2595 ----- 2600 ----- 2605 ----- 2609 ----- 2613 ----- 2618 ----- 2622 ----- 2627 ----- 2632 ----- 2637 ----- 2642 ----- 2646 ----- 2649 ----- 2653 ----- 2657 ----- 2661 ----- 2665 ----- 2669 ----- 2673 ----- 2677 ----- 2681 ----- 2686 ----- 2690 ----- 2694 ----- 2698 ----- 2703 ----- 2708 ----- 2714 ----- 2718 ----- 2723 ----- 2728 ----- 2733 ----- 2737 ----- 2741 ----- 2746 ----- 2750 ----- 2756 ----- 2761 ----- 2766 ----- 2770 ----- 2775 ----- 2779 ----- 2784 ----- 2788 ----- 2792 ----- 2797 ----- 2802 ----- 2807 ----- 2811 ----- 2815 ----- 2820 ----- 2823 ----- 2827 ----- 2831 ----- 2835 ----- 2840 ----- 2845 ----- 2849 ----- 2854 ----- 2858 ----- 2861 ----- 2866 ----- 2871 ----- 2875 ----- 2879 ----- 2883 ----- 2887 ----- 2890 ----- 2893 ----- 2897 ----- 2901 ----- 2905 ----- 2910 ----- 2914 ----- 2919 ----- 2923 ----- 2927 ----- 2931 ----- 2936 ----- 2939 ----- 2942 ----- 2946 ----- 2951 ----- 2956 ----- 2959 ----- 2963 ----- 2967 ----- 2971 ----- 2974 ----- 2977 ----- 2981 ----- 2985 ----- 2988 ----- 2992 ----- 2996 ----- 2999 --- 3000
+ │    │   histogram(2)=  0 8622 0 8928 0 8883 0 9279 0 8946 0 9315 0 9171 0 9063 0 8613 0 9180
+ │    │                <--- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 ---- 10
+ │    │   histogram(3)=  0 9171 0 9198 0 8919 0 8586 0 8712 0 9414 0 8694 0 9495 0 9378 0 8433
+ │    │                <--- 0 ---- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 -
+ │    ├── key: (1-3)
+ │    └── ordering: +3,+2
+ └── aggregations
+      └── max [as=max:6, type=int, outer=(1)]
+           └── no_o_id:1 [type=int]
+
+----Stats for consistency_03_group_by_1----
+column_names  row_count  distinct_count  null_count
+{max}         100        1               0
+{no_d_id}     100        10              0
+{no_w_id}     100        10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{max}         100.00         1.00           100.00              100.00 <==          0.00            1.00
+{no_d_id}     100.00         1.00           10.00               1.00                0.00            1.00
+{no_w_id}     100.00         1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_03_scan_2----
+column_names  row_count  distinct_count  null_count
+{no_d_id}     90000      10              0
+{no_o_id}     90000      900             0
+{no_w_id}     90000      10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{no_d_id}     90000.00       1.00           10.00               1.00                0.00            1.00
+{no_o_id}     90000.00       1.00           900.00              1.00                0.00            1.00
+{no_w_id}     90000.00       1.00           10.00               1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_04
+SELECT max(o_id)
+FROM "order"
+GROUP BY o_d_id, o_w_id
+ORDER BY o_w_id, o_d_id
+----
+----
+group-by (streaming)
+ ├── save-table-name: consistency_04_group_by_1
+ ├── columns: max:11(int!null)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
+ ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
+ ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=100, null(11)=0, distinct(2,3)=100, null(2,3)=0]
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(11)
+ ├── ordering: +3,+2
+ ├── scan order@order_idx
+ │    ├── save-table-name: consistency_04_scan_2
+ │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
+ │    ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │   histogram(1)=  0 60  1380 120  1440 180  1380 180  1440  60  1470 150  1410 240  1410  90   1350  210  1440  150  1380  120  1410  120  1410  150  1380  120  1440  120  1470  180  1440  120  1410  90   1410  120  1380  210  1440  60   1440  60   1410  150  1440  180  1350  150  1440  150  1440  150  1440  60   1440  90   1380  150  1350  150  1350  120  1410  120  1350  150  1410  90   1410  60   1380  90   1290  210  1410  180  1230  270  1440  210  1320  150  1410  120  1320  180  1440  180  1410  90   1350  150  1260  240  1290  210  1410  180  1380  150  1320  180  1380  120  1440  180  1320  150  1290  180  1410  90   1410  60   1380  120  1320  180  1380  150  1410  180  1380  150  1380  120  1380  120  1410  60   1350  150  1440  30   1320  150   1320  210   1350  120   1440   30   1440   30   1350  150   1350  270   1440   60   1380   90   1440  180   1410   60   1290  180   1410  120   1440   90   1440   60   1440   90   1260  210   1380  120   1380  150   1440  120   1440   90   1320  240   1320  150   1260  210   1290  180   1290  210   1410  120   1380   90   1410  150   1440   90   1440   60   1440   60   1440  210   1440  120   1410  120   1320  150   1440   30   1410  150   1380  120   1440  120   1410   60   1350  150   1410  120   1350  120   1440   90   1440  150   1290  180   1350  180   1320  150   1440   60   1410   90   1350  120   1410  210   1380  150   1350  270   1320  180   1350  150   1440  120   1410   90   1380  180   1440  150   1380   90   1200  270   1410  240   1440   30   1410   60   1440   90   1380  120   1410  120   1440   60   1440   60   1380   90   1410  120   1380   90   1410   30   1440   60   1410  120   1350  120   1290  210   1380  150   1380   90   1410   90   1380   90   1320  210   1290  180   1380   90   1350   90   1320  150   1380  120   1410  150   1410   30   1380   90   1410  120   1410   60   1410   30   1410  180   1410   60   1380   60   1410  120   1290  270   1350  120   1380   60   1410   60   1260  180   1290  150   1410  210   1410   60   1380   90   1380   60   1320  120   1380  180   1290  150   1380   60   1290  150   1290  150   1260  210   1290  120   1320   90   1380   60   1350   60   1350   90   1410  210   1320  150   1380  120   1260  150   1260  150   1320  120   1320   90   1260  120   1200  240   1230  210   1290   30
+ │    │                <--- 1 ------ 17 ------ 31 ------ 46 ------ 62 ------ 77 ------ 90 ------ 107 ------ 120 ------ 135 ------ 151 ------ 163 ------ 178 ------ 189 ------ 204 ------ 222 ------ 239 ------ 254 ------ 268 ------ 285 ------ 298 ------ 310 ------ 324 ------ 338 ------ 354 ------ 368 ------ 386 ------ 398 ------ 412 ------ 426 ------ 443 ------ 459 ------ 478 ------ 494 ------ 510 ------ 524 ------ 539 ------ 555 ------ 570 ------ 584 ------ 601 ------ 612 ------ 626 ------ 641 ------ 656 ------ 670 ------ 686 ------ 698 ------ 709 ------ 720 ------ 738 ------ 758 ------ 773 ------ 786 ------ 799 ------ 813 ------ 833 ------ 847 ------ 863 ------ 878 ------ 893 ------ 910 ------ 925 ------ 938 ------ 955 ------ 971 ------ 983 ------ 999 ------ 1017 ------ 1030 ------ 1044 ------ 1063 ------ 1077 ------ 1092 ------ 1108 ------ 1126 ------ 1139 ------ 1160 ------ 1176 ------ 1192 ------ 1208 ------ 1226 ------ 1239 ------ 1252 ------ 1266 ------ 1280 ------ 1294 ------ 1310 ------ 1326 ------ 1342 ------ 1352 ------ 1365 ------ 1378 ------ 1393 ------ 1409 ------ 1423 ------ 1439 ------ 1457 ------ 1470 ------ 1489 ------ 1507 ------ 1522 ------ 1532 ------ 1545 ------ 1558 ------ 1571 ------ 1583 ------ 1600 ------ 1614 ------ 1626 ------ 1641 ------ 1660 ------ 1673 ------ 1688 ------ 1701 ------ 1718 ------ 1731 ------ 1745 ------ 1762 ------ 1781 ------ 1797 ------ 1809 ------ 1825 ------ 1839 ------ 1852 ------ 1869 ------ 1882 ------ 1898 ------ 1916 ------ 1930 ------ 1945 ------ 1958 ------ 1974 ------ 1989 ------ 2006 ------ 2028 ------ 2044 ------ 2060 ------ 2080 ------ 2094 ------ 2112 ------ 2123 ------ 2138 ------ 2153 ------ 2168 ------ 2181 ------ 2196 ------ 2213 ------ 2228 ------ 2244 ------ 2260 ------ 2275 ------ 2288 ------ 2301 ------ 2316 ------ 2330 ------ 2347 ------ 2363 ------ 2378 ------ 2393 ------ 2411 ------ 2429 ------ 2443 ------ 2459 ------ 2478 ------ 2493 ------ 2509 ------ 2524 ------ 2541 ------ 2557 ------ 2575 ------ 2588 ------ 2603 ------ 2617 ------ 2628 ------ 2640 ------ 2656 ------ 2671 ------ 2684 ------ 2697 ------ 2714 ------ 2727 ------ 2748 ------ 2766 ------ 2780 ------ 2797 ------ 2811 ------ 2828 ------ 2839 ------ 2856 ------ 2873 ------ 2887 ------ 2904 ------ 2919 ------ 2931 ------ 2947 ------ 2960 ------ 2971 ------ 2984 ------ 3000
+ │    │   histogram(2)=  0 30990 0 30780 0 28650 0 30570 0 30060 0 30060 0 30690 0 28020 0 30180 0 30000
+ │    │                <---- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 ---- 10 -
+ │    │   histogram(3)=  0 29970 0 30090 0 29760 0 29040 0 29820 0 29580 0 30660 0 29280 0 31080 0 30720
+ │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
+ │    ├── key: (1-3)
+ │    └── ordering: +3,+2
+ └── aggregations
+      └── max [as=max:11, type=int, outer=(1)]
+           └── o_id:1 [type=int]
+
+----Stats for consistency_04_group_by_1----
+column_names  row_count  distinct_count  null_count
+{max}         100        1               0
+{o_d_id}      100        10              0
+{o_w_id}      100        10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{max}         100.00         1.00           100.00              100.00 <==          0.00            1.00
+{o_d_id}      100.00         1.00           10.00               1.00                0.00            1.00
+{o_w_id}      100.00         1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_04_scan_2----
+column_names  row_count  distinct_count  null_count
+{o_d_id}      300000     10              0
+{o_id}        300000     2999            0
+{o_w_id}      300000     10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_d_id}      300000.00      1.00           10.00               1.00                0.00            1.00
+{o_id}        300000.00      1.00           2999.00             1.00                0.00            1.00
+{o_w_id}      300000.00      1.00           10.00               1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_05
+SELECT count(*)
+FROM
+(
+    SELECT max(no_o_id) - min(no_o_id) - count(*) AS nod
+    FROM new_order
+    GROUP BY no_w_id, no_d_id
+)
+WHERE nod != -1
+----
+----
+scalar-group-by
+ ├── save-table-name: consistency_05_scalar_group_by_1
+ ├── columns: count:10(int!null)
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── stats: [rows=1, distinct(10)=1, null(10)=0]
+ ├── key: ()
+ ├── fd: ()-->(10)
+ ├── select
+ │    ├── save-table-name: consistency_05_select_2
+ │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:6(int!null) min:7(int!null) count_rows:8(int!null)
+ │    ├── immutable
+ │    ├── stats: [rows=33.3333, distinct(2)=9.82658, null(2)=0, distinct(3)=9.82658, null(3)=0, distinct(6)=33.3333, null(6)=0, distinct(7)=33.3333, null(7)=0, distinct(8)=33.3333, null(8)=0]
+ │    ├── key: (2,3)
+ │    ├── fd: (2,3)-->(6-8)
+ │    ├── group-by (streaming)
+ │    │    ├── save-table-name: consistency_05_group_by_3
+ │    │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:6(int!null) min:7(int!null) count_rows:8(int!null)
+ │    │    ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
+ │    │    ├── internal-ordering: +3,+2
+ │    │    ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=100, null(6)=0, distinct(7)=100, null(7)=0, distinct(8)=100, null(8)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │    ├── key: (2,3)
+ │    │    ├── fd: (2,3)-->(6-8)
+ │    │    ├── scan new_order
+ │    │    │    ├── save-table-name: consistency_05_scan_4
+ │    │    │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
+ │    │    │    ├── stats: [rows=90000, distinct(1)=900, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │    │    │   histogram(1)=  0   90   351  108   324  144   351  108   387   81   432   63   387   90   387   81   333  117   387  108   369  117   414   90   396  126   369  126   423   90   342   99   378   90   432  126   378  108   369   81   432  144   414   99   423   72   387  126   423   99   378  135   432  108   405   54   423  117   270  189   405   45   432   99   324  126   405  108   378  135   396   99   369   90   360  144   378   90   351   99   423  117   351   99   369   72   396  108   360   90   396  108   387   81   333  117   414   99   396   63   423  135   414   54   333  162   342  144   315  135   396   90   378  144   414   63   378   99   396  153   324  117   297  135   360  117   333  162   369  108   423  117   414   99   315  117   414   81   315  126   387   81   279  153   378   81   360  144   423   90   396   99   360   90   351  126   270  153   414   81   360  144   306  144   297  144   369   99   360   72   351  117   288  135   315  135   405  117   342   99   396  108   396   81   342   99   351   99   405   99   414  108   369   90   414   90   396   99   333  108   297  135   333  117   378   99   387   81   333  135   333  135   297  126   342  108   342  144   342   90   351   63   405   63   396  126   369  153   315  144   279  144   306  126   333  108   252  171   279  135   306  144   297  126   387   45   279  126   369   81   387   81   342  153   315   99   369  126   360  117   387  117   342  126   351   81   360   72   351   99   369   81   306  108   378  126   324  117   387  117   369  135   342   72   324   90   369  108   306  108   351  144   324  117   306   99   360   90   333  117   315   72   288  108   279  117   333   72   288   99   279  117   369   63   279  135   342   72   333  135   252  180   315  171   333   45   270  153   288  108   342   54   342   72   342  135   243  126   351   99   297   81   270  126   324   81   270  144   270   99   360  144   324   54   333  108   306  108   342  135   315   81   315  108   234  126   297  117   279   54   270  126   306   63   189  171   288   99   279   99   243  108   288   99   225  108   261   54   297  153   234   99   216  180   171  135   144   90   0  126
+ │    │    │    │                <--- 2101 ----- 2106 ----- 2110 ----- 2115 ----- 2121 ----- 2127 ----- 2132 ----- 2137 ----- 2142 ----- 2146 ----- 2150 ----- 2155 ----- 2160 ----- 2164 ----- 2170 ----- 2175 ----- 2179 ----- 2184 ----- 2189 ----- 2194 ----- 2200 ----- 2205 ----- 2211 ----- 2216 ----- 2221 ----- 2226 ----- 2231 ----- 2236 ----- 2242 ----- 2246 ----- 2251 ----- 2257 ----- 2262 ----- 2266 ----- 2271 ----- 2276 ----- 2280 ----- 2284 ----- 2289 ----- 2293 ----- 2298 ----- 2302 ----- 2307 ----- 2314 ----- 2318 ----- 2323 ----- 2328 ----- 2332 ----- 2337 ----- 2342 ----- 2347 ----- 2352 ----- 2357 ----- 2361 ----- 2365 ----- 2370 ----- 2376 ----- 2382 ----- 2387 ----- 2392 ----- 2397 ----- 2401 ----- 2406 ----- 2411 ----- 2416 ----- 2421 ----- 2427 ----- 2431 ----- 2436 ----- 2441 ----- 2446 ----- 2450 ----- 2455 ----- 2460 ----- 2465 ----- 2470 ----- 2475 ----- 2480 ----- 2484 ----- 2489 ----- 2493 ----- 2497 ----- 2501 ----- 2506 ----- 2510 ----- 2515 ----- 2519 ----- 2524 ----- 2529 ----- 2533 ----- 2538 ----- 2543 ----- 2547 ----- 2551 ----- 2557 ----- 2561 ----- 2565 ----- 2569 ----- 2574 ----- 2578 ----- 2582 ----- 2586 ----- 2591 ----- 2595 ----- 2600 ----- 2605 ----- 2609 ----- 2613 ----- 2618 ----- 2622 ----- 2627 ----- 2632 ----- 2637 ----- 2642 ----- 2646 ----- 2649 ----- 2653 ----- 2657 ----- 2661 ----- 2665 ----- 2669 ----- 2673 ----- 2677 ----- 2681 ----- 2686 ----- 2690 ----- 2694 ----- 2698 ----- 2703 ----- 2708 ----- 2714 ----- 2718 ----- 2723 ----- 2728 ----- 2733 ----- 2737 ----- 2741 ----- 2746 ----- 2750 ----- 2756 ----- 2761 ----- 2766 ----- 2770 ----- 2775 ----- 2779 ----- 2784 ----- 2788 ----- 2792 ----- 2797 ----- 2802 ----- 2807 ----- 2811 ----- 2815 ----- 2820 ----- 2823 ----- 2827 ----- 2831 ----- 2835 ----- 2840 ----- 2845 ----- 2849 ----- 2854 ----- 2858 ----- 2861 ----- 2866 ----- 2871 ----- 2875 ----- 2879 ----- 2883 ----- 2887 ----- 2890 ----- 2893 ----- 2897 ----- 2901 ----- 2905 ----- 2910 ----- 2914 ----- 2919 ----- 2923 ----- 2927 ----- 2931 ----- 2936 ----- 2939 ----- 2942 ----- 2946 ----- 2951 ----- 2956 ----- 2959 ----- 2963 ----- 2967 ----- 2971 ----- 2974 ----- 2977 ----- 2981 ----- 2985 ----- 2988 ----- 2992 ----- 2996 ----- 2999 --- 3000
+ │    │    │    │   histogram(2)=  0 8622 0 8928 0 8883 0 9279 0 8946 0 9315 0 9171 0 9063 0 8613 0 9180
+ │    │    │    │                <--- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 ---- 10
+ │    │    │    │   histogram(3)=  0 9171 0 9198 0 8919 0 8586 0 8712 0 9414 0 8694 0 9495 0 9378 0 8433
+ │    │    │    │                <--- 0 ---- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 -
+ │    │    │    ├── key: (1-3)
+ │    │    │    └── ordering: +3,+2
+ │    │    └── aggregations
+ │    │         ├── max [as=max:6, type=int, outer=(1)]
+ │    │         │    └── no_o_id:1 [type=int]
+ │    │         ├── min [as=min:7, type=int, outer=(1)]
+ │    │         │    └── no_o_id:1 [type=int]
+ │    │         └── count-rows [as=count_rows:8, type=int]
+ │    └── filters
+ │         └── ((max:6 - min:7) - count_rows:8) != -1 [type=bool, outer=(6-8), immutable]
+ └── aggregations
+      └── count-rows [as=count_rows:10, type=int]
+
+----Stats for consistency_05_scalar_group_by_1----
+column_names  row_count  distinct_count  null_count
+{count}       1          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{count}       1.00           1.00           1.00                1.00                0.00            1.00
+
+----Stats for consistency_05_select_2----
+column_names  row_count  distinct_count  null_count
+{count_rows}  0          0               0
+{max}         0          0               0
+{min}         0          0               0
+{no_d_id}     0          0               0
+{no_w_id}     0          0               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{count_rows}  33.00          +Inf <==       33.00               +Inf <==            0.00            1.00
+{max}         33.00          +Inf <==       33.00               +Inf <==            0.00            1.00
+{min}         33.00          +Inf <==       33.00               +Inf <==            0.00            1.00
+{no_d_id}     33.00          +Inf <==       10.00               +Inf <==            0.00            1.00
+{no_w_id}     33.00          +Inf <==       10.00               +Inf <==            0.00            1.00
+
+----Stats for consistency_05_group_by_3----
+column_names  row_count  distinct_count  null_count
+{count_rows}  100        1               0
+{max}         100        1               0
+{min}         100        1               0
+{no_d_id}     100        10              0
+{no_w_id}     100        10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{count_rows}  100.00         1.00           100.00              100.00 <==          0.00            1.00
+{max}         100.00         1.00           100.00              100.00 <==          0.00            1.00
+{min}         100.00         1.00           100.00              100.00 <==          0.00            1.00
+{no_d_id}     100.00         1.00           10.00               1.00                0.00            1.00
+{no_w_id}     100.00         1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_05_scan_4----
+column_names  row_count  distinct_count  null_count
+{no_d_id}     90000      10              0
+{no_o_id}     90000      900             0
+{no_w_id}     90000      10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{no_d_id}     90000.00       1.00           10.00               1.00                0.00            1.00
+{no_o_id}     90000.00       1.00           900.00              1.00                0.00            1.00
+{no_w_id}     90000.00       1.00           10.00               1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_06
+SELECT sum(o_ol_cnt)
+FROM "order"
+GROUP BY o_w_id, o_d_id
+ORDER BY o_w_id, o_d_id
+----
+----
+group-by (streaming)
+ ├── save-table-name: consistency_06_group_by_1
+ ├── columns: sum:11(decimal)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
+ ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
+ ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=100, null(11)=0, distinct(2,3)=100, null(2,3)=0]
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(11)
+ ├── ordering: +3,+2
+ ├── scan order
+ │    ├── save-table-name: consistency_06_scan_2
+ │    ├── columns: o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
+ │    ├── stats: [rows=300000, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(7)=11, null(7)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │   histogram(2)=  0 30990 0 30780 0 28650 0 30570 0 30060 0 30060 0 30690 0 28020 0 30180 0 30000
+ │    │                <---- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 ---- 10 -
+ │    │   histogram(3)=  0 29970 0 30090 0 29760 0 29040 0 29820 0 29580 0 30660 0 29280 0 31080 0 30720
+ │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
+ │    │   histogram(7)=  0 26550 2.4696e+05 26490
+ │    │                <---- 5 ------------- 15 -
+ │    └── ordering: +3,+2
+ └── aggregations
+      └── sum [as=sum:11, type=decimal, outer=(7)]
+           └── o_ol_cnt:7 [type=int]
+
+----Stats for consistency_06_group_by_1----
+column_names  row_count  distinct_count  null_count
+{o_d_id}      100        10              0
+{o_w_id}      100        10              0
+{sum}         100        93              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_d_id}      100.00         1.00           10.00               1.00                0.00            1.00
+{o_w_id}      100.00         1.00           10.00               1.00                0.00            1.00
+{sum}         100.00         1.00           100.00              1.08                0.00            1.00
+
+----Stats for consistency_06_scan_2----
+column_names  row_count  distinct_count  null_count
+{o_d_id}      300000     10              0
+{o_ol_cnt}    300000     11              0
+{o_w_id}      300000     10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_d_id}      300000.00      1.00           10.00               1.00                0.00            1.00
+{o_ol_cnt}    300000.00      1.00           11.00               1.00                0.00            1.00
+{o_w_id}      300000.00      1.00           10.00               1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_07
+SELECT count(*)
+FROM order_line
+GROUP BY ol_w_id, ol_d_id
+ORDER BY ol_w_id, ol_d_id
+----
+----
+group-by (streaming)
+ ├── save-table-name: consistency_07_group_by_1
+ ├── columns: count:13(int!null)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
+ ├── grouping columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
+ ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(13)=100, null(13)=0, distinct(2,3)=100, null(2,3)=0]
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(13)
+ ├── ordering: +3,+2
+ ├── scan order_line
+ │    ├── save-table-name: consistency_07_scan_2
+ │    ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
+ │    ├── stats: [rows=3.00122e+06, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │   histogram(2)=  0 2.8722e+05 0 3.0822e+05 0 3.0162e+05 0 2.9682e+05 0 3.1063e+05 0 3.0252e+05 0 3.0312e+05 0 3.0432e+05 0 2.9322e+05 0 2.9352e+05
+ │    │                <------ 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ---------- 10 ---
+ │    │   histogram(3)=  0 2.9082e+05 0 2.8632e+05 0 3.1093e+05 0 3.1093e+05 0 3.0732e+05 0 3.1783e+05 0 2.8902e+05 0 3.0342e+05 0 2.8932e+05 0 2.9532e+05
+ │    │                <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+ │    └── ordering: +3,+2
+ └── aggregations
+      └── count-rows [as=count_rows:13, type=int]
+
+----Stats for consistency_07_group_by_1----
+column_names  row_count  distinct_count  null_count
+{count}       100        93              0
+{ol_d_id}     100        10              0
+{ol_w_id}     100        10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{count}       100.00         1.00           100.00              1.08                0.00            1.00
+{ol_d_id}     100.00         1.00           10.00               1.00                0.00            1.00
+{ol_w_id}     100.00         1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_07_scan_2----
+column_names  row_count  distinct_count  null_count
+{ol_d_id}     3001222    10              0
+{ol_w_id}     3001222    10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{ol_d_id}     3001222.00     1.00           10.00               1.00                0.00            1.00
+{ol_w_id}     3001222.00     1.00           10.00               1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_08
+(SELECT no_w_id, no_d_id, no_o_id FROM new_order)
+EXCEPT ALL
+(SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
+----
+----
+except-all
+ ├── save-table-name: consistency_08_except_all_1
+ ├── columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
+ ├── left columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
+ ├── right columns: o_w_id:8(int) o_d_id:7(int) o_id:6(int)
+ ├── stats: [rows=90000, distinct(1)=900, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
+ ├── key: (1-3)
+ ├── scan new_order
+ │    ├── save-table-name: consistency_08_scan_2
+ │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
+ │    ├── stats: [rows=90000, distinct(1)=900, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │   histogram(1)=  0   90   351  108   324  144   351  108   387   81   432   63   387   90   387   81   333  117   387  108   369  117   414   90   396  126   369  126   423   90   342   99   378   90   432  126   378  108   369   81   432  144   414   99   423   72   387  126   423   99   378  135   432  108   405   54   423  117   270  189   405   45   432   99   324  126   405  108   378  135   396   99   369   90   360  144   378   90   351   99   423  117   351   99   369   72   396  108   360   90   396  108   387   81   333  117   414   99   396   63   423  135   414   54   333  162   342  144   315  135   396   90   378  144   414   63   378   99   396  153   324  117   297  135   360  117   333  162   369  108   423  117   414   99   315  117   414   81   315  126   387   81   279  153   378   81   360  144   423   90   396   99   360   90   351  126   270  153   414   81   360  144   306  144   297  144   369   99   360   72   351  117   288  135   315  135   405  117   342   99   396  108   396   81   342   99   351   99   405   99   414  108   369   90   414   90   396   99   333  108   297  135   333  117   378   99   387   81   333  135   333  135   297  126   342  108   342  144   342   90   351   63   405   63   396  126   369  153   315  144   279  144   306  126   333  108   252  171   279  135   306  144   297  126   387   45   279  126   369   81   387   81   342  153   315   99   369  126   360  117   387  117   342  126   351   81   360   72   351   99   369   81   306  108   378  126   324  117   387  117   369  135   342   72   324   90   369  108   306  108   351  144   324  117   306   99   360   90   333  117   315   72   288  108   279  117   333   72   288   99   279  117   369   63   279  135   342   72   333  135   252  180   315  171   333   45   270  153   288  108   342   54   342   72   342  135   243  126   351   99   297   81   270  126   324   81   270  144   270   99   360  144   324   54   333  108   306  108   342  135   315   81   315  108   234  126   297  117   279   54   270  126   306   63   189  171   288   99   279   99   243  108   288   99   225  108   261   54   297  153   234   99   216  180   171  135   144   90   0  126
+ │    │                <--- 2101 ----- 2106 ----- 2110 ----- 2115 ----- 2121 ----- 2127 ----- 2132 ----- 2137 ----- 2142 ----- 2146 ----- 2150 ----- 2155 ----- 2160 ----- 2164 ----- 2170 ----- 2175 ----- 2179 ----- 2184 ----- 2189 ----- 2194 ----- 2200 ----- 2205 ----- 2211 ----- 2216 ----- 2221 ----- 2226 ----- 2231 ----- 2236 ----- 2242 ----- 2246 ----- 2251 ----- 2257 ----- 2262 ----- 2266 ----- 2271 ----- 2276 ----- 2280 ----- 2284 ----- 2289 ----- 2293 ----- 2298 ----- 2302 ----- 2307 ----- 2314 ----- 2318 ----- 2323 ----- 2328 ----- 2332 ----- 2337 ----- 2342 ----- 2347 ----- 2352 ----- 2357 ----- 2361 ----- 2365 ----- 2370 ----- 2376 ----- 2382 ----- 2387 ----- 2392 ----- 2397 ----- 2401 ----- 2406 ----- 2411 ----- 2416 ----- 2421 ----- 2427 ----- 2431 ----- 2436 ----- 2441 ----- 2446 ----- 2450 ----- 2455 ----- 2460 ----- 2465 ----- 2470 ----- 2475 ----- 2480 ----- 2484 ----- 2489 ----- 2493 ----- 2497 ----- 2501 ----- 2506 ----- 2510 ----- 2515 ----- 2519 ----- 2524 ----- 2529 ----- 2533 ----- 2538 ----- 2543 ----- 2547 ----- 2551 ----- 2557 ----- 2561 ----- 2565 ----- 2569 ----- 2574 ----- 2578 ----- 2582 ----- 2586 ----- 2591 ----- 2595 ----- 2600 ----- 2605 ----- 2609 ----- 2613 ----- 2618 ----- 2622 ----- 2627 ----- 2632 ----- 2637 ----- 2642 ----- 2646 ----- 2649 ----- 2653 ----- 2657 ----- 2661 ----- 2665 ----- 2669 ----- 2673 ----- 2677 ----- 2681 ----- 2686 ----- 2690 ----- 2694 ----- 2698 ----- 2703 ----- 2708 ----- 2714 ----- 2718 ----- 2723 ----- 2728 ----- 2733 ----- 2737 ----- 2741 ----- 2746 ----- 2750 ----- 2756 ----- 2761 ----- 2766 ----- 2770 ----- 2775 ----- 2779 ----- 2784 ----- 2788 ----- 2792 ----- 2797 ----- 2802 ----- 2807 ----- 2811 ----- 2815 ----- 2820 ----- 2823 ----- 2827 ----- 2831 ----- 2835 ----- 2840 ----- 2845 ----- 2849 ----- 2854 ----- 2858 ----- 2861 ----- 2866 ----- 2871 ----- 2875 ----- 2879 ----- 2883 ----- 2887 ----- 2890 ----- 2893 ----- 2897 ----- 2901 ----- 2905 ----- 2910 ----- 2914 ----- 2919 ----- 2923 ----- 2927 ----- 2931 ----- 2936 ----- 2939 ----- 2942 ----- 2946 ----- 2951 ----- 2956 ----- 2959 ----- 2963 ----- 2967 ----- 2971 ----- 2974 ----- 2977 ----- 2981 ----- 2985 ----- 2988 ----- 2992 ----- 2996 ----- 2999 --- 3000
+ │    │   histogram(2)=  0 8622 0 8928 0 8883 0 9279 0 8946 0 9315 0 9171 0 9063 0 8613 0 9180
+ │    │                <--- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 ---- 10
+ │    │   histogram(3)=  0 9171 0 9198 0 8919 0 8586 0 8712 0 9414 0 8694 0 9495 0 9378 0 8433
+ │    │                <--- 0 ---- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 -
+ │    └── key: (1-3)
+ └── project
+      ├── save-table-name: consistency_08_project_3
+      ├── columns: o_id:6(int!null) o_d_id:7(int!null) o_w_id:8(int!null)
+      ├── stats: [rows=90000, distinct(6)=2999, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=10, null(8)=0, distinct(7,8)=100, null(7,8)=0]
+      ├── key: (6-8)
+      └── select
+           ├── save-table-name: consistency_08_select_4
+           ├── columns: o_id:6(int!null) o_d_id:7(int!null) o_w_id:8(int!null) o_carrier_id:11(int)
+           ├── stats: [rows=90000, distinct(6)=2999, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=10, null(8)=0, distinct(11)=1, null(11)=90000, distinct(7,8)=100, null(7,8)=0]
+           │   histogram(11)=  0 90000
+           │                 <--- NULL
+           ├── key: (6-8)
+           ├── fd: ()-->(11)
+           ├── scan order@order_idx
+           │    ├── save-table-name: consistency_08_scan_5
+           │    ├── columns: o_id:6(int!null) o_d_id:7(int!null) o_w_id:8(int!null) o_carrier_id:11(int)
+           │    ├── stats: [rows=300000, distinct(6)=2999, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=10, null(8)=0, distinct(11)=11, null(11)=90000, distinct(7,8)=100, null(7,8)=0]
+           │    │   histogram(6)=  0 60  1380 120  1440 180  1380 180  1440  60  1470 150  1410 240  1410  90   1350  210  1440  150  1380  120  1410  120  1410  150  1380  120  1440  120  1470  180  1440  120  1410  90   1410  120  1380  210  1440  60   1440  60   1410  150  1440  180  1350  150  1440  150  1440  150  1440  60   1440  90   1380  150  1350  150  1350  120  1410  120  1350  150  1410  90   1410  60   1380  90   1290  210  1410  180  1230  270  1440  210  1320  150  1410  120  1320  180  1440  180  1410  90   1350  150  1260  240  1290  210  1410  180  1380  150  1320  180  1380  120  1440  180  1320  150  1290  180  1410  90   1410  60   1380  120  1320  180  1380  150  1410  180  1380  150  1380  120  1380  120  1410  60   1350  150  1440  30   1320  150   1320  210   1350  120   1440   30   1440   30   1350  150   1350  270   1440   60   1380   90   1440  180   1410   60   1290  180   1410  120   1440   90   1440   60   1440   90   1260  210   1380  120   1380  150   1440  120   1440   90   1320  240   1320  150   1260  210   1290  180   1290  210   1410  120   1380   90   1410  150   1440   90   1440   60   1440   60   1440  210   1440  120   1410  120   1320  150   1440   30   1410  150   1380  120   1440  120   1410   60   1350  150   1410  120   1350  120   1440   90   1440  150   1290  180   1350  180   1320  150   1440   60   1410   90   1350  120   1410  210   1380  150   1350  270   1320  180   1350  150   1440  120   1410   90   1380  180   1440  150   1380   90   1200  270   1410  240   1440   30   1410   60   1440   90   1380  120   1410  120   1440   60   1440   60   1380   90   1410  120   1380   90   1410   30   1440   60   1410  120   1350  120   1290  210   1380  150   1380   90   1410   90   1380   90   1320  210   1290  180   1380   90   1350   90   1320  150   1380  120   1410  150   1410   30   1380   90   1410  120   1410   60   1410   30   1410  180   1410   60   1380   60   1410  120   1290  270   1350  120   1380   60   1410   60   1260  180   1290  150   1410  210   1410   60   1380   90   1380   60   1320  120   1380  180   1290  150   1380   60   1290  150   1290  150   1260  210   1290  120   1320   90   1380   60   1350   60   1350   90   1410  210   1320  150   1380  120   1260  150   1260  150   1320  120   1320   90   1260  120   1200  240   1230  210   1290   30
+           │    │                <--- 1 ------ 17 ------ 31 ------ 46 ------ 62 ------ 77 ------ 90 ------ 107 ------ 120 ------ 135 ------ 151 ------ 163 ------ 178 ------ 189 ------ 204 ------ 222 ------ 239 ------ 254 ------ 268 ------ 285 ------ 298 ------ 310 ------ 324 ------ 338 ------ 354 ------ 368 ------ 386 ------ 398 ------ 412 ------ 426 ------ 443 ------ 459 ------ 478 ------ 494 ------ 510 ------ 524 ------ 539 ------ 555 ------ 570 ------ 584 ------ 601 ------ 612 ------ 626 ------ 641 ------ 656 ------ 670 ------ 686 ------ 698 ------ 709 ------ 720 ------ 738 ------ 758 ------ 773 ------ 786 ------ 799 ------ 813 ------ 833 ------ 847 ------ 863 ------ 878 ------ 893 ------ 910 ------ 925 ------ 938 ------ 955 ------ 971 ------ 983 ------ 999 ------ 1017 ------ 1030 ------ 1044 ------ 1063 ------ 1077 ------ 1092 ------ 1108 ------ 1126 ------ 1139 ------ 1160 ------ 1176 ------ 1192 ------ 1208 ------ 1226 ------ 1239 ------ 1252 ------ 1266 ------ 1280 ------ 1294 ------ 1310 ------ 1326 ------ 1342 ------ 1352 ------ 1365 ------ 1378 ------ 1393 ------ 1409 ------ 1423 ------ 1439 ------ 1457 ------ 1470 ------ 1489 ------ 1507 ------ 1522 ------ 1532 ------ 1545 ------ 1558 ------ 1571 ------ 1583 ------ 1600 ------ 1614 ------ 1626 ------ 1641 ------ 1660 ------ 1673 ------ 1688 ------ 1701 ------ 1718 ------ 1731 ------ 1745 ------ 1762 ------ 1781 ------ 1797 ------ 1809 ------ 1825 ------ 1839 ------ 1852 ------ 1869 ------ 1882 ------ 1898 ------ 1916 ------ 1930 ------ 1945 ------ 1958 ------ 1974 ------ 1989 ------ 2006 ------ 2028 ------ 2044 ------ 2060 ------ 2080 ------ 2094 ------ 2112 ------ 2123 ------ 2138 ------ 2153 ------ 2168 ------ 2181 ------ 2196 ------ 2213 ------ 2228 ------ 2244 ------ 2260 ------ 2275 ------ 2288 ------ 2301 ------ 2316 ------ 2330 ------ 2347 ------ 2363 ------ 2378 ------ 2393 ------ 2411 ------ 2429 ------ 2443 ------ 2459 ------ 2478 ------ 2493 ------ 2509 ------ 2524 ------ 2541 ------ 2557 ------ 2575 ------ 2588 ------ 2603 ------ 2617 ------ 2628 ------ 2640 ------ 2656 ------ 2671 ------ 2684 ------ 2697 ------ 2714 ------ 2727 ------ 2748 ------ 2766 ------ 2780 ------ 2797 ------ 2811 ------ 2828 ------ 2839 ------ 2856 ------ 2873 ------ 2887 ------ 2904 ------ 2919 ------ 2931 ------ 2947 ------ 2960 ------ 2971 ------ 2984 ------ 3000
+           │    │   histogram(7)=  0 30990 0 30780 0 28650 0 30570 0 30060 0 30060 0 30690 0 28020 0 30180 0 30000
+           │    │                <---- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 ---- 10 -
+           │    │   histogram(8)=  0 29970 0 30090 0 29760 0 29040 0 29820 0 29580 0 30660 0 29280 0 31080 0 30720
+           │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
+           │    │   histogram(11)=  0 90000  0 21169 1.6751e+05 21318
+           │    │                 <--- NULL ---- 1 ------------- 10 -
+           │    ├── key: (6-8)
+           │    └── fd: (6-8)-->(11)
+           └── filters
+                └── o_carrier_id:11 IS NULL [type=bool, outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
+
+----Stats for consistency_08_except_all_1----
+column_names  row_count  distinct_count  null_count
+{no_d_id}     0          0               0
+{no_o_id}     0          0               0
+{no_w_id}     0          0               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{no_d_id}     90000.00       +Inf <==       10.00               +Inf <==            0.00            1.00
+{no_o_id}     90000.00       +Inf <==       900.00              +Inf <==            0.00            1.00
+{no_w_id}     90000.00       +Inf <==       10.00               +Inf <==            0.00            1.00
+
+----Stats for consistency_08_scan_2----
+column_names  row_count  distinct_count  null_count
+{no_d_id}     90000      10              0
+{no_o_id}     90000      900             0
+{no_w_id}     90000      10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{no_d_id}     90000.00       1.00           10.00               1.00                0.00            1.00
+{no_o_id}     90000.00       1.00           900.00              1.00                0.00            1.00
+{no_w_id}     90000.00       1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_08_project_3----
+column_names  row_count  distinct_count  null_count
+{o_d_id}      90000      10              0
+{o_id}        90000      900             0
+{o_w_id}      90000      10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_d_id}      90000.00       1.00           10.00               1.00                0.00            1.00
+{o_id}        90000.00       1.00           2999.00             3.33 <==            0.00            1.00
+{o_w_id}      90000.00       1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_08_select_4----
+column_names    row_count  distinct_count  null_count
+{o_carrier_id}  90000      1               90000
+{o_d_id}        90000      10              0
+{o_id}          90000      900             0
+{o_w_id}        90000      10              0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_carrier_id}  90000.00       1.00           1.00                1.00                90000.00        1.00
+{o_d_id}        90000.00       1.00           10.00               1.00                0.00            1.00
+{o_id}          90000.00       1.00           2999.00             3.33 <==            0.00            1.00
+{o_w_id}        90000.00       1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_08_scan_5----
+column_names    row_count  distinct_count  null_count
+{o_carrier_id}  300000     11              90000
+{o_d_id}        300000     10              0
+{o_id}          300000     2999            0
+{o_w_id}        300000     10              0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_carrier_id}  300000.00      1.00           11.00               1.00                90000.00        1.00
+{o_d_id}        300000.00      1.00           10.00               1.00                0.00            1.00
+{o_id}          300000.00      1.00           2999.00             1.00                0.00            1.00
+{o_w_id}        300000.00      1.00           10.00               1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_09
+(SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
+EXCEPT ALL
+(SELECT no_w_id, no_d_id, no_o_id FROM new_order)
+----
+----
+except-all
+ ├── save-table-name: consistency_09_except_all_1
+ ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
+ ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
+ ├── right columns: no_w_id:13(int) no_d_id:12(int) no_o_id:11(int)
+ ├── stats: [rows=90000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
+ ├── key: (1-3)
+ ├── project
+ │    ├── save-table-name: consistency_09_project_2
+ │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
+ │    ├── stats: [rows=90000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    ├── key: (1-3)
+ │    └── select
+ │         ├── save-table-name: consistency_09_select_3
+ │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
+ │         ├── stats: [rows=90000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=90000, distinct(2,3)=100, null(2,3)=0]
+ │         │   histogram(6)=  0 90000
+ │         │                <--- NULL
+ │         ├── key: (1-3)
+ │         ├── fd: ()-->(6)
+ │         ├── scan order@order_idx
+ │         │    ├── save-table-name: consistency_09_scan_4
+ │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
+ │         │    ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=11, null(6)=90000, distinct(2,3)=100, null(2,3)=0]
+ │         │    │   histogram(1)=  0 60  1380 120  1440 180  1380 180  1440  60  1470 150  1410 240  1410  90   1350  210  1440  150  1380  120  1410  120  1410  150  1380  120  1440  120  1470  180  1440  120  1410  90   1410  120  1380  210  1440  60   1440  60   1410  150  1440  180  1350  150  1440  150  1440  150  1440  60   1440  90   1380  150  1350  150  1350  120  1410  120  1350  150  1410  90   1410  60   1380  90   1290  210  1410  180  1230  270  1440  210  1320  150  1410  120  1320  180  1440  180  1410  90   1350  150  1260  240  1290  210  1410  180  1380  150  1320  180  1380  120  1440  180  1320  150  1290  180  1410  90   1410  60   1380  120  1320  180  1380  150  1410  180  1380  150  1380  120  1380  120  1410  60   1350  150  1440  30   1320  150   1320  210   1350  120   1440   30   1440   30   1350  150   1350  270   1440   60   1380   90   1440  180   1410   60   1290  180   1410  120   1440   90   1440   60   1440   90   1260  210   1380  120   1380  150   1440  120   1440   90   1320  240   1320  150   1260  210   1290  180   1290  210   1410  120   1380   90   1410  150   1440   90   1440   60   1440   60   1440  210   1440  120   1410  120   1320  150   1440   30   1410  150   1380  120   1440  120   1410   60   1350  150   1410  120   1350  120   1440   90   1440  150   1290  180   1350  180   1320  150   1440   60   1410   90   1350  120   1410  210   1380  150   1350  270   1320  180   1350  150   1440  120   1410   90   1380  180   1440  150   1380   90   1200  270   1410  240   1440   30   1410   60   1440   90   1380  120   1410  120   1440   60   1440   60   1380   90   1410  120   1380   90   1410   30   1440   60   1410  120   1350  120   1290  210   1380  150   1380   90   1410   90   1380   90   1320  210   1290  180   1380   90   1350   90   1320  150   1380  120   1410  150   1410   30   1380   90   1410  120   1410   60   1410   30   1410  180   1410   60   1380   60   1410  120   1290  270   1350  120   1380   60   1410   60   1260  180   1290  150   1410  210   1410   60   1380   90   1380   60   1320  120   1380  180   1290  150   1380   60   1290  150   1290  150   1260  210   1290  120   1320   90   1380   60   1350   60   1350   90   1410  210   1320  150   1380  120   1260  150   1260  150   1320  120   1320   90   1260  120   1200  240   1230  210   1290   30
+ │         │    │                <--- 1 ------ 17 ------ 31 ------ 46 ------ 62 ------ 77 ------ 90 ------ 107 ------ 120 ------ 135 ------ 151 ------ 163 ------ 178 ------ 189 ------ 204 ------ 222 ------ 239 ------ 254 ------ 268 ------ 285 ------ 298 ------ 310 ------ 324 ------ 338 ------ 354 ------ 368 ------ 386 ------ 398 ------ 412 ------ 426 ------ 443 ------ 459 ------ 478 ------ 494 ------ 510 ------ 524 ------ 539 ------ 555 ------ 570 ------ 584 ------ 601 ------ 612 ------ 626 ------ 641 ------ 656 ------ 670 ------ 686 ------ 698 ------ 709 ------ 720 ------ 738 ------ 758 ------ 773 ------ 786 ------ 799 ------ 813 ------ 833 ------ 847 ------ 863 ------ 878 ------ 893 ------ 910 ------ 925 ------ 938 ------ 955 ------ 971 ------ 983 ------ 999 ------ 1017 ------ 1030 ------ 1044 ------ 1063 ------ 1077 ------ 1092 ------ 1108 ------ 1126 ------ 1139 ------ 1160 ------ 1176 ------ 1192 ------ 1208 ------ 1226 ------ 1239 ------ 1252 ------ 1266 ------ 1280 ------ 1294 ------ 1310 ------ 1326 ------ 1342 ------ 1352 ------ 1365 ------ 1378 ------ 1393 ------ 1409 ------ 1423 ------ 1439 ------ 1457 ------ 1470 ------ 1489 ------ 1507 ------ 1522 ------ 1532 ------ 1545 ------ 1558 ------ 1571 ------ 1583 ------ 1600 ------ 1614 ------ 1626 ------ 1641 ------ 1660 ------ 1673 ------ 1688 ------ 1701 ------ 1718 ------ 1731 ------ 1745 ------ 1762 ------ 1781 ------ 1797 ------ 1809 ------ 1825 ------ 1839 ------ 1852 ------ 1869 ------ 1882 ------ 1898 ------ 1916 ------ 1930 ------ 1945 ------ 1958 ------ 1974 ------ 1989 ------ 2006 ------ 2028 ------ 2044 ------ 2060 ------ 2080 ------ 2094 ------ 2112 ------ 2123 ------ 2138 ------ 2153 ------ 2168 ------ 2181 ------ 2196 ------ 2213 ------ 2228 ------ 2244 ------ 2260 ------ 2275 ------ 2288 ------ 2301 ------ 2316 ------ 2330 ------ 2347 ------ 2363 ------ 2378 ------ 2393 ------ 2411 ------ 2429 ------ 2443 ------ 2459 ------ 2478 ------ 2493 ------ 2509 ------ 2524 ------ 2541 ------ 2557 ------ 2575 ------ 2588 ------ 2603 ------ 2617 ------ 2628 ------ 2640 ------ 2656 ------ 2671 ------ 2684 ------ 2697 ------ 2714 ------ 2727 ------ 2748 ------ 2766 ------ 2780 ------ 2797 ------ 2811 ------ 2828 ------ 2839 ------ 2856 ------ 2873 ------ 2887 ------ 2904 ------ 2919 ------ 2931 ------ 2947 ------ 2960 ------ 2971 ------ 2984 ------ 3000
+ │         │    │   histogram(2)=  0 30990 0 30780 0 28650 0 30570 0 30060 0 30060 0 30690 0 28020 0 30180 0 30000
+ │         │    │                <---- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 ---- 10 -
+ │         │    │   histogram(3)=  0 29970 0 30090 0 29760 0 29040 0 29820 0 29580 0 30660 0 29280 0 31080 0 30720
+ │         │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
+ │         │    │   histogram(6)=  0 90000  0 21169 1.6751e+05 21318
+ │         │    │                <--- NULL ---- 1 ------------- 10 -
+ │         │    ├── key: (1-3)
+ │         │    └── fd: (1-3)-->(6)
+ │         └── filters
+ │              └── o_carrier_id:6 IS NULL [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+ └── scan new_order
+      ├── save-table-name: consistency_09_scan_5
+      ├── columns: no_o_id:11(int!null) no_d_id:12(int!null) no_w_id:13(int!null)
+      ├── stats: [rows=90000, distinct(11)=900, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=10, null(13)=0, distinct(12,13)=100, null(12,13)=0]
+      │   histogram(11)=  0   90   351  108   324  144   351  108   387   81   432   63   387   90   387   81   333  117   387  108   369  117   414   90   396  126   369  126   423   90   342   99   378   90   432  126   378  108   369   81   432  144   414   99   423   72   387  126   423   99   378  135   432  108   405   54   423  117   270  189   405   45   432   99   324  126   405  108   378  135   396   99   369   90   360  144   378   90   351   99   423  117   351   99   369   72   396  108   360   90   396  108   387   81   333  117   414   99   396   63   423  135   414   54   333  162   342  144   315  135   396   90   378  144   414   63   378   99   396  153   324  117   297  135   360  117   333  162   369  108   423  117   414   99   315  117   414   81   315  126   387   81   279  153   378   81   360  144   423   90   396   99   360   90   351  126   270  153   414   81   360  144   306  144   297  144   369   99   360   72   351  117   288  135   315  135   405  117   342   99   396  108   396   81   342   99   351   99   405   99   414  108   369   90   414   90   396   99   333  108   297  135   333  117   378   99   387   81   333  135   333  135   297  126   342  108   342  144   342   90   351   63   405   63   396  126   369  153   315  144   279  144   306  126   333  108   252  171   279  135   306  144   297  126   387   45   279  126   369   81   387   81   342  153   315   99   369  126   360  117   387  117   342  126   351   81   360   72   351   99   369   81   306  108   378  126   324  117   387  117   369  135   342   72   324   90   369  108   306  108   351  144   324  117   306   99   360   90   333  117   315   72   288  108   279  117   333   72   288   99   279  117   369   63   279  135   342   72   333  135   252  180   315  171   333   45   270  153   288  108   342   54   342   72   342  135   243  126   351   99   297   81   270  126   324   81   270  144   270   99   360  144   324   54   333  108   306  108   342  135   315   81   315  108   234  126   297  117   279   54   270  126   306   63   189  171   288   99   279   99   243  108   288   99   225  108   261   54   297  153   234   99   216  180   171  135   144   90   0  126
+      │                 <--- 2101 ----- 2106 ----- 2110 ----- 2115 ----- 2121 ----- 2127 ----- 2132 ----- 2137 ----- 2142 ----- 2146 ----- 2150 ----- 2155 ----- 2160 ----- 2164 ----- 2170 ----- 2175 ----- 2179 ----- 2184 ----- 2189 ----- 2194 ----- 2200 ----- 2205 ----- 2211 ----- 2216 ----- 2221 ----- 2226 ----- 2231 ----- 2236 ----- 2242 ----- 2246 ----- 2251 ----- 2257 ----- 2262 ----- 2266 ----- 2271 ----- 2276 ----- 2280 ----- 2284 ----- 2289 ----- 2293 ----- 2298 ----- 2302 ----- 2307 ----- 2314 ----- 2318 ----- 2323 ----- 2328 ----- 2332 ----- 2337 ----- 2342 ----- 2347 ----- 2352 ----- 2357 ----- 2361 ----- 2365 ----- 2370 ----- 2376 ----- 2382 ----- 2387 ----- 2392 ----- 2397 ----- 2401 ----- 2406 ----- 2411 ----- 2416 ----- 2421 ----- 2427 ----- 2431 ----- 2436 ----- 2441 ----- 2446 ----- 2450 ----- 2455 ----- 2460 ----- 2465 ----- 2470 ----- 2475 ----- 2480 ----- 2484 ----- 2489 ----- 2493 ----- 2497 ----- 2501 ----- 2506 ----- 2510 ----- 2515 ----- 2519 ----- 2524 ----- 2529 ----- 2533 ----- 2538 ----- 2543 ----- 2547 ----- 2551 ----- 2557 ----- 2561 ----- 2565 ----- 2569 ----- 2574 ----- 2578 ----- 2582 ----- 2586 ----- 2591 ----- 2595 ----- 2600 ----- 2605 ----- 2609 ----- 2613 ----- 2618 ----- 2622 ----- 2627 ----- 2632 ----- 2637 ----- 2642 ----- 2646 ----- 2649 ----- 2653 ----- 2657 ----- 2661 ----- 2665 ----- 2669 ----- 2673 ----- 2677 ----- 2681 ----- 2686 ----- 2690 ----- 2694 ----- 2698 ----- 2703 ----- 2708 ----- 2714 ----- 2718 ----- 2723 ----- 2728 ----- 2733 ----- 2737 ----- 2741 ----- 2746 ----- 2750 ----- 2756 ----- 2761 ----- 2766 ----- 2770 ----- 2775 ----- 2779 ----- 2784 ----- 2788 ----- 2792 ----- 2797 ----- 2802 ----- 2807 ----- 2811 ----- 2815 ----- 2820 ----- 2823 ----- 2827 ----- 2831 ----- 2835 ----- 2840 ----- 2845 ----- 2849 ----- 2854 ----- 2858 ----- 2861 ----- 2866 ----- 2871 ----- 2875 ----- 2879 ----- 2883 ----- 2887 ----- 2890 ----- 2893 ----- 2897 ----- 2901 ----- 2905 ----- 2910 ----- 2914 ----- 2919 ----- 2923 ----- 2927 ----- 2931 ----- 2936 ----- 2939 ----- 2942 ----- 2946 ----- 2951 ----- 2956 ----- 2959 ----- 2963 ----- 2967 ----- 2971 ----- 2974 ----- 2977 ----- 2981 ----- 2985 ----- 2988 ----- 2992 ----- 2996 ----- 2999 --- 3000
+      │   histogram(12)=  0 8622 0 8928 0 8883 0 9279 0 8946 0 9315 0 9171 0 9063 0 8613 0 9180
+      │                 <--- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 ---- 10
+      │   histogram(13)=  0 9171 0 9198 0 8919 0 8586 0 8712 0 9414 0 8694 0 9495 0 9378 0 8433
+      │                 <--- 0 ---- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 -
+      └── key: (11-13)
+
+----Stats for consistency_09_except_all_1----
+column_names  row_count  distinct_count  null_count
+{o_d_id}      0          0               0
+{o_id}        0          0               0
+{o_w_id}      0          0               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_d_id}      90000.00       +Inf <==       10.00               +Inf <==            0.00            1.00
+{o_id}        90000.00       +Inf <==       2999.00             +Inf <==            0.00            1.00
+{o_w_id}      90000.00       +Inf <==       10.00               +Inf <==            0.00            1.00
+
+----Stats for consistency_09_project_2----
+column_names  row_count  distinct_count  null_count
+{o_d_id}      90000      10              0
+{o_id}        90000      900             0
+{o_w_id}      90000      10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_d_id}      90000.00       1.00           10.00               1.00                0.00            1.00
+{o_id}        90000.00       1.00           2999.00             3.33 <==            0.00            1.00
+{o_w_id}      90000.00       1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_09_select_3----
+column_names    row_count  distinct_count  null_count
+{o_carrier_id}  90000      1               90000
+{o_d_id}        90000      10              0
+{o_id}          90000      900             0
+{o_w_id}        90000      10              0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_carrier_id}  90000.00       1.00           1.00                1.00                90000.00        1.00
+{o_d_id}        90000.00       1.00           10.00               1.00                0.00            1.00
+{o_id}          90000.00       1.00           2999.00             3.33 <==            0.00            1.00
+{o_w_id}        90000.00       1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_09_scan_4----
+column_names    row_count  distinct_count  null_count
+{o_carrier_id}  300000     11              90000
+{o_d_id}        300000     10              0
+{o_id}          300000     2999            0
+{o_w_id}        300000     10              0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_carrier_id}  300000.00      1.00           11.00               1.00                90000.00        1.00
+{o_d_id}        300000.00      1.00           10.00               1.00                0.00            1.00
+{o_id}          300000.00      1.00           2999.00             1.00                0.00            1.00
+{o_w_id}        300000.00      1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_09_scan_5----
+column_names  row_count  distinct_count  null_count
+{no_d_id}     90000      10              0
+{no_o_id}     90000      900             0
+{no_w_id}     90000      10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{no_d_id}     90000.00       1.00           10.00               1.00                0.00            1.00
+{no_o_id}     90000.00       1.00           900.00              1.00                0.00            1.00
+{no_w_id}     90000.00       1.00           10.00               1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_10
+(
+    SELECT o_w_id, o_d_id, o_id, o_ol_cnt
+    FROM "order"
+    ORDER BY o_w_id, o_d_id, o_id DESC
+)
+EXCEPT ALL
+(
+    SELECT ol_w_id, ol_d_id, ol_o_id, count(*)
+    FROM order_line
+    GROUP BY (ol_w_id, ol_d_id, ol_o_id)
+    ORDER BY ol_w_id, ol_d_id, ol_o_id DESC
+)
+----
+----
+except-all
+ ├── save-table-name: consistency_10_except_all_1
+ ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
+ ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
+ ├── right columns: ol_w_id:13(int) ol_d_id:12(int) ol_o_id:11(int) count_rows:23(int)
+ ├── internal-ordering: +3,+2,-1,+7
+ ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(7)=11, null(7)=0]
+ ├── key: (1-3)
+ ├── fd: (1-3)-->(7)
+ ├── scan order
+ │    ├── save-table-name: consistency_10_scan_2
+ │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
+ │    ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(7)=11, null(7)=0]
+ │    │   histogram(1)=  0 60  1380 120  1440 180  1380 180  1440  60  1470 150  1410 240  1410  90   1350  210  1440  150  1380  120  1410  120  1410  150  1380  120  1440  120  1470  180  1440  120  1410  90   1410  120  1380  210  1440  60   1440  60   1410  150  1440  180  1350  150  1440  150  1440  150  1440  60   1440  90   1380  150  1350  150  1350  120  1410  120  1350  150  1410  90   1410  60   1380  90   1290  210  1410  180  1230  270  1440  210  1320  150  1410  120  1320  180  1440  180  1410  90   1350  150  1260  240  1290  210  1410  180  1380  150  1320  180  1380  120  1440  180  1320  150  1290  180  1410  90   1410  60   1380  120  1320  180  1380  150  1410  180  1380  150  1380  120  1380  120  1410  60   1350  150  1440  30   1320  150   1320  210   1350  120   1440   30   1440   30   1350  150   1350  270   1440   60   1380   90   1440  180   1410   60   1290  180   1410  120   1440   90   1440   60   1440   90   1260  210   1380  120   1380  150   1440  120   1440   90   1320  240   1320  150   1260  210   1290  180   1290  210   1410  120   1380   90   1410  150   1440   90   1440   60   1440   60   1440  210   1440  120   1410  120   1320  150   1440   30   1410  150   1380  120   1440  120   1410   60   1350  150   1410  120   1350  120   1440   90   1440  150   1290  180   1350  180   1320  150   1440   60   1410   90   1350  120   1410  210   1380  150   1350  270   1320  180   1350  150   1440  120   1410   90   1380  180   1440  150   1380   90   1200  270   1410  240   1440   30   1410   60   1440   90   1380  120   1410  120   1440   60   1440   60   1380   90   1410  120   1380   90   1410   30   1440   60   1410  120   1350  120   1290  210   1380  150   1380   90   1410   90   1380   90   1320  210   1290  180   1380   90   1350   90   1320  150   1380  120   1410  150   1410   30   1380   90   1410  120   1410   60   1410   30   1410  180   1410   60   1380   60   1410  120   1290  270   1350  120   1380   60   1410   60   1260  180   1290  150   1410  210   1410   60   1380   90   1380   60   1320  120   1380  180   1290  150   1380   60   1290  150   1290  150   1260  210   1290  120   1320   90   1380   60   1350   60   1350   90   1410  210   1320  150   1380  120   1260  150   1260  150   1320  120   1320   90   1260  120   1200  240   1230  210   1290   30
+ │    │                <--- 1 ------ 17 ------ 31 ------ 46 ------ 62 ------ 77 ------ 90 ------ 107 ------ 120 ------ 135 ------ 151 ------ 163 ------ 178 ------ 189 ------ 204 ------ 222 ------ 239 ------ 254 ------ 268 ------ 285 ------ 298 ------ 310 ------ 324 ------ 338 ------ 354 ------ 368 ------ 386 ------ 398 ------ 412 ------ 426 ------ 443 ------ 459 ------ 478 ------ 494 ------ 510 ------ 524 ------ 539 ------ 555 ------ 570 ------ 584 ------ 601 ------ 612 ------ 626 ------ 641 ------ 656 ------ 670 ------ 686 ------ 698 ------ 709 ------ 720 ------ 738 ------ 758 ------ 773 ------ 786 ------ 799 ------ 813 ------ 833 ------ 847 ------ 863 ------ 878 ------ 893 ------ 910 ------ 925 ------ 938 ------ 955 ------ 971 ------ 983 ------ 999 ------ 1017 ------ 1030 ------ 1044 ------ 1063 ------ 1077 ------ 1092 ------ 1108 ------ 1126 ------ 1139 ------ 1160 ------ 1176 ------ 1192 ------ 1208 ------ 1226 ------ 1239 ------ 1252 ------ 1266 ------ 1280 ------ 1294 ------ 1310 ------ 1326 ------ 1342 ------ 1352 ------ 1365 ------ 1378 ------ 1393 ------ 1409 ------ 1423 ------ 1439 ------ 1457 ------ 1470 ------ 1489 ------ 1507 ------ 1522 ------ 1532 ------ 1545 ------ 1558 ------ 1571 ------ 1583 ------ 1600 ------ 1614 ------ 1626 ------ 1641 ------ 1660 ------ 1673 ------ 1688 ------ 1701 ------ 1718 ------ 1731 ------ 1745 ------ 1762 ------ 1781 ------ 1797 ------ 1809 ------ 1825 ------ 1839 ------ 1852 ------ 1869 ------ 1882 ------ 1898 ------ 1916 ------ 1930 ------ 1945 ------ 1958 ------ 1974 ------ 1989 ------ 2006 ------ 2028 ------ 2044 ------ 2060 ------ 2080 ------ 2094 ------ 2112 ------ 2123 ------ 2138 ------ 2153 ------ 2168 ------ 2181 ------ 2196 ------ 2213 ------ 2228 ------ 2244 ------ 2260 ------ 2275 ------ 2288 ------ 2301 ------ 2316 ------ 2330 ------ 2347 ------ 2363 ------ 2378 ------ 2393 ------ 2411 ------ 2429 ------ 2443 ------ 2459 ------ 2478 ------ 2493 ------ 2509 ------ 2524 ------ 2541 ------ 2557 ------ 2575 ------ 2588 ------ 2603 ------ 2617 ------ 2628 ------ 2640 ------ 2656 ------ 2671 ------ 2684 ------ 2697 ------ 2714 ------ 2727 ------ 2748 ------ 2766 ------ 2780 ------ 2797 ------ 2811 ------ 2828 ------ 2839 ------ 2856 ------ 2873 ------ 2887 ------ 2904 ------ 2919 ------ 2931 ------ 2947 ------ 2960 ------ 2971 ------ 2984 ------ 3000
+ │    │   histogram(2)=  0 30990 0 30780 0 28650 0 30570 0 30060 0 30060 0 30690 0 28020 0 30180 0 30000
+ │    │                <---- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 ---- 10 -
+ │    │   histogram(3)=  0 29970 0 30090 0 29760 0 29040 0 29820 0 29580 0 30660 0 29280 0 31080 0 30720
+ │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
+ │    │   histogram(7)=  0 26550 2.4696e+05 26490
+ │    │                <---- 5 ------------- 15 -
+ │    ├── key: (1-3)
+ │    ├── fd: (1-3)-->(7)
+ │    └── ordering: +3,+2,-1
+ └── group-by (streaming)
+      ├── save-table-name: consistency_10_group_by_3
+      ├── columns: ol_o_id:11(int!null) ol_d_id:12(int!null) ol_w_id:13(int!null) count_rows:23(int!null)
+      ├── grouping columns: ol_o_id:11(int!null) ol_d_id:12(int!null) ol_w_id:13(int!null)
+      ├── stats: [rows=295745, distinct(11)=2999, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=10, null(13)=0, distinct(23)=295745, null(23)=0, distinct(11-13)=295745, null(11-13)=0]
+      ├── key: (11-13)
+      ├── fd: (11-13)-->(23)
+      ├── ordering: +13,+12,-11
+      ├── scan order_line
+      │    ├── save-table-name: consistency_10_scan_4
+      │    ├── columns: ol_o_id:11(int!null) ol_d_id:12(int!null) ol_w_id:13(int!null)
+      │    ├── stats: [rows=3.00122e+06, distinct(11)=2999, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=10, null(13)=0, distinct(11-13)=295745, null(11-13)=0]
+      │    │   histogram(11)=  0 300 14406 1200 14406 600  13806 1501 14706 900  14406 1501 14706 1501  14406  600  14706 1200  14106  900  13505 1801  14706  300  13205 1801  14406  600  14406 1200  14706  900  13806 1801  13806 1501  14106 1200  14706  900  13205 1801  14706  600  14406  600  14406 1200  14706  900  14406  600  14406  900  14106  900  14706 1200  14406  900  14106 3001  14706  900  13806 1801  13806 1200  14106 1200  14706 1801  14106  600  13806  900  14406 3001  13806  900  14106  900  12905 1801  13505 1501  14406  600  14406  900  13505 1501  12905 2701  13205 1501  13806 1801  12605 2101  14106  600  14406 1501  12905 1801  13806 1200  13505 1200  13505 1501  13205 1501  13806 1200  13806 1200  13205 2701  13806  900  13505 1801  13505 1200  13205 1501  14406  600  13205  1801  13806  2101  14406  1200  13806  1501  14406  1200  14406  600   14106  600   14406  1501  14406  1501  14106  1200  14106  1501  12905  2101  14406  1801  14406  1200  13505  1200  13505  1200  12005  3001  14106  1801  13205  1501  13806  2401  14406  1501  13806  900   13806  1501  13505  2101  14406  600   13505  1200  13505  1200  14406  2101  14406  900   13806  1200  13806  900   14106  1200  13205  2101  13505  1501  14406  300   14406  1501  13806  900   14106  1501  14406  1801  12905  2101  14106  1200  14106  1501  14406  900   14406  1200  14406  1801  14106  2701  12305  2401  13505  1501  14406  1200  14106  1501  13505  1501  13505  1801  13806  1200  14106  600   12605  2101  12905  2101  13205  1501  14106  600   14106  1501  14106  600   14406  1200  12605  2701  13205  1200  14406  1200  14106  300   12605  2101  13505  1200  13205  1200  14106  600   14106  900   14106  900   12905  2101  14106  300   13205  1801  12605  1801  13806  1200  14106  1501  14106  600   12605  2101  13806  1200  14106  1501  13505  1501  13205  1501  14106  600   14106  1501  13806  600   13205  1801  13806  900   13505  1501  13806  1200  13205  1200  14106  300   12605  1801  14106  1501  12905  1501  13205  2101  13806  600   13205  1200  14106  900   13205  1200  13505  900   14106  600   14106  2101  14106  600   13806  1801  12605  1801  14106  1200  12305  2101  13505  1501  13806  900   14106  900   12305  2401  12905  1801  13806  900   13505  900   13806  900   13806  900   13806  2101  12605  2101  13806  600   13505  1200  13806  300   12305  2401  13505  1501  13505  600   12305  1801  13505  1200  13505  900   12605  1501  13205  1501  12905  2401  12305  1200  12605  1501  11705  900   11705  600
+      │    │                 <--- 2 ------- 14 ------- 34 ------- 52 ------- 67 ------- 85 ------- 101 ------- 114 ------- 133 ------- 148 ------- 160 ------- 177 ------- 190 ------- 213 ------- 232 ------- 247 ------- 261 ------- 276 ------- 294 ------- 308 ------- 328 ------- 344 ------- 360 ------- 378 ------- 394 ------- 409 ------- 423 ------- 435 ------- 450 ------- 466 ------- 480 ------- 497 ------- 510 ------- 526 ------- 540 ------- 556 ------- 569 ------- 584 ------- 597 ------- 612 ------- 629 ------- 642 ------- 659 ------- 674 ------- 691 ------- 708 ------- 725 ------- 738 ------- 754 ------- 768 ------- 786 ------- 803 ------- 818 ------- 834 ------- 850 ------- 862 ------- 874 ------- 888 ------- 900 ------- 916 ------- 931 ------- 949 ------- 963 ------- 978 ------- 993 ------- 1005 ------- 1019 ------- 1037 ------- 1052 ------- 1065 ------- 1082 ------- 1098 ------- 1116 ------- 1131 ------- 1151 ------- 1166 ------- 1180 ------- 1196 ------- 1210 ------- 1227 ------- 1243 ------- 1256 ------- 1272 ------- 1285 ------- 1300 ------- 1315 ------- 1329 ------- 1345 ------- 1361 ------- 1378 ------- 1393 ------- 1408 ------- 1425 ------- 1441 ------- 1459 ------- 1476 ------- 1492 ------- 1507 ------- 1518 ------- 1532 ------- 1546 ------- 1561 ------- 1579 ------- 1594 ------- 1606 ------- 1622 ------- 1635 ------- 1646 ------- 1662 ------- 1678 ------- 1693 ------- 1705 ------- 1717 ------- 1734 ------- 1750 ------- 1764 ------- 1779 ------- 1791 ------- 1804 ------- 1821 ------- 1832 ------- 1843 ------- 1858 ------- 1875 ------- 1888 ------- 1902 ------- 1920 ------- 1935 ------- 1952 ------- 1971 ------- 1985 ------- 2002 ------- 2014 ------- 2028 ------- 2039 ------- 2052 ------- 2065 ------- 2078 ------- 2090 ------- 2108 ------- 2126 ------- 2139 ------- 2156 ------- 2172 ------- 2187 ------- 2201 ------- 2214 ------- 2227 ------- 2241 ------- 2258 ------- 2272 ------- 2286 ------- 2304 ------- 2318 ------- 2333 ------- 2347 ------- 2360 ------- 2372 ------- 2388 ------- 2405 ------- 2422 ------- 2437 ------- 2452 ------- 2469 ------- 2485 ------- 2498 ------- 2512 ------- 2526 ------- 2540 ------- 2553 ------- 2563 ------- 2580 ------- 2595 ------- 2609 ------- 2626 ------- 2641 ------- 2657 ------- 2674 ------- 2688 ------- 2701 ------- 2715 ------- 2728 ------- 2745 ------- 2758 ------- 2773 ------- 2790 ------- 2802 ------- 2815 ------- 2832 ------- 2850 ------- 2865 ------- 2883 ------- 2899 ------- 2915 ------- 2932 ------- 2946 ------- 2958 ------- 2973 ------- 2984 ------- 3000
+      │    │   histogram(12)=  0 2.8722e+05 0 3.0822e+05 0 3.0162e+05 0 2.9682e+05 0 3.1063e+05 0 3.0252e+05 0 3.0312e+05 0 3.0432e+05 0 2.9322e+05 0 2.9352e+05
+      │    │                 <------ 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ---------- 10 ---
+      │    │   histogram(13)=  0 2.9082e+05 0 2.8632e+05 0 3.1093e+05 0 3.1093e+05 0 3.0732e+05 0 3.1783e+05 0 2.8902e+05 0 3.0342e+05 0 2.8932e+05 0 2.9532e+05
+      │    │                 <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+      │    └── ordering: +13,+12,-11
+      └── aggregations
+           └── count-rows [as=count_rows:23, type=int]
+
+----Stats for consistency_10_except_all_1----
+column_names  row_count  distinct_count  null_count
+{o_d_id}      0          0               0
+{o_id}        0          0               0
+{o_ol_cnt}    0          0               0
+{o_w_id}      0          0               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_d_id}      300000.00      +Inf <==       10.00               +Inf <==            0.00            1.00
+{o_id}        300000.00      +Inf <==       2999.00             +Inf <==            0.00            1.00
+{o_ol_cnt}    300000.00      +Inf <==       11.00               +Inf <==            0.00            1.00
+{o_w_id}      300000.00      +Inf <==       10.00               +Inf <==            0.00            1.00
+
+----Stats for consistency_10_scan_2----
+column_names  row_count  distinct_count  null_count
+{o_d_id}      300000     10              0
+{o_id}        300000     2999            0
+{o_ol_cnt}    300000     11              0
+{o_w_id}      300000     10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_d_id}      300000.00      1.00           10.00               1.00                0.00            1.00
+{o_id}        300000.00      1.00           2999.00             1.00                0.00            1.00
+{o_ol_cnt}    300000.00      1.00           11.00               1.00                0.00            1.00
+{o_w_id}      300000.00      1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_10_group_by_3----
+column_names  row_count  distinct_count  null_count
+{count_rows}  300000     11              0
+{ol_d_id}     300000     10              0
+{ol_o_id}     300000     2999            0
+{ol_w_id}     300000     10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{count_rows}  295745.00      1.01           295745.00           26885.91 <==        0.00            1.00
+{ol_d_id}     295745.00      1.01           10.00               1.00                0.00            1.00
+{ol_o_id}     295745.00      1.01           2999.00             1.00                0.00            1.00
+{ol_w_id}     295745.00      1.01           10.00               1.00                0.00            1.00
+
+----Stats for consistency_10_scan_4----
+column_names  row_count  distinct_count  null_count
+{ol_d_id}     3001222    10              0
+{ol_o_id}     3001222    2999            0
+{ol_w_id}     3001222    10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{ol_d_id}     3001222.00     1.00           10.00               1.00                0.00            1.00
+{ol_o_id}     3001222.00     1.00           2999.00             1.00                0.00            1.00
+{ol_w_id}     3001222.00     1.00           10.00               1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_11
+(
+    SELECT ol_w_id, ol_d_id, ol_o_id, count(*)
+    FROM order_line
+    GROUP BY (ol_w_id, ol_d_id, ol_o_id)
+    ORDER BY ol_w_id, ol_d_id, ol_o_id DESC
+)
+EXCEPT ALL
+(
+    SELECT o_w_id, o_d_id, o_id, o_ol_cnt
+    FROM "order"
+    ORDER BY o_w_id, o_d_id, o_id DESC
+)
+----
+----
+except-all
+ ├── save-table-name: consistency_11_except_all_1
+ ├── columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count:13(int)
+ ├── left columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count_rows:13(int)
+ ├── right columns: o_w_id:16(int) o_d_id:15(int) o_id:14(int) o_ol_cnt:20(int)
+ ├── internal-ordering: +3,+2,-1,+13
+ ├── stats: [rows=295745, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(13)=295745, null(13)=0]
+ ├── key: (1-3)
+ ├── fd: (1-3)-->(13)
+ ├── group-by (streaming)
+ │    ├── save-table-name: consistency_11_group_by_2
+ │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:13(int!null)
+ │    ├── grouping columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
+ │    ├── stats: [rows=295745, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(13)=295745, null(13)=0, distinct(1-3)=295745, null(1-3)=0]
+ │    ├── key: (1-3)
+ │    ├── fd: (1-3)-->(13)
+ │    ├── ordering: +3,+2,-1
+ │    ├── scan order_line
+ │    │    ├── save-table-name: consistency_11_scan_3
+ │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
+ │    │    ├── stats: [rows=3.00122e+06, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(1-3)=295745, null(1-3)=0]
+ │    │    │   histogram(1)=  0 300 14406 1200 14406 600  13806 1501 14706 900  14406 1501 14706 1501  14406  600  14706 1200  14106  900  13505 1801  14706  300  13205 1801  14406  600  14406 1200  14706  900  13806 1801  13806 1501  14106 1200  14706  900  13205 1801  14706  600  14406  600  14406 1200  14706  900  14406  600  14406  900  14106  900  14706 1200  14406  900  14106 3001  14706  900  13806 1801  13806 1200  14106 1200  14706 1801  14106  600  13806  900  14406 3001  13806  900  14106  900  12905 1801  13505 1501  14406  600  14406  900  13505 1501  12905 2701  13205 1501  13806 1801  12605 2101  14106  600  14406 1501  12905 1801  13806 1200  13505 1200  13505 1501  13205 1501  13806 1200  13806 1200  13205 2701  13806  900  13505 1801  13505 1200  13205 1501  14406  600  13205  1801  13806  2101  14406  1200  13806  1501  14406  1200  14406  600   14106  600   14406  1501  14406  1501  14106  1200  14106  1501  12905  2101  14406  1801  14406  1200  13505  1200  13505  1200  12005  3001  14106  1801  13205  1501  13806  2401  14406  1501  13806  900   13806  1501  13505  2101  14406  600   13505  1200  13505  1200  14406  2101  14406  900   13806  1200  13806  900   14106  1200  13205  2101  13505  1501  14406  300   14406  1501  13806  900   14106  1501  14406  1801  12905  2101  14106  1200  14106  1501  14406  900   14406  1200  14406  1801  14106  2701  12305  2401  13505  1501  14406  1200  14106  1501  13505  1501  13505  1801  13806  1200  14106  600   12605  2101  12905  2101  13205  1501  14106  600   14106  1501  14106  600   14406  1200  12605  2701  13205  1200  14406  1200  14106  300   12605  2101  13505  1200  13205  1200  14106  600   14106  900   14106  900   12905  2101  14106  300   13205  1801  12605  1801  13806  1200  14106  1501  14106  600   12605  2101  13806  1200  14106  1501  13505  1501  13205  1501  14106  600   14106  1501  13806  600   13205  1801  13806  900   13505  1501  13806  1200  13205  1200  14106  300   12605  1801  14106  1501  12905  1501  13205  2101  13806  600   13205  1200  14106  900   13205  1200  13505  900   14106  600   14106  2101  14106  600   13806  1801  12605  1801  14106  1200  12305  2101  13505  1501  13806  900   14106  900   12305  2401  12905  1801  13806  900   13505  900   13806  900   13806  900   13806  2101  12605  2101  13806  600   13505  1200  13806  300   12305  2401  13505  1501  13505  600   12305  1801  13505  1200  13505  900   12605  1501  13205  1501  12905  2401  12305  1200  12605  1501  11705  900   11705  600
+ │    │    │                <--- 2 ------- 14 ------- 34 ------- 52 ------- 67 ------- 85 ------- 101 ------- 114 ------- 133 ------- 148 ------- 160 ------- 177 ------- 190 ------- 213 ------- 232 ------- 247 ------- 261 ------- 276 ------- 294 ------- 308 ------- 328 ------- 344 ------- 360 ------- 378 ------- 394 ------- 409 ------- 423 ------- 435 ------- 450 ------- 466 ------- 480 ------- 497 ------- 510 ------- 526 ------- 540 ------- 556 ------- 569 ------- 584 ------- 597 ------- 612 ------- 629 ------- 642 ------- 659 ------- 674 ------- 691 ------- 708 ------- 725 ------- 738 ------- 754 ------- 768 ------- 786 ------- 803 ------- 818 ------- 834 ------- 850 ------- 862 ------- 874 ------- 888 ------- 900 ------- 916 ------- 931 ------- 949 ------- 963 ------- 978 ------- 993 ------- 1005 ------- 1019 ------- 1037 ------- 1052 ------- 1065 ------- 1082 ------- 1098 ------- 1116 ------- 1131 ------- 1151 ------- 1166 ------- 1180 ------- 1196 ------- 1210 ------- 1227 ------- 1243 ------- 1256 ------- 1272 ------- 1285 ------- 1300 ------- 1315 ------- 1329 ------- 1345 ------- 1361 ------- 1378 ------- 1393 ------- 1408 ------- 1425 ------- 1441 ------- 1459 ------- 1476 ------- 1492 ------- 1507 ------- 1518 ------- 1532 ------- 1546 ------- 1561 ------- 1579 ------- 1594 ------- 1606 ------- 1622 ------- 1635 ------- 1646 ------- 1662 ------- 1678 ------- 1693 ------- 1705 ------- 1717 ------- 1734 ------- 1750 ------- 1764 ------- 1779 ------- 1791 ------- 1804 ------- 1821 ------- 1832 ------- 1843 ------- 1858 ------- 1875 ------- 1888 ------- 1902 ------- 1920 ------- 1935 ------- 1952 ------- 1971 ------- 1985 ------- 2002 ------- 2014 ------- 2028 ------- 2039 ------- 2052 ------- 2065 ------- 2078 ------- 2090 ------- 2108 ------- 2126 ------- 2139 ------- 2156 ------- 2172 ------- 2187 ------- 2201 ------- 2214 ------- 2227 ------- 2241 ------- 2258 ------- 2272 ------- 2286 ------- 2304 ------- 2318 ------- 2333 ------- 2347 ------- 2360 ------- 2372 ------- 2388 ------- 2405 ------- 2422 ------- 2437 ------- 2452 ------- 2469 ------- 2485 ------- 2498 ------- 2512 ------- 2526 ------- 2540 ------- 2553 ------- 2563 ------- 2580 ------- 2595 ------- 2609 ------- 2626 ------- 2641 ------- 2657 ------- 2674 ------- 2688 ------- 2701 ------- 2715 ------- 2728 ------- 2745 ------- 2758 ------- 2773 ------- 2790 ------- 2802 ------- 2815 ------- 2832 ------- 2850 ------- 2865 ------- 2883 ------- 2899 ------- 2915 ------- 2932 ------- 2946 ------- 2958 ------- 2973 ------- 2984 ------- 3000
+ │    │    │   histogram(2)=  0 2.8722e+05 0 3.0822e+05 0 3.0162e+05 0 2.9682e+05 0 3.1063e+05 0 3.0252e+05 0 3.0312e+05 0 3.0432e+05 0 2.9322e+05 0 2.9352e+05
+ │    │    │                <------ 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ---------- 10 ---
+ │    │    │   histogram(3)=  0 2.9082e+05 0 2.8632e+05 0 3.1093e+05 0 3.1093e+05 0 3.0732e+05 0 3.1783e+05 0 2.8902e+05 0 3.0342e+05 0 2.8932e+05 0 2.9532e+05
+ │    │    │                <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+ │    │    └── ordering: +3,+2,-1
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:13, type=int]
+ └── scan order
+      ├── save-table-name: consistency_11_scan_4
+      ├── columns: o_id:14(int!null) o_d_id:15(int!null) o_w_id:16(int!null) o_ol_cnt:20(int)
+      ├── stats: [rows=300000, distinct(14)=2999, null(14)=0, distinct(15)=10, null(15)=0, distinct(16)=10, null(16)=0, distinct(20)=11, null(20)=0]
+      │   histogram(14)=  0 60  1380 120  1440 180  1380 180  1440  60  1470 150  1410 240  1410  90   1350  210  1440  150  1380  120  1410  120  1410  150  1380  120  1440  120  1470  180  1440  120  1410  90   1410  120  1380  210  1440  60   1440  60   1410  150  1440  180  1350  150  1440  150  1440  150  1440  60   1440  90   1380  150  1350  150  1350  120  1410  120  1350  150  1410  90   1410  60   1380  90   1290  210  1410  180  1230  270  1440  210  1320  150  1410  120  1320  180  1440  180  1410  90   1350  150  1260  240  1290  210  1410  180  1380  150  1320  180  1380  120  1440  180  1320  150  1290  180  1410  90   1410  60   1380  120  1320  180  1380  150  1410  180  1380  150  1380  120  1380  120  1410  60   1350  150  1440  30   1320  150   1320  210   1350  120   1440   30   1440   30   1350  150   1350  270   1440   60   1380   90   1440  180   1410   60   1290  180   1410  120   1440   90   1440   60   1440   90   1260  210   1380  120   1380  150   1440  120   1440   90   1320  240   1320  150   1260  210   1290  180   1290  210   1410  120   1380   90   1410  150   1440   90   1440   60   1440   60   1440  210   1440  120   1410  120   1320  150   1440   30   1410  150   1380  120   1440  120   1410   60   1350  150   1410  120   1350  120   1440   90   1440  150   1290  180   1350  180   1320  150   1440   60   1410   90   1350  120   1410  210   1380  150   1350  270   1320  180   1350  150   1440  120   1410   90   1380  180   1440  150   1380   90   1200  270   1410  240   1440   30   1410   60   1440   90   1380  120   1410  120   1440   60   1440   60   1380   90   1410  120   1380   90   1410   30   1440   60   1410  120   1350  120   1290  210   1380  150   1380   90   1410   90   1380   90   1320  210   1290  180   1380   90   1350   90   1320  150   1380  120   1410  150   1410   30   1380   90   1410  120   1410   60   1410   30   1410  180   1410   60   1380   60   1410  120   1290  270   1350  120   1380   60   1410   60   1260  180   1290  150   1410  210   1410   60   1380   90   1380   60   1320  120   1380  180   1290  150   1380   60   1290  150   1290  150   1260  210   1290  120   1320   90   1380   60   1350   60   1350   90   1410  210   1320  150   1380  120   1260  150   1260  150   1320  120   1320   90   1260  120   1200  240   1230  210   1290   30
+      │                 <--- 1 ------ 17 ------ 31 ------ 46 ------ 62 ------ 77 ------ 90 ------ 107 ------ 120 ------ 135 ------ 151 ------ 163 ------ 178 ------ 189 ------ 204 ------ 222 ------ 239 ------ 254 ------ 268 ------ 285 ------ 298 ------ 310 ------ 324 ------ 338 ------ 354 ------ 368 ------ 386 ------ 398 ------ 412 ------ 426 ------ 443 ------ 459 ------ 478 ------ 494 ------ 510 ------ 524 ------ 539 ------ 555 ------ 570 ------ 584 ------ 601 ------ 612 ------ 626 ------ 641 ------ 656 ------ 670 ------ 686 ------ 698 ------ 709 ------ 720 ------ 738 ------ 758 ------ 773 ------ 786 ------ 799 ------ 813 ------ 833 ------ 847 ------ 863 ------ 878 ------ 893 ------ 910 ------ 925 ------ 938 ------ 955 ------ 971 ------ 983 ------ 999 ------ 1017 ------ 1030 ------ 1044 ------ 1063 ------ 1077 ------ 1092 ------ 1108 ------ 1126 ------ 1139 ------ 1160 ------ 1176 ------ 1192 ------ 1208 ------ 1226 ------ 1239 ------ 1252 ------ 1266 ------ 1280 ------ 1294 ------ 1310 ------ 1326 ------ 1342 ------ 1352 ------ 1365 ------ 1378 ------ 1393 ------ 1409 ------ 1423 ------ 1439 ------ 1457 ------ 1470 ------ 1489 ------ 1507 ------ 1522 ------ 1532 ------ 1545 ------ 1558 ------ 1571 ------ 1583 ------ 1600 ------ 1614 ------ 1626 ------ 1641 ------ 1660 ------ 1673 ------ 1688 ------ 1701 ------ 1718 ------ 1731 ------ 1745 ------ 1762 ------ 1781 ------ 1797 ------ 1809 ------ 1825 ------ 1839 ------ 1852 ------ 1869 ------ 1882 ------ 1898 ------ 1916 ------ 1930 ------ 1945 ------ 1958 ------ 1974 ------ 1989 ------ 2006 ------ 2028 ------ 2044 ------ 2060 ------ 2080 ------ 2094 ------ 2112 ------ 2123 ------ 2138 ------ 2153 ------ 2168 ------ 2181 ------ 2196 ------ 2213 ------ 2228 ------ 2244 ------ 2260 ------ 2275 ------ 2288 ------ 2301 ------ 2316 ------ 2330 ------ 2347 ------ 2363 ------ 2378 ------ 2393 ------ 2411 ------ 2429 ------ 2443 ------ 2459 ------ 2478 ------ 2493 ------ 2509 ------ 2524 ------ 2541 ------ 2557 ------ 2575 ------ 2588 ------ 2603 ------ 2617 ------ 2628 ------ 2640 ------ 2656 ------ 2671 ------ 2684 ------ 2697 ------ 2714 ------ 2727 ------ 2748 ------ 2766 ------ 2780 ------ 2797 ------ 2811 ------ 2828 ------ 2839 ------ 2856 ------ 2873 ------ 2887 ------ 2904 ------ 2919 ------ 2931 ------ 2947 ------ 2960 ------ 2971 ------ 2984 ------ 3000
+      │   histogram(15)=  0 30990 0 30780 0 28650 0 30570 0 30060 0 30060 0 30690 0 28020 0 30180 0 30000
+      │                 <---- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 ---- 10 -
+      │   histogram(16)=  0 29970 0 30090 0 29760 0 29040 0 29820 0 29580 0 30660 0 29280 0 31080 0 30720
+      │                 <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
+      │   histogram(20)=  0 26550 2.4696e+05 26490
+      │                 <---- 5 ------------- 15 -
+      ├── key: (14-16)
+      ├── fd: (14-16)-->(20)
+      └── ordering: +16,+15,-14
+
+----Stats for consistency_11_except_all_1----
+column_names  row_count  distinct_count  null_count
+{count}       0          0               0
+{ol_d_id}     0          0               0
+{ol_o_id}     0          0               0
+{ol_w_id}     0          0               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{count}       295745.00      +Inf <==       295745.00           +Inf <==            0.00            1.00
+{ol_d_id}     295745.00      +Inf <==       10.00               +Inf <==            0.00            1.00
+{ol_o_id}     295745.00      +Inf <==       2999.00             +Inf <==            0.00            1.00
+{ol_w_id}     295745.00      +Inf <==       10.00               +Inf <==            0.00            1.00
+
+----Stats for consistency_11_group_by_2----
+column_names  row_count  distinct_count  null_count
+{count_rows}  300000     11              0
+{ol_d_id}     300000     10              0
+{ol_o_id}     300000     2999            0
+{ol_w_id}     300000     10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{count_rows}  295745.00      1.01           295745.00           26885.91 <==        0.00            1.00
+{ol_d_id}     295745.00      1.01           10.00               1.00                0.00            1.00
+{ol_o_id}     295745.00      1.01           2999.00             1.00                0.00            1.00
+{ol_w_id}     295745.00      1.01           10.00               1.00                0.00            1.00
+
+----Stats for consistency_11_scan_3----
+column_names  row_count  distinct_count  null_count
+{ol_d_id}     3001222    10              0
+{ol_o_id}     3001222    2999            0
+{ol_w_id}     3001222    10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{ol_d_id}     3001222.00     1.00           10.00               1.00                0.00            1.00
+{ol_o_id}     3001222.00     1.00           2999.00             1.00                0.00            1.00
+{ol_w_id}     3001222.00     1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_11_scan_4----
+column_names  row_count  distinct_count  null_count
+{o_d_id}      300000     10              0
+{o_id}        300000     2999            0
+{o_ol_cnt}    300000     11              0
+{o_w_id}      300000     10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_d_id}      300000.00      1.00           10.00               1.00                0.00            1.00
+{o_id}        300000.00      1.00           2999.00             1.00                0.00            1.00
+{o_ol_cnt}    300000.00      1.00           11.00               1.00                0.00            1.00
+{o_w_id}      300000.00      1.00           10.00               1.00                0.00            1.00
+----
+----
+
+stats-quality database=tpcc set=save_tables_prefix=consistency_12
+SELECT count(*)
+FROM
+(
+    SELECT o_w_id, o_d_id, o_id
+    FROM "order"
+    WHERE o_carrier_id IS NULL
+)
+FULL OUTER JOIN
+(
+    SELECT ol_w_id, ol_d_id, ol_o_id
+    FROM order_line
+    WHERE ol_delivery_d IS NULL
+)
+ON (ol_w_id = o_w_id AND ol_d_id = o_d_id AND ol_o_id = o_id)
+WHERE ol_o_id IS NULL OR o_id IS NULL
+----
+----
+scalar-group-by
+ ├── save-table-name: consistency_12_scalar_group_by_1
+ ├── columns: count:23(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1, distinct(23)=1, null(23)=0]
+ ├── key: ()
+ ├── fd: ()-->(23)
+ ├── select
+ │    ├── save-table-name: consistency_12_select_2
+ │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:11(int) ol_d_id:12(int) ol_w_id:13(int)
+ │    ├── stats: [rows=629394, distinct(1)=2999, null(1)=440513, distinct(2)=10, null(2)=440513, distinct(3)=10, null(3)=440513, distinct(11)=2999, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=10, null(13)=0]
+ │    ├── full-join (merge)
+ │    │    ├── save-table-name: consistency_12_merge_join_3
+ │    │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:11(int) ol_d_id:12(int) ol_w_id:13(int)
+ │    │    ├── left ordering: +13,+12,-11
+ │    │    ├── right ordering: +3,+2,-1
+ │    │    ├── stats: [rows=899134, distinct(1)=2999, null(1)=629304, distinct(2)=10, null(2)=629304, distinct(3)=10, null(3)=629304, distinct(11)=2999, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=10, null(13)=0]
+ │    │    ├── project
+ │    │    │    ├── save-table-name: consistency_12_project_4
+ │    │    │    ├── columns: ol_o_id:11(int!null) ol_d_id:12(int!null) ol_w_id:13(int!null)
+ │    │    │    ├── stats: [rows=899134, distinct(11)=2999, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=10, null(13)=0]
+ │    │    │    ├── ordering: +13,+12,-11
+ │    │    │    └── select
+ │    │    │         ├── save-table-name: consistency_12_select_5
+ │    │    │         ├── columns: ol_o_id:11(int!null) ol_d_id:12(int!null) ol_w_id:13(int!null) ol_delivery_d:17(timestamp)
+ │    │    │         ├── stats: [rows=899134, distinct(11)=2999, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=10, null(13)=0, distinct(17)=1, null(17)=899134]
+ │    │    │         │   histogram(17)=  0 8.9913e+05
+ │    │    │         │                 <----- NULL --
+ │    │    │         ├── fd: ()-->(17)
+ │    │    │         ├── ordering: +13,+12,-11 opt(17) [actual: +13,+12,-11]
+ │    │    │         ├── scan order_line
+ │    │    │         │    ├── save-table-name: consistency_12_scan_6
+ │    │    │         │    ├── columns: ol_o_id:11(int!null) ol_d_id:12(int!null) ol_w_id:13(int!null) ol_delivery_d:17(timestamp)
+ │    │    │         │    ├── stats: [rows=3.00122e+06, distinct(11)=2999, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=10, null(13)=0, distinct(17)=2, null(17)=899134]
+ │    │    │         │    │   histogram(11)=  0 300 14406 1200 14406 600  13806 1501 14706 900  14406 1501 14706 1501  14406  600  14706 1200  14106  900  13505 1801  14706  300  13205 1801  14406  600  14406 1200  14706  900  13806 1801  13806 1501  14106 1200  14706  900  13205 1801  14706  600  14406  600  14406 1200  14706  900  14406  600  14406  900  14106  900  14706 1200  14406  900  14106 3001  14706  900  13806 1801  13806 1200  14106 1200  14706 1801  14106  600  13806  900  14406 3001  13806  900  14106  900  12905 1801  13505 1501  14406  600  14406  900  13505 1501  12905 2701  13205 1501  13806 1801  12605 2101  14106  600  14406 1501  12905 1801  13806 1200  13505 1200  13505 1501  13205 1501  13806 1200  13806 1200  13205 2701  13806  900  13505 1801  13505 1200  13205 1501  14406  600  13205  1801  13806  2101  14406  1200  13806  1501  14406  1200  14406  600   14106  600   14406  1501  14406  1501  14106  1200  14106  1501  12905  2101  14406  1801  14406  1200  13505  1200  13505  1200  12005  3001  14106  1801  13205  1501  13806  2401  14406  1501  13806  900   13806  1501  13505  2101  14406  600   13505  1200  13505  1200  14406  2101  14406  900   13806  1200  13806  900   14106  1200  13205  2101  13505  1501  14406  300   14406  1501  13806  900   14106  1501  14406  1801  12905  2101  14106  1200  14106  1501  14406  900   14406  1200  14406  1801  14106  2701  12305  2401  13505  1501  14406  1200  14106  1501  13505  1501  13505  1801  13806  1200  14106  600   12605  2101  12905  2101  13205  1501  14106  600   14106  1501  14106  600   14406  1200  12605  2701  13205  1200  14406  1200  14106  300   12605  2101  13505  1200  13205  1200  14106  600   14106  900   14106  900   12905  2101  14106  300   13205  1801  12605  1801  13806  1200  14106  1501  14106  600   12605  2101  13806  1200  14106  1501  13505  1501  13205  1501  14106  600   14106  1501  13806  600   13205  1801  13806  900   13505  1501  13806  1200  13205  1200  14106  300   12605  1801  14106  1501  12905  1501  13205  2101  13806  600   13205  1200  14106  900   13205  1200  13505  900   14106  600   14106  2101  14106  600   13806  1801  12605  1801  14106  1200  12305  2101  13505  1501  13806  900   14106  900   12305  2401  12905  1801  13806  900   13505  900   13806  900   13806  900   13806  2101  12605  2101  13806  600   13505  1200  13806  300   12305  2401  13505  1501  13505  600   12305  1801  13505  1200  13505  900   12605  1501  13205  1501  12905  2401  12305  1200  12605  1501  11705  900   11705  600
+ │    │    │         │    │                 <--- 2 ------- 14 ------- 34 ------- 52 ------- 67 ------- 85 ------- 101 ------- 114 ------- 133 ------- 148 ------- 160 ------- 177 ------- 190 ------- 213 ------- 232 ------- 247 ------- 261 ------- 276 ------- 294 ------- 308 ------- 328 ------- 344 ------- 360 ------- 378 ------- 394 ------- 409 ------- 423 ------- 435 ------- 450 ------- 466 ------- 480 ------- 497 ------- 510 ------- 526 ------- 540 ------- 556 ------- 569 ------- 584 ------- 597 ------- 612 ------- 629 ------- 642 ------- 659 ------- 674 ------- 691 ------- 708 ------- 725 ------- 738 ------- 754 ------- 768 ------- 786 ------- 803 ------- 818 ------- 834 ------- 850 ------- 862 ------- 874 ------- 888 ------- 900 ------- 916 ------- 931 ------- 949 ------- 963 ------- 978 ------- 993 ------- 1005 ------- 1019 ------- 1037 ------- 1052 ------- 1065 ------- 1082 ------- 1098 ------- 1116 ------- 1131 ------- 1151 ------- 1166 ------- 1180 ------- 1196 ------- 1210 ------- 1227 ------- 1243 ------- 1256 ------- 1272 ------- 1285 ------- 1300 ------- 1315 ------- 1329 ------- 1345 ------- 1361 ------- 1378 ------- 1393 ------- 1408 ------- 1425 ------- 1441 ------- 1459 ------- 1476 ------- 1492 ------- 1507 ------- 1518 ------- 1532 ------- 1546 ------- 1561 ------- 1579 ------- 1594 ------- 1606 ------- 1622 ------- 1635 ------- 1646 ------- 1662 ------- 1678 ------- 1693 ------- 1705 ------- 1717 ------- 1734 ------- 1750 ------- 1764 ------- 1779 ------- 1791 ------- 1804 ------- 1821 ------- 1832 ------- 1843 ------- 1858 ------- 1875 ------- 1888 ------- 1902 ------- 1920 ------- 1935 ------- 1952 ------- 1971 ------- 1985 ------- 2002 ------- 2014 ------- 2028 ------- 2039 ------- 2052 ------- 2065 ------- 2078 ------- 2090 ------- 2108 ------- 2126 ------- 2139 ------- 2156 ------- 2172 ------- 2187 ------- 2201 ------- 2214 ------- 2227 ------- 2241 ------- 2258 ------- 2272 ------- 2286 ------- 2304 ------- 2318 ------- 2333 ------- 2347 ------- 2360 ------- 2372 ------- 2388 ------- 2405 ------- 2422 ------- 2437 ------- 2452 ------- 2469 ------- 2485 ------- 2498 ------- 2512 ------- 2526 ------- 2540 ------- 2553 ------- 2563 ------- 2580 ------- 2595 ------- 2609 ------- 2626 ------- 2641 ------- 2657 ------- 2674 ------- 2688 ------- 2701 ------- 2715 ------- 2728 ------- 2745 ------- 2758 ------- 2773 ------- 2790 ------- 2802 ------- 2815 ------- 2832 ------- 2850 ------- 2865 ------- 2883 ------- 2899 ------- 2915 ------- 2932 ------- 2946 ------- 2958 ------- 2973 ------- 2984 ------- 3000
+ │    │    │         │    │   histogram(12)=  0 2.8722e+05 0 3.0822e+05 0 3.0162e+05 0 2.9682e+05 0 3.1063e+05 0 3.0252e+05 0 3.0312e+05 0 3.0432e+05 0 2.9322e+05 0 2.9352e+05
+ │    │    │         │    │                 <------ 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ---------- 10 ---
+ │    │    │         │    │   histogram(13)=  0 2.9082e+05 0 2.8632e+05 0 3.1093e+05 0 3.1093e+05 0 3.0732e+05 0 3.1783e+05 0 2.8902e+05 0 3.0342e+05 0 2.8932e+05 0 2.9532e+05
+ │    │    │         │    │                 <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+ │    │    │         │    │   histogram(17)=  0 8.9913e+05 0       2.1021e+06
+ │    │    │         │    │                 <----- NULL ----- '2006-01-02 15:04:05'
+ │    │    │         │    └── ordering: +13,+12,-11
+ │    │    │         └── filters
+ │    │    │              └── ol_delivery_d:17 IS NULL [type=bool, outer=(17), constraints=(/17: [/NULL - /NULL]; tight), fd=()-->(17)]
+ │    │    ├── project
+ │    │    │    ├── save-table-name: consistency_12_project_7
+ │    │    │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
+ │    │    │    ├── stats: [rows=90000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
+ │    │    │    ├── key: (1-3)
+ │    │    │    ├── ordering: +3,+2,-1
+ │    │    │    └── select
+ │    │    │         ├── save-table-name: consistency_12_select_8
+ │    │    │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
+ │    │    │         ├── stats: [rows=90000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=90000]
+ │    │    │         │   histogram(6)=  0 90000
+ │    │    │         │                <--- NULL
+ │    │    │         ├── key: (1-3)
+ │    │    │         ├── fd: ()-->(6)
+ │    │    │         ├── ordering: +3,+2,-1 opt(6) [actual: +3,+2,-1]
+ │    │    │         ├── scan order
+ │    │    │         │    ├── save-table-name: consistency_12_scan_9
+ │    │    │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
+ │    │    │         │    ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=11, null(6)=90000]
+ │    │    │         │    │   histogram(1)=  0 60  1380 120  1440 180  1380 180  1440  60  1470 150  1410 240  1410  90   1350  210  1440  150  1380  120  1410  120  1410  150  1380  120  1440  120  1470  180  1440  120  1410  90   1410  120  1380  210  1440  60   1440  60   1410  150  1440  180  1350  150  1440  150  1440  150  1440  60   1440  90   1380  150  1350  150  1350  120  1410  120  1350  150  1410  90   1410  60   1380  90   1290  210  1410  180  1230  270  1440  210  1320  150  1410  120  1320  180  1440  180  1410  90   1350  150  1260  240  1290  210  1410  180  1380  150  1320  180  1380  120  1440  180  1320  150  1290  180  1410  90   1410  60   1380  120  1320  180  1380  150  1410  180  1380  150  1380  120  1380  120  1410  60   1350  150  1440  30   1320  150   1320  210   1350  120   1440   30   1440   30   1350  150   1350  270   1440   60   1380   90   1440  180   1410   60   1290  180   1410  120   1440   90   1440   60   1440   90   1260  210   1380  120   1380  150   1440  120   1440   90   1320  240   1320  150   1260  210   1290  180   1290  210   1410  120   1380   90   1410  150   1440   90   1440   60   1440   60   1440  210   1440  120   1410  120   1320  150   1440   30   1410  150   1380  120   1440  120   1410   60   1350  150   1410  120   1350  120   1440   90   1440  150   1290  180   1350  180   1320  150   1440   60   1410   90   1350  120   1410  210   1380  150   1350  270   1320  180   1350  150   1440  120   1410   90   1380  180   1440  150   1380   90   1200  270   1410  240   1440   30   1410   60   1440   90   1380  120   1410  120   1440   60   1440   60   1380   90   1410  120   1380   90   1410   30   1440   60   1410  120   1350  120   1290  210   1380  150   1380   90   1410   90   1380   90   1320  210   1290  180   1380   90   1350   90   1320  150   1380  120   1410  150   1410   30   1380   90   1410  120   1410   60   1410   30   1410  180   1410   60   1380   60   1410  120   1290  270   1350  120   1380   60   1410   60   1260  180   1290  150   1410  210   1410   60   1380   90   1380   60   1320  120   1380  180   1290  150   1380   60   1290  150   1290  150   1260  210   1290  120   1320   90   1380   60   1350   60   1350   90   1410  210   1320  150   1380  120   1260  150   1260  150   1320  120   1320   90   1260  120   1200  240   1230  210   1290   30
+ │    │    │         │    │                <--- 1 ------ 17 ------ 31 ------ 46 ------ 62 ------ 77 ------ 90 ------ 107 ------ 120 ------ 135 ------ 151 ------ 163 ------ 178 ------ 189 ------ 204 ------ 222 ------ 239 ------ 254 ------ 268 ------ 285 ------ 298 ------ 310 ------ 324 ------ 338 ------ 354 ------ 368 ------ 386 ------ 398 ------ 412 ------ 426 ------ 443 ------ 459 ------ 478 ------ 494 ------ 510 ------ 524 ------ 539 ------ 555 ------ 570 ------ 584 ------ 601 ------ 612 ------ 626 ------ 641 ------ 656 ------ 670 ------ 686 ------ 698 ------ 709 ------ 720 ------ 738 ------ 758 ------ 773 ------ 786 ------ 799 ------ 813 ------ 833 ------ 847 ------ 863 ------ 878 ------ 893 ------ 910 ------ 925 ------ 938 ------ 955 ------ 971 ------ 983 ------ 999 ------ 1017 ------ 1030 ------ 1044 ------ 1063 ------ 1077 ------ 1092 ------ 1108 ------ 1126 ------ 1139 ------ 1160 ------ 1176 ------ 1192 ------ 1208 ------ 1226 ------ 1239 ------ 1252 ------ 1266 ------ 1280 ------ 1294 ------ 1310 ------ 1326 ------ 1342 ------ 1352 ------ 1365 ------ 1378 ------ 1393 ------ 1409 ------ 1423 ------ 1439 ------ 1457 ------ 1470 ------ 1489 ------ 1507 ------ 1522 ------ 1532 ------ 1545 ------ 1558 ------ 1571 ------ 1583 ------ 1600 ------ 1614 ------ 1626 ------ 1641 ------ 1660 ------ 1673 ------ 1688 ------ 1701 ------ 1718 ------ 1731 ------ 1745 ------ 1762 ------ 1781 ------ 1797 ------ 1809 ------ 1825 ------ 1839 ------ 1852 ------ 1869 ------ 1882 ------ 1898 ------ 1916 ------ 1930 ------ 1945 ------ 1958 ------ 1974 ------ 1989 ------ 2006 ------ 2028 ------ 2044 ------ 2060 ------ 2080 ------ 2094 ------ 2112 ------ 2123 ------ 2138 ------ 2153 ------ 2168 ------ 2181 ------ 2196 ------ 2213 ------ 2228 ------ 2244 ------ 2260 ------ 2275 ------ 2288 ------ 2301 ------ 2316 ------ 2330 ------ 2347 ------ 2363 ------ 2378 ------ 2393 ------ 2411 ------ 2429 ------ 2443 ------ 2459 ------ 2478 ------ 2493 ------ 2509 ------ 2524 ------ 2541 ------ 2557 ------ 2575 ------ 2588 ------ 2603 ------ 2617 ------ 2628 ------ 2640 ------ 2656 ------ 2671 ------ 2684 ------ 2697 ------ 2714 ------ 2727 ------ 2748 ------ 2766 ------ 2780 ------ 2797 ------ 2811 ------ 2828 ------ 2839 ------ 2856 ------ 2873 ------ 2887 ------ 2904 ------ 2919 ------ 2931 ------ 2947 ------ 2960 ------ 2971 ------ 2984 ------ 3000
+ │    │    │         │    │   histogram(2)=  0 30990 0 30780 0 28650 0 30570 0 30060 0 30060 0 30690 0 28020 0 30180 0 30000
+ │    │    │         │    │                <---- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 ---- 10 -
+ │    │    │         │    │   histogram(3)=  0 29970 0 30090 0 29760 0 29040 0 29820 0 29580 0 30660 0 29280 0 31080 0 30720
+ │    │    │         │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
+ │    │    │         │    │   histogram(6)=  0 90000  0 21169 1.6751e+05 21318
+ │    │    │         │    │                <--- NULL ---- 1 ------------- 10 -
+ │    │    │         │    ├── key: (1-3)
+ │    │    │         │    ├── fd: (1-3)-->(6)
+ │    │    │         │    └── ordering: +3,+2,-1
+ │    │    │         └── filters
+ │    │    │              └── o_carrier_id:6 IS NULL [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+ │    │    └── filters (true)
+ │    └── filters
+ │         └── (ol_o_id:11 IS NULL) OR (o_id:1 IS NULL) [type=bool, outer=(1,11)]
+ └── aggregations
+      └── count-rows [as=count_rows:23, type=int]
+
+----Stats for consistency_12_scalar_group_by_1----
+column_names  row_count  distinct_count  null_count
+{count}       1          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{count}       1.00           1.00           1.00                1.00                0.00            1.00
+
+----Stats for consistency_12_select_2----
+column_names  row_count  distinct_count  null_count
+{o_d_id}      0          0               0
+{o_id}        0          0               0
+{o_w_id}      0          0               0
+{ol_d_id}     0          0               0
+{ol_o_id}     0          0               0
+{ol_w_id}     0          0               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_d_id}      629394.00      +Inf <==       10.00               +Inf <==            440513.00       +Inf <==
+{o_id}        629394.00      +Inf <==       2999.00             +Inf <==            440513.00       +Inf <==
+{o_w_id}      629394.00      +Inf <==       10.00               +Inf <==            440513.00       +Inf <==
+{ol_d_id}     629394.00      +Inf <==       10.00               +Inf <==            0.00            1.00
+{ol_o_id}     629394.00      +Inf <==       2999.00             +Inf <==            0.00            1.00
+{ol_w_id}     629394.00      +Inf <==       10.00               +Inf <==            0.00            1.00
+
+----Stats for consistency_12_merge_join_3----
+column_names  row_count  distinct_count  null_count
+{o_d_id}      899134     10              0
+{o_id}        899134     900             0
+{o_w_id}      899134     10              0
+{ol_d_id}     899134     10              0
+{ol_o_id}     899134     900             0
+{ol_w_id}     899134     10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_d_id}      899134.00      1.00           10.00               1.00                629304.00       +Inf <==
+{o_id}        899134.00      1.00           2999.00             3.33 <==            629304.00       +Inf <==
+{o_w_id}      899134.00      1.00           10.00               1.00                629304.00       +Inf <==
+{ol_d_id}     899134.00      1.00           10.00               1.00                0.00            1.00
+{ol_o_id}     899134.00      1.00           2999.00             3.33 <==            0.00            1.00
+{ol_w_id}     899134.00      1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_12_project_4----
+column_names  row_count  distinct_count  null_count
+{ol_d_id}     899134     10              0
+{ol_o_id}     899134     900             0
+{ol_w_id}     899134     10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{ol_d_id}     899134.00      1.00           10.00               1.00                0.00            1.00
+{ol_o_id}     899134.00      1.00           2999.00             3.33 <==            0.00            1.00
+{ol_w_id}     899134.00      1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_12_select_5----
+column_names     row_count  distinct_count  null_count
+{ol_d_id}        899134     10              0
+{ol_delivery_d}  899134     1               899134
+{ol_o_id}        899134     900             0
+{ol_w_id}        899134     10              0
+~~~~
+column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{ol_d_id}        899134.00      1.00           10.00               1.00                0.00            1.00
+{ol_delivery_d}  899134.00      1.00           1.00                1.00                899134.00       1.00
+{ol_o_id}        899134.00      1.00           2999.00             3.33 <==            0.00            1.00
+{ol_w_id}        899134.00      1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_12_scan_6----
+column_names     row_count  distinct_count  null_count
+{ol_d_id}        3001222    10              0
+{ol_delivery_d}  3001222    2               899134
+{ol_o_id}        3001222    2999            0
+{ol_w_id}        3001222    10              0
+~~~~
+column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{ol_d_id}        3001222.00     1.00           10.00               1.00                0.00            1.00
+{ol_delivery_d}  3001222.00     1.00           2.00                1.00                899134.00       1.00
+{ol_o_id}        3001222.00     1.00           2999.00             1.00                0.00            1.00
+{ol_w_id}        3001222.00     1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_12_project_7----
+column_names  row_count  distinct_count  null_count
+{o_d_id}      90000      10              0
+{o_id}        90000      900             0
+{o_w_id}      90000      10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_d_id}      90000.00       1.00           10.00               1.00                0.00            1.00
+{o_id}        90000.00       1.00           2999.00             3.33 <==            0.00            1.00
+{o_w_id}      90000.00       1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_12_select_8----
+column_names    row_count  distinct_count  null_count
+{o_carrier_id}  90000      1               90000
+{o_d_id}        90000      10              0
+{o_id}          90000      900             0
+{o_w_id}        90000      10              0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_carrier_id}  90000.00       1.00           1.00                1.00                90000.00        1.00
+{o_d_id}        90000.00       1.00           10.00               1.00                0.00            1.00
+{o_id}          90000.00       1.00           2999.00             3.33 <==            0.00            1.00
+{o_w_id}        90000.00       1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_12_scan_9----
+column_names    row_count  distinct_count  null_count
+{o_carrier_id}  300000     11              90000
+{o_d_id}        300000     10              0
+{o_id}          300000     2999            0
+{o_w_id}        300000     10              0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_carrier_id}  300000.00      1.00           11.00               1.00                90000.00        1.00
+{o_d_id}        300000.00      1.00           10.00               1.00                0.00            1.00
+{o_id}          300000.00      1.00           2999.00             1.00                0.00            1.00
+{o_w_id}        300000.00      1.00           10.00               1.00                0.00            1.00
+----
+----

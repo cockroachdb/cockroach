@@ -1,0 +1,372 @@
+# Tests MVCC scans across range tombstones, with a more complex dataset.
+#
+# Sets up the following dataset, where x is tombstone, o-o is range tombstone, [] is intent.
+#
+#  T
+#  7             [d7]    [f7]            [j7]
+#  6                      f6
+#  5          o-------------------o           k5  o-----------o
+#  4  x   x       d4      f4  g4
+#  3      o-------o   e3  o-------oh3                     o---o
+#  2  a2          d2      f2  g2
+#  1  o-------------------o       o-----------o
+#     a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
+#
+run stats ok
+del_range_ts k=a end=f ts=1
+del_range_ts k=h end=k ts=1
+del_range_ts k=b end=d ts=3
+del_range_ts k=n end=o ts=3
+del_range_ts k=l end=o ts=5
+put k=a ts=2 v=a2
+del k=a ts=4
+del k=b ts=4
+put k=d ts=2 v=d2
+put k=d ts=4 v=d4
+put k=e ts=3 v=e3
+put k=f ts=2 v=f2
+put k=g ts=2 v=g2
+del_range_ts k=f end=h ts=3 localTs=2
+put k=f ts=4 v=f4
+put k=g ts=4 v=g4
+del_range_ts k=c end=h ts=5 localTs=6
+put k=f ts=6 v=f6
+put k=h ts=3 v=h3
+put k=k ts=5 v=k5
+with t=A
+  txn_begin ts=7
+  put k=d v=d7
+  put k=f v=f7
+  put k=j v=j7
+----
+>> del_range_ts k=a end=f ts=1
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 gc_bytes_age=+1287
+>> del_range_ts k=h end=k ts=1
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 gc_bytes_age=+1287
+>> del_range_ts k=b end=d ts=3
+stats: range_key_count=+2 range_key_bytes=+35 range_val_count=+3 gc_bytes_age=+3439
+>> del_range_ts k=n end=o ts=3
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 gc_bytes_age=+1261
+>> del_range_ts k=l end=o ts=5
+stats: range_key_count=+1 range_key_bytes=+22 range_val_count=+2 gc_bytes_age=+2082
+>> put k=a ts=2 v=a2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del k=a ts=4
+del: "a": found key true
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3168
+>> del k=b ts=4
+del: "b": found key false
+stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1344
+>> put k=d ts=2 v=d2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=d ts=4 v=d4
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 gc_bytes_age=+1824
+>> put k=e ts=3 v=e3
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=f ts=2 v=f2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=g ts=2 v=g2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del_range_ts k=f end=h ts=3 localTs=2
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+13 live_count=-2 live_bytes=-42 gc_bytes_age=+6596
+>> put k=f ts=4 v=f4
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
+>> put k=g ts=4 v=g4
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
+>> del_range_ts k=c end=h ts=5 localTs=6
+stats: range_key_count=+1 range_key_bytes=+49 range_val_count=+5 live_count=-4 live_bytes=-84 gc_bytes_age=+12665
+>> put k=f ts=6 v=f6
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-190
+>> put k=h ts=3 v=h3
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=k ts=5 v=k5
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=d v=d7 t=A
+put: lock acquisition = {span=d id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-190 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
+>> put k=f v=f7 t=A
+put: lock acquisition = {span=f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_bytes=+48 gc_bytes_age=+1767 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
+>> put k=j v=j7 t=A
+put: lock acquisition = {span=j id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 gul=0,0
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0={localTs=2.000000000,0}/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+meta: "f"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/7.000000000,0 -> /BYTES/f7
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+meta: "j"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/7.000000000,0 -> /BYTES/j7
+data: "k"/5.000000000,0 -> /BYTES/k5
+stats: key_count=9 key_bytes=210 val_count=16 val_bytes=242 range_key_count=8 range_key_bytes=158 range_val_count=14 range_val_bytes=13 live_count=5 live_bytes=249 gc_bytes_age=35952 intent_count=3 intent_bytes=57 lock_count=3 lock_age=279
+
+# Forward scans at all timestamps.
+run ok
+scan k=a end=z ts=1
+----
+scan: "a"-"z" -> <no data>
+
+run ok
+scan k=a end=z ts=2
+----
+scan: "a" -> /BYTES/a2 @2.000000000,0
+scan: "d" -> /BYTES/d2 @2.000000000,0
+scan: "f" -> /BYTES/f2 @2.000000000,0
+scan: "g" -> /BYTES/g2 @2.000000000,0
+
+run ok
+scan k=a end=z ts=3
+----
+scan: "a" -> /BYTES/a2 @2.000000000,0
+scan: "d" -> /BYTES/d2 @2.000000000,0
+scan: "e" -> /BYTES/e3 @3.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+
+run ok
+scan k=a end=z ts=4
+----
+scan: "d" -> /BYTES/d4 @4.000000000,0
+scan: "e" -> /BYTES/e3 @3.000000000,0
+scan: "f" -> /BYTES/f4 @4.000000000,0
+scan: "g" -> /BYTES/g4 @4.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+
+run ok
+scan k=a end=z ts=5
+----
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "k" -> /BYTES/k5 @5.000000000,0
+
+run ok
+scan k=a end=z ts=6
+----
+scan: "f" -> /BYTES/f6 @6.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "k" -> /BYTES/k5 @5.000000000,0
+
+# Forward scans at all timestamps with tombstones and intents.
+run ok
+scan k=a end=z ts=1 tombstones inconsistent
+----
+scan: "a"-"z" -> <no data>
+
+run ok
+scan k=a end=z ts=2 tombstones inconsistent
+----
+scan: "a" -> /BYTES/a2 @2.000000000,0
+scan: "d" -> /BYTES/d2 @2.000000000,0
+scan: "f" -> /BYTES/f2 @2.000000000,0
+scan: "g" -> /BYTES/g2 @2.000000000,0
+
+run ok
+scan k=a end=z ts=3 tombstones inconsistent
+----
+scan: "a" -> /BYTES/a2 @2.000000000,0
+scan: "d" -> /BYTES/d2 @2.000000000,0
+scan: "e" -> /BYTES/e3 @3.000000000,0
+scan: "f" -> /<empty> @3.000000000,0
+scan: "g" -> /<empty> @3.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+
+run ok
+scan k=a end=z ts=4 tombstones inconsistent
+----
+scan: "a" -> /<empty> @4.000000000,0
+scan: "b" -> /<empty> @4.000000000,0
+scan: "d" -> /BYTES/d4 @4.000000000,0
+scan: "e" -> /BYTES/e3 @3.000000000,0
+scan: "f" -> /BYTES/f4 @4.000000000,0
+scan: "g" -> /BYTES/g4 @4.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+
+run ok
+scan k=a end=z ts=5 tombstones inconsistent
+----
+scan: "a" -> /<empty> @4.000000000,0
+scan: "b" -> /<empty> @4.000000000,0
+scan: "d" -> /<empty> @5.000000000,0
+scan: "e" -> /<empty> @5.000000000,0
+scan: "f" -> /<empty> @5.000000000,0
+scan: "g" -> /<empty> @5.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "k" -> /BYTES/k5 @5.000000000,0
+
+run ok
+scan k=a end=z ts=6 tombstones inconsistent
+----
+scan: "a" -> /<empty> @4.000000000,0
+scan: "b" -> /<empty> @4.000000000,0
+scan: "d" -> /<empty> @5.000000000,0
+scan: "e" -> /<empty> @5.000000000,0
+scan: "f" -> /BYTES/f6 @6.000000000,0
+scan: "g" -> /<empty> @5.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "k" -> /BYTES/k5 @5.000000000,0
+
+run ok
+scan k=a end=z ts=7 tombstones inconsistent
+----
+scan: intent "d" {id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
+scan: intent "f" {id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
+scan: intent "j" {id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
+scan: "a" -> /<empty> @4.000000000,0
+scan: "b" -> /<empty> @4.000000000,0
+scan: "d" -> /<empty> @5.000000000,0
+scan: "e" -> /<empty> @5.000000000,0
+scan: "f" -> /BYTES/f6 @6.000000000,0
+scan: "g" -> /<empty> @5.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "k" -> /BYTES/k5 @5.000000000,0
+
+# Reverse scans at all timestamps.
+run ok
+scan k=a end=z ts=1 reverse
+----
+scan: "a"-"z" -> <no data>
+
+run ok
+scan k=a end=z ts=2 reverse
+----
+scan: "g" -> /BYTES/g2 @2.000000000,0
+scan: "f" -> /BYTES/f2 @2.000000000,0
+scan: "d" -> /BYTES/d2 @2.000000000,0
+scan: "a" -> /BYTES/a2 @2.000000000,0
+
+run ok
+scan k=a end=z ts=3 reverse
+----
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "e" -> /BYTES/e3 @3.000000000,0
+scan: "d" -> /BYTES/d2 @2.000000000,0
+scan: "a" -> /BYTES/a2 @2.000000000,0
+
+run ok
+scan k=a end=z ts=4 reverse
+----
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "g" -> /BYTES/g4 @4.000000000,0
+scan: "f" -> /BYTES/f4 @4.000000000,0
+scan: "e" -> /BYTES/e3 @3.000000000,0
+scan: "d" -> /BYTES/d4 @4.000000000,0
+
+run ok
+scan k=a end=z ts=5 reverse
+----
+scan: "k" -> /BYTES/k5 @5.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+
+run ok
+scan k=a end=z ts=6 reverse
+----
+scan: "k" -> /BYTES/k5 @5.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "f" -> /BYTES/f6 @6.000000000,0
+
+# Reverse scans at all timestamps with tombstones and intents.
+run ok
+scan k=a end=z ts=1 reverse tombstones inconsistent
+----
+scan: "a"-"z" -> <no data>
+
+run ok
+scan k=a end=z ts=2 reverse tombstones inconsistent
+----
+scan: "g" -> /BYTES/g2 @2.000000000,0
+scan: "f" -> /BYTES/f2 @2.000000000,0
+scan: "d" -> /BYTES/d2 @2.000000000,0
+scan: "a" -> /BYTES/a2 @2.000000000,0
+
+run ok
+scan k=a end=z ts=3 reverse tombstones inconsistent
+----
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "g" -> /<empty> @3.000000000,0
+scan: "f" -> /<empty> @3.000000000,0
+scan: "e" -> /BYTES/e3 @3.000000000,0
+scan: "d" -> /BYTES/d2 @2.000000000,0
+scan: "a" -> /BYTES/a2 @2.000000000,0
+
+run ok
+scan k=a end=z ts=4 reverse tombstones inconsistent
+----
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "g" -> /BYTES/g4 @4.000000000,0
+scan: "f" -> /BYTES/f4 @4.000000000,0
+scan: "e" -> /BYTES/e3 @3.000000000,0
+scan: "d" -> /BYTES/d4 @4.000000000,0
+scan: "b" -> /<empty> @4.000000000,0
+scan: "a" -> /<empty> @4.000000000,0
+
+run ok
+scan k=a end=z ts=5 reverse tombstones inconsistent
+----
+scan: "k" -> /BYTES/k5 @5.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "g" -> /<empty> @5.000000000,0
+scan: "f" -> /<empty> @5.000000000,0
+scan: "e" -> /<empty> @5.000000000,0
+scan: "d" -> /<empty> @5.000000000,0
+scan: "b" -> /<empty> @4.000000000,0
+scan: "a" -> /<empty> @4.000000000,0
+
+run ok
+scan k=a end=z ts=6 reverse tombstones inconsistent
+----
+scan: "k" -> /BYTES/k5 @5.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "g" -> /<empty> @5.000000000,0
+scan: "f" -> /BYTES/f6 @6.000000000,0
+scan: "e" -> /<empty> @5.000000000,0
+scan: "d" -> /<empty> @5.000000000,0
+scan: "b" -> /<empty> @4.000000000,0
+scan: "a" -> /<empty> @4.000000000,0
+
+run ok
+scan k=a end=z ts=7 reverse tombstones inconsistent
+----
+scan: intent "j" {id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
+scan: intent "f" {id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
+scan: intent "d" {id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0}
+scan: "k" -> /BYTES/k5 @5.000000000,0
+scan: "h" -> /BYTES/h3 @3.000000000,0
+scan: "g" -> /<empty> @5.000000000,0
+scan: "f" -> /BYTES/f6 @6.000000000,0
+scan: "e" -> /<empty> @5.000000000,0
+scan: "d" -> /<empty> @5.000000000,0
+scan: "b" -> /<empty> @4.000000000,0
+scan: "a" -> /<empty> @4.000000000,0
+
+# Start scan at bare point key.
+run ok
+scan k=k end=z ts=7 tombstones inconsistent
+----
+scan: "k" -> /BYTES/k5 @5.000000000,0
+
+# Start and end scan in the middle of a bare range key.
+run ok
+scan k=ddd end=ggg ts=4 tombstones inconsistent
+----
+scan: "e" -> /BYTES/e3 @3.000000000,0
+scan: "f" -> /BYTES/f4 @4.000000000,0
+scan: "g" -> /BYTES/g4 @4.000000000,0

@@ -1,0 +1,2 @@
+stmt_block ::=
+	'CREATE' 'TABLE' table_name '(' ( column_table_def ( ',' column_table_def )* ) ( 'CONSTRAINT' constraint_name | ) 'CHECK' '(' check_expr ')' ( table_constraints | ) ')'

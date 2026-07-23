@@ -1,0 +1,772 @@
+exec-ddl
+CREATE TABLE t (i int, g GEOMETRY, INVERTED INDEX (g))
+----
+
+# Histogram boundaries are from a `POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0,
+# 0.0 1.0, 0.0 0.0))` row. The row_count is lower than the sum of the
+# histogram's num_eq and num_range because there are more entries in
+# the inverted index than rows in the table.
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 1000,
+    "null_count": 0
+  },
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 7,
+    "null_count": 0,
+    "histo_col_type":"BYTES",
+    "histo_buckets":[{
+      "num_eq":1000,
+      "num_range":0,
+      "distinct_range":0,
+      "upper_bound":"\\x42fd0555555555555555"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\x42fd0fffffff00000000"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\x42fd1000000100000000"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\x42fd1aaaaaab00000000"
+    }]
+  }
+]'
+----
+
+# Selecting from within the polygon means the histogram will estimate
+# many rows returned, thus making a search on the PK favorable.
+opt
+SELECT i FROM t WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) ORDER BY i LIMIT 1
+----
+project
+ ├── columns: i:1(int)
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── limit
+      ├── columns: i:1(int) g:2(geometry!null)
+      ├── internal-ordering: +1
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── stats: [rows=1]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── select
+      │    ├── columns: i:1(int) g:2(geometry!null)
+      │    ├── immutable
+      │    ├── stats: [rows=222.222, distinct(2)=7, null(2)=0]
+      │    ├── ordering: +1
+      │    ├── limit hint: 1.00
+      │    ├── sort
+      │    │    ├── columns: i:1(int) g:2(geometry)
+      │    │    ├── stats: [rows=2000, distinct(2)=7, null(2)=0]
+      │    │    ├── ordering: +1
+      │    │    ├── limit hint: 9.00
+      │    │    └── scan t
+      │    │         ├── columns: i:1(int) g:2(geometry)
+      │    │         └── stats: [rows=2000, distinct(2)=7, null(2)=0]
+      │    └── filters
+      │         └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── 1 [type=int]
+
+memo
+SELECT i FROM t WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) ORDER BY i LIMIT 1
+----
+memo (optimized, ~15KB, required=[presentation: i:1])
+ ├── G1: (project G2 G3 i)
+ │    └── [presentation: i:1]
+ │         ├── best: (project G2 G3 i)
+ │         └── cost: 2656.94
+ ├── G2: (limit G4 G5 ordering=+1) (top-k G4 &{1 +1 })
+ │    └── []
+ │         ├── best: (limit G4="[ordering: +1] [limit hint: 1.00]" G5 ordering=+1)
+ │         └── cost: 2656.92
+ ├── G3: (projections)
+ ├── G4: (select G6 G7) (select G8 G7)
+ │    ├── [ordering: +1] [limit hint: 1.00]
+ │    │    ├── best: (select G6="[ordering: +1] [limit hint: 9.00]" G7)
+ │    │    └── cost: 2656.90
+ │    └── []
+ │         ├── best: (select G8 G7)
+ │         └── cost: 3671.93
+ ├── G5: (const 1)
+ ├── G6: (scan t,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 9.00]
+ │    │    ├── best: (sort G6)
+ │    │    └── cost: 2647.78
+ │    └── []
+ │         ├── best: (scan t,cols=(1,2))
+ │         └── cost: 2128.52
+ ├── G7: (filters G9)
+ ├── G8: (index-join G10 t,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 1.53]
+ │    │    ├── best: (sort G8)
+ │    │    └── cost: 3399.85
+ │    └── []
+ │         ├── best: (index-join G10 t,cols=(1,2))
+ │         └── cost: 3329.20
+ ├── G9: (function G11 st_intersects)
+ ├── G10: (inverted-filter G12 g_inverted_key)
+ │    └── []
+ │         ├── best: (inverted-filter G12 g_inverted_key)
+ │         └── cost: 1272.99
+ ├── G11: (scalar-list G13 G14)
+ ├── G12: (scan t@t_g_idx,inverted,cols=(3,6),constrained inverted)
+ │    └── []
+ │         ├── best: (scan t@t_g_idx,inverted,cols=(3,6),constrained inverted)
+ │         └── cost: 1261.09
+ ├── G13: (const '010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F')
+ └── G14: (variable g)
+
+# Selecting from outside the polygon means the histogram will estimate
+# few rows returned, thus making a search of the inverted index favorable.
+opt
+SELECT i FROM t WHERE st_intersects('LINESTRING(100 100, 150 150)', g) ORDER BY i LIMIT 1
+----
+project
+ ├── columns: i:1(int)
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── limit
+      ├── columns: i:1(int) g:2(geometry!null)
+      ├── internal-ordering: +1
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── stats: [rows=1]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── select
+      │    ├── columns: i:1(int) g:2(geometry!null)
+      │    ├── immutable
+      │    ├── stats: [rows=222.222, distinct(2)=7, null(2)=0]
+      │    ├── ordering: +1
+      │    ├── limit hint: 1.00
+      │    ├── sort
+      │    │    ├── columns: i:1(int) g:2(geometry)
+      │    │    ├── stats: [rows=1]
+      │    │    ├── ordering: +1
+      │    │    ├── limit hint: 0.00
+      │    │    └── index-join t
+      │    │         ├── columns: i:1(int) g:2(geometry)
+      │    │         ├── stats: [rows=1]
+      │    │         └── inverted-filter
+      │    │              ├── columns: rowid:3(int!null)
+      │    │              ├── inverted expression: /6
+      │    │              │    ├── tight: false, unique: false
+      │    │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │    │              ├── pre-filterer expression
+      │    │              │    └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool]
+      │    │              ├── stats: [rows=1]
+      │    │              ├── key: (3)
+      │    │              └── scan t@t_g_idx,inverted
+      │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
+      │    │                   ├── inverted constraint: /6/3
+      │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │    │                   ├── stats: [rows=1, distinct(3)=0.285714, null(3)=0, distinct(6)=1, null(6)=0]
+      │    │                   │   histogram(6)=
+      │    │                   ├── key: (3)
+      │    │                   └── fd: (3)-->(6)
+      │    └── filters
+      │         └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── 1 [type=int]
+
+memo
+SELECT i FROM t WHERE st_intersects('LINESTRING(100 100, 150 150)', g) ORDER BY i LIMIT 1
+----
+memo (optimized, ~15KB, required=[presentation: i:1])
+ ├── G1: (project G2 G3 i)
+ │    └── [presentation: i:1]
+ │         ├── best: (project G2 G3 i)
+ │         └── cost: 26.31
+ ├── G2: (limit G4 G5 ordering=+1) (top-k G4 &{1 +1 })
+ │    └── []
+ │         ├── best: (limit G4="[ordering: +1] [limit hint: 1.00]" G5 ordering=+1)
+ │         └── cost: 26.29
+ ├── G3: (projections)
+ ├── G4: (select G6 G7) (select G8 G7)
+ │    ├── [ordering: +1] [limit hint: 1.00]
+ │    │    ├── best: (select G8="[ordering: +1] [limit hint: 0.00]" G7)
+ │    │    └── cost: 26.27
+ │    └── []
+ │         ├── best: (select G8 G7)
+ │         └── cost: 26.21
+ ├── G5: (const 1)
+ ├── G6: (scan t,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 9.00]
+ │    │    ├── best: (sort G6)
+ │    │    └── cost: 2647.78
+ │    └── []
+ │         ├── best: (scan t,cols=(1,2))
+ │         └── cost: 2128.52
+ ├── G7: (filters G9)
+ ├── G8: (index-join G10 t,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 0.00]
+ │    │    ├── best: (sort G8)
+ │    │    └── cost: 25.23
+ │    └── []
+ │         ├── best: (index-join G10 t,cols=(1,2))
+ │         └── cost: 25.17
+ ├── G9: (function G11 st_intersects)
+ ├── G10: (inverted-filter G12 g_inverted_key)
+ │    └── []
+ │         ├── best: (inverted-filter G12 g_inverted_key)
+ │         └── cost: 19.09
+ ├── G11: (scalar-list G13 G14)
+ ├── G12: (scan t@t_g_idx,inverted,cols=(3,6),constrained inverted)
+ │    └── []
+ │         ├── best: (scan t@t_g_idx,inverted,cols=(3,6),constrained inverted)
+ │         └── cost: 19.06
+ ├── G13: (const '010200000002000000000000000000594000000000000059400000000000C062400000000000C06240')
+ └── G14: (variable g)
+
+# Add some NULL rows.
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 1000,
+    "null_count": 50
+  },
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 7,
+    "null_count": 100,
+    "histo_col_type":"BYTES",
+    "histo_buckets":[{
+      "num_eq":1000,
+      "num_range":0,
+      "distinct_range":0,
+      "upper_bound":"\\x42fd0555555555555555"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\x42fd0fffffff00000000"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\x42fd1000000100000000"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\x42fd1aaaaaab00000000"
+    }]
+  }
+]'
+----
+
+# Inverted indexes don't contain NULL entries, so we expect a full scan.
+opt colstat=1 colstat=2
+SELECT * FROM t WHERE g IS NULL OR st_intersects('LINESTRING(100 100, 150 150)', g)
+----
+select
+ ├── columns: i:1(int) g:2(geometry)
+ ├── immutable
+ ├── stats: [rows=733.333, distinct(1)=598.889, null(1)=18.3333, distinct(2)=7, null(2)=36.6667]
+ ├── scan t
+ │    ├── columns: i:1(int) g:2(geometry)
+ │    └── stats: [rows=2000, distinct(1)=1000, null(1)=50, distinct(2)=7, null(2)=100]
+ └── filters
+      └── (g:2 IS NULL) OR st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable]
+
+memo
+SELECT * FROM t WHERE g IS NULL OR st_intersects('LINESTRING(100 100, 150 150)', g)
+----
+memo (optimized, ~6KB, required=[presentation: i:1,g:2])
+ ├── G1: (select G2 G3)
+ │    └── [presentation: i:1,g:2]
+ │         ├── best: (select G2 G3)
+ │         └── cost: 4148.55
+ ├── G2: (scan t,cols=(1,2))
+ │    └── []
+ │         ├── best: (scan t,cols=(1,2))
+ │         └── cost: 2128.52
+ ├── G3: (filters G4)
+ ├── G4: (or G5 G6)
+ ├── G5: (is G7 G8)
+ ├── G6: (function G9 st_intersects)
+ ├── G7: (variable g)
+ ├── G8: (null)
+ ├── G9: (scalar-list G10 G7)
+ └── G10: (const '010200000002000000000000000000594000000000000059400000000000C062400000000000C06240')
+
+# Repeat above tests to ensure null counts are correct.
+opt colstat=1 colstat=2
+SELECT i FROM t WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) ORDER BY i LIMIT 1
+----
+project
+ ├── columns: i:1(int)
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── stats: [rows=1, distinct(1)=0.999868, null(1)=0.025, distinct(2)=0.933914, null(2)=0]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── limit
+      ├── columns: i:1(int) g:2(geometry!null)
+      ├── internal-ordering: +1
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── stats: [rows=1, distinct(1)=0.999868, null(1)=0.025, distinct(2)=0.933914, null(2)=0]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── select
+      │    ├── columns: i:1(int) g:2(geometry!null)
+      │    ├── immutable
+      │    ├── stats: [rows=211.111, distinct(1)=199.969, null(1)=5.27778, distinct(2)=7, null(2)=0]
+      │    ├── ordering: +1
+      │    ├── limit hint: 1.00
+      │    ├── sort
+      │    │    ├── columns: i:1(int) g:2(geometry)
+      │    │    ├── stats: [rows=2000, distinct(1)=1000, null(1)=50, distinct(2)=7, null(2)=100]
+      │    │    ├── ordering: +1
+      │    │    ├── limit hint: 9.47
+      │    │    └── scan t
+      │    │         ├── columns: i:1(int) g:2(geometry)
+      │    │         └── stats: [rows=2000, distinct(1)=1000, null(1)=50, distinct(2)=7, null(2)=100]
+      │    └── filters
+      │         └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── 1 [type=int]
+
+
+opt colstat=1 colstat=2
+SELECT i FROM t WHERE st_intersects('LINESTRING(100 100, 150 150)', g) ORDER BY i LIMIT 1
+----
+project
+ ├── columns: i:1(int)
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── stats: [rows=1, distinct(1)=0.999868, null(1)=0.025, distinct(2)=0.933914, null(2)=0]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── limit
+      ├── columns: i:1(int) g:2(geometry!null)
+      ├── internal-ordering: +1
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── stats: [rows=1, distinct(1)=0.999868, null(1)=0.025, distinct(2)=0.933914, null(2)=0]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── select
+      │    ├── columns: i:1(int) g:2(geometry!null)
+      │    ├── immutable
+      │    ├── stats: [rows=211.111, distinct(1)=199.969, null(1)=5.27778, distinct(2)=7, null(2)=0]
+      │    ├── ordering: +1
+      │    ├── limit hint: 1.00
+      │    ├── sort
+      │    │    ├── columns: i:1(int) g:2(geometry)
+      │    │    ├── stats: [rows=1]
+      │    │    ├── ordering: +1
+      │    │    ├── limit hint: 0.00
+      │    │    └── index-join t
+      │    │         ├── columns: i:1(int) g:2(geometry)
+      │    │         ├── stats: [rows=1]
+      │    │         └── inverted-filter
+      │    │              ├── columns: rowid:3(int!null)
+      │    │              ├── inverted expression: /6
+      │    │              │    ├── tight: false, unique: false
+      │    │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │    │              ├── pre-filterer expression
+      │    │              │    └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool]
+      │    │              ├── stats: [rows=1]
+      │    │              ├── key: (3)
+      │    │              └── scan t@t_g_idx,inverted
+      │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
+      │    │                   ├── inverted constraint: /6/3
+      │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │    │                   ├── stats: [rows=1, distinct(3)=0.28169, null(3)=0, distinct(6)=1, null(6)=0]
+      │    │                   │   histogram(6)=
+      │    │                   ├── key: (3)
+      │    │                   └── fd: (3)-->(6)
+      │    └── filters
+      │         └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── 1 [type=int]
+
+# Set a high null count.
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 100,
+    "null_count": 900
+  },
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 4,
+    "null_count": 900,
+    "histo_col_type":"BYTES",
+    "histo_buckets":[{
+      "num_eq":100,
+      "num_range":0,
+      "distinct_range":0,
+      "upper_bound":"\\x42fd0555555555555555"
+    },
+    {
+      "num_eq":100,
+      "num_range":0,
+      "distinct_range":0,
+      "upper_bound":"\\x42fd0fffffff00000000"
+    },
+    {
+      "num_eq":100,
+      "num_range":0,
+      "distinct_range":0,
+      "upper_bound":"\\x42fd1000000100000000"
+    },
+    {
+      "num_eq":100,
+      "num_range":0,
+      "distinct_range":0,
+      "upper_bound":"\\x42fd1aaaaaab00000000"
+    }]
+  }
+]'
+----
+
+opt colstat=1 colstat=2
+SELECT * FROM t WHERE st_intersects('LINESTRING(.5 .5, .7 .7)', g)
+----
+select
+ ├── columns: i:1(int) g:2(geometry!null)
+ ├── immutable
+ ├── stats: [rows=11.1111, distinct(1)=10.5717, null(1)=10, distinct(2)=4, null(2)=0]
+ ├── index-join t
+ │    ├── columns: i:1(int) g:2(geometry)
+ │    ├── stats: [rows=76.9231]
+ │    └── inverted-filter
+ │         ├── columns: rowid:3(int!null)
+ │         ├── inverted expression: /6
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+ │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         ├── pre-filterer expression
+ │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+ │         ├── stats: [rows=76.9231]
+ │         ├── key: (3)
+ │         └── scan t@t_g_idx,inverted
+ │              ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
+ │              ├── inverted constraint: /6/3
+ │              │    └── spans
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+ │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │              └── stats: [rows=100, distinct(3)=76.9231, null(3)=0, distinct(6)=1, null(6)=0]
+ │                  histogram(6)=  0            100             0             0
+ │                               <--- '\x42fd1000000100000000' --- '\x42fd1400000000000001'
+ └── filters
+      └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+# Force a scan of the inverted index so we can see the filtered histogram.
+opt
+SELECT i FROM t@t_g_idx WHERE st_intersects('LINESTRING(.5 .5, .7 .7)', g)
+----
+project
+ ├── columns: i:1(int)
+ ├── immutable
+ ├── stats: [rows=11.1111]
+ └── select
+      ├── columns: i:1(int) g:2(geometry!null)
+      ├── immutable
+      ├── stats: [rows=11.1111, distinct(2)=4, null(2)=0]
+      ├── index-join t
+      │    ├── columns: i:1(int) g:2(geometry)
+      │    ├── stats: [rows=76.9231]
+      │    └── inverted-filter
+      │         ├── columns: rowid:3(int!null)
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false, unique: false
+      │         │    └── union spans
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
+      │         ├── stats: [rows=76.9231]
+      │         ├── key: (3)
+      │         └── scan t@t_g_idx,inverted
+      │              ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
+      │              ├── inverted constraint: /6/3
+      │              │    └── spans
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── flags: force-index=t_g_idx
+      │              └── stats: [rows=100, distinct(3)=76.9231, null(3)=0, distinct(6)=1, null(6)=0]
+      │                  histogram(6)=  0            100             0             0
+      │                               <--- '\x42fd1000000100000000' --- '\x42fd1400000000000001'
+      └── filters
+           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+# Tests for multi-column inverted spatial indexes.
+
+exec-ddl
+CREATE TABLE m (
+  k INT PRIMARY KEY,
+  a INT,
+  g GEOMETRY,
+  INVERTED INDEX (a, g)
+)
+----
+
+# The stats builder should not panic during a SELECT on a table with a
+# multi-column inverted index.
+opt
+SELECT * FROM m
+----
+scan m
+ ├── columns: k:1(int!null) a:2(int) g:3(geometry)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+# Regression test for #62289. Don't corrupt stats when there are a large number
+# of columns and an inverted index.
+exec-ddl
+CREATE TABLE t62289 (
+  a BIT(18) NOT NULL,
+  b GEOGRAPHY NULL,
+  c REGPROC NOT NULL,
+  d DATE NOT NULL,
+  e BYTES,
+  f INT2 NULL,
+  g UUID,
+  h REGCLASS,
+  i BIT(15) NOT NULL,
+  j TIME NULL,
+  k FLOAT4 NOT NULL,
+  l JSONB,
+  m STRING,
+  n INT,
+  o STRING,
+  p STRING,
+  INVERTED INDEX (b)
+);
+----
+
+exec-ddl
+ALTER TABLE t62289 INJECT STATISTICS e'[
+  {
+    "columns": ["e"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["k"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["n"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["g"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["o"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["p"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["f"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["h"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["j"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["m"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 2000000,
+        "num_range": 0,
+        "upper_bound": "0107000020E6100000010000000103000020E610000001000000040000008C7D4198BD2B574080A6FD3A111E4D40F0DF86928AA12BC03A59212197A35140CEA3CEE206B863C0FC7649EB60BA53408C7D4198BD2B574080A6FD3A111E4D40"
+      },
+      {
+        "distinct_range": 40000000000,
+        "num_eq": 3000000,
+        "num_range": 40000000000,
+        "upper_bound": "0102000020E61000000300000005D8E086BB6365C03F9E5737DD1A53C0C04ECDED673B55C06711C00C7C0240C0B8EABD96072856404A9D2C529FC74EC0"
+      }
+    ],
+    "histo_col_type": "BYTES",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["l"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  }
+]':::JSONB;
+----
+
+opt
+SELECT count(*)
+FROM t62289
+GROUP BY b
+HAVING _st_dwithinexclusive(b, b, -0.38)::BOOL;
+----
+project
+ ├── columns: count:21(int!null)
+ ├── immutable
+ ├── stats: [rows=1]
+ └── group-by (hash)
+      ├── columns: b:2(geography!null) count_rows:21(int!null)
+      ├── grouping columns: b:2(geography!null)
+      ├── immutable
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0]
+      ├── key: (2)
+      ├── fd: (2)-->(21)
+      ├── select
+      │    ├── columns: b:2(geography!null)
+      │    ├── immutable
+      │    ├── stats: [rows=1, distinct(2)=1, null(2)=0]
+      │    ├── scan t62289
+      │    │    ├── columns: b:2(geography)
+      │    │    └── stats: [rows=1, distinct(2)=1, null(2)=0]
+      │    └── filters
+      │         └── _st_dwithinexclusive(b:2, b:2, -0.38) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── aggregations
+           └── count-rows [as=count_rows:21, type=int]

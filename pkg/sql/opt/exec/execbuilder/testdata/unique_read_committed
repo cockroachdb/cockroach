@@ -1,0 +1,46 @@
+# LogicTest: local-read-committed
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+# Test UNIQUE WITHOUT INDEX with an enum PK. Under read committed isolation this
+# should work, using single-key predicate locks.
+
+statement ok
+CREATE TYPE region AS ENUM ('us-east', 'us-west', 'eu-west')
+
+statement ok
+CREATE TABLE uniq_enum (
+  r region DEFAULT CASE (random()*3)::int WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END,
+  s STRING,
+  i INT,
+  j INT DEFAULT NULL,
+  PRIMARY KEY (r, i),
+  UNIQUE INDEX (r, s, j),
+  UNIQUE WITHOUT INDEX (i),
+  UNIQUE WITHOUT INDEX (s, j),
+  FAMILY (r, s, i, j)
+)
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+EXPLAIN (OPT) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+EXPLAIN (OPT) INSERT INTO uniq_enum (s, i) VALUES ('foo', 1), ('bar', 2)
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+EXPLAIN (OPT) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
+ON CONFLICT DO NOTHING
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+EXPLAIN (OPT) UPDATE uniq_enum SET r = DEFAULT, s = 'baz', i = 3 WHERE r = 'eu-west' AND i > 10 AND i <= 20
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+EXPLAIN (OPT) UPSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
+
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
+EXPLAIN (OPT) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
+ON CONFLICT (s, j) DO UPDATE SET i = 3

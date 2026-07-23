@@ -1,0 +1,17 @@
+echo
+----
+Oscillating across zero in both directions, mostly to check that
+negative numbers don't cause issues.
+input: [-10 -4 -6 -1 4 5 -2 6]
+   6.00 ┤                                      ╭
+   4.40 ┤                      ╭─────╮        ╭╯
+   2.80 ┤                    ╭─╯     ╰╮      ╭╯
+   1.20 ┤                  ╭─╯        ╰─╮   ╭╯
+  -0.40 ┤                ╭─╯            ╰╮ ╭╯
+  -2.00 ┤               ╭╯               ╰─╯
+  -3.60 ┤             ╭─╯
+  -5.20 ┤    ╭─────╮╭─╯
+  -6.80 ┤  ╭─╯     ╰╯
+  -8.40 ┤ ╭╯
+ -10.00 ┼─╯
+tdtv=125.25% (20.0/16.0) uptv=25.0 dntv=9.0 runs=5

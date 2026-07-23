@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "vtable",
+    srcs = [
+        "crdb_internal.go",
+        "doc.go",
+        "information_schema.go",
+        "information_schema_crdb.go",
+        "pg_catalog.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vtable",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/sem/catconstants"],
+)
+
+exports_files([
+    "pg_catalog.go",
+    "information_schema.go",
+])

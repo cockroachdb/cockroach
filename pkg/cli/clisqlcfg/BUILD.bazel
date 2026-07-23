@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "clisqlcfg",
+    srcs = [
+        "context.go",
+        "doc.go",
+        "opt_bool.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/clisqlcfg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/clicfg",
+        "//pkg/cli/clisqlclient",
+        "//pkg/cli/clisqlexec",
+        "//pkg/cli/clisqlshell",
+        "//pkg/server/pgurl",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_mattn_go_isatty//:go-isatty",
+    ],
+)

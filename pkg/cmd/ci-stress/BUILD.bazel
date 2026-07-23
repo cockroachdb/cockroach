@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//pkg/cmd/github-pull-request-make:__pkg__"],
+)
+
+go_library(
+    name = "ci-stress_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/ci-stress",
+    visibility = ["//visibility:private"],
+    deps = ["//pkg/util/buildutil"],
+)
+
+go_binary(
+    name = "ci-stress",
+    embed = [":ci-stress_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "ci-stress_test",
+    srcs = ["main_test.go"],
+    data = [":testdata"],  # keep
+    embed = [":ci-stress_lib"],
+    deps = ["//pkg/testutils/datapathutils"],
+)

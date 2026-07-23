@@ -1,0 +1,236 @@
+# Register three notifications on each stream (s1,s2). This test will walk
+# through the functionality of the store token watcher, including registering
+# notifications, adjusting the number of tokens being watched, and canceling
+# registered notifications.
+#
+# The same output is printed after each operation to show the state of the
+# notifications. The syntax is:
+#
+#  stream=<stream> tokens=<tokens> len=<len>
+#   name=<name> handle_id=<handle_id> deducted=<deducted>/<deduct> state=<state>
+#   ...
+# 
+# Where deducted=<deducted>/<deduct> is the number of tokens the notification
+# has deducted / wants to deduct on each notification. The deducted value only
+# changes when the notification is 'notified' of available tokens via the store
+# token watcher. len=<len> is the number of non-notified, non-cancelled
+# notifications registered on the stream
+#
+# Each stream starts with no tokens. Therefore we expect every registered
+# notification to be in the 'waiting' state.
+register
+  name=a store_id=1 deduct=1
+  name=b store_id=1 deduct=2
+  name=c store_id=1 deduct=3
+  name=d store_id=2 deduct=4
+  name=e store_id=2 deduct=5
+  name=f store_id=2 deduct=6
+----
+stream=t1/s1 tokens=0 len=3 running=true
+  name=a handle_id=1 deducted=0/1 state=waiting
+  name=b handle_id=2 deducted=0/2 state=waiting
+  name=c handle_id=3 deducted=0/3 state=waiting
+stream=t1/s2 tokens=0 len=3 running=true
+  name=d handle_id=1 deducted=0/4 state=waiting
+  name=e handle_id=2 deducted=0/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=waiting
+
+cancel name=a
+----
+stream=t1/s1 tokens=0 len=2 running=true
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=0/2 state=waiting
+  name=c handle_id=3 deducted=0/3 state=waiting
+stream=t1/s2 tokens=0 len=3 running=true
+  name=d handle_id=1 deducted=0/4 state=waiting
+  name=e handle_id=2 deducted=0/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=waiting
+
+# Add two tokens to each stream. Despite not being enough tokens for 'd', all
+# the watcher is concerned with is that there are tokens available (>0). Expect
+# the watcher to notify 'b' and 'd', which will be reflected in their deducted
+# token amounts and the stream's available tokens.
+adjust
+  store_id=1 tokens=2
+  store_id=2 tokens=2
+----
+stream=t1/s1 tokens=0 len=1 running=true
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=notified
+  name=c handle_id=3 deducted=0/3 state=waiting
+stream=t1/s2 tokens=-2 len=2 running=true
+  name=d handle_id=1 deducted=4/4 state=notified
+  name=e handle_id=2 deducted=0/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=waiting
+
+# Add another two tokens to each stream. Expect 'c' to be notified, and 'e' to
+# not be notified as the tokens are not > 0 yet.
+adjust
+  store_id=1 tokens=2
+  store_id=2 tokens=2
+----
+stream=t1/s1 tokens=-1 len=0 running=true
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=notified
+  name=c handle_id=3 deducted=3/3 state=notified
+stream=t1/s2 tokens=0 len=2 running=true
+  name=d handle_id=1 deducted=4/4 state=notified
+  name=e handle_id=2 deducted=0/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=waiting
+
+cancel name=f
+----
+stream=t1/s1 tokens=-1 len=0 running=true
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=notified
+  name=c handle_id=3 deducted=3/3 state=notified
+stream=t1/s2 tokens=0 len=1 running=true
+  name=d handle_id=1 deducted=4/4 state=notified
+  name=e handle_id=2 deducted=0/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# 'e' should now be notified and deduct tokens. The tokens after will both be
+# 0.
+adjust
+  store_id=1 tokens=1
+  store_id=2 tokens=5
+----
+stream=t1/s1 tokens=0 len=0 running=true
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=notified
+  name=c handle_id=3 deducted=3/3 state=notified
+stream=t1/s2 tokens=0 len=0 running=true
+  name=d handle_id=1 deducted=4/4 state=notified
+  name=e handle_id=2 deducted=5/5 state=notified
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# Both streams are now empty and have no registered notifications. Register
+# another set of notifications on the first stream, in order to verify that the
+# watcher correctly handles switching between an empty and non-empty state. 
+register
+  name=g store_id=1 deduct=1
+  name=h store_id=1 deduct=2
+----
+stream=t1/s1 tokens=0 len=2 running=true
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=notified
+  name=c handle_id=3 deducted=3/3 state=notified
+  name=g handle_id=4 deducted=0/1 state=waiting
+  name=h handle_id=5 deducted=0/2 state=waiting
+stream=t1/s2 tokens=0 len=0 running=true
+  name=d handle_id=1 deducted=4/4 state=notified
+  name=e handle_id=2 deducted=5/5 state=notified
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# Add 1 token so that 'g' is notified and not 'h'.
+adjust
+  store_id=1 tokens=1
+----
+stream=t1/s1 tokens=0 len=1 running=true
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=notified
+  name=c handle_id=3 deducted=3/3 state=notified
+  name=g handle_id=4 deducted=1/1 state=notified
+  name=h handle_id=5 deducted=0/2 state=waiting
+stream=t1/s2 tokens=0 len=0 running=true
+  name=d handle_id=1 deducted=4/4 state=notified
+  name=e handle_id=2 deducted=5/5 state=notified
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# Add another token so that 'h' is notified. Every handle should now be
+# notified or cancelled.
+adjust
+  store_id=1 tokens=2
+----
+stream=t1/s1 tokens=0 len=0 running=true
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=notified
+  name=c handle_id=3 deducted=3/3 state=notified
+  name=g handle_id=4 deducted=1/1 state=notified
+  name=h handle_id=5 deducted=2/2 state=notified
+stream=t1/s2 tokens=0 len=0 running=true
+  name=d handle_id=1 deducted=4/4 state=notified
+  name=e handle_id=2 deducted=5/5 state=notified
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# Next, move the clock forward by the idle duration, which will cause both
+# watchers to stop running. We do it in two steps to show the state of the
+# watchers in between the two ticks.
+tick seconds=30
+----
+tick=30
+stream=t1/s1 tokens=0 len=0 running=true
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=notified
+  name=c handle_id=3 deducted=3/3 state=notified
+  name=g handle_id=4 deducted=1/1 state=notified
+  name=h handle_id=5 deducted=2/2 state=notified
+stream=t1/s2 tokens=0 len=0 running=true
+  name=d handle_id=1 deducted=4/4 state=notified
+  name=e handle_id=2 deducted=5/5 state=notified
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+tick seconds=30
+----
+tick=60
+stream=t1/s1 tokens=0 len=0 running=false
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=notified
+  name=c handle_id=3 deducted=3/3 state=notified
+  name=g handle_id=4 deducted=1/1 state=notified
+  name=h handle_id=5 deducted=2/2 state=notified
+stream=t1/s2 tokens=0 len=0 running=false
+  name=d handle_id=1 deducted=4/4 state=notified
+  name=e handle_id=2 deducted=5/5 state=notified
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# Ensure that adding back another handle will cause the watcher to start
+# running again.
+register
+  name=i store_id=2 deduct=1
+----
+stream=t1/s1 tokens=0 len=0 running=false
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=notified
+  name=c handle_id=3 deducted=3/3 state=notified
+  name=g handle_id=4 deducted=1/1 state=notified
+  name=h handle_id=5 deducted=2/2 state=notified
+stream=t1/s2 tokens=0 len=1 running=true
+  name=d handle_id=1 deducted=4/4 state=notified
+  name=e handle_id=2 deducted=5/5 state=notified
+  name=f handle_id=3 deducted=0/6 state=cancelled
+  name=i handle_id=4 deducted=0/1 state=waiting
+
+# Add a token to the second stream so that 'i' is notified.
+adjust
+  store_id=2 tokens=1
+----
+stream=t1/s1 tokens=0 len=0 running=false
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=notified
+  name=c handle_id=3 deducted=3/3 state=notified
+  name=g handle_id=4 deducted=1/1 state=notified
+  name=h handle_id=5 deducted=2/2 state=notified
+stream=t1/s2 tokens=0 len=0 running=true
+  name=d handle_id=1 deducted=4/4 state=notified
+  name=e handle_id=2 deducted=5/5 state=notified
+  name=f handle_id=3 deducted=0/6 state=cancelled
+  name=i handle_id=4 deducted=1/1 state=notified
+
+# Lastly, tick the clock forward by the idle duration to stop the watcher.
+tick seconds=60
+----
+tick=120
+stream=t1/s1 tokens=0 len=0 running=false
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=notified
+  name=c handle_id=3 deducted=3/3 state=notified
+  name=g handle_id=4 deducted=1/1 state=notified
+  name=h handle_id=5 deducted=2/2 state=notified
+stream=t1/s2 tokens=0 len=0 running=false
+  name=d handle_id=1 deducted=4/4 state=notified
+  name=e handle_id=2 deducted=5/5 state=notified
+  name=f handle_id=3 deducted=0/6 state=cancelled
+  name=i handle_id=4 deducted=1/1 state=notified
+
+# vim:ft=sh

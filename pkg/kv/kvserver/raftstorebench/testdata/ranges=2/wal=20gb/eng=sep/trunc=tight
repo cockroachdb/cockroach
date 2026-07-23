@@ -1,0 +1,29 @@
+# Modeled after https://github.com/cockroachdb/cockroach/issues/16624#issuecomment-1137394935.
+#
+# Here:
+# - separate raft engine
+# - memtable size split across both engines (64mb each)
+#
+# We still use tightly coupled truncations. We could not do that in production
+# due to durability issues.
+# Loosely coupled truncations generally perform worse, since they allow a larger
+# window during which raft entries can get flushed to the Raft LSM.
+run
+singleengine: false
+numreplicas: 2
+numworkers: 2
+numwrites: 20000000
+smmemtablebytes: 67108864
+raftmemtablebytes: 67108864
+loosetrunc: false
+----
+singleengine: false
+numreplicas: 2
+numwrites: 20000000
+numworkers: 2
+smmemtablebytes: 67108864
+raftmemtablebytes: 67108864
+raftl0threshold: 2
+loosetrunc: false
+truncthresholdbytes: 65536
+singledel: false

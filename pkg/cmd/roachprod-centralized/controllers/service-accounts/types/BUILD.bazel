@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "types",
+    srcs = ["types.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/service-accounts/types",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/controllers",
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/services/auth/types",
+        "//pkg/cmd/roachprod-centralized/utils/api/bindings/stripe",
+        "//pkg/cmd/roachprod-centralized/utils/filters/types",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

@@ -1,0 +1,3122 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, FAMILY (a, b))
+
+let $t_id
+SELECT id FROM system.namespace WHERE name='t'
+
+statement ok
+CREATE TABLE u (a INT PRIMARY KEY, b INT, c INT, INDEX (b), FAMILY (a, b, c))
+
+statement ok
+CREATE VIEW v AS SELECT a FROM t AS t2
+
+# ------------------------------------------------------------------------------
+# Basic tests.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for no key update
+
+# By default, SELECT FOR SHARE doesn't acquire any locks.
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+
+# However, if the session setting is configured to do so, SELECT FOR SHARE will
+# acquire shared locks.
+
+statement ok
+SET enable_shared_locking_for_serializable = true
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for share
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for key share
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for share
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for no key update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t2
+
+query T
+EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ render ?column?: 1
+│
+└── • scan
+      columns: ()
+      estimated row count: 1,000 (missing stats)
+      table: t@t_pkey
+      spans: FULL SCAN
+      locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for no key update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for share
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for key share
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for share
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for no key update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for update
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2
+
+query T
+EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ render ?column?: 1
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1 (missing stats)
+      table: t@t_pkey
+      spans: /1/0
+      locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with table aliases.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t AS t2 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t AS t2 FOR UPDATE OF t
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t AS t2 FOR UPDATE OF t2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE OF t2
+
+# ------------------------------------------------------------------------------
+# Tests with views.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE OF v
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query error pgcode 42P01 relation "v2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE OF v2
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE OF t
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE OF t2
+
+# ------------------------------------------------------------------------------
+# Tests with aliased views.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM v AS v2 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query error pgcode 42P01 relation "v" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM v AS v2 FOR UPDATE OF v
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM v AS v2 FOR UPDATE OF v2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with subqueries.
+#
+# Row-level locking clauses only apply to subqueries in the FROM clause of a
+# SELECT statement. They don't apply to subqueries in the projection or in
+# the filter.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for no key update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for no key update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) FOR UPDATE OF t
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE OF t
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (a)
+│
+├── • values
+│     columns: (a)
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM t)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (a)
+        │ estimated row count: 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE)
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (a)
+│
+├── • values
+│     columns: (a)
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM t FOR UPDATE)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (a)
+        │ estimated row count: 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+              locking strength: for update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) FOR UPDATE OF t
+
+query T
+EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE OF t)
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (a)
+│
+├── • values
+│     columns: (a)
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM t FOR UPDATE OF t)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (a)
+        │ estimated row count: 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+              locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) AS r FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (r)
+│
+├── • values
+│     columns: (r)
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM t)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (a)
+        │ estimated row count: 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE) AS r
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (r)
+│
+├── • values
+│     columns: (r)
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM t FOR UPDATE)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (a)
+        │ estimated row count: 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+              locking strength: for update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) AS r FOR UPDATE OF t
+
+query T
+EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (r)
+│
+├── • values
+│     columns: (r)
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM t FOR UPDATE OF t)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (a)
+        │ estimated row count: 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+              locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│
+└── • lookup join (inner)
+    │ columns: (b, a, b)
+    │ estimated row count: 99 (missing stats)
+    │ table: t@t_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ locking strength: for update
+    │ parallel
+    │
+    └── • distinct
+        │ columns: (b)
+        │ estimated row count: 100 (missing stats)
+        │ distinct on: b
+        │
+        └── • scan
+              columns: (b)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│
+└── • lookup join (inner)
+    │ columns: (b, a, b)
+    │ estimated row count: 99 (missing stats)
+    │ table: t@t_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ parallel
+    │
+    └── • distinct
+        │ columns: (b)
+        │ estimated row count: 100 (missing stats)
+        │ distinct on: b
+        │
+        └── • scan
+              columns: (b)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+              locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│
+└── • lookup join (inner)
+    │ columns: (b, a, b)
+    │ estimated row count: 99 (missing stats)
+    │ table: t@t_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ locking strength: for update
+    │ parallel
+    │
+    └── • distinct
+        │ columns: (b)
+        │ estimated row count: 100 (missing stats)
+        │ distinct on: b
+        │
+        └── • scan
+              columns: (b)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE OF t)
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b)
+│
+└── • lookup join (inner)
+    │ columns: (b, a, b)
+    │ estimated row count: 99 (missing stats)
+    │ table: t@t_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ parallel
+    │
+    └── • distinct
+        │ columns: (b)
+        │ estimated row count: 100 (missing stats)
+        │ distinct on: b
+        │
+        └── • scan
+              columns: (b)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+              locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with common-table expressions.
+#
+# Unlike with FROM subqueries, row-level locking clauses do not apply to WITH
+# queries referenced by the primary query. To achieve row locking within a WITH
+# query, a locking clause should be specified within the WITH query.
+#
+# Note that scans with locking are considered to be side-effecting; CTEs that
+# contain locking clauses are not inlined.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM [SELECT a FROM t] FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a)
+│ render a: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a)
+│ render a: a
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM [SELECT a FROM t FOR UPDATE]
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (a)
+│
+├── • scan buffer
+│     columns: (a)
+│     estimated row count: 1,000 (missing stats)
+│     label: buffer 1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT a FROM t FOR UPDATE
+    │ exec mode: discard all rows
+    │
+    └── • buffer
+        │ columns: (a)
+        │ label: buffer 1
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+              locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (a)
+│
+├── • scan buffer
+│     columns: (a)
+│     estimated row count: 1,000 (missing stats)
+│     label: buffer 1 (cte)
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT a FROM t FOR UPDATE
+    │ exec mode: discard all rows
+    │
+    └── • buffer
+        │ columns: (a)
+        │ label: buffer 1 (cte)
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+              locking strength: for update
+
+# Verify that the unused CTE doesn't get eliminated.
+# TODO(radu): we should at least not buffer the rows in this case.
+query T
+EXPLAIN (VERBOSE) WITH sfu AS (SELECT a FROM t FOR UPDATE)
+SELECT c FROM u
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (c)
+│
+├── • scan
+│     columns: (c)
+│     estimated row count: 1,000 (missing stats)
+│     table: u@u_pkey
+│     spans: FULL SCAN
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT a FROM t FOR UPDATE
+    │ exec mode: discard all rows
+    │
+    └── • buffer
+        │ columns: (a)
+        │ label: buffer 1 (sfu)
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+              locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with joins.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for share
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for share
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for no key update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for key share
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for no key update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with joins of aliased tables and aliased joins.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t
+
+query error pgcode 42P01 relation "u" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t, u
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+# Postgres doesn't support applying locking clauses to joins. The following
+# queries all return the error: "FOR UPDATE cannot be applied to a join".
+# We could do the same, but it's not hard to support these, so we do.
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF t
+
+query error pgcode 42P01 relation "u" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u
+
+query error pgcode 42P01 relation "u2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u2
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, b, c)
+│
+└── • merge join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (a) = (a)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(a=a)"
+    │
+    ├── • scan
+    │     columns: (a, b)
+    │     ordering: +a
+    │     estimated row count: 1,000 (missing stats)
+    │     table: t@t_pkey
+    │     spans: FULL SCAN
+    │     locking strength: for update
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a
+          estimated row count: 1,000 (missing stats)
+          table: u@u_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with lateral joins.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t, u FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• cross join (inner)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1,000,000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1,000 (missing stats)
+│     table: t@t_pkey
+│     spans: FULL SCAN
+│     locking strength: for update
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 1,000 (missing stats)
+      table: u@u_pkey
+      spans: FULL SCAN
+      locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t, u FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• cross join (inner)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1,000,000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1,000 (missing stats)
+│     table: t@t_pkey
+│     spans: FULL SCAN
+│     locking strength: for update
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 1,000 (missing stats)
+      table: u@u_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
+----
+distribution: local
+vectorized: true
+·
+• cross join (inner)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1,000,000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1,000 (missing stats)
+│     table: t@t_pkey
+│     spans: FULL SCAN
+│     locking strength: for share
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 1,000 (missing stats)
+      table: u@u_pkey
+      spans: FULL SCAN
+      locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• cross join (inner)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1,000,000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1,000 (missing stats)
+│     table: t@t_pkey
+│     spans: FULL SCAN
+│     locking strength: for update
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 1,000 (missing stats)
+      table: u@u_pkey
+      spans: FULL SCAN
+      locking strength: for update
+
+query error pgcode 42P01 relation "u" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF u
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
+----
+distribution: local
+vectorized: true
+·
+• cross join (inner)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1,000,000 (missing stats)
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1,000 (missing stats)
+│     table: t@t_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 1,000 (missing stats)
+      table: u@u_pkey
+      spans: FULL SCAN
+      locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with index joins.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE indexed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  INDEX b_idx(b)
+)
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM indexed WHERE b = 2 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b, c)
+│ estimated row count: 10 (missing stats)
+│ table: indexed@indexed_pkey
+│ key columns: a
+│ locking strength: for update
+│ parallel
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 10 (missing stats)
+      table: indexed@b_idx
+      spans: /2-/3
+      locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM indexed WHERE b BETWEEN 2 AND 10 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b, c)
+│ estimated row count: 90 (missing stats)
+│ table: indexed@indexed_pkey
+│ key columns: a
+│ locking strength: for update
+│ parallel
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 90 (missing stats)
+      table: indexed@b_idx
+      spans: /2-/11
+      locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with lookup joins.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a = 2 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (c)
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@u_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ locking strength: for update
+    │ parallel
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /2/0
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a BETWEEN 2 AND 10 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (c)
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, c)
+    │ estimated row count: 9 (missing stats)
+    │ table: u@u_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ locking strength: for update
+    │ parallel
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 9 (missing stats)
+          table: t@t_pkey
+          spans: /2-/11
+          parallel
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 10 (missing stats)
+│ table: indexed@indexed_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b)
+    │ estimated row count: 10 (missing stats)
+    │ table: indexed@b_idx
+    │ equality: (b) = (b)
+    │ locking strength: for update
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /2/0
+          locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with inverted filters and joins.
+# ------------------------------------------------------------------------------
+
+statement ok
+SET enable_zigzag_join = true
+
+statement ok
+CREATE TABLE inverted (
+  a INT PRIMARY KEY,
+  b INT[],
+  c INT,
+  INVERTED INDEX b_inv(b)
+)
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM inverted WHERE b @> '{1, 2}' FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c)
+│ estimated row count: 12 (missing stats)
+│ table: inverted@inverted_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • project
+    │ columns: (a)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          estimated row count: 12 (missing stats)
+          left table: inverted@b_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          left locking strength: for update
+          right table: inverted@b_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
+          right locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM inverted WHERE b <@ '{1, 2}' FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b, c)
+│ estimated row count: 333 (missing stats)
+│ filter: b <@ ARRAY[1,2]
+│
+└── • index join
+    │ columns: (a, b, c)
+    │ estimated row count: 111 (missing stats)
+    │ table: inverted@inverted_pkey
+    │ key columns: a
+    │ locking strength: for update
+    │ parallel
+    │
+    └── • project
+        │ columns: (a)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ estimated row count: 111 (missing stats)
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: inverted@b_inv
+                  spans: /[]-/"D" /1-/3
+                  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM inverted@b_inv AS i1, inverted AS i2 WHERE i1.b @> i2.b FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, a, b, c)
+│
+└── • lookup join (inner)
+    │ columns: (a, b, c, a, a, b, c)
+    │ estimated row count: 10,000 (missing stats)
+    │ table: inverted@inverted_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> b
+    │ locking strength: for update
+    │ parallel
+    │
+    └── • project
+        │ columns: (a, b, c, a)
+        │
+        └── • inverted join (inner)
+            │ columns: (a, b, c, a, b_inverted_key)
+            │ estimated row count: 10,000 (missing stats)
+            │ table: inverted@b_inv
+            │ inverted expr: b_inverted_key @> b
+            │ locking strength: for update
+            │
+            └── • scan
+                  columns: (a, b, c)
+                  estimated row count: 1,000 (missing stats)
+                  table: inverted@inverted_pkey
+                  spans: FULL SCAN
+                  locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with zigzag joins.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE zigzag (
+  a INT PRIMARY KEY,
+  b INT,
+  c FLOAT,
+  d JSONB,
+  INDEX b_idx(b),
+  INDEX c_idx(c),
+  INVERTED INDEX d_idx(d)
+)
+
+query T
+EXPLAIN (VERBOSE) SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│
+└── • zigzag join
+      columns: (a, b, a, c)
+      estimated row count: 1 (missing stats)
+      pred: (b = 5) AND (c = 6.0)
+      left table: zigzag@b_idx
+      left columns: (a, b)
+      left fixed values: 1 column
+      left locking strength: for update
+      right table: zigzag@c_idx
+      right columns: (a, c)
+      right fixed values: 1 column
+      right locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * from zigzag where d @> '{"a": {"b": "c"}, "f": "g"}' FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d)
+│ estimated row count: 12 (missing stats)
+│ table: zigzag@zigzag_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • project
+    │ columns: (a)
+    │
+    └── • zigzag join
+          columns: (a, d_inverted_key, a, d_inverted_key)
+          estimated row count: 12 (missing stats)
+          left table: zigzag@d_idx
+          left columns: (a, d_inverted_key)
+          left fixed values: 1 column
+          left locking strength: for update
+          right table: zigzag@d_idx
+          right columns: (a, d_inverted_key)
+          right fixed values: 1 column
+          right locking strength: for update
+
+statement ok
+RESET enable_zigzag_join
+
+# ------------------------------------------------------------------------------
+# Tests with the NOWAIT lock wait policy.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for no key update
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for share
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for key share
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for share
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for no key update
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+  locking wait policy: nowait
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t2 NOWAIT
+
+query T
+EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ render ?column?: 1
+│
+└── • scan
+      columns: ()
+      estimated row count: 1,000 (missing stats)
+      table: t@t_pkey
+      spans: FULL SCAN
+      locking strength: for update
+      locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for update
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for no key update
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for share
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for key share
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for share
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for no key update
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for update
+  locking wait policy: nowait
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for update
+  locking wait policy: nowait
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2 NOWAIT
+
+query T
+EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t NOWAIT
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ render ?column?: 1
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1 (missing stats)
+      table: t@t_pkey
+      spans: /1/0
+      locking strength: for update
+      locking wait policy: nowait
+
+# ------------------------------------------------------------------------------
+# Tests with the SKIP LOCKED lock wait policy.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for no key update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for share
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for key share
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for share
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for no key update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+  locking wait policy: skip locked
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t2 SKIP LOCKED
+
+query T
+EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ render ?column?: 1
+│
+└── • scan
+      columns: ()
+      estimated row count: 1,000 (missing stats)
+      table: t@t_pkey
+      spans: FULL SCAN
+      locking strength: for update
+      locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for no key update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for share
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for key share
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for share
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for no key update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for update
+  locking wait policy: skip locked
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2 SKIP LOCKED
+
+query T
+EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ render ?column?: 1
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1 (missing stats)
+      table: t@t_pkey
+      spans: /1/0
+      locking strength: for update
+      locking wait policy: skip locked
+
+# Tests with a secondary index.
+
+query T
+EXPLAIN (VERBOSE) SELECT a, b FROM u WHERE b = 2 FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 10 (missing stats)
+  table: u@u_b_idx
+  spans: /2-/3
+  locking strength: for update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 2 FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b, c)
+│ estimated row count: 10 (missing stats)
+│ table: u@u_pkey
+│ key columns: a
+│ locking strength: for update
+│ locking wait policy: skip locked
+│ parallel
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 10 (missing stats)
+      table: u@u_b_idx
+      spans: /2-/3
+      locking strength: for update
+      locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 2 LIMIT 1 FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ columns: (a, b, c)
+│ count: 1
+│
+└── • index join
+    │ columns: (a, b, c)
+    │ estimated row count: 10 (missing stats)
+    │ table: u@u_pkey
+    │ key columns: a
+    │ locking strength: for update
+    │ locking wait policy: skip locked
+    │ parallel
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 10 (missing stats)
+          table: u@u_b_idx
+          spans: /2-/3
+          locking strength: for update
+          locking wait policy: skip locked
+
+# ------------------------------------------------------------------------------
+# Tests with durable locking.
+# ------------------------------------------------------------------------------
+
+statement ok
+SET enable_durable_locking_for_serializable = true
+
+# TODO(michae2, 100194): Change these from EXPLAIN (OPT) to EXPLAIN (VERBOSE).
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR UPDATE
+----
+scan t
+ └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR NO KEY UPDATE
+----
+scan t
+ └── locking: for-no-key-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR SHARE
+----
+scan t
+ └── locking: for-share,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE
+----
+scan t
+ └── locking: for-key-share,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE FOR SHARE
+----
+scan t
+ └── locking: for-share,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
+----
+scan t
+ └── locking: for-no-key-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
+----
+scan t
+ └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR UPDATE OF t
+----
+scan t
+ └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT (SELECT a FROM t FOR UPDATE OF t)
+----
+values
+ └── tuple
+      └── subquery
+           └── max1-row
+                └── scan t
+                     └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
+----
+project
+ └── inner-join (lookup t)
+      ├── lookup columns are key
+      ├── distinct-on
+      │    └── scan t
+      │         └── locking: for-update,durability-guaranteed
+      └── filters (true)
+
+statement ok
+RESET enable_durable_locking_for_serializable
+
+# ------------------------------------------------------------------------------
+# Tests with optimizer_use_lock_op_for_serializable.
+# ------------------------------------------------------------------------------
+
+subtest lock_op_optimizations
+
+statement ok
+SET optimizer_use_lock_op_for_serializable = true
+
+# Push the locking down into the scan.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 5 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /5/0
+  locking strength: for update
+
+# Push the locking down into the scan.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a > 2 AND a < 7 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 4 (missing stats)
+  table: t@t_pkey
+  spans: /3-/7
+  parallel
+  locking strength: for update
+
+# Same as above but we can't push the locking down due to the filter.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a > 2 AND a < 7 AND b % 2 = 0 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b)
+│ estimated row count: 1 (missing stats)
+│ table: t@t_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • filter
+    │ columns: (a, b)
+    │ estimated row count: 1 (missing stats)
+    │ filter: (b % 2) = 0
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 4 (missing stats)
+          table: t@t_pkey
+          spans: /3-/7
+          parallel
+
+# Scan on a secondary index. In this case we can't push the locking down.
+query T
+EXPLAIN (VERBOSE) SELECT b, a FROM u WHERE b = 5 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (b, a)
+│ estimated row count: 10 (missing stats)
+│ table: u@u_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 10 (missing stats)
+      table: u@u_b_idx
+      spans: /5-/6
+
+# Push the locking down into the index join.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 5 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b, c)
+│ estimated row count: 10 (missing stats)
+│ table: u@u_pkey
+│ key columns: a
+│ locking strength: for update
+│ parallel
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 10 (missing stats)
+      table: u@u_b_idx
+      spans: /5-/6
+
+# Push the locking down into the lookup join.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u ON u.a = t.b WHERE t.a = 5 FOR UPDATE OF u
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1 (missing stats)
+│ table: u@u_pkey
+│ equality: (b) = (a)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1 (missing stats)
+      table: t@t_pkey
+      spans: /5/0
+
+# Same as above but with another predicate in the join. In this case we can't
+# push the locking down.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u ON u.a = t.b AND u.c < t.b WHERE t.a = 5 FOR UPDATE OF u
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1 (missing stats)
+│ table: u@u_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@u_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ pred: c < a
+    │ parallel
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# Lookup join on a secondary index. In this case we can't push the locking down.
+query T
+EXPLAIN (VERBOSE) SELECT t.*, u.b, u.a FROM t JOIN u ON u.b = t.b WHERE t.a = 5 FOR UPDATE OF u
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, b, a)
+│ estimated row count: 10 (missing stats)
+│ table: u@u_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b)
+    │ estimated row count: 10 (missing stats)
+    │ table: u@u_b_idx
+    │ equality: (b) = (b)
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# Lookup join on a different table. In this case we can't push the locking down.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u ON u.a = t.b WHERE t.a = 5 FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1 (missing stats)
+│ table: t@t_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@u_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ parallel
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# Self-lookup join, locking the left side. Cannot push down locking.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t t1 INNER LOOKUP JOIN t t2 ON t2.a = t1.b WHERE t1.a = 5 FOR UPDATE OF t1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, a, b)
+│ estimated row count: 1 (missing stats)
+│ table: t@t_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b)
+    │ estimated row count: 1 (missing stats)
+    │ table: t@t_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ parallel
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# Self-lookup join, locking the right side. Can push down locking.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t t1 INNER LOOKUP JOIN t t2 ON t2.a = t1.b WHERE t1.a = 5 FOR UPDATE OF t2
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, a, b)
+│ estimated row count: 1 (missing stats)
+│ table: t@t_pkey
+│ equality: (b) = (a)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1 (missing stats)
+      table: t@t_pkey
+      spans: /5/0
+
+# Table with multiple column families. Test that we can push down locking in
+# some cases.
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT NOT NULL,
+  z INT,
+  INDEX (z),
+  FAMILY (x, y),
+  FAMILY (z)
+)
+
+# We can't push down locking if the scan doesn't fetch all families.
+query T
+EXPLAIN (VERBOSE) SELECT y FROM xyz WHERE x = 1 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (y)
+│
+└── • lookup join (semi)
+    │ columns: (x, y)
+    │ estimated row count: 1 (missing stats)
+    │ table: xyz@xyz_pkey
+    │ equality: (x) = (x)
+    │ equality cols are key
+    │ locking strength: for update
+    │ parallel
+    │
+    └── • scan
+          columns: (x, y)
+          estimated row count: 1 (missing stats)
+          table: xyz@xyz_pkey
+          spans: /1/0
+
+# We can push down locking if the scan fetches all families.
+query T
+EXPLAIN (VERBOSE) SELECT y, z FROM xyz WHERE x = 1 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (y, z)
+│
+└── • scan
+      columns: (x, y, z)
+      estimated row count: 1 (missing stats)
+      table: xyz@xyz_pkey
+      spans: /1-/2
+      locking strength: for update
+
+# We can't push down locking if the index join doesn't fetch all families.
+query T
+EXPLAIN (VERBOSE) SELECT y FROM xyz WHERE z = 2 FOR SHARE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (y)
+│
+└── • lookup join (semi)
+    │ columns: (x, y)
+    │ estimated row count: 10 (missing stats)
+    │ table: xyz@xyz_pkey
+    │ equality: (x) = (x)
+    │ equality cols are key
+    │ locking strength: for share
+    │ parallel
+    │
+    └── • project
+        │ columns: (x, y)
+        │
+        └── • index join
+            │ columns: (x, y, z)
+            │ estimated row count: 10 (missing stats)
+            │ table: xyz@xyz_pkey
+            │ key columns: x
+            │ parallel
+            │
+            └── • scan
+                  columns: (x, z)
+                  estimated row count: 10 (missing stats)
+                  table: xyz@xyz_z_idx
+                  spans: /2-/3
+
+# We can push down locking if the index join fetches all families.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z = 2 FOR SHARE
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (x, y, z)
+│ estimated row count: 10 (missing stats)
+│ table: xyz@xyz_pkey
+│ key columns: x
+│ locking strength: for share
+│ parallel
+│
+└── • scan
+      columns: (x, z)
+      estimated row count: 10 (missing stats)
+      table: xyz@xyz_z_idx
+      spans: /2-/3
+
+# We can't push down locking if the lookup join doesn't fetch all families.
+query T
+EXPLAIN (VERBOSE) SELECT t.*, x FROM t INNER LOOKUP JOIN xyz ON x = b WHERE a = 5 FOR UPDATE OF xyz
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, x)
+│ estimated row count: 1 (missing stats)
+│ table: xyz@xyz_pkey
+│ equality: (x) = (x)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • lookup join (inner)
+    │ columns: (a, b, x)
+    │ estimated row count: 1 (missing stats)
+    │ table: xyz@xyz_pkey
+    │ equality: (b) = (x)
+    │ equality cols are key
+    │ parallel
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# We can push down locking if the lookup join fetches all families.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t INNER LOOKUP JOIN xyz ON x = b WHERE a = 5 FOR UPDATE OF xyz
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, x, y, z)
+│ estimated row count: 1 (missing stats)
+│ table: xyz@xyz_pkey
+│ equality: (b) = (x)
+│ equality cols are key
+│ locking strength: for update
+│ parallel
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1 (missing stats)
+      table: t@t_pkey
+      spans: /5/0
+
+statement ok
+RESET optimizer_use_lock_op_for_serializable

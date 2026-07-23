@@ -1,0 +1,39 @@
+parse
+GRANT roLea,rOleB TO rOLeC WITH ADMIN OPTION
+----
+GRANT rolea, roleb TO rolec WITH ADMIN OPTION -- normalized!
+GRANT rolea, roleb TO rolec WITH ADMIN OPTION -- fully parenthesized
+GRANT rolea, roleb TO rolec WITH ADMIN OPTION -- literals removed
+GRANT _, _ TO _ WITH ADMIN OPTION -- identifiers removed
+
+parse
+GRANT roLea TO roLeB WITH ADMIN OPTION
+----
+GRANT rolea TO roleb WITH ADMIN OPTION -- normalized!
+GRANT rolea TO roleb WITH ADMIN OPTION -- fully parenthesized
+GRANT rolea TO roleb WITH ADMIN OPTION -- literals removed
+GRANT _ TO _ WITH ADMIN OPTION -- identifiers removed
+
+parse
+GRANT ALL ON TABLE the_table TO rolEC
+----
+GRANT ALL ON TABLE the_table TO rolec -- normalized!
+GRANT ALL ON TABLE (the_table) TO rolec -- fully parenthesized
+GRANT ALL ON TABLE the_table TO rolec -- literals removed
+GRANT ALL ON TABLE _ TO _ -- identifiers removed
+
+parse
+REVOKE roleA, roleB FROM RoleC
+----
+REVOKE rolea, roleb FROM rolec -- normalized!
+REVOKE rolea, roleb FROM rolec -- fully parenthesized
+REVOKE rolea, roleb FROM rolec -- literals removed
+REVOKE _, _ FROM _ -- identifiers removed
+
+parse
+REVOKE roleA FROM roleB
+----
+REVOKE rolea FROM roleb -- normalized!
+REVOKE rolea FROM roleb -- fully parenthesized
+REVOKE rolea FROM roleb -- literals removed
+REVOKE _ FROM _ -- identifiers removed

@@ -1,0 +1,135 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package admission
+
+import (
+	"context"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+)
+
+const (
+	// MinElasticCPUDuration is the minimum on-CPU time elastic requests can ask
+	// when seeking admission.
+	MinElasticCPUDuration = 10 * time.Millisecond
+
+	// MaxElasticCPUDuration is the maximum on-CPU time elastic requests can ask
+	// when seeking admission.
+	MaxElasticCPUDuration = 100 * time.Millisecond
+)
+
+var (
+	elasticCPUControlEnabled = settings.RegisterBoolSetting(
+		settings.SystemOnly,
+		"admission.elastic_cpu.enabled",
+		"when true, elastic work (like backups) performed by the KV layer is subject to admission control",
+		true,
+	)
+)
+
+// ElasticCPUWorkQueue maintains a queue of elastic work waiting to be admitted.
+type ElasticCPUWorkQueue struct {
+	settings  *cluster.Settings
+	workQueue elasticCPUInternalWorkQueue
+	granter   granterAndYieldDelayRecorder
+	metrics   *elasticCPUGranterMetrics
+
+	testingEnabled bool
+}
+
+// elasticCPUInternalWorkQueue abstracts *WorkQueue for testing.
+type elasticCPUInternalWorkQueue interface {
+	requester
+	Admit(ctx context.Context, info WorkInfo) (AdmitResponse, error)
+	adjustGroupUsed(gKey groupKey, additionalUsed int64)
+}
+
+func makeElasticCPUWorkQueue(
+	settings *cluster.Settings,
+	workQueue elasticCPUInternalWorkQueue,
+	granter granterAndYieldDelayRecorder,
+	metrics *elasticCPUGranterMetrics,
+) *ElasticCPUWorkQueue {
+	return &ElasticCPUWorkQueue{
+		settings:  settings,
+		workQueue: workQueue,
+		granter:   granter,
+		metrics:   metrics,
+	}
+}
+
+// Admit is called when requesting admission for elastic CPU work. When
+// yieldInHandle is true, the returned ElasticCPUWorkHandle yields in each
+// IsOverLimitAndPossiblyYield call.
+//
+// Non-nil errors are returned only if the context is canceled.
+func (e *ElasticCPUWorkQueue) Admit(
+	ctx context.Context, duration time.Duration, info WorkInfo, yieldInHandle bool,
+) (*ElasticCPUWorkHandle, error) {
+	if !e.enabled() {
+		return nil, nil
+	}
+	if duration < MinElasticCPUDuration {
+		duration = MinElasticCPUDuration
+	}
+	if duration > MaxElasticCPUDuration {
+		duration = MaxElasticCPUDuration
+	}
+	info.RequestedCount = duration.Nanoseconds()
+	resp, err := e.workQueue.Admit(ctx, info)
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Enabled {
+		return nil, nil
+	}
+	e.metrics.AcquiredNanos.Inc(duration.Nanoseconds())
+	if info.BypassAdmission {
+		e.metrics.bypassedAdmissionCumNanos.Add(duration.Nanoseconds())
+	}
+	return newElasticCPUWorkHandle(info.TenantID, duration, yieldInHandle, info.BypassAdmission, e.granter), nil
+}
+
+// AdmittedWorkDone indicates to the queue that the admitted work has
+// completed.
+func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
+	if h == nil {
+		return // nothing to do
+	}
+
+	e.metrics.PreWorkNanos.Inc(h.preWork.Nanoseconds())
+	_, difference := h.overLimitInner()
+	e.workQueue.adjustGroupUsed(tenantGroupKey(h.tenantID.ToUint64()), difference.Nanoseconds())
+	if h.bypassedAdmission {
+		e.metrics.bypassedAdmissionCumNanos.Add(difference.Nanoseconds())
+	}
+	if difference > 0 {
+		// We've used up our allotted slice, which we've already deducted tokens
+		// for. But we've gone over by difference, which we now need to deduct
+		// tokens for.
+		e.granter.tookWithoutPermission(difference.Nanoseconds())
+		e.metrics.AcquiredNanos.Inc(difference.Nanoseconds())
+		e.metrics.OverLimitDuration.RecordValue(difference.Nanoseconds())
+		return
+	}
+
+	e.granter.returnGrant(-difference.Nanoseconds())
+	e.metrics.ReturnedNanos.Inc(-difference.Nanoseconds())
+}
+
+func (e *ElasticCPUWorkQueue) enabled() bool {
+	if e.testingEnabled {
+		return true
+	}
+
+	return elasticCPUControlEnabled.Get(&e.settings.SV)
+}
+
+func (e *ElasticCPUWorkQueue) close() {
+	e.workQueue.close()
+}

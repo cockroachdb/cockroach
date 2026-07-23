@@ -1,0 +1,2077 @@
+exec-ddl
+CREATE TABLE x(a INT, b INT)
+----
+
+exec-ddl
+CREATE TABLE y(a INT)
+----
+
+build
+WITH t AS (SELECT a FROM y WHERE a < 3)
+  SELECT * FROM x NATURAL JOIN t
+----
+with &1 (t)
+ ├── columns: a:5!null b:6
+ ├── project
+ │    ├── columns: y.a:1!null
+ │    └── select
+ │         ├── columns: y.a:1!null y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+ │         ├── scan y
+ │         │    └── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+ │         └── filters
+ │              └── y.a:1 < 3
+ └── project
+      ├── columns: x.a:5!null b:6
+      └── inner-join (hash)
+           ├── columns: x.a:5!null b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9 a:10!null
+           ├── scan x
+           │    └── columns: x.a:5 b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9
+           ├── with-scan &1 (t)
+           │    ├── columns: a:10!null
+           │    └── mapping:
+           │         └──  y.a:1 => a:10
+           └── filters
+                └── x.a:5 = a:10
+
+build
+EXPLAIN
+  WITH t AS (SELECT a FROM y WHERE a < 3)
+    SELECT * FROM x NATURAL JOIN t
+----
+explain
+ ├── columns: info:11
+ └── with &1 (t)
+      ├── columns: a:5!null b:6
+      ├── project
+      │    ├── columns: y.a:1!null
+      │    └── select
+      │         ├── columns: y.a:1!null y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+      │         ├── scan y
+      │         │    └── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+      │         └── filters
+      │              └── y.a:1 < 3
+      └── project
+           ├── columns: x.a:5!null b:6
+           └── inner-join (hash)
+                ├── columns: x.a:5!null b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9 a:10!null
+                ├── scan x
+                │    └── columns: x.a:5 b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9
+                ├── with-scan &1 (t)
+                │    ├── columns: a:10!null
+                │    └── mapping:
+                │         └──  y.a:1 => a:10
+                └── filters
+                     └── x.a:5 = a:10
+
+build
+WITH
+    q AS (SELECT NULL)
+SELECT
+    1 + (SELECT * FROM q)
+----
+with &1 (q)
+ ├── columns: "?column?":3
+ ├── project
+ │    ├── columns: "?column?":1
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── NULL [as="?column?":1]
+ └── project
+      ├── columns: "?column?":3
+      ├── values
+      │    └── ()
+      └── projections
+           └── NULL [as="?column?":3]
+
+build
+CREATE VIEW v1 AS
+  WITH t AS (SELECT a FROM y WHERE a < 3)
+    SELECT 1 FROM x NATURAL JOIN t
+----
+create-view t.public.v1
+ ├── WITH t AS (SELECT a FROM t.public.y WHERE a < 3) SELECT 1 FROM t.public.x NATURAL JOIN t
+ ├── columns: "?column?":11
+ └── dependencies
+      ├── y [columns: a]
+      └── x [columns: a]
+
+build
+CREATE TABLE t1 AS
+  WITH t AS (SELECT a FROM y WHERE a < 3)
+    SELECT 1 FROM x NATURAL JOIN t
+----
+create-table
+ ├── CREATE TABLE t1 AS WITH t AS (SELECT a FROM t.public.y WHERE a < 3) SELECT 1 FROM t.public.x NATURAL JOIN t
+ └── project
+      ├── columns: rowid:12 "?column?":11!null
+      ├── with &1 (t)
+      │    ├── columns: "?column?":11!null
+      │    ├── project
+      │    │    ├── columns: y.a:1!null
+      │    │    └── select
+      │    │         ├── columns: y.a:1!null y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+      │    │         ├── scan y
+      │    │         │    └── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+      │    │         └── filters
+      │    │              └── y.a:1 < 3
+      │    └── project
+      │         ├── columns: "?column?":11!null
+      │         ├── inner-join (hash)
+      │         │    ├── columns: x.a:5!null b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9 a:10!null
+      │         │    ├── scan x
+      │         │    │    └── columns: x.a:5 b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9
+      │         │    ├── with-scan &1 (t)
+      │         │    │    ├── columns: a:10!null
+      │         │    │    └── mapping:
+      │         │    │         └──  y.a:1 => a:10
+      │         │    └── filters
+      │         │         └── x.a:5 = a:10
+      │         └── projections
+      │              └── 1 [as="?column?":11]
+      └── projections
+           └── unique_rowid() [as=rowid:12]
+
+build
+WITH t AS (SELECT a FROM y WHERE a < 3)
+  SELECT * FROM t
+----
+with &1 (t)
+ ├── columns: a:5!null
+ ├── project
+ │    ├── columns: y.a:1!null
+ │    └── select
+ │         ├── columns: y.a:1!null rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         ├── scan y
+ │         │    └── columns: y.a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         └── filters
+ │              └── y.a:1 < 3
+ └── with-scan &1 (t)
+      ├── columns: a:5!null
+      └── mapping:
+           └──  y.a:1 => a:5
+
+# Chaining multiple CTEs.
+build
+WITH
+    t1 AS (SELECT a FROM y WHERE a < 3),
+    t2 AS (SELECT * FROM t1 WHERE a > 1)
+SELECT * FROM t2
+----
+with &1 (t1)
+ ├── columns: a:6!null
+ ├── project
+ │    ├── columns: y.a:1!null
+ │    └── select
+ │         ├── columns: y.a:1!null rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         ├── scan y
+ │         │    └── columns: y.a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         └── filters
+ │              └── y.a:1 < 3
+ └── with &2 (t2)
+      ├── columns: a:6!null
+      ├── select
+      │    ├── columns: a:5!null
+      │    ├── with-scan &1 (t1)
+      │    │    ├── columns: a:5!null
+      │    │    └── mapping:
+      │    │         └──  y.a:1 => a:5
+      │    └── filters
+      │         └── a:5 > 1
+      └── with-scan &2 (t2)
+           ├── columns: a:6!null
+           └── mapping:
+                └──  a:5 => a:6
+
+build
+WITH
+    t1 AS (SELECT a FROM y WHERE a < 3),
+    t2 AS (SELECT * FROM t1 WHERE a > 1),
+    t3 AS (SELECT * FROM t2 WHERE a = 2)
+SELECT * FROM t3
+----
+with &1 (t1)
+ ├── columns: a:7!null
+ ├── project
+ │    ├── columns: y.a:1!null
+ │    └── select
+ │         ├── columns: y.a:1!null rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         ├── scan y
+ │         │    └── columns: y.a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         └── filters
+ │              └── y.a:1 < 3
+ └── with &2 (t2)
+      ├── columns: a:7!null
+      ├── select
+      │    ├── columns: a:5!null
+      │    ├── with-scan &1 (t1)
+      │    │    ├── columns: a:5!null
+      │    │    └── mapping:
+      │    │         └──  y.a:1 => a:5
+      │    └── filters
+      │         └── a:5 > 1
+      └── with &3 (t3)
+           ├── columns: a:7!null
+           ├── select
+           │    ├── columns: a:6!null
+           │    ├── with-scan &2 (t2)
+           │    │    ├── columns: a:6!null
+           │    │    └── mapping:
+           │    │         └──  a:5 => a:6
+           │    └── filters
+           │         └── a:6 = 2
+           └── with-scan &3 (t3)
+                ├── columns: a:7!null
+                └── mapping:
+                     └──  a:6 => a:7
+
+build
+WITH
+    t1 AS (SELECT * FROM y WHERE a < 3),
+    t2 AS (SELECT * FROM y WHERE a > 1),
+    t3 AS (SELECT * FROM t1 WHERE a < 4),
+    t4 AS (SELECT * FROM t2 WHERE a > 3)
+SELECT * FROM t3 NATURAL JOIN t4
+----
+with &1 (t1)
+ ├── columns: a:11!null
+ ├── project
+ │    ├── columns: y.a:1!null
+ │    └── select
+ │         ├── columns: y.a:1!null rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         ├── scan y
+ │         │    └── columns: y.a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │         └── filters
+ │              └── y.a:1 < 3
+ └── with &2 (t2)
+      ├── columns: a:11!null
+      ├── project
+      │    ├── columns: y.a:5!null
+      │    └── select
+      │         ├── columns: y.a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │         ├── scan y
+      │         │    └── columns: y.a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │         └── filters
+      │              └── y.a:5 > 1
+      └── with &3 (t3)
+           ├── columns: a:11!null
+           ├── select
+           │    ├── columns: a:9!null
+           │    ├── with-scan &1 (t1)
+           │    │    ├── columns: a:9!null
+           │    │    └── mapping:
+           │    │         └──  y.a:1 => a:9
+           │    └── filters
+           │         └── a:9 < 4
+           └── with &4 (t4)
+                ├── columns: a:11!null
+                ├── select
+                │    ├── columns: a:10!null
+                │    ├── with-scan &2 (t2)
+                │    │    ├── columns: a:10!null
+                │    │    └── mapping:
+                │    │         └──  y.a:5 => a:10
+                │    └── filters
+                │         └── a:10 > 3
+                └── project
+                     ├── columns: a:11!null
+                     └── inner-join (hash)
+                          ├── columns: a:11!null a:12!null
+                          ├── with-scan &3 (t3)
+                          │    ├── columns: a:11!null
+                          │    └── mapping:
+                          │         └──  a:9 => a:11
+                          ├── with-scan &4 (t4)
+                          │    ├── columns: a:12!null
+                          │    └── mapping:
+                          │         └──  a:10 => a:12
+                          └── filters
+                               └── a:11 = a:12
+
+# Make sure they scope properly.
+build
+WITH t AS (SELECT true) SELECT * FROM (WITH t AS (SELECT false) SELECT * FROM t)
+----
+with &1 (t)
+ ├── columns: bool:3!null
+ ├── project
+ │    ├── columns: bool:1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── true [as=bool:1]
+ └── with &2 (t)
+      ├── columns: bool:3!null
+      ├── project
+      │    ├── columns: bool:2!null
+      │    ├── values
+      │    │    └── ()
+      │    └── projections
+      │         └── false [as=bool:2]
+      └── with-scan &2 (t)
+           ├── columns: bool:3!null
+           └── mapping:
+                └──  bool:2 => bool:3
+
+build
+WITH
+    t AS (SELECT true),
+    t AS (SELECT false)
+SELECT * FROM t
+----
+error (42712): WITH query name t specified more than once
+
+# Using a CTE once in another CTE and once otherwise.
+build
+WITH
+    t1 AS (SELECT true),
+    t2 AS (SELECT * FROM t1)
+SELECT * FROM t1 NATURAL JOIN t2
+----
+with &1 (t1)
+ ├── columns: bool:3!null
+ ├── project
+ │    ├── columns: bool:1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── true [as=bool:1]
+ └── with &2 (t2)
+      ├── columns: bool:3!null
+      ├── with-scan &1 (t1)
+      │    ├── columns: bool:2!null
+      │    └── mapping:
+      │         └──  bool:1 => bool:2
+      └── project
+           ├── columns: bool:3!null
+           └── inner-join (hash)
+                ├── columns: bool:3!null bool:4!null
+                ├── with-scan &1 (t1)
+                │    ├── columns: bool:3!null
+                │    └── mapping:
+                │         └──  bool:1 => bool:3
+                ├── with-scan &2 (t2)
+                │    ├── columns: bool:4!null
+                │    └── mapping:
+                │         └──  bool:2 => bool:4
+                └── filters
+                     └── bool:3 = bool:4
+
+build
+WITH
+    t1 AS (SELECT * FROM x),
+    t2 AS (SELECT * FROM x NATURAL JOIN t1)
+SELECT * FROM t2 NATURAL JOIN x
+----
+with &1 (t1)
+ ├── columns: a:13!null b:14!null
+ ├── project
+ │    ├── columns: x.a:1 x.b:2
+ │    └── scan x
+ │         └── columns: x.a:1 x.b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── with &2 (t2)
+      ├── columns: a:13!null b:14!null
+      ├── project
+      │    ├── columns: x.a:6!null x.b:7!null
+      │    └── inner-join (hash)
+      │         ├── columns: x.a:6!null x.b:7!null rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 a:11!null b:12!null
+      │         ├── scan x
+      │         │    └── columns: x.a:6 x.b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         ├── with-scan &1 (t1)
+      │         │    ├── columns: a:11 b:12
+      │         │    └── mapping:
+      │         │         ├──  x.a:1 => a:11
+      │         │         └──  x.b:2 => b:12
+      │         └── filters
+      │              ├── x.a:6 = a:11
+      │              └── x.b:7 = b:12
+      └── project
+           ├── columns: a:13!null b:14!null
+           └── inner-join (hash)
+                ├── columns: a:13!null b:14!null x.a:15!null x.b:16!null rowid:17!null crdb_internal_mvcc_timestamp:18 tableoid:19
+                ├── with-scan &2 (t2)
+                │    ├── columns: a:13!null b:14!null
+                │    └── mapping:
+                │         ├──  x.a:6 => a:13
+                │         └──  x.b:7 => b:14
+                ├── scan x
+                │    └── columns: x.a:15 x.b:16 rowid:17!null crdb_internal_mvcc_timestamp:18 tableoid:19
+                └── filters
+                     ├── a:13 = x.a:15
+                     └── b:14 = x.b:16
+
+build
+WITH t AS (SELECT a FROM y WHERE a < 3)
+  SELECT * FROM t NATURAL JOIN t
+----
+error (42712): source name "t" specified more than once (missing AS clause)
+
+build
+WITH t(x) AS (SELECT a FROM x)
+  SELECT x FROM (SELECT x FROM t)
+----
+with &1 (t)
+ ├── columns: x:6
+ ├── project
+ │    ├── columns: a:1
+ │    └── scan x
+ │         └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── with-scan &1 (t)
+      ├── columns: x:6
+      └── mapping:
+           └──  a:1 => x:6
+
+build
+WITH t(a, b) AS (SELECT true a, false b)
+  SELECT a, b FROM t
+----
+with &1 (t)
+ ├── columns: a:3!null b:4!null
+ ├── project
+ │    ├── columns: a:1!null b:2!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         ├── true [as=a:1]
+ │         └── false [as=b:2]
+ └── with-scan &1 (t)
+      ├── columns: a:3!null b:4!null
+      └── mapping:
+           ├──  a:1 => a:3
+           └──  b:2 => b:4
+
+build
+WITH t(b, a) AS (SELECT true a, false b)
+  SELECT a, b FROM t
+----
+with &1 (t)
+ ├── columns: a:4!null b:3!null
+ ├── project
+ │    ├── columns: a:1!null b:2!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         ├── true [as=a:1]
+ │         └── false [as=b:2]
+ └── with-scan &1 (t)
+      ├── columns: b:3!null a:4!null
+      └── mapping:
+           ├──  a:1 => b:3
+           └──  b:2 => a:4
+
+build
+WITH t AS (SELECT a FROM x)
+    SELECT * FROM y WHERE a IN (SELECT * FROM t)
+----
+with &1 (t)
+ ├── columns: a:6
+ ├── project
+ │    ├── columns: x.a:1
+ │    └── scan x
+ │         └── columns: x.a:1 b:2 x.rowid:3!null x.crdb_internal_mvcc_timestamp:4 x.tableoid:5
+ └── project
+      ├── columns: y.a:6
+      └── select
+           ├── columns: y.a:6 y.rowid:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
+           ├── scan y
+           │    └── columns: y.a:6 y.rowid:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
+           └── filters
+                └── any: eq
+                     ├── with-scan &1 (t)
+                     │    ├── columns: a:10
+                     │    └── mapping:
+                     │         └──  x.a:1 => a:10
+                     └── y.a:6
+
+build
+WITH t(x) AS (SELECT a FROM x)
+    SELECT * FROM y WHERE a IN (SELECT x FROM t)
+----
+with &1 (t)
+ ├── columns: a:6
+ ├── project
+ │    ├── columns: x.a:1
+ │    └── scan x
+ │         └── columns: x.a:1 b:2 x.rowid:3!null x.crdb_internal_mvcc_timestamp:4 x.tableoid:5
+ └── project
+      ├── columns: y.a:6
+      └── select
+           ├── columns: y.a:6 y.rowid:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
+           ├── scan y
+           │    └── columns: y.a:6 y.rowid:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
+           └── filters
+                └── any: eq
+                     ├── with-scan &1 (t)
+                     │    ├── columns: x:10
+                     │    └── mapping:
+                     │         └──  x.a:1 => x:10
+                     └── y.a:6
+
+# Using a subquery inside a CTE
+build
+SELECT * FROM x WHERE a IN
+  (WITH t AS (SELECT * FROM y WHERE a < 3) SELECT * FROM t)
+----
+with &1 (t)
+ ├── columns: a:1 b:2
+ ├── project
+ │    ├── columns: y.a:6!null
+ │    └── select
+ │         ├── columns: y.a:6!null y.rowid:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
+ │         ├── scan y
+ │         │    └── columns: y.a:6 y.rowid:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
+ │         └── filters
+ │              └── y.a:6 < 3
+ └── project
+      ├── columns: x.a:1 b:2
+      └── select
+           ├── columns: x.a:1 b:2 x.rowid:3!null x.crdb_internal_mvcc_timestamp:4 x.tableoid:5
+           ├── scan x
+           │    └── columns: x.a:1 b:2 x.rowid:3!null x.crdb_internal_mvcc_timestamp:4 x.tableoid:5
+           └── filters
+                └── any: eq
+                     ├── with-scan &1 (t)
+                     │    ├── columns: a:10!null
+                     │    └── mapping:
+                     │         └──  y.a:6 => a:10
+                     └── x.a:1
+
+# Rename columns
+build
+WITH t(b) AS (SELECT a FROM x) SELECT b, t.b FROM t
+----
+with &1 (t)
+ ├── columns: b:6 b:6
+ ├── project
+ │    ├── columns: a:1
+ │    └── scan x
+ │         └── columns: a:1 x.b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── with-scan &1 (t)
+      ├── columns: b:6
+      └── mapping:
+           └──  a:1 => b:6
+
+build
+WITH t(b, c) AS (SELECT a FROM x) SELECT b, t.b FROM t
+----
+error (42P10): source "t" has 1 columns available but 2 columns specified
+
+# Ensure you can't reference the original table name
+build
+WITH t AS (SELECT a FROM x) SELECT a, x.t FROM t
+----
+error (42P01): no data source matches prefix: x in this context
+
+# Nested WITH, name shadowing
+build
+WITH t(x) AS (WITH t(x) AS (SELECT 1) SELECT x * 10 FROM t) SELECT x + 2 FROM t
+----
+with &1 (t)
+ ├── columns: "?column?":5!null
+ ├── project
+ │    ├── columns: "?column?":1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as="?column?":1]
+ └── with &2 (t)
+      ├── columns: "?column?":5!null
+      ├── project
+      │    ├── columns: "?column?":3!null
+      │    ├── with-scan &1 (t)
+      │    │    ├── columns: x:2!null
+      │    │    └── mapping:
+      │    │         └──  "?column?":1 => x:2
+      │    └── projections
+      │         └── x:2 * 10 [as="?column?":3]
+      └── project
+           ├── columns: "?column?":5!null
+           ├── with-scan &2 (t)
+           │    ├── columns: x:4!null
+           │    └── mapping:
+           │         └──  "?column?":3 => x:4
+           └── projections
+                └── x:4 + 2 [as="?column?":5]
+
+build
+WITH one AS (SELECT a AS u FROM x),
+     two AS (SELECT a AS v FROM (SELECT a FROM y UNION ALL SELECT u FROM one))
+  SELECT * FROM one JOIN two ON u = v
+----
+with &1 (one)
+ ├── columns: u:12!null v:13!null
+ ├── project
+ │    ├── columns: x.a:1
+ │    └── scan x
+ │         └── columns: x.a:1 b:2 x.rowid:3!null x.crdb_internal_mvcc_timestamp:4 x.tableoid:5
+ └── with &2 (two)
+      ├── columns: u:12!null v:13!null
+      ├── union-all
+      │    ├── columns: a:11
+      │    ├── left columns: y.a:6
+      │    ├── right columns: u:10
+      │    ├── project
+      │    │    ├── columns: y.a:6
+      │    │    └── scan y
+      │    │         └── columns: y.a:6 y.rowid:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
+      │    └── with-scan &1 (one)
+      │         ├── columns: u:10
+      │         └── mapping:
+      │              └──  x.a:1 => u:10
+      └── inner-join (hash)
+           ├── columns: u:12!null v:13!null
+           ├── with-scan &1 (one)
+           │    ├── columns: u:12
+           │    └── mapping:
+           │         └──  x.a:1 => u:12
+           ├── with-scan &2 (two)
+           │    ├── columns: v:13
+           │    └── mapping:
+           │         └──  a:11 => v:13
+           └── filters
+                └── u:12 = v:13
+
+build
+WITH foo AS (SELECT x.a FROM x ORDER by x.a) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: a:6
+ ├── project
+ │    ├── columns: x.a:1
+ │    └── scan x
+ │         └── columns: x.a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── with-scan &1 (foo)
+      ├── columns: a:6
+      └── mapping:
+           └──  x.a:1 => a:6
+
+# Mutations.
+build
+WITH t AS (SELECT a FROM x) INSERT INTO x SELECT a + 20 FROM t RETURNING *
+----
+with &1 (t)
+ ├── columns: a:6 b:7
+ ├── project
+ │    ├── columns: x.a:1
+ │    └── scan x
+ │         └── columns: x.a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── project
+      ├── columns: x.a:6 b:7
+      └── insert x
+           ├── columns: x.a:6 b:7 rowid:8!null
+           ├── insert-mapping:
+           │    ├── "?column?":12 => x.a:6
+           │    ├── b_default:13 => b:7
+           │    └── rowid_default:14 => rowid:8
+           ├── return-mapping:
+           │    ├── "?column?":12 => x.a:6
+           │    ├── b_default:13 => b:7
+           │    └── rowid_default:14 => rowid:8
+           └── project
+                ├── columns: b_default:13 rowid_default:14 "?column?":12
+                ├── project
+                │    ├── columns: "?column?":12
+                │    ├── with-scan &1 (t)
+                │    │    ├── columns: a:11
+                │    │    └── mapping:
+                │    │         └──  x.a:1 => a:11
+                │    └── projections
+                │         └── a:11 + 20 [as="?column?":12]
+                └── projections
+                     ├── NULL::INT8 [as=b_default:13]
+                     └── unique_rowid() [as=rowid_default:14]
+
+build
+WITH t AS (SELECT a FROM x) UPDATE x SET a = (SELECT * FROM t) RETURNING *
+----
+with &1 (t)
+ ├── columns: a:6 b:7
+ ├── project
+ │    ├── columns: x.a:1
+ │    └── scan x
+ │         └── columns: x.a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── project
+      ├── columns: x.a:6 b:7
+      └── update x
+           ├── columns: x.a:6 b:7 rowid:8!null
+           ├── fetch columns: x.a:11 b:12 rowid:13
+           ├── update-mapping:
+           │    └── a_new:17 => x.a:6
+           ├── return-mapping:
+           │    ├── a_new:17 => x.a:6
+           │    ├── b:12 => b:7
+           │    └── rowid:13 => rowid:8
+           └── project
+                ├── columns: a_new:17 x.a:11 b:12 rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
+                ├── scan x
+                │    ├── columns: x.a:11 b:12 rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
+                │    └── flags: avoid-full-scan
+                └── projections
+                     └── subquery [as=a_new:17]
+                          └── max1-row
+                               ├── columns: a:16
+                               └── with-scan &1 (t)
+                                    ├── columns: a:16
+                                    └── mapping:
+                                         └──  x.a:1 => a:16
+
+build
+WITH t AS (SELECT a FROM x) DELETE FROM x WHERE a = (SELECT * FROM t) RETURNING *
+----
+with &1 (t)
+ ├── columns: a:6!null b:7
+ ├── project
+ │    ├── columns: x.a:1
+ │    └── scan x
+ │         └── columns: x.a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── project
+      ├── columns: x.a:6!null b:7
+      └── delete x
+           ├── columns: x.a:6!null b:7 rowid:8!null
+           ├── fetch columns: x.a:11 b:12 rowid:13
+           ├── return-mapping:
+           │    ├── x.a:11 => x.a:6
+           │    ├── b:12 => b:7
+           │    └── rowid:13 => rowid:8
+           └── select
+                ├── columns: x.a:11!null b:12 rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
+                ├── scan x
+                │    ├── columns: x.a:11 b:12 rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
+                │    └── flags: avoid-full-scan
+                └── filters
+                     └── eq
+                          ├── x.a:11
+                          └── subquery
+                               └── max1-row
+                                    ├── columns: a:16
+                                    └── with-scan &1 (t)
+                                         ├── columns: a:16
+                                         └── mapping:
+                                              └──  x.a:1 => a:16
+
+
+# Regression test for #40407.
+exec-ddl
+CREATE TABLE xy (x INT, y INT, z TIMESTAMP);
+----
+
+exec-ddl
+CREATE TABLE uv (u INT, v INT);
+----
+
+build
+WITH
+    t AS (SELECT xy.x FROM xy INNER JOIN uv ON xy.x = uv.u ORDER BY uv.v DESC LIMIT 5)
+DELETE FROM
+    xy
+WHERE
+    x = ANY (SELECT * FROM t);
+----
+with &1 (t)
+ ├── project
+ │    ├── columns: xy.x:1!null
+ │    └── limit
+ │         ├── columns: xy.x:1!null v:8
+ │         ├── internal-ordering: -8
+ │         ├── sort
+ │         │    ├── columns: xy.x:1!null v:8
+ │         │    ├── ordering: -8
+ │         │    ├── limit hint: 5.00
+ │         │    └── project
+ │         │         ├── columns: xy.x:1!null v:8
+ │         │         └── inner-join (hash)
+ │         │              ├── columns: xy.x:1!null y:2 z:3 xy.rowid:4!null xy.crdb_internal_mvcc_timestamp:5 xy.tableoid:6 u:7!null v:8 uv.rowid:9!null uv.crdb_internal_mvcc_timestamp:10 uv.tableoid:11
+ │         │              ├── scan xy
+ │         │              │    └── columns: xy.x:1 y:2 z:3 xy.rowid:4!null xy.crdb_internal_mvcc_timestamp:5 xy.tableoid:6
+ │         │              ├── scan uv
+ │         │              │    └── columns: u:7 v:8 uv.rowid:9!null uv.crdb_internal_mvcc_timestamp:10 uv.tableoid:11
+ │         │              └── filters
+ │         │                   └── xy.x:1 = u:7
+ │         └── 5
+ └── delete xy
+      ├── columns: <none>
+      ├── fetch columns: xy.x:18 y:19 z:20 xy.rowid:21
+      └── select
+           ├── columns: xy.x:18 y:19 z:20 xy.rowid:21!null xy.crdb_internal_mvcc_timestamp:22 xy.tableoid:23
+           ├── scan xy
+           │    ├── columns: xy.x:18 y:19 z:20 xy.rowid:21!null xy.crdb_internal_mvcc_timestamp:22 xy.tableoid:23
+           │    └── flags: avoid-full-scan
+           └── filters
+                └── any: eq
+                     ├── with-scan &1 (t)
+                     │    ├── columns: x:24!null
+                     │    └── mapping:
+                     │         └──  xy.x:1 => x:24
+                     └── xy.x:18
+
+# Check hidden column handling: level, node_type should not be output.
+build
+WITH cte AS (EXPLAIN (VERBOSE) SELECT 1) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: info:3
+ ├── explain
+ │    ├── columns: info:2
+ │    ├── mode: verbose
+ │    └── project
+ │         ├── columns: "?column?":1!null
+ │         ├── values
+ │         │    └── ()
+ │         └── projections
+ │              └── 1 [as="?column?":1]
+ └── with-scan &1 (cte)
+      ├── columns: info:3
+      └── mapping:
+           └──  info:2 => info:3
+
+# WITH RECURSIVE examples from postgres docs.
+
+build
+WITH RECURSIVE t(n) AS (
+    VALUES (1)
+  UNION ALL
+    SELECT n+1 FROM t WHERE n < 100
+)
+SELECT sum(n) FROM t
+----
+with &2 (t)
+ ├── columns: sum:6
+ ├── recursive-c-t-e
+ │    ├── columns: n:2
+ │    ├── working table binding: &1
+ │    ├── initial columns: column1:1
+ │    ├── recursive columns: "?column?":4
+ │    ├── fake-rel
+ │    │    └── columns: n:2
+ │    ├── values
+ │    │    ├── columns: column1:1!null
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── select
+ │         │    ├── columns: n:3!null
+ │         │    ├── with-scan &1 (t)
+ │         │    │    ├── columns: n:3
+ │         │    │    └── mapping:
+ │         │    │         └──  n:2 => n:3
+ │         │    └── filters
+ │         │         └── n:3 < 100
+ │         └── projections
+ │              └── n:3 + 1 [as="?column?":4]
+ └── scalar-group-by
+      ├── columns: sum:6
+      ├── with-scan &2 (t)
+      │    ├── columns: n:5
+      │    └── mapping:
+      │         └──  n:2 => n:5
+      └── aggregations
+           └── sum [as=sum:6]
+                └── n:5
+
+build
+WITH RECURSIVE t(n) AS (
+    VALUES (1)
+  UNION
+    SELECT n+1 FROM t WHERE n < 100
+)
+SELECT sum(n) FROM t
+----
+with &2 (t)
+ ├── columns: sum:6
+ ├── recursive-c-t-e
+ │    ├── columns: n:2
+ │    ├── deduplicate
+ │    ├── working table binding: &1
+ │    ├── initial columns: column1:1
+ │    ├── recursive columns: "?column?":4
+ │    ├── fake-rel
+ │    │    └── columns: n:2
+ │    ├── values
+ │    │    ├── columns: column1:1!null
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── select
+ │         │    ├── columns: n:3!null
+ │         │    ├── with-scan &1 (t)
+ │         │    │    ├── columns: n:3
+ │         │    │    └── mapping:
+ │         │    │         └──  n:2 => n:3
+ │         │    └── filters
+ │         │         └── n:3 < 100
+ │         └── projections
+ │              └── n:3 + 1 [as="?column?":4]
+ └── scalar-group-by
+      ├── columns: sum:6
+      ├── with-scan &2 (t)
+      │    ├── columns: n:5
+      │    └── mapping:
+      │         └──  n:2 => n:5
+      └── aggregations
+           └── sum [as=sum:6]
+                └── n:5
+
+exec-ddl
+CREATE TABLE parts (part STRING, sub_part STRING, quantity INT)
+----
+
+build
+WITH RECURSIVE included_parts(sub_part, part, quantity) AS (
+    SELECT sub_part, part, quantity FROM parts WHERE part = 'our_product'
+  UNION ALL
+    SELECT p.sub_part, p.part, p.quantity
+    FROM included_parts AS pr, parts AS p
+    WHERE p.part = pr.sub_part
+)
+SELECT sub_part, sum(quantity) as total_quantity
+FROM included_parts
+GROUP BY sub_part
+----
+with &2 (included_parts)
+ ├── columns: sub_part:19 total_quantity:22
+ ├── recursive-c-t-e
+ │    ├── columns: sub_part:7 part:8 quantity:9
+ │    ├── working table binding: &1
+ │    ├── initial columns: parts.sub_part:2 parts.part:1 parts.quantity:3
+ │    ├── recursive columns: p.sub_part:14 p.part:13 p.quantity:15
+ │    ├── fake-rel
+ │    │    └── columns: sub_part:7 part:8 quantity:9
+ │    ├── project
+ │    │    ├── columns: parts.part:1!null parts.sub_part:2 parts.quantity:3
+ │    │    └── select
+ │    │         ├── columns: parts.part:1!null parts.sub_part:2 parts.quantity:3 parts.rowid:4!null parts.crdb_internal_mvcc_timestamp:5 parts.tableoid:6
+ │    │         ├── scan parts
+ │    │         │    └── columns: parts.part:1 parts.sub_part:2 parts.quantity:3 parts.rowid:4!null parts.crdb_internal_mvcc_timestamp:5 parts.tableoid:6
+ │    │         └── filters
+ │    │              └── parts.part:1 = 'our_product'
+ │    └── project
+ │         ├── columns: p.part:13!null p.sub_part:14 p.quantity:15
+ │         └── select
+ │              ├── columns: sub_part:10!null part:11 quantity:12 p.part:13!null p.sub_part:14 p.quantity:15 p.rowid:16!null p.crdb_internal_mvcc_timestamp:17 p.tableoid:18
+ │              ├── inner-join (cross)
+ │              │    ├── columns: sub_part:10 part:11 quantity:12 p.part:13 p.sub_part:14 p.quantity:15 p.rowid:16!null p.crdb_internal_mvcc_timestamp:17 p.tableoid:18
+ │              │    ├── with-scan &1 (included_parts)
+ │              │    │    ├── columns: sub_part:10 part:11 quantity:12
+ │              │    │    └── mapping:
+ │              │    │         ├──  sub_part:7 => sub_part:10
+ │              │    │         ├──  part:8 => part:11
+ │              │    │         └──  quantity:9 => quantity:12
+ │              │    ├── scan parts [as=p]
+ │              │    │    └── columns: p.part:13 p.sub_part:14 p.quantity:15 p.rowid:16!null p.crdb_internal_mvcc_timestamp:17 p.tableoid:18
+ │              │    └── filters (true)
+ │              └── filters
+ │                   └── p.part:13 = sub_part:10
+ └── group-by (hash)
+      ├── columns: sub_part:19 sum:22
+      ├── grouping columns: sub_part:19
+      ├── project
+      │    ├── columns: sub_part:19 quantity:21
+      │    └── with-scan &2 (included_parts)
+      │         ├── columns: sub_part:19 part:20 quantity:21
+      │         └── mapping:
+      │              ├──  sub_part:7 => sub_part:19
+      │              ├──  part:8 => part:20
+      │              └──  quantity:9 => quantity:21
+      └── aggregations
+           └── sum [as=sum:22]
+                └── quantity:21
+
+
+exec-ddl
+CREATE TABLE graph (id INT PRIMARY KEY, link INT, data STRING)
+----
+
+build
+WITH RECURSIVE search_graph(id, link, data, depth, path, cycle) AS (
+    SELECT g.id, g.link, g.data, 1,
+      ARRAY[g.id],
+      false
+    FROM graph g
+  UNION ALL
+    SELECT g.id, g.link, g.data, sg.depth + 1,
+      path || g.id,
+      g.id = ANY(path)
+    FROM graph g, search_graph sg
+    WHERE g.id = sg.link AND NOT cycle
+)
+SELECT * FROM search_graph
+----
+with &2 (search_graph)
+ ├── columns: id:29 link:30 data:31 depth:32 path:33 cycle:34
+ ├── recursive-c-t-e
+ │    ├── columns: id:9 link:10 data:11 depth:12 path:13 cycle:14
+ │    ├── working table binding: &1
+ │    ├── initial columns: g.id:1 g.link:2 g.data:3 "?column?":6 array:7 bool:8
+ │    ├── recursive columns: g.id:15 g.link:16 g.data:17 "?column?":26 "?column?":27 "?column?":28
+ │    ├── fake-rel
+ │    │    └── columns: id:9 link:10 data:11 depth:12 path:13 cycle:14
+ │    ├── project
+ │    │    ├── columns: "?column?":6!null array:7!null bool:8!null g.id:1!null g.link:2 g.data:3
+ │    │    ├── scan graph [as=g]
+ │    │    │    └── columns: g.id:1!null g.link:2 g.data:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    │    └── projections
+ │    │         ├── 1 [as="?column?":6]
+ │    │         ├── ARRAY[g.id:1] [as=array:7]
+ │    │         └── false [as=bool:8]
+ │    └── project
+ │         ├── columns: "?column?":26 "?column?":27 "?column?":28 g.id:15!null g.link:16 g.data:17
+ │         ├── select
+ │         │    ├── columns: g.id:15!null g.link:16 g.data:17 crdb_internal_mvcc_timestamp:18 tableoid:19 id:20 link:21!null data:22 depth:23 path:24 cycle:25!null
+ │         │    ├── inner-join (cross)
+ │         │    │    ├── columns: g.id:15!null g.link:16 g.data:17 crdb_internal_mvcc_timestamp:18 tableoid:19 id:20 link:21 data:22 depth:23 path:24 cycle:25
+ │         │    │    ├── scan graph [as=g]
+ │         │    │    │    └── columns: g.id:15!null g.link:16 g.data:17 crdb_internal_mvcc_timestamp:18 tableoid:19
+ │         │    │    ├── with-scan &1 (search_graph)
+ │         │    │    │    ├── columns: id:20 link:21 data:22 depth:23 path:24 cycle:25
+ │         │    │    │    └── mapping:
+ │         │    │    │         ├──  id:9 => id:20
+ │         │    │    │         ├──  link:10 => link:21
+ │         │    │    │         ├──  data:11 => data:22
+ │         │    │    │         ├──  depth:12 => depth:23
+ │         │    │    │         ├──  path:13 => path:24
+ │         │    │    │         └──  cycle:14 => cycle:25
+ │         │    │    └── filters (true)
+ │         │    └── filters
+ │         │         └── (g.id:15 = link:21) AND (NOT cycle:25)
+ │         └── projections
+ │              ├── depth:23 + 1 [as="?column?":26]
+ │              ├── path:24 || g.id:15 [as="?column?":27]
+ │              └── g.id:15 = ANY path:24 [as="?column?":28]
+ └── with-scan &2 (search_graph)
+      ├── columns: id:29 link:30 data:31 depth:32 path:33 cycle:34
+      └── mapping:
+           ├──  id:9 => id:29
+           ├──  link:10 => link:30
+           ├──  data:11 => data:31
+           ├──  depth:12 => depth:32
+           ├──  path:13 => path:33
+           └──  cycle:14 => cycle:34
+
+# Test where initial query has duplicate columns.
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 0, 0
+  UNION ALL
+    SELECT a+1, b+10 FROM cte WHERE a < 5
+) SELECT * FROM cte;
+----
+with &2 (cte)
+ ├── columns: a:8 b:9
+ ├── recursive-c-t-e
+ │    ├── columns: a:2 b:3
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1 "?column?":1
+ │    ├── recursive columns: "?column?":6 "?column?":7
+ │    ├── fake-rel
+ │    │    └── columns: a:2 b:3
+ │    ├── project
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         └── 0 [as="?column?":1]
+ │    └── project
+ │         ├── columns: "?column?":6!null "?column?":7
+ │         ├── select
+ │         │    ├── columns: a:4!null b:5
+ │         │    ├── with-scan &1 (cte)
+ │         │    │    ├── columns: a:4 b:5
+ │         │    │    └── mapping:
+ │         │    │         ├──  a:2 => a:4
+ │         │    │         └──  b:3 => b:5
+ │         │    └── filters
+ │         │         └── a:4 < 5
+ │         └── projections
+ │              ├── a:4 + 1 [as="?column?":6]
+ │              └── b:5 + 10 [as="?column?":7]
+ └── with-scan &2 (cte)
+      ├── columns: a:8 b:9
+      └── mapping:
+           ├──  a:2 => a:8
+           └──  b:3 => b:9
+
+# Test where recursive query has duplicate columns.
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 0, 1
+  UNION ALL
+    SELECT a+1, a+1 FROM cte WHERE a < 5
+) SELECT * FROM cte;
+----
+with &2 (cte)
+ ├── columns: a:8 b:9
+ ├── recursive-c-t-e
+ │    ├── columns: a:3 b:4
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":7 "?column?":7
+ │    ├── fake-rel
+ │    │    └── columns: a:3 b:4
+ │    ├── project
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         ├── 0 [as="?column?":1]
+ │    │         └── 1 [as="?column?":2]
+ │    └── project
+ │         ├── columns: "?column?":7!null
+ │         ├── select
+ │         │    ├── columns: a:5!null b:6
+ │         │    ├── with-scan &1 (cte)
+ │         │    │    ├── columns: a:5 b:6
+ │         │    │    └── mapping:
+ │         │    │         ├──  a:3 => a:5
+ │         │    │         └──  b:4 => b:6
+ │         │    └── filters
+ │         │         └── a:5 < 5
+ │         └── projections
+ │              └── a:5 + 1 [as="?column?":7]
+ └── with-scan &2 (cte)
+      ├── columns: a:8 b:9
+      └── mapping:
+           ├──  a:3 => a:8
+           └──  b:4 => b:9
+
+# Allow non-recursive CTE when RECURSIVE is used.
+build
+WITH RECURSIVE cte(a, b) AS (
+  SELECT 1, 2
+) SELECT * FROM cte;
+----
+with &2 (cte)
+ ├── columns: a:3!null b:4!null
+ ├── project
+ │    ├── columns: "?column?":1!null "?column?":2!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         ├── 1 [as="?column?":1]
+ │         └── 2 [as="?column?":2]
+ └── with-scan &2 (cte)
+      ├── columns: a:3!null b:4!null
+      └── mapping:
+           ├──  "?column?":1 => a:3
+           └──  "?column?":2 => b:4
+
+# Allow non-recursive CTE even when it has UNION ALL.
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 1, 2
+  UNION ALL
+    SELECT 3, 4
+) SELECT * FROM cte;
+----
+with &2 (cte)
+ ├── columns: a:9!null b:10!null
+ ├── union-all
+ │    ├── columns: "?column?":7!null "?column?":8!null
+ │    ├── left columns: "?column?":1 "?column?":2
+ │    ├── right columns: "?column?":5 "?column?":6
+ │    ├── project
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         ├── 1 [as="?column?":1]
+ │    │         └── 2 [as="?column?":2]
+ │    └── project
+ │         ├── columns: "?column?":5!null "?column?":6!null
+ │         ├── values
+ │         │    └── ()
+ │         └── projections
+ │              ├── 3 [as="?column?":5]
+ │              └── 4 [as="?column?":6]
+ └── with-scan &2 (cte)
+      ├── columns: a:9!null b:10!null
+      └── mapping:
+           ├──  "?column?":7 => a:9
+           └──  "?column?":8 => b:10
+
+# Allow non-recursive CTE even when it has UNION.
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 1, 2
+  UNION
+    SELECT 3, 4
+) SELECT * FROM cte;
+----
+with &2 (cte)
+ ├── columns: a:9!null b:10!null
+ ├── union
+ │    ├── columns: "?column?":7!null "?column?":8!null
+ │    ├── left columns: "?column?":1 "?column?":2
+ │    ├── right columns: "?column?":5 "?column?":6
+ │    ├── project
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         ├── 1 [as="?column?":1]
+ │    │         └── 2 [as="?column?":2]
+ │    └── project
+ │         ├── columns: "?column?":5!null "?column?":6!null
+ │         ├── values
+ │         │    └── ()
+ │         └── projections
+ │              ├── 3 [as="?column?":5]
+ │              └── 4 [as="?column?":6]
+ └── with-scan &2 (cte)
+      ├── columns: a:9!null b:10!null
+      └── mapping:
+           ├──  "?column?":7 => a:9
+           └──  "?column?":8 => b:10
+
+# Error cases.
+build
+WITH RECURSIVE cte(a, b) AS (
+  SELECT 1+a, 1+b FROM cte
+) SELECT * FROM cte;
+----
+error (42601): recursive query "cte" does not have the form non-recursive-term UNION [ALL] recursive-term
+
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 1+a, 1+b FROM cte
+  UNION ALL
+    SELECT 3, 4
+) SELECT * FROM cte;
+----
+error (42601): recursive reference to query "cte" must not appear within its non-recursive term
+
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 1, 2
+  UNION ALL
+    SELECT c1.a+c2.a, c1.b+c2.b FROM cte AS c1, cte AS c2
+) SELECT * FROM cte;
+----
+error (42601): recursive reference to query "cte" must not appear more than once
+
+# If we really need to reference the working table multiple times, we can use
+# an inner WITH.
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 1, 2
+  UNION ALL
+    (WITH foo AS (SELECT * FROM cte) SELECT c1.a+c2.a, c1.b+c2.b FROM foo AS c1, foo AS c2)
+) SELECT * FROM cte;
+----
+with &3 (cte)
+ ├── columns: a:13 b:14
+ ├── recursive-c-t-e
+ │    ├── columns: a:3 b:4
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":11 "?column?":12
+ │    ├── fake-rel
+ │    │    └── columns: a:3 b:4
+ │    ├── project
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         ├── 1 [as="?column?":1]
+ │    │         └── 2 [as="?column?":2]
+ │    └── with &2 (foo)
+ │         ├── columns: "?column?":11 "?column?":12
+ │         ├── with-scan &1 (cte)
+ │         │    ├── columns: a:5 b:6
+ │         │    └── mapping:
+ │         │         ├──  a:3 => a:5
+ │         │         └──  b:4 => b:6
+ │         └── project
+ │              ├── columns: "?column?":11 "?column?":12
+ │              ├── inner-join (cross)
+ │              │    ├── columns: a:7 b:8 a:9 b:10
+ │              │    ├── with-scan &2 (foo)
+ │              │    │    ├── columns: a:7 b:8
+ │              │    │    └── mapping:
+ │              │    │         ├──  a:5 => a:7
+ │              │    │         └──  b:6 => b:8
+ │              │    ├── with-scan &2 (foo)
+ │              │    │    ├── columns: a:9 b:10
+ │              │    │    └── mapping:
+ │              │    │         ├──  a:5 => a:9
+ │              │    │         └──  b:6 => b:10
+ │              │    └── filters (true)
+ │              └── projections
+ │                   ├── a:7 + a:9 [as="?column?":11]
+ │                   └── b:8 + b:10 [as="?column?":12]
+ └── with-scan &3 (cte)
+      ├── columns: a:13 b:14
+      └── mapping:
+           ├──  a:3 => a:13
+           └──  b:4 => b:14
+
+
+# Verify that we still hoist inner WITHs that don't refer to the recursive CTE.
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 1, 2
+  UNION ALL
+    (WITH foo AS (SELECT * FROM cte),
+          bar AS (SELECT 1 AS x, 2 AS y)
+    SELECT a+x, b+y FROM foo, bar)
+) SELECT * FROM cte;
+----
+with &3 (bar)
+ ├── columns: a:15 b:16
+ ├── project
+ │    ├── columns: x:7!null y:8!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         ├── 1 [as=x:7]
+ │         └── 2 [as=y:8]
+ └── with &4 (cte)
+      ├── columns: a:15 b:16
+      ├── recursive-c-t-e
+      │    ├── columns: a:3 b:4
+      │    ├── working table binding: &1
+      │    ├── initial columns: "?column?":1 "?column?":2
+      │    ├── recursive columns: "?column?":13 "?column?":14
+      │    ├── fake-rel
+      │    │    └── columns: a:3 b:4
+      │    ├── project
+      │    │    ├── columns: "?column?":1!null "?column?":2!null
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── projections
+      │    │         ├── 1 [as="?column?":1]
+      │    │         └── 2 [as="?column?":2]
+      │    └── with &2 (foo)
+      │         ├── columns: "?column?":13 "?column?":14
+      │         ├── with-scan &1 (cte)
+      │         │    ├── columns: a:5 b:6
+      │         │    └── mapping:
+      │         │         ├──  a:3 => a:5
+      │         │         └──  b:4 => b:6
+      │         └── project
+      │              ├── columns: "?column?":13 "?column?":14
+      │              ├── inner-join (cross)
+      │              │    ├── columns: a:9 b:10 x:11!null y:12!null
+      │              │    ├── with-scan &2 (foo)
+      │              │    │    ├── columns: a:9 b:10
+      │              │    │    └── mapping:
+      │              │    │         ├──  a:5 => a:9
+      │              │    │         └──  b:6 => b:10
+      │              │    ├── with-scan &3 (bar)
+      │              │    │    ├── columns: x:11!null y:12!null
+      │              │    │    └── mapping:
+      │              │    │         ├──  x:7 => x:11
+      │              │    │         └──  y:8 => y:12
+      │              │    └── filters (true)
+      │              └── projections
+      │                   ├── a:9 + x:11 [as="?column?":13]
+      │                   └── b:10 + y:12 [as="?column?":14]
+      └── with-scan &4 (cte)
+           ├── columns: a:15 b:16
+           └── mapping:
+                ├──  a:3 => a:15
+                └──  b:4 => b:16
+
+# Verify that we don't hoist inner WITHs that indirecly refer to the recursive
+# CTE.
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 1, 2
+  UNION ALL
+    (WITH foo AS (SELECT * FROM cte),
+          bar AS (SELECT a+1 AS x, b+2 AS y FROM foo)
+    SELECT a+x, b+y FROM foo, bar)
+) SELECT * FROM cte;
+----
+with &4 (cte)
+ ├── columns: a:17 b:18
+ ├── recursive-c-t-e
+ │    ├── columns: a:3 b:4
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":15 "?column?":16
+ │    ├── fake-rel
+ │    │    └── columns: a:3 b:4
+ │    ├── project
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         ├── 1 [as="?column?":1]
+ │    │         └── 2 [as="?column?":2]
+ │    └── with &2 (foo)
+ │         ├── columns: "?column?":15 "?column?":16
+ │         ├── with-scan &1 (cte)
+ │         │    ├── columns: a:5 b:6
+ │         │    └── mapping:
+ │         │         ├──  a:3 => a:5
+ │         │         └──  b:4 => b:6
+ │         └── with &3 (bar)
+ │              ├── columns: "?column?":15 "?column?":16
+ │              ├── project
+ │              │    ├── columns: x:9 y:10
+ │              │    ├── with-scan &2 (foo)
+ │              │    │    ├── columns: a:7 b:8
+ │              │    │    └── mapping:
+ │              │    │         ├──  a:5 => a:7
+ │              │    │         └──  b:6 => b:8
+ │              │    └── projections
+ │              │         ├── a:7 + 1 [as=x:9]
+ │              │         └── b:8 + 2 [as=y:10]
+ │              └── project
+ │                   ├── columns: "?column?":15 "?column?":16
+ │                   ├── inner-join (cross)
+ │                   │    ├── columns: a:11 b:12 x:13 y:14
+ │                   │    ├── with-scan &2 (foo)
+ │                   │    │    ├── columns: a:11 b:12
+ │                   │    │    └── mapping:
+ │                   │    │         ├──  a:5 => a:11
+ │                   │    │         └──  b:6 => b:12
+ │                   │    ├── with-scan &3 (bar)
+ │                   │    │    ├── columns: x:13 y:14
+ │                   │    │    └── mapping:
+ │                   │    │         ├──  x:9 => x:13
+ │                   │    │         └──  y:10 => y:14
+ │                   │    └── filters (true)
+ │                   └── projections
+ │                        ├── a:11 + x:13 [as="?column?":15]
+ │                        └── b:12 + y:14 [as="?column?":16]
+ └── with-scan &4 (cte)
+      ├── columns: a:17 b:18
+      └── mapping:
+           ├──  a:3 => a:17
+           └──  b:4 => b:18
+
+# Verify that [...] statements are hoisted to the top level.
+build
+WITH RECURSIVE cte(x, y) AS (
+    SELECT 1, 2
+  UNION ALL
+    SELECT a+x, b+y FROM cte, [INSERT INTO x VALUES (1,1),(2,2) RETURNING a, b] AS bar
+) SELECT * FROM cte;
+----
+with &2
+ ├── columns: x:19 y:20
+ ├── project
+ │    ├── columns: x.a:7!null x.b:8!null
+ │    └── insert x
+ │         ├── columns: x.a:7!null x.b:8!null rowid:9!null
+ │         ├── insert-mapping:
+ │         │    ├── column1:12 => x.a:7
+ │         │    ├── column2:13 => x.b:8
+ │         │    └── rowid_default:14 => rowid:9
+ │         ├── return-mapping:
+ │         │    ├── column1:12 => x.a:7
+ │         │    ├── column2:13 => x.b:8
+ │         │    └── rowid_default:14 => rowid:9
+ │         └── project
+ │              ├── columns: rowid_default:14 column1:12!null column2:13!null
+ │              ├── values
+ │              │    ├── columns: column1:12!null column2:13!null
+ │              │    ├── (1, 1)
+ │              │    └── (2, 2)
+ │              └── projections
+ │                   └── unique_rowid() [as=rowid_default:14]
+ └── with &3 (cte)
+      ├── columns: x:19 y:20
+      ├── recursive-c-t-e
+      │    ├── columns: x:3 y:4
+      │    ├── working table binding: &1
+      │    ├── initial columns: "?column?":1 "?column?":2
+      │    ├── recursive columns: "?column?":17 "?column?":18
+      │    ├── fake-rel
+      │    │    └── columns: x:3 y:4
+      │    ├── project
+      │    │    ├── columns: "?column?":1!null "?column?":2!null
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── projections
+      │    │         ├── 1 [as="?column?":1]
+      │    │         └── 2 [as="?column?":2]
+      │    └── project
+      │         ├── columns: "?column?":17 "?column?":18
+      │         ├── inner-join (cross)
+      │         │    ├── columns: x:5 y:6 a:15!null b:16!null
+      │         │    ├── with-scan &1 (cte)
+      │         │    │    ├── columns: x:5 y:6
+      │         │    │    └── mapping:
+      │         │    │         ├──  x:3 => x:5
+      │         │    │         └──  y:4 => y:6
+      │         │    ├── with-scan &2
+      │         │    │    ├── columns: a:15!null b:16!null
+      │         │    │    └── mapping:
+      │         │    │         ├──  x.a:7 => a:15
+      │         │    │         └──  x.b:8 => b:16
+      │         │    └── filters (true)
+      │         └── projections
+      │              ├── a:15 + x:5 [as="?column?":17]
+      │              └── b:16 + y:6 [as="?column?":18]
+      └── with-scan &3 (cte)
+           ├── columns: x:19 y:20
+           └── mapping:
+                ├──  x:3 => x:19
+                └──  y:4 => y:20
+
+# Veryify use of WITH inside the initial statement.
+build
+WITH RECURSIVE cte(a) AS (
+    (WITH v(x) AS (VALUES (1), (2)) SELECT v.x + v1.x FROM v, v AS v1)
+  UNION ALL
+    (SELECT a*10 FROM cte WHERE a < 100)
+) SELECT * FROM cte;
+----
+with &2 (v)
+ ├── columns: a:8
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    └── (2,)
+ └── with &3 (cte)
+      ├── columns: a:8
+      ├── recursive-c-t-e
+      │    ├── columns: a:5
+      │    ├── working table binding: &1
+      │    ├── initial columns: "?column?":4
+      │    ├── recursive columns: "?column?":7
+      │    ├── fake-rel
+      │    │    └── columns: a:5
+      │    ├── project
+      │    │    ├── columns: "?column?":4!null
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: x:2!null x:3!null
+      │    │    │    ├── with-scan &2 (v)
+      │    │    │    │    ├── columns: x:2!null
+      │    │    │    │    └── mapping:
+      │    │    │    │         └──  column1:1 => x:2
+      │    │    │    ├── with-scan &2 (v)
+      │    │    │    │    ├── columns: x:3!null
+      │    │    │    │    └── mapping:
+      │    │    │    │         └──  column1:1 => x:3
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── x:2 + x:3 [as="?column?":4]
+      │    └── project
+      │         ├── columns: "?column?":7!null
+      │         ├── select
+      │         │    ├── columns: a:6!null
+      │         │    ├── with-scan &1 (cte)
+      │         │    │    ├── columns: a:6
+      │         │    │    └── mapping:
+      │         │    │         └──  a:5 => a:6
+      │         │    └── filters
+      │         │         └── a:6 < 100
+      │         └── projections
+      │              └── a:6 * 10 [as="?column?":7]
+      └── with-scan &3 (cte)
+           ├── columns: a:8
+           └── mapping:
+                └──  a:5 => a:8
+
+# Verify a missing explicit cast in the "initial" query errors out.
+build
+WITH RECURSIVE cte(x) AS (SELECT a FROM x UNION ALL SELECT x::FLOAT FROM cte WHERE x < 10) SELECT * FROM cte;
+----
+error (42804): recursive query "cte" column 1 has type int in non-recursive term but type float overall
+
+exec-ddl
+CREATE TABLE graph_node (
+  id VARCHAR(16) PRIMARY KEY,
+  parent VARCHAR(16)
+)
+----
+
+# Verify a missing explicit cast in the "initial" query errors out.
+build
+WITH RECURSIVE nodes AS (
+  SELECT 'A' AS id
+  UNION ALL
+  SELECT graph_node.id FROM graph_node JOIN nodes ON graph_node.parent = nodes.id
+)
+SELECT * FROM nodes;
+----
+error (42804): recursive query "nodes" column 1 has type string in non-recursive term but type varchar overall
+
+# Mutating WITHs not allowed at non-root positions.
+build
+SELECT * FROM (WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo)
+----
+error (0A000): WITH clause containing a data-modifying statement must be at the top level
+
+build
+SELECT (WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo)
+----
+error (0A000): WITH clause containing a data-modifying statement must be at the top level
+
+build
+SELECT (WITH foo AS (UPDATE y SET a = 4 RETURNING *) SELECT * FROM foo)
+----
+error (0A000): WITH clause containing a data-modifying statement must be at the top level
+
+# Certain contexts besides the literal root allow mutating CTEs, like
+# underneath an EXPLAIN.
+build
+EXPLAIN WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo
+----
+explain
+ ├── columns: info:8
+ └── with &1 (foo)
+      ├── columns: a:7!null
+      ├── project
+      │    ├── columns: y.a:1!null
+      │    └── insert y
+      │         ├── columns: y.a:1!null rowid:2!null
+      │         ├── insert-mapping:
+      │         │    ├── column1:5 => y.a:1
+      │         │    └── rowid_default:6 => rowid:2
+      │         ├── return-mapping:
+      │         │    ├── column1:5 => y.a:1
+      │         │    └── rowid_default:6 => rowid:2
+      │         └── project
+      │              ├── columns: rowid_default:6 column1:5!null
+      │              ├── values
+      │              │    ├── columns: column1:5!null
+      │              │    └── (1,)
+      │              └── projections
+      │                   └── unique_rowid() [as=rowid_default:6]
+      └── with-scan &1 (foo)
+           ├── columns: a:7!null
+           └── mapping:
+                └──  y.a:1 => a:7
+
+exec-ddl
+CREATE TABLE a(x INT);
+----
+
+build
+INSERT INTO a(x)
+        (WITH b(z) AS (VALUES (1),(2),(3)) SELECT z+1 AS w FROM b)
+----
+with &1 (b)
+ ├── values
+ │    ├── columns: column1:5!null
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (3,)
+ └── insert a
+      ├── columns: <none>
+      ├── insert-mapping:
+      │    ├── w:7 => x:1
+      │    └── rowid_default:8 => rowid:2
+      └── project
+           ├── columns: rowid_default:8 w:7!null
+           ├── project
+           │    ├── columns: w:7!null
+           │    ├── with-scan &1 (b)
+           │    │    ├── columns: z:6!null
+           │    │    └── mapping:
+           │    │         └──  column1:5 => z:6
+           │    └── projections
+           │         └── z:6 + 1 [as=w:7]
+           └── projections
+                └── unique_rowid() [as=rowid_default:8]
+
+# Subquery as a whole is correlated, but the WITH is not.
+build
+SELECT (WITH foo as (VALUES (1)) SELECT x) FROM (VALUES (1)) AS v(x)
+----
+with &1 (foo)
+ ├── columns: x:4
+ ├── values
+ │    ├── columns: column1:2!null
+ │    └── (1,)
+ └── project
+      ├── columns: x:4
+      ├── values
+      │    ├── columns: column1:1!null
+      │    └── (1,)
+      └── projections
+           └── subquery [as=x:4]
+                └── max1-row
+                     ├── columns: x:3
+                     └── project
+                          ├── columns: x:3
+                          ├── values
+                          │    └── ()
+                          └── projections
+                               └── column1:1 [as=x:3]
+
+# Regression test for #43963.
+build
+WITH a AS (SELECT 1 AS testval) SELECT a.testval FROM a
+----
+with &1 (a)
+ ├── columns: testval:2!null
+ ├── project
+ │    ├── columns: testval:1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as=testval:1]
+ └── with-scan &1 (a)
+      ├── columns: testval:2!null
+      └── mapping:
+           └──  testval:1 => testval:2
+
+build
+WITH t AS MATERIALIZED (SELECT a FROM y WHERE a < 3)
+  SELECT * FROM x NATURAL JOIN t
+----
+with &1 (t)
+ ├── columns: a:5!null b:6
+ ├── materialized
+ ├── project
+ │    ├── columns: y.a:1!null
+ │    └── select
+ │         ├── columns: y.a:1!null y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+ │         ├── scan y
+ │         │    └── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+ │         └── filters
+ │              └── y.a:1 < 3
+ └── project
+      ├── columns: x.a:5!null b:6
+      └── inner-join (hash)
+           ├── columns: x.a:5!null b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9 a:10!null
+           ├── scan x
+           │    └── columns: x.a:5 b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9
+           ├── with-scan &1 (t)
+           │    ├── columns: a:10!null
+           │    └── mapping:
+           │         └──  y.a:1 => a:10
+           └── filters
+                └── x.a:5 = a:10
+
+build
+WITH t AS NOT MATERIALIZED (SELECT a FROM y WHERE a < 3)
+  SELECT * FROM x NATURAL JOIN t
+----
+with &1 (t)
+ ├── columns: a:5!null b:6
+ ├── not-materialized
+ ├── project
+ │    ├── columns: y.a:1!null
+ │    └── select
+ │         ├── columns: y.a:1!null y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+ │         ├── scan y
+ │         │    └── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+ │         └── filters
+ │              └── y.a:1 < 3
+ └── project
+      ├── columns: x.a:5!null b:6
+      └── inner-join (hash)
+           ├── columns: x.a:5!null b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9 a:10!null
+           ├── scan x
+           │    └── columns: x.a:5 b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9
+           ├── with-scan &1 (t)
+           │    ├── columns: a:10!null
+           │    └── mapping:
+           │         └──  y.a:1 => a:10
+           └── filters
+                └── x.a:5 = a:10
+
+# Verify that we don't incorrectly project a+1 again (#55196).
+build
+WITH cte AS (SELECT a+1 FROM x ORDER BY a+b LIMIT 10) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: "?column?":8
+ ├── project
+ │    ├── columns: "?column?":6
+ │    └── limit
+ │         ├── columns: "?column?":6 column7:7
+ │         ├── internal-ordering: +7
+ │         ├── sort
+ │         │    ├── columns: "?column?":6 column7:7
+ │         │    ├── ordering: +7
+ │         │    ├── limit hint: 10.00
+ │         │    └── project
+ │         │         ├── columns: "?column?":6 column7:7
+ │         │         ├── scan x
+ │         │         │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         │         └── projections
+ │         │              ├── a:1 + 1 [as="?column?":6]
+ │         │              └── a:1 + b:2 [as=column7:7]
+ │         └── 10
+ └── with-scan &1 (cte)
+      ├── columns: "?column?":8
+      └── mapping:
+           └──  "?column?":6 => "?column?":8
+
+build
+WITH cte AS (SELECT DISTINCT ON (b) a+1 FROM x) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: "?column?":7
+ ├── project
+ │    ├── columns: "?column?":6
+ │    └── distinct-on
+ │         ├── columns: b:2 "?column?":6
+ │         ├── grouping columns: b:2
+ │         ├── project
+ │         │    ├── columns: "?column?":6 b:2
+ │         │    ├── scan x
+ │         │    │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         │    └── projections
+ │         │         └── a:1 + 1 [as="?column?":6]
+ │         └── aggregations
+ │              └── first-agg [as="?column?":6]
+ │                   └── "?column?":6
+ └── with-scan &1 (cte)
+      ├── columns: "?column?":7
+      └── mapping:
+           └──  "?column?":6 => "?column?":7
+
+# Tests with correlated subqueries inside a CTE.
+build
+SELECT (WITH foo AS (SELECT x.a FROM x WHERE x.a = y.a) SELECT a FROM foo) FROM y
+----
+project
+ ├── columns: a:11
+ ├── scan y
+ │    └── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+ └── projections
+      └── subquery [as=a:11]
+           └── max1-row
+                ├── columns: a:10!null
+                └── with &1 (foo)
+                     ├── columns: a:10!null
+                     ├── project
+                     │    ├── columns: x.a:5!null
+                     │    └── select
+                     │         ├── columns: x.a:5!null b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9
+                     │         ├── scan x
+                     │         │    └── columns: x.a:5 b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9
+                     │         └── filters
+                     │              └── x.a:5 = y.a:1
+                     └── with-scan &1 (foo)
+                          ├── columns: a:10!null
+                          └── mapping:
+                               └──  x.a:5 => a:10
+
+build
+SELECT (WITH foo AS (SELECT (SELECT y.a) FROM x) SELECT a FROM foo) FROM y
+----
+project
+ ├── columns: a:13
+ ├── scan y
+ │    └── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+ └── projections
+      └── subquery [as=a:13]
+           └── max1-row
+                ├── columns: a:12
+                └── with &1 (foo)
+                     ├── columns: a:12
+                     ├── project
+                     │    ├── columns: a:11
+                     │    ├── scan x
+                     │    │    └── columns: x.a:5 b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9
+                     │    └── projections
+                     │         └── subquery [as=a:11]
+                     │              └── max1-row
+                     │                   ├── columns: a:10
+                     │                   └── project
+                     │                        ├── columns: a:10
+                     │                        ├── values
+                     │                        │    └── ()
+                     │                        └── projections
+                     │                             └── y.a:1 [as=a:10]
+                     └── with-scan &1 (foo)
+                          ├── columns: a:12
+                          └── mapping:
+                               └──  a:11 => a:12
+
+build
+SELECT * FROM
+  (VALUES (1), (2)) AS v(x),
+  LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
+----
+inner-join-apply
+ ├── columns: x:1!null "?column?":3
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    └── (2,)
+ ├── with &1 (foo)
+ │    ├── columns: "?column?":3
+ │    ├── project
+ │    │    ├── columns: "?column?":2
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         └── 1 + column1:1 [as="?column?":2]
+ │    └── with-scan &1 (foo)
+ │         ├── columns: "?column?":3
+ │         └── mapping:
+ │              └──  "?column?":2 => "?column?":3
+ └── filters (true)
+
+
+# In this test, foo is correlated and cannot be hoisted up; bar and baz depend
+# on foo, so they can't be hoisted up either. But qux can be hoisted up.
+build
+SELECT * FROM y, LATERAL (
+  WITH foo AS (SELECT (SELECT y.a) FROM x),
+       bar AS (SELECT 1 FROM foo),
+       baz AS (SELECT 2 FROM bar),
+       qux AS (SELECT 3 FROM y)
+  SELECT * FROM foo, bar, baz, qux
+)
+----
+with &4 (qux)
+ ├── columns: a:1 a:21 "?column?":22!null "?column?":23!null "?column?":24!null
+ ├── project
+ │    ├── columns: "?column?":20!null
+ │    ├── scan y
+ │    │    └── columns: y.a:16 y.rowid:17!null y.crdb_internal_mvcc_timestamp:18 y.tableoid:19
+ │    └── projections
+ │         └── 3 [as="?column?":20]
+ └── project
+      ├── columns: y.a:1 a:21 "?column?":22!null "?column?":23!null "?column?":24!null
+      └── inner-join-apply
+           ├── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4 a:21 "?column?":22!null "?column?":23!null "?column?":24!null
+           ├── scan y
+           │    └── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 y.tableoid:4
+           ├── with &1 (foo)
+           │    ├── columns: a:21 "?column?":22!null "?column?":23!null "?column?":24!null
+           │    ├── project
+           │    │    ├── columns: a:11
+           │    │    ├── scan x
+           │    │    │    └── columns: x.a:5 b:6 x.rowid:7!null x.crdb_internal_mvcc_timestamp:8 x.tableoid:9
+           │    │    └── projections
+           │    │         └── subquery [as=a:11]
+           │    │              └── max1-row
+           │    │                   ├── columns: a:10
+           │    │                   └── project
+           │    │                        ├── columns: a:10
+           │    │                        ├── values
+           │    │                        │    └── ()
+           │    │                        └── projections
+           │    │                             └── y.a:1 [as=a:10]
+           │    └── with &2 (bar)
+           │         ├── columns: a:21 "?column?":22!null "?column?":23!null "?column?":24!null
+           │         ├── project
+           │         │    ├── columns: "?column?":13!null
+           │         │    ├── with-scan &1 (foo)
+           │         │    │    ├── columns: a:12
+           │         │    │    └── mapping:
+           │         │    │         └──  a:11 => a:12
+           │         │    └── projections
+           │         │         └── 1 [as="?column?":13]
+           │         └── with &3 (baz)
+           │              ├── columns: a:21 "?column?":22!null "?column?":23!null "?column?":24!null
+           │              ├── project
+           │              │    ├── columns: "?column?":15!null
+           │              │    ├── with-scan &2 (bar)
+           │              │    │    ├── columns: "?column?":14!null
+           │              │    │    └── mapping:
+           │              │    │         └──  "?column?":13 => "?column?":14
+           │              │    └── projections
+           │              │         └── 2 [as="?column?":15]
+           │              └── inner-join (cross)
+           │                   ├── columns: a:21 "?column?":22!null "?column?":23!null "?column?":24!null
+           │                   ├── with-scan &1 (foo)
+           │                   │    ├── columns: a:21
+           │                   │    └── mapping:
+           │                   │         └──  a:11 => a:21
+           │                   ├── inner-join (cross)
+           │                   │    ├── columns: "?column?":22!null "?column?":23!null "?column?":24!null
+           │                   │    ├── with-scan &2 (bar)
+           │                   │    │    ├── columns: "?column?":22!null
+           │                   │    │    └── mapping:
+           │                   │    │         └──  "?column?":13 => "?column?":22
+           │                   │    ├── inner-join (cross)
+           │                   │    │    ├── columns: "?column?":23!null "?column?":24!null
+           │                   │    │    ├── with-scan &3 (baz)
+           │                   │    │    │    ├── columns: "?column?":23!null
+           │                   │    │    │    └── mapping:
+           │                   │    │    │         └──  "?column?":15 => "?column?":23
+           │                   │    │    ├── with-scan &4 (qux)
+           │                   │    │    │    ├── columns: "?column?":24!null
+           │                   │    │    │    └── mapping:
+           │                   │    │    │         └──  "?column?":20 => "?column?":24
+           │                   │    │    └── filters (true)
+           │                   │    └── filters (true)
+           │                   └── filters (true)
+           └── filters (true)
+
+# Regression tests for #93370. Do not convert a non-recursive CTE
+# that uses UNION ALL and WITH RECURSIVE to UNION.
+build
+WITH RECURSIVE
+   x(id) AS
+     (SELECT 1 UNION ALL SELECT id+1 FROM x WHERE id < 3 ),
+   y(id) AS
+     (SELECT * FROM x UNION ALL SELECT * FROM x)
+ SELECT * FROM y
+----
+with &2 (x)
+ ├── columns: id:9
+ ├── recursive-c-t-e
+ │    ├── columns: id:2
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: "?column?":4
+ │    ├── fake-rel
+ │    │    └── columns: id:2
+ │    ├── project
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         └── 1 [as="?column?":1]
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── select
+ │         │    ├── columns: id:3!null
+ │         │    ├── with-scan &1 (x)
+ │         │    │    ├── columns: id:3
+ │         │    │    └── mapping:
+ │         │    │         └──  id:2 => id:3
+ │         │    └── filters
+ │         │         └── id:3 < 3
+ │         └── projections
+ │              └── id:3 + 1 [as="?column?":4]
+ └── with &4 (y)
+      ├── columns: id:9
+      ├── union-all
+      │    ├── columns: id:8
+      │    ├── left columns: id:5
+      │    ├── right columns: id:7
+      │    ├── with-scan &2 (x)
+      │    │    ├── columns: id:5
+      │    │    └── mapping:
+      │    │         └──  id:2 => id:5
+      │    └── with-scan &2 (x)
+      │         ├── columns: id:7
+      │         └── mapping:
+      │              └──  id:2 => id:7
+      └── with-scan &4 (y)
+           ├── columns: id:9
+           └── mapping:
+                └──  id:8 => id:9
+
+exec-ddl
+CREATE TABLE t93370 (i INT)
+----
+
+build
+WITH RECURSIVE
+   y(id) AS (SELECT * FROM t93370 UNION ALL SELECT * FROM t93370)
+ SELECT * FROM y
+----
+with &2 (y)
+ ├── columns: id:11
+ ├── union-all
+ │    ├── columns: i:10
+ │    ├── left columns: t93370.i:1
+ │    ├── right columns: t93370.i:6
+ │    ├── project
+ │    │    ├── columns: t93370.i:1
+ │    │    └── scan t93370
+ │    │         └── columns: t93370.i:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    └── project
+ │         ├── columns: t93370.i:6
+ │         └── scan t93370
+ │              └── columns: t93370.i:6 rowid:7!null crdb_internal_mvcc_timestamp:8 tableoid:9
+ └── with-scan &2 (y)
+      ├── columns: id:11
+      └── mapping:
+           └──  i:10 => id:11

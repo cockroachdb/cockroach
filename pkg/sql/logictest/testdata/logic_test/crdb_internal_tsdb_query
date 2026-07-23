@@ -1,0 +1,260 @@
+# LogicTest: !3node-tenant-default-configs !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
+
+# crdb_internal.tsdb_query is a privilege-gated generator that returns
+# raw per-source datapoints from the in-cluster TSDB. The asserts below
+# focus on the schema, argument validation, and access control. End-to-
+# end coverage that round-trips a written datapoint through the bridge
+# lives in pkg/ts/sql_adapter_e2e_test.go.
+
+# Schema: a labelled tuple of (timestamp, value, source).
+query TFT colnames
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.sql.query.count',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz
+) LIMIT 0
+----
+timestamp  value  source
+
+# An unknown metric name returns zero rows (not an error).
+query TFT
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz
+)
+----
+
+# end_time must be strictly greater than start_time.
+query error pq: crdb_internal.tsdb_query end_time .* must be greater than start_time
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.sql.query.count',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:00+00'::timestamptz
+)
+
+# A NULL name argument is rejected by the typing layer (calledOnNullInput
+# defaults to false for generators); the underlying generator is never
+# constructed.
+query TFT
+SELECT * FROM crdb_internal.tsdb_query(
+  NULL,
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz
+)
+----
+
+# A future-only window is clamped to "now" by the adapter, so the call
+# returns zero rows rather than erroring.
+query TFT
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.sql.query.count',
+  '2999-01-01 00:00:00+00'::timestamptz,
+  '2999-01-01 00:00:01+00'::timestamptz
+)
+----
+
+# PREPARE/EXECUTE with placeholders for all three arguments.
+statement ok
+PREPARE p AS
+  SELECT * FROM crdb_internal.tsdb_query($1, $2, $3) LIMIT 0
+
+query TFT colnames
+EXECUTE p('cr.node.sql.query.count',
+          '2026-05-01 00:00:00+00'::timestamptz,
+          '2026-05-01 00:00:01+00'::timestamptz)
+----
+timestamp  value  source
+
+# Privilege denial: a non-admin without VIEWCLUSTERMETADATA cannot call
+# the generator. The default test fixture creates `testuser` without
+# any system privileges. Switch users, expect an insufficient_privilege
+# error, then GRANT the privilege and confirm the call succeeds.
+user testuser
+
+query error pq: user testuser does not have VIEWCLUSTERMETADATA system privilege
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.sql.query.count',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz
+)
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERMETADATA TO testuser
+
+user testuser
+
+query TFT
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz
+)
+----
+
+user root
+
+subtest options_jsonb
+
+# 4-arg with empty options is equivalent to 3-arg.
+query TFT colnames
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.sql.query.count',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{}'::jsonb
+) LIMIT 0
+----
+timestamp  value  source
+
+# 4-arg with NULL options is equivalent to 3-arg.
+query TFT colnames
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.sql.query.count',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  NULL
+) LIMIT 0
+----
+timestamp  value  source
+
+# Unknown JSONB field is rejected.
+query error pq: unknown option "downsamplr"; accepted options: downsampler, interval, derivative, source_aggregator, sources
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"downsamplr":"SUM"}'::jsonb
+)
+
+# Invalid downsampler enum.
+query error pq: invalid downsampler "sun"; must be one of AVG, SUM, MAX, MIN
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"downsampler":"sun","interval":"1m"}'::jsonb
+)
+
+# downsampler without interval is rejected.
+query error pq: "downsampler" requires "interval" to be set
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"downsampler":"SUM"}'::jsonb
+)
+
+# interval not a multiple of 10s is rejected.
+query error pq: interval must be a positive multiple of 10s; got 15s
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"interval":"15s"}'::jsonb
+)
+
+# interval with month components is rejected.
+query error pq: interval must not contain month or year components
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"interval":"1 month"}'::jsonb
+)
+
+# source_aggregator FIRST is rejected. The eval.Aggregator enum mirrors
+# tspb and includes FIRST/LAST/VARIANCE, but the TSDB server does not
+# implement them, so the parser refuses them at the SQL boundary
+# rather than letting an opaque server-internal error reach the user.
+query error pq: invalid source_aggregator "FIRST"; must be one of AVG, SUM, MAX, MIN
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"source_aggregator":"FIRST"}'::jsonb
+)
+
+# downsampler VARIANCE is rejected at the parser boundary for the same
+# reason — the TSDB server's verifyDownsampler in pkg/ts/query.go does
+# not yet support VARIANCE.
+query error pq: invalid downsampler "VARIANCE"; must be one of AVG, SUM, MAX, MIN
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"downsampler":"VARIANCE","interval":"1m"}'::jsonb
+)
+
+# sources must be an array of strings.
+query error pq: option "sources" must be an array of strings, got string
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz,
+  '{"sources":"1"}'::jsonb
+)
+
+# Case-insensitive enum parsing.
+query TFT colnames
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:01:00+00'::timestamptz,
+  '{"downsampler":"sum","interval":"1m","derivative":"non_negative_derivative"}'::jsonb
+) LIMIT 0
+----
+timestamp  value  source
+
+# PREPARE/EXECUTE with placeholders including JSONB.
+statement ok
+PREPARE q AS
+  SELECT * FROM crdb_internal.tsdb_query($1, $2, $3, $4) LIMIT 0
+
+query TFT colnames
+EXECUTE q('cr.node.does_not_exist',
+          '2026-05-01 00:00:00+00'::timestamptz,
+          '2026-05-01 00:00:01+00'::timestamptz,
+          '{"interval":"10s"}'::jsonb)
+----
+timestamp  value  source
+
+subtest caps
+
+# Time-range cap: a window larger than max_time_range trips before any
+# TSDB I/O. The error message names the cluster setting so an operator
+# can find and tune it.
+statement ok
+SET CLUSTER SETTING sql.crdb_internal.tsdb_query.max_time_range = '1m'
+
+query error pq: crdb_internal\.tsdb_query effective window of .* exceeds the configured maximum of 1m0s
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.sql.query.count',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 01:00:00+00'::timestamptz
+)
+
+statement ok
+RESET CLUSTER SETTING sql.crdb_internal.tsdb_query.max_time_range
+
+# Row-count cap: setting max_rows to 0 disables the cap entirely;
+# the call returns its full result set without any row-count check.
+# The cap-trip path on positive row counts is exercised in the e2e
+# test where a known datapoint can be staged deterministically;
+# logic tests run against an empty TSDB so they can't reliably force
+# a positive row count.
+statement ok
+SET CLUSTER SETTING sql.crdb_internal.tsdb_query.max_rows = 0
+
+query TFT
+SELECT * FROM crdb_internal.tsdb_query(
+  'cr.node.does_not_exist',
+  '2026-05-01 00:00:00+00'::timestamptz,
+  '2026-05-01 00:00:01+00'::timestamptz
+)
+----
+
+statement ok
+RESET CLUSTER SETTING sql.crdb_internal.tsdb_query.max_rows

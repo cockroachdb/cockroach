@@ -1,0 +1,686 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# drtprod is a wrapper for roachprod for use when managing the long-lived DRT
+# clusters that ensures consistent use of the correct project-assignment vars
+# and done some additional sanity check enforcement on some flags.
+
+export ROACHPROD_GCE_DEFAULT_PROJECT=cockroach-drt
+export ROACHPROD_DNS="drt.crdb.io"
+
+if [ "$#" -lt 1 ]; then
+  echo
+  echo "drtprod runs roachprod commands against DRT clusters"
+  echo
+  echo "Usage: drtprod <command>"
+  echo
+  echo "Commands include:"
+  echo "  push-hosts: write the ips and pgurl files for a cluster to a node/cluster"
+  echo "  dns: update/create DNS entries in drt.crdb.io for a cluster"
+  echo "  create: a wrapper for the 'roachprod' with predefined specs for named clusters"
+  echo "  *: any other command is passed to roachprod, potentialy with flags addded"
+  echo
+  roachprod | sed -e 's/roachprod/drtprod/g'
+  exit 0
+fi
+
+case $1 in
+  "start")
+    cluster="$2"
+    # This is to avoid the command to have --restart and --restart=false both in case of drt-large
+    if [[ $cluster != "drt-large" && "$*" != *"--restart"* ]]; then
+      # implied for long-lived DRT clusters; avoid on init w/ --restart=false.
+      shift
+      set -- start "--enable-fluent-sink" "--restart" "$@"
+    fi
+    if [[ "$*" != *"--secure"* ]]; then
+      shift
+      set -- start "--enable-fluent-sink" "--secure" "$@"
+    fi
+    if [[ "$*" != *"--sql-port 26257"* ]]; then
+      shift
+      set -- start "--enable-fluent-sink" "--sql-port" "26257" "$@"
+    fi
+    case $cluster in
+      "drt-large")
+        shift
+        set -- start "--binary" "./cockroach" --args=--log="file-defaults: {dir: 'logs', max-group-size: 1GiB}" --store-count=16 --restart=false --args="--wal-failover=among-stores" "$@"
+        roachprod run $cluster -- "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
+        ;;
+      "drt-chaos")
+        shift
+        set -- start "--binary" "./cockroach" --args=--log="file-defaults: {dir: 'logs', max-group-size: 1GiB}" --store-count=4 --args="--wal-failover=among-stores" "$@"
+        ;;
+      "drt-ldr1"|"drt-ldr2")
+        shift
+        set -- start "--binary" "./cockroach" --args=--log="file-defaults: {dir: 'logs', max-group-size: 1GiB}" --restart=false "$@"
+        ;;
+      *)
+        ;;
+    esac
+    ;;
+  "dns")
+    if [ "$#" -lt 2 ]; then
+      echo "usage: drtprod $1 <cluster> [create]"
+      exit 1
+    fi
+    # roachprod only manages DNS in ephemeral, so we just do this ourselves.
+    # These are very low-churn clusters so this is fine being manual and in a
+    # wrapper.
+    shift
+    cluster=$1
+    roachprod adminurl $cluster --ips --insecure=false |
+      awk '{printf "%04d\t%s\n", NR, $0}' | # prepend the padded node IDs.
+      sed -e 's,https://\(.*\):26258/,\1,g' | # remove the HTTPS part.
+      while read node ip; do
+        host="${cluster}-${node}.drt.crdb.io."
+        gcloud dns --project=cockroach-shared record-sets ${2:-update} "${host}" --rrdatas="${ip}" \
+          --type="A" --zone="drt" --ttl=60
+      done
+    exit 0
+    ;;
+  "datadog")
+    shift
+    cluster="${1}"
+
+    dd_api_key="$(gcloud --project=cockroach-drt secrets versions access latest --secret datadog-api-key)"
+    if [ -z "${dd_api_key}" ]; then
+      echo "Missing Datadog API key!"
+      exit 1
+    fi
+
+    dd_site="us5.datadoghq.com"
+
+    case $cluster in
+      "drt-chaos")
+        roachprod ssh ${cluster} -- "sudo mkdir -p /etc/fluent-bit && sudo tee /etc/fluent-bit/config-override.yaml > /dev/null << EOF
+---
+pipeline:
+  inputs:
+  - name: tail
+    path: /var/log/audit/audit.log
+    tag: audit
+    key: message
+    storage.type: filesystem
+    alias: audit
+  outputs:
+  - name: datadog
+    match: audit
+    host: http-intake.logs.${dd_site}
+    tls: on
+    compress: gzip
+    apikey: ${dd_api_key}
+    dd_source: audit
+    dd_service: drt-cockroachdb
+    dd_tags: env:development,cluster:${cluster%:*},service:drt-cockroachdb,team:drt
+    alias: audit
+    storage.total_limit_size: 25MB
+EOF"
+        ;;
+
+      "workload-chaos")
+        roachprod ssh ${cluster} -- "sudo mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
+---
+receivers:
+  prometheus/workload:
+    config:
+      global:
+        scrape_interval: 30s
+      scrape_configs:
+      - job_name: workload1
+        honor_timestamps: false
+        metrics_path: /metrics
+        tls_config:
+          insecure_skip_verify: true
+        follow_redirects: true
+        enable_http2: true
+        static_configs:
+        - targets:
+          - "localhost:2112"
+        relabel_configs:
+        - action: replace
+          replacement: 1
+          target_label: workload
+      - job_name: workload2
+        honor_timestamps: false
+        metrics_path: /metrics
+        tls_config:
+          insecure_skip_verify: true
+        follow_redirects: true
+        enable_http2: true
+        static_configs:
+        - targets:
+          - "localhost:2113"
+        relabel_configs:
+        - action: replace
+          replacement: 2
+          target_label: workload
+      - job_name: workload3
+        honor_timestamps: false
+        metrics_path: /metrics
+        tls_config:
+          insecure_skip_verify: true
+        follow_redirects: true
+        enable_http2: true
+        static_configs:
+        - targets:
+          - "localhost:2114"
+        relabel_configs:
+        - action: replace
+          replacement: 3
+          target_label: workload
+
+processors:
+  filter/workload:
+    metrics:
+      include:
+        match_type: regexp
+        expressions:
+        - workload_tpcc.*
+        - workload_kv_.*
+
+# The */datadog elements are defined in the primary configuration file.
+service:
+  pipelines:
+    metrics:
+      receivers:
+      - prometheus/workload
+      processors:
+      - memory_limiter/datadog
+      - filter/workload
+      - batch/datadog
+      - attributes/datadog
+      exporters:
+      - datadog
+EOF"
+        ;;
+
+      "workload-large")
+        roachprod ssh ${cluster} -- "sudo mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
+---
+receivers:
+  prometheus/workload:
+    config:
+      global:
+        scrape_interval: 30s
+      scrape_configs:
+      - job_name: workload1
+        honor_timestamps: false
+        metrics_path: /metrics
+        tls_config:
+          insecure_skip_verify: true
+        follow_redirects: true
+        enable_http2: true
+        static_configs:
+        - targets:
+          - "localhost:2112"
+        relabel_configs:
+        - action: replace
+          replacement: 1
+          target_label: workload
+
+processors:
+  filter/workload:
+    metrics:
+      include:
+        match_type: regexp
+        expressions:
+        - workload_tpcc.*
+
+# The */datadog elements are defined in the primary configuration file.
+service:
+  pipelines:
+    metrics:
+      receivers:
+      - prometheus/workload
+      processors:
+      - memory_limiter/datadog
+      - filter/workload
+      - batch/datadog
+      - attributes/datadog
+      exporters:
+      - datadog
+EOF"
+        ;;
+    esac
+
+    # TODO: Move this into roachtest_ops.sh per
+    # https://github.com/cockroachdb/cockroach/pull/126530#discussion_r1668760594
+    roachprod ssh ${cluster} -- "sudo tee /etc/profile.d/99-datadog.sh > /dev/null << EOF
+export DD_SITE=${dd_site}
+export DD_API_KEY=${dd_api_key}
+export DD_TAGS=env:development,cluster${cluster%:*},team:drt,service:drt-cockroachdb
+EOF"
+
+    roachprod opentelemetry-start ${cluster} \
+      --datadog-api-key "${dd_api_key}" \
+      --datadog-tags 'service:drt-cockroachdb,team:drt'
+
+    roachprod fluent-bit-start ${cluster} \
+      --datadog-api-key "${dd_api_key}" \
+      --datadog-service drt-cockroachdb \
+      --datadog-tags 'service:drt-cockroachdb,team:drt'
+
+    echo
+    echo "Updated ${cluster} configuration to send telemetry data to Datadog."
+    echo
+    echo "If this was the first time this script was run against ${cluster} then"
+    echo "CockroachDB must be restarted to reload its logging configuration."
+    echo
+
+    exit 0
+    ;;
+  "ua-failover")
+    if [ "$#" -lt 2 ]; then
+      echo "usage: $0 failover {drt-ua1,drt-ua2}"
+      echo
+      echo "fails the ua workload over to the specified ua cluster, setting the other as a standby"
+      exit 1
+    fi
+    shift
+    cluster=$1
+    shift
+    case "${cluster}" in
+      "drt-ua1")
+        standby=drt-ua2
+        pgurls=pgurls.ua1.txt
+        ;;
+      "drt-ua2")
+        standby=drt-ua1
+        pgurls=pgurls.ua2.txt
+        ;;
+      *)
+        echo "unknown cluster: ${cluster}"
+        exit 1
+        ;;
+    esac
+    echo "stopping workload..."
+    $0 ssh workload-ua:1 -- "sudo systemctl stop tpcc"
+    echo "cutting over..."
+    $0 sql $cluster:1 --cluster=system -- -e "ALTER VIRTUAL CLUSTER main COMPLETE REPLICATION TO LATEST"
+    $0 sql $cluster:1 --cluster=system -- -e "SELECT status FROM [SHOW JOBS WHEN COMPLETE SELECT id FROM system.jobs WHERE job_type = 'REPLICATION STREAM INGESTION'];"
+    echo "cutover complete; restarting workload..."
+
+    $0 sql $cluster:1 --cluster=system -- -e "ALTER TENANT MAIN START SERVICE SHARED"
+    $0 ssh workload-ua:1 -- "ln -sf $pgurls pgurls.txt; sudo systemctl start tpcc"
+    echo "restarted workload; configuing new standby..."
+    $0 sql $standby:1 --cluster=system -- -e "ALTER VIRTUAL CLUSTER main STOP SERVICE"
+    $0 sql $standby:1 --cluster=system -- -e "ALTER VIRTUAL CLUSTER main START REPLICATION OF main ON 'external://$cluster'"
+    echo "started replication in other direction."
+    exit 0
+    ;;
+  "create")
+    if [ "$#" -lt 2 ]; then
+      echo "usage: drtprod create {drt-large,drt-chaos,drt-ua1,drt-ua2,workload-large,workload-chaos}"
+      exit 1
+    fi
+    case "${2}" in
+      "drt-large")
+        roachprod create drt-large \
+          --clouds gce \
+          --gce-managed \
+          --gce-enable-multiple-stores \
+          --gce-zones "northamerica-northeast2-a:2,northamerica-northeast2-b:2,northamerica-northeast2-c:1,us-east5-a:2,us-east5-b:2,us-east5-c:1,us-east1-b:2,us-east1-c:2,us-east1-d:1" \
+          --gce-use-spot \
+          --nodes 15 \
+          --gce-machine-type n2-standard-16 \
+          --local-ssd=true \
+          --gce-local-ssd-count 16 \
+          --os-volume-size 100 \
+          --username drt \
+          --lifetime 8760h
+        # setup dns
+        $0 dns drt-large create
+        ;;
+      "workload-large")
+        roachprod create workload-large \
+          --clouds gce \
+          --gce-zones "northamerica-northeast2-a,us-east5-a,us-east1-b" \
+          --nodes 3 \
+          --gce-machine-type n2-standard-4 \
+          --os-volume-size 100 \
+          --username workload \
+          --lifetime 8760h
+        ;;
+      "drt-chaos")
+        roachprod create drt-chaos \
+          --clouds gce \
+          --gce-managed \
+          --gce-zones "us-east1-d,us-east1-b,us-east1-c" \
+          --nodes 6 \
+          --gce-machine-type n2-standard-16 \
+          --gce-local-ssd-count="4" \
+          --gce-enable-multiple-stores \
+          --local-ssd=true \
+          --username drt \
+          --lifetime="8760h" \
+          --gce-image "ubuntu-2204-jammy-v20240319"
+        # setup dns
+        $0 dns drt-chaos create
+        ;;
+      "workload-chaos")
+        roachprod create workload-chaos \
+          --clouds gce \
+          --gce-zone "us-east1-c" \
+          --nodes 1 \
+          --gce-machine-type n2-standard-8 \
+          --os-volume-size 100 \
+          --username workload \
+          --lifetime 8760h
+        ;;
+      "ua")
+        roachprod create drt-ua1 \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="5" \
+          --gce-machine-type="n2-standard-16" \
+          --local-ssd="true"  \
+          --gce-local-ssd-count="8" \
+          --username="drt" \
+          --lifetime="8760h"
+
+        roachprod create drt-ua2 \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="5" \
+          --gce-machine-type="n2-standard-16" \
+          --local-ssd="true"  \
+          --gce-local-ssd-count="8" \
+          --username="drt" \
+          --lifetime="8760h"
+
+        # setup dns
+        $0 dns drt-ua1 create || $0 dns drt-ua1 || (echo "dns setup failed -- run dns manually"; true)
+        $0 dns drt-ua2 create || $0 dns drt-ua2 || (echo "dns setup failed -- run dns manually"; true)
+
+        # start cockroach
+        $0 stage drt-ua1 cockroach
+        $0 stage drt-ua2 cockroach
+        $0 start drt-ua1 --restart=false
+        $0 start drt-ua2 --restart=false
+
+        # tell the clusters about eachother.
+        ua2="$(roachprod ssh drt-ua2:1 -- ./cockroach convert-url --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt --url {pgurl:1:system})"
+        ua1="$(roachprod ssh drt-ua1:1 -- ./cockroach convert-url --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt --url {pgurl:1:system})"
+        $0 sql drt-ua1:1 --cluster=system -- -e "CREATE EXTERNAL CONNECTION 'drt-ua2' AS '${ua2}'"
+        $0 sql drt-ua2:1 --cluster=system -- -e "CREATE EXTERNAL CONNECTION 'drt-ua1' AS '${ua1}'"
+
+        # enable rangefeeds.
+        $0 sql drt-ua1:1 --cluster=system -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+        $0 sql drt-ua2:1 --cluster=system -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+
+        # enable weak transaction isolation levels.
+        $0 sql drt-ua1:1 --cluster=system -- -e "SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true"
+        $0 sql drt-ua2:1 --cluster=system -- -e "SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true"
+        $0 sql drt-ua1:1 --cluster=system -- -e "SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true"
+        $0 sql drt-ua2:1 --cluster=system -- -e "SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true"
+
+        # Setup the main tenant, on ua1 initilly.
+        $0 sql drt-ua1:1 --cluster=system -- -e "CREATE VIRTUAL CLUSTER main"
+        $0 sql drt-ua1:1 --cluster=system -- -e "ALTER VIRTUAL CLUSTER main START SERVICE SHARED"
+        $0 sql drt-ua1:1 --cluster=main --auth-mode=root -- -e "CREATE USER roachprod WITH PASSWORD 'cockroachdb'"
+        $0 sql drt-ua1:1 --cluster=main --auth-mode=root -- -e "GRANT admin TO roachprod"
+
+        # setup the second to follow it.
+        $0 sql drt-ua2:1 --cluster=system -- -e "CREATE VIRTUAL CLUSTER main FROM REPLICATION OF main ON 'external://drt-ua1'"
+
+        # point traffic at the main tenant.
+        $0 sql drt-ua1:1 --cluster=system -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
+        $0 sql drt-ua2:1 --cluster=system -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
+
+        echo
+        echo "Completed setup of ua1 and ua2, with virtual cluster main on ua1 replicating to ua2."
+        echo
+        echo "To restore the 150k warehouse fixture, run:"
+        echo "    restore database tpcc from latest in 'gs://cockroach-fixtures-us-east1/backups/tpc-c/v24.1/db/warehouses=150k/?AUTH=implicit';'"
+        echo
+        echo "Then run 'drtprod create workload-ua' after the restore completes to start the workload."
+        echo
+        ;;
+      "workload-ua")
+        set -x
+        roachprod create workload-ua \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="1" \
+          --gce-machine-type="n2-standard-8" \
+          --os-volume-size 100 \
+          --username workload \
+          --lifetime 8760h \
+          --gce-image "ubuntu-2204-jammy-v20240319"
+        # setup dns
+        $0 dns workload-ua create || $0 dns workload-ua
+
+        # push cockroach to the worker to run its built-in workloads
+        roachprod stage workload-ua:1 cockroach
+        roachprod stage workload-ua:1 workload
+
+        # Push certs for both clusters to the worker.
+        roachprod get drt-ua1:1 certs certs.ua1
+        roachprod put workload-ua:1 certs.ua1
+        roachprod get drt-ua2:1 certs certs.ua2
+        roachprod put workload-ua:1 certs.ua2
+        roachprod ssh workload-ua:1 -- "chmod 0600 certs.ua1/* certs.ua2/*"
+        rm -rf certs.ua1 certs.ua2
+
+        # Setup pgurls for worklooads to use.
+        roachprod ssh workload-ua:1 -- "
+        echo \"$(roachprod pgurl drt-ua1 --secure --cluster=main | sed 's/=certs/=certs.ua1/g' | sed "s/'//g" )\" > pgurls.ua1.txt;
+        echo \"$(roachprod pgurl drt-ua2 --secure --cluster=main | sed 's/=certs/=certs.ua2/g' | sed "s/'//g" )\" > pgurls.ua2.txt;
+        ln -sf pgurls.ua1.txt pgurls.txt"
+
+        # Setup the tpcc workload runner as a script invoked by systemd.
+        roachprod ssh workload-ua:1 -- 'cat - > tpcc << EOF
+#!/usr/bin/env bash
+
+exec ./cockroach workload run tpcc \\
+  --warehouses=150000 \\
+  --max-rate=1200 \\
+  --workers=100 \\
+  --wait=false \\
+  --tolerate-errors \\
+  --display-every 60s \\
+  \$(cat /home/ubuntu/pgurls.txt)
+EOF'
+        roachprod ssh workload-ua:1 -- "chmod +x ./tpcc;
+sudo tee /etc/systemd/system/tpcc.service > /dev/null << EOF
+[Unit]
+Description=tpcc load generator
+
+[Service]
+WorkingDirectory=/home/ubuntu
+User=ubuntu
+ExecStart=/home/ubuntu/tpcc
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+        roachprod ssh workload-ua -- "sudo systemctl daemon-reload; sudo systemctl enable tpcc.service; sudo systemctl start tpcc.service"
+        ;;
+      "ldr")
+        roachprod create drt-ldr1 \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="5" \
+          --gce-machine-type="n2-standard-16" \
+          --local-ssd="false"  \
+          --gce-pd-volume-size="500" \
+          --gce-pd-volume-type="pd-balanced" \
+          --username="drt" \
+          --lifetime="8760h"
+
+        roachprod create drt-ldr2 \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="5" \
+          --gce-machine-type="n2-standard-16" \
+          --local-ssd="false"  \
+          --gce-pd-volume-size="500" \
+          --gce-pd-volume-type="pd-balanced" \
+          --username="drt" \
+          --lifetime="8760h"
+
+        # setup dns
+        $0 dns drt-ldr1 create || $0 dns drt-ldr1 || (echo "dns setup failed -- run dns manually"; true)
+        $0 dns drt-ldr2 create || $0 dns drt-ldr2 || (echo "dns setup failed -- run dns manually"; true)
+
+        # start cockroach
+        $0 stage drt-ldr1 cockroach
+        $0 stage drt-ldr2 cockroach
+        $0 start drt-ldr1 --restart=false
+        $0 start drt-ldr2 --restart=false
+
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING sql.ttl.default_delete_batch_size = 1000"
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING sql.ttl.default_delete_rate_limit = 2000"
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING sql.ttl.default_select_batch_size = 5000"
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true"
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true"
+
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING sql.ttl.default_delete_batch_size = 1000"
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING sql.ttl.default_delete_rate_limit = 2000"
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING sql.ttl.default_select_batch_size = 5000"
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true"
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true"
+
+        # import the workload
+        $0 sql drt-ldr1:1 -- -e "CREATE DATABASE ycsb"
+        $0 sql drt-ldr1:1 -- -e "ALTER DATABASE ycsb CONFIGURE ZONE USING gc.ttlseconds = 600"
+
+        $0 sql drt-ldr2:1 -- -e "CREATE DATABASE ycsb"
+        $0 sql drt-ldr2:1 -- -e "ALTER DATABASE ycsb CONFIGURE ZONE USING gc.ttlseconds = 600"
+
+        $0 ssh drt-ldr1:1 "./cockroach workload init ycsb --workload=A --insert-count=1000 --families=false {pgurl:1}"
+        $0 ssh drt-ldr2:1 "./cockroach workload init ycsb --workload=A --insert-count=1000 --families=false --insert-start=4511686018427387904 {pgurl:1}"
+
+        # tell the clusters about eachother.
+        ldr2="$(roachprod ssh drt-ldr2:1 -- ./cockroach convert-url --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt --database ycsb --user root --url {pgurl:1})"
+        ldr1="$(roachprod ssh drt-ldr1:1 -- ./cockroach convert-url --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt --database ycsb --user root --url {pgurl:1})"
+        $0 sql drt-ldr1:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr2' AS '${ldr2}'"
+        $0 sql drt-ldr2:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr1' AS '${ldr1}'"
+
+        $0 sql drt-ldr1:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN expired_at TIMESTAMPTZ NOT NULL DEFAULT now() + '30 minutes';"
+        # set row level ttl
+        $0 sql drt-ldr1:1 -- -e "ALTER TABLE ycsb.public.usertable SET (ttl_expiration_expression = 'expired_at', ttl_job_cron = '*/30 * * * *');"
+
+        $0 sql drt-ldr2:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN expired_at TIMESTAMPTZ NOT NULL DEFAULT now() + '30 minutes';"
+        $0 sql drt-ldr2:1 -- -e "ALTER TABLE ycsb.public.usertable SET (ttl_expiration_expression = 'expired_at', ttl_job_cron = '*/30 * * * *');"
+
+        roachprod sql drt-ldr1:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://drt-ldr2' INTO TABLE ycsb.public.usertable;"
+        roachprod sql drt-ldr2:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://drt-ldr1' INTO TABLE ycsb.public.usertable;"
+
+        echo
+        echo "Completed setup of ldr1 and ldr2, with logical data replication between them on table ycsb.usertable."
+        echo
+        echo "Run 'drtprod create workload-ldr' to create the workload node and start the workload."
+        echo
+        ;;
+      "workload-ldr")
+        set -x
+        roachprod create workload-ldr \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="1" \
+          --gce-machine-type="n2-standard-16" \
+          --os-volume-size 100 \
+          --username workload \
+          --lifetime 8760h \
+        # setup dns
+        $0 dns workload-ldr create || $0 dns workload-ldr
+
+        # push cockroach to the worker to run its built-in workloads
+        roachprod stage workload-ldr:1 cockroach
+        roachprod stage workload-ldr:1 workload
+
+        # Push certs for both clusters to the worker.
+        roachprod get drt-ldr1:1 certs certs.ldr1
+        roachprod put workload-ldr:1 certs.ldr1
+        roachprod get drt-ldr2:1 certs certs.ldr2
+        roachprod put workload-ldr:1 certs.ldr2
+        roachprod ssh workload-ldr:1 -- "chmod 0600 certs.ldr1/* certs.ldr2/*"
+        rm -rf certs.ldr1 certs.ldr2
+
+        # Setup pgurls for worklooads to use.
+        roachprod ssh workload-ldr:1 -- "
+        echo \"$(roachprod pgurl drt-ldr1 | sed 's/=certs/=certs.ldr1/g' | sed "s/'//g" )\" > pgurls.ldr1.txt;
+        echo \"$(roachprod pgurl drt-ldr2 | sed 's/=certs/=certs.ldr2/g' | sed "s/'//g" )\" > pgurls.ldr2.txt;
+        ln -sf pgurls.ldr1.txt pgurls.txt"
+
+        # Setup the ycsb workload runner as a script invoked by systemd.
+        # The runner cycles through all lettered ycsb workloads in a
+        # round-robin fashion, plus an insert-only workload.
+        roachprod ssh workload-ldr:1 -- 'cat - > ycsb_run_ldr1.sh << EOF
+#!/usr/bin/env bash
+
+exec ./cockroach workload run ycsb \\
+    --concurrency=100 \\
+    --max-rate 10000 \\
+    --insert-start=0 \\
+    --families=false \\
+    --tolerate-errors \\
+    --request-distribution=uniform \\
+    --workload='custom' --read-freq=0.2 --read-modify-write-freq 0.1 --insert-freq 0.3 --scan-freq 0.1 --update-freq 0.2 --delete-freq 0.1 \\
+    \$(cat /home/ubuntu/pgurls.ldr1.txt)
+EOF'
+        roachprod ssh workload-ldr:1 -- 'cat - > ycsb_run_ldr2.sh << EOF
+#!/usr/bin/env bash
+
+exec ./cockroach workload run ycsb \\
+    --concurrency=100 \\
+    --max-rate 10000 \\
+    --tolerate-errors \\
+    --families=false \\
+    --insert-start=4611686018427387904 \\
+    --request-distribution=uniform \\
+    --workload='custom' --read-freq=0.2 --read-modify-write-freq 0.1 --insert-freq 0.3 --scan-freq 0.1 --update-freq 0.2 --delete-freq 0.1 \\
+    \$(cat /home/ubuntu/pgurls.ldr2.txt)
+EOF'
+        roachprod ssh workload-ldr:1 -- "chmod +x ./ycsb_run_ldr1.sh;
+sudo tee /etc/systemd/system/ycsb_ldr1.service > /dev/null << EOF
+[Unit]
+Description=ycsb load generator for ldr1
+
+[Service]
+WorkingDirectory=/home/ubuntu
+User=ubuntu
+ExecStart=/home/ubuntu/ycsb_run_ldr1.sh
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+        roachprod ssh workload-ldr:1 -- "chmod +x ./ycsb_run_ldr2.sh;
+sudo tee /etc/systemd/system/ycsb_ldr2.service > /dev/null << EOF
+[Unit]
+Description=ycsb load generator for ldr2
+
+[Service]
+WorkingDirectory=/home/ubuntu
+User=ubuntu
+ExecStart=/home/ubuntu/ycsb_run_ldr2.sh
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+        roachprod ssh workload-ldr -- "sudo systemctl daemon-reload; sudo systemctl enable ycsb_ldr1.service; sudo systemctl start ycsb_ldr1.service"
+        roachprod ssh workload-ldr -- "sudo systemctl enable ycsb_ldr2.service; sudo systemctl start ycsb_ldr2.service"
+        ;;
+      *)
+        echo
+        echo "ATN: If $2 is intended to be long-lived, please define it by name in drtprod instead."
+        echo
+        exec roachprod "$@"
+      ;;
+    esac
+    exit 0
+esac
+
+
+roachprod "$@"

@@ -1,0 +1,102 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "logcrash",
+    srcs = ["crash_reporting.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logcrash",
+    visibility = ["//visibility:public"],
+    x_defs = {
+        "github.com/cockroachdb/cockroach/pkg/util/log/logcrash.crashReportEnv": "{STABLE_CRASH_REPORT_ENV}",
+        "github.com/cockroachdb/cockroach/pkg/util/log/logcrash.crashReportingDisabledString": "{STABLE_TELEMETRY_DISABLED}",
+    },
+    deps = [
+        "//pkg/build",
+        "//pkg/settings",
+        "//pkg/util/envutil",
+        "//pkg/util/log",
+        "//pkg/util/log/severity",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_getsentry_sentry_go//:sentry-go",
+    ],
+)
+
+go_test(
+    name = "logcrash_test",
+    size = "small",
+    srcs = [
+        "crash_reporting_packet_test.go",
+        "crash_reporting_test.go",
+        "crash_reporting_unix_test.go",
+        "main_test.go",
+    ],
+    embed = [":logcrash"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/util",
+        "//pkg/util/envutil",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_getsentry_sentry_go//:sentry-go",
+        "@com_github_pmezard_go_difflib//difflib",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:aix": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:android": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:illumos": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:js": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:netbsd": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:openbsd": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:osx": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:plan9": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:qnx": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:solaris": [
+            "@org_golang_x_sys//unix",
+        ],
+        "//conditions:default": [],
+    }),
+)

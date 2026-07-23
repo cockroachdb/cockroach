@@ -1,0 +1,16 @@
+index-constraints vars=(a int, b int) index=(a)
+a > 2 AND a < 4 AND b = 2
+----
+[/3 - /3]
+Remaining filter: b = 2
+
+index-constraints vars=(a int, b int) index=(a)
+a > 2
+optional: a < 4 AND b = 2
+----
+[/3 - /3]
+
+index-constraints vars=(a int, b int) index=(a desc, b desc)
+optional: a >= 2 AND a <= 4 AND b IN (1, 2, 3)
+----
+[/4/3 - /2/1]

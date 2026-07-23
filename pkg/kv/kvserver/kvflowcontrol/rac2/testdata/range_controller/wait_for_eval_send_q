@@ -1,0 +1,230 @@
+# Initialize a range with voters on s1,s2 and s3. The local replica and
+# leaseholder will be s1. The leaseholder is denoted by the '*' suffix. Also
+# set regular streams to initially have 8MiB tokens and a limit of 8MiB
+# tokens. Replicas 2 and 3 have a send-queue.
+init regular_limit=8MiB regular_init=8MiB elastic_limit=1 elastic_init=1
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+t1/s1: eval reg=+8.0 MiB/+8.0 MiB ela=+1 B/+1 B
+       send reg=+8.0 MiB/+8.0 MiB ela=+1 B/+1 B
+t1/s2: eval reg=+8.0 MiB/+8.0 MiB ela=+1 B/+1 B
+       send reg=+8.0 MiB/+8.0 MiB ela=+1 B/+1 B
+t1/s3: eval reg=+8.0 MiB/+8.0 MiB ela=+1 B/+1 B
+       send reg=+8.0 MiB/+8.0 MiB ela=+1 B/+1 B
+
+# Create MsgApps with different entries for each replica, so replicas 2 and 3
+# have a send-queue.
+raft_event
+range_id=1
+  entries
+    term=1 index=1 pri=NormalPri size=1MiB
+  sending
+    replica_id=1 [1,2)
+    replica_id=2 [1,1)
+    replica_id=3 [1,1)
+----
+t1/s1: eval reg=+7.0 MiB/+8.0 MiB ela=-1024 KiB/+1 B
+       send reg=+7.0 MiB/+8.0 MiB ela=-1024 KiB/+1 B
+t1/s2: eval reg=+7.0 MiB/+8.0 MiB ela=-1024 KiB/+1 B
+       send reg=+8.0 MiB/+8.0 MiB ela=+1 B/+1 B
+t1/s3: eval reg=+7.0 MiB/+8.0 MiB ela=-1024 KiB/+1 B
+       send reg=+8.0 MiB/+8.0 MiB ela=+1 B/+1 B
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,2) precise_q_size=+1.0 MiB
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,2) precise_q_size=+1.0 MiB
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+++++
+
+# Start a high priority evaluation. It should not complete due to lack of
+# quorum with no send-queue.
+wait_for_eval name=a range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=false waited=false err=<nil>
+
+# Make a quorum with no send-queue.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=2
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=2
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=2
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n3,s3):3: closed
+++++
+
+# Evaluation completes.
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=true  err=<nil>
+
+# All replicas have no send-queue.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=2
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=2
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=2
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=2
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+
+wait_for_eval name=b range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=true  err=<nil>
+  name=b pri=high-pri done=true  waited=true  err=<nil>
+
+# Create MsgApps with different entries for each replica, so replicas 2 and 3
+# have a send-queue.
+raft_event
+range_id=1
+  entries
+    term=1 index=2 pri=NormalPri size=1MiB
+    term=1 index=3 pri=NormalPri size=1MiB
+    term=1 index=4 pri=NormalPri size=1MiB
+  sending
+    replica_id=1 [2,5)
+    replica_id=2 [2,3)
+    replica_id=3 [2,4)
+----
+t1/s1: eval reg=+4.0 MiB/+8.0 MiB ela=-4.0 MiB/+1 B
+       send reg=+4.0 MiB/+8.0 MiB ela=-4.0 MiB/+1 B
+t1/s2: eval reg=+5.0 MiB/+8.0 MiB ela=-3.0 MiB/+1 B
+       send reg=+7.0 MiB/+8.0 MiB ela=-1024 KiB/+1 B
+t1/s3: eval reg=+5.0 MiB/+8.0 MiB ela=-3.0 MiB/+1 B
+       send reg=+6.0 MiB/+8.0 MiB ela=-2.0 MiB/+1 B
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,5) (4.0 MiB) send_queue=[5,5) precise_q_size=+0 B
+eval deducted: reg=+4.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+  term=1 index=4  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,5) precise_q_size=+2.0 MiB
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+2.0 MiB ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,5) precise_q_size=+1.0 MiB
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+
+# Evaluation has to wait because only replica 1 has no send-queue.
+wait_for_eval name=c range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=true  err=<nil>
+  name=b pri=high-pri done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=false waited=false err=<nil>
+
+# Send another event, that eliminates replica 2's send-queue.
+raft_event
+range_id=1
+  entries
+    term=1 index=5 pri=NormalPri size=1MiB
+  sending
+    replica_id=1 [5,6)
+    replica_id=2 [3,6)
+    replica_id=3 [4,5)
+----
+t1/s1: eval reg=+3.0 MiB/+8.0 MiB ela=-5.0 MiB/+1 B
+       send reg=+3.0 MiB/+8.0 MiB ela=-5.0 MiB/+1 B
+t1/s2: eval reg=+4.0 MiB/+8.0 MiB ela=-4.0 MiB/+1 B
+       send reg=+4.0 MiB/+8.0 MiB ela=-4.0 MiB/+1 B
+t1/s3: eval reg=+4.0 MiB/+8.0 MiB ela=-4.0 MiB/+1 B
+       send reg=+5.0 MiB/+8.0 MiB ela=-3.0 MiB/+1 B
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (5.0 MiB) send_queue=[6,6) precise_q_size=+0 B
+eval deducted: reg=+5.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+  term=1 index=4  tokens=1048576
+  term=1 index=5  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[1,6) (5.0 MiB) send_queue=[6,6) precise_q_size=+0 B
+eval deducted: reg=+4.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+  term=1 index=4  tokens=1048576
+  term=1 index=5  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,5) (4.0 MiB) send_queue=[5,6) precise_q_size=+1.0 MiB
+eval deducted: reg=+4.0 MiB ela=+0 B
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+  term=1 index=4  tokens=1048576
+++++
+
+# Since there is a quorum with no send-queue (replicas 1 and 2), the evaluation
+# of c completes.
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=true  err=<nil>
+  name=b pri=high-pri done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>

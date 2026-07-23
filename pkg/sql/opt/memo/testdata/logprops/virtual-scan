@@ -1,0 +1,45 @@
+build
+SELECT catalog_name, sql_path
+FROM (SELECT * FROM information_schema.schemata WHERE SCHEMA_NAME='public')
+LEFT JOIN information_schema.tables
+ON CATALOG_NAME=TABLE_CATALOG AND SCHEMA_NAME=TABLE_SCHEMA
+----
+project
+ ├── columns: catalog_name:2(string!null) sql_path:5(string)
+ ├── prune: (2,5)
+ └── left-join (cross)
+      ├── columns: catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string) crdb_is_user_defined:6(string) information_schema.tables.crdb_internal_vtable_pk:7(int) table_catalog:8(string) table_schema:9(string) table_name:10(string) table_type:11(string) is_insertable_into:12(string) version:13(int)
+      ├── fd: ()-->(3)
+      ├── prune: (4-7,10-13)
+      ├── reject-nulls: (7-13)
+      ├── interesting orderings: (+7)
+      ├── project
+      │    ├── columns: catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string) crdb_is_user_defined:6(string)
+      │    ├── fd: ()-->(3)
+      │    ├── prune: (2-6)
+      │    └── select
+      │         ├── columns: information_schema.schemata.crdb_internal_vtable_pk:1(int!null) catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string) crdb_is_user_defined:6(string)
+      │         ├── fd: ()-->(3)
+      │         ├── prune: (1,2,4-6)
+      │         ├── interesting orderings: (+1 opt(3))
+      │         ├── scan schemata
+      │         │    ├── columns: information_schema.schemata.crdb_internal_vtable_pk:1(int!null) catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string) crdb_is_user_defined:6(string)
+      │         │    ├── prune: (1-6)
+      │         │    └── interesting orderings: (+1)
+      │         └── filters
+      │              └── eq [type=bool, outer=(3), constraints=(/3: [/'public' - /'public']; tight), fd=()-->(3)]
+      │                   ├── variable: schema_name:3 [type=string]
+      │                   └── const: 'public' [type=string]
+      ├── scan tables
+      │    ├── columns: information_schema.tables.crdb_internal_vtable_pk:7(int!null) table_catalog:8(string!null) table_schema:9(string!null) table_name:10(string!null) table_type:11(string!null) is_insertable_into:12(string!null) version:13(int)
+      │    ├── prune: (7-13)
+      │    ├── interesting orderings: (+7)
+      │    └── unfiltered-cols: (7-13)
+      └── filters
+           └── and [type=bool, outer=(2,3,8,9), constraints=(/2: (/NULL - ]; /3: (/NULL - ]; /8: (/NULL - ]; /9: (/NULL - ])]
+                ├── eq [type=bool]
+                │    ├── variable: catalog_name:2 [type=string]
+                │    └── variable: table_catalog:8 [type=string]
+                └── eq [type=bool]
+                     ├── variable: schema_name:3 [type=string]
+                     └── variable: table_schema:9 [type=string]

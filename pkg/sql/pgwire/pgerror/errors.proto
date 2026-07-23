@@ -1,0 +1,32 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.pgerror;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror";
+
+// Error contains all Postgres wire protocol error fields.
+// See https://www.postgresql.org/docs/current/static/protocol-error-fields.html
+// for a list of all Postgres error fields, most of which are optional and can
+// be used to provide auxiliary error information.
+message Error {
+  // standard pg error fields. This can be passed
+  // over the pg wire protocol.
+  string code = 1;
+  string message = 2;
+  string detail = 3;
+  string hint = 4;
+  string severity = 8;
+  string constraint_name = 9;
+
+  message Source {
+      string file = 1;
+      int32 line = 2;
+      string function = 3;
+  }
+  Source source = 5;
+
+  reserved 6,7;
+};

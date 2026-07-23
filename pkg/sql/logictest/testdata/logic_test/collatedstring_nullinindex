@@ -1,0 +1,27 @@
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b STRING COLLATE en
+)
+
+statement ok
+INSERT INTO t VALUES (1, 'foo' COLLATE en), (2, NULL), (3, 'bar' COLLATE en)
+
+statement ok
+CREATE INDEX ON t (b, a)
+
+# Test that unspecifying b is like specifying NULL.
+statement ok
+INSERT INTO t (a) VALUES(4)
+
+statement ok
+INSERT INTO t VALUES(5)
+
+query T
+SELECT b FROM t ORDER BY b
+----
+NULL
+NULL
+NULL
+bar
+foo

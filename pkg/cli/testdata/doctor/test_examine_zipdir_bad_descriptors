@@ -1,0 +1,4 @@
+debug doctor examine zipdir testdata/doctor/debugzip-bad-descriptors 21.1-52
+----
+debug doctor examine zipdir testdata/doctor/debugzip-bad-descriptors 21.1-52
+ERROR: expected 2 fields, got 1 in system.descriptors.txt

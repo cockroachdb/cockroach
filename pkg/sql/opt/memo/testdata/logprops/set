@@ -1,0 +1,742 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+
+exec-ddl
+CREATE TABLE uv (u INT, v INT NOT NULL)
+----
+
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+----
+
+exec-ddl
+CREATE TABLE mn (m INT, n INT, PRIMARY KEY (m, n))
+----
+
+build
+SELECT * FROM xy UNION SELECT * FROM uv
+----
+union
+ ├── columns: x:10(int) y:11(int)
+ ├── left columns: xy.x:1(int) xy.y:2(int)
+ ├── right columns: u:5(int) v:6(int)
+ ├── key: (10,11)
+ ├── interesting orderings: (+10)
+ ├── project
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    ├── interesting orderings: (+1)
+ │    └── scan xy
+ │         ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2-4)
+ │         ├── prune: (1-4)
+ │         └── interesting orderings: (+1)
+ └── project
+      ├── columns: u:5(int) v:6(int!null)
+      ├── prune: (5,6)
+      └── scan uv
+           ├── columns: u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+           ├── key: (7)
+           ├── fd: (7)-->(5,6,8,9)
+           ├── prune: (5-9)
+           └── interesting orderings: (+7)
+
+build
+SELECT x, y, x FROM xy INTERSECT SELECT v, u, rowid FROM (SELECT *, rowid FROM uv WHERE u=1) uv
+----
+intersect
+ ├── columns: x:10(int!null) y:11(int) x:12(int!null)
+ ├── left columns: xy.x:1(int) xy.y:2(int) xy.x:1(int)
+ ├── right columns: v:6(int) u:5(int) rowid:7(int)
+ ├── key: (12)
+ ├── fd: ()-->(11), (12)-->(10,11), (10)==(12), (12)==(10)
+ ├── interesting orderings: (+12)
+ ├── project
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    ├── interesting orderings: (+1)
+ │    └── scan xy
+ │         ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2-4)
+ │         ├── prune: (1-4)
+ │         └── interesting orderings: (+1)
+ └── project
+      ├── columns: u:5(int!null) v:6(int!null) rowid:7(int!null)
+      ├── key: (7)
+      ├── fd: ()-->(5), (7)-->(6)
+      ├── prune: (5-7)
+      ├── interesting orderings: (+7 opt(5))
+      └── select
+           ├── columns: u:5(int!null) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+           ├── key: (7)
+           ├── fd: ()-->(5), (7)-->(6,8,9)
+           ├── prune: (6-9)
+           ├── interesting orderings: (+7 opt(5))
+           ├── scan uv
+           │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+           │    ├── key: (7)
+           │    ├── fd: (7)-->(5,6,8,9)
+           │    ├── prune: (5-9)
+           │    └── interesting orderings: (+7)
+           └── filters
+                └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+                     ├── variable: u:5 [type=int]
+                     └── const: 1 [type=int]
+
+build
+SELECT x, x, y FROM xy EXCEPT SELECT u, v, v FROM (SELECT * FROM uv WHERE u=1) uv
+----
+except
+ ├── columns: x:10(int!null) x:11(int!null) y:12(int)
+ ├── left columns: xy.x:1(int) xy.x:1(int) xy.y:2(int)
+ ├── right columns: u:5(int) v:6(int) v:6(int)
+ ├── key: (11)
+ ├── fd: (11)-->(10,12), (10)==(11), (11)==(10)
+ ├── interesting orderings: (+(10|11))
+ ├── project
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    ├── interesting orderings: (+1)
+ │    └── scan xy
+ │         ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2-4)
+ │         ├── prune: (1-4)
+ │         └── interesting orderings: (+1)
+ └── project
+      ├── columns: u:5(int!null) v:6(int!null)
+      ├── fd: ()-->(5)
+      ├── prune: (5,6)
+      └── select
+           ├── columns: u:5(int!null) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+           ├── key: (7)
+           ├── fd: ()-->(5), (7)-->(6,8,9)
+           ├── prune: (6-9)
+           ├── interesting orderings: (+7 opt(5))
+           ├── scan uv
+           │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+           │    ├── key: (7)
+           │    ├── fd: (7)-->(5,6,8,9)
+           │    ├── prune: (5-9)
+           │    └── interesting orderings: (+7)
+           └── filters
+                └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+                     ├── variable: u:5 [type=int]
+                     └── const: 1 [type=int]
+
+# Propagate outer columns.
+build
+SELECT * FROM xy WHERE (SELECT x, u FROM uv UNION SELECT y, v FROM uv) = (1, 2)
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1)
+ └── select
+      ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── prune: (3,4)
+      ├── interesting orderings: (+1)
+      ├── scan xy
+      │    ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1)
+      └── filters
+           └── eq [type=bool, outer=(1,2), immutable, correlated-subquery]
+                ├── subquery [type=tuple{int, int}]
+                │    └── max1-row
+                │         ├── columns: column19:19(tuple{int, int})
+                │         ├── error: "more than one row returned by a subquery used as an expression"
+                │         ├── outer: (1,2)
+                │         ├── cardinality: [0 - 1]
+                │         ├── key: ()
+                │         ├── fd: ()-->(19)
+                │         └── project
+                │              ├── columns: column19:19(tuple{int, int})
+                │              ├── outer: (1,2)
+                │              ├── prune: (19)
+                │              ├── union
+                │              │    ├── columns: x:17(int) u:18(int)
+                │              │    ├── left columns: x:10(int) uv.u:5(int)
+                │              │    ├── right columns: y:16(int) v:12(int)
+                │              │    ├── outer: (1,2)
+                │              │    ├── key: (17,18)
+                │              │    ├── project
+                │              │    │    ├── columns: x:10(int) uv.u:5(int)
+                │              │    │    ├── outer: (1)
+                │              │    │    ├── fd: ()-->(10)
+                │              │    │    ├── prune: (5,10)
+                │              │    │    ├── scan uv
+                │              │    │    │    ├── columns: uv.u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+                │              │    │    │    ├── key: (7)
+                │              │    │    │    ├── fd: (7)-->(5,6,8,9)
+                │              │    │    │    ├── prune: (5-9)
+                │              │    │    │    └── interesting orderings: (+7)
+                │              │    │    └── projections
+                │              │    │         └── variable: xy.x:1 [as=x:10, type=int, outer=(1)]
+                │              │    └── project
+                │              │         ├── columns: y:16(int) v:12(int!null)
+                │              │         ├── outer: (2)
+                │              │         ├── fd: ()-->(16)
+                │              │         ├── prune: (12,16)
+                │              │         ├── scan uv
+                │              │         │    ├── columns: uv.u:11(int) v:12(int!null) rowid:13(int!null) uv.crdb_internal_mvcc_timestamp:14(decimal) uv.tableoid:15(oid)
+                │              │         │    ├── key: (13)
+                │              │         │    ├── fd: (13)-->(11,12,14,15)
+                │              │         │    ├── prune: (11-15)
+                │              │         │    └── interesting orderings: (+13)
+                │              │         └── projections
+                │              │              └── variable: xy.y:2 [as=y:16, type=int, outer=(2)]
+                │              └── projections
+                │                   └── tuple [as=column19:19, type=tuple{int, int}, outer=(17,18)]
+                │                        ├── variable: x:17 [type=int]
+                │                        └── variable: u:18 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── const: 2 [type=int]
+
+# Calculate union cardinality.
+build
+SELECT * FROM (VALUES (1), (2), (3))
+UNION ALL
+SELECT * FROM (VALUES (4), (5))
+UNION
+SELECT * FROM (VALUES (6), (7), (8))
+----
+union
+ ├── columns: column1:5(int!null)
+ ├── left columns: column1:3(int)
+ ├── right columns: column1:4(int)
+ ├── cardinality: [1 - 8]
+ ├── key: (5)
+ ├── union-all
+ │    ├── columns: column1:3(int!null)
+ │    ├── left columns: column1:1(int)
+ │    ├── right columns: column1:2(int)
+ │    ├── cardinality: [5 - 5]
+ │    ├── prune: (3)
+ │    ├── values
+ │    │    ├── columns: column1:1(int!null)
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── prune: (1)
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 1 [type=int]
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 2 [type=int]
+ │    │    └── tuple [type=tuple{int}]
+ │    │         └── const: 3 [type=int]
+ │    └── values
+ │         ├── columns: column1:2(int!null)
+ │         ├── cardinality: [2 - 2]
+ │         ├── prune: (2)
+ │         ├── tuple [type=tuple{int}]
+ │         │    └── const: 4 [type=int]
+ │         └── tuple [type=tuple{int}]
+ │              └── const: 5 [type=int]
+ └── values
+      ├── columns: column1:4(int!null)
+      ├── cardinality: [3 - 3]
+      ├── prune: (4)
+      ├── tuple [type=tuple{int}]
+      │    └── const: 6 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 7 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 8 [type=int]
+
+# Calculate intersection cardinality.
+build
+SELECT * FROM (VALUES (1), (2), (3))
+INTERSECT ALL
+SELECT * FROM (VALUES (4), (5))
+INTERSECT
+SELECT * FROM (VALUES (6), (7), (8))
+----
+intersect
+ ├── columns: column1:1(int!null)
+ ├── left columns: column1:1(int!null)
+ ├── right columns: column1:3(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── intersect-all
+ │    ├── columns: column1:1(int!null)
+ │    ├── left columns: column1:1(int!null)
+ │    ├── right columns: column1:2(int)
+ │    ├── cardinality: [0 - 2]
+ │    ├── values
+ │    │    ├── columns: column1:1(int!null)
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── prune: (1)
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 1 [type=int]
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 2 [type=int]
+ │    │    └── tuple [type=tuple{int}]
+ │    │         └── const: 3 [type=int]
+ │    └── values
+ │         ├── columns: column1:2(int!null)
+ │         ├── cardinality: [2 - 2]
+ │         ├── prune: (2)
+ │         ├── tuple [type=tuple{int}]
+ │         │    └── const: 4 [type=int]
+ │         └── tuple [type=tuple{int}]
+ │              └── const: 5 [type=int]
+ └── values
+      ├── columns: column1:3(int!null)
+      ├── cardinality: [3 - 3]
+      ├── prune: (3)
+      ├── tuple [type=tuple{int}]
+      │    └── const: 6 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 7 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 8 [type=int]
+
+# Calculate except cardinality.
+build
+SELECT * FROM (VALUES (1), (2), (3))
+EXCEPT ALL
+SELECT * FROM (VALUES (4), (5))
+EXCEPT
+SELECT * FROM (VALUES (6), (7), (8), (9))
+----
+except
+ ├── columns: column1:1(int!null)
+ ├── left columns: column1:1(int!null)
+ ├── right columns: column1:3(int)
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ ├── except-all
+ │    ├── columns: column1:1(int!null)
+ │    ├── left columns: column1:1(int!null)
+ │    ├── right columns: column1:2(int)
+ │    ├── cardinality: [1 - 3]
+ │    ├── values
+ │    │    ├── columns: column1:1(int!null)
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── prune: (1)
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 1 [type=int]
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 2 [type=int]
+ │    │    └── tuple [type=tuple{int}]
+ │    │         └── const: 3 [type=int]
+ │    └── values
+ │         ├── columns: column1:2(int!null)
+ │         ├── cardinality: [2 - 2]
+ │         ├── prune: (2)
+ │         ├── tuple [type=tuple{int}]
+ │         │    └── const: 4 [type=int]
+ │         └── tuple [type=tuple{int}]
+ │              └── const: 5 [type=int]
+ └── values
+      ├── columns: column1:3(int!null)
+      ├── cardinality: [4 - 4]
+      ├── prune: (3)
+      ├── tuple [type=tuple{int}]
+      │    └── const: 6 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 7 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 8 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 9 [type=int]
+
+# FDs include equivalencies for columns that have equivalencies in both the left
+# and right inputs.
+norm
+SELECT a, b, c FROM abc WHERE a > 0 AND a = c
+UNION
+SELECT a, b, c FROM abc WHERE a > 10 AND a = c
+----
+distinct-on
+ ├── columns: a:11(int!null) b:12(int) c:13(int!null)
+ ├── grouping columns: a:11(int!null)
+ ├── key: (11)
+ ├── fd: (11)-->(12,13), (11)==(13), (13)==(11)
+ ├── prune: (12,13)
+ ├── union-all
+ │    ├── columns: a:11(int!null) b:12(int) c:13(int!null)
+ │    ├── left columns: abc.a:1(int) abc.b:2(int) abc.c:3(int)
+ │    ├── right columns: abc.a:6(int) abc.b:7(int) abc.c:8(int)
+ │    ├── fd: (11)==(13), (13)==(11)
+ │    ├── prune: (12)
+ │    ├── interesting orderings: (+(11|13))
+ │    ├── select
+ │    │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int!null)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2), (1)==(3), (3)==(1)
+ │    │    ├── prune: (2)
+ │    │    ├── interesting orderings: (+(1|3))
+ │    │    ├── scan abc
+ │    │    │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2,3)
+ │    │    │    ├── prune: (1-3)
+ │    │    │    └── interesting orderings: (+1)
+ │    │    └── filters
+ │    │         ├── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │    │         │    ├── variable: abc.a:1 [type=int]
+ │    │         │    └── const: 0 [type=int]
+ │    │         └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ │    │              ├── variable: abc.a:1 [type=int]
+ │    │              └── variable: abc.c:3 [type=int]
+ │    └── select
+ │         ├── columns: abc.a:6(int!null) abc.b:7(int) abc.c:8(int!null)
+ │         ├── key: (6)
+ │         ├── fd: (6)-->(7), (6)==(8), (8)==(6)
+ │         ├── prune: (7)
+ │         ├── interesting orderings: (+(6|8))
+ │         ├── scan abc
+ │         │    ├── columns: abc.a:6(int!null) abc.b:7(int) abc.c:8(int)
+ │         │    ├── key: (6)
+ │         │    ├── fd: (6)-->(7,8)
+ │         │    ├── prune: (6-8)
+ │         │    └── interesting orderings: (+6)
+ │         └── filters
+ │              ├── gt [type=bool, outer=(6), constraints=(/6: [/11 - ]; tight)]
+ │              │    ├── variable: abc.a:6 [type=int]
+ │              │    └── const: 10 [type=int]
+ │              └── eq [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+ │                   ├── variable: abc.a:6 [type=int]
+ │                   └── variable: abc.c:8 [type=int]
+ └── aggregations
+      ├── const-agg [as=b:12, type=int, outer=(12)]
+      │    └── variable: b:12 [type=int]
+      └── const-agg [as=c:13, type=int, outer=(13)]
+           └── variable: c:13 [type=int]
+
+# Do not include equivalencies from only the left or right input.
+norm
+SELECT a, b, c FROM abc WHERE a > 0 AND a = c
+UNION
+SELECT a, b, c FROM abc WHERE a > 10 AND a = b
+----
+distinct-on
+ ├── columns: a:11(int!null) b:12(int) c:13(int)
+ ├── grouping columns: a:11(int!null)
+ ├── key: (11)
+ ├── fd: (11)-->(12,13)
+ ├── prune: (12,13)
+ ├── union-all
+ │    ├── columns: a:11(int!null) b:12(int) c:13(int)
+ │    ├── left columns: abc.a:1(int) abc.b:2(int) abc.c:3(int)
+ │    ├── right columns: abc.a:6(int) abc.b:7(int) abc.c:8(int)
+ │    ├── prune: (12,13)
+ │    ├── interesting orderings: (+11)
+ │    ├── select
+ │    │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int!null)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2), (1)==(3), (3)==(1)
+ │    │    ├── prune: (2)
+ │    │    ├── interesting orderings: (+(1|3))
+ │    │    ├── scan abc
+ │    │    │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2,3)
+ │    │    │    ├── prune: (1-3)
+ │    │    │    └── interesting orderings: (+1)
+ │    │    └── filters
+ │    │         ├── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │    │         │    ├── variable: abc.a:1 [type=int]
+ │    │         │    └── const: 0 [type=int]
+ │    │         └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ │    │              ├── variable: abc.a:1 [type=int]
+ │    │              └── variable: abc.c:3 [type=int]
+ │    └── select
+ │         ├── columns: abc.a:6(int!null) abc.b:7(int!null) abc.c:8(int)
+ │         ├── key: (6)
+ │         ├── fd: (6)-->(8), (6)==(7), (7)==(6)
+ │         ├── prune: (8)
+ │         ├── interesting orderings: (+(6|7))
+ │         ├── scan abc
+ │         │    ├── columns: abc.a:6(int!null) abc.b:7(int) abc.c:8(int)
+ │         │    ├── key: (6)
+ │         │    ├── fd: (6)-->(7,8)
+ │         │    ├── prune: (6-8)
+ │         │    └── interesting orderings: (+6)
+ │         └── filters
+ │              ├── gt [type=bool, outer=(6), constraints=(/6: [/11 - ]; tight)]
+ │              │    ├── variable: abc.a:6 [type=int]
+ │              │    └── const: 10 [type=int]
+ │              └── eq [type=bool, outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
+ │                   ├── variable: abc.a:6 [type=int]
+ │                   └── variable: abc.b:7 [type=int]
+ └── aggregations
+      ├── const-agg [as=b:12, type=int, outer=(12)]
+      │    └── variable: b:12 [type=int]
+      └── const-agg [as=c:13, type=int, outer=(13)]
+           └── variable: c:13 [type=int]
+
+# Intersect FDs include equivalencies for columns that have equivalencies in the
+# left input.
+norm
+SELECT a, b, c FROM abc WHERE a > 0 AND a = c
+INTERSECT
+SELECT a, b, c FROM abc WHERE a > 10 AND a = b
+----
+intersect-all
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── left columns: a:1(int!null) b:2(int) c:3(int)
+ ├── right columns: a:6(int) b:7(int) c:8(int)
+ ├── key: (1)
+ ├── fd: (1)==(2,3), (2)==(1,3), (3)==(1,2)
+ ├── interesting orderings: (+1)
+ ├── select
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2), (1)==(3), (3)==(1)
+ │    ├── prune: (2)
+ │    ├── interesting orderings: (+(1|3))
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,3)
+ │    │    ├── prune: (1-3)
+ │    │    └── interesting orderings: (+1)
+ │    └── filters
+ │         ├── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │         │    ├── variable: a:1 [type=int]
+ │         │    └── const: 0 [type=int]
+ │         └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ │              ├── variable: a:1 [type=int]
+ │              └── variable: c:3 [type=int]
+ └── select
+      ├── columns: a:6(int!null) b:7(int!null) c:8(int)
+      ├── key: (6)
+      ├── fd: (6)-->(8), (6)==(7), (7)==(6)
+      ├── prune: (8)
+      ├── interesting orderings: (+(6|7))
+      ├── scan abc
+      │    ├── columns: a:6(int!null) b:7(int) c:8(int)
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7,8)
+      │    ├── prune: (6-8)
+      │    └── interesting orderings: (+6)
+      └── filters
+           ├── gt [type=bool, outer=(6), constraints=(/6: [/11 - ]; tight)]
+           │    ├── variable: a:6 [type=int]
+           │    └── const: 10 [type=int]
+           └── eq [type=bool, outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
+                ├── variable: a:6 [type=int]
+                └── variable: b:7 [type=int]
+
+# Except FDs include equivalencies for columns that have equivalencies in the
+# left input.
+norm
+SELECT a, b, c FROM abc WHERE a > 0 AND a = c
+EXCEPT
+SELECT a, b, c FROM abc WHERE a > 10 AND a = b
+----
+except-all
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── left columns: a:1(int!null) b:2(int) c:3(int)
+ ├── right columns: a:6(int) b:7(int) c:8(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2), (1)==(3), (3)==(1)
+ ├── interesting orderings: (+1)
+ ├── select
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2), (1)==(3), (3)==(1)
+ │    ├── prune: (2)
+ │    ├── interesting orderings: (+(1|3))
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,3)
+ │    │    ├── prune: (1-3)
+ │    │    └── interesting orderings: (+1)
+ │    └── filters
+ │         ├── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │         │    ├── variable: a:1 [type=int]
+ │         │    └── const: 0 [type=int]
+ │         └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ │              ├── variable: a:1 [type=int]
+ │              └── variable: c:3 [type=int]
+ └── select
+      ├── columns: a:6(int!null) b:7(int!null) c:8(int)
+      ├── key: (6)
+      ├── fd: (6)-->(8), (6)==(7), (7)==(6)
+      ├── prune: (8)
+      ├── interesting orderings: (+(6|7))
+      ├── scan abc
+      │    ├── columns: a:6(int!null) b:7(int) c:8(int)
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7,8)
+      │    ├── prune: (6-8)
+      │    └── interesting orderings: (+6)
+      └── filters
+           ├── gt [type=bool, outer=(6), constraints=(/6: [/11 - ]; tight)]
+           │    ├── variable: a:6 [type=int]
+           │    └── const: 10 [type=int]
+           └── eq [type=bool, outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
+                ├── variable: a:6 [type=int]
+                └── variable: b:7 [type=int]
+
+# Regression test for #89101. EXCEPT can have cardinality 0 even if left side
+# has more rows than the right.
+norm
+VALUES (1), (1) EXCEPT VALUES (1)
+----
+except
+ ├── columns: column1:1(int!null)
+ ├── left columns: column1:1(int!null)
+ ├── right columns: column1:2(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ └── values
+      ├── columns: column1:2(int!null)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2)
+      ├── prune: (2)
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
+
+# EXCEPT ALL cannot have cardinality lower than min left - max right.
+norm
+VALUES (1), (1) EXCEPT ALL VALUES (1)
+----
+except-all
+ ├── columns: column1:1(int!null)
+ ├── left columns: column1:1(int!null)
+ ├── right columns: column1:2(int)
+ ├── cardinality: [1 - 2]
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ └── values
+      ├── columns: column1:2(int!null)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2)
+      ├── prune: (2)
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
+
+# Regression test for #113817. The key from the LHS of the intersection should
+# be reduced after adding the FDs from the RHS.
+norm
+SELECT m, n FROM mn
+INTERSECT
+SELECT x, y FROM xy
+----
+intersect-all
+ ├── columns: m:1(int!null) n:2(int)
+ ├── left columns: m:1(int!null) n:2(int)
+ ├── right columns: x:5(int) y:6(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── interesting orderings: (+1,+2)
+ ├── scan mn
+ │    ├── columns: m:1(int!null) n:2(int!null)
+ │    ├── key: (1,2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1,+2)
+ └── scan xy
+      ├── columns: x:5(int!null) y:6(int)
+      ├── key: (5)
+      ├── fd: (5)-->(6)
+      ├── prune: (5,6)
+      └── interesting orderings: (+5)
+
+# Regression test for #133221: if a column with an equivalency is remapped more
+# than once, create a new equivalency for each remapping.
+norm
+SELECT * FROM (SELECT x, x, COALESCE(NULL, x) FROM xy) INTERSECT VALUES (1, 2, 3);
+----
+intersect-all
+ ├── columns: x:9(int!null) x:10(int!null) coalesce:11(int!null)
+ ├── left columns: xy.x:1(int) xy.x:1(int) coalesce:5(int)
+ ├── right columns: column1:6(int) column2:7(int) column3:8(int)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(9-11), (9)==(10,11), (10)==(9,11), (11)==(9,10)
+ ├── interesting orderings: (+(9|10|11))
+ ├── project
+ │    ├── columns: coalesce:5(int!null) xy.x:1(int!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)==(5), (5)==(1)
+ │    ├── prune: (1,5)
+ │    ├── interesting orderings: (+(1|5))
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:1(int!null)
+ │    │    ├── key: (1)
+ │    │    ├── prune: (1)
+ │    │    └── interesting orderings: (+1)
+ │    └── projections
+ │         └── variable: xy.x:1 [as=coalesce:5, type=int, outer=(1)]
+ └── values
+      ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      ├── prune: (6-8)
+      └── tuple [type=tuple{int, int, int}]
+           ├── const: 1 [type=int]
+           ├── const: 2 [type=int]
+           └── const: 3 [type=int]
+
+norm
+SELECT * FROM (SELECT x, x, COALESCE(NULL, x) FROM xy) EXCEPT VALUES (1, 2, 3);
+----
+except-all
+ ├── columns: x:9(int!null) x:10(int!null) coalesce:11(int!null)
+ ├── left columns: xy.x:1(int) xy.x:1(int) coalesce:5(int)
+ ├── right columns: column1:6(int) column2:7(int) column3:8(int)
+ ├── key: (10)
+ ├── fd: (9)==(10,11), (10)==(9,11), (11)==(9,10)
+ ├── interesting orderings: (+(9|10|11))
+ ├── project
+ │    ├── columns: coalesce:5(int!null) xy.x:1(int!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)==(5), (5)==(1)
+ │    ├── prune: (1,5)
+ │    ├── interesting orderings: (+(1|5))
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:1(int!null)
+ │    │    ├── key: (1)
+ │    │    ├── prune: (1)
+ │    │    └── interesting orderings: (+1)
+ │    └── projections
+ │         └── variable: xy.x:1 [as=coalesce:5, type=int, outer=(1)]
+ └── values
+      ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      ├── prune: (6-8)
+      └── tuple [type=tuple{int, int, int}]
+           ├── const: 1 [type=int]
+           ├── const: 2 [type=int]
+           └── const: 3 [type=int]

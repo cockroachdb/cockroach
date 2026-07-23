@@ -1,0 +1,41 @@
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+load("@aspect_rules_js//npm:defs.bzl", "npm_package")
+load("@//pkg/ui/workspaces/db-console/src/js:defs.bzl", "protobufjs_library")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+
+npm_link_all_packages(name = "node_modules")
+
+protobufjs_library(
+    name = "crdb-protobuf-client-ccl__proto",
+    out_name = "protos",
+    protos = [
+        "//pkg/server/serverpb:serverpb_proto",
+        "//pkg/ts/tspb:tspb_proto",
+    ],
+)
+
+js_library(
+    name = "crdb-protobuf-client-ccl-lib",
+    srcs = [
+        "package.json",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [":crdb-protobuf-client-ccl__proto"],
+)
+
+npm_package(
+    name = "crdb-protobuf-client-ccl",
+    srcs = [
+        "package.json",
+        ":crdb-protobuf-client-ccl-lib",
+    ],
+    package = "@cockroachlabs/crdb-protobuf-client-ccl",
+    visibility = ["//visibility:public"],
+)
+
+# rules_js 2.x expects npm_package targets to be named 'pkg' by default
+alias(
+    name = "pkg",
+    actual = ":crdb-protobuf-client-ccl",
+    visibility = ["//visibility:public"],
+)

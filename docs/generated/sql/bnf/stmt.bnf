@@ -1,0 +1,4 @@
+stmt ::=
+	'HELPTOKEN'
+	| stmt_without_legacy_transaction
+	| legacy_transaction_stmt

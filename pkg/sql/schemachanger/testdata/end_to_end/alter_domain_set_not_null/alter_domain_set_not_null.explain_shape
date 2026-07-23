@@ -1,0 +1,9 @@
+/* setup */
+CREATE DOMAIN salmon AS INT DEFAULT 0;
+CREATE TABLE t (c salmon);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER DOMAIN salmon SET NOT NULL;
+----
+Schema change plan for ALTER DOMAIN ‹defaultdb›.‹public›.‹salmon› SET NOT NULL;
+ └── execute 2 system table mutations transactions

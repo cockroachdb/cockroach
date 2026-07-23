@@ -1,0 +1,334 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+----
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 3
+  },
+  {
+    "columns": ["x","y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10,
+    "avg_size": 14
+  },
+  {
+    "columns": ["s","y"],
+    "created_at": "2018-01-01 1:40:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 100
+  }
+]'
+----
+
+build
+SELECT x FROM a
+----
+project
+ ├── columns: x:1(int!null)
+ ├── stats: [rows=2000]
+ ├── key: (1)
+ └── scan a
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      ├── stats: [rows=2000]
+      ├── key: (1)
+      └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+
+build
+SELECT y, s FROM a
+----
+project
+ ├── columns: y:2(int) s:3(string)
+ ├── stats: [rows=2000]
+ └── scan a
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      ├── stats: [rows=2000]
+      ├── key: (1)
+      └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+
+build
+SELECT count(*) FROM (SELECT x, y FROM a) GROUP BY x, y
+----
+project
+ ├── columns: count:7(int!null)
+ ├── stats: [rows=2000]
+ └── group-by (hash)
+      ├── columns: x:1(int!null) y:2(int) count_rows:7(int!null)
+      ├── grouping columns: x:1(int!null) y:2(int)
+      ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(2,7)
+      ├── project
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── scan a
+      │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │         ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── aggregations
+           └── count-rows [as=count_rows:7, type=int]
+
+# Test that the stats are calculated correctly for synthesized columns.
+build
+SELECT * FROM (SELECT concat(s, y::string) FROM a) AS q(v) WHERE v = 'foo'
+----
+select
+ ├── columns: v:7(string!null)
+ ├── immutable
+ ├── stats: [rows=20, distinct(7)=1, null(7)=0]
+ ├── fd: ()-->(7)
+ ├── project
+ │    ├── columns: concat:7(string)
+ │    ├── immutable
+ │    ├── stats: [rows=2000, distinct(7)=100, null(7)=0]
+ │    ├── scan a
+ │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │    │    ├── stats: [rows=2000, distinct(2,3)=100, null(2,3)=0]
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │    └── projections
+ │         └── concat(s:3, y:2::STRING) [as=concat:7, type=string, outer=(2,3), immutable]
+ └── filters
+      └── concat:7 = 'foo' [type=bool, outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+
+# Test that stats for synthesized and non-synthesized columns are combined.
+build
+SELECT * FROM (SELECT concat(s, y::string), x FROM a) AS q(v, x) GROUP BY v, x
+----
+group-by (hash)
+ ├── columns: v:7(string) x:1(int!null)
+ ├── grouping columns: x:1(int!null) concat:7(string)
+ ├── immutable
+ ├── stats: [rows=2000, distinct(1,7)=2000, null(1,7)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(7)
+ └── project
+      ├── columns: concat:7(string) x:1(int!null)
+      ├── immutable
+      ├── stats: [rows=2000, distinct(1,7)=2000, null(1,7)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(7)
+      ├── scan a
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      │    ├── stats: [rows=2000, distinct(1-3)=2000, null(1-3)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── projections
+           └── concat(s:3, y:2::STRING) [as=concat:7, type=string, outer=(2,3), immutable]
+
+# No available stats for column y.
+build
+SELECT * FROM (SELECT y + 3 AS v FROM a) WHERE v >= 1 AND v <= 100
+----
+select
+ ├── columns: v:7(int!null)
+ ├── immutable
+ ├── stats: [rows=1000, distinct(7)=100, null(7)=0]
+ ├── project
+ │    ├── columns: v:7(int)
+ │    ├── immutable
+ │    ├── stats: [rows=2000, distinct(7)=200, null(7)=0]
+ │    ├── scan a
+ │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │    │    ├── stats: [rows=2000, distinct(2)=200, null(2)=20]
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │    └── projections
+ │         └── y:2 + 3 [as=v:7, type=int, outer=(2), immutable]
+ └── filters
+      └── (v:7 >= 1) AND (v:7 <= 100) [type=bool, outer=(7), constraints=(/7: [/1 - /100]; tight)]
+
+exec-ddl
+CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
+----
+
+exec-ddl
+ALTER TABLE kuv INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 3
+  },
+  {
+    "columns": ["v"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10,
+    "avg_size": 14
+  }
+]'
+----
+
+# Correlated subquery.
+build
+SELECT * FROM a WHERE EXISTS (SELECT s < v FROM kuv GROUP BY s < v)
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) a.crdb_internal_mvcc_timestamp:5(decimal) a.tableoid:6(oid)
+      ├── stats: [rows=666.667]
+      ├── key: (1)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── scan a
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) a.crdb_internal_mvcc_timestamp:5(decimal) a.tableoid:6(oid)
+      │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(4)=200, null(4)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── filters
+           └── exists [type=bool, outer=(3), correlated-subquery]
+                └── group-by (hash)
+                     ├── columns: column12:12(bool)
+                     ├── grouping columns: column12:12(bool)
+                     ├── outer: (3)
+                     ├── cardinality: [0 - 3]
+                     ├── stats: [rows=3, distinct(12)=3, null(12)=0]
+                     ├── key: (12)
+                     └── project
+                          ├── columns: column12:12(bool)
+                          ├── outer: (3)
+                          ├── stats: [rows=2000, distinct(12)=10, null(12)=0]
+                          ├── scan kuv
+                          │    ├── columns: k:7(int!null) u:8(float) v:9(string) kuv.crdb_internal_mvcc_timestamp:10(decimal) kuv.tableoid:11(oid)
+                          │    ├── stats: [rows=2000, distinct(9)=10, null(9)=0]
+                          │    ├── key: (7)
+                          │    └── fd: (7)-->(8-11)
+                          └── projections
+                               └── s:3 < v:9 [as=column12:12, type=bool, outer=(3,9)]
+
+# Bump up null counts.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 3
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 500,
+    "null_count": 1000,
+    "avg_size": 2
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 500,
+    "null_count": 500,
+    "avg_size": 14
+  }
+]'
+----
+
+build colstat=2 colstat=3 colstat=(2,3)
+SELECT y, s FROM a
+----
+project
+ ├── columns: y:2(int) s:3(string)
+ ├── stats: [rows=2000, distinct(2)=500, null(2)=1000, distinct(3)=500, null(3)=500, distinct(2,3)=2000, null(2,3)=250]
+ └── scan a
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+      ├── stats: [rows=2000, distinct(2)=500, null(2)=1000, distinct(3)=500, null(3)=500, distinct(2,3)=2000, null(2,3)=250]
+      ├── key: (1)
+      └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+
+# Test that the stats are calculated correctly for synthesized columns.
+build
+SELECT * FROM (SELECT concat(s, y::string) FROM a) AS q(v) WHERE v = 'foo'
+----
+select
+ ├── columns: v:7(string!null)
+ ├── immutable
+ ├── stats: [rows=1, distinct(7)=1, null(7)=0]
+ ├── fd: ()-->(7)
+ ├── project
+ │    ├── columns: concat:7(string)
+ │    ├── immutable
+ │    ├── stats: [rows=2000, distinct(7)=2000, null(7)=0]
+ │    ├── scan a
+ │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │    │    ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=250]
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │    └── projections
+ │         └── concat(s:3, y:2::STRING) [as=concat:7, type=string, outer=(2,3), immutable]
+ └── filters
+      └── concat:7 = 'foo' [type=bool, outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+
+build colstat=7 colstat=8 colstat=(7,8)
+SELECT NULL, NULLIF(x,y) FROM a
+----
+project
+ ├── columns: "?column?":7(unknown) nullif:8(int)
+ ├── stats: [rows=2000, distinct(7)=1, null(7)=2000, distinct(8)=2000, null(8)=0, distinct(7,8)=2000, null(7,8)=0]
+ ├── fd: ()-->(7)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │    ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ └── projections
+      ├── NULL [as="?column?":7, type=unknown]
+      └── CASE x:1 WHEN y:2 THEN CAST(NULL AS INT8) ELSE x:1 END [as=nullif:8, type=int, outer=(1,2)]
+
+# Regression test for #124831 - don't panic due to statistics assertion with
+# optimizer rules disabled.
+exec-ddl
+CREATE TABLE t124831 (a INT, b INT);
+----
+
+norm disable=(SimplifyZeroCardinalityGroup,EliminateExistsZeroRows,SimplifyZeroCardinalitySemiJoin,PushFilterIntoJoinLeft,HoistUnboundFilterFromExistsSubquery)
+SELECT a FROM t124831 WHERE NULL::INT IN (SELECT 1 LIMIT b);
+----
+project
+ ├── columns: a:1(int)
+ ├── cardinality: [0 - 0]
+ ├── immutable
+ ├── stats: [rows=0]
+ └── semi-join-apply
+      ├── columns: a:1(int) b:2(int)
+      ├── cardinality: [0 - 0]
+      ├── immutable
+      ├── stats: [rows=0]
+      ├── scan t124831
+      │    ├── columns: a:1(int) b:2(int)
+      │    └── stats: [rows=1000]
+      ├── limit
+      │    ├── outer: (2)
+      │    ├── cardinality: [0 - 1]
+      │    ├── immutable
+      │    ├── stats: [rows=1]
+      │    ├── key: ()
+      │    ├── values
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── stats: [rows=1]
+      │    │    ├── key: ()
+      │    │    └── () [type=tuple]
+      │    └── b:2 [type=int]
+      └── filters
+           └── false [type=bool, constraints=(contradiction; tight)]

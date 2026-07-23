@@ -1,0 +1,42 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+//go:build darwin
+
+package disk
+
+import (
+	"io/fs"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/pebble/vfs"
+	"golang.org/x/sys/unix"
+)
+
+type darwinCollector struct{}
+
+func (darwinCollector) collect(disks []*monitoredDisk, time time.Time) (int, error) {
+	return len(disks), nil
+}
+
+func (darwinCollector) collectInstantaneous(
+	disks []*monitoredDisk, now time.Time, recorder func(traceEvent), buf []byte,
+) (countCollected int, _ []byte, err error) {
+	return len(disks), buf, nil
+}
+
+func newStatsCollector(fs vfs.FS) (*darwinCollector, error) {
+	return &darwinCollector{}, nil
+}
+
+func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
+	statInfo := finfo.Sys().(*sysutil.StatT)
+	id := DeviceID{
+		Major: unix.Major(uint64(statInfo.Dev)),
+		Minor: unix.Minor(uint64(statInfo.Dev)),
+	}
+	return id
+}

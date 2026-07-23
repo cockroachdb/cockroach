@@ -1,0 +1,1051 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package concurrency
+
+import (
+	"context"
+	"fmt"
+	"sync"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+)
+
+// MaxLockWaitQueueLength sets the maximum length of a lock wait-queue that a
+// read-write request is willing to enter and wait in. Used to provide a release
+// valve and ensure some level of quality-of-service under severe per-key
+// contention. If set to a non-zero value and an existing lock wait-queue is
+// already equal to or exceeding this length, the request will be rejected
+// eagerly instead of entering the queue and waiting.
+//
+// This is a fairly blunt mechanism to place an upper bound on resource
+// utilization per lock wait-queue and ensure some reasonable level of
+// quality-of-service for transactions that enter a lock wait-queue. More
+// sophisticated queueing alternatives exist that account for queueing time and
+// detect sustained queue growth before rejecting:
+// - https://queue.acm.org/detail.cfm?id=2209336
+// - https://queue.acm.org/detail.cfm?id=2839461
+//
+// We could explore these algorithms if this setting is too coarse grained and
+// not serving its purpose well enough.
+//
+// Alternatively, we could implement the lock_timeout session variable that
+// exists in Postgres (#67513) and use that to ensure quality-of-service for
+// requests that wait for locks. With that configuration, this cluster setting
+// would be relegated to a guardrail that protects against unbounded resource
+// utilization and runaway queuing for misbehaving clients, a role it is well
+// positioned to serve.
+var MaxLockWaitQueueLength = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.lock_table.maximum_lock_wait_queue_length",
+	"the maximum length of a lock wait-queue that read-write requests are willing "+
+		"to enter and wait in. The setting can be used to ensure some level of quality-of-service "+
+		"under severe per-key contention. If set to a non-zero value and an existing lock "+
+		"wait-queue is already equal to or exceeding this length, requests will be rejected "+
+		"eagerly instead of entering the queue and waiting. Set to 0 to disable.",
+	0,
+	settings.WithValidateInt(func(v int64) error {
+		if v < 0 {
+			return errors.Errorf("cannot be set to a negative value: %d", v)
+		}
+		if v == 0 {
+			return nil // disabled
+		}
+		// Don't let the setting be dropped below a reasonable value that we don't
+		// expect to impact internal transaction processing.
+		const minSafeMaxLength = 3
+		if v < minSafeMaxLength {
+			return errors.Errorf("cannot be set below %d: %d", minSafeMaxLength, v)
+		}
+		return nil
+	}),
+)
+
+// DiscoveredLocksThresholdToConsultTxnStatusCache sets a threshold as mentioned
+// in the description string. The default of 200 is somewhat arbitrary but
+// should suffice for small OLTP transactions. Given the default
+// 10,000 lock capacity of the lock table, 200 is small enough to not matter
+// much against the capacity, which is desirable. We have seen examples with
+// discoveredCount > 100,000, caused by stats collection, where we definitely
+// want to avoid adding these locks to the lock table, if possible.
+var DiscoveredLocksThresholdToConsultTxnStatusCache = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	// NOTE: the name of this setting mentions "finalized" for historical reasons.
+	"kv.lock_table.discovered_locks_threshold_for_consulting_finalized_txn_cache",
+	"the maximum number of discovered locks by a waiter, above which the txn status cache"+
+		"is consulted and resolvable locks are not added to the lock table -- this should be a small"+
+		"fraction of the maximum number of locks in the lock table",
+	200,
+	settings.NonNegativeInt,
+)
+
+// DefaultLockTableSize controls the default upper bound on the number of locks
+// in a lock table.
+var DefaultLockTableSize = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.lock_table.default_size",
+	"the default upper bound on the number of locks in a lock table. This setting "+
+		"controls the maximum number of locks that can be held in memory by the lock table "+
+		"before it starts evicting locks to manage memory pressure.",
+	10000,
+)
+
+// BatchPushedLockResolution controls whether the lock table should allow
+// non-locking readers to defer and batch the resolution of conflicting locks
+// whose holder is known to be pending and have been pushed above the reader's
+// timestamp.
+var BatchPushedLockResolution = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.batch_pushed_lock_resolution.enabled",
+	"whether the lock table should allow non-locking readers to defer and batch the resolution of "+
+		"conflicting locks whose holder is known to be pending and have been pushed above the reader's "+
+		"timestamp",
+	true,
+)
+
+// UnreplicatedLockReliabilitySplit controls whether the replica will attempt
+// to keep unreplicated locks during range split operations.
+var UnreplicatedLockReliabilitySplit = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.unreplicated_lock_reliability.split.enabled",
+	"whether the replica should attempt to keep unreplicated locks during range splits",
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.split.enabled", true),
+)
+
+// UnreplicatedLockReliabilityLeaseTransfer controls whether the replica will attempt
+// to keep unreplicated locks during lease transfer operations.
+var UnreplicatedLockReliabilityLeaseTransfer = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled",
+	"whether the replica should attempt to keep unreplicated locks during lease transfers",
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled", true),
+)
+
+// UnreplicatedLockReliabilityMerge controls whether the replica will attempt to
+// keep unreplicated locks during range merge operations.
+var UnreplicatedLockReliabilityMerge = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.unreplicated_lock_reliability.merge.enabled",
+	"whether the replica should attempt to keep unreplicated locks during range merges",
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.merge.enabled", true),
+)
+
+var MaxLockFlushSize = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kv.lock_table.unreplicated_lock_reliability.max_flush_size",
+	"maximum size of locks that will be flushed during merge and transfer operations (if 0, defaults to half of the MaxCommandSizeDefault)",
+	0,
+)
+
+// VirtualIntentResolution controls whether the intents encountered by a
+// non-locking read request can be "virtually resolved".
+var VirtualIntentResolution = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.concurrency.virtual_intent_resolution.enabled",
+	"whether read-only, non-locking requests should virtually resolve intents",
+	metamorphic.ConstantWithTestBool("kv.concurrency.virtual_intent_resolution.enabled", false),
+)
+
+// PushUsingCachedClockObservation controls whether we allow intents from
+// PENDING transactions to be resolved by requests with uncertainty intervals by
+// using a cached clock observation from the original pusher.
+var PushUsingCachedClockObservation = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.concurrency.push_pending_from_cache.enabled",
+	"whether intents from pending transactions can be resolved using cached clock observations",
+	true,
+)
+
+// MaxLockFlushSize is the maximum number of lock bytes that we will attempt to
+// flush during merge and transfer operations.
+func GetMaxLockFlushSize(sv *settings.Values) int64 {
+	s := MaxLockFlushSize.Get(sv)
+	if s > 0 {
+		return s
+	} else {
+		return kvserverbase.MaxCommandSize.Get(sv) / 2
+	}
+}
+
+// managerImpl implements the Manager interface.
+type managerImpl struct {
+	st *cluster.Settings
+	// Synchronizes conflicting in-flight requests.
+	lm latchManager
+	// Synchronizes conflicting in-progress transactions.
+	lt lockTable
+	// Waits for locks that conflict with a request to be released.
+	ltw lockTableWaiter
+	// Waits for transaction completion and detects deadlocks.
+	twq txnWaitQueue
+}
+
+// Config contains the dependencies to construct a Manager.
+type Config struct {
+	// Identification.
+	NodeDesc  *roachpb.NodeDescriptor
+	RangeDesc *roachpb.RangeDescriptor
+	// Components.
+	Settings       *cluster.Settings
+	DB             *kv.DB
+	Clock          *hlc.Clock
+	Stopper        *stop.Stopper
+	IntentResolver IntentResolver
+	// Metrics.
+	TxnWaitMetrics                    *txnwait.Metrics
+	SlowLatchGauge                    *metric.Gauge
+	LatchWaitDurations                metric.IHistogram
+	LocksShedDueToMemoryLimit         *metric.Counter
+	NumLockShedDueToMemoryLimitEvents *metric.Counter
+	VirtualResolveCondenseCount       *metric.Counter
+	VirtualResolveDisabledCount       *metric.Counter
+	// Configs + Knobs.
+	MaxLockTableSize  int64
+	DisableTxnPushing bool
+	TxnWaitKnobs      txnwait.TestingKnobs
+}
+
+func (c *Config) initDefaults() {
+	if c.MaxLockTableSize == 0 {
+		c.MaxLockTableSize = DefaultLockTableSize.Get(&c.Settings.SV)
+	}
+}
+
+// NewManager creates a new concurrency Manager structure.
+func NewManager(cfg Config) Manager {
+	cfg.initDefaults()
+	m := new(managerImpl)
+	lt := maybeWrapInVerifyingLockTable(
+		newLockTable(
+			cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock, cfg.Settings,
+			cfg.LocksShedDueToMemoryLimit, cfg.NumLockShedDueToMemoryLimitEvents,
+			cfg.VirtualResolveCondenseCount, cfg.VirtualResolveDisabledCount,
+		),
+	)
+	*m = managerImpl{
+		st: cfg.Settings,
+		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
+		// pkg/storage/concurrency/latch package. Make it implement the
+		// latchManager interface directly, if possible.
+		lm: &latchManagerImpl{
+			m: spanlatch.Make(
+				cfg.Stopper,
+				cfg.SlowLatchGauge,
+				cfg.Settings,
+				cfg.LatchWaitDurations,
+				cfg.Clock,
+			),
+		},
+		lt: lt,
+		ltw: &lockTableWaiterImpl{
+			nodeDesc:          cfg.NodeDesc,
+			st:                cfg.Settings,
+			clock:             cfg.Clock,
+			stopper:           cfg.Stopper,
+			ir:                cfg.IntentResolver,
+			lt:                lt,
+			disableTxnPushing: cfg.DisableTxnPushing,
+		},
+		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
+		// pkg/storage/concurrency/txnwait package.
+		twq: txnwait.NewQueue(txnwait.Config{
+			RangeDesc: cfg.RangeDesc,
+			DB:        cfg.DB,
+			Clock:     cfg.Clock,
+			Stopper:   cfg.Stopper,
+			Metrics:   cfg.TxnWaitMetrics,
+			Knobs:     cfg.TxnWaitKnobs,
+		}),
+	}
+	return m
+}
+
+// SequenceReq implements the RequestSequencer interface.
+func (m *managerImpl) SequenceReq(
+	ctx context.Context, prev Guard, req Request, evalKind RequestEvalKind,
+) (Guard, Response, *Error) {
+	var g *guardImpl
+	var branch int
+	if prev == nil {
+		switch evalKind {
+		case PessimisticEval:
+			branch = 1
+			log.Event(ctx, "sequencing request")
+		case OptimisticEval:
+			branch = 2
+			log.Event(ctx, "optimistically sequencing request")
+		case PessimisticAfterFailedOptimisticEval:
+			panic("retry should have non-nil guard")
+		default:
+			panic("unexpected evalKind")
+		}
+		g = newGuard(req)
+	} else {
+		g = prev.(*guardImpl)
+		switch evalKind {
+		case PessimisticEval:
+			branch = 3
+			g.AssertNoLatches()
+			log.Event(ctx, "re-sequencing request")
+		case OptimisticEval:
+			panic("optimistic eval cannot happen when re-sequencing")
+		case PessimisticAfterFailedOptimisticEval:
+			branch = 4
+			if !shouldIgnoreLatches(g.req) {
+				g.AssertLatches()
+			}
+			log.Event(ctx, "re-sequencing request after optimistic sequencing failed")
+		default:
+			panic("unexpected evalKind")
+		}
+	}
+	g.evalKind = evalKind
+	resp, err := m.sequenceReqWithGuard(ctx, g, branch)
+	if resp != nil || err != nil {
+		// Ensure that we release the guard if we return a response or an error.
+		m.finishReqImpl(ctx, g)
+		return nil, resp, err
+	}
+	return g, nil, nil
+}
+
+func (m *managerImpl) sequenceReqWithGuard(
+	ctx context.Context, g *guardImpl, branch int,
+) (Response, *Error) {
+	// Some requests don't need to acquire latches at all.
+	if shouldIgnoreLatches(g.req) {
+		log.Event(ctx, "not acquiring latches")
+		return nil, nil
+	}
+
+	// Check if this is a request that waits on latches, but does not acquire
+	// them.
+	if shouldWaitOnLatchesWithoutAcquiring(g.req) {
+		log.Event(ctx, "waiting on latches without acquiring")
+		return nil, m.lm.WaitFor(ctx, g.req.LatchSpans, g.req.PoisonPolicy, g.req.Batch)
+	}
+
+	// Provide the manager with an opportunity to intercept the request. It
+	// may be able to serve the request directly, and even if not, it may be
+	// able to update its internal state based on the request.
+	resp, err := m.maybeInterceptReq(ctx, g.req)
+	if resp != nil || err != nil {
+		return resp, err
+	}
+
+	// Only the first iteration can sometimes already be holding latches -- we
+	// use this to assert below.
+	firstIteration := true
+	for {
+		if !g.HoldingLatches() {
+			if g.evalKind == OptimisticEval {
+				if !firstIteration {
+					// The only way we loop more than once is when conflicting locks are
+					// found -- see below where that happens and the comment there on
+					// why it will never happen with OptimisticEval.
+					panic("optimistic eval should not loop in sequenceReqWithGuard")
+				}
+				log.Event(ctx, "optimistically acquiring latches")
+				g.lg = m.lm.AcquireOptimistic(g.req)
+				g.lm = m.lm
+			} else {
+				// Acquire latches for the request. This synchronizes the request
+				// with all conflicting in-flight requests.
+				log.Event(ctx, "acquiring latches")
+				g.lg, err = m.lm.Acquire(ctx, g.req)
+				if err != nil {
+					return nil, err
+				}
+				g.lm = m.lm
+			}
+		} else {
+			if !firstIteration {
+				panic(errors.AssertionFailedf("second or later iteration cannot be holding latches"))
+			}
+			if g.evalKind != PessimisticAfterFailedOptimisticEval {
+				panic(redact.Safe(fmt.Sprintf("must not be holding latches\n"+
+					"this is tracked in github.com/cockroachdb/cockroach/issues/77663; please comment if seen\n"+
+					"eval_kind=%d, holding_latches=%t, branch=%d, first_iteration=%t, stack=\n%s",
+					g.evalKind, g.HoldingLatches(), branch, firstIteration, debugutil.Stack())))
+			}
+			log.Event(ctx, "optimistic failed, so waiting for latches")
+			g.lg, err = m.lm.WaitUntilAcquired(ctx, g.lg)
+			if err != nil {
+				return nil, err
+			}
+		}
+		firstIteration = false
+
+		// Some requests don't want the wait on locks.
+		if g.req.LockSpans.Empty() {
+			return nil, nil
+		}
+
+		// Set the request's MaxWaitQueueLength based on the cluster setting, if not
+		// already set.
+		if g.req.MaxLockWaitQueueLength == 0 {
+			g.req.MaxLockWaitQueueLength = int(MaxLockWaitQueueLength.Get(&m.st.SV))
+		}
+
+		if g.evalKind == OptimisticEval {
+			if g.ltg != nil {
+				panic("Optimistic locking should not have a non-nil lockTableGuard")
+			}
+			log.Event(ctx, "optimistically scanning lock table for conflicting locks")
+			g.ltg = m.lt.ScanOptimistic(g.req)
+		} else {
+			// Scan for conflicting locks.
+			log.Event(ctx, "scanning lock table for conflicting locks")
+			g.ltg, err = m.lt.ScanAndEnqueue(ctx, g.req, g.ltg)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Wait on conflicting locks, if necessary. Note that this will never be
+		// true if ScanOptimistic was called above. Therefore it will also never
+		// be true if latchManager.AcquireOptimistic was called.
+		if g.ltg.ShouldWait() {
+			m.lm.Release(ctx, g.moveLatchGuard())
+
+			log.Event(ctx, "waiting in lock wait-queues")
+			if err := m.ltw.WaitOn(ctx, g.req, g.ltg); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		return nil, nil
+	}
+}
+
+// maybeInterceptReq allows the concurrency manager to intercept requests before
+// sequencing and evaluation so that it can immediately act on them. This allows
+// the concurrency manager to route certain concurrency control-related requests
+// into queues and optionally update its internal state based on the requests.
+func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Response, *Error) {
+	switch {
+	case req.isSingle(kvpb.PushTxn):
+		// If necessary, wait in the txnWaitQueue for the pushee transaction to
+		// expire or to move to a finalized state.
+		t := req.Requests[0].GetPushTxn()
+		tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+		var info ash.WorkloadInfo
+		if req.Batch != nil {
+			info = ash.WorkloadInfo{
+				WorkloadID:    req.Batch.WorkloadID,
+				AppNameID:     req.Batch.AppNameID,
+				GatewayNodeID: req.Batch.GatewayNodeID,
+				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+			}
+		}
+		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnPushWait")
+		resp, err := m.twq.MaybeWaitForPush(ctx, t, req.WaitPolicy)
+		cleanup()
+		if err != nil {
+			return nil, err
+		} else if resp != nil {
+			return makeSingleResponse(resp), nil
+		}
+	case req.isSingle(kvpb.QueryTxn):
+		// If necessary, wait in the txnWaitQueue for a transaction state update
+		// or for a dependent transaction to change.
+		t := req.Requests[0].GetQueryTxn()
+		tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+		var info ash.WorkloadInfo
+		if req.Batch != nil {
+			info = ash.WorkloadInfo{
+				WorkloadID:    req.Batch.WorkloadID,
+				AppNameID:     req.Batch.AppNameID,
+				GatewayNodeID: req.Batch.GatewayNodeID,
+				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+			}
+		}
+		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnQueryWait")
+		pErr := m.twq.MaybeWaitForQuery(ctx, t)
+		cleanup()
+		return nil, pErr
+	default:
+		// TODO(nvanbenschoten): in the future, use this hook to update the lock
+		// table to allow contending transactions to proceed.
+		// for _, arg := range req.Requests {
+		// 	switch t := arg.GetInner().(type) {
+		// 	case *kvpb.ResolveIntentRequest:
+		// 		_ = t
+		// 	case *kvpb.ResolveIntentRangeRequest:
+		// 		_ = t
+		// 	}
+		// }
+	}
+	return nil, nil
+}
+
+// shouldIgnoreLatches determines whether the request should ignore latches
+// before proceeding to evaluate. Latches are used to synchronize with other
+// conflicting requests, based on the Spans collected for the request. Most
+// request types will want to acquire latches. Requests that return true for
+// shouldWaitOnLatchesWithoutAcquiring will not completely ignore latches as
+// they could wait on them, even if they don't acquire latches.
+func shouldIgnoreLatches(req Request) bool {
+	switch {
+	case req.ReadConsistency != kvpb.CONSISTENT:
+		// Only acquire latches for consistent operations.
+		return true
+	case req.isSingle(kvpb.RequestLease):
+		// Ignore latches for lease requests. These requests are run on replicas
+		// that do not hold the lease, so acquiring latches wouldn't help
+		// synchronize with other requests.
+		return true
+	}
+	return false
+}
+
+// shouldWaitOnLatchesWithoutAcquiring determines if this is a request that
+// only waits on existing latches without acquiring any new ones.
+func shouldWaitOnLatchesWithoutAcquiring(req Request) bool {
+	return req.isSingle(kvpb.Barrier)
+}
+
+// PoisonReq implements the RequestSequencer interface.
+func (m *managerImpl) PoisonReq(g Guard) {
+	gi, ok := g.(*guardImpl)
+	if !ok {
+		// The guard is not a guardImpl, e.g. a mock in tests. Nothing to do.
+		return
+	}
+	// NB: gi.lg == nil is the case for requests that ignore latches, see
+	// shouldIgnoreLatches.
+	if gi.lg != nil {
+		m.lm.Poison(gi.lg)
+	}
+}
+
+// FinishReq implements the RequestSequencer interface.
+func (m *managerImpl) FinishReq(ctx context.Context, g Guard) {
+	gi, ok := g.(*guardImpl)
+	if !ok {
+		// The guard is not a guardImpl, e.g. a mock in tests. Nothing to do.
+		return
+	}
+	m.finishReqImpl(ctx, gi)
+}
+
+// finishReqImpl is the internal implementation of FinishReq that operates on
+// the concrete guardImpl type.
+func (m *managerImpl) finishReqImpl(ctx context.Context, g *guardImpl) {
+	// NOTE: we release latches _before_ exiting lock wait-queues deliberately.
+	// Either order would be correct, but the order here avoids non-determinism in
+	// cases where a request A holds both latches and has claimed some keys by
+	// virtue of being the first request in a lock wait-queue and has a request B
+	// waiting on its claim. If request A released its claim (by exiting the lock
+	// wait-queue) before releasing its latches, it would be possible for B to
+	// beat A to the latch manager and end up blocking on its latches briefly. Not
+	// only is this confusing in traces, but it is slightly less efficient than if
+	// request A released latches before letting anyone waiting on it in the lock
+	// table proceed, ensuring that waiters do not hit its latches.
+	//
+	// Elsewhere, we relate the relationship of between the latch manager and the
+	// lock-table to that of a mutex and condition variable pair. Following that
+	// analogy, this release ordering is akin to signaling a condition variable
+	// after releasing its associated mutex. Doing so ensures that whoever the
+	// signaler wakes up (if anyone) will never bump into its mutex immediately
+	// upon resumption.
+	if lg := g.moveLatchGuard(); lg != nil {
+		m.lm.Release(ctx, lg)
+	}
+	if ltg := g.moveLockTableGuard(); ltg != nil {
+		m.lt.Dequeue(ctx, ltg)
+	}
+	releaseGuard(g)
+}
+
+// HandleLockConflictError implements the ContentionHandler interface.
+func (m *managerImpl) HandleLockConflictError(
+	ctx context.Context, g Guard, seq roachpb.LeaseSequence, t *kvpb.LockConflictError,
+) (Guard, *Error) {
+	gi := g.(*guardImpl)
+	if gi.ltg == nil {
+		log.KvExec.Fatalf(ctx, "cannot handle LockConflictError %v for request without "+
+			"lockTableGuard; were lock spans declared for this request?", t)
+	}
+
+	// Add a discovered lock to lock-table for each intent and enter each lock's
+	// wait-queue.
+	//
+	// If the lock-table is disabled and one or more of the intents are ignored
+	// then we proceed without the intent being added to the lock table. In such
+	// cases, we know that this replica is no longer the leaseholder. One of two
+	// things can happen next.
+	// 1) if the request cannot be served on this follower replica according to
+	//    the closed timestamp then it will be redirected to the leaseholder on
+	//    its next evaluation attempt, where it may discover the same intent and
+	//    wait in the new leaseholder's lock table.
+	// 2) if the request can be served on this follower replica according to the
+	//    closed timestamp then it will likely re-encounter the same intent on its
+	//    next evaluation attempt. The LockConflictError will then be mapped to an
+	//    InvalidLeaseError in maybeAttachLease, which will indicate that the
+	//    request cannot be served as a follower read after all and cause the
+	//    request to be redirected to the leaseholder.
+	//
+	// Either way, there is no possibility of the request entering an infinite
+	// loop without making progress.
+
+	consultTxnStatusCache :=
+		int64(len(t.Locks)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
+	var numAdded int
+	for i := range t.Locks {
+		foundLock := &t.Locks[i]
+		added, err := m.lt.AddDiscoveredLock(ctx, foundLock, seq, consultTxnStatusCache, gi.ltg)
+		if err != nil {
+			log.KvExec.Fatalf(ctx, "%v", err)
+		}
+		if added {
+			numAdded++
+		} else {
+			log.VEventf(ctx, 2,
+				"discovered lock on %s not added to disabled lock table", foundLock.Key)
+		}
+	}
+	if numAdded > 0 {
+		log.VEventf(ctx, 2, "added %d discovered lock(s) to lock table: %v", numAdded, t)
+	}
+
+	// Release the Guard's latches but continue to remain in lock wait-queues by
+	// not releasing lockWaitQueueGuards. We expect the caller of this method to
+	// then re-sequence the Request by calling SequenceReq with the un-latched
+	// Guard. This is analogous to iterating through the loop in SequenceReq.
+	m.lm.Release(ctx, gi.moveLatchGuard())
+
+	// If the discovery process collected a set of intents to resolve before the
+	// next evaluation attempt, do so.
+	if toResolve := gi.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
+		if err := m.ltw.ResolveDeferredIntents(ctx, gi.req.AdmissionHeader, toResolve); err != nil {
+			m.finishReqImpl(ctx, gi)
+			return nil, err
+		}
+	}
+
+	return g, nil
+}
+
+// HandleTransactionPushError implements the ContentionHandler interface.
+func (m *managerImpl) HandleTransactionPushError(
+	ctx context.Context, g Guard, t *kvpb.TransactionPushError,
+) Guard {
+	gi := g.(*guardImpl)
+	m.twq.EnqueueTxn(&t.PusheeTxn)
+
+	// Release the Guard's latches. The PushTxn request should not be in any
+	// lock wait-queues because it does not scan the lockTable. We expect the
+	// caller of this method to then re-sequence the Request by calling
+	// SequenceReq with the un-latched Guard. This is analogous to iterating
+	// through the loop in SequenceReq.
+	m.lm.Release(ctx, gi.moveLatchGuard())
+	return g
+}
+
+// OnLockAcquired implements the LockManager interface.
+func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcquisition) {
+	if err := m.lt.AcquireLock(ctx, acq); err != nil {
+		if errors.IsAssertionFailure(err) {
+			log.KvExec.Fatalf(ctx, "%v", err)
+		}
+		// It's reasonable to expect benign errors here that the layer above
+		// (command evaluation) isn't equipped to deal with. As long as we're not
+		// violating any assertions, we simply log and move on. One benign case is
+		// when an unreplicated lock is being acquired by a transaction at an older
+		// epoch.
+		log.KvExec.Errorf(ctx, "%v", err)
+	}
+}
+
+// OnLockMissing implements the LockManager interface.
+func (m *managerImpl) OnLockMissing(ctx context.Context, acq *roachpb.LockAcquisition) {
+	if err := m.lt.MarkIneligibleForExport(ctx, acq); err != nil {
+		// We don't currently expect any errors other than assertion failures that represent
+		// programming errors from this method.
+		log.KvExec.Fatalf(ctx, "%v", err)
+	}
+}
+
+// OnLockUpdated implements the LockManager interface.
+func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate) {
+	if err := m.lt.UpdateLocks(ctx, up); err != nil {
+		log.KvExec.Fatalf(ctx, "%v", err)
+	}
+}
+
+// QueryLockTableState implements the LockManager interface.
+func (m *managerImpl) QueryLockTableState(
+	ctx context.Context, span roachpb.Span, opts QueryLockTableOptions,
+) ([]roachpb.LockStateInfo, QueryLockTableResumeState) {
+	return m.lt.QueryLockTableState(span, opts)
+}
+
+// ExportUnreplicatedLocks implements the LockManager interface.
+func (m *managerImpl) ExportUnreplicatedLocks(
+	span roachpb.Span, f func(*roachpb.LockAcquisition) bool,
+) {
+	m.lt.ExportUnreplicatedLocks(span, f)
+}
+
+// OnTransactionUpdated implements the TransactionManager interface.
+func (m *managerImpl) OnTransactionUpdated(ctx context.Context, txn *roachpb.Transaction) {
+	m.twq.UpdateTxn(ctx, txn)
+}
+
+// GetDependents implements the TransactionManager interface.
+func (m *managerImpl) GetDependents(txnID uuid.UUID) []uuid.UUID {
+	return m.twq.GetDependents(txnID)
+}
+
+// OnRangeDescUpdated implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
+	m.twq.OnRangeDescUpdated(desc)
+	m.lm.OnRangeDescUpdated(desc)
+}
+
+var allKeysSpan = roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}
+
+// OnRangeLeaseTransferEval implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeLeaseTransferEval() ([]*roachpb.LockAcquisition, int64) {
+	if !UnreplicatedLockReliabilityLeaseTransfer.Get(&m.st.SV) {
+		return nil, 0
+	}
+
+	return m.exportUnreplicatedLocks()
+}
+
+// OnRangeSubumeEval implements the RangeStateListener interface. It is called
+// during evaluation of Subsume. The returned LockAcquisition structs represent
+// held locks that we may want to flush to disk as replicated.
+func (m *managerImpl) OnRangeSubsumeEval() ([]*roachpb.LockAcquisition, int64) {
+	if !UnreplicatedLockReliabilityMerge.Get(&m.st.SV) {
+		return nil, 0
+	}
+
+	return m.exportUnreplicatedLocks()
+}
+
+// OnRangeLeaseUpdated implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeLeaseUpdated(seq roachpb.LeaseSequence, isLeaseholder bool) {
+	if isLeaseholder {
+		m.lt.Enable(seq)
+		m.twq.Enable(seq)
+	} else {
+		// Disable all queues - the concurrency manager will no longer be
+		// informed about all state transitions to locks and transactions.
+		const disable = true
+		m.lt.Clear(disable)
+		m.twq.Clear(disable)
+	}
+}
+
+// OnRangeSplit implements the RangeStateListener interface. It is called on the
+// LHS replica of a split and should be passed the new RHS start key (LHS
+// EndKey).
+func (m *managerImpl) OnRangeSplit(rhsStartKey roachpb.Key) []roachpb.LockAcquisition {
+	if UnreplicatedLockReliabilitySplit.Get(&m.st.SV) {
+		lockToMove := m.lt.ClearGE(rhsStartKey)
+		m.twq.ClearGE(rhsStartKey)
+		return lockToMove
+	} else {
+		// TODO(ssd): We could call ClearGE here but ignore the response. But for
+		// now we leave the old behavior unchanged.
+		const disable = false
+		m.lt.Clear(disable)
+		m.twq.Clear(disable)
+		return nil
+	}
+}
+
+// OnRangeMerge implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeMerge() {
+	m.OnReplicaRemoval()
+}
+
+// OnReplicaRemoval implements the RangeStateListener interface.
+func (m *managerImpl) OnReplicaRemoval() {
+	// Disable all queues - the replica is being removed and will no longer be
+	// informed about all state transitions to locks and transactions.
+	const disable = true
+	m.lt.Clear(disable)
+	m.twq.Clear(disable)
+}
+
+// OnReplicaSnapshotApplied implements the RangeStateListener interface.
+func (m *managerImpl) OnReplicaSnapshotApplied() {
+	// A snapshot can cause discontinuities in raft entry application. The
+	// lockTable expects to observe all lock state transitions on the range
+	// through LockManager listener methods. If there's a chance it missed a
+	// state transition, it is safer to simply clear the lockTable and rebuild
+	// it from persistent intent state by allowing requests to discover locks
+	// and inform the manager through calls to HandleLockConflictError.
+	//
+	// A range only maintains locks in the lockTable of its leaseholder replica
+	// even thought it runs a concurrency manager on all replicas. Because of
+	// this, we expect it to be very rare that this actually clears any locks.
+	// Still, it is possible for the leaseholder replica to receive a snapshot
+	// when it is not also the raft leader.
+	const disable = false
+	m.lt.Clear(disable)
+}
+
+// LatchMetrics implements the MetricExporter interface.
+func (m *managerImpl) LatchMetrics() LatchMetrics {
+	return m.lm.Metrics()
+}
+
+// LockTableMetrics implements the MetricExporter interface.
+func (m *managerImpl) LockTableMetrics() LockTableMetrics {
+	return m.lt.Metrics()
+}
+
+func (m *managerImpl) exportUnreplicatedLocks() ([]*roachpb.LockAcquisition, int64) {
+	// TODO(ssd): Expose a function that allows us to pre-allocate this a bit better.
+	approximateBatchSize := int64(0)
+	acquisitions := make([]*roachpb.LockAcquisition, 0)
+	m.lt.ExportUnreplicatedLocks(allKeysSpan, func(acq *roachpb.LockAcquisition) bool {
+		approximateBatchSize += storage.ApproximateLockTableSize(acq)
+		acquisitions = append(acquisitions, acq)
+		return true
+	})
+	return acquisitions, approximateBatchSize
+}
+
+// TestingLockTableString implements the TestingAccessor interface.
+func (m *managerImpl) TestingLockTableString() string {
+	return m.lt.String()
+}
+
+// TestingTxnWaitQueue implements the MetricExporter interface.
+func (m *managerImpl) TestingTxnWaitQueue() *txnwait.Queue {
+	return m.twq.(*txnwait.Queue)
+}
+
+// TestingPushedTransactionUpdated implements the TestingAccessor interface.
+func (m *managerImpl) TestingPushedTransactionUpdated(
+	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
+) {
+	m.lt.PushedTransactionUpdated(txn, clockObs)
+}
+
+// SetMaxLockTableSize implements the LockManager interface.
+func (m *managerImpl) SetMaxLockTableSize(maxLocks int64) {
+	m.lt.SetMaxLockTableSize(maxLocks)
+}
+
+func (r *Request) isSingle(m kvpb.Method) bool {
+	if len(r.Requests) != 1 {
+		return false
+	}
+	return r.Requests[0].GetInner().Method() == m
+}
+
+// canVirtuallyResolve returns true if all requests in the batch are read-only
+// and non-locking.
+func (r *Request) canVirtuallyResolve() bool {
+	for _, ru := range r.Requests {
+		req := ru.GetInner()
+		canVirtuallyResolve := kvpb.IsReadOnly(req) && !kvpb.IsLocking(req)
+		if !canVirtuallyResolve {
+			return false
+		}
+	}
+	return true
+}
+
+// Used to avoid allocations.
+var guardPool = sync.Pool{
+	New: func() interface{} { return new(guardImpl) },
+}
+
+func newGuard(req Request) *guardImpl {
+	g := guardPool.Get().(*guardImpl)
+	g.req = req
+	return g
+}
+
+func releaseGuard(g *guardImpl) {
+	if g.req.LatchSpans != nil {
+		g.req.LatchSpans.Release()
+	}
+	if g.req.LockSpans != nil {
+		g.req.LockSpans.Release()
+	}
+	*g = guardImpl{}
+	guardPool.Put(g)
+}
+
+// Req implements the Guard interface.
+func (g *guardImpl) Req() Request {
+	return g.req
+}
+
+// EvalKind implements the Guard interface.
+func (g *guardImpl) EvalKind() RequestEvalKind {
+	return g.evalKind
+}
+
+// LatchSpans implements the Guard interface.
+func (g *guardImpl) LatchSpans() *spanset.SpanSet {
+	return g.req.LatchSpans
+}
+
+// TakeSpanSets implements the Guard interface.
+func (g *guardImpl) TakeSpanSets() (*spanset.SpanSet, *lockspanset.LockSpanSet) {
+	la, lo := g.req.LatchSpans, g.req.LockSpans
+	g.req.LatchSpans, g.req.LockSpans = nil, nil
+	return la, lo
+}
+
+// HoldingLatches implements the Guard interface.
+func (g *guardImpl) HoldingLatches() bool {
+	return g != nil && g.lg != nil
+}
+
+// AssertLatches implements the Guard interface.
+func (g *guardImpl) AssertLatches() {
+	if !shouldIgnoreLatches(g.req) && !shouldWaitOnLatchesWithoutAcquiring(g.req) && !g.HoldingLatches() {
+		panic("expected latches held, found none")
+	}
+}
+
+// AssertNoLatches implements the Guard interface.
+func (g *guardImpl) AssertNoLatches() {
+	if g.HoldingLatches() {
+		panic("unexpected latches held")
+	}
+}
+
+// IsolatedAtLaterTimestamps implements the Guard interface.
+func (g *guardImpl) IsolatedAtLaterTimestamps() bool {
+	// If the request acquired any read latches with bounded (MVCC) timestamps
+	// then it cannot trivially bump its timestamp without dropping and
+	// re-acquiring those latches. Doing so could allow the request to read at
+	// an unprotected timestamp. We only look at global latch spans because local
+	// latch spans always use unbounded (NonMVCC) timestamps.
+	//
+	// Even still, the existence of read only global latch spans is not enough for
+	// us to determine that the request is not isolated at higher timestamps -- we
+	// must check the timestamps at which the latches are declared as well. That's
+	// because if a read latch is declared at hlc.MaxTimestamp, it is isolated at
+	// higher timestamps; shared locking requests do exactly this.
+	readLatchesIsolatedAtHigherTimestamp := true
+	for _, l := range g.req.LatchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal) {
+		if !l.Timestamp.Equal(hlc.MaxTimestamp) {
+			readLatchesIsolatedAtHigherTimestamp = false
+			break
+		}
+	}
+	// If read latches are isolated at higher timestamps then the request can
+	// trivially bump its timestamp without dropping and re-acquiring those
+	// latches. There's no need to check write latches, as they're always isolated
+	// at higher timestamps.
+	return readLatchesIsolatedAtHigherTimestamp &&
+		// If the request intends to perform any non-locking reads, it cannot
+		// trivially bump its timestamp and expect to be isolated at the higher
+		// timestamp. Bumping its timestamp could cause the request to conflict with
+		// locks that it previously did not conflict with. It must drop its
+		// lockTableGuard and re-scan the lockTable.
+		len(g.req.LockSpans.GetSpans(lock.None)) == 0
+}
+
+// CheckOptimisticNoConflicts implements the Guard interface.
+func (g *guardImpl) CheckOptimisticNoConflicts(
+	latchSpansRead *spanset.SpanSet, lockSpansRead *lockspanset.LockSpanSet,
+) (ok bool) {
+	if g.evalKind != OptimisticEval {
+		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.evalKind))
+	}
+	if g.lg == nil && g.ltg == nil {
+		return true
+	}
+	if g.lg == nil {
+		panic("expected non-nil latchGuard")
+	}
+	// First check the latches, since a conflict there could mean that racing
+	// requests in the lock table caused a conflicting lock to not be noticed.
+	if g.lm.CheckOptimisticNoConflicts(g.lg, latchSpansRead) {
+		return g.ltg.CheckOptimisticNoConflicts(lockSpansRead)
+	}
+	return false
+}
+
+// CheckOptimisticNoLatchConflicts implements the Guard interface.
+func (g *guardImpl) CheckOptimisticNoLatchConflicts() (ok bool) {
+	if g.evalKind != OptimisticEval {
+		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.evalKind))
+	}
+	if g.lg == nil {
+		return true
+	}
+	return g.lm.CheckOptimisticNoConflicts(g.lg, g.req.LatchSpans)
+}
+
+// IsKeyLockedByConflictingTxn implements the Guard interface.
+func (g *guardImpl) IsKeyLockedByConflictingTxn(
+	ctx context.Context, key roachpb.Key, strength lock.Strength,
+) (bool, *enginepb.TxnMeta, error) {
+	return g.ltg.IsKeyLockedByConflictingTxn(ctx, key, strength)
+}
+
+// IntentsToResolveVirtually implements the Guard interface.
+func (g *guardImpl) IntentsToResolveVirtually() []roachpb.LockUpdate {
+	if g.ltg != nil {
+		return g.ltg.IntentsToResolveVirtually()
+	}
+	return nil
+}
+
+// HasCondensedIntents implements the Guard interface.
+func (g *guardImpl) HasCondensedIntents() bool {
+	if g.ltg != nil {
+		return g.ltg.HasCondensedIntents()
+	}
+	return false
+}
+
+func (g *guardImpl) moveLatchGuard() latchGuard {
+	lg := g.lg
+	g.lg = nil
+	g.lm = nil
+	return lg
+}
+
+func (g *guardImpl) moveLockTableGuard() lockTableGuard {
+	ltg := g.ltg
+	g.ltg = nil
+	return ltg
+}
+
+func makeSingleResponse(r kvpb.Response) Response {
+	ru := make(Response, 1)
+	ru[0].MustSetInner(r)
+	return ru
+}

@@ -1,0 +1,179 @@
+exec-ddl
+CREATE TABLE t (a INT, b BOOL, c STRING)
+----
+
+opt
+SELECT * FROM t WHERE a = NULL
+----
+values
+ ├── columns: a:1(int!null) b:2(bool!null) c:3(string!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ └── prune: (1-3)
+
+opt
+SELECT * FROM t WHERE a < NULL
+----
+values
+ ├── columns: a:1(int!null) b:2(bool!null) c:3(string!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ └── prune: (1-3)
+
+opt
+SELECT * FROM t WHERE a IS NULL
+----
+select
+ ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── fd: ()-->(1)
+ ├── prune: (2,3)
+ ├── scan t
+ │    ├── columns: a:1(int) b:2(bool) c:3(string)
+ │    └── prune: (1-3)
+ └── filters
+      └── is [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+           ├── variable: a:1 [type=int]
+           └── null [type=unknown]
+
+opt
+SELECT * FROM t WHERE a IS NOT NULL
+----
+select
+ ├── columns: a:1(int!null) b:2(bool) c:3(string)
+ ├── prune: (2,3)
+ ├── scan t
+ │    ├── columns: a:1(int) b:2(bool) c:3(string)
+ │    └── prune: (1-3)
+ └── filters
+      └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+           ├── variable: a:1 [type=int]
+           └── null [type=unknown]
+
+opt
+SELECT * FROM t WHERE b IS NULL AND c IS NULL
+----
+select
+ ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── fd: ()-->(2,3)
+ ├── prune: (1)
+ ├── scan t
+ │    ├── columns: a:1(int) b:2(bool) c:3(string)
+ │    └── prune: (1-3)
+ └── filters
+      ├── is [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
+      │    ├── variable: b:2 [type=bool]
+      │    └── null [type=unknown]
+      └── is [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+           ├── variable: c:3 [type=string]
+           └── null [type=unknown]
+
+opt
+SELECT * FROM t WHERE b IS NOT NULL AND c IS NOT NULL
+----
+select
+ ├── columns: a:1(int) b:2(bool!null) c:3(string!null)
+ ├── prune: (1)
+ ├── scan t
+ │    ├── columns: a:1(int) b:2(bool) c:3(string)
+ │    └── prune: (1-3)
+ └── filters
+      ├── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+      │    ├── variable: b:2 [type=bool]
+      │    └── null [type=unknown]
+      └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+           ├── variable: c:3 [type=string]
+           └── null [type=unknown]
+
+exec-ddl
+CREATE TABLE xyz (
+  x INT,
+  y INT,
+  z FLOAT
+)
+----
+
+# Test that we get a not-NULL constraint on x.
+opt
+SELECT * FROM xyz WHERE x > abs(y)
+----
+select
+ ├── columns: x:1(int!null) y:2(int) z:3(float)
+ ├── immutable
+ ├── prune: (3)
+ ├── scan xyz
+ │    ├── columns: x:1(int) y:2(int) z:3(float)
+ │    └── prune: (1-3)
+ └── filters
+      └── gt [type=bool, outer=(1,2), immutable, constraints=(/1: (/NULL - ])]
+           ├── variable: x:1 [type=int]
+           └── function: abs [type=int]
+                └── variable: y:2 [type=int]
+
+# Test that we get a not-NULL constraint on x.
+opt
+SELECT * FROM xyz WHERE sin(x::float)::int < x
+----
+select
+ ├── columns: x:1(int!null) y:2(int) z:3(float)
+ ├── immutable
+ ├── prune: (2,3)
+ ├── scan xyz
+ │    ├── columns: x:1(int) y:2(int) z:3(float)
+ │    └── prune: (1-3)
+ └── filters
+      └── gt [type=bool, outer=(1), immutable, constraints=(/1: (/NULL - ])]
+           ├── variable: x:1 [type=int]
+           └── cast: INT8 [type=int]
+                └── function: sin [type=float]
+                     └── cast: FLOAT8 [type=float]
+                          └── variable: x:1 [type=int]
+
+# Test that we get a not-NULL constraint on x and y.
+opt
+SELECT * FROM xyz WHERE x > y
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null) z:3(float)
+ ├── prune: (3)
+ ├── scan xyz
+ │    ├── columns: x:1(int) y:2(int) z:3(float)
+ │    └── prune: (1-3)
+ └── filters
+      └── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+           ├── variable: x:1 [type=int]
+           └── variable: y:2 [type=int]
+
+# Test that we get a not-NULL constraint on x and y.
+opt
+SELECT * FROM xyz WHERE x = y
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null) z:3(float)
+ ├── fd: (1)==(2), (2)==(1)
+ ├── prune: (3)
+ ├── scan xyz
+ │    ├── columns: x:1(int) y:2(int) z:3(float)
+ │    └── prune: (1-3)
+ └── filters
+      └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+           ├── variable: x:1 [type=int]
+           └── variable: y:2 [type=int]
+
+# Test that we get a not-NULL constraint on z.
+opt
+SELECT * FROM xyz WHERE st_dwithin('point(0 0)'::geometry, 'point(1 1)'::geometry, z)
+----
+select
+ ├── columns: x:1(int) y:2(int) z:3(float!null)
+ ├── immutable
+ ├── prune: (1,2)
+ ├── scan xyz
+ │    ├── columns: x:1(int) y:2(int) z:3(float)
+ │    └── prune: (1-3)
+ └── filters
+      └── function: st_dwithin [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
+           ├── const: '010100000000000000000000000000000000000000' [type=geometry]
+           ├── const: '0101000000000000000000F03F000000000000F03F' [type=geometry]
+           └── variable: z:3 [type=float]

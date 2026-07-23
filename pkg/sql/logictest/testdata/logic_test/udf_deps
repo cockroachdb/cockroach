@@ -1,0 +1,323 @@
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  def INT DEFAULT 10,
+  c INT,
+  drop_sel INT,  cascade_sel INT,
+  drop_ins INT,
+  drop_ins2 INT, cascade_ins2 INT,
+  drop_ups INT,
+  drop_ups2 INT, cascade_ups2 INT,
+  drop_up INT,   cascade_up INT,
+  drop_del INT,  cascade_del INT
+)
+
+# --------------------------------------------------
+# SELECT
+# --------------------------------------------------
+
+statement ok
+CREATE FUNCTION sel() RETURNS VOID LANGUAGE SQL AS $$
+  SELECT a, b, cascade_sel FROM t;
+$$
+
+skipif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop table t because other objects depend on it
+DROP TABLE t
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop relation \"t\" because function \"sel\" depends on it
+DROP TABLE t
+
+statement ok
+ALTER TABLE t RENAME COLUMN c TO c2
+
+statement ok
+ALTER TABLE t DROP COLUMN drop_sel
+
+statement ok
+SELECT sel()
+
+statement ok
+ALTER TABLE t DROP COLUMN cascade_sel CASCADE
+
+statement error pgcode 42883 unknown function: sel\(\)
+SELECT sel()
+
+# --------------------------------------------------
+# INSERT
+# --------------------------------------------------
+
+statement ok
+CREATE FUNCTION ins() RETURNS VOID LANGUAGE SQL AS $$
+  INSERT INTO t VALUES (1, 10, DEFAULT);
+$$
+
+skipif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop table t because other objects depend on it
+DROP TABLE t
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop relation \"t\" because function \"ins\" depends on it
+DROP TABLE t
+
+# NOTE: Postgres allows this. We cannot until we can rewrite the column names in
+# the INSERT statement, or use column IDs instead.
+statement error pgcode 2BP01 cannot rename column \"b\" because function \"ins\" depends on it
+ALTER TABLE t RENAME COLUMN b TO b2
+
+statement error pgcode 2BP01 cannot drop column \"b\" because function \"ins\" depends on it
+ALTER TABLE t DROP COLUMN b
+
+statement error pgcode 2BP01 cannot drop column \"def\" because function \"ins\" depends on it
+ALTER TABLE t DROP COLUMN def
+
+statement ok
+ALTER TABLE t RENAME COLUMN c2 TO c3
+
+statement ok
+ALTER TABLE t DROP COLUMN drop_ins
+
+statement ok
+SELECT ins()
+
+query III rowsort
+SELECT a, b, def FROM t
+----
+1  10  10
+
+statement ok
+DROP FUNCTION ins
+
+statement ok
+CREATE FUNCTION ins2() RETURNS VOID LANGUAGE SQL AS $$
+  INSERT INTO t (a, b, cascade_ins2, def) VALUES (2, 20, 200, DEFAULT);
+$$
+
+skipif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop table t because other objects depend on it
+DROP TABLE t
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop relation \"t\" because function \"ins2\" depends on it
+DROP TABLE t
+
+# NOTE: Postgres allows this. We cannot until we can rewrite the column names in
+# the INSERT statement, or use column IDs instead.
+statement error pgcode 2BP01 cannot rename column \"b\" because function \"ins2\" depends on it
+ALTER TABLE t RENAME COLUMN b TO b2
+
+statement error pgcode 2BP01 cannot drop column \"b\" because function \"ins2\" depends on it
+ALTER TABLE t DROP COLUMN b
+
+statement error pgcode 2BP01 cannot drop column \"def\" because function \"ins2\" depends on it
+ALTER TABLE t DROP COLUMN def
+
+statement ok
+ALTER TABLE t RENAME COLUMN c3 TO c4
+
+statement ok
+ALTER TABLE t DROP COLUMN drop_ins2
+
+statement ok
+SELECT ins2()
+
+query III rowsort
+SELECT a, b, def FROM t
+----
+1  10  10
+2  20  10
+
+statement ok
+ALTER TABLE t DROP COLUMN cascade_ins2 CASCADE
+
+statement error pgcode 42883 unknown function: ins2\(\)
+SELECT ins2()
+
+# --------------------------------------------------
+# UPSERT
+# --------------------------------------------------
+
+statement ok
+CREATE FUNCTION ups() RETURNS VOID LANGUAGE SQL AS $$
+  UPSERT INTO t VALUES (3, 30, DEFAULT);
+$$
+
+skipif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop table t because other objects depend on it
+DROP TABLE t
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop relation \"t\" because function \"ups\" depends on it
+DROP TABLE t
+
+# NOTE: Postgres allows this. We cannot until we can rewrite the column names in
+# the UPSERT statement, or use column IDs instead.
+statement error pgcode 2BP01 cannot rename column \"b\" because function \"ups\" depends on it
+ALTER TABLE t RENAME COLUMN b TO b2
+
+statement error pgcode 2BP01 cannot drop column \"b\" because function \"ups\" depends on it
+ALTER TABLE t DROP COLUMN b
+
+statement error pgcode 2BP01 cannot drop column \"def\" because function \"ups\" depends on it
+ALTER TABLE t DROP COLUMN def
+
+statement ok
+ALTER TABLE t RENAME COLUMN c4 TO c5
+
+statement ok
+ALTER TABLE t DROP COLUMN drop_ups
+
+statement ok
+SELECT ups()
+
+query III rowsort
+SELECT a, b, def FROM t
+----
+1  10  10
+2  20  10
+3  30  10
+
+statement ok
+DROP FUNCTION ups
+
+statement ok
+CREATE FUNCTION ups2() RETURNS VOID LANGUAGE SQL AS $$
+  UPSERT INTO t (a, b, cascade_ups2, def) VALUES (4, 40, 400, DEFAULT);
+$$
+
+skipif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop table t because other objects depend on it
+DROP TABLE t
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop relation \"t\" because function \"ups2\" depends on it
+DROP TABLE t
+
+# NOTE: Postgres allows this. We cannot until we can rewrite the column names in
+# the UPSERT statement, or use column IDs instead.
+statement error pgcode 2BP01 cannot rename column \"b\" because function \"ups2\" depends on it
+ALTER TABLE t RENAME COLUMN b TO b2
+
+statement error pgcode 2BP01 cannot drop column \"b\" because function \"ups2\" depends on it
+ALTER TABLE t DROP COLUMN b
+
+statement error pgcode 2BP01 cannot drop column \"def\" because function \"ups2\" depends on it
+ALTER TABLE t DROP COLUMN def
+
+statement ok
+ALTER TABLE t RENAME COLUMN c5 TO c6
+
+statement ok
+ALTER TABLE t DROP COLUMN drop_ups2
+
+statement ok
+SELECT ups2()
+
+query III rowsort
+SELECT a, b, def FROM t
+----
+1  10  10
+2  20  10
+3  30  10
+4  40  10
+
+statement ok
+ALTER TABLE t DROP COLUMN cascade_ups2 CASCADE
+
+statement error pgcode 42883 unknown function: ups2\(\)
+SELECT ups2()
+
+# --------------------------------------------------
+# UPDATE
+# --------------------------------------------------
+
+statement ok
+CREATE FUNCTION up() RETURNS VOID LANGUAGE SQL AS $$
+  UPDATE t SET b = 11 WHERE a = 1 AND cascade_up IS NULL
+$$
+
+skipif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop table t because other objects depend on it
+DROP TABLE t
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop relation \"t\" because function \"up\" depends on it
+DROP TABLE t
+
+statement error pgcode 2BP01 cannot rename column \"a\" because function \"up\" depends on it
+ALTER TABLE t RENAME COLUMN a TO a2
+
+# TODO(#120836): Track dependencies of SET columns.
+# statement error pgcode 2BP01 cannot rename column \"b\" because function \"up\" depends on it
+# ALTER TABLE t RENAME COLUMN b TO b2
+
+statement ok
+ALTER TABLE t RENAME COLUMN c6 TO c7
+
+statement ok
+ALTER TABLE t DROP COLUMN drop_up
+
+statement ok
+SELECT up()
+
+query III rowsort
+SELECT a, b, def FROM t
+----
+1  11  10
+2  20  10
+3  30  10
+4  40  10
+
+statement ok
+ALTER TABLE t DROP COLUMN cascade_up CASCADE
+
+statement error pgcode 42883 unknown function: up\(\)
+SELECT up()
+
+# --------------------------------------------------
+# DELETE
+# --------------------------------------------------
+
+statement ok
+CREATE FUNCTION del() RETURNS VOID LANGUAGE SQL AS $$
+  DELETE FROM t WHERE a = 1 AND cascade_del = 1
+$$
+
+skipif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop table t because other objects depend on it
+DROP TABLE t
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 2BP01 cannot drop relation \"t\" because function \"del\" depends on it
+DROP TABLE t
+
+statement error pgcode 2BP01 cannot rename column \"a\" because function \"del\" depends on it
+ALTER TABLE t RENAME COLUMN a TO a2
+
+statement ok
+ALTER TABLE t RENAME COLUMN c7 TO c8
+
+statement ok
+ALTER TABLE t DROP COLUMN drop_del
+
+statement ok
+SELECT del()
+
+query III rowsort
+SELECT a, b, def FROM t
+----
+1  11  10
+2  20  10
+3  30  10
+4  40  10
+
+statement ok
+ALTER TABLE t DROP COLUMN cascade_del CASCADE
+
+statement error pgcode 42883 unknown function: del\(\)
+SELECT del()
+
+statement ok
+DROP TABLE t

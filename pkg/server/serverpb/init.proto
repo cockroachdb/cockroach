@@ -1,0 +1,28 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.server.serverpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/server/serverpb";
+
+message BootstrapRequest {
+    InitType init_type = 1;
+}
+
+enum InitType {
+    DEFAULT = 0;
+    NONE = 1;
+    VIRTUALIZED_EMPTY = 2;
+    VIRTUALIZED = 3;
+}
+message BootstrapResponse { }
+
+service Init {
+  // Bootstrap bootstraps an uninitialized cluster. This is primarily used by
+  // cockroach init. It writes the data for a single-node cluster comprised of
+  // this node (with NodeID "1") to the first store (StoreID "1"), after which
+  // the node can start and allow other nodes to join the cluster.
+  rpc Bootstrap(BootstrapRequest) returns (BootstrapResponse) { }
+}

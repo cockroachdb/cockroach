@@ -1,0 +1,262 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package sql
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
+)
+
+type alterIndexNode struct {
+	zeroInputPlanNode
+	n         *tree.AlterIndex
+	tableDesc *tabledesc.Mutable
+	index     catalog.Index
+}
+
+// AlterIndex applies a schema change on an index.
+// Privileges: CREATE on table.
+func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER INDEX",
+	); err != nil {
+		return nil, err
+	}
+
+	// Check if the table actually exists. expandMutableIndexName returns the
+	// underlying table.
+	_, tableDesc, err := expandMutableIndexName(ctx, p, &n.Index, !n.IfExists /* requireTable */)
+	if err != nil {
+		// Error if no table is found and IfExists is false.
+		return nil, err
+	}
+
+	if tableDesc == nil {
+		// No error if no table but IfExists is true.
+		return newZeroNode(nil /* columns */), nil
+	}
+
+	// Check if the index actually exists.
+	index := catalog.FindIndexByName(tableDesc, string(n.Index.Index))
+	if index == nil {
+		if n.IfExists {
+			// Nothing needed if no index exists and IfExists is true.
+			return newZeroNode(nil /* columns */), nil
+		}
+		return nil, pgerror.Newf(pgcode.UndefinedObject,
+			"index %q does not exist", string(n.Index.Index))
+	}
+
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
+		return nil, err
+	}
+
+	// Disallow schema changes if this table's schema is locked.
+	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
+		return nil, err
+	}
+
+	return &alterIndexNode{n: n, tableDesc: tableDesc, index: index}, nil
+}
+
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because ALTER INDEX performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *alterIndexNode) ReadingOwnWrites() {}
+
+func (n *alterIndexNode) startExec(params runParams) error {
+	// Commands can either change the descriptor directly (for
+	// alterations that don't require a backfill) or add a mutation to
+	// the list.
+	descriptorChanged := false
+	origNumMutations := len(n.tableDesc.Mutations)
+
+	for _, cmd := range n.n.Cmds {
+		switch t := cmd.(type) {
+		case *tree.AlterIndexPartitionBy:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("index", "partition_by"))
+			if n.tableDesc.GetLocalityConfig() != nil {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot change the partitioning of an index if the table is part of a multi-region database",
+				)
+			}
+			if n.tableDesc.PartitionAllBy {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot change the partitioning of an index if the table has PARTITION ALL BY defined",
+				)
+			}
+			if n.index.ImplicitPartitioningColumnCount() > 0 {
+				return unimplemented.New(
+					"ALTER INDEX PARTITION BY",
+					"cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning",
+				)
+			}
+			if n.index.IsSharded() {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot set explicit partitioning with ALTER INDEX PARTITION BY on a hash sharded index",
+				)
+			}
+			allowImplicitPartitioning := params.p.EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
+				n.tableDesc.IsLocalityRegionalByRow()
+			alteredIndexDesc := n.index.IndexDescDeepCopy()
+			newImplicitCols, newPartitioning, err := CreatePartitioning(
+				params.ctx,
+				params.extendedEvalCtx.Settings,
+				params.EvalContext(),
+				n.tableDesc,
+				alteredIndexDesc,
+				t.PartitionBy,
+				nil, /* allowedNewColumnNames */
+				allowImplicitPartitioning,
+			)
+			if err != nil {
+				return err
+			}
+			if newPartitioning.NumImplicitColumns > 0 {
+				return unimplemented.New(
+					"ALTER INDEX PARTITION BY",
+					"cannot ALTER INDEX and change the partitioning to contain implicit columns",
+				)
+			}
+			isIndexAltered := tabledesc.UpdateIndexPartitioning(&alteredIndexDesc, n.index.Primary(), newImplicitCols, newPartitioning)
+			if isIndexAltered {
+				oldPartitioning := n.index.GetPartitioning().DeepCopy()
+				if n.index.Primary() {
+					n.tableDesc.SetPrimaryIndex(alteredIndexDesc)
+				} else {
+					n.tableDesc.SetPublicNonPrimaryIndex(n.index.Ordinal(), alteredIndexDesc)
+				}
+				n.index = n.tableDesc.ActiveIndexes()[n.index.Ordinal()]
+				descriptorChanged = true
+				if err := deleteRemovedPartitionZoneConfigs(
+					params.ctx,
+					params.p.InternalSQLTxn(),
+					n.tableDesc,
+					n.index.GetID(),
+					oldPartitioning,
+					n.index.GetPartitioning(),
+					params.extendedEvalCtx.ExecCfg,
+					params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+				); err != nil {
+					return err
+				}
+			}
+		case *tree.AlterIndexSetStorageParams:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("index", "set_storage_params"))
+			indexDesc := n.index.IndexDescDeepCopy()
+			setter := indexstorageparam.Setter{IndexDesc: &indexDesc, NewObject: false}
+			if err := storageparam.Set(
+				params.ctx,
+				params.p.SemaCtx(),
+				params.EvalContext(),
+				t.StorageParams,
+				&setter,
+			); err != nil {
+				return err
+			}
+			if err := paramparse.ValidateIndexStorageParams(
+				params.ctx,
+				t.StorageParams,
+				paramparse.IndexStorageParamContext{
+					IsPrimaryKey:            n.index.Primary(),
+					IsUnique:                indexDesc.Unique,
+					IsSharded:               indexDesc.Sharded.IsSharded,
+					HasImplicitPartitioning: indexDesc.Partitioning.NumImplicitColumns > 0,
+					Version:                 params.EvalContext().Settings.Version,
+				},
+			); err != nil {
+				return err
+			}
+			if n.index.Primary() {
+				n.tableDesc.SetPrimaryIndex(*setter.IndexDesc)
+			} else {
+				n.tableDesc.SetPublicNonPrimaryIndex(n.index.Ordinal(), *setter.IndexDesc)
+			}
+			n.index = n.tableDesc.ActiveIndexes()[n.index.Ordinal()]
+			descriptorChanged = true
+
+		case *tree.AlterIndexResetStorageParams:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("index", "reset_storage_params"))
+			indexDesc := n.index.IndexDescDeepCopy()
+			setter := indexstorageparam.Setter{IndexDesc: &indexDesc, NewObject: false}
+			if err := storageparam.Reset(
+				params.ctx,
+				params.EvalContext(),
+				t.Params,
+				&setter,
+			); err != nil {
+				return err
+			}
+			if n.index.Primary() {
+				n.tableDesc.SetPrimaryIndex(*setter.IndexDesc)
+			} else {
+				n.tableDesc.SetPublicNonPrimaryIndex(n.index.Ordinal(), *setter.IndexDesc)
+			}
+			n.index = n.tableDesc.ActiveIndexes()[n.index.Ordinal()]
+			descriptorChanged = true
+
+		default:
+			return errors.AssertionFailedf(
+				"unsupported alter command: %T", cmd)
+		}
+
+	}
+
+	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+	if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
+		return err
+	}
+
+	addedMutations := len(n.tableDesc.Mutations) > origNumMutations
+	if !addedMutations && !descriptorChanged {
+		// Nothing to be done
+		return nil
+	}
+	mutationID := descpb.InvalidMutationID
+	if addedMutations {
+		mutationID = n.tableDesc.ClusterVersion().NextMutationID
+	}
+	if err := params.p.writeSchemaChange(
+		params.ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Record this index alteration in the event log. This is an auditable log
+	// event and is recorded in the same transaction as the table descriptor
+	// update.
+	return params.p.logEvent(params.ctx,
+		n.tableDesc.ID,
+		&eventpb.AlterIndex{
+			TableName:  n.n.Index.Table.FQString(),
+			IndexName:  n.index.GetName(),
+			MutationID: uint32(mutationID),
+		})
+}
+
+func (n *alterIndexNode) Next(runParams) (bool, error) { return false, nil }
+func (n *alterIndexNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterIndexNode) Close(context.Context)        {}

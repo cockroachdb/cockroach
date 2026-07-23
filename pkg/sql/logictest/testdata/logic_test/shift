@@ -1,0 +1,47 @@
+# Check non-constant eval
+
+statement ok
+CREATE TABLE t AS SELECT 1 AS i
+
+statement error shift argument out of range
+SELECT i << 64 FROM t
+
+statement error shift argument out of range
+SELECT i >> 64 FROM t
+
+statement error shift argument out of range
+SELECT i << -1 FROM t
+
+statement error shift argument out of range
+SELECT i >> -1 FROM t
+
+query II
+SELECT i << 63 >> 63, i << 62 >> 62 FROM t
+----
+-1 1
+
+# Check constant folding
+
+statement error shift argument out of range
+SELECT 1 << 64
+
+statement error shift argument out of range
+SELECT 1 >> 64
+
+statement error shift argument out of range
+SELECT 1 << -1
+
+statement error shift argument out of range
+SELECT 1 >> -1
+
+query II
+SELECT 1 << 63 >> 63, 1 << 62 >> 62
+----
+-1 1
+
+# Ensure that shift returns the same result as an int or a constant
+
+query II
+SELECT 1 << 63 >> 63, 1::INT << 63 >> 63
+----
+-1 -1

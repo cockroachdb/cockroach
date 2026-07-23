@@ -1,0 +1,549 @@
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0
+----
+
+new-txn txn=txn2 ts=12,1 epoch=0
+----
+
+new-txn txn=txn3 ts=14,1 epoch=0
+----
+
+# -------------------------------------------------------------
+# Acquire a lock on key a at timestamp 10,1
+# -------------------------------------------------------------
+
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@a
+----
+
+scan r=req1
+----
+start-waiting: false
+
+guard-state r=req1
+----
+new: state=doneWaiting
+
+acquire r=req1 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req1
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# -------------------------------------------------------------
+# Wait on this lock as:
+# 1. transactional read-only request
+# 2. transactional read-write request
+# 3. non-transactional read-only request
+# 4. non-transactional read-write request
+# -------------------------------------------------------------
+
+new-request r=req2 txn=txn2 ts=12,1 spans=none@a
+----
+
+new-request r=req3 txn=txn3 ts=14,1 spans=intent@a
+----
+
+new-request r=req4 txn=none ts=16,1 spans=none@a
+----
+
+new-request r=req5 txn=none ts=18,1 spans=intent@a
+----
+
+scan r=req2
+----
+start-waiting: true
+
+guard-state r=req2
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
+
+scan r=req3
+----
+start-waiting: true
+
+guard-state r=req3
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
+
+scan r=req4
+----
+start-waiting: true
+
+guard-state r=req4
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
+
+scan r=req5
+----
+start-waiting: true
+
+guard-state r=req5
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 4, txn: none
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, strength: Intent, txn: none
+
+metrics
+----
+locks: 1
+locksheld: 1
+totallockholddurationnanos: 0
+lockswithwaitqueues: 1
+waiters: 4
+waitingreaders: 2
+waitingwriters: 2
+totalwaitdurationnanos: 0
+topklocksbywaiters:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 0
+  waiters: 4
+  waitingreaders: 2
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 0
+  waiters: 4
+  waitingreaders: 2
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 0
+  waiters: 4
+  waitingreaders: 2
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+# -------------------------------------------------------------
+# Update lock timestamp to 11,1 - nothing moves
+# -------------------------------------------------------------
+
+update txn=txn1 ts=11,1 epoch=0 span=a
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 4, txn: none
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, strength: Intent, txn: none
+
+# -------------------------------------------------------------
+# Update lock timestamp to 13,1 - the transactional read at
+# at timestamp 12,1 is allowed to proceed without acquire a
+# reservation
+# -------------------------------------------------------------
+
+update txn=txn1 ts=13,1 epoch=0 span=a
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 13.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 4, txn: none
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, strength: Intent, txn: none
+
+guard-state r=req2
+----
+new: state=doneWaiting
+
+scan r=req2
+----
+start-waiting: false
+
+dequeue r=req2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 13.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 4, txn: none
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, strength: Intent, txn: none
+
+# -------------------------------------------------------------
+# Update lock timestamp to 10,1 - noop since lock is already at
+# 13,1
+# -------------------------------------------------------------
+
+update txn=txn1 ts=10,1 epoch=0 span=a
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 13.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 4, txn: none
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, strength: Intent, txn: none
+
+# -------------------------------------------------------------
+# Update lock timestamp to 15,1 - nothing moves
+# -------------------------------------------------------------
+
+update txn=txn1 ts=15,1 epoch=0 span=a
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 15.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 4, txn: none
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, strength: Intent, txn: none
+
+# -------------------------------------------------------------
+# Update lock timestamp to 17,1 - the transactional read at
+# at timestamp 16,1 is allowed to proceed without acquire a
+# reservation
+# -------------------------------------------------------------
+
+update txn=txn1 ts=17,1 epoch=0 span=a
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 17.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, strength: Intent, txn: none
+
+guard-state r=req4
+----
+new: state=doneWaiting
+
+scan r=req4
+----
+start-waiting: false
+
+dequeue r=req4
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 17.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, strength: Intent, txn: none
+
+# -------------------------------------------------------------
+# Update lock timestamp to 19,1 - nothing moves
+# -------------------------------------------------------------
+
+update txn=txn1 ts=19,1 epoch=0 span=a
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 19.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, strength: Intent, txn: none
+
+# -------------------------------------------------------------
+# Update lock epoch to 1 - the lock is dropped and the transactional
+# write at timestamp 14,1 is allowed to acquire a reservation. Once
+# it finishes, the non-transactional write is allowed to proceed
+# without grabbing a reservation
+# -------------------------------------------------------------
+
+update txn=txn1 ts=19,1 epoch=1 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, strength: Intent, txn: none
+
+guard-state r=req3
+----
+new: state=doneWaiting
+
+scan r=req3
+----
+start-waiting: false
+
+guard-state r=req5
+----
+new: state=waitFor txn=txn3 key="a" held=false guard-strength=Intent
+
+dequeue r=req3
+----
+num=0
+
+guard-state r=req5
+----
+new: state=doneWaiting
+
+scan r=req5
+----
+start-waiting: false
+
+dequeue r=req5
+----
+num=0
+
+# -------------------------------------------------------------
+# Lock is held at multiple seqnums and then updated to ignore
+# either a seqnum that is not in the held list or one that is
+# in the list. When all the seqnums are ignored, the lock is
+# released. Additionally, tests the effect of updates with older
+# epochs -- they don't affect seqnums, but can advance ts.
+# -------------------------------------------------------------
+
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10 epoch=1 seq=1
+----
+
+new-txn txn=txn2 ts=12,1 epoch=0
+----
+
+new-txn txn=txn3 ts=14,1 epoch=0
+----
+
+new-request r=req1 txn=txn1 ts=10 spans=exclusive@a
+----
+
+acquire r=req1 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)]
+
+new-txn txn=txn1 ts=10 epoch=1 seq=5
+----
+
+new-request r=req2 txn=txn1 ts=10 spans=exclusive@a
+----
+
+acquire r=req2 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)]
+
+new-txn txn=txn1 ts=10 epoch=1 seq=7
+----
+
+new-request r=req3 txn=txn1 ts=10 spans=exclusive@a
+----
+
+acquire r=req3 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)]
+
+new-txn txn=txn1 ts=10 epoch=1 seq=10
+----
+
+new-request r=req4 txn=txn1 ts=10 spans=exclusive@a
+----
+
+acquire r=req4 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)]
+
+# No seqnum change since lock is not held at seqnum 3, 8, 9.
+
+update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,8-9
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 9}]
+
+# No change since update is using older epoch.
+
+update txn=txn1 ts=10 epoch=0 span=a ignored-seqs=3,8-9
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 9}]
+
+update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,8-9
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 9}]
+
+update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,8-11
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 11}]
+
+# No seqnum change since update is using older epoch. But since the update is using
+# a higher timestamp, the ts is advanced.
+
+update txn=txn1 ts=15 epoch=0 span=a ignored-seqs=1
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 15.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 11}]
+
+# No change, since seqnum 3 is not held. Note that the ts is not updated.
+
+update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 15.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 11}]
+
+# Timestamp is updated again.
+update txn=txn1 ts=16 epoch=1 span=a
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 16.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 11}]
+
+# Seqnum 1 is also ignored, so the lock is released. Note that it does not
+# matter that the update is using an older timestamp.
+
+update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=1
+----
+num=0
+
+# ------------------------------------------------------------------------------
+# Tests where both an exclusive lock and a (replicated) intent exists on a key,
+# and the intent is forgotten because of a lock update, we correctly let some
+# waiting requests through.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req5 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req5
+----
+start-waiting: false
+
+acquire r=req5 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 10)]
+
+new-request r=req6 txn=txn2 ts=10 spans=none@a
+----
+
+scan r=req6
+----
+start-waiting: true
+
+add-discovered k=a durability=r strength=intent txn=txn1 r=req6
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 10)]
+   waiting readers:
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+
+new-request r=req7 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req7
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 10)]
+   waiting readers:
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+   queued locking requests:
+    active: true req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+
+update txn=txn1 ts=11,0 epoch=0 span=a
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 10)]
+   queued locking requests:
+    active: true req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000003

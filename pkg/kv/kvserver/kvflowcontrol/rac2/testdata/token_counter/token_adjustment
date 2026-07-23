@@ -1,0 +1,178 @@
+init stream=1
+----
+
+metrics
+----
+  regular
+    kvflowcontrol.streams.eval.regular.total_count                    : 1
+    kvflowcontrol.streams.eval.regular.blocked_count                  : 0
+    kvflowcontrol.tokens.eval.regular.available                       : +16MiB
+    kvflowcontrol.tokens.eval.regular.deducted                        : +0B
+    kvflowcontrol.tokens.eval.regular.returned.disconnect             : +0B
+    kvflowcontrol.tokens.eval.regular.returned                        : +0B
+    kvflowcontrol.tokens.eval.regular.unaccounted                     : +0B
+  elastic
+    kvflowcontrol.streams.eval.elastic.total_count                    : 1
+    kvflowcontrol.streams.eval.elastic.blocked_count                  : 0
+    kvflowcontrol.tokens.eval.elastic.available                       : +8.0MiB
+    kvflowcontrol.tokens.eval.elastic.deducted                        : +0B
+    kvflowcontrol.tokens.eval.elastic.returned.disconnect             : +0B
+    kvflowcontrol.tokens.eval.elastic.returned                        : +0B
+    kvflowcontrol.tokens.eval.elastic.unaccounted                     : +0B
+
+adjust
+class=regular delta=-1MiB
+class=regular delta=-7MiB
+class=regular delta=-2MiB
+class=regular delta=-2MiB
+class=regular delta=+2MiB
+class=regular delta=-2MiB
+class=regular delta=+4MiB
+class=regular delta=+2MiB
+class=elastic delta=-2MiB
+class=regular delta=-2MiB
+class=regular delta=+2MiB
+class=elastic delta=+2MiB
+class=regular delta=+6MiB
+----
+regular: deducted: +16 MiB, returned: +16 MiB, force-flush: +0 B, prevent-send-q: +0 B
+elastic: deducted: +18 MiB, returned: +18 MiB, force-flush: +0 B, prevent-send-q: +0 B
+
+history
+----
+                                     regular |  elastic
+                                      +16MiB |  +8.0MiB
+=======================================================
+ -1.0MiB regular normal               +15MiB |  +7.0MiB
+ -7.0MiB regular normal              +8.0MiB |      +0B (elastic blocked)
+ -2.0MiB regular normal              +6.0MiB |  -2.0MiB (elastic blocked)
+ -2.0MiB regular normal              +4.0MiB |  -4.0MiB (elastic blocked)
+ +2.0MiB regular normal              +6.0MiB |  -2.0MiB (elastic blocked)
+ -2.0MiB regular normal              +4.0MiB |  -4.0MiB (elastic blocked)
+ +4.0MiB regular normal              +8.0MiB |      +0B (elastic blocked)
+ +2.0MiB regular normal               +10MiB |  +2.0MiB
+ -2.0MiB elastic normal               +10MiB |      +0B (elastic blocked)
+ -2.0MiB regular normal              +8.0MiB |  -2.0MiB (elastic blocked)
+ +2.0MiB regular normal               +10MiB |      +0B (elastic blocked)
+ +2.0MiB elastic normal               +10MiB |  +2.0MiB
+ +6.0MiB regular normal               +16MiB |  +8.0MiB
+
+# Despite the elastic stream being unblocked by the time metrics is called, the
+# stream was blocked for a non-zero duration between metric calls so we expect
+# elastic.blocked_count=1.
+metrics
+----
+  regular
+    kvflowcontrol.streams.eval.regular.total_count                    : 1
+    kvflowcontrol.streams.eval.regular.blocked_count                  : 0
+    kvflowcontrol.tokens.eval.regular.available                       : +16MiB
+    kvflowcontrol.tokens.eval.regular.deducted                        : +16MiB
+    kvflowcontrol.tokens.eval.regular.returned.disconnect             : +0B
+    kvflowcontrol.tokens.eval.regular.returned                        : +16MiB
+    kvflowcontrol.tokens.eval.regular.unaccounted                     : +0B
+  elastic
+    kvflowcontrol.streams.eval.elastic.total_count                    : 1
+    kvflowcontrol.streams.eval.elastic.blocked_count                  : 0
+    kvflowcontrol.tokens.eval.elastic.available                       : +8.0MiB
+    kvflowcontrol.tokens.eval.elastic.deducted                        : +18MiB
+    kvflowcontrol.tokens.eval.elastic.returned.disconnect             : +0B
+    kvflowcontrol.tokens.eval.elastic.returned                        : +18MiB
+    kvflowcontrol.tokens.eval.elastic.unaccounted                     : +0B
+
+init stream=2
+----
+
+# There should now be two streams in the metrics, double the available tokens
+# for each work class.
+metrics
+----
+  regular
+    kvflowcontrol.streams.eval.regular.total_count                    : 2
+    kvflowcontrol.streams.eval.regular.blocked_count                  : 0
+    kvflowcontrol.tokens.eval.regular.available                       : +32MiB
+    kvflowcontrol.tokens.eval.regular.deducted                        : +16MiB
+    kvflowcontrol.tokens.eval.regular.returned.disconnect             : +0B
+    kvflowcontrol.tokens.eval.regular.returned                        : +16MiB
+    kvflowcontrol.tokens.eval.regular.unaccounted                     : +0B
+  elastic
+    kvflowcontrol.streams.eval.elastic.total_count                    : 2
+    kvflowcontrol.streams.eval.elastic.blocked_count                  : 0
+    kvflowcontrol.tokens.eval.elastic.available                       : +16MiB
+    kvflowcontrol.tokens.eval.elastic.deducted                        : +18MiB
+    kvflowcontrol.tokens.eval.elastic.returned.disconnect             : +0B
+    kvflowcontrol.tokens.eval.elastic.returned                        : +18MiB
+    kvflowcontrol.tokens.eval.elastic.unaccounted                     : +0B
+
+adjust
+class=elastic delta=-7MiB
+class=regular delta=-7MiB
+class=elastic delta=+6MiB
+class=regular delta=-1MiB
+class=regular delta=-6MiB
+class=regular delta=+6MiB
+class=regular delta=-9MiB
+class=regular delta=+17MiB
+class=elastic delta=+1MiB
+----
+regular: deducted: +23 MiB, returned: +23 MiB, force-flush: +0 B, prevent-send-q: +0 B
+elastic: deducted: +30 MiB, returned: +30 MiB, force-flush: +0 B, prevent-send-q: +0 B
+
+
+history
+----
+                                     regular |  elastic
+                                      +16MiB |  +8.0MiB
+=======================================================
+ -7.0MiB elastic normal               +16MiB |  +1.0MiB
+ -7.0MiB regular normal              +9.0MiB |  -6.0MiB (elastic blocked)
+ +6.0MiB elastic normal              +9.0MiB |      +0B (elastic blocked)
+ -1.0MiB regular normal              +8.0MiB |  -1.0MiB (elastic blocked)
+ -6.0MiB regular normal              +2.0MiB |  -7.0MiB (elastic blocked)
+ +6.0MiB regular normal              +8.0MiB |  -1.0MiB (elastic blocked)
+ -9.0MiB regular normal              -1.0MiB |   -10MiB (regular and elastic blocked)
+  +17MiB regular normal               +16MiB |  +7.0MiB
+ +1.0MiB elastic normal               +16MiB |  +8.0MiB
+
+metrics
+----
+  regular
+    kvflowcontrol.streams.eval.regular.total_count                    : 2
+    kvflowcontrol.streams.eval.regular.blocked_count                  : 0
+    kvflowcontrol.tokens.eval.regular.available                       : +32MiB
+    kvflowcontrol.tokens.eval.regular.deducted                        : +39MiB
+    kvflowcontrol.tokens.eval.regular.returned.disconnect             : +0B
+    kvflowcontrol.tokens.eval.regular.returned                        : +39MiB
+    kvflowcontrol.tokens.eval.regular.unaccounted                     : +0B
+  elastic
+    kvflowcontrol.streams.eval.elastic.total_count                    : 2
+    kvflowcontrol.streams.eval.elastic.blocked_count                  : 0
+    kvflowcontrol.tokens.eval.elastic.available                       : +16MiB
+    kvflowcontrol.tokens.eval.elastic.deducted                        : +48MiB
+    kvflowcontrol.tokens.eval.elastic.returned.disconnect             : +0B
+    kvflowcontrol.tokens.eval.elastic.returned                        : +48MiB
+    kvflowcontrol.tokens.eval.elastic.unaccounted                     : +0B
+
+adjust
+class=regular delta=-16MiB
+----
+regular: deducted: +16 MiB, returned: +0 B, force-flush: +0 B, prevent-send-q: +0 B
+elastic: deducted: +16 MiB, returned: +0 B, force-flush: +0 B, prevent-send-q: +0 B
+
+metrics
+----
+  regular
+    kvflowcontrol.streams.eval.regular.total_count                    : 2
+    kvflowcontrol.streams.eval.regular.blocked_count                  : 1
+    kvflowcontrol.tokens.eval.regular.available                       : +16MiB
+    kvflowcontrol.tokens.eval.regular.deducted                        : +55MiB
+    kvflowcontrol.tokens.eval.regular.returned.disconnect             : +0B
+    kvflowcontrol.tokens.eval.regular.returned                        : +39MiB
+    kvflowcontrol.tokens.eval.regular.unaccounted                     : +0B
+  elastic
+    kvflowcontrol.streams.eval.elastic.total_count                    : 2
+    kvflowcontrol.streams.eval.elastic.blocked_count                  : 1
+    kvflowcontrol.tokens.eval.elastic.available                       : +0B
+    kvflowcontrol.tokens.eval.elastic.deducted                        : +64MiB
+    kvflowcontrol.tokens.eval.elastic.returned.disconnect             : +0B
+    kvflowcontrol.tokens.eval.elastic.returned                        : +48MiB
+    kvflowcontrol.tokens.eval.elastic.unaccounted                     : +0B

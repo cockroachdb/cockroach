@@ -1,0 +1,9 @@
+/* setup */
+
+/* test */
+CREATE DATABASE db;
+DROP DATABASE db;
+EXPLAIN (DDL, SHAPE) CREATE DATABASE db;
+----
+Schema change plan for CREATE DATABASE ‹db›; following CREATE DATABASE ‹db›; DROP DATABASE ‹db›;
+ └── execute 1 system table mutations transaction

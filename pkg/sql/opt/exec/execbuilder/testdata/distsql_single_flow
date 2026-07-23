@@ -1,0 +1,208 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE t1 (a INT PRIMARY KEY, b INT, c INT);
+CREATE TABLE t2 (a INT PRIMARY KEY, b INT, c INT);
+
+# Move the single range to a remote node.
+
+retry
+statement ok
+ALTER TABLE t1 EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 2)
+
+retry
+statement ok
+ALTER TABLE t2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 2)
+
+# There are no stats on the table, so the single flow should stay on the remote
+# node.
+query T
+EXPLAIN (VEC) SELECT * FROM t1, t2 WHERE t1.a = t2.b
+----
+│
+├ Node 1
+│ └ *colrpc.Inbox
+└ Node 2
+  └ *colrpc.Outbox
+    └ *colexecjoin.hashJoiner
+      ├ *colfetcher.ColBatchScan
+      └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t1, t2 WHERE t1.a = t2.b
+----
+distribution: full
+·
+• hash join
+│ equality: (a) = (b)
+│ left cols are key
+│
+├── • scan
+│     missing stats
+│     table: t1@t1_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: t2@t2_pkey
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkt9v2jAQx9_3V1j3VKajxA7bg6VKmQpTmSh0gLRJU1WZ5ICoIc7si7oK8b9PCesKUaH74QdLPp8_9_2ebwP-ewYa-l9vhh8GI3HWG0xn08_Dlpj2h_3LmXgrPk7G14IlClbiy1V_0hcsz424EKzO54CQ24RGZk0e9DeQgKDgFqFwNibvravCmzppkPwAHSCkeVFyFb5FiK0j0BvglDMCDSPbtkUnBISE2KRZnbZFsCU_P_JslgS6u1dl0AMdbnGvkDxdaGbmGU3IJOQ6wUE5YBmxvCvu6REQLm1WrnOvhUExRxEDwrQwVaANx4TJhrDgX4XJhjAVsfofYaohTB4V9qynzK1LyFHS_JPXU15wd2X86pNNc3IddWguowWfRbJ14dLlis8i1QKEcclaRBIjhVGIURejdxi9P-ovbPhTB_5eGb0J-cLmnv5o9oJGpbas3FKypF33vC1dTDfOxnXu7jiuQXUgIc-72-7uMMifrjw7Muvfc7NPkidJ4QFJniSpvyCpfZJsksKTpOC4O1V1bJHZh7s0AQ3Br9V-YXtaUD0wS19923RlH2rs7LGomr4wmSeEa3NPPWJy6zRPPacxaHYlbbdvfgYAAP__MJ2RJw==
+
+# Inject stats so that column 'b' has few unique values whereas column 'c' has
+# many unique values.
+statement ok
+ALTER TABLE t1 INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+ALTER TABLE t2 INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100
+  }
+]'
+
+# Now check that the single flow with a join is moved to the gateway.
+query T
+EXPLAIN (VEC) SELECT * FROM t1, t2 WHERE t1.a = t2.b
+----
+│
+└ Node 1
+  └ *colexecjoin.hashJoiner
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t1, t2 WHERE t1.a = t2.b
+----
+distribution: local
+·
+• hash join
+│ estimated row count: 10,000
+│ equality: (a) = (b)
+│ left cols are key
+│
+├── • scan
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│     table: t1@t1_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+      table: t2@t2_pkey
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykklFr2zAQx9_3KcQ9JePSWsq2B0FBo8loRtp0SWCDYYpiXxJTx_KkM10J-e7DzrYmJt3opgeDTtLvfv_DWwjfctAw_HI7fj-6EZ3BaDaffRp3xWw4Hl7OxWvxYTq5FixRsBKfr4bToWB5ZsWFYHW2AITCpXRjNxRAfwUJMULpXUIhOF-Xts2FUfoddISQFWXFdTlGSJwn0FvgjHMCDXO7yGlKNiV_HgFCSmyzvMGyNCzvynt6BIRLl1ebImhhUSxQJIAwK21d6EG8Q3AVPzUJbFcEWh5YjQagox3-m5hsiSnD6n_EVEtMPiv25FMVzqfkKT1yieuXf7tyIt2VDeuPLivIn6vjcDktuWNk98JnqzV3jOoCwqRiLYxEo9D00bxB8xbNu2fz9Vv51EsGP6VQuiJQO-fJTlGrU0_WaSld0X56wVU-oVvvkubufjtpQE0hpcD7U7XfjIrmSNYdPNnN7__mkCRfQFKHJNkmqT-S-kek6NgpRljm7uEuS0FD9HP1Tnx-Lagf2FWohz1bu4cGO38s61EtbR4I4dre04CY_CYrssBZApp9Rbvdqx8BAAD__-o0VdY=
+
+
+# If we add a not very selective filter, the flow is still moved to the gateway.
+query T
+EXPLAIN (VEC) SELECT * FROM t1, t2 WHERE t1.b = 1 AND t1.a = t2.a
+----
+│
+└ Node 1
+  └ *colexecjoin.mergeJoinInnerOp
+    ├ *colfetcher.ColBatchScan
+    └ *colexecsel.selEQInt64Int64ConstOp
+      └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t1, t2 WHERE t1.b = 1 AND t1.a = t2.a
+----
+distribution: local
+·
+• merge join
+│ estimated row count: 3,333
+│ equality: (a) = (a)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│     table: t2@t2_pkey
+│     spans: FULL SCAN
+│
+└── • filter
+    │ estimated row count: 3,333
+    │ filter: b = 1
+    │
+    └── • scan
+          estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+          table: t1@t1_pkey
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkl9v2jAUxd_3Kaz7BJspsROmyRJSqkK1TPzpAGmTJlSZ5JJGDXFmO-oqxHefkmwrRMDG6ocovrZ_5xxfb8F8T0HA8Ovd6DqYkNYgmC_mn0dtMh-OhjcL8pbczqZjYhkllpMvH4ezIWlZdrUifcLa5HoyqKaS9InlV7INFDIV4URu0ID4BgyWFHKtQjRG6bK0rTYE0Q8QDoUkywtblpcUQqURxBZsYlMEAQu5SnGGMkLddYBChFYmaYW13Lf8Pn_EZ6Bwo9JikxlBJCUrSkKgMM9lWejAckdBFfZFxFgZIwi25yoYgHB29P-MsYYx5lv2GmO8YYxdYuw2SS1q1F1-6KquC-Lzsm1CiGCy-HDSgtuwwE9aeFEuMqUj1BgdCC_Lk3_bciTHGHWMn1SSoe66h1FSXNuWz961-zqJH-pfoDAtrCC-R_0e9d9Tn1GfU989GdFrRHQvueWJ6qi86zWTHhXqNYS8S4RmaHKVGfwnJaeh1GHlzWIUY90powod4p1WYbW3nk4rUFWI0Nh61a0nQVYtsVJBo9z8eY37JHaWxA9Izj7JaZL4BZ74Pok3Se5Zknfak9skeWdJvXPplhTWqXq6TyIQ4PwanSOf3wPKAzI25QOYP6inCrt4zsv2rWVqkMJYPuIALepNkiXGJiEIqwvc7d78DAAA___NVNb4
+
+# However, if we add a selective filter, the flow is kept on the remote node.
+query T
+EXPLAIN (VEC) SELECT * FROM t1 INNER MERGE JOIN t2 ON t1.a = t2.a WHERE t1.c = 1
+----
+│
+├ Node 1
+│ └ *colrpc.Inbox
+└ Node 2
+  └ *colrpc.Outbox
+    └ *colexecjoin.mergeJoinInnerOp
+      ├ *colexecsel.selEQInt64Int64ConstOp
+      │ └ *colfetcher.ColBatchScan
+      └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t1 INNER MERGE JOIN t2 ON t1.a = t2.a WHERE t1.c = 1
+----
+distribution: full
+·
+• merge join
+│ estimated row count: 100
+│ equality: (a) = (a)
+│ left cols are key
+│ right cols are key
+│
+├── • filter
+│   │ estimated row count: 100
+│   │ filter: c = 1
+│   │
+│   └── • scan
+│         estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│         table: t1@t1_pkey
+│         spans: FULL SCAN
+│
+└── • scan
+      estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+      table: t2@t2_pkey
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk1Fr2zAUhd_3K8R9ajelsWRnDEHAo3E3l8TpnMAGoxTVvklNHcuTZLoS8t-H7XVNTJMumx9CfHT13XOupTWYHzkICL5djT-GETkZhbP57Mv4lMyCcXA-J2_JRTydEMtIGEVBTCZB_Ckgl9MwIpaTaUQsO5NkSCw_k-Tr5yAOaiUhQ8KAQqFSjOQKDYjvUAscrimUWiVojNK1vG6KwvQnCIdCVpSVreVrConSCGINNrM5goBI9VTZ94BCilZmeVO2oaAq-7zJWLlEEIOtLuEIhLehW43Y4UZzeZtjjDJF3Xd22oFlvmU35T0-AoVzlVerwggiKbmlJAEKs1LWQg_2GWMdY84xxi6y3KJG3We7rlpdEN-t5y6ECKP5h70WeMcC-9fZ8M5suG_5_8zG7Rjje409-6kKpVPUmHaPxeslL6SboF7ipcoK1H13N12OC3vis3enQ50t79q_QGFaWUF8Rn1OfZf6HvUH1H-_N6LXiejuRHzlAsRoSlUY_Ksb4HQ69VgdGNMltgM0qtIJXmmVNLXt67QBNUKKxrarg_YlLJ6WjNUoV39O7zaJHSTxI0j8IMnbIbFtEuuS3CNIfJvEuyTvIMnZn86tZ7_I1cNNloIA5_fTe-Hn6YF6g1ya-gDM7tRDg50_lvXnW8jcIIWJvMcRWtSrrMiMzRIQVle42bz5FQAA__89HtsW

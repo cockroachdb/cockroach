@@ -1,0 +1,9 @@
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c), INDEX d_idx (d))
+
+# Generate all combinations of values 1 to 20.
+statement ok
+INSERT INTO data SELECT a, b, c::FLOAT, NULL FROM
+   generate_series(1, 20) AS a(a),
+   generate_series(1, 20) AS b(b),
+   generate_series(1, 20) AS c(c)

@@ -1,0 +1,159 @@
+# This file contains tests that ctr_stream produces the expected outputs
+# for known inputs. This ensures that changes to the implementation do
+# not render it incompatible with previously-written data.
+#
+# This test is inherently going to be full of illegible gibberish, so in
+# order to minimize maintenance burden we use the datadriven package with
+# its "rewrite" option. To produce random inputs, you can use something like
+#   head -c 16 /dev/random | od -An -tx1 -v
+# (note that macOS `od` uses more whitespacae than linux `od`, so this file
+# uses the linux `od` format).
+
+# 128 bytes of random data. In this file we'll verify the entire contents
+# of the block. In the test code, we'll try slicing it up in different ways
+# so that we test long blocks, short blocks, non-aligned blocks, etc.
+set-data
+4a 55 17 f3 ff 73 bc d8 7e 51 66 a0 1c 95 cb 20
+c2 54 53 b1 40 11 ec aa 12 b1 09 fa a2 69 22 bc
+56 9f f6 b0 1b 40 36 b0 d9 e2 de 3e b3 86 6b 60
+51 80 b2 c9 ae 05 bd c3 10 0a e0 38 bd 32 4c 5b
+e5 b5 4b e9 bc d5 94 9d b4 4f f7 dc 6d 88 9d 00
+6a 83 16 42 ec 46 3b 2f bf 34 01 75 f7 ce 82 1c
+b5 df e3 4c ce d0 74 ed a4 fd 96 5a be 69 05 51
+c6 bf da 38 1f 8e 80 01 bf 81 8c 31 1f 53 12 b8
+----
+ok
+
+create-key name=default
+d6 35 90 0e ce 70 8e d2 d2 47 cd 16 fc fb 26 87
+----
+ok
+
+create-key name=other
+42 d8 8a 0f ed 55 c0 64 ef 48 99 27 e1 a2 8c 2d
+----
+ok
+
+create-iv name=default
+72 ea 17 b6 7a dd 63 bb 01 94 ba 8e bd 84 13 c4
+----
+ok
+
+create-iv name=other
+d7 53 99 7c 89 a2 bf 64 5a 38 65 d8 9a 71 07 2a
+----
+ok
+
+encrypt offset=0
+----
+70 54 03 81 d3 f0 e5 f2 ab 28 03 55 f0 53 a3 63
+a8 03 e1 f5 06 48 53 3a 86 81 f8 a6 da 35 80 a3
+4a fb 80 48 39 cf 77 32 17 1e ec 32 cc 22 e9 4a
+3f b7 f9 e4 93 52 89 21 0c bc bc 66 77 3a 23 18
+df 79 ab 4a 7a 29 c7 3d 45 41 dd fc e0 d9 10 e0
+76 22 e8 78 2c 6a cb 3d 62 af 84 3e 3c 9f ee f7
+84 7b 38 01 db fb 98 e5 1d 9b 61 e1 ed ef be 94
+93 3a 79 84 c3 dc 9d 26 be 2f ed 3c 83 68 d4 30
+
+# Change the key and the output changes
+encrypt offset=0 key=other
+----
+27 8e 1a 59 1a e2 8c 31 8e 80 8d 35 40 1e 1c b5
+01 7f 76 58 67 4b aa 0a 2e e5 23 41 ea f1 31 62
+99 70 ac dc 65 a1 4f d6 84 9e dc c3 1c 63 43 8a
+d0 04 de 89 3c 2d 8d 12 2f 97 e6 81 0c 16 a0 c1
+2e cd 2f f2 f6 1d 46 76 83 78 63 3f 44 3a d5 46
+f2 d4 b7 65 be f6 02 88 9f f7 6e 6f 4b 74 dc 4f
+ad 29 80 70 5e b1 3e 1e 6e e8 df a0 b8 cf 90 f4
+83 29 7d dc 21 a2 31 da d2 47 22 a5 3e 26 12 4c
+
+# The IV also changes the output
+encrypt offset=0 iv=other
+----
+61 8b 1f 76 07 05 78 e9 67 27 c8 fb 3d 75 3b c5
+f1 f0 6f a7 6d 81 f9 b3 e4 40 98 62 d4 51 f7 b3
+de d6 1b 80 b1 ac 26 81 37 5c 49 b5 bc 30 fa 95
+3e ec 12 3d 87 39 6e 0e 3a 6e f7 0e c9 ac 44 bb
+24 ce 71 1f 5e aa 98 78 6e 02 a1 d0 cd 65 46 75
+e7 f7 3f 8b d8 22 34 d9 fb ef b0 9f d8 e2 7a ad
+1f 13 0d 94 8d b7 d1 87 14 96 77 7c 82 c4 6f 6e
+0d 0e 42 46 09 29 a2 21 82 42 95 35 1c f7 2a 6e
+
+# And so does the offset. Note that the way this parameter works is to
+# logically shift the static test input data into the given offset.
+encrypt offset=1
+----
+4b 41 65 df 7c 2a 96 0d 07 34 93 4c da fd 88 4a
+95 e6 17 f7 19 ae 7c 3e 22 40 55 82 fe cb 3d a0
+32 e9 0e 92 94 01 b4 7e 25 d0 d2 41 17 04 41 0e
+66 cb 9f f4 f9 31 5f df a6 56 be f2 b5 5d 0f 61
+29 55 e8 2f 40 86 34 6c ba 65 d7 51 3c 05 7d 1c
+cb 7d 2c 82 c0 b6 29 f2 24 b1 4a be a6 a2 69 2d
+11 04 ae 59 e5 3c 7c 54 c2 0a 2d 09 38 d2 c0 04
+43 1c 66 e4 4d 93 a7 00 11 e0 81 ad 24 95 9a 36
+
+# Test some interesting offsets, namely powers of 256 times the block
+# size of 16 (which result in powers of 256 in the internal computation)
+encrypt offset=4096
+----
+af 94 f3 42 3d fa 41 44 ff 9d 06 bf 56 cd 71 65
+a2 ec 9c 24 50 06 a7 22 66 51 c7 05 9f 63 71 d0
+2c 8e d0 13 4d 2e b2 85 85 59 ed 07 a8 b7 40 43
+26 3e 66 72 92 d9 6f 50 f1 13 a0 d5 f0 38 09 8a
+ef 57 fd 88 64 99 3b b1 4b 83 bd 01 1d 72 e0 b9
+3b 16 6c 99 77 d1 85 58 b3 29 ef 33 b3 d0 7a 87
+6a 77 62 ca 02 5b ab a4 4f 69 f6 54 3f d3 f6 21
+e1 f6 71 70 b4 6d f7 9c d5 7b 23 96 e1 ce f2 1a
+
+encrypt offset=1048576
+----
+c9 77 fa e6 0e 74 c9 2b 6c 01 25 50 eb 96 c1 4b
+51 a6 d5 90 1a 77 3d c0 9c 33 48 21 b5 78 fb 94
+a5 f6 16 05 41 4c 4b 11 3e b8 fc bf 20 6c a6 b8
+34 8e 12 46 80 d9 24 7c 35 90 5c d4 34 0c 7c eb
+77 3d 8b 1d 30 36 7a d3 f9 7e 04 f6 2f ab 6f 4c
+6c 8d 80 bc a7 c3 10 5d ac f1 bb e5 9b 1e 1a cd
+bd 28 2a 5b 44 63 55 85 f2 ed df cf 29 cc d2 81
+c6 ee 58 d4 7d 1c 53 34 e5 0f 4b 96 1f ac 29 8d
+
+encrypt offset=268435456
+----
+ba f1 04 5a 3c 96 0e a4 13 aa 61 a2 81 9e aa 0b
+95 6b 11 dd 6c 70 4f 85 94 41 3d 68 47 9b 09 de
+20 b3 bf ce 45 67 05 70 d8 85 2d e4 b9 dc ba 99
+27 e5 c7 30 4f 4e 39 c8 3f cc 95 9b 39 b3 9b ea
+13 34 9b ec 08 9a 86 59 10 c9 90 42 0c 17 fc a1
+41 c6 5c f5 b7 c6 d4 81 a6 33 b9 25 4d 97 21 02
+70 0b 5a 9f fe fd 97 da 11 bf ea 5d 53 5e 54 5e
+dd 3b 2d 67 71 8b 10 ac 14 a9 91 29 13 4b 91 1f
+
+# V1 and V2 diverge when the low 32 bits overflow.
+# See below that the first line (one 16-byte block)
+# of v1 and v2 are the same and then the overflow
+# makes subsequent rows differ.
+create-iv name=near-overflow
+00 00 00 00 00 00 00 00 00 00 00 00 ff ff ff ff
+----
+ok
+
+encrypt offset=0 iv=near-overflow only-version=v1
+----
+de 67 4c 32 f0 97 b4 f4 b0 cf 86 36 7f 9b 05 bb
+ed 2f 5b d0 36 7b 42 8b 48 2d 86 ae aa ad 28 65
+d6 34 64 4b f6 b9 ac 9c 5a af 35 be 2d 19 00 21
+61 22 5d 5a 2c 29 84 da 05 66 7c 4f d2 de 89 08
+c1 c8 df 90 01 59 4c 1c b6 fe 01 a0 0e 25 9f 70
+1c fb 8e 2b 46 b1 eb 19 5c 06 1b 2f 47 68 a7 ce
+d5 f4 12 81 cb aa 93 21 30 db 52 9c 6f 99 3d 1b
+64 67 27 a2 f7 2f ad db 5c b7 90 0c 08 1a f8 51
+
+encrypt offset=0 iv=near-overflow only-version=v2
+----
+de 67 4c 32 f0 97 b4 f4 b0 cf 86 36 7f 9b 05 bb
+bf b6 8a 5f 7e 70 a4 ce 15 c5 1f 18 53 a5 2c c6
+96 11 3b 8d 2e ba 33 f1 48 f0 67 04 ef cd 36 58
+5c 8b 3d d7 d1 65 09 58 e4 b3 0a 97 ab 9c af 2d
+b4 dd 3d 13 0b 18 63 3d 47 60 04 a1 cf c9 3f 6a
+99 6d 14 71 a1 69 5e 19 f7 f4 44 08 9d c0 d7 01
+f4 d1 60 3e 16 ad 55 43 e5 a6 76 27 38 36 10 78
+95 72 a7 92 cb 7e f6 27 66 b6 8f 2c 52 cb f9 10

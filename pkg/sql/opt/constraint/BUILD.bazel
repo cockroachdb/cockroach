@@ -1,0 +1,58 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "constraint",
+    srcs = [
+        "columns.go",
+        "constraint.go",
+        "constraint_set.go",
+        "key.go",
+        "key_extension.go",
+        "locality.go",
+        "span.go",
+        "spans.go",
+        "testutils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/constraint",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/partition",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "constraint_test",
+    size = "small",
+    srcs = [
+        "columns_test.go",
+        "constraint_set_test.go",
+        "constraint_test.go",
+        "key_test.go",
+        "span_test.go",
+        "spans_test.go",
+    ],
+    embed = [":constraint"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/partition",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+        "//pkg/util/intsets",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,1 @@
+bazel coverage --compilation_mode=fastbuild --@io_bazel_rules_go//go/config:cover_format=lcov --combined_report=lcov --instrumentation_filter="//pkg/kv/kvserver/kvflowcontrol/replica_rac2" --test_verbose_timeout_warnings --test_tmpdir=/tmp --sandbox_debug //pkg/kv/kvserver/kvflowcontrol/replica_rac2:small_tests

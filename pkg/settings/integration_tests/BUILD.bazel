@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "integration_tests_test",
+    srcs = [
+        "main_test.go",
+        "propagation_test.go",
+        "settings_test.go",
+    ],
+    exec_properties = {"test.Pool": "large"},
+    shard_count = 6,
+    deps = [
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings",
+        "//pkg/storage/fs",
+        "//pkg/testutils",
+        "//pkg/testutils/listenerutil",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

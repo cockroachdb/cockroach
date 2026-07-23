@@ -1,0 +1,7 @@
+setup
+CREATE USER foo WITH LOGIN PASSWORD 'bar';
+----
+
+test
+CREATE SCHEMA sc AUTHORIZATION foo;
+----

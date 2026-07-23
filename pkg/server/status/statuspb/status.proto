@@ -1,0 +1,131 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.server.status.statuspb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/server/status/statuspb";
+
+import "roachpb/metadata.proto";
+import "build/info.proto";
+import "gogoproto/gogo.proto";
+
+// StoreStatus records the most recent values of metrics for a store.
+message StoreStatus {
+  // desc is the store descriptor.
+  roachpb.StoreDescriptor desc = 1 [(gogoproto.nullable) = false];
+
+  // metrics contains the last sampled values for the node metrics.
+  map<string, double> metrics = 2;
+}
+
+// NodeStatus records the most recent values of metrics for a node.
+// API: PUBLIC ALPHA
+message NodeStatus {
+  // desc is the node descriptor.
+  roachpb.NodeDescriptor desc = 1 [(gogoproto.nullable) = false];
+
+  // build_info describes the `cockroach` executable file.
+  // API: PUBLIC ALPHA
+  build.Info build_info = 2 [(gogoproto.nullable) = false];
+
+  // started_at is the unix timestamp at which the node process was
+  // last started.
+  // API: PUBLIC ALPHA
+  int64 started_at = 3;
+
+  // updated_at is the unix timestamp at which the node status record
+  // was last updated.
+  // API: PUBLIC ALPHA
+  int64 updated_at = 4;
+
+  // metrics contains the last sampled values for the node metrics.
+  map<string, double> metrics = 5;
+
+  // store_statuses provides the store status payloads for all
+  // the stores on that node.
+  repeated StoreStatus store_statuses = 6 [(gogoproto.nullable) = false];
+
+  // args is the list of command-line arguments used to last start the node.
+  repeated string args = 7;
+
+  // env is the list of environment variables that influenced
+  // the node's configuration.
+  repeated string env = 8;
+
+  // latencies is a map of nodeIDs to nanoseconds which is the latency
+  // between this node and the other node.
+  //
+  // NOTE: this is deprecated and is only set if the min supported
+  //       cluster version is >= VersionRPCNetworkStats.
+  map<int32, int64> latencies = 9 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+
+  message NetworkActivity {
+    reserved 1, 2;
+    int64 latency = 3;  // in nanoseconds
+  }
+  // activity is a map of nodeIDs to network statistics from this node
+  // to other nodes.
+  map<int32, NetworkActivity> activity = 10 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+
+  // total_system_memory is the total RAM available to the system
+  // (or, if detected, the memory available to the cgroup this process is in)
+  // in bytes.
+  // API: PUBLIC ALPHA
+  int64 total_system_memory = 11;
+
+  // num_cpus is the number of logical CPUs as reported by the operating system
+  // on the host where the `cockroach` process is running. This reflects the
+  // physical CPU count and does not account for container/cgroup limits.
+  // See num_vcpus for container-aware CPU allocation.
+  // API: PUBLIC ALPHA
+  int32 num_cpus = 12;
+
+  // num_vcpus is the number of vCPUs allocated to the process by the container
+  // orchestrator (e.g., Kubernetes, Docker) based on cgroup CPU quota/period.
+  // This represents the platform CPU allocation and is independent of GOMAXPROCS
+  // runtime tuning. Falls back to num_cpus if no container limits are configured.
+  // Supports fractional values (e.g., 1.5 for Kubernetes CPU limits like "1500m").
+  // API: PUBLIC ALPHA
+  double num_vcpus = 13;
+}
+
+// A HealthAlert is an undesired condition detected by a server which should be
+// exposed to the operators.
+message HealthAlert {
+  option (gogoproto.goproto_stringer) = false;
+
+  // store_id is zero for alerts not specific to a store (i.e. apply at the node level).
+  int32 store_id = 1 [
+    // NB: trying to make this nullable does not work with the custom type. You need a
+    // pointer type as the custom type, but that breaks protoc-gen-gogoroach.
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID",
+    (gogoproto.customname) = "StoreID"
+  ];
+  enum Category {
+    METRICS = 0;
+    NETWORK = 1;
+  }
+  Category category = 2;
+  // SafeDescription must not contain PII as it will be unredacted in logs.
+  string safe_description = 3 [
+    (gogoproto.customtype) = "github.com/cockroachdb/redact.SafeString",
+    (gogoproto.nullable) = false
+  ];
+  double value = 4;
+}
+
+// HealthCheckResult holds a number of HealthAlerts.
+message HealthCheckResult{
+  option (gogoproto.goproto_stringer) = false;
+
+  repeated HealthAlert alerts = 1 [(gogoproto.nullable) = false];
+}

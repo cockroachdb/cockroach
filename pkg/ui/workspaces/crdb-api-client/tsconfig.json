@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "es2016",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": false
+  }
+}

@@ -1,0 +1,604 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+
+exec-ddl
+CREATE TABLE b (x STRING PRIMARY KEY, z DECIMAL NOT NULL, arr STRING[])
+----
+
+exec-ddl
+CREATE TABLE unusual (x INT PRIMARY KEY, arr INT[])
+----
+
+# Variable
+build
+SELECT a.x FROM a
+----
+project
+ ├── columns: x:1(int!null)
+ └── scan a
+      └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+
+# Const
+build
+SELECT 1 AS a, TRUE AS b, FALSE AS c, NULL AS d
+----
+project
+ ├── columns: a:1(int!null) b:2(bool!null) c:3(bool!null) d:4(unknown)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      ├── 1 [as=a:1, type=int]
+      ├── true [as=b:2, type=bool]
+      ├── false [as=c:3, type=bool]
+      └── NULL [as=d:4, type=unknown]
+
+# Placeholder
+build
+SELECT * FROM a WHERE x = $1
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      ├── scan a
+      │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      └── filters
+           └── x:1 = $1 [type=bool]
+
+# Tuple, Projections
+build
+SELECT (a.x, 1.5) AS r, a.y FROM a
+----
+project
+ ├── columns: r:5(tuple{int, decimal}!null) y:2(int)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ └── projections
+      └── (x:1, 1.5) [as=r:5, type=tuple{int, decimal}]
+
+# And, Or, Not
+build
+SELECT * FROM a WHERE a.x = 1 AND NOT (a.y = 2 OR a.y = 3.5)
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      ├── scan a
+      │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      └── filters
+           └── (x:1 = 1) AND (NOT ((y:2 = 2) OR (y:2 = 3.5))) [type=bool]
+
+# Eq, Ne
+build
+SELECT * FROM a WHERE a.x = 1 AND a.x <> 2
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      ├── scan a
+      │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      └── filters
+           └── (x:1 = 1) AND (x:1 != 2) [type=bool]
+
+# Le, Ge, Lt, Gt
+build
+SELECT * FROM a WHERE a.x >= 1 AND a.x <= 10 AND a.y > 1 AND a.y < 10
+----
+project
+ ├── columns: x:1(int!null) y:2(int!null)
+ └── select
+      ├── columns: x:1(int!null) y:2(int!null) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      ├── scan a
+      │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      └── filters
+           └── (((x:1 >= 1) AND (x:1 <= 10)) AND (y:2 > 1)) AND (y:2 < 10) [type=bool]
+
+# In, NotIn
+build
+SELECT * FROM a WHERE a.x IN (1, 2) AND a.y NOT IN (3, 4)
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      ├── scan a
+      │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      └── filters
+           └── (x:1 IN (1, 2)) AND (y:2 NOT IN (3, 4)) [type=bool]
+
+# Like, NotLike
+build
+SELECT * FROM b WHERE b.x LIKE '%foo%' AND b.x NOT LIKE '%bar%'
+----
+project
+ ├── columns: x:1(string!null) z:2(decimal!null) arr:3(string[])
+ └── select
+      ├── columns: x:1(string!null) z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      ├── scan b
+      │    └── columns: x:1(string!null) z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      └── filters
+           └── (x:1 LIKE '%foo%') AND (x:1 NOT LIKE '%bar%') [type=bool]
+
+# ILike, INotLike
+build
+SELECT * FROM b WHERE b.x ILIKE '%foo%' AND b.x NOT ILIKE '%bar%'
+----
+project
+ ├── columns: x:1(string!null) z:2(decimal!null) arr:3(string[])
+ └── select
+      ├── columns: x:1(string!null) z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      ├── scan b
+      │    └── columns: x:1(string!null) z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      └── filters
+           └── (x:1 ILIKE '%foo%') AND (x:1 NOT ILIKE '%bar%') [type=bool]
+
+# RegMatch, NotRegMatch, RegIMatch, NotRegIMatch
+build
+SELECT * FROM b WHERE b.x ~ 'foo' AND b.x !~ 'bar' AND b.x ~* 'foo' AND b.x !~* 'bar'
+----
+project
+ ├── columns: x:1(string!null) z:2(decimal!null) arr:3(string[])
+ └── select
+      ├── columns: x:1(string!null) z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      ├── scan b
+      │    └── columns: x:1(string!null) z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      └── filters
+           └── (((x:1 ~ 'foo') AND (x:1 !~ 'bar')) AND (x:1 ~* 'foo')) AND (x:1 !~* 'bar') [type=bool]
+
+# Is, IsNot
+build
+SELECT * FROM a WHERE a.x IS DISTINCT FROM a.y AND a.x IS NULL
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      ├── scan a
+      │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      └── filters
+           └── (x:1 IS DISTINCT FROM y:2) AND (x:1 IS NULL) [type=bool]
+
+# Bitand, Bitor, Bitxor
+build
+SELECT a.x & a.y AS r, a.x | a.y AS s, a.x # a.y AS t FROM a
+----
+project
+ ├── columns: r:5(int) s:6(int) t:7(int)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ └── projections
+      ├── x:1 & y:2 [as=r:5, type=int]
+      ├── x:1 | y:2 [as=s:6, type=int]
+      └── x:1 # y:2 [as=t:7, type=int]
+
+# Plus, Minus, Mult, Div, FloorDiv
+build
+SELECT a.x + 1.5 AS r,
+       DATE '2000-01-01' - 15 AS s,
+       10.10 * a.x AS t,
+       1 / a.y AS u,
+       a.x // 1.5 AS v
+  FROM a
+----
+project
+ ├── columns: r:5(decimal!null) s:6(date!null) t:7(decimal!null) u:8(decimal) v:9(decimal!null)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ └── projections
+      ├── x:1 + 1.5 [as=r:5, type=decimal]
+      ├── '2000-01-01' - 15 [as=s:6, type=date]
+      ├── 10.10 * x:1 [as=t:7, type=decimal]
+      ├── 1 / y:2 [as=u:8, type=decimal]
+      └── x:1 // 1.5 [as=v:9, type=decimal]
+
+# Mod, Pow, LShift, RShift
+build
+SELECT 100.1 % a.x AS r,
+       a.x ^ 2.5 AS s,
+       a.x << 3 AS t,
+       a.y >> 2 AS u
+  FROM a
+----
+project
+ ├── columns: r:5(decimal!null) s:6(decimal!null) t:7(int!null) u:8(int)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ └── projections
+      ├── 100.1 % x:1 [as=r:5, type=decimal]
+      ├── x:1 ^ 2.5 [as=s:6, type=decimal]
+      ├── x:1 << 3 [as=t:7, type=int]
+      └── y:2 >> 2 [as=u:8, type=int]
+
+# FetchVal, FetchText, FetchValPath, FetchTextPath
+build
+SELECT '[1, 2]'->1 AS r,
+       '[1, 2]'->>1 AS s,
+       '{"a": 5}'#>ARRAY['a'] AS t,
+       '{"a": 5}'#>>ARRAY['a'] AS u
+  FROM a
+----
+project
+ ├── columns: r:5(jsonb) s:6(string) t:7(jsonb) u:8(string)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ └── projections
+      ├── '[1, 2]'->1 [as=r:5, type=jsonb]
+      ├── '[1, 2]'->>1 [as=s:6, type=string]
+      ├── '{"a": 5}'#>ARRAY['a'] [as=t:7, type=jsonb]
+      └── '{"a": 5}'#>>ARRAY['a'] [as=u:8, type=string]
+
+# Concat
+build
+SELECT b.x || 'more' AS r FROM b
+----
+project
+ ├── columns: r:6(string!null)
+ ├── scan b
+ │    └── columns: x:1(string!null) z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+ └── projections
+      └── x:1 || 'more' [as=r:6, type=string]
+
+# UnaryMinus, UnaryComplement
+build
+SELECT -a.y AS r, ~a.x AS s FROM a
+----
+project
+ ├── columns: r:5(int) s:6(int)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ └── projections
+      ├── -y:2 [as=r:5, type=int]
+      └── ~x:1 [as=s:6, type=int]
+
+# Array Concat
+build
+SELECT arr || arr AS r, arr || NULL AS s, NULL || arr AS t FROM unusual
+----
+project
+ ├── columns: r:5(int[]) s:6(int[]) t:7(int[])
+ ├── scan unusual
+ │    └── columns: x:1(int!null) arr:2(int[]) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ └── projections
+      ├── arr:2 || arr:2 [as=r:5, type=int[]]
+      ├── arr:2 || NULL::INT8[] [as=s:6, type=int[]]
+      └── NULL::INT8[] || arr:2 [as=t:7, type=int[]]
+
+# Array Element Concat
+build
+SELECT x || arr AS r, arr || x AS s, x || NULL::int[] AS t, NULL::int[] || x AS u FROM unusual
+----
+project
+ ├── columns: r:5(int[]) s:6(int[]) t:7(int[]) u:8(int[])
+ ├── scan unusual
+ │    └── columns: x:1(int!null) arr:2(int[]) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+ └── projections
+      ├── x:1 || arr:2 [as=r:5, type=int[]]
+      ├── arr:2 || x:1 [as=s:6, type=int[]]
+      ├── x:1 || NULL::INT8[] [as=t:7, type=int[]]
+      └── NULL::INT8[] || x:1 [as=u:8, type=int[]]
+
+# Function with fixed return type.
+build
+SELECT length('text')
+----
+project
+ ├── columns: length:1(int)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── length('text') [as=length:1, type=int]
+
+# Function with return type dependent on arg types.
+build
+SELECT div(1.0, 2.0)
+----
+project
+ ├── columns: div:1(decimal)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── div(1.0, 2.0) [as=div:1, type=decimal]
+
+# Function with same arguments in multiple overloads.
+build
+SELECT now()
+----
+project
+ ├── columns: now:1(timestamptz)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── now() [as=now:1, type=timestamptz]
+
+# Variadic function.
+build
+SELECT greatest(1, 2, 3, 4)
+----
+project
+ ├── columns: greatest:1(int)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── greatest(1, 2, 3, 4) [as=greatest:1, type=int]
+
+# Aggregate functions.
+build
+SELECT
+    array_agg(z), array_cat_agg(arr), avg(z), bool_and(z=0), bool_or(z=0), concat_agg(x),
+    count(z), count(*), max(x), max(z), sum_int(x::int), sum(z), sqrdiff(z), variance(x::int),
+    stddev(z), xor_agg(x::int), json_agg(x::json), jsonb_agg(x::jsonb)
+FROM b
+----
+scalar-group-by
+ ├── columns: array_agg:6(decimal[]) array_cat_agg:7(string[]) avg:8(decimal) bool_and:10(bool) bool_or:11(bool) concat_agg:12(string) count:13(int!null) count:14(int!null) max:15(string) max:16(decimal) sum_int:18(int) sum:19(decimal) sqrdiff:20(decimal) variance:21(decimal) stddev:22(decimal) xor_agg:23(int) json_agg:25(jsonb) jsonb_agg:26(jsonb)
+ ├── project
+ │    ├── columns: column9:9(bool!null) column17:17(int!null) column24:24(jsonb!null) x:1(string!null) z:2(decimal!null) arr:3(string[])
+ │    ├── scan b
+ │    │    └── columns: x:1(string!null) z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+ │    └── projections
+ │         ├── z:2 = 0 [as=column9:9, type=bool]
+ │         ├── x:1::INT8 [as=column17:17, type=int]
+ │         └── x:1::JSONB [as=column24:24, type=jsonb]
+ └── aggregations
+      ├── array-agg [as=array_agg:6, type=decimal[]]
+      │    └── z:2 [type=decimal]
+      ├── array-cat-agg [as=array_cat_agg:7, type=string[]]
+      │    └── arr:3 [type=string[]]
+      ├── avg [as=avg:8, type=decimal]
+      │    └── z:2 [type=decimal]
+      ├── bool-and [as=bool_and:10, type=bool]
+      │    └── column9:9 [type=bool]
+      ├── bool-or [as=bool_or:11, type=bool]
+      │    └── column9:9 [type=bool]
+      ├── concat-agg [as=concat_agg:12, type=string]
+      │    └── x:1 [type=string]
+      ├── count [as=count:13, type=int]
+      │    └── z:2 [type=decimal]
+      ├── count-rows [as=count_rows:14, type=int]
+      ├── max [as=max:15, type=string]
+      │    └── x:1 [type=string]
+      ├── max [as=max:16, type=decimal]
+      │    └── z:2 [type=decimal]
+      ├── sum-int [as=sum_int:18, type=int]
+      │    └── column17:17 [type=int]
+      ├── sum [as=sum:19, type=decimal]
+      │    └── z:2 [type=decimal]
+      ├── sqr-diff [as=sqrdiff:20, type=decimal]
+      │    └── z:2 [type=decimal]
+      ├── variance [as=variance:21, type=decimal]
+      │    └── column17:17 [type=int]
+      ├── std-dev [as=stddev:22, type=decimal]
+      │    └── z:2 [type=decimal]
+      ├── xor-agg [as=xor_agg:23, type=int]
+      │    └── column17:17 [type=int]
+      ├── json-agg [as=json_agg:25, type=jsonb]
+      │    └── column24:24 [type=jsonb]
+      └── jsonb-agg [as=jsonb_agg:26, type=jsonb]
+           └── column24:24 [type=jsonb]
+
+# ConstAgg internal aggregate function.
+opt
+SELECT * FROM (SELECT x, x::string, y FROM a) WHERE (SELECT max(x) FROM b WHERE y=z::int) > 'foo'
+----
+project
+ ├── columns: x:1(int!null) x:5(string!null) y:2(int!null)
+ ├── select
+ │    ├── columns: a.x:1(int!null) y:2(int!null) max:11(string!null)
+ │    ├── group-by (hash)
+ │    │    ├── columns: a.x:1(int!null) y:2(int!null) max:11(string!null)
+ │    │    ├── grouping columns: a.x:1(int!null)
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:6(string!null) column12:12(int!null)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: a.x:1(int!null) y:2(int)
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: column12:12(int!null) b.x:6(string!null)
+ │    │    │    │    ├── scan b
+ │    │    │    │    │    └── columns: b.x:6(string!null) z:7(decimal!null)
+ │    │    │    │    └── projections
+ │    │    │    │         └── z:7::INT8 [as=column12:12, type=int]
+ │    │    │    └── filters
+ │    │    │         └── y:2 = column12:12 [type=bool]
+ │    │    └── aggregations
+ │    │         ├── max [as=max:11, type=string]
+ │    │         │    └── b.x:6 [type=string]
+ │    │         └── const-agg [as=y:2, type=int]
+ │    │              └── y:2 [type=int]
+ │    └── filters
+ │         └── max:11 > 'foo' [type=bool]
+ └── projections
+      └── a.x:1::STRING [as=x:5, type=string]
+
+# ConstNotNullAgg internal aggregate function.
+opt
+SELECT EXISTS(SELECT * FROM a WHERE expr<0) FROM (SELECT x+1 AS expr FROM a)
+----
+project
+ ├── columns: exists:11(bool!null)
+ ├── group-by (hash)
+ │    ├── columns: x:1(int!null) canary_agg:12(int)
+ │    ├── grouping columns: x:1(int!null)
+ │    ├── left-join (cross)
+ │    │    ├── columns: x:1(int!null) expr:5(int!null) x:6(int)
+ │    │    ├── project
+ │    │    │    ├── columns: expr:5(int!null) x:1(int!null)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: x:1(int!null)
+ │    │    │    └── projections
+ │    │    │         └── x:1 + 1 [as=expr:5, type=int]
+ │    │    ├── scan a
+ │    │    │    └── columns: x:6(int!null)
+ │    │    └── filters
+ │    │         └── expr:5 < 0 [type=bool]
+ │    └── aggregations
+ │         └── const-not-null-agg [as=canary_agg:12, type=int]
+ │              └── x:6 [type=int]
+ └── projections
+      └── canary_agg:12 IS NOT NULL [as=exists:11, type=bool]
+
+# Cast
+build
+SELECT x::VARCHAR(2) FROM b
+----
+project
+ ├── columns: x:6(varchar!null)
+ ├── scan b
+ │    └── columns: b.x:1(string!null) z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+ └── projections
+      └── b.x:1::VARCHAR(2) [as=x:6, type=varchar]
+
+# Cast same type with different precisions.
+# See #42571.
+build
+SELECT z::decimal(10, 3), z::decimal(10, 1), z::decimal(10, 4) FROM b
+----
+project
+ ├── columns: z:6(decimal!null) z:7(decimal!null) z:8(decimal!null)
+ ├── scan b
+ │    └── columns: x:1(string!null) b.z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+ └── projections
+      ├── b.z:2::DECIMAL(10,3) [as=z:6, type=decimal]
+      ├── b.z:2::DECIMAL(10,1) [as=z:7, type=decimal]
+      └── b.z:2::DECIMAL(10,4) [as=z:8, type=decimal]
+
+build
+SELECT ARRAY[1,2] IS NULL
+----
+project
+ ├── columns: "?column?":1(bool!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[1,2] IS NULL [as="?column?":1, type=bool]
+
+# Tests with enum types.
+exec-ddl
+CREATE TYPE color AS ENUM ('red', 'green', 'blue')
+----
+
+exec-ddl
+CREATE TABLE colortab (k INT PRIMARY KEY, c color)
+----
+
+build
+SELECT * FROM colortab WHERE c = 'red'
+----
+project
+ ├── columns: k:1(int!null) c:2(color!null)
+ └── select
+      ├── columns: k:1(int!null) c:2(color!null) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      ├── scan colortab
+      │    └── columns: k:1(int!null) c:2(color) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      └── filters
+           └── c:2 = 'red' [type=bool]
+
+build
+SELECT ARRAY['red', 'green']::color[]
+----
+project
+ ├── columns: array:1(color[]!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY['red','green'] [as=array:1, type=color[]]
+
+norm
+SELECT ARRAY['red', 'green']::color[]
+----
+values
+ ├── columns: array:1(color[]!null)
+ └── (ARRAY['red','green'],) [type=tuple{color[]}]
+
+# Invalid label does not get folded.
+build
+SELECT ARRAY['foo']::color[]
+----
+error (22P02): invalid input value for enum color: "foo"
+
+norm
+SELECT ARRAY['foo']::color[]
+----
+error (22P02): invalid input value for enum color: "foo"
+
+# Regression tests for #68233.
+build
+SELECT (ARRAY[]::color[]) IS NULL
+----
+project
+ ├── columns: "?column?":1(bool!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[] IS NULL [as="?column?":1, type=bool]
+
+norm
+SELECT (ARRAY[]::color[]) IS NULL
+----
+values
+ ├── columns: "?column?":1(bool!null)
+ └── (false,) [type=tuple{bool}]
+
+build
+SELECT (ARRAY[]::color[]) IS NOT NULL
+----
+project
+ ├── columns: "?column?":1(bool!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[] IS NOT NULL [as="?column?":1, type=bool]
+
+norm
+SELECT (ARRAY[]::color[]) IS NOT NULL
+----
+values
+ ├── columns: "?column?":1(bool!null)
+ └── (true,) [type=tuple{bool}]
+
+# This comparison should succeed, no matter if `<` or `>` is used.
+build
+SELECT ARRAY[]::TIMESTAMPTZ[] < ARRAY[NULL];
+----
+project
+ ├── columns: "?column?":1(bool)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[] < ARRAY[NULL] [as="?column?":1, type=bool]
+
+build
+SELECT ARRAY[]::TIMESTAMPTZ[] > ARRAY[NULL];
+----
+project
+ ├── columns: "?column?":1(bool)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[] > ARRAY[NULL] [as="?column?":1, type=bool]
+
+# This comparison should succeed, no matter if `<` or `>` is used.
+build
+SELECT (ARRAY[TIMESTAMPTZ '1969-12-29T21:20:13'], ARRAY[]::TIMESTAMPTZ[]) >
+       (ARRAY[TIMESTAMPTZ '1969-12-29T21:20:13'], ARRAY[NULL]);
+----
+project
+ ├── columns: "?column?":1(bool)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── (ARRAY['1969-12-29T21:20:13'::TIMESTAMPTZ], ARRAY[]) > (ARRAY['1969-12-29T21:20:13'::TIMESTAMPTZ], ARRAY[NULL]) [as="?column?":1, type=bool]
+
+# This comparison should succeed, no matter if `<` or `>` is used.
+build
+SELECT (ARRAY[TIMESTAMPTZ '1969-12-29T21:20:13'], ARRAY[]::TIMESTAMPTZ[]) <
+       (ARRAY[TIMESTAMPTZ '1969-12-29T21:20:13'], ARRAY[NULL]);
+----
+project
+ ├── columns: "?column?":1(bool)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── (ARRAY['1969-12-29T21:20:13'::TIMESTAMPTZ], ARRAY[]) < (ARRAY['1969-12-29T21:20:13'::TIMESTAMPTZ], ARRAY[NULL]) [as="?column?":1, type=bool]

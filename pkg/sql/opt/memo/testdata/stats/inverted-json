@@ -1,0 +1,1220 @@
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  j JSON,
+  INVERTED INDEX j_idx (j)
+)
+----
+
+# Histogram boundaries are for JSON values `[]`, `{}`, `[1]`, `[2]`, `[3]`,
+# `{"a": "b"}`, `{"c": "d"}`, and `{"e": "f"}`. The row_count is lower than the
+# sum of the histogram buckets num_eq's because some rows can have multiple
+# inverted index entries, for example `{"a": "b", "c": "d"}`. There are:
+#
+#   - 2000 rows total
+#   - 10 empty arrays
+#   - 990 arrays encoded into 1110 index entries
+#   - 10 empty objects
+#   - 990 objects encoded into 1110 index entries
+#
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["j"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x37000138"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x37000139"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x37000300012a0200"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 100,
+        "num_range": 0,
+        "upper_bound": "\\x37000300012a0400"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x37000300012a0600"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x3761000112620001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 100,
+        "num_range": 0,
+        "upper_bound": "\\x3763000112640001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x3765000112660001"
+      }
+    ]
+  }
+]'
+----
+
+# Containment of an empty object requires a scan over all object entries.
+opt
+SELECT * FROM t@j_idx WHERE j @> '{}'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb!null)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [{}, {}]
+      │         └── ["", [])
+      ├── stats: [rows=1000]
+      ├── key: (1)
+      └── scan t@j_idx,inverted
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+           ├── inverted constraint: /5/1
+           │    └── spans
+           │         ├── [{}, {}]
+           │         └── ["", [])
+           ├── flags: force-index=j_idx
+           └── stats: [rows=1110, distinct(1)=1000, null(1)=0, distinct(5)=4, null(5)=0]
+               histogram(5)=  0       10       0          990           0          100           0           10
+                            <--- '\x37000139' --- '\x3761000112620001' --- '\x3763000112640001' --- '\x3765000112660001'
+
+# An inverted index scan is preferred for a more selective filter.
+opt
+SELECT * FROM t WHERE j @> '{"c": "d"}'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb!null)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── scan t@j_idx,inverted
+      ├── columns: k:1(int!null)
+      ├── inverted constraint: /5/1
+      │    └── spans: ["c"/"d", "c"/"d"]
+      ├── stats: [rows=100, distinct(5)=1, null(5)=0]
+      │   histogram(5)=  0          100           0           0
+      │                <--- '\x3763000112640001' --- '\x3763000112640002'
+      └── key: (1)
+
+# A query with the fetch val operator results in the same stats as a query with
+# the containment operator.
+opt
+SELECT * FROM t WHERE j->'c' = '"d"'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── scan t@j_idx,inverted
+      ├── columns: k:1(int!null)
+      ├── inverted constraint: /5/1
+      │    └── spans: ["c"/"d", "c"/"d"]
+      ├── stats: [rows=100, distinct(5)=1, null(5)=0]
+      │   histogram(5)=  0          100           0           0
+      │                <--- '\x3763000112640001' --- '\x3763000112640002'
+      └── key: (1)
+
+# A disjunction requires scanning all entries that match either the left or the
+# right.
+opt
+SELECT * FROM t WHERE j @> '{"c": "d"}' OR j @> '{"e": "f"}'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb!null)
+ ├── immutable
+ ├── stats: [rows=666.667, distinct(2)=10, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["c"/"d", "c"/"d"]
+      │         └── ["e"/"f", "e"/"f"]
+      ├── stats: [rows=99.0991]
+      ├── key: (1)
+      └── scan t@j_idx,inverted
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+           ├── inverted constraint: /5/1
+           │    └── spans
+           │         ├── ["c"/"d", "c"/"d"]
+           │         └── ["e"/"f", "e"/"f"]
+           └── stats: [rows=110, distinct(1)=99.0991, null(1)=0, distinct(5)=2, null(5)=0]
+               histogram(5)=  0          100           0           10
+                            <--- '\x3763000112640001' --- '\x3765000112660001'
+
+# Containment of an empty array requires a scan over all array entries.
+opt
+SELECT * FROM t@j_idx WHERE j @> '[]'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb!null)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [[], []]
+      │         └── [Arr/, Arr/]
+      ├── stats: [rows=1000]
+      ├── key: (1)
+      └── scan t@j_idx,inverted
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+           ├── inverted constraint: /5/1
+           │    └── spans
+           │         ├── [[], []]
+           │         └── [Arr/, Arr/]
+           ├── flags: force-index=j_idx
+           └── stats: [rows=1110, distinct(1)=1000, null(1)=0, distinct(5)=4, null(5)=0]
+               histogram(5)=  0       10       0          990           0          100           0           10           0      0
+                            <--- '\x37000138' --- '\x37000300012a0200' --- '\x37000300012a0400' --- '\x37000300012a0600' --- '\x370004'
+
+# An inverted index scan is preferred for a more selective filter.
+opt
+SELECT * FROM t WHERE j @> '[2]'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb!null)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── scan t@j_idx,inverted
+      ├── columns: k:1(int!null)
+      ├── inverted constraint: /5/1
+      │    └── spans: [Arr/2, Arr/2]
+      ├── stats: [rows=100, distinct(5)=1, null(5)=0]
+      │   histogram(5)=  0          100           0           0
+      │                <--- '\x37000300012a0400' --- '\x37000300012a0401'
+      └── key: (1)
+
+# A disjunction requires scanning all entries that match either the left or the
+# right.
+opt
+SELECT * FROM t WHERE j @> '[2]' OR j @> '[3]'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb!null)
+ ├── immutable
+ ├── stats: [rows=666.667, distinct(2)=10, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [Arr/2, Arr/2]
+      │         └── [Arr/3, Arr/3]
+      ├── stats: [rows=99.0991]
+      ├── key: (1)
+      └── scan t@j_idx,inverted
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+           ├── inverted constraint: /5/1
+           │    └── spans
+           │         ├── [Arr/2, Arr/2]
+           │         └── [Arr/3, Arr/3]
+           └── stats: [rows=110, distinct(1)=99.0991, null(1)=0, distinct(5)=2, null(5)=0]
+               histogram(5)=  0          100           0           10           0           0
+                            <--- '\x37000300012a0400' --- '\x37000300012a0600' --- '\x37000300012a0601'
+
+# An inverted index scan is preferred for the containment of an indexed column
+# by an empty array. An additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '[]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t@j_idx,inverted
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: [[], []]
+ │         ├── stats: [rows=10, distinct(5)=1, null(5)=0]
+ │         │   histogram(5)=  0       10       0       0
+ │         │                <--- '\x37000138' --- '\x37000139'
+ │         └── key: (1)
+ └── filters
+      └── j:2 <@ '[]' [type=bool, outer=(2), immutable]
+
+# An inverted index scan is preferred for containment of an indexed column
+# by an empty object. An additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '{}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t@j_idx,inverted
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: [{}, {}]
+ │         ├── stats: [rows=10, distinct(5)=1, null(5)=0]
+ │         │   histogram(5)=  0       10       0       0
+ │         │                <--- '\x37000139' --- '\x3700013a'
+ │         └── key: (1)
+ └── filters
+      └── j:2 <@ '{}' [type=bool, outer=(2), immutable]
+
+# An inverted index scan is preferred for a more selective filter. An
+# additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '{"c": "d"}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=99.0991]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── [{}, {}]
+ │         │         └── ["c"/"d", "c"/"d"]
+ │         ├── stats: [rows=99.0991]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── [{}, {}]
+ │              │         └── ["c"/"d", "c"/"d"]
+ │              └── stats: [rows=110, distinct(1)=99.0991, null(1)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0       10       0          100           0           0
+ │                               <--- '\x37000139' --- '\x3763000112640001' --- '\x3763000112640002'
+ └── filters
+      └── j:2 <@ '{"c": "d"}' [type=bool, outer=(2), immutable]
+
+# A disjunction requires scanning all entries that match either the left or the
+# right. An additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '{"c": "d"}' OR j <@ '{"e": "f"}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=108.108]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── [{}, {}]
+ │         │         ├── ["c"/"d", "c"/"d"]
+ │         │         └── ["e"/"f", "e"/"f"]
+ │         ├── stats: [rows=108.108]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── [{}, {}]
+ │              │         ├── ["c"/"d", "c"/"d"]
+ │              │         └── ["e"/"f", "e"/"f"]
+ │              └── stats: [rows=120, distinct(1)=108.108, null(1)=0, distinct(5)=3, null(5)=0]
+ │                  histogram(5)=  0       10       0          100           0           10
+ │                               <--- '\x37000139' --- '\x3763000112640001' --- '\x3765000112660001'
+ └── filters
+      └── (j:2 <@ '{"c": "d"}') OR (j:2 <@ '{"e": "f"}') [type=bool, outer=(2), immutable]
+
+# A conjunction requires scanning all entries that match both the left and the
+# right. An additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '{"c": "d"}' AND j <@ '{"e": "f"}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=108.108]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: [{}, {}]
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false, unique: false
+ │         │         │    └── union spans: ["c"/"d", "c"/"d"]
+ │         │         └── span expression
+ │         │              ├── tight: false, unique: false
+ │         │              └── union spans: ["e"/"f", "e"/"f"]
+ │         ├── stats: [rows=108.108]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── [{}, {}]
+ │              │         ├── ["c"/"d", "c"/"d"]
+ │              │         └── ["e"/"f", "e"/"f"]
+ │              └── stats: [rows=120, distinct(1)=108.108, null(1)=0, distinct(5)=3, null(5)=0]
+ │                  histogram(5)=  0       10       0          100           0           10
+ │                               <--- '\x37000139' --- '\x3763000112640001' --- '\x3765000112660001'
+ └── filters
+      ├── j:2 <@ '{"c": "d"}' [type=bool, outer=(2), immutable]
+      └── j:2 <@ '{"e": "f"}' [type=bool, outer=(2), immutable]
+
+# An inverted index scan is preferred for a more selective filter. An
+# additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '[2]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=99.0991]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── [2, 2]
+ │         │         ├── [[], []]
+ │         │         └── [Arr/2, Arr/2]
+ │         ├── stats: [rows=99.0991]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── [2, 2]
+ │              │         ├── [[], []]
+ │              │         └── [Arr/2, Arr/2]
+ │              └── stats: [rows=110, distinct(1)=99.0991, null(1)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0       10       0          100           0           0
+ │                               <--- '\x37000138' --- '\x37000300012a0400' --- '\x37000300012a0401'
+ └── filters
+      └── j:2 <@ '[2]' [type=bool, outer=(2), immutable]
+
+# A disjunction requires scanning all entries that match either the left or the
+# right. An additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '[2]' OR j <@ '[3]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=108.108]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── [2, 2]
+ │         │         ├── [3, 3]
+ │         │         ├── [[], []]
+ │         │         ├── [Arr/2, Arr/2]
+ │         │         └── [Arr/3, Arr/3]
+ │         ├── stats: [rows=108.108]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── [2, 2]
+ │              │         ├── [3, 3]
+ │              │         ├── [[], []]
+ │              │         ├── [Arr/2, Arr/2]
+ │              │         └── [Arr/3, Arr/3]
+ │              └── stats: [rows=120, distinct(1)=108.108, null(1)=0, distinct(5)=3, null(5)=0]
+ │                  histogram(5)=  0       10       0          100           0           10           0           0
+ │                               <--- '\x37000138' --- '\x37000300012a0400' --- '\x37000300012a0600' --- '\x37000300012a0601'
+ └── filters
+      └── (j:2 <@ '[2]') OR (j:2 <@ '[3]') [type=bool, outer=(2), immutable]
+
+# A conjunction requires scanning all entries that match both the left and the
+# right. An additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '[2]' AND j <@ '[3]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=108.108]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: [[], []]
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false, unique: false
+ │         │         │    └── union spans
+ │         │         │         ├── [2, 2]
+ │         │         │         └── [Arr/2, Arr/2]
+ │         │         └── span expression
+ │         │              ├── tight: false, unique: false
+ │         │              └── union spans
+ │         │                   ├── [3, 3]
+ │         │                   └── [Arr/3, Arr/3]
+ │         ├── stats: [rows=108.108]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── [2, 2]
+ │              │         ├── [3, 3]
+ │              │         ├── [[], []]
+ │              │         ├── [Arr/2, Arr/2]
+ │              │         └── [Arr/3, Arr/3]
+ │              └── stats: [rows=120, distinct(1)=108.108, null(1)=0, distinct(5)=3, null(5)=0]
+ │                  histogram(5)=  0       10       0          100           0           10           0           0
+ │                               <--- '\x37000138' --- '\x37000300012a0400' --- '\x37000300012a0600' --- '\x37000300012a0601'
+ └── filters
+      ├── j:2 <@ '[2]' [type=bool, outer=(2), immutable]
+      └── j:2 <@ '[3]' [type=bool, outer=(2), immutable]
+
+# Histogram boundaries are for JSON values `true`, `"foo"`, `22`, `[]`, and
+# `{}`.
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "null_count": 0
+  },
+  {
+    "columns": ["j"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 5,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1000,
+        "num_range": 0,
+        "upper_bound": "\\x3700010a"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 100,
+        "num_range": 0,
+        "upper_bound": "\\x37000112666f6f0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 700,
+        "num_range": 0,
+        "upper_bound": "\\x3700012a2c00"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 100,
+        "num_range": 0,
+        "upper_bound": "\\x37000138"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 100,
+        "num_range": 0,
+        "upper_bound": "\\x37000139"
+      }
+    ]
+  }
+]'
+----
+
+# An inverted index scan is preferred for containment of an empty object when
+# most inverted index entries are non-objects.
+opt
+SELECT * FROM t WHERE j @> '{}'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb!null)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [{}, {}]
+      │         └── ["", [])
+      ├── stats: [rows=100]
+      ├── key: (1)
+      └── scan t@j_idx,inverted
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+           ├── inverted constraint: /5/1
+           │    └── spans
+           │         ├── [{}, {}]
+           │         └── ["", [])
+           └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
+               histogram(5)=  0      100
+                            <--- '\x37000139'
+
+# An inverted index scan is preferred for containment of an empty array when
+# most inverted index entries are non-arrays.
+opt
+SELECT * FROM t WHERE j @> '[]'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb!null)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [[], []]
+      │         └── [Arr/, Arr/]
+      ├── stats: [rows=100]
+      ├── key: (1)
+      └── scan t@j_idx,inverted
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+           ├── inverted constraint: /5/1
+           │    └── spans
+           │         ├── [[], []]
+           │         └── [Arr/, Arr/]
+           └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
+               histogram(5)=  0      100       0       0
+                            <--- '\x37000138' --- '\x37000139'
+
+# A query with the fetch val operator with a single key/val pair object on the
+# right side uses the inverted index, and the inverted expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' = '{"b": "c"}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=1]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t@j_idx,inverted
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["a"/"b"/"c", "a"/"b"/"c"]
+ │         ├── stats: [rows=1, distinct(5)=1, null(5)=0]
+ │         │   histogram(5)=
+ │         └── key: (1)
+ └── filters
+      └── (j:2->'a') = '{"b": "c"}' [type=bool, outer=(2), immutable]
+
+# A query with the fetch val operator with a nested object on the right side
+# uses the inverted index, and the inverted expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' = '{"b": {"c": "d"}}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=1]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t@j_idx,inverted
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["a"/"b"/"c"/"d", "a"/"b"/"c"/"d"]
+ │         ├── stats: [rows=1, distinct(5)=1, null(5)=0]
+ │         │   histogram(5)=
+ │         └── key: (1)
+ └── filters
+      └── (j:2->'a') = '{"b": {"c": "d"}}' [type=bool, outer=(2), immutable]
+
+# A query with the fetch val operator with an object on the right side
+# with multiple key/val pairs uses the inverted index, and the inverted
+# expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' = '{"b": "c", "d": "e"}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=1]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t@j_idx,inverted
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["a"/"b"/"c", "a"/"b"/"c"]
+ │         ├── stats: [rows=1, distinct(5)=1, null(5)=0]
+ │         │   histogram(5)=
+ │         └── key: (1)
+ └── filters
+      └── (j:2->'a') = '{"b": "c", "d": "e"}' [type=bool, outer=(2), immutable]
+
+# A query with the fetch val operator with an array on the right side
+# uses the inverted index, and the inverted expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' = '["b", "c", "d", "e"]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=1]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t@j_idx,inverted
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["a"/Arr/"b", "a"/Arr/"b"]
+ │         ├── stats: [rows=1, distinct(5)=1, null(5)=0]
+ │         │   histogram(5)=
+ │         └── key: (1)
+ └── filters
+      └── (j:2->'a') = '["b", "c", "d", "e"]' [type=bool, outer=(2), immutable]
+
+# A query with the fetch val operator with an object on the right side
+# that contains an array uses the inverted index, and the inverted expression
+# is not tight.
+opt
+SELECT * FROM t WHERE j->'a' = '{"b": ["c", "d", "e"]}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=1]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t@j_idx,inverted
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
+ │         ├── stats: [rows=1, distinct(5)=1, null(5)=0]
+ │         │   histogram(5)=
+ │         └── key: (1)
+ └── filters
+      └── (j:2->'a') = '{"b": ["c", "d", "e"]}' [type=bool, outer=(2), immutable]
+
+# A query with the fetch val operator with empty array on the right side
+# uses the inverted index, and the inverted expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' = '[]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=1]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["a"/[], "a"/[]]
+ │         │         └── ["a"/Arr/, "a"/Arr/]
+ │         ├── stats: [rows=1]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── ["a"/[], "a"/[]]
+ │              │         └── ["a"/Arr/, "a"/Arr/]
+ │              └── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0]
+ │                  histogram(5)=
+ └── filters
+      └── (j:2->'a') = '[]' [type=bool, outer=(2), immutable]
+
+# A query with the fetch val operator with an empty object on the right side
+# uses the inverted index, and the inverted expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' = '{}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=1]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["a"/{}, "a"/{}]
+ │         │         └── ["a"/, Arr/)
+ │         ├── stats: [rows=1]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── ["a"/{}, "a"/{}]
+ │              │         └── ["a"/, Arr/)
+ │              └── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0]
+ │                  histogram(5)=
+ └── filters
+      └── (j:2->'a') = '{}' [type=bool, outer=(2), immutable]
+
+# A query with fetch val and contains operators uses the inverted index.
+opt
+SELECT * FROM t WHERE j->'a' @> '1'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["a"/1, "a"/1]
+      │         └── ["a"/Arr/1, "a"/Arr/1]
+      ├── stats: [rows=1]
+      ├── key: (1)
+      └── scan t@j_idx,inverted
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+           ├── inverted constraint: /5/1
+           │    └── spans
+           │         ├── ["a"/1, "a"/1]
+           │         └── ["a"/Arr/1, "a"/Arr/1]
+           └── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0]
+               histogram(5)=
+
+# A query with fetch val and contained by operators uses the inverted index,
+# and the expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' <@ '1'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=100]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── [{}, {}]
+ │         │         └── ["a"/1, "a"/1]
+ │         ├── stats: [rows=100]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── [{}, {}]
+ │              │         └── ["a"/1, "a"/1]
+ │              └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
+ │                  histogram(5)=  0      100
+ │                               <--- '\x37000139'
+ └── filters
+      └── (j:2->'a') <@ '1' [type=bool, outer=(2), immutable]
+
+# A query with chained fetch val and contains operators uses the inverted index.
+opt
+SELECT * FROM t WHERE j->'a'->'b' @> '"c"'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
+      │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
+      ├── stats: [rows=1]
+      ├── key: (1)
+      └── scan t@j_idx,inverted
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+           ├── inverted constraint: /5/1
+           │    └── spans
+           │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
+           │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
+           └── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0]
+               histogram(5)=
+
+# A query with chained fetch val and contained by operators uses the inverted
+# index, and the expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a'->'b' <@ '"c"'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=100]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── [{}, {}]
+ │         │         ├── ["a"/{}, "a"/{}]
+ │         │         └── ["a"/"b"/"c", "a"/"b"/"c"]
+ │         ├── stats: [rows=100]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── [{}, {}]
+ │              │         ├── ["a"/{}, "a"/{}]
+ │              │         └── ["a"/"b"/"c", "a"/"b"/"c"]
+ │              └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
+ │                  histogram(5)=  0      100
+ │                               <--- '\x37000139'
+ └── filters
+      └── ((j:2->'a')->'b') <@ '"c"' [type=bool, outer=(2), immutable]
+
+# A query with fetch val and contains operators uses the inverted index when an
+# object is on the right side.
+opt
+SELECT * FROM t WHERE j->'a' @> '{"b": "c"}'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── scan t@j_idx,inverted
+      ├── columns: k:1(int!null)
+      ├── inverted constraint: /5/1
+      │    └── spans: ["a"/"b"/"c", "a"/"b"/"c"]
+      ├── stats: [rows=1, distinct(5)=1, null(5)=0]
+      │   histogram(5)=
+      └── key: (1)
+
+# A query with fetch val and contained by operators uses the inverted index
+# when an object is on the right side, and the expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' <@ '{"b": "c"}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=100]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── [{}, {}]
+ │         │         ├── ["a"/{}, "a"/{}]
+ │         │         └── ["a"/"b"/"c", "a"/"b"/"c"]
+ │         ├── stats: [rows=100]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── [{}, {}]
+ │              │         ├── ["a"/{}, "a"/{}]
+ │              │         └── ["a"/"b"/"c", "a"/"b"/"c"]
+ │              └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
+ │                  histogram(5)=  0      100
+ │                               <--- '\x37000139'
+ └── filters
+      └── (j:2->'a') <@ '{"b": "c"}' [type=bool, outer=(2), immutable]
+
+# A query with fetch val and contains operators uses the inverted index when an
+# array is on the right side, and the expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' @> '[1, 2]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=24.6914]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=1]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t@j_idx,inverted
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["a"/Arr/1, "a"/Arr/1]
+ │         ├── stats: [rows=1, distinct(5)=1, null(5)=0]
+ │         │   histogram(5)=
+ │         └── key: (1)
+ └── filters
+      └── (j:2->'a') @> '[1, 2]' [type=bool, outer=(2), immutable]
+
+# A query with fetch val and contained by operators uses the inverted index
+# when an array is on the right side, and the expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' <@ '[1, 2]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=100]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── [{}, {}]
+ │         │         ├── ["a"/1, "a"/1]
+ │         │         ├── ["a"/2, "a"/2]
+ │         │         ├── ["a"/[], "a"/[]]
+ │         │         ├── ["a"/Arr/1, "a"/Arr/1]
+ │         │         └── ["a"/Arr/2, "a"/Arr/2]
+ │         ├── stats: [rows=100]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── [{}, {}]
+ │              │         ├── ["a"/1, "a"/1]
+ │              │         ├── ["a"/2, "a"/2]
+ │              │         ├── ["a"/[], "a"/[]]
+ │              │         ├── ["a"/Arr/1, "a"/Arr/1]
+ │              │         └── ["a"/Arr/2, "a"/Arr/2]
+ │              └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
+ │                  histogram(5)=  0      100
+ │                               <--- '\x37000139'
+ └── filters
+      └── (j:2->'a') <@ '[1, 2]' [type=bool, outer=(2), immutable]
+
+# A query with fetch val and contained by operators uses the inverted index
+# when the fetch val is on the right side.
+opt
+SELECT * FROM t WHERE  '"c"' <@ j->'a'->'b'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
+      │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
+      ├── stats: [rows=1]
+      ├── key: (1)
+      └── scan t@j_idx,inverted
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+           ├── inverted constraint: /5/1
+           │    └── spans
+           │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
+           │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
+           └── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0]
+               histogram(5)=
+
+# A query with fetch val and contains operators uses the inverted index when
+# the fetch val is on the right side.
+opt
+SELECT * FROM t WHERE  '[1, 2]' @> j->'a'->'b'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=100]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── [{}, {}]
+ │         │         ├── ["a"/{}, "a"/{}]
+ │         │         ├── ["a"/"b"/1, "a"/"b"/1]
+ │         │         ├── ["a"/"b"/2, "a"/"b"/2]
+ │         │         ├── ["a"/"b"/[], "a"/"b"/[]]
+ │         │         ├── ["a"/"b"/Arr/1, "a"/"b"/Arr/1]
+ │         │         └── ["a"/"b"/Arr/2, "a"/"b"/Arr/2]
+ │         ├── stats: [rows=100]
+ │         ├── key: (1)
+ │         └── scan t@j_idx,inverted
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── [{}, {}]
+ │              │         ├── ["a"/{}, "a"/{}]
+ │              │         ├── ["a"/"b"/1, "a"/"b"/1]
+ │              │         ├── ["a"/"b"/2, "a"/"b"/2]
+ │              │         ├── ["a"/"b"/[], "a"/"b"/[]]
+ │              │         ├── ["a"/"b"/Arr/1, "a"/"b"/Arr/1]
+ │              │         └── ["a"/"b"/Arr/2, "a"/"b"/Arr/2]
+ │              └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
+ │                  histogram(5)=  0      100
+ │                               <--- '\x37000139'
+ └── filters
+      └── '[1, 2]' @> ((j:2->'a')->'b') [type=bool, outer=(2), immutable]

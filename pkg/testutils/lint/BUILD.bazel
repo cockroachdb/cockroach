@@ -1,0 +1,60 @@
+exports_files(["testdata/errcheck_excludes.txt"])
+
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+# gazelle:build_tags lint
+# gazelle:build_tags nightly
+
+go_library(
+    name = "lint",
+    srcs = ["lint.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "lint_test",
+    size = "enormous",
+    # keep
+    srcs = [
+        "gen-lint_test.go",
+        "nightly_lint_test.go",
+    ],
+    data = glob(["testdata/**"]) + [
+        "//.github:CODEOWNERS",
+        "//build/bazelutil:nogo_config.json",
+        "//pkg/sql/opt/optgen/cmd/optfmt",
+        "@co_honnef_go_tools//cmd/staticcheck",
+        "@com_github_cockroachdb_crlfmt//:crlfmt",
+    ],
+    embed = [":lint"],
+    embedsrcs = ["gcassert_paths.txt"],
+    tags = [
+        "integration",
+        "no-remote-exec",
+    ],
+    visibility = ["//build/bazelutil:__subpackages__"],
+    deps = [
+        "//pkg/build",
+        "//pkg/build/bazel",
+        "//pkg/cmd/urlcheck/lib/urlcheck",
+        "//pkg/internal/codeowners",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/builtins",
+        "//pkg/testutils/skip",
+        "//pkg/util/envutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_ghemawat_stream//:stream",
+        "@com_github_jordanlewis_gcassert//:gcassert",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_tools//go/packages",
+    ],
+)
+
+genrule(
+    name = "gen-lint-test",
+    srcs = ["lint_test.go"],
+    outs = ["gen-lint_test.go"],
+    cmd = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@",
+)

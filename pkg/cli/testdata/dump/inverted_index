@@ -1,0 +1,46 @@
+sql
+CREATE DATABASE d;
+CREATE TABLE d.t (
+	a JSON,
+	b JSON,
+	c INT[],
+	d INT[],
+	e geography(geometry),
+	f geometry(point, 4326),
+
+	INVERTED INDEX idx (a),
+	INVERTED INDEX idx3 (c),
+	INVERTED INDEX idx5 (e)
+);
+
+CREATE INVERTED INDEX idx2 ON d.t (b);
+CREATE INVERTED INDEX idx4 ON d.t (d);
+CREATE INVERTED INDEX idx6 ON d.t (f);
+
+INSERT INTO d.t VALUES ('{"a": "b"}', '{"c": "d"}', ARRAY[1], ARRAY[2], 'POINT(1.0 1.0)', 'SRID=4326;POINT(1.0 1.0)');
+----
+INSERT 1
+
+dump d t
+----
+----
+CREATE TABLE public.t (
+	a JSONB NULL,
+	b JSONB NULL,
+	c INT8[] NULL,
+	d INT8[] NULL,
+	e GEOGRAPHY(GEOMETRY) NULL,
+	f GEOMETRY(POINT,4326) NULL,
+	INVERTED INDEX idx (a),
+	INVERTED INDEX idx3 (c),
+	INVERTED INDEX idx5 (e),
+	INVERTED INDEX idx2 (b),
+	INVERTED INDEX idx4 (d),
+	INVERTED INDEX idx6 (f),
+	FAMILY "primary" (a, b, c, d, e, f, rowid)
+);
+
+INSERT INTO public.t (a, b, c, d, e, f) VALUES
+	('{"a": "b"}', '{"c": "d"}', ARRAY[1], ARRAY[2], '0101000020E6100000000000000000F03F000000000000F03F', '0101000020E6100000000000000000F03F000000000000F03F');
+----
+----

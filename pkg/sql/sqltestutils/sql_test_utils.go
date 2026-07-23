@@ -1,0 +1,176 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+// Package sqltestutils provides helper methods for testing sql packages.
+package sqltestutils
+
+import (
+	"context"
+	gosql "database/sql"
+	"fmt"
+	"net/url"
+	"strings"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v4"
+	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
+)
+
+// AddImmediateGCZoneConfig set the GC TTL to 0 for the given table ID. One must
+// make sure to disable strict GC TTL enforcement when using this.
+func AddImmediateGCZoneConfig(sqlDB *gosql.DB, id descpb.ID) (zonepb.ZoneConfig, error) {
+	return UpdateGCZoneConfig(sqlDB, id, 0)
+}
+
+// UpdateGCZoneConfig sets the GC TTL to a custom value for the given table ID.
+// If setting the value to 0, one must make sure to disable strict GC TTL
+// enforcement when using this.
+func UpdateGCZoneConfig(
+	sqlDB *gosql.DB, id descpb.ID, ttlSeconds int32,
+) (zonepb.ZoneConfig, error) {
+	cfg := zonepb.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = ttlSeconds
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		return cfg, err
+	}
+	_, err = sqlDB.Exec(`UPSERT INTO system.zones VALUES ($1, $2)`, id, buf)
+	return cfg, err
+}
+
+// DisableGCTTLStrictEnforcement sets the cluster setting to disable strict
+// GC TTL enforcement.
+func DisableGCTTLStrictEnforcement(t *testing.T, db *gosql.DB) (cleanup func()) {
+	_, err := db.Exec(`SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false`)
+	require.NoError(t, err)
+	return func() {
+		_, err := db.Exec(`SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = DEFAULT`)
+		require.NoError(t, err)
+	}
+}
+
+// SetShortRangeFeedIntervals is a helper to set the cluster settings
+// pertaining to rangefeeds to short durations. This is helps tests which
+// rely on zone/span configuration changes to propagate.
+func SetShortRangeFeedIntervals(t *testing.T, srv serverutils.TestServerInterface) {
+	systemDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	short := "'20ms'"
+	if util.RaceEnabled {
+		short = "'200ms'"
+	}
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = `+short)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = `+short)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = `+short)
+}
+
+// AddDefaultZoneConfig adds an entry for the given id into system.zones.
+func AddDefaultZoneConfig(sqlDB *gosql.DB, id descpb.ID) (zonepb.ZoneConfig, error) {
+	cfg := zonepb.DefaultZoneConfig()
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		return cfg, err
+	}
+	_, err = sqlDB.Exec(`UPSERT INTO system.zones VALUES ($1, $2)`, id, buf)
+	return cfg, err
+}
+
+// BulkInsertIntoTable fills up table t.test with (maxValue + 1) rows.
+func BulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
+	inserts := make([]string, maxValue+1)
+	for i := 0; i < maxValue+1; i++ {
+		inserts[i] = fmt.Sprintf(`(%d, %d)`, i, maxValue-i)
+	}
+	_, err := sqlDB.Exec(`INSERT INTO t.test (k, v) VALUES ` + strings.Join(inserts, ","))
+	return err
+}
+
+// GetTableKeyCount returns the number of keys in t.test.
+func GetTableKeyCount(ctx context.Context, kvDB *kv.DB, codec keys.SQLCodec) (int, error) {
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "test")
+	tablePrefix := codec.TablePrefix(uint32(tableDesc.GetID()))
+	tableEnd := tablePrefix.PrefixEnd()
+	kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0)
+	return len(kvs), err
+}
+
+// CheckTableKeyCountExact returns whether the number of keys in t.test
+// equals exactly e.
+func CheckTableKeyCountExact(ctx context.Context, kvDB *kv.DB, codec keys.SQLCodec, e int) error {
+	if count, err := GetTableKeyCount(ctx, kvDB, codec); err != nil {
+		return err
+	} else if count != e {
+		return errors.Newf("expected %d key value pairs, but got %d", e, count)
+	}
+	return nil
+}
+
+// CheckTableKeyCount returns the number of KVs in the DB, the multiple
+// should be the number of columns.
+func CheckTableKeyCount(
+	ctx context.Context, kvDB *kv.DB, codec keys.SQLCodec, multiple int, maxValue int,
+) error {
+	return CheckTableKeyCountExact(ctx, kvDB, codec, multiple*(maxValue+1))
+}
+
+// IsClientSideQueryCanceledErr returns whether err is a client-side
+// QueryCanceled error.
+func IsClientSideQueryCanceledErr(err error) bool {
+	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+		return pgcode.MakeCode(string(pqErr.Code)) == pgcode.QueryCanceled
+	}
+	return pgerror.GetPGCode(err) == pgcode.QueryCanceled
+}
+
+// ArrayStringToSlice converts a string array column to a string slice.
+// "{}" -> {}
+// "{a}" -> {"a"}
+// "{a,b}" -> {"a", "b"}
+func ArrayStringToSlice(t *testing.T, array string, message ...string) []string {
+	length := len(array)
+	require.GreaterOrEqual(t, length, 2, message)
+	require.Equal(t, "{", string(array[0]), message)
+	require.Equal(t, "}", string(array[length-1]), message)
+	if length == 2 {
+		return []string{}
+	}
+	return strings.Split(array[1:length-1], ",")
+}
+
+// PGXConn is a helper to create a pgx.Conn from a url.
+func PGXConn(t *testing.T, connURL url.URL) (*pgx.Conn, error) {
+	t.Helper()
+	pgxConfig, err := pgx.ParseConfig(connURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pgx.ConnectConfig(context.Background(), pgxConfig)
+}
+
+// TestingDescsTxn is a convenience function for running a transaction on
+// descriptors when you have a serverutils.ApplicationLayerInterface.
+func TestingDescsTxn(
+	ctx context.Context,
+	s serverutils.ApplicationLayerInterface,
+	f func(ctx context.Context, txn isql.Txn, col *descs.Collection) error,
+) error {
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	return sql.DescsTxn(ctx, &execCfg, f)
+}

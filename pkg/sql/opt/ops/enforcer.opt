@@ -1,0 +1,39 @@
+# enforcer.opt contains Optgen language definitions for "enforcer" operators
+# that ensure result sets provide requested physical properties like row sort
+# order and column naming. These operators are added by the optimizer on an
+# as-needed basis, in order to wrap input expressions that do not naturally
+# provide the desired properties.
+#
+# Tags
+#
+# Enforcer - All operators in this file are marked with the Enforcer tag, so
+#            they can be easily distinguished from Scalar and Relational
+#            operators.
+
+# Sort enforces the ordering of rows returned by its input expression. Rows can
+# be sorted by one or more of the input columns, each of which can be sorted in
+# either ascending or descending order. See the Ordering field in the
+# PhysicalProps struct.
+[Enforcer, Telemetry]
+define Sort {
+    # InputOrdering specifies the ordering that the sort requires
+    # from its input. It allows the optimizer and DistSQL to plan
+    # the sort using the segmented/chunk sort strategy.
+    #
+    # For a regular sort, this is empty. If it is not empty, this
+    # is a segmented sort where the input is already sorted on the
+    # specified prefix of columns.
+    InputOrdering OrderingChoice
+}
+
+# Distribute enforces the physical distribution of rows returned by its input
+# expression. Currently, it is only used to re-distribute data across different
+# sets of regions in a multi-region cluster. For example, if rows are spread
+# across multiple regions, a Distribute enforcer can be used to route the rows
+# to the gateway region. See the Distribution field in the PhysicalProps struct.
+# TODO(rytaft): We should probably include the input distribution here so we can
+# accurately cost the Distribute operator. This will likely require calculating
+# "interesting distributions", similar to "interesting orderings".
+[Enforcer, Telemetry]
+define Distribute {
+}

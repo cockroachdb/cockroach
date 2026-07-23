@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "bitarray",
+    srcs = ["bitarray.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/bitarray",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "bitarray_test",
+    size = "small",
+    srcs = ["bitarray_test.go"],
+    embed = [":bitarray"],
+    deps = ["//pkg/util/randutil"],
+)

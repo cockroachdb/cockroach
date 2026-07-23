@@ -1,0 +1,255 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y FLOAT)
+----
+
+exec-ddl
+CREATE TABLE b (x INT, y FLOAT)
+----
+
+build
+SELECT 5 r
+----
+project
+ ├── columns: r:1!null
+ ├── values
+ │    └── ()
+ └── projections
+      └── 5 [as=r:1]
+
+build
+SELECT a.x FROM a
+----
+project
+ ├── columns: x:1!null
+ └── scan a
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT a.x, a.y FROM a
+----
+project
+ ├── columns: x:1!null y:2
+ └── scan a
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT a.y, a.x FROM a
+----
+project
+ ├── columns: y:2 x:1!null
+ └── scan a
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT * FROM a
+----
+project
+ ├── columns: x:1!null y:2
+ └── scan a
+      └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+# Note that an explicit projection operator is added for table b (unlike for
+# table a) to avoid projecting the hidden rowid column.
+build
+SELECT * FROM b
+----
+project
+ ├── columns: x:1 y:2
+ └── scan b
+      └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT (a.x + 3) AS "X", false AS "Y" FROM a
+----
+project
+ ├── columns: X:5!null Y:6!null
+ ├── scan a
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      ├── x:1 + 3 [as=X:5]
+      └── false [as=Y:6]
+
+build
+SELECT *, ((x < y) OR x > 1000) AS r FROM a
+----
+project
+ ├── columns: x:1!null y:2 r:5
+ ├── scan a
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── (x:1 < y:2) OR (x:1 > 1000) [as=r:5]
+
+build
+SELECT a.*, true FROM a
+----
+project
+ ├── columns: x:1!null y:2 bool:5!null
+ ├── scan a
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── true [as=bool:5]
+
+build
+SELECT u + 1 AS r, v + 1 AS s FROM (SELECT a.x + 3 AS t, a.y + 1.0 AS u FROM a) AS foo(u, v)
+----
+project
+ ├── columns: r:7!null s:8
+ ├── project
+ │    ├── columns: t:5!null u:6
+ │    ├── scan a
+ │    │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    └── projections
+ │         ├── x:1 + 3 [as=t:5]
+ │         └── y:2 + 1.0 [as=u:6]
+ └── projections
+      ├── t:5 + 1 [as=r:7]
+      └── u:6 + 1.0 [as=s:8]
+
+build
+SELECT rowid FROM b;
+----
+project
+ ├── columns: rowid:3!null
+ └── scan b
+      └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT rowid FROM (SELECT * FROM b)
+----
+error (42703): column "rowid" does not exist
+
+build
+SELECT rowid FROM (SELECT rowid FROM b)
+----
+project
+ ├── columns: rowid:3!null
+ └── scan b
+      └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT q.r FROM (SELECT rowid FROM b) AS q(r)
+----
+project
+ ├── columns: r:3!null
+ └── scan b
+      └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT r FROM (SELECT rowid FROM b) AS q(r)
+----
+project
+ ├── columns: r:3!null
+ └── scan b
+      └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+
+exec-ddl
+CREATE TABLE c (x INT, y FLOAT)
+----
+
+build
+SELECT rowid FROM b, c
+----
+error (42702): column reference "rowid" is ambiguous (candidates: b.rowid, c.rowid)
+
+build
+SELECT x, y, rowid FROM c WHERE rowid > 0
+----
+project
+ ├── columns: x:1 y:2 rowid:3!null
+ └── select
+      ├── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan c
+      │    └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── rowid:3 > 0
+
+build
+SELECT r FROM (SELECT x, y, rowid AS r FROM c)
+----
+project
+ ├── columns: r:3!null
+ └── project
+      ├── columns: x:1 y:2 rowid:3!null
+      └── scan c
+           └── columns: x:1 y:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT rowid::string FROM b
+----
+project
+ ├── columns: rowid:6!null
+ ├── scan b
+ │    └── columns: x:1 y:2 b.rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── projections
+      └── b.rowid:3::STRING [as=rowid:6]
+
+build
+SELECT (x, y)::timestamp FROM b
+----
+error (42846): invalid cast: tuple{int, float} -> timestamp
+
+build
+SELECT CAST(x AS int[]) FROM b
+----
+error (42846): invalid cast: int -> int[]
+
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+----
+
+build
+SELECT c FROM (SELECT a FROM abc)
+----
+error (42703): column "c" does not exist
+
+build
+SELECT c FROM (SELECT a FROM abc ORDER BY c)
+----
+error (42703): column "c" does not exist
+
+build
+SELECT c FROM (SELECT a, b FROM abc ORDER BY c)
+----
+error (42703): column "c" does not exist
+
+build fully-qualify-names
+SELECT t.kv.k FROM abc AS kv
+----
+error (42P01): no data source matches prefix: t.kv in this context
+
+exec-ddl
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+----
+
+build fully-qualify-names
+SELECT t.kv.k FROM kv
+----
+project
+ ├── columns: k:1!null
+ └── scan t.public.kv
+      └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.crdb_internal_mvcc_timestamp:3 t.public.kv.tableoid:4
+
+# Check that tuple type includes labels.
+build
+SELECT x FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
+----
+project
+ ├── columns: x:5
+ ├── scan kv
+ │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── ((v:2, v:2, v:2) AS a, b, c) [as=x:5]
+
+# Regression test for #48179. Star expansion of un-labeled tuple must project
+# all columns from the tuple.
+build
+SELECT (b).* FROM (VALUES (((1, 2)))) as a(b)
+----
+project
+ ├── columns: "?column?":2 "?column?":3
+ ├── values
+ │    ├── columns: column1:1
+ │    └── ((1, 2),)
+ └── projections
+      ├── (column1:1).@1 [as="?column?":2]
+      └── (column1:1).@2 [as="?column?":3]

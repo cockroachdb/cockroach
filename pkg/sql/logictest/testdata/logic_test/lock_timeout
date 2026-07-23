@@ -1,0 +1,185 @@
+# Create a table, write a row, lock it, then switch users.
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+statement ok
+GRANT ALL ON t TO testuser
+
+statement ok
+INSERT INTO t VALUES (1, 1)
+
+statement ok
+BEGIN; UPDATE t SET v = 2 WHERE k = 1
+
+user testuser
+
+# Set a lock timeout and begin issuing queries. Those that conflict with
+# the locked row should be rejected.
+statement ok
+SET lock_timeout = '1ms'
+
+skipif config weak-iso-level-configs
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+SELECT * FROM t
+
+# Under READ COMMITTED and REPEATABLE READ, non-locking reads don't block on
+# writes.
+onlyif config weak-iso-level-configs
+statement ok
+SELECT * FROM t
+
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+SELECT * FROM t FOR UPDATE
+
+statement error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
+SELECT * FROM t FOR UPDATE NOWAIT
+
+skipif config weak-iso-level-configs
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+SELECT * FROM t WHERE k = 1
+
+# Under READ COMMITTED and REPEATABLE READ, non-locking reads don't block on
+# writes.
+onlyif config weak-iso-level-configs
+statement ok
+SELECT * FROM t WHERE k = 1
+
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+SELECT * FROM t WHERE k = 1 FOR UPDATE
+
+statement error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
+SELECT * FROM t WHERE k = 1 FOR UPDATE NOWAIT
+
+statement ok
+SELECT * FROM t WHERE k = 2
+
+statement ok
+SELECT * FROM t WHERE k = 2 FOR UPDATE
+
+statement ok
+SELECT * FROM t WHERE k = 2 FOR UPDATE NOWAIT
+
+skipif config weak-iso-level-configs
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+SELECT * FROM t WHERE v = 9
+
+# Under READ COMMITTED and REPEATABLE READ, non-locking reads don't block on
+# writes.
+onlyif config weak-iso-level-configs
+statement ok
+SELECT * FROM t WHERE v = 9
+
+skipif config weak-iso-level-configs
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+SELECT * FROM t WHERE v = 9 FOR UPDATE
+
+# Under READ COMMITTED and REPEATABLE READ, non-locking reads don't block on
+# writes.
+onlyif config weak-iso-level-configs
+statement ok
+SELECT * FROM t WHERE v = 9
+
+skipif config weak-iso-level-configs
+statement error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
+SELECT * FROM t WHERE v = 9 FOR UPDATE NOWAIT
+
+# Under READ COMMITTED and REPEATABLE READ, non-locking reads don't block on
+# writes.
+onlyif config weak-iso-level-configs
+statement ok
+SELECT * FROM t WHERE v = 9 FOR UPDATE NOWAIT
+
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+INSERT INTO t VALUES (1, 3)
+
+statement ok
+INSERT INTO t VALUES (2, 3)
+
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+UPSERT INTO t VALUES (1, 3)
+
+statement ok
+UPSERT INTO t VALUES (2, 3)
+
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+UPDATE t SET v = 4
+
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+UPDATE t SET v = 4 WHERE k = 1
+
+statement ok
+UPDATE t SET v = 4 WHERE k = 2
+
+skipif config weak-iso-level-configs
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+UPDATE t SET v = 4 WHERE v = 9
+
+onlyif config weak-iso-level-configs
+statement ok
+UPDATE t SET v = 4 WHERE v = 9
+
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+DELETE FROM t
+
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+DELETE FROM t WHERE k = 1
+
+statement count 1
+DELETE FROM t WHERE k = 2
+
+skipif config weak-iso-level-configs
+statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
+DELETE FROM t WHERE v = 9
+
+onlyif config weak-iso-level-configs
+statement count 0
+DELETE FROM t WHERE v = 9
+
+# Verify that lock_timeout is honored by insert fast path FK checks. The insert
+# fast path performs FK existence checks in a separate KV batch that previously
+# did not propagate lock_timeout from the session, causing indefinite blocking.
+
+user root
+
+statement ok
+COMMIT
+
+statement ok
+CREATE TABLE parent_lt (p INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE child_lt (c INT PRIMARY KEY, p INT REFERENCES parent_lt (p))
+
+statement ok
+GRANT ALL ON TABLE parent_lt TO testuser
+
+statement ok
+GRANT ALL ON TABLE child_lt TO testuser
+
+statement ok
+INSERT INTO parent_lt VALUES (1)
+
+statement ok
+BEGIN; UPDATE parent_lt SET p = 1 WHERE p = 1
+
+user testuser
+
+statement ok
+SET lock_timeout = '1ms';
+SET enable_implicit_fk_locking_for_serializable = on;
+SET enable_shared_locking_for_serializable = on;
+SET enable_durable_locking_for_serializable = on
+
+statement error conflicting locks.*reason=lock_timeout
+INSERT INTO child_lt VALUES (1, 1)
+
+statement ok
+RESET lock_timeout;
+RESET enable_implicit_fk_locking_for_serializable;
+RESET enable_shared_locking_for_serializable;
+RESET enable_durable_locking_for_serializable
+
+user root
+
+statement ok
+ROLLBACK

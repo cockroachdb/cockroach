@@ -1,0 +1,141 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.ctupdate;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb";
+
+import "util/hlc/timestamp.proto";
+
+import "gogoproto/gogo.proto";
+
+// RangeClosedTimestampPolicy defines a range's closed timestamp policy. All
+// ranges in a cluster are placed in a closed timestamp policy bucket, which is
+// decided by the leaseholder replica of the range. The side transport sender
+// periodically transmits closed timestamp updates for ranges it's responsible
+// for, closing timestamps on a per-bucket basis.
+//
+// NB: The policy is only used inside kvserver, and shouldn't leak to the
+// client. See roachpb.ClosedTimestampPolicy and toClientClosedTsPolicy for the
+// client side equivalent.
+//
+// Closed timestamp policies on the server can be dynamically adjusted based on
+// observed network latencies between the leaseholder and its farthest follower.
+// Each range is bucketed based on observed network latencies, and buckets may
+// change as network latencies change, or the range's SpanConfig changes.
+enum RangeClosedTimestampPolicy {
+  option (gogoproto.goproto_enum_prefix) = false;
+  // LAG_BY_CLUSTER_SETTING indicates that the range's closed timestamp is
+  // configured to lag behind present time by the value configured for the
+  // `kv.closed_timestamp.target_duration` cluster setting.
+  LAG_BY_CLUSTER_SETTING = 0;
+  // The following policies correspond to roachpb.LEAD_FOR_GLOBAL_READS policy.
+  // LEAD_FOR_GLOBAL_READS indicates that the range's closed timestamp is
+  // configured to lead present time such that all followers of the range are
+  // able to serve consistent, present time reads.
+  //
+  // Lead policy for global reads with no locality information. It uses a
+  // hardcoded network latency 150ms by default.
+  LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO = 1;
+  // Lead policy for ranges with global reads policy. The following policies are
+  // selected based on max leaseholder-to-follower latency.
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS = 2;  // [0,20)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS = 3;  // [20,40)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS = 4;  // [40,60)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_80MS = 5;  // [60,80)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_100MS = 6;  // [80,100)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS = 7;  // [100,120)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_140MS = 8;  // [120,140)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_160MS = 9;  // [140,160)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_180MS = 10; // [160,180)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_200MS = 11; // [180,200)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_220MS = 12; // [200,220)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_240MS = 13; // [220,240)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_260MS = 14; // [240,260)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_280MS = 15; // [260,280)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS = 16; // [280,300)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS = 17; // >=300ms
+  // Sentinel value for slice sizing.
+  MAX_CLOSED_TIMESTAMP_POLICY = 18;
+}
+
+// Update contains information about (the advancement of) closed timestamps for
+// ranges with leases on the sender node. Updates are of two types: snapshots
+// and incrementals. Snapshots are stand-alone messages, explicitly containing
+// state about a bunch of ranges. Incrementals are deltas since the previous
+// message (the previous message can be a snapshot or another incremental); they
+// contain info about which new ranges are included in the info provided, which
+// ranges are removed, and how the closed timestamps for different categories of
+// ranges advanced. Ranges communicated by a previous message and not touched by
+// an incremental are "implicitly" referenced by the incremental. In order to
+// properly handle incrementals, the recipient maintains a "stream's state": the
+// group of ranges that can be implicitly referenced by the next message.
+message Update {
+  option (gogoproto.goproto_stringer) = false;
+  // node_id identifies the sending node.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+  // seq_num identifies this update across all updates produced by a node. The
+  // sequence is reset when the node restarts, so a recipient can only count on
+  // it increasing within a single PushUpdates stream.
+  //
+  // All messages have sequence numbers, including snapshots. A snapshot can be
+  // applied on top of any state (i.e. it can be applied after having skipped
+  // messages); its sequence number tells the recipient what incremental message
+  // it should expect afterwards.
+  int64 seq_num = 2 [(gogoproto.casttype) = "SeqNum"];
+
+  // snapshot indicates whether this message is standalone, or whether it's just
+  // a delta since the messages with the previous seq_num. A snapshot
+  // re-initializes all of the recipient's state. The first message on a stream
+  // is always a snapshot. Afterwards, there could be others if the sender is
+  // temporarily slowed down or if the stream experience network problems and
+  // some incremental messages are dropped  (although generally we expect that
+  // to result in a stream failing and a new one being established).
+  bool snapshot = 3;
+
+  // closed_timestamps represents the timestamps that are being closed for each
+  // group of ranges, with a group being represented by its policy.
+  //
+  // The recipient is supposed to forward the closed timestamps of the affected
+  // ranges to these values. Upon receiving one of these updates, the recipient
+  // should generally not assume that it hasn't been informed of a higher closed
+  // timestamp for any range in particular - races between this side-transport
+  // and the regular Raft transport are possible, as are races between two
+  // side-transport streams for an outgoing and incoming leaseholder.
+  message GroupUpdate {
+    RangeClosedTimestampPolicy policy = 1;
+    util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
+  }
+  repeated GroupUpdate closed_timestamps = 4 [(gogoproto.nullable) = false];
+
+  // removed contains the set of ranges that are no longer tracked on this
+  // stream. The closed timestamps in this message and future messages no longer
+  // apply to these removed ranges.
+  //
+  // The field will be empty if snapshot is true, as a snapshot message implies
+  // that all ranges not present in the snapshot's added_or_updated list are no
+  // longer tracked.
+  repeated int32 removed = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+
+  // added_or_updated contains the set of ranges that are either being added to
+  // the tracked ranges set with a given (lai, policy) or updated within the
+  // tracked range set with a new (lai, policy). All future updates on the
+  // stream are applicable to these ranges until they are removed, either
+  // explicitly by being included in a future removed set or implicitly by not
+  // being included in the added_or_updated field of a future snapshot.
+  message RangeUpdate {
+    uint64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+    uint64 lai = 2 [(gogoproto.customname) = "LAI", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
+    RangeClosedTimestampPolicy policy = 3;
+  }
+  repeated RangeUpdate added_or_updated = 6 [(gogoproto.nullable) = false];
+}
+
+message Response {}
+
+service SideTransport {
+  rpc PushUpdates(stream Update) returns (stream Response) { }
+}

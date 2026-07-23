@@ -1,0 +1,258 @@
+parse
+DECLARE
+BEGIN
+johnny := NULL;
+gyro = 7 + 7;
+END
+----
+DECLARE
+BEGIN
+johnny := NULL;
+gyro := 7 + 7;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+johnny := (NULL);
+gyro := ((7) + (7));
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+johnny := _;
+gyro := _ + _;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+_ := NULL;
+_ := 7 + 7;
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+BEGIN
+a := NULL;
+END
+----
+DECLARE
+BEGIN
+a := NULL;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+a := (NULL);
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+a := _;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+_ := NULL;
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+  "%_2jd9$f foo" integer := 30;
+BEGIN
+  "%_2jd9$f foo" := 100;
+END
+----
+DECLARE
+"%_2jd9$f foo" INT8 := 30;
+BEGIN
+"%_2jd9$f foo" := 100;
+END;
+ -- normalized!
+DECLARE
+"%_2jd9$f foo" INT8 := (30);
+BEGIN
+"%_2jd9$f foo" := (100);
+END;
+ -- fully parenthesized
+DECLARE
+"%_2jd9$f foo" INT8 := _;
+BEGIN
+"%_2jd9$f foo" := _;
+END;
+ -- literals removed
+DECLARE
+_ INT8 := 30;
+BEGIN
+_ := 100;
+END;
+ -- identifiers removed
+
+# We support assignment with indirection.
+parse
+BEGIN
+  a.b := 100;
+END
+----
+BEGIN
+a.b := 100;
+END;
+ -- normalized!
+BEGIN
+a.b := (100);
+END;
+ -- fully parenthesized
+BEGIN
+a.b := _;
+END;
+ -- literals removed
+BEGIN
+_._ := 100;
+END;
+ -- identifiers removed
+
+# We do not currently support more than one indirection.
+error
+BEGIN
+  a.b.c := 100;
+END
+----
+at or near ".": syntax error
+DETAIL: source SQL:
+BEGIN
+  a.b.c := 100;
+     ^
+
+error
+DECLARE
+BEGIN
+  a :=;
+END
+----
+at or near ":": syntax error: missing expression
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  a :=;
+    ^
+
+error
+DECLARE
+BEGIN
+johnny := (NULL;
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+DETAIL: source SQL:
+DECLARE
+BEGIN
+johnny := (NULL;
+END
+   ^
+
+error
+DECLARE
+BEGIN
+johnny := NULL);
+END
+----
+at or near "null": syntax error: mismatched parentheses
+DETAIL: source SQL:
+DECLARE
+BEGIN
+johnny := NULL);
+          ^
+
+error
+DECLARE
+BEGIN
+johnny := (1 + (2);
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+DETAIL: source SQL:
+DECLARE
+BEGIN
+johnny := (1 + (2);
+END
+   ^
+
+error
+DECLARE
+BEGIN
+  a := 1, 'string';
+END
+----
+at or near ";": syntax error: query returned 2 columns
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  a := 1, 'string';
+                  ^
+
+error
+DECLARE
+BEGIN
+  a := 1, (2, 3, 4, 5);
+END
+----
+at or near ";": syntax error: query returned 2 columns
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  a := 1, (2, 3, 4, 5);
+                      ^
+
+error
+DECLARE
+BEGIN
+  a := 1, (2, 3, 4, 5), 'abcd', true, ((1));
+END
+----
+at or near ";": syntax error: query returned 5 columns
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  a := 1, (2, 3, 4, 5), 'abcd', true, ((1));
+                                           ^
+
+feature-count
+DECLARE
+BEGIN
+johnny := NULL;
+gyro = 7 + 7;
+END
+----
+stmt_assign: 2
+stmt_block: 1
+
+pretty
+DECLARE
+BEGIN
+johnny := NULL;
+gyro = 7 + 7;
+END
+----
+DECLARE
+BEGIN
+	johnny := NULL;
+	gyro := 7 + 7;
+END;
+
+pretty
+DECLARE
+BEGIN
+result := some_function(first_argument, second_argument, third_argument) + another_function(fourth_argument, fifth_argument);
+END
+----
+DECLARE
+BEGIN
+	result :=
+		some_function(
+			first_argument,
+			second_argument,
+			third_argument
+		)
+		+ another_function(fourth_argument, fifth_argument);
+END;

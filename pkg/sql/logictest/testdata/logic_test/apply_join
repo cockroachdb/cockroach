@@ -1,0 +1,807 @@
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, str STRING);
+CREATE TABLE u (l INT PRIMARY KEY, str2 STRING);
+CREATE TABLE v (m INT PRIMARY KEY, str3 STRING);
+INSERT INTO t SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i);
+INSERT INTO u SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i);
+INSERT INTO v SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i);
+
+statement ok
+SET allow_prepare_as_opt_plan = ON
+
+# InnerJoinApply tests.
+
+statement ok
+PREPARE a AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Var "k") (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2")
+  (NoOrdering)
+)'
+
+query ITIT rowsort
+EXECUTE a
+----
+1  one    1  one
+2  two    2  two
+3  three  3  three
+4  four   4  four
+5  five   5  five
+
+# A test case when the right side produces no columns.
+statement ok
+PREPARE right_no_cols AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "") ])
+      [ (Eq (Var "k") (Const 2 "int") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+query IT nosort
+EXECUTE right_no_cols
+----
+2  two
+2  two
+2  two
+2  two
+2  two
+
+# LeftJoinApply tests.
+
+statement ok
+PREPARE b AS OPT PLAN '
+(Root
+  (LeftJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Plus (Var "k") (Const 1 "int")) (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2")
+  (NoOrdering)
+)'
+
+query ITIT rowsort
+EXECUTE b
+----
+1  one      2  two
+2  two      3  three
+3  three    4  four
+4  four     5  five
+5  five     NULL NULL
+
+# SemiJoinApply tests.
+
+statement ok
+PREPARE c AS OPT PLAN '
+(Root
+  (SemiJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Plus (Var "k") (Const 1 "int")) (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+query IT rowsort
+EXECUTE c
+----
+1  one
+2  two
+3  three
+4  four
+
+# AntiJoinApply tests.
+
+statement ok
+PREPARE d AS OPT PLAN '
+(Root
+  (AntiJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Plus (Var "k") (Const 1 "int")) (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+query IT rowsort
+EXECUTE d
+----
+5  five
+
+# Nested Apply, with outer columns of the outer apply on the left and right of
+# the inner apply.
+
+statement ok
+PREPARE e AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (InnerJoinApply
+      (Select
+        (Scan [(Table "u") (Cols "l,str2") ])
+        [ (Eq (Var "k") (Var "l") )]
+      )
+      (Select
+        (Scan [(Table "v") (Cols "m,str3") ])
+        [ (Eq (Var "k") (Var "m") )]
+      )
+      [ (Eq (Var "k") (Var "l")) ]
+      []
+    )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2,m,str3")
+  (NoOrdering)
+)'
+
+query ITITIT rowsort
+EXECUTE e
+----
+1  one    1  one    1  one
+2  two    2  two    2  two
+3  three  3  three  3  three
+4  four   4  four   4  four
+5  five   5  five   5  five
+
+# Test subqueries within an apply join.
+
+statement ok
+PREPARE f AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Plus (Var "k")
+                  (Subquery (Values [(Tuple [(Const 1 "int")] "tuple{int}") ]
+                                    [(Cols [(NewColumn "z" "int")] )])
+                            []))
+            (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2")
+  (NoOrdering)
+)'
+
+query ITIT rowsort
+EXECUTE f
+----
+1  one    2  two
+2  two    3  three
+3  three  4  four
+4  four   5  five
+
+# Another test of subqueries within an apply join.
+
+query I rowsort
+SELECT
+	(SELECT * FROM (VALUES ((SELECT x FROM (VALUES (1)) AS s (x)) + y)))
+FROM
+	(VALUES (1), (2), (3)) AS t (y)
+----
+2
+3
+4
+
+
+# Regression test for #36197: 0-col applyjoin RHS doesn't panic
+
+statement ok
+CREATE TABLE table9 (
+    _bool BOOL,
+    _bytes BYTES,
+    _date DATE,
+    _decimal DECIMAL,
+    _float4 FLOAT4,
+    _float8 FLOAT8,
+    _inet INET,
+    _int4 INT4,
+    _int8 INT8,
+    _interval INTERVAL,
+    _jsonb JSONB,
+    _string STRING,
+    _time TIME,
+    _timestamp TIMESTAMP,
+    _timestamptz TIMESTAMPTZ,
+    _uuid UUID
+); INSERT INTO table9 DEFAULT VALUES;
+
+query B
+SELECT
+  true
+FROM
+    table9 AS tab_27927
+WHERE
+    EXISTS(
+        SELECT
+            tab_27929._string AS col_85223
+        FROM
+            table9 AS tab_27928,
+            table9 AS tab_27929,
+            table9 AS tab_27930
+            RIGHT JOIN table9 AS tab_27931
+            ON
+                NOT
+                    (
+                        tab_27927._float8
+                        IN (
+                                CASE
+                                WHEN NULL
+                                THEN div(
+                                    tab_27927._float4::FLOAT8,
+                                    tab_27927._float4::FLOAT8
+                                )::FLOAT8
+                                ELSE tab_27927._float4
+                                END,
+                                tab_27927._float4,
+                                tab_27927._float8::FLOAT8
+                                + NULL::FLOAT8,
+                                tab_27927._float4
+                            )
+                    )
+        WHERE
+            EXISTS(
+                SELECT
+                    2470039497:::OID AS col_85224
+                FROM
+                    table9 AS tab_27932
+                ORDER BY
+                    tab_27932._string ASC,
+                    tab_27932._interval DESC,
+                    tab_27932._uuid DESC
+                LIMIT
+                    37:::INT8
+            )
+        LIMIT
+            11:::INT8
+    )
+LIMIT
+    89:::INT8;
+----
+true
+
+# Regression test for #37454: untyped null produced at top level.
+
+statement ok
+CREATE TABLE x (a INT8); CREATE TABLE y (b INT8); INSERT INTO x VALUES (1); INSERT INTO y VALUES (2);
+
+query II
+SELECT a, (SELECT a FROM y) FROM x
+----
+1  1
+
+# Regression test for #40589.
+statement ok
+CREATE TABLE IF NOT EXISTS t40589 AS
+	SELECT
+		'2001-01-01'::TIMESTAMPTZ + g * '1 day',
+		g * '1 day'::INTERVAL AS _interval,
+		g % 0 = 0 AS _bool,
+		g AS _decimal,
+		g,
+		g AS _bytes,
+		substring(NULL, NULL, NULL)::UUID AS _uuid,
+		'0.0.0.0'::INET + g AS _inet,
+		g AS _jsonb
+	FROM
+		generate_series(NULL, NULL) AS g;
+
+query T
+SELECT
+	(
+		SELECT
+			NULL
+		FROM
+			t40589,
+			t40589 AS t0,
+			t40589 AS t1
+			INNER JOIN t40589 AS t2 ON true
+			JOIN t40589 AS t3
+				RIGHT JOIN t40589 AS t4
+					LEFT JOIN t40589 AS t5 ON
+							t._bool ON false ON
+					t1._uuid = t3._uuid
+			JOIN t40589 AS t6
+				JOIN t40589 AS t7
+					LEFT JOIN t40589 AS t8 ON true
+					JOIN t40589 AS t9
+						JOIN t40589 AS t10 ON true ON
+							true ON true ON true
+		WHERE
+			7.835752314020045477E+27
+			NOT IN (SELECT t6._decimal::DECIMAL)
+			AND true
+	)
+FROM
+	t40589 AS t, t40589;
+----
+
+# Test that the "inner" plan of an apply join can refer to a top-level WITH clause.
+
+statement ok
+CREATE TABLE IF NOT EXISTS cpk (
+  key VARCHAR(255) NOT NULL,
+  value INTEGER NOT NULL,
+  extra INTEGER NOT NULL,
+  PRIMARY KEY (key, value)
+)
+
+statement ok
+INSERT INTO cpk VALUES ('k1', 1, 1), ('k2', 2, 2), ('k3', 3, 3)
+
+# Inner join with correlated values prevents decorrelation. This ensures the
+# final plan contains a correlated InnerJoin operator with a reference to the
+# With clause.
+statement ok
+WITH target_values (k, v) AS (
+  VALUES ('k1', 1), ('k3', 3))
+UPDATE cpk SET extra = (
+    SELECT y+10
+    FROM target_values
+    INNER JOIN (VALUES (cpk.value)) v(y)
+    ON TRUE
+    WHERE k='k1'
+)
+WHERE ((cpk.key, cpk.value) IN (SELECT target_values.k, target_values.v FROM target_values))
+
+query TII rowsort
+SELECT * FROM cpk
+----
+k1  1  11
+k2  2  2
+k3  3  13
+
+# Regression test for #65040. Rows fetched for the right side of the apply join
+# were not cleared for successive rows on the left, causing a panic.
+
+statement ok
+CREATE TABLE t65040 (a INT, b TIMESTAMP);
+INSERT INTO t65040 VALUES (1, '2001-01-01');
+INSERT INTO t65040 VALUES (2, '2002-02-02');
+
+statement ok
+SELECT NULL
+FROM t65040 AS t1
+WHERE t1.b IN (
+  SELECT t2.b
+  FROM t65040,
+    (VALUES (t1.a)) AS v (a)
+      JOIN t65040 AS t2 ON v.a = t2.a
+)
+
+# Regression tests for not handling the subqueries in the "inner" plans
+# correctly (#39433).
+query I rowsort
+SELECT
+  (
+    SELECT
+      tab_4.col_4
+    FROM
+      (VALUES (1)) AS tab_1 (col_1)
+      JOIN (
+          VALUES
+            (
+              (
+                SELECT
+                  1
+                FROM
+                  (SELECT 1)
+                WHERE
+                  EXISTS(SELECT 1)
+              )
+            )
+        )
+          AS tab_6 (col_6) ON (tab_1.col_1) = (tab_6.col_6)
+  )
+FROM
+  (VALUES (NULL)) AS tab_4 (col_4),
+  (VALUES (NULL), (NULL)) AS tab_5 (col_5);
+----
+NULL
+NULL
+
+statement ok
+CREATE TABLE t39433 AS SELECT true AS _bool;
+
+query I
+SELECT
+  (
+    SELECT
+      NULL
+    FROM
+      t39433
+      LEFT JOIN t39433 AS tab_57077
+        RIGHT JOIN t39433 AS tab_57078 FULL JOIN t39433 AS tab_57079 ON true ON tab_57069._bool
+        CROSS JOIN t39433 AS tab_57080
+        INNER JOIN t39433 AS tab_57081 ON true ON
+          EXISTS(SELECT NULL FROM t39433 AS tab_57082 LEFT JOIN t39433 ON EXISTS(SELECT NULL FROM t39433))
+  )
+FROM
+  t39433 AS tab_57069;
+----
+NULL
+
+# Regression test for mixing subqueries in "inner" and "outer" contexts
+# (#66923).
+query error more than one row returned by a subquery used as an expression
+VALUES
+  (
+    (
+      SELECT
+        (
+          SELECT
+            NULL
+          FROM
+            (VALUES (tab_54747.col_95055)) AS tab_54752 (col_95061)
+          WHERE
+            (SELECT random()::INT) < tab_54752.col_95061
+        )
+      FROM
+        (VALUES (0:::OID), (3790322641:::OID)) AS tab_54747 (col_95055)
+    )
+  );
+
+# Regression tests for not closing the apply join's plan when the physical
+# planning for the main query in that plan fails (#82705, #83368).
+query error pq: could not parse \"\\\\E\" as type time
+SELECT
+  '1 day':::INTERVAL AS col_218767,
+  (
+    SELECT
+      jsonb_object_agg(
+        '{"baz": null, "foo": [[1.4294938406328335], {"baz": [[]]}, {"UkCCPdz_,`": true, "wT7Dq }": {"R\"3w": 0.11797676668867385}}], "vSedin$fKu\"D": {}}':::JSONB::STRING,
+        tab_130100.col_218774
+      )::JSONB
+        AS col_218775
+    FROM
+      (
+        VALUES
+          (parse_time(e'\\E':::STRING::STRING)::TIME),
+          (
+            CASE
+            WHEN (SELECT tab_130097.col_218770 AS col_218771 FROM (VALUES (NULL)) AS tab_130097 (col_218770) LIMIT 1:::INT8) THEN '13:42:12.743575':::TIME
+            ELSE '19:49:43.000308':::TIME
+            END
+          ),
+          ('14:36:56.737547':::TIME)
+      )
+        AS tab_130098 (col_218772)
+      JOIN (VALUES ('14:54:42.42701':::TIME)) AS tab_130099 (col_218773) ON (tab_130098.col_218772) = (tab_130099.col_218773)
+      FULL JOIN (VALUES (tab_130094.col_218765)) AS tab_130100 (col_218774) ON NULL
+    GROUP BY
+      tab_130098.col_218772, tab_130100.col_218774
+    LIMIT
+      1:::INT8
+  )
+    AS col_218776
+FROM
+  (
+    VALUES
+      (
+        '21 years 10 mons 899 days 17:53:39.838878':::INTERVAL,
+        (
+          SELECT
+            '{";z>gyrXH`$": {}, "X,!6@?[,H": null, "b": "\"7i?^K[JB>o", "foobar": "b"}':::JSONB AS col_218764
+          FROM
+            (VALUES (0:::INT8)) AS tab_130093 (col_218763)
+          LIMIT
+            1:::INT8
+        )
+      ),
+      ('-60 years -6 mons -921 days -13:36:39.76583':::INTERVAL, '[{"OD}_yC": {}, "bar": {"Zkm3=(b~": {}, "a": {}}}, null, [], {}, [], [], []]':::JSONB)
+  )
+    AS tab_130094 (col_218765, col_218766);
+
+query error pq: error parsing EWKB: wkb: unknown byte order: 11000000
+WITH
+  with_111870 (col_664924) AS (SELECT * FROM (VALUES (true)) AS tab_397795 (col_664924))
+SELECT
+  cte_ref_33032.col_664924 AS col_664951
+FROM
+  with_111870 AS cte_ref_33032
+WHERE
+  EXISTS(
+    SELECT
+      1 AS col_664950
+    FROM
+      (VALUES (NULL)) AS tab_397798 (col_664927)
+      JOIN (
+          VALUES
+            (
+              (
+                SELECT
+                  '0106000000080000000103000000010000000D000000F0505233A40CC9C11BB743615DDA01C2B88C1EFC973CE64166D33387A326FCC1AC21BE6137A8E7413BCC9C277AE3FBC1B48612908643E841DC9FDD40096DFDC1308D25E7556AE541C915C046D055F4C138B48164A87BF7414AEAE615FBCFF2C196A8DC43211F02421C0F170232E8EB4192294D0B1832F84130479BA27F0FF2411893A0BCE16BE1412066858D449DE04160672B715310CAC1849FFD3CD44CFD41CFC2ADCED035F5C18C7E25996257FB418B246ED77421F4C1D09F0FAA75D3D4C1F0505233A40CC9C11BB743615DDA01C20103000000010000000600000058468ACCBC64F8418786AC4B6294FCC1080375F090CAEF41F08A5E26CF9DD441BA8573D036C5F7414C86B6AFF353FB411C22C528802BE94164C2DBD3DB41FC41583B00514C79F0C1FE97F4B9D5B0F24158468ACCBC64F8418786AC4B6294FCC1010300000001000000070000006E657E9AF457FCC1621834F5D0ECFBC1C09A82DB0FF3A04102C5AF7FC470FCC1E8C86B17FB80FF41826A06E89AE2EEC102483755C6220242D026966E856BF74198B2A8B04BE0EF4108575F84B214FB410CEBE7176F0A01C2ACC9D3FCB23FF5416E657E9AF457FCC1621834F5D0ECFBC10103000000010000000700000005349AF6354B01C2F6FA430E22CCF9C168FE825E929602C2AF949EEAE3DA01C2ABA76CF17C1FF0C1CC8327CAA112FFC140817828CF20CFC160D5A39864E1DE417400B38D4B11F7C10EA5063A797AEBC1D69DB7923410F8C12C17009A5D1CE04105349AF6354B01C2F6FA430E22CCF9C101030000000100000008000000080745DE1832F341A4E452B9669BFAC1D0AAD87FEB24F241D8D3D9BDEFF1D94192AE3AE18C2700420265B06EDD33F041C89C281D0B2AE34118D587512EF3F9418038B4E65C9AC84138169B40A643EB417A1107E45270E4C1DC71F1EA3AC3F141C1AC97127529F2C14492972AAEC8F241080745DE1832F341A4E452B9669BFAC101030000000100000009000000675BC4C8FA9A00C240AFB3C37BB0B3C1BB07A39C2042F3C162AD6982C839EFC10ED9AF069F64E4C1FDF6D190F2AFF2C1D890039C94E6FF41DC85CD27FD7E00C2EEB2ABDFA4130242EA64F205DDB10142ECA5416845C1D5C130E460FD4C5BEC414C142C48A32DF6C10E424B732C530042C4EC62A5FF47E7C1C00FB9F4D691BF41675BC4C8FA9A00C240AFB3C37BB0B3C10103000000010000000B000000E0E65A62275FF3C1C04DD36847F0D7C14422412E8665FBC135032AE342CAF5C130CE2639FFB5E8415A87A92BF019E4C1B836C82B63FFF44100D66C891B5CD4C11A8144AFA273F541F8BE8E570F2CD3416CC0750B58DCE74100BD28C324C3DD417CBAB9E9FCD8FB410CBF47ADD13E004260B7BF4E0D61EE41E8125410DFDDF44125E767329DEFF2C1C8872D12881EE541D9C93E2A020102C23C505A59DC79E041E0E65A62275FF3C1C04DD36847F0D7C1010300000001000000050000008C59CC2680C3E341946C8F4E5C43DFC1B079180A387902424A8ABA12AB59EAC1A85532A10C64E6412C8C5B2BFF64024230B89A7910E2E1C1FE4D023E917CF3418C59CC2680C3E341946C8F4E5C43DFC1':::GEOMETRY
+                    AS col_664939
+                FROM
+                  (VALUES (NULL)) AS tab_397805 (col_664938)
+              )
+            ),
+            (st_mpointfromwkb(e'\\xc00a3213a312d8b9e4':::BYTES::BYTES, ('107.115.23.162/21':::INET::INET - '243.32.48.41/8':::INET::INET)::INT8::INT8)::GEOMETRY)
+        )
+          AS tab_397806 (col_664940) ON cte_ref_33032.col_664924
+      JOIN (
+          VALUES
+            (
+              '01030000400100000006000000604DBD5DDC12EE41E7F92AFA7236F5C1C806EE05E20FF8C1AE0EC58E089AF041037B428FCC74F4C1105BADD850C1FC41407E0CD5F406FC416C6E81576649F5C1A88849CFCCB2E7413DF8A105E4DBF9C1C05FB16532DADCC15BB2F12004BA00C2E0F5EDCFFDD8F5C114735FD70C27E2C188A7663531A5E0C1604DBD5DDC12EE41E7F92AFA7236F5C1C806EE05E20FF8C1':::GEOMETRY
+            ),
+            (
+              st_translate(
+                '010700000000000000':::GEOMETRY::GEOMETRY,
+                atan2d(cosh((-1.7130878673648953):::FLOAT8::FLOAT8)::FLOAT8::FLOAT8, (-0.004513979274377716):::FLOAT8::FLOAT8)::FLOAT8::FLOAT8,
+                0.4371603268852574:::FLOAT8::FLOAT8,
+                (-0.29366208391016146):::FLOAT8::FLOAT8
+              )::GEOMETRY
+            )
+        )
+          AS tab_397811 (col_664945) ON (tab_397806.col_664940) = (tab_397811.col_664945)
+      JOIN (
+          VALUES
+            (
+              '0105000080030000000102000080020000005815AB9CA02EFD418A62B4D90D47FA411C81B0625EEDEA41B4A3F2F01CDEFAC1B28DADD0E1DF01421828B463FE52D6C101020000800300000090BA7156E31FCBC138ED53761B8EEB41B69D1E893034F341C887135538B9D0C11C215672AA65E941CC5E7459EE4FF7C1CE07DAA9DCD0ECC134C355C3C207ED4178A281C13FECD3410102000080030000001A4894B4A2AAEEC1BE1C45840D15FEC170113FBD1CB0E3414E7477CF58ADF841FA9631702A7BF7C1C06DD44EA605B1C154FAF1F87849FC41147370821DCCEA41942E895E2E45EAC1':::GEOMETRY,
+              ARRAY[2834432470:::OID, 1285215016:::OID, 2816797228:::OID]
+            )
+        )
+          AS tab_397813 (col_664948, col_664949) ON (tab_397806.col_664940) = (tab_397813.col_664948)
+  );
+
+subtest regression_87733
+
+statement ok
+CREATE TABLE t87733a (a INT);
+CREATE TABLE t87733b (b INT);
+INSERT INTO t87733a VALUES (1)
+
+# Regression test for #87733. Do not panic when planning the RHS of an
+# apply-join that refers to a With expression transitively through another With
+# expression.
+query T
+WITH
+  t1 AS (SELECT a FROM t87733a),
+  t2 AS MATERIALIZED (SELECT a, b FROM t1 JOIN t87733b ON true)
+SELECT NULL
+FROM t1
+LEFT JOIN LATERAL (
+  WITH t3 AS (SELECT * FROM t2 WHERE t2.a = t1.a)
+  SELECT array_agg(CASE WHEN v = '' THEN b END)
+  FROM (
+    SELECT '' AS v, b FROM t3 ORDER BY b DESC
+  )
+) ON true;
+----
+NULL
+
+subtest regression_89601
+
+statement ok
+CREATE TABLE t89601 (i INT4);
+INSERT INTO t89601 VALUES (0)
+
+# Regression test for #89601. All with bindings should be added to the new
+# metadata when planning the RHS of an apply-join.
+statement ok
+SELECT NULL
+FROM t89601 t1, t89601 t2
+WHERE EXISTS(
+  SELECT NULL
+  FROM t89601 t3, t89601 t4
+  WHERE t3.i IN (
+     WITH w AS (SELECT NULL)
+     SELECT t4.i::INT8 FROM w
+  )
+)
+
+# Regression test for incorrectly using the RootTxn in apply join iterations
+# when the main query is using the LeafTxn (#97989).
+statement ok
+CREATE TABLE t1 (said, smid) AS VALUES (1, 1);
+CREATE TABLE t2 (aid, said, mid, pid) AS VALUES (1, 1, 1, 1);
+CREATE TABLE t3 (mid, smid) AS VALUES (1, 1);
+CREATE TABLE t4 (pid PRIMARY KEY) AS VALUES (1);
+CREATE TABLE t5 (said, smid) AS VALUES (1, 1);
+
+statement ok
+CREATE MATERIALIZED VIEW v1 AS
+    WITH
+        cte1
+            AS (
+                SELECT
+                    aid, t4.pid
+                FROM
+                    t1
+                    INNER JOIN t2 ON t2.said = t1.said AND t2.mid = (SELECT mid FROM t3 WHERE smid = t1.smid)
+                    INNER JOIN t4 ON t4.pid = t2.pid
+                    INNER JOIN t3 ON t3.smid = t1.smid
+            ),
+        cte2
+            AS (
+                SELECT
+                    aid, t4.pid
+                FROM
+                    t5
+                    INNER JOIN t2 ON t2.said = t5.said AND t2.mid = (SELECT mid FROM t3 WHERE smid = t5.smid)
+                    INNER JOIN t4 ON t4.pid = t2.pid
+                    INNER JOIN t3 ON t3.smid = t5.smid
+            )
+    SELECT
+        aid, pid
+    FROM
+        (
+            SELECT aid, pid FROM cte1
+            UNION
+            SELECT aid, pid FROM cte2
+        );
+
+# Regression test for #111327 - the query shouldn't cause a nil-pointer error.
+statement ok
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
+
+statement ok
+CREATE TABLE IF NOT EXISTS seed AS
+SELECT
+  g :: INT2 AS _int2,
+  g :: INT4 AS _int4,
+  g :: INT8 AS _int8,
+  g :: FLOAT4 AS _float4,
+  g :: FLOAT8 AS _float8,
+  '2001-01-01' :: DATE + g AS _date,
+  '2001-01-01' :: TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp,
+  '2001-01-01' :: TIMESTAMPTZ + g * '1 day'::INTERVAL AS _timestamptz,
+  g * '1 day' :: INTERVAL AS _interval,
+  g % 2 = 1 AS _bool,
+  g :: DECIMAL AS _decimal,
+  g :: STRING AS _string,
+  g :: STRING :: BYTES AS _bytes,
+  substring('00000000-0000-0000-0000-' || g :: STRING || '00000000000', 1, 36):: UUID AS _uuid,
+  '0.0.0.0' :: INET + g AS _inet,
+  g :: STRING :: JSONB AS _jsonb,
+  enum_range('hello' :: greeting) [g] as _enum
+FROM
+  generate_series(1, 5) AS g;
+
+statement ok
+INSERT INTO seed DEFAULT VALUES;
+
+statement ok
+CREATE INDEX on seed (_int8, _float8, _date);
+
+statement ok
+CREATE INVERTED INDEX on seed (_jsonb);
+
+statement error pgcode 22P02 pq: invalid input syntax for type pg_lsn: \"1\"
+SELECT
+  tab378984.crdb_internal_mvcc_timestamp AS "%pcol857759",
+  '48 years 7 mons 894 days 13:39:26.674765':::INTERVAL AS col857760,
+  tab378983.tableoid AS "coL857761",
+  tab378983.crdb_internal_mvcc_timestamp AS col857762,
+  (SELECT (-4999644074744333745):::INT8 AS "co""l857763" LIMIT 1:::INT8) AS col857764,
+  tab378983._inet AS col857765,
+  '2011-06-28 16:37:44.000635+00':::TIMESTAMPTZ AS col857766,
+  tab378984._bool AS col857767,
+  tab378983.tableoid AS col857768,
+  tab378984._timestamptz AS col857769,
+  NULL AS "Co😽l857770",
+  tab378984._string AS "c)ol857771",
+  NULL AS col857772,
+  tab378983._int4 AS c🙃ol857773,
+  tab378984._interval AS " col857774",
+  tab378984.crdb_internal_mvcc_timestamp AS "c%69ol'857775"
+FROM
+  seed@seed__int8__float8__date_idx AS tab378983,
+  seed@[0] AS tab378984
+WHERE
+  (
+    true
+    AND (
+      '9E82DF40/BC8A8379':::PG_LSN::PG_LSN NOT IN (
+        SELECT pg_lsn(tab378984._string::STRING)::PG_LSN::PG_LSN AS col857758
+        FROM seed@[0] AS "%ptAb%v378985" WHERE "%ptAb%v378985"._bool LIMIT 22:::INT8
+      )
+    )
+  )
+ORDER BY tab378983._timestamptz ASC NULLS FIRST
+LIMIT 78:::INT8;
+
+# Test apply joins with subqueries/CTEs in the inner and outer plans.
+subtest inner_outer_subquery
+
+statement ok
+SET testing_optimizer_disable_rule_probability = 1.0;
+
+query ITI rowsort
+WITH foo (bar) AS MATERIALIZED (SELECT 100)
+SELECT * FROM t INNER JOIN LATERAL (
+  SELECT * FROM foo WHERE bar = k*100
+) ON TRUE;
+----
+1  one  100
+
+query ITITI rowsort
+WITH foo AS MATERIALIZED (SELECT 100)
+SELECT * FROM t INNER JOIN LATERAL (
+  SELECT *, (SELECT * FROM foo) FROM u WHERE l = k
+) ON TRUE;
+----
+1  one    1  one    100
+2  two    2  two    100
+3  three  3  three  100
+4  four   4  four   100
+5  five   5  five   100
+
+# Add a few additional subqueries.
+query ITITIII rowsort
+WITH foo AS MATERIALIZED (SELECT 100)
+SELECT *, (SELECT max(m) FROM v)
+FROM t INNER JOIN LATERAL (
+  SELECT *, (SELECT * FROM foo), (SELECT min(m) FROM v) FROM u WHERE l = k
+) ON TRUE;
+----
+1  one    1  one    100  1  5
+2  two    2  two    100  1  5
+3  three  3  three  100  1  5
+4  four   4  four   100  1  5
+5  five   5  five   100  1  5
+
+# Make the nested subquery correlated.
+query ITITIII rowsort
+WITH foo AS MATERIALIZED (SELECT 100)
+SELECT *, (SELECT max(m) FROM v)
+FROM t INNER JOIN LATERAL (
+  SELECT *, (SELECT * FROM foo), (SELECT min(m) + k FROM v) FROM u WHERE l = k
+) ON TRUE;
+----
+1  one    1  one    100  2  5
+2  two    2  two    100  3  5
+3  three  3  three  100  4  5
+4  four   4  four   100  5  5
+5  five   5  five   100  6  5
+
+# Add a CTE to the inner plan. The bound expression is correlated.
+query ITITII rowsort
+WITH foo AS MATERIALIZED (SELECT 100)
+SELECT * FROM t INNER JOIN LATERAL (
+  WITH bar AS (SELECT *, (SELECT * FROM foo) FROM u WHERE l = k) SELECT * FROM bar, foo
+) ON TRUE;
+----
+1  one    1  one    100  100
+2  two    2  two    100  100
+3  three  3  three  100  100
+4  four   4  four   100  100
+5  five   5  five   100  100
+
+statement ok
+RESET testing_optimizer_disable_rule_probability;
+
+subtest end

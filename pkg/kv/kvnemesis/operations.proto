@@ -1,0 +1,299 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.kv.kvnemesis;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis";
+
+import "errorspb/errors.proto";
+import "gogoproto/gogo.proto";
+import "kv/kvpb/api.proto";
+import "kv/kvserver/concurrency/isolation/levels.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+
+message BatchOperation {
+  repeated Operation ops = 1 [(gogoproto.nullable) = false];
+  Result result = 2 [(gogoproto.nullable) = false];
+  bool follower_read_eligible = 3;
+}
+
+enum ClosureTxnType {
+  Commit = 0;
+  Rollback = 1;
+  // TODO(dan): Ambiguous = 2;
+}
+
+message ClosureTxnOperation {
+  string txn_id = 1 [(gogoproto.customname) = 'TxnID'];
+  repeated Operation ops = 2 [(gogoproto.nullable) = false];
+  BatchOperation commit_in_batch = 3;
+  ClosureTxnType type = 4;
+  cockroach.kv.kvserver.concurrency.isolation.Level iso_level = 7;
+  Result result = 5 [(gogoproto.nullable) = false];
+  roachpb.Transaction txn = 6;
+  bool buffered_writes = 8;
+  double user_priority = 9 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.UserPriority"];
+  bool follower_read_eligible = 10;
+}
+
+message GetOperation {
+  bytes key = 1;
+  bool for_update = 2;
+  bool for_share = 3;
+  bool guaranteed_durability = 4;
+  bool skip_locked = 5;
+  Result result = 6 [(gogoproto.nullable) = false];
+  bool follower_read_eligible = 7;
+}
+
+message ScanOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  bool for_update = 3;
+  bool for_share = 4;
+  bool guaranteed_durability = 5;
+  bool skip_locked = 6;
+  bool reverse = 7;
+  Result result = 8 [(gogoproto.nullable) = false];
+  bool follower_read_eligible = 9;
+}
+
+message PutOperation {
+  bytes key = 1;
+  uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  bool must_acquire_exclusive_lock = 4;
+
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message CPutOperation {
+  bytes key = 1;
+  uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  bytes exp_val = 3;
+  bool allow_if_does_not_exist = 4;
+
+  Result result = 5 [(gogoproto.nullable) = false];
+}
+
+message DeleteOperation {
+  bytes key = 1;
+  uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  bool must_acquire_exclusive_lock = 4;
+
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message DeleteRangeOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  uint32 seq = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  Result result = 4 [(gogoproto.nullable) = false];
+}
+
+message DeleteRangeUsingTombstoneOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  uint32 seq = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  Result result = 4 [(gogoproto.nullable) = false];
+}
+
+message AddSSTableOperation {
+  bytes data = 1;
+  roachpb.Span span = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp sst_timestamp = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTTimestamp"];
+  uint32 seq = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  bool as_writes = 5;
+  Result result = 6 [(gogoproto.nullable) = false];
+}
+
+message BarrierOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  bool with_lease_applied_index = 3;
+  Result result = 4 [(gogoproto.nullable) = false];
+}
+
+message FlushLockTableOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message SplitOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message MergeOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message ChangeReplicasOperation {
+  bytes key = 1;
+  repeated roachpb.ReplicationChange changes = 2 [(gogoproto.nullable) = false];
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message TransferLeaseOperation {
+  bytes key = 1;
+  int32 target = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+enum ChangeSettingType {
+  SetLeaseType = 0;
+  ToggleVirtualIntentResolution = 1;
+}
+
+message ChangeSettingOperation {
+  ChangeSettingType type = 1;
+  int32 lease_type = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseType"];
+  Result result = 3 [(gogoproto.nullable) = false];
+  bool vir_enabled = 4;
+}
+
+enum ChangeZoneType {
+  ToggleGlobalReads = 0;
+}
+
+message ChangeZoneOperation {
+  ChangeZoneType type = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message SavepointCreateOperation {
+  int32 id = 1 [(gogoproto.customname) = "ID"];
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message SavepointReleaseOperation {
+  int32 id = 1 [(gogoproto.customname) = "ID"];
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message SavepointRollbackOperation {
+  int32 id = 1 [(gogoproto.customname) = "ID"];
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message MutateBatchHeaderOperation {
+  int64 max_span_request_keys = 1;
+  int64 target_bytes = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message AddNetworkPartitionOperation {
+  int32 from_node = 1;
+  int32 to_node = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message RemoveNetworkPartitionOperation {
+  int32 from_node = 1;
+  int32 to_node = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message StopNodeOperation {
+  int32 node_id = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message RestartNodeOperation {
+  int32 node_id = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message CrashNodeOperation {
+  int32 node_id = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message MvccGCOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message Operation {
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.onlyone) = true;
+
+  BatchOperation batch = 1;
+
+  // TODO(dan): The original prototype of kvnemesis had separate operations for
+  // {Begin,Use,Commit,Rollback}Txn, which helped generate more interesting
+  // concurrency traffic. This had some issues with deadlock in the txn wait
+  // queue, but it seems like it should be possible to bring it back somehow.
+  ClosureTxnOperation closure_txn = 2;
+
+  GetOperation get = 7;
+  PutOperation put = 8;
+  ScanOperation scan = 9;
+  DeleteOperation delete = 10;
+  DeleteRangeOperation delete_range = 11;
+  DeleteRangeUsingTombstoneOperation delete_range_using_tombstone = 12;
+  SplitOperation split = 13;
+  MergeOperation merge = 14;
+  ChangeReplicasOperation change_replicas = 15;
+  TransferLeaseOperation transfer_lease = 16;
+  ChangeSettingOperation change_setting = 17;
+  ChangeZoneOperation change_zone = 18;
+  AddSSTableOperation add_sstable = 19 [(gogoproto.customname) = "AddSSTable"];
+  SavepointCreateOperation savepoint_create = 20;
+  SavepointReleaseOperation savepoint_release = 21;
+  SavepointRollbackOperation savepoint_rollback = 22;
+  BarrierOperation barrier = 23;
+  FlushLockTableOperation flush_lock_table = 24;
+  MutateBatchHeaderOperation mutate_batch_header = 25;
+  CPutOperation cput = 26 [(gogoproto.customname) = "CPut"];
+  AddNetworkPartitionOperation addNetworkPartition = 27;
+  RemoveNetworkPartitionOperation removeNetworkPartition = 28;
+  StopNodeOperation stopNode = 29;
+  RestartNodeOperation restartNode = 30;
+  CrashNodeOperation crashNode = 31;
+  MvccGCOperation mvccGC = 32;
+}
+
+enum ResultType {
+  Unknown = 0;
+  NoError = 1;
+  Error = 2;
+  Keys = 3;
+  Value = 4;
+  Values = 5;
+}
+
+message KeyValue {
+  bytes key = 1;
+  // The RawBytes of a roachpb.Value.
+  bytes value = 2;
+}
+
+message Result {
+  ResultType type = 1;
+  // Only set if Type is ResultType_Error.
+  errorspb.EncodedError err = 2;
+  // Only set if Type is ResultType_Keys.  Each element is a roachpb.Key.
+  repeated bytes keys = 3;
+  // Only set if Type is ResultType_Value. The RawBytes of a roachpb.Value.
+  bytes value = 4;
+  // Only set if Type is ResultType_Values. The RawBytes of a roachpb.Value.
+  repeated KeyValue values = 5 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp optional_timestamp = 6 [(gogoproto.nullable) = false];
+  roachpb.Span resume_span = 7;
+}
+
+message Step {
+  option (gogoproto.goproto_stringer) = false;
+  Operation op = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp before = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp after = 3 [(gogoproto.nullable) = false];
+  int32 db_id = 4 [(gogoproto.customname) = 'DBID'];
+  // Trace will contain (a reference on where to find) the recording of the
+  // Step's execution. Used to print it out when the test fails.
+  string trace = 5;
+}

@@ -1,0 +1,38 @@
+make-test-filter
+foo
+----
+regexp: foo
+suite: 
+
+make-test-filter
+tag:release_qualification
+----
+regexp: .
+suite: release_qualification
+
+make-test-filter
+foo tag:release_qualification
+----
+regexp: foo
+suite: release_qualification
+
+make-test-filter
+foo tag:weekly
+----
+regexp: foo
+suite: weekly
+
+make-test-filter
+tag:foo
+----
+error: tags are no longer supported; use --suite, --owner instead
+
+make-test-filter
+tag:release_qualification tag:weekly
+----
+error: tags are no longer supported; use --suite, --owner instead
+
+make-test-filter
+tag:release_qualification,weekly
+----
+error: tags are no longer supported; use --suite, --owner instead

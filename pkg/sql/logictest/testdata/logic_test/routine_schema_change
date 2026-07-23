@@ -1,0 +1,54 @@
+subtest statement-control
+
+statement ok
+SET use_declarative_schema_changer = 'on'
+
+# Disable CREATE FUNCTION.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!CREATE FUNCTION'
+
+# Verify that it is disabled.
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+# Falling-back to the legacy schema changer works.
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+# Disable CREATE PROCEDURE.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!CREATE PROCEDURE'
+
+# Verify that it is disabled.
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) CREATE PROCEDURE p() LANGUAGE SQL as 'SELECT 1'
+
+# Falling-back to the legacy schema changer works.
+statement ok
+CREATE PROCEDURE p() LANGUAGE SQL as 'SELECT 1'
+
+# Disable DROP FUNCTION.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!DROP FUNCTION'
+
+# Verify that it is disabled.
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) DROP FUNCTION f
+
+# Falling-back to the legacy schema changer works.
+statement ok
+DROP FUNCTION f
+
+# Disable DROP PROCEDURE.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!DROP PROCEDURE'
+
+# Verify that it is disabled.
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) DROP PROCEDURE p
+
+# Falling-back to the legacy schema changer works.
+statement ok
+DROP PROCEDURE p
+
+subtest end

@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "requestbatcher",
+    srcs = ["batcher.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher",
+    visibility = ["//pkg:__subpackages__"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/kv/kvpb",
+        "//pkg/obs/workloadid",
+        "//pkg/roachpb",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/buildutil",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "requestbatcher_test",
+    size = "small",
+    srcs = ["batcher_test.go"],
+    embed = [":requestbatcher"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
+        "//pkg/testutils",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
+    ],
+)

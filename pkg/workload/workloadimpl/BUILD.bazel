@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "workloadimpl",
+    srcs = [
+        "doc.go",
+        "precomputedrand.go",
+        "random.go",
+        "zipfgenerator.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/workloadimpl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "workloadimpl_test",
+    size = "small",
+    srcs = [
+        "precomputedrand_test.go",
+        "random_test.go",
+        "zipfgenerator_test.go",
+    ],
+    embed = [":workloadimpl"],
+    deps = [
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,91 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "coldata",
+    srcs = [
+        "batch.go",
+        "bytes.go",
+        "datum_vec.go",
+        "json.go",
+        "native_types.go",
+        "nulls.go",
+        "testutils.go",
+        "vec.go",
+        ":gen-vec",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/col/coldata",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/typeconv",
+        "//pkg/sql/colexecerror",
+        "//pkg/sql/types",
+        "//pkg/util/buildutil",
+        "//pkg/util/duration",
+        "//pkg/util/json",
+        "//pkg/util/metamorphic",
+        "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "coldata_test",
+    size = "small",
+    srcs = [
+        "batch_test.go",
+        "bytes_test.go",
+        "main_test.go",
+        "nulls_test.go",
+        "vec_test.go",
+    ],
+    embed = [":coldata"],
+    deps = [
+        "//pkg/col/coldataext",
+        "//pkg/col/coldatatestutils",
+        "//pkg/sql/colconv",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+genrule(
+    name = "gen-vec",
+    srcs = ["vec_tmpl.go"],
+    outs = ["vec.eg.go"],
+    cmd = """
+GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
+GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+export PATH=$$GO_ABS_PATH:$$PATH
+export GOROOT=`dirname $$GO_ABS_PATH`
+export HOME=$(GENDIR)
+export GOPATH=/nonexist-gopath
+export COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true
+$(location //pkg/sql/colexec/execgen/cmd/execgen) \
+    -fmt=false pkg/col/coldata/$@ > $@
+$(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
+""",
+    tools = [
+        "//pkg/sql/colexec/execgen/cmd/execgen",
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+        "@go_sdk//:bin/go",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+disallowed_imports_test(
+    "coldata",
+    [
+        "//pkg/sql/catalog",
+        "//pkg/sql/sem/tree",
+    ],
+)

@@ -1,0 +1,72 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "execstats",
+    srcs = [
+        "stats.go",
+        "traceanalyzer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/execstats",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvpb",
+        "//pkg/sql/execinfrapb",
+        "//pkg/util",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/buildutil",
+        "//pkg/util/optional",
+        "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+    ],
+)
+
+go_test(
+    name = "execstats_test",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "traceanalyzer_test.go",
+        "utils_test.go",
+    ],
+    embed = [":execstats"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvpb",
+        "//pkg/multitenant/tenantcapabilitiespb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execopnode",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/storage/enginepb",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/optional",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+disallowed_imports_test(
+    "execstats",
+    ["//pkg/sql/execinfra"],
+)

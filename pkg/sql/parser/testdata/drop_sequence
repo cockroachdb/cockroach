@@ -1,0 +1,71 @@
+parse
+DROP SEQUENCE a
+----
+DROP SEQUENCE a
+DROP SEQUENCE a -- fully parenthesized
+DROP SEQUENCE a -- literals removed
+DROP SEQUENCE _ -- identifiers removed
+
+parse
+EXPLAIN DROP SEQUENCE a
+----
+EXPLAIN DROP SEQUENCE a
+EXPLAIN DROP SEQUENCE a -- fully parenthesized
+EXPLAIN DROP SEQUENCE a -- literals removed
+EXPLAIN DROP SEQUENCE _ -- identifiers removed
+
+parse
+DROP SEQUENCE a.b
+----
+DROP SEQUENCE a.b
+DROP SEQUENCE a.b -- fully parenthesized
+DROP SEQUENCE a.b -- literals removed
+DROP SEQUENCE _._ -- identifiers removed
+
+parse
+DROP SEQUENCE a, b
+----
+DROP SEQUENCE a, b
+DROP SEQUENCE a, b -- fully parenthesized
+DROP SEQUENCE a, b -- literals removed
+DROP SEQUENCE _, _ -- identifiers removed
+
+parse
+DROP SEQUENCE IF EXISTS a
+----
+DROP SEQUENCE IF EXISTS a
+DROP SEQUENCE IF EXISTS a -- fully parenthesized
+DROP SEQUENCE IF EXISTS a -- literals removed
+DROP SEQUENCE IF EXISTS _ -- identifiers removed
+
+parse
+DROP SEQUENCE a RESTRICT
+----
+DROP SEQUENCE a RESTRICT
+DROP SEQUENCE a RESTRICT -- fully parenthesized
+DROP SEQUENCE a RESTRICT -- literals removed
+DROP SEQUENCE _ RESTRICT -- identifiers removed
+
+parse
+DROP SEQUENCE IF EXISTS a, b RESTRICT
+----
+DROP SEQUENCE IF EXISTS a, b RESTRICT
+DROP SEQUENCE IF EXISTS a, b RESTRICT -- fully parenthesized
+DROP SEQUENCE IF EXISTS a, b RESTRICT -- literals removed
+DROP SEQUENCE IF EXISTS _, _ RESTRICT -- identifiers removed
+
+parse
+DROP SEQUENCE a.b CASCADE
+----
+DROP SEQUENCE a.b CASCADE
+DROP SEQUENCE a.b CASCADE -- fully parenthesized
+DROP SEQUENCE a.b CASCADE -- literals removed
+DROP SEQUENCE _._ CASCADE -- identifiers removed
+
+parse
+DROP SEQUENCE a, b CASCADE
+----
+DROP SEQUENCE a, b CASCADE
+DROP SEQUENCE a, b CASCADE -- fully parenthesized
+DROP SEQUENCE a, b CASCADE -- literals removed
+DROP SEQUENCE _, _ CASCADE -- identifiers removed

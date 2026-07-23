@@ -1,0 +1,247 @@
+exec
+CREATE TABLE t.orders (oid INT PRIMARY KEY, cid INT, value DECIMAL, date DATE)
+----
+
+# In the string version, the constants are not anonymized.
+plan-string
+SELECT oid FROM t.orders WHERE oid = 123
+----
+----
+planning time: 0µs
+execution time: 0µs
+distribution: local
+vectorized: false
+plan type: custom
+maximum memory usage: 0 B
+DistSQL network usage: 0 B (0 messages)
+kv cpu time: 0µs
+sql cpu time: 0µs
+isolation level: serializable
+priority: normal
+quality of service: regular
+
+• scan
+  columns: (oid int)
+  estimated row count: 1 (missing stats)
+  table: orders@orders_pkey
+  spans: /123/0
+----
+----
+
+plan-string
+SELECT cid, date, value FROM t.orders
+----
+----
+planning time: 0µs
+execution time: 0µs
+distribution: local
+vectorized: false
+plan type: custom
+maximum memory usage: 0 B
+DistSQL network usage: 0 B (0 messages)
+kv cpu time: 0µs
+sql cpu time: 0µs
+isolation level: serializable
+priority: normal
+quality of service: regular
+
+• scan
+  columns: (cid int, date date, value decimal)
+  estimated row count: 1,000 (missing stats)
+  table: orders@orders_pkey
+  spans: FULL SCAN
+----
+----
+
+plan-string
+SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDER BY 1 - sum(value)
+----
+----
+planning time: 0µs
+execution time: 0µs
+distribution: local
+vectorized: false
+plan type: custom
+maximum memory usage: 0 B
+DistSQL network usage: 0 B (0 messages)
+kv cpu time: 0µs
+sql cpu time: 0µs
+isolation level: serializable
+priority: normal
+quality of service: regular
+
+• project
+│ columns: (cid int, sum decimal)
+│
+└── • sort
+    │ columns: (column10 decimal, cid int, sum decimal)
+    │ estimated row count: 98 (missing stats)
+    │ order: +column10
+    │
+    └── • render
+        │ columns: (column10 decimal, cid int, sum decimal)
+        │ render column10: ((1)[decimal] - (sum)[decimal])[decimal]
+        │ render cid: (cid)[int]
+        │ render sum: (sum)[decimal]
+        │
+        └── • group (hash)
+            │ columns: (cid int, sum decimal)
+            │ estimated row count: 98 (missing stats)
+            │ aggregate 0: sum(value)
+            │ group by: cid
+            │
+            └── • project
+                │ columns: (cid int, value decimal)
+                │
+                └── • filter
+                    │ columns: (cid int, value decimal, date date)
+                    │ estimated row count: 333 (missing stats)
+                    │ filter: ((date)[date] > ('2015-01-01')[date])[bool]
+                    │
+                    └── • scan
+                          columns: (cid int, value decimal, date date)
+                          estimated row count: 1,000 (missing stats)
+                          table: orders@orders_pkey
+                          spans: FULL SCAN
+----
+----
+
+plan-string
+SELECT value FROM (SELECT cid, date, value FROM t.orders)
+----
+----
+planning time: 0µs
+execution time: 0µs
+distribution: local
+vectorized: false
+plan type: custom
+maximum memory usage: 0 B
+DistSQL network usage: 0 B (0 messages)
+kv cpu time: 0µs
+sql cpu time: 0µs
+isolation level: serializable
+priority: normal
+quality of service: regular
+
+• scan
+  columns: (value decimal)
+  estimated row count: 1,000 (missing stats)
+  table: orders@orders_pkey
+  spans: FULL SCAN
+----
+----
+
+plan-string
+SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
+----
+----
+planning time: 0µs
+execution time: 0µs
+distribution: local
+vectorized: false
+plan type: custom
+maximum memory usage: 0 B
+DistSQL network usage: 0 B (0 messages)
+kv cpu time: 0µs
+sql cpu time: 0µs
+isolation level: serializable
+priority: normal
+quality of service: regular
+
+• project
+│ columns: (cid int, date date, value decimal)
+│
+└── • hash join (inner)
+    │ columns: (cid int, value decimal, date date, date date)
+    │ estimated row count: 980 (missing stats)
+    │ equality: (date) = (date)
+    │ right cols are key
+    │
+    ├── • scan
+    │     columns: (cid int, value decimal, date date)
+    │     estimated row count: 1,000 (missing stats)
+    │     table: orders@orders_pkey
+    │     spans: FULL SCAN
+    │
+    └── • distinct
+        │ columns: (date date)
+        │ estimated row count: 100 (missing stats)
+        │ distinct on: date
+        │
+        └── • scan
+              columns: (date date)
+              estimated row count: 1,000 (missing stats)
+              table: orders@orders_pkey
+              spans: FULL SCAN
+----
+----
+
+exec
+CREATE TABLE t.movies (
+  id SERIAL PRIMARY KEY,
+  title TEXT,
+  released INT
+)
+----
+
+exec
+CREATE TABLE t.actors (
+  id SERIAL PRIMARY KEY,
+  name TEXT
+)
+----
+
+# Subquery.
+plan-string
+SELECT id AS movie_id, title, (SELECT name FROM t.actors WHERE name = 'Foo') FROM t.movies
+----
+----
+planning time: 0µs
+execution time: 0µs
+distribution: local
+vectorized: false
+plan type: custom
+maximum memory usage: 0 B
+DistSQL network usage: 0 B (0 messages)
+kv cpu time: 0µs
+sql cpu time: 0µs
+isolation level: serializable
+priority: normal
+quality of service: regular
+
+• root
+│ columns: (movie_id int, title string, name string)
+│
+├── • render
+│   │ columns: (movie_id int, title string, name string)
+│   │ render name: (@S1)[string]
+│   │ render id: (id)[int]
+│   │ render title: (title)[string]
+│   │
+│   └── • scan
+│         columns: (id int, title string)
+│         estimated row count: 1,000 (missing stats)
+│         table: movies@movies_pkey
+│         spans: FULL SCAN
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT name FROM t.actors WHERE name = 'Foo')
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ columns: (name string)
+        │ estimated row count: 1
+        │
+        └── • filter
+            │ columns: (name string)
+            │ estimated row count: 10 (missing stats)
+            │ filter: ((name)[string] = ('Foo')[string])[bool]
+            │
+            └── • scan
+                  columns: (name string)
+                  estimated row count: 1,000 (missing stats)
+                  table: actors@actors_pkey
+                  spans: FULL SCAN
+----
+----

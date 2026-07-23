@@ -1,0 +1,44 @@
+# Walk through what happens in fallback path of piggybacking, i.e. we don't
+# have raft messages to piggy messages on top of but we then fire one-off
+# messages.
+
+init
+----
+
+# Set up two nodes, each with one store.
+add node=n1 store=s1
+----
+
+add node=n2 store=s2
+----
+
+# Send a raft message for r1 from n1 to n2 and vice versa, each node holding a
+# replica with id=1,2 respectively. We do this to create the non-idle connect
+# between the two nodes (it's done on demand).
+send range=r1 from=n1/s1/1 to=n2/s2/2 commit=1
+----
+
+send range=r1 from=n2/s2/2 to=n1/s1/1 commit=1
+----
+
+# Add a msg to be piggybacked from n2 back to n1.
+piggyback from=n2 node=n1 store=s1 range=r1
+----
+
+# Note that it is pending.
+pending-piggybacks from=n2 to=n1
+----
+ranges: r1
+
+fallback-piggyback from=n2
+----
+
+# Note that it no longer pending, but was not dropped.
+pending-piggybacks from=n2 to=n1
+----
+ranges: none
+
+metrics
+----
+node=n1: dispatches-dropped=0
+node=n2: dispatches-dropped=0

@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "lint_test",
+    srcs = [
+        "lint_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings",
+        "//pkg/sql/lexbase",
+        "//pkg/sql/parser",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

@@ -1,0 +1,4 @@
+show_default_session_variables_for_role_stmt ::=
+	'SHOW' 'DEFAULT' 'SESSION' 'VARIABLES' 'FOR' role_or_group_or_user role_spec
+	| 'SHOW' 'DEFAULT' 'SESSION' 'VARIABLES' 'FOR' 'ROLE_ALL' 'ALL'
+	| 'SHOW' 'DEFAULT' 'SESSION' 'VARIABLES' 'FOR' 'USER_ALL' 'ALL'

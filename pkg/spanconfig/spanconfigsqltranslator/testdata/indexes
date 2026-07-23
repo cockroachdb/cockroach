@@ -1,0 +1,124 @@
+# We start off by creating a simple database -> table -> index hierarchy. We set
+# a zone configuration on the index but not on the table. This means the table
+# has a "placeholder zone config".
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t(i INT PRIMARY KEY, j INT);
+CREATE INDEX idx ON db.t (j);
+----
+
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
+----
+
+exec-sql
+ALTER INDEX db.t@idx CONFIGURE ZONE USING num_voters = 5;
+----
+
+query-sql
+SHOW ZONE CONFIGURATION FOR DATABASE db
+----
+DATABASE db ALTER DATABASE db CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 14400,
+	num_replicas = 7,
+	constraints = '[]',
+	lease_preferences = '[]'
+
+query-sql
+SHOW ZONE CONFIGURATION FOR TABLE db.t
+----
+DATABASE db ALTER DATABASE db CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 14400,
+	num_replicas = 7,
+	constraints = '[]',
+	lease_preferences = '[]'
+
+query-sql
+SHOW ZONE CONFIGURATION FOR INDEX db.t@idx
+----
+INDEX db.public.t@idx ALTER INDEX db.public.t@idx CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 14400,
+	num_replicas = 7,
+	num_voters = 5,
+	constraints = '[]',
+	voter_constraints = '[]',
+	lease_preferences = '[]'
+
+# First entry = primary index (table's config above)
+# Second entry = index idx, so numvoters should be overridden.
+# Third entry = Any future indexes that may be added to this table. Should be
+#               the same as the table's config.
+translate database=db table=t
+----
+/Table/106{-/2}                            num_replicas=7
+/Table/106/{2-3}                           num_replicas=7 num_voters=5
+/Table/10{6/3-7}                           num_replicas=7
+
+# Configure GC ttl on the database and override it for the index. The table
+# continues to hold a placeholder zone config.
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 3600;
+----
+
+exec-sql
+ALTER INDEX db.t@idx CONFIGURE ZONE USING gc.ttlseconds = 25
+----
+
+translate database=db table=t
+----
+/Table/106{-/2}                            ttl_seconds=3600 num_replicas=7
+/Table/106/{2-3}                           ttl_seconds=25 num_replicas=7 num_voters=5
+/Table/10{6/3-7}                           ttl_seconds=3600 num_replicas=7
+
+# Configure a zone config field on the table, so that it is no longer a
+# placeholder zone config.
+exec-sql
+ALTER TABLE db.t CONFIGURE ZONE USING range_min_bytes = 1000, range_max_bytes=100000000;
+----
+
+query-sql
+SHOW ZONE CONFIGURATION FOR INDEX db.t@idx
+----
+INDEX db.public.t@idx ALTER INDEX db.public.t@idx CONFIGURE ZONE USING
+	range_min_bytes = 1000,
+	range_max_bytes = 100000000,
+	gc.ttlseconds = 25,
+	num_replicas = 7,
+	num_voters = 5,
+	constraints = '[]',
+	voter_constraints = '[]',
+	lease_preferences = '[]'
+
+translate database=db table=t
+----
+/Table/106{-/2}                            range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
+/Table/106/{2-3}                           range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5
+/Table/10{6/3-7}                           range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
+
+# Configure a zone config field on each index on a table to ensure that both
+# indexes have their own zone configs.
+exec-sql
+CREATE TABLE db.t_indexes (k INT PRIMARY KEY, v INT, INDEX idx (v));
+----
+
+exec-sql
+ALTER INDEX db.t_indexes@t_indexes_pkey CONFIGURE ZONE USING num_replicas = 4;
+----
+
+exec-sql
+ALTER INDEX db.t_indexes@idx CONFIGURE ZONE USING num_replicas = 5;
+----
+
+translate database=db table=t_indexes
+----
+/Table/107{-/1}                            ttl_seconds=3600 num_replicas=7
+/Table/107/{1-2}                           ttl_seconds=3600 num_replicas=4
+/Table/107/{2-3}                           ttl_seconds=3600 num_replicas=5
+/Table/10{7/3-8}                           ttl_seconds=3600 num_replicas=7

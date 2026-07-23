@@ -1,0 +1,166 @@
+# tests adapted from logictest -- values
+
+build
+VALUES (1)
+----
+values
+ ├── columns: column1:1!null
+ └── (1,)
+
+build
+VALUES (1, 2, 3), (4, 5, 6)
+----
+values
+ ├── columns: column1:1!null column2:2!null column3:3!null
+ ├── (1, 2, 3)
+ └── (4, 5, 6)
+
+build
+VALUES (1), (2, 3)
+----
+error (42601): VALUES lists must all be the same length, expected 1 columns, found 2
+
+build
+VALUES (1), (1), (2), (3) ORDER BY 1 DESC LIMIT 3
+----
+limit
+ ├── columns: column1:1!null
+ ├── internal-ordering: -1
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: column1:1!null
+ │    ├── ordering: -1
+ │    ├── limit hint: 3.00
+ │    └── values
+ │         ├── columns: column1:1!null
+ │         ├── (1,)
+ │         ├── (1,)
+ │         ├── (2,)
+ │         └── (3,)
+ └── 3
+
+build
+VALUES (1), (1), (2), (3) ORDER BY z
+----
+error (42703): column "z" does not exist
+
+build
+VALUES ('this', 'is', 'a', 'test'), (1, 2, 3, 4)
+----
+error (42804): VALUES types int and string cannot be matched
+
+build
+VALUES ('one', 1, 1.0), ('two', 2, 2.0)
+----
+values
+ ├── columns: column1:1!null column2:2!null column3:3!null
+ ├── ('one', 1, 1.0)
+ └── ('two', 2, 2.0)
+
+build
+VALUES (true), (true), (false)
+----
+values
+ ├── columns: column1:1!null
+ ├── (true,)
+ ├── (true,)
+ └── (false,)
+
+build
+VALUES (NULL)
+----
+values
+ ├── columns: column1:1
+ └── (NULL,)
+
+build
+VALUES (NULL, 1)
+----
+values
+ ├── columns: column1:1 column2:2!null
+ └── (NULL, 1)
+
+build
+VALUES (NULL, 1), (2, NULL)
+----
+values
+ ├── columns: column1:1 column2:2
+ ├── (NULL::INT8, 1)
+ └── (2, NULL::INT8)
+
+build
+VALUES (NULL, 1), (2, NULL)
+----
+values
+ ├── columns: column1:1 column2:2
+ ├── (NULL::INT8, 1)
+ └── (2, NULL::INT8)
+
+build
+VALUES (NULL, 1), (2, NULL), (NULL, 'a')
+----
+error (42804): VALUES types string and int cannot be matched
+
+build
+SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
+----
+project
+ ├── columns: coalesce:3
+ ├── values
+ │    ├── columns: column1:1 column2:2
+ │    ├── (1, 2)
+ │    ├── (3, NULL::INT8)
+ │    ├── (NULL::INT8, 4)
+ │    └── (NULL::INT8, NULL::INT8)
+ └── projections
+      └── COALESCE(column1:1, column2:2) [as=coalesce:3]
+
+# subqueries can be evaluated in VALUES
+build
+VALUES ((SELECT 1 a)), ((SELECT 2 b))
+----
+values
+ ├── columns: column1:3
+ ├── tuple
+ │    └── subquery
+ │         └── max1-row
+ │              ├── columns: a:1!null
+ │              └── project
+ │                   ├── columns: a:1!null
+ │                   ├── values
+ │                   │    └── ()
+ │                   └── projections
+ │                        └── 1 [as=a:1]
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: b:2!null
+                └── project
+                     ├── columns: b:2!null
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── 2 [as=b:2]
+
+build
+VALUES (1), ((SELECT 2 a))
+----
+values
+ ├── columns: column1:2
+ ├── (1,)
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: a:1!null
+                └── project
+                     ├── columns: a:1!null
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── 2 [as=a:1]
+
+# Regression test for #57441.
+build
+VALUES (1) ORDER BY count(1)
+----
+error (42803): count(): aggregate functions are not allowed in ORDER BY

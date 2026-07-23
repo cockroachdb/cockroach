@@ -1,0 +1,224 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/logpb/event.proto";
+
+// Category: Cluster-level events
+// Channel: OPS
+//
+// Events in this category pertain to an entire cluster and are
+// not relative to any particular tenant.
+//
+// In a multi-tenant setup, the `system.eventlog` table for individual
+// tenants cannot contain a copy of cluster-level events; conversely,
+// the `system.eventlog` table in the system tenant cannot contain the
+// SQL-level events for individual tenants.
+
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// The comment at the top has a specific format for the doc generator.
+// *Really look at doc.go before modifying this file.*
+
+// CommonNodeEventDetails contains the fields common to all
+// node-level events.
+message CommonNodeEventDetails {
+  // The node ID where the event was originated.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The time when this node was last started.
+  int64 started_at = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The approximate last time the node was up before the last restart.
+  int64 last_up = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// NodeJoin is recorded when a node joins the cluster.
+message NodeJoin {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeRestart is recorded when an existing node rejoins the cluster
+// after being offline.
+message NodeRestart {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeShutdownConnectionTimeout is recorded when SQL connections remain open
+// during shutdown, after waiting for the server.shutdown.connections.timeout
+// to transpire.
+message NodeShutdownConnectionTimeout {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The detailed message, meant to be a human-understandable explanation.
+  string detail = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.SafeString", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The number of connections still open after waiting for the client to close them.
+  uint32 connections_remaining = 4 [(gogoproto.jsontag) = ",includeempty"];
+  // The amount of time the server waited for the client to close the connections, defined by server.shutdown.connections.timeout.
+  uint32 timeout_millis = 5 [(gogoproto.jsontag) = ",includeempty"];
+}
+
+// NodeShutdownTransactionTimeout is recorded when SQL transactions remain open
+// during shutdown, after waiting for the server.shutdown.transactions.timeout
+// to transpire.
+message NodeShutdownTransactionTimeout {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The detailed message, meant to be a human-understandable explanation.
+  string detail = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.SafeString", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The number of connections still running SQL transactions after waiting for the client to end them.
+  uint32 connections_remaining = 4 [(gogoproto.jsontag) = ",includeempty"];
+  // The amount of time the server waited for the client to close the connections, defined by server.shutdown.transactions.timeout.
+  uint32 timeout_millis = 5 [(gogoproto.jsontag) = ",includeempty"];
+}
+
+
+// CommonNodeDecommissionDetails contains the fields common to all
+// node-level decommission/recommission events.
+//
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this.*
+message CommonNodeDecommissionDetails {
+  // The node ID where the event was originated.
+  int32 requesting_node_id = 1 [(gogoproto.customname) = "RequestingNodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The node ID affected by the operation.
+  int32 target_node_id = 2 [(gogoproto.customname) = "TargetNodeID", (gogoproto.jsontag) = ",omitempty"];
+}
+
+// NodeDecommissioning is recorded when a node is marked as
+// decommissioning.
+message NodeDecommissioning {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeDecommissionDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeDecommissioned is recorded when a node is marked as
+// decommissioned.
+message NodeDecommissioned {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeDecommissionDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// NodeRecommissioned is recorded when a decommissioning node is
+// recommissioned.
+message NodeRecommissioned {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeDecommissionDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// DiskSlownessDetected is recorded when a store observes disk slowness
+// events.
+message DiskSlownessDetected {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The node ID where the event was originated.
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+  int32 store_id = 3 [(gogoproto.customname) = "StoreID", (gogoproto.jsontag) = ",omitempty"];
+}
+
+// DiskSlownessCleared is recorded when disk slowness in a store has cleared.
+message DiskSlownessCleared {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The node ID where the event was originated.
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+  int32 store_id = 3 [(gogoproto.customname) = "StoreID", (gogoproto.jsontag) = ",omitempty"];
+}
+
+// LowDiskSpace is emitted when a store is reaching capacity, as we reach
+// certain thresholds. It is emitted periodically while we are in a low disk
+// state.
+message LowDiskSpace {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // The node ID where the event was originated.
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+  int32 store_id = 3 [(gogoproto.customname) = "StoreID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The free space percent threshold that we went under.
+  int32 percent_threshold = 4 [(gogoproto.jsontag) = ",omitempty"];
+  uint64 available_bytes = 5 [(gogoproto.jsontag) = ",omitempty"];
+  uint64 total_bytes = 6 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// GCPressureDetected is recorded when the Go garbage collector is consuming
+// a high fraction of available CPU capacity, indicating that the heap is
+// approaching the GOMEMLIMIT soft memory limit. Sustained GC pressure
+// degrades performance and may indicate that the node needs more memory.
+message GCPressureDetected {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // The node ID where the event was originated.
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The GC CPU usage as a fraction of total available CPU capacity (0.0 to 1.0).
+  double gc_cpu_fraction = 3 [(gogoproto.customname) = "GCCPUFraction", (gogoproto.jsontag) = ",includeempty"];
+
+  // The current Go heap allocation in bytes.
+  uint64 go_alloc_bytes = 4 [(gogoproto.jsontag) = ",includeempty"];
+
+  // The configured GOMEMLIMIT soft memory limit in bytes (0 if unset).
+  uint64 go_limit_bytes = 5 [(gogoproto.jsontag) = ",includeempty"];
+}
+
+// CertsReload is recorded when the TLS certificates are
+// reloaded/rotated from disk.
+message CertsReload {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // Whether the operation completed without errors.
+  bool success = 2 [(gogoproto.jsontag) = ",omitempty"];
+  // If an error was encountered, the text of the error.
+  string error_message = 3 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// CommonSharedServiceEventDetails contains the fields common to all
+// tenant shared server events.
+//
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this.*
+message CommonSharedServiceEventDetails {
+  // The node ID where the event was originated.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The ID of the tenant owning the service.
+  uint64 tenant_id = 2 [(gogoproto.customname) = "TenantID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The ID of the server instance.
+  int32 instance_id = 3 [(gogoproto.customname) = "InstanceID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The name of the tenant at the time the event was emitted.
+  string tenant_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// TenantSharedServiceStart is recorded when a tenant server
+// is started inside the same process as the KV layer.
+message TenantSharedServiceStart {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  CommonSharedServiceEventDetails shared = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // Whether the startup was successful.
+  bool ok = 3 [(gogoproto.customname) = "OK", (gogoproto.jsontag) = ",omitempty"];
+
+  // If the startup failed, the text of the error.
+  string error_text = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];  
+}
+
+// TenantSharedServiceStop is recorded when a tenant server
+// is shut down inside the same process as the KV layer.
+message TenantSharedServiceStop {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  CommonSharedServiceEventDetails shared = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}

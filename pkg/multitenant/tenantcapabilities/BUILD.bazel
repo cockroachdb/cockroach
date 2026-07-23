@@ -1,0 +1,60 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tenantcapabilities",
+    srcs = [
+        "capability.go",
+        "interfaces.go",
+        "testingknobs.go",
+        "value.go",
+        "values.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvpb",
+        "//pkg/multitenant/mtinfopb",
+        "//pkg/multitenant/tenantcapabilitiespb",
+        "//pkg/roachpb",
+        "//pkg/spanconfig/spanconfigbounds",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
+    ],
+)
+
+go_test(
+    name = "tenantcapabilities_test",
+    srcs = [
+        "capabilities_test.go",
+        "main_test.go",
+        "values_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":tenantcapabilities"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvclient/rangefeed/rangefeedcache",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher",
+        "//pkg/multitenant/tenantcapabilitiespb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,14 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
+CREATE SEQUENCE db.public.sq1;
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE db.public.tbl ADD COLUMN j INT AS (NULL::INT) VIRTUAL NOT NULL;
+----
+Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL AS (‹NULL›::INT8) VIRTUAL;
+ ├── execute 1 system table mutations transaction
+ ├── validate non-index-backed constraint tbl.[constraint 2] in relation tbl
+ ├── execute 1 system table mutations transaction
+ ├── validate NOT NULL constraint on column j+ in index tbl_pkey in relation tbl
+ └── execute 2 system table mutations transactions

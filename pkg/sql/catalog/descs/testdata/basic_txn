@@ -1,0 +1,22 @@
+exec db=defaultdb
+CREATE TABLE foo (i INT PRIMARY KEY);
+----
+0	
+
+exec db=defaultdb
+INSERT INTO foo VALUES (1), (2);
+ALTER TABLE foo ADD COLUMN j INT DEFAULT 52;
+ALTER TABLE foo ADD COLUMN k INT DEFAULT 64;
+----
+2	0	0	
+
+query db=defaultdb
+SELECT * FROM foo;
+SELECT j, k FROM foo;
+----
+i  j   k
+1  52  64
+2  52  64
+j   k
+52  64
+52  64

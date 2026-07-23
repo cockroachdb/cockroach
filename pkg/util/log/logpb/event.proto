@@ -1,0 +1,20 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.util.log;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/log/logpb";
+
+import "gogoproto/gogo.proto";
+
+
+// CommonEventDetails contains the fields common to all structed events.
+message CommonEventDetails {
+  // The timestamp of the event. Expressed as nanoseconds since
+  // the Unix epoch.
+  int64 timestamp = 1 [(gogoproto.jsontag) = ",omitempty"];
+  // The type of the event.
+  string event_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}

@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "errcmp",
+    srcs = ["errcmp.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errcmp",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/testutils/lint/passes/passesutil",
+        "@org_golang_x_tools//go/analysis",
+        "@org_golang_x_tools//go/analysis/passes/inspect",
+        "@org_golang_x_tools//go/ast/inspector",
+    ],
+)
+
+go_test(
+    name = "errcmp_test",
+    srcs = ["errcmp_test.go"],
+    data = glob(["testdata/**"]) + [
+        "@go_sdk//:files",
+    ],
+    exec_properties = {"test.Pool": "large"},
+    tags = ["cpu:2"],
+    deps = [
+        ":errcmp",
+        "//pkg/build/bazel",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/skip",
+        "@com_github_cockroachdb_errors//:errors",  # keep
+        "@org_golang_x_tools//go/analysis/analysistest",
+    ],
+)

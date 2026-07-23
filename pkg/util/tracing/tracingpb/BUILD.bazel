@@ -1,0 +1,70 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tracingpb",
+    srcs = [
+        "recorded_span.go",
+        "recording.go",
+        "tracing.go",
+    ],
+    embed = [":tracingpb_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/humanizeutil",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_jaegertracing_jaeger//model/json",
+    ],
+)
+
+proto_library(
+    name = "tracingpb_proto",
+    srcs = [
+        "recorded_span.proto",
+        "tracing.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:any_proto",
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:timestamp_proto",
+    ],
+)
+
+go_proto_library(
+    name = "tracingpb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb",
+    proto = ":tracingpb_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_redact//:redact",  # keep
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+go_test(
+    name = "tracingpb_test",
+    srcs = [
+        "condense_test.go",
+        "recording_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":tracingpb"],
+    deps = [
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/echotest",
+        "//pkg/util/log",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)

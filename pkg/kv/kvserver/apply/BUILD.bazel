@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "apply",
+    srcs = [
+        "asserter.go",
+        "cmd.go",
+        "doc.go",
+        "task.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft/raftpb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "apply_test",
+    size = "small",
+    srcs = [
+        "doc_test.go",
+        "task_test.go",
+    ],
+    deps = [
+        ":apply",
+        "//pkg/kv/kvpb",
+        "//pkg/raft/raftpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

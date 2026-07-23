@@ -1,0 +1,3 @@
+reset_stmt ::=
+	reset_session_stmt
+	| reset_csetting_stmt

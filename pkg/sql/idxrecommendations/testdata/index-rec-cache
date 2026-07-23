@@ -1,0 +1,184 @@
+update fingerprint=f1 planHash=123 database=db stmtType=DML
+----
+recs=[] execCount=1 found=true cacheSize=1
+
+should fingerprint=f1 planHash=123 database=db
+----
+false
+
+# DDL is ignored.
+update fingerprint=fDDL planHash=123 database=db stmtType=DDL repeat=6
+----
+recs=[] execCount=0 found=false cacheSize=1
+
+should fingerprint=fDDL planHash=123 database=db
+----
+false
+
+# 4 repeats is not enough to trigger.
+update fingerprint=f2 planHash=123 database=db stmtType=DML repeat=4
+----
+recs=[] execCount=4 found=true cacheSize=2
+
+should fingerprint=f2 planHash=123 database=db
+----
+false
+
+# 5 repeats triggers recommendation generation.
+update fingerprint=f3 planHash=123 database=db stmtType=DML repeat=5
+----
+recs=[] execCount=5 found=true cacheSize=3
+
+should fingerprint=f3 planHash=123 database=db stmtType=DML
+----
+true
+
+# set a rec for fingerprint 3
+update fingerprint=f3 planHash=123 database=db stmtType=DML repeat=1 rec=rec3
+----
+recs=[{rec3 0}] execCount=0 found=true cacheSize=3
+
+# set a second rec for fingerprint 3
+update fingerprint=f3 planHash=123 database=db stmtType=DML repeat=1 rec=rec3b
+----
+recs=[{rec3b 0}] execCount=0 found=true cacheSize=3
+
+# set a rec for fingerprint 2
+update fingerprint=f2 planHash=123 database=db stmtType=DML repeat=5 rec=rec2
+----
+recs=[{rec2 0}] execCount=0 found=true cacheSize=3
+
+# ensure rec for fingerprint 3 remains the same
+update fingerprint=f3 planHash=123 database=db stmtType=DML repeat=5
+----
+recs=[{rec3b 0}] execCount=5 found=true cacheSize=3
+
+# set two recs for fingerprint 3
+update fingerprint=f3 planHash=123 database=db stmtType=DML repeat=1 rec=rec3c,rec3d
+----
+recs=[{rec3c 0} {rec3d 0}] execCount=0 found=true cacheSize=3
+
+# ensure rec for fingerprint 2 remains the same
+update fingerprint=f2 planHash=123 database=db stmtType=DML repeat=5
+----
+recs=[{rec2 0}] execCount=5 found=true cacheSize=3
+
+# Same fingerprint with different database has separate cache key
+update fingerprint=f3 planHash=123 database=db2 stmtType=DML repeat=5
+----
+recs=[] execCount=5 found=true cacheSize=4
+
+update fingerprint=f3 planHash=123 database=db2 stmtType=DML rec=rec3e,rec3f
+----
+recs=[{rec3e 0} {rec3f 0}] execCount=0 found=true cacheSize=4
+
+# Same fingerprint with different planHash has separate cache key
+update fingerprint=f3 planHash=456 database=db stmtType=DML repeat=5
+----
+recs=[] execCount=5 found=true cacheSize=5
+
+update fingerprint=f3 planHash=456 database=db stmtType=DML rec=rec3g,rec3h
+----
+recs=[{rec3g 0} {rec3h 0}] execCount=0 found=true cacheSize=5
+
+# check that all 3 cache keys with same fingerprint return different data
+update fingerprint=f3 planHash=123 database=db stmtType=DML
+----
+recs=[{rec3c 0} {rec3d 0}] execCount=1 found=true cacheSize=5
+
+update fingerprint=f3 planHash=123 database=db2 stmtType=DML
+----
+recs=[{rec3e 0} {rec3f 0}] execCount=1 found=true cacheSize=5
+
+update fingerprint=f3 planHash=456 database=db stmtType=DML
+----
+recs=[{rec3g 0} {rec3h 0}] execCount=1 found=true cacheSize=5
+
+# 4th fingerprint is not collected because our limit is 5 in the test cache (f1, f2, f3, f3-db2, f3-hash456).
+update fingerprint=f4 planHash=123 database=db stmtType=DML repeat=5 rec=rec4
+----
+recs=[] execCount=0 found=false cacheSize=5
+
+should fingerprint=f4 planHash=123 database=db stmtType=DML
+----
+false
+
+# Reset 3rd fingerprint,
+update fingerprint=f3 planHash=123 database=db stmtType=DML reset=true
+----
+recs=[] execCount=0 found=true cacheSize=5
+
+# Accumulate updates to 3rd fingerprint after reset.
+update fingerprint=f3 planHash=123 database=db stmtType=DML repeat=5 rec=rec3
+----
+recs=[{rec3 0}] execCount=0 found=true cacheSize=5
+
+# Should not trigger on 3rd fingerprint after more accumulations because the last timestamp is recent.
+should fingerprint=f3 planHash=123 database=db stmtType=DML
+----
+false
+
+set-rec-timeout
+1ns
+----
+ok
+
+# Since the execution counter was reset, we will say that a new recommendation does not need to be generated
+should fingerprint=f3 planHash=123 database=db stmtType=DML
+----
+false
+
+update fingerprint=f3 planHash=123 database=db stmtType=DML repeat=5
+----
+recs=[{rec3 0}] execCount=5 found=true cacheSize=5
+
+# now that we've accumulated 5 new executions, the cache will tell us it's time to generate a new rec
+should fingerprint=f3 planHash=123 database=db stmtType=DML
+----
+true
+
+set-time-between-cleanups
+1ns
+----
+ok
+
+# 4th fingerprint is still not collected because we haven't expired anything from the cache
+update fingerprint=f4 planHash=123 database=db stmtType=DML repeat=5
+----
+recs=[] execCount=0 found=false cacheSize=5
+
+should fingerprint=f4 planHash=123 database=db stmtType=DML
+----
+false
+
+set-time-threshold-for-deletion
+1ns
+----
+ok
+
+# 4th fingerprint is now collected because we will evict the other recommendations
+update fingerprint=f4 planHash=123 database=db stmtType=DML repeat=5
+----
+recs=[] execCount=5 found=true cacheSize=1
+
+should fingerprint=f4 planHash=123 database=db stmtType=DML
+----
+true
+
+update fingerprint=f4 planHash=123 database=db stmtType=DML rec=rec4b
+----
+recs=[{rec4b 0}] execCount=0 found=true cacheSize=1
+
+# Even with small cache and many executions, DDL is ignored
+update fingerprint=fDDL planHash=123 database=db stmtType=DDL repeat=10
+----
+recs=[] execCount=0 found=false cacheSize=1
+
+should fingerprint=fDDL planHash=123 database=db
+----
+false
+
+update fingerprint=fDDL planHash=123 database=db stmtType=DDL rec=shouldNotShowUp
+----
+recs=[] execCount=0 found=false cacheSize=1
+

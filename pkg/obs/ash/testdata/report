@@ -1,0 +1,60 @@
+# Text report with entries.
+text-report generated=2026-03-05T12:34:56.789Z lookback=60s
+CPU ReplicaSend 00000000000002a 523
+LOCK LockWait 000000000000001a 312
+IO StorageEval 0000000000000003 201
+----
+ASH Aggregated Report
+Generated: 2026-03-05T12:34:56.789Z
+Lookback:  1m0s
+Samples:   1036
+.
+   COUNT  WORK_EVENT_TYPE   WORK_EVENT              WORKLOAD_ID
+     523  CPU               ReplicaSend             00000000000002a
+     312  LOCK              LockWait                000000000000001a
+     201  IO                StorageEval             0000000000000003
+
+# Text report with no entries.
+text-report generated=2026-03-05T12:34:56.789Z lookback=60s
+----
+ASH Aggregated Report
+Generated: 2026-03-05T12:34:56.789Z
+Lookback:  1m0s
+Samples:   0
+.
+No samples in window.
+
+# JSON report with entries.
+json-report generated=2026-03-05T12:34:56.789Z lookback=60s
+CPU ReplicaSend aaa 100
+IO StorageEval bbb 50
+----
+{
+  "generated": "2026-03-05T12:34:56.789Z",
+  "lookback_seconds": 60,
+  "total_samples": 150,
+  "groups": [
+    {
+      "work_event_type": "CPU",
+      "work_event": "ReplicaSend",
+      "workload_id": "aaa",
+      "count": 100
+    },
+    {
+      "work_event_type": "IO",
+      "work_event": "StorageEval",
+      "workload_id": "bbb",
+      "count": 50
+    }
+  ]
+}
+
+# JSON report with no entries.
+json-report generated=2026-03-05T12:34:56.789Z lookback=60s
+----
+{
+  "generated": "2026-03-05T12:34:56.789Z",
+  "lookback_seconds": 60,
+  "total_samples": 0,
+  "groups": []
+}

@@ -1,0 +1,56 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "application.module.scss";
+
+$divider-spacing-default: crl-gutters(1.5);
+$divider-spacing-condensed: crl-gutters(1);
+
+.breadcrumbs {
+  svg[data-icon="left"] {
+    font-size: 12px;
+    margin-right: crl-gutters(0.5);
+    color: $color-base-blue;
+  }
+}
+
+.item-container {
+  display: inline-flex;
+}
+
+.item-last {
+  @include crl-type-body;
+}
+
+.item {
+  margin-right: $divider-spacing-default;
+  @include crl-type-body;
+}
+
+.item-link {
+  color: $color-base-blue;
+  font-weight: 600;
+
+  &:hover {
+    color: $color-core-blue-4;
+  }
+}
+
+.item-divider {
+  display: inline-flex;
+  align-items: center;
+  margin-right: $divider-spacing-default;
+  color: $crl-base-text;
+}
+
+.breadcrumbs--condensed {
+  .item {
+    margin-right: $divider-spacing-condensed;
+  }
+
+  .item-divider {
+    margin-right: $divider-spacing-condensed;
+  }
+}

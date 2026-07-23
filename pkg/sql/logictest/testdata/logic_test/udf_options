@@ -1,0 +1,438 @@
+subtest usage
+
+statement error pgcode 0A000 unimplemented: C is not yet supported
+CREATE FUNCTION populate() RETURNS integer AS 'dir/funcs', 'populate' LANGUAGE C
+
+statement error pgcode 42704 language \"made_up_language\" does not exist
+CREATE FUNCTION populate() RETURNS integer AS $$
+DECLARE
+    -- declarations
+BEGIN
+    PERFORM my_function();
+END;
+$$ LANGUAGE made_up_language
+
+statement error pgcode 42P13 leak proof function must be immutable, but got volatility: STABLE
+CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is string
+CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$
+
+statement error pgcode 42601 pq: STABLE: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE STABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42601 pq: STRICT: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT CALLED ON NULL INPUT STABLE STRICT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42601 pq: RETURNS NULL ON NULL INPUT: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT CALLED ON NULL INPUT STABLE RETURNS NULL ON NULL INPUT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42601 pq: NOT LEAKPROOF: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT LEAKPROOF NOT LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42601 pq: AS \$\$ SELECT 2 \$\$: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$ AS $$ SELECT 2 $$;
+
+statement error pgcode 42601 pq: LANGUAGE SQL: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42601 pq: SECURITY DEFINER: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE SECURITY INVOKER SECURITY DEFINER LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 42601 pq: SECURITY INVOKER: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE SECURITY INVOKER EXTERNAL SECURITY INVOKER LANGUAGE SQL AS $$ SELECT 1 $$;
+
+subtest volatility
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+INSERT INTO kv VALUES (1, 1), (2, 2), (3, 3);
+CREATE FUNCTION get_l(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
+SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION get_i(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
+SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION get_s(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
+SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION get_v(i INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION int_identity_v(i INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+SELECT i;
+$$;
+
+query T
+SELECT pg_get_functiondef('get_l'::regproc::oid)
+----
+CREATE FUNCTION public.get_l(i INT8)
+  RETURNS INT8
+  STABLE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+    SELECT v FROM public.kv WHERE k = i;
+  $$
+
+query T
+SELECT pg_get_functiondef(NULL)
+----
+NULL
+
+query T
+SELECT pg_get_functiondef(123456)
+----
+NULL
+
+# Postgres behaves differently for builtin functions, but we don't yet support
+# the syntax for defining non-SQL functions.
+query T
+SELECT pg_get_functiondef('soundex'::regproc::oid)
+----
+soundex
+
+# pg_get_function_sqlbody returns the deparsed body only for functions defined
+# with the SQL-standard inline body syntax (RETURN expr or BEGIN ATOMIC ... END).
+# CockroachDB does not support that syntax (#85144), so prosqlbody is always
+# NULL today, matching Postgres' behavior for AS $$...$$ functions.
+query T
+SELECT pg_get_function_sqlbody('get_l'::regproc::oid)
+----
+NULL
+
+query T
+SELECT pg_get_function_sqlbody(NULL)
+----
+NULL
+
+query T
+SELECT pg_get_function_sqlbody(123456)
+----
+NULL
+
+query T
+SELECT pg_get_function_sqlbody('soundex'::regproc::oid)
+----
+NULL
+
+# Only the volatile functions should see the changes made by the UPDATE in the
+# CTE.
+query IIIIIIII colnames,rowsort
+WITH u AS (
+  UPDATE kv SET v = v + 10 RETURNING k
+)
+SELECT
+get_l(k) l1, get_l(int_identity_v(k)) l2,
+get_i(k) i1, get_i(int_identity_v(k)) i2,
+get_s(k) s1, get_s(int_identity_v(k)) s2,
+get_v(k) v1, get_v(int_identity_v(k)) v2
+FROM u;
+----
+l1  l2  i1  i2  s1  s2  v1  v2
+1   1   1   1   1   1   11  11
+2   2   2   2   2   2   12  12
+3   3   3   3   3   3   13  13
+
+statement ok
+CREATE SEQUENCE sq2;
+
+# Note: postgres allows non-volatile functions to call other volatile functions.
+statement error pgcode 22023 volatile statement not allowed in immutable function: SELECT nextval\('sq2'\)
+CREATE FUNCTION rand_i() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+
+# Note: postgres allows non-volatile functions to call other volatile functions.
+statement error pgcode 22023 volatile statement not allowed in stable function: SELECT nextval\('sq2'\)
+CREATE FUNCTION rand_s() RETURNS INT STABLE LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+
+statement ok
+CREATE FUNCTION rand_v() RETURNS INT VOLATILE  LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+
+query II rowsort
+SELECT rand_v(), rand_v() FROM generate_series(1, 3)
+----
+1  2
+3  4
+5  6
+
+
+subtest strict
+
+statement ok
+CREATE FUNCTION strict_fn(i INT, t TEXT, b BOOL) RETURNS INT STRICT LANGUAGE SQL AS $$
+  SELECT 1
+$$
+
+query I
+SELECT strict_fn(1, 'foo', true)
+----
+1
+
+# Same as above, but with non-constant arguments.
+query I
+WITH tmp(a, b, c) AS MATERIALIZED (VALUES (1, 'foo', true))
+SELECT strict_fn(a, b, c) FROM tmp
+----
+1
+
+query III
+SELECT strict_fn(NULL, 'foo', true), strict_fn(1, NULL, true), strict_fn(1, 'foo', NULL)
+----
+NULL  NULL  NULL
+
+query III
+SELECT strict_fn(NULL, NULL, true), strict_fn(1, NULL, NULL), strict_fn(NULL, 'foo', NULL)
+----
+NULL  NULL  NULL
+
+query I
+SELECT strict_fn(NULL, NULL, NULL)
+----
+NULL
+
+statement ok
+CREATE TABLE imp(k INT PRIMARY KEY, a INT, b TEXT);
+INSERT INTO imp VALUES (1, 2, 'a');
+
+statement ok
+CREATE FUNCTION strict_fn_imp(t TEXT, i imp) RETURNS INT RETURNS NULL ON NULL INPUT LANGUAGE SQL AS $$
+  SELECT 1
+$$
+
+# A tuple with all NULL elements is not considered "NULL INPUT" for a UDF, even
+# though IS NULL returns true for it.
+query IB
+SELECT strict_fn_imp('foo', (NULL,NULL,NULL)), (NULL,NULL,NULL)::imp IS NULL
+----
+1  true
+
+query I
+SELECT strict_fn_imp('foo', NULL)
+----
+NULL
+
+# Tests for the SQL-standard inline body syntax (BEGIN ATOMIC ... END
+# and bare RETURN expr) for CREATE FUNCTION and CREATE PROCEDURE. These
+# bodies are translated into the legacy string body form during opt
+# building, so the descriptor and execution paths are unchanged.
+
+subtest sql_body
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT);
+INSERT INTO abc VALUES (1, 10), (2, 20)
+
+subtest sql_body/begin_atomic_single
+
+statement ok
+CREATE FUNCTION f1(i INT) RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    SELECT b FROM abc WHERE a = i;
+  END
+
+query I
+SELECT f1(1)
+----
+10
+
+subtest sql_body/bare_return
+
+statement ok
+CREATE FUNCTION f2(i INT) RETURNS INT LANGUAGE SQL
+  RETURN (SELECT b FROM abc WHERE a = i)
+
+query I
+SELECT f2(2)
+----
+20
+
+subtest sql_body/begin_atomic_with_return
+
+statement ok
+CREATE FUNCTION f3(i INT) RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    RETURN (SELECT b FROM abc WHERE a = i);
+  END
+
+query I
+SELECT f3(1)
+----
+10
+
+subtest sql_body/begin_atomic_multi_stmt
+
+statement ok
+CREATE FUNCTION f4(i INT, j INT) RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    INSERT INTO abc VALUES (i, j);
+    SELECT b FROM abc WHERE a = i;
+  END
+
+query I
+SELECT f4(99, 999)
+----
+999
+
+subtest sql_body/return_not_last
+
+# RETURN is the result expression, not a control-flow statement: it only
+# determines the result when it is the final body statement. A RETURN
+# followed by more statements has its value discarded, and the last
+# statement determines the result. This matches Postgres, which evaluates
+# the last body statement regardless of RETURN position, so rewriting
+# RETURN as SELECT is faithful.
+statement ok
+CREATE FUNCTION f_return_then_select() RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    RETURN 1;
+    SELECT 2;
+  END
+
+query I
+SELECT f_return_then_select()
+----
+2
+
+statement ok
+CREATE FUNCTION f_select_return_select() RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    SELECT 7;
+    RETURN 3;
+    SELECT 4;
+  END
+
+query I
+SELECT f_select_return_select()
+----
+4
+
+# Multiple RETURNs are allowed (no "first RETURN wins" short-circuit); the
+# last body statement still determines the result, matching Postgres.
+statement ok
+CREATE FUNCTION f_two_returns() RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    RETURN 1;
+    RETURN 2;
+  END
+
+query I
+SELECT f_two_returns()
+----
+2
+
+statement ok
+CREATE FUNCTION f_return_return_select() RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    RETURN 1;
+    RETURN 2;
+    SELECT 3;
+  END
+
+query I
+SELECT f_return_return_select()
+----
+3
+
+subtest sql_body/procedure_begin_atomic
+
+statement ok
+CREATE PROCEDURE p1(i INT) LANGUAGE SQL
+  BEGIN ATOMIC
+    INSERT INTO abc VALUES (i, i);
+  END
+
+statement ok
+CALL p1(50)
+
+query II rowsort
+SELECT a, b FROM abc
+----
+1   10
+2   20
+50  50
+99  999
+
+subtest sql_body/plpgsql_inline_body_rejected
+
+statement error inline SQL function body only valid for language SQL
+CREATE FUNCTION f5() RETURNS INT LANGUAGE PLPGSQL
+  BEGIN ATOMIC
+    RETURN 1;
+  END
+
+subtest sql_body/polymorphic_inline_body_rejected
+
+statement error SQL function with unquoted function body cannot have polymorphic arguments
+CREATE FUNCTION f6(x ANYELEMENT) RETURNS ANYELEMENT LANGUAGE SQL
+  RETURN x
+
+subtest sql_body/early_binding_blocks_drop_column
+
+# The reference tracking that protects existing string-body UDFs also covers
+# inline-body ones, since both paths land in the same opt builder logic.
+statement error pgcode 2BP01 cannot drop column "b" because function "f1" depends on it
+ALTER TABLE abc DROP COLUMN b
+
+subtest sql_body/show_create_renders_string_form
+
+# Inline-body functions are stored as string bodies, so SHOW CREATE
+# FUNCTION renders the AS $$ ... $$ form rather than the original
+# BEGIN ATOMIC syntax. This is a deliberate trade-off to avoid changing
+# descriptor storage.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f1]
+----
+CREATE FUNCTION public.f1(i INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+    SELECT b FROM public.abc WHERE a = i;
+  $$
+
+subtest sql_body/duplicate_body_rejected
+
+# Specifying both an AS $$ ... $$ string body and an inline RETURN or
+# BEGIN ATOMIC body is rejected, matching Postgres (pgcode 42P13).
+statement error pgcode 42P13 duplicate function body specified
+CREATE FUNCTION f7(x INT) RETURNS INT
+  LANGUAGE SQL
+  AS $$ SELECT x * 2 $$
+  RETURN x * 3
+
+statement error pgcode 42P13 duplicate function body specified
+CREATE FUNCTION f8(x INT) RETURNS INT
+  LANGUAGE SQL
+  AS $$ SELECT x * 2 $$
+  BEGIN ATOMIC
+    SELECT x * 3;
+  END
+
+subtest sql_body/ddl_in_inline_body_rejected
+
+# Postgres parses BEGIN ATOMIC bodies at definition time (early binding), so DDL
+# and DCL are forbidden there. This holds even for procedures, which otherwise
+# support DDL through the dollar-quoted AS $$ ... $$ form.
+statement error pgcode 0A000 CREATE TABLE is not yet supported in unquoted SQL routine body
+CREATE FUNCTION f9() RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    CREATE TABLE t_inline (a INT);
+    SELECT 1;
+  END
+
+statement error pgcode 0A000 CREATE TABLE is not yet supported in unquoted SQL routine body
+CREATE PROCEDURE p2() LANGUAGE SQL
+  BEGIN ATOMIC
+    CREATE TABLE t_inline (a INT);
+  END
+
+statement error pgcode 0A000 GRANT is not yet supported in unquoted SQL routine body
+CREATE PROCEDURE p3() LANGUAGE SQL
+  BEGIN ATOMIC
+    GRANT ALL ON TABLE abc TO testuser;
+  END

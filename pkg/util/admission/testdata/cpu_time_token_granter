@@ -1,0 +1,254 @@
+# Simple tryGet calls. Start with noBurst=1, canBurst=0.
+init noburst=1
+----
+cpuTTG can_burst=0 no_burst=1
+requester: waitingRequests: false, returnValueFromHasWaitingRequests: no_burst, returnValueFromGranted: 0
+
+try-get v=1
+----
+kv: tryGet(1) returned true
+cpuTTG can_burst=-1 no_burst=0
+
+try-get v=1
+----
+kv: tryGet(1) returned false
+
+# Returns tokens used since last call to reset-tokens-used.
+# Since only one try-get v=1 succeeded, only one token used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 1
+
+# Since reset-tokens-used just called, should return zero.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 0
+
+# More simple tryGet calls. Start with noBurst=2.
+init noburst=2
+----
+cpuTTG can_burst=0 no_burst=2
+requester: waitingRequests: false, returnValueFromHasWaitingRequests: no_burst, returnValueFromGranted: 0
+
+# For the granter, this is a NOP. Still, it will be
+# called in production. So best to test it doesn't panic, or similar.
+continue-grant-chain
+----
+kv: continueGrantChain
+
+try-get v=1
+----
+kv: tryGet(1) returned true
+cpuTTG can_burst=-1 no_burst=1
+
+try-get v=1
+----
+kv: tryGet(1) returned true
+cpuTTG can_burst=-2 no_burst=0
+
+try-get v=1
+----
+kv: tryGet(1) returned false
+
+# Since two try-gets v=1 succeeded, should return two.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 2
+
+# returnGrant adds tokens to the buckets, when a positive count is used.
+init noburst=1
+----
+cpuTTG can_burst=0 no_burst=1
+requester: waitingRequests: false, returnValueFromHasWaitingRequests: no_burst, returnValueFromGranted: 0
+
+return-grant v=1
+----
+kv: returnGrant(1)
+cpuTTG can_burst=1 no_burst=2
+
+try-get v=1
+----
+kv: tryGet(1) returned true
+cpuTTG can_burst=0 no_burst=1
+
+try-get v=1
+----
+kv: tryGet(1) returned true
+cpuTTG can_burst=-1 no_burst=0
+
+# The net of one return-grant v=1 with two try-gets v=1 is one
+# token used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 1
+
+# Simple tookWithoutPermission test.
+init noburst=3
+----
+cpuTTG can_burst=0 no_burst=3
+requester: waitingRequests: false, returnValueFromHasWaitingRequests: no_burst, returnValueFromGranted: 0
+
+took-without-permission v=3
+----
+kv: tookWithoutPermission(3)
+cpuTTG can_burst=-3 no_burst=0
+
+try-get v=1
+----
+kv: tryGet(1) returned false
+
+try-get v=1
+----
+kv: tryGet(1) returned false
+
+# took-without-permission v=3 is the only successful call, so three tokens used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 3
+
+# Test granting. A single request will be admitted.
+init waiter=2
+----
+cpuTTG can_burst=0 no_burst=0
+requester: waitingRequests: true, returnValueFromHasWaitingRequests: no_burst, returnValueFromGranted: 2
+
+return-grant v=2
+----
+kv: returnGrant(2)
+kv: granted in chain 0, and returning 2
+
+# The net of one return-grant v=2 with that grant leading to admission of request
+# with token count equal to two is zero tokens used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 0
+
+# Test granting. Return 3 tokens. The waiter always returns 1 from
+# granted, so it gets granted admission three times (until tokens
+# exhausted). -3 net.
+init burst=-1 noburst=-1 waiter=1
+----
+cpuTTG can_burst=-1 no_burst=-1
+requester: waitingRequests: true, returnValueFromHasWaitingRequests: no_burst, returnValueFromGranted: 1
+
+return-grant v=3
+----
+kv: returnGrant(3)
+kv: granted in chain 0, and returning 1
+kv: granted in chain 0, and returning 1
+cpuTTG can_burst=0 no_burst=0
+
+# The net of one return-grant v=3 with that grant leading to admission of two requests
+# with token count equal to one is -1 tokens used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned -1
+
+# Simple tryGet calls, with burst this time.
+init burst=1
+----
+cpuTTG can_burst=1 no_burst=0
+requester: waitingRequests: false, returnValueFromHasWaitingRequests: no_burst, returnValueFromGranted: 0
+
+try-get v=1
+----
+kv: tryGet(1) returned false
+
+try-get burst v=1
+----
+kv: tryGet(1) returned true
+cpuTTG can_burst=0 no_burst=-1
+
+try-get burst v=1
+----
+kv: tryGet(1) returned false
+
+# Since one burst try-get succeeded, should return one.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 1
+
+# Test granting, with burst. After the call to return-grant, both
+# buckets have 1 token. The waiter is a burst waiter so it checks
+# canBurst bucket — which is positive — and gets granted.
+init burst=-1 noburst=-1 waiter=1 burstwaiter
+----
+cpuTTG can_burst=-1 no_burst=-1
+requester: waitingRequests: true, returnValueFromHasWaitingRequests: can_burst, returnValueFromGranted: 1
+
+return-grant v=2
+----
+kv: returnGrant(2)
+kv: granted in chain 0, and returning 1
+cpuTTG can_burst=0 no_burst=0
+
+# The net of one return-grant v=2 with that grant leading to admission of one request
+# with token count equal to one is -1 tokens used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned -1
+
+# Test granting, with burst. After the call to return-grant, noBurst
+# bucket has 1 token but canBurst has 0. The waiter is a burst waiter
+# so it checks canBurst — which is not positive — so no grant.
+init burst=-1 noburst=-1 waiter=1 burstwaiter
+----
+cpuTTG can_burst=-1 no_burst=-1
+requester: waitingRequests: true, returnValueFromHasWaitingRequests: can_burst, returnValueFromGranted: 1
+
+return-grant v=1
+----
+kv: returnGrant(1)
+cpuTTG can_burst=0 no_burst=0
+
+# The net of one return-grant v=1 with that grant not leading to any admission is
+# -1 tokens used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned -1
+
+# Test refill. Note that there is a single non-burstable request waiting
+# for admission.
+init waiter=1
+----
+requester: waitingRequests: true, returnValueFromHasWaitingRequests: no_burst, returnValueFromGranted: 1
+
+# The arguments to refill are hard-coded in the test code, but they are also
+# shown in the below output. The corresponding entry in delta is added to every
+# bucket, subject to a max capacity of the corresponding entry in cap and a min
+# floor of the corresponding entry in min. Due to the refill, the waiter is
+# granted admission (it checks noBurst which becomes positive).
+refill
+----
+kv: granted in chain 0, and returning 1
+kv: granted in chain 0, and returning 1
+kv: granted in chain 0, and returning 1
+kv: granted in chain 0, and returning 1
+refill(
+	can_burst -> delta: 5, cap: 20, min: 0
+	no_burst -> delta: 4, cap: 16, min: -4
+)
+cpuTTG can_burst=1 no_burst=0
+
+# Refilling the buckets does not count as token usage. The waiter (returnValue=1)
+# is granted admission repeatedly until noBurst is exhausted: 4 grants of 1 token
+# each. So four tokens used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 4
+
+# Test that refill enforces both ceiling and floor. canBurst starts at 16,
+# so 16 + delta(5) = 21 > cap(20), demonstrating the ceiling. noBurst starts
+# deeply negative so it is clamped to its floor of -4.
+init noburst=-100 burst=16
+----
+cpuTTG can_burst=16 no_burst=-100
+requester: waitingRequests: false, returnValueFromHasWaitingRequests: no_burst, returnValueFromGranted: 0
+
+refill
+----
+refill(
+	can_burst -> delta: 5, cap: 20, min: 0
+	no_burst -> delta: 4, cap: 16, min: -4
+)
+cpuTTG can_burst=20 no_burst=-4

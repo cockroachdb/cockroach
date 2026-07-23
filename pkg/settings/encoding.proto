@@ -1,0 +1,21 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.settings;
+option go_package = "github.com/cockroachdb/cockroach/pkg/settings";
+
+import "gogoproto/gogo.proto";
+
+// EncodedValue contains the value of a cluster setting serialized as an opaque
+// string, along with a type identifier. Used when storing setting values on
+// disk or passing them over the wire.
+message EncodedValue {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
+
+  string value = 1;
+  string type = 2;
+}

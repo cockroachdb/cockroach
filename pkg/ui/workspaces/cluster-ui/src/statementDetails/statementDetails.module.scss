@@ -1,0 +1,220 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module";
+
+.canary-chart-wrapper {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.latency-legend {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-left: 12px;
+  padding-top: 40px;
+  padding-bottom: 24px;
+  font-size: 11px;
+  color: #475872;
+
+  &__bar {
+    width: 14px;
+    flex: 1;
+    min-height: 60px;
+    margin: 4px 0;
+    border-radius: 3px;
+    // --latency-gradient is set on the parent .latency-legend from
+    // LATENCY_LEGEND_GRADIENT in timeseriesUtils.ts to keep the
+    // gradient in sync with latencyToColor.
+    background: var(--latency-gradient);
+  }
+
+  &__label {
+    margin-top: 4px;
+    font-size: 10px;
+    color: #8b96a9;
+  }
+}
+
+.text-link {
+  white-space: nowrap;
+  line-height: $line-height--medium;
+  font-weight: $font-weight--bold;
+  color: $colors--primary-blue-3;
+
+  &:hover {
+    color: $colors--primary-blue-3;
+    text-decoration: underline;
+  }
+
+  color: $colors--link;
+
+  &__unset {
+    color: $tooltip-color;
+    font-style: italic;
+  }
+}
+
+.section {
+  flex: 0 0 auto;
+  padding: 12px 24px 12px 0px;
+  row-gap: 24px;
+  display: flex;
+  flex-direction: column;
+
+  &--heading {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  &--container {
+    padding: 0 24px 0 0;
+  }
+}
+
+.page--header {
+  padding: 0;
+
+  &__title {
+    font-family: $font-family--base;
+    font-size: 20px;
+    line-height: 1.6;
+    letter-spacing: -0.2px;
+    color: $colors--neutral-8;
+    margin-bottom: 25px;
+  }
+}
+
+.back-link {
+  text-decoration: none;
+  color: $link-color;
+}
+
+.fit-content-width {
+  width: fit-content;
+}
+
+.table-details {
+  .summary--card__counting {
+    margin-bottom: 15px;
+
+    &--value {
+      margin: 0;
+      color: $colors--neutral-8;
+      line-height: 32px;
+    }
+
+    &--label {
+      font-size: 14px;
+      line-height: 22px;
+      letter-spacing: 0.1px;
+    }
+  }
+}
+
+.table-area {
+  overflow-x: scroll;
+}
+
+.last-cleared-tooltip,
+.numeric-stats-table,
+.plan-view-table {
+  &__tooltip {
+    width: 36px;
+    height: 16px;
+    display: inline-block;
+    text-transform: none;
+    font-weight: normal;
+    white-space: normal;
+    letter-spacing: normal;
+    font-size: 14px;
+    vertical-align: middle;
+  }
+
+  &__tooltip-hover-area {
+    width: 100%;
+    padding: 0px 10px;
+  }
+
+  &__info-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid $tooltip-color;
+    font-size: 12px;
+    line-height: 14px;
+    text-align: center;
+    color: $tooltip-color;
+  }
+
+  .hover-tooltip--hovered &__info-icon {
+    border-color: $body-color;
+    color: $body-color;
+  }
+}
+
+.statements-table {
+  &__col-query-text {
+    font-family: $font-family--monospace;
+    white-space: pre-wrap;
+  }
+}
+
+.summary-card {
+  color: $colors--neutral-7;
+  h5 {
+    color: $colors--neutral-7;
+  }
+}
+
+.root {
+  flex-grow: 0;
+  width: 100%;
+}
+
+.tooltip-info {
+  border-bottom: 1px dashed $colors--neutral-5;
+}
+
+.no-margin-bottom {
+  margin-bottom: 0px;
+}
+
+.margin-bottom {
+  margin-bottom: 20px;
+}
+
+.margin-bottom-large {
+  margin-bottom: 40px;
+}
+
+.margin-right {
+  margin-right: 12px !important;
+}
+
+.margin-header {
+  margin-top: 10px;
+}
+
+.margin-left-neg {
+  margin-left: -11px !important;
+}
+
+.crl-anchor {
+  font-weight: $font-weight--bold;
+  font-size: $font-size--small;
+  line-height: $line-height--small;
+  letter-spacing: 0.3px;
+  color: $colors--neutral-0;
+  text-decoration: underline;
+
+  &:hover {
+    opacity: 0.7;
+    color: $colors--neutral-0;
+    text-decoration: underline;
+  }
+}

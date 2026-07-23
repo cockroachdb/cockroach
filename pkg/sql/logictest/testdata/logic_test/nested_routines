@@ -1,0 +1,81 @@
+# Regression test for #120916 - the nested routine is not in tail-call position,
+# and so cannot be a target for TCO.
+statement ok
+CREATE FUNCTION f_nested(x INT) RETURNS INT AS $$
+  BEGIN
+    x := x * 2;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f() RETURNS RECORD AS $$
+  DECLARE
+    a INT := -2;
+  BEGIN
+    a := f_nested(a);
+    RAISE NOTICE 'here';
+    RETURN (a, -a);
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II
+SELECT * FROM f() AS g(x INT, y INT);
+----
+-4  4
+
+# Case with an exception handler on the parent routine. This prevents TCO,
+# since executing the child routine in the parent's context would lose track
+# of the exception handler.
+statement ok
+DROP FUNCTION f;
+DROP FUNCTION f_nested;
+
+statement ok
+CREATE FUNCTION f_nested() RETURNS INT AS $$
+  BEGIN
+    RETURN 1//0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN f_nested();
+  EXCEPTION WHEN division_by_zero THEN
+    RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+-1
+
+# Regression test for #121316 - nested routines in a data source.
+statement ok
+CREATE TYPE typ AS (x INT, y INT);
+
+statement ok
+CREATE FUNCTION f_nested(a INT) RETURNS typ AS $$
+  BEGIN
+    RETURN ROW(1, 2)::typ;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION f(a INT) RETURNS INT AS $$
+  BEGIN
+    RETURN (f_nested(a)).y;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(2);
+----
+2
+
+query I
+SELECT * FROM f(2);
+----
+2

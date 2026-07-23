@@ -1,0 +1,22 @@
+diff -urN a/services/network/mgmt/2021-03-01/network/BUILD.bazel b/services/network/mgmt/2021-03-01/network/BUILD.bazel
+--- a/services/network/mgmt/2021-03-01/network/BUILD.bazel
++++ b/services/network/mgmt/2021-03-01/network/BUILD.bazel
+@@ -116,6 +116,7 @@
+         "webapplicationfirewallpolicies.go",
+         "webcategories.go",
+     ],
++    exec_properties = { "Pool": "large" },
+     importpath = "github.com/Azure/azure-sdk-for-go/services/network/mgmt/2021-03-01/network",
+     visibility = ["//visibility:public"],
+     deps = [
+diff -urN a/services/network/mgmt/2022-07-01/network/BUILD.bazel b/services/network/mgmt/2022-07-01/network/BUILD.bazel
+--- a/services/network/mgmt/2022-07-01/network/BUILD.bazel
++++ b/services/network/mgmt/2022-07-01/network/BUILD.bazel
+@@ -139,6 +139,7 @@
+         "webapplicationfirewallpolicies.go",
+         "webcategories.go",
+     ],
++    exec_properties = { "Pool": "large" },
+     importpath = "github.com/Azure/azure-sdk-for-go/services/network/mgmt/2022-07-01/network",
+     visibility = ["//visibility:public"],
+     deps = [

@@ -1,0 +1,8 @@
+# LogicTest: !3node-tenant
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+# Regression check that FROM == TO doesn't error
+statement ok
+ALTER TABLE t SCATTER FROM (1) TO (1)

@@ -1,0 +1,36 @@
+echo
+----
+global:
+  scrape_interval: 10s
+  scrape_timeout: 5s
+scrape_configs:
+- job_name: workload0
+  static_configs:
+  - targets:
+    - 127.0.0.3:2005
+    - 127.0.0.4:2005
+    - 127.0.0.5:2005
+    - 127.0.0.6:2009
+  metrics_path: /
+  tls_config:
+    insecure_skip_verify: true
+- job_name: cockroach-n8
+  static_configs:
+  - labels:
+      node: "8"
+      tenant: system
+    targets:
+    - 127.0.0.8:26258
+  metrics_path: /_status/vars
+  tls_config:
+    insecure_skip_verify: true
+- job_name: cockroach-n9
+  static_configs:
+  - labels:
+      node: "9"
+      tenant: system
+    targets:
+    - 127.0.0.9:26258
+  metrics_path: /_status/vars
+  tls_config:
+    insecure_skip_verify: true

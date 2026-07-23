@@ -1,0 +1,276 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package sql
+
+import (
+	"context"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+)
+
+type autoCommitOpt int
+
+const (
+	autoCommitDisabled autoCommitOpt = 0
+	autoCommitEnabled  autoCommitOpt = 1
+)
+
+// tableWriterBase is meant to be used to factor common code between
+// the all tableWriters.
+type tableWriterBase struct {
+	// txn is the current KV transaction.
+	txn *kv.Txn
+	// desc is the descriptor of the table that we're writing.
+	desc catalog.TableDescriptor
+	// is autoCommit turned on.
+	autoCommit autoCommitOpt
+	// b is the current batch.
+	b *kv.Batch
+	// lockTimeout specifies the maximum amount of time that the writer will
+	// wait while attempting to acquire a lock on a key.
+	lockTimeout time.Duration
+	// deadlockTimeout specifies the amount of time that the writer will wait
+	// on a lock before checking if there is a race condition.
+	deadlockTimeout time.Duration
+	// maxBatchSize determines the maximum number of rows in the SQL-level batch
+	// for a mutation operation. By default, it will be set to 10k but can be a
+	// different value in tests.
+	maxBatchSize int
+	// maxBatchByteSize determines the maximum number of key and value bytes in
+	// the KV batch for a mutation operation.
+	// NOTE: This is based on the bytes in the KV batch, while maxBatchSize is
+	// based on the rows in the SQL-level batch.
+	maxBatchByteSize int
+	// currentBatchSize is the size of the current SQL-level batch (i.e. not the
+	// KV-level batch). It is updated on every row() call and is reset once a new
+	// batch is started.
+	currentBatchSize int
+	// rowsWritten tracks the number of primary index rows written by this
+	// tableWriterBase so far. This counter includes unsuccessful writes (e.g.
+	// those performed by swap mutations in the event of a nonexistent row).
+	rowsWritten int64
+	// indexRowsWritten tracks the number of primary and secondary index rows
+	// written by this tableWriterBase so far. It is always >= rowsWritten.
+	indexRowsWritten int64
+	// indexBytesWritten tracks the number of primary and secondary index bytes
+	// written by this tableWriterBase so far.
+	indexBytesWritten int64
+	// kvCPUTime tracks the cumulative CPU time (in nanoseconds) that KV
+	// reported in BatchResponse headers during the execution of this table writer.
+	kvCPUTime int64
+	// localKVCPUTime tracks the cumulative SQL goroutine CPU time (in
+	// nanoseconds) spent inside KV calls during the execution of this table
+	// writer, as measured by the grunning library. This is the portion of SQL
+	// goroutine CPU that overlapped with KV work, not the CPU consumed on KV
+	// servers (see kvCPUTime for that).
+	localKVCPUTime int64
+	// cpuStopWatch is used to measure grunning time around KV calls.
+	cpuStopWatch timeutil.CPUStopWatch
+	// rowsWrittenLimit if positive indicates that
+	// `transaction_rows_written_err` is enabled. The limit will be checked in
+	// finalize() before deciding whether it is safe to auto commit (if auto
+	// commit is enabled).
+	rowsWrittenLimit int64
+	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
+	// to use the non-test value.
+	forceProductionBatchSizes bool
+	// Adapter to make expose a kv.Batch as a Putter
+	putter row.KVBatchAdapter
+	// originID is an identifier for the cluster that originally wrote the data
+	// being written by the table writer during Logical Data Replication.
+	originID uint32
+	// originTimestamp is the timestamp the data written by this table writer were
+	// originally written with before being replicated via Logical Data
+	// Replication.
+	originTimestamp hlc.Timestamp
+	// workloadID is the statement fingerprint ID or job ID for ASH sampling.
+	workloadID uint64
+	// workloadType distinguishes the kind of workload for ASH sampling.
+	workloadType workloadid.WorkloadType
+}
+
+var maxBatchBytes = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"sql.mutations.mutation_batch_byte_size",
+	"byte size - in key and value lengths -- for mutation batches",
+	4<<20,
+)
+
+// init initializes the tableWriterBase with a Txn.
+func (tb *tableWriterBase) init(
+	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *eval.Context,
+) error {
+	if txn.Type() != kv.RootTxn {
+		return errors.AssertionFailedf("unexpectedly non-root txn is used by the table writer")
+	}
+	tb.txn = txn
+	tb.desc = tableDesc
+	tb.lockTimeout = 0
+	tb.deadlockTimeout = 0
+	tb.originID = 0
+	tb.originTimestamp = hlc.Timestamp{}
+	if evalCtx != nil {
+		tb.lockTimeout = evalCtx.SessionData().LockTimeout
+		tb.deadlockTimeout = evalCtx.SessionData().DeadlockTimeout
+		tb.originID = evalCtx.SessionData().OriginIDForLogicalDataReplication
+		tb.originTimestamp = evalCtx.SessionData().OriginTimestampForLogicalDataReplication
+		tb.workloadID = evalCtx.WorkloadID
+		tb.workloadType = evalCtx.WorkloadType
+	}
+	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionValues
+	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
+	batchMaxBytes := int(maxBatchBytes.Default())
+	if evalCtx != nil {
+		batchMaxBytes = int(maxBatchBytes.Get(&evalCtx.Settings.SV))
+	}
+	tb.maxBatchByteSize = mutations.MaxBatchByteSize(batchMaxBytes, tb.forceProductionBatchSizes)
+	tb.initNewBatch()
+	return nil
+}
+
+// setRowsWrittenLimit should be called before finalize whenever the
+// `transaction_rows_written_err` guardrail should be enforced in case the auto
+// commit might be enabled.
+func (tb *tableWriterBase) setRowsWrittenLimit(sd *sessiondata.SessionData) {
+	if sd != nil && !sd.Internal {
+		// Only set the limit for non-internal queries (for internal ones we
+		// never error out based on the txn row count guardrails).
+		tb.rowsWrittenLimit = sd.TxnRowsWrittenErr
+	}
+}
+
+// flushAndStartNewBatch shares the common flushAndStartNewBatch() code between
+// tableWriters.
+func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
+	log.VEventf(ctx, 2, "writing batch with %d requests", len(tb.b.Requests()))
+	tb.cpuStopWatch.Start()
+	err := tb.txn.Run(ctx, tb.b)
+	if delta := tb.cpuStopWatch.Stop(); delta > 0 {
+		tb.localKVCPUTime += int64(delta)
+	}
+	if err != nil {
+		return row.ConvertBatchError(ctx, tb.desc, tb.b, false /* alwaysConvertCondFailed */)
+	}
+	if err := tb.tryDoResponseAdmission(ctx); err != nil {
+		return err
+	}
+	if br := tb.b.RawResponse(); br != nil && br.CPUTime > 0 {
+		tb.kvCPUTime += br.CPUTime
+	}
+	tb.rowsWritten += int64(tb.currentBatchSize)
+	// The mutation operators add one request to the KV batch for each index
+	// entry that's written.
+	tb.indexRowsWritten += int64(len(tb.b.Requests()))
+	tb.indexBytesWritten += int64(tb.b.ApproximateMutationBytes())
+	tb.currentBatchSize = 0
+	tb.initNewBatch()
+	return nil
+}
+
+// finalize shares the common finalize() code between tableWriters.
+func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
+	// NB: unlike flushAndStartNewBatch, we don't bother with admission control
+	// for response processing when finalizing.
+	tb.rowsWritten += int64(tb.currentBatchSize)
+	tb.indexRowsWritten += int64(len(tb.b.Requests()))
+	tb.indexBytesWritten += int64(tb.b.ApproximateMutationBytes())
+	if tb.autoCommit == autoCommitEnabled &&
+		// We can only auto commit if the rows written guardrail is disabled or
+		// we haven't exceeded the specified limit (the optimizer is responsible
+		// for making sure that there is exactly one mutation before enabling
+		// the auto commit).
+		(tb.rowsWrittenLimit == 0 || tb.rowsWritten <= tb.rowsWrittenLimit) &&
+		// Also, we don't want to try to commit here if the deadline is expired.
+		// If we bubble back up to SQL then maybe we can get a fresh deadline
+		// before committing.
+		!tb.txn.DeadlineLikelySufficient() {
+		log.Event(ctx, "autocommit enabled")
+		log.VEventf(ctx, 2, "writing batch with %d requests and committing", len(tb.b.Requests()))
+		// An auto-txn can commit the transaction with the batch. This is an
+		// optimization to avoid an extra round-trip to the transaction
+		// coordinator.
+		tb.cpuStopWatch.Start()
+		err = tb.txn.CommitInBatch(ctx, tb.b)
+		if delta := tb.cpuStopWatch.Stop(); delta > 0 {
+			tb.localKVCPUTime += int64(delta)
+		}
+	} else {
+		log.VEventf(ctx, 2, "writing batch with %d requests", len(tb.b.Requests()))
+		tb.cpuStopWatch.Start()
+		err = tb.txn.Run(ctx, tb.b)
+		if delta := tb.cpuStopWatch.Stop(); delta > 0 {
+			tb.localKVCPUTime += int64(delta)
+		}
+	}
+	if err != nil {
+		return row.ConvertBatchError(ctx, tb.desc, tb.b, false /* alwaysConvertCondFailed */)
+	}
+	if br := tb.b.RawResponse(); br != nil && br.CPUTime > 0 {
+		tb.kvCPUTime += br.CPUTime
+	}
+	return tb.tryDoResponseAdmission(ctx)
+}
+
+func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
+	// Do admission control for response processing. This is the shared write
+	// path for most SQL mutations.
+	responseAdmissionQ := tb.txn.DB().SQLKVResponseAdmissionQ
+	if responseAdmissionQ != nil {
+		requestAdmissionHeader := tb.txn.AdmissionHeader()
+		responseAdmission := admission.WorkInfo{
+			TenantID:     roachpb.SystemTenantID,
+			Priority:     admissionpb.WorkPriority(requestAdmissionHeader.Priority),
+			CreateTime:   requestAdmissionHeader.CreateTime,
+			WorkloadID:   tb.workloadID,
+			WorkloadType: tb.workloadType,
+		}
+		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (tb *tableWriterBase) enableAutoCommit() {
+	tb.autoCommit = autoCommitEnabled
+}
+
+func (tb *tableWriterBase) initNewBatch() {
+	tb.b = tb.txn.NewBatch()
+	tb.putter.Batch = tb.b
+	tb.b.Header.LockTimeout = tb.lockTimeout
+	tb.b.Header.DeadlockTimeout = tb.deadlockTimeout
+	if tb.originID != 0 {
+		tb.b.Header.WriteOptions = &kvpb.WriteOptions{
+			OriginID:        tb.originID,
+			OriginTimestamp: tb.originTimestamp,
+		}
+	}
+}
+
+func (tb *tableWriterBase) createSavepoint(ctx context.Context) (kv.SavepointToken, error) {
+	return tb.txn.CreateSavepoint(ctx)
+}
+
+func (tb *tableWriterBase) rollbackToSavepoint(ctx context.Context, s kv.SavepointToken) error {
+	return tb.txn.RollbackToSavepoint(ctx, s)
+}

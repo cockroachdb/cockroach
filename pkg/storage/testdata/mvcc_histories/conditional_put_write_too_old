@@ -1,0 +1,46 @@
+# This test verifies the differing behavior of conditional puts when writing
+# with an older timestamp than the existing write. In these cases, a WriteTooOld
+# error is returned and the condition is not evaluated until after the
+# write-write conflict is resolved.
+
+run ok
+put ts=10 k=k v=v1
+----
+>> at end:
+data: "k"/10.000000000,0 -> /BYTES/v1
+
+# Try a non-transactional put @t=1 with expectation of nil; should fail with a WriteTooOld error.
+run error
+cput ts=1 k=k v=v2
+----
+>> at end:
+data: "k"/10.000000000,0 -> /BYTES/v1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 1.000000000,0 too old; must write at or above 10.000000000,1
+
+# Now do a non-transactional put @t=1 with expectation of value1; will return WriteTooOld error @t=10,1.
+run error
+cput ts=1 k=k v=v2 cond=v1
+----
+>> at end:
+data: "k"/10.000000000,0 -> /BYTES/v1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 1.000000000,0 too old; must write at or above 10.000000000,1
+
+# Try a transactional put @t=1 with expectation of value2; should fail with a WriteTooOld error.
+run error
+with t=a
+  txn_begin ts=1
+  cput k=k v=v2 cond=v1
+----
+>> at end:
+txn: "a" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 gul=0,0
+data: "k"/10.000000000,0 -> /BYTES/v1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 1.000000000,0 too old; must write at or above 10.000000000,1
+
+# Now do a transactional put @t=1 with expectation of nil; will return WriteTooOld error @t=10,2.
+run error
+with t=a
+  cput k=k v=v3
+----
+>> at end:
+data: "k"/10.000000000,0 -> /BYTES/v1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 1.000000000,0 too old; must write at or above 10.000000000,1

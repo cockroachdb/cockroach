@@ -1,0 +1,205 @@
+statement ok
+CREATE USER testuser1;
+CREATE USER testuser2;
+GRANT testuser1 TO ROOT;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser1 GRANT SELECT ON TABLES TO testuser2;
+
+statement error pq: role testuser1 cannot be dropped because some objects depend on it\nowner of default privileges on new relations belonging to role testuser1 in database test
+DROP ROLE testuser1
+
+statement error pq: role testuser2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new relations belonging to role testuser1 in database test
+DROP ROLE testuser2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser1 REVOKE SELECT ON TABLES FROM testuser2;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser1 GRANT USAGE ON SCHEMAS TO testuser2;
+
+statement error pq: role testuser1 cannot be dropped because some objects depend on it\nowner of default privileges on new schemas belonging to role testuser1 in database test
+DROP ROLE testuser1
+
+statement error pq: role testuser2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new schemas belonging to role testuser1 in database test
+DROP ROLE testuser2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser1 REVOKE USAGE ON SCHEMAS FROM testuser2;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser1 GRANT USAGE ON TYPES TO testuser2;
+
+statement error pq: role testuser1 cannot be dropped because some objects depend on it\nowner of default privileges on new types belonging to role testuser1 in database test
+DROP ROLE testuser1
+
+statement error pq: role testuser2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new types belonging to role testuser1 in database test
+DROP ROLE testuser2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser1 REVOKE USAGE ON TYPES FROM testuser2;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser1 GRANT SELECT ON SEQUENCES TO testuser2;
+
+statement error pq: role testuser1 cannot be dropped because some objects depend on it\nowner of default privileges on new sequences belonging to role testuser1 in database test
+DROP ROLE testuser1
+
+statement error pq: role testuser2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new sequences belonging to role testuser1 in database test
+DROP ROLE testuser2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser1 REVOKE SELECT ON TABLES FROM testuser2;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser1 REVOKE USAGE ON SCHEMAS FROM testuser2;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser1 REVOKE USAGE ON TYPES FROM testuser2;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser1 REVOKE SELECT ON SEQUENCES FROM testuser2;
+
+statement ok
+DROP ROLE testuser1;
+
+statement ok
+DROP ROLE testuser2;
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON TABLES TO testuser2
+
+statement error pq: role testuser2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new relations for all roles in database test
+DROP ROLE testuser2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE SELECT ON TABLES FROM testuser2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT USAGE ON SCHEMAS TO testuser2;
+
+statement error pq: role testuser2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new schemas for all roles in database test
+DROP ROLE testuser2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE USAGE ON SCHEMAS FROM testuser2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT USAGE ON TYPES TO testuser2;
+
+statement error pq: role testuser2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new types for all roles in database test
+DROP ROLE testuser2
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE USAGE ON TYPES FROM testuser2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON SEQUENCES TO testuser2;
+
+statement error pq: role testuser2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new sequences for all roles in database test
+DROP ROLE testuser2
+
+# Grant default privileges to testuser2 in a second database.
+statement ok
+CREATE ROLE testuser3;
+GRANT testuser2 TO root;
+GRANT testuser3 TO root;
+CREATE DATABASE testdb2;
+USE testdb2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON SEQUENCES TO testuser2;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser3 GRANT SELECT ON SEQUENCES TO testuser2;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser2 GRANT SELECT ON SEQUENCES TO testuser3;
+
+statement error pq: role testuser2 cannot be dropped because some objects depend on it\nowner of default privileges on new sequences belonging to role testuser2 in database testdb2\nprivileges for default privileges on new sequences belonging to role testuser3 in database testdb2\nprivileges for default privileges on new sequences for all roles in database test\nprivileges for default privileges on new sequences for all roles in database testdb2
+DROP ROLE testuser2
+
+# Check the hint output.
+statement error pq: role testuser2 cannot be dropped because some objects depend on it\nowner of default privileges on new sequences belonging to role testuser2 in database testdb2\nprivileges for default privileges on new sequences belonging to role testuser3 in database testdb2\nprivileges for default privileges on new sequences for all roles in database test\nprivileges for default privileges on new sequences for all roles in database testdb2\nHINT: USE testdb2; ALTER DEFAULT PRIVILEGES FOR ROLE testuser2 REVOKE ALL ON SEQUENCES FROM testuser3;\nUSE testdb2; ALTER DEFAULT PRIVILEGES FOR ROLE testuser3 REVOKE ALL ON SEQUENCES FROM testuser2;\nUSE test; ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE ALL ON SEQUENCES FROM testuser2;\nUSE testdb2; ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE ALL ON SEQUENCES FROM testuser2;
+DROP ROLE testuser2
+
+# Tests where default privileges are defined on the schema.
+statement ok
+CREATE ROLE testuser4;
+GRANT testuser4 TO root;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA PUBLIC GRANT SELECT ON SEQUENCES TO testuser4;
+
+statement error pq: role testuser4 cannot be dropped because some objects depend on it\nprivileges for default privileges on new sequences for all roles in database testdb2 in schema public
+DROP ROLE testuser4
+
+statement ok
+CREATE SCHEMA s;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA s GRANT SELECT ON SEQUENCES TO testuser4;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser3 IN SCHEMA s GRANT SELECT ON SEQUENCES TO testuser4;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser4 IN SCHEMA s GRANT SELECT ON SEQUENCES TO testuser3;
+
+statement error pq: role testuser4 cannot be dropped because some objects depend on it\nowner of default privileges on new sequences belonging to role testuser4 in database testdb2 in schema s\nprivileges for default privileges on new sequences belonging to role testuser3 in database testdb2 in schema s\nprivileges for default privileges on new sequences for all roles in database testdb2 in schema public\nprivileges for default privileges on new sequences for all roles in database testdb2 in schema s
+DROP ROLE testuser4
+
+statement error pq: role testuser4 cannot be dropped because some objects depend on it\nowner of default privileges on new sequences belonging to role testuser4 in database testdb2 in schema s\nprivileges for default privileges on new sequences belonging to role testuser3 in database testdb2 in schema s\nprivileges for default privileges on new sequences for all roles in database testdb2 in schema public\nprivileges for default privileges on new sequences for all roles in database testdb2 in schema s\nHINT: USE testdb2; ALTER DEFAULT PRIVILEGES FOR ROLE testuser4 IN SCHEMA S REVOKE ALL ON SEQUENCES FROM testuser3;\nUSE testdb2; ALTER DEFAULT PRIVILEGES FOR ROLE testuser3 IN SCHEMA S REVOKE ALL ON SEQUENCES FROM testuser4;\nUSE testdb2; ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA PUBLIC REVOKE ALL ON SEQUENCES FROM testuser4;\nUSE testdb2; ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA S REVOKE ALL ON SEQUENCES FROM testuser4;
+DROP ROLE testuser4
+
+# Now let's ensure we can revoke all the privileges and drop testuser2/3/4.
+
+# Prepare to drop testuser2.
+statement ok
+USE test;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE ALL ON SEQUENCES FROM testuser2;
+
+statement ok
+USE testdb2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser3 REVOKE ALL ON SEQUENCES FROM testuser2;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser2 REVOKE ALL ON SEQUENCES FROM testuser3;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE ALL ON SEQUENCES FROM testuser2;
+
+statement ok
+DROP ROLE testuser2;
+
+# Prepare to drop testuser3.
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser3 IN SCHEMA s REVOKE ALL ON SEQUENCES FROM testuser4;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser4 IN SCHEMA s REVOKE ALL ON SEQUENCES FROM testuser3;
+
+statement ok
+DROP ROLE testuser3;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA s REVOKE ALL ON SEQUENCES FROM testuser4;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM testuser4;
+
+statement ok
+DROP ROLE testuser4;
+
+subtest fix_for_regression_bug_134538
+
+statement ok
+CREATE USER not_admin WITH PASSWORD '123';
+GRANT SYSTEM CREATEROLE TO not_admin;
+SET ROLE not_admin;
+
+statement error pq: role/user "a_user_that_does_not_exist" does not exist
+DROP USER a_user_that_does_not_exist;
+
+statement ok
+DROP USER IF EXISTS a_user_that_does_not_exist;
+
+statement ok
+SET ROLE admin;
+
+statement error pq: role/user "a_user_that_does_not_exist" does not exist
+DROP USER a_user_that_does_not_exist;
+
+statement ok
+DROP USER IF EXISTS a_user_that_does_not_exist;
+
+subtest end
+
+# Verify that a granting default privileges to the same role the defaults are
+# being defined for has no undesirable side effect.
+subtest default_priv_granted_to_self
+
+statement ok
+CREATE ROLE self_referencing_role
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE self_referencing_role GRANT INSERT ON TABLES TO self_referencing_role
+
+statement ok
+DROP ROLE self_referencing_role
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects
+----
+0
+
+subtest end

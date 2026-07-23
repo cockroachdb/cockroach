@@ -1,0 +1,171 @@
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+let $t_id
+SELECT id FROM system.namespace WHERE name='a'
+
+statement ok
+CREATE TABLE b (id INT PRIMARY KEY)
+
+query TTTTIT rowsort
+SHOW TABLES FROM test
+----
+public  a  table  root  0  NULL
+public  b  table  root  0  NULL
+
+statement ok
+INSERT INTO a VALUES (3),(7),(2)
+
+query I rowsort
+SELECT * FROM a
+----
+2
+3
+7
+
+statement ok
+DROP TABLE a
+
+# The "updating privileges" clause in the SELECT statement is for excluding jobs
+# run by an unrelated startup migration.
+# The "updating version" clause is for excluding schema change jobs that
+# are caused by role creation/modification.
+query TT
+SELECT replace(job_type, 'NEW SCHEMA CHANGE', 'SCHEMA CHANGE'), status
+  FROM [SHOW JOBS]
+ WHERE (user_name = 'root' OR user_name = 'node')
+       AND (
+			job_type = 'SCHEMA CHANGE GC'
+			OR job_type = 'NEW SCHEMA CHANGE'
+			OR (
+					job_type = 'SCHEMA CHANGE'
+					AND description != 'updating privileges'
+					AND description NOT LIKE 'updating version%'
+				)
+		) ORDER BY 1, 2;
+----
+SCHEMA CHANGE     succeeded
+SCHEMA CHANGE GC  running
+
+query TTTTIT
+SHOW TABLES FROM test
+----
+public  b  table  root  0  NULL
+
+statement error pgcode 42P01 relation "a" does not exist
+SELECT * FROM a
+
+statement error pq: \[\d+ AS a\]: relation "a" is being dropped: descriptor is being dropped
+SELECT * FROM [$t_id AS a]
+
+statement error pgcode 42P01 relation "a" does not exist
+DROP TABLE a
+
+statement ok
+DROP TABLE IF EXISTS a
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+query I
+SELECT * FROM a
+----
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+user testuser
+
+statement ok
+CREATE SCHEMA s
+
+user root
+
+statement ok
+CREATE TABLE s.t()
+
+user testuser
+
+# Being the owner of schema s should allow testuser to drop table s.t.
+statement ok
+DROP TABLE s.t
+
+# Verify that a table can successfully be dropped after performing
+# a schema change to the table in the same transaction.
+# See https://github.com/cockroachdb/cockroach/issues/56235.
+subtest drop_after_schema_change_in_txn
+statement ok
+CREATE TABLE to_drop();
+
+statement ok
+BEGIN;
+
+statement ok
+ALTER TABLE to_drop ADD COLUMN foo int;
+
+statement ok
+DROP TABLE to_drop;
+
+statement ok
+COMMIT;
+
+statement error pgcode 42P01 relation "to_drop" does not exist
+DROP TABLE to_drop;
+
+subtest drop_table_with_not_valid_constraints
+
+statement ok
+CREATE TABLE t_with_not_valid_constraints_1 (i INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE TABLE t_with_not_valid_constraints_2 (i INT PRIMARY KEY, j INT);
+
+statement ok
+ALTER TABLE t_with_not_valid_constraints_1 ADD CHECK (i > 0) NOT VALID;
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true;
+
+statement ok
+ALTER TABLE t_with_not_valid_constraints_1 ADD UNIQUE WITHOUT INDEX (j) NOT VALID;
+
+statement ok
+ALTER TABLE t_with_not_valid_constraints_1 ADD FOREIGN KEY (i) REFERENCES t_with_not_valid_constraints_2 (i) NOT VALID;
+
+statement ok
+DROP TABLE t_with_not_valid_constraints_1;
+
+statement ok
+DROP TABLE t_with_not_valid_constraints_2;
+
+# Tests for #97783 where unvalidated FK references were not cleaned up
+subtest drop_table_with_not_valid_fk_and_check
+
+statement ok
+CREATE TABLE t_not_valid_src (i INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE TABLE t_not_valid_dst (i INT PRIMARY KEY, j INT, c CHAR);
+
+statement ok
+CREATE SEQUENCE t_not_valid_sq;
+
+statement ok
+ALTER TABLE t_not_valid_dst ADD CONSTRAINT v_fk FOREIGN KEY(j) REFERENCES t_not_valid_src(i) NOT VALID;
+
+statement ok
+ALTER TABLE t_not_valid_dst ADD CHECK (j > currval('t_not_valid_sq')) NOT VALID;
+
+statement ok
+DROP TABLE t_not_valid_src CASCADE;
+
+statement ok
+DROP SEQUENCE t_not_valid_sq CASCADE;
+
+# Sequence related check constraint should be cleaned, so inserts should work.
+# Also the destination descriptor should be valid after the FK clean up. Note:
+# skip on older configs since this is an existing bug, not a new regression
+# (see #97871).
+skipif config local-legacy-schema-changer
+statement ok
+INSERT INTO t_not_valid_dst VALUES(5,5,5);

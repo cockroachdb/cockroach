@@ -1,0 +1,106 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
+CREATE SEQUENCE db.public.sq1;
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE db.public.tbl ADD COLUMN j INT AS (NULL::INT) VIRTUAL NOT NULL;
+----
+Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL AS (‹NULL›::INT8) VIRTUAL;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 4 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC      ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC      ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
+ │         │    └── ABSENT → PUBLIC      ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+), Usage: REGULAR}
+ │         ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │         │    └── ABSENT → WRITE_ONLY  CheckConstraint:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey), ConstraintID: 2}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT      TableSchemaLocked:{DescID: 106 (tbl)}
+ │         └── 6 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":106}
+ │              ├── AddCheckConstraint {"CheckExpr":"CASE WHEN (crdb_...","ConstraintID":2,"TableID":106,"Validity":2}
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":106}}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":106}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":106}}
+ │              └── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":106}}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 4 elements transitioning toward PUBLIC
+ │    │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │    │    │    ├── PUBLIC      → ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
+ │    │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
+ │    │    │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+), Usage: REGULAR}
+ │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │    │    │    └── WRITE_ONLY  → ABSENT CheckConstraint:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey), ConstraintID: 2}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT      → PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 4 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC      ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC      ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
+ │         │    └── ABSENT → PUBLIC      ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+), Usage: REGULAR}
+ │         ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │         │    └── ABSENT → WRITE_ONLY  CheckConstraint:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey), ConstraintID: 2}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT      TableSchemaLocked:{DescID: 106 (tbl)}
+ │         └── 8 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":106}
+ │              ├── AddCheckConstraint {"CheckExpr":"CASE WHEN (crdb_...","ConstraintID":2,"TableID":106,"Validity":2}
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":106}}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":106}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":106}}
+ │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":106}}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Validat..."}
+ ├── PostCommitPhase
+ │    ├── Stage 1 of 3 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │    │    │    └── WRITE_ONLY → VALIDATED CheckConstraint:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey), ConstraintID: 2}
+ │    │    └── 1 Validation operation
+ │    │         └── ValidateConstraint {"ConstraintID":2,"IndexIDForValidation":1,"TableID":106}
+ │    ├── Stage 2 of 3 in PostCommitPhase
+ │    │    ├── 2 elements transitioning toward PUBLIC
+ │    │    │    ├── DELETE_ONLY → WRITE_ONLY Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │    │    │    └── ABSENT      → WRITE_ONLY ColumnNotNull:{DescID: 106 (tbl), ColumnID: 3 (j+), IndexID: 1 (tbl_pkey)}
+ │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │    │    │    └── VALIDATED   → PUBLIC     CheckConstraint:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey), ConstraintID: 2}
+ │    │    └── 5 Mutation operations
+ │    │         ├── MakeValidatedCheckConstraintPublic {"ConstraintID":2,"TableID":106}
+ │    │         ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":3,"TableID":106}
+ │    │         ├── MakeAbsentColumnNotNullWriteOnly {"ColumnID":3,"TableID":106}
+ │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Validat..."}
+ │    └── Stage 3 of 3 in PostCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── WRITE_ONLY → VALIDATED ColumnNotNull:{DescID: 106 (tbl), ColumnID: 3 (j+), IndexID: 1 (tbl_pkey)}
+ │         └── 1 Validation operation
+ │              └── ValidateColumnNotNull {"ColumnID":3,"IndexIDForValidation":1,"TableID":106}
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 2 elements transitioning toward PUBLIC
+      │    │    ├── WRITE_ONLY → PUBLIC              Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+      │    │    └── VALIDATED  → PUBLIC              ColumnNotNull:{DescID: 106 (tbl), ColumnID: 3 (j+), IndexID: 1 (tbl_pkey)}
+      │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+      │    │    └── PUBLIC     → TRANSIENT_VALIDATED CheckConstraint:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey), ConstraintID: 2}
+      │    └── 6 Mutation operations
+      │         ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":106}
+      │         ├── MakeValidatedColumnNotNullPublic {"ColumnID":3,"TableID":106}
+      │         ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":106}
+      │         ├── RefreshStats {"TableID":106}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_ABSENT
+           │    └── TRANSIENT_VALIDATED → TRANSIENT_ABSENT CheckConstraint:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey), ConstraintID: 2}
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT              → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}
+           └── 4 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":106}
+                ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

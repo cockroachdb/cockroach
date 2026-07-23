@@ -1,0 +1,1876 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v))
+
+# There must be no limit at the index scan level.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE v > 4 AND v < 8 AND w > 30 ORDER BY v LIMIT 2
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ columns: (k, v, w)
+│ count: 2
+│
+└── • filter
+    │ columns: (k, v, w)
+    │ ordering: +v
+    │ estimated row count: 28 (missing stats)
+    │ filter: w > 30
+    │
+    └── • index join
+        │ columns: (k, v, w)
+        │ ordering: +v
+        │ estimated row count: 30 (missing stats)
+        │ table: t@t_pkey
+        │ key columns: k
+        │ parallel
+        │
+        └── • scan
+              columns: (k, v)
+              ordering: +v
+              estimated row count: 30 (missing stats)
+              table: t@t_v_idx
+              spans: /5-/8
+
+# This kind of query can be used to work around memory usage limits. We need to
+# choose the "hard" limit of 100 over the "soft" limit of 25 (with the hard
+# limit we will only store 100 rows in the sort node). See #19677.
+query T
+EXPLAIN (VERBOSE) SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) ORDER BY w LIMIT 25
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ columns: (w)
+│ count: 25
+│
+└── • distinct
+    │ columns: (w)
+    │ ordering: +w
+    │ estimated row count: 65 (missing stats)
+    │ distinct on: w
+    │ order key: w
+    │
+    └── • top-k
+        │ columns: (w)
+        │ estimated row count: 100 (missing stats)
+        │ order: +w
+        │ k: 100
+        │
+        └── • scan
+              columns: (w)
+              estimated row count: 1,000 (missing stats)
+              table: t@t_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k, v)
+  ordering: +k
+  estimated row count: 5 (missing stats)
+  table: t@t_pkey
+  spans: LIMITED SCAN
+  limit: 5
+
+query T
+EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k OFFSET 5
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ columns: (k, v)
+│ offset: 5
+│
+└── • scan
+      columns: (k, v)
+      ordering: +k
+      estimated row count: 1,000 (missing stats)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ columns: (k, v)
+│ offset: 1
+│
+└── • scan
+      columns: (k, v)
+      ordering: +v
+      estimated row count: 6 (missing stats)
+      table: t@t_v_idx
+      spans: LIMITED SCAN
+      limit: 6
+
+query T
+EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ columns: (k, v)
+│ offset: 1
+│
+└── • revscan
+      columns: (k, v)
+      ordering: -v
+      estimated row count: 6 (missing stats)
+      table: t@t_v_idx
+      spans: LIMITED SCAN
+      limit: 6
+
+query T
+EXPLAIN (VERBOSE) SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (sum)
+│
+└── • project
+    │ columns: (any_not_null, sum)
+    │ ordering: -any_not_null
+    │
+    └── • top-k
+        │ columns: (k, sum, any_not_null)
+        │ estimated row count: 10 (missing stats)
+        │ order: -any_not_null
+        │ k: 10
+        │
+        └── • group (streaming)
+            │ columns: (k, sum, any_not_null)
+            │ estimated row count: 1,000 (missing stats)
+            │ aggregate 0: sum(w)
+            │ aggregate 1: any_not_null(v)
+            │ group by: k
+            │ ordered: +k
+            │
+            └── • scan
+                  columns: (k, v, w)
+                  ordering: +k
+                  estimated row count: 1,000 (missing stats)
+                  table: t@t_pkey
+                  spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (k)
+│
+└── • scan
+      columns: (k, v)
+      estimated row count: 4 (missing stats)
+      table: t@t_v_idx
+      spans: LIMITED SCAN
+      limit: 4
+
+query T
+EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (k)
+│
+└── • scan
+      columns: (k, v)
+      estimated row count: 4 (missing stats)
+      table: t@t_v_idx
+      spans: LIMITED SCAN
+      limit: 4
+
+query T
+EXPLAIN (VERBOSE) SELECT k FROM (SELECT k FROM t LIMIT 5) WHERE k != 2
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (k)
+│ estimated row count: 2 (missing stats)
+│ filter: k != 2
+│
+└── • scan
+      columns: (k)
+      estimated row count: 5 (missing stats)
+      table: t@t_v_idx
+      spans: LIMITED SCAN
+      limit: 5
+
+query T
+EXPLAIN (VERBOSE) SELECT k, w FROM t WHERE v >= 1 AND v <= 100 LIMIT 10
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (k, w)
+│
+└── • index join
+    │ columns: (k, v, w)
+    │ estimated row count: 10 (missing stats)
+    │ table: t@t_pkey
+    │ key columns: k
+    │ parallel
+    │
+    └── • scan
+          columns: (k, v)
+          estimated row count: 10 (missing stats)
+          table: t@t_v_idx
+          spans: /1-/101
+          limit: 10
+
+query T
+EXPLAIN (VERBOSE) SELECT k, w FROM t WHERE v >= 1 AND v <= 100 ORDER BY v LIMIT 10
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (k, w)
+│
+└── • index join
+    │ columns: (k, v, w)
+    │ ordering: +v
+    │ estimated row count: 10 (missing stats)
+    │ table: t@t_pkey
+    │ key columns: k
+    │ parallel
+    │
+    └── • scan
+          columns: (k, v)
+          ordering: +v
+          estimated row count: 10 (missing stats)
+          table: t@t_v_idx
+          spans: /1-/101
+          limit: 10
+
+query T
+EXPLAIN (VERBOSE) SELECT k, w FROM (SELECT * FROM t WHERE v >= 1 AND v <= 100 ORDER BY k LIMIT 10) ORDER BY v
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (k, w)
+│
+└── • index join
+    │ columns: (k, v, w)
+    │ ordering: +v
+    │ estimated row count: 10 (missing stats)
+    │ table: t@t_pkey
+    │ key columns: k
+    │ parallel
+    │
+    └── • sort
+        │ columns: (k, v)
+        │ estimated row count: 10 (missing stats)
+        │ order: +v
+        │
+        └── • limit
+            │ columns: (k, v)
+            │ count: 10
+            │
+            └── • union all
+                │ columns: (k, v)
+                │ ordering: +k
+                │ estimated row count: 1,000 (missing stats)
+                │
+                ├── • union all
+                │   │ columns: (k, v)
+                │   │ ordering: +k
+                │   │ estimated row count: 360 (missing stats)
+                │   │
+                │   ├── • union all
+                │   │   │ columns: (k, v)
+                │   │   │ ordering: +k
+                │   │   │ estimated row count: 160 (missing stats)
+                │   │   │
+                │   │   ├── • union all
+                │   │   │   │ columns: (k, v)
+                │   │   │   │ ordering: +k
+                │   │   │   │ estimated row count: 80 (missing stats)
+                │   │   │   │
+                │   │   │   ├── • union all
+                │   │   │   │   │ columns: (k, v)
+                │   │   │   │   │ ordering: +k
+                │   │   │   │   │ estimated row count: 40 (missing stats)
+                │   │   │   │   │
+                │   │   │   │   ├── • union all
+                │   │   │   │   │   │ columns: (k, v)
+                │   │   │   │   │   │ ordering: +k
+                │   │   │   │   │   │ estimated row count: 20 (missing stats)
+                │   │   │   │   │   │
+                │   │   │   │   │   ├── • scan
+                │   │   │   │   │   │     columns: (k, v)
+                │   │   │   │   │   │     ordering: +k
+                │   │   │   │   │   │     estimated row count: 10 (missing stats)
+                │   │   │   │   │   │     table: t@t_v_idx
+                │   │   │   │   │   │     spans: /73-/74
+                │   │   │   │   │   │     limit: 10
+                │   │   │   │   │   │
+                │   │   │   │   │   └── • scan
+                │   │   │   │   │         columns: (k, v)
+                │   │   │   │   │         ordering: +k
+                │   │   │   │   │         estimated row count: 10 (missing stats)
+                │   │   │   │   │         table: t@t_v_idx
+                │   │   │   │   │         spans: /74-/75
+                │   │   │   │   │         limit: 10
+                │   │   │   │   │
+                │   │   │   │   └── • union all
+                │   │   │   │       │ columns: (k, v)
+                │   │   │   │       │ ordering: +k
+                │   │   │   │       │ estimated row count: 20 (missing stats)
+                │   │   │   │       │
+                │   │   │   │       ├── • scan
+                │   │   │   │       │     columns: (k, v)
+                │   │   │   │       │     ordering: +k
+                │   │   │   │       │     estimated row count: 10 (missing stats)
+                │   │   │   │       │     table: t@t_v_idx
+                │   │   │   │       │     spans: /75-/76
+                │   │   │   │       │     limit: 10
+                │   │   │   │       │
+                │   │   │   │       └── • scan
+                │   │   │   │             columns: (k, v)
+                │   │   │   │             ordering: +k
+                │   │   │   │             estimated row count: 10 (missing stats)
+                │   │   │   │             table: t@t_v_idx
+                │   │   │   │             spans: /76-/77
+                │   │   │   │             limit: 10
+                │   │   │   │
+                │   │   │   └── • union all
+                │   │   │       │ columns: (k, v)
+                │   │   │       │ ordering: +k
+                │   │   │       │ estimated row count: 40 (missing stats)
+                │   │   │       │
+                │   │   │       ├── • union all
+                │   │   │       │   │ columns: (k, v)
+                │   │   │       │   │ ordering: +k
+                │   │   │       │   │ estimated row count: 20 (missing stats)
+                │   │   │       │   │
+                │   │   │       │   ├── • scan
+                │   │   │       │   │     columns: (k, v)
+                │   │   │       │   │     ordering: +k
+                │   │   │       │   │     estimated row count: 10 (missing stats)
+                │   │   │       │   │     table: t@t_v_idx
+                │   │   │       │   │     spans: /77-/78
+                │   │   │       │   │     limit: 10
+                │   │   │       │   │
+                │   │   │       │   └── • scan
+                │   │   │       │         columns: (k, v)
+                │   │   │       │         ordering: +k
+                │   │   │       │         estimated row count: 10 (missing stats)
+                │   │   │       │         table: t@t_v_idx
+                │   │   │       │         spans: /78-/79
+                │   │   │       │         limit: 10
+                │   │   │       │
+                │   │   │       └── • union all
+                │   │   │           │ columns: (k, v)
+                │   │   │           │ ordering: +k
+                │   │   │           │ estimated row count: 20 (missing stats)
+                │   │   │           │
+                │   │   │           ├── • scan
+                │   │   │           │     columns: (k, v)
+                │   │   │           │     ordering: +k
+                │   │   │           │     estimated row count: 10 (missing stats)
+                │   │   │           │     table: t@t_v_idx
+                │   │   │           │     spans: /79-/80
+                │   │   │           │     limit: 10
+                │   │   │           │
+                │   │   │           └── • scan
+                │   │   │                 columns: (k, v)
+                │   │   │                 ordering: +k
+                │   │   │                 estimated row count: 10 (missing stats)
+                │   │   │                 table: t@t_v_idx
+                │   │   │                 spans: /80-/81
+                │   │   │                 limit: 10
+                │   │   │
+                │   │   └── • union all
+                │   │       │ columns: (k, v)
+                │   │       │ ordering: +k
+                │   │       │ estimated row count: 80 (missing stats)
+                │   │       │
+                │   │       ├── • union all
+                │   │       │   │ columns: (k, v)
+                │   │       │   │ ordering: +k
+                │   │       │   │ estimated row count: 40 (missing stats)
+                │   │       │   │
+                │   │       │   ├── • union all
+                │   │       │   │   │ columns: (k, v)
+                │   │       │   │   │ ordering: +k
+                │   │       │   │   │ estimated row count: 20 (missing stats)
+                │   │       │   │   │
+                │   │       │   │   ├── • scan
+                │   │       │   │   │     columns: (k, v)
+                │   │       │   │   │     ordering: +k
+                │   │       │   │   │     estimated row count: 10 (missing stats)
+                │   │       │   │   │     table: t@t_v_idx
+                │   │       │   │   │     spans: /81-/82
+                │   │       │   │   │     limit: 10
+                │   │       │   │   │
+                │   │       │   │   └── • scan
+                │   │       │   │         columns: (k, v)
+                │   │       │   │         ordering: +k
+                │   │       │   │         estimated row count: 10 (missing stats)
+                │   │       │   │         table: t@t_v_idx
+                │   │       │   │         spans: /82-/83
+                │   │       │   │         limit: 10
+                │   │       │   │
+                │   │       │   └── • union all
+                │   │       │       │ columns: (k, v)
+                │   │       │       │ ordering: +k
+                │   │       │       │ estimated row count: 20 (missing stats)
+                │   │       │       │
+                │   │       │       ├── • scan
+                │   │       │       │     columns: (k, v)
+                │   │       │       │     ordering: +k
+                │   │       │       │     estimated row count: 10 (missing stats)
+                │   │       │       │     table: t@t_v_idx
+                │   │       │       │     spans: /83-/84
+                │   │       │       │     limit: 10
+                │   │       │       │
+                │   │       │       └── • scan
+                │   │       │             columns: (k, v)
+                │   │       │             ordering: +k
+                │   │       │             estimated row count: 10 (missing stats)
+                │   │       │             table: t@t_v_idx
+                │   │       │             spans: /84-/85
+                │   │       │             limit: 10
+                │   │       │
+                │   │       └── • union all
+                │   │           │ columns: (k, v)
+                │   │           │ ordering: +k
+                │   │           │ estimated row count: 40 (missing stats)
+                │   │           │
+                │   │           ├── • union all
+                │   │           │   │ columns: (k, v)
+                │   │           │   │ ordering: +k
+                │   │           │   │ estimated row count: 20 (missing stats)
+                │   │           │   │
+                │   │           │   ├── • scan
+                │   │           │   │     columns: (k, v)
+                │   │           │   │     ordering: +k
+                │   │           │   │     estimated row count: 10 (missing stats)
+                │   │           │   │     table: t@t_v_idx
+                │   │           │   │     spans: /85-/86
+                │   │           │   │     limit: 10
+                │   │           │   │
+                │   │           │   └── • scan
+                │   │           │         columns: (k, v)
+                │   │           │         ordering: +k
+                │   │           │         estimated row count: 10 (missing stats)
+                │   │           │         table: t@t_v_idx
+                │   │           │         spans: /86-/87
+                │   │           │         limit: 10
+                │   │           │
+                │   │           └── • union all
+                │   │               │ columns: (k, v)
+                │   │               │ ordering: +k
+                │   │               │ estimated row count: 20 (missing stats)
+                │   │               │
+                │   │               ├── • scan
+                │   │               │     columns: (k, v)
+                │   │               │     ordering: +k
+                │   │               │     estimated row count: 10 (missing stats)
+                │   │               │     table: t@t_v_idx
+                │   │               │     spans: /87-/88
+                │   │               │     limit: 10
+                │   │               │
+                │   │               └── • scan
+                │   │                     columns: (k, v)
+                │   │                     ordering: +k
+                │   │                     estimated row count: 10 (missing stats)
+                │   │                     table: t@t_v_idx
+                │   │                     spans: /88-/89
+                │   │                     limit: 10
+                │   │
+                │   └── • union all
+                │       │ columns: (k, v)
+                │       │ ordering: +k
+                │       │ estimated row count: 200 (missing stats)
+                │       │
+                │       ├── • union all
+                │       │   │ columns: (k, v)
+                │       │   │ ordering: +k
+                │       │   │ estimated row count: 80 (missing stats)
+                │       │   │
+                │       │   ├── • union all
+                │       │   │   │ columns: (k, v)
+                │       │   │   │ ordering: +k
+                │       │   │   │ estimated row count: 40 (missing stats)
+                │       │   │   │
+                │       │   │   ├── • union all
+                │       │   │   │   │ columns: (k, v)
+                │       │   │   │   │ ordering: +k
+                │       │   │   │   │ estimated row count: 20 (missing stats)
+                │       │   │   │   │
+                │       │   │   │   ├── • scan
+                │       │   │   │   │     columns: (k, v)
+                │       │   │   │   │     ordering: +k
+                │       │   │   │   │     estimated row count: 10 (missing stats)
+                │       │   │   │   │     table: t@t_v_idx
+                │       │   │   │   │     spans: /89-/90
+                │       │   │   │   │     limit: 10
+                │       │   │   │   │
+                │       │   │   │   └── • scan
+                │       │   │   │         columns: (k, v)
+                │       │   │   │         ordering: +k
+                │       │   │   │         estimated row count: 10 (missing stats)
+                │       │   │   │         table: t@t_v_idx
+                │       │   │   │         spans: /90-/91
+                │       │   │   │         limit: 10
+                │       │   │   │
+                │       │   │   └── • union all
+                │       │   │       │ columns: (k, v)
+                │       │   │       │ ordering: +k
+                │       │   │       │ estimated row count: 20 (missing stats)
+                │       │   │       │
+                │       │   │       ├── • scan
+                │       │   │       │     columns: (k, v)
+                │       │   │       │     ordering: +k
+                │       │   │       │     estimated row count: 10 (missing stats)
+                │       │   │       │     table: t@t_v_idx
+                │       │   │       │     spans: /91-/92
+                │       │   │       │     limit: 10
+                │       │   │       │
+                │       │   │       └── • scan
+                │       │   │             columns: (k, v)
+                │       │   │             ordering: +k
+                │       │   │             estimated row count: 10 (missing stats)
+                │       │   │             table: t@t_v_idx
+                │       │   │             spans: /92-/93
+                │       │   │             limit: 10
+                │       │   │
+                │       │   └── • union all
+                │       │       │ columns: (k, v)
+                │       │       │ ordering: +k
+                │       │       │ estimated row count: 40 (missing stats)
+                │       │       │
+                │       │       ├── • union all
+                │       │       │   │ columns: (k, v)
+                │       │       │   │ ordering: +k
+                │       │       │   │ estimated row count: 20 (missing stats)
+                │       │       │   │
+                │       │       │   ├── • scan
+                │       │       │   │     columns: (k, v)
+                │       │       │   │     ordering: +k
+                │       │       │   │     estimated row count: 10 (missing stats)
+                │       │       │   │     table: t@t_v_idx
+                │       │       │   │     spans: /93-/94
+                │       │       │   │     limit: 10
+                │       │       │   │
+                │       │       │   └── • scan
+                │       │       │         columns: (k, v)
+                │       │       │         ordering: +k
+                │       │       │         estimated row count: 10 (missing stats)
+                │       │       │         table: t@t_v_idx
+                │       │       │         spans: /94-/95
+                │       │       │         limit: 10
+                │       │       │
+                │       │       └── • union all
+                │       │           │ columns: (k, v)
+                │       │           │ ordering: +k
+                │       │           │ estimated row count: 20 (missing stats)
+                │       │           │
+                │       │           ├── • scan
+                │       │           │     columns: (k, v)
+                │       │           │     ordering: +k
+                │       │           │     estimated row count: 10 (missing stats)
+                │       │           │     table: t@t_v_idx
+                │       │           │     spans: /95-/96
+                │       │           │     limit: 10
+                │       │           │
+                │       │           └── • scan
+                │       │                 columns: (k, v)
+                │       │                 ordering: +k
+                │       │                 estimated row count: 10 (missing stats)
+                │       │                 table: t@t_v_idx
+                │       │                 spans: /96-/97
+                │       │                 limit: 10
+                │       │
+                │       └── • union all
+                │           │ columns: (k, v)
+                │           │ ordering: +k
+                │           │ estimated row count: 120 (missing stats)
+                │           │
+                │           ├── • union all
+                │           │   │ columns: (k, v)
+                │           │   │ ordering: +k
+                │           │   │ estimated row count: 40 (missing stats)
+                │           │   │
+                │           │   ├── • union all
+                │           │   │   │ columns: (k, v)
+                │           │   │   │ ordering: +k
+                │           │   │   │ estimated row count: 20 (missing stats)
+                │           │   │   │
+                │           │   │   ├── • scan
+                │           │   │   │     columns: (k, v)
+                │           │   │   │     ordering: +k
+                │           │   │   │     estimated row count: 10 (missing stats)
+                │           │   │   │     table: t@t_v_idx
+                │           │   │   │     spans: /97-/98
+                │           │   │   │     limit: 10
+                │           │   │   │
+                │           │   │   └── • scan
+                │           │   │         columns: (k, v)
+                │           │   │         ordering: +k
+                │           │   │         estimated row count: 10 (missing stats)
+                │           │   │         table: t@t_v_idx
+                │           │   │         spans: /98-/99
+                │           │   │         limit: 10
+                │           │   │
+                │           │   └── • union all
+                │           │       │ columns: (k, v)
+                │           │       │ ordering: +k
+                │           │       │ estimated row count: 20 (missing stats)
+                │           │       │
+                │           │       ├── • scan
+                │           │       │     columns: (k, v)
+                │           │       │     ordering: +k
+                │           │       │     estimated row count: 10 (missing stats)
+                │           │       │     table: t@t_v_idx
+                │           │       │     spans: /99-/100
+                │           │       │     limit: 10
+                │           │       │
+                │           │       └── • scan
+                │           │             columns: (k, v)
+                │           │             ordering: +k
+                │           │             estimated row count: 10 (missing stats)
+                │           │             table: t@t_v_idx
+                │           │             spans: /100-/101
+                │           │             limit: 10
+                │           │
+                │           └── • union all
+                │               │ columns: (k, v)
+                │               │ ordering: +k
+                │               │ estimated row count: 80 (missing stats)
+                │               │
+                │               ├── • union all
+                │               │   │ columns: (k, v)
+                │               │   │ ordering: +k
+                │               │   │ estimated row count: 40 (missing stats)
+                │               │   │
+                │               │   ├── • union all
+                │               │   │   │ columns: (k, v)
+                │               │   │   │ ordering: +k
+                │               │   │   │ estimated row count: 20 (missing stats)
+                │               │   │   │
+                │               │   │   ├── • scan
+                │               │   │   │     columns: (k, v)
+                │               │   │   │     ordering: +k
+                │               │   │   │     estimated row count: 10 (missing stats)
+                │               │   │   │     table: t@t_v_idx
+                │               │   │   │     spans: /1-/2
+                │               │   │   │     limit: 10
+                │               │   │   │
+                │               │   │   └── • scan
+                │               │   │         columns: (k, v)
+                │               │   │         ordering: +k
+                │               │   │         estimated row count: 10 (missing stats)
+                │               │   │         table: t@t_v_idx
+                │               │   │         spans: /2-/3
+                │               │   │         limit: 10
+                │               │   │
+                │               │   └── • union all
+                │               │       │ columns: (k, v)
+                │               │       │ ordering: +k
+                │               │       │ estimated row count: 20 (missing stats)
+                │               │       │
+                │               │       ├── • scan
+                │               │       │     columns: (k, v)
+                │               │       │     ordering: +k
+                │               │       │     estimated row count: 10 (missing stats)
+                │               │       │     table: t@t_v_idx
+                │               │       │     spans: /3-/4
+                │               │       │     limit: 10
+                │               │       │
+                │               │       └── • scan
+                │               │             columns: (k, v)
+                │               │             ordering: +k
+                │               │             estimated row count: 10 (missing stats)
+                │               │             table: t@t_v_idx
+                │               │             spans: /4-/5
+                │               │             limit: 10
+                │               │
+                │               └── • union all
+                │                   │ columns: (k, v)
+                │                   │ ordering: +k
+                │                   │ estimated row count: 40 (missing stats)
+                │                   │
+                │                   ├── • union all
+                │                   │   │ columns: (k, v)
+                │                   │   │ ordering: +k
+                │                   │   │ estimated row count: 20 (missing stats)
+                │                   │   │
+                │                   │   ├── • scan
+                │                   │   │     columns: (k, v)
+                │                   │   │     ordering: +k
+                │                   │   │     estimated row count: 10 (missing stats)
+                │                   │   │     table: t@t_v_idx
+                │                   │   │     spans: /5-/6
+                │                   │   │     limit: 10
+                │                   │   │
+                │                   │   └── • scan
+                │                   │         columns: (k, v)
+                │                   │         ordering: +k
+                │                   │         estimated row count: 10 (missing stats)
+                │                   │         table: t@t_v_idx
+                │                   │         spans: /6-/7
+                │                   │         limit: 10
+                │                   │
+                │                   └── • union all
+                │                       │ columns: (k, v)
+                │                       │ ordering: +k
+                │                       │ estimated row count: 20 (missing stats)
+                │                       │
+                │                       ├── • scan
+                │                       │     columns: (k, v)
+                │                       │     ordering: +k
+                │                       │     estimated row count: 10 (missing stats)
+                │                       │     table: t@t_v_idx
+                │                       │     spans: /7-/8
+                │                       │     limit: 10
+                │                       │
+                │                       └── • scan
+                │                             columns: (k, v)
+                │                             ordering: +k
+                │                             estimated row count: 10 (missing stats)
+                │                             table: t@t_v_idx
+                │                             spans: /8-/9
+                │                             limit: 10
+                │
+                └── • union all
+                    │ columns: (k, v)
+                    │ ordering: +k
+                    │ estimated row count: 640 (missing stats)
+                    │
+                    ├── • union all
+                    │   │ columns: (k, v)
+                    │   │ ordering: +k
+                    │   │ estimated row count: 320 (missing stats)
+                    │   │
+                    │   ├── • union all
+                    │   │   │ columns: (k, v)
+                    │   │   │ ordering: +k
+                    │   │   │ estimated row count: 160 (missing stats)
+                    │   │   │
+                    │   │   ├── • union all
+                    │   │   │   │ columns: (k, v)
+                    │   │   │   │ ordering: +k
+                    │   │   │   │ estimated row count: 80 (missing stats)
+                    │   │   │   │
+                    │   │   │   ├── • union all
+                    │   │   │   │   │ columns: (k, v)
+                    │   │   │   │   │ ordering: +k
+                    │   │   │   │   │ estimated row count: 40 (missing stats)
+                    │   │   │   │   │
+                    │   │   │   │   ├── • union all
+                    │   │   │   │   │   │ columns: (k, v)
+                    │   │   │   │   │   │ ordering: +k
+                    │   │   │   │   │   │ estimated row count: 20 (missing stats)
+                    │   │   │   │   │   │
+                    │   │   │   │   │   ├── • scan
+                    │   │   │   │   │   │     columns: (k, v)
+                    │   │   │   │   │   │     ordering: +k
+                    │   │   │   │   │   │     estimated row count: 10 (missing stats)
+                    │   │   │   │   │   │     table: t@t_v_idx
+                    │   │   │   │   │   │     spans: /9-/10
+                    │   │   │   │   │   │     limit: 10
+                    │   │   │   │   │   │
+                    │   │   │   │   │   └── • scan
+                    │   │   │   │   │         columns: (k, v)
+                    │   │   │   │   │         ordering: +k
+                    │   │   │   │   │         estimated row count: 10 (missing stats)
+                    │   │   │   │   │         table: t@t_v_idx
+                    │   │   │   │   │         spans: /10-/11
+                    │   │   │   │   │         limit: 10
+                    │   │   │   │   │
+                    │   │   │   │   └── • union all
+                    │   │   │   │       │ columns: (k, v)
+                    │   │   │   │       │ ordering: +k
+                    │   │   │   │       │ estimated row count: 20 (missing stats)
+                    │   │   │   │       │
+                    │   │   │   │       ├── • scan
+                    │   │   │   │       │     columns: (k, v)
+                    │   │   │   │       │     ordering: +k
+                    │   │   │   │       │     estimated row count: 10 (missing stats)
+                    │   │   │   │       │     table: t@t_v_idx
+                    │   │   │   │       │     spans: /11-/12
+                    │   │   │   │       │     limit: 10
+                    │   │   │   │       │
+                    │   │   │   │       └── • scan
+                    │   │   │   │             columns: (k, v)
+                    │   │   │   │             ordering: +k
+                    │   │   │   │             estimated row count: 10 (missing stats)
+                    │   │   │   │             table: t@t_v_idx
+                    │   │   │   │             spans: /12-/13
+                    │   │   │   │             limit: 10
+                    │   │   │   │
+                    │   │   │   └── • union all
+                    │   │   │       │ columns: (k, v)
+                    │   │   │       │ ordering: +k
+                    │   │   │       │ estimated row count: 40 (missing stats)
+                    │   │   │       │
+                    │   │   │       ├── • union all
+                    │   │   │       │   │ columns: (k, v)
+                    │   │   │       │   │ ordering: +k
+                    │   │   │       │   │ estimated row count: 20 (missing stats)
+                    │   │   │       │   │
+                    │   │   │       │   ├── • scan
+                    │   │   │       │   │     columns: (k, v)
+                    │   │   │       │   │     ordering: +k
+                    │   │   │       │   │     estimated row count: 10 (missing stats)
+                    │   │   │       │   │     table: t@t_v_idx
+                    │   │   │       │   │     spans: /13-/14
+                    │   │   │       │   │     limit: 10
+                    │   │   │       │   │
+                    │   │   │       │   └── • scan
+                    │   │   │       │         columns: (k, v)
+                    │   │   │       │         ordering: +k
+                    │   │   │       │         estimated row count: 10 (missing stats)
+                    │   │   │       │         table: t@t_v_idx
+                    │   │   │       │         spans: /14-/15
+                    │   │   │       │         limit: 10
+                    │   │   │       │
+                    │   │   │       └── • union all
+                    │   │   │           │ columns: (k, v)
+                    │   │   │           │ ordering: +k
+                    │   │   │           │ estimated row count: 20 (missing stats)
+                    │   │   │           │
+                    │   │   │           ├── • scan
+                    │   │   │           │     columns: (k, v)
+                    │   │   │           │     ordering: +k
+                    │   │   │           │     estimated row count: 10 (missing stats)
+                    │   │   │           │     table: t@t_v_idx
+                    │   │   │           │     spans: /15-/16
+                    │   │   │           │     limit: 10
+                    │   │   │           │
+                    │   │   │           └── • scan
+                    │   │   │                 columns: (k, v)
+                    │   │   │                 ordering: +k
+                    │   │   │                 estimated row count: 10 (missing stats)
+                    │   │   │                 table: t@t_v_idx
+                    │   │   │                 spans: /16-/17
+                    │   │   │                 limit: 10
+                    │   │   │
+                    │   │   └── • union all
+                    │   │       │ columns: (k, v)
+                    │   │       │ ordering: +k
+                    │   │       │ estimated row count: 80 (missing stats)
+                    │   │       │
+                    │   │       ├── • union all
+                    │   │       │   │ columns: (k, v)
+                    │   │       │   │ ordering: +k
+                    │   │       │   │ estimated row count: 40 (missing stats)
+                    │   │       │   │
+                    │   │       │   ├── • union all
+                    │   │       │   │   │ columns: (k, v)
+                    │   │       │   │   │ ordering: +k
+                    │   │       │   │   │ estimated row count: 20 (missing stats)
+                    │   │       │   │   │
+                    │   │       │   │   ├── • scan
+                    │   │       │   │   │     columns: (k, v)
+                    │   │       │   │   │     ordering: +k
+                    │   │       │   │   │     estimated row count: 10 (missing stats)
+                    │   │       │   │   │     table: t@t_v_idx
+                    │   │       │   │   │     spans: /17-/18
+                    │   │       │   │   │     limit: 10
+                    │   │       │   │   │
+                    │   │       │   │   └── • scan
+                    │   │       │   │         columns: (k, v)
+                    │   │       │   │         ordering: +k
+                    │   │       │   │         estimated row count: 10 (missing stats)
+                    │   │       │   │         table: t@t_v_idx
+                    │   │       │   │         spans: /18-/19
+                    │   │       │   │         limit: 10
+                    │   │       │   │
+                    │   │       │   └── • union all
+                    │   │       │       │ columns: (k, v)
+                    │   │       │       │ ordering: +k
+                    │   │       │       │ estimated row count: 20 (missing stats)
+                    │   │       │       │
+                    │   │       │       ├── • scan
+                    │   │       │       │     columns: (k, v)
+                    │   │       │       │     ordering: +k
+                    │   │       │       │     estimated row count: 10 (missing stats)
+                    │   │       │       │     table: t@t_v_idx
+                    │   │       │       │     spans: /19-/20
+                    │   │       │       │     limit: 10
+                    │   │       │       │
+                    │   │       │       └── • scan
+                    │   │       │             columns: (k, v)
+                    │   │       │             ordering: +k
+                    │   │       │             estimated row count: 10 (missing stats)
+                    │   │       │             table: t@t_v_idx
+                    │   │       │             spans: /20-/21
+                    │   │       │             limit: 10
+                    │   │       │
+                    │   │       └── • union all
+                    │   │           │ columns: (k, v)
+                    │   │           │ ordering: +k
+                    │   │           │ estimated row count: 40 (missing stats)
+                    │   │           │
+                    │   │           ├── • union all
+                    │   │           │   │ columns: (k, v)
+                    │   │           │   │ ordering: +k
+                    │   │           │   │ estimated row count: 20 (missing stats)
+                    │   │           │   │
+                    │   │           │   ├── • scan
+                    │   │           │   │     columns: (k, v)
+                    │   │           │   │     ordering: +k
+                    │   │           │   │     estimated row count: 10 (missing stats)
+                    │   │           │   │     table: t@t_v_idx
+                    │   │           │   │     spans: /21-/22
+                    │   │           │   │     limit: 10
+                    │   │           │   │
+                    │   │           │   └── • scan
+                    │   │           │         columns: (k, v)
+                    │   │           │         ordering: +k
+                    │   │           │         estimated row count: 10 (missing stats)
+                    │   │           │         table: t@t_v_idx
+                    │   │           │         spans: /22-/23
+                    │   │           │         limit: 10
+                    │   │           │
+                    │   │           └── • union all
+                    │   │               │ columns: (k, v)
+                    │   │               │ ordering: +k
+                    │   │               │ estimated row count: 20 (missing stats)
+                    │   │               │
+                    │   │               ├── • scan
+                    │   │               │     columns: (k, v)
+                    │   │               │     ordering: +k
+                    │   │               │     estimated row count: 10 (missing stats)
+                    │   │               │     table: t@t_v_idx
+                    │   │               │     spans: /23-/24
+                    │   │               │     limit: 10
+                    │   │               │
+                    │   │               └── • scan
+                    │   │                     columns: (k, v)
+                    │   │                     ordering: +k
+                    │   │                     estimated row count: 10 (missing stats)
+                    │   │                     table: t@t_v_idx
+                    │   │                     spans: /24-/25
+                    │   │                     limit: 10
+                    │   │
+                    │   └── • union all
+                    │       │ columns: (k, v)
+                    │       │ ordering: +k
+                    │       │ estimated row count: 160 (missing stats)
+                    │       │
+                    │       ├── • union all
+                    │       │   │ columns: (k, v)
+                    │       │   │ ordering: +k
+                    │       │   │ estimated row count: 80 (missing stats)
+                    │       │   │
+                    │       │   ├── • union all
+                    │       │   │   │ columns: (k, v)
+                    │       │   │   │ ordering: +k
+                    │       │   │   │ estimated row count: 40 (missing stats)
+                    │       │   │   │
+                    │       │   │   ├── • union all
+                    │       │   │   │   │ columns: (k, v)
+                    │       │   │   │   │ ordering: +k
+                    │       │   │   │   │ estimated row count: 20 (missing stats)
+                    │       │   │   │   │
+                    │       │   │   │   ├── • scan
+                    │       │   │   │   │     columns: (k, v)
+                    │       │   │   │   │     ordering: +k
+                    │       │   │   │   │     estimated row count: 10 (missing stats)
+                    │       │   │   │   │     table: t@t_v_idx
+                    │       │   │   │   │     spans: /25-/26
+                    │       │   │   │   │     limit: 10
+                    │       │   │   │   │
+                    │       │   │   │   └── • scan
+                    │       │   │   │         columns: (k, v)
+                    │       │   │   │         ordering: +k
+                    │       │   │   │         estimated row count: 10 (missing stats)
+                    │       │   │   │         table: t@t_v_idx
+                    │       │   │   │         spans: /26-/27
+                    │       │   │   │         limit: 10
+                    │       │   │   │
+                    │       │   │   └── • union all
+                    │       │   │       │ columns: (k, v)
+                    │       │   │       │ ordering: +k
+                    │       │   │       │ estimated row count: 20 (missing stats)
+                    │       │   │       │
+                    │       │   │       ├── • scan
+                    │       │   │       │     columns: (k, v)
+                    │       │   │       │     ordering: +k
+                    │       │   │       │     estimated row count: 10 (missing stats)
+                    │       │   │       │     table: t@t_v_idx
+                    │       │   │       │     spans: /27-/28
+                    │       │   │       │     limit: 10
+                    │       │   │       │
+                    │       │   │       └── • scan
+                    │       │   │             columns: (k, v)
+                    │       │   │             ordering: +k
+                    │       │   │             estimated row count: 10 (missing stats)
+                    │       │   │             table: t@t_v_idx
+                    │       │   │             spans: /28-/29
+                    │       │   │             limit: 10
+                    │       │   │
+                    │       │   └── • union all
+                    │       │       │ columns: (k, v)
+                    │       │       │ ordering: +k
+                    │       │       │ estimated row count: 40 (missing stats)
+                    │       │       │
+                    │       │       ├── • union all
+                    │       │       │   │ columns: (k, v)
+                    │       │       │   │ ordering: +k
+                    │       │       │   │ estimated row count: 20 (missing stats)
+                    │       │       │   │
+                    │       │       │   ├── • scan
+                    │       │       │   │     columns: (k, v)
+                    │       │       │   │     ordering: +k
+                    │       │       │   │     estimated row count: 10 (missing stats)
+                    │       │       │   │     table: t@t_v_idx
+                    │       │       │   │     spans: /29-/30
+                    │       │       │   │     limit: 10
+                    │       │       │   │
+                    │       │       │   └── • scan
+                    │       │       │         columns: (k, v)
+                    │       │       │         ordering: +k
+                    │       │       │         estimated row count: 10 (missing stats)
+                    │       │       │         table: t@t_v_idx
+                    │       │       │         spans: /30-/31
+                    │       │       │         limit: 10
+                    │       │       │
+                    │       │       └── • union all
+                    │       │           │ columns: (k, v)
+                    │       │           │ ordering: +k
+                    │       │           │ estimated row count: 20 (missing stats)
+                    │       │           │
+                    │       │           ├── • scan
+                    │       │           │     columns: (k, v)
+                    │       │           │     ordering: +k
+                    │       │           │     estimated row count: 10 (missing stats)
+                    │       │           │     table: t@t_v_idx
+                    │       │           │     spans: /31-/32
+                    │       │           │     limit: 10
+                    │       │           │
+                    │       │           └── • scan
+                    │       │                 columns: (k, v)
+                    │       │                 ordering: +k
+                    │       │                 estimated row count: 10 (missing stats)
+                    │       │                 table: t@t_v_idx
+                    │       │                 spans: /32-/33
+                    │       │                 limit: 10
+                    │       │
+                    │       └── • union all
+                    │           │ columns: (k, v)
+                    │           │ ordering: +k
+                    │           │ estimated row count: 80 (missing stats)
+                    │           │
+                    │           ├── • union all
+                    │           │   │ columns: (k, v)
+                    │           │   │ ordering: +k
+                    │           │   │ estimated row count: 40 (missing stats)
+                    │           │   │
+                    │           │   ├── • union all
+                    │           │   │   │ columns: (k, v)
+                    │           │   │   │ ordering: +k
+                    │           │   │   │ estimated row count: 20 (missing stats)
+                    │           │   │   │
+                    │           │   │   ├── • scan
+                    │           │   │   │     columns: (k, v)
+                    │           │   │   │     ordering: +k
+                    │           │   │   │     estimated row count: 10 (missing stats)
+                    │           │   │   │     table: t@t_v_idx
+                    │           │   │   │     spans: /33-/34
+                    │           │   │   │     limit: 10
+                    │           │   │   │
+                    │           │   │   └── • scan
+                    │           │   │         columns: (k, v)
+                    │           │   │         ordering: +k
+                    │           │   │         estimated row count: 10 (missing stats)
+                    │           │   │         table: t@t_v_idx
+                    │           │   │         spans: /34-/35
+                    │           │   │         limit: 10
+                    │           │   │
+                    │           │   └── • union all
+                    │           │       │ columns: (k, v)
+                    │           │       │ ordering: +k
+                    │           │       │ estimated row count: 20 (missing stats)
+                    │           │       │
+                    │           │       ├── • scan
+                    │           │       │     columns: (k, v)
+                    │           │       │     ordering: +k
+                    │           │       │     estimated row count: 10 (missing stats)
+                    │           │       │     table: t@t_v_idx
+                    │           │       │     spans: /35-/36
+                    │           │       │     limit: 10
+                    │           │       │
+                    │           │       └── • scan
+                    │           │             columns: (k, v)
+                    │           │             ordering: +k
+                    │           │             estimated row count: 10 (missing stats)
+                    │           │             table: t@t_v_idx
+                    │           │             spans: /36-/37
+                    │           │             limit: 10
+                    │           │
+                    │           └── • union all
+                    │               │ columns: (k, v)
+                    │               │ ordering: +k
+                    │               │ estimated row count: 40 (missing stats)
+                    │               │
+                    │               ├── • union all
+                    │               │   │ columns: (k, v)
+                    │               │   │ ordering: +k
+                    │               │   │ estimated row count: 20 (missing stats)
+                    │               │   │
+                    │               │   ├── • scan
+                    │               │   │     columns: (k, v)
+                    │               │   │     ordering: +k
+                    │               │   │     estimated row count: 10 (missing stats)
+                    │               │   │     table: t@t_v_idx
+                    │               │   │     spans: /37-/38
+                    │               │   │     limit: 10
+                    │               │   │
+                    │               │   └── • scan
+                    │               │         columns: (k, v)
+                    │               │         ordering: +k
+                    │               │         estimated row count: 10 (missing stats)
+                    │               │         table: t@t_v_idx
+                    │               │         spans: /38-/39
+                    │               │         limit: 10
+                    │               │
+                    │               └── • union all
+                    │                   │ columns: (k, v)
+                    │                   │ ordering: +k
+                    │                   │ estimated row count: 20 (missing stats)
+                    │                   │
+                    │                   ├── • scan
+                    │                   │     columns: (k, v)
+                    │                   │     ordering: +k
+                    │                   │     estimated row count: 10 (missing stats)
+                    │                   │     table: t@t_v_idx
+                    │                   │     spans: /39-/40
+                    │                   │     limit: 10
+                    │                   │
+                    │                   └── • scan
+                    │                         columns: (k, v)
+                    │                         ordering: +k
+                    │                         estimated row count: 10 (missing stats)
+                    │                         table: t@t_v_idx
+                    │                         spans: /40-/41
+                    │                         limit: 10
+                    │
+                    └── • union all
+                        │ columns: (k, v)
+                        │ ordering: +k
+                        │ estimated row count: 320 (missing stats)
+                        │
+                        ├── • union all
+                        │   │ columns: (k, v)
+                        │   │ ordering: +k
+                        │   │ estimated row count: 160 (missing stats)
+                        │   │
+                        │   ├── • union all
+                        │   │   │ columns: (k, v)
+                        │   │   │ ordering: +k
+                        │   │   │ estimated row count: 80 (missing stats)
+                        │   │   │
+                        │   │   ├── • union all
+                        │   │   │   │ columns: (k, v)
+                        │   │   │   │ ordering: +k
+                        │   │   │   │ estimated row count: 40 (missing stats)
+                        │   │   │   │
+                        │   │   │   ├── • union all
+                        │   │   │   │   │ columns: (k, v)
+                        │   │   │   │   │ ordering: +k
+                        │   │   │   │   │ estimated row count: 20 (missing stats)
+                        │   │   │   │   │
+                        │   │   │   │   ├── • scan
+                        │   │   │   │   │     columns: (k, v)
+                        │   │   │   │   │     ordering: +k
+                        │   │   │   │   │     estimated row count: 10 (missing stats)
+                        │   │   │   │   │     table: t@t_v_idx
+                        │   │   │   │   │     spans: /41-/42
+                        │   │   │   │   │     limit: 10
+                        │   │   │   │   │
+                        │   │   │   │   └── • scan
+                        │   │   │   │         columns: (k, v)
+                        │   │   │   │         ordering: +k
+                        │   │   │   │         estimated row count: 10 (missing stats)
+                        │   │   │   │         table: t@t_v_idx
+                        │   │   │   │         spans: /42-/43
+                        │   │   │   │         limit: 10
+                        │   │   │   │
+                        │   │   │   └── • union all
+                        │   │   │       │ columns: (k, v)
+                        │   │   │       │ ordering: +k
+                        │   │   │       │ estimated row count: 20 (missing stats)
+                        │   │   │       │
+                        │   │   │       ├── • scan
+                        │   │   │       │     columns: (k, v)
+                        │   │   │       │     ordering: +k
+                        │   │   │       │     estimated row count: 10 (missing stats)
+                        │   │   │       │     table: t@t_v_idx
+                        │   │   │       │     spans: /43-/44
+                        │   │   │       │     limit: 10
+                        │   │   │       │
+                        │   │   │       └── • scan
+                        │   │   │             columns: (k, v)
+                        │   │   │             ordering: +k
+                        │   │   │             estimated row count: 10 (missing stats)
+                        │   │   │             table: t@t_v_idx
+                        │   │   │             spans: /44-/45
+                        │   │   │             limit: 10
+                        │   │   │
+                        │   │   └── • union all
+                        │   │       │ columns: (k, v)
+                        │   │       │ ordering: +k
+                        │   │       │ estimated row count: 40 (missing stats)
+                        │   │       │
+                        │   │       ├── • union all
+                        │   │       │   │ columns: (k, v)
+                        │   │       │   │ ordering: +k
+                        │   │       │   │ estimated row count: 20 (missing stats)
+                        │   │       │   │
+                        │   │       │   ├── • scan
+                        │   │       │   │     columns: (k, v)
+                        │   │       │   │     ordering: +k
+                        │   │       │   │     estimated row count: 10 (missing stats)
+                        │   │       │   │     table: t@t_v_idx
+                        │   │       │   │     spans: /45-/46
+                        │   │       │   │     limit: 10
+                        │   │       │   │
+                        │   │       │   └── • scan
+                        │   │       │         columns: (k, v)
+                        │   │       │         ordering: +k
+                        │   │       │         estimated row count: 10 (missing stats)
+                        │   │       │         table: t@t_v_idx
+                        │   │       │         spans: /46-/47
+                        │   │       │         limit: 10
+                        │   │       │
+                        │   │       └── • union all
+                        │   │           │ columns: (k, v)
+                        │   │           │ ordering: +k
+                        │   │           │ estimated row count: 20 (missing stats)
+                        │   │           │
+                        │   │           ├── • scan
+                        │   │           │     columns: (k, v)
+                        │   │           │     ordering: +k
+                        │   │           │     estimated row count: 10 (missing stats)
+                        │   │           │     table: t@t_v_idx
+                        │   │           │     spans: /47-/48
+                        │   │           │     limit: 10
+                        │   │           │
+                        │   │           └── • scan
+                        │   │                 columns: (k, v)
+                        │   │                 ordering: +k
+                        │   │                 estimated row count: 10 (missing stats)
+                        │   │                 table: t@t_v_idx
+                        │   │                 spans: /48-/49
+                        │   │                 limit: 10
+                        │   │
+                        │   └── • union all
+                        │       │ columns: (k, v)
+                        │       │ ordering: +k
+                        │       │ estimated row count: 80 (missing stats)
+                        │       │
+                        │       ├── • union all
+                        │       │   │ columns: (k, v)
+                        │       │   │ ordering: +k
+                        │       │   │ estimated row count: 40 (missing stats)
+                        │       │   │
+                        │       │   ├── • union all
+                        │       │   │   │ columns: (k, v)
+                        │       │   │   │ ordering: +k
+                        │       │   │   │ estimated row count: 20 (missing stats)
+                        │       │   │   │
+                        │       │   │   ├── • scan
+                        │       │   │   │     columns: (k, v)
+                        │       │   │   │     ordering: +k
+                        │       │   │   │     estimated row count: 10 (missing stats)
+                        │       │   │   │     table: t@t_v_idx
+                        │       │   │   │     spans: /49-/50
+                        │       │   │   │     limit: 10
+                        │       │   │   │
+                        │       │   │   └── • scan
+                        │       │   │         columns: (k, v)
+                        │       │   │         ordering: +k
+                        │       │   │         estimated row count: 10 (missing stats)
+                        │       │   │         table: t@t_v_idx
+                        │       │   │         spans: /50-/51
+                        │       │   │         limit: 10
+                        │       │   │
+                        │       │   └── • union all
+                        │       │       │ columns: (k, v)
+                        │       │       │ ordering: +k
+                        │       │       │ estimated row count: 20 (missing stats)
+                        │       │       │
+                        │       │       ├── • scan
+                        │       │       │     columns: (k, v)
+                        │       │       │     ordering: +k
+                        │       │       │     estimated row count: 10 (missing stats)
+                        │       │       │     table: t@t_v_idx
+                        │       │       │     spans: /51-/52
+                        │       │       │     limit: 10
+                        │       │       │
+                        │       │       └── • scan
+                        │       │             columns: (k, v)
+                        │       │             ordering: +k
+                        │       │             estimated row count: 10 (missing stats)
+                        │       │             table: t@t_v_idx
+                        │       │             spans: /52-/53
+                        │       │             limit: 10
+                        │       │
+                        │       └── • union all
+                        │           │ columns: (k, v)
+                        │           │ ordering: +k
+                        │           │ estimated row count: 40 (missing stats)
+                        │           │
+                        │           ├── • union all
+                        │           │   │ columns: (k, v)
+                        │           │   │ ordering: +k
+                        │           │   │ estimated row count: 20 (missing stats)
+                        │           │   │
+                        │           │   ├── • scan
+                        │           │   │     columns: (k, v)
+                        │           │   │     ordering: +k
+                        │           │   │     estimated row count: 10 (missing stats)
+                        │           │   │     table: t@t_v_idx
+                        │           │   │     spans: /53-/54
+                        │           │   │     limit: 10
+                        │           │   │
+                        │           │   └── • scan
+                        │           │         columns: (k, v)
+                        │           │         ordering: +k
+                        │           │         estimated row count: 10 (missing stats)
+                        │           │         table: t@t_v_idx
+                        │           │         spans: /54-/55
+                        │           │         limit: 10
+                        │           │
+                        │           └── • union all
+                        │               │ columns: (k, v)
+                        │               │ ordering: +k
+                        │               │ estimated row count: 20 (missing stats)
+                        │               │
+                        │               ├── • scan
+                        │               │     columns: (k, v)
+                        │               │     ordering: +k
+                        │               │     estimated row count: 10 (missing stats)
+                        │               │     table: t@t_v_idx
+                        │               │     spans: /55-/56
+                        │               │     limit: 10
+                        │               │
+                        │               └── • scan
+                        │                     columns: (k, v)
+                        │                     ordering: +k
+                        │                     estimated row count: 10 (missing stats)
+                        │                     table: t@t_v_idx
+                        │                     spans: /56-/57
+                        │                     limit: 10
+                        │
+                        └── • union all
+                            │ columns: (k, v)
+                            │ ordering: +k
+                            │ estimated row count: 160 (missing stats)
+                            │
+                            ├── • union all
+                            │   │ columns: (k, v)
+                            │   │ ordering: +k
+                            │   │ estimated row count: 80 (missing stats)
+                            │   │
+                            │   ├── • union all
+                            │   │   │ columns: (k, v)
+                            │   │   │ ordering: +k
+                            │   │   │ estimated row count: 40 (missing stats)
+                            │   │   │
+                            │   │   ├── • union all
+                            │   │   │   │ columns: (k, v)
+                            │   │   │   │ ordering: +k
+                            │   │   │   │ estimated row count: 20 (missing stats)
+                            │   │   │   │
+                            │   │   │   ├── • scan
+                            │   │   │   │     columns: (k, v)
+                            │   │   │   │     ordering: +k
+                            │   │   │   │     estimated row count: 10 (missing stats)
+                            │   │   │   │     table: t@t_v_idx
+                            │   │   │   │     spans: /57-/58
+                            │   │   │   │     limit: 10
+                            │   │   │   │
+                            │   │   │   └── • scan
+                            │   │   │         columns: (k, v)
+                            │   │   │         ordering: +k
+                            │   │   │         estimated row count: 10 (missing stats)
+                            │   │   │         table: t@t_v_idx
+                            │   │   │         spans: /58-/59
+                            │   │   │         limit: 10
+                            │   │   │
+                            │   │   └── • union all
+                            │   │       │ columns: (k, v)
+                            │   │       │ ordering: +k
+                            │   │       │ estimated row count: 20 (missing stats)
+                            │   │       │
+                            │   │       ├── • scan
+                            │   │       │     columns: (k, v)
+                            │   │       │     ordering: +k
+                            │   │       │     estimated row count: 10 (missing stats)
+                            │   │       │     table: t@t_v_idx
+                            │   │       │     spans: /59-/60
+                            │   │       │     limit: 10
+                            │   │       │
+                            │   │       └── • scan
+                            │   │             columns: (k, v)
+                            │   │             ordering: +k
+                            │   │             estimated row count: 10 (missing stats)
+                            │   │             table: t@t_v_idx
+                            │   │             spans: /60-/61
+                            │   │             limit: 10
+                            │   │
+                            │   └── • union all
+                            │       │ columns: (k, v)
+                            │       │ ordering: +k
+                            │       │ estimated row count: 40 (missing stats)
+                            │       │
+                            │       ├── • union all
+                            │       │   │ columns: (k, v)
+                            │       │   │ ordering: +k
+                            │       │   │ estimated row count: 20 (missing stats)
+                            │       │   │
+                            │       │   ├── • scan
+                            │       │   │     columns: (k, v)
+                            │       │   │     ordering: +k
+                            │       │   │     estimated row count: 10 (missing stats)
+                            │       │   │     table: t@t_v_idx
+                            │       │   │     spans: /61-/62
+                            │       │   │     limit: 10
+                            │       │   │
+                            │       │   └── • scan
+                            │       │         columns: (k, v)
+                            │       │         ordering: +k
+                            │       │         estimated row count: 10 (missing stats)
+                            │       │         table: t@t_v_idx
+                            │       │         spans: /62-/63
+                            │       │         limit: 10
+                            │       │
+                            │       └── • union all
+                            │           │ columns: (k, v)
+                            │           │ ordering: +k
+                            │           │ estimated row count: 20 (missing stats)
+                            │           │
+                            │           ├── • scan
+                            │           │     columns: (k, v)
+                            │           │     ordering: +k
+                            │           │     estimated row count: 10 (missing stats)
+                            │           │     table: t@t_v_idx
+                            │           │     spans: /63-/64
+                            │           │     limit: 10
+                            │           │
+                            │           └── • scan
+                            │                 columns: (k, v)
+                            │                 ordering: +k
+                            │                 estimated row count: 10 (missing stats)
+                            │                 table: t@t_v_idx
+                            │                 spans: /64-/65
+                            │                 limit: 10
+                            │
+                            └── • union all
+                                │ columns: (k, v)
+                                │ ordering: +k
+                                │ estimated row count: 80 (missing stats)
+                                │
+                                ├── • union all
+                                │   │ columns: (k, v)
+                                │   │ ordering: +k
+                                │   │ estimated row count: 40 (missing stats)
+                                │   │
+                                │   ├── • union all
+                                │   │   │ columns: (k, v)
+                                │   │   │ ordering: +k
+                                │   │   │ estimated row count: 20 (missing stats)
+                                │   │   │
+                                │   │   ├── • scan
+                                │   │   │     columns: (k, v)
+                                │   │   │     ordering: +k
+                                │   │   │     estimated row count: 10 (missing stats)
+                                │   │   │     table: t@t_v_idx
+                                │   │   │     spans: /65-/66
+                                │   │   │     limit: 10
+                                │   │   │
+                                │   │   └── • scan
+                                │   │         columns: (k, v)
+                                │   │         ordering: +k
+                                │   │         estimated row count: 10 (missing stats)
+                                │   │         table: t@t_v_idx
+                                │   │         spans: /66-/67
+                                │   │         limit: 10
+                                │   │
+                                │   └── • union all
+                                │       │ columns: (k, v)
+                                │       │ ordering: +k
+                                │       │ estimated row count: 20 (missing stats)
+                                │       │
+                                │       ├── • scan
+                                │       │     columns: (k, v)
+                                │       │     ordering: +k
+                                │       │     estimated row count: 10 (missing stats)
+                                │       │     table: t@t_v_idx
+                                │       │     spans: /67-/68
+                                │       │     limit: 10
+                                │       │
+                                │       └── • scan
+                                │             columns: (k, v)
+                                │             ordering: +k
+                                │             estimated row count: 10 (missing stats)
+                                │             table: t@t_v_idx
+                                │             spans: /68-/69
+                                │             limit: 10
+                                │
+                                └── • union all
+                                    │ columns: (k, v)
+                                    │ ordering: +k
+                                    │ estimated row count: 40 (missing stats)
+                                    │
+                                    ├── • union all
+                                    │   │ columns: (k, v)
+                                    │   │ ordering: +k
+                                    │   │ estimated row count: 20 (missing stats)
+                                    │   │
+                                    │   ├── • scan
+                                    │   │     columns: (k, v)
+                                    │   │     ordering: +k
+                                    │   │     estimated row count: 10 (missing stats)
+                                    │   │     table: t@t_v_idx
+                                    │   │     spans: /69-/70
+                                    │   │     limit: 10
+                                    │   │
+                                    │   └── • scan
+                                    │         columns: (k, v)
+                                    │         ordering: +k
+                                    │         estimated row count: 10 (missing stats)
+                                    │         table: t@t_v_idx
+                                    │         spans: /70-/71
+                                    │         limit: 10
+                                    │
+                                    └── • union all
+                                        │ columns: (k, v)
+                                        │ ordering: +k
+                                        │ estimated row count: 20 (missing stats)
+                                        │
+                                        ├── • scan
+                                        │     columns: (k, v)
+                                        │     ordering: +k
+                                        │     estimated row count: 10 (missing stats)
+                                        │     table: t@t_v_idx
+                                        │     spans: /71-/72
+                                        │     limit: 10
+                                        │
+                                        └── • scan
+                                              columns: (k, v)
+                                              ordering: +k
+                                              estimated row count: 10 (missing stats)
+                                              table: t@t_v_idx
+                                              spans: /72-/73
+                                              limit: 10
+
+# Regression test for #47283: scan with both hard limit and soft limit.
+statement ok
+CREATE TABLE t_47283(k INT PRIMARY KEY, a INT)
+
+# The scan should have a hard limit.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM t_47283 ORDER BY k LIMIT 4) WHERE a > 5 LIMIT 1
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ columns: (k, a)
+│ count: 1
+│
+└── • filter
+    │ columns: (k, a)
+    │ estimated row count: 2 (missing stats)
+    │ filter: a > 5
+    │
+    └── • scan
+          columns: (k, a)
+          estimated row count: 4 (missing stats)
+          table: t_47283@t_47283_pkey
+          spans: LIMITED SCAN
+          limit: 4
+
+# Regression test for #55156: split hash-sharded index scan.
+statement ok
+CREATE TABLE IF NOT EXISTS user_checklist_items (
+    tenant_id UUID,
+    location_id UUID,
+    checklist_item_id UUID,
+    user_id STRING,
+    configuration_maintenance_id UUID NOT NULL,
+    configuration_maintenance_item_id UUID NOT NULL,
+    date_should_be_completed DATE NOT NULL,
+    is_recurrent_assignation BOOL,
+    location_name STRING NOT NULL,
+    order_item FLOAT NOT NULL,
+    title STRING NOT NULL,
+    create_date TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (tenant_id, location_id, checklist_item_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem ON user_checklist_items (tenant_id, user_id, date_should_be_completed, location_name, title, order_item, checklist_item_id) USING HASH WITH (bucket_count=8);
+CREATE INDEX IF NOT EXISTS userchecklistitems_tenantid_locationid_configurationmaintenanceid_configurationmaintenanceitemid_dateshouldbecompleted ON user_checklist_items (tenant_id, location_id, configuration_maintenance_id, configuration_maintenance_item_id, date_should_be_completed) USING HASH WITH (bucket_count=8);
+
+statement ok
+ALTER TABLE user_checklist_items INJECT STATISTICS
+'[
+  {
+    "columns": ["tenant_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 1,
+    "null_count": 0
+  },
+  {
+    "columns": ["user_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 1,
+    "null_count": 0
+  }
+]'
+
+# Expect a scan over each shard.
+query T
+EXPLAIN
+  SELECT
+    tenant_id, user_id, date_should_be_completed
+  FROM
+    user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+  WHERE
+    tenant_id = 'a2a0dd49-23cf-4cf2-b823-61701c416e60'
+    AND user_id = '01603523-c6f0-4e12-a43f-524c76b0fa8f'
+    AND date_should_be_completed >= '2020-10-01'
+  ORDER BY
+    date_should_be_completed
+  LIMIT
+    5;
+----
+distribution: local
+·
+• limit
+│ count: 5
+│
+└── • union all
+    │ estimated row count: 40
+    │
+    ├── • union all
+    │   │ estimated row count: 20
+    │   │
+    │   ├── • union all
+    │   │   │ estimated row count: 10
+    │   │   │
+    │   │   ├── • scan
+    │   │   │     estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+    │   │   │     table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+    │   │   │     spans: [/0/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /0/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+    │   │   │     limit: 5
+    │   │   │
+    │   │   └── • scan
+    │   │         estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+    │   │         table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+    │   │         spans: [/1/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /1/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+    │   │         limit: 5
+    │   │
+    │   └── • union all
+    │       │ estimated row count: 10
+    │       │
+    │       ├── • scan
+    │       │     estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+    │       │     table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+    │       │     spans: [/2/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /2/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+    │       │     limit: 5
+    │       │
+    │       └── • scan
+    │             estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+    │             table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+    │             spans: [/3/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /3/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+    │             limit: 5
+    │
+    └── • union all
+        │ estimated row count: 20
+        │
+        ├── • union all
+        │   │ estimated row count: 10
+        │   │
+        │   ├── • scan
+        │   │     estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+        │   │     table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+        │   │     spans: [/4/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /4/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+        │   │     limit: 5
+        │   │
+        │   └── • scan
+        │         estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+        │         table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+        │         spans: [/5/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /5/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+        │         limit: 5
+        │
+        └── • union all
+            │ estimated row count: 10
+            │
+            ├── • scan
+            │     estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+            │     table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+            │     spans: [/6/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /6/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+            │     limit: 5
+            │
+            └── • scan
+                  estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+                  table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+                  spans: [/7/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /7/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+                  limit: 5
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v, w LIMIT 5
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ columns: (k, v, w)
+│ estimated row count: 5 (missing stats)
+│ order: +v,+w
+│ k: 5
+│
+└── • scan
+      columns: (k, v, w)
+      estimated row count: 1,000 (missing stats)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+
+
+statement ok
+CREATE TABLE a AS (SELECT i, i AS j FROM generate_series(0, 1000) AS gen(i));
+
+statement ok
+CREATE INDEX ON a (i, j);
+
+statement ok
+CREATE TABLE b AS SELECT k, k::STRING AS s FROM generate_series(0, 99) AS gen(k);
+
+statement ok
+CREATE INDEX ON b (k, s);
+
+statement ok
+ANALYZE a;
+
+statement ok
+ANALYZE b;
+
+query T retry
+EXPLAIN SELECT * FROM a INNER LOOKUP JOIN b ON k = j ORDER BY i LIMIT 5;
+----
+distribution: local
+·
+• limit
+│ count: 5
+│
+└── • lookup join
+    │ estimated row count: 100
+    │ table: b@b_k_s_idx
+    │ equality: (j) = (k)
+    │
+    └── • scan
+          estimated row count: 100 - 1,001 (100% of the table; stats collected <hidden> ago)
+          table: a@a_i_j_idx
+          spans: FULL SCAN (SOFT LIMIT)
+
+# A limit cannot be pushed into the scan of a virtual table with ORDER BY.
+query T
+EXPLAIN SELECT oid, typname FROM pg_type ORDER BY oid LIMIT 10
+----
+distribution: local
+·
+• limit
+│ count: 10
+│
+└── • virtual table
+      table: pg_type@pg_type_oid_idx
+
+# A limit can be pushed into the scan of a virtual table without ORDER BY.
+query T
+EXPLAIN SELECT oid, typname FROM pg_type LIMIT 10
+----
+distribution: local
+·
+• virtual table
+  table: pg_type@primary
+  limit: 10
+
+# A limit cannot be pushed into the constrained scan of a virtual table with
+# ORDER BY.
+query T
+EXPLAIN SELECT oid, typname FROM pg_type WHERE OID BETWEEN 1 AND 1000 ORDER BY oid LIMIT 10
+----
+distribution: local
+·
+• limit
+│ count: 10
+│
+└── • virtual table
+      table: pg_type@primary
+      virtual table filter
+
+# Regression test for #69685 - a limit cannot be pushed below a window function
+# if its order-by references the window function.
+query T
+EXPLAIN SELECT * FROM generate_series(1, 10) ORDER BY row_number() OVER () LIMIT 1;
+----
+distribution: local
+·
+• top-k
+│ estimated row count: 1
+│ order: +row_number
+│ k: 1
+│
+└── • window
+    │ estimated row count: 10
+    │
+    └── • project set
+        │ estimated row count: 10
+        │
+        └── • emptyrow
+
+# Regression test for not incorporating the OFFSET value into the limit hint.
+statement ok
+CREATE TABLE t_offset (k INT PRIMARY KEY);
+
+statement ok
+INSERT INTO t_offset SELECT generate_series(1, 10)
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t_offset LIMIT 1 OFFSET 3; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%'
+ ORDER BY message, ordinality ASC
+----
+fetched: /t_offset/t_offset_pkey/1 -> <undecoded>
+fetched: /t_offset/t_offset_pkey/2 -> <undecoded>
+fetched: /t_offset/t_offset_pkey/3 -> <undecoded>
+fetched: /t_offset/t_offset_pkey/4 -> <undecoded>

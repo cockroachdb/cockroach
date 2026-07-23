@@ -1,0 +1,44 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package colexec
+
+import (
+	"context"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
+)
+
+func TestBufferOp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	inputTuples := colexectestutils.Tuples{{int64(1)}, {int64(2)}, {int64(3)}}
+	input := colexectestutils.NewOpTestInput(testAllocator, coldata.BatchSize(), inputTuples, []*types.T{types.Int})
+	buffer := NewBufferOp(input).(*bufferOp)
+	buffer.Init(context.Background())
+
+	t.Run("TestBufferReturnsInputCorrectly", func(t *testing.T) {
+		buffer.advance()
+		b := colexecop.NextNoMeta(buffer)
+		require.Nil(t, b.Selection())
+		require.Equal(t, len(inputTuples), b.Length())
+		for i, val := range inputTuples {
+			require.Equal(t, val[0], b.ColVec(0).Int64()[i])
+		}
+
+		// We've read over the batch, so we now should get a zero-length batch.
+		b = colexecop.NextNoMeta(buffer)
+		require.Nil(t, b.Selection())
+		require.Equal(t, 0, b.Length())
+	})
+}

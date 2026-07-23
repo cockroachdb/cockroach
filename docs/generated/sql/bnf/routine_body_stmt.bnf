@@ -1,0 +1,3 @@
+routine_body_stmt ::=
+	stmt_without_legacy_transaction
+	| routine_return_stmt

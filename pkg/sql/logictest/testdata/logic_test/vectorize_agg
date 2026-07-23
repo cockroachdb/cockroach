@@ -1,0 +1,87 @@
+statement ok
+CREATE TABLE bools (a INT, b BOOL)
+
+query BB
+SELECT bool_and(b), bool_or(b) FROM bools
+----
+NULL NULL
+
+query BB
+SELECT bool_and(b), bool_or(b) FROM bools GROUP BY a
+----
+
+statement ok
+INSERT INTO bools VALUES
+(0, NULL),
+(1, true),  (1, true),
+(2, false), (2, false),
+(3, false), (3, true), (3, true),
+(4, NULL),  (4, true),
+(5, false), (5, NULL)
+
+query BB rowsort
+SELECT bool_and(b), bool_or(b) FROM bools GROUP BY a;
+----
+NULL NULL
+true true
+false false
+false true
+true true
+false false
+
+statement ok
+CREATE TABLE bytes_string(_group INT, _bytes BYTES, _string STRING)
+
+query TT
+SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string
+----
+NULL NULL
+
+query TT
+SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string GROUP BY _group
+----
+
+statement ok
+INSERT INTO bytes_string VALUES
+(0, NULL, NULL),
+(1, b'1', '1'),
+(2, b'2', '2'), (2, b'2', '2'),
+(3, b'3', '3'), (3, NULL, NULL), (3, b'3', '3')
+
+query TT
+SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string GROUP BY _group ORDER BY _group
+----
+NULL NULL
+1    1
+22   22
+33   33
+
+# Regression test for incorrect handling of non-scalar GROUP BY with no
+# aggregate functions (#87619).
+statement ok
+CREATE TABLE t87619 (b) AS SELECT true;
+SET testing_optimizer_random_seed = 3164997759865821235;
+SET testing_optimizer_disable_rule_probability = 0.500000;
+
+query B
+SELECT true FROM t87619 GROUP BY b HAVING b
+----
+true
+
+statement ok
+RESET testing_optimizer_random_seed;
+RESET testing_optimizer_disable_rule_probability;
+
+# Regression test for releasing the memory of datums in the datum-backed vector
+# from the incorrect memory account (#97603).
+statement ok
+CREATE TABLE t97603 (id PRIMARY KEY) AS SELECT generate_series(1, 50000);
+
+# The important bits are to use an aggregate function that is not supported
+# natively in the vectorized engine and to have a projection operator that is
+# producing a datum-backed vector (constant OID projection).
+statement ok
+SELECT
+     var_pop(crdb_internal_mvcc_timestamp::DECIMAL),
+     1:::OID
+FROM t97603 GROUP BY id HAVING bool_or(true)

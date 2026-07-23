@@ -1,0 +1,112 @@
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0
+----
+
+new-txn txn=txn2 ts=10,1 epoch=0
+----
+
+# -------------------------------------------------------------
+# Disable the lock-table - the replica may have lost the lease
+# or may be being merged away. It should not be possible to add
+# a lock to the lock-table.
+# NOTE: the clear functionality itself is already tested in
+# testdata/clear.
+# -------------------------------------------------------------
+
+clear disable
+----
+num=0
+
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@a+exclusive@c
+----
+
+scan r=req1
+----
+start-waiting: false
+
+guard-state r=req1
+----
+new: state=doneWaiting
+
+add-discovered r=req1 k=a txn=txn2
+----
+num=0
+
+# NOTE: this won't end up in an infinite loop of scanning a disabled
+# lock-table and discovering but ignoring the same lock in practice
+# because the second pass through evaluation is likely to hit a
+# NotLeaseholderError, bouncing the request back to the client.
+
+scan r=req1
+----
+start-waiting: false
+
+acquire r=req1 k=c durability=u strength=exclusive
+----
+num=0
+
+dequeue r=req1
+----
+num=0
+
+# -------------------------------------------------------------
+# Enable the lock-table - the behavior should return to normal.
+# -------------------------------------------------------------
+
+enable
+----
+
+new-request r=req2 txn=txn1 ts=10,1 spans=exclusive@a+exclusive@c
+----
+
+scan r=req2
+----
+start-waiting: false
+
+guard-state r=req2
+----
+new: state=doneWaiting
+
+add-discovered r=req2 k=a txn=txn2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 2, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+scan r=req2
+----
+start-waiting: true
+
+guard-state r=req2
+----
+new: state=waitFor txn=txn2 key="a" held=true guard-strength=Exclusive
+
+release txn=txn2 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 2, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+
+guard-state r=req2
+----
+new: state=doneWaiting
+
+acquire r=req2 k=c durability=u strength=exclusive
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 2, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req2
+----
+num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]

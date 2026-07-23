@@ -1,0 +1,2570 @@
+## Session var names never contain PII and should be distinguished
+## during anonymization for feature tracking purposes.
+
+parse
+SHOW barfoo
+----
+SHOW barfoo
+SHOW barfoo -- fully parenthesized
+SHOW barfoo -- literals removed
+SHOW barfoo -- identifiers removed
+
+parse
+EXPLAIN SHOW barfoo
+----
+EXPLAIN SHOW barfoo
+EXPLAIN SHOW barfoo -- fully parenthesized
+EXPLAIN SHOW barfoo -- literals removed
+EXPLAIN SHOW barfoo -- identifiers removed
+
+
+
+parse
+SHOW database
+----
+SHOW database
+SHOW database -- fully parenthesized
+SHOW database -- literals removed
+SHOW database -- identifiers removed
+
+parse
+SHOW timezone
+----
+SHOW timezone
+SHOW timezone -- fully parenthesized
+SHOW timezone -- literals removed
+SHOW timezone -- identifiers removed
+
+parse
+SHOW "BLAH"
+----
+SHOW "BLAH"
+SHOW "BLAH" -- fully parenthesized
+SHOW "BLAH" -- literals removed
+SHOW "BLAH" -- identifiers removed
+
+parse
+SHOW SESSION barfoo
+----
+SHOW barfoo -- normalized!
+SHOW barfoo -- fully parenthesized
+SHOW barfoo -- literals removed
+SHOW barfoo -- identifiers removed
+
+parse
+SHOW SESSION database
+----
+SHOW database -- normalized!
+SHOW database -- fully parenthesized
+SHOW database -- literals removed
+SHOW database -- identifiers removed
+
+parse
+SHOW SESSION TIME ZONE
+----
+SHOW timezone -- normalized!
+SHOW timezone -- fully parenthesized
+SHOW timezone -- literals removed
+SHOW timezone -- identifiers removed
+
+parse
+SHOW SESSION TIMEZONE
+----
+SHOW timezone -- normalized!
+SHOW timezone -- fully parenthesized
+SHOW timezone -- literals removed
+SHOW timezone -- identifiers removed
+
+## Cluster setting names never contain PII and should be distinguished
+## for feature tracking purposes.
+
+parse
+SHOW CLUSTER SETTING a
+----
+SHOW CLUSTER SETTING a
+SHOW CLUSTER SETTING a -- fully parenthesized
+SHOW CLUSTER SETTING a -- literals removed
+SHOW CLUSTER SETTING a -- identifiers removed
+
+parse
+EXPLAIN SHOW CLUSTER SETTING a
+----
+EXPLAIN SHOW CLUSTER SETTING a
+EXPLAIN SHOW CLUSTER SETTING a -- fully parenthesized
+EXPLAIN SHOW CLUSTER SETTING a -- literals removed
+EXPLAIN SHOW CLUSTER SETTING a -- identifiers removed
+
+parse
+SHOW ALL CLUSTER SETTINGS
+----
+SHOW ALL CLUSTER SETTINGS
+SHOW ALL CLUSTER SETTINGS -- fully parenthesized
+SHOW ALL CLUSTER SETTINGS -- literals removed
+SHOW ALL CLUSTER SETTINGS -- identifiers removed
+
+parse
+SHOW CLUSTER SETTING ALL
+----
+SHOW ALL CLUSTER SETTINGS -- normalized!
+SHOW ALL CLUSTER SETTINGS -- fully parenthesized
+SHOW ALL CLUSTER SETTINGS -- literals removed
+SHOW ALL CLUSTER SETTINGS -- identifiers removed
+
+parse
+SHOW PUBLIC CLUSTER SETTINGS
+----
+SHOW PUBLIC CLUSTER SETTINGS
+SHOW PUBLIC CLUSTER SETTINGS -- fully parenthesized
+SHOW PUBLIC CLUSTER SETTINGS -- literals removed
+SHOW PUBLIC CLUSTER SETTINGS -- identifiers removed
+
+parse
+SHOW CLUSTER SETTINGS
+----
+SHOW PUBLIC CLUSTER SETTINGS -- normalized!
+SHOW PUBLIC CLUSTER SETTINGS -- fully parenthesized
+SHOW PUBLIC CLUSTER SETTINGS -- literals removed
+SHOW PUBLIC CLUSTER SETTINGS -- identifiers removed
+
+parse
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER 123
+----
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER 123
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER (123) -- fully parenthesized
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER _ -- literals removed
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER 123 -- identifiers removed
+
+parse
+SHOW CLUSTER SETTING a FOR TENANT 123
+----
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER 123 -- normalized!
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER (123) -- fully parenthesized
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER _ -- literals removed
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER 123 -- identifiers removed
+
+parse
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER (1+1)
+----
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER (1 + 1) -- normalized!
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER ((((1) + (1)))) -- fully parenthesized
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER (_ + _) -- literals removed
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER (1 + 1) -- identifiers removed
+
+parse
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER $1
+----
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER $1
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER ($1) -- fully parenthesized
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER $1 -- literals removed
+SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER $1 -- identifiers removed
+
+parse
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER 1
+----
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER 1
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER (1) -- fully parenthesized
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER _ -- literals removed
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER 1 -- identifiers removed
+
+parse
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER 123
+----
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER 123
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER (123) -- fully parenthesized
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER _ -- literals removed
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER 123 -- identifiers removed
+
+parse
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER (1+1)
+----
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER (1 + 1) -- normalized!
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER ((((1) + (1)))) -- fully parenthesized
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER (_ + _) -- literals removed
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER (1 + 1) -- identifiers removed
+
+parse
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER $1
+----
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER $1
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER ($1) -- fully parenthesized
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER $1 -- literals removed
+EXPLAIN SHOW CLUSTER SETTING a FOR VIRTUAL CLUSTER $1 -- identifiers removed
+
+parse
+SHOW ALL CLUSTER SETTINGS FOR TENANT 1
+----
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER 1 -- normalized!
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER (1) -- fully parenthesized
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER _ -- literals removed
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER 1 -- identifiers removed
+
+parse
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER 1
+----
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER 1
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER (1) -- fully parenthesized
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER _ -- literals removed
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER 1 -- identifiers removed
+
+parse
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER 123
+----
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER 123
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER (123) -- fully parenthesized
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER _ -- literals removed
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER 123 -- identifiers removed
+
+parse
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER (1+1)
+----
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER (1 + 1) -- normalized!
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER ((((1) + (1)))) -- fully parenthesized
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER (_ + _) -- literals removed
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER (1 + 1) -- identifiers removed
+
+parse
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER $1
+----
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER $1
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER ($1) -- fully parenthesized
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER $1 -- literals removed
+SHOW ALL CLUSTER SETTINGS FOR VIRTUAL CLUSTER $1 -- identifiers removed
+
+parse
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER 123
+----
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER 123
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER (123) -- fully parenthesized
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER _ -- literals removed
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER 123 -- identifiers removed
+
+parse
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER (1+1)
+----
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER (1 + 1) -- normalized!
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER ((((1) + (1)))) -- fully parenthesized
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER (_ + _) -- literals removed
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER (1 + 1) -- identifiers removed
+
+parse
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER $1
+----
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER $1
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER ($1) -- fully parenthesized
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER $1 -- literals removed
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER $1 -- identifiers removed
+
+parse
+SHOW CLUSTER SETTINGS FOR VIRTUAL CLUSTER 123
+----
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER 123 -- normalized!
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER (123) -- fully parenthesized
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER _ -- literals removed
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER 123 -- identifiers removed
+
+parse
+SHOW PUBLIC CLUSTER SETTINGS FOR TENANT INTERVAL 'string' DAY TO HOUR
+----
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER ('string'::INTERVAL DAY TO HOUR) -- normalized!
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER ((('string')::INTERVAL DAY TO HOUR)) -- fully parenthesized
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER ('_'::INTERVAL DAY TO HOUR) -- literals removed
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER ('string'::INTERVAL DAY TO HOUR) -- identifiers removed
+
+parse
+SHOW CLUSTER SETTINGS FOR VIRTUAL CLUSTER (1+1)
+----
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER (1 + 1) -- normalized!
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER ((((1) + (1)))) -- fully parenthesized
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER (_ + _) -- literals removed
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER (1 + 1) -- identifiers removed
+
+parse
+SHOW CLUSTER SETTINGS FOR VIRTUAL CLUSTER $1
+----
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER $1 -- normalized!
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER ($1) -- fully parenthesized
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER $1 -- literals removed
+SHOW PUBLIC CLUSTER SETTINGS FOR VIRTUAL CLUSTER $1 -- identifiers removed
+
+parse
+SHOW DATABASES
+----
+SHOW DATABASES
+SHOW DATABASES -- fully parenthesized
+SHOW DATABASES -- literals removed
+SHOW DATABASES -- identifiers removed
+
+parse
+EXPLAIN SHOW DATABASES
+----
+EXPLAIN SHOW DATABASES
+EXPLAIN SHOW DATABASES -- fully parenthesized
+EXPLAIN SHOW DATABASES -- literals removed
+EXPLAIN SHOW DATABASES -- identifiers removed
+
+parse
+SHOW ENUMS
+----
+SHOW ENUMS
+SHOW ENUMS -- fully parenthesized
+SHOW ENUMS -- literals removed
+SHOW ENUMS -- identifiers removed
+
+parse
+EXPLAIN SHOW ENUMS
+----
+EXPLAIN SHOW ENUMS
+EXPLAIN SHOW ENUMS -- fully parenthesized
+EXPLAIN SHOW ENUMS -- literals removed
+EXPLAIN SHOW ENUMS -- identifiers removed
+
+parse
+SHOW TYPES
+----
+SHOW TYPES
+SHOW TYPES -- fully parenthesized
+SHOW TYPES -- literals removed
+SHOW TYPES -- identifiers removed
+
+parse
+SHOW TYPES WITH COMMENT
+----
+SHOW TYPES WITH COMMENT
+SHOW TYPES WITH COMMENT -- fully parenthesized
+SHOW TYPES WITH COMMENT -- literals removed
+SHOW TYPES WITH COMMENT -- identifiers removed
+
+parse
+EXPLAIN SHOW TYPES
+----
+EXPLAIN SHOW TYPES
+EXPLAIN SHOW TYPES -- fully parenthesized
+EXPLAIN SHOW TYPES -- literals removed
+EXPLAIN SHOW TYPES -- identifiers removed
+
+parse
+EXPLAIN SHOW TYPES WITH COMMENT
+----
+EXPLAIN SHOW TYPES WITH COMMENT
+EXPLAIN SHOW TYPES WITH COMMENT -- fully parenthesized
+EXPLAIN SHOW TYPES WITH COMMENT -- literals removed
+EXPLAIN SHOW TYPES WITH COMMENT -- identifiers removed
+
+parse
+SHOW SCHEMAS
+----
+SHOW SCHEMAS
+SHOW SCHEMAS -- fully parenthesized
+SHOW SCHEMAS -- literals removed
+SHOW SCHEMAS -- identifiers removed
+
+parse
+EXPLAIN SHOW SCHEMAS
+----
+EXPLAIN SHOW SCHEMAS
+EXPLAIN SHOW SCHEMAS -- fully parenthesized
+EXPLAIN SHOW SCHEMAS -- literals removed
+EXPLAIN SHOW SCHEMAS -- identifiers removed
+
+parse
+SHOW SCHEMAS FROM a
+----
+SHOW SCHEMAS FROM a
+SHOW SCHEMAS FROM a -- fully parenthesized
+SHOW SCHEMAS FROM a -- literals removed
+SHOW SCHEMAS FROM _ -- identifiers removed
+
+parse
+EXPLAIN SHOW SCHEMAS WITH COMMENT
+----
+EXPLAIN SHOW SCHEMAS WITH COMMENT
+EXPLAIN SHOW SCHEMAS WITH COMMENT -- fully parenthesized
+EXPLAIN SHOW SCHEMAS WITH COMMENT -- literals removed
+EXPLAIN SHOW SCHEMAS WITH COMMENT -- identifiers removed
+
+parse
+SHOW SCHEMAS FROM a WITH COMMENT
+----
+SHOW SCHEMAS FROM a WITH COMMENT
+SHOW SCHEMAS FROM a WITH COMMENT -- fully parenthesized
+SHOW SCHEMAS FROM a WITH COMMENT -- literals removed
+SHOW SCHEMAS FROM _ WITH COMMENT -- identifiers removed
+
+parse
+SHOW SEQUENCES
+----
+SHOW SEQUENCES
+SHOW SEQUENCES -- fully parenthesized
+SHOW SEQUENCES -- literals removed
+SHOW SEQUENCES -- identifiers removed
+
+parse
+EXPLAIN SHOW SEQUENCES
+----
+EXPLAIN SHOW SEQUENCES
+EXPLAIN SHOW SEQUENCES -- fully parenthesized
+EXPLAIN SHOW SEQUENCES -- literals removed
+EXPLAIN SHOW SEQUENCES -- identifiers removed
+
+parse
+SHOW SEQUENCES FROM a
+----
+SHOW SEQUENCES FROM a
+SHOW SEQUENCES FROM a -- fully parenthesized
+SHOW SEQUENCES FROM a -- literals removed
+SHOW SEQUENCES FROM _ -- identifiers removed
+
+parse
+SHOW TABLES
+----
+SHOW TABLES
+SHOW TABLES -- fully parenthesized
+SHOW TABLES -- literals removed
+SHOW TABLES -- identifiers removed
+
+parse
+SHOW TABLES WITH COMMENT
+----
+SHOW TABLES WITH COMMENT
+SHOW TABLES WITH COMMENT -- fully parenthesized
+SHOW TABLES WITH COMMENT -- literals removed
+SHOW TABLES WITH COMMENT -- identifiers removed
+
+parse
+EXPLAIN SHOW TABLES
+----
+EXPLAIN SHOW TABLES
+EXPLAIN SHOW TABLES -- fully parenthesized
+EXPLAIN SHOW TABLES -- literals removed
+EXPLAIN SHOW TABLES -- identifiers removed
+
+parse
+SHOW TABLES FROM a
+----
+SHOW TABLES FROM a
+SHOW TABLES FROM a -- fully parenthesized
+SHOW TABLES FROM a -- literals removed
+SHOW TABLES FROM _ -- identifiers removed
+
+parse
+SHOW TABLES FROM a WITH COMMENT
+----
+SHOW TABLES FROM a WITH COMMENT
+SHOW TABLES FROM a WITH COMMENT -- fully parenthesized
+SHOW TABLES FROM a WITH COMMENT -- literals removed
+SHOW TABLES FROM _ WITH COMMENT -- identifiers removed
+
+parse
+SHOW TABLES FROM a.b
+----
+SHOW TABLES FROM a.b
+SHOW TABLES FROM a.b -- fully parenthesized
+SHOW TABLES FROM a.b -- literals removed
+SHOW TABLES FROM _._ -- identifiers removed
+
+parse
+SHOW TABLES FROM a.b WITH COMMENT
+----
+SHOW TABLES FROM a.b WITH COMMENT
+SHOW TABLES FROM a.b WITH COMMENT -- fully parenthesized
+SHOW TABLES FROM a.b WITH COMMENT -- literals removed
+SHOW TABLES FROM _._ WITH COMMENT -- identifiers removed
+
+parse
+SHOW COLUMNS FROM a
+----
+SHOW COLUMNS FROM a
+SHOW COLUMNS FROM a -- fully parenthesized
+SHOW COLUMNS FROM a -- literals removed
+SHOW COLUMNS FROM _ -- identifiers removed
+
+parse
+EXPLAIN SHOW COLUMNS FROM a
+----
+EXPLAIN SHOW COLUMNS FROM a
+EXPLAIN SHOW COLUMNS FROM a -- fully parenthesized
+EXPLAIN SHOW COLUMNS FROM a -- literals removed
+EXPLAIN SHOW COLUMNS FROM _ -- identifiers removed
+
+parse
+SHOW COLUMNS FROM a.b.c
+----
+SHOW COLUMNS FROM a.b.c
+SHOW COLUMNS FROM a.b.c -- fully parenthesized
+SHOW COLUMNS FROM a.b.c -- literals removed
+SHOW COLUMNS FROM _._._ -- identifiers removed
+
+parse
+SHOW INDEXES FROM a
+----
+SHOW INDEXES FROM a
+SHOW INDEXES FROM a -- fully parenthesized
+SHOW INDEXES FROM a -- literals removed
+SHOW INDEXES FROM _ -- identifiers removed
+
+parse
+EXPLAIN SHOW INDEXES FROM a
+----
+EXPLAIN SHOW INDEXES FROM a
+EXPLAIN SHOW INDEXES FROM a -- fully parenthesized
+EXPLAIN SHOW INDEXES FROM a -- literals removed
+EXPLAIN SHOW INDEXES FROM _ -- identifiers removed
+
+parse
+SHOW INDEXES FROM a WITH COMMENT
+----
+SHOW INDEXES FROM a WITH COMMENT
+SHOW INDEXES FROM a WITH COMMENT -- fully parenthesized
+SHOW INDEXES FROM a WITH COMMENT -- literals removed
+SHOW INDEXES FROM _ WITH COMMENT -- identifiers removed
+
+parse
+EXPLAIN SHOW INDEXES FROM a WITH COMMENT
+----
+EXPLAIN SHOW INDEXES FROM a WITH COMMENT
+EXPLAIN SHOW INDEXES FROM a WITH COMMENT -- fully parenthesized
+EXPLAIN SHOW INDEXES FROM a WITH COMMENT -- literals removed
+EXPLAIN SHOW INDEXES FROM _ WITH COMMENT -- identifiers removed
+
+parse
+SHOW INDEXES FROM a.b.c
+----
+SHOW INDEXES FROM a.b.c
+SHOW INDEXES FROM a.b.c -- fully parenthesized
+SHOW INDEXES FROM a.b.c -- literals removed
+SHOW INDEXES FROM _._._ -- identifiers removed
+
+parse
+SHOW INDEXES FROM a.b.c WITH COMMENT
+----
+SHOW INDEXES FROM a.b.c WITH COMMENT
+SHOW INDEXES FROM a.b.c WITH COMMENT -- fully parenthesized
+SHOW INDEXES FROM a.b.c WITH COMMENT -- literals removed
+SHOW INDEXES FROM _._._ WITH COMMENT -- identifiers removed
+
+parse
+SHOW INDEXES FROM DATABASE a
+----
+SHOW INDEXES FROM DATABASE a
+SHOW INDEXES FROM DATABASE a -- fully parenthesized
+SHOW INDEXES FROM DATABASE a -- literals removed
+SHOW INDEXES FROM DATABASE _ -- identifiers removed
+
+parse
+SHOW INDEXES FROM DATABASE a WITH COMMENT
+----
+SHOW INDEXES FROM DATABASE a WITH COMMENT
+SHOW INDEXES FROM DATABASE a WITH COMMENT -- fully parenthesized
+SHOW INDEXES FROM DATABASE a WITH COMMENT -- literals removed
+SHOW INDEXES FROM DATABASE _ WITH COMMENT -- identifiers removed
+
+parse
+SHOW INDEX FROM t
+----
+SHOW INDEXES FROM t -- normalized!
+SHOW INDEXES FROM t -- fully parenthesized
+SHOW INDEXES FROM t -- literals removed
+SHOW INDEXES FROM _ -- identifiers removed
+
+
+parse
+SHOW KEYS FROM t
+----
+SHOW INDEXES FROM t -- normalized!
+SHOW INDEXES FROM t -- fully parenthesized
+SHOW INDEXES FROM t -- literals removed
+SHOW INDEXES FROM _ -- identifiers removed
+
+
+parse
+SHOW CONSTRAINTS FROM a
+----
+SHOW CONSTRAINTS FROM a
+SHOW CONSTRAINTS FROM a -- fully parenthesized
+SHOW CONSTRAINTS FROM a -- literals removed
+SHOW CONSTRAINTS FROM _ -- identifiers removed
+
+parse
+SHOW CONSTRAINTS FROM a.b.c
+----
+SHOW CONSTRAINTS FROM a.b.c
+SHOW CONSTRAINTS FROM a.b.c -- fully parenthesized
+SHOW CONSTRAINTS FROM a.b.c -- literals removed
+SHOW CONSTRAINTS FROM _._._ -- identifiers removed
+
+parse
+EXPLAIN SHOW CONSTRAINTS FROM a.b.c
+----
+EXPLAIN SHOW CONSTRAINTS FROM a.b.c
+EXPLAIN SHOW CONSTRAINTS FROM a.b.c -- fully parenthesized
+EXPLAIN SHOW CONSTRAINTS FROM a.b.c -- literals removed
+EXPLAIN SHOW CONSTRAINTS FROM _._._ -- identifiers removed
+
+parse
+SHOW CONSTRAINT FROM t
+----
+SHOW CONSTRAINTS FROM t -- normalized!
+SHOW CONSTRAINTS FROM t -- fully parenthesized
+SHOW CONSTRAINTS FROM t -- literals removed
+SHOW CONSTRAINTS FROM _ -- identifiers removed
+
+
+parse
+SHOW TABLES FROM a.b; SHOW COLUMNS FROM b
+----
+SHOW TABLES FROM a.b; SHOW COLUMNS FROM b
+SHOW TABLES FROM a.b; SHOW COLUMNS FROM b -- fully parenthesized
+SHOW TABLES FROM a.b; SHOW COLUMNS FROM b -- literals removed
+SHOW TABLES FROM _._; SHOW COLUMNS FROM _ -- identifiers removed
+
+parse
+EXPLAIN SHOW TABLES FROM a
+----
+EXPLAIN SHOW TABLES FROM a
+EXPLAIN SHOW TABLES FROM a -- fully parenthesized
+EXPLAIN SHOW TABLES FROM a -- literals removed
+EXPLAIN SHOW TABLES FROM _ -- identifiers removed
+
+parse
+SHOW ROLES
+----
+SHOW ROLES
+SHOW ROLES -- fully parenthesized
+SHOW ROLES -- literals removed
+SHOW ROLES -- identifiers removed
+
+parse
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com'
+----
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com'
+SHOW ROLES WITH SOURCE = ('ldap:ldap.example.com') -- fully parenthesized
+SHOW ROLES WITH SOURCE = '_' -- literals removed
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com' -- identifiers removed
+
+parse
+SHOW ROLES WITH LAST LOGIN BEFORE '2024-01-01'
+----
+SHOW ROLES WITH LAST LOGIN BEFORE '2024-01-01'
+SHOW ROLES WITH LAST LOGIN BEFORE ('2024-01-01') -- fully parenthesized
+SHOW ROLES WITH LAST LOGIN BEFORE '_' -- literals removed
+SHOW ROLES WITH LAST LOGIN BEFORE '2024-01-01' -- identifiers removed
+
+parse
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01'
+----
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01'
+SHOW ROLES WITH SOURCE = ('ldap:ldap.example.com'), LAST LOGIN BEFORE ('2024-01-01') -- fully parenthesized
+SHOW ROLES WITH SOURCE = '_', LAST LOGIN BEFORE '_' -- literals removed
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01' -- identifiers removed
+
+parse
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10
+----
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10
+SHOW ROLES WITH SOURCE = ('ldap:ldap.example.com') LIMIT (10) -- fully parenthesized
+SHOW ROLES WITH SOURCE = '_' LIMIT _ -- literals removed
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10 -- identifiers removed
+
+parse
+SHOW ROLES LIMIT 5
+----
+SHOW ROLES LIMIT 5
+SHOW ROLES LIMIT (5) -- fully parenthesized
+SHOW ROLES LIMIT _ -- literals removed
+SHOW ROLES LIMIT 5 -- identifiers removed
+
+parse
+EXPLAIN SHOW ROLES
+----
+EXPLAIN SHOW ROLES
+EXPLAIN SHOW ROLES -- fully parenthesized
+EXPLAIN SHOW ROLES -- literals removed
+EXPLAIN SHOW ROLES -- identifiers removed
+
+parse
+SHOW USERS
+----
+SHOW USERS
+SHOW USERS -- fully parenthesized
+SHOW USERS -- literals removed
+SHOW USERS -- identifiers removed
+
+parse
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com'
+----
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com'
+SHOW USERS WITH SOURCE = ('ldap:ldap.example.com') -- fully parenthesized
+SHOW USERS WITH SOURCE = '_' -- literals removed
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com' -- identifiers removed
+
+parse
+SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01'
+----
+SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01'
+SHOW USERS WITH LAST LOGIN BEFORE ('2024-01-01') -- fully parenthesized
+SHOW USERS WITH LAST LOGIN BEFORE '_' -- literals removed
+SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01' -- identifiers removed
+
+parse
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01'
+----
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01'
+SHOW USERS WITH SOURCE = ('ldap:ldap.example.com'), LAST LOGIN BEFORE ('2024-01-01') -- fully parenthesized
+SHOW USERS WITH SOURCE = '_', LAST LOGIN BEFORE '_' -- literals removed
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01' -- identifiers removed
+
+parse
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10
+----
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10
+SHOW USERS WITH SOURCE = ('ldap:ldap.example.com') LIMIT (10) -- fully parenthesized
+SHOW USERS WITH SOURCE = '_' LIMIT _ -- literals removed
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10 -- identifiers removed
+
+parse
+SHOW USERS LIMIT 5
+----
+SHOW USERS LIMIT 5
+SHOW USERS LIMIT (5) -- fully parenthesized
+SHOW USERS LIMIT _ -- literals removed
+SHOW USERS LIMIT 5 -- identifiers removed
+
+parse
+EXPLAIN SHOW USERS
+----
+EXPLAIN SHOW USERS
+EXPLAIN SHOW USERS -- fully parenthesized
+EXPLAIN SHOW USERS -- literals removed
+EXPLAIN SHOW USERS -- identifiers removed
+
+error
+SHOW USERS WITH SOURCE = 'a', SOURCE = 'b'
+----
+at or near "EOF": syntax error: SOURCE option specified multiple times
+DETAIL: source SQL:
+SHOW USERS WITH SOURCE = 'a', SOURCE = 'b'
+                                          ^
+
+error
+SHOW ROLES WITH SOURCE = 'a', SOURCE = 'b'
+----
+at or near "EOF": syntax error: SOURCE option specified multiple times
+DETAIL: source SQL:
+SHOW ROLES WITH SOURCE = 'a', SOURCE = 'b'
+                                          ^
+
+error
+SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01', LAST LOGIN BEFORE '2025-01-01'
+----
+at or near "EOF": syntax error: LAST LOGIN BEFORE option specified multiple times
+DETAIL: source SQL:
+SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01', LAST LOGIN BEFORE '2025-01-01'
+                                                                              ^
+
+error
+SHOW ROLES WITH LAST LOGIN BEFORE '2024-01-01', LAST LOGIN BEFORE '2025-01-01'
+----
+at or near "EOF": syntax error: LAST LOGIN BEFORE option specified multiple times
+DETAIL: source SQL:
+SHOW ROLES WITH LAST LOGIN BEFORE '2024-01-01', LAST LOGIN BEFORE '2025-01-01'
+                                                                              ^
+
+parse
+SHOW JOB 1234
+----
+SHOW JOBS VALUES (1234) -- normalized!
+SHOW JOBS VALUES ((1234)) -- fully parenthesized
+SHOW JOBS VALUES (_) -- literals removed
+SHOW JOBS VALUES (1234) -- identifiers removed
+
+parse
+EXPLAIN SHOW JOB 1234
+----
+EXPLAIN SHOW JOBS VALUES (1234) -- normalized!
+EXPLAIN SHOW JOBS VALUES ((1234)) -- fully parenthesized
+EXPLAIN SHOW JOBS VALUES (_) -- literals removed
+EXPLAIN SHOW JOBS VALUES (1234) -- identifiers removed
+
+parse
+SHOW JOBS
+----
+SHOW JOBS
+SHOW JOBS -- fully parenthesized
+SHOW JOBS -- literals removed
+SHOW JOBS -- identifiers removed
+
+parse
+EXPLAIN SHOW JOBS
+----
+EXPLAIN SHOW JOBS
+EXPLAIN SHOW JOBS -- fully parenthesized
+EXPLAIN SHOW JOBS -- literals removed
+EXPLAIN SHOW JOBS -- identifiers removed
+
+parse
+SHOW AUTOMATIC JOBS
+----
+SHOW AUTOMATIC JOBS
+SHOW AUTOMATIC JOBS -- fully parenthesized
+SHOW AUTOMATIC JOBS -- literals removed
+SHOW AUTOMATIC JOBS -- identifiers removed
+
+parse
+EXPLAIN SHOW AUTOMATIC JOBS
+----
+EXPLAIN SHOW AUTOMATIC JOBS
+EXPLAIN SHOW AUTOMATIC JOBS -- fully parenthesized
+EXPLAIN SHOW AUTOMATIC JOBS -- literals removed
+EXPLAIN SHOW AUTOMATIC JOBS -- identifiers removed
+
+parse
+SHOW CHANGEFEED JOB 1234
+----
+SHOW CHANGEFEED JOBS VALUES (1234) -- normalized!
+SHOW CHANGEFEED JOBS VALUES ((1234)) -- fully parenthesized
+SHOW CHANGEFEED JOBS VALUES (_) -- literals removed
+SHOW CHANGEFEED JOBS VALUES (1234) -- identifiers removed
+
+parse
+EXPLAIN SHOW CHANGEFEED JOB 1234
+----
+EXPLAIN SHOW CHANGEFEED JOBS VALUES (1234) -- normalized!
+EXPLAIN SHOW CHANGEFEED JOBS VALUES ((1234)) -- fully parenthesized
+EXPLAIN SHOW CHANGEFEED JOBS VALUES (_) -- literals removed
+EXPLAIN SHOW CHANGEFEED JOBS VALUES (1234) -- identifiers removed
+
+parse
+SHOW CHANGEFEED JOB 1234 WITH WATCHED_TABLES
+----
+SHOW CHANGEFEED JOBS VALUES (1234) WITH WATCHED_TABLES -- normalized!
+SHOW CHANGEFEED JOBS VALUES ((1234)) WITH WATCHED_TABLES -- fully parenthesized
+SHOW CHANGEFEED JOBS VALUES (_) WITH WATCHED_TABLES -- literals removed
+SHOW CHANGEFEED JOBS VALUES (1234) WITH WATCHED_TABLES -- identifiers removed
+
+parse
+EXPLAIN SHOW CHANGEFEED JOB 1234 WITH WATCHED_TABLES
+----
+EXPLAIN SHOW CHANGEFEED JOBS VALUES (1234) WITH WATCHED_TABLES -- normalized!
+EXPLAIN SHOW CHANGEFEED JOBS VALUES ((1234)) WITH WATCHED_TABLES -- fully parenthesized
+EXPLAIN SHOW CHANGEFEED JOBS VALUES (_) WITH WATCHED_TABLES -- literals removed
+EXPLAIN SHOW CHANGEFEED JOBS VALUES (1234) WITH WATCHED_TABLES -- identifiers removed
+
+parse
+SHOW CHANGEFEED JOBS
+----
+SHOW CHANGEFEED JOBS
+SHOW CHANGEFEED JOBS -- fully parenthesized
+SHOW CHANGEFEED JOBS -- literals removed
+SHOW CHANGEFEED JOBS -- identifiers removed
+
+parse
+EXPLAIN SHOW CHANGEFEED JOBS
+----
+EXPLAIN SHOW CHANGEFEED JOBS
+EXPLAIN SHOW CHANGEFEED JOBS -- fully parenthesized
+EXPLAIN SHOW CHANGEFEED JOBS -- literals removed
+EXPLAIN SHOW CHANGEFEED JOBS -- identifiers removed
+
+parse
+SHOW CHANGEFEED JOBS WITH WATCHED_TABLES
+----
+SHOW CHANGEFEED JOBS WITH WATCHED_TABLES
+SHOW CHANGEFEED JOBS WITH WATCHED_TABLES -- fully parenthesized
+SHOW CHANGEFEED JOBS WITH WATCHED_TABLES -- literals removed
+SHOW CHANGEFEED JOBS WITH WATCHED_TABLES -- identifiers removed
+
+parse
+EXPLAIN SHOW CHANGEFEED JOBS WITH WATCHED_TABLES
+----
+EXPLAIN SHOW CHANGEFEED JOBS WITH WATCHED_TABLES
+EXPLAIN SHOW CHANGEFEED JOBS WITH WATCHED_TABLES -- fully parenthesized
+EXPLAIN SHOW CHANGEFEED JOBS WITH WATCHED_TABLES -- literals removed
+EXPLAIN SHOW CHANGEFEED JOBS WITH WATCHED_TABLES -- identifiers removed
+
+parse
+SHOW CLUSTER STATEMENTS
+----
+SHOW CLUSTER STATEMENTS
+SHOW CLUSTER STATEMENTS -- fully parenthesized
+SHOW CLUSTER STATEMENTS -- literals removed
+SHOW CLUSTER STATEMENTS -- identifiers removed
+
+parse
+EXPLAIN SHOW CLUSTER STATEMENTS
+----
+EXPLAIN SHOW CLUSTER STATEMENTS
+EXPLAIN SHOW CLUSTER STATEMENTS -- fully parenthesized
+EXPLAIN SHOW CLUSTER STATEMENTS -- literals removed
+EXPLAIN SHOW CLUSTER STATEMENTS -- identifiers removed
+
+parse
+SHOW STATEMENTS
+----
+SHOW CLUSTER STATEMENTS -- normalized!
+SHOW CLUSTER STATEMENTS -- fully parenthesized
+SHOW CLUSTER STATEMENTS -- literals removed
+SHOW CLUSTER STATEMENTS -- identifiers removed
+
+parse
+SHOW QUERIES
+----
+SHOW CLUSTER STATEMENTS -- normalized!
+SHOW CLUSTER STATEMENTS -- fully parenthesized
+SHOW CLUSTER STATEMENTS -- literals removed
+SHOW CLUSTER STATEMENTS -- identifiers removed
+
+parse
+SHOW ALL CLUSTER STATEMENTS
+----
+SHOW ALL CLUSTER STATEMENTS
+SHOW ALL CLUSTER STATEMENTS -- fully parenthesized
+SHOW ALL CLUSTER STATEMENTS -- literals removed
+SHOW ALL CLUSTER STATEMENTS -- identifiers removed
+
+parse
+EXPLAIN SHOW ALL CLUSTER STATEMENTS
+----
+EXPLAIN SHOW ALL CLUSTER STATEMENTS
+EXPLAIN SHOW ALL CLUSTER STATEMENTS -- fully parenthesized
+EXPLAIN SHOW ALL CLUSTER STATEMENTS -- literals removed
+EXPLAIN SHOW ALL CLUSTER STATEMENTS -- identifiers removed
+
+
+parse
+SHOW ALL STATEMENTS
+----
+SHOW ALL CLUSTER STATEMENTS -- normalized!
+SHOW ALL CLUSTER STATEMENTS -- fully parenthesized
+SHOW ALL CLUSTER STATEMENTS -- literals removed
+SHOW ALL CLUSTER STATEMENTS -- identifiers removed
+
+parse
+SHOW ALL QUERIES
+----
+SHOW ALL CLUSTER STATEMENTS -- normalized!
+SHOW ALL CLUSTER STATEMENTS -- fully parenthesized
+SHOW ALL CLUSTER STATEMENTS -- literals removed
+SHOW ALL CLUSTER STATEMENTS -- identifiers removed
+
+parse
+SHOW LOCAL STATEMENTS
+----
+SHOW LOCAL STATEMENTS
+SHOW LOCAL STATEMENTS -- fully parenthesized
+SHOW LOCAL STATEMENTS -- literals removed
+SHOW LOCAL STATEMENTS -- identifiers removed
+
+parse
+EXPLAIN SHOW LOCAL STATEMENTS
+----
+EXPLAIN SHOW LOCAL STATEMENTS
+EXPLAIN SHOW LOCAL STATEMENTS -- fully parenthesized
+EXPLAIN SHOW LOCAL STATEMENTS -- literals removed
+EXPLAIN SHOW LOCAL STATEMENTS -- identifiers removed
+
+parse
+SHOW ALL LOCAL STATEMENTS
+----
+SHOW ALL LOCAL STATEMENTS
+SHOW ALL LOCAL STATEMENTS -- fully parenthesized
+SHOW ALL LOCAL STATEMENTS -- literals removed
+SHOW ALL LOCAL STATEMENTS -- identifiers removed
+
+parse
+EXPLAIN SHOW ALL LOCAL STATEMENTS
+----
+EXPLAIN SHOW ALL LOCAL STATEMENTS
+EXPLAIN SHOW ALL LOCAL STATEMENTS -- fully parenthesized
+EXPLAIN SHOW ALL LOCAL STATEMENTS -- literals removed
+EXPLAIN SHOW ALL LOCAL STATEMENTS -- identifiers removed
+
+parse
+SHOW CLUSTER SESSIONS
+----
+SHOW CLUSTER SESSIONS
+SHOW CLUSTER SESSIONS -- fully parenthesized
+SHOW CLUSTER SESSIONS -- literals removed
+SHOW CLUSTER SESSIONS -- identifiers removed
+
+parse
+EXPLAIN SHOW CLUSTER SESSIONS
+----
+EXPLAIN SHOW CLUSTER SESSIONS
+EXPLAIN SHOW CLUSTER SESSIONS -- fully parenthesized
+EXPLAIN SHOW CLUSTER SESSIONS -- literals removed
+EXPLAIN SHOW CLUSTER SESSIONS -- identifiers removed
+
+parse
+SHOW SESSIONS
+----
+SHOW CLUSTER SESSIONS -- normalized!
+SHOW CLUSTER SESSIONS -- fully parenthesized
+SHOW CLUSTER SESSIONS -- literals removed
+SHOW CLUSTER SESSIONS -- identifiers removed
+
+parse
+SHOW ALL CLUSTER SESSIONS
+----
+SHOW ALL CLUSTER SESSIONS
+SHOW ALL CLUSTER SESSIONS -- fully parenthesized
+SHOW ALL CLUSTER SESSIONS -- literals removed
+SHOW ALL CLUSTER SESSIONS -- identifiers removed
+
+parse
+EXPLAIN SHOW ALL CLUSTER SESSIONS
+----
+EXPLAIN SHOW ALL CLUSTER SESSIONS
+EXPLAIN SHOW ALL CLUSTER SESSIONS -- fully parenthesized
+EXPLAIN SHOW ALL CLUSTER SESSIONS -- literals removed
+EXPLAIN SHOW ALL CLUSTER SESSIONS -- identifiers removed
+
+parse
+SHOW ALL SESSIONS
+----
+SHOW ALL CLUSTER SESSIONS -- normalized!
+SHOW ALL CLUSTER SESSIONS -- fully parenthesized
+SHOW ALL CLUSTER SESSIONS -- literals removed
+SHOW ALL CLUSTER SESSIONS -- identifiers removed
+
+parse
+SHOW LOCAL SESSIONS
+----
+SHOW LOCAL SESSIONS
+SHOW LOCAL SESSIONS -- fully parenthesized
+SHOW LOCAL SESSIONS -- literals removed
+SHOW LOCAL SESSIONS -- identifiers removed
+
+parse
+EXPLAIN SHOW LOCAL SESSIONS
+----
+EXPLAIN SHOW LOCAL SESSIONS
+EXPLAIN SHOW LOCAL SESSIONS -- fully parenthesized
+EXPLAIN SHOW LOCAL SESSIONS -- literals removed
+EXPLAIN SHOW LOCAL SESSIONS -- identifiers removed
+
+parse
+SHOW ALL LOCAL SESSIONS
+----
+SHOW ALL LOCAL SESSIONS
+SHOW ALL LOCAL SESSIONS -- fully parenthesized
+SHOW ALL LOCAL SESSIONS -- literals removed
+SHOW ALL LOCAL SESSIONS -- identifiers removed
+
+parse
+EXPLAIN SHOW ALL LOCAL SESSIONS
+----
+EXPLAIN SHOW ALL LOCAL SESSIONS
+EXPLAIN SHOW ALL LOCAL SESSIONS -- fully parenthesized
+EXPLAIN SHOW ALL LOCAL SESSIONS -- literals removed
+EXPLAIN SHOW ALL LOCAL SESSIONS -- identifiers removed
+
+parse
+SHOW CLUSTER TRANSACTIONS
+----
+SHOW CLUSTER TRANSACTIONS
+SHOW CLUSTER TRANSACTIONS -- fully parenthesized
+SHOW CLUSTER TRANSACTIONS -- literals removed
+SHOW CLUSTER TRANSACTIONS -- identifiers removed
+
+parse
+SHOW TRANSACTIONS
+----
+SHOW CLUSTER TRANSACTIONS -- normalized!
+SHOW CLUSTER TRANSACTIONS -- fully parenthesized
+SHOW CLUSTER TRANSACTIONS -- literals removed
+SHOW CLUSTER TRANSACTIONS -- identifiers removed
+
+parse
+SHOW ALL TRANSACTIONS
+----
+SHOW ALL CLUSTER TRANSACTIONS -- normalized!
+SHOW ALL CLUSTER TRANSACTIONS -- fully parenthesized
+SHOW ALL CLUSTER TRANSACTIONS -- literals removed
+SHOW ALL CLUSTER TRANSACTIONS -- identifiers removed
+
+parse
+SHOW TRACE FOR SESSION
+----
+SHOW TRACE FOR SESSION
+SHOW TRACE FOR SESSION -- fully parenthesized
+SHOW TRACE FOR SESSION -- literals removed
+SHOW TRACE FOR SESSION -- identifiers removed
+
+parse
+EXPLAIN SHOW TRACE FOR SESSION
+----
+EXPLAIN SHOW TRACE FOR SESSION
+EXPLAIN SHOW TRACE FOR SESSION -- fully parenthesized
+EXPLAIN SHOW TRACE FOR SESSION -- literals removed
+EXPLAIN SHOW TRACE FOR SESSION -- identifiers removed
+
+parse
+SHOW KV TRACE FOR SESSION
+----
+SHOW KV TRACE FOR SESSION
+SHOW KV TRACE FOR SESSION -- fully parenthesized
+SHOW KV TRACE FOR SESSION -- literals removed
+SHOW KV TRACE FOR SESSION -- identifiers removed
+
+parse
+EXPLAIN SHOW KV TRACE FOR SESSION
+----
+EXPLAIN SHOW KV TRACE FOR SESSION
+EXPLAIN SHOW KV TRACE FOR SESSION -- fully parenthesized
+EXPLAIN SHOW KV TRACE FOR SESSION -- literals removed
+EXPLAIN SHOW KV TRACE FOR SESSION -- identifiers removed
+
+parse
+SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION
+----
+SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION
+SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION -- fully parenthesized
+SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION -- literals removed
+SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION -- identifiers removed
+
+parse
+EXPLAIN SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION
+----
+EXPLAIN SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION
+EXPLAIN SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION -- fully parenthesized
+EXPLAIN SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION -- literals removed
+EXPLAIN SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION -- identifiers removed
+
+parse
+SHOW STATISTICS FOR TABLE t
+----
+SHOW STATISTICS FOR TABLE t
+SHOW STATISTICS FOR TABLE t -- fully parenthesized
+SHOW STATISTICS FOR TABLE t -- literals removed
+SHOW STATISTICS FOR TABLE _ -- identifiers removed
+
+parse
+SHOW STATISTICS USING JSON FOR TABLE t
+----
+SHOW STATISTICS USING JSON FOR TABLE t
+SHOW STATISTICS USING JSON FOR TABLE t -- fully parenthesized
+SHOW STATISTICS USING JSON FOR TABLE t -- literals removed
+SHOW STATISTICS USING JSON FOR TABLE _ -- identifiers removed
+
+parse
+EXPLAIN SHOW STATISTICS FOR TABLE t
+----
+EXPLAIN SHOW STATISTICS FOR TABLE t
+EXPLAIN SHOW STATISTICS FOR TABLE t -- fully parenthesized
+EXPLAIN SHOW STATISTICS FOR TABLE t -- literals removed
+EXPLAIN SHOW STATISTICS FOR TABLE _ -- identifiers removed
+
+parse
+SHOW STATISTICS FOR TABLE d.t
+----
+SHOW STATISTICS FOR TABLE d.t
+SHOW STATISTICS FOR TABLE d.t -- fully parenthesized
+SHOW STATISTICS FOR TABLE d.t -- literals removed
+SHOW STATISTICS FOR TABLE _._ -- identifiers removed
+
+parse
+SHOW HISTOGRAM 123
+----
+SHOW HISTOGRAM 123
+SHOW HISTOGRAM 123 -- fully parenthesized
+SHOW HISTOGRAM 123 -- literals removed
+SHOW HISTOGRAM 123 -- identifiers removed
+
+parse
+EXPLAIN SHOW HISTOGRAM 123
+----
+EXPLAIN SHOW HISTOGRAM 123
+EXPLAIN SHOW HISTOGRAM 123 -- fully parenthesized
+EXPLAIN SHOW HISTOGRAM 123 -- literals removed
+EXPLAIN SHOW HISTOGRAM 123 -- identifiers removed
+
+parse
+SHOW RANGE FROM TABLE t FOR ROW (1, 2)
+----
+SHOW RANGE FROM TABLE t FOR ROW (1, 2)
+SHOW RANGE FROM TABLE t FOR ROW ((1), (2)) -- fully parenthesized
+SHOW RANGE FROM TABLE t FOR ROW (_, _) -- literals removed
+SHOW RANGE FROM TABLE _ FOR ROW (1, 2) -- identifiers removed
+
+parse
+SHOW RANGE FROM TABLE d.t FOR ROW (1, 2)
+----
+SHOW RANGE FROM TABLE d.t FOR ROW (1, 2)
+SHOW RANGE FROM TABLE d.t FOR ROW ((1), (2)) -- fully parenthesized
+SHOW RANGE FROM TABLE d.t FOR ROW (_, _) -- literals removed
+SHOW RANGE FROM TABLE _._ FOR ROW (1, 2) -- identifiers removed
+
+parse
+SHOW RANGE FROM INDEX d.t@i FOR ROW (1, 2)
+----
+SHOW RANGE FROM INDEX d.t@i FOR ROW (1, 2)
+SHOW RANGE FROM INDEX d.t@i FOR ROW ((1), (2)) -- fully parenthesized
+SHOW RANGE FROM INDEX d.t@i FOR ROW (_, _) -- literals removed
+SHOW RANGE FROM INDEX _._@_ FOR ROW (1, 2) -- identifiers removed
+
+parse
+SHOW RANGE FROM INDEX t@i FOR ROW (1, 2)
+----
+SHOW RANGE FROM INDEX t@i FOR ROW (1, 2)
+SHOW RANGE FROM INDEX t@i FOR ROW ((1), (2)) -- fully parenthesized
+SHOW RANGE FROM INDEX t@i FOR ROW (_, _) -- literals removed
+SHOW RANGE FROM INDEX _@_ FOR ROW (1, 2) -- identifiers removed
+
+parse
+SHOW RANGE FROM INDEX i FOR ROW (1, 2)
+----
+SHOW RANGE FROM INDEX i FOR ROW (1, 2)
+SHOW RANGE FROM INDEX i FOR ROW ((1), (2)) -- fully parenthesized
+SHOW RANGE FROM INDEX i FOR ROW (_, _) -- literals removed
+SHOW RANGE FROM INDEX _ FOR ROW (1, 2) -- identifiers removed
+
+parse
+SHOW CLUSTER RANGES
+----
+SHOW CLUSTER RANGES
+SHOW CLUSTER RANGES -- fully parenthesized
+SHOW CLUSTER RANGES -- literals removed
+SHOW CLUSTER RANGES -- identifiers removed
+
+parse
+SHOW CLUSTER RANGES WITH DETAILS
+----
+SHOW CLUSTER RANGES WITH DETAILS
+SHOW CLUSTER RANGES WITH DETAILS -- fully parenthesized
+SHOW CLUSTER RANGES WITH DETAILS -- literals removed
+SHOW CLUSTER RANGES WITH DETAILS -- identifiers removed
+
+parse
+SHOW CLUSTER RANGES WITH INDEXES
+----
+SHOW CLUSTER RANGES WITH INDEXES
+SHOW CLUSTER RANGES WITH INDEXES -- fully parenthesized
+SHOW CLUSTER RANGES WITH INDEXES -- literals removed
+SHOW CLUSTER RANGES WITH INDEXES -- identifiers removed
+
+parse
+SHOW CLUSTER RANGES WITH TABLES
+----
+SHOW CLUSTER RANGES WITH TABLES
+SHOW CLUSTER RANGES WITH TABLES -- fully parenthesized
+SHOW CLUSTER RANGES WITH TABLES -- literals removed
+SHOW CLUSTER RANGES WITH TABLES -- identifiers removed
+
+parse
+SHOW CLUSTER RANGES WITH INDEXES, DETAILS, KEYS
+----
+SHOW CLUSTER RANGES WITH DETAILS, KEYS, INDEXES -- normalized!
+SHOW CLUSTER RANGES WITH DETAILS, KEYS, INDEXES -- fully parenthesized
+SHOW CLUSTER RANGES WITH DETAILS, KEYS, INDEXES -- literals removed
+SHOW CLUSTER RANGES WITH DETAILS, KEYS, INDEXES -- identifiers removed
+
+parse
+SHOW RANGES FROM DATABASE d
+----
+SHOW RANGES FROM DATABASE d
+SHOW RANGES FROM DATABASE d -- fully parenthesized
+SHOW RANGES FROM DATABASE d -- literals removed
+SHOW RANGES FROM DATABASE _ -- identifiers removed
+
+parse
+SHOW RANGES FROM CURRENT_CATALOG
+----
+SHOW RANGES FROM CURRENT_CATALOG
+SHOW RANGES FROM CURRENT_CATALOG -- fully parenthesized
+SHOW RANGES FROM CURRENT_CATALOG -- literals removed
+SHOW RANGES FROM CURRENT_CATALOG -- identifiers removed
+
+parse
+SHOW RANGES FROM DATABASE d WITH TABLES
+----
+SHOW RANGES FROM DATABASE d WITH TABLES
+SHOW RANGES FROM DATABASE d WITH TABLES -- fully parenthesized
+SHOW RANGES FROM DATABASE d WITH TABLES -- literals removed
+SHOW RANGES FROM DATABASE _ WITH TABLES -- identifiers removed
+
+parse
+SHOW RANGES FROM DATABASE d WITH TABLES, DETAILS
+----
+SHOW RANGES FROM DATABASE d WITH DETAILS, TABLES -- normalized!
+SHOW RANGES FROM DATABASE d WITH DETAILS, TABLES -- fully parenthesized
+SHOW RANGES FROM DATABASE d WITH DETAILS, TABLES -- literals removed
+SHOW RANGES FROM DATABASE _ WITH DETAILS, TABLES -- identifiers removed
+
+parse
+SHOW RANGES FROM DATABASE d WITH DETAILS
+----
+SHOW RANGES FROM DATABASE d WITH DETAILS
+SHOW RANGES FROM DATABASE d WITH DETAILS -- fully parenthesized
+SHOW RANGES FROM DATABASE d WITH DETAILS -- literals removed
+SHOW RANGES FROM DATABASE _ WITH DETAILS -- identifiers removed
+
+parse
+SHOW RANGES FROM CURRENT_CATALOG WITH TABLES
+----
+SHOW RANGES FROM CURRENT_CATALOG WITH TABLES
+SHOW RANGES FROM CURRENT_CATALOG WITH TABLES -- fully parenthesized
+SHOW RANGES FROM CURRENT_CATALOG WITH TABLES -- literals removed
+SHOW RANGES FROM CURRENT_CATALOG WITH TABLES -- identifiers removed
+
+parse
+SHOW RANGES FROM DATABASE d WITH INDEXES
+----
+SHOW RANGES FROM DATABASE d WITH INDEXES
+SHOW RANGES FROM DATABASE d WITH INDEXES -- fully parenthesized
+SHOW RANGES FROM DATABASE d WITH INDEXES -- literals removed
+SHOW RANGES FROM DATABASE _ WITH INDEXES -- identifiers removed
+
+parse
+SHOW RANGES
+----
+SHOW RANGES FROM CURRENT_CATALOG -- normalized!
+SHOW RANGES FROM CURRENT_CATALOG -- fully parenthesized
+SHOW RANGES FROM CURRENT_CATALOG -- literals removed
+SHOW RANGES FROM CURRENT_CATALOG -- identifiers removed
+
+parse
+SHOW RANGES WITH INDEXES
+----
+SHOW RANGES FROM CURRENT_CATALOG WITH INDEXES -- normalized!
+SHOW RANGES FROM CURRENT_CATALOG WITH INDEXES -- fully parenthesized
+SHOW RANGES FROM CURRENT_CATALOG WITH INDEXES -- literals removed
+SHOW RANGES FROM CURRENT_CATALOG WITH INDEXES -- identifiers removed
+
+
+parse
+SHOW RANGES FROM CURRENT_CATALOG WITH INDEXES
+----
+SHOW RANGES FROM CURRENT_CATALOG WITH INDEXES
+SHOW RANGES FROM CURRENT_CATALOG WITH INDEXES -- fully parenthesized
+SHOW RANGES FROM CURRENT_CATALOG WITH INDEXES -- literals removed
+SHOW RANGES FROM CURRENT_CATALOG WITH INDEXES -- identifiers removed
+
+parse
+SHOW RANGES FROM TABLE d.t
+----
+SHOW RANGES FROM TABLE d.t
+SHOW RANGES FROM TABLE d.t -- fully parenthesized
+SHOW RANGES FROM TABLE d.t -- literals removed
+SHOW RANGES FROM TABLE _._ -- identifiers removed
+
+parse
+EXPLAIN SHOW RANGES FROM TABLE d.t
+----
+EXPLAIN SHOW RANGES FROM TABLE d.t
+EXPLAIN SHOW RANGES FROM TABLE d.t -- fully parenthesized
+EXPLAIN SHOW RANGES FROM TABLE d.t -- literals removed
+EXPLAIN SHOW RANGES FROM TABLE _._ -- identifiers removed
+
+parse
+SHOW RANGES FROM TABLE t
+----
+SHOW RANGES FROM TABLE t
+SHOW RANGES FROM TABLE t -- fully parenthesized
+SHOW RANGES FROM TABLE t -- literals removed
+SHOW RANGES FROM TABLE _ -- identifiers removed
+
+parse
+SHOW RANGES FROM TABLE t WITH DETAILS
+----
+SHOW RANGES FROM TABLE t WITH DETAILS
+SHOW RANGES FROM TABLE t WITH DETAILS -- fully parenthesized
+SHOW RANGES FROM TABLE t WITH DETAILS -- literals removed
+SHOW RANGES FROM TABLE _ WITH DETAILS -- identifiers removed
+
+parse
+SHOW RANGES FROM TABLE t WITH DETAILS, INDEXES
+----
+SHOW RANGES FROM TABLE t WITH DETAILS, INDEXES
+SHOW RANGES FROM TABLE t WITH DETAILS, INDEXES -- fully parenthesized
+SHOW RANGES FROM TABLE t WITH DETAILS, INDEXES -- literals removed
+SHOW RANGES FROM TABLE _ WITH DETAILS, INDEXES -- identifiers removed
+
+parse
+SHOW RANGES FROM TABLE t WITH INDEXES
+----
+SHOW RANGES FROM TABLE t WITH INDEXES
+SHOW RANGES FROM TABLE t WITH INDEXES -- fully parenthesized
+SHOW RANGES FROM TABLE t WITH INDEXES -- literals removed
+SHOW RANGES FROM TABLE _ WITH INDEXES -- identifiers removed
+
+parse
+SHOW RANGES FROM INDEX d.t@i
+----
+SHOW RANGES FROM INDEX d.t@i
+SHOW RANGES FROM INDEX d.t@i -- fully parenthesized
+SHOW RANGES FROM INDEX d.t@i -- literals removed
+SHOW RANGES FROM INDEX _._@_ -- identifiers removed
+
+parse
+SHOW RANGES FROM INDEX t@i
+----
+SHOW RANGES FROM INDEX t@i
+SHOW RANGES FROM INDEX t@i -- fully parenthesized
+SHOW RANGES FROM INDEX t@i -- literals removed
+SHOW RANGES FROM INDEX _@_ -- identifiers removed
+
+parse
+SHOW RANGES FROM INDEX d.i
+----
+SHOW RANGES FROM INDEX d.i
+SHOW RANGES FROM INDEX d.i -- fully parenthesized
+SHOW RANGES FROM INDEX d.i -- literals removed
+SHOW RANGES FROM INDEX _._ -- identifiers removed
+
+parse
+SHOW RANGES FROM INDEX i
+----
+SHOW RANGES FROM INDEX i
+SHOW RANGES FROM INDEX i -- fully parenthesized
+SHOW RANGES FROM INDEX i -- literals removed
+SHOW RANGES FROM INDEX _ -- identifiers removed
+
+parse
+SHOW REGIONS
+----
+SHOW REGIONS
+SHOW REGIONS -- fully parenthesized
+SHOW REGIONS -- literals removed
+SHOW REGIONS -- identifiers removed
+
+parse
+SHOW REGIONS FROM CLUSTER
+----
+SHOW REGIONS FROM CLUSTER
+SHOW REGIONS FROM CLUSTER -- fully parenthesized
+SHOW REGIONS FROM CLUSTER -- literals removed
+SHOW REGIONS FROM CLUSTER -- identifiers removed
+
+parse
+SHOW REGIONS FROM ALL DATABASES
+----
+SHOW REGIONS FROM ALL DATABASES
+SHOW REGIONS FROM ALL DATABASES -- fully parenthesized
+SHOW REGIONS FROM ALL DATABASES -- literals removed
+SHOW REGIONS FROM ALL DATABASES -- identifiers removed
+
+parse
+SHOW REGIONS FROM DATABASE
+----
+SHOW REGIONS FROM DATABASE
+SHOW REGIONS FROM DATABASE -- fully parenthesized
+SHOW REGIONS FROM DATABASE -- literals removed
+SHOW REGIONS FROM DATABASE -- identifiers removed
+
+parse
+SHOW REGIONS FROM DATABASE d
+----
+SHOW REGIONS FROM DATABASE d
+SHOW REGIONS FROM DATABASE d -- fully parenthesized
+SHOW REGIONS FROM DATABASE d -- literals removed
+SHOW REGIONS FROM DATABASE _ -- identifiers removed
+
+parse
+SHOW SURVIVAL GOAL FROM DATABASE
+----
+SHOW SURVIVAL GOAL FROM DATABASE
+SHOW SURVIVAL GOAL FROM DATABASE -- fully parenthesized
+SHOW SURVIVAL GOAL FROM DATABASE -- literals removed
+SHOW SURVIVAL GOAL FROM DATABASE -- identifiers removed
+
+parse
+SHOW SURVIVAL GOAL FROM DATABASE d
+----
+SHOW SURVIVAL GOAL FROM DATABASE d
+SHOW SURVIVAL GOAL FROM DATABASE d -- fully parenthesized
+SHOW SURVIVAL GOAL FROM DATABASE d -- literals removed
+SHOW SURVIVAL GOAL FROM DATABASE _ -- identifiers removed
+
+parse
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t
+----
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t -- fully parenthesized
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t -- literals removed
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE _._ -- identifiers removed
+
+parse
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t WITH START TIMESTAMP = '132412341234.000000', EXCLUDE COLUMNS = ('crdb_original_replication_timestamp', 'other_column')
+----
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t WITH OPTIONS (START TIMESTAMP = '132412341234.000000', EXCLUDE COLUMNS = ('crdb_original_replication_timestamp', 'other_column')) -- normalized!
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t WITH OPTIONS (START TIMESTAMP = ('132412341234.000000'), EXCLUDE COLUMNS = (('crdb_original_replication_timestamp'), ('other_column'))) -- fully parenthesized
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t WITH OPTIONS (START TIMESTAMP = '_', EXCLUDE COLUMNS = ('_', '_')) -- literals removed
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE _._ WITH OPTIONS (START TIMESTAMP = '132412341234.000000', EXCLUDE COLUMNS = ('crdb_original_replication_timestamp', 'other_column')) -- identifiers removed
+
+parse
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t
+----
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER (t) -- fully parenthesized
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t -- literals removed
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER _ -- identifiers removed
+
+parse
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t WITH START TIMESTAMP = '132412341234.000000'
+----
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- normalized!
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER (t) WITH OPTIONS (START TIMESTAMP = ('132412341234.000000')) -- fully parenthesized
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '_') -- literals removed
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER _ WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- identifiers removed
+
+parse
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT t WITH START TIMESTAMP = '132412341234.000000'
+----
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- normalized!
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER (t) WITH OPTIONS (START TIMESTAMP = ('132412341234.000000')) -- fully parenthesized
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '_') -- literals removed
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER _ WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- identifiers removed
+
+parse
+SHOW FINGERPRINTS FROM TABLE d.t
+----
+SHOW FINGERPRINTS FROM TABLE d.t
+SHOW FINGERPRINTS FROM TABLE d.t -- fully parenthesized
+SHOW FINGERPRINTS FROM TABLE d.t -- literals removed
+SHOW FINGERPRINTS FROM TABLE _._ -- identifiers removed
+
+parse
+SHOW FINGERPRINTS FROM TABLE d.t WITH START TIMESTAMP = '132412341234.000000', EXCLUDE COLUMNS = ('crdb_original_replication_timestamp', 'other_column')
+----
+SHOW FINGERPRINTS FROM TABLE d.t WITH OPTIONS (START TIMESTAMP = '132412341234.000000', EXCLUDE COLUMNS = ('crdb_original_replication_timestamp', 'other_column')) -- normalized!
+SHOW FINGERPRINTS FROM TABLE d.t WITH OPTIONS (START TIMESTAMP = ('132412341234.000000'), EXCLUDE COLUMNS = (('crdb_original_replication_timestamp'), ('other_column'))) -- fully parenthesized
+SHOW FINGERPRINTS FROM TABLE d.t WITH OPTIONS (START TIMESTAMP = '_', EXCLUDE COLUMNS = ('_', '_')) -- literals removed
+SHOW FINGERPRINTS FROM TABLE _._ WITH OPTIONS (START TIMESTAMP = '132412341234.000000', EXCLUDE COLUMNS = ('crdb_original_replication_timestamp', 'other_column')) -- identifiers removed
+
+parse
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t
+----
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER (t) -- fully parenthesized
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t -- literals removed
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER _ -- identifiers removed
+
+parse
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t WITH START TIMESTAMP = '132412341234.000000'
+----
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- normalized!
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER (t) WITH OPTIONS (START TIMESTAMP = ('132412341234.000000')) -- fully parenthesized
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '_') -- literals removed
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER _ WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- identifiers removed
+
+parse
+SHOW FINGERPRINTS FROM TENANT t WITH START TIMESTAMP = '132412341234.000000'
+----
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- normalized!
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER (t) WITH OPTIONS (START TIMESTAMP = ('132412341234.000000')) -- fully parenthesized
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '_') -- literals removed
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER _ WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATIONS
+----
+SHOW ZONE CONFIGURATIONS
+SHOW ZONE CONFIGURATIONS -- fully parenthesized
+SHOW ZONE CONFIGURATIONS -- literals removed
+SHOW ZONE CONFIGURATIONS -- identifiers removed
+
+parse
+EXPLAIN SHOW ZONE CONFIGURATIONS
+----
+EXPLAIN SHOW ZONE CONFIGURATIONS
+EXPLAIN SHOW ZONE CONFIGURATIONS -- fully parenthesized
+EXPLAIN SHOW ZONE CONFIGURATIONS -- literals removed
+EXPLAIN SHOW ZONE CONFIGURATIONS -- identifiers removed
+
+
+parse
+SHOW ALL ZONE CONFIGURATIONS
+----
+SHOW ZONE CONFIGURATIONS -- normalized!
+SHOW ZONE CONFIGURATIONS -- fully parenthesized
+SHOW ZONE CONFIGURATIONS -- literals removed
+SHOW ZONE CONFIGURATIONS -- identifiers removed
+
+
+parse
+SHOW ZONE CONFIGURATION FROM RANGE default
+----
+SHOW ZONE CONFIGURATION FROM RANGE default
+SHOW ZONE CONFIGURATION FROM RANGE default -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM RANGE default -- literals removed
+SHOW ZONE CONFIGURATION FROM RANGE _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FOR RANGE foo
+----
+SHOW ZONE CONFIGURATION FROM RANGE foo -- normalized!
+SHOW ZONE CONFIGURATION FROM RANGE foo -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM RANGE foo -- literals removed
+SHOW ZONE CONFIGURATION FROM RANGE _ -- identifiers removed
+
+
+parse
+SHOW ZONE CONFIGURATION FROM RANGE meta
+----
+SHOW ZONE CONFIGURATION FROM RANGE meta
+SHOW ZONE CONFIGURATION FROM RANGE meta -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM RANGE meta -- literals removed
+SHOW ZONE CONFIGURATION FROM RANGE _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FROM DATABASE db
+----
+SHOW ZONE CONFIGURATION FROM DATABASE db
+SHOW ZONE CONFIGURATION FROM DATABASE db -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM DATABASE db -- literals removed
+SHOW ZONE CONFIGURATION FROM DATABASE _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FOR DATABASE foo
+----
+SHOW ZONE CONFIGURATION FROM DATABASE foo -- normalized!
+SHOW ZONE CONFIGURATION FROM DATABASE foo -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM DATABASE foo -- literals removed
+SHOW ZONE CONFIGURATION FROM DATABASE _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FROM TABLE db.t
+----
+SHOW ZONE CONFIGURATION FROM TABLE db.t
+SHOW ZONE CONFIGURATION FROM TABLE db.t -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM TABLE db.t -- literals removed
+SHOW ZONE CONFIGURATION FROM TABLE _._ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FOR TABLE foo
+----
+SHOW ZONE CONFIGURATION FROM TABLE foo -- normalized!
+SHOW ZONE CONFIGURATION FROM TABLE foo -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM TABLE foo -- literals removed
+SHOW ZONE CONFIGURATION FROM TABLE _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FROM TABLE db.schema.t
+----
+SHOW ZONE CONFIGURATION FROM TABLE db.schema.t
+SHOW ZONE CONFIGURATION FROM TABLE db.schema.t -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM TABLE db.schema.t -- literals removed
+SHOW ZONE CONFIGURATION FROM TABLE _._._ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FROM PARTITION p OF TABLE db.t
+----
+SHOW ZONE CONFIGURATION FROM PARTITION p OF TABLE db.t
+SHOW ZONE CONFIGURATION FROM PARTITION p OF TABLE db.t -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM PARTITION p OF TABLE db.t -- literals removed
+SHOW ZONE CONFIGURATION FROM PARTITION _ OF TABLE _._ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FROM TABLE t PARTITION foo
+----
+SHOW ZONE CONFIGURATION FROM PARTITION foo OF TABLE t -- normalized!
+SHOW ZONE CONFIGURATION FROM PARTITION foo OF TABLE t -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM PARTITION foo OF TABLE t -- literals removed
+SHOW ZONE CONFIGURATION FROM PARTITION _ OF TABLE _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FOR TABLE foo PARTITION bar
+----
+SHOW ZONE CONFIGURATION FROM PARTITION bar OF TABLE foo -- normalized!
+SHOW ZONE CONFIGURATION FROM PARTITION bar OF TABLE foo -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM PARTITION bar OF TABLE foo -- literals removed
+SHOW ZONE CONFIGURATION FROM PARTITION _ OF TABLE _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FOR PARTITION foo OF TABLE bar
+----
+SHOW ZONE CONFIGURATION FROM PARTITION foo OF TABLE bar -- normalized!
+SHOW ZONE CONFIGURATION FROM PARTITION foo OF TABLE bar -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM PARTITION foo OF TABLE bar -- literals removed
+SHOW ZONE CONFIGURATION FROM PARTITION _ OF TABLE _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FROM INDEX t@idx PARTITION foo
+----
+SHOW ZONE CONFIGURATION FROM PARTITION foo OF INDEX t@idx -- normalized!
+SHOW ZONE CONFIGURATION FROM PARTITION foo OF INDEX t@idx -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM PARTITION foo OF INDEX t@idx -- literals removed
+SHOW ZONE CONFIGURATION FROM PARTITION _ OF INDEX _@_ -- identifiers removed
+
+
+parse
+SHOW ZONE CONFIGURATION FROM TABLE t
+----
+SHOW ZONE CONFIGURATION FROM TABLE t
+SHOW ZONE CONFIGURATION FROM TABLE t -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM TABLE t -- literals removed
+SHOW ZONE CONFIGURATION FROM TABLE _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FROM PARTITION p OF TABLE t
+----
+SHOW ZONE CONFIGURATION FROM PARTITION p OF TABLE t
+SHOW ZONE CONFIGURATION FROM PARTITION p OF TABLE t -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM PARTITION p OF TABLE t -- literals removed
+SHOW ZONE CONFIGURATION FROM PARTITION _ OF TABLE _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FROM INDEX db.t@i
+----
+SHOW ZONE CONFIGURATION FROM INDEX db.t@i
+SHOW ZONE CONFIGURATION FROM INDEX db.t@i -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM INDEX db.t@i -- literals removed
+SHOW ZONE CONFIGURATION FROM INDEX _._@_ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FROM INDEX t@i
+----
+SHOW ZONE CONFIGURATION FROM INDEX t@i
+SHOW ZONE CONFIGURATION FROM INDEX t@i -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM INDEX t@i -- literals removed
+SHOW ZONE CONFIGURATION FROM INDEX _@_ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FROM INDEX i
+----
+SHOW ZONE CONFIGURATION FROM INDEX i
+SHOW ZONE CONFIGURATION FROM INDEX i -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM INDEX i -- literals removed
+SHOW ZONE CONFIGURATION FROM INDEX _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FOR INDEX foo
+----
+SHOW ZONE CONFIGURATION FROM INDEX foo -- normalized!
+SHOW ZONE CONFIGURATION FROM INDEX foo -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM INDEX foo -- literals removed
+SHOW ZONE CONFIGURATION FROM INDEX _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FOR INDEX foo PARTITION bar
+----
+SHOW ZONE CONFIGURATION FROM PARTITION bar OF INDEX foo -- normalized!
+SHOW ZONE CONFIGURATION FROM PARTITION bar OF INDEX foo -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM PARTITION bar OF INDEX foo -- literals removed
+SHOW ZONE CONFIGURATION FROM PARTITION _ OF INDEX _ -- identifiers removed
+
+parse
+SHOW ZONE CONFIGURATION FOR PARTITION foo OF INDEX bar
+----
+SHOW ZONE CONFIGURATION FROM PARTITION foo OF INDEX bar -- normalized!
+SHOW ZONE CONFIGURATION FROM PARTITION foo OF INDEX bar -- fully parenthesized
+SHOW ZONE CONFIGURATION FROM PARTITION foo OF INDEX bar -- literals removed
+SHOW ZONE CONFIGURATION FROM PARTITION _ OF INDEX _ -- identifiers removed
+
+
+## Tables are the default, but can also be specified with
+## GRANT x ON TABLE y. However, the stringer does not output TABLE.
+
+parse
+SHOW GRANTS
+----
+SHOW GRANTS
+SHOW GRANTS -- fully parenthesized
+SHOW GRANTS -- literals removed
+SHOW GRANTS -- identifiers removed
+
+parse
+EXPLAIN SHOW GRANTS
+----
+EXPLAIN SHOW GRANTS
+EXPLAIN SHOW GRANTS -- fully parenthesized
+EXPLAIN SHOW GRANTS -- literals removed
+EXPLAIN SHOW GRANTS -- identifiers removed
+
+parse
+SHOW GRANTS ON role
+----
+SHOW GRANTS ON ROLE -- normalized!
+SHOW GRANTS ON ROLE -- fully parenthesized
+SHOW GRANTS ON ROLE -- literals removed
+SHOW GRANTS ON ROLE -- identifiers removed
+
+parse
+SHOW GRANTS ON role foo
+----
+SHOW GRANTS ON ROLE foo -- normalized!
+SHOW GRANTS ON ROLE foo -- fully parenthesized
+SHOW GRANTS ON ROLE foo -- literals removed
+SHOW GRANTS ON ROLE _ -- identifiers removed
+
+parse
+SHOW GRANTS ON role foo, bar
+----
+SHOW GRANTS ON ROLE foo, bar -- normalized!
+SHOW GRANTS ON ROLE foo, bar -- fully parenthesized
+SHOW GRANTS ON ROLE foo, bar -- literals removed
+SHOW GRANTS ON ROLE _, _ -- identifiers removed
+
+parse
+SHOW GRANTS ON TABLE foo
+----
+SHOW GRANTS ON TABLE foo
+SHOW GRANTS ON TABLE (foo) -- fully parenthesized
+SHOW GRANTS ON TABLE foo -- literals removed
+SHOW GRANTS ON TABLE _ -- identifiers removed
+
+parse
+SHOW GRANTS ON "role"
+----
+SHOW GRANTS ON TABLE "role" -- normalized!
+SHOW GRANTS ON TABLE ("role") -- fully parenthesized
+SHOW GRANTS ON TABLE "role" -- literals removed
+SHOW GRANTS ON TABLE _ -- identifiers removed
+
+
+parse
+SHOW GRANTS ON role, foo
+----
+SHOW GRANTS ON TABLE "role", foo -- normalized!
+SHOW GRANTS ON TABLE ("role"), (foo) -- fully parenthesized
+SHOW GRANTS ON TABLE "role", foo -- literals removed
+SHOW GRANTS ON TABLE _, _ -- identifiers removed
+
+parse
+SHOW GRANTS ON foo
+----
+SHOW GRANTS ON TABLE foo -- normalized!
+SHOW GRANTS ON TABLE (foo) -- fully parenthesized
+SHOW GRANTS ON TABLE foo -- literals removed
+SHOW GRANTS ON TABLE _ -- identifiers removed
+
+parse
+SHOW GRANTS ON foo, db.foo
+----
+SHOW GRANTS ON TABLE foo, db.foo -- normalized!
+SHOW GRANTS ON TABLE (foo), (db.foo) -- fully parenthesized
+SHOW GRANTS ON TABLE foo, db.foo -- literals removed
+SHOW GRANTS ON TABLE _, _._ -- identifiers removed
+
+parse
+SHOW GRANTS ON "role", foo
+----
+SHOW GRANTS ON TABLE "role", foo -- normalized!
+SHOW GRANTS ON TABLE ("role"), (foo) -- fully parenthesized
+SHOW GRANTS ON TABLE "role", foo -- literals removed
+SHOW GRANTS ON TABLE _, _ -- identifiers removed
+
+parse
+SHOW GRANTS ON "role".foo
+----
+SHOW GRANTS ON TABLE "role".foo -- normalized!
+SHOW GRANTS ON TABLE ("role".foo) -- fully parenthesized
+SHOW GRANTS ON TABLE "role".foo -- literals removed
+SHOW GRANTS ON TABLE _._ -- identifiers removed
+
+parse
+SHOW GRANTS ON role.foo
+----
+SHOW GRANTS ON TABLE "role".foo -- normalized!
+SHOW GRANTS ON TABLE ("role".foo) -- fully parenthesized
+SHOW GRANTS ON TABLE "role".foo -- literals removed
+SHOW GRANTS ON TABLE _._ -- identifiers removed
+
+parse
+SHOW GRANTS ON role.*
+----
+SHOW GRANTS ON TABLE "role".* -- normalized!
+SHOW GRANTS ON TABLE ("role".*) -- fully parenthesized
+SHOW GRANTS ON TABLE "role".* -- literals removed
+SHOW GRANTS ON TABLE _.* -- identifiers removed
+
+parse
+SHOW GRANTS ON SCHEMA foo
+----
+SHOW GRANTS ON SCHEMA foo
+SHOW GRANTS ON SCHEMA foo -- fully parenthesized
+SHOW GRANTS ON SCHEMA foo -- literals removed
+SHOW GRANTS ON SCHEMA _ -- identifiers removed
+
+parse
+SHOW GRANTS ON SCHEMA foo.bar
+----
+SHOW GRANTS ON SCHEMA foo.bar
+SHOW GRANTS ON SCHEMA foo.bar -- fully parenthesized
+SHOW GRANTS ON SCHEMA foo.bar -- literals removed
+SHOW GRANTS ON SCHEMA _._ -- identifiers removed
+
+parse
+SHOW GRANTS ON SCHEMA foo.*
+----
+SHOW GRANTS ON SCHEMA foo."*" -- normalized!
+SHOW GRANTS ON SCHEMA foo."*" -- fully parenthesized
+SHOW GRANTS ON SCHEMA foo."*" -- literals removed
+SHOW GRANTS ON SCHEMA _._ -- identifiers removed
+
+parse
+SHOW GRANTS ON SCHEMA foo, bar
+----
+SHOW GRANTS ON SCHEMA foo, bar
+SHOW GRANTS ON SCHEMA foo, bar -- fully parenthesized
+SHOW GRANTS ON SCHEMA foo, bar -- literals removed
+SHOW GRANTS ON SCHEMA _, _ -- identifiers removed
+
+parse
+SHOW GRANTS ON SCHEMA foo.bar, bar.baz
+----
+SHOW GRANTS ON SCHEMA foo.bar, bar.baz
+SHOW GRANTS ON SCHEMA foo.bar, bar.baz -- fully parenthesized
+SHOW GRANTS ON SCHEMA foo.bar, bar.baz -- literals removed
+SHOW GRANTS ON SCHEMA _._, _._ -- identifiers removed
+
+parse
+SHOW GRANTS ON TYPE typ1
+----
+SHOW GRANTS ON TYPE typ1
+SHOW GRANTS ON TYPE typ1 -- fully parenthesized
+SHOW GRANTS ON TYPE typ1 -- literals removed
+SHOW GRANTS ON TYPE _ -- identifiers removed
+
+parse
+SHOW GRANTS ON TYPE typ1, schema2.typ2, db.schema.typ
+----
+SHOW GRANTS ON TYPE typ1, schema2.typ2, db.schema.typ
+SHOW GRANTS ON TYPE typ1, schema2.typ2, db.schema.typ -- fully parenthesized
+SHOW GRANTS ON TYPE typ1, schema2.typ2, db.schema.typ -- literals removed
+SHOW GRANTS ON TYPE _, _._, _._._ -- identifiers removed
+
+parse
+SHOW GRANTS ON TABLE foo, db.foo
+----
+SHOW GRANTS ON TABLE foo, db.foo
+SHOW GRANTS ON TABLE (foo), (db.foo) -- fully parenthesized
+SHOW GRANTS ON TABLE foo, db.foo -- literals removed
+SHOW GRANTS ON TABLE _, _._ -- identifiers removed
+
+parse
+SHOW GRANTS ON TYPE foo
+----
+SHOW GRANTS ON TYPE foo
+SHOW GRANTS ON TYPE foo -- fully parenthesized
+SHOW GRANTS ON TYPE foo -- literals removed
+SHOW GRANTS ON TYPE _ -- identifiers removed
+
+parse
+SHOW GRANTS ON TYPE foo, bar
+----
+SHOW GRANTS ON TYPE foo, bar
+SHOW GRANTS ON TYPE foo, bar -- fully parenthesized
+SHOW GRANTS ON TYPE foo, bar -- literals removed
+SHOW GRANTS ON TYPE _, _ -- identifiers removed
+
+parse
+SHOW GRANTS ON TYPE foo, bar FOR baz
+----
+SHOW GRANTS ON TYPE foo, bar FOR baz
+SHOW GRANTS ON TYPE foo, bar FOR baz -- fully parenthesized
+SHOW GRANTS ON TYPE foo, bar FOR baz -- literals removed
+SHOW GRANTS ON TYPE _, _ FOR _ -- identifiers removed
+
+parse
+SHOW GRANTS ON DATABASE foo, bar
+----
+SHOW GRANTS ON DATABASE foo, bar
+SHOW GRANTS ON DATABASE foo, bar -- fully parenthesized
+SHOW GRANTS ON DATABASE foo, bar -- literals removed
+SHOW GRANTS ON DATABASE _, _ -- identifiers removed
+
+parse
+SHOW GRANTS ON DATABASE foo FOR bar
+----
+SHOW GRANTS ON DATABASE foo FOR bar
+SHOW GRANTS ON DATABASE foo FOR bar -- fully parenthesized
+SHOW GRANTS ON DATABASE foo FOR bar -- literals removed
+SHOW GRANTS ON DATABASE _ FOR _ -- identifiers removed
+
+parse
+SHOW GRANTS FOR bar, baz
+----
+SHOW GRANTS FOR bar, baz
+SHOW GRANTS FOR bar, baz -- fully parenthesized
+SHOW GRANTS FOR bar, baz -- literals removed
+SHOW GRANTS FOR _, _ -- identifiers removed
+
+parse
+SHOW GRANTS ON ROLE
+----
+SHOW GRANTS ON ROLE
+SHOW GRANTS ON ROLE -- fully parenthesized
+SHOW GRANTS ON ROLE -- literals removed
+SHOW GRANTS ON ROLE -- identifiers removed
+
+parse
+SHOW GRANTS ON ROLE foo
+----
+SHOW GRANTS ON ROLE foo
+SHOW GRANTS ON ROLE foo -- fully parenthesized
+SHOW GRANTS ON ROLE foo -- literals removed
+SHOW GRANTS ON ROLE _ -- identifiers removed
+
+parse
+SHOW GRANTS ON ROLE foo, bar
+----
+SHOW GRANTS ON ROLE foo, bar
+SHOW GRANTS ON ROLE foo, bar -- fully parenthesized
+SHOW GRANTS ON ROLE foo, bar -- literals removed
+SHOW GRANTS ON ROLE _, _ -- identifiers removed
+
+parse
+SHOW GRANTS ON ROLE foo FOR bar
+----
+SHOW GRANTS ON ROLE foo FOR bar
+SHOW GRANTS ON ROLE foo FOR bar -- fully parenthesized
+SHOW GRANTS ON ROLE foo FOR bar -- literals removed
+SHOW GRANTS ON ROLE _ FOR _ -- identifiers removed
+
+parse
+SHOW GRANTS ON ROLE FOR bar, baz
+----
+SHOW GRANTS ON ROLE FOR bar, baz
+SHOW GRANTS ON ROLE FOR bar, baz -- fully parenthesized
+SHOW GRANTS ON ROLE FOR bar, baz -- literals removed
+SHOW GRANTS ON ROLE FOR _, _ -- identifiers removed
+
+parse
+SHOW TRANSACTION STATUS
+----
+SHOW TRANSACTION STATUS
+SHOW TRANSACTION STATUS -- fully parenthesized
+SHOW TRANSACTION STATUS -- literals removed
+SHOW TRANSACTION STATUS -- identifiers removed
+
+parse
+EXPLAIN SHOW TRANSACTION STATUS
+----
+EXPLAIN SHOW TRANSACTION STATUS
+EXPLAIN SHOW TRANSACTION STATUS -- fully parenthesized
+EXPLAIN SHOW TRANSACTION STATUS -- literals removed
+EXPLAIN SHOW TRANSACTION STATUS -- identifiers removed
+
+parse
+SHOW TRANSACTION ISOLATION LEVEL
+----
+SHOW transaction_isolation -- normalized!
+SHOW transaction_isolation -- fully parenthesized
+SHOW transaction_isolation -- literals removed
+SHOW transaction_isolation -- identifiers removed
+
+parse
+SHOW TRANSACTION PRIORITY
+----
+SHOW transaction_priority -- normalized!
+SHOW transaction_priority -- fully parenthesized
+SHOW transaction_priority -- literals removed
+SHOW transaction_priority -- identifiers removed
+
+parse
+SHOW SAVEPOINT STATUS
+----
+SHOW SAVEPOINT STATUS
+SHOW SAVEPOINT STATUS -- fully parenthesized
+SHOW SAVEPOINT STATUS -- literals removed
+SHOW SAVEPOINT STATUS -- identifiers removed
+
+parse
+EXPLAIN SHOW SAVEPOINT STATUS
+----
+EXPLAIN SHOW SAVEPOINT STATUS
+EXPLAIN SHOW SAVEPOINT STATUS -- fully parenthesized
+EXPLAIN SHOW SAVEPOINT STATUS -- literals removed
+EXPLAIN SHOW SAVEPOINT STATUS -- identifiers removed
+
+parse
+SHOW TRANSFER STATE
+----
+SHOW TRANSFER STATE
+SHOW TRANSFER STATE -- fully parenthesized
+SHOW TRANSFER STATE -- literals removed
+SHOW TRANSFER STATE -- identifiers removed
+
+parse
+SHOW TRANSFER STATE WITH ''
+----
+SHOW TRANSFER STATE WITH ''
+SHOW TRANSFER STATE WITH ('') -- fully parenthesized
+SHOW TRANSFER STATE WITH '_' -- literals removed
+SHOW TRANSFER STATE WITH '' -- identifiers removed
+
+parse
+SHOW TRANSFER STATE WITH 'foo-bar'
+----
+SHOW TRANSFER STATE WITH 'foo-bar'
+SHOW TRANSFER STATE WITH ('foo-bar') -- fully parenthesized
+SHOW TRANSFER STATE WITH '_' -- literals removed
+SHOW TRANSFER STATE WITH 'foo-bar' -- identifiers removed
+
+parse
+SHOW TRANSFER STATE WITH 'foo'
+----
+SHOW TRANSFER STATE WITH 'foo'
+SHOW TRANSFER STATE WITH ('foo') -- fully parenthesized
+SHOW TRANSFER STATE WITH '_' -- literals removed
+SHOW TRANSFER STATE WITH 'foo' -- identifiers removed
+
+parse
+SHOW TRANSFER STATE WITH 'foo''o'
+----
+SHOW TRANSFER STATE WITH e'foo\'o' -- normalized!
+SHOW TRANSFER STATE WITH (e'foo\'o') -- fully parenthesized
+SHOW TRANSFER STATE WITH '_' -- literals removed
+SHOW TRANSFER STATE WITH e'foo\'o' -- identifiers removed
+
+parse
+SHOW LAST QUERY STATISTICS
+----
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, plan_latency, exec_latency, service_latency, post_commit_jobs_latency -- normalized!
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, plan_latency, exec_latency, service_latency, post_commit_jobs_latency -- fully parenthesized
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, plan_latency, exec_latency, service_latency, post_commit_jobs_latency -- literals removed
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, plan_latency, exec_latency, service_latency, post_commit_jobs_latency -- identifiers removed
+
+parse
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, service_latency
+----
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, service_latency
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, service_latency -- fully parenthesized
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, service_latency -- literals removed
+SHOW LAST QUERY STATISTICS RETURNING parse_latency, service_latency -- identifiers removed
+
+parse
+SHOW SYNTAX 'select 1'
+----
+SHOW SYNTAX 'select 1'
+SHOW SYNTAX 'select 1' -- fully parenthesized
+SHOW SYNTAX '_' -- literals removed
+SHOW SYNTAX '_' -- identifiers removed
+
+parse
+EXPLAIN SHOW SYNTAX 'select 1'
+----
+EXPLAIN SHOW SYNTAX 'select 1'
+EXPLAIN SHOW SYNTAX 'select 1' -- fully parenthesized
+EXPLAIN SHOW SYNTAX '_' -- literals removed
+EXPLAIN SHOW SYNTAX '_' -- identifiers removed
+
+parse
+SHOW CREATE TABLE t
+----
+SHOW CREATE t -- normalized!
+SHOW CREATE t -- fully parenthesized
+SHOW CREATE t -- literals removed
+SHOW CREATE _ -- identifiers removed
+
+parse
+SHOW CREATE TABLE t WITH REDACT
+----
+SHOW CREATE t WITH REDACT -- normalized!
+SHOW CREATE t WITH REDACT -- fully parenthesized
+SHOW CREATE t WITH REDACT -- literals removed
+SHOW CREATE _ WITH REDACT -- identifiers removed
+
+parse
+SHOW CREATE TABLE t WITH IGNORE_FOREIGN_KEYS
+----
+SHOW CREATE t WITH IGNORE_FOREIGN_KEYS -- normalized!
+SHOW CREATE t WITH IGNORE_FOREIGN_KEYS -- fully parenthesized
+SHOW CREATE t WITH IGNORE_FOREIGN_KEYS -- literals removed
+SHOW CREATE _ WITH IGNORE_FOREIGN_KEYS -- identifiers removed
+
+parse
+SHOW CREATE VIEW t
+----
+SHOW CREATE t -- normalized!
+SHOW CREATE t -- fully parenthesized
+SHOW CREATE t -- literals removed
+SHOW CREATE _ -- identifiers removed
+
+parse
+SHOW CREATE VIEW t WITH REDACT
+----
+SHOW CREATE t WITH REDACT -- normalized!
+SHOW CREATE t WITH REDACT -- fully parenthesized
+SHOW CREATE t WITH REDACT -- literals removed
+SHOW CREATE _ WITH REDACT -- identifiers removed
+
+parse
+SHOW CREATE SEQUENCE t
+----
+SHOW CREATE t -- normalized!
+SHOW CREATE t -- fully parenthesized
+SHOW CREATE t -- literals removed
+SHOW CREATE _ -- identifiers removed
+
+parse
+SHOW NAMES
+----
+SHOW client_encoding -- normalized!
+SHOW client_encoding -- fully parenthesized
+SHOW client_encoding -- literals removed
+SHOW client_encoding -- identifiers removed
+
+parse
+SHOW CREATE FUNCTION foo
+----
+SHOW CREATE FUNCTION foo
+SHOW CREATE FUNCTION foo -- fully parenthesized
+SHOW CREATE FUNCTION foo -- literals removed
+SHOW CREATE FUNCTION _ -- identifiers removed
+
+parse
+SHOW CREATE FUNCTION db.foo
+----
+SHOW CREATE FUNCTION db.foo
+SHOW CREATE FUNCTION db.foo -- fully parenthesized
+SHOW CREATE FUNCTION db.foo -- literals removed
+SHOW CREATE FUNCTION _._ -- identifiers removed
+
+parse
+SHOW CREATE FUNCTION db.sch.foo
+----
+SHOW CREATE FUNCTION db.sch.foo
+SHOW CREATE FUNCTION db.sch.foo -- fully parenthesized
+SHOW CREATE FUNCTION db.sch.foo -- literals removed
+SHOW CREATE FUNCTION _._._ -- identifiers removed
+
+parse
+SHOW CREATE INDEXES FROM t
+----
+SHOW CREATE INDEXES FROM t
+SHOW CREATE INDEXES FROM t -- fully parenthesized
+SHOW CREATE INDEXES FROM t -- literals removed
+SHOW CREATE INDEXES FROM _ -- identifiers removed
+
+parse
+SHOW CREATE SECONDARY INDEXES FROM t
+----
+SHOW CREATE SECONDARY INDEXES FROM t
+SHOW CREATE SECONDARY INDEXES FROM t -- fully parenthesized
+SHOW CREATE SECONDARY INDEXES FROM t -- literals removed
+SHOW CREATE SECONDARY INDEXES FROM _ -- identifiers removed
+
+parse
+SHOW CREATE ALL TRIGGERS
+----
+SHOW CREATE ALL TRIGGERS
+SHOW CREATE ALL TRIGGERS -- fully parenthesized
+SHOW CREATE ALL TRIGGERS -- literals removed
+SHOW CREATE ALL TRIGGERS -- identifiers removed
+
+parse
+SHOW LOGICAL REPLICATION JOBS
+----
+SHOW LOGICAL REPLICATION JOBS
+SHOW LOGICAL REPLICATION JOBS -- fully parenthesized
+SHOW LOGICAL REPLICATION JOBS -- literals removed
+SHOW LOGICAL REPLICATION JOBS -- identifiers removed
+
+parse
+SHOW LOGICAL REPLICATION JOBS WITH DETAILS
+----
+SHOW LOGICAL REPLICATION JOBS WITH DETAILS
+SHOW LOGICAL REPLICATION JOBS WITH DETAILS -- fully parenthesized
+SHOW LOGICAL REPLICATION JOBS WITH DETAILS -- literals removed
+SHOW LOGICAL REPLICATION JOBS WITH DETAILS -- identifiers removed
+
+parse
+SHOW VIRTUAL CLUSTER foo
+----
+SHOW VIRTUAL CLUSTER foo
+SHOW VIRTUAL CLUSTER (foo) -- fully parenthesized
+SHOW VIRTUAL CLUSTER foo -- literals removed
+SHOW VIRTUAL CLUSTER _ -- identifiers removed
+
+parse
+SHOW TENANT foo
+----
+SHOW VIRTUAL CLUSTER foo -- normalized!
+SHOW VIRTUAL CLUSTER (foo) -- fully parenthesized
+SHOW VIRTUAL CLUSTER foo -- literals removed
+SHOW VIRTUAL CLUSTER _ -- identifiers removed
+
+parse
+SHOW VIRTUAL CLUSTER foo WITH REPLICATION STATUS
+----
+SHOW VIRTUAL CLUSTER foo WITH REPLICATION STATUS
+SHOW VIRTUAL CLUSTER (foo) WITH REPLICATION STATUS -- fully parenthesized
+SHOW VIRTUAL CLUSTER foo WITH REPLICATION STATUS -- literals removed
+SHOW VIRTUAL CLUSTER _ WITH REPLICATION STATUS -- identifiers removed
+
+parse
+SHOW VIRTUAL CLUSTER foo WITH CAPABILITIES
+----
+SHOW VIRTUAL CLUSTER foo WITH CAPABILITIES
+SHOW VIRTUAL CLUSTER (foo) WITH CAPABILITIES -- fully parenthesized
+SHOW VIRTUAL CLUSTER foo WITH CAPABILITIES -- literals removed
+SHOW VIRTUAL CLUSTER _ WITH CAPABILITIES -- identifiers removed
+
+parse
+SHOW VIRTUAL CLUSTERS
+----
+SHOW VIRTUAL CLUSTER ALL -- normalized!
+SHOW VIRTUAL CLUSTER ALL -- fully parenthesized
+SHOW VIRTUAL CLUSTER ALL -- literals removed
+SHOW VIRTUAL CLUSTER ALL -- identifiers removed
+
+parse
+SHOW VIRTUAL CLUSTERS WITH REPLICATION STATUS
+----
+SHOW VIRTUAL CLUSTER ALL WITH REPLICATION STATUS -- normalized!
+SHOW VIRTUAL CLUSTER ALL WITH REPLICATION STATUS -- fully parenthesized
+SHOW VIRTUAL CLUSTER ALL WITH REPLICATION STATUS -- literals removed
+SHOW VIRTUAL CLUSTER ALL WITH REPLICATION STATUS -- identifiers removed
+
+parse
+SHOW VIRTUAL CLUSTER ALL
+----
+SHOW VIRTUAL CLUSTER ALL
+SHOW VIRTUAL CLUSTER ALL -- fully parenthesized
+SHOW VIRTUAL CLUSTER ALL -- literals removed
+SHOW VIRTUAL CLUSTER ALL -- identifiers removed
+
+parse
+SHOW VIRTUAL CLUSTER ALL WITH REPLICATION STATUS
+----
+SHOW VIRTUAL CLUSTER ALL WITH REPLICATION STATUS
+SHOW VIRTUAL CLUSTER ALL WITH REPLICATION STATUS -- fully parenthesized
+SHOW VIRTUAL CLUSTER ALL WITH REPLICATION STATUS -- literals removed
+SHOW VIRTUAL CLUSTER ALL WITH REPLICATION STATUS -- identifiers removed
+
+parse
+SHOW VIRTUAL CLUSTER ALL WITH PRIOR REPLICATION DETAILS
+----
+SHOW VIRTUAL CLUSTER ALL WITH PRIOR REPLICATION DETAILS
+SHOW VIRTUAL CLUSTER ALL WITH PRIOR REPLICATION DETAILS -- fully parenthesized
+SHOW VIRTUAL CLUSTER ALL WITH PRIOR REPLICATION DETAILS -- literals removed
+SHOW VIRTUAL CLUSTER ALL WITH PRIOR REPLICATION DETAILS -- identifiers removed
+
+parse
+SHOW VIRTUAL CLUSTER foo WITH REPLICATION STATUS, PRIOR REPLICATION DETAILS, CAPABILITIES
+----
+SHOW VIRTUAL CLUSTER foo WITH REPLICATION STATUS, PRIOR REPLICATION DETAILS, CAPABILITIES
+SHOW VIRTUAL CLUSTER (foo) WITH REPLICATION STATUS, PRIOR REPLICATION DETAILS, CAPABILITIES -- fully parenthesized
+SHOW VIRTUAL CLUSTER foo WITH REPLICATION STATUS, PRIOR REPLICATION DETAILS, CAPABILITIES -- literals removed
+SHOW VIRTUAL CLUSTER _ WITH REPLICATION STATUS, PRIOR REPLICATION DETAILS, CAPABILITIES -- identifiers removed
+
+parse
+SHOW BACKUP 'abc' IN 'def' WITH SKIP SIZE
+----
+SHOW BACKUP 'abc' IN '*****' WITH OPTIONS (skip size) -- normalized!
+SHOW BACKUP ('abc') IN ('*****') WITH OPTIONS (skip size) -- fully parenthesized
+SHOW BACKUP '_' IN '_' WITH OPTIONS (skip size) -- literals removed
+SHOW BACKUP 'abc' IN '*****' WITH OPTIONS (skip size) -- identifiers removed
+SHOW BACKUP 'abc' IN 'def' WITH OPTIONS (skip size) -- passwords exposed
+
+parse
+SHOW BACKUP 'abc' IN 'def' WITH NOWAIT
+----
+SHOW BACKUP 'abc' IN '*****' WITH OPTIONS (skip size) -- normalized!
+SHOW BACKUP ('abc') IN ('*****') WITH OPTIONS (skip size) -- fully parenthesized
+SHOW BACKUP '_' IN '_' WITH OPTIONS (skip size) -- literals removed
+SHOW BACKUP 'abc' IN '*****' WITH OPTIONS (skip size) -- identifiers removed
+SHOW BACKUP 'abc' IN 'def' WITH OPTIONS (skip size) -- passwords exposed
+
+parse
+SHOW DEFAULT SESSION VARIABLES FOR ROLE foo
+----
+SHOW DEFAULT SESSION VARIABLES FOR ROLE foo
+SHOW DEFAULT SESSION VARIABLES FOR ROLE foo -- fully parenthesized
+SHOW DEFAULT SESSION VARIABLES FOR ROLE foo -- literals removed
+SHOW DEFAULT SESSION VARIABLES FOR ROLE _ -- identifiers removed
+
+parse
+SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL
+----
+SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL
+SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL -- fully parenthesized
+SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL -- literals removed
+SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL -- identifiers removed
+
+parse
+SHOW TRIGGERS FROM foo;
+----
+SHOW TRIGGERS FROM foo -- normalized!
+SHOW TRIGGERS FROM foo -- fully parenthesized
+SHOW TRIGGERS FROM foo -- literals removed
+SHOW TRIGGERS FROM _ -- identifiers removed
+
+parse
+SHOW TRIGGERS FROM foo.bar;
+----
+SHOW TRIGGERS FROM foo.bar -- normalized!
+SHOW TRIGGERS FROM foo.bar -- fully parenthesized
+SHOW TRIGGERS FROM foo.bar -- literals removed
+SHOW TRIGGERS FROM _._ -- identifiers removed
+
+error
+SHOW TRIGGER FROM foo;
+----
+at or near "from": syntax error
+DETAIL: source SQL:
+SHOW TRIGGER FROM foo
+             ^
+HINT: try \h SHOW TRIGGERS
+
+error
+SHOW TRIGGERS ON foo;
+----
+at or near "on": syntax error
+DETAIL: source SQL:
+SHOW TRIGGERS ON foo
+              ^
+HINT: try \h SHOW TRIGGERS
+
+error
+SHOW TRIGGERS FOR foo;
+----
+at or near "for": syntax error
+DETAIL: source SQL:
+SHOW TRIGGERS FOR foo
+              ^
+HINT: try \h SHOW TRIGGERS
+
+parse
+SHOW CREATE TRIGGER foo ON bar;
+----
+SHOW CREATE TRIGGER foo ON bar -- normalized!
+SHOW CREATE TRIGGER foo ON bar -- fully parenthesized
+SHOW CREATE TRIGGER foo ON bar -- literals removed
+SHOW CREATE TRIGGER _ ON _ -- identifiers removed
+
+parse
+SHOW CREATE TRIGGER foo ON bar.baz;
+----
+SHOW CREATE TRIGGER foo ON bar.baz -- normalized!
+SHOW CREATE TRIGGER foo ON bar.baz -- fully parenthesized
+SHOW CREATE TRIGGER foo ON bar.baz -- literals removed
+SHOW CREATE TRIGGER _ ON _._ -- identifiers removed
+
+error
+SHOW CREATE TRIGGER foo ON TABLE bar;
+----
+at or near "table": syntax error
+DETAIL: source SQL:
+SHOW CREATE TRIGGER foo ON TABLE bar
+                           ^
+HINT: try \h SHOW CREATE
+
+error
+SHOW CREATE TRIGGER foo FROM bar;
+----
+at or near "from": syntax error
+DETAIL: source SQL:
+SHOW CREATE TRIGGER foo FROM bar
+                        ^
+HINT: try \h SHOW CREATE
+
+error
+SHOW CREATE TRIGGER foo;
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SHOW CREATE TRIGGER foo
+                       ^
+HINT: try \h SHOW CREATE
+
+error
+SHOW CREATE TRIGGERS ON foo;
+----
+at or near "on": syntax error
+DETAIL: source SQL:
+SHOW CREATE TRIGGERS ON foo
+                     ^
+
+parse
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10'
+----
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10'
+SHOW STATEMENT HINTS FOR ('SELECT * FROM t WHERE x = 10') -- fully parenthesized
+SHOW STATEMENT HINTS FOR '_' -- literals removed
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' WITH DETAILS
+----
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' WITH OPTIONS (DETAILS) -- normalized!
+SHOW STATEMENT HINTS FOR ('SELECT * FROM t WHERE x = 10') WITH OPTIONS (DETAILS) -- fully parenthesized
+SHOW STATEMENT HINTS FOR '_' WITH OPTIONS (DETAILS) -- literals removed
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' WITH OPTIONS (DETAILS) -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' WITH OPTIONS (DETAILS)
+----
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' WITH OPTIONS (DETAILS)
+SHOW STATEMENT HINTS FOR ('SELECT * FROM t WHERE x = 10') WITH OPTIONS (DETAILS) -- fully parenthesized
+SHOW STATEMENT HINTS FOR '_' WITH OPTIONS (DETAILS) -- literals removed
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' WITH OPTIONS (DETAILS) -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR $$ SELECT * FROM t WHERE x = 'value' $$
+----
+SHOW STATEMENT HINTS FOR e' SELECT * FROM t WHERE x = \'value\' ' -- normalized!
+SHOW STATEMENT HINTS FOR (e' SELECT * FROM t WHERE x = \'value\' ') -- fully parenthesized
+SHOW STATEMENT HINTS FOR '_' -- literals removed
+SHOW STATEMENT HINTS FOR e' SELECT * FROM t WHERE x = \'value\' ' -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR $1
+----
+SHOW STATEMENT HINTS FOR $1
+SHOW STATEMENT HINTS FOR ($1) -- fully parenthesized
+SHOW STATEMENT HINTS FOR $1 -- literals removed
+SHOW STATEMENT HINTS FOR $1 -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR $1 WITH DETAILS
+----
+SHOW STATEMENT HINTS FOR $1 WITH OPTIONS (DETAILS) -- normalized!
+SHOW STATEMENT HINTS FOR ($1) WITH OPTIONS (DETAILS) -- fully parenthesized
+SHOW STATEMENT HINTS FOR $1 WITH OPTIONS (DETAILS) -- literals removed
+SHOW STATEMENT HINTS FOR $1 WITH OPTIONS (DETAILS) -- identifiers removed
+
+error
+SHOW STATEMENT HINTS FOR
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SHOW STATEMENT HINTS FOR
+                        ^
+HINT: try \h SHOW STATEMENT HINTS
+
+error
+SHOW STATEMENT HINTS
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SHOW STATEMENT HINTS
+                    ^
+HINT: try \h SHOW STATEMENT HINTS
+
+error
+SHOW STATEMENT
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SHOW STATEMENT
+              ^
+HINT: try \h SHOW
+
+error
+SHOW STATEMENT HINT FOR SELECT 1
+----
+at or near "hint": syntax error
+DETAIL: source SQL:
+SHOW STATEMENT HINT FOR SELECT 1
+               ^
+HINT: try \h SHOW
+
+error
+SHOW HINT FOR SELECT 1
+----
+at or near "for": syntax error
+DETAIL: source SQL:
+SHOW HINT FOR SELECT 1
+          ^
+
+error
+SHOW HINTS FOR SELECT 1
+----
+at or near "hints": syntax error
+DETAIL: source SQL:
+SHOW HINTS FOR SELECT 1
+     ^
+HINT: try \h SHOW

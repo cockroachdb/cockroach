@@ -1,0 +1,5 @@
+import_stmt ::=
+	'IMPORT' 'INTO' table_name '(' column_name ( ( ',' column_name ) )* ')' ( 'CSV' | 'AVRO' | 'DELIMITED' ) 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 'WITH' option '=' value ( ( ',' option '=' value ) )*
+	| 'IMPORT' 'INTO' table_name '(' column_name ( ( ',' column_name ) )* ')' ( 'CSV' | 'AVRO' | 'DELIMITED' ) 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 
+	| 'IMPORT' 'INTO' table_name ( 'CSV' | 'AVRO' | 'DELIMITED' ) 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 'WITH' option '=' value ( ( ',' option '=' value ) )*
+	| 'IMPORT' 'INTO' table_name ( 'CSV' | 'AVRO' | 'DELIMITED' ) 'DATA' '(' file_location ( ( ',' file_location ) )* ')' 

@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "closedts",
+    srcs = [
+        "policy.go",
+        "policy_calculation.go",
+        "setting.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/settings",
+        "//pkg/util/hlc",
+        "//pkg/util/metamorphic",
+    ],
+)
+
+go_test(
+    name = "closedts_test",
+    srcs = [
+        "policy_calculation_test.go",
+        "policy_test.go",
+    ],
+    embed = [":closedts"],
+    deps = [
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)

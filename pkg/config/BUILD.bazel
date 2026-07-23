@@ -1,0 +1,101 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "config",
+    srcs = [
+        "field.go",
+        "keys.go",
+        "provider.go",
+        "system.go",
+        "system_mask.go",
+        "testutil.go",
+        ":field-stringer",  # keep
+    ],
+    embed = [":config_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/config",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/encoding",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "config_test",
+    size = "small",
+    srcs = [
+        "keys_test.go",
+        "main_test.go",
+        "system_test.go",
+    ],
+    deps = [
+        ":config",
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/security/username",
+        "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/catprivilege",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/testutils",
+        "//pkg/util/encoding",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+proto_library(
+    name = "config_proto",
+    srcs = ["system.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:roachpb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_library(
+    name = "config_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/config",
+    proto = ":config_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+disallowed_imports_test(
+    src = "config",
+    disallowed_list = [
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/typedesc",
+    ],
+)
+
+stringer(
+    name = "field-stringer",
+    src = "field.go",
+    additional_args = ["--linecomment"],
+    typ = "Field",
+)

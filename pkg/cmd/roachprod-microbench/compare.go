@@ -1,0 +1,637 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"math"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"text/template"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/google"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/model"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils/benchdoc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/slack-go/slack"
+	"golang.org/x/exp/maps"
+	"golang.org/x/perf/benchfmt"
+	"golang.org/x/perf/benchseries"
+)
+
+type compareConfig struct {
+	slackConfig     slackConfig
+	influxConfig    influxConfig
+	experimentDir   string
+	baselineDir     string
+	versionContext  string
+	benchmarkConfig string
+	generateSheet   bool
+	threshold       float64
+	postIssues      string
+}
+
+const (
+	postIssuesGroup  = "group"
+	postIssuesSingle = "single"
+)
+
+type slackConfig struct {
+	user    string
+	channel string
+	token   string
+}
+
+type influxConfig struct {
+	host     string
+	token    string
+	metadata map[string]string
+}
+
+type compare struct {
+	compareConfig
+	service          *google.Service
+	packages         []string
+	benchmarkInfoMap benchmarkInfoMap
+	ctx              context.Context
+}
+
+var defaultInfluxMetadata = map[string]string{
+	"branch":      "master",
+	"machine":     "n2-standard-32",
+	"goarch":      "amd64",
+	"goos":        "linux",
+	"repository":  "cockroach",
+	"run-time":    timeutil.Now().Format(time.RFC3339),
+	"upload-time": timeutil.Now().Format(time.RFC3339),
+}
+
+const (
+	defaultPercentageThreshold = 20.0
+	slackReportMax             = 3
+	skipComparison             = math.MaxFloat64
+	// slackWarningThresholdDivisor is used to compute the warning threshold
+	// for Slack reports. Changes that exceed threshold/divisor but not the
+	// full threshold are shown with a warning indicator (orange diamond).
+	slackWarningThresholdDivisor = 2
+)
+
+const slackCompareTemplateScript = `
+{{ range .Metrics }}*Top {{ len .Changes }} significant change(s) for metric: {{ .MetricName }}*
+{{ range .Changes }}• {{ .BenchmarkName }} {{.ChangeSymbol}}{{ .PercentChange }}
+{{ end }}
+{{ end }}
+`
+
+func newCompare(config compareConfig) (*compare, error) {
+	// Use the baseline directory to infer package info.
+	packages, err := getPackagesFromLogs(config.baselineDir)
+	if err != nil {
+		return nil, err
+	}
+	// Add default metadata values to the influx config for any missing keys.
+	for k, v := range defaultInfluxMetadata {
+		if _, ok := config.influxConfig.metadata[k]; !ok {
+			config.influxConfig.metadata[k] = v
+		}
+	}
+
+	var infoMap benchmarkInfoMap
+	if config.benchmarkConfig != "" {
+		benchmarkInfoList, listErr := loadBenchmarkList(config.benchmarkConfig)
+		if listErr != nil {
+			return nil, listErr
+		}
+		infoMap = newBenchmarkInfoMap(benchmarkInfoList)
+	}
+
+	ctx := context.Background()
+	var service *google.Service
+	if config.generateSheet {
+		service, err = google.New(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &compare{
+		compareConfig:    config,
+		service:          service,
+		packages:         packages,
+		benchmarkInfoMap: infoMap,
+		ctx:              ctx,
+	}, nil
+}
+
+func defaultCompareConfig() compareConfig {
+	return compareConfig{
+		threshold: skipComparison, // Skip comparison by default
+		slackConfig: slackConfig{
+			user:    "microbench",
+			channel: "perf-ops",
+		},
+		influxConfig: influxConfig{
+			host:     "http://localhost:8086",
+			metadata: make(map[string]string),
+		},
+	}
+}
+
+func (c *compare) readMetrics() (map[string]*model.MetricMap, error) {
+	builders := make(map[string]*model.Builder)
+	for _, pkg := range c.packages {
+		basePackage := pkg[:strings.Index(pkg[4:]+"/", "/")+4]
+		results, ok := builders[basePackage]
+		if !ok {
+			results = model.NewBuilder()
+			builders[basePackage] = results
+		}
+
+		// Read the previous and current results. If either is missing, we'll just
+		// skip it.
+		if err := processReportFile(results, "baseline", pkg,
+			filepath.Join(c.baselineDir, getReportLogName(reportLogName, pkg))); err != nil {
+			return nil, err
+
+		}
+		if err := processReportFile(results, "experiment", pkg,
+			filepath.Join(c.experimentDir, getReportLogName(reportLogName, pkg))); err != nil {
+			log.Printf("failed to add report for %s: %s", pkg, err)
+			return nil, err
+		}
+	}
+
+	// Compute the results.
+	metricMaps := make(map[string]*model.MetricMap)
+	for pkg, builder := range builders {
+		metricMap := builder.ComputeMetricMap()
+		metricMaps[pkg] = &metricMap
+	}
+	return metricMaps, nil
+}
+
+func (c *compare) createComparisons(
+	metricMaps map[string]*model.MetricMap, oldID string, newID string,
+) model.ComparisonResultsMap {
+
+	comparisonResultsMap := make(model.ComparisonResultsMap)
+
+	for pkgGroup, metricMap := range metricMaps {
+		var comparisonResults []*model.ComparisonResult
+		metricKeys := maps.Keys(*metricMap)
+		sort.Sort(sort.Reverse(sort.StringSlice(metricKeys)))
+		for _, metricKey := range metricKeys {
+			metric := (*metricMap)[metricKey]
+			// Compute comparisons for each benchmark present in both runs.
+			comparisons := make(map[string]*model.Comparison)
+			for name := range metric.BenchmarkEntries {
+				comparison := metric.ComputeComparison(name, oldID, newID)
+				if comparison != nil {
+					comparisons[name] = comparison
+				}
+			}
+
+			if len(comparisons) != 0 {
+				// Sort comparisons by delta, or the benchmark name if no delta is available.
+				keys := maps.Keys(comparisons)
+				sort.Slice(keys, func(i, j int) bool {
+					d1 := comparisons[keys[i]].Delta * float64(metric.Better)
+					d2 := comparisons[keys[j]].Delta * float64(metric.Better)
+					if d1 == d2 {
+						return keys[i] < keys[j]
+					}
+					return d1 < d2
+				})
+
+				var comparisonDetails []*model.ComparisonDetail
+				for _, name := range keys {
+					comparisonDetails = append(comparisonDetails, &model.ComparisonDetail{
+						BenchmarkName: name,
+						Comparison:    comparisons[name],
+					})
+				}
+
+				comparisonResults = append(comparisonResults, &model.ComparisonResult{
+					Metric:      metric,
+					Comparisons: comparisonDetails,
+				})
+			}
+		}
+
+		comparisonResultsMap[pkgGroup] = comparisonResults
+	}
+
+	return comparisonResultsMap
+}
+
+func (c *compare) publishToGoogleSheets(
+	comparisonResultsMap model.ComparisonResultsMap,
+) (map[string]string, error) {
+	sheets := make(map[string]string)
+	for pkgGroup, comparisonResults := range comparisonResultsMap {
+		sheetName := pkgGroup + "/..."
+		if c.versionContext != "" {
+			sheetName = fmt.Sprintf("%s (%s)", sheetName, c.versionContext)
+		}
+
+		url, err := c.service.CreateSheet(c.ctx, sheetName, comparisonResults, "baseline", "experiment")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to create sheet for %s", pkgGroup)
+		}
+		log.Printf("Generated sheet for %s: %s\n", sheetName, url)
+		sheets[pkgGroup] = url
+	}
+	return sheets, nil
+}
+
+func (c *compare) postToSlack(
+	links map[string]string, comparisonResultsMap model.ComparisonResultsMap,
+) error {
+	// Template structures used to generate the Slack message.
+	type changeInfo struct {
+		BenchmarkName string
+		PercentChange string
+		ChangeSymbol  string
+	}
+	type metricInfo struct {
+		MetricName string
+		Changes    []changeInfo
+	}
+
+	pkgGroups := maps.Keys(comparisonResultsMap)
+	sort.Strings(pkgGroups)
+	var attachments []slack.Attachment
+	for _, pkgGroup := range pkgGroups {
+		comparisonResults := comparisonResultsMap[pkgGroup]
+
+		var metrics []metricInfo
+		var highestPercentChange = 0.0
+		for _, result := range comparisonResults {
+			mi := metricInfo{MetricName: result.Metric.Name}
+
+			for _, detail := range result.Comparisons {
+				if len(mi.Changes) >= slackReportMax {
+					break
+				}
+				comparison := detail.Comparison
+				metric := result.Metric
+
+				threshold := c.benchmarkThreshold(detail.BenchmarkName)
+				warningThreshold := threshold / slackWarningThresholdDivisor
+				if !isRegression(comparison.Delta, metric.Better) ||
+					!meetsThreshold(comparison.Delta, warningThreshold) {
+					continue
+				}
+				nameSplit := strings.Split(detail.BenchmarkName, util.PackageSeparator)
+				ci := changeInfo{
+					BenchmarkName: nameSplit[0] + util.PackageSeparator + truncateBenchmarkName(nameSplit[1], 32),
+					PercentChange: fmt.Sprintf("%.2f%%", comparison.Delta),
+				}
+				if math.Abs(comparison.Delta) > highestPercentChange {
+					highestPercentChange = math.Abs(comparison.Delta)
+				}
+				ci.ChangeSymbol = ":small_orange_diamond:"
+				if meetsThreshold(comparison.Delta, threshold) {
+					ci.ChangeSymbol = ":small_red_triangle:"
+				}
+				mi.Changes = append(mi.Changes, ci)
+			}
+			if len(mi.Changes) > 0 {
+				metrics = append(metrics, mi)
+			}
+		}
+		status := "good"
+		output := "No significant changes."
+		if len(metrics) > 0 {
+			var sb strings.Builder
+			t, err := template.New("summary").Parse(slackCompareTemplateScript)
+			if err != nil {
+				return err
+			}
+			err = t.Execute(&sb, struct{ Metrics []metricInfo }{metrics})
+			if err != nil {
+				return err
+			}
+			status = "warning"
+			if highestPercentChange > defaultPercentageThreshold {
+				status = "danger"
+			}
+			output = sb.String()
+		}
+		link := links[pkgGroup]
+		attachments = append(attachments,
+			slack.Attachment{
+				Color:   status,
+				Pretext: fmt.Sprintf("<%s|Google Sheet> for *%s/...*", link, pkgGroup),
+				Text:    output,
+			})
+
+	}
+
+	s := newSlackClient(c.slackConfig.user, c.slackConfig.channel, c.slackConfig.token)
+	return s.Post(
+		slack.MsgOptionText(fmt.Sprintf("Microbenchmark comparison summary: %s", c.versionContext), false),
+		slack.MsgOptionAttachments(attachments...),
+	)
+}
+
+func (c *compare) compareUsingThreshold(comparisonResultsMap model.ComparisonResultsMap) error {
+	var reportStrings []string
+
+	for pkgName, comparisonResults := range comparisonResultsMap {
+		var metrics []string
+
+		for _, result := range comparisonResults {
+			metricKey := result.Metric.Unit
+
+			for _, detail := range result.Comparisons {
+				comparison := detail.Comparison
+
+				// If Delta is more negative than the threshold, then there's a concerning perf regression
+				if (comparison.Delta*float64(result.Metric.Better))+c.threshold < 0 {
+					metrics = append(metrics, fmt.Sprintf("Metric: %s, Benchmark: %s, Change: %s", metricKey, detail.BenchmarkName, comparison.FormattedDelta))
+				}
+			}
+		}
+
+		if len(metrics) > 0 {
+			reportStrings = append(reportStrings, fmt.Sprintf("Package: %s\n%s", pkgName, strings.Join(metrics, "\n")))
+		}
+	}
+
+	if len(reportStrings) > 0 {
+		reportString := strings.Join(reportStrings, "\n\n")
+		return errors.Errorf("there are benchmark regressions of > %.2f%% in the following packages:\n\n%s",
+			c.threshold, reportString)
+	}
+
+	return nil
+}
+
+func (c *compare) maybePostRegressionIssuesGroup(
+	comparisonResultsMap model.ComparisonResultsMap,
+) error {
+	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	l, _ := loggerCfg.NewLogger("")
+
+	// Collect errors encountered while creating benchmark issues.
+	var createBenchmarkIssueErrors []error
+
+	for pkgName, comparisonResults := range comparisonResultsMap {
+		var regressions []regressionInfo
+
+		for _, result := range comparisonResults {
+			for _, detail := range result.Comparisons {
+				comparison := detail.Comparison
+				metric := result.Metric
+
+				threshold := c.benchmarkThreshold(detail.BenchmarkName)
+				if isRegression(comparison.Delta, metric.Better) && meetsThreshold(comparison.Delta, threshold) {
+					regressions = append(regressions, regressionInfo{
+						benchmarkName:  detail.BenchmarkName,
+						metricUnit:     result.Metric.Unit,
+						percentChange:  math.Abs(comparison.Delta),
+						formattedDelta: comparison.FormattedDelta,
+						threshold:      threshold,
+					})
+				}
+			}
+		}
+
+		if len(regressions) > 0 {
+			formatter, req, err := createRegressionPostRequest(pkgName, regressions, c.versionContext)
+			if err != nil {
+				log.Printf("failed to create regression post request for package %s: %v", pkgName, err)
+				// Accumulate the error but continue processing other packages.
+				createBenchmarkIssueErrors = append(createBenchmarkIssueErrors, err)
+				continue
+			}
+			err = postBenchmarkIssue(c.ctx, l, formatter, req)
+			if err != nil {
+				log.Printf("failed to post regression issue for package %s: %v", pkgName, err)
+				// Accumulate the error but continue processing other packages.
+				createBenchmarkIssueErrors = append(createBenchmarkIssueErrors, err)
+				continue
+			}
+			log.Printf("Posted regression issue for package: %s with %d regression(s)", pkgName, len(regressions))
+		}
+	}
+
+	if len(createBenchmarkIssueErrors) > 0 {
+		return errors.Join(createBenchmarkIssueErrors...)
+	}
+
+	return nil
+}
+
+func (c *compare) maybePostRegressionIssuesSingle(
+	comparisonResultsMap model.ComparisonResultsMap,
+) error {
+	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	l, _ := loggerCfg.NewLogger("")
+	var errs []error
+
+	for _, comparisonResults := range comparisonResultsMap {
+		for _, result := range comparisonResults {
+			for _, detail := range result.Comparisons {
+				comparison := detail.Comparison
+				metric := result.Metric
+
+				packagePath, functionName, err := parseBenchmarkName(detail.BenchmarkName)
+				if err != nil {
+					log.Printf("failed to parse benchmark name %s: %v", detail.BenchmarkName, err)
+					errs = append(errs, err)
+					continue
+				}
+
+				compareArgs := benchdoc.NewCompareArgs()
+				if info, ok := c.benchmarkInfoMap.lookup(packagePath, functionName); ok {
+					compareArgs = info.CompareArgs
+				}
+				if compareArgs.PostIssue == benchdoc.PostIssueNone {
+					continue
+				}
+
+				if !isRegression(comparison.Delta, metric.Better) ||
+					!meetsThreshold(comparison.Delta, c.benchmarkThreshold(detail.BenchmarkName)) {
+					continue
+				}
+
+				reg := regressionInfo{
+					benchmarkName:  detail.BenchmarkName,
+					metricUnit:     result.Metric.Unit,
+					percentChange:  math.Abs(comparison.Delta),
+					formattedDelta: comparison.FormattedDelta,
+					threshold:      c.benchmarkThreshold(detail.BenchmarkName),
+				}
+
+				releaseBlocker := compareArgs.PostIssue == benchdoc.PostIssueBlocker
+				formatter, req, err := createSingleRegressionPostRequest(
+					reg, c.versionContext, releaseBlocker,
+				)
+				if err != nil {
+					log.Printf("failed to create single regression request for %s: %v",
+						detail.BenchmarkName, err)
+					errs = append(errs, err)
+					continue
+				}
+				if err = postBenchmarkIssue(c.ctx, l, formatter, req); err != nil {
+					log.Printf("failed to post single regression issue for %s: %v",
+						detail.BenchmarkName, err)
+					errs = append(errs, err)
+					continue
+				}
+				log.Printf("Posted single regression issue for: %s", detail.BenchmarkName)
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}
+
+func (c *compare) pushToInfluxDB(comparisonResultsMap model.ComparisonResultsMap) error {
+	client := influxdb2.NewClient(c.influxConfig.host, c.influxConfig.token)
+	defer client.Close()
+	writeAPI := client.WriteAPI("cockroach", "microbench")
+	errorChan := writeAPI.Errors()
+
+	metadata, err := loadMetadata(filepath.Join(c.experimentDir, "metadata.log"))
+	if err != nil {
+		return err
+	}
+	experimentTime := metadata.ExperimentCommitTime
+	normalizedDateString, err := benchseries.NormalizeDateString(experimentTime)
+	if err != nil {
+		return errors.Wrap(err, "error normalizing experiment commit date")
+	}
+	ts, err := benchseries.ParseNormalizedDateString(normalizedDateString)
+	if err != nil {
+		return errors.Wrap(err, "error parsing experiment commit date")
+	}
+
+	// Monitor errorChan for the first writing error. On error, cancel the
+	// context to stop writing further points. Subsequent errors are swallowed.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var writeErr error
+	go func() {
+		for err := range errorChan {
+			if writeErr == nil {
+				writeErr = errors.Wrap(err, "writing to InfluxDB")
+				cancel()
+			}
+		}
+	}()
+
+	for _, group := range comparisonResultsMap {
+		for _, result := range group {
+			for _, detail := range result.Comparisons {
+				if ctx.Err() != nil {
+					break
+				}
+				ci := detail.Comparison.ConfidenceInterval
+				if model.IsUndefinedConfidenceInterval(ci) {
+					continue
+				}
+				fields := map[string]interface{}{
+					"low":               ci.Low,
+					"center":            ci.Center,
+					"high":              ci.High,
+					"upload-time":       metadata.RunTime,
+					"baseline-commit":   metadata.BaselineCommit,
+					"experiment-commit": metadata.ExperimentCommit,
+					"benchmarks-commit": metadata.BenchmarksCommit,
+				}
+				pkg := strings.Split(detail.BenchmarkName, util.PackageSeparator)[0]
+				benchmarkName := strings.Split(detail.BenchmarkName, util.PackageSeparator)[1]
+				tags := map[string]string{
+					"name":         benchmarkName,
+					"unit":         result.Metric.Unit,
+					"pkg":          pkg,
+					"repository":   "cockroach",
+					"branch":       "master",
+					"goarch":       metadata.GoArch,
+					"goos":         metadata.GoOS,
+					"machine-type": metadata.Machine,
+				}
+				p := influxdb2.NewPoint("benchmark-result", tags, fields, ts)
+				writeAPI.WritePoint(p)
+			}
+		}
+	}
+	// Flush triggers sending any remaining buffered points and closes
+	// errorChan when done, which terminates the error-monitoring goroutine.
+	writeAPI.Flush()
+	return writeErr
+}
+
+func processReportFile(builder *model.Builder, id, pkg, path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		// A not found error is ignored since it can be expected that
+		// some microbenchmarks have changed names or been removed.
+		if oserror.IsNotExist(err) {
+			return nil
+		}
+		return errors.Wrapf(err, "failed to create reader for %s", path)
+	}
+	defer file.Close()
+	reader := benchfmt.NewReader(file, path)
+	return builder.AddMetrics(id, pkg+util.PackageSeparator, reader)
+}
+
+func truncateBenchmarkName(text string, maxLen int) string {
+	lastSlash := maxLen
+	curLen := 0
+	for i, r := range text {
+		if r == '/' {
+			lastSlash = i
+		}
+		curLen++
+		if curLen > maxLen {
+			return text[:lastSlash] + "..."
+		}
+	}
+	return text
+}
+
+func isRegression(delta float64, better int) bool {
+	return delta*float64(better) < 0
+}
+
+func meetsThreshold(delta float64, threshold float64) bool {
+	return math.Abs(delta) >= threshold
+}
+
+// benchmarkThreshold returns the regression threshold (in percentage) for the
+// given benchmark. If a per-benchmark threshold is configured via benchdoc, it
+// is converted from a fraction (e.g., 0.3) to a percentage (30.0). Otherwise,
+// the defaultPercentageThreshold is returned.
+func (c *compare) benchmarkThreshold(benchmarkName string) float64 {
+	if c.benchmarkInfoMap != nil {
+		packagePath, functionName, err := parseBenchmarkName(benchmarkName)
+		if err == nil {
+			if info, ok := c.benchmarkInfoMap.lookup(packagePath, functionName); ok {
+				if info.CompareArgs.Threshold > 0 {
+					return info.CompareArgs.Threshold * 100
+				}
+			}
+		}
+	}
+	return defaultPercentageThreshold
+}

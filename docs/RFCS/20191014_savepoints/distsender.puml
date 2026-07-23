@@ -1,0 +1,26 @@
+@startuml
+box "On any node using txns"
+  participant "client.Txn" as Txn
+  participant TxnCoordSender
+  participant DistSender
+end box
+box "Elsewhere"
+  participant leaseholder1
+  participant leaseholder2
+  participant leaseholder3
+end box
+
+Txn -> TxnCoordSender : sender.Send(BatchRequest)
+TxnCoordSender -> TxnCoordSender : (some txn logic)
+TxnCoordSender -> DistSender : sender.Send(BatchRequest)
+DistSender -> leaseholder1 : (distribute batch)
+DistSender -> leaseholder2 : (distribute batch)
+DistSender -> leaseholder3 : (distribute batch)
+leaseholder1 --> DistSender : BatchResponse
+leaseholder2 --> DistSender : BatchResponse
+leaseholder3 --> DistSender : BatchResponse
+DistSender -> DistSender : (merge responses)
+DistSender --> TxnCoordSender : BatchResponse
+TxnCoordSender -> TxnCoordSender : (some txn logic)
+TxnCoordSender --> Txn : BatchResponse
+@enduml

@@ -1,0 +1,3429 @@
+# LogicTest: !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2 !local-prepared
+# knob-opt: allow-unsafe
+#
+# local-prepared is excluded because the routine-context DDL isolation
+# upgrade (#170020) auto-commits and restarts the implicit txn, which
+# invalidates any in-flight portal. In the extended-query protocol, simple
+# statements are run as Prepare+Bind+Execute, so an active portal exists at
+# the moment we want to auto-commit. Users on the extended protocol fall
+# back to the in-routine safety net (txnSchemaChangeErr) and must explicitly
+# use SERIALIZABLE.
+
+# DDL in PL/pgSQL procedure bodies requires late binding.
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = true
+
+subtest ddl_blocked_in_functions
+
+# DDL should remain blocked in functions.
+statement error pgcode 0A000 unimplemented: CREATE TABLE usage inside a function definition
+CREATE FUNCTION f_create() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_func (a INT);
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: DROP TABLE usage inside a function definition
+CREATE FUNCTION f_drop() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE t_func;
+END
+$$;
+
+subtest end
+
+
+subtest ddl_blocked_in_do_blocks
+
+# DDL should remain blocked in DO blocks.
+statement error pgcode 0A000 unimplemented: CREATE TABLE usage inside a function definition
+DO $$
+BEGIN
+  CREATE TABLE t_do (a INT);
+END
+$$;
+
+subtest end
+
+
+subtest other_ddl_still_blocked
+
+statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition
+CREATE PROCEDURE p_alter() LANGUAGE PLpgSQL AS $$
+BEGIN
+  ALTER TABLE t ADD COLUMN b BOOL;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: CREATE INDEX usage inside a function definition
+CREATE PROCEDURE p_create_idx() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE INDEX idx ON t (a);
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: CREATE VIEW usage inside a function definition
+CREATE PROCEDURE p_create_view() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE VIEW v AS SELECT 1;
+END
+$$;
+
+subtest end
+
+
+subtest create_and_drop_table_in_procedure
+
+statement ok
+CREATE PROCEDURE p_create_table() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_proc_created (a INT PRIMARY KEY, b TEXT);
+END
+$$;
+
+statement ok
+CALL p_create_table();
+
+# CREATE TABLE in a procedure uses the legacy schema changer (direct
+# descriptor write). No NEW SCHEMA CHANGE job is created.
+query I
+SELECT count(*) FROM [SHOW JOBS]
+WHERE job_type = 'NEW SCHEMA CHANGE'
+AND description LIKE '%t_proc_created%';
+----
+0
+
+statement ok
+INSERT INTO t_proc_created VALUES (1, 'hello');
+
+query IT
+SELECT * FROM t_proc_created;
+----
+1  hello
+
+statement ok
+CREATE PROCEDURE p_drop_table() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE t_proc_created;
+END
+$$;
+
+statement ok
+CALL p_drop_table();
+
+statement error pgcode 42P01 relation "t_proc_created" does not exist
+SELECT * FROM t_proc_created;
+
+statement ok
+DROP PROCEDURE p_create_table;
+
+statement ok
+DROP PROCEDURE p_drop_table;
+
+subtest end
+
+
+subtest if_not_exists_and_if_exists
+
+statement ok
+CREATE PROCEDURE p_create_idempotent() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE IF NOT EXISTS t_idempotent (a INT PRIMARY KEY);
+END
+$$;
+
+statement ok
+CALL p_create_idempotent();
+
+# Second call should not error thanks to IF NOT EXISTS.
+statement ok
+CALL p_create_idempotent();
+
+query I
+SELECT count(*) FROM t_idempotent;
+----
+0
+
+statement ok
+CREATE PROCEDURE p_drop_idempotent() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE IF EXISTS t_idempotent;
+END
+$$;
+
+statement ok
+CALL p_drop_idempotent();
+
+statement error pgcode 42P01 relation "t_idempotent" does not exist
+SELECT * FROM t_idempotent;
+
+# Second call should not error thanks to IF EXISTS.
+statement ok
+CALL p_drop_idempotent();
+
+statement ok
+DROP PROCEDURE p_create_idempotent;
+
+statement ok
+DROP PROCEDURE p_drop_idempotent;
+
+subtest end
+
+
+subtest multiple_ddl_in_procedure
+
+statement ok
+CREATE PROCEDURE p_multi_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_multi_1 (a INT PRIMARY KEY);
+  CREATE TABLE t_multi_2 (b TEXT);
+END
+$$;
+
+statement ok
+CALL p_multi_ddl();
+
+query I
+SELECT count(*) FROM t_multi_1;
+----
+0
+
+query I
+SELECT count(*) FROM t_multi_2;
+----
+0
+
+statement ok
+DROP PROCEDURE p_multi_ddl;
+
+statement ok
+DROP TABLE t_multi_1, t_multi_2;
+
+subtest end
+
+
+subtest ddl_with_commit
+
+# COMMIT in the procedure triggers synchronous schema change completion
+# via waitForTxnJobs.
+statement ok
+CREATE PROCEDURE p_ddl_commit() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_committed (a INT PRIMARY KEY);
+  COMMIT;
+END
+$$;
+
+statement ok
+CALL p_ddl_commit();
+
+statement ok
+INSERT INTO t_committed VALUES (1);
+
+query I
+SELECT * FROM t_committed;
+----
+1
+
+statement ok
+DROP PROCEDURE p_ddl_commit;
+
+statement ok
+DROP TABLE t_committed;
+
+subtest end
+
+
+subtest ddl_with_commit_and_dml
+
+statement ok
+CREATE TABLE t_pre_commit (x INT PRIMARY KEY);
+
+statement ok
+CREATE PROCEDURE p_dml_then_ddl_commit() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_pre_commit VALUES (1);
+  CREATE TABLE t_post_ddl (a INT);
+  COMMIT;
+END
+$$;
+
+statement ok
+CALL p_dml_then_ddl_commit();
+
+query I
+SELECT * FROM t_pre_commit;
+----
+1
+
+query I
+SELECT count(*) FROM t_post_ddl;
+----
+0
+
+statement ok
+DROP PROCEDURE p_dml_then_ddl_commit;
+
+statement ok
+DROP TABLE t_pre_commit, t_post_ddl;
+
+subtest end
+
+
+subtest create_and_drop_separate_procedures
+
+statement ok
+CREATE PROCEDURE p_create_ephemeral() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_ephemeral (a INT);
+END
+$$;
+
+statement ok
+CALL p_create_ephemeral();
+
+query I
+SELECT count(*) FROM t_ephemeral;
+----
+0
+
+# The table must exist before creating a procedure that references it.
+statement ok
+CREATE PROCEDURE p_drop_ephemeral() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE t_ephemeral;
+END
+$$;
+
+statement ok
+CALL p_drop_ephemeral();
+
+statement error pgcode 42P01 relation "t_ephemeral" does not exist
+SELECT * FROM t_ephemeral;
+
+statement ok
+DROP PROCEDURE p_create_ephemeral;
+
+statement ok
+DROP PROCEDURE p_drop_ephemeral;
+
+subtest end
+
+
+subtest autocommit_before_ddl
+
+# Under READ COMMITTED (the local-read-committed config default), CALLing a
+# procedure whose body contains DDL fires the upgrade NOTICE via the pre-plan
+# walker, regardless of the autocommit_before_ddl setting. The procedure then
+# runs entirely under SERIALIZABLE.
+
+statement ok
+SET autocommit_before_ddl = true;
+
+statement ok
+CREATE TABLE t_autocommit_test (x INT PRIMARY KEY);
+INSERT INTO t_autocommit_test VALUES (1);
+
+statement ok
+CREATE PROCEDURE p_autocommit() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_autocommit_test VALUES (2);
+  CREATE TABLE t_autocommit_created (a INT);
+END
+$$;
+
+# Under SERIALIZABLE no upgrade is needed; under weaker isolation the upgrade
+# NOTICE fires. Skip the noticetrace assertion since both behaviors are
+# correct depending on the config's default isolation.
+
+statement ok
+CALL p_autocommit();
+
+query I rowsort
+SELECT * FROM t_autocommit_test;
+----
+1
+2
+
+query I
+SELECT count(*) FROM t_autocommit_created;
+----
+0
+
+statement ok
+DROP PROCEDURE p_autocommit;
+
+statement ok
+DROP TABLE t_autocommit_test, t_autocommit_created;
+
+# Verify ROLLBACK undoes both DML and DDL even with autocommit_before_ddl on,
+# proving the autocommit does not actually commit mid-procedure.
+statement ok
+CREATE TABLE t_autocommit_rb (x INT PRIMARY KEY);
+INSERT INTO t_autocommit_rb VALUES (1);
+
+statement ok
+CREATE PROCEDURE p_autocommit_rollback() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_autocommit_rb VALUES (2);
+  CREATE TABLE t_autocommit_rb_tbl (a INT);
+  ROLLBACK;
+END
+$$;
+
+statement ok
+CALL p_autocommit_rollback();
+
+# If autocommit_before_ddl had actually committed, the INSERT would survive
+# the ROLLBACK. Only the original row should be present.
+query I
+SELECT * FROM t_autocommit_rb;
+----
+1
+
+# The DDL should also be rolled back.
+statement error pgcode 42P01 relation "t_autocommit_rb_tbl" does not exist
+SELECT * FROM t_autocommit_rb_tbl;
+
+statement ok
+DROP PROCEDURE p_autocommit_rollback;
+
+statement ok
+DROP TABLE t_autocommit_rb;
+
+statement ok
+SET autocommit_before_ddl = false;
+
+subtest end
+
+
+subtest sql_language_procedure
+
+statement ok
+CREATE PROCEDURE p_sql_create() LANGUAGE SQL AS $$
+  CREATE TABLE t_sql_proc (a INT PRIMARY KEY);
+$$;
+
+statement ok
+CALL p_sql_create();
+
+query I
+SELECT count(*) FROM t_sql_proc;
+----
+0
+
+statement ok
+DROP PROCEDURE p_sql_create;
+
+statement ok
+DROP TABLE t_sql_proc;
+
+subtest end
+
+
+subtest ddl_then_dml_same_table
+
+# With late binding CREATE PROCEDURE accepts a body that does DDL and then
+# references the new table in the same body — references are not resolved
+# until CALL time. CALL still fails today because the body's statements
+# are built (AST -> RelExpr) eagerly at CALL plan time, before the
+# preceding CREATE TABLE has actually executed. See #167687 for the
+# proposal to defer body-statement building to execution time, which
+# would let these cases succeed. Workaround: split DDL and DML into
+# separate procedures.
+
+statement ok
+CREATE PROCEDURE p_create_and_insert() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_immediate (a INT PRIMARY KEY, b TEXT);
+  INSERT INTO t_immediate VALUES (1, 'created_inline');
+END
+$$;
+
+statement error pgcode 42P01 relation "t_immediate" does not exist
+CALL p_create_and_insert();
+
+statement ok
+DROP PROCEDURE p_create_and_insert;
+
+# Same shape but with an intervening COMMIT.
+statement ok
+CREATE PROCEDURE p_create_commit_insert() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_commit_then_use (a INT);
+  COMMIT;
+  INSERT INTO t_commit_then_use VALUES (1);
+END
+$$;
+
+statement error pgcode 42P01 relation "t_commit_then_use" does not exist
+CALL p_create_commit_insert();
+
+statement ok
+DROP PROCEDURE p_create_commit_insert;
+
+subtest end
+
+
+subtest rollback_in_procedure
+
+# ROLLBACK inside a procedure should undo DDL performed in the current
+# transaction and start a new implicit transaction.
+statement ok
+CREATE PROCEDURE p_ddl_rollback() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rollback_test (a INT);
+  ROLLBACK;
+END
+$$;
+
+statement ok
+CALL p_ddl_rollback();
+
+statement error pgcode 42P01 relation "t_rollback_test" does not exist
+SELECT * FROM t_rollback_test;
+
+statement ok
+DROP PROCEDURE p_ddl_rollback;
+
+subtest end
+
+
+subtest explicit_txn_rejects_ddl
+
+# DDL inside a procedure is rejected at runtime when the procedure is called
+# from an explicit transaction. The MVP only allows the validated DDL types
+# within an implicit (single-CALL) transaction; in an explicit transaction the
+# caller could mix in arbitrary post-CALL statements that interact poorly with
+# the procedure's schema changes.
+statement ok
+CREATE PROCEDURE p_create_in_txn() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_txn_create (a INT);
+END
+$$;
+
+statement ok
+BEGIN;
+
+statement error pgcode 0A000 DDL statements are not allowed in stored procedures called from an explicit transaction
+CALL p_create_in_txn();
+
+statement ok
+ROLLBACK;
+
+statement error pgcode 42P01 relation "t_txn_create" does not exist
+SELECT * FROM t_txn_create;
+
+# The same procedure called from an implicit transaction works.
+statement ok
+CALL p_create_in_txn();
+
+statement ok
+DROP TABLE t_txn_create;
+
+statement ok
+DROP PROCEDURE p_create_in_txn;
+
+# A DML-only procedure in an explicit transaction is unaffected.
+statement ok
+CREATE TABLE t_dml_only (a INT);
+
+statement ok
+CREATE PROCEDURE p_dml_only() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_dml_only VALUES (1);
+END
+$$;
+
+statement ok
+BEGIN;
+
+statement ok
+CALL p_dml_only();
+
+statement ok
+COMMIT;
+
+query I
+SELECT a FROM t_dml_only;
+----
+1
+
+statement ok
+DROP PROCEDURE p_dml_only;
+
+statement ok
+DROP TABLE t_dml_only;
+
+# A procedure that runs DML before DDL in an explicit transaction commits
+# the DML statements that ran before the DDL is reached, then aborts the
+# transaction with the new error. (The DML rolls back when the user issues
+# ROLLBACK, since the failed CALL leaves the txn in the aborted state.)
+statement ok
+CREATE TABLE t_mixed (a INT);
+
+statement ok
+CREATE PROCEDURE p_dml_then_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_mixed VALUES (1);
+  CREATE TABLE t_mixed_new (b INT);
+END
+$$;
+
+statement ok
+BEGIN;
+
+statement error pgcode 0A000 DDL statements are not allowed in stored procedures called from an explicit transaction
+CALL p_dml_then_ddl();
+
+statement ok
+ROLLBACK;
+
+query I
+SELECT count(*) FROM t_mixed;
+----
+0
+
+statement error pgcode 42P01 relation "t_mixed_new" does not exist
+SELECT * FROM t_mixed_new;
+
+statement ok
+DROP PROCEDURE p_dml_then_ddl;
+
+statement ok
+DROP TABLE t_mixed;
+
+# Nested procedures: outer CALL in implicit transaction, inner procedure has
+# DDL — should work.
+statement ok
+CREATE PROCEDURE p_inner_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_nested (a INT);
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_outer_calls_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CALL p_inner_ddl();
+END
+$$;
+
+# Under SERIALIZABLE the nested CALL succeeds: the txn is already at the
+# required isolation level so no upgrade is needed.
+skipif config local-read-committed local-repeatable-read
+statement ok
+CALL p_outer_calls_ddl();
+
+skipif config local-read-committed local-repeatable-read
+statement ok
+DROP TABLE t_nested;
+
+# Under weak isolation the pre-plan body walker does not recurse into nested
+# CALLs, so the inner CREATE TABLE hits the in-routine safety net and is
+# rejected. Failing the CALL is preferable to silently running DDL at the
+# wrong isolation level; users that need this should call the inner
+# procedure directly (which the walker handles) or run under SERIALIZABLE.
+onlyif config local-read-committed local-repeatable-read
+statement error pgcode 0A000 to use multi-statement transactions involving a schema change under weak isolation levels
+CALL p_outer_calls_ddl();
+
+onlyif config local-read-committed local-repeatable-read
+statement error pgcode 42P01 relation "t_nested" does not exist
+SELECT * FROM t_nested;
+
+# Nested procedures: outer CALL in explicit transaction, inner procedure has
+# DDL — should be rejected. The explicit-transaction context propagates to
+# nested CALLs.
+statement ok
+BEGIN;
+
+statement error pgcode 0A000 DDL statements are not allowed in stored procedures called from an explicit transaction
+CALL p_outer_calls_ddl();
+
+statement ok
+ROLLBACK;
+
+statement error pgcode 42P01 relation "t_nested" does not exist
+SELECT * FROM t_nested;
+
+statement ok
+DROP PROCEDURE p_outer_calls_ddl;
+
+statement ok
+DROP PROCEDURE p_inner_ddl;
+
+subtest end
+
+
+subtest ddl_then_error_in_procedure
+
+# When a procedure errors after performing DDL, the entire transaction
+# (including the DDL) should be aborted.
+statement ok
+CREATE PROCEDURE p_ddl_then_error() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_error_test (a INT);
+  SELECT 1 // 0;
+END
+$$;
+
+statement error division by zero
+CALL p_ddl_then_error();
+
+statement error pgcode 42P01 relation "t_error_test" does not exist
+SELECT * FROM t_error_test;
+
+statement ok
+DROP PROCEDURE p_ddl_then_error;
+
+subtest end
+
+
+subtest ddl_in_exception_block
+
+# Test DDL interaction with PL/pgSQL exception handlers, which use savepoints
+# internally via BeginInternalSubTransaction.
+
+# DDL before an exception block should survive; DDL inside the block where
+# the exception occurs should be rolled back by the savepoint.
+statement ok
+CREATE PROCEDURE p_ddl_exception() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_before_exc (a INT);
+  BEGIN
+    CREATE TABLE t_in_exc_block (a INT);
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught division by zero';
+  END;
+END
+$$;
+
+statement ok
+CALL p_ddl_exception();
+
+# t_before_exc was created before the exception block and should exist.
+query I
+SELECT count(*) FROM t_before_exc;
+----
+0
+
+# t_in_exc_block was created inside the block that raised an exception;
+# the savepoint rollback should have undone it.
+statement error pgcode 42P01 relation "t_in_exc_block" does not exist
+SELECT * FROM t_in_exc_block;
+
+statement ok
+DROP PROCEDURE p_ddl_exception;
+
+statement ok
+DROP TABLE t_before_exc;
+
+# Test DDL inside the exception handler itself.
+statement ok
+CREATE PROCEDURE p_ddl_in_handler() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    CREATE TABLE t_from_handler (a INT);
+  END;
+END
+$$;
+
+statement ok
+CALL p_ddl_in_handler();
+
+query I
+SELECT count(*) FROM t_from_handler;
+----
+0
+
+statement ok
+DROP PROCEDURE p_ddl_in_handler;
+
+statement ok
+DROP TABLE t_from_handler;
+
+subtest end
+
+
+subtest ddl_in_exception_block_rollback_each_type
+
+# Per-DDL rollback when a sub-block raises a caught exception: DROP TABLE,
+# DROP ROLE, and CREATE/DROP SCHEMA. The DSC paths leak post-commit work
+# that the savepoint does not see; assertions diverge between legacy and
+# DSC and are gated accordingly. The DSC divergences are an instance of
+# issue #10735 (ROLLBACK TO SAVEPOINT after DDL).
+
+# DROP TABLE inside an exception sub-block. Behaviors diverge:
+# - Legacy: the descriptor write to KV is rolled back by the savepoint and
+#   the queued schema-change job runs against a still-PUBLIC descriptor at
+#   commit, doing nothing. The table survives.
+# - DSC: the post-commit job is bound to the parent transaction's commit,
+#   not to the savepoint. The job runs and finalizes the drop. The table
+#   is gone.
+statement ok
+CREATE TABLE t_drop_in_exc (a INT);
+
+statement ok
+CREATE PROCEDURE p_drop_table_in_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    DROP TABLE t_drop_in_exc;
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_drop_table_in_exc();
+
+onlyif config local-legacy-schema-changer
+query I
+SELECT count(*) FROM t_drop_in_exc;
+----
+0
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42P01 relation "t_drop_in_exc" does not exist
+SELECT * FROM t_drop_in_exc;
+
+statement ok
+DROP PROCEDURE p_drop_table_in_exc;
+
+statement ok
+DROP TABLE IF EXISTS t_drop_in_exc;
+
+# DROP ROLE inside the exception sub-block. Roles do not go through the
+# descriptor cache or the schema-change job machinery, so the savepoint
+# rolls them back cleanly under both schema changers.
+statement ok
+CREATE ROLE r_drop_in_exc;
+
+statement ok
+CREATE PROCEDURE p_drop_role_in_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    DROP ROLE r_drop_in_exc;
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_drop_role_in_exc();
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_drop_in_exc';
+----
+r_drop_in_exc
+
+statement ok
+DROP PROCEDURE p_drop_role_in_exc;
+
+statement ok
+DROP ROLE r_drop_in_exc;
+
+# CREATE SCHEMA inside the exception sub-block. Behaviors diverge:
+# - Legacy: the KV write is rolled back; the queued database-schema-change
+#   job survives as an orphan no-op, but the schema is not visible.
+# - DSC: the post-commit job creates the schema after the savepoint, so
+#   the schema survives. Same DSC-post-commit-job class as DROP TABLE above.
+statement ok
+CREATE PROCEDURE p_create_schema_in_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    CREATE SCHEMA s_create_in_exc;
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_create_schema_in_exc();
+
+onlyif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_create_in_exc';
+----
+
+skipif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_create_in_exc';
+----
+s_create_in_exc
+
+statement ok
+DROP PROCEDURE p_create_schema_in_exc;
+
+statement ok
+DROP SCHEMA IF EXISTS s_create_in_exc;
+
+# DROP SCHEMA inside the exception sub-block. Same legacy / DSC divergence
+# as CREATE SCHEMA.
+statement ok
+CREATE SCHEMA s_drop_in_exc;
+
+statement ok
+CREATE PROCEDURE p_drop_schema_in_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    DROP SCHEMA s_drop_in_exc;
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_drop_schema_in_exc();
+
+onlyif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_drop_in_exc';
+----
+s_drop_in_exc
+
+skipif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_drop_in_exc';
+----
+
+statement ok
+DROP PROCEDURE p_drop_schema_in_exc;
+
+statement ok
+DROP SCHEMA IF EXISTS s_drop_in_exc;
+
+subtest end
+
+
+subtest ddl_before_exception_block_survives_each_type
+
+# DDL run before the exception sub-block sits outside the savepoint scope and
+# must survive when the sub-block raises. The existing ddl_in_exception_block
+# covers CREATE TABLE; this widens the coverage to one procedure that creates
+# a table, a schema, and a role before the sub-block raises.
+statement ok
+CREATE PROCEDURE p_ddl_before_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_before_each (a INT);
+  CREATE SCHEMA s_before_each;
+  CREATE ROLE r_before_each;
+  BEGIN
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_ddl_before_exc();
+
+query I
+SELECT count(*) FROM t_before_each;
+----
+0
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_before_each';
+----
+s_before_each
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_before_each';
+----
+r_before_each
+
+statement ok
+DROP PROCEDURE p_ddl_before_exc;
+
+statement ok
+DROP TABLE t_before_each;
+
+statement ok
+DROP SCHEMA s_before_each;
+
+statement ok
+DROP ROLE r_before_each;
+
+subtest end
+
+
+subtest drop_ddl_before_exception_block_survives
+
+# DROP variant of ddl_before_exception_block_survives_each_type. A DROP that
+# completes before the savepoint is created sits outside the savepoint's
+# scope, so the savepoint cannot reach it. The descriptors-collection
+# limitation that breaks DROP TABLE inside the sub-block does not affect
+# this case because the work was already past the point the savepoint can
+# rewind to.
+statement ok
+CREATE TABLE t_drop_before (a INT);
+
+statement ok
+CREATE SCHEMA s_drop_before;
+
+statement ok
+CREATE ROLE r_drop_before;
+
+statement ok
+CREATE PROCEDURE p_drop_before_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE t_drop_before;
+  DROP SCHEMA s_drop_before;
+  DROP ROLE r_drop_before;
+  BEGIN
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_drop_before_exc();
+
+statement error pgcode 42P01 relation "t_drop_before" does not exist
+SELECT * FROM t_drop_before;
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_drop_before';
+----
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_drop_before';
+----
+
+statement ok
+DROP PROCEDURE p_drop_before_exc;
+
+subtest end
+
+
+subtest ddl_in_nested_exception_blocks
+
+# Two nested exception sub-blocks. The inner block raises and is caught by
+# its own handler; the outer block's handler should not fire. DDL done in the
+# inner block must be rolled back; DDL done in the outer block (before the
+# inner block was entered) must survive, since it is outside the inner
+# savepoint and the outer block's savepoint is never rolled back.
+statement ok
+CREATE PROCEDURE p_nested_exc_blocks() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    CREATE TABLE t_outer_nested (a INT);
+    CREATE SCHEMA s_outer_nested;
+    BEGIN
+      CREATE TABLE t_inner_nested (a INT);
+      CREATE SCHEMA s_inner_nested;
+      SELECT 1 // 0;
+    EXCEPTION WHEN division_by_zero THEN
+      RAISE NOTICE 'inner caught';
+    END;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'outer caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_nested_exc_blocks();
+
+query I
+SELECT count(*) FROM t_outer_nested;
+----
+0
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_outer_nested';
+----
+s_outer_nested
+
+statement error pgcode 42P01 relation "t_inner_nested" does not exist
+SELECT * FROM t_inner_nested;
+
+# s_inner_nested: legacy rolls it back; DSC's post-commit job creates it.
+onlyif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_inner_nested';
+----
+
+skipif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_inner_nested';
+----
+s_inner_nested
+
+statement ok
+DROP PROCEDURE p_nested_exc_blocks;
+
+statement ok
+DROP TABLE t_outer_nested;
+
+statement ok
+DROP SCHEMA s_outer_nested;
+
+statement ok
+DROP SCHEMA IF EXISTS s_inner_nested;
+
+subtest end
+
+
+subtest ddl_in_nested_procedure_with_exception
+
+# The outer procedure's exception sub-block CALLs an inner procedure that does
+# DDL and then raises. The outer handler catches the error; the inner DDL must
+# be rolled back. This validates that the savepoint scope spans nested CALL
+# boundaries.
+#
+# Skipped under weak isolation: a nested CALL whose inner body performs
+# multiple DDLs trips the read-committed / repeatable-read multi-statement-
+# schema-change guard, which would require autocommit_before_ddl and
+# defeat the implicit-txn-only semantics this subtest is meant to exercise.
+statement ok
+CREATE PROCEDURE p_inner_ddl_then_raise() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_inner_proc (a INT);
+  CREATE SCHEMA s_inner_proc;
+  SELECT 1 // 0;
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_outer_with_exc() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    CALL p_inner_ddl_then_raise();
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'outer caught';
+  END;
+END
+$$;
+
+skipif config local-read-committed local-repeatable-read
+statement ok
+CALL p_outer_with_exc();
+
+skipif config local-read-committed local-repeatable-read
+statement error pgcode 42P01 relation "t_inner_proc" does not exist
+SELECT * FROM t_inner_proc;
+
+# s_inner_proc: legacy rolls it back; DSC's post-commit job creates it.
+onlyif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_inner_proc';
+----
+
+skipif config local-legacy-schema-changer local-read-committed local-repeatable-read
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_inner_proc';
+----
+s_inner_proc
+
+statement ok
+DROP PROCEDURE p_outer_with_exc;
+
+statement ok
+DROP PROCEDURE p_inner_ddl_then_raise;
+
+statement ok
+DROP SCHEMA IF EXISTS s_inner_proc;
+
+subtest end
+
+
+subtest ddl_in_exception_block_partial_progress
+
+# Multiple DDL statements before the error in a single sub-block. All of them
+# must be rolled back, not just the most recent one, and any DDL after the
+# error must not run at all.
+statement ok
+CREATE PROCEDURE p_partial_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    CREATE TABLE t_partial_a (a INT);
+    CREATE TABLE t_partial_b (a INT);
+    CREATE SCHEMA s_partial_a;
+    CREATE SCHEMA s_partial_b;
+    SELECT 1 // 0;
+    -- The statements below must never run, because control transfers to the
+    -- exception handler at the divide-by-zero above. The CREATE SCHEMA is
+    -- included to confirm that even DSC's post-commit job does not pick up
+    -- statements that were never executed.
+    CREATE TABLE t_partial_c (a INT);
+    CREATE SCHEMA s_partial_c;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_partial_ddl();
+
+statement error pgcode 42P01 relation "t_partial_a" does not exist
+SELECT * FROM t_partial_a;
+
+statement error pgcode 42P01 relation "t_partial_b" does not exist
+SELECT * FROM t_partial_b;
+
+statement error pgcode 42P01 relation "t_partial_c" does not exist
+SELECT * FROM t_partial_c;
+
+# Schemas before the error: legacy rolls both back; DSC's post-commit job
+# creates both. The schema after the error (s_partial_c) must never exist
+# under either schema changer because the statement never executed.
+onlyif config local-legacy-schema-changer
+query T rowsort
+SELECT schema_name FROM [SHOW SCHEMAS]
+WHERE schema_name IN ('s_partial_a', 's_partial_b', 's_partial_c');
+----
+
+skipif config local-legacy-schema-changer
+query T rowsort
+SELECT schema_name FROM [SHOW SCHEMAS]
+WHERE schema_name IN ('s_partial_a', 's_partial_b', 's_partial_c');
+----
+s_partial_a
+s_partial_b
+
+statement ok
+DROP PROCEDURE p_partial_ddl;
+
+statement ok
+DROP SCHEMA IF EXISTS s_partial_a;
+
+statement ok
+DROP SCHEMA IF EXISTS s_partial_b;
+
+subtest end
+
+
+subtest ddl_in_exception_block_when_clause_match
+
+# When the raised exception matches a WHEN clause, the savepoint rolls back
+# the sub-block's DDL and the procedure returns successfully. When the raised
+# exception does not match any WHEN clause, the error propagates out of the
+# procedure and the whole CALL transaction is aborted; either way the DDL must
+# not survive.
+
+# Matched: division_by_zero is caught, procedure returns OK, DDL rolled back.
+statement ok
+CREATE PROCEDURE p_when_matches() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    CREATE TABLE t_when_matched (a INT);
+    CREATE SCHEMA s_when_matched;
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'matched';
+  END;
+END
+$$;
+
+statement ok
+CALL p_when_matches();
+
+statement error pgcode 42P01 relation "t_when_matched" does not exist
+SELECT * FROM t_when_matched;
+
+# s_when_matched: legacy rolls it back; DSC's post-commit job creates it.
+# TODO(#170021): the DSC result here is wrong. The CREATE SCHEMA happened
+# inside an exception sub-block whose savepoint was rolled back, so the
+# schema should not exist after the CALL returns. The expected result for
+# the DSC query below should be empty, matching the legacy behavior.
+onlyif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_when_matched';
+----
+
+skipif config local-legacy-schema-changer
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_when_matched';
+----
+s_when_matched
+
+statement ok
+DROP PROCEDURE p_when_matches;
+
+statement ok
+DROP SCHEMA IF EXISTS s_when_matched;
+
+# Unmatched: RAISE EXCEPTION (P0001) is not caught by WHEN division_by_zero,
+# so the error escapes the procedure and the CALL fails. The DDL still must
+# not be visible after the failed CALL.
+statement ok
+CREATE PROCEDURE p_when_unmatched() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    CREATE TABLE t_when_unmatched (a INT);
+    CREATE SCHEMA s_when_unmatched;
+    RAISE EXCEPTION 'boom';
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'will not match';
+  END;
+END
+$$;
+
+statement error pgcode P0001 pq: boom
+CALL p_when_unmatched();
+
+statement error pgcode 42P01 relation "t_when_unmatched" does not exist
+SELECT * FROM t_when_unmatched;
+
+# Unlike the matched case above, DSC does not create the schema here: the
+# unmatched exception aborts the outer CALL transaction, so the post-commit
+# job that would have finalized the CREATE SCHEMA never starts.
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_when_unmatched';
+----
+
+statement ok
+DROP PROCEDURE p_when_unmatched;
+
+subtest end
+
+
+subtest ddl_with_rollback_and_dml
+
+# Both DML and DDL should be rolled back together when ROLLBACK is called.
+statement ok
+CREATE TABLE t_dml_rollback_check (x INT PRIMARY KEY);
+
+statement ok
+INSERT INTO t_dml_rollback_check VALUES (1);
+
+statement ok
+CREATE PROCEDURE p_dml_ddl_rollback() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_dml_rollback_check VALUES (2);
+  CREATE TABLE t_dml_ddl_new (a INT);
+  ROLLBACK;
+END
+$$;
+
+statement ok
+CALL p_dml_ddl_rollback();
+
+query I
+SELECT * FROM t_dml_rollback_check;
+----
+1
+
+statement error pgcode 42P01 relation "t_dml_ddl_new" does not exist
+SELECT * FROM t_dml_ddl_new;
+
+statement ok
+DROP PROCEDURE p_dml_ddl_rollback;
+
+statement ok
+DROP TABLE t_dml_rollback_check;
+
+subtest end
+
+
+subtest ddl_commit_then_rollback
+
+# COMMIT mid-procedure finalizes DDL in the first transaction; a subsequent
+# ROLLBACK should only undo work in the new implicit transaction.
+statement ok
+CREATE PROCEDURE p_commit_then_rollback() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_committed_ddl (a INT);
+  COMMIT;
+  -- Now in a new implicit transaction.
+  CREATE TABLE t_uncommitted_ddl (a INT);
+  ROLLBACK;
+END
+$$;
+
+statement ok
+CALL p_commit_then_rollback();
+
+# t_committed_ddl was committed before the rollback.
+query I
+SELECT count(*) FROM t_committed_ddl;
+----
+0
+
+# t_uncommitted_ddl was created after the COMMIT and then rolled back.
+statement error pgcode 42P01 relation "t_uncommitted_ddl" does not exist
+SELECT * FROM t_uncommitted_ddl;
+
+statement ok
+DROP PROCEDURE p_commit_then_rollback;
+
+statement ok
+DROP TABLE t_committed_ddl;
+
+subtest end
+
+
+subtest nested_procedure_with_ddl
+
+# DDL in nested procedure calls should work correctly.
+statement ok
+CREATE PROCEDURE p_inner_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_nested_inner (a INT);
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_outer_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_nested_outer (a INT);
+  CALL p_inner_ddl();
+END
+$$;
+
+statement ok
+CALL p_outer_ddl();
+
+query I
+SELECT count(*) FROM t_nested_outer;
+----
+0
+
+query I
+SELECT count(*) FROM t_nested_inner;
+----
+0
+
+statement ok
+DROP PROCEDURE p_outer_ddl;
+
+statement ok
+DROP TABLE t_nested_outer, t_nested_inner;
+
+# Test that ROLLBACK in outer procedure undoes inner procedure's DDL.
+# Under SERIALIZABLE the CALL succeeds; under weak isolation the outer body
+# walker does not recurse into the inner CALL, so the inner CREATE TABLE
+# hits the in-routine safety net and the CALL is rejected.
+statement ok
+CREATE PROCEDURE p_outer_rollback() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CALL p_inner_ddl();
+  ROLLBACK;
+END
+$$;
+
+skipif config local-read-committed local-repeatable-read
+statement ok
+CALL p_outer_rollback();
+
+skipif config local-read-committed local-repeatable-read
+statement error pgcode 42P01 relation "t_nested_inner" does not exist
+SELECT * FROM t_nested_inner;
+
+onlyif config local-read-committed local-repeatable-read
+statement error pgcode 0A000 to use multi-statement transactions involving a schema change under weak isolation levels
+CALL p_outer_rollback();
+
+statement ok
+DROP PROCEDURE p_outer_rollback;
+
+statement ok
+DROP PROCEDURE p_inner_ddl;
+
+subtest end
+
+
+subtest ddl_after_rollback
+
+# After ROLLBACK in a procedure, execution continues in a new implicit
+# transaction. DDL in the new transaction should succeed.
+statement ok
+CREATE PROCEDURE p_rollback_then_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_pre_rollback (a INT);
+  ROLLBACK;
+  -- Now in a new implicit transaction.
+  CREATE TABLE t_post_rollback (a INT);
+END
+$$;
+
+statement ok
+CALL p_rollback_then_ddl();
+
+statement error pgcode 42P01 relation "t_pre_rollback" does not exist
+SELECT * FROM t_pre_rollback;
+
+# t_post_rollback was created in the new implicit transaction.
+query I
+SELECT count(*) FROM t_post_rollback;
+----
+0
+
+statement ok
+DROP PROCEDURE p_rollback_then_ddl;
+
+statement ok
+DROP TABLE t_post_rollback;
+
+subtest end
+
+
+subtest ddl_under_read_committed
+
+# DDL inside a routine body mirrors the top-level isolation enforcement:
+# the txn is upgraded to SERIALIZABLE (with a NOTICE) when the DDL is the
+# first body statement, and rejected with an error when prior body
+# statements have already executed at a weaker isolation level.
+
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true;
+
+statement ok
+SET default_transaction_isolation = 'read committed';
+
+# Basic DDL in procedure under READ COMMITTED implicit txn fires the
+# isolation upgrade NOTICE.
+statement ok
+CREATE PROCEDURE p_rc_create() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rc_test (a INT PRIMARY KEY);
+END
+$$;
+
+query T noticetrace
+CALL p_rc_create();
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+query I
+SELECT count(*) FROM t_rc_test;
+----
+0
+
+statement ok
+DROP TABLE t_rc_test;
+
+statement ok
+DROP PROCEDURE p_rc_create;
+
+# Multiple DDL statements as the first body statements: the upgrade fires
+# once on the first DDL; subsequent DDLs run silently under SERIALIZABLE.
+statement ok
+CREATE PROCEDURE p_rc_multi_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rc_multi1 (a INT);
+  CREATE TABLE t_rc_multi2 (a INT);
+  CREATE TABLE t_rc_multi3 (a INT);
+END
+$$;
+
+query T noticetrace
+CALL p_rc_multi_ddl();
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+statement ok
+DROP TABLE t_rc_multi1; DROP TABLE t_rc_multi2; DROP TABLE t_rc_multi3;
+
+statement ok
+DROP PROCEDURE p_rc_multi_ddl;
+
+# A procedure body that mixes DML and DDL also triggers the upgrade: the
+# pre-plan walker discovers DDL anywhere in the body and auto-commits to a
+# fresh SERIALIZABLE txn, so the entire body (DML and DDL) runs safely.
+statement ok
+CREATE TABLE t_rc_seed (a INT);
+
+statement ok
+CREATE PROCEDURE p_rc_dml_then_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_rc_seed VALUES (1);
+  CREATE TABLE t_rc_dml_first (a INT);
+END
+$$;
+
+query T noticetrace
+CALL p_rc_dml_then_ddl();
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+query I
+SELECT count(*) FROM t_rc_seed;
+----
+1
+
+statement ok
+DROP TABLE t_rc_dml_first;
+
+statement ok
+DROP PROCEDURE p_rc_dml_then_ddl;
+
+statement ok
+DROP TABLE t_rc_seed;
+
+# SQL-language procedures with DDL also trigger the upgrade. The body
+# walker dispatches on RoutineLanguage, so this exercises the
+# tree.RoutineLangSQL branch separately from PL/pgSQL.
+statement ok
+CREATE PROCEDURE p_rc_sql_ddl() LANGUAGE SQL AS $$
+  CREATE TABLE t_rc_sql_lang (a INT PRIMARY KEY);
+$$;
+
+query T noticetrace
+CALL p_rc_sql_ddl();
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+statement ok
+DROP TABLE t_rc_sql_lang;
+
+statement ok
+DROP PROCEDURE p_rc_sql_ddl;
+
+# The forced SERIALIZABLE override consumed by the upgraded CALL must not
+# leak into the next implicit txn. Run a CALL that triggers the upgrade,
+# then verify the session is back at READ COMMITTED.
+statement ok
+CREATE PROCEDURE p_rc_no_leak() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rc_no_leak (a INT);
+END
+$$;
+
+statement ok
+CALL p_rc_no_leak();
+
+query T
+SHOW transaction_isolation;
+----
+read committed
+
+statement ok
+DROP TABLE t_rc_no_leak;
+
+statement ok
+DROP PROCEDURE p_rc_no_leak;
+
+# DDL in procedure under READ COMMITTED explicit txn is rejected like every
+# other explicit-txn case; the isolation level does not matter.
+statement ok
+CREATE PROCEDURE p_rc_explicit() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rc_explicit (a INT PRIMARY KEY);
+END
+$$;
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
+statement error pgcode 0A000 DDL statements are not allowed in stored procedures called from an explicit transaction
+CALL p_rc_explicit();
+
+statement ok
+ROLLBACK;
+
+statement error pgcode 42P01 relation "t_rc_explicit" does not exist
+SELECT * FROM t_rc_explicit;
+
+statement ok
+DROP PROCEDURE p_rc_explicit;
+
+# Bare DDL under READ COMMITTED fires the isolation upgrade NOTICE.
+# Skip under local-prepared: the prepare+execute phases each fire the NOTICE.
+skipif config local-prepared
+statement ok
+CREATE TABLE t_notice_check (a INT);
+
+skipif config local-prepared
+query T noticetrace
+DROP TABLE t_notice_check;
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+# Nested procedures: the upgrade triggered by an inner DDL applies to the
+# outer txn, so subsequent DDLs at any nesting level run silently.
+statement ok
+CREATE PROCEDURE p_rc_inner_ddl_first() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rc_nested_inner (a INT);
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_rc_outer_calls_inner() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CALL p_rc_inner_ddl_first();
+  CREATE TABLE t_rc_nested_outer (a INT);
+END
+$$;
+
+query T noticetrace
+CALL p_rc_outer_calls_inner();
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+statement ok
+DROP TABLE t_rc_nested_inner;
+
+statement ok
+DROP TABLE t_rc_nested_outer;
+
+statement ok
+DROP PROCEDURE p_rc_outer_calls_inner;
+
+statement ok
+DROP PROCEDURE p_rc_inner_ddl_first;
+
+# Nested procedures: outer body runs DML before invoking an inner that does
+# DDL. The inner DDL is rejected because the outer DML already executed at
+# READ COMMITTED.
+statement ok
+CREATE TABLE t_rc_outer_seed (a INT);
+
+statement ok
+CREATE PROCEDURE p_rc_inner_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rc_inner_should_not_exist (a INT);
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_rc_outer_dml_first() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_rc_outer_seed VALUES (1);
+  CALL p_rc_inner_ddl();
+END
+$$;
+
+statement error pgcode 0A000 to use multi-statement transactions involving a schema change under weak isolation levels
+CALL p_rc_outer_dml_first();
+
+statement ok
+DROP PROCEDURE p_rc_outer_dml_first;
+
+statement ok
+DROP PROCEDURE p_rc_inner_ddl;
+
+statement ok
+DROP TABLE t_rc_outer_seed;
+
+statement ok
+SET default_transaction_isolation = 'serializable';
+
+subtest end
+
+
+subtest ddl_under_repeatable_read
+
+# DDL inside a routine body under REPEATABLE READ behaves like the READ
+# COMMITTED case: the txn is upgraded when the DDL is the first body
+# statement, and rejected otherwise.
+
+statement ok
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true;
+
+statement ok
+SET default_transaction_isolation = 'repeatable read';
+
+# Basic DDL in procedure under REPEATABLE READ fires the NOTICE.
+statement ok
+CREATE PROCEDURE p_rr_create() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rr_test (a INT PRIMARY KEY);
+END
+$$;
+
+query T noticetrace
+CALL p_rr_create();
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+query I
+SELECT count(*) FROM t_rr_test;
+----
+0
+
+statement ok
+DROP TABLE t_rr_test;
+
+statement ok
+DROP PROCEDURE p_rr_create;
+
+# DDL in procedure under REPEATABLE READ explicit txn is rejected.
+statement ok
+CREATE PROCEDURE p_rr_rollback() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rr_rb (a INT);
+END
+$$;
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+statement error pgcode 0A000 DDL statements are not allowed in stored procedures called from an explicit transaction
+CALL p_rr_rollback();
+
+statement ok
+ROLLBACK;
+
+statement error pgcode 42P01 relation "t_rr_rb" does not exist
+SELECT * FROM t_rr_rb;
+
+statement ok
+DROP PROCEDURE p_rr_rollback;
+
+# DML mixed with DDL in an implicit-txn CALL also triggers the upgrade.
+statement ok
+CREATE TABLE t_rr_seed (a INT);
+
+statement ok
+CREATE PROCEDURE p_rr_dml_then_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_rr_seed VALUES (1);
+  CREATE TABLE t_rr_dml_first (a INT);
+END
+$$;
+
+query T noticetrace
+CALL p_rr_dml_then_ddl();
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+statement ok
+DROP TABLE t_rr_dml_first;
+
+statement ok
+DROP PROCEDURE p_rr_dml_then_ddl;
+
+statement ok
+DROP TABLE t_rr_seed;
+
+statement ok
+SET default_transaction_isolation = 'serializable';
+
+statement ok
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false;
+
+subtest end
+
+
+subtest schema_role_blocked_in_functions
+
+# CREATE/DROP SCHEMA and CREATE/DROP ROLE remain blocked in functions.
+statement error pgcode 0A000 unimplemented: CREATE SCHEMA usage inside a function definition
+CREATE FUNCTION f_create_schema() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA s_func;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: DROP SCHEMA usage inside a function definition
+CREATE FUNCTION f_drop_schema() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP SCHEMA s_func;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: CREATE ROLE usage inside a function definition
+CREATE FUNCTION f_create_role() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE ROLE r_func;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: DROP ROLE usage inside a function definition
+CREATE FUNCTION f_drop_role() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP ROLE r_func;
+END
+$$;
+
+# Volatility marker does not change the rule.
+statement error pgcode 0A000 unimplemented: CREATE ROLE usage inside a function definition
+CREATE FUNCTION f_create_role_volatile() RETURNS VOID LANGUAGE PLpgSQL VOLATILE AS $$
+BEGIN
+  CREATE ROLE r_func;
+END
+$$;
+
+subtest end
+
+
+subtest schema_role_blocked_in_do_blocks
+
+statement error pgcode 0A000 unimplemented: CREATE SCHEMA usage inside a function definition
+DO $$
+BEGIN
+  CREATE SCHEMA s_do;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: DROP SCHEMA usage inside a function definition
+DO $$
+BEGIN
+  DROP SCHEMA s_do;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: CREATE ROLE usage inside a function definition
+DO $$
+BEGIN
+  CREATE ROLE r_do;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: DROP ROLE usage inside a function definition
+DO $$
+BEGIN
+  DROP ROLE r_do;
+END
+$$;
+
+subtest end
+
+
+subtest create_and_drop_schema_in_procedure
+
+statement ok
+CREATE PROCEDURE p_create_schema() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA s_proc_created;
+END
+$$;
+
+statement ok
+CALL p_create_schema();
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_proc_created';
+----
+s_proc_created
+
+statement ok
+CREATE PROCEDURE p_drop_schema() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP SCHEMA s_proc_created;
+END
+$$;
+
+statement ok
+CALL p_drop_schema();
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_proc_created';
+----
+
+statement ok
+DROP PROCEDURE p_create_schema;
+
+statement ok
+DROP PROCEDURE p_drop_schema;
+
+subtest end
+
+
+subtest create_and_drop_role_in_procedure
+
+statement ok
+CREATE PROCEDURE p_create_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE ROLE r_proc_created;
+END
+$$;
+
+statement ok
+CALL p_create_role();
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_proc_created';
+----
+r_proc_created
+
+statement ok
+CREATE PROCEDURE p_drop_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP ROLE r_proc_created;
+END
+$$;
+
+statement ok
+CALL p_drop_role();
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_proc_created';
+----
+
+statement ok
+DROP PROCEDURE p_create_role;
+
+statement ok
+DROP PROCEDURE p_drop_role;
+
+subtest end
+
+
+subtest if_not_exists_and_if_exists_schema_role
+
+statement ok
+CREATE PROCEDURE p_create_schema_idem() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA IF NOT EXISTS s_idem;
+END
+$$;
+
+statement ok
+CALL p_create_schema_idem();
+
+# Second call must not error thanks to IF NOT EXISTS.
+statement ok
+CALL p_create_schema_idem();
+
+statement ok
+CREATE PROCEDURE p_drop_schema_idem() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP SCHEMA IF EXISTS s_idem;
+END
+$$;
+
+statement ok
+CALL p_drop_schema_idem();
+
+# Second call must not error thanks to IF EXISTS.
+statement ok
+CALL p_drop_schema_idem();
+
+statement ok
+CREATE PROCEDURE p_create_role_idem() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE ROLE IF NOT EXISTS r_idem;
+END
+$$;
+
+statement ok
+CALL p_create_role_idem();
+
+statement ok
+CALL p_create_role_idem();
+
+statement ok
+CREATE PROCEDURE p_drop_role_idem() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP ROLE IF EXISTS r_idem;
+END
+$$;
+
+statement ok
+CALL p_drop_role_idem();
+
+statement ok
+CALL p_drop_role_idem();
+
+statement ok
+DROP PROCEDURE p_create_schema_idem;
+
+statement ok
+DROP PROCEDURE p_drop_schema_idem;
+
+statement ok
+DROP PROCEDURE p_create_role_idem;
+
+statement ok
+DROP PROCEDURE p_drop_role_idem;
+
+subtest end
+
+
+subtest multiple_schema_role_ops_in_procedure
+
+# Multiple operations of the same kind in one body.
+statement ok
+CREATE PROCEDURE p_multi_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE ROLE r_multi_1;
+  CREATE ROLE r_multi_2;
+END
+$$;
+
+statement ok
+CALL p_multi_role();
+
+query T rowsort
+SELECT rolname FROM pg_roles WHERE rolname IN ('r_multi_1', 'r_multi_2');
+----
+r_multi_1
+r_multi_2
+
+# CREATE SCHEMA followed by DROP SCHEMA on the same name in one body. Under
+# late binding CREATE PROCEDURE succeeds, but CALL still fails today because
+# body statements are built eagerly at CALL plan time, before the preceding
+# CREATE SCHEMA has executed. See the ddl_then_dml_same_table subtest for
+# the analogous CREATE TABLE + INSERT case.
+statement ok
+CREATE PROCEDURE p_create_drop_schema() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA s_transient;
+  DROP SCHEMA s_transient;
+END
+$$;
+
+statement error pgcode 3F000 unknown schema "s_transient"
+CALL p_create_drop_schema();
+
+statement ok
+DROP PROCEDURE p_create_drop_schema;
+
+statement ok
+DROP ROLE r_multi_1, r_multi_2;
+
+statement ok
+DROP PROCEDURE p_multi_role;
+
+subtest end
+
+
+subtest rollback_schema_role_in_procedure
+
+# RAISE EXCEPTION after creating a schema and a role rolls both back.
+statement ok
+CREATE PROCEDURE p_create_then_raise() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA s_rollback;
+  CREATE ROLE r_rollback;
+  RAISE EXCEPTION 'boom';
+END
+$$;
+
+statement error pgcode P0001 pq: boom
+CALL p_create_then_raise();
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_rollback';
+----
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_rollback';
+----
+
+statement ok
+DROP PROCEDURE p_create_then_raise;
+
+# Exception block savepoint: a CREATE ROLE inside a sub-block that raises
+# is rolled back, while work outside the sub-block survives.
+statement ok
+CREATE PROCEDURE p_role_in_exc_block() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE ROLE r_outside_exc;
+  BEGIN
+    CREATE ROLE r_inside_exc;
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_role_in_exc_block();
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_outside_exc';
+----
+r_outside_exc
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_inside_exc';
+----
+
+statement ok
+DROP ROLE r_outside_exc;
+
+statement ok
+DROP PROCEDURE p_role_in_exc_block;
+
+subtest end
+
+
+subtest nested_procedure_schema_role
+
+# DDL in a nested procedure call should be visible to the caller.
+statement ok
+CREATE PROCEDURE p_inner_schema_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA s_nested;
+  CREATE ROLE r_nested;
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_outer_schema_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CALL p_inner_schema_role();
+END
+$$;
+
+statement ok
+CALL p_outer_schema_role();
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_nested';
+----
+s_nested
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_nested';
+----
+r_nested
+
+statement ok
+DROP SCHEMA s_nested;
+
+statement ok
+DROP ROLE r_nested;
+
+statement ok
+DROP PROCEDURE p_outer_schema_role;
+
+statement ok
+DROP PROCEDURE p_inner_schema_role;
+
+subtest end
+
+
+subtest drop_schema_cascade_restrict_in_procedure
+
+statement ok
+CREATE SCHEMA s_with_table;
+
+statement ok
+CREATE TABLE s_with_table.t (a INT);
+
+# Under late binding the non-empty check for DROP SCHEMA RESTRICT is
+# deferred to CALL time, so CREATE PROCEDURE accepts the body and CALL
+# raises the error.
+statement ok
+CREATE PROCEDURE p_drop_schema_restrict() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP SCHEMA s_with_table RESTRICT;
+END
+$$;
+
+statement error pgcode 2BP01 schema "s_with_table" is not empty
+CALL p_drop_schema_restrict();
+
+statement ok
+DROP PROCEDURE p_drop_schema_restrict;
+
+# CASCADE drops the schema and its child objects when CALLed.
+statement ok
+CREATE PROCEDURE p_drop_schema_cascade() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP SCHEMA s_with_table CASCADE;
+END
+$$;
+
+statement ok
+CALL p_drop_schema_cascade();
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_with_table';
+----
+
+statement error pgcode 42P01 relation "s_with_table.t" does not exist
+SELECT * FROM s_with_table.t;
+
+statement ok
+DROP PROCEDURE p_drop_schema_cascade;
+
+subtest end
+
+
+subtest create_schema_authorization_in_procedure
+
+statement ok
+CREATE ROLE r_owner;
+
+statement ok
+CREATE PROCEDURE p_create_schema_auth() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA s_owned AUTHORIZATION r_owner;
+END
+$$;
+
+statement ok
+CALL p_create_schema_auth();
+
+query TT
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name = 's_owned';
+----
+s_owned  r_owner
+
+statement ok
+DROP SCHEMA s_owned;
+
+statement ok
+DROP ROLE r_owner;
+
+statement ok
+DROP PROCEDURE p_create_schema_auth;
+
+subtest end
+
+
+subtest ddl_under_serializable
+
+# Under SERIALIZABLE no upgrade is needed, so DDL in any position runs
+# without firing the NOTICE.
+statement ok
+CREATE TABLE t_ser_seed (a INT);
+
+statement ok
+CREATE PROCEDURE p_ser_dml_then_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_ser_seed VALUES (1);
+  CREATE TABLE t_ser_after (a INT);
+END
+$$;
+
+query T noticetrace
+CALL p_ser_dml_then_ddl();
+----
+
+statement ok
+DROP TABLE t_ser_after;
+
+statement ok
+DROP PROCEDURE p_ser_dml_then_ddl;
+
+statement ok
+DROP TABLE t_ser_seed;
+
+subtest end
+
+
+# The subtests below cover SECURITY DEFINER applied to DDL inside stored
+# procedure bodies. Privilege checks, ownership assignments, and the
+# current_user builtin all resolve to the routine owner for the duration of
+# the body, matching PostgreSQL.
+
+subtest security_definer_create_schema
+
+statement ok
+CREATE ROLE r_def_schema;
+GRANT CREATE ON DATABASE test TO r_def_schema;
+
+statement ok
+CREATE ROLE r_inv_schema;
+
+statement ok
+SET ROLE r_def_schema;
+
+statement ok
+CREATE PROCEDURE p_sd_schema() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CREATE SCHEMA s_sd;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_schema TO r_inv_schema;
+
+statement ok
+SET ROLE r_inv_schema;
+
+statement ok
+CALL p_sd_schema();
+
+# Owner is the definer even though the invoker issued the CALL.
+query TT
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name = 's_sd';
+----
+s_sd  r_def_schema
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP SCHEMA s_sd;
+
+statement ok
+DROP PROCEDURE p_sd_schema;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_def_schema;
+
+statement ok
+DROP ROLE r_def_schema, r_inv_schema;
+
+subtest end
+
+
+subtest security_definer_create_role
+
+statement ok
+CREATE ROLE r_def_role WITH CREATEROLE;
+
+statement ok
+CREATE ROLE r_inv_role;
+
+statement ok
+SET ROLE r_def_role;
+
+statement ok
+CREATE PROCEDURE p_sd_role() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CREATE ROLE r_sd_created;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_role TO r_inv_role;
+
+statement ok
+SET ROLE r_inv_role;
+
+# CREATEROLE is evaluated against the definer; the invoker (without
+# CREATEROLE) can still call the procedure.
+statement ok
+CALL p_sd_role();
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_sd_created';
+----
+r_sd_created
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP ROLE r_sd_created;
+
+statement ok
+DROP PROCEDURE p_sd_role;
+
+statement ok
+DROP ROLE r_def_role, r_inv_role;
+
+subtest end
+
+
+subtest security_definer_create_table
+
+# CREATE TABLE goes through a different code path than CREATE SCHEMA, so
+# cover the table-owner side of the same bug. The invoker lacks CREATE on
+# the schema and would fail without the definer override.
+statement ok
+CREATE ROLE r_def_tbl;
+GRANT ALL ON SCHEMA public TO r_def_tbl;
+
+statement ok
+CREATE ROLE r_inv_tbl;
+
+statement ok
+SET ROLE r_def_tbl;
+
+statement ok
+CREATE PROCEDURE p_sd_table() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CREATE TABLE t_sd (a INT);
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_table TO r_inv_tbl;
+
+statement ok
+SET ROLE r_inv_tbl;
+
+statement ok
+CALL p_sd_table();
+
+query TTT colnames
+SELECT schema_name, table_name, owner FROM [SHOW TABLES FROM public] WHERE table_name = 't_sd';
+----
+schema_name  table_name  owner
+public       t_sd        r_def_tbl
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE t_sd;
+
+statement ok
+DROP PROCEDURE p_sd_table;
+
+statement ok
+REVOKE ALL ON SCHEMA public FROM r_def_tbl;
+
+statement ok
+DROP ROLE r_def_tbl, r_inv_tbl;
+
+subtest end
+
+
+subtest security_definer_drop
+
+# DROP SCHEMA, DROP ROLE, and DROP TABLE all evaluate authorization
+# against the effective user. Set up objects owned by a "manager" role,
+# wrap the drops in a SECURITY DEFINER procedure owned by the manager,
+# and call it as an unprivileged invoker.
+statement ok
+CREATE ROLE r_mgr WITH CREATEROLE;
+GRANT CREATE ON DATABASE test TO r_mgr;
+
+statement ok
+CREATE ROLE r_caller;
+
+statement ok
+SET ROLE r_mgr;
+
+statement ok
+CREATE SCHEMA s_drop;
+CREATE TABLE s_drop.t_drop (a INT);
+CREATE ROLE r_drop;
+
+statement ok
+CREATE PROCEDURE p_sd_drop() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  -- CASCADE is required because the DROP SCHEMA non-empty check happens
+  -- at compile time, before the DROP TABLE in the same body runs (see
+  -- the drop_schema_cascade_restrict_in_procedure subtest).
+  DROP SCHEMA s_drop CASCADE;
+  DROP ROLE r_drop;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_drop TO r_caller;
+
+statement ok
+SET ROLE r_caller;
+
+# The invoker has no privileges to drop the schema or role directly; only
+# the SECURITY DEFINER procedure can perform these on its behalf.
+statement error pgcode 42501 must be owner of schema
+DROP SCHEMA s_drop CASCADE;
+
+statement error pgcode 42501 does not have CREATEROLE privilege
+DROP ROLE r_drop;
+
+statement ok
+CALL p_sd_drop();
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_drop';
+----
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_drop';
+----
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_sd_drop;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_mgr;
+
+statement ok
+DROP ROLE r_mgr, r_caller;
+
+subtest end
+
+
+subtest security_definer_current_user
+
+# A SECURITY DEFINER body sees current_user = definer, matching PostgreSQL
+# (`CREATE PROCEDURE ... LANGUAGE plpgsql SECURITY DEFINER`). The companion
+# SECURITY INVOKER procedure is the regression baseline: same body, same
+# call, but current_user reports the invoker. session_user is unaffected
+# by SET ROLE in both cases (it tracks the authenticated connection).
+statement ok
+CREATE ROLE r_def_cu;
+
+statement ok
+CREATE ROLE r_inv_cu;
+
+statement ok
+SET ROLE r_def_cu;
+
+statement ok
+CREATE PROCEDURE p_sd_cu(OUT cu STRING, OUT su STRING) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  cu := current_user;
+  su := session_user;
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_si_cu(OUT cu STRING, OUT su STRING) LANGUAGE PLpgSQL SECURITY INVOKER AS $$
+BEGIN
+  cu := current_user;
+  su := session_user;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_cu, p_si_cu TO r_inv_cu;
+
+statement ok
+SET ROLE r_inv_cu;
+
+query TT colnames
+CALL p_sd_cu(NULL, NULL);
+----
+cu        su
+r_def_cu  root
+
+query TT colnames
+CALL p_si_cu(NULL, NULL);
+----
+cu        su
+r_inv_cu  root
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_sd_cu;
+
+statement ok
+DROP PROCEDURE p_si_cu;
+
+statement ok
+DROP ROLE r_def_cu, r_inv_cu;
+
+subtest end
+
+
+subtest security_definer_nested_stack
+
+# Stacking: an outer DEFINER procedure that calls an inner DEFINER
+# procedure sees the inner owner for the inner body, then sees the outer
+# owner again afterwards.
+statement ok
+CREATE ROLE r_outer_def;
+
+statement ok
+CREATE ROLE r_inner_def;
+
+statement ok
+CREATE ROLE r_invoker_nested;
+
+statement ok
+SET ROLE r_inner_def;
+
+statement ok
+CREATE PROCEDURE p_inner_def(OUT u STRING) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  u := current_user;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_inner_def TO PUBLIC;
+
+statement ok
+SET ROLE r_outer_def;
+
+statement ok
+CREATE PROCEDURE p_outer_def(OUT before_inner STRING, OUT inner_u STRING, OUT after_inner STRING)
+LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  before_inner := current_user;
+  CALL p_inner_def(inner_u);
+  after_inner := current_user;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_outer_def TO r_invoker_nested;
+
+statement ok
+SET ROLE r_invoker_nested;
+
+query TTT colnames
+CALL p_outer_def(NULL, NULL, NULL);
+----
+before_inner  inner_u      after_inner
+r_outer_def   r_inner_def  r_outer_def
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_outer_def;
+
+statement ok
+DROP PROCEDURE p_inner_def;
+
+statement ok
+DROP ROLE r_outer_def, r_inner_def, r_invoker_nested;
+
+subtest end
+
+
+subtest security_invoker_calls_definer
+
+# An INVOKER outer procedure calls a DEFINER inner procedure. The outer
+# body sees the invoker as current_user (no push); the inner body sees
+# the inner definer (single push); after the inner returns, the outer
+# body sees the invoker again (pop). Exercises push/pop on top of an
+# unmodified base stack.
+statement ok
+CREATE ROLE r_inner_idi;
+
+statement ok
+CREATE ROLE r_invoker_idi;
+
+statement ok
+SET ROLE r_inner_idi;
+
+statement ok
+CREATE PROCEDURE p_inner_idi(OUT u STRING) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  u := current_user;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_inner_idi TO PUBLIC;
+
+statement ok
+SET ROLE r_invoker_idi;
+
+statement ok
+CREATE PROCEDURE p_outer_idi(OUT before_inner STRING, OUT inner_u STRING, OUT after_inner STRING)
+LANGUAGE PLpgSQL AS $$
+BEGIN
+  before_inner := current_user;
+  CALL p_inner_idi(inner_u);
+  after_inner := current_user;
+END
+$$;
+
+query TTT colnames
+CALL p_outer_idi(NULL, NULL, NULL);
+----
+before_inner   inner_u      after_inner
+r_invoker_idi  r_inner_idi  r_invoker_idi
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_outer_idi;
+
+statement ok
+DROP PROCEDURE p_inner_idi;
+
+statement ok
+DROP ROLE r_inner_idi, r_invoker_idi;
+
+subtest end
+
+
+subtest security_definer_outer_invokes_inner
+
+# A DEFINER outer procedure calls an INVOKER inner procedure. The inner
+# has no push of its own and must inherit the outer's effective user; the
+# outer body sees the outer definer before, during, and after the inner
+# call.
+statement ok
+CREATE ROLE r_def_dii;
+
+statement ok
+CREATE ROLE r_invoker_dii;
+
+statement ok
+CREATE PROCEDURE p_inner_dii(OUT u STRING) LANGUAGE PLpgSQL AS $$
+BEGIN
+  u := current_user;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_inner_dii TO PUBLIC;
+
+statement ok
+SET ROLE r_def_dii;
+
+statement ok
+CREATE PROCEDURE p_outer_dii(OUT before_inner STRING, OUT inner_u STRING, OUT after_inner STRING)
+LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  before_inner := current_user;
+  CALL p_inner_dii(inner_u);
+  after_inner := current_user;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_outer_dii TO r_invoker_dii;
+
+statement ok
+SET ROLE r_invoker_dii;
+
+query TTT colnames
+CALL p_outer_dii(NULL, NULL, NULL);
+----
+before_inner  inner_u    after_inner
+r_def_dii     r_def_dii  r_def_dii
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_outer_dii;
+
+statement ok
+DROP PROCEDURE p_inner_dii;
+
+statement ok
+DROP ROLE r_def_dii, r_invoker_dii;
+
+subtest end
+
+
+subtest security_invoker_unchanged
+
+# Regression guard: SECURITY INVOKER (the default) must still evaluate
+# privilege checks against the invoker, even now that DEFINER works.
+statement ok
+CREATE ROLE r_def_inv WITH CREATEROLE;
+
+statement ok
+CREATE ROLE r_inv_inv;
+
+statement ok
+SET ROLE r_def_inv;
+
+statement ok
+CREATE PROCEDURE p_si_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE ROLE r_si_created;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_si_role TO r_inv_inv;
+
+statement ok
+SET ROLE r_inv_inv;
+
+statement error pgcode 42501 user r_inv_inv does not have CREATEROLE privilege
+CALL p_si_role();
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_si_role;
+
+statement ok
+DROP ROLE r_def_inv, r_inv_inv;
+
+subtest end
+
+
+subtest security_definer_exception_restores
+
+# After a SECURITY DEFINER routine returns (including via an exception
+# block that catches an error in the body), the invoker's effective user
+# is restored.
+statement ok
+CREATE ROLE r_def_exc;
+
+statement ok
+CREATE ROLE r_inv_exc;
+
+statement ok
+SET ROLE r_def_exc;
+
+statement ok
+CREATE PROCEDURE p_sd_exc(OUT u_inside STRING) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  BEGIN
+    u_inside := current_user;
+    RAISE EXCEPTION 'boom';
+  EXCEPTION WHEN raise_exception THEN
+    -- swallow
+  END;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_exc TO r_inv_exc;
+
+statement ok
+SET ROLE r_inv_exc;
+
+query T colnames
+CALL p_sd_exc(NULL);
+----
+u_inside
+r_def_exc
+
+# After the call returns, current_user is back to the invoker.
+query T
+SELECT current_user;
+----
+r_inv_exc
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_sd_exc;
+
+statement ok
+DROP ROLE r_def_exc, r_inv_exc;
+
+subtest end
+
+
+subtest security_definer_nested_definer_tail_call
+
+# An outer SECURITY DEFINER procedure whose final body statement is a CALL
+# to an inner SECURITY DEFINER procedure that performs DDL. The inner CALL
+# is in tail-call position. The inner owner has the privilege required by
+# the DDL; the outer owner and invoker do not. The schema must be created
+# and owned by the inner owner.
+statement ok
+CREATE ROLE r_outer_tc;
+GRANT CREATE ON DATABASE test TO r_outer_tc;
+
+statement ok
+CREATE ROLE r_inner_tc;
+GRANT CREATE ON DATABASE test TO r_inner_tc;
+
+statement ok
+CREATE ROLE r_invoker_tc;
+
+statement ok
+SET ROLE r_inner_tc;
+
+statement ok
+CREATE PROCEDURE p_inner_tc_ddl() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CREATE SCHEMA s_tc;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_inner_tc_ddl TO PUBLIC;
+
+statement ok
+SET ROLE r_outer_tc;
+
+statement ok
+CREATE PROCEDURE p_outer_tc() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CALL p_inner_tc_ddl();
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_outer_tc TO r_invoker_tc;
+
+statement ok
+SET ROLE r_invoker_tc;
+
+statement ok
+CALL p_outer_tc();
+
+# Owner is the inner DEFINER, not the outer DEFINER and not the invoker.
+query TT
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name = 's_tc';
+----
+s_tc  r_inner_tc
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP SCHEMA s_tc;
+
+statement ok
+DROP PROCEDURE p_outer_tc;
+
+statement ok
+DROP PROCEDURE p_inner_tc_ddl;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_outer_tc, r_inner_tc;
+
+statement ok
+DROP ROLE r_outer_tc, r_inner_tc, r_invoker_tc;
+
+subtest end
+
+
+subtest security_definer_sql_language
+
+# LANGUAGE SQL procedure body: the definer override must apply
+# regardless of routine language. Verify ownership lands on the definer.
+statement ok
+CREATE ROLE r_def_sql;
+GRANT CREATE ON DATABASE test TO r_def_sql;
+
+statement ok
+CREATE ROLE r_inv_sql;
+GRANT CREATE ON DATABASE test TO r_inv_sql;
+
+statement ok
+SET ROLE r_def_sql;
+
+statement ok
+CREATE PROCEDURE p_sd_sql() LANGUAGE SQL SECURITY DEFINER AS $$
+  CREATE SCHEMA s_sd_sql;
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_sql TO r_inv_sql;
+
+statement ok
+SET ROLE r_inv_sql;
+
+statement ok
+CALL p_sd_sql();
+
+query TT
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name = 's_sd_sql';
+----
+s_sd_sql  r_def_sql
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP SCHEMA s_sd_sql;
+
+statement ok
+DROP PROCEDURE p_sd_sql;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_def_sql, r_inv_sql;
+
+statement ok
+DROP ROLE r_def_sql, r_inv_sql;
+
+subtest end
+
+
+subtest security_definer_multi_statement_body
+
+# Multiple independent DDL statements in one SECURITY DEFINER body.
+# Confirms the effective-user override stays in effect across all body
+# statements rather than leaking after the first. Targets are deliberately
+# non-dependent to avoid the early-binding limitation covered by
+# drop_schema_cascade_restrict_in_procedure.
+statement ok
+CREATE ROLE r_def_multi WITH CREATEROLE;
+GRANT CREATE ON DATABASE test TO r_def_multi;
+
+statement ok
+CREATE ROLE r_inv_multi;
+
+statement ok
+SET ROLE r_def_multi;
+
+statement ok
+CREATE PROCEDURE p_sd_multi() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CREATE SCHEMA s_multi_a;
+  CREATE SCHEMA s_multi_b;
+  CREATE ROLE r_multi_created;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_multi TO r_inv_multi;
+
+statement ok
+SET ROLE r_inv_multi;
+
+statement ok
+CALL p_sd_multi();
+
+# All three objects record the definer, not the invoker.
+query TT rowsort
+SELECT schema_name, owner FROM [SHOW SCHEMAS]
+WHERE schema_name IN ('s_multi_a', 's_multi_b');
+----
+s_multi_a  r_def_multi
+s_multi_b  r_def_multi
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_multi_created';
+----
+r_multi_created
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP SCHEMA s_multi_a;
+
+statement ok
+DROP SCHEMA s_multi_b;
+
+statement ok
+DROP ROLE r_multi_created;
+
+statement ok
+DROP PROCEDURE p_sd_multi;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_def_multi;
+
+statement ok
+DROP ROLE r_def_multi, r_inv_multi;
+
+subtest end
+
+
+subtest security_definer_unhandled_error_restores
+
+# Companion to security_definer_exception_restores: an uncaught
+# exception must still pop the definer push.
+statement ok
+CREATE ROLE r_def_unh;
+
+statement ok
+CREATE ROLE r_inv_unh;
+
+statement ok
+SET ROLE r_def_unh;
+
+statement ok
+CREATE PROCEDURE p_sd_unh() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  RAISE EXCEPTION 'boom';
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_unh TO r_inv_unh;
+
+statement ok
+SET ROLE r_inv_unh;
+
+statement error pgcode P0001 pq: boom
+CALL p_sd_unh();
+
+# Effective user is back to the invoker after the failed CALL.
+query T
+SELECT current_user;
+----
+r_inv_unh
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_sd_unh;
+
+statement ok
+DROP ROLE r_def_unh, r_inv_unh;
+
+subtest end
+
+
+subtest security_definer_has_schema_privilege
+
+# has_*_privilege builtins without a user argument resolve against
+# current_user, so inside a DEFINER body they reflect the definer.
+statement ok
+CREATE ROLE r_def_priv;
+GRANT CREATE ON DATABASE test TO r_def_priv;
+
+statement ok
+CREATE ROLE r_inv_priv;
+
+statement ok
+SET ROLE r_def_priv;
+
+statement ok
+CREATE SCHEMA s_priv;
+
+statement ok
+CREATE PROCEDURE p_sd_priv(OUT has_usage BOOL) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  has_usage := has_schema_privilege('s_priv', 'USAGE');
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_priv TO r_inv_priv;
+
+statement ok
+SET ROLE r_inv_priv;
+
+# Invoker has no access; definer (schema owner) does.
+query B
+SELECT has_schema_privilege('s_priv', 'USAGE');
+----
+false
+
+query B
+CALL p_sd_priv(NULL);
+----
+true
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP SCHEMA s_priv;
+
+statement ok
+DROP PROCEDURE p_sd_priv;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_def_priv;
+
+statement ok
+DROP ROLE r_def_priv, r_inv_priv;
+
+subtest end
+
+
+subtest security_definer_has_function_privilege
+
+# Companion to security_definer_has_schema_privilege covering the
+# user-defined-function branch of has_function_privilege, which was a
+# pre-existing outlier reaching for SessionData().User() directly.
+statement ok
+CREATE ROLE r_def_fpriv;
+GRANT CREATE ON DATABASE test TO r_def_fpriv;
+
+statement ok
+CREATE ROLE r_inv_fpriv;
+
+statement ok
+SET ROLE r_def_fpriv;
+
+statement ok
+CREATE FUNCTION f_fpriv(n INT) RETURNS INT LANGUAGE SQL AS $$ SELECT n + 1 $$;
+
+# EXECUTE is granted to PUBLIC by default; revoke so the invoker truly
+# has no path to the function.
+statement ok
+REVOKE EXECUTE ON FUNCTION f_fpriv(INT) FROM PUBLIC;
+
+statement ok
+CREATE PROCEDURE p_sd_fpriv(OUT has_exec BOOL) LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  has_exec := has_function_privilege('f_fpriv(INT)', 'EXECUTE');
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_fpriv TO r_inv_fpriv;
+
+statement ok
+SET ROLE r_inv_fpriv;
+
+# Invoker has no EXECUTE; definer (function owner) does.
+query B
+SELECT has_function_privilege('f_fpriv(INT)', 'EXECUTE');
+----
+false
+
+query B
+CALL p_sd_fpriv(NULL);
+----
+true
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_sd_fpriv;
+
+statement ok
+DROP FUNCTION f_fpriv(INT);
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_def_fpriv;
+
+statement ok
+DROP ROLE r_def_fpriv, r_inv_fpriv;
+
+subtest end
+
+
+subtest security_definer_plpgsql_loop
+
+# PL/pgSQL loops compile into INVOKER continuation routines that
+# tail-call through routineGenerator.Start's for-loop. The outer DEFINER
+# push must remain in effect for every continuation; RAISE NOTICE on each
+# iteration makes the per-iteration current_user visible.
+statement ok
+CREATE ROLE r_def_loop;
+
+statement ok
+CREATE ROLE r_inv_loop;
+
+statement ok
+SET ROLE r_def_loop;
+
+statement ok
+CREATE PROCEDURE p_sd_loop() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+DECLARE
+  i INT := 0;
+BEGIN
+  WHILE i < 5 LOOP
+    RAISE NOTICE 'iter % current_user=%', i, current_user;
+    i := i + 1;
+  END LOOP;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_loop TO r_inv_loop;
+
+statement ok
+SET ROLE r_inv_loop;
+
+query T noticetrace
+CALL p_sd_loop();
+----
+NOTICE: iter 0 current_user=r_def_loop
+NOTICE: iter 1 current_user=r_def_loop
+NOTICE: iter 2 current_user=r_def_loop
+NOTICE: iter 3 current_user=r_def_loop
+NOTICE: iter 4 current_user=r_def_loop
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p_sd_loop;
+
+statement ok
+DROP ROLE r_def_loop, r_inv_loop;
+
+subtest end
+
+
+subtest security_definer_with_commit_rollback
+
+# Verify the DEFINER push survives across PL/pgSQL COMMIT/ROLLBACK inside
+# the procedure body. COMMIT/ROLLBACK end the current transaction and
+# start a new one; the routine resumes via a cached resumeProc memo that
+# bypasses the optbuilder's PushEffectiveUser, so the continuation's own
+# UDFDefinition must carry SecurityMode/RoutineOwner for the runtime push
+# in routineGenerator.Start to fire on resume.
+statement ok
+CREATE ROLE r_def_txn;
+
+statement ok
+GRANT CREATE ON DATABASE test TO r_def_txn;
+
+statement ok
+CREATE ROLE r_inv_txn;
+
+statement ok
+SET ROLE r_def_txn;
+
+statement ok
+CREATE PROCEDURE p_sd_txn() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CREATE SCHEMA s_txn_a;
+  COMMIT;
+  CREATE SCHEMA s_txn_b;
+  COMMIT;
+  CREATE SCHEMA s_txn_c;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_txn TO r_inv_txn;
+
+statement ok
+SET ROLE r_inv_txn;
+
+statement ok
+CALL p_sd_txn();
+
+# All three schemas record the definer despite the intermediate COMMITs.
+query TT rowsort
+SELECT schema_name, owner FROM [SHOW SCHEMAS]
+WHERE schema_name IN ('s_txn_a', 's_txn_b', 's_txn_c');
+----
+s_txn_a  r_def_txn
+s_txn_b  r_def_txn
+s_txn_c  r_def_txn
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP SCHEMA s_txn_a;
+
+statement ok
+DROP SCHEMA s_txn_b;
+
+statement ok
+DROP SCHEMA s_txn_c;
+
+statement ok
+DROP PROCEDURE p_sd_txn;
+
+# ROLLBACK variant: the first CREATE SCHEMA is rolled back; only the
+# post-ROLLBACK schema persists, owned by the definer.
+statement ok
+SET ROLE r_def_txn;
+
+statement ok
+CREATE PROCEDURE p_sd_txn_rb() LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+BEGIN
+  CREATE SCHEMA s_txn_rb_a;
+  ROLLBACK;
+  CREATE SCHEMA s_txn_rb_b;
+END
+$$;
+
+statement ok
+GRANT EXECUTE ON PROCEDURE p_sd_txn_rb TO r_inv_txn;
+
+statement ok
+SET ROLE r_inv_txn;
+
+statement ok
+CALL p_sd_txn_rb();
+
+query TT rowsort
+SELECT schema_name, owner FROM [SHOW SCHEMAS]
+WHERE schema_name IN ('s_txn_rb_a', 's_txn_rb_b');
+----
+s_txn_rb_b  r_def_txn
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP SCHEMA s_txn_rb_b;
+
+statement ok
+DROP PROCEDURE p_sd_txn_rb;
+
+statement ok
+REVOKE CREATE ON DATABASE test FROM r_def_txn;
+
+statement ok
+DROP ROLE r_def_txn, r_inv_txn;
+
+subtest end

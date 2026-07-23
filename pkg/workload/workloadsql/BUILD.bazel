@@ -1,0 +1,52 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "workloadsql",
+    srcs = [
+        "dataload.go",
+        "workloadsql.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/workloadsql",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/lexbase",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/errorutil",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "//pkg/workload",
+        "@com_github_cockroachdb_cockroach_go_v2//crdb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_version//:version",
+        "@org_golang_x_sync//errgroup",
+        "@org_golang_x_time//rate",
+    ],
+)
+
+go_test(
+    name = "workloadsql_test",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "sliceslice_test.go",
+        "workloadsql_test.go",
+    ],
+    embed = [":workloadsql"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/uuid",
+        "//pkg/workload",
+        "//pkg/workload/bank",
+    ],
+)

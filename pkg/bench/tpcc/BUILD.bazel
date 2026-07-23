@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "tpcc_test",
+    srcs = [
+        "bench_test.go",
+        "main_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        "//pkg/base",
+        "//pkg/bench/benchprof",
+        "//pkg/rpc/nodedialer",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql/stats",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/ts",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/workload",
+        "//pkg/workload/fixture",
+        "//pkg/workload/histogram",
+        "//pkg/workload/tpcc",
+        "//pkg/workload/workloadsql",
+    ],
+)

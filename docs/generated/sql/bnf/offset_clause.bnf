@@ -1,0 +1,4 @@
+offset_clause ::=
+	'OFFSET' a_expr
+	| 'OFFSET' select_fetch_first_value 'ROW'
+	| 'OFFSET' select_fetch_first_value 'ROWS'

@@ -1,0 +1,132 @@
+# Single-node - both profiles
+upload-profiles
+{
+  "nodes": {
+    "1": {
+      "profiles": [
+        {"type": "cpu", "timestamp": 1718972610, "duration": 20},
+        {"type": "heap", "timestamp": 1718974401, "duration": 20}
+      ]
+    }
+  }
+}
+----
+=== uploading profiles
+Upload ID: abc-20241114000000
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=profiles
+{"start":"","end":"","attachments":["cpu.pprof"],"tags_profiler":"cluster:ABC,env:debug,file_name:cpu.pprof,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
+{"start":"","end":"","attachments":["heap.pprof"],"tags_profiler":"cluster:ABC,env:debug,file_name:heap.pprof,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
+
+
+# Multi-node - both profiles
+upload-profiles tags=foo:bar
+{
+  "nodes": {
+    "1": {
+      "profiles": [
+        {"type": "cpu", "timestamp": 1718972610, "duration": 20},
+        {"type": "heap", "timestamp": 1718974401, "duration": 20}
+      ]
+    },
+    "2": {
+      "profiles": [
+        {"type": "cpu", "timestamp": 1718974543, "duration": 20},
+        {"type": "heap", "timestamp": 1718974535, "duration": 20}
+      ]
+    }
+  }
+}
+----
+=== uploading profiles
+Upload ID: abc-20241114000000
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --tags=foo:bar --cluster=ABC --include=profiles
+{"start":"","end":"","attachments":["cpu.pprof"],"tags_profiler":"cluster:ABC,env:debug,file_name:cpu.pprof,foo:bar,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
+{"start":"","end":"","attachments":["cpu.pprof"],"tags_profiler":"cluster:ABC,env:debug,file_name:cpu.pprof,foo:bar,node_id:2,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
+{"start":"","end":"","attachments":["heap.pprof"],"tags_profiler":"cluster:ABC,env:debug,file_name:heap.pprof,foo:bar,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
+{"start":"","end":"","attachments":["heap.pprof"],"tags_profiler":"cluster:ABC,env:debug,file_name:heap.pprof,foo:bar,node_id:2,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
+
+# Single-node - only CPU profile
+upload-profiles tags=customer:user-given-name,cluster:XYZ
+{
+  "nodes": {
+    "1": {
+      "profiles": [
+        {"type": "cpu", "timestamp": 1718972610, "duration": 20}
+      ]
+    }
+  }
+}
+----
+=== uploading profiles
+Upload ID: abc-20241114000000
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --tags=customer:user-given-name,cluster:XYZ --cluster=ABC --include=profiles
+{"start":"","end":"","attachments":["cpu.pprof"],"tags_profiler":"cluster:XYZ,customer:user-given-name,env:debug,file_name:cpu.pprof,foo:bar,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
+
+
+# Single-node - no profiles found
+upload-profiles
+{
+  "nodes": {
+    "1": {}
+  }
+}
+----
+=== uploading profiles
+Upload ID: abc-20241114000000
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=profiles
+
+
+# Colliding tags - env provided by the user should take precedence
+upload-profiles tags=env:SH
+{
+  "nodes": {
+    "1": {
+      "profiles": [
+        {"type": "cpu", "timestamp": 1718972610, "duration": 20},
+        {"type": "heap", "timestamp": 1718974401, "duration": 20}
+      ]
+    }
+  }
+}
+----
+=== uploading profiles
+Upload ID: abc-20241114000000
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --tags=env:SH --cluster=ABC --include=profiles
+{"start":"","end":"","attachments":["cpu.pprof"],"tags_profiler":"cluster:ABC,env:SH,file_name:cpu.pprof,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
+{"start":"","end":"","attachments":["heap.pprof"],"tags_profiler":"cluster:ABC,env:SH,file_name:heap.pprof,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
+
+
+# Single-node - both profiles error
+upload-profiles tags=ERR
+{
+  "nodes": {
+    "1": {
+      "profiles": [
+        {"type": "cpu", "timestamp": 1718972610, "duration": 20},
+        {"type": "heap", "timestamp": 1718974401, "duration": 20}
+      ]
+    }
+  }
+}
+----
+=== uploading profiles
+Failed to upload profiles: failed to upload profiles to Datadog
+Upload ID: abc-20241114000000
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --tags=ERR --cluster=ABC --include=profiles
+
+
+# Customer name not provided by the user
+upload-profiles tags=foo:bar skip-cluster-name=true
+{
+  "nodes": {
+    "1": {
+      "profiles": [
+        {"type": "cpu", "timestamp": 1718972610, "duration": 20},
+        {"type": "heap", "timestamp": 1718974401, "duration": 20}
+      ]
+    }
+  }
+}
+----
+ERROR: cluster name is required for uploading artifacts
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --tags=foo:bar --include=profiles

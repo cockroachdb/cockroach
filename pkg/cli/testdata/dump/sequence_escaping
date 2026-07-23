@@ -1,0 +1,14 @@
+sql
+CREATE DATABASE d;
+CREATE SEQUENCE d."'";
+----
+CREATE SEQUENCE
+
+dump d
+----
+----
+CREATE SEQUENCE public."'" MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+
+SELECT setval(e'"\'"', 1, false);
+----
+----

@@ -1,0 +1,159 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package logical
+
+import (
+	"context"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrsettings"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnapply"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnmode"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+)
+
+// resumeTransactionalLdr runs the transactional LDR ingestion loop, converging
+// on the earliest unappliable transaction before pausing the job.
+//
+// The control loop has three outcomes per attempt:
+//  1. The coordinator returns a txnapply.ReplicationError at timestamp T:
+//     capture it as the candidate pause cause, shrink endTime to T.Prev(), and
+//     retry. The next attempt's mergefeed will skip events at and after T, so
+//     a conflicting txn at T can never re-trigger the same error; instead, an
+//     earlier conflict (if any) will surface.
+//  2. The coordinator returns ErrEndTimeReached: every txn with timestamp
+//     <= endTime has been applied without surfacing a new conflict, so the
+//     captured ReplicationError identifies the earliest conflicting
+//     transaction. Pause the job with that error.
+//  3. Any other error: propagate it; resumeWithRetries decides whether to
+//     retry or surface the failure.
+func (r *logicalReplicationResumer) resumeTransactionalLdr(
+	ctx context.Context, jobExecCtx sql.JobExecContext,
+) error {
+	endTime := hlc.MaxTimestamp
+	var capturedErr *txnapply.ReplicationError
+	err := r.resumeWithRetries(ctx, jobExecCtx, func() error {
+		err := r.runTxnCoordinator(ctx, jobExecCtx, endTime)
+		switch {
+		case errors.As(err, &capturedErr):
+			endTime = capturedErr.Timestamp.Prev()
+			return err
+		case errors.Is(err, txnmode.ErrEndTimeReached):
+			if capturedErr == nil {
+				return jobs.MarkAsPermanentJobError(errors.AssertionFailedf(
+					"transactional LDR reached replication cutoff %s without a captured conflict error",
+					endTime,
+				))
+			}
+			return jobs.MarkPauseRequestError(capturedErr)
+		default:
+			return err
+		}
+	})
+	return r.handleResumeError(ctx, jobExecCtx, err)
+}
+
+// runTxnCoordinator sets up and runs the transactional LDR coordinator.
+func (r *logicalReplicationResumer) runTxnCoordinator(
+	ctx context.Context, jobExecCtx sql.JobExecContext, endTime hlc.Timestamp,
+) error {
+	// Skip setup entirely if the job has already replicated past endTime. This
+	// happens when the convergence loop has shrunk endTime below the persisted
+	// frontier and there is no work left in the [replicatedTime, endTime]
+	// window.
+	replicatedTime, err := replicatedTimeFromJob(ctx, jobExecCtx.ExecCfg().InternalDB, r.job)
+	if err != nil {
+		return err
+	}
+	if endTime.LessEq(replicatedTime) {
+		return txnmode.ErrEndTimeReached
+	}
+
+	client, err := r.getActiveClient(ctx, jobExecCtx.ExecCfg().InternalDB)
+	if err != nil {
+		return err
+	}
+	defer closeAndLog(ctx, client)
+
+	if err := r.heartbeatAndCheckActive(ctx, client); err != nil {
+		return err
+	}
+
+	planner := MakeLogicalReplicationPlanner(jobExecCtx, r.job, client)
+	sourcePlan, err := planner.GetSourcePlan(ctx)
+	if err != nil {
+		return err
+	}
+
+	uris, err := r.getClusterUris(ctx, r.job, jobExecCtx.ExecCfg().InternalDB)
+	if err != nil {
+		return err
+	}
+	if err := r.checkpointPartitionURIs(ctx, uris, sourcePlan.Topology.SerializedClusterUris()); err != nil {
+		return err
+	}
+
+	flowPlan, planCtx, applierInstanceIDs, err :=
+		txnmode.PlanTxnReplication(ctx, r.job, jobExecCtx, sourcePlan, replicatedTime, endTime)
+	if err != nil {
+		return errors.Wrap(err, "building DistSQL plan")
+	}
+
+	payload := r.job.Details().(jobspb.LogicalReplicationDetails)
+	heartbeatInterval := func() time.Duration {
+		return ldrsettings.HeartbeatFrequency.Get(&jobExecCtx.ExecCfg().Settings.SV)
+	}
+	heartbeatSender := streamclient.NewHeartbeatSender(
+		ctx,
+		client,
+		streampb.StreamID(payload.StreamID),
+		heartbeatInterval,
+	)
+	defer func() {
+		_ = heartbeatSender.Stop()
+	}()
+
+	runFlow := func(ctx context.Context) error {
+		return txnmode.RunDistSQLFlow(
+			ctx, jobExecCtx, flowPlan, planCtx,
+			r.job, heartbeatSender.FrontierUpdates,
+			applierInstanceIDs, replicatedTime, endTime,
+		)
+	}
+	startHeartbeat := func(ctx context.Context) error {
+		heartbeatSender.Start(ctx, timeutil.DefaultTimeSource{})
+		return heartbeatSender.Wait()
+	}
+
+	return ctxgroup.GoAndWait(ctx, runFlow, startHeartbeat)
+}
+
+// replicatedTimeFromJob returns the replicated time from ProgressStorage,
+// falling back to the replication start time if no checkpoint exists.
+func replicatedTimeFromJob(ctx context.Context, db isql.DB, job *jobs.Job) (hlc.Timestamp, error) {
+	var resolved hlc.Timestamp
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		_, resolved, _, err = job.ProgressStorage().Get(ctx, txn)
+		return err
+	}); err != nil {
+		return hlc.Timestamp{}, err
+	}
+	if !resolved.IsEmpty() {
+		return resolved, nil
+	}
+	payload := job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
+	return payload.ReplicationStartTime, nil
+}

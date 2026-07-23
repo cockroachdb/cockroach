@@ -1,0 +1,371 @@
+filter
+functions:
+----
+
+subtest at_ident
+
+comp at=8
+select xor
+----
+ii'
+  ^
+--
+functions: completing for "xor" (7,10) with schema ""
+--sql:
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
+       'functions' AS category,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"xor", 7, 10, ""}
+
+comp at=12
+select xor
+----
+ii_
+  ^
+--
+functions: completing for "" (12,12) with schema ""
+--sql:
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
+       'functions' AS category,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"", 12, 12, ""}
+
+subtest end
+
+subtest after_period_unknown
+
+comp at=10
+select a.xor
+----
+ii.i'
+    ^
+--
+functions: completing for "xor" (7,12) with schema "a"
+--sql:
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
+       'functions' AS category,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"xor", 7, 12, "a"}
+
+comp at=10
+select a.
+----
+ii._
+   ^
+--
+functions: completing for "" (7,9) with schema "a"
+--sql:
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
+       'functions' AS category,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"", 7, 9, "a"}
+
+subtest end
+
+subtest after_vschema
+
+comp at=22
+select crdb_internal.xor
+----
+ii.i'
+    ^
+--
+functions: completing for "xor" (7,24) with schema "crdb_internal"
+--sql:
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
+       'functions' AS category,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"xor", 7, 24, "crdb_internal"}
+
+comp at=21
+select crdb_internal.
+----
+ii.'
+   ^
+--
+functions: completing for "" (7,21) with schema "crdb_internal"
+--sql:
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
+       'functions' AS category,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"", 7, 21, "crdb_internal"}
+
+
+comp at=20
+select pg_catalog.xor
+----
+ii.i'
+    ^
+--
+functions: completing for "xor" (7,21) with schema "pg_catalog"
+--sql:
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
+       'functions' AS category,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"xor", 7, 21, "pg_catalog"}
+
+comp at=18
+select pg_catalog.
+----
+ii.'
+   ^
+--
+functions: completing for "" (7,18) with schema "pg_catalog"
+--sql:
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
+       'functions' AS category,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"", 7, 18, "pg_catalog"}
+
+
+comp at=27
+select information_schema.xor
+----
+ii.i'
+    ^
+--
+functions: completing for "xor" (7,29) with schema "information_schema"
+--sql:
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
+       'functions' AS category,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"xor", 7, 29, "information_schema"}
+
+comp at=26
+select information_schema.
+----
+ii.'
+   ^
+--
+functions: completing for "" (7,26) with schema "information_schema"
+--sql:
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
+       'functions' AS category,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"", 7, 26, "information_schema"}
+
+subtest end
+
+subtest quoted_ident
+
+comp at=21
+select "pg_catalog".xor
+----
+ii.i'
+    ^
+--
+functions: completing for "xor" (7,23) with schema "pg_catalog"
+--sql:
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
+       'functions' AS category,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"xor", 7, 23, "pg_catalog"}
+
+# Quoted uppercase is an entire schema entirely.
+comp at=22
+select "PG_CATALOG".xor
+----
+ii.i'
+    ^
+--
+functions: completing for "xor" (7,23) with schema "PG_CATALOG"
+--sql:
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
+       'functions' AS category,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"xor", 7, 23, "PG_CATALOG"}
+
+
+subtest end

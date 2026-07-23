@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "pgconnect",
+    srcs = ["pgconnect.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cmp-protocol/pgconnect",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgwirebase",
+        "//pkg/util/ctxgroup",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgproto3_v2//:pgproto3",
+    ],
+)

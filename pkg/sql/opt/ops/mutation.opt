@@ -1,0 +1,486 @@
+# mutation.opt contains Optgen language definitions for the mutation statement
+# operator (Insert, Upsert, Update, Delete).
+
+# Insert evaluates a relational input expression, and inserts values from it
+# into a target table. The input may be an arbitrarily complex expression:
+#
+#   INSERT INTO ab SELECT x, y+1 FROM xy ORDER BY y
+#
+# It can also be a simple VALUES clause:
+#
+#   INSERT INTO ab VALUES (1, 2)
+#
+# It may also return rows, which can be further composed:
+#
+#   SELECT a + b FROM [INSERT INTO ab VALUES (1, 2) RETURNING a, b]
+#
+# The Insert operator is capable of inserting values into computed columns and
+# mutation columns, which are not writable (or even visible in the case of
+# mutation columns) by SQL users.
+[Relational, Mutation, WithBinding]
+define Insert {
+    Input RelExpr
+    UniqueChecks UniqueChecksExpr
+    FastPathUniqueChecks FastPathUniqueChecksExpr
+    FKChecks FKChecksExpr
+    _ MutationPrivate
+}
+
+[Private]
+define MutationPrivate {
+    # Table identifies the table which is being mutated. It is an id that can be
+    # passed to the Metadata.Table method in order to fetch cat.Table metadata.
+    Table TableID
+
+    # InsertCols are columns from the Input expression that will be inserted into
+    # the target table. They must be a subset of the Input expression's output
+    # columns. The count and order of columns corresponds to the count and order
+    # of the target table's columns, including in-progress schema mutation
+    # columns. If any column ID is zero, then that column will not be part of
+    # the insert operation (e.g. delete-only mutation column). Column values are
+    # read from the input columns and are then inserted into the corresponding
+    # table columns. For example:
+    #
+    #   INSERT INTO ab VALUES (1, 2)
+    #
+    # If there is a delete-only mutation column "c", then InsertCols would contain
+    # [a_colid, b_colid, 0].
+    InsertCols OptionalColList
+
+    # FetchCols are columns from the Input expression that will be fetched from
+    # the target table. They must be a subset of the Input expression's output
+    # columns. The count and order of columns corresponds to the count and order
+    # of the target table's columns, including in-progress schema mutation
+    # columns. If any column ID is zero, then that column will not take part in
+    # the update operation (e.g. columns in unreferenced column family).
+    #
+    # Fetch columns are referenced by update, computed, and constraint
+    # expressions. They're also needed to formulate the final key/value pairs;
+    # updating even one column in a family requires the entire value to be
+    # reformulated. For example:
+    #
+    #   CREATE TABLE abcd (
+    #     a INT PRIMARY KEY, b INT, c INT, d INT, e INT,
+    #     FAMILY (a, b), FAMILY (c, d), FAMILY (e))
+    #   UPDATE ab SET c=c+1
+    #
+    # The (a, c, d) columns need to be fetched from the store in order to satisfy
+    # the UPDATE query. The "a" column is needed because it's in the primary key.
+    # The "c" column is needed because its value is used as part of computing an
+    # updated value, and the "d" column is needed because it's in the same family
+    # as "c". Taking all this into account, FetchCols would contain this list:
+    # [a_colid, 0, c_colid, d_colid, 0].
+    FetchCols OptionalColList
+
+    # UpdateCols are columns from the Input expression that contain updated values
+    # for columns of the target table. They must be a subset of the Input
+    # expression's output columns. The count and order of columns corresponds to
+    # the count and order of the target table's columns, including in-progress
+    # schema mutation columns. If any column ID is zero, then that column will not
+    # take part in the update operation (e.g. columns that are not updated).
+    # Updated column values are read from the input columns and are then inserted
+    # into the corresponding table columns. For example:
+    #
+    #   CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT AS (b+1) AS STORED)
+    #   UPDATE abc SET b=1
+    #
+    # Since column "b" is updated, and "c" is a computed column dependent on "b",
+    # then UpdateCols would contain [0, b_colid, c_colid].
+    UpdateCols OptionalColList
+
+    # CheckCols are columns from the Input expression containing the results of
+    # evaluating the check constraints from the target table. Evaluating a check
+    # check constraint expression produces a boolean value which is projected as
+    # a column and then checked by the mutation operator. Check columns must be
+    # a subset of the Input expression's output columns. The count and order of
+    # columns corresponds to the count and order of the target table's Check
+    # collection (see the opt.Table.CheckCount and opt.Table.Check methods). If
+    # any column ID is zero, then that check will not be performed (i.e. because
+    # it's been statically proved to be true). For example:
+    #
+    #   CREATE TABLE abc (a INT CHECK (a > 0), b INT, c INT CHECK (c <> 0))
+    #   UPDATE abc SET a=1, b=b+1
+    #
+    # Since the check constraint for column "a" can be statically proven to be
+    # true, CheckCols would contain [0, b_colid].
+    # TODO(radu): we don't actually implement this optimization currently.
+    CheckCols OptionalColList
+
+    # PartialIndexPutCols are columns from the Input expression containing the
+    # results of evaluating each partial index predicate from the target table
+    # for the mutation. Evaluating a partial index predicate produces a boolean
+    # value which is projected as a column and used during execution to
+    # determine whether or not to write a row to the partial index. The count
+    # and order of columns corresponds to the count and order of the target
+    # table's partial indexes. For example:
+    #
+    #   CREATE TABLE abc (
+    #     a INT, b INT, c INT,
+    #     INDEX (a) WHERE a > 0,
+    #     INDEX (b),
+    #     INDEX (c) WHERE c > 5
+    #   )
+    #
+    # In this case there are two columns. The first is the result of evaluating
+    # the predicate expression of the index on a. The second is the result of
+    # evaluating the predicate of the index on c. The index on b is not a
+    # partial index, because it has no predicate, so it is not included in
+    # PartialIndexPutCols.
+    PartialIndexPutCols OptionalColList
+
+    # PartialIndexDelCols is similar to PartialIndexPutCols, but instead
+    # indicates when the previous version of a row must be deleted from a
+    # partial index during updates or deletes in order to maintain the state of
+    # the index.
+    PartialIndexDelCols OptionalColList
+
+    # VectorIndexDelPartitionCols are columns from the Input expression
+    # containing the keys for the partitions that the deleted or updated rows
+    # should be removed from. The length is always equal to the number of vector
+    # indexes on the table.
+    VectorIndexDelPartitionCols OptionalColList
+
+    # VectorIndexPutPartitionCols are columns from the Input expression
+    # containing the keys for the partitions that the inserted or updated rows
+    # should be added to. The length is always equal to the number of vector
+    # indexes on the table.
+    VectorIndexPutPartitionCols OptionalColList
+
+    # VectorIndexPutQuantizedVecCols are columns from the Input expression
+    # containing the quantized and encoded vectors that should be inserted into
+    # the index. The length is always equal to the number of vector indexes on
+    # the table.
+    VectorIndexPutQuantizedVecCols OptionalColList
+
+    # CanaryCol is used only with the Upsert operator. It identifies the column
+    # that the execution engine uses to decide whether to insert or to update.
+    # If the canary column value is null for a particular input row, then a new
+    # row is inserted into the table. Otherwise, the existing row is updated.
+    # While CanaryCol is 0 for all non-Upsert operators, it is also 0 for the
+    # "blind" Upsert case in which a "Put" KV operator inserts a new row or
+    # overwrites an existing row.
+    CanaryCol ColumnID
+
+    # ArbiterIndexes is used only with the Insert and Upsert operators. It
+    # identifies the unique indexes used to detect conflicts for UPSERT and
+    # INSERT ON CONFLICT statements.
+    ArbiterIndexes IndexOrdinals
+
+    # ArbiterConstraints is used only with the Insert and Upsert operators. It
+    # identifies the unique without index constraints used to detect conflicts
+    # for UPSERT and INSERT ON CONFLICT statements.
+    ArbiterConstraints UniqueOrdinals
+
+    # ReturnCols are the set of columns returned by the mutation operator when
+    # the RETURNING clause has been specified. By default, the return columns
+    # include all columns in the table, including hidden columns, but not
+    # including any columns that are undergoing mutation (being added or dropped
+    # as part of online schema change). If no RETURNING clause was specified,
+    # then ReturnCols is nil.
+    ReturnCols OptionalColList
+
+    # PassthroughCols are columns that the mutation needs to passthrough from
+    # its input. It's similar to the passthrough columns in projections. This
+    # is useful for `UPDATE .. FROM` and `DELETE ... USING` mutations where the
+    # `RETURNING` clause references columns from tables in the `FROM` or `USING`
+    # clause, respectively. When this happens the mutation will need to pass through
+    # those referenced columns from its input.
+    PassthroughCols ColList
+
+    # TriggerCols is the set of columns needed for building AFTER triggers, and
+    # which cannot be pruned from the mutation input. Note that TriggerCols may
+    # intersect with the other sets above, and it may also contain columns that
+    # are not part of the above sets.
+    TriggerCols ColSet
+
+    # Mutation operators can act similarly to a With operator: they buffer their
+    # input, making it accessible to FK queries. If this is not required, WithID
+    # is zero.
+    WithID WithID
+
+    # FKCascades stores metadata necessary for building cascading queries.
+    FKCascades FKCascades
+
+    # Unique indexes where uniqueness will be ensured by writing tombstones to
+    # all partitions.
+    UniqueWithTombstoneIndexes IndexOrdinals
+
+    # AfterTriggers stores metadata necessary for building AFTER triggers.
+    AfterTriggers AfterTriggers
+
+    # VectorInsert indicates that the mutation is an insert with a specialized
+    # vectorized implementation used for Copy statements.
+    VectorInsert bool
+
+    # Swap indicates that the mutation is an update swap or delete swap.
+    Swap bool
+}
+
+# Update evaluates a relational input expression that fetches existing rows from
+# a target table and computes new values for one or more columns. Arbitrary
+# subsets of rows can be selected from the target table and processed in order,
+# as with this example:
+#
+#   UPDATE abc SET b=10 WHERE a>0 ORDER BY b+c LIMIT 10
+#
+# The Update operator will also update any computed columns, including mutation
+# columns that are computed.
+[Relational, Mutation, WithBinding]
+define Update {
+    Input RelExpr
+    UniqueChecks UniqueChecksExpr
+    FKChecks FKChecksExpr
+    _ MutationPrivate
+}
+
+# Upsert evaluates a relational input expression that tries to insert a new row
+# into a target table. If a conflicting row already exists, then Upsert will
+# instead update the existing row. The Upsert operator is used for all of these
+# syntactic variants:
+#
+#   INSERT..ON CONFLICT DO UPDATE
+#     INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT (a) DO UPDATE SET b=10
+#
+#   INSERT..ON CONFLICT DO NOTHING
+#     INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT DO NOTHING
+#
+#   UPSERT
+#     UPSERT INTO abc VALUES (1, 2, 3)
+#
+# The Update operator will also insert/update any computed columns, including
+# mutation columns that are computed.
+[Relational, Mutation, WithBinding]
+define Upsert {
+    Input RelExpr
+    UniqueChecks UniqueChecksExpr
+    FKChecks FKChecksExpr
+    _ MutationPrivate
+}
+
+# Delete is an operator used to delete all rows that are selected by a
+# relational input expression:
+#
+#   DELETE FROM abc WHERE a>0 ORDER BY b LIMIT 10
+#
+[Relational, Mutation, WithBinding]
+define Delete {
+    Input RelExpr
+    UniqueChecks UniqueChecksExpr
+    FKChecks FKChecksExpr
+    _ MutationPrivate
+}
+
+# FKChecks is a list of foreign key check queries, to be run after the main
+# query.
+[Scalar, List]
+define FKChecks {
+}
+
+# FKChecksItem is a foreign key check query, to be run after the main query.
+# An execution error will be generated if the query returns any results.
+[Scalar, ListItem]
+define FKChecksItem {
+    Check RelExpr
+    _ FKChecksItemPrivate
+}
+
+[Private]
+define FKChecksItemPrivate {
+    OriginTable TableID
+    ReferencedTable TableID
+
+    # If FKOutbound is true: this item checks that a new value in the origin
+    # table has a valid reference. The FK constraint is
+    # OutboundForeignKey(FKOrdinal) on the origin table.
+    #
+    # If FKOutbound is false: this item checks that a removed value from the
+    # referenced table doesn't orphan references to it from the origin table.
+    # The FK constraint is InboundForeignKey(FKOrdinal) on the referenced table.
+    FKOutbound bool
+    FKOrdinal int
+
+    # KeyCols are the columns in the Check query that form the value tuple shown
+    # in the error message.
+    KeyCols ColList
+
+    # OpName is the name that should be used for this check in error messages.
+    OpName string
+}
+
+# FastPathUniqueChecks is a list of uniqueness check Selects which could be
+# converted into constrained Scans from which KV requests can be generated
+# to be used in place of regular UniqueChecks.
+[Scalar, List]
+define FastPathUniqueChecks {
+}
+
+# FastPathUniqueChecksItem is a unique check query, to be run as a KV request
+# before the main query.
+# An execution error will be generated if the KV request returns any results.
+[Scalar, ListItem]
+define FastPathUniqueChecksItem {
+    Check RelExpr
+    _ FastPathUniqueChecksItemPrivate
+}
+
+# FastPathUniqueChecksItemPrivate contains information about a foreign key or
+# uniqueness check to be performed by the insert fast-path (see
+# ConstructInsertFastPath). It identifies the index into which we can perform
+# the lookup. This is a structure built during exploration to contain
+# information we can use to build the InsertFastPathCheck structure in the
+# execbuilder phase.
+[Private]
+define FastPathUniqueChecksItemPrivate {
+    ReferencedTableID TableID
+    ReferencedIndexOrdinal IndexOrdinal
+
+    # This is the ordinal of the check in the table's unique constraints.
+    CheckOrdinal int
+
+    # InsertCols contains the table column ordinals of the referenced index key
+    # columns. The position in this list corresponds with the ordinal of the
+    # referenced index column (its position in the index key).
+    InsertCols ColList
+
+    # DatumsFromConstraint contains constant values from the insert row for the
+    # columns in the unique constraint. Columns not available directly from the
+    # insert row or computed from insert row values (computed column) may be
+    # filled in from a CHECK constraint on the column. The number of entries
+    # corresponds with the number of KV lookups. For example, when built from
+    # analyzing a locality-optimized operation accessing 1 local region and 2
+    # remote regions, the resulting DatumsFromConstraint would have 3 entries.
+    DatumsFromConstraint ScalarListExpr
+
+    # Locking represents the row-level locking mode of the fast path check. This
+    # is populated from the Scan generated by the optimizer when planning the
+    # fast path check. Most of the time this is unset (Strength = ForNone),
+    # which indicates that no row-level locking will be performed while
+    # performing the uniqueness checks.
+    Locking Locking
+}
+
+# UniqueChecks is a list of uniqueness check queries, to be run after the main
+# query.
+[Scalar, List]
+define UniqueChecks {
+}
+
+# UniqueChecksItem is a unique check query, to be run after the main query.
+# An execution error will be generated if the query returns any results.
+[Scalar, ListItem]
+define UniqueChecksItem {
+    Check RelExpr
+    _ UniqueChecksItemPrivate
+}
+
+[Private]
+define UniqueChecksItemPrivate {
+    Table TableID
+
+    # This is the ordinal of the check in the table's unique constraints.
+    CheckOrdinal int
+
+    # KeyCols are the columns in the Check query that form the value tuple shown
+    # in the error message.
+    KeyCols ColList
+}
+
+# Lock evaluates a relational input expression, and locks rows in the given
+# table based on primary key columns provided by the input expression. Lock is
+# produced by FOR UPDATE and FOR SHARE clauses on SELECT statements:
+#
+#   SELECT * FROM ab WHERE a > 0 ORDER BY b LIMIT 10 FOR UPDATE
+#
+# The locking strength, wait policy, form, and durability are specified by the
+# operator, meaning that a single Lock operator represents locking one table at
+# one strength. A single statement using FOR UPDATE or FOR SHARE may require
+# multiple Lock operators in order to lock multiple tables, or even to lock the
+# same table at multiple different strengths.
+#
+# The input expression is prohibited from using certain operations such as outer
+# joins and aggregations in order to clarify the semantics of which rows are
+# locked. Outside of these prohibitions the input can be arbitrary, including
+# inner joins and subqueries, but must provide the primary key columns of the
+# table being locked.
+#
+# The Lock operator does not necessarily have to be at the top of a plan. It
+# could appear within a subtree of the plan, and in this case acts as an
+# optimization barrier to ensure the correct rows are locked.
+[Relational]
+define Lock {
+    Input RelExpr
+    _ LockPrivate
+}
+
+# LockPrivate contains the state describing a lock operation. For example,
+# consider the following SELECT FOR UPDATE statement under read committed
+# isolation:
+#
+#   CREATE TABLE ab (a INT NOT NULL PRIMARY KEY, b INT);
+#
+#   SELECT x.a, y.b
+#   FROM ab AS x
+#   JOIN ab AS y ON y.a = x.b
+#   WHERE x.a = 5
+#   FOR UPDATE OF x;
+#
+# After optbuild the plan will look like:
+#
+#   lock ab [as=x]
+#    ├── columns: a:1 b:6
+#    ├── locking: for-update,durability-guaranteed
+#    ├── volatile, mutations
+#    └── project
+#         ├── columns: x.a:1 y.b:6
+#         └── inner-join (lookup ab [as=y])
+#              ├── columns: x.a:1 x.b:2 y.a:5 y.b:6
+#              ├── key columns: [2] = [5]
+#              ├── lookup columns are key
+#              ├── scan ab [as=x]
+#              │    ├── columns: x.a:1 x.b:2
+#              │    ├── constraint: /1: [/5 - /5]
+#              │    └── prune: (2)
+#              └── filters (true)
+#
+# In this case the LockPrivate will look like:
+#
+#   {
+#     Table:     a fresh table ID for ab (separate from x and y),
+#     KeySource: the table ID of x,
+#     Locking:   {Strength: FOR UPDATE, Durability: GUARANTEED},
+#     KeyCols:   [a:1 of x],
+#     LockCols:  {a and b of the new Table},
+#     Cols:      {a:1 of x and b:6 of y},
+#   }
+#
+# Many of these fields are needed to produce the locking LookupJoin in execbuild
+# that is the current implementation of locking.
+[Private]
+define LockPrivate {
+    # Table identifies the table to lock. Currently only the primary index of
+    # the table is locked.
+    Table TableID
+
+    # KeySource identifies the source of the key columns.
+    KeySource TableID
+
+    # Locking represents the row-level locking mode to use when locking the
+    # primary index.
+    Locking Locking
+
+    # KeyCols are the primary key columns produced by the input, used to lookup
+    # into the primary index of the table. They must be in the same order as the
+    # primary key columns of the table.
+    KeyCols ColList
+
+    # LockCols is the set of columns to lock. LockCols determines which column
+    # families will be locked. None of the LockCols are included in the output
+    # of the lock operation. If LockCols is empty we will only lock the first
+    # column family.
+    LockCols ColSet
+
+    # Cols is the set of columns from the input expression returned by the Lock
+    # operator, which are passed through. Cols contains all of the KeyCols and
+    # none of the LockCols.
+    Cols ColSet
+}

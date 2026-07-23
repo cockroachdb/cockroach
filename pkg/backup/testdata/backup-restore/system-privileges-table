@@ -1,0 +1,49 @@
+new-cluster name=s1
+----
+
+exec-sql
+CREATE USER testuser;
+CREATE USER testuser2;
+GRANT SYSTEM MODIFYCLUSTERSETTING, VIEWACTIVITY TO testuser;
+GRANT SELECT ON crdb_internal.tables TO testuser;
+CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo';
+GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser2;
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser2;
+GRANT SELECT ON crdb_internal.databases, crdb_internal.tables TO testuser2;
+GRANT ALL ON EXTERNAL CONNECTION foo TO testuser2;
+----
+
+query-sql
+SELECT username, path, privileges, grant_options FROM system.privileges order by username, path
+----
+root /externalconn/foo {ALL} {}
+testuser /global/ {MODIFYCLUSTERSETTING,VIEWACTIVITY} {}
+testuser /vtable/crdb_internal/tables {SELECT} {}
+testuser2 /externalconn/foo {ALL} {}
+testuser2 /global/ {VIEWACTIVITYREDACTED} {}
+testuser2 /vtable/crdb_internal/databases {SELECT} {}
+testuser2 /vtable/crdb_internal/tables {SELECT} {}
+
+exec-sql
+BACKUP INTO 'nodelocal://1/test/'
+----
+
+# Start a new cluster with the same IO dir.
+new-cluster name=s2 share-io-dir=s1
+----
+
+# Restore into the new cluster.
+exec-sql cluster=s2
+RESTORE FROM LATEST IN 'nodelocal://1/test/'
+----
+
+query-sql cluster=s2
+SELECT username, path, privileges, grant_options FROM system.privileges order by username, path
+----
+root /externalconn/foo {ALL} {}
+testuser /global/ {MODIFYCLUSTERSETTING,VIEWACTIVITY} {}
+testuser /vtable/crdb_internal/tables {SELECT} {}
+testuser2 /externalconn/foo {ALL} {}
+testuser2 /global/ {VIEWACTIVITYREDACTED} {}
+testuser2 /vtable/crdb_internal/databases {SELECT} {}
+testuser2 /vtable/crdb_internal/tables {SELECT} {}

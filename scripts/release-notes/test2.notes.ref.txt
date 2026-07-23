@@ -1,0 +1,39 @@
+### Bug fixes
+
+- Feature A [#1][#1] [beda26774][beda26774]
+- Feature B [#1][#1] [52d1235cc][52d1235cc]
+
+### Miscellaneous
+
+#### Changes without release note annotation
+
+- [#unknown][#unknown] [f872999e8][f872999e8] master update (test2 <test2@example.com>)
+
+### Doc updates
+
+Docs team: Please add these manually.
+
+### Contributors
+
+This release includes 2 merged PRs by 1 author.
+We would like to thank the following contributors from the CockroachDB community:
+
+- test2
+
+### PRs merged by contributors
+
+- test2:
+  - 2018-04-22 [#unknown][#unknown] [f872999e8][f872999e8] (+   0 -   0 ~   0/ 0) master update
+  - 2018-04-22 [#100  ][#100  ] [e9b08c236][e9b08c236] (+   0 -   0 ~   0/ 0) PR title alternate format
+  - 2018-04-22 [#1    ][#1    ] [7358b462a][7358b462a] (+   0 -   0 ~   0/ 0) PR title (2 commits)
+
+
+[#1]: https://github.com/cockroachdb/cockroach/pull/1
+[#100]: https://github.com/cockroachdb/cockroach/pull/100
+[#unknown]: https://github.com/cockroachdb/cockroach/pull/unknown
+[52d1235cc]: https://github.com/cockroachdb/cockroach/commit/52d1235cc
+[7358b462a]: https://github.com/cockroachdb/cockroach/commit/7358b462a
+[beda26774]: https://github.com/cockroachdb/cockroach/commit/beda26774
+[e9b08c236]: https://github.com/cockroachdb/cockroach/commit/e9b08c236
+[f872999e8]: https://github.com/cockroachdb/cockroach/commit/f872999e8
+

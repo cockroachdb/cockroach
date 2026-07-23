@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tpccchecks",
+    srcs = ["checks_generator.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/tpccchecks",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/timeutil",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "//pkg/workload/tpcc",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)

@@ -1,0 +1,27 @@
+# Ensure that subscribers started after certain span configs have been
+# deleted/overwritten never observe earlier state.
+
+update
+upsert [a,c):A
+upsert [d,f):D
+----
+
+update
+delete [d,f)
+upsert [a,c):B
+----
+
+start
+----
+
+updates
+----
+[/Min,/Max)
+
+store-reader key=a
+----
+conf=B
+
+store-reader key=d
+----
+conf=FALLBACK

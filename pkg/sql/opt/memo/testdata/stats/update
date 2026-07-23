@@ -1,0 +1,251 @@
+exec-ddl
+CREATE TABLE abc (
+    a INT NOT NULL,
+    b TEXT DEFAULT ('foo'),
+    c FLOAT AS (a::float) STORED
+)
+----
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8 NOT NULL,
+    z FLOAT8
+)
+----
+
+# Statistics should be derived from UPDATE input columns and transferred to
+# RETURNING columns.
+build
+SELECT *
+FROM [UPDATE xyz SET y=5 WHERE z=5.5 RETURNING *]
+WHERE x > 'foo'
+----
+with &1
+ ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
+ ├── volatile, mutations
+ ├── stats: [rows=3.33333, distinct(12)=3.33333, null(12)=0]
+ ├── key: (12)
+ ├── fd: ()-->(13,14)
+ ├── update xyz
+ │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float!null)
+ │    ├── fetch columns: xyz.x:6(string) xyz.y:7(int) xyz.z:8(float)
+ │    ├── update-mapping:
+ │    │    └── y_new:11 => xyz.y:2
+ │    ├── return-mapping:
+ │    │    ├── xyz.x:6 => xyz.x:1
+ │    │    ├── y_new:11 => xyz.y:2
+ │    │    └── xyz.z:8 => xyz.z:3
+ │    ├── volatile, mutations
+ │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2,3)
+ │    └── project
+ │         ├── columns: y_new:11(int!null) xyz.x:6(string!null) xyz.y:7(int!null) xyz.z:8(float!null) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
+ │         ├── stats: [rows=10, distinct(6)=10, null(6)=0, distinct(8)=1, null(8)=0, distinct(11)=1, null(11)=0]
+ │         ├── key: (6)
+ │         ├── fd: ()-->(8,11), (6)-->(7,9,10)
+ │         ├── select
+ │         │    ├── columns: xyz.x:6(string!null) xyz.y:7(int!null) xyz.z:8(float!null) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
+ │         │    ├── stats: [rows=10, distinct(6)=10, null(6)=0, distinct(8)=1, null(8)=0]
+ │         │    ├── key: (6)
+ │         │    ├── fd: ()-->(8), (6)-->(7,9,10)
+ │         │    ├── scan xyz
+ │         │    │    ├── columns: xyz.x:6(string!null) xyz.y:7(int!null) xyz.z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
+ │         │    │    ├── flags: avoid-full-scan
+ │         │    │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=100, null(7)=0, distinct(8)=100, null(8)=10]
+ │         │    │    ├── key: (6)
+ │         │    │    └── fd: (6)-->(7-10)
+ │         │    └── filters
+ │         │         └── xyz.z:8 = 5.5 [type=bool, outer=(8), constraints=(/8: [/5.5 - /5.5]; tight), fd=()-->(8)]
+ │         └── projections
+ │              └── 5 [as=y_new:11, type=int]
+ └── select
+      ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
+      ├── stats: [rows=3.33333, distinct(12)=3.33333, null(12)=0]
+      ├── key: (12)
+      ├── fd: ()-->(13,14)
+      ├── with-scan &1
+      │    ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
+      │    ├── mapping:
+      │    │    ├──  xyz.x:1(string) => x:12(string)
+      │    │    ├──  xyz.y:2(int) => y:13(int)
+      │    │    └──  xyz.z:3(float) => z:14(float)
+      │    ├── stats: [rows=10, distinct(12)=10, null(12)=0, distinct(13)=1, null(13)=0, distinct(14)=1, null(14)=0]
+      │    ├── key: (12)
+      │    └── fd: ()-->(13,14)
+      └── filters
+           └── x:12 > 'foo' [type=bool, outer=(12), constraints=(/12: [/e'foo\x00' - ]; tight)]
+
+# Cardinality is zero.
+build
+UPDATE xyz SET x='foo' WHERE False RETURNING *
+----
+update xyz
+ ├── columns: x:1(string!null) y:2(int!null) z:3(float)
+ ├── fetch columns: x:6(string) y:7(int) z:8(float)
+ ├── update-mapping:
+ │    └── x_new:11 => x:1
+ ├── return-mapping:
+ │    ├── x_new:11 => x:1
+ │    ├── y:7 => y:2
+ │    └── z:8 => z:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── fd: ()-->(1)
+ └── project
+      ├── columns: x_new:11(string!null) x:6(string!null) y:7(int!null) z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
+      ├── cardinality: [0 - 0]
+      ├── stats: [rows=0]
+      ├── key: (6)
+      ├── fd: ()-->(11), (6)-->(7-10)
+      ├── select
+      │    ├── columns: x:6(string!null) y:7(int!null) z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
+      │    ├── cardinality: [0 - 0]
+      │    ├── stats: [rows=0]
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7-10)
+      │    ├── scan xyz
+      │    │    ├── columns: x:6(string!null) y:7(int!null) z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
+      │    │    ├── flags: avoid-full-scan
+      │    │    ├── stats: [rows=1000]
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7-10)
+      │    └── filters
+      │         └── false [type=bool, constraints=(contradiction; tight)]
+      └── projections
+           └── 'foo' [as=x_new:11, type=string]
+
+# Regression test for #62692. Ensure we don't error when calculating stats for
+# mutation passthrough columns
+
+exec-ddl
+CREATE TABLE parent (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child (x INT, c INT REFERENCES parent (p))
+----
+
+build
+WITH q AS (UPDATE child SET c = p FROM parent WHERE p = 1 RETURNING p) SELECT * FROM q WHERE p = 1
+----
+with &2 (q)
+ ├── columns: p:18(int!null)
+ ├── volatile, mutations
+ ├── stats: [rows=1, distinct(18)=1, null(18)=0]
+ ├── fd: ()-->(18)
+ ├── project
+ │    ├── columns: parent.p:11(int)
+ │    ├── volatile, mutations
+ │    ├── stats: [rows=632.305, distinct(11)=632.305, null(11)=0]
+ │    ├── fd: ()-->(11)
+ │    └── update child
+ │         ├── columns: x:1(int) child.c:2(int!null) rowid:3(int!null) parent.p:11(int) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
+ │         ├── fetch columns: x:6(int) child.c:7(int) rowid:8(int)
+ │         ├── passthrough columns: parent.p:11(int) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
+ │         ├── update-mapping:
+ │         │    └── parent.p:11 => child.c:2
+ │         ├── return-mapping:
+ │         │    ├── x:6 => x:1
+ │         │    ├── parent.p:11 => child.c:2
+ │         │    └── rowid:8 => rowid:3
+ │         ├── input binding: &1
+ │         ├── volatile, mutations
+ │         ├── stats: [rows=632.305, distinct(11)=632.305, null(11)=0]
+ │         ├── key: (3)
+ │         ├── fd: ()-->(2,11-13), (3)-->(1), (2)==(11), (11)==(2)
+ │         ├── distinct-on
+ │         │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid) parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
+ │         │    ├── grouping columns: rowid:8(int!null)
+ │         │    ├── stats: [rows=632.305, distinct(8)=632.305, null(8)=0, distinct(11)=632.305, null(11)=0]
+ │         │    ├── key: (8)
+ │         │    ├── fd: ()-->(11-13), (8)-->(6,7,9-13)
+ │         │    ├── select
+ │         │    │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid) parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
+ │         │    │    ├── stats: [rows=1000, distinct(8)=632.305, null(8)=0, distinct(11)=1, null(11)=0]
+ │         │    │    ├── key: (8)
+ │         │    │    ├── fd: ()-->(11-13), (8)-->(6,7,9,10)
+ │         │    │    ├── inner-join (cross)
+ │         │    │    │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid) parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
+ │         │    │    │    ├── stats: [rows=1e+06, distinct(8)=1000, null(8)=0, distinct(11)=1000, null(11)=0]
+ │         │    │    │    ├── key: (8,11)
+ │         │    │    │    ├── fd: (8)-->(6,7,9,10), (11)-->(12,13)
+ │         │    │    │    ├── scan child
+ │         │    │    │    │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid)
+ │         │    │    │    │    ├── flags: avoid-full-scan
+ │         │    │    │    │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
+ │         │    │    │    │    ├── key: (8)
+ │         │    │    │    │    └── fd: (8)-->(6,7,9,10)
+ │         │    │    │    ├── scan parent
+ │         │    │    │    │    ├── columns: parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
+ │         │    │    │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0]
+ │         │    │    │    │    ├── key: (11)
+ │         │    │    │    │    └── fd: (11)-->(12,13)
+ │         │    │    │    └── filters (true)
+ │         │    │    └── filters
+ │         │    │         └── parent.p:11 = 1 [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+ │         │    └── aggregations
+ │         │         ├── first-agg [as=x:6, type=int, outer=(6)]
+ │         │         │    └── x:6 [type=int]
+ │         │         ├── first-agg [as=child.c:7, type=int, outer=(7)]
+ │         │         │    └── child.c:7 [type=int]
+ │         │         ├── first-agg [as=child.crdb_internal_mvcc_timestamp:9, type=decimal, outer=(9)]
+ │         │         │    └── child.crdb_internal_mvcc_timestamp:9 [type=decimal]
+ │         │         ├── first-agg [as=child.tableoid:10, type=oid, outer=(10)]
+ │         │         │    └── child.tableoid:10 [type=oid]
+ │         │         ├── first-agg [as=parent.p:11, type=int, outer=(11)]
+ │         │         │    └── parent.p:11 [type=int]
+ │         │         ├── first-agg [as=parent.crdb_internal_mvcc_timestamp:12, type=decimal, outer=(12)]
+ │         │         │    └── parent.crdb_internal_mvcc_timestamp:12 [type=decimal]
+ │         │         └── first-agg [as=parent.tableoid:13, type=oid, outer=(13)]
+ │         │              └── parent.tableoid:13 [type=oid]
+ │         └── f-k-checks
+ │              └── f-k-checks-item: child(c) -> parent(p)
+ │                   └── anti-join (hash)
+ │                        ├── columns: c:14(int!null)
+ │                        ├── stats: [rows=1]
+ │                        ├── fd: ()-->(14)
+ │                        ├── with-scan &1
+ │                        │    ├── columns: c:14(int!null)
+ │                        │    ├── mapping:
+ │                        │    │    └──  parent.p:11(int) => c:14(int)
+ │                        │    ├── stats: [rows=632.305, distinct(14)=632.305, null(14)=0]
+ │                        │    └── fd: ()-->(14)
+ │                        ├── scan parent
+ │                        │    ├── columns: parent.p:15(int!null)
+ │                        │    ├── flags: avoid-full-scan
+ │                        │    ├── stats: [rows=1000, distinct(15)=1000, null(15)=0]
+ │                        │    └── key: (15)
+ │                        └── filters
+ │                             └── c:14 = parent.p:15 [type=bool, outer=(14,15), constraints=(/14: (/NULL - ]; /15: (/NULL - ]), fd=(14)==(15), (15)==(14)]
+ └── select
+      ├── columns: p:18(int!null)
+      ├── stats: [rows=1, distinct(18)=1, null(18)=0]
+      ├── fd: ()-->(18)
+      ├── with-scan &2 (q)
+      │    ├── columns: p:18(int)
+      │    ├── mapping:
+      │    │    └──  parent.p:11(int) => p:18(int)
+      │    ├── stats: [rows=632.305, distinct(18)=632.305, null(18)=0]
+      │    └── fd: ()-->(18)
+      └── filters
+           └── p:18 = 1 [type=bool, outer=(18), constraints=(/18: [/1 - /1]; tight), fd=()-->(18)]

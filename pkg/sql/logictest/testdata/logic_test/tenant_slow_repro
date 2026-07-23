@@ -1,0 +1,16 @@
+# LogicTest: 3node-tenant 5node
+
+statement ok
+CREATE TABLE parent_multi (pa INT, pb INT, pc INT, UNIQUE INDEX (pa,pb,pc));
+CREATE TABLE child_multi_1 (
+  c INT,
+  a INT,
+  b INT,
+  FOREIGN KEY (a,b,c) REFERENCES parent_multi(pa,pb,pc) ON DELETE CASCADE
+);
+CREATE TABLE child_multi_2 (
+  b INT,
+  c INT,
+  a INT,
+  FOREIGN KEY (a,b,c) REFERENCES parent_multi(pa,pb,pc) ON DELETE CASCADE
+);

@@ -1,0 +1,122 @@
+filter
+schemas:
+----
+
+subtest at_ident
+
+comp at=8
+select xor
+----
+ii'
+  ^
+--
+schemas: completing for "xor" (7,10)
+--sql:
+SELECT n.nspname AS completion,
+                'schema' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_namespace n
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
+ WHERE left(nspname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"xor", 7, 10}
+
+comp at=12
+select xor
+----
+ii_
+  ^
+--
+schemas: completing for "" (12,12)
+--sql:
+SELECT n.nspname AS completion,
+                'schema' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_namespace n
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
+ WHERE left(nspname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"", 12, 12}
+
+subtest end
+
+subtest after_period
+
+comp at=10
+select a.xor
+----
+ii.i'
+    ^
+--
+schemas: not completing
+
+comp at=10
+select a.
+----
+ii._
+   ^
+--
+schemas: not completing
+
+comp at=9
+select a.
+----
+ii.'
+   ^
+--
+schemas: not completing
+
+
+subtest end
+
+subtest quoted_ident
+
+comp at=11
+select "pg_
+----
+ii'
+  ^
+--
+schemas: completing for "pg_" (7,11)
+--sql:
+SELECT n.nspname AS completion,
+                'schema' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_namespace n
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
+ WHERE left(nspname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"pg_", 7, 11}
+
+# Quoted uppercase is an entire schema entirely.
+comp at=11
+select "PG_
+----
+ii'
+  ^
+--
+schemas: completing for "PG_" (7,11)
+--sql:
+SELECT n.nspname AS completion,
+                'schema' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_namespace n
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
+ WHERE left(nspname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
+--placeholders: []interface {}{"PG_", 7, 11}
+
+
+subtest end

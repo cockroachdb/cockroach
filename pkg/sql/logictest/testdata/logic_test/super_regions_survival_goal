@@ -1,0 +1,824 @@
+# LogicTest: multiregion-15node-5region-3azs
+
+# Tests for per-super-region survival goals (ALTER DATABASE ... ALTER SUPER
+# REGION ... SURVIVE ...).
+
+# --------------------------------------------------------------------------
+# Setup: create a database with 5 regions and two super regions.
+# sr_east has 3 regions: ap-southeast-2, us-east-1, ca-central-1
+# sr_west has 2 regions: us-central-1, us-west-1
+# --------------------------------------------------------------------------
+
+statement ok
+CREATE DATABASE srsg PRIMARY REGION "us-east-1"
+  REGIONS "ap-southeast-2", "ca-central-1", "us-central-1", "us-west-1"
+
+statement ok
+ALTER DATABASE srsg ADD SUPER REGION "sr_east" VALUES "ap-southeast-2", "ca-central-1", "us-east-1"
+
+statement ok
+ALTER DATABASE srsg ADD SUPER REGION "sr_west" VALUES "us-central-1", "us-west-1"
+
+# --------------------------------------------------------------------------
+# a. Basic ALTER SUPER REGION SURVIVE operations.
+# --------------------------------------------------------------------------
+
+subtest basic_operations
+
+# SURVIVE REGION FAILURE succeeds for sr_east (3 regions).
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_east SURVIVE REGION FAILURE
+
+# SURVIVE ZONE FAILURE always succeeds.
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_west SURVIVE ZONE FAILURE
+
+# Reset both to inherit from database.
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_east SURVIVE DEFAULT
+
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_west SURVIVE DEFAULT
+
+subtest end
+
+# --------------------------------------------------------------------------
+# b. SHOW SUPER REGIONS output with survival_goal column.
+# --------------------------------------------------------------------------
+
+subtest show_super_regions
+
+# When no explicit goal is set, survival_goal should be NULL.
+query TTTT rowsort
+SHOW SUPER REGIONS FROM DATABASE srsg
+----
+srsg  sr_east  {ap-southeast-2,ca-central-1,us-east-1}  NULL
+srsg  sr_west  {us-central-1,us-west-1}                 NULL
+
+# Set ZONE FAILURE on sr_west.
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_west SURVIVE ZONE FAILURE
+
+query TTTT rowsort
+SHOW SUPER REGIONS FROM DATABASE srsg
+----
+srsg  sr_east  {ap-southeast-2,ca-central-1,us-east-1}  NULL
+srsg  sr_west  {us-central-1,us-west-1}                 zone
+
+# Set REGION FAILURE on sr_east.
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_east SURVIVE REGION FAILURE
+
+query TTTT rowsort
+SHOW SUPER REGIONS FROM DATABASE srsg
+----
+srsg  sr_east  {ap-southeast-2,ca-central-1,us-east-1}  region
+srsg  sr_west  {us-central-1,us-west-1}                 zone
+
+# Verify crdb_internal.super_regions virtual table returns correct values.
+query TTTT rowsort
+SELECT database_name, super_region_name, regions::STRING, survival_goal
+  FROM crdb_internal.super_regions
+ WHERE database_name = 'srsg'
+----
+srsg  sr_east  {ap-southeast-2,ca-central-1,us-east-1}  region
+srsg  sr_west  {us-central-1,us-west-1}                 zone
+
+# Reset sr_east and verify NULL.
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_east SURVIVE DEFAULT
+
+query TTTT rowsort
+SHOW SUPER REGIONS FROM DATABASE srsg
+----
+srsg  sr_east  {ap-southeast-2,ca-central-1,us-east-1}  NULL
+srsg  sr_west  {us-central-1,us-west-1}                 zone
+
+# Reset sr_west too.
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_west SURVIVE DEFAULT
+
+subtest end
+
+# --------------------------------------------------------------------------
+# c. ALTER SUPER REGION ... VALUES preserves explicit goals.
+# --------------------------------------------------------------------------
+
+subtest alter_values_preserves_goal
+
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_east SURVIVE REGION FAILURE
+
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_east VALUES "us-east-1", "ap-southeast-2", "ca-central-1"
+
+query TTTT rowsort
+SHOW SUPER REGIONS FROM DATABASE srsg
+----
+srsg  sr_east  {ap-southeast-2,ca-central-1,us-east-1}  region
+srsg  sr_west  {us-central-1,us-west-1}                 NULL
+
+query TTTT rowsort
+SELECT database_name, super_region_name, regions::STRING, survival_goal
+  FROM crdb_internal.super_regions
+ WHERE database_name = 'srsg'
+----
+srsg  sr_east  {ap-southeast-2,ca-central-1,us-east-1}  region
+srsg  sr_west  {us-central-1,us-west-1}                 NULL
+
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_east SURVIVE DEFAULT
+
+subtest end
+
+# --------------------------------------------------------------------------
+# d. Error cases.
+# --------------------------------------------------------------------------
+
+subtest error_cases
+
+# SURVIVE REGION FAILURE on super region with < 3 regions.
+statement error pq: super region sr_west only has 2 region\(s\): at least 3 regions are required for surviving a region failure
+ALTER DATABASE srsg ALTER SUPER REGION sr_west SURVIVE REGION FAILURE
+
+# ALTER SUPER REGION on non-existent super region.
+statement error pq: super region "nonexistent" of database "srsg" does not exist
+ALTER DATABASE srsg ALTER SUPER REGION nonexistent SURVIVE ZONE FAILURE
+
+# Non-multi-region database.
+statement ok
+CREATE DATABASE single_region
+
+statement error pq: database must be multi-region to support super regions
+ALTER DATABASE single_region ALTER SUPER REGION sr SURVIVE ZONE FAILURE
+
+statement ok
+DROP DATABASE single_region
+
+# SURVIVE REGION FAILURE with PLACEMENT RESTRICTED.
+statement ok
+SET enable_multiregion_placement_policy = true
+
+statement ok
+CREATE DATABASE restricted_db PRIMARY REGION "us-east-1"
+  REGIONS "ap-southeast-2", "ca-central-1"
+  PLACEMENT RESTRICTED
+
+statement ok
+ALTER DATABASE restricted_db ADD SUPER REGION "sr1" VALUES "ap-southeast-2", "ca-central-1", "us-east-1"
+
+statement error pq: a region-survivable super region cannot exist in a database with a restricted placement policy
+ALTER DATABASE restricted_db ALTER SUPER REGION sr1 SURVIVE REGION FAILURE
+
+statement ok
+DROP DATABASE restricted_db
+
+# Reverse direction: switching to PLACEMENT RESTRICTED when a super region
+# already has SURVIVE REGION FAILURE should fail.
+statement ok
+CREATE DATABASE restricted_db2 PRIMARY REGION "us-east-1"
+  REGIONS "ap-southeast-2", "ca-central-1"
+
+statement ok
+ALTER DATABASE restricted_db2 ADD SUPER REGION "sr1" VALUES "ap-southeast-2", "ca-central-1", "us-east-1"
+
+statement ok
+ALTER DATABASE restricted_db2 ALTER SUPER REGION sr1 SURVIVE REGION FAILURE
+
+statement error pq: super region "sr1" has SURVIVE REGION FAILURE set, which is incompatible with a restricted placement policy
+ALTER DATABASE restricted_db2 PLACEMENT RESTRICTED
+
+statement ok
+DROP DATABASE restricted_db2
+
+statement ok
+SET enable_multiregion_placement_policy = false
+
+subtest end
+
+# --------------------------------------------------------------------------
+# e. Zone config impact — the key behavioral tests.
+# --------------------------------------------------------------------------
+
+subtest zone_config_impact
+
+# Create a fresh database for zone config tests. db_zc has 5 regions.
+# Two super regions: zc_east (3 regions), zc_west (2 regions).
+statement ok
+CREATE DATABASE db_zc PRIMARY REGION "us-east-1"
+  REGIONS "ap-southeast-2", "ca-central-1", "us-central-1", "us-west-1"
+
+statement ok
+ALTER DATABASE db_zc ADD SUPER REGION "zc_east" VALUES "ap-southeast-2", "ca-central-1", "us-east-1"
+
+statement ok
+ALTER DATABASE db_zc ADD SUPER REGION "zc_west" VALUES "us-central-1", "us-west-1"
+
+statement ok
+CREATE TABLE db_zc.rbt_east(x INT) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+statement ok
+CREATE TABLE db_zc.rbr(x INT) LOCALITY REGIONAL BY ROW
+
+# -- Scenario 1: Both super regions and database at ZONE FAILURE (default).
+# Tables in sr_east (3 regions) should have num_replicas=5, num_voters=3.
+# All 3 voters pin to the affinity region; remaining 2 non-voters spread
+# to the other regions: 3+1+1.
+# Tables in sr_west (2 regions) should have num_replicas=4, num_voters=3.
+# 3 voters pin to affinity, 1 non-voter to other region: 3+1.
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db_zc.rbt_east
+----
+TABLE db_zc.public.rbt_east  ALTER TABLE db_zc.public.rbt_east CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 14400,
+                               num_replicas = 5,
+                               num_voters = 3,
+                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 3}',
+                               voter_constraints = '[+region=us-east-1]',
+                               lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE db_zc.rbr
+----
+PARTITION "us-east-1" OF TABLE db_zc.public.rbr  ALTER PARTITION "us-east-1" OF TABLE db_zc.public.rbr CONFIGURE ZONE USING
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 5,
+                                                   num_voters = 3,
+                                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 3}',
+                                                   voter_constraints = '[+region=us-east-1]',
+                                                   lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-central-1" OF TABLE db_zc.rbr
+----
+PARTITION "us-central-1" OF TABLE db_zc.public.rbr  ALTER PARTITION "us-central-1" OF TABLE db_zc.public.rbr CONFIGURE ZONE USING
+                                                      range_min_bytes = 134217728,
+                                                      range_max_bytes = 536870912,
+                                                      gc.ttlseconds = 14400,
+                                                      num_replicas = 4,
+                                                      num_voters = 3,
+                                                      constraints = '{+region=us-central-1: 3, +region=us-west-1: 1}',
+                                                      voter_constraints = '[+region=us-central-1]',
+                                                      lease_preferences = '[[+region=us-central-1]]'
+
+# -- Scenario 2: Set sr_east to REGION FAILURE, database stays ZONE FAILURE.
+# Tables in sr_east should now have num_voters=5 (region failure semantics).
+
+statement ok
+ALTER DATABASE db_zc ALTER SUPER REGION zc_east SURVIVE REGION FAILURE
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db_zc.rbt_east
+----
+TABLE db_zc.public.rbt_east  ALTER TABLE db_zc.public.rbt_east CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 14400,
+                               num_replicas = 5,
+                               num_voters = 5,
+                               constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 2}',
+                               voter_constraints = '{+region=us-east-1: 2}',
+                               lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE db_zc.rbr
+----
+PARTITION "us-east-1" OF TABLE db_zc.public.rbr  ALTER PARTITION "us-east-1" OF TABLE db_zc.public.rbr CONFIGURE ZONE USING
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 5,
+                                                   num_voters = 5,
+                                                   constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 2}',
+                                                   voter_constraints = '{+region=us-east-1: 2}',
+                                                   lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE db_zc.rbr
+----
+PARTITION "ap-southeast-2" OF TABLE db_zc.public.rbr  ALTER PARTITION "ap-southeast-2" OF TABLE db_zc.public.rbr CONFIGURE ZONE USING
+                                                        range_min_bytes = 134217728,
+                                                        range_max_bytes = 536870912,
+                                                        gc.ttlseconds = 14400,
+                                                        num_replicas = 5,
+                                                        num_voters = 5,
+                                                        constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                                        voter_constraints = '{+region=ap-southeast-2: 2}',
+                                                        lease_preferences = '[[+region=ap-southeast-2]]'
+
+# sr_west should still use zone failure semantics (inherited from database).
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-central-1" OF TABLE db_zc.rbr
+----
+PARTITION "us-central-1" OF TABLE db_zc.public.rbr  ALTER PARTITION "us-central-1" OF TABLE db_zc.public.rbr CONFIGURE ZONE USING
+                                                      range_min_bytes = 134217728,
+                                                      range_max_bytes = 536870912,
+                                                      gc.ttlseconds = 14400,
+                                                      num_replicas = 4,
+                                                      num_voters = 3,
+                                                      constraints = '{+region=us-central-1: 3, +region=us-west-1: 1}',
+                                                      voter_constraints = '[+region=us-central-1]',
+                                                      lease_preferences = '[[+region=us-central-1]]'
+
+# -- Scenario 3: Reset sr_east to DEFAULT, then set database to REGION FAILURE.
+# sr_east inherits from database so should get region failure semantics.
+# sr_west also inherits and needs 3+ regions to satisfy region failure. But
+# sr_west has only 2 regions, so setting database to REGION FAILURE should fail.
+
+statement ok
+ALTER DATABASE db_zc ALTER SUPER REGION zc_east SURVIVE DEFAULT
+
+statement error pq: super region zc_west only has 2 region\(s\): at least 3 regions are required for surviving a region failure
+ALTER DATABASE db_zc SURVIVE REGION FAILURE
+
+# Give sr_west an explicit ZONE FAILURE goal so changing the database to
+# REGION FAILURE won't apply to it.
+statement ok
+ALTER DATABASE db_zc ALTER SUPER REGION zc_west SURVIVE ZONE FAILURE
+
+statement ok
+ALTER DATABASE db_zc SURVIVE REGION FAILURE
+
+# sr_east inherits REGION FAILURE from database.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db_zc.rbt_east
+----
+TABLE db_zc.public.rbt_east  ALTER TABLE db_zc.public.rbt_east CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 14400,
+                               num_replicas = 5,
+                               num_voters = 5,
+                               constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 2}',
+                               voter_constraints = '{+region=us-east-1: 2}',
+                               lease_preferences = '[[+region=us-east-1]]'
+
+# -- Scenario 4: sr_west has explicit ZONE FAILURE, database has REGION FAILURE.
+# sr_west's tables should use zone failure semantics (3 voters).
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-central-1" OF TABLE db_zc.rbr
+----
+PARTITION "us-central-1" OF TABLE db_zc.public.rbr  ALTER PARTITION "us-central-1" OF TABLE db_zc.public.rbr CONFIGURE ZONE USING
+                                                      range_min_bytes = 134217728,
+                                                      range_max_bytes = 536870912,
+                                                      gc.ttlseconds = 14400,
+                                                      num_replicas = 4,
+                                                      num_voters = 3,
+                                                      constraints = '{+region=us-central-1: 3, +region=us-west-1: 1}',
+                                                      voter_constraints = '[+region=us-central-1]',
+                                                      lease_preferences = '[[+region=us-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-west-1" OF TABLE db_zc.rbr
+----
+PARTITION "us-west-1" OF TABLE db_zc.public.rbr  ALTER PARTITION "us-west-1" OF TABLE db_zc.public.rbr CONFIGURE ZONE USING
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 4,
+                                                   num_voters = 3,
+                                                   constraints = '{+region=us-central-1: 1, +region=us-west-1: 3}',
+                                                   voter_constraints = '[+region=us-west-1]',
+                                                   lease_preferences = '[[+region=us-west-1]]'
+
+# -- Scenario 5: Reset to DEFAULT and verify zone configs revert.
+# First restore the database to ZONE FAILURE so sr_west (2 regions) can
+# safely inherit.
+statement ok
+ALTER DATABASE db_zc SURVIVE ZONE FAILURE
+
+# Now reset both super regions to DEFAULT (inherits zone failure from db).
+statement ok
+ALTER DATABASE db_zc ALTER SUPER REGION zc_west SURVIVE DEFAULT
+
+statement ok
+ALTER DATABASE db_zc ALTER SUPER REGION zc_east SURVIVE DEFAULT
+
+# Verify zone configs revert to database-level behavior.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db_zc.rbt_east
+----
+TABLE db_zc.public.rbt_east  ALTER TABLE db_zc.public.rbt_east CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 14400,
+                               num_replicas = 5,
+                               num_voters = 3,
+                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 3}',
+                               voter_constraints = '[+region=us-east-1]',
+                               lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-central-1" OF TABLE db_zc.rbr
+----
+PARTITION "us-central-1" OF TABLE db_zc.public.rbr  ALTER PARTITION "us-central-1" OF TABLE db_zc.public.rbr CONFIGURE ZONE USING
+                                                      range_min_bytes = 134217728,
+                                                      range_max_bytes = 536870912,
+                                                      gc.ttlseconds = 14400,
+                                                      num_replicas = 4,
+                                                      num_voters = 3,
+                                                      constraints = '{+region=us-central-1: 3, +region=us-west-1: 1}',
+                                                      voter_constraints = '[+region=us-central-1]',
+                                                      lease_preferences = '[[+region=us-central-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest end
+
+# --------------------------------------------------------------------------
+# f. Interaction with database-level survival goal changes.
+# --------------------------------------------------------------------------
+
+subtest database_survival_goal_interaction
+
+# Create a fresh database for this test.
+statement ok
+CREATE DATABASE db_inter PRIMARY REGION "us-east-1"
+  REGIONS "ap-southeast-2", "ca-central-1", "us-central-1", "us-west-1"
+
+statement ok
+ALTER DATABASE db_inter ADD SUPER REGION "sr1" VALUES "ap-southeast-2", "ca-central-1", "us-east-1"
+
+statement ok
+ALTER DATABASE db_inter ADD SUPER REGION "sr2" VALUES "us-central-1", "us-west-1"
+
+statement ok
+CREATE TABLE db_inter.rbt_sr1(x INT) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+statement ok
+CREATE TABLE db_inter.rbr(x INT) LOCALITY REGIONAL BY ROW
+
+# Set sr1 to explicit ZONE FAILURE. Set sr2 to explicit ZONE FAILURE too
+# (so changing db to REGION FAILURE won't fail validation for sr2).
+statement ok
+ALTER DATABASE db_inter ALTER SUPER REGION sr1 SURVIVE ZONE FAILURE
+
+statement ok
+ALTER DATABASE db_inter ALTER SUPER REGION sr2 SURVIVE ZONE FAILURE
+
+# Capture sr1 zone config before changing database survival goal.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db_inter.rbt_sr1
+----
+TABLE db_inter.public.rbt_sr1  ALTER TABLE db_inter.public.rbt_sr1 CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 14400,
+                                 num_replicas = 5,
+                                 num_voters = 3,
+                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 3}',
+                                 voter_constraints = '[+region=us-east-1]',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+# Change database to REGION FAILURE. sr1 has explicit ZONE FAILURE so should
+# NOT be affected (HasSurvivalGoal skip in alterDatabaseSurvivalGoal).
+statement ok
+ALTER DATABASE db_inter SURVIVE REGION FAILURE
+
+# sr1 zone config should be unchanged — still zone failure semantics.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db_inter.rbt_sr1
+----
+TABLE db_inter.public.rbt_sr1  ALTER TABLE db_inter.public.rbt_sr1 CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 14400,
+                                 num_replicas = 5,
+                                 num_voters = 3,
+                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 3}',
+                                 voter_constraints = '[+region=us-east-1]',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+# sr2 also has explicit ZONE FAILURE, so it should be unchanged too.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-central-1" OF TABLE db_inter.rbr
+----
+PARTITION "us-central-1" OF TABLE db_inter.public.rbr  ALTER PARTITION "us-central-1" OF TABLE db_inter.public.rbr CONFIGURE ZONE USING
+                                                         range_min_bytes = 134217728,
+                                                         range_max_bytes = 536870912,
+                                                         gc.ttlseconds = 14400,
+                                                         num_replicas = 4,
+                                                         num_voters = 3,
+                                                         constraints = '{+region=us-central-1: 3, +region=us-west-1: 1}',
+                                                         voter_constraints = '[+region=us-central-1]',
+                                                         lease_preferences = '[[+region=us-central-1]]'
+
+# Now test the opposite: sr1 set to DEFAULT (inherits from database).
+# Change database survival goal → sr1 zone configs SHOULD be affected.
+statement ok
+ALTER DATABASE db_inter SURVIVE ZONE FAILURE
+
+statement ok
+ALTER DATABASE db_inter ALTER SUPER REGION sr1 SURVIVE DEFAULT
+
+# Verify sr1 currently has zone failure semantics (inherited from db).
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db_inter.rbt_sr1
+----
+TABLE db_inter.public.rbt_sr1  ALTER TABLE db_inter.public.rbt_sr1 CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 14400,
+                                 num_replicas = 5,
+                                 num_voters = 3,
+                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 3}',
+                                 voter_constraints = '[+region=us-east-1]',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+# Change database to REGION FAILURE. sr1 (DEFAULT) should pick up region
+# failure semantics. sr2 has explicit ZONE FAILURE so stays unaffected.
+statement ok
+ALTER DATABASE db_inter SURVIVE REGION FAILURE
+
+# sr1 inherits REGION FAILURE from database — num_voters should now be 5.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db_inter.rbt_sr1
+----
+TABLE db_inter.public.rbt_sr1  ALTER TABLE db_inter.public.rbt_sr1 CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 14400,
+                                 num_replicas = 5,
+                                 num_voters = 5,
+                                 constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 2}',
+                                 voter_constraints = '{+region=us-east-1: 2}',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE db_inter.rbr
+----
+PARTITION "ap-southeast-2" OF TABLE db_inter.public.rbr  ALTER PARTITION "ap-southeast-2" OF TABLE db_inter.public.rbr CONFIGURE ZONE USING
+                                                           range_min_bytes = 134217728,
+                                                           range_max_bytes = 536870912,
+                                                           gc.ttlseconds = 14400,
+                                                           num_replicas = 5,
+                                                           num_voters = 5,
+                                                           constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                                                           voter_constraints = '{+region=ap-southeast-2: 2}',
+                                                           lease_preferences = '[[+region=ap-southeast-2]]'
+
+# sr2 with explicit ZONE FAILURE should be unchanged.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-central-1" OF TABLE db_inter.rbr
+----
+PARTITION "us-central-1" OF TABLE db_inter.public.rbr  ALTER PARTITION "us-central-1" OF TABLE db_inter.public.rbr CONFIGURE ZONE USING
+                                                         range_min_bytes = 134217728,
+                                                         range_max_bytes = 536870912,
+                                                         gc.ttlseconds = 14400,
+                                                         num_replicas = 4,
+                                                         num_voters = 3,
+                                                         constraints = '{+region=us-central-1: 3, +region=us-west-1: 1}',
+                                                         voter_constraints = '[+region=us-central-1]',
+                                                         lease_preferences = '[[+region=us-central-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest end
+
+# --------------------------------------------------------------------------
+# g. ALTER SUPER REGION ... VALUES validates preserved explicit goals.
+# --------------------------------------------------------------------------
+
+subtest alter_values_validation
+
+statement ok
+CREATE DATABASE sr_validate PRIMARY REGION "us-east-1"
+  REGIONS "ap-southeast-2", "ca-central-1"
+
+statement ok
+ALTER DATABASE sr_validate ADD SUPER REGION sr1 VALUES "ap-southeast-2", "ca-central-1", "us-east-1"
+
+statement ok
+ALTER DATABASE sr_validate ALTER SUPER REGION sr1 SURVIVE REGION FAILURE
+
+statement error pq: super region sr1 only has 2 region\(s\): at least 3 regions are required for surviving a region failure
+ALTER DATABASE sr_validate ALTER SUPER REGION sr1 VALUES "ca-central-1", "us-east-1"
+
+statement ok
+DROP DATABASE sr_validate
+
+subtest end
+
+# --------------------------------------------------------------------------
+# h. Drop and re-add a super region clears the explicit survival goal.
+# --------------------------------------------------------------------------
+
+subtest drop_readd_clears_goal
+
+# Set sr_east to REGION FAILURE.
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_east SURVIVE REGION FAILURE
+
+query TTTT rowsort
+SHOW SUPER REGIONS FROM DATABASE srsg
+----
+srsg  sr_east  {ap-southeast-2,ca-central-1,us-east-1}  region
+srsg  sr_west  {us-central-1,us-west-1}                 NULL
+
+# Drop sr_east.
+statement ok
+ALTER DATABASE srsg DROP SUPER REGION "sr_east"
+
+# Re-add sr_east with the same regions.
+statement ok
+ALTER DATABASE srsg ADD SUPER REGION "sr_east" VALUES "ap-southeast-2", "ca-central-1", "us-east-1"
+
+# The re-added super region should have no explicit goal (NULL).
+query TTTT rowsort
+SHOW SUPER REGIONS FROM DATABASE srsg
+----
+srsg  sr_east  {ap-southeast-2,ca-central-1,us-east-1}  NULL
+srsg  sr_west  {us-central-1,us-west-1}                 NULL
+
+subtest end
+
+# --------------------------------------------------------------------------
+# i. GLOBAL tables are unaffected by per-super-region survival goals.
+# --------------------------------------------------------------------------
+
+subtest global_table_unaffected
+
+statement ok
+CREATE DATABASE db_global PRIMARY REGION "us-east-1"
+  REGIONS "ap-southeast-2", "ca-central-1", "us-central-1", "us-west-1"
+
+statement ok
+ALTER DATABASE db_global ADD SUPER REGION "g_east" VALUES "ap-southeast-2", "ca-central-1", "us-east-1"
+
+statement ok
+ALTER DATABASE db_global ADD SUPER REGION "g_west" VALUES "us-central-1", "us-west-1"
+
+statement ok
+CREATE TABLE db_global.gtbl(x INT) LOCALITY GLOBAL
+
+# Baseline zone config for the GLOBAL table.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db_global.gtbl
+----
+TABLE db_global.public.gtbl  ALTER TABLE db_global.public.gtbl CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 14400,
+                               global_reads = true,
+                               num_replicas = 7,
+                               num_voters = 3,
+                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                               voter_constraints = '[+region=us-east-1]',
+                               lease_preferences = '[[+region=us-east-1]]'
+
+# Set g_east to REGION FAILURE.
+statement ok
+ALTER DATABASE db_global ALTER SUPER REGION g_east SURVIVE REGION FAILURE
+
+# GLOBAL table zone config should be unchanged.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db_global.gtbl
+----
+TABLE db_global.public.gtbl  ALTER TABLE db_global.public.gtbl CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 14400,
+                               global_reads = true,
+                               num_replicas = 7,
+                               num_voters = 3,
+                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                               voter_constraints = '[+region=us-east-1]',
+                               lease_preferences = '[[+region=us-east-1]]'
+
+# Reset and verify again.
+statement ok
+ALTER DATABASE db_global ALTER SUPER REGION g_east SURVIVE DEFAULT
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db_global.gtbl
+----
+TABLE db_global.public.gtbl  ALTER TABLE db_global.public.gtbl CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 14400,
+                               global_reads = true,
+                               num_replicas = 7,
+                               num_voters = 3,
+                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                               voter_constraints = '[+region=us-east-1]',
+                               lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+DROP DATABASE db_global
+
+subtest end
+
+# --------------------------------------------------------------------------
+# j. DROP REGION is blocked for regions in a super region with explicit goal.
+# --------------------------------------------------------------------------
+
+subtest drop_region_blocked_with_goal
+
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_east SURVIVE REGION FAILURE
+
+# Dropping a region that belongs to a super region is blocked regardless of
+# whether the super region has an explicit survival goal.
+statement error pq: region ap-southeast-2 is part of super region sr_east
+ALTER DATABASE srsg DROP REGION "ap-southeast-2"
+
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_east SURVIVE DEFAULT
+
+subtest end
+
+# --------------------------------------------------------------------------
+# k. SURVIVE DEFAULT is blocked when database goal would be unsatisfiable.
+# --------------------------------------------------------------------------
+
+subtest default_blocked_when_db_region_failure
+
+# sr_west has 2 regions and an explicit ZONE FAILURE goal.
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_west SURVIVE ZONE FAILURE
+
+# sr_east needs an explicit goal too so that changing the database to
+# REGION FAILURE does not fail validation for sr_west (which only has
+# 2 regions and would otherwise inherit the database goal).
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_east SURVIVE REGION FAILURE
+
+statement ok
+ALTER DATABASE srsg SURVIVE REGION FAILURE
+
+# Resetting sr_west to DEFAULT would make it inherit REGION FAILURE from
+# the database, but sr_west only has 2 regions — must fail.
+statement error pq: super region sr_west only has 2 region\(s\): at least 3 regions are required for surviving a region failure
+ALTER DATABASE srsg ALTER SUPER REGION sr_west SURVIVE DEFAULT
+
+# Clean up: restore database to ZONE FAILURE, then reset both SRs.
+statement ok
+ALTER DATABASE srsg SURVIVE ZONE FAILURE
+
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_west SURVIVE DEFAULT
+
+statement ok
+ALTER DATABASE srsg ALTER SUPER REGION sr_east SURVIVE DEFAULT
+
+subtest end
+
+# --------------------------------------------------------------------------
+# l. Secondary region in a different super region does not leak into
+#    zone configs for the other super region.
+# --------------------------------------------------------------------------
+
+subtest secondary_region_in_different_super_region
+
+# When the secondary region lives in one super region (SR1) and a table is
+# in a different super region (SR2), the secondary must not appear in SR2's
+# voter constraints or lease preferences.
+statement ok
+CREATE DATABASE sr_sec_db PRIMARY REGION "us-east-1"
+  REGIONS "ap-southeast-2", "ca-central-1", "us-central-1", "us-west-1"
+
+# Set secondary before adding super regions (no validation constraint yet).
+statement ok
+ALTER DATABASE sr_sec_db SET SECONDARY REGION "us-west-1"
+
+# SR1 contains primary (us-east-1) and secondary (us-west-1).
+statement ok
+ALTER DATABASE sr_sec_db ADD SUPER REGION "sr1" VALUES "us-east-1", "us-west-1"
+
+# SR2 contains neither primary nor secondary.
+statement ok
+ALTER DATABASE sr_sec_db ADD SUPER REGION "sr2" VALUES "ap-southeast-2", "ca-central-1", "us-central-1"
+
+statement ok
+ALTER DATABASE sr_sec_db ALTER SUPER REGION sr2 SURVIVE REGION FAILURE
+
+statement ok
+CREATE TABLE sr_sec_db.t1 (k INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "us-central-1"
+
+# The secondary region (us-west-1) is outside SR2. Verify it does not appear
+# in the constraints, voter_constraints, or lease_preferences for this table.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE sr_sec_db.t1
+----
+TABLE sr_sec_db.public.t1  ALTER TABLE sr_sec_db.public.t1 CONFIGURE ZONE USING
+                             range_min_bytes = 134217728,
+                             range_max_bytes = 536870912,
+                             gc.ttlseconds = 14400,
+                             num_replicas = 5,
+                             num_voters = 5,
+                             constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-central-1: 2}',
+                             voter_constraints = '{+region=us-central-1: 2}',
+                             lease_preferences = '[[+region=us-central-1]]'
+
+statement ok
+DROP DATABASE sr_sec_db
+
+subtest end
+

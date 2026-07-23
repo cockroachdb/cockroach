@@ -1,0 +1,3 @@
+alter_split_stmt ::=
+	'ALTER' 'TABLE' table_name 'SPLIT' 'AT' select_stmt
+	| 'ALTER' 'TABLE' table_name 'SPLIT' 'AT' select_stmt 'WITH' 'EXPIRATION' a_expr

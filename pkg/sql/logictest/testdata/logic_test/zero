@@ -1,0 +1,185 @@
+# This tests zeros and numbers with trailing zeros.
+
+# ints
+
+statement ok
+CREATE TABLE i (i int, v int)
+
+statement ok
+INSERT INTO i VALUES
+  (1, 0),
+  (2, -0),
+  (3, 0::int),
+  (4, -0::int),
+  (5, '0'::int),
+  (6, '-0'::int)
+
+query II
+select * FROM i ORDER BY i
+----
+1 0
+2 0
+3 0
+4 0
+5 0
+6 0
+
+query IIIIII
+SELECT 0, -0, 0::int, -0::int, '0'::int, '-0'::int
+----
+0 0 0 0 0 0
+
+# floats
+
+statement ok
+CREATE TABLE f (i int, v float)
+
+statement ok
+INSERT INTO f VALUES
+  (1, 0.0),
+  (2, -0.0),
+  (3, 0.00::float),
+  (4, -0.00::float),
+  (5, (-0.000)::float),
+  (6, 0::float),
+  (7, -0::float),
+  (8, '0.0000'::float),
+  (9, '-0.0000'::float),
+  (10, 0),
+  (11, -0)
+
+query IR
+select * FROM f ORDER BY i
+----
+1 0
+2 -0
+3 0
+4 -0
+5 0
+6 0
+7 -0
+8 0
+9 -0
+10 0
+11 -0
+
+query RRRRRIIRRRR colnames
+SELECT 0.0::float as a,
+      -0.0::float as b,
+      0.00::float as c,
+     -0.00::float as d,
+  (-0.000)::float as e,
+                0 as f,
+               -0 as g,
+         0::float as h,
+        -0::float as i,
+  '0.0000'::float as j,
+ '-0.0000'::float as k
+----
+a  b   c  d   e  f  g  h  i   j  k
+0  -0  0  -0  0  0  0  0  -0  0  -0
+
+# decimals
+
+query RRRRRRRRR colnames
+SELECT 0.0::decimal as a,
+      -0.0::decimal as b,
+      0.00::decimal as c,
+     -0.00::decimal as d,
+  (-0.000)::decimal as e,
+         0::decimal as f,
+        -0::decimal as g,
+  '0.0000'::decimal as h,
+ '-0.0000'::decimal as i
+----
+a    b    c     d     e      f  g  h       i
+0.0  0.0  0.00  0.00  0.000  0  0  0.0000  0.0000
+
+statement ok
+CREATE TABLE d (i INT, v DECIMAL)
+
+statement ok
+INSERT INTO d VALUES
+  (1, 0.0),
+  (2, -0.0),
+  (3, 0.00::decimal),
+  (4, -0.00::decimal),
+  (5, (-0.000)::decimal),
+  (6, 0::decimal),
+  (7, -0::decimal),
+  (8, '0.0000'::decimal),
+  (9, '-0.0000'::decimal),
+  (10, 0),
+  (11, -0)
+
+query IR
+select * FROM d ORDER BY i
+----
+1 0.0
+2 0.0
+3 0.00
+4 0.00
+5 0.000
+6 0
+7 0
+8 0.0000
+9 0.0000
+10 0
+11 0
+
+statement ok
+CREATE TABLE didx (i INT, v DECIMAL, INDEX vidx (v))
+
+statement ok
+INSERT INTO didx VALUES
+  (1, 0.0),
+  (2, -0.0),
+  (3, 0.00::decimal),
+  (4, -0.00::decimal),
+  (5, (-0.000)::decimal),
+  (6, 0::decimal),
+  (7, -0::decimal),
+  (8, '0.0000'::decimal),
+  (9, '-0.0000'::decimal),
+  (10, 0),
+  (11, -0)
+
+query R
+SELECT v FROM didx ORDER BY INDEX didx@vidx
+----
+0.0
+0.0
+0.00
+0.00
+0.000
+0
+0
+0.0000
+0.0000
+0
+0
+
+query RRRR
+SELECT - -0.00::decimal, - - -0.00::decimal, - - -0.00, - -0.00
+----
+0.00 0.00 0.00 0.00
+
+# TODO(mjibson): 
+#
+#query RRRR
+#SELECT -+-0.010::decimal, 0.020, 0.030::decimal, -0.0400000000000000000000000000
+#----
+#0.010 0.020 0.030 -0.0400000000000000000000000000
+#
+#query RR
+#SELECT -0.040 + 0, 0.040::decimal + 0
+#----
+#-0.040 0.040
+
+query R
+SELECT * FROM (VALUES (-0.0::DECIMAL), (-0::DECIMAL), (0::DECIMAL), (-0.00::DECIMAL)) ORDER BY 1
+----
+0.0
+0
+0
+0.00

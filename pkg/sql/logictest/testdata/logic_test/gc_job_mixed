@@ -1,0 +1,33 @@
+# LogicTest: local
+
+statement ok
+CREATE DATABASE db
+
+statement ok
+CREATE TABLE db.kv (k INT NOT NULL, v STRING);
+INSERT INTO db.kv (k, v) VALUES (1, 'a')
+
+statement ok
+CREATE TABLE db.other(t STRING);
+INSERT INTO db.other (t) VALUES ('other')
+
+statement ok
+ALTER TABLE db.kv ALTER PRIMARY KEY USING COLUMNS (k)
+
+statement ok
+DROP TABLE db.kv
+
+statement ok
+DROP DATABASE db
+
+query T rowsort
+SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC'
+----
+GC for ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
+GC for DROP TABLE db.public.kv
+GC for DROP DATABASE db
+
+query I
+SELECT count(*) FROM crdb_internal.lost_descriptors_with_data
+----
+0

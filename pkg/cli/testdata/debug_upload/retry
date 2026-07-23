@@ -1,0 +1,72 @@
+# Blob PUT fails twice with a transient 500, then succeeds.
+upload
+{
+  "create_session": {"status": 201, "session_id": "ses_r1", "upload_token": "tok_r1"},
+  "resumable_session": {"status": 201, "object_path": "ses_r1/debug.zip"},
+  "blob_put": [
+    {"status": 500, "body": "transient flake"},
+    {"status": 500, "body": "transient flake"},
+    {"status": 200}
+  ],
+  "complete": {"status": 200}
+}
+----
+----
+Upload session: ses_r1
+
+upload attempt failed (1/6): blob upload failed (500): transient flake. Retrying...
+
+upload attempt failed (2/6): blob upload failed (500): transient flake. Retrying...
+Session ses_r1 completed.
+Uploaded NN B in NNs (NN MB/s).
+[counters] create_session=1 reupload=0 resumable_session=1 complete=1 blob_probe=0 blob_put=3
+----
+----
+
+# Blob PUT always fails: retry budget exhausted (1 initial + 5 retries = 6 attempts).
+upload
+{
+  "create_session": {"status": 201, "session_id": "ses_r2", "upload_token": "tok_r2"},
+  "resumable_session": {"status": 201, "object_path": "ses_r2/debug.zip"},
+  "blob_put": [
+    {"status": 500, "body": "flake"},
+    {"status": 500, "body": "flake"},
+    {"status": 500, "body": "flake"},
+    {"status": 500, "body": "flake"},
+    {"status": 500, "body": "flake"},
+    {"status": 500, "body": "flake"}
+  ]
+}
+----
+----
+Upload session: ses_r2
+
+upload attempt failed (1/6): blob upload failed (500): flake. Retrying...
+
+upload attempt failed (2/6): blob upload failed (500): flake. Retrying...
+
+upload attempt failed (3/6): blob upload failed (500): flake. Retrying...
+
+upload attempt failed (4/6): blob upload failed (500): flake. Retrying...
+
+upload attempt failed (5/6): blob upload failed (500): flake. Retrying...
+
+upload attempt failed (6/6): blob upload failed (500): flake
+ERROR: upload failed after 6 attempts; resume with --resume-session=ses_r2: blob upload failed (500): flake
+[counters] create_session=1 reupload=0 resumable_session=1 complete=0 blob_probe=0 blob_put=6
+----
+----
+
+# Dead session URI on resume: probe returns 404, the retry loop
+# short-circuits because the URI cannot be revived.
+upload
+{
+  "resume_session": "ses_dead",
+  "reupload": {"status": 200, "session_id": "ses_dead", "upload_token": "tok_d"},
+  "resumable_session": {"status": 200, "object_path": "ses_dead/debug.zip"},
+  "blob_probe": {"status": 404, "body": "URI not found"}
+}
+----
+Resumed upload session: ses_dead
+ERROR: upload session has expired
+[counters] create_session=0 reupload=1 resumable_session=1 complete=0 blob_probe=1 blob_put=0

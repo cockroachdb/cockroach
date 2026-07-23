@@ -1,0 +1,2 @@
+batch_generated.go -diff
+*_string.go -diff

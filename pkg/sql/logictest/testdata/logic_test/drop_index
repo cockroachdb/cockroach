@@ -1,0 +1,623 @@
+statement ok
+CREATE TABLE users (
+  id    INT PRIMARY KEY,
+  name  VARCHAR NOT NULL,
+  title VARCHAR,
+  INDEX foo (name),
+  UNIQUE INDEX bar (id, name),
+  INDEX baw (name, title)
+)
+
+statement ok
+CREATE TABLE othertable (
+   x INT,
+   y INT,
+   INDEX baw (x),
+   INDEX yak (y, x)
+)
+
+statement error index name "baw" is ambiguous
+DROP INDEX baw
+
+statement error index name "baw" is ambiguous
+DROP INDEX IF EXISTS baw
+
+statement error pgcode 42704 index "ark" does not exist
+DROP INDEX ark
+
+statement ok
+DROP INDEX IF EXISTS ark
+
+statement error pgcode 42704 index "ark" does not exist
+DROP INDEX users@ark
+
+statement ok
+DROP INDEX IF EXISTS users@ark
+
+statement ok
+DROP INDEX yak
+
+statement ok
+CREATE INDEX yak ON othertable (y, x)
+
+statement ok
+DROP INDEX IF EXISTS yak
+
+statement ok
+DROP TABLE othertable
+
+statement ok
+DROP INDEX baw
+
+statement ok
+INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM users
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+users       bar         false       1             id           id          ASC        false    false     true     1
+users       bar         false       2             name         name        ASC        false    false     true     1
+users       foo         true        1             name         name        ASC        false    false     true     1
+users       foo         true        2             id           id          ASC        false    true      true     1
+users       users_pkey  false       1             id           id          ASC        false    false     true     1
+users       users_pkey  false       2             name         name        N/A        true     false     true     1
+users       users_pkey  false       3             title        title       N/A        true     false     true     1
+
+statement error index "zap" does not exist
+DROP INDEX users@zap
+
+statement ok
+DROP INDEX IF EXISTS users@zap
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM users
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+users       bar         false       1             id           id          ASC        false    false     true     1
+users       bar         false       2             name         name        ASC        false    false     true     1
+users       foo         true        1             name         name        ASC        false    false     true     1
+users       foo         true        2             id           id          ASC        false    true      true     1
+users       users_pkey  false       1             id           id          ASC        false    false     true     1
+users       users_pkey  false       2             name         name        N/A        true     false     true     1
+users       users_pkey  false       3             title        title       N/A        true     false     true     1
+
+# Also test that dropping with a non-existing index still drops 'foo'.
+
+statement ok
+DROP INDEX IF EXISTS users@foo, users@zap
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM users
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+users       bar         false       1             id           id          ASC        false    false     true     1
+users       bar         false       2             name         name        ASC        false    false     true     1
+users       users_pkey  false       1             id           id          ASC        false    false     true     1
+users       users_pkey  false       2             name         name        N/A        true     false     true     1
+users       users_pkey  false       3             title        title       N/A        true     false     true     1
+
+user testuser
+
+skipif config local-legacy-schema-changer
+statement error must be owner of table users or have CREATE privilege on table users
+DROP INDEX users@bar
+
+onlyif config local-legacy-schema-changer
+statement error user testuser does not have CREATE privilege on relation users
+DROP INDEX users@bar
+
+user root
+
+statement ok
+GRANT CREATE ON TABLE users TO testuser
+
+user testuser
+
+statement error in use as unique constraint
+DROP INDEX users@bar
+
+statement error in use as unique constraint
+DROP INDEX users@bar RESTRICT
+
+statement ok
+DROP INDEX users@bar CASCADE
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM users
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+users       users_pkey  false       1             id           id          ASC        false    false     true     1
+users       users_pkey  false       2             name         name        N/A        true     false     true     1
+users       users_pkey  false       3             title        title       N/A        true     false     true     1
+
+user root
+
+query ITT rowsort
+SELECT * FROM users
+----
+1 tom   cat
+2 jerry rat
+
+statement ok
+CREATE INDEX foo ON users (name)
+
+statement ok
+CREATE INDEX bar ON users (title)
+
+statement ok
+CREATE INDEX baz ON users (name, title)
+
+statement ok
+DROP INDEX IF EXISTS users@invalid, users@baz
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM users
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+users       bar         true        1             title        title       ASC        false    false     true     1
+users       bar         true        2             id           id          ASC        false    true      true     1
+users       foo         true        1             name         name        ASC        false    false     true     1
+users       foo         true        2             id           id          ASC        false    true      true     1
+users       users_pkey  false       1             id           id          ASC        false    false     true     1
+users       users_pkey  false       2             name         name        N/A        true     false     true     1
+users       users_pkey  false       3             title        title       N/A        true     false     true     1
+
+statement ok
+CREATE VIEW v AS SELECT name FROM users@{FORCE_INDEX=foo}
+
+statement error cannot drop index "foo" because view "v" depends on it
+DROP INDEX users@foo
+
+statement ok
+DROP INDEX users@bar
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM users
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+users       foo         true        1             name         name        ASC        false    false     true     1
+users       foo         true        2             id           id          ASC        false    true      true     1
+users       users_pkey  false       1             id           id          ASC        false    false     true     1
+users       users_pkey  false       2             name         name        N/A        true     false     true     1
+users       users_pkey  false       3             title        title       N/A        true     false     true     1
+
+statement ok
+CREATE VIEW v2 AS SELECT name FROM v
+
+query TTTTIT rowsort
+SHOW TABLES
+----
+public  users  table  root  0  NULL
+public  v      view   root  0  NULL
+public  v2     view   root  0  NULL
+
+statement ok
+GRANT ALL ON users to testuser
+
+statement ok
+GRANT ALL ON v to testuser
+
+user testuser
+
+statement error user testuser does not have DROP privilege on relation v2
+DROP INDEX users@foo CASCADE
+
+user root
+
+statement ok
+DROP INDEX users@foo CASCADE
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM users
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+users       users_pkey  false       1             id           id          ASC        false    false     true     1
+users       users_pkey  false       2             name         name        N/A        true     false     true     1
+users       users_pkey  false       3             title        title       N/A        true     false     true     1
+
+query TTTTIT
+SHOW TABLES
+----
+public  users  table  root  0  NULL
+
+# Test that schema change job description is correct #80889
+statement ok
+CREATE TABLE tbl (c string);
+
+statement ok
+CREATE INDEX expr_idx ON tbl(lower(c));
+
+statement ok
+DROP INDEX expr_idx;
+
+query T colnames
+SELECT description FROM crdb_internal.jobs ORDER BY created DESC LIMIT 2;
+----
+description
+GC for DROP INDEX test.public.tbl@expr_idx
+DROP INDEX test.public.tbl@expr_idx
+
+# Test the syntax without a '@'
+
+statement ok
+CREATE INDEX baz ON users (name)
+
+# Also test that dropping with a non-existing index still drops 'baz'.
+
+statement ok
+DROP INDEX IF EXISTS baz, zap
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM users
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+users       users_pkey  false       1             id           id          ASC        false    false     true     1
+users       users_pkey  false       2             name         name        N/A        true     false     true     1
+users       users_pkey  false       3             title        title       N/A        true     false     true     1
+
+# Test that it still succeeds when an index does not exist.
+
+statement ok
+DROP INDEX IF EXISTS baz
+
+# Test that presence of a view or sequence doesn't break DROP INDEX (#21834)
+
+statement ok
+CREATE DATABASE view_test
+
+statement ok
+SET DATABASE = view_test
+
+statement ok
+CREATE TABLE t (id INT)
+
+statement ok
+CREATE VIEW v AS SELECT id FROM t
+
+statement error pgcode 42704 pq: index "nonexistent_index" does not exist
+DROP INDEX nonexistent_index
+
+statement ok
+CREATE DATABASE sequence_test
+
+statement ok
+SET DATABASE = sequence_test
+
+statement ok
+CREATE SEQUENCE s
+
+statement error pgcode 42704 pq: index "nonexistent_index" does not exist
+DROP INDEX nonexistent_index
+
+statement ok
+CREATE TABLE tu (a INT UNIQUE)
+
+statement ok
+CREATE UNIQUE INDEX tu_a ON tu(a)
+
+statement error in use as unique constraint
+DROP INDEX tu_a_key
+
+statement ok
+DROP INDEX tu_a
+
+# Test that we have more relaxed restrictions on dropping indexes referenced by fks.
+subtest fk_drop
+
+# Ensure that DROP INDEX CASCADE does not delete the foreign key when
+# there is another index that can satisfy the foreign key constraint.
+statement disable-cf-mutator ok
+CREATE TABLE fk1 (x int);
+
+statement ok
+CREATE TABLE fk2 (x int PRIMARY KEY);
+
+statement ok
+CREATE INDEX i ON fk1 (x);
+
+statement ok
+CREATE INDEX i2 ON fk1 (x);
+
+statement ok
+ALTER TABLE fk1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2 (x);
+
+statement ok
+DROP INDEX fk1@i CASCADE
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE fk1
+----
+fk1  CREATE TABLE public.fk1 (
+       x INT8 NULL,
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
+       CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
+       INDEX i2 (x ASC)
+     );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE fk1
+----
+fk1  CREATE TABLE public.fk1 (
+       x INT8 NULL,
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
+       CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
+       INDEX i2 (x ASC)
+     ) WITH (schema_locked = true);
+
+# test that notices are generated on index drops
+subtest notice_on_drop_index
+
+statement ok
+CREATE TABLE drop_index_test(a int);
+CREATE INDEX drop_index_test_index ON drop_index_test(a);
+
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
+query T noticetrace
+DROP INDEX drop_index_test_index
+----
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+# test correct error reporting from NewUniquenessConstraintViolationError; see #46276
+subtest new_uniqueness_constraint_error
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b DECIMAL(10,1) NOT NULL DEFAULT(0), UNIQUE INDEX t_secondary (b), FAMILY (a, b));
+INSERT INTO t VALUES (100, 500.5);
+
+statement ok
+SET autocommit_before_ddl = false;
+
+skipif config schema-locked-disabled
+statement ok
+ALTER TABLE t SET (schema_locked=false)
+
+statement ok
+BEGIN;
+DROP INDEX t_secondary CASCADE;
+ALTER TABLE t DROP COLUMN b;
+INSERT INTO t SELECT a + 1 FROM t;
+
+skipif config #112488 weak-iso-level-configs
+statement error pgcode 23505 duplicate key value violates unique constraint "t_secondary"\nDETAIL: Key \(b\)=\(0\.0\) already exists
+UPSERT INTO t SELECT a + 1 FROM t;
+
+statement ok
+COMMIT;
+
+statement ok
+RESET autocommit_before_ddl
+
+skipif config schema-locked-disabled
+statement ok
+ALTER TABLE t SET (schema_locked=true)
+
+# test the primary key cannot be dropped with drop index; see #56853
+subtest drop_primary_key
+
+statement error pgcode 0A000 cannot drop the primary index of a table using DROP INDEX
+CREATE TABLE drop_primary(); DROP INDEX drop_primary@drop_primary_pkey CASCADE;
+
+# This subtest tests that dropping a unique index that is serving
+# a inbound FK constraint works properly:
+#  - no cascade: return error
+#  - cascade AND:
+#    - there exists another unique index on the same columns: only drop the index
+#    - there exists another unique index but not on the same columns: drop the index and the FK constraint
+#    - there exists another unique without index constraint on the same columns: only drop the index
+#    - there exists another unique_without_index constraint but not on the same columns: drop the index and the FK constraint
+subtest drop_unique_index_serving_FK_96731
+
+statement ok
+CREATE TABLE t2_96731(i INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE UNIQUE INDEX t2_96731_idx ON t2_96731(j);
+
+statement ok
+CREATE TABLE t1_96731(i INT PRIMARY KEY, j INT REFERENCES t2_96731(j));
+
+statement error pq: "t2_96731_idx" is referenced by foreign key from table "t1_96731"
+DROP INDEX t2_96731_idx;
+
+# Create another unique index on the same columns and ensure
+# dropping the index won't drop the FK constraint.
+statement ok
+CREATE UNIQUE INDEX t2_96731_idx2 ON t2_96731(j);
+
+statement ok
+DROP INDEX t2_96731_idx CASCADE;
+
+query TTTTB colnames
+SELECT * FROM [SHOW CONSTRAINTS FROM t1_96731] ORDER BY constraint_name
+----
+table_name  constraint_name      constraint_type  details                                 validated
+t1_96731    t1_96731_i_not_null  NOT NULL         NOT NULL                                true
+t1_96731    t1_96731_j_fkey      FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
+t1_96731    t1_96731_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)                     true
+
+# Drop the last unique index will drop the FK as well this time.
+statement ok
+DROP INDEX t2_96731_idx2 CASCADE;
+
+query TTTTB colnames,nosort
+SHOW CONSTRAINTS FROM t1_96731;
+----
+table_name  constraint_name      constraint_type  details              validated
+t1_96731    t1_96731_i_not_null  NOT NULL         NOT NULL             true
+t1_96731    t1_96731_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)  true
+
+# Recreate the unique index and FK constraint.
+statement ok
+CREATE UNIQUE INDEX t2_96731_idx ON t2_96731(j);
+
+statement ok
+ALTER TABLE t1_96731 ADD FOREIGN KEY (j) REFERENCES t2_96731(j);
+
+# Create a unique_without_index constraint on the same columns and ensure
+# dropping the index won't drop the FK constraint.
+statement ok
+SET experimental_enable_unique_without_index_constraints = true;
+
+statement ok
+ALTER TABLE t2_96731 ADD CONSTRAINT unique_j UNIQUE WITHOUT INDEX (j);
+
+statement ok
+DROP INDEX t2_96731_idx CASCADE;
+
+query TTTTB colnames
+SELECT * FROM [SHOW CONSTRAINTS FROM t1_96731] ORDER BY constraint_name
+----
+table_name  constraint_name      constraint_type  details                                 validated
+t1_96731    t1_96731_i_not_null  NOT NULL         NOT NULL                                true
+t1_96731    t1_96731_j_fkey      FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
+t1_96731    t1_96731_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)                     true
+
+# Recreate the unique index, drop the unique_without_index constraint,
+# and add another one on different columns.
+statement ok
+CREATE UNIQUE INDEX t2_96731_idx ON t2_96731(j);
+
+statement ok
+ALTER TABLE t2_96731 DROP CONSTRAINT unique_j
+
+statement ok
+ALTER TABLE t2_96731 ADD CONSTRAINT unique_i UNIQUE WITHOUT INDEX (i);
+
+# Now dropping the index will also drop the FK constraint.
+statement ok
+DROP INDEX t2_96731_idx CASCADE;
+
+query TTTTB colnames,nosort
+SHOW CONSTRAINTS FROM t1_96731;
+----
+table_name  constraint_name      constraint_type  details              validated
+t1_96731    t1_96731_i_not_null  NOT NULL         NOT NULL             true
+t1_96731    t1_96731_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)  true
+
+statement ok
+DROP TABLE t1_96731, t2_96731;
+
+
+# In #107576 we had a bug where we were not correctly resolving foreign key
+# references by filtering down to the target table for DROP INDEX. As a side effect
+# we could end up cleaning foreign key references in other unrelated tables. In
+# the example below fk_drop_other has foreign key back references which are not
+# relevant.
+subtest drop_index_fk_check
+
+statement ok
+CREATE TABLE fk_drop_target
+ ( k int primary key,
+   j int);
+CREATE TABLE fk_drop_ref_src(
+  k int,
+  j int primary key);
+CREATE UNIQUE INDEX target_j
+     ON fk_drop_target(j);
+ CREATE TABLE fk_ref_dst(
+  k int primary key,
+  j int,
+  m int,
+   CONSTRAINT "j_fk" FOREIGN KEY (j) REFERENCES
+       fk_drop_target(k),
+   CONSTRAINT m_fk   FOREIGN KEY (m) REFERENCES
+        fk_drop_ref_src(j)
+ );
+
+statement ok
+DROP INDEX fk_drop_target@target_j CASCADE;
+
+query T rowsort
+SELECT constraint_name from [SHOW CONSTRAINTS FROM fk_ref_dst];
+----
+fk_ref_dst_pkey
+j_fk
+m_fk
+fk_ref_dst_k_not_null
+
+subtest safe_updates_rejects_drop_index
+
+statement ok
+set sql_safe_updates = true;
+set autocommit_before_ddl = true;
+CREATE TABLE roaches(id INT PRIMARY KEY, value STRING);
+CREATE INDEX roaches_value_idx ON roaches(value);
+
+statement error pq: rejected \(sql_safe_updates = true\): DROP INDEX
+DROP INDEX IF EXISTS roaches@roaches_value_idx;
+
+statement ok
+SET sql_safe_updates = false;
+
+subtest drop_hash_sharded_index_depended_on_by_procedure
+
+statement ok
+CREATE TABLE tab_145100 (
+  id UUID PRIMARY KEY,
+  i INT NOT NULL,
+  j int not null,
+  INDEX (i ASC) USING HASH,
+  FAMILY (id, i, j)
+)
+
+statement ok
+CREATE PROCEDURE proc_select_145100() LANGUAGE SQL AS $$
+  SELECT *, crdb_internal_i_shard_16 FROM tab_145100;
+$$;
+
+statement error cannot drop column "crdb_internal_i_shard_16" because function "proc_select_145100" depends on it
+DROP INDEX tab_145100@tab_145100_i_idx
+
+statement ok
+DROP PROCEDURE proc_select_145100
+
+statement ok
+CREATE PROCEDURE proc_insert_145100(in_id UUID, in_i INT) LANGUAGE SQL AS $$
+  INSERT INTO tab_145100 (id, i) VALUES (in_id, in_i);
+$$;
+
+statement ok
+DROP INDEX tab_145100@tab_145100_i_idx
+
+statement ok
+DROP PROCEDURE proc_insert_145100
+
+onlyif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tab_145100]
+----
+CREATE TABLE public.tab_145100 (
+  id UUID NOT NULL,
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  CONSTRAINT tab_145100_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_i_j (id, i, j)
+);
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tab_145100]
+----
+CREATE TABLE public.tab_145100 (
+  id UUID NOT NULL,
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  CONSTRAINT tab_145100_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_i_j (id, i, j)
+) WITH (schema_locked = true);
+
+# DROP INDEX ... CASCADE should have caused the procedure to be dropped.
+statement error procedure proc_select_145100 does not exist
+CALL proc_select_145100()
+
+statement ok
+DROP TABLE tab_145100
+
+subtest end

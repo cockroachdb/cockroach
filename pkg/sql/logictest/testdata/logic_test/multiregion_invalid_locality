@@ -1,0 +1,15 @@
+# LogicTest: multiregion-invalid-locality
+
+query TT colnames
+SHOW REGIONS FROM CLUSTER
+----
+region  zones
+test1   {test1-az3}
+
+query error no region set on the locality flag on this node
+SELECT gateway_region()
+
+query T nodeidx=2
+SELECT gateway_region()
+----
+test1

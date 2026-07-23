@@ -1,0 +1,28 @@
+# YAML for creating and configuring the drt monitor cluster. This is used for remotre deployment
+environment:
+  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
+  ROACHPROD_DNS: drt.crdb.io
+  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
+  ROACHPROD_GCE_DNS_ZONE: drt
+  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
+  MONITOR_CLUSTER: <yaml file name>-monitor # this is overwritten with the yaml file name
+
+targets:
+  - target_name: $MONITOR_CLUSTER
+    steps:
+      - command: create
+        continue_on_failure: true
+        args:
+          - $MONITOR_CLUSTER
+        flags:
+          clouds: gce
+          gce-zones: "us-central1-a"
+          nodes: 1
+          gce-machine-type: n2-standard-2
+          username: drt
+          lifetime: 8760h
+          gce-image: "ubuntu-2204-jammy-v20240319"
+      - command: sync
+        flags:
+          clouds: gce
+      - script: pkg/cmd/drtprod/scripts/add_dd_api_key_to_bash.sh

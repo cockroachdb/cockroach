@@ -1,0 +1,104 @@
+#
+# Simple identifiers, strings, numbers, comments
+#
+scan
+foo define f123 "hello world" 1 0045 foo _ _123foo# comment ()[]
+----
+(IDENT foo)
+(WHITESPACE  )
+(IDENT define)
+(WHITESPACE  )
+(IDENT f123)
+(WHITESPACE  )
+(STRING "hello world")
+(WHITESPACE  )
+(NUMBER 1)
+(WHITESPACE  )
+(NUMBER 0045)
+(WHITESPACE  )
+(IDENT foo)
+(WHITESPACE  )
+(IDENT _)
+(WHITESPACE  )
+(IDENT _123foo)
+(COMMENT # comment ()[])
+
+#
+# Symbols
+#
+scan
+()[]{}$:*==>&,^|.. . ...
+----
+(LPAREN ()
+(RPAREN ))
+(LBRACKET [)
+(RBRACKET ])
+(LBRACE {)
+(RBRACE })
+(DOLLAR $)
+(COLON :)
+(ASTERISK *)
+(EQUALS =)
+(ARROW =>)
+(AMPERSAND &)
+(COMMA ,)
+(CARET ^)
+(PIPE |)
+(ILLEGAL ..)
+(WHITESPACE  )
+(DOT .)
+(WHITESPACE  )
+(ELLIPSES ...)
+
+#
+# Unterminated string
+#
+scan
+"hello world
+----
+(ILLEGAL "hello world)
+
+#
+# Comment on its own line.
+#
+scan
+#comment
+----
+(COMMENT #comment)
+
+#
+# Failure scanning string
+#
+scan fail=5
+"hello
+----
+(ILLEGAL "hel)
+(ERROR io: read/write on closed pipe)
+
+#
+# Failure scanning comment
+#
+scan fail=6
+# hello
+----
+(COMMENT # hel)
+(ERROR io: read/write on closed pipe)
+
+#
+# Failure scanning ellipses
+#
+scan fail=3
+...
+----
+(ILLEGAL ..)
+(ERROR io: read/write on closed pipe)
+
+#
+# Failure scanning whitespace
+#
+scan fail=5
+hel     lo
+----
+(IDENT hel)
+(WHITESPACE  )
+(ERROR io: read/write on closed pipe)

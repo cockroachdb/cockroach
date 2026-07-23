@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "operations",
+    srcs = ["operations.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/internal/operations",
+    visibility = ["//pkg/cmd/roachprod-centralized/services/clusters:__subpackages__"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/repositories/clusters",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/roachprod/cloud/types",
+    ],
+)
+
+go_test(
+    name = "operations_test",
+    srcs = ["operations_test.go"],
+    embed = [":operations"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/repositories/clusters/mocks",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/roachprod/cloud/types",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//mock",
+    ],
+)

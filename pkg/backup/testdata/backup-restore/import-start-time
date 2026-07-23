@@ -1,0 +1,108 @@
+# Test that Import properly sets and removes the ImportStartTime from the table descriptor.
+# The basic idea:
+# For table with or without data:
+## -start and pause an import
+## -check that the ImportStartTime is set on the descriptor
+## -check that it's removed after cancellation / success
+
+new-cluster name=s1
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
+----
+
+
+exec-sql
+CREATE VIEW import_time (importStartTime)
+AS WITH tbls AS (
+   	SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS orig FROM system.descriptor
+   )
+SELECT orig->'table'->'importStartWallTime' FROM tbls
+INNER JOIN (SELECT id FROM system.namespace WHERE name='foo') AS sys
+ON sys.id = tbls.id;
+----
+
+exec-sql
+EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM baz WHERE i = 1;
+----
+NOTICE: EXPORT is not the recommended way to move data out of CockroachDB and may be deprecated in the future. Please consider exporting data with changefeeds instead: https://www.cockroachlabs.com/docs/stable/export-data-with-changefeeds
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+import expect-pausepoint tag=a
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+
+query-sql regex=^"\d.
+SELECT * FROM import_time
+----
+true
+
+# attempting another import on the table should fail, as there's already an in-progress import
+# on the table.
+exec-sql
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+pq: relation "foo" is offline: importing
+
+# Cancel the job so that the cleanup hook runs, and ensure the importStartTime is 0.
+job cancel=a
+----
+
+query-sql
+SELECT * FROM import_time
+----
+<nil>
+
+# remove the pause setting, and try the import again and ensure it succeeds.
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+exec-sql
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+
+query-sql
+SELECT * FROM import_time
+----
+<nil>
+
+
+# ensure importing into an existing table also modifies the descriptor properly
+exec-sql
+EXPORT INTO CSV 'nodelocal://1/export2/' FROM SELECT * FROM baz WHERE i = 2;
+----
+NOTICE: EXPORT is not the recommended way to move data out of CockroachDB and may be deprecated in the future. Please consider exporting data with changefeeds instead: https://www.cockroachlabs.com/docs/stable/export-data-with-changefeeds
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+import expect-pausepoint tag=b
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export2/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+query-sql regex=^"\d.
+SELECT * FROM import_time
+----
+true
+
+# Cancel the job so that the cleanup hook runs.
+job cancel=b
+----
+
+query-sql
+SELECT * FROM import_time
+----
+<nil>

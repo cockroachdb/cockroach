@@ -1,0 +1,7 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+----
+
+test
+ALTER TABLE t ALTER COLUMN j SET DEFAULT 42;
+----

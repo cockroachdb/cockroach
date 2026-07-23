@@ -1,0 +1,66 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "acceptance",
+    testonly = 1,
+    srcs = [
+        "flags.go",
+        "test_acceptance.go",
+        "util_cluster.go",
+        "util_docker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/acceptance",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/acceptance/cluster",
+        "//pkg/base",
+        "//pkg/build/bazel",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/security/username",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/envutil",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_containerd_containerd//platforms",
+        "@com_github_docker_docker//api/types",
+        "@com_github_docker_docker//api/types/container",
+    ],
+)
+
+go_test(
+    name = "acceptance_test",
+    size = "enormous",
+    srcs = [
+        "adapter_test.go",
+        "cli_test.go",
+        "compose_test.go",
+        "debug_remote_test.go",
+        "generated_cli_test.go",
+    ],
+    data = glob([
+        "testdata/**",
+        "compose/**",
+    ]) + [
+        "//pkg/cli:interactive_tests",
+    ],
+    embed = [":acceptance"],
+    shard_count = 16,
+    tags = [
+        "integration",
+        "no-remote-exec",
+    ],
+    deps = [
+        "//pkg/acceptance/cluster",
+        "//pkg/build/bazel",
+        "//pkg/security/username",
+        "//pkg/testutils/skip",
+        "//pkg/util/log",
+    ],
+)

@@ -1,0 +1,1353 @@
+# ------------------------------------------------------------------------------
+# Create a simple schema that models customers and orders. Each customer has an
+# id (c_id), and has zero or more orders that are related via a foreign key of
+# the same name. A customer has a billing state and an order has a shipping
+# state, either of which could be NULL. This schema, while simple, is rich
+# enough to provide many interesting correlated subquery variations.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE c (c_id INT PRIMARY KEY, bill TEXT);
+CREATE TABLE o (o_id INT PRIMARY KEY, c_id INT, ship TEXT);
+INSERT INTO c VALUES
+    (1, 'CA'),
+    (2, 'TX'),
+    (3, 'MA'),
+    (4, 'TX'),
+    (5, NULL),
+    (6, 'FL');
+INSERT INTO o VALUES
+    (10, 1, 'CA'), (20, 1, 'CA'), (30, 1, 'CA'),
+    (40, 2, 'CA'), (50, 2, 'TX'), (60, 2, NULL),
+    (70, 4, 'WY'), (80, 4, NULL),
+    (90, 6, 'WA');
+
+# ------------------------------------------------------------------------------
+# Subqueries in select filters.
+# ------------------------------------------------------------------------------
+
+# Customers with orders.
+query IT rowsort
+SELECT * FROM c WHERE EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id);
+----
+1  CA
+2  TX
+4  TX
+6  FL
+
+# Customers with no orders.
+query IT rowsort
+SELECT * FROM c WHERE NOT EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id);
+----
+3  MA
+5  NULL
+
+# Customers with orders or with no orders (should return all customers).
+query IT rowsort
+SELECT *
+FROM c
+WHERE
+    EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id)
+    OR NOT EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id);
+----
+1  CA
+2  TX
+3  MA
+4  TX
+5  NULL
+6  FL
+
+# Customers with billing address in TX that have orders.
+query IT rowsort
+SELECT * FROM c WHERE EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id AND c.bill='TX');
+----
+2  TX
+4  TX
+
+# Customers that have at least one order shipped to WY.
+query IT rowsort
+SELECT * FROM c WHERE 'WY' IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
+----
+4  TX
+
+# Customers that have at least one order shipped to WY or to WA.
+query IT rowsort
+SELECT *
+FROM c
+WHERE
+    'WY' IN (SELECT ship FROM o WHERE o.c_id=c.c_id)
+    OR 'WA' IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
+----
+4  TX
+6  FL
+
+# Customers that have at least one order shipped to CA, but none to TX.
+query IT rowsort
+SELECT *
+FROM c
+WHERE
+    'CA' IN (SELECT ship FROM o WHERE o.c_id=c.c_id)
+    AND 'TX' NOT IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
+----
+1  CA
+
+# Customers with at least one order with billing addr = shipping addr.
+query IT rowsort
+SELECT * FROM c WHERE bill IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
+----
+1  CA
+2  TX
+
+# Customers with all orders with billing addr = shipping addr.
+query IT rowsort
+SELECT * FROM c WHERE bill = ALL(SELECT ship FROM o WHERE o.c_id=c.c_id);
+----
+1  CA
+3  MA
+5  NULL
+
+# Customers with no order with billing addr = shipping addr (with NULL ship).
+query IT rowsort
+SELECT * FROM c WHERE bill NOT IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
+----
+3  MA
+5  NULL
+6  FL
+
+# Customers with no order with billing addr = shipping addr (no NULL ship).
+query IT rowsort
+SELECT * FROM c WHERE bill NOT IN (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL);
+----
+3  MA
+4  TX
+5  NULL
+6  FL
+
+# Customers with no order with billing addr = shipping addr (only NULL ship).
+query IT rowsort
+SELECT * FROM c WHERE bill NOT IN (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NULL);
+----
+1  CA
+3  MA
+5  NULL
+6  FL
+
+# Customers with bill state < any ship state.
+query IT rowsort
+SELECT * FROM c WHERE bill < ANY(SELECT ship FROM o WHERE o.c_id=c.c_id);
+----
+4  TX
+6  FL
+
+# Customers where bill state < any ship state is null result. This prevents
+# normalizing ANY into EXISTS.
+query IT rowsort
+SELECT * FROM c WHERE (bill < ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NULL;
+----
+2  TX
+
+# Customers where bill state < any ship state is not null result. This prevents
+# normalizing ANY into EXISTS.
+query IT rowsort
+SELECT * FROM c WHERE (bill < ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL;
+----
+1  CA
+3  MA
+4  TX
+5  NULL
+6  FL
+
+# Customers with bill state > any ship state.
+query IT rowsort
+SELECT * FROM c WHERE bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id);
+----
+2  TX
+
+# Customers where bill state > any ship state is null result. This prevents
+# normalizing ANY into EXISTS.
+query IT rowsort
+SELECT * FROM c WHERE (bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NULL;
+----
+4  TX
+
+# Customers where bill state > any ship state is not null result. This prevents
+# normalizing ANY into EXISTS.
+query IT rowsort
+SELECT * FROM c WHERE (bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL;
+----
+1  CA
+2  TX
+3  MA
+5  NULL
+6  FL
+
+# Customers where bill state matches any ship state.
+query IT rowsort
+SELECT * FROM c WHERE bill = ANY(SELECT ship FROM o);
+----
+1  CA
+2  TX
+4  TX
+
+# Customers where bill state matches any ship state or is null.
+query IT rowsort
+SELECT * FROM c WHERE bill = ANY(SELECT ship FROM o) OR bill IS NULL;
+----
+1  CA
+2  TX
+4  TX
+5  NULL
+
+# Test NULL IN case. Use IS NOT NULL to prevent normalize ANY into EXISTS.
+query IT rowsort
+SELECT * FROM c WHERE (NULL::text IN (SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL;
+----
+3  MA
+5  NULL
+
+# Test NULL NOT IN case. Use IS NOT NULL to prevent normalize ANY into EXISTS.
+query IT rowsort
+SELECT * FROM c WHERE (NULL::text NOT IN (SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL;
+----
+3  MA
+5  NULL
+
+# Customers where it is unknown whether a replaced bill state is one of the ship
+# states. This tests a more complex scalar expression as argument to IN.
+query IT rowsort
+SELECT * FROM c WHERE (replace(bill, 'TX', 'WY') IN (SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NULL;
+----
+2  TX
+
+# Customers with all orders with billing addr = shipping addr, or with at least
+# one order shipped to WY.
+query IT rowsort
+SELECT *
+FROM c
+WHERE
+    bill = ALL(SELECT ship FROM o WHERE o.c_id=c.c_id)
+    OR EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id AND ship='WY');
+----
+1  CA
+3  MA
+4  TX
+5  NULL
+
+# Customers with all orders with billing addr = shipping addr, but with at least
+# one order.
+query IT rowsort
+SELECT *
+FROM c
+WHERE
+    bill = ALL(SELECT ship FROM o WHERE o.c_id=c.c_id)
+    AND EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id);
+----
+1  CA
+
+# Customers with more than one order.
+query IT rowsort
+SELECT * FROM c WHERE (SELECT count(*) FROM o WHERE o.c_id=c.c_id) > 1;
+----
+1  CA
+2  TX
+4  TX
+
+# Customers with more than one order shipped to a known state (i.e. NOT NULL).
+query IT rowsort
+SELECT * FROM c WHERE (SELECT count(ship) FROM o WHERE o.c_id=c.c_id) > 1;
+----
+1  CA
+2  TX
+
+# For each customer, orders shipped to lowest state (alphabetically).
+query IIT rowsort
+SELECT c.c_id, o.o_id, o.ship
+FROM c
+INNER JOIN o
+ON c.c_id=o.c_id AND o.ship = (SELECT min(o.ship) FROM o WHERE o.c_id=c.c_id);
+----
+1  20  CA
+2  40  CA
+4  70  WY
+1  10  CA
+6  90  WA
+1  30  CA
+
+# Customers who have shipped more orders to a particular state than all other
+# customers have shipped to that state, combined.
+query ITI rowsort
+SELECT c.c_id, o.ship, count(*)
+FROM c
+INNER JOIN o
+ON c.c_id=o.c_id
+WHERE
+    (SELECT count(*) FROM o AS o2 WHERE o2.ship = o.ship AND o2.c_id = o.c_id) >
+    (SELECT count(*) FROM o AS o2 WHERE o2.ship = o.ship AND o2.c_id <> o.c_id)
+GROUP BY c.c_id, o.ship;
+----
+1  CA  3
+2  TX  1
+4  WY  1
+6  WA  1
+
+# Customers with more than one order and with the highest state = 'CA'.
+query IT rowsort
+SELECT *
+FROM c
+WHERE
+    (SELECT count(*) FROM o WHERE o.c_id=c.c_id) > 1
+    AND (SELECT max(ship) FROM o WHERE o.c_id=c.c_id) = 'CA';
+----
+1  CA
+
+# Customers with more than one order or with an unknown ship state.
+query IT rowsort
+SELECT *
+FROM c
+WHERE
+    (SELECT count(*) FROM o WHERE o.c_id=c.c_id) > 1
+    OR EXISTS(SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NULL);
+----
+1  CA
+2  TX
+4  TX
+
+# Customers that have a bill state equal to the max ship state of all their
+# orders (alphabetically).
+query IT rowsort
+SELECT c_id, bill
+FROM c AS c2
+WHERE EXISTS
+(
+    SELECT * FROM c WHERE bill=(SELECT max(ship) FROM o WHERE c_id=c2.c_id AND c_id=c.c_id)
+)
+----
+1  CA
+2  TX
+
+# Customers that have at least one order shipped to their billing state (or if
+# the ship state is null).
+query IT rowsort
+SELECT c_id, bill
+FROM c AS c2
+WHERE EXISTS
+(
+    SELECT *
+    FROM (SELECT c_id, coalesce(ship, bill) AS state FROM o WHERE c_id=c2.c_id) AS o
+    WHERE state=bill
+)
+----
+1  CA
+2  TX
+4  TX
+
+# Customers with each of their orders numbered.
+query II rowsort
+SELECT c_id, generate_series(1, (SELECT count(*) FROM o WHERE o.c_id=c.c_id)) FROM c
+----
+1  1
+1  2
+1  3
+2  1
+2  2
+2  3
+4  1
+4  2
+6  1
+
+# Customers that have no orders with a NULL ship state.
+query IT rowsort
+SELECT *
+FROM c
+WHERE (SELECT ship FROM o WHERE o.c_id=c.c_id ORDER BY ship LIMIT 1) IS NOT NULL
+----
+1  CA
+6  FL
+
+# Customers that have first order shipping to 'CA' or 'WY' (no NULL ship).
+query IT
+SELECT *
+FROM c
+WHERE
+    (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL ORDER BY ship LIMIT 1)='CA'
+    OR (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL ORDER BY ship LIMIT 1)='WY'
+ORDER BY c_id
+----
+1  CA
+2  TX
+4  TX
+
+# Apply
+query IT rowsort
+SELECT *
+FROM c
+WHERE (SELECT o_id FROM o WHERE o.c_id=c.c_id AND ship='WY')=4;
+----
+
+# Try to find customers other than customer #2 that have at most one order that
+# is shipping to 'CA'. However, since there is more than one order shipping to
+# 'CA' corresponding to customers other than #2, this attempt fails with an
+# error.
+query error more than one row returned by a subquery used as an expression
+SELECT * FROM c WHERE c_id=(SELECT c_id FROM o WHERE ship='CA' AND c.c_id<>2)
+
+# Find customers other than customer #1 that have at most one order that is
+# shipping to 'CA' and a billing state equal to 'TX'. Since there is only one
+# other customer who is shipping to 'CA', and this customer has only a single
+# order, this attempt is successful.
+query IT
+SELECT * FROM c WHERE c_id=(SELECT c_id FROM o WHERE ship='CA' AND c_id<>1 AND bill='TX')
+----
+2  TX
+
+# Find customers with billing state equal to 'FL' that have at most one order
+# that is shipping to 'WA'. Since there is only one order shipping to 'WA', this
+# attempt is successful.
+query IT
+SELECT * FROM c WHERE c_id=(SELECT c_id FROM o WHERE ship='WA' AND bill='FL')
+----
+6  FL
+
+# Try to find customers that have at most one order that is also shipping to
+# 'WA'. However, since there are customers that have more than one order, this
+# attempt fails with an error.
+query error more than one row returned by a subquery used as an expression
+SELECT * FROM c WHERE (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL)='WA'
+
+# Add clause to filter out customers that have more than one order. Find
+# remaining customers with at least one order shipping to 'WA'.
+query IT
+SELECT *
+FROM c
+WHERE (
+  SELECT ship
+  FROM o
+  WHERE o.c_id=c.c_id AND ship IS NOT NULL AND (SELECT count(*) FROM o WHERE o.c_id=c.c_id)<=1
+)='WA'
+----
+6  FL
+
+# ------------------------------------------------------------------------------
+# Subqueries in projection lists.
+#   Although the queries are similar to those above, they are often compiled
+#   differently in the context of a projection list, due to different null
+#   result handling rules.
+# ------------------------------------------------------------------------------
+
+# Customers with orders.
+query IB
+SELECT c_id, EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id) FROM c ORDER BY c_id;
+----
+1  true
+2  true
+3  false
+4  true
+5  false
+6  true
+
+# Customers with no orders.
+query IB
+SELECT c_id, NOT EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id) FROM c ORDER BY c_id;
+----
+1  false
+2  false
+3  true
+4  false
+5  true
+6  false
+
+# Customers with orders or with no orders (should be all customers).
+query IB
+SELECT
+    c_id,
+    EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id)
+    OR NOT EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id)
+FROM c
+ORDER BY c_id;
+----
+1  true
+2  true
+3  true
+4  true
+5  true
+6  true
+
+# Customers with billing address in TX that have orders.
+query IB
+SELECT c_id, EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id AND c.bill='TX') FROM c ORDER BY c_id;
+----
+1  false
+2  true
+3  false
+4  true
+5  false
+6  false
+
+# Customers that have at least one order shipped to WY.
+query IB
+SELECT c_id, 'WY' IN (SELECT ship FROM o WHERE o.c_id=c.c_id) FROM c ORDER BY c_id;
+----
+1  false
+2  NULL
+3  false
+4  true
+5  false
+6  false
+
+# Customers that have at least one order shipped to WY or to WA.
+query IB
+SELECT
+    c_id,
+    'WY' IN (SELECT ship FROM o WHERE o.c_id=c.c_id)
+    OR 'WA' IN (SELECT ship FROM o WHERE o.c_id=c.c_id)
+FROM c
+ORDER BY c_id;
+----
+1  false
+2  NULL
+3  false
+4  true
+5  false
+6  true
+
+# Customers that have at least one order shipped to CA, but none to TX.
+query IB
+SELECT
+    c_id,
+    'CA' IN (SELECT ship FROM o WHERE o.c_id=c.c_id)
+    AND 'TX' NOT IN (SELECT ship FROM o WHERE o.c_id=c.c_id)
+FROM c
+ORDER BY c_id;
+----
+1  true
+2  false
+3  false
+4  NULL
+5  false
+6  false
+
+# Customers with at least one order with billing addr = shipping addr.
+query IB
+SELECT c_id, bill IN (SELECT ship FROM o WHERE o.c_id=c.c_id) FROM c ORDER BY c_id;
+----
+1  true
+2  true
+3  false
+4  NULL
+5  false
+6  false
+
+# Customers with all orders with billing addr = shipping addr.
+query IB
+SELECT c_id, bill = ALL(SELECT ship FROM o WHERE o.c_id=c.c_id) FROM c ORDER BY c_id;
+----
+1  true
+2  false
+3  true
+4  false
+5  true
+6  false
+
+# Customers with no order with billing addr = shipping addr (with NULL ship).
+query IB
+SELECT c_id, bill NOT IN (SELECT ship FROM o WHERE o.c_id=c.c_id) FROM c ORDER BY c_id;
+----
+1  false
+2  false
+3  true
+4  NULL
+5  true
+6  true
+
+# Customers with no order with billing addr = shipping addr (no NULL ship).
+query IB
+SELECT c_id, bill NOT IN (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL)
+FROM c
+ORDER BY c_id;
+----
+1  false
+2  false
+3  true
+4  true
+5  true
+6  true
+
+# Customers with no order with billing addr = shipping addr (only NULL ship).
+query IB
+SELECT c_id, bill NOT IN (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NULL)
+FROM c
+ORDER BY c_id;
+----
+1  true
+2  NULL
+3  true
+4  NULL
+5  true
+6  true
+
+# Customers with bill state < any ship state.
+query IB
+SELECT c_id, bill < ANY(SELECT ship FROM o WHERE o.c_id=c.c_id) FROM c ORDER BY c_id;
+----
+1  false
+2  NULL
+3  false
+4  true
+5  false
+6  true
+
+# Customers where bill state < any ship state is null result.
+query IB
+SELECT c_id, (bill < ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NULL FROM c ORDER BY c_id;
+----
+1  false
+2  true
+3  false
+4  false
+5  false
+6  false
+
+# Customers where bill state < any ship state is not null result.
+query IB
+SELECT c_id, (bill < ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL FROM c ORDER BY c_id;
+----
+1  true
+2  false
+3  true
+4  true
+5  true
+6  true
+
+# Customers with bill state > any ship state.
+query IB
+SELECT c_id, bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id) FROM c ORDER BY c_id;
+----
+1  false
+2  true
+3  false
+4  NULL
+5  false
+6  false
+
+# Customers where bill state > any ship state is null result.
+query IB
+SELECT c_id, (bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NULL FROM c ORDER BY c_id;
+----
+1  false
+2  false
+3  false
+4  true
+5  false
+6  false
+
+# Customers where bill state > any ship state is not null result.
+query IB
+SELECT c_id, (bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL FROM c ORDER BY c_id;
+----
+1  true
+2  true
+3  true
+4  false
+5  true
+6  true
+
+# Customers where bill state matches any non-null ship state.
+query IB rowsort
+SELECT c_id, bill = ANY(SELECT ship FROM o WHERE ship IS NOT NULL) FROM c;
+----
+1  true
+2  true
+3  false
+4  true
+5  NULL
+6  false
+
+# Customers where bill state matches any non-null ship state or is null.
+query IB rowsort
+SELECT c_id, bill = ANY(SELECT ship FROM o WHERE ship IS NOT NULL) OR bill IS NULL FROM c;
+----
+1  true
+2  true
+3  false
+4  true
+5  true
+6  false
+
+# Test NULL IN case.
+query IB
+SELECT c_id, (NULL::text IN (SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL
+FROM c
+ORDER BY c_id;
+----
+1  false
+2  false
+3  true
+4  false
+5  true
+6  false
+
+# Test NULL NOT IN case. Use IS NOT NULL to prevent normalize ANY into EXISTS.
+query IB
+SELECT c_id, (NULL::text NOT IN (SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL
+FROM c
+ORDER BY c_id;
+----
+1  false
+2  false
+3  true
+4  false
+5  true
+6  false
+
+# Customers where it is unknown whether a replaced bill state is one of the ship
+# states. This tests a more complex scalar expression as argument to IN.
+query IB
+SELECT c_id, (replace(bill, 'TX', 'WY') IN (SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NULL
+FROM c
+ORDER BY c_id;
+----
+1  false
+2  true
+3  false
+4  false
+5  false
+6  false
+
+# Customers with all orders with billing addr = shipping addr, or with at least
+# one order shipped to WY.
+query IB
+SELECT
+    c_id,
+    bill = ALL(SELECT ship FROM o WHERE o.c_id=c.c_id)
+    OR EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id AND ship='WY')
+FROM c
+ORDER BY c_id;
+----
+1  true
+2  false
+3  true
+4  true
+5  true
+6  false
+
+# Customers with all orders with billing addr = shipping addr, but with at least
+# one order.
+query IB
+SELECT
+    c_id,
+    bill = ALL(SELECT ship FROM o WHERE o.c_id=c.c_id)
+    AND EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id)
+FROM c
+ORDER BY c_id;
+----
+1  true
+2  false
+3  false
+4  false
+5  false
+6  false
+
+# Apply.
+query IT rowsort
+SELECT *
+FROM c
+WHERE (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
+----
+1  CA
+2  TX
+4  TX
+6  FL
+
+# Customers with at least one shipping address = minimum shipping address.
+query IB
+SELECT
+    c_id,
+    (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id)
+FROM c
+ORDER BY c_id;
+----
+1  true
+2  true
+3  false
+4  true
+5  false
+6  true
+
+# Maximum number of orders for a customer. Use subquery in aggregate function.
+query I
+SELECT max((SELECT count(*) FROM o WHERE o.c_id=c.c_id)) FROM c;
+----
+3
+
+# Order count by customer.
+query II
+SELECT
+    c_id,
+    (SELECT count(*) FROM o WHERE o.c_id=c.c_id)
+FROM c
+ORDER BY c_id;
+----
+1  3
+2  3
+3  0
+4  2
+5  0
+6  1
+
+# Count bill/ship addresses in each state.
+query TI
+SELECT
+    s.st,
+    (SELECT count(*) FROM c WHERE c.bill=s.st) + (SELECT count(*) FROM o WHERE o.ship=s.st)
+FROM (SELECT c.bill AS st FROM c UNION SELECT o.ship AS st FROM o) s
+ORDER BY s.st;
+----
+NULL  0
+CA    5
+FL    1
+MA    1
+TX    3
+WA    1
+WY    1
+
+# Customer orders grouped by ship state, compared with count of all orders
+# shipped to that state by all other customers combined.
+query ITII rowsort
+SELECT c.c_id, o.ship, count(*) AS cust,
+    (SELECT count(*) FROM o AS o2 WHERE o2.ship = o.ship AND o2.c_id <> c.c_id) AS other
+FROM c
+INNER JOIN o
+ON c.c_id=o.c_id
+GROUP BY c.c_id, o.ship;
+----
+2  TX    1  0
+4  NULL  1  0
+6  WA    1  0
+2  NULL  1  0
+4  WY    1  0
+1  CA    3  1
+2  CA    1  3
+
+# Customers with their orders (even if no orders), plus max of bill and ship
+# states for that customer (alphabetically).
+query IIT
+SELECT
+    c.c_id,
+    o.o_id,
+    (
+        SELECT max(CASE WHEN c2.bill > o2.ship THEN c2.bill ELSE o2.ship END)
+        FROM c AS c2, o AS o2
+        WHERE c2.c_id=o2.c_id AND c2.c_id=c.c_id
+    )
+FROM c
+LEFT JOIN o
+ON c.c_id=o.c_id
+ORDER BY c.c_id, o.o_id
+----
+1  10    CA
+1  20    CA
+1  30    CA
+2  40    TX
+2  50    TX
+2  60    TX
+3  NULL  NULL
+4  70    WY
+4  80    WY
+5  NULL  NULL
+6  90    WA
+
+# Customers, with boolean indicating whether they have at least one order with a
+# NULL ship state.
+query IB
+SELECT
+    c.c_id,
+    (SELECT ship FROM o WHERE o.c_id=c.c_id ORDER BY ship LIMIT 1) IS NOT NULL
+FROM c
+ORDER BY c.c_id
+----
+1  true
+2  false
+3  false
+4  false
+5  false
+6  true
+
+# Customers, with boolean indicating whether their first order shipped to 'CA'
+# or 'WY' (no NULL ship).
+query IB
+SELECT
+    c.c_id,
+    (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL ORDER BY ship LIMIT 1)='CA'
+    OR (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL ORDER BY ship LIMIT 1)='WY'
+FROM c
+ORDER BY c_id
+----
+1  true
+2  true
+3  NULL
+4  true
+5  NULL
+6  false
+
+query T
+SELECT (SELECT concat_agg(ship || ' ')
+  FROM
+  (SELECT c_id AS o_c_id, ship FROM o ORDER BY ship)
+  WHERE o_c_id=c.c_id)
+FROM c ORDER BY c_id
+----
+CA CA CA
+CA TX
+NULL
+WY
+NULL
+WA
+
+query T
+SELECT (SELECT string_agg(ship, ', ')
+  FROM
+  (SELECT c_id AS o_c_id, ship FROM o ORDER BY ship)
+  WHERE o_c_id=c.c_id)
+FROM c ORDER BY c_id
+----
+CA, CA, CA
+CA, TX
+NULL
+WY
+NULL
+WA
+
+query T
+SELECT (SELECT string_agg(DISTINCT ship, ', ')
+  FROM
+  (SELECT c_id AS o_c_id, ship FROM o ORDER BY ship)
+  WHERE o_c_id=c.c_id)
+FROM c ORDER BY c_id
+----
+CA
+CA, TX
+NULL
+WY
+NULL
+WA
+
+query ITI colnames
+SELECT
+    *
+FROM
+    (SELECT c_id AS c_c_id, bill FROM c),
+    LATERAL (SELECT row_number() OVER () AS rownum FROM o WHERE c_id = c_c_id)
+ORDER BY c_c_id, bill, rownum
+----
+c_c_id  bill  rownum
+1       CA    1
+1       CA    2
+1       CA    3
+2       TX    1
+2       TX    2
+2       TX    3
+4       TX    1
+4       TX    2
+6       FL    1
+
+query TI colnames,rowsort
+SELECT
+    *
+FROM
+    (SELECT bill FROM c),
+    LATERAL (SELECT row_number() OVER (PARTITION BY bill) AS rownum FROM o WHERE ship = bill)
+ORDER BY bill, rownum
+----
+bill  rownum
+CA    1
+CA    2
+CA    3
+CA    4
+TX    1
+TX    1
+
+# ------------------------------------------------------------------------------
+# Subqueries in other interesting locations.
+# ------------------------------------------------------------------------------
+
+# Group by order count by customer, and order by that order count as well.
+query II
+SELECT
+    (SELECT count(*) FROM o WHERE o.c_id=c.c_id) AS order_cnt,
+    count(*) AS cust_cnt
+FROM c
+GROUP BY (SELECT count(*) FROM o WHERE o.c_id=c.c_id)
+ORDER BY (SELECT count(*) FROM o WHERE o.c_id=c.c_id) DESC;
+----
+3  2
+2  1
+1  1
+0  2
+
+# Subquery in VALUES clause.
+query III
+SELECT c_cnt, o_cnt, c_cnt + o_cnt AS total
+FROM (VALUES ((SELECT count(*) FROM c), (SELECT count(*) FROM o))) AS v(c_cnt, o_cnt)
+WHERE c_cnt > 0 AND o_cnt > 0;
+----
+6  9  15
+
+# Subquery in JOIN condition.
+query II rowsort
+SELECT c.c_id, o.o_id
+FROM c
+INNER JOIN o
+ON c.c_id=o.c_id AND EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id AND ship IS NULL);
+----
+2  40
+2  50
+2  60
+4  70
+4  80
+
+query error more than one row returned by a subquery
+SELECT c.c_id, o.o_id
+FROM c
+INNER JOIN o
+ON c.c_id=o.c_id AND o.ship = (SELECT o.ship FROM o WHERE o.c_id=c.c_id);
+
+statement error AS OF SYSTEM TIME must be provided on a top-level statement
+SELECT (SELECT c_id FROM o AS OF SYSTEM TIME '-1us')
+FROM c
+WHERE EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id)
+
+# Subquery in ARRAY(...)
+query ITT
+SELECT
+  c_id,
+  ARRAY(SELECT o_id FROM o WHERE o.c_id = c.c_id ORDER BY o_id),
+  ARRAY(SELECT o_id FROM o WHERE o.ship = c.bill ORDER BY o_id)
+FROM c ORDER BY c_id
+----
+1  {10,20,30}  {10,20,30,40}
+2  {40,50,60}  {50}
+3  {}          {}
+4  {70,80}     {50}
+5  {}          {}
+6  {90}        {}
+
+query IT
+SELECT
+  c_id,
+  ARRAY(SELECT o_id FROM o WHERE o.c_id = c.c_id ORDER BY o_id)
+FROM c ORDER BY c_id
+----
+1  {10,20,30}
+2  {40,50,60}
+3  {}
+4  {70,80}
+5  {}
+6  {90}
+
+# Regression for issue #24676: missing support for correlated subquery in JSON
+# operator.
+statement ok
+CREATE TABLE groups(
+  id SERIAL PRIMARY KEY,
+  data JSONB
+);
+
+statement ok
+INSERT INTO groups(data) VALUES('{"name": "Group 1", "members": [{"name": "admin", "type": "USER"}, {"name": "user", "type": "USER"}]}');
+INSERT INTO groups(data) VALUES('{"name": "Group 2", "members": [{"name": "admin2", "type": "USER"}]}');
+
+query TT
+SELECT
+  g.data->>'name' AS group_name,
+  jsonb_array_elements( (SELECT gg.data->'members' FROM groups gg WHERE gg.data->>'name' = g.data->>'name') )
+FROM
+  groups g
+ORDER BY g.data->>'name'
+----
+Group 1  {"name": "admin", "type": "USER"}
+Group 1  {"name": "user", "type": "USER"}
+Group 2  {"name": "admin2", "type": "USER"}
+
+query TT
+SELECT
+    data->>'name',
+    members
+FROM
+    groups AS g,
+    jsonb_array_elements(
+        (
+            SELECT
+                gg.data->'members' AS members
+            FROM
+                groups AS gg
+            WHERE
+                gg.data->>'name' = g.data->>'name'
+        )
+    ) AS members
+ORDER BY g.data->>'name'
+----
+Group 1  {"name": "admin", "type": "USER"}
+Group 1  {"name": "user", "type": "USER"}
+Group 2  {"name": "admin2", "type": "USER"}
+
+# ------------------------------------------------------------------------------
+# Regression test cases.
+# ------------------------------------------------------------------------------
+
+# Regression for issue 32786.
+
+statement ok
+CREATE TABLE t32786 (id UUID PRIMARY KEY, parent_id UUID, parent_path text)
+
+statement ok
+INSERT INTO t32786 VALUES ('3AAA2577-DBC3-47E7-9E85-9CC7E19CF48A', null)
+
+statement ok
+UPDATE t32786 as node
+SET parent_path=concat((SELECT parent.parent_path
+  FROM t32786 parent
+  WHERE parent.id=node.parent_id),
+  node.id::varchar, '/')
+
+statement ok
+INSERT INTO t32786 VALUES ('5AE7EAFD-8277-4F41-83DE-0FD4B4482169', '3AAA2577-DBC3-47E7-9E85-9CC7E19CF48A')
+
+statement ok
+UPDATE t32786 as node
+SET parent_path=concat((SELECT parent.parent_path
+  FROM t32786 parent
+  WHERE parent.id=node.parent_id),
+  node.id::varchar, '/')
+
+query T
+SELECT parent_path FROM t32786 ORDER BY id
+----
+3aaa2577-dbc3-47e7-9e85-9cc7e19cf48a/
+3aaa2577-dbc3-47e7-9e85-9cc7e19cf48a/5ae7eafd-8277-4f41-83de-0fd4b4482169/
+
+# Regression test for #32723.
+query I
+SELECT
+    generate_series(a + 1, a + 1)
+FROM
+    (SELECT a FROM ((SELECT 1 AS a, 1) EXCEPT ALL (SELECT 0, 0)))
+----
+2
+
+# Regression for issue 35437.
+
+statement ok
+CREATE TABLE users (
+    id INT8 NOT NULL DEFAULT unique_rowid(),
+    name VARCHAR(50),
+    PRIMARY KEY (id)
+);
+
+statement ok
+INSERT INTO users(id, name) VALUES (1, 'user1');
+INSERT INTO users(id, name) VALUES (2, 'user2');
+INSERT INTO users(id, name) VALUES (3, 'user3');
+
+statement ok
+CREATE TABLE stuff (
+    id INT8 NOT NULL DEFAULT unique_rowid(),
+    date DATE,
+    user_id INT8,
+    PRIMARY KEY (id),
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+statement ok
+INSERT INTO stuff(id, date, user_id) VALUES (1, '2007-10-15'::DATE, 1);
+INSERT INTO stuff(id, date, user_id) VALUES (2, '2007-12-15'::DATE, 1);
+INSERT INTO stuff(id, date, user_id) VALUES (3, '2007-11-15'::DATE, 1);
+INSERT INTO stuff(id, date, user_id) VALUES (4, '2008-01-15'::DATE, 2);
+INSERT INTO stuff(id, date, user_id) VALUES (5, '2007-06-15'::DATE, 3);
+INSERT INTO stuff(id, date, user_id) VALUES (6, '2007-03-15'::DATE, 3);
+
+query ITITI
+SELECT
+    users.id AS users_id,
+    users.name AS users_name,
+    stuff_1.id AS stuff_1_id,
+    stuff_1.date AS stuff_1_date,
+    stuff_1.user_id AS stuff_1_user_id
+FROM
+    users
+    LEFT JOIN stuff AS stuff_1
+    ON
+        users.id = stuff_1.user_id
+        AND stuff_1.id
+            = (
+                    SELECT
+                        stuff_2.id
+                    FROM
+                        stuff AS stuff_2
+                    WHERE
+                        stuff_2.user_id = users.id
+                    ORDER BY
+                        stuff_2.date DESC
+                    LIMIT
+                        1
+                )
+ORDER BY
+    users.name;
+----
+1  user1  2  2007-12-15 00:00:00 +0000 +0000  1
+2  user2  4  2008-01-15 00:00:00 +0000 +0000  2
+3  user3  5  2007-06-15 00:00:00 +0000 +0000  3
+
+statement ok
+DROP TABLE stuff;
+DROP TABLE users;
+
+# Regression test for #38867.
+query T
+SELECT (
+		SELECT
+			ARRAY (
+			  SELECT c.relname
+			  FROM pg_inherits AS i JOIN pg_class AS c ON c.oid = i.inhparent
+			  WHERE i.inhrelid = rel.oid
+			  ORDER BY inhseqno
+			)
+)
+FROM pg_class AS rel
+LIMIT 5;
+----
+{}
+{}
+{}
+{}
+{}
+
+# Customers, their billing address, and all orders not going to their billing address
+query ITT rowsort
+SELECT
+    c_id, bill, states
+FROM
+    c
+    JOIN LATERAL (
+            SELECT
+                COALESCE(array_agg(o.ship), '{}') AS states
+            FROM
+                o
+            WHERE
+                o.c_id = c.c_id AND o.ship != c.bill
+        ) ON true;
+----
+1  CA    {}
+3  MA    {}
+4  TX    {WY}
+5  NULL  {}
+6  FL    {WA}
+2  TX    {CA}
+
+# Customers that have billing addresses and all orders not going to their billing address
+query IT rowsort
+SELECT
+    c_id, states
+FROM
+    c
+    LEFT JOIN LATERAL (
+            SELECT
+                COALESCE(array_agg(o.ship), '{}') AS states
+            FROM
+                o
+            WHERE
+                o.c_id = c.c_id AND o.ship != c.bill
+        ) ON true
+WHERE
+    bill IS NOT NULL;
+----
+1  {}
+3  {}
+2  {CA}
+4  {WY}
+6  {WA}
+
+# Regression test for #48638.
+statement ok
+CREATE TABLE IF NOT EXISTS t_48638 (
+  key INTEGER NOT NULL,
+  value INTEGER NOT NULL,
+  PRIMARY KEY (key, value))
+
+statement ok
+INSERT INTO t_48638 values (1, 4);
+INSERT INTO t_48638 values (4, 3);
+INSERT INTO t_48638 values (3, 2);
+INSERT INTO t_48638 values (4, 1);
+INSERT INTO t_48638 values (1, 2);
+INSERT INTO t_48638 values (6, 5);
+INSERT INTO t_48638 values (7, 8);
+
+query II rowsort
+SELECT *
+FROM t_48638
+WHERE key IN (
+  WITH v AS (
+    SELECT
+      level1.value AS value, level1.key AS level1, level2.key AS level2, level3.key AS level3
+    FROM
+      t_48638 AS level2
+      RIGHT JOIN (SELECT * FROM t_48638 WHERE value = 4) AS level1 ON level1.value = level2.key
+      LEFT JOIN (SELECT * FROM t_48638) AS level3 ON level3.key = level2.value
+  )
+  SELECT v.level1 FROM v WHERE v.level1 IS NOT NULL
+  UNION ALL SELECT v.level2 FROM v WHERE v.level2 IS NOT NULL
+  UNION ALL SELECT v.level3 FROM v WHERE v.level3 IS NOT NULL
+)
+----
+1  2
+1  4
+3  2
+4  1
+4  3
+
+# Regression test for #98691.
+statement ok
+CREATE TABLE t98691 (
+  a INT,
+  b INT
+)
+
+statement ok
+INSERT INTO t98691 VALUES (1, 10)
+
+query B nosort
+SELECT (NULL, NULL) = ANY (
+  SELECT a, b FROM t98691 WHERE a > i
+) FROM (VALUES (0), (0)) v(i)
+----
+NULL
+NULL
+
+statement ok
+INSERT INTO t98691 VALUES (NULL, NULL)
+
+query B nosort
+SELECT (2, 20) = ANY (
+  SELECT a, b FROM t98691 WHERE a > i OR a IS NULL
+) FROM (VALUES (0), (0)) v(i)
+----
+NULL
+NULL
+
+# Regression test for #108057 - maintain the precision of the a+x operation.
+statement ok
+CREATE TABLE xy108057 (x DECIMAL(10, 2) PRIMARY KEY, y DECIMAL(10, 2));
+CREATE TABLE ab108057 (a DECIMAL(10, 0), b DECIMAL(10, 0));
+
+statement ok
+INSERT INTO xy108057 VALUES (1.00, 1.00);
+INSERT INTO ab108057 VALUES (1, 1);
+
+query RRRR
+SELECT * FROM xy108057 INNER JOIN LATERAL (SELECT a, a+x FROM ab108057) ON a = x
+----
+1.00  1.00  1  2.00
+
+query RRRR
+SELECT * FROM ab108057 INNER JOIN LATERAL (SELECT x, x+a FROM xy108057) ON a = x
+----
+1  1  1.00  2.00

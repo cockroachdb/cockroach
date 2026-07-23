@@ -1,0 +1,427 @@
+init
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*]
+t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
+inspect range_id=1
+----
+{
+  "range_id": "1",
+  "connected_streams": [
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 1,
+        "available_eval_regular_tokens": "16777216",
+        "available_eval_elastic_tokens": "8388608",
+        "available_send_regular_tokens": "16777216",
+        "available_send_elastic_tokens": "8388608"
+      },
+      "tracked_deductions": [
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
+    }
+  ]
+}
+
+# Add two other replicas, these new streams should show up and have the initial
+# tokens set.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+inspect range_id=1
+----
+{
+  "range_id": "1",
+  "connected_streams": [
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 1,
+        "available_eval_regular_tokens": "16777216",
+        "available_eval_elastic_tokens": "8388608",
+        "available_send_regular_tokens": "16777216",
+        "available_send_elastic_tokens": "8388608"
+      },
+      "tracked_deductions": [
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
+    },
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 2,
+        "available_eval_regular_tokens": "16777216",
+        "available_eval_elastic_tokens": "8388608",
+        "available_send_regular_tokens": "16777216",
+        "available_send_elastic_tokens": "8388608"
+      },
+      "tracked_deductions": [
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
+    },
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 3,
+        "available_eval_regular_tokens": "16777216",
+        "available_eval_elastic_tokens": "8388608",
+        "available_send_regular_tokens": "16777216",
+        "available_send_elastic_tokens": "8388608"
+      },
+      "tracked_deductions": [
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
+    }
+  ]
+}
+
+# Send a raft event which will exhaust the elastic tokens across all stores.
+raft_event
+range_id=1
+  term=1 index=1 pri=NormalPri size=3MiB
+  term=1 index=2 pri=NormalPri size=3MiB
+  term=1 index=3 pri=NormalPri size=2MiB
+----
+t1/s1: eval reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB
+t1/s2: eval reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB
+
+inspect range_id=1
+----
+{
+  "range_id": "1",
+  "connected_streams": [
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 1,
+        "available_eval_regular_tokens": "8388608",
+        "available_eval_elastic_tokens": "0",
+        "available_send_regular_tokens": "8388608",
+        "available_send_elastic_tokens": "0"
+      },
+      "tracked_deductions": [
+        {
+          "priority": 0,
+          "tokens": "3145728",
+          "raft_log_position": {
+            "term": "1",
+            "index": "1"
+          }
+        },
+        {
+          "priority": 0,
+          "tokens": "3145728",
+          "raft_log_position": {
+            "term": "1",
+            "index": "2"
+          }
+        },
+        {
+          "priority": 0,
+          "tokens": "2097152",
+          "raft_log_position": {
+            "term": "1",
+            "index": "3"
+          }
+        }
+      ],
+      "total_eval_deducted_tokens": "8388608",
+      "total_send_deducted_tokens": "8388608",
+      "disconnected": false
+    },
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 2,
+        "available_eval_regular_tokens": "8388608",
+        "available_eval_elastic_tokens": "0",
+        "available_send_regular_tokens": "8388608",
+        "available_send_elastic_tokens": "0"
+      },
+      "tracked_deductions": [
+        {
+          "priority": 0,
+          "tokens": "3145728",
+          "raft_log_position": {
+            "term": "1",
+            "index": "1"
+          }
+        },
+        {
+          "priority": 0,
+          "tokens": "3145728",
+          "raft_log_position": {
+            "term": "1",
+            "index": "2"
+          }
+        },
+        {
+          "priority": 0,
+          "tokens": "2097152",
+          "raft_log_position": {
+            "term": "1",
+            "index": "3"
+          }
+        }
+      ],
+      "total_eval_deducted_tokens": "8388608",
+      "total_send_deducted_tokens": "8388608",
+      "disconnected": false
+    },
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 3,
+        "available_eval_regular_tokens": "8388608",
+        "available_eval_elastic_tokens": "0",
+        "available_send_regular_tokens": "8388608",
+        "available_send_elastic_tokens": "0"
+      },
+      "tracked_deductions": [
+        {
+          "priority": 0,
+          "tokens": "3145728",
+          "raft_log_position": {
+            "term": "1",
+            "index": "1"
+          }
+        },
+        {
+          "priority": 0,
+          "tokens": "3145728",
+          "raft_log_position": {
+            "term": "1",
+            "index": "2"
+          }
+        },
+        {
+          "priority": 0,
+          "tokens": "2097152",
+          "raft_log_position": {
+            "term": "1",
+            "index": "3"
+          }
+        }
+      ],
+      "total_eval_deducted_tokens": "8388608",
+      "total_send_deducted_tokens": "8388608",
+      "disconnected": false
+    }
+  ]
+}
+
+# Change the replica on s3 to StateSnapshot. This should untrack all entries
+# and result in the stream token counts being updated accordingly.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=4
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=4
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=4
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot next=4
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+
+inspect range_id=1
+----
+{
+  "range_id": "1",
+  "connected_streams": [
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 1,
+        "available_eval_regular_tokens": "8388608",
+        "available_eval_elastic_tokens": "0",
+        "available_send_regular_tokens": "8388608",
+        "available_send_elastic_tokens": "0"
+      },
+      "tracked_deductions": [
+        {
+          "priority": 0,
+          "tokens": "3145728",
+          "raft_log_position": {
+            "term": "1",
+            "index": "1"
+          }
+        },
+        {
+          "priority": 0,
+          "tokens": "3145728",
+          "raft_log_position": {
+            "term": "1",
+            "index": "2"
+          }
+        },
+        {
+          "priority": 0,
+          "tokens": "2097152",
+          "raft_log_position": {
+            "term": "1",
+            "index": "3"
+          }
+        }
+      ],
+      "total_eval_deducted_tokens": "8388608",
+      "total_send_deducted_tokens": "8388608",
+      "disconnected": false
+    },
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 2,
+        "available_eval_regular_tokens": "8388608",
+        "available_eval_elastic_tokens": "0",
+        "available_send_regular_tokens": "8388608",
+        "available_send_elastic_tokens": "0"
+      },
+      "tracked_deductions": [
+        {
+          "priority": 0,
+          "tokens": "3145728",
+          "raft_log_position": {
+            "term": "1",
+            "index": "1"
+          }
+        },
+        {
+          "priority": 0,
+          "tokens": "3145728",
+          "raft_log_position": {
+            "term": "1",
+            "index": "2"
+          }
+        },
+        {
+          "priority": 0,
+          "tokens": "2097152",
+          "raft_log_position": {
+            "term": "1",
+            "index": "3"
+          }
+        }
+      ],
+      "total_eval_deducted_tokens": "8388608",
+      "total_send_deducted_tokens": "8388608",
+      "disconnected": false
+    }
+  ]
+}
+
+# Partially admit the entries created earlier (1-3), the inspect state should
+# reflect the token return.
+admit
+range_id=1
+  store_id=1 term=1 to_index=1 pri=NormalPri
+  store_id=2 term=1 to_index=2 pri=NormalPri
+----
+t1/s1: eval reg=+11 MiB/+16 MiB ela=+3.0 MiB/+8.0 MiB
+       send reg=+11 MiB/+16 MiB ela=+3.0 MiB/+8.0 MiB
+t1/s2: eval reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
+       send reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
+t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
+inspect range_id=1
+----
+{
+  "range_id": "1",
+  "connected_streams": [
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 1,
+        "available_eval_regular_tokens": "11534336",
+        "available_eval_elastic_tokens": "3145728",
+        "available_send_regular_tokens": "11534336",
+        "available_send_elastic_tokens": "3145728"
+      },
+      "tracked_deductions": [
+        {
+          "priority": 0,
+          "tokens": "3145728",
+          "raft_log_position": {
+            "term": "1",
+            "index": "2"
+          }
+        },
+        {
+          "priority": 0,
+          "tokens": "2097152",
+          "raft_log_position": {
+            "term": "1",
+            "index": "3"
+          }
+        }
+      ],
+      "total_eval_deducted_tokens": "5242880",
+      "total_send_deducted_tokens": "5242880",
+      "disconnected": false
+    },
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 2,
+        "available_eval_regular_tokens": "14680064",
+        "available_eval_elastic_tokens": "6291456",
+        "available_send_regular_tokens": "14680064",
+        "available_send_elastic_tokens": "6291456"
+      },
+      "tracked_deductions": [
+        {
+          "priority": 0,
+          "tokens": "2097152",
+          "raft_log_position": {
+            "term": "1",
+            "index": "3"
+          }
+        }
+      ],
+      "total_eval_deducted_tokens": "2097152",
+      "total_send_deducted_tokens": "2097152",
+      "disconnected": false
+    }
+  ]
+}

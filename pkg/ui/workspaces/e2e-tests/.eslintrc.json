@@ -1,0 +1,10 @@
+{
+  "root": true,
+  "extends": "@cockroachlabs/eslint-config",
+  "settings": {
+    "react": {
+      "pragma": "React",
+      "version": "17.0"
+    }
+  }
+}

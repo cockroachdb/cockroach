@@ -1,0 +1,220 @@
+
+# Base test case - define a regular pagination state of 7 nodes.
+define
+queried: 1,2,3
+in-progress: 4
+in-progress-index: 2
+to-query: 5,6,7
+----
+ok
+
+marshal
+----
+MSwyLDMsfDR8Mnw1LDYsNyw=
+
+# Add two nodes to nodesToQuery.
+
+merge-node-ids
+9,11
+----
+nodesQueried: 1,2,3
+inProgress: 4
+inProgressIndex: 2
+nodesToQuery: 5,6,7,9,11
+
+# Add two more nodes to nodesToQuery. Nodes 9 and 11 should not be re-added.
+
+merge-node-ids
+8,9,10,11
+----
+nodesQueried: 1,2,3
+inProgress: 4
+inProgressIndex: 2
+nodesToQuery: 5,6,7,9,11,8,10
+
+# Do nothing if all nodes being merged are already in the struct.
+
+merge-node-ids
+1,3,4,5,6,7,8
+----
+nodesQueried: 1,2,3
+inProgress: 4
+inProgressIndex: 2
+nodesToQuery: 5,6,7,9,11,8,10
+
+marshal
+----
+MSwyLDMsfDR8Mnw1LDYsNyw5LDExLDgsMTAs
+
+# The struct being unmarshalled below should match the one defined in the very
+# first test case.
+
+unmarshal
+MSwyLDMsfDR8Mnw1LDYsNyw=
+----
+nodesQueried: 1,2,3
+inProgress: 4
+inProgressIndex: 2
+nodesToQuery: 5,6,7
+
+# Simpler string for testing unmarshal.
+
+unmarshal
+MSx8MnwyfDMs
+----
+nodesQueried: 1
+inProgress: 2
+inProgressIndex: 2
+nodesToQuery: 3
+
+# Tests for paginate().
+
+define
+queried: 1,2,3
+in-progress: 4
+in-progress-index: 2
+to-query: 5,6,7
+----
+ok
+
+# Simple case - get the next 5 elements a couple times. Note that each
+# subsequent `limit` matches the previously returned `newLimit`, or 5 if the
+# previous newLimit was 0 (i.e. denoting the "next request").
+
+paginate
+limit 5
+length 10
+nodeID 4
+----
+start: 2
+end: 7
+newLimit: 0
+state:
+nodesQueried: 1,2,3
+inProgress: 4
+inProgressIndex: 7
+nodesToQuery: 5,6,7
+
+
+paginate
+limit 5
+length 10
+nodeID 4
+----
+start: 7
+end: 10
+newLimit: 2
+state:
+nodesQueried: 1,2,3,4
+inProgress: 5
+inProgressIndex: 0
+nodesToQuery: 6,7
+
+
+paginate
+limit 2
+length 7
+nodeID 5
+----
+start: 0
+end: 2
+newLimit: 0
+state:
+nodesQueried: 1,2,3,4
+inProgress: 5
+inProgressIndex: 2
+nodesToQuery: 6,7
+
+paginate
+limit 5
+length 7
+nodeID 5
+----
+start: 2
+end: 7
+newLimit: 0
+state:
+nodesQueried: 1,2,3,4,5
+inProgress: 6
+inProgressIndex: 0
+nodesToQuery: 7
+
+paginate
+limit 5
+length 4
+nodeID 6
+----
+start: 0
+end: 4
+newLimit: 1
+state:
+nodesQueried: 1,2,3,4,5,6
+inProgress: 7
+inProgressIndex: 0
+nodesToQuery:
+
+paginate
+limit 1
+length 6
+nodeID 7
+----
+start: 0
+end: 1
+newLimit: 0
+state:
+nodesQueried: 1,2,3,4,5,6
+inProgress: 7
+inProgressIndex: 1
+nodesToQuery:
+
+paginate
+limit 5
+length 6
+nodeID 7
+----
+start: 1
+end: 6
+newLimit: 0
+state:
+nodesQueried: 1,2,3,4,5,6,7
+inProgress: 0
+inProgressIndex: 0
+nodesToQuery:
+
+# Test a case where node 5 returns an error and gets skipped.
+
+define
+queried: 1,2,3
+in-progress: 4
+in-progress-index: 2
+to-query: 5,6,7
+----
+ok
+
+paginate
+limit 5
+length 5
+nodeID 4
+----
+start: 2
+end: 5
+newLimit: 2
+state:
+nodesQueried: 1,2,3,4
+inProgress: 5
+inProgressIndex: 0
+nodesToQuery: 6,7
+
+paginate
+limit 2
+length 5
+nodeID 6
+----
+start: 0
+end: 2
+newLimit: 0
+state:
+nodesQueried: 1,2,3,4,5
+inProgress: 6
+inProgressIndex: 2
+nodesToQuery: 7

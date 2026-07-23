@@ -1,0 +1,217 @@
+parse
+CREATE USER foo
+----
+CREATE USER foo
+CREATE USER foo -- fully parenthesized
+CREATE USER foo -- literals removed
+CREATE USER _ -- identifiers removed
+
+parse
+CREATE USER IF NOT EXISTS foo
+----
+CREATE USER IF NOT EXISTS foo
+CREATE USER IF NOT EXISTS foo -- fully parenthesized
+CREATE USER IF NOT EXISTS foo -- literals removed
+CREATE USER IF NOT EXISTS _ -- identifiers removed
+
+
+parse
+CREATE ROLE foo
+----
+CREATE ROLE foo
+CREATE ROLE foo -- fully parenthesized
+CREATE ROLE foo -- literals removed
+CREATE ROLE _ -- identifiers removed
+
+parse
+CREATE ROLE IF NOT EXISTS foo
+----
+CREATE ROLE IF NOT EXISTS foo
+CREATE ROLE IF NOT EXISTS foo -- fully parenthesized
+CREATE ROLE IF NOT EXISTS foo -- literals removed
+CREATE ROLE IF NOT EXISTS _ -- identifiers removed
+
+parse
+CREATE ROLE foo WITH CREATEDB
+----
+CREATE ROLE foo WITH CREATEDB
+CREATE ROLE foo WITH CREATEDB -- fully parenthesized
+CREATE ROLE foo WITH CREATEDB -- literals removed
+CREATE ROLE _ WITH CREATEDB -- identifiers removed
+
+parse
+CREATE ROLE IF NOT EXISTS foo WITH CREATEDB
+----
+CREATE ROLE IF NOT EXISTS foo WITH CREATEDB
+CREATE ROLE IF NOT EXISTS foo WITH CREATEDB -- fully parenthesized
+CREATE ROLE IF NOT EXISTS foo WITH CREATEDB -- literals removed
+CREATE ROLE IF NOT EXISTS _ WITH CREATEDB -- identifiers removed
+
+parse
+CREATE ROLE foo CREATEDB
+----
+CREATE ROLE foo WITH CREATEDB -- normalized!
+CREATE ROLE foo WITH CREATEDB -- fully parenthesized
+CREATE ROLE foo WITH CREATEDB -- literals removed
+CREATE ROLE _ WITH CREATEDB -- identifiers removed
+
+parse
+CREATE ROLE IF NOT EXISTS foo CREATEDB
+----
+CREATE ROLE IF NOT EXISTS foo WITH CREATEDB -- normalized!
+CREATE ROLE IF NOT EXISTS foo WITH CREATEDB -- fully parenthesized
+CREATE ROLE IF NOT EXISTS foo WITH CREATEDB -- literals removed
+CREATE ROLE IF NOT EXISTS _ WITH CREATEDB -- identifiers removed
+
+parse
+CREATE ROLE foo WITH CREATEROLE
+----
+CREATE ROLE foo WITH CREATEROLE
+CREATE ROLE foo WITH CREATEROLE -- fully parenthesized
+CREATE ROLE foo WITH CREATEROLE -- literals removed
+CREATE ROLE _ WITH CREATEROLE -- identifiers removed
+
+parse
+CREATE ROLE IF NOT EXISTS foo WITH CREATEROLE
+----
+CREATE ROLE IF NOT EXISTS foo WITH CREATEROLE
+CREATE ROLE IF NOT EXISTS foo WITH CREATEROLE -- fully parenthesized
+CREATE ROLE IF NOT EXISTS foo WITH CREATEROLE -- literals removed
+CREATE ROLE IF NOT EXISTS _ WITH CREATEROLE -- identifiers removed
+
+parse
+CREATE ROLE foo CREATEROLE
+----
+CREATE ROLE foo WITH CREATEROLE -- normalized!
+CREATE ROLE foo WITH CREATEROLE -- fully parenthesized
+CREATE ROLE foo WITH CREATEROLE -- literals removed
+CREATE ROLE _ WITH CREATEROLE -- identifiers removed
+
+parse
+CREATE ROLE IF NOT EXISTS foo CREATEROLE
+----
+CREATE ROLE IF NOT EXISTS foo WITH CREATEROLE -- normalized!
+CREATE ROLE IF NOT EXISTS foo WITH CREATEROLE -- fully parenthesized
+CREATE ROLE IF NOT EXISTS foo WITH CREATEROLE -- literals removed
+CREATE ROLE IF NOT EXISTS _ WITH CREATEROLE -- identifiers removed
+
+error
+CREATE USER foo PASSWORD bar
+----
+at or near "bar": syntax error
+DETAIL: source SQL:
+CREATE USER foo PASSWORD bar
+                         ^
+HINT: try \h CREATE ROLE
+
+parse
+CREATE USER foo PASSWORD 'bar'
+----
+CREATE USER foo WITH PASSWORD '*****' -- normalized!
+CREATE USER foo WITH PASSWORD '*****' -- fully parenthesized
+CREATE USER foo WITH PASSWORD '*****' -- literals removed
+CREATE USER _ WITH PASSWORD '*****' -- identifiers removed
+CREATE USER foo WITH PASSWORD 'bar' -- passwords exposed
+
+error
+CREATE USER foo ENCRYPTED PASSWORD bar
+----
+at or near "bar": syntax error
+DETAIL: source SQL:
+CREATE USER foo ENCRYPTED PASSWORD bar
+                                   ^
+HINT: try \h CREATE ROLE
+
+parse
+CREATE USER foo ENCRYPTED PASSWORD 'bar'
+----
+CREATE USER foo WITH PASSWORD '*****' -- normalized!
+CREATE USER foo WITH PASSWORD '*****' -- fully parenthesized
+CREATE USER foo WITH PASSWORD '*****' -- literals removed
+CREATE USER _ WITH PASSWORD '*****' -- identifiers removed
+CREATE USER foo WITH PASSWORD 'bar' -- passwords exposed
+
+parse
+CREATE USER foo PASSWORD NULL
+----
+CREATE USER foo WITH PASSWORD '*****' -- normalized!
+CREATE USER foo WITH PASSWORD '*****' -- fully parenthesized
+CREATE USER foo WITH PASSWORD '*****' -- literals removed
+CREATE USER _ WITH PASSWORD '*****' -- identifiers removed
+CREATE USER foo WITH PASSWORD NULL -- passwords exposed
+
+error
+CREATE USER foo WITH ENCRYPTED PASSWORD bar
+----
+at or near "bar": syntax error
+DETAIL: source SQL:
+CREATE USER foo WITH ENCRYPTED PASSWORD bar
+                                        ^
+HINT: try \h CREATE ROLE
+
+parse
+CREATE USER foo WITH ENCRYPTED PASSWORD 'bar'
+----
+CREATE USER foo WITH PASSWORD '*****' -- normalized!
+CREATE USER foo WITH PASSWORD '*****' -- fully parenthesized
+CREATE USER foo WITH PASSWORD '*****' -- literals removed
+CREATE USER _ WITH PASSWORD '*****' -- identifiers removed
+CREATE USER foo WITH PASSWORD 'bar' -- passwords exposed
+
+parse
+CREATE USER foo LOGIN VALID UNTIL NULL PASSWORD NULL
+----
+CREATE USER foo WITH LOGIN VALID UNTIL NULL PASSWORD '*****' -- normalized!
+CREATE USER foo WITH LOGIN VALID UNTIL (NULL) PASSWORD '*****' -- fully parenthesized
+CREATE USER foo WITH LOGIN VALID UNTIL '_' PASSWORD '*****' -- literals removed
+CREATE USER _ WITH LOGIN VALID UNTIL NULL PASSWORD '*****' -- identifiers removed
+CREATE USER foo WITH LOGIN VALID UNTIL NULL PASSWORD NULL -- passwords exposed
+
+error
+CREATE USER foo WITH PASSWORD
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+CREATE USER foo WITH PASSWORD
+                             ^
+HINT: try \h CREATE ROLE
+
+parse
+CREATE USER foo VALID UNTIL '1970-01-01'
+----
+CREATE USER foo WITH VALID UNTIL '1970-01-01' -- normalized!
+CREATE USER foo WITH VALID UNTIL ('1970-01-01') -- fully parenthesized
+CREATE USER foo WITH VALID UNTIL '_' -- literals removed
+CREATE USER _ WITH VALID UNTIL '1970-01-01' -- identifiers removed
+
+parse
+CREATE USER foo REPLICATION
+----
+CREATE USER foo WITH REPLICATION -- normalized!
+CREATE USER foo WITH REPLICATION -- fully parenthesized
+CREATE USER foo WITH REPLICATION -- literals removed
+CREATE USER _ WITH REPLICATION -- identifiers removed
+
+parse
+CREATE USER foo NOREPLICATION
+----
+CREATE USER foo WITH NOREPLICATION -- normalized!
+CREATE USER foo WITH NOREPLICATION -- fully parenthesized
+CREATE USER foo WITH NOREPLICATION -- literals removed
+CREATE USER _ WITH NOREPLICATION -- identifiers removed
+
+parse
+CREATE ROLE foo WITH SUBJECT 'bar'
+----
+CREATE ROLE foo WITH SUBJECT 'bar'
+CREATE ROLE foo WITH SUBJECT ('bar') -- fully parenthesized
+CREATE ROLE foo WITH SUBJECT '_' -- literals removed
+CREATE ROLE _ WITH SUBJECT 'bar' -- identifiers removed
+
+parse
+CREATE ROLE foo WITH PROVISIONSRC 'src'
+----
+CREATE ROLE foo WITH PROVISIONSRC 'src'
+CREATE ROLE foo WITH PROVISIONSRC ('src') -- fully parenthesized
+CREATE ROLE foo WITH PROVISIONSRC '_' -- literals removed
+CREATE ROLE _ WITH PROVISIONSRC 'src' -- identifiers removed

@@ -1,0 +1,11 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "growstack",
+    srcs = [
+        "growstack.go",
+        "growstack.s",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/growstack",
+    visibility = ["//visibility:public"],
+)

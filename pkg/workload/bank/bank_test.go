@@ -1,0 +1,116 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package bank
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
+	"github.com/stretchr/testify/require"
+)
+
+func TestCheckConsistency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(
+		t, base.TestServerArgs{UseDatabase: `test`},
+	)
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE test`)
+
+	gen := FromConfig(
+		10 /* rows */, 10 /* batchSize */, defaultPayloadBytes, 1, /* ranges */
+	)
+	hooks := gen.(workload.Hookser).Hooks()
+
+	setup := func(t *testing.T) {
+		t.Helper()
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
+		sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE bank %s`, bankSchema))
+		for i := 0; i < 10; i++ {
+			sqlDB.Exec(t, `INSERT INTO bank (id, balance, payload) VALUES ($1, 0, 'x')`, i)
+		}
+	}
+
+	t.Run("happy-path", func(t *testing.T) {
+		setup(t)
+		require.NoError(t, hooks.CheckConsistency(ctx, db))
+	})
+
+	t.Run("balance-violation", func(t *testing.T) {
+		setup(t)
+		sqlDB.Exec(t, `UPDATE bank SET balance = 100 WHERE id = 0`)
+		err := hooks.CheckConsistency(ctx, db)
+		require.ErrorContains(t, err, "balance invariant violated")
+	})
+
+	t.Run("row-deleted", func(t *testing.T) {
+		setup(t)
+		sqlDB.Exec(t, `DELETE FROM bank WHERE id = 5`)
+		err := hooks.CheckConsistency(ctx, db)
+		require.ErrorContains(t, err, "row integrity violated")
+	})
+}
+
+func TestBank(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		rows           int
+		ranges         int
+		expectedRanges int
+	}{
+		{10, 0, 1}, // we always have at least one range
+		{10, 1, 1},
+		{10, 9, 9},
+		{10, 10, 10},
+		{10, 100, 10}, // don't make more ranges than rows
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("rows=%d/ranges=%d", test.rows, test.ranges), func(t *testing.T) {
+			sqlDB := sqlutils.MakeSQLRunner(db)
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
+
+			bank := FromConfig(test.rows, test.rows, defaultPayloadBytes, test.ranges)
+			bankTable := bank.Tables()[0]
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, bankTable.Name, bankTable.Schema))
+
+			if err := workloadsql.Split(ctx, db, bankTable, 1 /* concurrency */); err != nil {
+				t.Fatalf("%+v", err)
+			}
+
+			var rangeCount int
+			sqlDB.QueryRow(t,
+				fmt.Sprintf(`SELECT count(*) FROM [SHOW RANGES FROM TABLE %s]`, bankTable.Name),
+			).Scan(&rangeCount)
+			if rangeCount != test.expectedRanges {
+				t.Errorf("got %d ranges expected %d", rangeCount, test.expectedRanges)
+			}
+		})
+	}
+}

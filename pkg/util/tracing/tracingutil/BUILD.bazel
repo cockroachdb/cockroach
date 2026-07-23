@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tracingutil",
+    srcs = [
+        "testutils.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/grpcutil",
+        "//pkg/util/tracing",
+        "@com_github_gogo_protobuf//types",
+        "@org_golang_google_grpc//metadata",
+    ],
+)

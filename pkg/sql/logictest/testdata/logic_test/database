@@ -1,0 +1,503 @@
+statement ok
+CREATE DATABASE a
+
+statement error pgcode 42P04 database "a" already exists
+CREATE DATABASE a
+
+statement ok
+CREATE DATABASE IF NOT EXISTS a
+
+statement error pgcode 42601 empty database name
+CREATE DATABASE ""
+
+query TTTTTT colnames,rowsort
+SHOW DATABASES
+----
+database_name  owner  primary_region  secondary_region  regions  survival_goal
+a              root   NULL            NULL              {}       NULL
+defaultdb      root   NULL            NULL              {}       NULL
+postgres       root   NULL            NULL              {}       NULL
+system         node   NULL            NULL              {}       NULL
+test           root   NULL            NULL              {}       NULL
+
+statement ok
+CREATE ROLE newrole LOGIN
+
+query B
+SELECT has_database_privilege('newrole', 'a', 'CONNECT')
+----
+true
+
+statement ok
+COMMENT ON DATABASE a IS 'A'
+
+query TTTTTTT colnames,rowsort
+SHOW DATABASES WITH COMMENT
+----
+database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
+a              root   NULL            NULL              {}       NULL           A
+defaultdb      root   NULL            NULL              {}       NULL           NULL
+postgres       root   NULL            NULL              {}       NULL           NULL
+system         node   NULL            NULL              {}       NULL           NULL
+test           root   NULL            NULL              {}       NULL           NULL
+
+statement ok
+COMMENT ON DATABASE a IS 'AAA'
+
+query TTTTTTT colnames,rowsort
+SHOW DATABASES WITH COMMENT
+----
+database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
+a              root   NULL            NULL              {}       NULL           AAA
+defaultdb      root   NULL            NULL              {}       NULL           NULL
+postgres       root   NULL            NULL              {}       NULL           NULL
+system         node   NULL            NULL              {}       NULL           NULL
+test           root   NULL            NULL              {}       NULL           NULL
+
+# Verify that SHOW SCHEMAS FROM a includes user-defined schemas.
+statement ok
+CREATE SCHEMA a.s
+
+query TT colnames,rowsort
+SHOW SCHEMAS FROM a
+----
+schema_name         owner
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
+public              root
+s                   root
+
+statement ok
+CREATE DATABASE b TEMPLATE=template0
+
+statement error unsupported template: nope
+CREATE DATABASE c TEMPLATE=NOPE
+
+statement error unsupported template: nope
+CREATE DATABASE IF NOT EXISTS c TEMPLATE=NOPE
+
+statement ok
+CREATE DATABASE b2 ENCODING='UTF8'
+
+statement error unsupported encoding: NOPE
+CREATE DATABASE c ENCODING='NOPE'
+
+statement error unsupported encoding: NOPE
+CREATE DATABASE IF NOT EXISTS c ENCODING='NOPE'
+
+statement ok
+CREATE DATABASE b3 LC_COLLATE='C.UTF-8'
+
+statement error unsupported collation: NOPE
+CREATE DATABASE c LC_COLLATE='NOPE'
+
+statement error unsupported collation: NOPE
+CREATE DATABASE IF NOT EXISTS c LC_COLLATE='NOPE'
+
+statement ok
+CREATE DATABASE b4 LC_CTYPE='C.UTF-8'
+
+statement error unsupported character classification: NOPE
+CREATE DATABASE c LC_CTYPE='NOPE'
+
+statement error unsupported character classification: NOPE
+CREATE DATABASE IF NOT EXISTS c LC_CTYPE='NOPE'
+
+statement ok
+CREATE DATABASE b5 TEMPLATE=template0 ENCODING='UTF8' LC_COLLATE='C.UTF-8' LC_CTYPE='C.UTF-8'
+
+statement ok
+CREATE DATABASE b6 TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8'
+
+statement ok
+CREATE DATABASE b7 WITH CONNECTION LIMIT -1
+
+statement error only connection limit -1 is supported, got: 1
+CREATE DATABASE b8 WITH CONNECTION LIMIT = 1
+
+statement ok
+CREATE DATABASE c
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+a          root  NULL  NULL  {}  NULL
+b          root  NULL  NULL  {}  NULL
+b2         root  NULL  NULL  {}  NULL
+b3         root  NULL  NULL  {}  NULL
+b4         root  NULL  NULL  {}  NULL
+b5         root  NULL  NULL  {}  NULL
+b6         root  NULL  NULL  {}  NULL
+b7         root  NULL  NULL  {}  NULL
+c          root  NULL  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
+
+statement ok
+CREATE TABLE b.a (id INT PRIMARY KEY)
+
+statement ok
+INSERT INTO b.a VALUES (3),(7),(2)
+
+query I rowsort
+SELECT * FROM b.a
+----
+2
+3
+7
+
+statement error database "b" is not empty
+DROP DATABASE b RESTRICT
+
+statement ok
+DROP DATABASE b CASCADE
+
+statement error pgcode 42P01 relation "b.a" does not exist
+SELECT * FROM b.a
+
+statement error database "b" does not exist
+DROP DATABASE b
+
+statement ok
+DROP DATABASE IF EXISTS b
+
+statement ok
+DROP DATABASE b2 CASCADE;
+
+statement ok
+DROP DATABASE b3 CASCADE;
+
+statement ok
+DROP DATABASE b4 CASCADE;
+
+statement ok
+DROP DATABASE b5 CASCADE;
+
+statement ok
+DROP DATABASE b6 CASCADE;
+
+statement ok
+DROP DATABASE b7 CASCADE
+
+statement error pgcode 42601 empty database name
+DROP DATABASE ""
+
+query TTTTTT colnames,rowsort
+SHOW DATABASES
+----
+database_name  owner  primary_region  secondary_region  regions  survival_goal
+a              root   NULL            NULL              {}       NULL
+c              root   NULL            NULL              {}       NULL
+defaultdb      root   NULL            NULL              {}       NULL
+postgres       root   NULL            NULL              {}       NULL
+system         node   NULL            NULL              {}       NULL
+test           root   NULL            NULL              {}       NULL
+
+statement ok
+CREATE DATABASE b
+
+statement error pgcode 42P01 relation "b.a" does not exist
+SELECT * FROM b.a
+
+statement ok
+CREATE TABLE b.a (id INT PRIMARY KEY)
+
+query I
+SELECT * FROM b.a
+----
+
+# Non-admin users need the CREATEDB role option to create databases.
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE privs
+
+user root
+
+statement ok
+ALTER USER testuser CREATEDB
+
+user testuser
+
+statement ok
+CREATE DATABASE privs
+
+# As the owner, testuser has DROP privileges.
+statement ok
+DROP DATABASE privs CASCADE
+
+# But needs explicit DROP privileges on databases where they're not the owner.
+statement error user testuser does not have DROP privilege on database a
+DROP DATABASE a CASCADE
+
+user root
+
+statement ok
+GRANT DROP ON DATABASE a TO testuser
+
+user testuser
+
+statement ok
+DROP DATABASE a CASCADE
+
+# Test revoking CREATEDB.
+user root
+
+statement ok
+ALTER USER testuser NOCREATEDB
+
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE privs
+
+user root
+
+subtest missing-db-error-issue-68060
+
+statement ok
+CREATE DATABASE db1;
+
+statement ok
+USE db1;
+
+statement ok
+SET sql_safe_updates=false;
+
+statement ok
+DROP DATABASE db1;
+
+statement error pgcode 3D000 pq: database "db1" does not exist
+SELECT * FROM crdb_internal.session_variables;
+
+statement error pgcode 3D000 pq: database "db1" does not exist
+SELECT * FROM pg_catalog.pg_attribute;
+
+statement error pgcode 3D000 pq: database "db1" does not exist
+SELECT * FROM unknown_table;
+
+subtest missing-schema-error-69713
+
+statement ok
+CREATE DATABASE db69713;
+
+statement ok
+USE db69713;
+
+statement ok
+CREATE SCHEMA s;
+
+statement ok
+CREATE TYPE s.testenum AS ENUM ('foo', 'bar', 'baz');
+
+statement ok
+CREATE TABLE db69713.s.pg_indexdef_test (
+    a INT PRIMARY KEY,
+    e s.testenum
+);
+
+statement ok
+CREATE TABLE db69713.s.pg_constraintdef_test (
+  a int,
+  FOREIGN KEY(a) REFERENCES db69713.s.pg_indexdef_test(a) ON DELETE CASCADE
+);
+
+statement ok
+DROP DATABASE db69713;
+
+statement ok
+RESET DATABASE;
+
+subtest end
+
+# Ensure user must exist to create with owner.
+statement error role/user "fake_user" does not exist
+CREATE DATABASE aa with owner fake_user
+
+statement ok
+CREATE DATABASE a with owner testuser
+
+query TTTTTT colnames,rowsort
+SHOW DATABASES
+----
+database_name  owner     primary_region  secondary_region  regions  survival_goal
+a              testuser  NULL            NULL              {}       NULL
+b              root      NULL            NULL              {}       NULL
+c              root      NULL            NULL              {}       NULL
+defaultdb      root      NULL            NULL              {}       NULL
+postgres       root      NULL            NULL              {}       NULL
+system         node      NULL            NULL              {}       NULL
+test           root      NULL            NULL              {}       NULL
+
+# Non-superusers also must be a member of the new owning role.
+statement ok
+CREATE USER testuser2
+
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE d WITH OWNER testuser2
+
+user root
+
+# Regression test for #122901: with CREATEDB privilege, non-admins must
+# still be a member of the owning role.
+subtest create_database_owner_membership_check
+
+statement ok
+CREATE ROLE db_owner_role;
+
+statement ok
+ALTER USER testuser CREATEDB
+
+user testuser
+
+statement error pq: role/user "db_owner_role2" does not exist
+CREATE DATABASE d_owned WITH OWNER db_owner_role2
+
+statement error pq: must be member of role "db_owner_role"
+CREATE DATABASE d_owned WITH OWNER db_owner_role
+
+user root
+
+statement ok
+GRANT db_owner_role TO testuser
+
+user testuser
+
+statement ok
+CREATE DATABASE d_owned WITH OWNER db_owner_role
+
+user root
+
+statement ok
+ALTER USER testuser NOCREATEDB
+
+statement ok
+REVOKE db_owner_role FROM testuser
+
+# Admin role must bypass role membership.
+statement ok
+CREATE USER db_admin_role;
+ALTER USER db_admin_role CREATEDB;
+
+statement ok
+SET ROLE db_admin_role
+
+statement error pq: must be member of role "db_owner_role"
+CREATE DATABASE d_admin WITH OWNER db_owner_role
+
+statement ok
+RESET ROLE;
+ALTER USER db_admin_role NOCREATEDB;
+GRANT ADMIN TO db_admin_role;
+SET ROLE db_admin_role
+
+statement ok
+CREATE DATABASE db_admin WITH OWNER db_owner_role
+
+statement ok
+CREATE DATABASE db_root WITH OWNER root
+
+statement ok
+RESET ROLE;
+DROP USER db_admin_role
+
+subtest end
+
+# Fix for https://github.com/cockroachdb/cockroach/issues/97938.
+subtest if_not_exists_with_owner
+
+statement ok
+CREATE DATABASE IF NOT EXISTS ifnotexistsownerdb WITH OWNER testuser
+
+query TTTTTT colnames
+SELECT * FROM [SHOW DATABASES] WHERE database_name = 'ifnotexistsownerdb'
+----
+database_name       owner     primary_region  secondary_region  regions  survival_goal
+ifnotexistsownerdb  testuser  NULL            NULL              {}       NULL
+
+statement ok
+CREATE DATABASE IF NOT EXISTS ifnotexistsownerdb WITH OWNER testuser
+
+query TTTTTT colnames
+SELECT * FROM [SHOW DATABASES] WHERE database_name = 'ifnotexistsownerdb'
+----
+database_name       owner     primary_region  secondary_region  regions  survival_goal
+ifnotexistsownerdb  testuser  NULL            NULL              {}       NULL
+
+subtest end
+
+subtest regression_105906
+
+statement ok
+CREATE SCHEMA regression_105906
+
+statement ok
+CREATE DATABASE regression_105906
+
+query TT colnames,rowsort
+SHOW SCHEMAS
+----
+schema_name         owner
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
+public              root
+regression_105906   root
+
+# Note: regression_105906 should not appear in the list of schemas below
+query TT colnames,rowsort
+SHOW SCHEMAS FROM regression_105906
+----
+schema_name         owner
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
+public              root
+
+statement ok
+DROP DATABASE regression_105906
+
+statement ok
+DROP SCHEMA regression_105906
+
+statement ok
+CREATE SCHEMA "rEgReSsIoN 105906"
+
+statement ok
+CREATE DATABASE "rEgReSsIoN 105906"
+
+query T rowsort
+SELECT schema_name FROM [SHOW SCHEMAS]
+----
+public
+rEgReSsIoN 105906
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+
+# Note: "rEgReSsIoN 105906" should not appear in the list of schemas below
+query T rowsort
+SELECT schema_name FROM [SHOW SCHEMAS FROM "rEgReSsIoN 105906"]
+----
+public
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+
+statement ok
+DROP SCHEMA "rEgReSsIoN 105906"
+
+statement ok
+DROP DATABASE "rEgReSsIoN 105906"
+
+subtest end

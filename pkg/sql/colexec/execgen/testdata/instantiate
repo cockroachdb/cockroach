@@ -1,0 +1,276 @@
+template
+package main
+
+func a(input bool) {
+  b(input)
+}
+
+// execgen:template<t>
+// execgen:instantiate<true>
+// execgen:instantiate<false>
+func b(t bool) int {
+  if t {
+    x = 3
+  } else {
+    x = 4
+  }
+  return x
+}
+----
+----
+package main
+
+func a(input bool) {
+	b_runtime_to_template(input)
+}
+
+const _ = "template_b"
+
+func b_runtime_to_template(t bool) int {
+	switch t {
+	case true:
+		return b_true()
+	case false:
+		return b_false()
+	default:
+		panic(fmt.Sprint("unknown value", t))
+	}
+}
+
+func b_true() int {
+	x = 3
+	return x
+}
+
+func b_false() int {
+	x = 4
+	return x
+}
+----
+----
+
+template
+package main
+
+// execgen:instantiate<1>
+// execgen:instantiate<2>
+// execgen:instantiate<3>
+// execgen:template<i>
+func b(i int) {
+  switch i {
+    case 1:
+      fmt.Println("found a 1")
+    case 2:
+      fmt.Println("found a 2")
+    case 3:
+      fmt.Println("found a 3")
+  }
+}
+
+func a(input int) {
+    b(input)
+}
+----
+----
+package main
+
+const _ = "template_b"
+
+func b_runtime_to_template(i int) {
+	switch i {
+	case 1:
+		b_1()
+	case 2:
+		b_2()
+	case 3:
+		b_3()
+	default:
+		panic(fmt.Sprint("unknown value", i))
+	}
+}
+
+func a(input int) {
+	b_runtime_to_template(input)
+}
+
+func b_1() {
+	fmt.Println("found a 1")
+}
+
+func b_2() {
+	fmt.Println("found a 2")
+}
+
+func b_3() {
+	fmt.Println("found a 3")
+}
+----
+----
+
+template
+package main
+
+func a(input bool, i int) {
+  b(input, i)
+}
+
+// execgen:template<t, i>
+// execgen:instantiate<true, 3>
+// execgen:instantiate<false, 3>
+// execgen:instantiate<false, 4>
+func b(t bool, i int) int {
+  if t {
+    x = 3
+  } else {
+    switch i {
+      case 3:
+        x = 1
+      case 4:
+        x = 2
+    }
+  }
+  return x
+}
+----
+----
+package main
+
+func a(input bool, i int) {
+	b_runtime_to_template(input, i)
+}
+
+const _ = "template_b"
+
+func b_runtime_to_template(t bool, i int) int {
+	switch t {
+	case false:
+		switch i {
+		case 3:
+			return b_false_3()
+		case 4:
+			return b_false_4()
+		default:
+			panic(fmt.Sprint("unknown value", i))
+		}
+	case true:
+		switch i {
+		case 3:
+			return b_true_3()
+		default:
+			panic(fmt.Sprint("unknown value", i))
+		}
+	default:
+		panic(fmt.Sprint("unknown value", t))
+	}
+}
+
+func b_true_3() int {
+	x = 3
+	return x
+}
+
+func b_false_3() int {
+	x = 1
+	return x
+}
+
+func b_false_4() int {
+	x = 2
+	return x
+}
+----
+----
+
+template
+package main
+
+func a(input bool) {
+  b(input)
+}
+
+// execgen:let
+var Bools = []bool{true, false}
+
+// execgen:let
+var MyIntegers = []int{1,4,7}
+
+// execgen:template<t, i>
+// execgen:instantiate<Bools, MyIntegers>
+func b(t bool, i int) int {
+  if t {
+    x = 3
+  } else {
+    x = 4
+  }
+  return x
+}
+----
+----
+package main
+
+func a(input bool) {
+	b_runtime_to_template(input)
+}
+
+const _ = "template_b"
+
+func b_runtime_to_template(t bool, i int) int {
+	switch t {
+	case false:
+		switch i {
+		case 1:
+			return b_false_1()
+		case 4:
+			return b_false_4()
+		case 7:
+			return b_false_7()
+		default:
+			panic(fmt.Sprint("unknown value", i))
+		}
+	case true:
+		switch i {
+		case 1:
+			return b_true_1()
+		case 4:
+			return b_true_4()
+		case 7:
+			return b_true_7()
+		default:
+			panic(fmt.Sprint("unknown value", i))
+		}
+	default:
+		panic(fmt.Sprint("unknown value", t))
+	}
+}
+
+func b_true_1() int {
+	x = 3
+	return x
+}
+
+func b_true_4() int {
+	x = 3
+	return x
+}
+
+func b_true_7() int {
+	x = 3
+	return x
+}
+
+func b_false_1() int {
+	x = 4
+	return x
+}
+
+func b_false_4() int {
+	x = 4
+	return x
+}
+
+func b_false_7() int {
+	x = 4
+	return x
+}
+----
+----

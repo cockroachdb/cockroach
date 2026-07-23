@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spec",
+    srcs = [
+        "cloud.go",
+        "cluster_spec.go",
+        "gce_storage.go",
+        "machine_type.go",
+        "option.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/aws",
+        "//pkg/roachprod/vm/azure",
+        "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/gce/gcedb",
+        "//pkg/roachprod/vm/ibm",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "spec_test",
+    srcs = [
+        "cluster_spec_test.go",
+        "gce_storage_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":spec"],
+    deps = [
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,7 @@
+Many of the test cases in this directory are copied or derived from the JSON
+Parsing Test Suite, available online at:
+
+     https://github.com/nst/JSONTestSuite
+
+These test cases are Copyright (c) 2016 Nicolas Seriot and subject to the terms
+of the MIT license that can be found in licenses/MIT-jsontestsuite.txt.

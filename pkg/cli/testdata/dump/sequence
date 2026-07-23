@@ -1,0 +1,33 @@
+sql
+CREATE DATABASE d;
+CREATE SEQUENCE d.s1 INCREMENT 123; -- test one sequence right at its minval
+CREATE SEQUENCE d.s2 INCREMENT 456; -- test another that's been incremented
+SELECT nextval('d.s2'); -- 1
+SELECT nextval('d.s2'); -- 457
+----
+nextval
+1
+nextval
+457
+
+dump d
+----
+----
+CREATE SEQUENCE public.s1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 123 START 1;
+
+CREATE SEQUENCE public.s2 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 456 START 1;
+
+SELECT setval('s1', 1, false);
+
+SELECT setval('s2', 913, false);
+----
+----
+
+sql
+SELECT nextval('tmp.s1');
+SELECT nextval('tmp.s2');
+----
+nextval
+1
+nextval
+913

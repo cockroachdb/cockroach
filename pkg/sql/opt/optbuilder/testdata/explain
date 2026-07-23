@@ -1,0 +1,68 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+
+build
+EXPLAIN SELECT * FROM xy
+----
+explain
+ ├── columns: info:5
+ └── project
+      ├── columns: x:1!null y:2
+      └── scan xy
+           └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+EXPLAIN (TYPES) SELECT * FROM xy
+----
+explain
+ ├── columns: info:5
+ └── project
+      ├── columns: x:1!null y:2
+      └── scan xy
+           └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+EXPLAIN (VERBOSE) SELECT * FROM xy
+----
+explain
+ ├── columns: info:5
+ ├── mode: verbose
+ └── project
+      ├── columns: x:1!null y:2
+      └── scan xy
+           └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+# Verify we preserve the ordering requirement of the explained query.
+build
+EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y
+----
+explain
+ ├── columns: info:5
+ ├── mode: verbose
+ └── sort
+      ├── columns: x:1!null y:2
+      ├── ordering: +2
+      └── project
+           ├── columns: x:1!null y:2
+           └── scan xy
+                └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) ON x=u
+----
+explain
+ ├── columns: info:7
+ ├── mode: verbose
+ └── project
+      ├── columns: x:1!null y:2 u:5!null v:6!null
+      └── inner-join (hash)
+           ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4 column1:5!null column2:6!null
+           ├── scan xy
+           │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           ├── values
+           │    ├── columns: column1:5!null column2:6!null
+           │    ├── (1, 2)
+           │    └── (3, 4)
+           └── filters
+                └── x:1 = column1:5

@@ -1,0 +1,303 @@
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
+
+query TTTB rowsort
+SHOW GRANTS ON DATABASE test
+----
+test  admin   ALL        true
+test  public  CONNECT    false
+test  public  TEMPORARY  false
+test  root    ALL        true
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+query II rowsort
+SELECT * FROM kv
+----
+1 2
+3 4
+5 6
+7 8
+
+statement ok
+SET sql_safe_updates = TRUE;
+
+statement error RENAME DATABASE on current database
+ALTER DATABASE test RENAME TO u
+
+statement ok
+SET sql_safe_updates = FALSE;
+
+statement ok
+ALTER DATABASE test RENAME TO u
+
+statement error pgcode 3D000 database "test" does not exist
+SELECT * FROM kv
+
+statement error target database or schema does not exist
+SHOW GRANTS ON DATABASE test
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+u          root  NULL  NULL  {}  NULL
+
+# check the name in descriptor is also changed
+query TTTB rowsort
+SHOW GRANTS ON DATABASE u
+----
+u  admin   ALL        true
+u  public  CONNECT    false
+u  public  TEMPORARY  false
+u  root    ALL        true
+
+statement ok
+SET DATABASE = u
+
+query II rowsort
+SELECT * FROM kv
+----
+1 2
+3 4
+5 6
+7 8
+
+statement error pgcode 42601 empty database name
+ALTER DATABASE "" RENAME TO u
+
+statement error pgcode 42601 empty database name
+ALTER DATABASE u RENAME TO ""
+
+statement ok
+ALTER DATABASE u RENAME TO u
+
+statement ok
+CREATE DATABASE t
+
+statement error the new database name "u" already exists
+ALTER DATABASE t RENAME TO u
+
+statement ok
+GRANT ALL ON DATABASE t TO testuser
+
+user testuser
+
+statement error must be owner of database t
+ALTER DATABASE t RENAME TO v
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+t          root  NULL  NULL  {}  NULL
+u          root  NULL  NULL  {}  NULL
+
+# Test that owners can rename databases as long as they have the CREATEDB
+# privilege.
+user root
+
+statement ok
+ALTER USER testuser CREATEDB
+
+user testuser
+
+statement ok
+CREATE DATABASE testuserdb
+
+statement ok
+ALTER DATABASE testuserdb RENAME TO testuserdb2
+
+user root
+
+statement ok
+ALTER USER testuser NOCREATEDB
+
+user testuser
+
+statement error permission denied to rename database
+ALTER DATABASE testuserdb2 RENAME TO testuserdb3
+
+user root
+
+statement ok
+DROP DATABASE testuserdb2
+
+# Test that renames aren't allowed while views refer to any of a DB's tables,
+# both for views in that database and for views in a different database.
+
+statement ok
+CREATE VIEW t.v AS SELECT k,v FROM u.kv
+
+query TTTTIT
+SHOW TABLES FROM u
+----
+public  kv  table  root  0  NULL
+
+statement error cannot rename database because relation "t.public.v" depends on relation "u.public.kv"
+ALTER DATABASE u RENAME TO v
+
+statement ok
+DROP VIEW t.v
+
+statement ok
+ALTER DATABASE u RENAME TO v
+
+statement ok
+CREATE VIEW v.v AS SELECT k,v FROM v.kv
+
+statement error pq: cannot rename database because relation "v.public.v" depends on relation "v.public.kv"\s.*consider dropping "v.public.v" first
+ALTER DATABASE v RENAME TO u
+
+# Check that the default databases can be renamed like any other.
+statement ok
+ALTER DATABASE defaultdb RENAME TO w;
+  ALTER DATABASE postgres RENAME TO defaultdb;
+  ALTER DATABASE w RENAME TO postgres
+
+query TTTTTT rowsort
+SHOW DATABASES
+----
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+t          root  NULL  NULL  {}  NULL
+v          root  NULL  NULL  {}  NULL
+
+statement ok
+SET vectorize=on
+
+query T
+EXPLAIN ALTER DATABASE v RENAME TO x
+----
+distribution: local
+·
+• alter database
+
+statement ok
+RESET vectorize
+
+# Verify that the EXPLAIN above does not actually rename the database (#30543)
+query TTTTTT colnames,rowsort
+SHOW DATABASES
+----
+database_name  owner  primary_region  secondary_region  regions  survival_goal
+defaultdb      root   NULL            NULL              {}       NULL
+postgres       root   NULL            NULL              {}       NULL
+system         node   NULL            NULL              {}       NULL
+t              root   NULL            NULL              {}       NULL
+v              root   NULL            NULL              {}       NULL
+
+# Test dependent sequences on different databases upon renames
+# are allowed now, as well as testing
+# renaming databases with sequences in the same DB is successful.
+subtest regression_45411
+
+statement ok
+CREATE DATABASE db1; CREATE SEQUENCE db1.seq
+
+statement ok
+CREATE DATABASE db2; CREATE TABLE db2.tbl (a int DEFAULT nextval('db1.seq'))
+
+statement ok
+ALTER DATABASE db1 RENAME TO db3
+
+statement ok
+DROP DATABASE db2 CASCADE;
+
+statement ok
+DROP DATABASE db3 CASCADE
+
+statement ok
+CREATE DATABASE db1;
+
+statement ok
+CREATE SEQUENCE db1.a_seq;
+CREATE SEQUENCE db1.b_seq;
+
+statement ok
+USE db1;
+
+statement ok
+CREATE TABLE db1.a (a int default nextval('a_seq') + nextval('b_seq') + 1); ALTER DATABASE db1 RENAME TO db2; USE db2;
+
+statement ok
+DROP TABLE db2.a;
+
+statement ok
+CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('db2.b_seq') + 1);
+
+statement ok
+ALTER DATABASE db2 RENAME TO db1;
+
+statement ok
+ALTER DATABASE db1 RENAME TO db2
+
+statement ok
+DROP TABLE db2.a;
+
+statement ok
+CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('db2.public.b_seq') + 1);
+
+statement ok
+ALTER DATABASE db2 RENAME TO db1; ALTER DATABASE db1 RENAME TO db2
+
+statement ok
+DROP TABLE db2.a;
+
+statement ok
+CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('public.b_seq') + 1);
+
+statement ok
+ALTER DATABASE db2 RENAME TO db1
+
+statement ok
+USE defaultdb
+
+statement ok
+DROP DATABASE db1 CASCADE
+
+statement ok
+CREATE FUNCTION identity1(n INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT n;
+$$
+
+statement ok
+CREATE FUNCTION identity2(n INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT identity1(n);
+$$
+
+statement ok
+ALTER DATABASE defaultdb RENAME TO db;
+USE db;
+
+query I
+SELECT identity1(2);
+----
+2
+
+query I
+SELECT identity2(2);
+----
+2

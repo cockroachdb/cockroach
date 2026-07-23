@@ -1,0 +1,5 @@
+alter_split_index_stmt ::=
+	'ALTER' 'INDEX' table_name '@' index_name 'SPLIT' 'AT' select_stmt
+	| 'ALTER' 'INDEX' index_name 'SPLIT' 'AT' select_stmt
+	| 'ALTER' 'INDEX' table_name '@' index_name 'SPLIT' 'AT' select_stmt 'WITH' 'EXPIRATION' a_expr
+	| 'ALTER' 'INDEX' index_name 'SPLIT' 'AT' select_stmt 'WITH' 'EXPIRATION' a_expr

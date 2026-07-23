@@ -1,0 +1,198 @@
+new-cluster name=s1
+----
+
+subtest create-scheduled-privileges
+
+exec-sql
+CREATE DATABASE foo;
+----
+
+exec-sql
+CREATE TABLE foo.foo (id INT);
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION foo AS 'userfile:///foo';
+----
+
+# Admin can create all schedules.
+exec-sql
+CREATE SCHEDULE foocluster_admin FOR BACKUP INTO 'external://foo/cluster' RECURRING '@hourly';
+----
+
+exec-sql
+CREATE SCHEDULE foodb_admin FOR BACKUP DATABASE foo INTO 'external://foo/database' RECURRING '@hourly';
+----
+
+exec-sql
+CREATE SCHEDULE footable_admin FOR BACKUP TABLE foo.foo INTO 'external://foo/table' RECURRING '@hourly';
+----
+
+# Non-root admin can create all schedules.
+exec-sql
+CREATE USER testuser;
+GRANT ADMIN TO testuser;
+----
+
+exec-sql user=testuser
+CREATE SCHEDULE foocluster_admintestuser FOR BACKUP INTO 'external://foo/cluster' RECURRING '@hourly';
+----
+
+exec-sql user=testuser
+CREATE SCHEDULE foodb_admintestuser FOR BACKUP DATABASE foo INTO 'external://foo/database' RECURRING '@hourly';
+----
+
+exec-sql user=testuser
+CREATE SCHEDULE footable_admintestuser FOR BACKUP TABLE foo.foo INTO 'external://foo/table' RECURRING '@hourly';
+----
+
+# Non-root non-admin cannot create any schedules.
+exec-sql
+REVOKE ADMIN FROM testuser;
+----
+
+exec-sql user=testuser
+CREATE SCHEDULE foocluster FOR BACKUP INTO 'external://foo/cluster' RECURRING '@hourly';
+----
+pq: failed to dry run backup: only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups: user testuser does not have BACKUP system privilege
+
+exec-sql user=testuser
+CREATE SCHEDULE foodb FOR BACKUP DATABASE foo INTO 'external://foo/database' RECURRING '@hourly';
+----
+pq: failed to dry run backup: user testuser does not have SELECT privilege on relation foo
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database foo.
+
+exec-sql user=testuser
+CREATE SCHEDULE footable FOR BACKUP TABLE foo.foo INTO 'external://foo/table' RECURRING '@hourly';
+----
+pq: failed to dry run backup: user testuser does not have SELECT privilege on relation foo
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: foo.
+
+# Grant `BACKUP` privileges to testuser.
+exec-sql
+GRANT SYSTEM BACKUP TO testuser;
+GRANT BACKUP ON DATABASE foo TO testuser;
+GRANT BACKUP ON TABLE foo.foo TO testuser;
+----
+
+exec-sql
+GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser;
+----
+
+exec-sql user=testuser
+CREATE SCHEDULE foocluster_testuser FOR BACKUP INTO 'external://foo/cluster' RECURRING '@hourly';
+----
+
+exec-sql user=testuser
+CREATE SCHEDULE foodb_testuser FOR BACKUP DATABASE foo INTO 'external://foo/database' RECURRING '@hourly';
+----
+
+exec-sql user=testuser
+CREATE SCHEDULE footable_testuser FOR BACKUP TABLE foo.foo INTO 'external://foo/table' RECURRING '@hourly';
+----
+
+subtest end
+
+subtest control-schedules-privileges
+
+# Save the schedule IDs for the schedules created by admin root.
+let $fullID $incID
+with schedules as (show schedules) select id from schedules where label='foocluster_admin' order by command->>'backup_type' asc;
+----
+
+query-sql
+with schedules as (SHOW SCHEDULES FOR BACKUP) SELECT label, command FROM schedules WHERE id IN
+($fullID, $incID) ORDER BY next_run;
+----
+foocluster_admin BACKUP INTO LATEST IN 'external://foo/cluster' WITH OPTIONS (detached)
+foocluster_admin BACKUP INTO 'external://foo/cluster' WITH OPTIONS (detached)
+
+# nonadmin testuser is not allowed to drop a schedule they do not own.
+exec-sql expect-error-regex=(must have REPAIRCLUSTER privilege or be owner of the schedule [0-9]+ to DROP it) user=testuser
+DROP SCHEDULE $fullID
+----
+regex matches error
+
+exec-sql
+GRANT ADMIN TO testuser
+----
+
+# testuser has been granted admin so the drop should succeed.
+exec-sql user=testuser
+DROP SCHEDULE $fullID
+----
+
+query-sql
+with schedules as (SHOW SCHEDULES FOR BACKUP) SELECT label,command,owner FROM schedules WHERE id IN
+($fullID, $incID) ORDER BY next_run;
+----
+
+exec-sql
+REVOKE ADMIN FROM testuser
+----
+
+# create new admin scheduled backup
+exec-sql
+CREATE SCHEDULE foocluster_admin_revoke FOR BACKUP INTO 'external://foo/cluster2' RECURRING '@hourly';
+----
+
+# Save the schedule IDs for the schedules created by admin root.
+let $otherFullID $otherIncID
+with schedules as (show schedules) select id from schedules where label='foocluster_admin_revoke' order by command->>'backup_type' asc;
+----
+
+exec-sql expect-error-regex=(must have REPAIRCLUSTER privilege or be owner of the schedule [0-9]+ to DROP it) user=testuser
+DROP SCHEDULE $otherFullID
+----
+regex matches error
+
+# Save the schedule IDs for the schedules that were created by non-admin testuser.
+let $testuserFullID $testuserIncID
+with schedules as (show schedules) select id from schedules where label='foocluster_testuser' order by command->>'backup_type' asc;
+----
+
+query-sql
+with schedules as (SHOW SCHEDULES FOR BACKUP) SELECT label, command, owner FROM schedules WHERE id
+IN ($testuserFullID, $testuserIncID) ORDER BY next_run;
+----
+foocluster_testuser BACKUP INTO LATEST IN 'external://foo/cluster' WITH OPTIONS (detached) testuser
+foocluster_testuser BACKUP INTO 'external://foo/cluster' WITH OPTIONS (detached) testuser
+
+# testuser owns these schedules so should be able to pause, resume, drop, alter
+# them without admin.
+exec-sql user=testuser
+PAUSE SCHEDULE $testuserFullID;
+PAUSE SCHEDULE $testuserIncID;
+----
+
+exec-sql user=testuser
+RESUME SCHEDULE $testuserFullID;
+RESUME SCHEDULE $testuserIncID;
+----
+
+exec-sql user=testuser
+ALTER BACKUP SCHEDULE $testuserFullID SET WITH revision_history = false;
+----
+
+exec-sql user=testuser
+DROP SCHEDULE $testuserFullID;
+DROP SCHEDULE $testuserIncID;
+----
+
+# But testuser can't drop, alter, resume or pause the root owned schedules.
+exec-sql expect-error-regex=(must have REPAIRCLUSTER privilege or be owner of the schedule [0-9]+ to PAUSE it) user=testuser
+PAUSE SCHEDULE $otherFullID
+----
+regex matches error
+
+exec-sql expect-error-regex=(must have REPAIRCLUSTER privilege or be owner of the schedule [0-9]+ to RESUME it) user=testuser
+RESUME SCHEDULE $otherFullID
+----
+regex matches error
+
+exec-sql expect-error-regex=(must have REPAIRCLUSTER privilege or be owner of the schedule [0-9]+ to DROP it) user=testuser
+DROP SCHEDULE $otherFullID;
+----
+regex matches error
+
+subtest end

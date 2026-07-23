@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+
+exec git submodule update --init --recursive

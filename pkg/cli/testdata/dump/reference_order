@@ -1,0 +1,166 @@
+# Test dumping a database with foreign keys does so in correct order.
+
+sql
+CREATE DATABASE d1;
+CREATE DATABASE d2;
+USE d1;
+
+-- B -> A
+CREATE TABLE b (i int PRIMARY KEY);
+CREATE TABLE a (i int REFERENCES b);
+INSERT INTO b VALUES (1);
+INSERT INTO a VALUES (1);
+
+-- Test multiple tables to make sure transitive deps are sorted correctly.
+-- E -> D -> C
+-- G -> F -> D -> C
+CREATE TABLE g (i int PRIMARY KEY);
+CREATE TABLE f (i int PRIMARY KEY, g int REFERENCES g);
+CREATE TABLE e (i int PRIMARY KEY);
+CREATE TABLE d (i int PRIMARY KEY, e int REFERENCES e, f int REFERENCES f);
+CREATE TABLE c (i int REFERENCES d);
+INSERT INTO g VALUES (1);
+INSERT INTO f VALUES (1, 1);
+INSERT INTO e VALUES (1);
+INSERT INTO d VALUES (1, 1, 1);
+INSERT INTO c VALUES (1);
+
+-- Test a table that uses a sequence to make sure the sequence is dumped first.
+CREATE SEQUENCE s;
+CREATE TABLE s_tbl (id INT PRIMARY KEY DEFAULT nextval('s'), v INT);
+INSERT INTO s_tbl (v) VALUES (10), (11);
+----
+INSERT 2
+
+dump d1
+----
+----
+CREATE TABLE public.b (
+	i INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	FAMILY "primary" (i)
+);
+
+CREATE TABLE public.a (
+	i INT8 NULL,
+	FAMILY "primary" (i, rowid)
+);
+
+CREATE TABLE public.e (
+	i INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	FAMILY "primary" (i)
+);
+
+CREATE TABLE public.g (
+	i INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	FAMILY "primary" (i)
+);
+
+CREATE TABLE public.f (
+	i INT8 NOT NULL,
+	g INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	FAMILY "primary" (i, g)
+);
+
+CREATE TABLE public.d (
+	i INT8 NOT NULL,
+	e INT8 NULL,
+	f INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	FAMILY "primary" (i, e, f)
+);
+
+CREATE TABLE public.c (
+	i INT8 NULL,
+	FAMILY "primary" (i, rowid)
+);
+
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+
+CREATE TABLE public.s_tbl (
+	id INT8 NOT NULL DEFAULT nextval('s':::STRING),
+	v INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, v)
+);
+
+INSERT INTO public.b (i) VALUES
+	(1);
+
+INSERT INTO public.a (i) VALUES
+	(1);
+
+INSERT INTO public.e (i) VALUES
+	(1);
+
+INSERT INTO public.g (i) VALUES
+	(1);
+
+INSERT INTO public.f (i, g) VALUES
+	(1, 1);
+
+INSERT INTO public.d (i, e, f) VALUES
+	(1, 1, 1);
+
+INSERT INTO public.c (i) VALUES
+	(1);
+
+SELECT setval('s', 3, false);
+
+INSERT INTO public.s_tbl (id, v) VALUES
+	(1, 10),
+	(2, 11);
+
+ALTER TABLE public.a ADD CONSTRAINT fk_i_ref_b FOREIGN KEY (i) REFERENCES public.b(i);
+ALTER TABLE public.f ADD CONSTRAINT fk_g_ref_g FOREIGN KEY (g) REFERENCES public.g(i);
+ALTER TABLE public.d ADD CONSTRAINT fk_e_ref_e FOREIGN KEY (e) REFERENCES public.e(i);
+ALTER TABLE public.d ADD CONSTRAINT fk_f_ref_f FOREIGN KEY (f) REFERENCES public.f(i);
+ALTER TABLE public.c ADD CONSTRAINT fk_i_ref_d FOREIGN KEY (i) REFERENCES public.d(i);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+ALTER TABLE public.a VALIDATE CONSTRAINT fk_i_ref_b;
+ALTER TABLE public.f VALIDATE CONSTRAINT fk_g_ref_g;
+ALTER TABLE public.d VALIDATE CONSTRAINT fk_e_ref_e;
+ALTER TABLE public.d VALIDATE CONSTRAINT fk_f_ref_f;
+ALTER TABLE public.c VALIDATE CONSTRAINT fk_i_ref_d;
+----
+----
+
+# Ensure dump specifying only some tables works if those tables
+# reference tables not in the dump. Roundtrip is disabled because table
+# f is not present in the dump.
+dump d1 d e
+noroundtrip
+----
+----
+CREATE TABLE public.e (
+	i INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	FAMILY "primary" (i)
+);
+
+CREATE TABLE public.d (
+	i INT8 NOT NULL,
+	e INT8 NULL,
+	f INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	FAMILY "primary" (i, e, f)
+);
+
+INSERT INTO public.e (i) VALUES
+	(1);
+
+INSERT INTO public.d (i, e, f) VALUES
+	(1, 1, 1);
+
+ALTER TABLE public.d ADD CONSTRAINT fk_e_ref_e FOREIGN KEY (e) REFERENCES public.e(i);
+ALTER TABLE public.d ADD CONSTRAINT fk_f_ref_f FOREIGN KEY (f) REFERENCES public.f(i);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+ALTER TABLE public.d VALIDATE CONSTRAINT fk_e_ref_e;
+ALTER TABLE public.d VALIDATE CONSTRAINT fk_f_ref_f;
+----
+----

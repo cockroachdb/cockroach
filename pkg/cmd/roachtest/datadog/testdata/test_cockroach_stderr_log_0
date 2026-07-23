@@ -1,0 +1,16 @@
+cockroach start: Tue Mar 17 09:44:35 UTC 2026, logging to logs
+CockroachDB node starting at 2026-03-17 09:44:36.69675646 +0000 UTC m=+0.767383031 (took 0.4s)
+build:               CCL v26.2.0-alpha.2-dev-c39cb18c3b4fb63609a0171e8db47e861d85599c @ 2026/03/17 05:04:55 (go1.25.5)
+malloc_conf:         prof:false,prof_active:true,background_thread:true,thp:never,metadata_thp:disabled,narenas:8,dirty_decay_ms:2000,muzzy_decay_ms:0
+webui:               https://10.142.3.19:26258
+sql:                 postgresql://root@10.142.3.19:26257/defaultdb?sslcert=certs%2Fclient.root.crt&sslkey=certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt
+sql (JDBC):          jdbc:postgresql://10.142.3.19:26257/defaultdb?sslcert=certs%2Fclient.root.crt&sslkey=certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt&user=root
+RPC client flags:    ./cockroach <client cmd> --host=10.142.3.19:26257 --certs-dir=certs
+logs:                /home/ubuntu/logs
+locality:            cloud=gce,region=us-east1,zone=us-east1-d
+temp dir:            /mnt/data1/cockroach/cockroach-temp1827568758
+external I/O path:   /mnt/data1/cockroach/extern
+store[0]:            path=/mnt/data1/cockroach,attrs=node9:node9store1:store1
+clusterID:           43105920-fac5-477f-82d8-ec372f5c5138
+status:              initialized new node, joined pre-existing cluster
+nodeID:              9

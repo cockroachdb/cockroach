@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "profilerconstants",
+    srcs = ["constants.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

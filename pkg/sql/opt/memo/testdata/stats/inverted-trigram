@@ -1,0 +1,660 @@
+# Ensure that it's okay to perform an inverted filter on a table with a trigram
+# inverted index that only has a forward statistic collected on the inverted
+# column.
+
+exec-ddl
+CREATE TABLE a (a TEXT)
+----
+
+exec-ddl
+CREATE INDEX fwd ON a(a)
+----
+
+exec-ddl
+CREATE INVERTED INDEX inv ON a(a gin_trgm_ops)
+----
+
+# First, check both plans without stats.
+opt
+SELECT * FROM a WHERE a = 'foo'
+----
+scan a@fwd
+ ├── columns: a:1(string!null)
+ ├── constraint: /1/2: [/'foo' - /'foo']
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+ └── fd: ()-->(1)
+
+opt
+SELECT * FROM a WHERE a LIKE '%foo%'
+----
+select
+ ├── columns: a:1(string!null)
+ ├── stats: [rows=330, distinct(1)=100, null(1)=0]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=111.111]
+ │    └── scan a@inv,inverted
+ │         ├── columns: rowid:2(int!null)
+ │         ├── inverted constraint: /5/2
+ │         │    └── spans: ["foo", "foo"]
+ │         ├── stats: [rows=111.111, distinct(5)=100, null(5)=0]
+ │         └── key: (2)
+ └── filters
+      └── a:1 LIKE '%foo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+
+# Inject forward statistics.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 10,
+    "null_count": 0,
+    "histo_col_type": "VARCHAR",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "blah"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "zooo"
+      }
+    ]
+  }
+]'
+----
+
+# Check the plan for a forward scan.
+opt
+SELECT * FROM a WHERE a = 'blah'
+----
+scan a@fwd
+ ├── columns: a:1(string!null)
+ ├── constraint: /1/2: [/'blah' - /'blah']
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+ │   histogram(1)=  0    10
+ │                <--- 'blah'
+ └── fd: ()-->(1)
+
+# Make sure that this query doesn't have a problem, even though the inverted
+# scan could see "forward histogram" data.
+
+opt
+SELECT * FROM a WHERE a LIKE '%blah%'
+----
+select
+ ├── columns: a:1(string!null)
+ ├── stats: [rows=333.333, distinct(1)=10, null(1)=0]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=111.111]
+ │    └── inverted-filter
+ │         ├── columns: rowid:2(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: empty
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false, unique: true
+ │         │         │    └── union spans: ["bla", "bla"]
+ │         │         └── span expression
+ │         │              ├── tight: false, unique: false
+ │         │              └── union spans: ["lah", "lah"]
+ │         ├── stats: [rows=111.111]
+ │         ├── key: (2)
+ │         └── scan a@inv,inverted
+ │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/2
+ │              │    └── spans
+ │              │         ├── ["bla", "bla"]
+ │              │         └── ["lah", "lah"]
+ │              └── stats: [rows=111.111, distinct(2)=111.111, null(2)=0, distinct(5)=100, null(5)=0]
+ └── filters
+      └── a:1 LIKE '%blah%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+
+# Now, inject inverted statistics with forward statistics also.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x122020620001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x1220207a0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x1220626c0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x12207a6f0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x126168200001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x12626c610001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x126c61680001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x126f6f200001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x126f6f6f0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x127a6f6f0001"
+      }
+    ]
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_col_type": "VARCHAR",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "blah"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "zooo"
+      }
+    ]
+  }
+]'
+----
+
+# Test that we get a plan that uses the inverted index now that there are stats.
+opt
+SELECT * FROM a WHERE a LIKE '%blah%'
+----
+select
+ ├── columns: a:1(string!null)
+ ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=4]
+ │    └── inverted-filter
+ │         ├── columns: rowid:2(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: empty
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false, unique: true
+ │         │         │    └── union spans: ["bla", "bla"]
+ │         │         └── span expression
+ │         │              ├── tight: false, unique: false
+ │         │              └── union spans: ["lah", "lah"]
+ │         ├── stats: [rows=4]
+ │         ├── key: (2)
+ │         └── scan a@inv,inverted
+ │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/2
+ │              │    └── spans
+ │              │         ├── ["bla", "bla"]
+ │              │         └── ["lah", "lah"]
+ │              └── stats: [rows=20, distinct(2)=4, null(2)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0         10         0         10         0         0
+ │                               <--- '\x12626c610001' --- '\x126c61680001' --- '\x126c61680002'
+ └── filters
+      └── a:1 LIKE '%blah%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+
+# Test a less selective filter, forcing the inverted index scan.
+opt
+SELECT * FROM a@inv WHERE a LIKE '%zooo%'
+----
+select
+ ├── columns: a:1(string!null)
+ ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=396]
+ │    └── inverted-filter
+ │         ├── columns: rowid:2(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: empty
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false, unique: true
+ │         │         │    └── union spans: ["ooo", "ooo"]
+ │         │         └── span expression
+ │         │              ├── tight: false, unique: false
+ │         │              └── union spans: ["zoo", "zoo"]
+ │         ├── stats: [rows=396]
+ │         ├── key: (2)
+ │         └── scan a@inv,inverted
+ │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/2
+ │              │    └── spans
+ │              │         ├── ["ooo", "ooo"]
+ │              │         └── ["zoo", "zoo"]
+ │              ├── flags: force-index=inv
+ │              └── stats: [rows=1980, distinct(2)=396, null(2)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0        990         0        990
+ │                               <--- '\x126f6f6f0001' --- '\x127a6f6f0001'
+ └── filters
+      └── a:1 LIKE '%zooo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+
+# Test a trigram similarity filter.
+opt
+SELECT * FROM a WHERE a % 'blah'
+----
+select
+ ├── columns: a:1(string)
+ ├── stable
+ ├── stats: [rows=10]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=8]
+ │    └── distinct-on
+ │         ├── columns: rowid:2(int!null)
+ │         ├── grouping columns: rowid:2(int!null)
+ │         ├── stats: [rows=8, distinct(2)=8, null(2)=0]
+ │         ├── key: (2)
+ │         └── scan a@inv,inverted
+ │              ├── columns: rowid:2(int!null)
+ │              ├── constraint: /5
+ │              │    ├── [/" bl" - /" bl"]
+ │              │    ├── [/"ah " - /"ah "]
+ │              │    ├── [/"bla" - /"bla"]
+ │              │    └── [/"lah" - /"lah"]
+ │              └── stats: [rows=40, distinct(2)=8, null(2)=0, distinct(5)=4, null(5)=0]
+ │                  histogram(5)=  0         10         0         10         0         10         0         10
+ │                               <--- '\x1220626c0001' --- '\x126168200001' --- '\x12626c610001' --- '\x126c61680001'
+ └── filters
+      └── a:1 % 'blah' [type=bool, outer=(1), stable]
+
+opt set=(optimizer_use_improved_trigram_similarity_selectivity=false)
+SELECT * FROM a WHERE a % 'blah'
+----
+select
+ ├── columns: a:1(string)
+ ├── stable
+ ├── stats: [rows=333.333]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=8]
+ │    └── distinct-on
+ │         ├── columns: rowid:2(int!null)
+ │         ├── grouping columns: rowid:2(int!null)
+ │         ├── stats: [rows=8, distinct(2)=8, null(2)=0]
+ │         ├── key: (2)
+ │         └── scan a@inv,inverted
+ │              ├── columns: rowid:2(int!null)
+ │              ├── constraint: /5
+ │              │    ├── [/" bl" - /" bl"]
+ │              │    ├── [/"ah " - /"ah "]
+ │              │    ├── [/"bla" - /"bla"]
+ │              │    └── [/"lah" - /"lah"]
+ │              └── stats: [rows=40, distinct(2)=8, null(2)=0, distinct(5)=4, null(5)=0]
+ │                  histogram(5)=  0         10         0         10         0         10         0         10
+ │                               <--- '\x1220626c0001' --- '\x126168200001' --- '\x12626c610001' --- '\x126c61680001'
+ └── filters
+      └── a:1 % 'blah' [type=bool, outer=(1), stable]
+
+# Test a trigram similarity filter with a single span.
+opt set=(pg_trgm.similarity_threshold=1)
+SELECT * FROM a WHERE a % 'blah'
+----
+select
+ ├── columns: a:1(string)
+ ├── stable
+ ├── stats: [rows=10]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=2]
+ │    └── distinct-on
+ │         ├── columns: rowid:2(int!null)
+ │         ├── grouping columns: rowid:2(int!null)
+ │         ├── stats: [rows=2, distinct(2)=2, null(2)=0]
+ │         ├── key: (2)
+ │         └── scan a@inv,inverted
+ │              ├── columns: rowid:2(int!null)
+ │              ├── constraint: /5: [/"lah" - /"lah"]
+ │              └── stats: [rows=10, distinct(2)=2, null(2)=0, distinct(5)=1, null(5)=0]
+ │                  histogram(5)=  0         10
+ │                               <--- '\x126c61680001'
+ └── filters
+      └── a:1 % 'blah' [type=bool, outer=(1), stable]
+
+# Now, check what happens with a forward scan now that we have an inverted histogram.
+opt
+SELECT * FROM a WHERE a = 'blah'
+----
+scan a@fwd
+ ├── columns: a:1(string!null)
+ ├── constraint: /1/2: [/'blah' - /'blah']
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+ │   histogram(1)=  0    10
+ │                <--- 'blah'
+ └── fd: ()-->(1)
+
+# Finally, check what happens when there are only inverted stats.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x1220207a0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x122020620001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x1220626c0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x12207a6f0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x126168200001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x12626c610001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x126c61680001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x126f6f200001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x126f6f6f0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x127a6f6f0001"
+      }
+    ]
+  }
+]'
+----
+
+opt
+SELECT * FROM a WHERE a LIKE '%blah%'
+----
+select
+ ├── columns: a:1(string!null)
+ ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=4]
+ │    └── inverted-filter
+ │         ├── columns: rowid:2(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: empty
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false, unique: true
+ │         │         │    └── union spans: ["bla", "bla"]
+ │         │         └── span expression
+ │         │              ├── tight: false, unique: false
+ │         │              └── union spans: ["lah", "lah"]
+ │         ├── stats: [rows=4]
+ │         ├── key: (2)
+ │         └── scan a@inv,inverted
+ │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/2
+ │              │    └── spans
+ │              │         ├── ["bla", "bla"]
+ │              │         └── ["lah", "lah"]
+ │              └── stats: [rows=20, distinct(2)=4, null(2)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0         10         0         10         0         0
+ │                               <--- '\x12626c610001' --- '\x126c61680001' --- '\x126c61680002'
+ └── filters
+      └── a:1 LIKE '%blah%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+
+# Test a less selective filter, forcing the inverted index scan.
+opt
+SELECT * FROM a@inv WHERE a LIKE '%zooo%'
+----
+select
+ ├── columns: a:1(string!null)
+ ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── index-join a
+ │    ├── columns: a:1(string)
+ │    ├── stats: [rows=396]
+ │    └── inverted-filter
+ │         ├── columns: rowid:2(int!null)
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: empty
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false, unique: true
+ │         │         │    └── union spans: ["ooo", "ooo"]
+ │         │         └── span expression
+ │         │              ├── tight: false, unique: false
+ │         │              └── union spans: ["zoo", "zoo"]
+ │         ├── stats: [rows=396]
+ │         ├── key: (2)
+ │         └── scan a@inv,inverted
+ │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
+ │              ├── inverted constraint: /5/2
+ │              │    └── spans
+ │              │         ├── ["ooo", "ooo"]
+ │              │         └── ["zoo", "zoo"]
+ │              ├── flags: force-index=inv
+ │              └── stats: [rows=1980, distinct(2)=396, null(2)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0        990         0        990
+ │                               <--- '\x126f6f6f0001' --- '\x127a6f6f0001'
+ └── filters
+      └── a:1 LIKE '%zooo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+
+opt
+SELECT * FROM a WHERE a = 'blah'
+----
+scan a@fwd
+ ├── columns: a:1(string!null)
+ ├── constraint: /1/2: [/'blah' - /'blah']
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ └── fd: ()-->(1)
+
+# Simulate truncate on an inverted column to ensure that the optimizer doesn't
+# use stale stats.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_col_type": "VARCHAR",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "blah"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "zooo"
+      }
+    ]
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x1220207a0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x122020620001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x1220626c0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x12207a6f0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x126168200001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x12626c610001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x126c61680001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x126f6f200001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x126f6f6f0001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x127a6f6f0001"
+      }
+    ]
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 0,
+    "distinct_count": 0,
+    "null_count": 0
+  }
+]'
+----
+
+# This explain should have no histogram, since the most recent statistic has no
+# histogram, even though the column in question is inverted and older stats
+# exist with histograms.
+
+opt
+SELECT * FROM a WHERE a = 'blah'
+----
+scan a@fwd
+ ├── columns: a:1(string!null)
+ ├── constraint: /1/2: [/'blah' - /'blah']
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ └── fd: ()-->(1)

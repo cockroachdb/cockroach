@@ -1,0 +1,416 @@
+# Change the application name.
+
+send
+Query {"String": "SET application_name = 'pgtest'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Change the time zone using an offset.
+
+send
+Query {"String": "SET TIME ZONE +6"}
+----
+
+until
+ParameterStatus
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"\u003c+06\u003e-06"}
+
+until
+ReadyForQuery
+----
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET TIME ZONE -11.5"}
+----
+
+until
+ParameterStatus
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"\u003c-11:30\u003e+11:30"}
+
+until
+ReadyForQuery
+----
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Change the time zone using a real string.
+
+send
+Query {"String": "SET TIME ZONE 'America/New_York'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"America/New_York"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Change interval style.
+
+send
+Query {"String": "SET IntervalStyle = 'ISO_8601'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Query {"String": "SET DateStyle = 'YMD, ISO'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP ROLE IF EXISTS testuser"}
+----
+
+# Ignore the notice, as the user might exist.
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP ROLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE ROLE testuser"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE ROLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET ROLE testuser"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET ROLE testuser"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "RESET ROLE"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"RESET"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test for SET LOCAL.
+
+send
+Query {"String": "SET TIME ZONE 'Australia/Sydney'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+Query {"String": "SET LOCAL TIME ZONE 'Australia/Adelaide'"}
+Query {"String": "SET LOCAL INTERVALSTYLE = 'sql_standard'"}
+Query {"String": "SET LOCAL DATESTYLE = 'ISO,DMY'"}
+Query {"String": "SET LOCAL application_name = 'bobby'"}
+Query {"String": "SET LOCAL role = 'testuser'"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, DMY"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"bobby"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "SAVEPOINT s1"}
+Query {"String": "SET LOCAL TIME ZONE 'Australia/Perth'"}
+Query {"String": "SET LOCAL INTERVALSTYLE = 'postgres'"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Perth"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"postgres"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "ROLLBACK TO SAVEPOINT s1"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "ROLLBACK"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# Test SET LOCAL with special cockroach_restart savepoint.
+send
+Query {"String": "BEGIN"}
+Query {"String": "SAVEPOINT cockroach_restart"}
+Query {"String": "SET LOCAL TIME ZONE 'Australia/Adelaide'"}
+Query {"String": "SET LOCAL INTERVALSTYLE = 'sql_standard'"}
+Query {"String": "SET LOCAL DATESTYLE = 'ISO,DMY'"}
+Query {"String": "SET LOCAL application_name = 'bobby'"}
+Query {"String": "SET LOCAL role = 'testuser'"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, DMY"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"bobby"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Releasing the special savepoint commits the transaction, but a COMMIT is
+# still required afterwards.
+send
+Query {"String": "RELEASE SAVEPOINT cockroach_restart"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Postgres uses the RELEASE tag since the savepoint is not special in Postgres.
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"RELEASE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Verify that the COMMIT causes the parameter status updates to be sent.
+send
+Query {"String": "COMMIT"}
+----
+
+# Verify that the COMMIT causes the parameter status updates to be sent.
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# Parameter status updates should work if there's an error inside a
+# cockroach_restart savepoint.
+send
+Query {"String": "BEGIN"}
+Query {"String": "SAVEPOINT cockroach_restart"}
+Query {"String": "SET LOCAL TIME ZONE 'Australia/Adelaide'"}
+Query {"String": "SET LOCAL INTERVALSTYLE = 'sql_standard'"}
+Query {"String": "SET LOCAL DATESTYLE = 'ISO,DMY'"}
+Query {"String": "SET LOCAL application_name = 'bobby'"}
+Query {"String": "SET LOCAL role = 'testuser'"}
+Query {"String": "SELECT 1/0"}
+----
+
+# In Postgres, the parameter statuses are all updated as soon as an error
+# occurs in the transaction.
+until noncrdb_only
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, DMY"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"bobby"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+until crdb_only ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, DMY"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"bobby"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Query {"String": "ROLLBACK"}
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# CockroachDB sends the parameter status updates during ROLLBACK.
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

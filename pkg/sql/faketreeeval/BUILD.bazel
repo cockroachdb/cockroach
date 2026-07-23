@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "faketreeeval",
+    srcs = ["evalctx.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/faketreeeval",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/jobs/jobspb",
+        "//pkg/roachpb",
+        "//pkg/security/username",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/hintpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/pgwire/pgnotice",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/sql/types",
+        "//pkg/util/duration",
+        "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/hlc",
+        "//pkg/util/mon",
+        "//pkg/util/rangedesc",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_lib_pq//oid",
+    ],
+)

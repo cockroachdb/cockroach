@@ -1,0 +1,115 @@
+add id=1 name=db1
+----
+(0, 0, db1): 1
+
+add parent-id=1 id=51 name=sc1
+----
+(1, 0, sc1): 51
+
+add parent-id=1 parent-schema-id=51 id=52 name=tab1
+----
+(1, 51, tab1): 52
+
+add parent-id=1 parent-schema-id=29 id=53 name=tab2
+----
+(1, 29, tab2): 53
+
+add parent-id=1 parent-schema-id=29 id=54 name=func1
+----
+(1, 29, func1): 54
+
+len
+----
+5
+
+iterate-by-id
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 51, tab1): 52
+(1, 29, tab2): 53
+(1, 29, func1): 54
+
+# This item has the same name key (1, 29, tab2) as item with id=53
+add parent-id=1 parent-schema-id=29 id=55 name=tab2
+----
+(1, 29, tab2): 55
+
+iterate-by-id
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 51, tab1): 52
+(1, 29, tab2): 53
+(1, 29, func1): 54
+(1, 29, tab2): 55
+
+remove id=55
+----
+true
+
+iterate-by-id
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 51, tab1): 52
+(1, 29, tab2): 53
+(1, 29, func1): 54
+
+# Make sure get-by-id works properly
+get-by-id id=10
+----
+not found
+
+get-by-id id=52
+----
+(1, 51, tab1): 52
+
+get-by-id id=54
+----
+(1, 29, func1): 54
+
+# Add a table which matches another table by name. Make sure that the
+# other table gets removed.
+
+add parent-id=1 parent-schema-id=51 id=54 name=tab1
+----
+(1, 51, tab1): 54
+
+len
+----
+5
+
+iterate-by-id
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 51, tab1): 52
+(1, 29, tab2): 53
+(1, 51, tab1): 54
+
+remove id=54
+----
+true
+
+get-by-id id=54
+----
+not found
+
+len
+----
+4
+
+remove id=54
+----
+false
+
+clear
+----
+
+len
+----
+0
+
+iterate-by-id
+----

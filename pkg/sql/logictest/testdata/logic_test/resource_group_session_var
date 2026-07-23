@@ -1,0 +1,65 @@
+# LogicTest: local
+
+# Tests for the resource_group session variable. The variable binds a
+# session to a named resource group; only the two built-in groups exist
+# today. SET resolves the name to an id via the resource group name
+# cache and errors on unknown names. The setting is always stamped on
+# the session regardless of admission.cpu_time_tokens.mode.
+
+# Default is empty.
+query T
+SHOW resource_group
+----
+·
+
+# Setting an unknown group errors.
+statement error pq: unknown resource group "does_not_exist"
+SET resource_group = 'does_not_exist'
+
+# The unsuccessful SET left the session unbound.
+query T
+SHOW resource_group
+----
+·
+
+# Setting a known built-in group succeeds and is reflected by SHOW.
+statement ok
+SET resource_group = 'crdb_internal_resource_group_low'
+
+query T
+SHOW resource_group
+----
+crdb_internal_resource_group_low
+
+statement ok
+SET resource_group = 'crdb_internal_resource_group_high'
+
+query T
+SHOW resource_group
+----
+crdb_internal_resource_group_high
+
+# RESET clears the binding.
+statement ok
+RESET resource_group
+
+query T
+SHOW resource_group
+----
+·
+
+# Setting the empty string also clears the binding.
+statement ok
+SET resource_group = 'crdb_internal_resource_group_high'
+
+statement ok
+SET resource_group = ''
+
+query T
+SHOW resource_group
+----
+·
+
+# Names are case-sensitive: an upper-cased built-in name is unknown.
+statement error pq: unknown resource group "CRDB_INTERNAL_RESOURCE_GROUP_LOW"
+SET resource_group = 'CRDB_INTERNAL_RESOURCE_GROUP_LOW'

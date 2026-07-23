@@ -1,0 +1,74 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.readsummary;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb";
+
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+// ReadSummary contains a summary of all read requests served on a range, along
+// with the timestamps that those reads were served at. The structure is a
+// summary in that it may not represent these reads with perfect precision.
+// Instead, it is allowed to lose resolution in exchange for reduced space, as
+// long as the resulting timestamp for each key does not regress. During such
+// compression, the timestamp of a given key is only allowed to advance as
+// precision drops. This parallels a similar ratcheting policy in the timestamp
+// cache (tscache.Cache).
+//
+// For example, a high-resolution version of the summary may look like:
+//
+//                         #
+//    ^       ##     ##    #
+// ts |    #  ##     ##    #    #######
+//    |    #  ##     ####  #    #######   ##
+//       ###  ##     #######    #######   ##  ###
+//       ----------- ----------------------------
+//          local               global
+//
+// While a low-resolution (compressed) version of the summary may look like:
+//
+//                   ############################
+//    ^  ########### ############################
+// ts |  ########### ############################
+//    |  ########### ############################
+//       ########### ############################
+//       ----------- ----------------------------
+//          local               global
+//
+message ReadSummary {
+  option (gogoproto.equal) = true;
+
+  Segment local  = 1 [(gogoproto.nullable) = false];
+  Segment global = 2 [(gogoproto.nullable) = false];
+}
+  
+// Segment is a segement of a Range's complete ReadSummary. A ReadSummary has a
+// segment for each of the Range's replicated, addressable contiguous keyspaces
+// (i.e. range-local and global).
+message Segment {
+  option (gogoproto.equal) = true;
+
+  util.hlc.Timestamp low_water = 1 [(gogoproto.nullable) = false];
+  // The spans are sorted by key and are non-overlapping.
+  repeated ReadSpan read_spans = 2 [(gogoproto.nullable) = false];
+}
+
+// ReadSpan is a key span that has been read at a timestamp. The span carries an
+// optional transaction ID that signifies which transaction performed the read.
+// This is used to exclude a given read from being considered as a source of a
+// read-write conflict if a transaction returns to write to a key that it had
+// previously read from.
+message ReadSpan {
+  option (gogoproto.equal) = true;
+
+  bytes key                    = 1;
+  bytes end_key                = 2;
+  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  bytes txn_id                 = 4 [(gogoproto.customname) = "TxnID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false];
+}

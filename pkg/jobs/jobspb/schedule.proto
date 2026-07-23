@@ -1,0 +1,74 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.jobs.jobspb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
+import "clusterversion/cluster_version.proto";
+
+
+// ScheduleDetails describes how to schedule and execute the job.
+message ScheduleDetails {
+  // WaitBehavior describes how to handle previously  started
+  // jobs that have not completed yet.
+  enum WaitBehavior {
+    // Wait for the previous run to complete
+    // before starting the next one.
+    WAIT = 0;
+    // Do not wait for the previous run to complete.
+    NO_WAIT = 1;
+    // If the previous run is still running, skip this run
+    // and advance schedule to the next recurrence.
+    SKIP = 2;
+  }
+
+  // ErrorHandlingBehavior describes how to handle failed job runs.
+  enum ErrorHandlingBehavior {
+    // By default, failed jobs will run again, based on their schedule.
+    RETRY_SCHED = 0;
+    // Retry failed jobs soon.
+    RETRY_SOON = 1;
+    // Stop running this schedule
+    PAUSE_SCHED = 2;
+  }
+
+  // How to handle running jobs.
+  WaitBehavior wait = 1;
+
+  // How to handle failed jobs.
+  ErrorHandlingBehavior on_error = 2;
+
+  // ClusterID is populated at schedule creation with the ClusterID, in case a
+  // schedule resuming later, needs to use this information, e.g. to determine if it
+  // has been restored into a different cluster, which might mean it should
+  // terminate, pause or update some other state.
+  //
+  // A resuming schedule may change the cluster_id
+  // on resumption.
+  bytes cluster_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+
+  // CreationClusterVersion documents the cluster version this schedule was created on.
+  clusterversion.ClusterVersion creation_cluster_version = 4 [(gogoproto.nullable) = false];
+}
+
+// ExecutionArguments describes data needed to execute scheduled jobs.
+message ExecutionArguments {
+  google.protobuf.Any args = 1;
+}
+
+// Message representing sql statement to execute.
+message SqlStatementExecutionArg {
+  string statement = 1;
+}
+
+// ScheduleState represents mutable schedule state.
+// The members of this proto may be mutated during each schedule execution.
+message ScheduleState {
+  string status = 1;
+}

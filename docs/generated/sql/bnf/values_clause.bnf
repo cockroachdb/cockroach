@@ -1,0 +1,2 @@
+values_clause ::=
+	'VALUES' '(' a_expr ( ( ',' a_expr ) )* ')' ( ( ',' '(' ( ( a_expr ) ( ( ',' a_expr ) )* ) ')' ) )*

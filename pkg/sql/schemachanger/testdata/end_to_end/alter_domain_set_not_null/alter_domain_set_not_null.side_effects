@@ -1,0 +1,130 @@
+/* setup */
+CREATE DOMAIN salmon AS INT DEFAULT 0;
+CREATE TABLE t (c salmon);
+----
+...
++object {100 101 salmon} -> 104
++object {100 101 _salmon} -> 105
++object {100 101 t} -> 106
+
+/* test */
+ALTER DOMAIN salmon SET NOT NULL;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER DOMAIN
+increment telemetry for sql.schema.alter_domain.set_not_null
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert descriptor #104
+  ...
+         width: 64
+       defaultExpr: "0"
+  -    nextConstraintId: 1
+  +    nextConstraintId: 2
+  +    notNullConstraintId: 1
+  +    notNullConstraintName: crdb_internal_constraint_1_name_placeholder
+  +    notNullState: VALIDATING
+     id: 104
+     kind: DOMAIN
+  ...
+     referencingDescriptorIds:
+     - 106
+  -  version: "2"
+  +  version: "3"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 3 MutationType ops
+upsert descriptor #104
+   type:
+     arrayTypeId: 105
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 104
+  +      name: salmon
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER DOMAIN ‹defaultdb›.‹public›.‹salmon› SET NOT NULL
+  +        statement: ALTER DOMAIN salmon SET NOT NULL
+  +        statementTag: ALTER DOMAIN
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     domain:
+       baseType:
+  ...
+         width: 64
+       defaultExpr: "0"
+  -    nextConstraintId: 1
+  +    nextConstraintId: 2
+  +    notNullConstraintId: 1
+  +    notNullConstraintName: crdb_internal_constraint_1_name_placeholder
+  +    notNullState: VALIDATING
+     id: 104
+     kind: DOMAIN
+  ...
+     referencingDescriptorIds:
+     - 106
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "ALTER DOMAIN defaultdb.public.salmon SET NOT NULL"
+  descriptor IDs: [104]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 1 with 4 MutationType ops
+upsert descriptor #104
+   type:
+     arrayTypeId: 105
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 104
+  -      name: salmon
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER DOMAIN ‹defaultdb›.‹public›.‹salmon› SET NOT NULL
+  -        statement: ALTER DOMAIN salmon SET NOT NULL
+  -        statementTag: ALTER DOMAIN
+  -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     domain:
+       baseType:
+  ...
+       nextConstraintId: 2
+       notNullConstraintId: 1
+  -    notNullConstraintName: crdb_internal_constraint_1_name_placeholder
+  -    notNullState: VALIDATING
+  +    notNullConstraintName: salmon_not_null
+  +    notNullState: ENFORCING
+     id: 104
+     kind: DOMAIN
+  ...
+     referencingDescriptorIds:
+     - 106
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #3
+# end PostCommitPhase

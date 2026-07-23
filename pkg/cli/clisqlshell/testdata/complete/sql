@@ -1,0 +1,138 @@
+# Full completion choice when there is no context whatsoever.
+complete
+select * from @
+----
+complete 0 14
+msg: ""
+completions:
+- "database":
+  "defaultdb" () -> "defaultdb" (0, 0)
+  "postgres" () -> "postgres" (0, 0)
+  "system" () -> "system" (0, 0)
+- "functions":
+  "\"current_date\"(" ((from schema pg_catalog) Returns the date of the current transaction) -> "\"current_date\"(" (0, 0)
+  "\"current_schema\"(" ((from schema pg_catalog) Returns the current schema) -> "\"current_schema\"(" (0, 0)
+  "\"current_time\"(" ((from schema pg_catalog) Returns the current transaction's time with time zone) -> "\"current_time\"(" (0, 0)
+  "\"current_timestamp\"(" ((from schema pg_catalog) Returns the time of the current transaction) -> "\"current_timestamp\"(" (0, 0)
+  "\"current_user\"(" ((from schema pg_catalog) Returns the current user) -> "\"current_user\"(" (0, 0)
+  "\"extract\"(" ((from schema pg_catalog) Extracts `element` from `input`) -> "\"extract\"(" (0, 0)
+  "\"extract_duration\"(" ((from schema pg_catalog) Extracts `element` from `input`) -> "\"extract_duration\"(" (0, 0)
+  "\"family\"(" ((from schema pg_catalog) Extracts the IP family of the value; 4 for IPv4, 6 for IPv6) -> "\"family\"(" (0, 0)
+  "\"greatest\"(" ((from schema pg_catalog) Returns the element with the greatest value) -> "\"greatest\"(" (0, 0)
+  "\"least\"(" ((from schema pg_catalog) Returns the element with the lowest value) -> "\"least\"(" (0, 0)
+  ... entries omitted ...
+- "keyword":
+  "ABORT" (unreserved) -> "ABORT" (0, 0)
+  "ABSOLUTE" (unreserved) -> "ABSOLUTE" (0, 0)
+  "ACCESS" (unreserved) -> "ACCESS" (0, 0)
+  "ACTION" (unreserved) -> "ACTION" (0, 0)
+  "ADD" (unreserved) -> "ADD" (0, 0)
+  "ADMIN" (unreserved) -> "ADMIN" (0, 0)
+  "AFTER" (unreserved) -> "AFTER" (0, 0)
+  "AGGREGATE" (unreserved) -> "AGGREGATE" (0, 0)
+  "ALL" (reserved) -> "ALL" (0, 0)
+  "ALTER" (unreserved) -> "ALTER" (0, 0)
+  ... entries omitted ...
+- "relation":
+  "geography_columns" (Shows all defined geography columns. Matches PostGIS' geography_columns function) -> "geography_columns" (0, 0)
+  "geometry_columns" (Shows all defined geometry columns. Matches PostGIS' geometry_columns functional) -> "geometry_columns" (0, 0)
+  "spatial_ref_sys" (Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatia) -> "spatial_ref_sys" (0, 0)
+- "schema":
+  "crdb_internal" () -> "crdb_internal" (0, 0)
+  "information_schema" () -> "information_schema" (0, 0)
+  "pg_catalog" () -> "pg_catalog" (0, 0)
+  "pg_extension" () -> "pg_extension" (0, 0)
+  "public" () -> "public" (0, 0)
+
+# Complete a database name.
+complete
+select * from defaul@
+----
+complete 0 20
+msg: ""
+completions:
+- "database":
+  "defaultdb" () -> "defaultdb" (0, 6)
+- "functions":
+  "default_to_database_primary_region(" ((from schema pg_catalog) Returns the given region if the region has been added to the current database) -> "default_to_database_primary_region(" (0, 6)
+- "keyword":
+  "DEFAULT" (reserved) -> "DEFAULT" (0, 6)
+  "DEFAULTS" (unreserved) -> "DEFAULTS" (0, 6)
+
+
+# Complete a schema name.
+complete
+select * from defaultdb.@
+----
+complete 0 24
+msg: ""
+completions:
+- "schema":
+  "crdb_internal" () -> "crdb_internal" (0, 0)
+  "information_schema" () -> "information_schema" (0, 0)
+  "pg_catalog" () -> "pg_catalog" (0, 0)
+  "pg_extension" () -> "pg_extension" (0, 0)
+  "public" () -> "public" (0, 0)
+
+complete
+select * from defaultdb.pub@
+----
+complete 0 27
+msg: ""
+completions:
+- "schema":
+  "public" () -> "public" (0, 3)
+
+# When there is no table in the target schema, there's no completion available.
+
+complete
+select * from defaultdb.public.@
+----
+complete 0 31
+msg: ""
+(no completions generated)
+
+# If there's just one table, that gets immediately completed.
+sql
+CREATE TABLE mytable(x int)
+----
+ok
+
+complete
+select * from defaultdb.public.@
+----
+complete 0 31
+msg: ""
+completions:
+- "relation":
+  "mytable" () -> "mytable" (0, 0)
+
+complete
+select array_l@
+----
+complete 0 14
+msg: ""
+completions:
+- "functions":
+  "array_length(" ((from schema pg_catalog) Calculates the length of `input` on the provided `array_dimension`) -> "array_length(" (0, 7)
+  "array_lower(" ((from schema pg_catalog) Calculates the minimum value of `input` on the provided `array_dimension`) -> "array_lower(" (0, 7)
+
+# Complete pg_catalog tables after a pg_catalog prefix.
+complete
+select * from pg_catalog.pg_pro@
+----
+complete 0 31
+msg: ""
+completions:
+- "relation":
+  "pg_proc" (built-in functions (incomplete)) -> "pg_proc" (0, 6)
+
+# Complete pg_catalog tables if the user has typed pg_ already.
+complete
+select * from pg_pro@
+----
+complete 0 20
+msg: ""
+completions:
+- "relation":
+  "pg_proc" (built-in functions (incomplete)) -> "pg_proc" (0, 6)

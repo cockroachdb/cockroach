@@ -1,0 +1,64 @@
+# Test verifies that if we have metadata and remaining remaining replicas doesn't
+# match descriptor it is reported as error.
+# For that we use "stale" replica that existed pre merge and hence have a shorter
+# span.
+
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 4 # This replica must reach end of span but falls short of.
+  RangeID: 2
+  StartKey: /Table/1
+  EndKey: /Table/5
+  Replicas:
+  - { NodeID: 4, StoreID: 4, ReplicaID: 1}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 2}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+----
+ok
+
+descriptor-data
+- RangeID: 1
+  StartKey: /Min
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+- RangeID: 2
+  StartKey: /Table/1
+  Replicas:
+  - { NodeID: 4, StoreID: 4, ReplicaID: 1}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 2}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 3}
+----
+ok
+
+collect-replica-info stores=(1,2,4)
+----
+ok
+
+make-plan
+----
+ERROR: loss of quorum recovery error
+range doesn't match to the descriptor in the metadata
+  r0 /Table/{1-5} metadata /{Table/1-Max}

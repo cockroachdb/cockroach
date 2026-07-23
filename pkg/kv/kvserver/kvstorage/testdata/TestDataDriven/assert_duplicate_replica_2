@@ -1,0 +1,14 @@
+# Variant of the original test but there's overlap between an
+# initialized and uninitialized copy. The result is exactly
+# the same.
+new-replica range-id=1 replica-id=10 k=a ek=c
+----
+r1:{a-c} [(n1,s1):10, next=11, gen=0]
+
+new-replica range-id=1 replica-id=20
+----
+ok
+
+load-and-reconcile
+----
+conflicting RaftReplicaID 20 for r1:{a-c} [(n1,s1):10, next=11, gen=0]

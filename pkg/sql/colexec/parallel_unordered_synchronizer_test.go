@@ -1,0 +1,302 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package colexec
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
+)
+
+func TestParallelUnorderedSynchronizer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const (
+		maxInputs  = 16
+		maxBatches = 16
+	)
+
+	var (
+		rng, _ = randutil.NewTestRand()
+		typs   = []*types.T{types.Int}
+		// We want at least two inputs (one regular and one possibly blocking).
+		numInputs     = rng.Intn(maxInputs-1) + 2
+		numBatches    = rng.Intn(maxBatches) + 1
+		blockDuration = time.Second
+		errSuffix     = "test-induced metadata"
+	)
+
+	type synchronizerTerminationScenario int
+	const (
+		// synchronizerGracefulTermination is a termination scenario where the
+		// synchronizer terminates gracefully.
+		synchronizerGracefulTermination synchronizerTerminationScenario = iota
+		// synchronizerContextCanceled is a termination scenario where a
+		// cancellation requests that a synchronizer terminates.
+		synchronizerContextCanceled
+		// synchronizerPrematureDrainMeta is a termination scenario where
+		// DrainMeta is called prematurely on the synchronizer. In this scenario
+		// we also ensure that the inputs are eagerly unblocked from their
+		// current Next work.
+		synchronizerPrematureDrainMeta
+		// synchronizerMaxTerminationScenario should be at the end of the
+		// termination scenario list so that it can be used as an upper bound to
+		// generate any other termination scenario.
+		synchronizerMaxTerminationScenario
+	)
+	terminationScenario := synchronizerTerminationScenario(rng.Intn(int(synchronizerMaxTerminationScenario)))
+
+	inputs := make([]colexecargs.OpWithMetaInfo, numInputs)
+	for i := range inputs {
+		var source colexecop.Operator
+		args := coldatatestutils.RandomVecArgs{Rand: rng, NullProbability: rng.Float64()}
+		batch := coldatatestutils.RandomBatch(testAllocator, args, typs, coldata.BatchSize(), 0 /* length */)
+		if i < numInputs-1 {
+			s := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
+			s.ResetBatchesToReturn(numBatches)
+			source = s
+		} else {
+			// Use the last input to possibly introduce some delay in Next.
+			numBatchesLeft := numBatches
+			var inputCtx context.Context
+			source = &colexecop.CallbackOperator{
+				InitCb: func(ctx context.Context) {
+					inputCtx = ctx
+				},
+				NextCb: func() coldata.Batch {
+					if numBatchesLeft == 0 {
+						return coldata.ZeroBatch
+					}
+					if terminationScenario == synchronizerPrematureDrainMeta {
+						// In PrematureDrainMeta scenario we want to block the
+						// input until the context is canceled in order to
+						// simulate that this operator is performing some
+						// intensive work that should be stopped immediately
+						// once the synchronizer transitions into the draining
+						// state.
+						select {
+						case <-inputCtx.Done():
+							colexecerror.ExpectedError(inputCtx.Err())
+						case <-time.After(blockDuration):
+							colexecerror.InternalError(errors.New("unexpectedly slept for a second"))
+						}
+					}
+					numBatchesLeft--
+					return batch
+				},
+			}
+		}
+		inputs[i].Root = source
+		inputIdx := i
+		inputs[i].MetadataSources = []colexecop.MetadataSource{
+			colexectestutils.CallbackMetadataSource{DrainMetaCb: func() []execinfrapb.ProducerMetadata {
+				return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d %s", inputIdx, errSuffix)}}
+			}},
+		}
+	}
+
+	ctx, cancelFn := context.WithCancel(context.Background())
+
+	var wg sync.WaitGroup
+	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
+	s.Init(ctx)
+
+	t.Run(fmt.Sprintf("numInputs=%d/numBatches=%d/terminationScenario=%d", numInputs, numBatches, terminationScenario), func(t *testing.T) {
+		if terminationScenario == synchronizerContextCanceled {
+			wg.Add(1)
+			sleepTime := time.Duration(rng.Intn(500)) * time.Microsecond
+			go func() {
+				time.Sleep(sleepTime)
+				cancelFn()
+				wg.Done()
+			}()
+		} else {
+			// Appease the linter complaining about context leaks.
+			defer cancelFn()
+		}
+
+		batchesReturned := 0
+		expectedBatchesReturned := numInputs * numBatches
+		var streamingMeta []execinfrapb.ProducerMetadata
+		for {
+			var b coldata.Batch
+			var meta *execinfrapb.ProducerMetadata
+			if err := colexecerror.CatchVectorizedRuntimeError(func() { b, meta = s.Next() }); err != nil {
+				if terminationScenario == synchronizerContextCanceled {
+					require.True(t, testutils.IsError(err, "context canceled"), err)
+					break
+				} else {
+					t.Fatal(err)
+				}
+			}
+			if meta != nil {
+				// Skip the always-on grunning emission from each worker
+				// goroutine; it is orthogonal to the test-induced metadata
+				// this test exercises.
+				if meta.Metrics == nil {
+					streamingMeta = append(streamingMeta, *meta)
+				}
+				continue
+			}
+			if b.Length() == 0 {
+				if terminationScenario == synchronizerGracefulTermination {
+					// Successful run, check that all inputs have returned metadata.
+					meta := append(streamingMeta, filterMetricsMeta(s.DrainMeta())...)
+					require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
+				}
+				break
+			}
+			batchesReturned++
+			if terminationScenario == synchronizerPrematureDrainMeta && batchesReturned < expectedBatchesReturned {
+				// Call DrainMeta before the input is finished.
+				meta := append(streamingMeta, filterMetricsMeta(s.DrainMeta())...)
+				// Make sure that all expected metadata is still propagated.
+				// Note that if the last input wasn't pre-emptied, then the
+				// error will not match.
+				require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
+				for _, m := range meta {
+					require.True(t, strings.Contains(m.Err.Error(), errSuffix))
+				}
+			}
+		}
+		if terminationScenario != synchronizerContextCanceled && terminationScenario != synchronizerPrematureDrainMeta {
+			require.Equal(t, expectedBatchesReturned, batchesReturned)
+		}
+		wg.Wait()
+	})
+}
+
+func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const expectedErr = "first input error"
+	ctx := context.Background()
+
+	inputs := make([]colexecargs.OpWithMetaInfo, 6)
+	inputs[0].Root = &colexecop.CallbackOperator{NextCb: func() coldata.Batch {
+		colexecerror.InternalError(errors.New(expectedErr))
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil
+	}}
+	typs := types.OneIntCol
+	for i := 1; i < len(inputs); i++ {
+		acc := testMemMonitor.MakeBoundAccount()
+		defer acc.Close(ctx)
+		func(allocator *colmem.Allocator) {
+			inputs[i].Root = &colexecop.CallbackOperator{
+				NextCb: func() coldata.Batch {
+					// All inputs that do not encounter an error will continue to return
+					// batches.
+					b := allocator.NewMemBatchWithMaxCapacity(typs)
+					b.SetLength(1)
+					return b
+				},
+			}
+		}(
+			// Make a separate allocator per input, since each input will call Next in
+			// a different goroutine.
+			colmem.NewAllocator(ctx, &acc, coldata.StandardColumnFactory),
+		)
+	}
+	// Also add a metadata source to each input.
+	for i := 0; i < len(inputs); i++ {
+		inputs[i].MetadataSources = colexecop.MetadataSources{colexectestutils.CallbackMetadataSource{
+			DrainMetaCb: func() []execinfrapb.ProducerMetadata {
+				// Note that we don't care about the type of metadata, so we can
+				// just use an empty metadata object.
+				return []execinfrapb.ProducerMetadata{{}}
+			},
+		}}
+	}
+
+	var wg sync.WaitGroup
+	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
+	s.Init(ctx)
+	var streamingMeta []execinfrapb.ProducerMetadata
+	for {
+		if err := colexecerror.CatchVectorizedRuntimeError(func() {
+			_, meta := s.Next()
+			// Skip the always-on grunning emission from each worker goroutine.
+			if meta != nil && meta.Metrics == nil {
+				streamingMeta = append(streamingMeta, *meta)
+			}
+		}); err != nil {
+			require.True(t, testutils.IsError(err, expectedErr), err)
+			break
+		}
+		// Loop until we get an error.
+	}
+	// The caller must call DrainMeta on error.
+	//
+	// Ensure that all inputs, including the one that encountered an error,
+	// properly drain their metadata sources. Notably, the error itself should
+	// not be propagated as metadata (i.e. we don't want it to be duplicated),
+	// but each input should produce a single metadata object.
+	require.Equal(t, len(inputs), len(streamingMeta)+len(filterMetricsMeta(s.DrainMeta())))
+	// This is the crux of the test: assert that all inputs have finished.
+	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
+}
+
+// filterMetricsMeta drops the always-on per-goroutine grunning emissions
+// (Metrics-only metadata) so tests that count test-induced metadata don't
+// have to account for the synchronizer's own instrumentation overhead.
+func filterMetricsMeta(meta []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
+	filtered := meta[:0]
+	for _, m := range meta {
+		if m.Metrics != nil && m.Err == nil {
+			continue
+		}
+		filtered = append(filtered, m)
+	}
+	return filtered
+}
+
+func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
+	const numInputs = 6
+
+	typs := []*types.T{types.Int}
+	inputs := make([]colexecargs.OpWithMetaInfo, numInputs)
+	for i := range inputs {
+		batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
+		batch.SetLength(coldata.BatchSize())
+		inputs[i].Root = colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
+	}
+	var wg sync.WaitGroup
+	ctx, cancelFn := context.WithCancel(context.Background())
+	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
+	s.Init(ctx)
+	b.SetBytes(8 * int64(coldata.BatchSize()))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		colexecop.NextNoMeta(s)
+	}
+	b.StopTimer()
+	cancelFn()
+	wg.Wait()
+}

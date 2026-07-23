@@ -1,0 +1,210 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package kvserver
+
+import (
+	"context"
+	"fmt"
+	"math/rand"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/stretchr/testify/require"
+)
+
+func TestTenantsStorageMetricsRelease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	m := newTenantsStorageMetrics()
+	var refs []*tenantStorageMetrics
+	const tenants = 7
+	for i := 0; i < tenants; i++ {
+		id := roachpb.MustMakeTenantID(roachpb.MinTenantID.InternalValue + uint64(i))
+		tm := m.acquireTenant(id)
+		tm.SysBytes.Update(1023)
+		tm.KeyCount.Inc(123)
+		refs = append(refs, tm)
+	}
+	for i, ref := range refs {
+		require.Equal(t, int64(1023*(tenants-i)), m.SysBytes.Value(), i)
+		require.Equal(t, int64(123*(tenants-i)), m.KeyCount.Value(), i)
+		m.releaseTenant(context.Background(), ref)
+	}
+	require.Zero(t, m.SysBytes.Value())
+	require.Zero(t, m.KeyCount.Value())
+}
+
+// TestTenantsStorageMetricsConcurrency exercises the concurrency logic of the
+// TenantsStorageMetrics and ensures that none of the assertions are hit.
+// The test doesn't meaningfully exercise the logic which is tested elsewhere.
+func TestTenantsStorageMetricsConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const (
+		tenants  = 3
+		N        = 200
+		maxSleep = time.Microsecond
+		rounds   = 10
+	)
+	randDuration := func() time.Duration {
+		return time.Duration(rand.Intn(int(maxSleep)))
+	}
+
+	var tenantIDs []roachpb.TenantID
+	for id := uint64(1); id <= tenants; id++ {
+		tenantIDs = append(tenantIDs, roachpb.MustMakeTenantID(id))
+	}
+	ctx := context.Background()
+	sm := newTenantsStorageMetrics()
+	// Launch N goroutines and have them all acquire a random tenant, then sleep
+	// a random tiny amount, increment the metrics, then release. We want to
+	// ensure that the refCount is never in an illegal state.
+	run := func() {
+		for i := 0; i < rounds; i++ {
+			tid := tenantIDs[rand.Intn(tenants)]
+
+			time.Sleep(randDuration())
+			ref := sm.acquireTenant(tid)
+
+			time.Sleep(randDuration())
+			sm.incMVCCGauges(ctx, ref, enginepb.MVCCStats{})
+
+			time.Sleep(randDuration())
+			sm.releaseTenant(ctx, ref)
+		}
+	}
+	var wg sync.WaitGroup
+	wg.Add(N)
+	for i := 0; i < N; i++ {
+		go func() { defer wg.Done(); run() }()
+	}
+	wg.Wait()
+}
+
+// TestPebbleDiskWriteMetrics tests the categorized disk write metrics in Pebble.
+func TestPebbleDiskWriteMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tmpDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		StoreSpecs: []base.StoreSpec{
+			{Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize), Path: tmpDir},
+		},
+	})
+	defer ts.Stopper().Stop(ctx)
+
+	// Force a WAL write.
+	require.NoError(t, ts.DB().Put(ctx, "kev", "value"))
+
+	if err := ts.GetStores().(*Stores).VisitStores(func(s *Store) error {
+		testutils.SucceedsSoon(t, func() error {
+			if ok := s.Registry().Contains("storage.category-pebble-wal.bytes-written"); !ok {
+				return fmt.Errorf("missing pebble WAL writes metric")
+			}
+			return nil
+		})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestWALSecondaryFileOpLatencyMetric verifies that the secondary WAL file
+// operation latency metric is properly registered and accessible.
+func TestWALSecondaryFileOpLatencyMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tmpDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		StoreSpecs: []base.StoreSpec{
+			{Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize), Path: tmpDir},
+		},
+	})
+	defer ts.Stopper().Stop(ctx)
+
+	// Verify the secondary WAL file operation latency metric is registered.
+	if err := ts.GetStores().(*Stores).VisitStores(func(s *Store) error {
+		if ok := s.Registry().Contains("storage.wal.secondary.file_op.latency"); !ok {
+			return fmt.Errorf("missing secondary WAL file operation latency metric")
+		}
+		// Verify the metric is non-nil in the store metrics.
+		if s.metrics.WALSecondaryFileOpLatency == nil {
+			return fmt.Errorf("WALSecondaryFileOpLatency metric is nil")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateDiskCounter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name     string
+		initial  int64
+		newVal   int64
+		expected int64
+	}{{
+		name:     "fresh counter, first update",
+		initial:  0,
+		newVal:   100,
+		expected: 100,
+	}, {
+		name:     "normal increasing update",
+		initial:  100,
+		newVal:   200,
+		expected: 200,
+	}, {
+		name:     "same value (no change)",
+		initial:  100,
+		newVal:   100,
+		expected: 100,
+	}, {
+		name:     "counter wrap: new value lower than current",
+		initial:  4294720145000000,
+		newVal:   136286000000,
+		expected: 136286000000,
+	}, {
+		name:     "counter wrap to zero",
+		initial:  100,
+		newVal:   0,
+		expected: 0,
+	}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			counter := metric.NewCounter(metric.Metadata{Name: "test"})
+			if tt.initial > 0 {
+				counter.Update(tt.initial)
+			}
+			updateDiskCounter(ctx, counter, tt.newVal)
+			require.Equal(t, tt.expected, counter.Count())
+		})
+	}
+}

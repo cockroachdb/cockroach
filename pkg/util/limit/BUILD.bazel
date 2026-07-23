@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "limit",
+    srcs = ["limiter.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/limit",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/quotapool",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+    ],
+)
+
+go_test(
+    name = "limit_test",
+    size = "small",
+    srcs = ["limiter_test.go"],
+    embed = [":limit"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_sync//errgroup",
+    ],
+)

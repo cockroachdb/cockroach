@@ -1,0 +1,11 @@
+/* setup */
+CREATE DOMAIN salmon AS INT DEFAULT 0;
+CREATE SCHEMA fish;
+CREATE TABLE t (c salmon);
+CREATE VIEW v AS SELECT c FROM t;
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER DOMAIN salmon SET SCHEMA fish;
+----
+Schema change plan for ALTER DOMAIN ‹defaultdb›.‹public›.‹salmon› SET SCHEMA ‹fish›;
+ └── execute 1 system table mutations transaction

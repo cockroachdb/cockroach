@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "workloadreplay",
+    srcs = ["workloadreplay.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/internal/workloadreplay",
+    visibility = ["//pkg:__subpackages__"],
+    deps = [
+        "//pkg/util/envutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_snowflakedb_gosnowflake//:gosnowflake",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//option",
+    ],
+)

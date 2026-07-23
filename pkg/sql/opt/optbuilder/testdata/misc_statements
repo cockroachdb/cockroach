@@ -1,0 +1,210 @@
+exec-ddl
+CREATE TABLE ab (a INT, b STRING)
+----
+
+build
+CANCEL JOBS SELECT 1
+----
+control-jobs (CANCEL)
+ ├── project
+ │    ├── columns: "?column?":1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as="?column?":1]
+ └── CAST(NULL AS STRING)
+
+build
+RESUME JOBS VALUES (1), (2), (3)
+----
+control-jobs (RESUME)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (3,)
+ └── CAST(NULL AS STRING)
+
+build
+PAUSE JOBS SELECT a FROM ab ORDER BY b
+----
+control-jobs (PAUSE)
+ ├── sort
+ │    ├── columns: a:1  [hidden: b:2]
+ │    ├── ordering: +2
+ │    └── project
+ │         ├── columns: a:1 b:2
+ │         └── scan ab
+ │              └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── CAST(NULL AS STRING)
+
+build
+PAUSE JOB 1
+----
+control-jobs (PAUSE)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    └── (1,)
+ └── CAST(NULL AS STRING)
+
+build
+PAUSE JOBS SELECT 1.1
+----
+error (42601): PAUSE JOBS data column 1 (job_id) must be of type int, not type decimal
+
+build
+CANCEL JOBS SELECT 1, 1
+----
+error (42601): too many columns in CANCEL JOBS data
+
+build
+CANCEL SESSION 'foo'
+----
+cancel-sessions
+ └── values
+      ├── columns: column1:1!null
+      └── ('foo',)
+
+build
+CANCEL SESSIONS VALUES ('foo'), ('bar')
+----
+cancel-sessions
+ └── values
+      ├── columns: column1:1!null
+      ├── ('foo',)
+      └── ('bar',)
+
+build
+CANCEL SESSIONS SELECT b FROM ab ORDER BY a
+----
+cancel-sessions
+ └── sort
+      ├── columns: b:2  [hidden: a:1]
+      ├── ordering: +1
+      └── project
+           ├── columns: a:1 b:2
+           └── scan ab
+                └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+CANCEL SESSION 1
+----
+error (42601): CANCEL SESSIONS data column 1 (session_id) must be of type string, not type int
+
+build
+CANCEL SESSIONS VALUES (1, 2)
+----
+error (42601): too many columns in CANCEL SESSIONS data
+
+build
+CANCEL QUERY 'foo'
+----
+cancel-queries
+ └── values
+      ├── columns: column1:1!null
+      └── ('foo',)
+
+build
+CANCEL QUERIES VALUES ('foo'), ('bar')
+----
+cancel-queries
+ └── values
+      ├── columns: column1:1!null
+      ├── ('foo',)
+      └── ('bar',)
+
+build
+CANCEL QUERIES SELECT b FROM ab ORDER BY a
+----
+cancel-queries
+ └── sort
+      ├── columns: b:2  [hidden: a:1]
+      ├── ordering: +1
+      └── project
+           ├── columns: a:1 b:2
+           └── scan ab
+                └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+CANCEL QUERY 1
+----
+error (42601): CANCEL QUERIES data column 1 (query_id) must be of type string, not type int
+
+build
+CANCEL QUERIES VALUES (1, 2)
+----
+error (42601): too many columns in CANCEL QUERIES data
+
+build
+EXPORT INTO CSV 'nodelocal://0/foo' FROM SELECT * FROM ab
+----
+export
+ ├── columns: filename:6 rows:7 bytes:8
+ ├── format: CSV
+ ├── project
+ │    ├── columns: a:1 b:2
+ │    └── scan ab
+ │         └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── 'nodelocal://0/foo'
+
+build
+EXPORT INTO CSV 'nodelocal://0/foo' WITH 'foo', 'bar'='baz' FROM SELECT * FROM ab
+----
+export
+ ├── columns: filename:6 rows:7 bytes:8
+ ├── format: CSV
+ ├── project
+ │    ├── columns: a:1 b:2
+ │    └── scan ab
+ │         └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ ├── 'nodelocal://0/foo'
+ └── k-v-options
+      ├── k-v-options-item foo
+      │    └── CAST(NULL AS STRING)
+      └── k-v-options-item bar
+           └── 'baz'
+
+build
+EXPORT INTO CSV 'nodelocal://0/foo' WITH 'foo' = $1 FROM SELECT * FROM ab
+----
+export
+ ├── columns: filename:6 rows:7 bytes:8
+ ├── format: CSV
+ ├── project
+ │    ├── columns: a:1 b:2
+ │    └── scan ab
+ │         └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ ├── 'nodelocal://0/foo'
+ └── k-v-options
+      └── k-v-options-item foo
+           └── $1
+
+build
+CREATE STATISTICS foo FROM ab
+----
+create-statistics
+ └── CREATE STATISTICS foo FROM ab WITH OPTIONS AS OF SYSTEM TIME '-1us'
+
+build
+CREATE STATISTICS foo FROM ab AS OF SYSTEM TIME '-2s'
+----
+create-statistics
+ └── CREATE STATISTICS foo FROM ab WITH OPTIONS AS OF SYSTEM TIME '-2s'
+
+build
+CREATE STATISTICS foo FROM ab THROTTLING 0.3
+----
+create-statistics
+ └── CREATE STATISTICS foo FROM ab WITH OPTIONS THROTTLING 0.3 AS OF SYSTEM TIME '-1us'
+
+build
+CREATE STATISTICS foo FROM ab THROTTLING 0.3 AS OF SYSTEM TIME '-2s'
+----
+create-statistics
+ └── CREATE STATISTICS foo FROM ab WITH OPTIONS THROTTLING 0.3 AS OF SYSTEM TIME '-2s'
+
+build
+ANALYZE ab
+----
+create-statistics
+ └── CREATE STATISTICS "" FROM ab WITH OPTIONS AS OF SYSTEM TIME '-0.001ms'

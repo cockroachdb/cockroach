@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "invertedexpr",
+    srcs = [
+        "expression.go",
+        "geo_expression.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geoindex",
+        "//pkg/roachpb",
+        "//pkg/sql/inverted",
+        "//pkg/sql/opt",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "invertedexpr_test",
+    size = "small",
+    srcs = ["geo_expression_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":invertedexpr"],
+    deps = [
+        "//pkg/geo/geoindex",
+        "//pkg/sql/inverted",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

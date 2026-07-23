@@ -1,0 +1,25 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "../core/index.module.scss";
+
+.sessions-page {
+  position: relative;
+  all: initial;
+  font-family: $font-family--base;
+}
+
+.sessions-filter {
+  font-size: $font-size--medium;
+  margin-bottom: $spacing-smaller;
+}
+
+.session-column-selector {
+  margin-bottom: $spacing-smaller;
+}
+
+.session-table-area {
+  min-height: 500px;
+}

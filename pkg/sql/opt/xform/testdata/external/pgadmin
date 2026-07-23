@@ -1,0 +1,143 @@
+# Correlated subqueries.
+
+# For testing, create the schema for the builtin tables.
+exec-ddl
+CREATE TABLE pg_stat_activity (
+    datid OID NULL,
+    datname NAME NULL,
+    pid INTEGER NULL,
+    usesysid OID NULL,
+    username NAME NULL,
+    application_name STRING NULL,
+    client_addr INET NULL,
+    client_hostname STRING NULL,
+    client_port INTEGER NULL,
+    backend_start TIMESTAMP WITH TIME ZONE NULL,
+    xact_start TIMESTAMP WITH TIME ZONE NULL,
+    query_start TIMESTAMP WITH TIME ZONE NULL,
+    state_change TIMESTAMP WITH TIME ZONE NULL,
+    wait_event_type STRING NULL,
+    wait_event STRING NULL,
+    state STRING NULL,
+    backend_xid INTEGER NULL,
+    backend_xmin INTEGER NULL,
+    query STRING NULL
+)
+----
+
+exec-ddl
+CREATE TABLE pg_roles (
+    oid OID NULL,
+    rolname NAME NULL,
+    rolsuper BOOL NULL,
+    rolinherit BOOL NULL,
+    rolcreaterole BOOL NULL,
+    rolcreatedb BOOL NULL,
+    rolcatupdate BOOL NULL,
+    rolcanlogin BOOL NULL,
+    rolreplication BOOL NULL,
+    rolconnlimit INT NULL,
+    rolpassword STRING NULL,
+    rolvaliduntil TIMESTAMP WITH TIME ZONE NULL,
+    rolbypassrls BOOL NULL,
+    rolconfig STRING[] NULL
+)
+----
+
+opt
+SELECT
+    pid AS "PID",
+    username AS "User",
+    datname AS "Database",
+    backend_start AS "Backend start",
+    CASE
+    WHEN client_hostname IS NOT NULL
+    AND client_hostname != ''
+    THEN client_hostname::STRING
+    || ':'
+    || client_port::STRING
+    WHEN client_addr IS NOT NULL
+    AND client_addr::STRING != ''
+    THEN client_addr::STRING || ':' || client_port::STRING
+    WHEN client_port = -1 THEN 'local pipe'
+    ELSE 'localhost:' || client_port::STRING
+    END
+        AS "Client",
+    application_name AS "Application",
+    query AS "Query",
+    query_start AS "Query start",
+    xact_start AS "Xact start"
+FROM
+    pg_stat_activity AS sa
+WHERE
+    (
+        SELECT
+            r.rolsuper OR r.oid = sa.usesysid
+        FROM
+            pg_roles AS r
+        WHERE
+            r.rolname = current_user()
+    )
+----
+project
+ ├── columns: PID:3 User:5 Database:2 "Backend start":10 Client:41 Application:6 Query:19 "Query start":12 "Xact start":11
+ ├── immutable
+ ├── select
+ │    ├── columns: datname:2 pid:3 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":40!null
+ │    ├── key: (20)
+ │    ├── fd: ()-->(40), (20)-->(2,3,5-12,19)
+ │    ├── ensure-distinct-on
+ │    │    ├── columns: datname:2 pid:3 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":40
+ │    │    ├── grouping columns: sa.rowid:20!null
+ │    │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    │    ├── key: (20)
+ │    │    ├── fd: (20)-->(2,3,5-12,19,40)
+ │    │    ├── left-join-apply
+ │    │    │    ├── columns: datname:2 pid:3 usesysid:4 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":40
+ │    │    │    ├── fd: (20)-->(2-12,19)
+ │    │    │    ├── scan pg_stat_activity [as=sa]
+ │    │    │    │    ├── columns: datname:2 pid:3 usesysid:4 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null
+ │    │    │    │    ├── key: (20)
+ │    │    │    │    └── fd: (20)-->(2-12,19)
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: "?column?":40
+ │    │    │    │    ├── outer: (4)
+ │    │    │    │    ├── select
+ │    │    │    │    │    ├── columns: oid:23 rolname:24!null rolsuper:25
+ │    │    │    │    │    ├── fd: ()-->(24)
+ │    │    │    │    │    ├── scan pg_roles [as=r]
+ │    │    │    │    │    │    └── columns: oid:23 rolname:24 rolsuper:25
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── rolname:24 = 'opttester' [outer=(24), constraints=(/24: [/'opttester' - /'opttester']; tight), fd=()-->(24)]
+ │    │    │    │    └── projections
+ │    │    │    │         └── rolsuper:25 OR (oid:23 = usesysid:4) [as="?column?":40, outer=(4,23,25)]
+ │    │    │    └── filters (true)
+ │    │    └── aggregations
+ │    │         ├── const-agg [as=datname:2, outer=(2)]
+ │    │         │    └── datname:2
+ │    │         ├── const-agg [as=pid:3, outer=(3)]
+ │    │         │    └── pid:3
+ │    │         ├── const-agg [as=username:5, outer=(5)]
+ │    │         │    └── username:5
+ │    │         ├── const-agg [as=application_name:6, outer=(6)]
+ │    │         │    └── application_name:6
+ │    │         ├── const-agg [as=client_addr:7, outer=(7)]
+ │    │         │    └── client_addr:7
+ │    │         ├── const-agg [as=client_hostname:8, outer=(8)]
+ │    │         │    └── client_hostname:8
+ │    │         ├── const-agg [as=client_port:9, outer=(9)]
+ │    │         │    └── client_port:9
+ │    │         ├── const-agg [as=backend_start:10, outer=(10)]
+ │    │         │    └── backend_start:10
+ │    │         ├── const-agg [as=xact_start:11, outer=(11)]
+ │    │         │    └── xact_start:11
+ │    │         ├── const-agg [as=query_start:12, outer=(12)]
+ │    │         │    └── query_start:12
+ │    │         ├── const-agg [as=query:19, outer=(19)]
+ │    │         │    └── query:19
+ │    │         └── const-agg [as="?column?":40, outer=(40)]
+ │    │              └── "?column?":40
+ │    └── filters
+ │         └── "?column?":40 [outer=(40), constraints=(/40: [/true - /true]; tight), fd=()-->(40)]
+ └── projections
+      └── CASE WHEN (client_hostname:8 IS NOT NULL) AND (client_hostname:8 != '') THEN (client_hostname:8 || ':') || client_port:9::STRING WHEN (client_addr:7 IS NOT NULL) AND (client_addr:7::STRING != '') THEN (client_addr:7::STRING || ':') || client_port:9::STRING WHEN client_port:9 = -1 THEN 'local pipe' ELSE 'localhost:' || client_port:9::STRING END [as=Client:41, outer=(7-9), immutable]

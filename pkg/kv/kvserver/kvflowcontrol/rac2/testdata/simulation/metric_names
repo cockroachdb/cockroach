@@ -1,0 +1,59 @@
+# This test prints out every scraped metric names for conveinent use in other
+# tests. When new metrics are added to the structs in rac/metrics.go, they will
+# be reflected here when re-running the test with --rewrite (or cause this test
+# to fail). e.g:
+#
+#   dev test pkg/kv/kvserver/kvflowcontrol/rac2 -v -f TestUsingSimulation/metric_names --rewrite
+#
+init
+----
+
+metric_names
+----
+kvflowcontrol.eval_wait.elastic.duration
+kvflowcontrol.eval_wait.elastic.requests.admitted
+kvflowcontrol.eval_wait.elastic.requests.bypassed
+kvflowcontrol.eval_wait.elastic.requests.errored
+kvflowcontrol.eval_wait.elastic.requests.waiting
+kvflowcontrol.eval_wait.regular.duration
+kvflowcontrol.eval_wait.regular.requests.admitted
+kvflowcontrol.eval_wait.regular.requests.bypassed
+kvflowcontrol.eval_wait.regular.requests.errored
+kvflowcontrol.eval_wait.regular.requests.waiting
+kvflowcontrol.range_controller.count
+kvflowcontrol.send_queue.bytes
+kvflowcontrol.send_queue.count
+kvflowcontrol.send_queue.prevent.count
+kvflowcontrol.send_queue.scheduled.deducted_bytes
+kvflowcontrol.send_queue.scheduled.force_flush
+kvflowcontrol.streams.eval.elastic.blocked_count
+kvflowcontrol.streams.eval.elastic.total_count
+kvflowcontrol.streams.eval.regular.blocked_count
+kvflowcontrol.streams.eval.regular.total_count
+kvflowcontrol.streams.send.elastic.blocked_count
+kvflowcontrol.streams.send.elastic.total_count
+kvflowcontrol.streams.send.regular.blocked_count
+kvflowcontrol.streams.send.regular.total_count
+kvflowcontrol.tokens.eval.elastic.available
+kvflowcontrol.tokens.eval.elastic.deducted
+kvflowcontrol.tokens.eval.elastic.returned
+kvflowcontrol.tokens.eval.elastic.returned.disconnect
+kvflowcontrol.tokens.eval.elastic.unaccounted
+kvflowcontrol.tokens.eval.regular.available
+kvflowcontrol.tokens.eval.regular.deducted
+kvflowcontrol.tokens.eval.regular.returned
+kvflowcontrol.tokens.eval.regular.returned.disconnect
+kvflowcontrol.tokens.eval.regular.unaccounted
+kvflowcontrol.tokens.send.elastic.available
+kvflowcontrol.tokens.send.elastic.deducted
+kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue
+kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue
+kvflowcontrol.tokens.send.elastic.returned
+kvflowcontrol.tokens.send.elastic.returned.disconnect
+kvflowcontrol.tokens.send.elastic.unaccounted
+kvflowcontrol.tokens.send.regular.available
+kvflowcontrol.tokens.send.regular.deducted
+kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue
+kvflowcontrol.tokens.send.regular.returned
+kvflowcontrol.tokens.send.regular.returned.disconnect
+kvflowcontrol.tokens.send.regular.unaccounted

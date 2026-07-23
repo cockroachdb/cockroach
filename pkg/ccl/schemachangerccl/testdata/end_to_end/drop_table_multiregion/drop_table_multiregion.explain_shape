@@ -1,0 +1,11 @@
+/* setup */
+CREATE DATABASE multi_region_test_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multi_region_test_db.public.table_regional_by_row (
+  k INT PRIMARY KEY
+) LOCALITY REGIONAL BY ROW;
+
+/* test */
+EXPLAIN (DDL, SHAPE) DROP TABLE multi_region_test_db.public.table_regional_by_row;
+----
+Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›;
+ └── execute 2 system table mutations transactions

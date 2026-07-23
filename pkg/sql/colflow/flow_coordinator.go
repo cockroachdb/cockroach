@@ -1,0 +1,352 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package colflow
+
+import (
+	"context"
+	"sync"
+
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
+)
+
+// FlowCoordinator is the execinfra.Processor that is responsible for shutting
+// down the vectorized flow on the gateway node.
+type FlowCoordinator struct {
+	execinfra.ProcessorBaseNoHelper
+	colexecop.NonExplainable
+
+	input execinfra.RowSource
+
+	// row and meta are the results produced by calling input.Next stored here
+	// in order for that call to be wrapped in the panic-catcher.
+	row  rowenc.EncDatumRow
+	meta *execinfrapb.ProducerMetadata
+
+	// cancelFlow cancels the context of the flow.
+	cancelFlow context.CancelFunc
+}
+
+var flowCoordinatorPool = sync.Pool{
+	New: func() interface{} {
+		return &FlowCoordinator{}
+	},
+}
+
+// NewFlowCoordinator creates a new FlowCoordinator processor that is the root
+// of the vectorized flow.
+// - cancelFlow is the cancellation function of the flow's context (i.e. it is
+// Flow.ctxCancel).
+func NewFlowCoordinator(
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	input execinfra.RowSource,
+	cancelFlow context.CancelFunc,
+) *FlowCoordinator {
+	f := flowCoordinatorPool.Get().(*FlowCoordinator)
+	f.input = input
+	f.cancelFlow = cancelFlow
+	f.Init(
+		f,
+		flowCtx,
+		processorID,
+		execinfra.ProcStateOpts{
+			// We append input to inputs to drain below in order to reuse
+			// the same underlying slice from the pooled FlowCoordinator.
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				// Note that the input must have been drained by the
+				// ProcessorBaseNoHelper by this point, so we can just close the
+				// FlowCoordinator.
+				f.close()
+				return nil
+			},
+		},
+	)
+	f.AddInputToDrain(input)
+	return f
+}
+
+var _ execopnode.OpNode = &FlowCoordinator{}
+var _ execinfra.Processor = &FlowCoordinator{}
+var _ execreleasable.Releasable = &FlowCoordinator{}
+
+// ChildCount is part of the execopnode.OpNode interface.
+func (f *FlowCoordinator) ChildCount(verbose bool) int {
+	return 1
+}
+
+// Child is part of the execopnode.OpNode interface.
+func (f *FlowCoordinator) Child(nth int, verbose bool) execopnode.OpNode {
+	if nth == 0 {
+		// The input must be the execopnode.OpNode (it's either a materializer or
+		// a wrapped row-execution processor).
+		return f.input.(execopnode.OpNode)
+	}
+	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
+}
+
+// OutputTypes is part of the execinfra.Processor interface.
+func (f *FlowCoordinator) OutputTypes() []*types.T {
+	return f.input.OutputTypes()
+}
+
+// Start is part of the execinfra.RowSource interface.
+func (f *FlowCoordinator) Start(ctx context.Context) {
+	ctx = f.StartInternal(ctx, "flow coordinator" /* name */)
+	if err := colexecerror.CatchVectorizedRuntimeError(func() {
+		f.input.Start(ctx)
+	}); err != nil {
+		f.MoveToDraining(err)
+	}
+}
+
+func (f *FlowCoordinator) next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if f.State == execinfra.StateRunning {
+		row, meta := f.input.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				f.MoveToDraining(nil /* err */)
+			}
+			return nil, meta
+		}
+		if row != nil {
+			return row, nil
+		}
+		// Both row and meta are nil, so we transition to draining.
+		f.MoveToDraining(nil /* err */)
+	}
+	return nil, f.DrainHelper()
+}
+
+func (f *FlowCoordinator) nextAdapter() {
+	f.row, f.meta = f.next()
+}
+
+// Next is part of the execinfra.RowSource interface.
+func (f *FlowCoordinator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if err := colexecerror.CatchVectorizedRuntimeError(f.nextAdapter); err != nil {
+		if f.State == execinfra.StateRunning {
+			f.MoveToDraining(err)
+		} else {
+			// We have encountered an error during draining, so we will just
+			// return the error as metadata directly. This could occur, for
+			// example, when accounting for the metadata footprint and exceeding
+			// the limit.
+			meta := execinfrapb.GetProducerMeta()
+			meta.Err = err
+			return nil, meta
+		}
+		return nil, f.DrainHelper()
+	}
+	return f.row, f.meta
+}
+
+func (f *FlowCoordinator) close() {
+	if f.InternalClose() {
+		f.cancelFlow()
+	}
+}
+
+// ConsumerClosed is part of the execinfra.RowSource interface.
+func (f *FlowCoordinator) ConsumerClosed() {
+	f.close()
+}
+
+// Release implements the execinfra.Releasable interface.
+func (f *FlowCoordinator) Release() {
+	f.ProcessorBaseNoHelper.Reset()
+	*f = FlowCoordinator{
+		// We're keeping the reference to the same ProcessorBaseNoHelper since
+		// it allows us to reuse some of the slices.
+		ProcessorBaseNoHelper: f.ProcessorBaseNoHelper,
+	}
+	flowCoordinatorPool.Put(f)
+}
+
+// BatchFlowCoordinator is a component that is responsible for running the
+// vectorized flow (by receiving the batches from the root operator and pushing
+// them to the batch receiver) and shutting down the whole flow when done. It
+// can only be planned on the gateway node when colexecop.Operator is the root
+// of the tree and the consumer is an execinfra.BatchReceiver.
+type BatchFlowCoordinator struct {
+	colexecop.OneInputNode
+	colexecop.NonExplainable
+	flowCtx     *execinfra.FlowCtx
+	processorID int32
+
+	input  colexecargs.OpWithMetaInfo
+	output execinfra.BatchReceiver
+
+	// batch and meta is the result produced by calling input.Next stored here
+	// in order for that call to be wrapped in the panic-catcher.
+	batch coldata.Batch
+	meta  *execinfrapb.ProducerMetadata
+
+	// cancelFlow cancels the context of the flow.
+	cancelFlow context.CancelFunc
+}
+
+var batchFlowCoordinatorPool = sync.Pool{
+	New: func() interface{} {
+		return &BatchFlowCoordinator{}
+	},
+}
+
+// NewBatchFlowCoordinator creates a new BatchFlowCoordinator operator that is
+// the root of the vectorized flow.
+// - cancelFlow is the cancellation function of the flow's context (i.e. it is
+// Flow.ctxCancel).
+func NewBatchFlowCoordinator(
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	input colexecargs.OpWithMetaInfo,
+	output execinfra.BatchReceiver,
+	cancelFlow context.CancelFunc,
+) *BatchFlowCoordinator {
+	f := batchFlowCoordinatorPool.Get().(*BatchFlowCoordinator)
+	*f = BatchFlowCoordinator{
+		OneInputNode: colexecop.NewOneInputNode(input.Root),
+		flowCtx:      flowCtx,
+		processorID:  processorID,
+		input:        input,
+		output:       output,
+		cancelFlow:   cancelFlow,
+	}
+	return f
+}
+
+var _ execopnode.OpNode = &BatchFlowCoordinator{}
+var _ execreleasable.Releasable = &BatchFlowCoordinator{}
+
+func (f *BatchFlowCoordinator) init(ctx context.Context) error {
+	return colexecerror.CatchVectorizedRuntimeError(func() {
+		f.input.Root.Init(ctx)
+	})
+}
+
+func (f *BatchFlowCoordinator) nextAdapter() {
+	f.batch, f.meta = f.input.Root.Next()
+}
+
+func (f *BatchFlowCoordinator) next() error {
+	return colexecerror.CatchVectorizedRuntimeError(f.nextAdapter)
+}
+
+func (f *BatchFlowCoordinator) pushError(err error) execinfra.ConsumerStatus {
+	meta := execinfrapb.GetProducerMeta()
+	meta.Err = err
+	return f.output.PushBatch(nil /* batch */, meta)
+}
+
+// Run is the main loop of the coordinator. It runs the flow to completion and
+// then shuts it down.
+func (f *BatchFlowCoordinator) Run(ctx context.Context) {
+	status := execinfra.NeedMoreRows
+
+	ctx, span := execinfra.ProcessorSpan(ctx, f.flowCtx, "batch flow coordinator", f.processorID)
+
+	// Set the ASH work state for this goroutine so that active sampling
+	// can attribute CPU work to the correct workload identity.
+	var ashCleanup func()
+	if f.flowCtx != nil && f.flowCtx.EvalCtx != nil {
+		var gatewayNodeID roachpb.NodeID
+		if f.flowCtx.NodeID != nil {
+			gatewayNodeID = roachpb.NodeID(f.flowCtx.NodeID.SQLInstanceID())
+		}
+		ashCleanup = ash.SetWorkState(
+			f.flowCtx.Codec().TenantID,
+			ash.WorkloadInfo{
+				WorkloadID:    f.flowCtx.EvalCtx.WorkloadID,
+				AppNameID:     f.flowCtx.EvalCtx.AppNameID,
+				GatewayNodeID: gatewayNodeID,
+				WorkloadType:  f.flowCtx.EvalCtx.WorkloadType,
+			},
+			ash.WorkCPU, "BatchFlowCoordinator")
+	}
+
+	// Make sure that we close the coordinator and notify the batch receiver in
+	// all cases.
+	defer func() {
+		if ashCleanup != nil {
+			ashCleanup()
+		}
+		f.cancelFlow()
+		f.output.ProducerDone()
+		span.Finish()
+	}()
+
+	if err := f.init(ctx); err != nil {
+		f.pushError(err)
+		// If initialization is not successful, we just exit since the operator
+		// tree might not be setup properly.
+		return
+	}
+
+	for status == execinfra.NeedMoreRows {
+		err := f.next()
+		if err != nil {
+			switch status = f.pushError(err); status {
+			case execinfra.ConsumerClosed:
+				return
+			}
+			continue
+		}
+		if f.meta == nil && f.batch.Length() == 0 {
+			// All rows have been exhausted, so we transition to draining.
+			break
+		}
+		switch status = f.output.PushBatch(f.batch, f.meta); status {
+		case execinfra.ConsumerClosed:
+			return
+		}
+	}
+
+	// Collect the stats and get the trace if necessary.
+	if span != nil {
+		for _, s := range f.input.StatsCollectors {
+			span.RecordStructured(s.GetStats())
+		}
+		if meta := execinfra.GetTraceDataAsMetadata(f.flowCtx, span); meta != nil {
+			status = f.output.PushBatch(nil /* batch */, meta)
+			if status == execinfra.ConsumerClosed {
+				return
+			}
+		}
+	}
+
+	// Drain all metadata sources.
+	drainedMeta := f.input.MetadataSources.DrainMeta()
+	for i := range drainedMeta {
+		if execinfra.ShouldSwallowReadWithinUncertaintyIntervalError(&drainedMeta[i]) {
+			// This metadata object contained an error that was swallowed per
+			// the contract of execinfra.StateDraining.
+			continue
+		}
+		status = f.output.PushBatch(nil /* batch */, &drainedMeta[i])
+		if status == execinfra.ConsumerClosed {
+			return
+		}
+	}
+}
+
+// Release implements the execinfra.Releasable interface.
+func (f *BatchFlowCoordinator) Release() {
+	*f = BatchFlowCoordinator{}
+	batchFlowCoordinatorPool.Put(f)
+}

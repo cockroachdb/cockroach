@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tenantcapabilitiesauthorizer",
+    srcs = [
+        "allow_everything.go",
+        "allow_nothing.go",
+        "authorizer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/multitenant/mtinfopb",
+        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/log",
+        "//pkg/util/log/logcrash",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "tenantcapabilitiesauthorizer_test",
+    srcs = ["authorizer_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":tenantcapabilitiesauthorizer"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils",
+        "//pkg/multitenant/tenantcapabilitiespb",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)

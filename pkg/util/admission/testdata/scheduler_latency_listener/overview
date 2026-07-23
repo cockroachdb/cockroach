@@ -1,0 +1,187 @@
+# Walk through the basics of the datadriven syntax. We initialize an elastic
+# CPU granter with an initial limit of 25% and default parameters.
+init limit=25%
+----
+
+params
+----
+target-p99       = 1ms
+min-util         = 5.00%
+max-util         = 75.00%
+inactive-util    = 12.00%
+adjustment-delta = 0.10%
+factor           = 2.00
+inactive-factor  = 0.25
+
+# We create a latency profile over time manually (first graph plotted below).
+# We also start of a slowly increasing (+2% of limit every tick, where limit is
+# from 1 tick ago). We later increase the rate of elastic work growth (+8% per
+# tick) until it reaches 100% of the limit. Later it's reduced to 90% of the
+# limit for a while, after which elastic work decreases at a rate of 10% per
+# tick.
+tick
+p99=1.2ms ticks=5 util-fraction=+0.02 util-lag=1
+p99=1.1ms ticks=5
+p99=1ms   ticks=5
+p99=1.2ms ticks=5
+p99=950us ticks=5
+p99=850us ticks=5 util-fraction=+0.08
+p99=750us ticks=5
+p99=650us ticks=5
+p99=950us ticks=5
+p99=850us ticks=5
+p99=750us ticks=5
+p99=950us ticks=5
+p99=850us ticks=5
+p99=750us ticks=5 util-fraction=0.9
+p99=650us ticks=5
+p99=950us ticks=5
+p99=1.1ms ticks=5
+p99=1050us ticks=5
+p99=1150us ticks=5
+p99=1.1ms ticks=5
+p99=1050us ticks=5
+p99=1150us ticks=5 util-fraction=-0.1
+p99=850us ticks=5
+p99=750us ticks=5
+p99=850us ticks=5
+p99=750us ticks=5
+p99=850us ticks=5
+p99=750us ticks=5
+p99=850us ticks=5
+p99=750us ticks=5
+----
+
+# We should observe a few things. We don't start decreasing the elastic CPU
+# limit until the utilization crosses the min-util value (5%). We also only
+# decrease the limit if the scheduling latency is higher than the target
+# latency. If the latency is lower, and elastic work approaches the limit, we
+# slowly start increasing the limit. We do so until we hit the maximum allowed
+# (25%) at which point we stay there. If scheduling latency increases again,
+# the limit is reduced which in turn reduces the utilization. If there's no
+# longer any elastic work in the system, the limit stays where it last was.
+plot width=70 height=20
+----
+----
+ 1200 ┼─╮    ╭─╮
+ 1172 ┤ │    │ │
+ 1145 ┤ ╰╮   │ │                                ╭─╮    ╭─╮
+ 1118 ┤  │   │ │                                │ │    │ │
+ 1090 ┤  ╰─╮ │ ╰╮                           ╭─╮ │ ╰─╮  │ │
+ 1062 ┤    │ │  │                          ╭╯ │ │   ╰╮ │ │
+ 1035 ┤    │ │  │                          │  ╰─╯    ╰─╯ │
+ 1008 ┤    │ │  │                          │             │
+  980 ┼─────────────────────────────────────────────────────────────────────
+  952 ┤         ╰─╮      ╭─╮    ╭─╮      ╭─╯             │
+  925 ┤           │      │ │    │ │      │               │
+  898 ┤           │      │ │    │ │      │               │
+  870 ┤           │      │ │    │ │      │               │
+  842 ┤           ╰─╮    │ ╰─╮  │ ╰─╮    │               ╰─╮  ╭─╮  ╭─╮ ╭─╮
+  815 ┤             │    │   │  │   │    │                 │  │ │  │ │ │ │
+  788 ┤             │    │   │  │   │    │                 ╰╮ │ │ ╭╯ │ │ │
+  760 ┤             │    │   ╰╮ │   ╰╮   │                  │ │ │ │  │ │ ╰╮
+  732 ┤             ╰─╮  │    ╰─╯    ╰─╮ │                  ╰─╯ ╰─╯  ╰─╯  ╰─
+  705 ┤               │  │             │ │
+  678 ┤               ╰╮ │             │ │
+  650 ┤                ╰─╯             ╰─╯
+                           p99 scheduler latencies (μs)
+
+
+ 28.4 ┤                                ╭─────╮
+ 27.0 ┤                          ╭╭─╮──╯     ╰──╮
+ 25.5 ┤                   ╭╭──────╯ │   ╭─────╮ ╰───╮
+ 24.1 ┼───╮         ╭╭─────╯        ╰───╯     ╰───╮ ╰──╮
+ 22.7 ┤   ╰─────────╭╯                            ╰──╮ ╰─────────────────╮
+ 21.3 ┤             │                                ╰─╮                 ╰──
+ 19.9 ┤             │                                  │
+ 18.4 ┤            ╭╯                                  │
+ 17.0 ┤            │                                   ╰╮
+ 15.6 ┤            │                                    │
+ 14.2 ┤           ╭╯                                    │
+ 12.8 ┤           │                                     │
+ 11.3 ┤           │                                     ╰╮
+  9.9 ┤         ╭─╯                                      │
+  8.5 ┤        ╭╯                                        │
+  7.1 ┤      ╭─╯                                         ╰╮
+  5.7 ┤     ╭╯                                            │
+  4.3 ┤   ╭─╯                                             │
+  2.8 ┤  ╭╯                                               │
+  1.4 ┤ ╭╯                                                ╰╮
+  0.0 ┼─╯                                                  ╰────────────────
+                       elastic cpu utilization and limit (%)
+----
+----
+
+# Manually specifying latencies can be cumbersome. These tests also support an
+# 'auto' mode, where you can specify a "set-point" elastic CPU % (i.e. if
+# utilization is higher than that % scheduling latency is higher than the
+# target threshold, and vice versa) and a number of ticks to simulate.
+#
+# Let's first start off the workload, initially at 0% but increasing at a rate
+# of 1% of limit per tick, looking at the limit from 10 ticks ago.
+tick
+p99=950ms ticks=1 util-fraction=0.0
+p99=1ms ticks=1 util-fraction=+0.01 util-lag=10
+----
+
+# The steady state is going to hover around 13.8% of elastic CPU work. Let's
+# simulate for 350 ticks.
+auto set-point=13.8% ticks=350 m=10 c=10
+----
+
+# We see that we end up roughly where we want -- a limit of 13.8%. The
+# jaggedness in latencies/limit is a result of the controller trying to
+# continually adjust around the right limit.
+plot width=70 height=20
+----
+----
+ 1200 ┼╮
+ 1172 ┤│
+ 1145 ┤│             ╭╮
+ 1118 ┤│           ╭╮││
+ 1090 ┤╰─╮         ││││
+ 1062 ┤  │       ╭╮││││
+ 1035 ┤  │       │╰╯╰╯│             ╭─────╮
+ 1008 ┤  │       │    │            ╭╯     ╰──╮   ╭─╮   ╭─╮   ╭╮   ╭─╮   ╭╮
+  980 ┼─────────────────────────────────────────────────────────────────────
+  952 ┤  ╰╮ ╭╮╭╮ │    │          │
+  925 ┤   │ ││││ │    │    ╭╮  ╭─╯
+  898 ┤   │ ││││ │    │    ││╭─╯
+  870 ┤   │ ││││ │    │    │╰╯
+  842 ┤   ╰╮││││ │    │╭─╮ │
+  815 ┤    │││││ │    ││ │ │
+  788 ┤    │││││ │    ││ │ │
+  760 ┤    │││││ │    ││ │ │
+  732 ┤    ││╰╯╰╮│    ╰╯ ╰─╯
+  705 ┤    ││   ││
+  678 ┤    ││   ││
+  650 ┤    ╰╯   ╰╯
+                           p99 scheduler latencies (μs)
+
+
+ 28.3 ┤         ╭─╮
+ 26.9 ┤       ╭╮╯ ╰╮              ╭╮
+ 25.5 ┼╮    ╭╭╯│╭─╮╰╮           ╭─╯╰╮
+ 24.1 ┤│╭╮╭╭─╯ ╰╯ ╰╮╰╮        ╭─╯   ╰╮
+ 22.7 ┤╰╯╰╯│       ╰╮╰─────╮╭─╯      ╰╮
+ 21.2 ┤    │        ╰╮     ╰╯         ╰╮
+ 19.8 ┤   ╭╯         │                 ╭─╮
+ 18.4 ┤   │          │               ╭─╯╰╰╮
+ 17.0 ┤   │          │              ╭╯   ╰╰╮
+ 15.6 ┤   │          │             ╭╯     ╰╰╮
+ 14.2 ┤   │          │            ╭╯       ╰╰╮ ╭─╭─╮ ╭╭──╮ ╭╭──╮ ╭╭──╮─╭───╮
+ 12.7 ┤   │          │            │         ╰╰───╯─╰──╯ ╰╰──╯╰─╰──╯ ╰╰─╯ ╰─╰
+ 11.3 ┤   │          │           ╭╯
+  9.9 ┤  ╭╯          ╰╮         ╭╯
+  8.5 ┤  │            │         │
+  7.1 ┤  │            │        ╭╯
+  5.7 ┤ ╭╯            │       ╭╯
+  4.2 ┤ │             │      ╭╯
+  2.8 ┤╭╯             │     ╭╯
+  1.4 ┤│              │     │
+  0.0 ┼╯              ╰─────╯
+                       elastic cpu utilization and limit (%)
+----
+----
+
+# vim:ft=sh

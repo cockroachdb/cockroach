@@ -1,0 +1,7 @@
+opt_frame_clause ::=
+	'RANGE' frame_bound opt_frame_exclusion
+	| 'RANGE' 'BETWEEN' frame_bound 'AND' frame_bound opt_frame_exclusion
+	| 'ROWS' frame_bound opt_frame_exclusion
+	| 'ROWS' 'BETWEEN' frame_bound 'AND' frame_bound opt_frame_exclusion
+	| 'GROUPS' frame_bound opt_frame_exclusion
+	| 'GROUPS' 'BETWEEN' frame_bound 'AND' frame_bound opt_frame_exclusion

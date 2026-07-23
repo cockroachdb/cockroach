@@ -1,0 +1,1962 @@
+# These are postgres regress sql join test suite
+# https://github.com/postgres/postgres/blob/master/src/test/regress/sql/join.sql
+# Adapted to sqllogictest format
+
+statement ok
+CREATE TABLE J1_TBL ( i integer, j integer, t text )
+
+statement ok
+CREATE TABLE J2_TBL ( i integer, k integer )
+
+statement ok
+INSERT INTO J1_TBL VALUES (1, 4, 'one')
+
+statement ok
+INSERT INTO J1_TBL VALUES (2, 3, 'two')
+
+statement ok
+INSERT INTO J1_TBL VALUES (3, 2, 'three')
+
+statement ok
+INSERT INTO J1_TBL VALUES (4, 1, 'four')
+
+statement ok
+INSERT INTO J1_TBL VALUES (5, 0, 'five')
+
+statement ok
+INSERT INTO J1_TBL VALUES (6, 6, 'six')
+
+statement ok
+INSERT INTO J1_TBL VALUES (7, 7, 'seven')
+
+statement ok
+INSERT INTO J1_TBL VALUES (8, 8, 'eight')
+
+statement ok
+INSERT INTO J1_TBL VALUES (0, NULL, 'zero')
+
+statement ok
+INSERT INTO J1_TBL VALUES (NULL, NULL, 'null')
+
+statement ok
+INSERT INTO J1_TBL VALUES (NULL, 0, 'zero')
+
+statement ok
+INSERT INTO J2_TBL VALUES (1, -1)
+
+statement ok
+INSERT INTO J2_TBL VALUES (2, 2)
+
+statement ok
+INSERT INTO J2_TBL VALUES (3, -3)
+
+statement ok
+INSERT INTO J2_TBL VALUES (2, 4)
+
+statement ok
+INSERT INTO J2_TBL VALUES (5, -5)
+
+statement ok
+INSERT INTO J2_TBL VALUES (5, -5)
+
+statement ok
+INSERT INTO J2_TBL VALUES (0, NULL)
+
+statement ok
+INSERT INTO J2_TBL VALUES (NULL, NULL)
+
+statement ok
+INSERT INTO J2_TBL VALUES (NULL, 0)
+
+query TIIT rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL AS tx
+----
+x 1 4 one
+x 2 3 two
+x 3 2 three
+x 4 1 four
+x 5 0 five
+x 6 6 six
+x 7 7 seven
+x 8 8 eight
+x 0 NULL zero
+x NULL NULL null
+x NULL 0 zero
+
+query TIIT rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL tx
+----
+x 1 4 one
+x 2 3 two
+x 3 2 three
+x 4 1 four
+x 5 0 five
+x 6 6 six
+x 7 7 seven
+x 8 8 eight
+x 0 NULL zero
+x NULL NULL null
+x NULL 0 zero
+
+query TIIT rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL AS t1 (a, b, c)
+----
+x 1 4 one
+x 2 3 two
+x 3 2 three
+x 4 1 four
+x 5 0 five
+x 6 6 six
+x 7 7 seven
+x 8 8 eight
+x 0 NULL zero
+x NULL NULL null
+x NULL 0 zero
+
+query TIIT rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL t1 (a, b, c)
+----
+x 1 4 one
+x 2 3 two
+x 3 2 three
+x 4 1 four
+x 5 0 five
+x 6 6 six
+x 7 7 seven
+x 8 8 eight
+x 0 NULL zero
+x NULL NULL null
+x NULL 0 zero
+
+query TIITII rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL t1 (a, b, c), J2_TBL t2 (d, e)
+----
+x 1 4 one 1 -1
+x 2 3 two 1 -1
+x 3 2 three 1 -1
+x 4 1 four 1 -1
+x 5 0 five 1 -1
+x 6 6 six 1 -1
+x 7 7 seven 1 -1
+x 8 8 eight 1 -1
+x 0 NULL zero 1 -1
+x NULL NULL null 1 -1
+x NULL 0 zero 1 -1
+x 1 4 one 2 2
+x 2 3 two 2 2
+x 3 2 three 2 2
+x 4 1 four 2 2
+x 5 0 five 2 2
+x 6 6 six 2 2
+x 7 7 seven 2 2
+x 8 8 eight 2 2
+x 0 NULL zero 2 2
+x NULL NULL null 2 2
+x NULL 0 zero 2 2
+x 1 4 one 3 -3
+x 2 3 two 3 -3
+x 3 2 three 3 -3
+x 4 1 four 3 -3
+x 5 0 five 3 -3
+x 6 6 six 3 -3
+x 7 7 seven 3 -3
+x 8 8 eight 3 -3
+x 0 NULL zero 3 -3
+x NULL NULL null 3 -3
+x NULL 0 zero 3 -3
+x 1 4 one 2 4
+x 2 3 two 2 4
+x 3 2 three 2 4
+x 4 1 four 2 4
+x 5 0 five 2 4
+x 6 6 six 2 4
+x 7 7 seven 2 4
+x 8 8 eight 2 4
+x 0 NULL zero 2 4
+x NULL NULL null 2 4
+x NULL 0 zero 2 4
+x 1 4 one 5 -5
+x 2 3 two 5 -5
+x 3 2 three 5 -5
+x 4 1 four 5 -5
+x 5 0 five 5 -5
+x 6 6 six 5 -5
+x 7 7 seven 5 -5
+x 8 8 eight 5 -5
+x 0 NULL zero 5 -5
+x NULL NULL null 5 -5
+x NULL 0 zero 5 -5
+x 1 4 one 5 -5
+x 2 3 two 5 -5
+x 3 2 three 5 -5
+x 4 1 four 5 -5
+x 5 0 five 5 -5
+x 6 6 six 5 -5
+x 7 7 seven 5 -5
+x 8 8 eight 5 -5
+x 0 NULL zero 5 -5
+x NULL NULL null 5 -5
+x NULL 0 zero 5 -5
+x 1 4 one 0 NULL
+x 2 3 two 0 NULL
+x 3 2 three 0 NULL
+x 4 1 four 0 NULL
+x 5 0 five 0 NULL
+x 6 6 six 0 NULL
+x 7 7 seven 0 NULL
+x 8 8 eight 0 NULL
+x 0 NULL zero 0 NULL
+x NULL NULL null 0 NULL
+x NULL 0 zero 0 NULL
+x 1 4 one NULL NULL
+x 2 3 two NULL NULL
+x 3 2 three NULL NULL
+x 4 1 four NULL NULL
+x 5 0 five NULL NULL
+x 6 6 six NULL NULL
+x 7 7 seven NULL NULL
+x 8 8 eight NULL NULL
+x 0 NULL zero NULL NULL
+x NULL NULL null NULL NULL
+x NULL 0 zero NULL NULL
+x 1 4 one NULL 0
+x 2 3 two NULL 0
+x 3 2 three NULL 0
+x 4 1 four NULL 0
+x 5 0 five NULL 0
+x 6 6 six NULL 0
+x 7 7 seven NULL 0
+x 8 8 eight NULL 0
+x 0 NULL zero NULL 0
+x NULL NULL null NULL 0
+x NULL 0 zero NULL 0
+
+query TII rowsort
+SELECT 'x' AS "xxx", t1.a, t2.e FROM J1_TBL t1 (a, b, c), J2_TBL t2 (d, e) WHERE t1.a = t2.d
+----
+x 0 NULL
+x 1 -1
+x 2 2
+x 2 4
+x 3 -3
+x 5 -5
+x 5 -5
+
+query TIITII rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL CROSS JOIN J2_TBL
+----
+x 1 4 one 1 -1
+x 2 3 two 1 -1
+x 3 2 three 1 -1
+x 4 1 four 1 -1
+x 5 0 five 1 -1
+x 6 6 six 1 -1
+x 7 7 seven 1 -1
+x 8 8 eight 1 -1
+x 0 NULL zero 1 -1
+x NULL NULL null 1 -1
+x NULL 0 zero 1 -1
+x 1 4 one 2 2
+x 2 3 two 2 2
+x 3 2 three 2 2
+x 4 1 four 2 2
+x 5 0 five 2 2
+x 6 6 six 2 2
+x 7 7 seven 2 2
+x 8 8 eight 2 2
+x 0 NULL zero 2 2
+x NULL NULL null 2 2
+x NULL 0 zero 2 2
+x 1 4 one 3 -3
+x 2 3 two 3 -3
+x 3 2 three 3 -3
+x 4 1 four 3 -3
+x 5 0 five 3 -3
+x 6 6 six 3 -3
+x 7 7 seven 3 -3
+x 8 8 eight 3 -3
+x 0 NULL zero 3 -3
+x NULL NULL null 3 -3
+x NULL 0 zero 3 -3
+x 1 4 one 2 4
+x 2 3 two 2 4
+x 3 2 three 2 4
+x 4 1 four 2 4
+x 5 0 five 2 4
+x 6 6 six 2 4
+x 7 7 seven 2 4
+x 8 8 eight 2 4
+x 0 NULL zero 2 4
+x NULL NULL null 2 4
+x NULL 0 zero 2 4
+x 1 4 one 5 -5
+x 2 3 two 5 -5
+x 3 2 three 5 -5
+x 4 1 four 5 -5
+x 5 0 five 5 -5
+x 6 6 six 5 -5
+x 7 7 seven 5 -5
+x 8 8 eight 5 -5
+x 0 NULL zero 5 -5
+x NULL NULL null 5 -5
+x NULL 0 zero 5 -5
+x 1 4 one 5 -5
+x 2 3 two 5 -5
+x 3 2 three 5 -5
+x 4 1 four 5 -5
+x 5 0 five 5 -5
+x 6 6 six 5 -5
+x 7 7 seven 5 -5
+x 8 8 eight 5 -5
+x 0 NULL zero 5 -5
+x NULL NULL null 5 -5
+x NULL 0 zero 5 -5
+x 1 4 one 0 NULL
+x 2 3 two 0 NULL
+x 3 2 three 0 NULL
+x 4 1 four 0 NULL
+x 5 0 five 0 NULL
+x 6 6 six 0 NULL
+x 7 7 seven 0 NULL
+x 8 8 eight 0 NULL
+x 0 NULL zero 0 NULL
+x NULL NULL null 0 NULL
+x NULL 0 zero 0 NULL
+x 1 4 one NULL NULL
+x 2 3 two NULL NULL
+x 3 2 three NULL NULL
+x 4 1 four NULL NULL
+x 5 0 five NULL NULL
+x 6 6 six NULL NULL
+x 7 7 seven NULL NULL
+x 8 8 eight NULL NULL
+x 0 NULL zero NULL NULL
+x NULL NULL null NULL NULL
+x NULL 0 zero NULL NULL
+x 1 4 one NULL 0
+x 2 3 two NULL 0
+x 3 2 three NULL 0
+x 4 1 four NULL 0
+x 5 0 five NULL 0
+x 6 6 six NULL 0
+x 7 7 seven NULL 0
+x 8 8 eight NULL 0
+x 0 NULL zero NULL 0
+x NULL NULL null NULL 0
+x NULL 0 zero NULL 0
+
+statement error column reference "i" is ambiguous
+SELECT 'x' AS "xxx", i, k, t FROM J1_TBL CROSS JOIN J2_TBL
+
+query TIIT rowsort
+SELECT 'x' AS "xxx", t1.i, k, t FROM J1_TBL t1 CROSS JOIN J2_TBL t2
+----
+x 1 -1 one
+x 2 -1 two
+x 3 -1 three
+x 4 -1 four
+x 5 -1 five
+x 6 -1 six
+x 7 -1 seven
+x 8 -1 eight
+x 0 -1 zero
+x NULL -1 null
+x NULL -1 zero
+x 1 2 one
+x 2 2 two
+x 3 2 three
+x 4 2 four
+x 5 2 five
+x 6 2 six
+x 7 2 seven
+x 8 2 eight
+x 0 2 zero
+x NULL 2 null
+x NULL 2 zero
+x 1 -3 one
+x 2 -3 two
+x 3 -3 three
+x 4 -3 four
+x 5 -3 five
+x 6 -3 six
+x 7 -3 seven
+x 8 -3 eight
+x 0 -3 zero
+x NULL -3 null
+x NULL -3 zero
+x 1 4 one
+x 2 4 two
+x 3 4 three
+x 4 4 four
+x 5 4 five
+x 6 4 six
+x 7 4 seven
+x 8 4 eight
+x 0 4 zero
+x NULL 4 null
+x NULL 4 zero
+x 1 -5 one
+x 2 -5 two
+x 3 -5 three
+x 4 -5 four
+x 5 -5 five
+x 6 -5 six
+x 7 -5 seven
+x 8 -5 eight
+x 0 -5 zero
+x NULL -5 null
+x NULL -5 zero
+x 1 -5 one
+x 2 -5 two
+x 3 -5 three
+x 4 -5 four
+x 5 -5 five
+x 6 -5 six
+x 7 -5 seven
+x 8 -5 eight
+x 0 -5 zero
+x NULL -5 null
+x NULL -5 zero
+x 1 NULL one
+x 2 NULL two
+x 3 NULL three
+x 4 NULL four
+x 5 NULL five
+x 6 NULL six
+x 7 NULL seven
+x 8 NULL eight
+x 0 NULL zero
+x NULL NULL null
+x NULL NULL zero
+x 1 NULL one
+x 2 NULL two
+x 3 NULL three
+x 4 NULL four
+x 5 NULL five
+x 6 NULL six
+x 7 NULL seven
+x 8 NULL eight
+x 0 NULL zero
+x NULL NULL null
+x NULL NULL zero
+x 1 0 one
+x 2 0 two
+x 3 0 three
+x 4 0 four
+x 5 0 five
+x 6 0 six
+x 7 0 seven
+x 8 0 eight
+x 0 0 zero
+x NULL 0 null
+x NULL 0 zero
+
+query TITI rowsort
+SELECT 'x' AS "xxx", ii, tt, kk FROM (J1_TBL CROSS JOIN J2_TBL) AS tx (ii, jj, tt, ii2, kk)
+----
+x 1 one -1
+x 2 two -1
+x 3 three -1
+x 4 four -1
+x 5 five -1
+x 6 six -1
+x 7 seven -1
+x 8 eight -1
+x 0 zero -1
+x NULL null -1
+x NULL zero -1
+x 1 one 2
+x 2 two 2
+x 3 three 2
+x 4 four 2
+x 5 five 2
+x 6 six 2
+x 7 seven 2
+x 8 eight 2
+x 0 zero 2
+x NULL null 2
+x NULL zero 2
+x 1 one -3
+x 2 two -3
+x 3 three -3
+x 4 four -3
+x 5 five -3
+x 6 six -3
+x 7 seven -3
+x 8 eight -3
+x 0 zero -3
+x NULL null -3
+x NULL zero -3
+x 1 one 4
+x 2 two 4
+x 3 three 4
+x 4 four 4
+x 5 five 4
+x 6 six 4
+x 7 seven 4
+x 8 eight 4
+x 0 zero 4
+x NULL null 4
+x NULL zero 4
+x 1 one -5
+x 2 two -5
+x 3 three -5
+x 4 four -5
+x 5 five -5
+x 6 six -5
+x 7 seven -5
+x 8 eight -5
+x 0 zero -5
+x NULL null -5
+x NULL zero -5
+x 1 one -5
+x 2 two -5
+x 3 three -5
+x 4 four -5
+x 5 five -5
+x 6 six -5
+x 7 seven -5
+x 8 eight -5
+x 0 zero -5
+x NULL null -5
+x NULL zero -5
+x 1 one NULL
+x 2 two NULL
+x 3 three NULL
+x 4 four NULL
+x 5 five NULL
+x 6 six NULL
+x 7 seven NULL
+x 8 eight NULL
+x 0 zero NULL
+x NULL null NULL
+x NULL zero NULL
+x 1 one NULL
+x 2 two NULL
+x 3 three NULL
+x 4 four NULL
+x 5 five NULL
+x 6 six NULL
+x 7 seven NULL
+x 8 eight NULL
+x 0 zero NULL
+x NULL null NULL
+x NULL zero NULL
+x 1 one 0
+x 2 two 0
+x 3 three 0
+x 4 four 0
+x 5 five 0
+x 6 six 0
+x 7 seven 0
+x 8 eight 0
+x 0 zero 0
+x NULL null 0
+x NULL zero 0
+
+query TIII rowsort
+SELECT 'x' AS "xxx", tx.ii, tx.jj, tx.kk FROM (J1_TBL t1 (a, b, c) CROSS JOIN J2_TBL t2 (d, e)) AS tx (ii, jj, tt, ii2, kk)
+----
+x 1 4 -1
+x 2 3 -1
+x 3 2 -1
+x 4 1 -1
+x 5 0 -1
+x 6 6 -1
+x 7 7 -1
+x 8 8 -1
+x 0 NULL -1
+x NULL NULL -1
+x NULL 0 -1
+x 1 4 2
+x 2 3 2
+x 3 2 2
+x 4 1 2
+x 5 0 2
+x 6 6 2
+x 7 7 2
+x 8 8 2
+x 0 NULL 2
+x NULL NULL 2
+x NULL 0 2
+x 1 4 -3
+x 2 3 -3
+x 3 2 -3
+x 4 1 -3
+x 5 0 -3
+x 6 6 -3
+x 7 7 -3
+x 8 8 -3
+x 0 NULL -3
+x NULL NULL -3
+x NULL 0 -3
+x 1 4 4
+x 2 3 4
+x 3 2 4
+x 4 1 4
+x 5 0 4
+x 6 6 4
+x 7 7 4
+x 8 8 4
+x 0 NULL 4
+x NULL NULL 4
+x NULL 0 4
+x 1 4 -5
+x 2 3 -5
+x 3 2 -5
+x 4 1 -5
+x 5 0 -5
+x 6 6 -5
+x 7 7 -5
+x 8 8 -5
+x 0 NULL -5
+x NULL NULL -5
+x NULL 0 -5
+x 1 4 -5
+x 2 3 -5
+x 3 2 -5
+x 4 1 -5
+x 5 0 -5
+x 6 6 -5
+x 7 7 -5
+x 8 8 -5
+x 0 NULL -5
+x NULL NULL -5
+x NULL 0 -5
+x 1 4 NULL
+x 2 3 NULL
+x 3 2 NULL
+x 4 1 NULL
+x 5 0 NULL
+x 6 6 NULL
+x 7 7 NULL
+x 8 8 NULL
+x 0 NULL NULL
+x NULL NULL NULL
+x NULL 0 NULL
+x 1 4 NULL
+x 2 3 NULL
+x 3 2 NULL
+x 4 1 NULL
+x 5 0 NULL
+x 6 6 NULL
+x 7 7 NULL
+x 8 8 NULL
+x 0 NULL NULL
+x NULL NULL NULL
+x NULL 0 NULL
+x 1 4 0
+x 2 3 0
+x 3 2 0
+x 4 1 0
+x 5 0 0
+x 6 6 0
+x 7 7 0
+x 8 8 0
+x 0 NULL 0
+x NULL NULL 0
+x NULL 0 0
+
+query TIITIIII rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL CROSS JOIN J2_TBL a CROSS JOIN J2_TBL b
+----
+x 1 4 one 1 -1 1 -1
+x 1 4 one 1 -1 2 2
+x 1 4 one 1 -1 3 -3
+x 1 4 one 1 -1 2 4
+x 1 4 one 1 -1 5 -5
+x 1 4 one 1 -1 5 -5
+x 1 4 one 1 -1 0 NULL
+x 1 4 one 1 -1 NULL NULL
+x 1 4 one 1 -1 NULL 0
+x 2 3 two 1 -1 1 -1
+x 2 3 two 1 -1 2 2
+x 2 3 two 1 -1 3 -3
+x 2 3 two 1 -1 2 4
+x 2 3 two 1 -1 5 -5
+x 2 3 two 1 -1 5 -5
+x 2 3 two 1 -1 0 NULL
+x 2 3 two 1 -1 NULL NULL
+x 2 3 two 1 -1 NULL 0
+x 3 2 three 1 -1 1 -1
+x 3 2 three 1 -1 2 2
+x 3 2 three 1 -1 3 -3
+x 3 2 three 1 -1 2 4
+x 3 2 three 1 -1 5 -5
+x 3 2 three 1 -1 5 -5
+x 3 2 three 1 -1 0 NULL
+x 3 2 three 1 -1 NULL NULL
+x 3 2 three 1 -1 NULL 0
+x 4 1 four 1 -1 1 -1
+x 4 1 four 1 -1 2 2
+x 4 1 four 1 -1 3 -3
+x 4 1 four 1 -1 2 4
+x 4 1 four 1 -1 5 -5
+x 4 1 four 1 -1 5 -5
+x 4 1 four 1 -1 0 NULL
+x 4 1 four 1 -1 NULL NULL
+x 4 1 four 1 -1 NULL 0
+x 5 0 five 1 -1 1 -1
+x 5 0 five 1 -1 2 2
+x 5 0 five 1 -1 3 -3
+x 5 0 five 1 -1 2 4
+x 5 0 five 1 -1 5 -5
+x 5 0 five 1 -1 5 -5
+x 5 0 five 1 -1 0 NULL
+x 5 0 five 1 -1 NULL NULL
+x 5 0 five 1 -1 NULL 0
+x 6 6 six 1 -1 1 -1
+x 6 6 six 1 -1 2 2
+x 6 6 six 1 -1 3 -3
+x 6 6 six 1 -1 2 4
+x 6 6 six 1 -1 5 -5
+x 6 6 six 1 -1 5 -5
+x 6 6 six 1 -1 0 NULL
+x 6 6 six 1 -1 NULL NULL
+x 6 6 six 1 -1 NULL 0
+x 7 7 seven 1 -1 1 -1
+x 7 7 seven 1 -1 2 2
+x 7 7 seven 1 -1 3 -3
+x 7 7 seven 1 -1 2 4
+x 7 7 seven 1 -1 5 -5
+x 7 7 seven 1 -1 5 -5
+x 7 7 seven 1 -1 0 NULL
+x 7 7 seven 1 -1 NULL NULL
+x 7 7 seven 1 -1 NULL 0
+x 8 8 eight 1 -1 1 -1
+x 8 8 eight 1 -1 2 2
+x 8 8 eight 1 -1 3 -3
+x 8 8 eight 1 -1 2 4
+x 8 8 eight 1 -1 5 -5
+x 8 8 eight 1 -1 5 -5
+x 8 8 eight 1 -1 0 NULL
+x 8 8 eight 1 -1 NULL NULL
+x 8 8 eight 1 -1 NULL 0
+x 0 NULL zero 1 -1 1 -1
+x 0 NULL zero 1 -1 2 2
+x 0 NULL zero 1 -1 3 -3
+x 0 NULL zero 1 -1 2 4
+x 0 NULL zero 1 -1 5 -5
+x 0 NULL zero 1 -1 5 -5
+x 0 NULL zero 1 -1 0 NULL
+x 0 NULL zero 1 -1 NULL NULL
+x 0 NULL zero 1 -1 NULL 0
+x NULL NULL null 1 -1 1 -1
+x NULL NULL null 1 -1 2 2
+x NULL NULL null 1 -1 3 -3
+x NULL NULL null 1 -1 2 4
+x NULL NULL null 1 -1 5 -5
+x NULL NULL null 1 -1 5 -5
+x NULL NULL null 1 -1 0 NULL
+x NULL NULL null 1 -1 NULL NULL
+x NULL NULL null 1 -1 NULL 0
+x NULL 0 zero 1 -1 1 -1
+x NULL 0 zero 1 -1 2 2
+x NULL 0 zero 1 -1 3 -3
+x NULL 0 zero 1 -1 2 4
+x NULL 0 zero 1 -1 5 -5
+x NULL 0 zero 1 -1 5 -5
+x NULL 0 zero 1 -1 0 NULL
+x NULL 0 zero 1 -1 NULL NULL
+x NULL 0 zero 1 -1 NULL 0
+x 1 4 one 2 2 1 -1
+x 1 4 one 2 2 2 2
+x 1 4 one 2 2 3 -3
+x 1 4 one 2 2 2 4
+x 1 4 one 2 2 5 -5
+x 1 4 one 2 2 5 -5
+x 1 4 one 2 2 0 NULL
+x 1 4 one 2 2 NULL NULL
+x 1 4 one 2 2 NULL 0
+x 2 3 two 2 2 1 -1
+x 2 3 two 2 2 2 2
+x 2 3 two 2 2 3 -3
+x 2 3 two 2 2 2 4
+x 2 3 two 2 2 5 -5
+x 2 3 two 2 2 5 -5
+x 2 3 two 2 2 0 NULL
+x 2 3 two 2 2 NULL NULL
+x 2 3 two 2 2 NULL 0
+x 3 2 three 2 2 1 -1
+x 3 2 three 2 2 2 2
+x 3 2 three 2 2 3 -3
+x 3 2 three 2 2 2 4
+x 3 2 three 2 2 5 -5
+x 3 2 three 2 2 5 -5
+x 3 2 three 2 2 0 NULL
+x 3 2 three 2 2 NULL NULL
+x 3 2 three 2 2 NULL 0
+x 4 1 four 2 2 1 -1
+x 4 1 four 2 2 2 2
+x 4 1 four 2 2 3 -3
+x 4 1 four 2 2 2 4
+x 4 1 four 2 2 5 -5
+x 4 1 four 2 2 5 -5
+x 4 1 four 2 2 0 NULL
+x 4 1 four 2 2 NULL NULL
+x 4 1 four 2 2 NULL 0
+x 5 0 five 2 2 1 -1
+x 5 0 five 2 2 2 2
+x 5 0 five 2 2 3 -3
+x 5 0 five 2 2 2 4
+x 5 0 five 2 2 5 -5
+x 5 0 five 2 2 5 -5
+x 5 0 five 2 2 0 NULL
+x 5 0 five 2 2 NULL NULL
+x 5 0 five 2 2 NULL 0
+x 6 6 six 2 2 1 -1
+x 6 6 six 2 2 2 2
+x 6 6 six 2 2 3 -3
+x 6 6 six 2 2 2 4
+x 6 6 six 2 2 5 -5
+x 6 6 six 2 2 5 -5
+x 6 6 six 2 2 0 NULL
+x 6 6 six 2 2 NULL NULL
+x 6 6 six 2 2 NULL 0
+x 7 7 seven 2 2 1 -1
+x 7 7 seven 2 2 2 2
+x 7 7 seven 2 2 3 -3
+x 7 7 seven 2 2 2 4
+x 7 7 seven 2 2 5 -5
+x 7 7 seven 2 2 5 -5
+x 7 7 seven 2 2 0 NULL
+x 7 7 seven 2 2 NULL NULL
+x 7 7 seven 2 2 NULL 0
+x 8 8 eight 2 2 1 -1
+x 8 8 eight 2 2 2 2
+x 8 8 eight 2 2 3 -3
+x 8 8 eight 2 2 2 4
+x 8 8 eight 2 2 5 -5
+x 8 8 eight 2 2 5 -5
+x 8 8 eight 2 2 0 NULL
+x 8 8 eight 2 2 NULL NULL
+x 8 8 eight 2 2 NULL 0
+x 0 NULL zero 2 2 1 -1
+x 0 NULL zero 2 2 2 2
+x 0 NULL zero 2 2 3 -3
+x 0 NULL zero 2 2 2 4
+x 0 NULL zero 2 2 5 -5
+x 0 NULL zero 2 2 5 -5
+x 0 NULL zero 2 2 0 NULL
+x 0 NULL zero 2 2 NULL NULL
+x 0 NULL zero 2 2 NULL 0
+x NULL NULL null 2 2 1 -1
+x NULL NULL null 2 2 2 2
+x NULL NULL null 2 2 3 -3
+x NULL NULL null 2 2 2 4
+x NULL NULL null 2 2 5 -5
+x NULL NULL null 2 2 5 -5
+x NULL NULL null 2 2 0 NULL
+x NULL NULL null 2 2 NULL NULL
+x NULL NULL null 2 2 NULL 0
+x NULL 0 zero 2 2 1 -1
+x NULL 0 zero 2 2 2 2
+x NULL 0 zero 2 2 3 -3
+x NULL 0 zero 2 2 2 4
+x NULL 0 zero 2 2 5 -5
+x NULL 0 zero 2 2 5 -5
+x NULL 0 zero 2 2 0 NULL
+x NULL 0 zero 2 2 NULL NULL
+x NULL 0 zero 2 2 NULL 0
+x 1 4 one 3 -3 1 -1
+x 1 4 one 3 -3 2 2
+x 1 4 one 3 -3 3 -3
+x 1 4 one 3 -3 2 4
+x 1 4 one 3 -3 5 -5
+x 1 4 one 3 -3 5 -5
+x 1 4 one 3 -3 0 NULL
+x 1 4 one 3 -3 NULL NULL
+x 1 4 one 3 -3 NULL 0
+x 2 3 two 3 -3 1 -1
+x 2 3 two 3 -3 2 2
+x 2 3 two 3 -3 3 -3
+x 2 3 two 3 -3 2 4
+x 2 3 two 3 -3 5 -5
+x 2 3 two 3 -3 5 -5
+x 2 3 two 3 -3 0 NULL
+x 2 3 two 3 -3 NULL NULL
+x 2 3 two 3 -3 NULL 0
+x 3 2 three 3 -3 1 -1
+x 3 2 three 3 -3 2 2
+x 3 2 three 3 -3 3 -3
+x 3 2 three 3 -3 2 4
+x 3 2 three 3 -3 5 -5
+x 3 2 three 3 -3 5 -5
+x 3 2 three 3 -3 0 NULL
+x 3 2 three 3 -3 NULL NULL
+x 3 2 three 3 -3 NULL 0
+x 4 1 four 3 -3 1 -1
+x 4 1 four 3 -3 2 2
+x 4 1 four 3 -3 3 -3
+x 4 1 four 3 -3 2 4
+x 4 1 four 3 -3 5 -5
+x 4 1 four 3 -3 5 -5
+x 4 1 four 3 -3 0 NULL
+x 4 1 four 3 -3 NULL NULL
+x 4 1 four 3 -3 NULL 0
+x 5 0 five 3 -3 1 -1
+x 5 0 five 3 -3 2 2
+x 5 0 five 3 -3 3 -3
+x 5 0 five 3 -3 2 4
+x 5 0 five 3 -3 5 -5
+x 5 0 five 3 -3 5 -5
+x 5 0 five 3 -3 0 NULL
+x 5 0 five 3 -3 NULL NULL
+x 5 0 five 3 -3 NULL 0
+x 6 6 six 3 -3 1 -1
+x 6 6 six 3 -3 2 2
+x 6 6 six 3 -3 3 -3
+x 6 6 six 3 -3 2 4
+x 6 6 six 3 -3 5 -5
+x 6 6 six 3 -3 5 -5
+x 6 6 six 3 -3 0 NULL
+x 6 6 six 3 -3 NULL NULL
+x 6 6 six 3 -3 NULL 0
+x 7 7 seven 3 -3 1 -1
+x 7 7 seven 3 -3 2 2
+x 7 7 seven 3 -3 3 -3
+x 7 7 seven 3 -3 2 4
+x 7 7 seven 3 -3 5 -5
+x 7 7 seven 3 -3 5 -5
+x 7 7 seven 3 -3 0 NULL
+x 7 7 seven 3 -3 NULL NULL
+x 7 7 seven 3 -3 NULL 0
+x 8 8 eight 3 -3 1 -1
+x 8 8 eight 3 -3 2 2
+x 8 8 eight 3 -3 3 -3
+x 8 8 eight 3 -3 2 4
+x 8 8 eight 3 -3 5 -5
+x 8 8 eight 3 -3 5 -5
+x 8 8 eight 3 -3 0 NULL
+x 8 8 eight 3 -3 NULL NULL
+x 8 8 eight 3 -3 NULL 0
+x 0 NULL zero 3 -3 1 -1
+x 0 NULL zero 3 -3 2 2
+x 0 NULL zero 3 -3 3 -3
+x 0 NULL zero 3 -3 2 4
+x 0 NULL zero 3 -3 5 -5
+x 0 NULL zero 3 -3 5 -5
+x 0 NULL zero 3 -3 0 NULL
+x 0 NULL zero 3 -3 NULL NULL
+x 0 NULL zero 3 -3 NULL 0
+x NULL NULL null 3 -3 1 -1
+x NULL NULL null 3 -3 2 2
+x NULL NULL null 3 -3 3 -3
+x NULL NULL null 3 -3 2 4
+x NULL NULL null 3 -3 5 -5
+x NULL NULL null 3 -3 5 -5
+x NULL NULL null 3 -3 0 NULL
+x NULL NULL null 3 -3 NULL NULL
+x NULL NULL null 3 -3 NULL 0
+x NULL 0 zero 3 -3 1 -1
+x NULL 0 zero 3 -3 2 2
+x NULL 0 zero 3 -3 3 -3
+x NULL 0 zero 3 -3 2 4
+x NULL 0 zero 3 -3 5 -5
+x NULL 0 zero 3 -3 5 -5
+x NULL 0 zero 3 -3 0 NULL
+x NULL 0 zero 3 -3 NULL NULL
+x NULL 0 zero 3 -3 NULL 0
+x 1 4 one 2 4 1 -1
+x 1 4 one 2 4 2 2
+x 1 4 one 2 4 3 -3
+x 1 4 one 2 4 2 4
+x 1 4 one 2 4 5 -5
+x 1 4 one 2 4 5 -5
+x 1 4 one 2 4 0 NULL
+x 1 4 one 2 4 NULL NULL
+x 1 4 one 2 4 NULL 0
+x 2 3 two 2 4 1 -1
+x 2 3 two 2 4 2 2
+x 2 3 two 2 4 3 -3
+x 2 3 two 2 4 2 4
+x 2 3 two 2 4 5 -5
+x 2 3 two 2 4 5 -5
+x 2 3 two 2 4 0 NULL
+x 2 3 two 2 4 NULL NULL
+x 2 3 two 2 4 NULL 0
+x 3 2 three 2 4 1 -1
+x 3 2 three 2 4 2 2
+x 3 2 three 2 4 3 -3
+x 3 2 three 2 4 2 4
+x 3 2 three 2 4 5 -5
+x 3 2 three 2 4 5 -5
+x 3 2 three 2 4 0 NULL
+x 3 2 three 2 4 NULL NULL
+x 3 2 three 2 4 NULL 0
+x 4 1 four 2 4 1 -1
+x 4 1 four 2 4 2 2
+x 4 1 four 2 4 3 -3
+x 4 1 four 2 4 2 4
+x 4 1 four 2 4 5 -5
+x 4 1 four 2 4 5 -5
+x 4 1 four 2 4 0 NULL
+x 4 1 four 2 4 NULL NULL
+x 4 1 four 2 4 NULL 0
+x 5 0 five 2 4 1 -1
+x 5 0 five 2 4 2 2
+x 5 0 five 2 4 3 -3
+x 5 0 five 2 4 2 4
+x 5 0 five 2 4 5 -5
+x 5 0 five 2 4 5 -5
+x 5 0 five 2 4 0 NULL
+x 5 0 five 2 4 NULL NULL
+x 5 0 five 2 4 NULL 0
+x 6 6 six 2 4 1 -1
+x 6 6 six 2 4 2 2
+x 6 6 six 2 4 3 -3
+x 6 6 six 2 4 2 4
+x 6 6 six 2 4 5 -5
+x 6 6 six 2 4 5 -5
+x 6 6 six 2 4 0 NULL
+x 6 6 six 2 4 NULL NULL
+x 6 6 six 2 4 NULL 0
+x 7 7 seven 2 4 1 -1
+x 7 7 seven 2 4 2 2
+x 7 7 seven 2 4 3 -3
+x 7 7 seven 2 4 2 4
+x 7 7 seven 2 4 5 -5
+x 7 7 seven 2 4 5 -5
+x 7 7 seven 2 4 0 NULL
+x 7 7 seven 2 4 NULL NULL
+x 7 7 seven 2 4 NULL 0
+x 8 8 eight 2 4 1 -1
+x 8 8 eight 2 4 2 2
+x 8 8 eight 2 4 3 -3
+x 8 8 eight 2 4 2 4
+x 8 8 eight 2 4 5 -5
+x 8 8 eight 2 4 5 -5
+x 8 8 eight 2 4 0 NULL
+x 8 8 eight 2 4 NULL NULL
+x 8 8 eight 2 4 NULL 0
+x 0 NULL zero 2 4 1 -1
+x 0 NULL zero 2 4 2 2
+x 0 NULL zero 2 4 3 -3
+x 0 NULL zero 2 4 2 4
+x 0 NULL zero 2 4 5 -5
+x 0 NULL zero 2 4 5 -5
+x 0 NULL zero 2 4 0 NULL
+x 0 NULL zero 2 4 NULL NULL
+x 0 NULL zero 2 4 NULL 0
+x NULL NULL null 2 4 1 -1
+x NULL NULL null 2 4 2 2
+x NULL NULL null 2 4 3 -3
+x NULL NULL null 2 4 2 4
+x NULL NULL null 2 4 5 -5
+x NULL NULL null 2 4 5 -5
+x NULL NULL null 2 4 0 NULL
+x NULL NULL null 2 4 NULL NULL
+x NULL NULL null 2 4 NULL 0
+x NULL 0 zero 2 4 1 -1
+x NULL 0 zero 2 4 2 2
+x NULL 0 zero 2 4 3 -3
+x NULL 0 zero 2 4 2 4
+x NULL 0 zero 2 4 5 -5
+x NULL 0 zero 2 4 5 -5
+x NULL 0 zero 2 4 0 NULL
+x NULL 0 zero 2 4 NULL NULL
+x NULL 0 zero 2 4 NULL 0
+x 1 4 one 5 -5 1 -1
+x 1 4 one 5 -5 2 2
+x 1 4 one 5 -5 3 -3
+x 1 4 one 5 -5 2 4
+x 1 4 one 5 -5 5 -5
+x 1 4 one 5 -5 5 -5
+x 1 4 one 5 -5 0 NULL
+x 1 4 one 5 -5 NULL NULL
+x 1 4 one 5 -5 NULL 0
+x 2 3 two 5 -5 1 -1
+x 2 3 two 5 -5 2 2
+x 2 3 two 5 -5 3 -3
+x 2 3 two 5 -5 2 4
+x 2 3 two 5 -5 5 -5
+x 2 3 two 5 -5 5 -5
+x 2 3 two 5 -5 0 NULL
+x 2 3 two 5 -5 NULL NULL
+x 2 3 two 5 -5 NULL 0
+x 3 2 three 5 -5 1 -1
+x 3 2 three 5 -5 2 2
+x 3 2 three 5 -5 3 -3
+x 3 2 three 5 -5 2 4
+x 3 2 three 5 -5 5 -5
+x 3 2 three 5 -5 5 -5
+x 3 2 three 5 -5 0 NULL
+x 3 2 three 5 -5 NULL NULL
+x 3 2 three 5 -5 NULL 0
+x 4 1 four 5 -5 1 -1
+x 4 1 four 5 -5 2 2
+x 4 1 four 5 -5 3 -3
+x 4 1 four 5 -5 2 4
+x 4 1 four 5 -5 5 -5
+x 4 1 four 5 -5 5 -5
+x 4 1 four 5 -5 0 NULL
+x 4 1 four 5 -5 NULL NULL
+x 4 1 four 5 -5 NULL 0
+x 5 0 five 5 -5 1 -1
+x 5 0 five 5 -5 2 2
+x 5 0 five 5 -5 3 -3
+x 5 0 five 5 -5 2 4
+x 5 0 five 5 -5 5 -5
+x 5 0 five 5 -5 5 -5
+x 5 0 five 5 -5 0 NULL
+x 5 0 five 5 -5 NULL NULL
+x 5 0 five 5 -5 NULL 0
+x 6 6 six 5 -5 1 -1
+x 6 6 six 5 -5 2 2
+x 6 6 six 5 -5 3 -3
+x 6 6 six 5 -5 2 4
+x 6 6 six 5 -5 5 -5
+x 6 6 six 5 -5 5 -5
+x 6 6 six 5 -5 0 NULL
+x 6 6 six 5 -5 NULL NULL
+x 6 6 six 5 -5 NULL 0
+x 7 7 seven 5 -5 1 -1
+x 7 7 seven 5 -5 2 2
+x 7 7 seven 5 -5 3 -3
+x 7 7 seven 5 -5 2 4
+x 7 7 seven 5 -5 5 -5
+x 7 7 seven 5 -5 5 -5
+x 7 7 seven 5 -5 0 NULL
+x 7 7 seven 5 -5 NULL NULL
+x 7 7 seven 5 -5 NULL 0
+x 8 8 eight 5 -5 1 -1
+x 8 8 eight 5 -5 2 2
+x 8 8 eight 5 -5 3 -3
+x 8 8 eight 5 -5 2 4
+x 8 8 eight 5 -5 5 -5
+x 8 8 eight 5 -5 5 -5
+x 8 8 eight 5 -5 0 NULL
+x 8 8 eight 5 -5 NULL NULL
+x 8 8 eight 5 -5 NULL 0
+x 0 NULL zero 5 -5 1 -1
+x 0 NULL zero 5 -5 2 2
+x 0 NULL zero 5 -5 3 -3
+x 0 NULL zero 5 -5 2 4
+x 0 NULL zero 5 -5 5 -5
+x 0 NULL zero 5 -5 5 -5
+x 0 NULL zero 5 -5 0 NULL
+x 0 NULL zero 5 -5 NULL NULL
+x 0 NULL zero 5 -5 NULL 0
+x NULL NULL null 5 -5 1 -1
+x NULL NULL null 5 -5 2 2
+x NULL NULL null 5 -5 3 -3
+x NULL NULL null 5 -5 2 4
+x NULL NULL null 5 -5 5 -5
+x NULL NULL null 5 -5 5 -5
+x NULL NULL null 5 -5 0 NULL
+x NULL NULL null 5 -5 NULL NULL
+x NULL NULL null 5 -5 NULL 0
+x NULL 0 zero 5 -5 1 -1
+x NULL 0 zero 5 -5 2 2
+x NULL 0 zero 5 -5 3 -3
+x NULL 0 zero 5 -5 2 4
+x NULL 0 zero 5 -5 5 -5
+x NULL 0 zero 5 -5 5 -5
+x NULL 0 zero 5 -5 0 NULL
+x NULL 0 zero 5 -5 NULL NULL
+x NULL 0 zero 5 -5 NULL 0
+x 1 4 one 5 -5 1 -1
+x 1 4 one 5 -5 2 2
+x 1 4 one 5 -5 3 -3
+x 1 4 one 5 -5 2 4
+x 1 4 one 5 -5 5 -5
+x 1 4 one 5 -5 5 -5
+x 1 4 one 5 -5 0 NULL
+x 1 4 one 5 -5 NULL NULL
+x 1 4 one 5 -5 NULL 0
+x 2 3 two 5 -5 1 -1
+x 2 3 two 5 -5 2 2
+x 2 3 two 5 -5 3 -3
+x 2 3 two 5 -5 2 4
+x 2 3 two 5 -5 5 -5
+x 2 3 two 5 -5 5 -5
+x 2 3 two 5 -5 0 NULL
+x 2 3 two 5 -5 NULL NULL
+x 2 3 two 5 -5 NULL 0
+x 3 2 three 5 -5 1 -1
+x 3 2 three 5 -5 2 2
+x 3 2 three 5 -5 3 -3
+x 3 2 three 5 -5 2 4
+x 3 2 three 5 -5 5 -5
+x 3 2 three 5 -5 5 -5
+x 3 2 three 5 -5 0 NULL
+x 3 2 three 5 -5 NULL NULL
+x 3 2 three 5 -5 NULL 0
+x 4 1 four 5 -5 1 -1
+x 4 1 four 5 -5 2 2
+x 4 1 four 5 -5 3 -3
+x 4 1 four 5 -5 2 4
+x 4 1 four 5 -5 5 -5
+x 4 1 four 5 -5 5 -5
+x 4 1 four 5 -5 0 NULL
+x 4 1 four 5 -5 NULL NULL
+x 4 1 four 5 -5 NULL 0
+x 5 0 five 5 -5 1 -1
+x 5 0 five 5 -5 2 2
+x 5 0 five 5 -5 3 -3
+x 5 0 five 5 -5 2 4
+x 5 0 five 5 -5 5 -5
+x 5 0 five 5 -5 5 -5
+x 5 0 five 5 -5 0 NULL
+x 5 0 five 5 -5 NULL NULL
+x 5 0 five 5 -5 NULL 0
+x 6 6 six 5 -5 1 -1
+x 6 6 six 5 -5 2 2
+x 6 6 six 5 -5 3 -3
+x 6 6 six 5 -5 2 4
+x 6 6 six 5 -5 5 -5
+x 6 6 six 5 -5 5 -5
+x 6 6 six 5 -5 0 NULL
+x 6 6 six 5 -5 NULL NULL
+x 6 6 six 5 -5 NULL 0
+x 7 7 seven 5 -5 1 -1
+x 7 7 seven 5 -5 2 2
+x 7 7 seven 5 -5 3 -3
+x 7 7 seven 5 -5 2 4
+x 7 7 seven 5 -5 5 -5
+x 7 7 seven 5 -5 5 -5
+x 7 7 seven 5 -5 0 NULL
+x 7 7 seven 5 -5 NULL NULL
+x 7 7 seven 5 -5 NULL 0
+x 8 8 eight 5 -5 1 -1
+x 8 8 eight 5 -5 2 2
+x 8 8 eight 5 -5 3 -3
+x 8 8 eight 5 -5 2 4
+x 8 8 eight 5 -5 5 -5
+x 8 8 eight 5 -5 5 -5
+x 8 8 eight 5 -5 0 NULL
+x 8 8 eight 5 -5 NULL NULL
+x 8 8 eight 5 -5 NULL 0
+x 0 NULL zero 5 -5 1 -1
+x 0 NULL zero 5 -5 2 2
+x 0 NULL zero 5 -5 3 -3
+x 0 NULL zero 5 -5 2 4
+x 0 NULL zero 5 -5 5 -5
+x 0 NULL zero 5 -5 5 -5
+x 0 NULL zero 5 -5 0 NULL
+x 0 NULL zero 5 -5 NULL NULL
+x 0 NULL zero 5 -5 NULL 0
+x NULL NULL null 5 -5 1 -1
+x NULL NULL null 5 -5 2 2
+x NULL NULL null 5 -5 3 -3
+x NULL NULL null 5 -5 2 4
+x NULL NULL null 5 -5 5 -5
+x NULL NULL null 5 -5 5 -5
+x NULL NULL null 5 -5 0 NULL
+x NULL NULL null 5 -5 NULL NULL
+x NULL NULL null 5 -5 NULL 0
+x NULL 0 zero 5 -5 1 -1
+x NULL 0 zero 5 -5 2 2
+x NULL 0 zero 5 -5 3 -3
+x NULL 0 zero 5 -5 2 4
+x NULL 0 zero 5 -5 5 -5
+x NULL 0 zero 5 -5 5 -5
+x NULL 0 zero 5 -5 0 NULL
+x NULL 0 zero 5 -5 NULL NULL
+x NULL 0 zero 5 -5 NULL 0
+x 1 4 one 0 NULL 1 -1
+x 1 4 one 0 NULL 2 2
+x 1 4 one 0 NULL 3 -3
+x 1 4 one 0 NULL 2 4
+x 1 4 one 0 NULL 5 -5
+x 1 4 one 0 NULL 5 -5
+x 1 4 one 0 NULL 0 NULL
+x 1 4 one 0 NULL NULL NULL
+x 1 4 one 0 NULL NULL 0
+x 2 3 two 0 NULL 1 -1
+x 2 3 two 0 NULL 2 2
+x 2 3 two 0 NULL 3 -3
+x 2 3 two 0 NULL 2 4
+x 2 3 two 0 NULL 5 -5
+x 2 3 two 0 NULL 5 -5
+x 2 3 two 0 NULL 0 NULL
+x 2 3 two 0 NULL NULL NULL
+x 2 3 two 0 NULL NULL 0
+x 3 2 three 0 NULL 1 -1
+x 3 2 three 0 NULL 2 2
+x 3 2 three 0 NULL 3 -3
+x 3 2 three 0 NULL 2 4
+x 3 2 three 0 NULL 5 -5
+x 3 2 three 0 NULL 5 -5
+x 3 2 three 0 NULL 0 NULL
+x 3 2 three 0 NULL NULL NULL
+x 3 2 three 0 NULL NULL 0
+x 4 1 four 0 NULL 1 -1
+x 4 1 four 0 NULL 2 2
+x 4 1 four 0 NULL 3 -3
+x 4 1 four 0 NULL 2 4
+x 4 1 four 0 NULL 5 -5
+x 4 1 four 0 NULL 5 -5
+x 4 1 four 0 NULL 0 NULL
+x 4 1 four 0 NULL NULL NULL
+x 4 1 four 0 NULL NULL 0
+x 5 0 five 0 NULL 1 -1
+x 5 0 five 0 NULL 2 2
+x 5 0 five 0 NULL 3 -3
+x 5 0 five 0 NULL 2 4
+x 5 0 five 0 NULL 5 -5
+x 5 0 five 0 NULL 5 -5
+x 5 0 five 0 NULL 0 NULL
+x 5 0 five 0 NULL NULL NULL
+x 5 0 five 0 NULL NULL 0
+x 6 6 six 0 NULL 1 -1
+x 6 6 six 0 NULL 2 2
+x 6 6 six 0 NULL 3 -3
+x 6 6 six 0 NULL 2 4
+x 6 6 six 0 NULL 5 -5
+x 6 6 six 0 NULL 5 -5
+x 6 6 six 0 NULL 0 NULL
+x 6 6 six 0 NULL NULL NULL
+x 6 6 six 0 NULL NULL 0
+x 7 7 seven 0 NULL 1 -1
+x 7 7 seven 0 NULL 2 2
+x 7 7 seven 0 NULL 3 -3
+x 7 7 seven 0 NULL 2 4
+x 7 7 seven 0 NULL 5 -5
+x 7 7 seven 0 NULL 5 -5
+x 7 7 seven 0 NULL 0 NULL
+x 7 7 seven 0 NULL NULL NULL
+x 7 7 seven 0 NULL NULL 0
+x 8 8 eight 0 NULL 1 -1
+x 8 8 eight 0 NULL 2 2
+x 8 8 eight 0 NULL 3 -3
+x 8 8 eight 0 NULL 2 4
+x 8 8 eight 0 NULL 5 -5
+x 8 8 eight 0 NULL 5 -5
+x 8 8 eight 0 NULL 0 NULL
+x 8 8 eight 0 NULL NULL NULL
+x 8 8 eight 0 NULL NULL 0
+x 0 NULL zero 0 NULL 1 -1
+x 0 NULL zero 0 NULL 2 2
+x 0 NULL zero 0 NULL 3 -3
+x 0 NULL zero 0 NULL 2 4
+x 0 NULL zero 0 NULL 5 -5
+x 0 NULL zero 0 NULL 5 -5
+x 0 NULL zero 0 NULL 0 NULL
+x 0 NULL zero 0 NULL NULL NULL
+x 0 NULL zero 0 NULL NULL 0
+x NULL NULL null 0 NULL 1 -1
+x NULL NULL null 0 NULL 2 2
+x NULL NULL null 0 NULL 3 -3
+x NULL NULL null 0 NULL 2 4
+x NULL NULL null 0 NULL 5 -5
+x NULL NULL null 0 NULL 5 -5
+x NULL NULL null 0 NULL 0 NULL
+x NULL NULL null 0 NULL NULL NULL
+x NULL NULL null 0 NULL NULL 0
+x NULL 0 zero 0 NULL 1 -1
+x NULL 0 zero 0 NULL 2 2
+x NULL 0 zero 0 NULL 3 -3
+x NULL 0 zero 0 NULL 2 4
+x NULL 0 zero 0 NULL 5 -5
+x NULL 0 zero 0 NULL 5 -5
+x NULL 0 zero 0 NULL 0 NULL
+x NULL 0 zero 0 NULL NULL NULL
+x NULL 0 zero 0 NULL NULL 0
+x 1 4 one NULL NULL 1 -1
+x 1 4 one NULL NULL 2 2
+x 1 4 one NULL NULL 3 -3
+x 1 4 one NULL NULL 2 4
+x 1 4 one NULL NULL 5 -5
+x 1 4 one NULL NULL 5 -5
+x 1 4 one NULL NULL 0 NULL
+x 1 4 one NULL NULL NULL NULL
+x 1 4 one NULL NULL NULL 0
+x 2 3 two NULL NULL 1 -1
+x 2 3 two NULL NULL 2 2
+x 2 3 two NULL NULL 3 -3
+x 2 3 two NULL NULL 2 4
+x 2 3 two NULL NULL 5 -5
+x 2 3 two NULL NULL 5 -5
+x 2 3 two NULL NULL 0 NULL
+x 2 3 two NULL NULL NULL NULL
+x 2 3 two NULL NULL NULL 0
+x 3 2 three NULL NULL 1 -1
+x 3 2 three NULL NULL 2 2
+x 3 2 three NULL NULL 3 -3
+x 3 2 three NULL NULL 2 4
+x 3 2 three NULL NULL 5 -5
+x 3 2 three NULL NULL 5 -5
+x 3 2 three NULL NULL 0 NULL
+x 3 2 three NULL NULL NULL NULL
+x 3 2 three NULL NULL NULL 0
+x 4 1 four NULL NULL 1 -1
+x 4 1 four NULL NULL 2 2
+x 4 1 four NULL NULL 3 -3
+x 4 1 four NULL NULL 2 4
+x 4 1 four NULL NULL 5 -5
+x 4 1 four NULL NULL 5 -5
+x 4 1 four NULL NULL 0 NULL
+x 4 1 four NULL NULL NULL NULL
+x 4 1 four NULL NULL NULL 0
+x 5 0 five NULL NULL 1 -1
+x 5 0 five NULL NULL 2 2
+x 5 0 five NULL NULL 3 -3
+x 5 0 five NULL NULL 2 4
+x 5 0 five NULL NULL 5 -5
+x 5 0 five NULL NULL 5 -5
+x 5 0 five NULL NULL 0 NULL
+x 5 0 five NULL NULL NULL NULL
+x 5 0 five NULL NULL NULL 0
+x 6 6 six NULL NULL 1 -1
+x 6 6 six NULL NULL 2 2
+x 6 6 six NULL NULL 3 -3
+x 6 6 six NULL NULL 2 4
+x 6 6 six NULL NULL 5 -5
+x 6 6 six NULL NULL 5 -5
+x 6 6 six NULL NULL 0 NULL
+x 6 6 six NULL NULL NULL NULL
+x 6 6 six NULL NULL NULL 0
+x 7 7 seven NULL NULL 1 -1
+x 7 7 seven NULL NULL 2 2
+x 7 7 seven NULL NULL 3 -3
+x 7 7 seven NULL NULL 2 4
+x 7 7 seven NULL NULL 5 -5
+x 7 7 seven NULL NULL 5 -5
+x 7 7 seven NULL NULL 0 NULL
+x 7 7 seven NULL NULL NULL NULL
+x 7 7 seven NULL NULL NULL 0
+x 8 8 eight NULL NULL 1 -1
+x 8 8 eight NULL NULL 2 2
+x 8 8 eight NULL NULL 3 -3
+x 8 8 eight NULL NULL 2 4
+x 8 8 eight NULL NULL 5 -5
+x 8 8 eight NULL NULL 5 -5
+x 8 8 eight NULL NULL 0 NULL
+x 8 8 eight NULL NULL NULL NULL
+x 8 8 eight NULL NULL NULL 0
+x 0 NULL zero NULL NULL 1 -1
+x 0 NULL zero NULL NULL 2 2
+x 0 NULL zero NULL NULL 3 -3
+x 0 NULL zero NULL NULL 2 4
+x 0 NULL zero NULL NULL 5 -5
+x 0 NULL zero NULL NULL 5 -5
+x 0 NULL zero NULL NULL 0 NULL
+x 0 NULL zero NULL NULL NULL NULL
+x 0 NULL zero NULL NULL NULL 0
+x NULL NULL null NULL NULL 1 -1
+x NULL NULL null NULL NULL 2 2
+x NULL NULL null NULL NULL 3 -3
+x NULL NULL null NULL NULL 2 4
+x NULL NULL null NULL NULL 5 -5
+x NULL NULL null NULL NULL 5 -5
+x NULL NULL null NULL NULL 0 NULL
+x NULL NULL null NULL NULL NULL NULL
+x NULL NULL null NULL NULL NULL 0
+x NULL 0 zero NULL NULL 1 -1
+x NULL 0 zero NULL NULL 2 2
+x NULL 0 zero NULL NULL 3 -3
+x NULL 0 zero NULL NULL 2 4
+x NULL 0 zero NULL NULL 5 -5
+x NULL 0 zero NULL NULL 5 -5
+x NULL 0 zero NULL NULL 0 NULL
+x NULL 0 zero NULL NULL NULL NULL
+x NULL 0 zero NULL NULL NULL 0
+x 1 4 one NULL 0 1 -1
+x 1 4 one NULL 0 2 2
+x 1 4 one NULL 0 3 -3
+x 1 4 one NULL 0 2 4
+x 1 4 one NULL 0 5 -5
+x 1 4 one NULL 0 5 -5
+x 1 4 one NULL 0 0 NULL
+x 1 4 one NULL 0 NULL NULL
+x 1 4 one NULL 0 NULL 0
+x 2 3 two NULL 0 1 -1
+x 2 3 two NULL 0 2 2
+x 2 3 two NULL 0 3 -3
+x 2 3 two NULL 0 2 4
+x 2 3 two NULL 0 5 -5
+x 2 3 two NULL 0 5 -5
+x 2 3 two NULL 0 0 NULL
+x 2 3 two NULL 0 NULL NULL
+x 2 3 two NULL 0 NULL 0
+x 3 2 three NULL 0 1 -1
+x 3 2 three NULL 0 2 2
+x 3 2 three NULL 0 3 -3
+x 3 2 three NULL 0 2 4
+x 3 2 three NULL 0 5 -5
+x 3 2 three NULL 0 5 -5
+x 3 2 three NULL 0 0 NULL
+x 3 2 three NULL 0 NULL NULL
+x 3 2 three NULL 0 NULL 0
+x 4 1 four NULL 0 1 -1
+x 4 1 four NULL 0 2 2
+x 4 1 four NULL 0 3 -3
+x 4 1 four NULL 0 2 4
+x 4 1 four NULL 0 5 -5
+x 4 1 four NULL 0 5 -5
+x 4 1 four NULL 0 0 NULL
+x 4 1 four NULL 0 NULL NULL
+x 4 1 four NULL 0 NULL 0
+x 5 0 five NULL 0 1 -1
+x 5 0 five NULL 0 2 2
+x 5 0 five NULL 0 3 -3
+x 5 0 five NULL 0 2 4
+x 5 0 five NULL 0 5 -5
+x 5 0 five NULL 0 5 -5
+x 5 0 five NULL 0 0 NULL
+x 5 0 five NULL 0 NULL NULL
+x 5 0 five NULL 0 NULL 0
+x 6 6 six NULL 0 1 -1
+x 6 6 six NULL 0 2 2
+x 6 6 six NULL 0 3 -3
+x 6 6 six NULL 0 2 4
+x 6 6 six NULL 0 5 -5
+x 6 6 six NULL 0 5 -5
+x 6 6 six NULL 0 0 NULL
+x 6 6 six NULL 0 NULL NULL
+x 6 6 six NULL 0 NULL 0
+x 7 7 seven NULL 0 1 -1
+x 7 7 seven NULL 0 2 2
+x 7 7 seven NULL 0 3 -3
+x 7 7 seven NULL 0 2 4
+x 7 7 seven NULL 0 5 -5
+x 7 7 seven NULL 0 5 -5
+x 7 7 seven NULL 0 0 NULL
+x 7 7 seven NULL 0 NULL NULL
+x 7 7 seven NULL 0 NULL 0
+x 8 8 eight NULL 0 1 -1
+x 8 8 eight NULL 0 2 2
+x 8 8 eight NULL 0 3 -3
+x 8 8 eight NULL 0 2 4
+x 8 8 eight NULL 0 5 -5
+x 8 8 eight NULL 0 5 -5
+x 8 8 eight NULL 0 0 NULL
+x 8 8 eight NULL 0 NULL NULL
+x 8 8 eight NULL 0 NULL 0
+x 0 NULL zero NULL 0 1 -1
+x 0 NULL zero NULL 0 2 2
+x 0 NULL zero NULL 0 3 -3
+x 0 NULL zero NULL 0 2 4
+x 0 NULL zero NULL 0 5 -5
+x 0 NULL zero NULL 0 5 -5
+x 0 NULL zero NULL 0 0 NULL
+x 0 NULL zero NULL 0 NULL NULL
+x 0 NULL zero NULL 0 NULL 0
+x NULL NULL null NULL 0 1 -1
+x NULL NULL null NULL 0 2 2
+x NULL NULL null NULL 0 3 -3
+x NULL NULL null NULL 0 2 4
+x NULL NULL null NULL 0 5 -5
+x NULL NULL null NULL 0 5 -5
+x NULL NULL null NULL 0 0 NULL
+x NULL NULL null NULL 0 NULL NULL
+x NULL NULL null NULL 0 NULL 0
+x NULL 0 zero NULL 0 1 -1
+x NULL 0 zero NULL 0 2 2
+x NULL 0 zero NULL 0 3 -3
+x NULL 0 zero NULL 0 2 4
+x NULL 0 zero NULL 0 5 -5
+x NULL 0 zero NULL 0 5 -5
+x NULL 0 zero NULL 0 0 NULL
+x NULL 0 zero NULL 0 NULL NULL
+x NULL 0 zero NULL 0 NULL 0
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL INNER JOIN J2_TBL USING (i)
+----
+x 0 NULL zero NULL
+x 1 4 one -1
+x 2 3 two 2
+x 2 3 two 4
+x 3 2 three -3
+x 5 0 five -5
+x 5 0 five -5
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL JOIN J2_TBL USING (i)
+----
+x 0 NULL zero NULL
+x 1 4 one -1
+x 2 3 two 2
+x 2 3 two 4
+x 3 2 three -3
+x 5 0 five -5
+x 5 0 five -5
+
+query TIITI
+SELECT 'x' AS "xxx", * FROM J1_TBL t1 (a, b, c) JOIN J2_TBL t2 (a, d) USING (a) ORDER BY a, d
+----
+x 0 NULL zero NULL
+x 1 4 one -1
+x 2 3 two 2
+x 2 3 two 4
+x 3 2 three -3
+x 5 0 five -5
+x 5 0 five -5
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL t1 (a, b, c) JOIN J2_TBL t2 (a, b) USING (b) ORDER BY b, t1.a
+----
+x 0 5 five NULL
+x 0 NULL zero NULL
+x 2 3 three 2
+x 4 1 one 2
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL NATURAL JOIN J2_TBL
+----
+x 0 NULL zero NULL
+x 1 4 one -1
+x 2 3 two 2
+x 2 3 two 4
+x 3 2 three -3
+x 5 0 five -5
+x 5 0 five -5
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (a, d)
+----
+x 0 NULL zero NULL
+x 1 4 one -1
+x 2 3 two 2
+x 2 3 two 4
+x 3 2 three -3
+x 5 0 five -5
+x 5 0 five -5
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (d, a)
+----
+x 0 NULL zero NULL
+x 2 3 two 2
+x 4 1 four 2
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL t1 (a, b) NATURAL JOIN J2_TBL t2 (a)
+----
+x 0 NULL zero NULL
+x 1 4 one -1
+x 2 3 two 2
+x 2 3 two 4
+x 3 2 three -3
+x 5 0 five -5
+x 5 0 five -5
+
+query TIITII rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = J2_TBL.i)
+----
+x 0 NULL zero 0 NULL
+x 1 4 one 1 -1
+x 2 3 two 2 2
+x 2 3 two 2 4
+x 3 2 three 3 -3
+x 5 0 five 5 -5
+x 5 0 five 5 -5
+
+query TIITII rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = J2_TBL.k)
+----
+x 0 NULL zero NULL 0
+x 2 3 two 2 2
+x 4 1 four 2 4
+
+query TIITII rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i <= J2_TBL.k)
+----
+x 1 4 one 2 2
+x 2 3 two 2 2
+x 0 NULL zero 2 2
+x 1 4 one 2 4
+x 2 3 two 2 4
+x 3 2 three 2 4
+x 4 1 four 2 4
+x 0 NULL zero 2 4
+x 0 NULL zero NULL 0
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL LEFT OUTER JOIN J2_TBL USING (i) ORDER BY i, k, t
+----
+x 0 NULL zero NULL
+x 1 4 one -1
+x 2 3 two 2
+x 2 3 two 4
+x 3 2 three -3
+x 4 1 four NULL
+x 5 0 five -5
+x 5 0 five -5
+x 6 6 six NULL
+x 7 7 seven NULL
+x 8 8 eight NULL
+x NULL NULL null NULL
+x NULL 0 zero NULL
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL LEFT JOIN J2_TBL USING (i) ORDER BY i, k, t
+----
+x 0 NULL zero NULL
+x 1 4 one -1
+x 2 3 two 2
+x 2 3 two 4
+x 3 2 three -3
+x 4 1 four NULL
+x 5 0 five -5
+x 5 0 five -5
+x 6 6 six NULL
+x 7 7 seven NULL
+x 8 8 eight NULL
+x NULL NULL null NULL
+x NULL 0 zero NULL
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL RIGHT OUTER JOIN J2_TBL USING (i)
+----
+x 0 NULL zero NULL
+x 1 4 one -1
+x 2 3 two 2
+x 2 3 two 4
+x 3 2 three -3
+x 5 0 five -5
+x 5 0 five -5
+x NULL NULL NULL NULL
+x NULL NULL NULL 0
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL RIGHT JOIN J2_TBL USING (i)
+----
+x 0 NULL zero NULL
+x 1 4 one -1
+x 2 3 two 2
+x 2 3 two 4
+x 3 2 three -3
+x 5 0 five -5
+x 5 0 five -5
+x NULL NULL NULL NULL
+x NULL NULL NULL 0
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL FULL OUTER JOIN J2_TBL USING (i) ORDER BY i, k, t
+----
+x 0 NULL zero NULL
+x 1 4 one -1
+x 2 3 two 2
+x 2 3 two 4
+x 3 2 three -3
+x 4 1 four NULL
+x 5 0 five -5
+x 5 0 five -5
+x 6 6 six NULL
+x 7 7 seven NULL
+x 8 8 eight NULL
+x NULL NULL NULL 0
+x NULL NULL null NULL
+x NULL 0 zero NULL
+x NULL NULL NULL NULL
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL FULL JOIN J2_TBL USING (i) ORDER BY i, k, t
+----
+x 0 NULL zero NULL
+x 1 4 one -1
+x 2 3 two 2
+x 2 3 two 4
+x 3 2 three -3
+x 4 1 four NULL
+x 5 0 five -5
+x 5 0 five -5
+x 6 6 six NULL
+x 7 7 seven NULL
+x 8 8 eight NULL
+x NULL NULL NULL 0
+x NULL NULL null NULL
+x NULL 0 zero NULL
+x NULL NULL NULL NULL
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (k = 1)
+----
+
+query TIITI rowsort
+SELECT 'x' AS "xxx", * FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (i = 1)
+----
+x 1 4 one -1
+
+statement ok
+CREATE TABLE t1 (name TEXT, n INTEGER)
+
+statement ok
+CREATE TABLE t2 (name TEXT, n INTEGER)
+
+statement ok
+CREATE TABLE t3 (name TEXT, n INTEGER)
+
+statement ok
+INSERT INTO t1 VALUES ( 'bb', 11 )
+
+statement ok
+INSERT INTO t2 VALUES ( 'bb', 12 )
+
+statement ok
+INSERT INTO t2 VALUES ( 'cc', 22 )
+
+statement ok
+INSERT INTO t2 VALUES ( 'ee', 42 )
+
+statement ok
+INSERT INTO t3 VALUES ( 'bb', 13 )
+
+statement ok
+INSERT INTO t3 VALUES ( 'cc', 23 )
+
+statement ok
+INSERT INTO t3 VALUES ( 'dd', 33 )
+
+query TIII rowsort
+SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name)
+----
+bb 11 12 13
+cc NULL 22 23
+dd NULL NULL 33
+ee NULL 42 NULL
+
+query TII rowsort
+SELECT * FROM (SELECT * FROM t2) as s2 INNER JOIN (SELECT * FROM t3) s3 USING (name)
+----
+bb 12 13
+cc 22 23
+
+query TII rowsort
+SELECT * FROM (SELECT * FROM t2) as s2 LEFT JOIN (SELECT * FROM t3) s3 USING (name)
+----
+bb 12 13
+cc 22 23
+ee 42 NULL
+
+query TII rowsort
+SELECT * FROM (SELECT * FROM t2) as s2 FULL JOIN (SELECT * FROM t3) s3 USING (name)
+----
+bb 12 13
+cc 22 23
+dd NULL 33
+ee 42 NULL
+
+query TIIII rowsort
+SELECT * FROM (SELECT name, n as s2_n, 2 as s2_2 FROM t2) as s2 NATURAL INNER JOIN (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
+----
+bb 12 2 13 3
+cc 22 2 23 3
+
+query TIIII rowsort
+SELECT * FROM (SELECT name, n as s2_n, 2 as s2_2 FROM t2) as s2 NATURAL LEFT JOIN (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
+----
+bb 12 2 13 3
+cc 22 2 23 3
+ee 42 2 NULL NULL
+
+query TIIII rowsort
+SELECT * FROM (SELECT name, n as s2_n, 2 as s2_2 FROM t2) as s2 NATURAL FULL JOIN (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
+----
+bb 12 2 13 3
+cc 22 2 23 3
+dd NULL NULL 33 3
+ee 42 2 NULL NULL
+
+query TIIIIII rowsort
+SELECT * FROM (SELECT name, n as s1_n, 1 as s1_1 FROM t1) as s1 NATURAL INNER JOIN (SELECT name, n as s2_n, 2 as s2_2 FROM t2) as s2 NATURAL INNER JOIN (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
+----
+bb 11 1 12 2 13 3
+
+query TIIIIII rowsort
+SELECT * FROM (SELECT name, n as s1_n, 1 as s1_1 FROM t1) as s1 NATURAL FULL JOIN (SELECT name, n as s2_n, 2 as s2_2 FROM t2) as s2 NATURAL FULL JOIN (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
+----
+bb 11 1 12 2 13 3
+cc NULL NULL 22 2 23 3
+dd NULL NULL NULL NULL 33 3
+ee NULL NULL 42 2 NULL NULL
+
+query TIII rowsort
+SELECT * FROM (SELECT name, n as s1_n FROM t1) as s1 NATURAL FULL JOIN (SELECT * FROM (SELECT name, n as s2_n FROM t2) as s2 NATURAL FULL JOIN (SELECT name, n as s3_n FROM t3) as s3 ) ss2
+----
+bb 11 12 13
+cc NULL 22 23
+dd NULL NULL 33
+ee NULL 42 NULL
+
+query TIIII rowsort
+SELECT * FROM (SELECT name, n as s1_n FROM t1) as s1 NATURAL FULL JOIN (SELECT * FROM (SELECT name, n as s2_n, 2 as s2_2 FROM t2) as s2 NATURAL FULL JOIN (SELECT name, n as s3_n FROM t3) as s3 ) ss2
+----
+bb 11 12 2 13
+cc NULL 22 2 23
+dd NULL NULL NULL 33
+ee NULL 42 2 NULL
+
+statement ok
+create table xt (x1 int, x2 int)
+
+statement ok
+insert into xt values (1,11)
+
+statement ok
+insert into xt values (2,22)
+
+statement ok
+insert into xt values (3,null)
+
+statement ok
+insert into xt values (4,44)
+
+statement ok
+insert into xt values (5,null)
+
+statement ok
+create table yt (y1 int, y2 int)
+
+statement ok
+insert into yt values (1,111)
+
+statement ok
+insert into yt values (2,222)
+
+statement ok
+insert into yt values (3,333)
+
+statement ok
+insert into yt values (4,null)
+
+statement ok
+select * from xt left join yt on (x1 = y1 and x2 is not null)
+
+statement ok
+select * from xt left join yt on (x1 = y1 and y2 is not null)
+
+statement ok
+select * from (xt left join yt on (x1 = y1)) left join xt xx(xx1,xx2) on (x1 = xx1)
+
+statement ok
+select * from (xt left join yt on (x1 = y1)) left join xt xx(xx1,xx2) on (x1 = xx1 and x2 is not null)
+
+statement ok
+select * from (xt left join yt on (x1 = y1)) left join xt xx(xx1,xx2) on (x1 = xx1 and y2 is not null)
+
+statement ok
+select * from (xt left join yt on (x1 = y1)) left join xt xx(xx1,xx2) on (x1 = xx1 and xx2 is not null)
+
+statement ok
+select * from (xt left join yt on (x1 = y1)) left join xt xx(xx1,xx2) on (x1 = xx1) where (x2 is not null)
+
+statement ok
+select * from (xt left join yt on (x1 = y1)) left join xt xx(xx1,xx2) on (x1 = xx1) where (y2 is not null)
+
+statement ok
+select * from (xt left join yt on (x1 = y1)) left join xt xx(xx1,xx2) on (x1 = xx1) where (xx2 is not null)
+
+statement ok
+DROP TABLE t1
+
+statement ok
+DROP TABLE t2
+
+statement ok
+DROP TABLE t3
+
+statement ok
+DROP TABLE xt
+
+statement ok
+DROP TABLE yt
+
+statement ok
+DROP TABLE J1_TBL
+
+statement ok
+DROP TABLE J2_TBL

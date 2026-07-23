@@ -1,0 +1,246 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+import {
+  util,
+  TimeWindow,
+  TimeScale,
+  findClosestTimeScale,
+  defaultTimeScaleOptions,
+  useClusterSettings,
+} from "@cockroachlabs/cluster-ui";
+import { History } from "history";
+import isNil from "lodash/isNil";
+import isObject from "lodash/isObject";
+import map from "lodash/map";
+import Long from "long";
+import moment from "moment-timezone";
+import React, { useMemo } from "react";
+import { useSelector } from "react-redux";
+
+import { useMetrics } from "src/hooks/useMetrics";
+import { PayloadAction } from "src/interfaces/action";
+import * as protos from "src/js/protos";
+import { adjustTimeScale, selectMetricsTime } from "src/redux/timeScale";
+import { findChildrenOfType } from "src/util/find";
+import {
+  Metric,
+  MetricProps,
+  MetricsDataComponentProps,
+} from "src/views/shared/components/metricQuery";
+
+/**
+ * queryFromProps is a helper method which generates a TimeSeries Query data
+ * structure based on a MetricProps object.
+ */
+function queryFromProps(
+  metricProps: MetricProps,
+  graphProps: MetricsDataComponentProps,
+): protos.cockroach.ts.tspb.IQuery {
+  let derivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE;
+  let sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM;
+  let downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX;
+
+  // Compute derivative function.
+  if (!isNil(metricProps.derivative)) {
+    derivative = metricProps.derivative;
+  } else if (metricProps.rate) {
+    derivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.DERIVATIVE;
+  } else if (metricProps.nonNegativeRate) {
+    derivative =
+      protos.cockroach.ts.tspb.TimeSeriesQueryDerivative
+        .NON_NEGATIVE_DERIVATIVE;
+  }
+  // Compute downsample function.
+  if (!isNil(metricProps.downsampler)) {
+    downsampler = metricProps.downsampler;
+  } else if (metricProps.downsampleMax) {
+    downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX;
+  } else if (metricProps.downsampleMin) {
+    downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MIN;
+  }
+  // Compute aggregation function.
+  if (!isNil(metricProps.aggregator)) {
+    sourceAggregator = metricProps.aggregator;
+  } else if (metricProps.aggregateMax) {
+    sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX;
+  } else if (metricProps.aggregateMin) {
+    sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MIN;
+  } else if (metricProps.aggregateAvg) {
+    sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG;
+  }
+  const tenantSource =
+    metricProps.tenantSource || graphProps.tenantSource || undefined;
+  return {
+    name: metricProps.name,
+    sources: metricProps.sources || graphProps.sources || undefined,
+    tenant_id: tenantSource ? { id: Long.fromString(tenantSource) } : undefined,
+    downsampler: downsampler,
+    source_aggregator: sourceAggregator,
+    derivative: derivative,
+  };
+}
+
+/**
+ * MetricsDataProviderProps are the properties provided explicitly to a
+ * MetricsDataProvider object via React (i.e. setting an attribute in JSX).
+ */
+interface MetricsDataProviderProps {
+  // id is no longer used internally (the Redux metrics store key was removed
+  // when switching to SWR). Kept optional for backwards compatibility with
+  // existing call sites; can be removed in a follow-up cleanup.
+  id?: string;
+  // If current is true, uses the current time instead of the global timewindow.
+  current?: boolean;
+  children?: React.ReactElement<{}>;
+  adjustTimeScaleOnChange?: (
+    curTimeScale: TimeScale,
+    timeWindow: TimeWindow,
+  ) => TimeScale;
+  setMetricsFixedWindow?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
+  setTimeScale?: (ts: TimeScale) => PayloadAction<TimeScale>;
+  history?: History;
+}
+
+const currentTimeInfo = () => {
+  let now = moment();
+  // Round to the nearest 10 seconds. There are 10000 ms in 10 s.
+  now = moment(Math.floor(now.valueOf() / 10000) * 10000);
+  return {
+    start: Long.fromNumber(
+      util.MilliToNano(now.clone().subtract(30, "s").valueOf()),
+    ),
+    end: Long.fromNumber(util.MilliToNano(now.valueOf())),
+    sampleDuration: Long.fromNumber(
+      util.MilliToNano(moment.duration(10, "s").asMilliseconds()),
+    ),
+  };
+};
+
+/**
+ * MetricsDataProvider is a container which manages query data for a renderable
+ * component. For example, MetricsDataProvider may contain a "LineGraph"
+ * component; the metric set becomes responsible for querying the server
+ * required by that LineGraph.
+ *
+ * <MetricsDataProvider>
+ *  <LineGraph data="[]">
+ *    <Axis label="Series X over time.">
+ *      <Metric title="" name="series.x" sources="node.1" />
+ *    </Axis>
+ *  </LineGraph>
+ * </MetricsDataProvider>;
+ *
+ * Additionally, each MetricsDataProvider has a single, externally set TimeSpan
+ * property, that determines the window over which time series should be
+ * queried. This property is also currently intended to be set via react-redux.
+ */
+function MetricsDataProvider({
+  current: isCurrent,
+  children,
+  adjustTimeScaleOnChange,
+  setMetricsFixedWindow,
+  setTimeScale,
+  history,
+}: MetricsDataProviderProps): React.ReactElement {
+  const { settingValues } = useClusterSettings({
+    names: [
+      "timeseries.storage.resolution_10s.ttl",
+      "timeseries.storage.resolution_30m.ttl",
+    ],
+  });
+  const sTTLValue =
+    settingValues["timeseries.storage.resolution_10s.ttl"]?.value;
+  const sTTL = sTTLValue
+    ? util.durationFromISO8601String(sTTLValue)
+    : undefined;
+  const mTTLValue =
+    settingValues["timeseries.storage.resolution_30m.ttl"]?.value;
+  const mTTL = mTTLValue
+    ? util.durationFromISO8601String(mTTLValue)
+    : undefined;
+
+  const metricsTime = useSelector(selectMetricsTime);
+
+  const timeInfo = useMemo(() => {
+    if (isCurrent) {
+      return currentTimeInfo();
+    }
+    if (!isObject(metricsTime.currentWindow)) {
+      return null;
+    }
+    const { start: startMoment, end: endMoment } = metricsTime.currentWindow;
+    const start = startMoment.valueOf();
+    const end = endMoment.valueOf();
+    const syncedScale = findClosestTimeScale(
+      defaultTimeScaleOptions,
+      util.MilliToSeconds(end - start),
+    );
+    const adjusted = adjustTimeScale(
+      { ...syncedScale, fixedWindowEnd: false },
+      { start: startMoment, end: endMoment },
+      sTTL,
+      mTTL,
+    );
+
+    return {
+      start: Long.fromNumber(util.MilliToNano(start)),
+      end: Long.fromNumber(util.MilliToNano(end)),
+      sampleDuration: Long.fromNumber(
+        util.MilliToNano(adjusted.timeScale.sampleSize.asMilliseconds()),
+      ),
+    };
+  }, [isCurrent, metricsTime, sTTL, mTTL]);
+
+  // MetricsDataProvider should contain only one direct child.
+  const child = React.Children.only(children);
+
+  // Compute the time series queries from child Metric components.
+  const queries = useMemo(() => {
+    const selectors: React.ReactElement<MetricProps>[] = findChildrenOfType(
+      children,
+      Metric,
+    );
+    return map(selectors, s =>
+      queryFromProps(
+        s.props,
+        (child as React.ReactElement<MetricsDataComponentProps>).props,
+      ),
+    );
+  }, [children, child]);
+
+  // Build the request message from timeInfo and queries.
+  const requestMsg = useMemo(() => {
+    if (!timeInfo || queries.length === 0) {
+      return undefined;
+    }
+    return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
+      start_nanos: timeInfo.start,
+      end_nanos: timeInfo.end,
+      sample_nanos: timeInfo.sampleDuration,
+      queries,
+    });
+  }, [timeInfo, queries]);
+
+  // Fetch metrics data via SWR with request batching. Multiple
+  // MetricsDataProviders rendering in the same cycle have their
+  // requests coalesced into a single API call.
+  const { data } = useMetrics(requestMsg);
+
+  const dataProps: MetricsDataComponentProps = {
+    data,
+    timeInfo,
+    setMetricsFixedWindow,
+    setTimeScale,
+    history,
+    adjustTimeScaleOnChange,
+  };
+  return React.cloneElement(
+    child as React.ReactElement<MetricsDataComponentProps>,
+    dataProps,
+  );
+}
+
+export { MetricsDataProvider };

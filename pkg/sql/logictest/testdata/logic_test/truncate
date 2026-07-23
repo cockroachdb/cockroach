@@ -1,0 +1,267 @@
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+query II rowsort
+SELECT * FROM kv
+----
+1 2
+3 4
+5 6
+7 8
+
+statement ok
+CREATE VIEW kview AS SELECT k,v FROM kv
+
+query II rowsort
+SELECT * FROM kview
+----
+1 2
+3 4
+5 6
+7 8
+
+statement error "kview" is not a table
+TRUNCATE TABLE kview
+
+query II rowsort
+SELECT * FROM kview
+----
+1 2
+3 4
+5 6
+7 8
+
+statement ok
+TRUNCATE TABLE kv
+
+query II
+SELECT * FROM kv
+----
+
+query II
+SELECT * FROM kview
+----
+
+query T retry
+SELECT status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'
+----
+running
+
+# Ensure that TRUNCATE works with a self referential FK.
+statement ok
+CREATE TABLE selfref (
+  y INT PRIMARY KEY,
+  Z INT REFERENCES selfref (y)
+)
+
+statement ok
+TRUNCATE table selfref
+
+statement ok
+INSERT INTO selfref VALUES (1, NULL);
+
+statement ok
+DROP TABLE selfref
+
+subtest truncate_29010
+
+statement ok
+CREATE SEQUENCE foo;
+
+statement ok
+CREATE TABLE bar (
+  id INT NOT NULL DEFAULT nextval('foo':::STRING),
+  description STRING NULL,
+  CONSTRAINT "primary" PRIMARY KEY (id ASC),
+  FAMILY "primary" (id, description)
+);
+
+statement ok
+TRUNCATE bar
+
+statement ok
+DROP TABLE bar;
+
+subtest index_dependencies
+
+statement ok
+CREATE TABLE t0(c0 INT UNIQUE CHECK(true));
+
+statement ok
+INSERT INTO t0 VALUES (0),(1),(2);
+
+# Create two dependencies on the index. One from a view and one from a
+# function.
+statement ok
+CREATE VIEW v0 AS SELECT c0 FROM t0 @{FORCE_INDEX = t0_c0_key};
+
+statement ok
+create function get_min_t0() RETURNS INT LANGUAGE SQL AS $$ SELECT c0 FROM t0@t0_c0_key ORDER BY c0 LIMIT 1; $$;
+
+query I
+SELECT * FROM v0 ORDER BY c0;
+----
+0
+1
+2
+
+query I
+SELECT get_min_t0();
+----
+0
+
+statement ok
+ALTER TABLE t0 SET (schema_locked=false)
+
+# Fallback to legacy schema changer due to references.
+statement ok
+TRUNCATE TABLE t0;
+
+statement ok
+ALTER TABLE t0 RESET (schema_locked)
+
+query I
+SELECT * FROM v0 ORDER BY c0;
+----
+
+query I
+SELECT get_min_t0();
+----
+NULL
+
+# Ensure the index dependency was copied over.
+statement error pq: index "t0_c0_key" is in use as unique constraint.*
+DROP INDEX t0@t0_c0_key;
+
+statement ok
+DROP INDEX t0@t0_c0_key CASCADE;
+
+# Ensure the cascade got rid of the view
+statement error pq: relation "v0" does not exist
+SELECT * FROM v0;
+
+# Ensure the cascade got rid of the function
+statement error pq: unknown function: get_min_t0()
+SELECT get_min_t0();
+
+statement ok
+DROP TABLE t0;
+
+subtest truncate_30547
+
+statement ok
+CREATE TABLE tt AS SELECT 'foo'
+
+statement ok
+SET vectorize=on
+
+query T
+EXPLAIN TRUNCATE TABLE tt
+----
+distribution: local
+·
+• truncate
+
+statement ok
+RESET vectorize
+
+# Verify that EXPLAIN did not cause the truncate to be performed.
+query T
+SELECT * FROM tt
+----
+foo
+
+# Tests for comments getting moved during truncate.
+subtest comments
+
+statement ok
+CREATE TABLE t (
+  x INT,
+  y INT,
+  z INT,
+  INDEX i1 (x),
+  INDEX i2 (y),
+  INDEX i3 (z)
+);
+COMMENT ON COLUMN t.x IS '''hi''); DROP TABLE t;';
+COMMENT ON COLUMN t.z IS 'comm"en"t2';
+COMMENT ON INDEX t@i2 IS 'comm''ent3';
+
+statement ok
+TRUNCATE t
+
+query TT
+SELECT column_name, comment FROM [SHOW COLUMNS FROM t WITH COMMENT] ORDER BY column_name
+----
+rowid  NULL
+x      'hi'); DROP TABLE t;
+y      NULL
+z      comm"en"t2
+
+
+query TT rowsort
+SELECT distinct(index_name), comment FROM [SHOW INDEXES FROM t WITH COMMENT]
+----
+t_pkey  NULL
+i1      NULL
+i2      comm'ent3
+i3      NULL
+
+# Ensure that truncate comment reasignment works when index and column IDs
+# don't all start from 1.
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (x INT, y INT, z INT);
+
+statement ok
+ALTER TABLE t DROP COLUMN y;
+
+statement ok
+ALTER TABLE t ADD COLUMN y INT;
+
+statement ok
+ALTER TABLE t DROP COLUMN y;
+
+statement ok
+ALTER TABLE t ADD COLUMN y INT;
+
+statement ok
+CREATE INDEX i ON t (x);
+
+statement ok
+DROP INDEX t@i;
+
+statement ok
+CREATE INDEX i ON t (x);
+
+statement ok
+DROP INDEX t@i;
+
+statement ok
+CREATE INDEX i ON t (x);
+
+statement ok
+COMMENT ON COLUMN t.y IS 'hello1';
+COMMENT ON INDEX t@i IS 'hello2'
+
+query TT rowsort
+SELECT column_name, comment FROM [SHOW COLUMNS FROM t WITH COMMENT]
+----
+rowid  NULL
+x      NULL
+y      hello1
+z      NULL
+
+query TT rowsort
+SELECT distinct(index_name), comment FROM [SHOW INDEXES FROM t WITH COMMENT]
+----
+t_pkey  NULL
+i       hello2

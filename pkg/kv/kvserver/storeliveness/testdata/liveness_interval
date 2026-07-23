@@ -1,0 +1,71 @@
+# -------------------------------------------------------------
+# In this test a store (n1, s1) requests support with different
+# values for the support duration.
+# -------------------------------------------------------------
+
+support-from node-id=2 store-id=2
+----
+epoch: 0, expiration: 0,0
+
+# -------------------------------------------------------------
+# Store (n1, s1) requests and receives support with
+# support-duration=10s.
+# -------------------------------------------------------------
+
+send-heartbeats now=100 support-duration=10s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:110.000000000,0}
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=1 expiration=110
+----
+
+support-from node-id=2 store-id=2
+----
+epoch: 1, expiration: 110.000000000,0
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) requests support with support-duration=20s
+# and successfully extends support from (n2, s2).
+# -------------------------------------------------------------
+
+send-heartbeats now=101 support-duration=20s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:121.000000000,0}
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=1 expiration=121
+----
+
+support-from node-id=2 store-id=2
+----
+epoch: 1, expiration: 121.000000000,0
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) requests support with support-duration=5s.
+# The support expiration does not regress.
+# -------------------------------------------------------------
+
+send-heartbeats now=102 support-duration=5s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:121.000000000,0}
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=1 expiration=121
+----
+
+support-from node-id=2 store-id=2
+----
+epoch: 1, expiration: 121.000000000,0
+
+debug-metrics
+----
+HeartbeatSuccess: 3, HeartbeatFailure: 0
+MessageHandleSuccess: 3, MessageHandleFailure: 0
+SupportWithdrawSuccess: 0, SupportWithdrawFailure: 0
+SupportFromStores: 1, SupportForStores: 0

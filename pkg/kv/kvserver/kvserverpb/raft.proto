@@ -1,0 +1,436 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.kvserverpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb";
+
+import "errorspb/errors.proto";
+import "kv/kvpb/errors.proto";
+import "roachpb/metadata.proto";
+import "kv/kvserver/liveness/livenesspb/liveness.proto";
+import "kv/kvserver/kvserverpb/state.proto";
+import "kv/kvserver/kvflowcontrol/kvflowcontrolpb/kvflowcontrol.proto";
+import "raft/raftpb/raft.proto";
+import "util/hlc/timestamp.proto";
+import "util/tracing/tracingpb/recorded_span.proto";
+import "gogoproto/gogo.proto";
+
+// RaftHeartbeat is a request that contains the barebones information for a
+// raftpb.MsgHeartbeat raftpb.Message. RaftHeartbeats are coalesced and sent
+// in a RaftMessageRequest, and reconstructed by the receiver into individual
+// raftpb.Message protos.
+message RaftHeartbeat {
+  uint64 range_id = 1 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  uint32 from_replica_id = 2 [(gogoproto.customname) = "FromReplicaID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+  uint32 to_replica_id = 3 [(gogoproto.customname) = "ToReplicaID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+  uint64 term = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftTerm"];
+  uint64 commit = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
+  bool quiesce = 6;
+  reserved 7;
+  repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
+  // This field helps migrate in the lagging_followers_on_quiesce field. For
+  // messages sent by versions of Cockroach that do not know about the
+  // lagging_followers_on_quiesce field (i.e. v20.1), we need to assume that all
+  // replicas are lagging, not that none of them are.
+  //
+  // TODO(nvanbenschoten): Migration path:
+  // v20.2: Add this field. Always set to true when quiesce == true.
+  //        Consult field on receiver. Consider all replicas "lagging"
+  //        if not set to true on liveness change.
+  // v22.1: Keep sending. Stop consulting.
+  // v22.2: Remove field.
+  bool lagging_followers_on_quiesce_accurate = 10;
+}
+
+// The traced entry from the leader along with the trace and span ID.
+message TracedEntry {
+  uint64 index = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
+  uint64 trace_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
+  uint64 span_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "SpanID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.SpanID"];
+}
+
+// RaftMessageRequest is the request used to send raft messages using our
+// protobuf-based RPC codec. If a RaftMessageRequest has a non-empty number of
+// heartbeats or heartbeat_resps, the contents of the message field is treated
+// as a dummy message and discarded. A coalesced heartbeat request's replica
+// descriptor's range ID must be zero.
+message RaftMessageRequest {
+  uint64 range_id = 1 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // Optionally, the start key of the sending replica. This is only populated
+  // as a "hint" under certain conditions.
+  bytes range_start_key = 8 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+
+  roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
+  roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
+
+  raftpb.Message message = 4 [(gogoproto.nullable) = false];
+
+  // Is this a quiesce request? A quiesce request is a MsgHeartbeat
+  // which is requesting the recipient to stop ticking its local
+  // replica as long as the current Raft state matches the heartbeat
+  // Term/Commit. If the Term/Commit match, the recipient is marked as
+  // quiescent. If they don't match, the message is passed along to
+  // Raft which will generate a MsgHeartbeatResp that will unquiesce
+  // the sender.
+  bool quiesce = 5;
+  // If quiesce is true, this set contains liveness information about
+  // the replicas that were dead when the leader decided to quiesce and
+  // were lagging behind the quiescence log index (meaning they would
+  // have prevented quiescence had they been alive). If any replica
+  // (leader or follower) becomes aware that a replica in this set has
+  // become live, it should unquiesce the range so that the replica can
+  // be caught back up.
+  repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 9 [(gogoproto.nullable) = false];
+
+  // A coalesced heartbeat request is any RaftMessageRequest with a nonzero number of
+  // heartbeats or heartbeat_resps.
+  repeated RaftHeartbeat heartbeats = 6 [(gogoproto.nullable) = false];
+  repeated RaftHeartbeat heartbeat_resps = 7 [(gogoproto.nullable) = false];
+
+  // LowPriorityOverride is set only if Message is a MsgApp. When true, it
+  // specifies that the priority of the Entries in the Message that are
+  // subject to replication admission control are overridden to be
+  // raftpb.LowPri.
+  bool low_priority_override = 13;
+  // AdmittedState annotates a MsgAppResp message with a vector of admitted log
+  // indices. Used only with RACv2.
+  kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedState admitted_state = 14 [(gogoproto.nullable) = false];
+
+  // TracedEntry is a mapping from Raft index to trace and span ids for this
+  // request. They are set by the leaseholder and begin tracing on all
+  // replicas. Currently, traces are not returned to the leaseholder, but
+  // instead logged to a local log file.
+  repeated TracedEntry traced_entries = 15 [(gogoproto.nullable) = false];
+
+  reserved 10, 11, 12;
+}
+
+message RaftMessageRequestBatch {
+  repeated RaftMessageRequest requests = 1 [(gogoproto.nullable) = false];
+
+  // now is a clock reading from the sender of the batch. It must be used by
+  // the receiver to update its local HLC, which provides causality tracking.
+  //
+  // One way in which this is used is to update the clock of a raft candidate
+  // to the clock of all followers that have voted for it, which is used to
+  // provide a disjointness guarantee to leader leases.
+  util.hlc.Timestamp now = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // AdmittedStates contains admitted vector messages addressed to replicas
+  // located on the receiver node of this batch.
+  repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.PiggybackedAdmittedState admitted_states = 4 [(gogoproto.nullable) = false];
+
+  reserved 2;
+}
+
+message RaftMessageResponseUnion {
+  option (gogoproto.onlyone) = true;
+
+  kv.kvpb.Error error = 1;
+}
+
+// RaftMessageResponse may be sent to the sender of a
+// RaftMessageRequest. RaftMessage does not use the usual
+// request/response pattern; it is primarily modeled as a one-way
+// stream of requests. Normal 'responses' are usually sent as new
+// requests on a separate stream in the other direction.
+// RaftMessageResponse is not sent for every RaftMessageRequest, but
+// may be used for certain error conditions.
+message RaftMessageResponse {
+  uint64 range_id = 1 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+
+  roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
+  roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
+
+  RaftMessageResponseUnion union = 4 [(gogoproto.nullable) = false];
+}
+
+// SnapshotRequest is the request used to send streaming snapshot requests.
+message SnapshotRequest {
+  // QueueName indicates the source of the snapshot. Snapshots are prioritized
+  // within a queue and round-robin selected between queues for both the sending
+  // and receiving side.
+  enum QueueName {
+    OTHER = 0;
+    REPLICATE_QUEUE = 1;
+    RAFT_SNAPSHOT_QUEUE = 2;
+  }
+
+  message Header {
+    // The replica state at the time the snapshot was generated. Note
+    // that ReplicaState.Desc differs from the above range_descriptor
+    // field which holds the updated descriptor after the new replica
+    // has been added while ReplicaState.Desc holds the descriptor
+    // before the new replica has been added.
+    storagepb.ReplicaState state = 5 [(gogoproto.nullable) = false];
+
+    // The inner raft message is of type MsgSnap, and its snapshot data contains a UUID.
+    RaftMessageRequest raft_message_request = 2 [(gogoproto.nullable) = false];
+
+    // The estimated size of the range, to be used in reservation decisions.
+    int64 range_size = 3;
+
+    // The sending queue's name, to be utilized to ensure fairness across
+    // different snapshot sending sources. The default queue name, OTHER, is
+    // reserved for any uncategorized and unprioritized snapshots, and requests
+    // with sender queue name OTHER may not specify a non-zero
+    // sender_queue_priority.  To prioritize snapshots categorized as OTHER,
+    // first move them to a different queue name.
+    SnapshotRequest.QueueName sender_queue_name = 10;
+
+    // The sending queue's priority, to be utilized to prioritize snapshots
+    // from a particular sending source.
+    double sender_queue_priority = 11;
+
+    // If true, the snapshot could contain shared files present in a pre-configured
+    // or explicitly specified shared.Storage instance. Such files will have their
+    // metadata present in the snapshot, but not file contents.
+    bool shared_replicate = 12;
+
+    // If true, the snapshot could contain external files. Such files
+    // will have their metadata present in the snapshot but not the
+    // file contents.
+    bool external_replicate = 13;
+
+    reserved 1, 4, 6, 7, 8, 9, 14;
+  }
+
+  // SharedTable represents one shared SSTable present in shared storage.
+  // Intended to be the protobuf version of pebble.SharedSSTMeta.
+  message SharedTable {
+    // Internal key represents a Pebble-internal key. See pebble.InternalKey
+    // for details on how these keys are used.
+    message InternalKey {
+      // User key portion of the internal key.
+      bytes user_key = 1;
+      // Trailer portion of the internal key, as defined by Pebble.
+      uint64 trailer = 2;
+    }
+
+    // Used by the Pebble objstorage package to resolve a reference to a shared object.
+    bytes backing = 1;
+
+    // Used by the Pebble objstorage package to generate new blob storage drivers.
+    // Reserved for future use.
+    bytes locator = 2;
+
+    // Smallest internal key in the sstable.
+    InternalKey smallest = 3;
+    // Largest internal key in the sstable.
+    InternalKey largest = 4;
+    // Smallest range key in the sstable. Zero value if no range keys are
+    // present.
+    InternalKey smallest_range_key = 5;
+    // Largest range key in the sstable. Zero value if no range keys are
+    // present.
+    InternalKey largest_range_key = 6;
+    // Smallest point key in the sstable. Zero value if no point keys are
+    // present.
+    InternalKey smallest_point_key = 7;
+    // Largest point key in the sstable. Zero value if no point keys are
+    // present.
+    InternalKey largest_point_key = 8;
+
+    // LSM level of the original sstable. This sstable will go into the same
+    // level in the destination LSM.
+    int32 level = 9;
+    // Physical size of the sstable in bytes.
+    uint64 size = 10;
+  }
+
+  // ExternalTable represents one SSTable present in external storage.
+  // Intended to be the protobuf version of pebble.ExternalFile.
+  message ExternalTable {
+    // Used by the Pebble objstorage package to generate new blob storage drivers.
+    // Reserved for future use.
+    bytes locator = 1;
+
+    // ObjName is the unique name of this sstable on Locator.
+    string object_name = 2;
+
+    // Physical size of the sstable in bytes.
+    uint64 size = 3;
+
+    // StartKey is the loose, inclusive start key of the sstable.
+    bytes StartKey = 4;
+    // EndKey is the loose, end key of the sstable. Whether it is
+    // inclusive or exclusive is controlled by EndKeyIsInclusive.
+    bytes EndKey = 5;
+
+    // EndKeyIsInclusive is true if the EndKey is inclusive.
+    bool EndKeyIsInclusive = 6;
+
+    // HasPointKey denote whether this file contains point keys.
+    bool has_point_key = 7;
+
+    // HasRangeKey denote whether this file contains range keys.
+    bool has_range_key = 8;
+
+    // SyntheticPrefix will prepend this suffix to all keys in the file during
+    // iteration. Note that the backing file itself is not modified.
+    bytes synthetic_prefix = 9;
+
+    // SyntheticSuffix will replace the suffix of every key in the file during
+    // iteration. Note that the file itself is not modified, rather, every key
+    // returned by an iterator will have the synthetic suffix.
+    //
+    // SyntheticSuffix can only be used under the following conditions:
+    //  - the synthetic suffix must sort before any non-empty suffixes in the
+    //    backing sst (the entire sst, not just the part restricted to Bounds).
+    //  - the backing sst must not contain multiple keys with the same prefix.
+    bytes synthetic_suffix = 10;
+
+    // LSM level of the original sstable. This sstable will go into the same
+    // level in the destination LSM.
+    int32 level = 11;
+
+  }
+
+  Header header = 1;
+
+  // A BatchRepr. Multiple kv_batches may be sent across multiple request messages.
+  bytes kv_batch = 2 [(gogoproto.customname) = "KVBatch"];
+
+  bool final = 4;
+
+  repeated SharedTable shared_tables = 5 [(gogoproto.nullable) = false];
+
+  // If true, signals the receiver that the sender can no longer replicate
+  // using shared files, even though the Header initially contained
+  // shared_replicate = true. All contents of this range will be streamed as
+  // usual beyond this point. This bool must be set to true in a request before
+  // the end of the snapshot (i.e. before the final = true request), and this
+  // flag must be set to true before any user keys are streamed.
+  bool transition_from_shared_to_regular_replicate = 6;
+
+  repeated ExternalTable external_tables = 7 [(gogoproto.nullable) = false];
+
+  reserved 3;
+}
+
+message SnapshotResponse {
+  enum Status {
+    UNKNOWN = 0;
+    ACCEPTED = 1;
+    APPLIED = 2;
+    ERROR = 3;
+    reserved 4;
+  }
+  Status status = 1;
+  // Message is a message explaining an ERROR return value. It is not set for any
+  // other status.
+  //
+  // As of 23.1, the encoded_error field is always used instead. 23.1 itself
+  // needs to populate both due to needing to be compatible with 22.2. Once
+  // the MinSupportedVersion is 23.1, this can be removed.
+  string deprecated_message = 2;
+  reserved 3;
+
+  // Traces from snapshot processing, returned on status APPLIED or ERROR.
+  repeated util.tracing.tracingpb.RecordedSpan collected_spans = 4 [(gogoproto.nullable) = false];
+
+  // encoded_error encodes the error when the status is ERROR.
+  //
+  // MIGRATION: only guaranteed to be set when the message field is no longer there.
+  errorspb.EncodedError encoded_error = 5 [(gogoproto.nullable) = false];
+
+  // msg_app_resp stores an optional MsgAppResp the receiving RawNode may have
+  // generated in response to applying the snapshot. This message will also have
+  // been handed to the raft transport, but it is helpful to step it into the
+  // sender manually to avoid the race described in:
+  //
+  // https://github.com/cockroachdb/cockroach/issues/97971
+  raftpb.Message msg_app_resp = 6;
+}
+
+// TODO(baptist): Extend this if necessary to separate out the request for the throttle.
+message DelegateSnapshotRequest {
+  oneof value {
+    DelegateSendSnapshotRequest send = 1;
+  }
+}
+
+// DelegateSnapshotRequest is the request used to delegate send snapshot requests.
+message DelegateSendSnapshotRequest {
+  uint64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+
+  // The replica that delegates the snapshot request, in most cases the leader/leaseholder.
+  // The snapshot request should originate from the coordinator.
+  roachpb.ReplicaDescriptor coordinator_replica = 2 [(gogoproto.nullable) = false];
+
+  // The replica receiving the snapshot.
+  roachpb.ReplicaDescriptor recipient_replica = 3 [(gogoproto.nullable) = false];
+
+  // The replica selected to act as the snapshot sender.
+  roachpb.ReplicaDescriptor delegated_sender = 4 [(gogoproto.nullable) = false];
+
+  // The Raft term of the coordinator (in most cases the leaseholder) replica.
+  // The term is used during snapshot receiving to reject messages from an older term.
+  uint64 term = 7 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftTerm"];
+
+  // The first index of the Raft log on the coordinator replica.
+  uint64 first_index = 8 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
+
+  // The sending queue's name.
+  SnapshotRequest.QueueName sender_queue_name = 9;
+
+  // The sending queue's priority.
+  double sender_queue_priority = 10;
+
+  // The generation of the leaseholders descriptor.
+  uint64 descriptor_generation = 11 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeGeneration"];
+
+  // Max queue length on the delegate before this request is rejected.
+  int64 queue_on_delegate_len = 12;
+
+  // Id of this snapshot which is maintained from coordinator to receiver.
+  bytes snap_id = 13 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false];
+
+  reserved 5, 6;
+}
+
+message DelegateSnapshotResponse {
+  enum Status {
+    ERROR = 0;
+    APPLIED = 1;
+  }
+
+  Status status = 1;
+  errorspb.EncodedError encoded_error = 2 [(gogoproto.nullable) = false];
+
+  // collected_spans stores trace spans recorded during the execution of this
+  // request.
+  repeated util.tracing.tracingpb.RecordedSpan collected_spans = 3 [(gogoproto.nullable) = false];
+
+  // msg_app_resp stores an optional MsgAppResp the receiving RawNode may have
+  // generated in response to applying the snapshot. This message will also have
+  // been handed to the raft transport, but it is helpful to step it into the
+  // sender manually to avoid the race described in:
+  //
+  // https://github.com/cockroachdb/cockroach/issues/97971
+  raftpb.Message msg_app_resp = 4;
+}
+
+// ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
+message ConfChangeContext {
+  string command_id = 1 [(gogoproto.customname) = "CommandID"];
+
+  // Payload is the application-level command (i.e. an encoded
+  // kvserverpb.RaftCommand).
+  bytes payload = 2;
+}

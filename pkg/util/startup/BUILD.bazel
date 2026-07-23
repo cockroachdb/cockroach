@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "startup",
+    srcs = ["retry.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/startup",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_petermattis_goid//:goid",
+    ],
+)
+
+go_test(
+    name = "startup_test",
+    srcs = [
+        "retry_test.go",
+        "startup_test.go",
+    ],
+    embed = [":startup"],
+    deps = [
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/storage/fs",
+        "//pkg/testutils/listenerutil",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,7 @@
+log
+----
+mybreaker: tripped with error: boom
+mybreaker: breaker reset
+mybreaker: tripped with error: probe error
+mybreaker: now tripped with error: client error (previously: probe error)
+mybreaker: breaker reset

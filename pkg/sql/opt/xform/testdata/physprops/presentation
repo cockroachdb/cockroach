@@ -1,0 +1,86 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+
+exec-ddl
+CREATE TABLE t.b (x INT, y FLOAT)
+----
+
+# Scan operator.
+opt
+SELECT a.y, a.x, a.y y2 FROM a
+----
+scan a
+ ├── columns: y:2 x:1!null y2:2
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# Select operator.
+opt
+SELECT a.y, a.x, a.y y2 FROM a WHERE y=1
+----
+select
+ ├── columns: y:2!null x:1!null y2:2!null
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ ├── scan a
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── y:2 = 1 [outer=(2), fd=()-->(2)]
+
+# Project operator.
+opt
+SELECT 1+a.y AS plus, a.x FROM a
+----
+project
+ ├── columns: plus:5 x:1!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(5)
+ ├── scan a
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      └── y:2 + 1 [as=plus:5, outer=(2), immutable]
+
+# Join operator.
+opt
+SELECT b.x, rowid, a.y, a.x, a.y y2, b.y FROM a, b
+----
+inner-join (cross)
+ ├── columns: x:5 rowid:7!null y:2 x:1!null y2:2 y:6
+ ├── key: (1,7)
+ ├── fd: (1)-->(2), (7)-->(5,6)
+ ├── scan a
+ │    ├── columns: a.x:1!null a.y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan b
+ │    ├── columns: b.x:5 b.y:6 rowid:7!null
+ │    ├── key: (7)
+ │    └── fd: (7)-->(5,6)
+ └── filters (true)
+
+# Groupby operator.
+opt
+SELECT max(y), y, y, x FROM a GROUP BY a.x, a.y
+----
+group-by (streaming)
+ ├── columns: max:5 y:2 y:2 x:1!null
+ ├── grouping columns: x:1!null
+ ├── internal-ordering: +1
+ ├── key: (1)
+ ├── fd: (1)-->(2,5)
+ ├── scan a
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
+ └── aggregations
+      ├── max [as=max:5, outer=(2)]
+      │    └── y:2
+      └── const-agg [as=y:2, outer=(2)]
+           └── y:2

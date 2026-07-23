@@ -1,0 +1,8 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "execreleasable",
+    srcs = ["releasable.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable",
+    visibility = ["//visibility:public"],
+)

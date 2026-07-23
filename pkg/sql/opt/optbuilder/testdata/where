@@ -1,0 +1,206 @@
+# tests adapted from logictest -- where
+
+exec-ddl
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+----
+
+exec-ddl
+CREATE TABLE kvString (
+  k STRING PRIMARY KEY,
+  v STRING
+)
+----
+
+build
+SELECT * FROM kv WHERE k IN (1, 3)
+----
+project
+ ├── columns: k:1!null v:2
+ └── select
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan kv
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── k:1 IN (1, 3)
+
+build
+SELECT * FROM kv WHERE v IN (6)
+----
+project
+ ├── columns: k:1!null v:2!null
+ └── select
+      ├── columns: k:1!null v:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan kv
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── v:2 IN (6,)
+
+build
+SELECT * FROM kv WHERE k IN (SELECT k FROM kv)
+----
+project
+ ├── columns: k:1!null v:2
+ └── select
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan kv
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: k:5!null
+                │    └── scan kv
+                │         └── columns: k:5!null v:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+                └── k:1
+
+build
+SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
+----
+project
+ ├── columns: k:1!null v:2
+ └── select
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan kv
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: column9:9
+                │    ├── project
+                │    │    ├── columns: k:5!null v:6
+                │    │    └── scan kv
+                │    │         └── columns: k:5!null v:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+                │    └── projections
+                │         └── (k:5, v:6) [as=column9:9]
+                └── (k:1, v:2)
+
+build
+SELECT * FROM kv WHERE nonexistent = 1
+----
+error (42703): column "nonexistent" does not exist
+
+build
+SELECT 'hello' LIKE v AS r FROM kvString WHERE k LIKE 'like%' ORDER BY k
+----
+project
+ ├── columns: r:5  [hidden: k:1!null]
+ ├── ordering: +1
+ ├── select
+ │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    ├── ordering: +1
+ │    ├── scan kvstring
+ │    │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    │    └── ordering: +1
+ │    └── filters
+ │         └── k:1 LIKE 'like%'
+ └── projections
+      └── 'hello' LIKE v:2 [as=r:5]
+
+build
+SELECT 'hello' SIMILAR TO v AS r FROM kvString WHERE k SIMILAR TO 'like[1-2]' ORDER BY k
+----
+project
+ ├── columns: r:5  [hidden: k:1!null]
+ ├── ordering: +1
+ ├── select
+ │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    ├── ordering: +1
+ │    ├── scan kvstring
+ │    │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    │    └── ordering: +1
+ │    └── filters
+ │         └── k:1 SIMILAR TO 'like[1-2]'
+ └── projections
+      └── 'hello' SIMILAR TO v:2 [as=r:5]
+
+build
+SELECT 'hello' ~ replace(v, '%', '.*') AS r FROM kvString WHERE k ~ 'like[1-2]' ORDER BY k
+----
+project
+ ├── columns: r:5  [hidden: k:1!null]
+ ├── ordering: +1
+ ├── select
+ │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    ├── ordering: +1
+ │    ├── scan kvstring
+ │    │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    │    └── ordering: +1
+ │    └── filters
+ │         └── k:1 ~ 'like[1-2]'
+ └── projections
+      └── 'hello' ~ replace(v:2, '%', '.*') [as=r:5]
+
+# Test mixed type tuple comparison.
+
+build
+SELECT * FROM kv WHERE k IN (1, 5.0, 9)
+----
+project
+ ├── columns: k:1!null v:2
+ └── select
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan kv
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── k:1 IN (1, 5, 9)
+
+# Regression tests for #22670.
+exec-ddl
+CREATE TABLE ab (a INT, b INT)
+----
+
+build
+SELECT * FROM ab WHERE a IN (1, 3, 4)
+----
+project
+ ├── columns: a:1!null b:2
+ └── select
+      ├── columns: a:1!null b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan ab
+      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── a:1 IN (1, 3, 4)
+
+build
+SELECT * FROM ab WHERE a IN (1, 3, 4, NULL)
+----
+project
+ ├── columns: a:1!null b:2
+ └── select
+      ├── columns: a:1!null b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan ab
+      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── a:1 IN (1, 3, 4, NULL)
+
+build
+SELECT * FROM ab WHERE (a, b) IN ((1, 10), (3, 30), (4, 40))
+----
+project
+ ├── columns: a:1!null b:2!null
+ └── select
+      ├── columns: a:1!null b:2!null rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan ab
+      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── (a:1, b:2) IN ((1, 10), (3, 30), (4, 40))
+
+build
+SELECT * FROM ab WHERE (a, b) IN ((1, 10), (4, NULL), (NULL, 50))
+----
+project
+ ├── columns: a:1!null b:2!null
+ └── select
+      ├── columns: a:1!null b:2!null rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan ab
+      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── (a:1, b:2) IN ((1, 10), (4, NULL), (NULL, 50))
+
+# Where clause must be type bool.
+build
+SELECT * FROM ab WHERE a
+----
+error (42804): argument of WHERE must be type bool, not type int

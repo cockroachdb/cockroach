@@ -1,0 +1,1394 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package cli
+
+import (
+	"archive/zip"
+	"compress/gzip"
+	"encoding/csv"
+	"encoding/gob"
+	"encoding/json"
+	"fmt"
+	"io"
+	"math/rand"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/datadriven"
+	"github.com/klauspost/compress/zstd"
+	"github.com/stretchr/testify/require"
+)
+
+// TestTSDumpUploadE2E tests the end-to-end functionality of uploading a time
+// series dump to Datadog from a user perspective. This runs the tsdump command
+// externally. The datadog API is mocked to capture the request and verify the
+// uploaded data.
+func TestTSDumpUploadE2E(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
+		return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
+	})()
+	defer testutils.TestingHook(&getHostname, func() string {
+		return "hostname"
+	})()
+
+	datadriven.RunTest(t, "testdata/tsdump_upload_e2e", func(t *testing.T, d *datadriven.TestData) string {
+		var buf strings.Builder
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			reader, err := gzip.NewReader(r.Body)
+			require.NoError(t, err)
+			body, err := io.ReadAll(reader)
+			require.NoError(t, err)
+			fmt.Fprintln(&buf, string(body))
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer testutils.TestingHook(&hostNameOverride, server.Listener.Addr().String())()
+		defer server.Close()
+
+		c := NewCLITest(TestCLIParams{})
+		defer c.Cleanup()
+
+		switch d.Cmd {
+		case "upload-datadog":
+			debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
+			debugTimeSeriesDumpOpts.clusterID = "test-cluster-id"
+			debugTimeSeriesDumpOpts.zendeskTicket = "zd-test"
+			debugTimeSeriesDumpOpts.organizationName = "test-org"
+			debugTimeSeriesDumpOpts.userName = "test-user"
+
+			var compression string
+			d.MaybeScanArgs(t, "compression", &compression)
+
+			dumpFilePath := generateMockTSDumpFromCSV(t, d.Input, withCompression(compression))
+			var clusterLabel, apiKey string
+			if d.HasArg("cluster-label") {
+				d.ScanArgs(t, "cluster-label", &clusterLabel)
+			} else {
+				clusterLabel = "test-cluster"
+			}
+			if d.HasArg("api-key") {
+				d.ScanArgs(t, "api-key", &apiKey)
+			} else {
+				apiKey = "dd-api-key"
+			}
+
+			// Run the command
+			_, err := c.RunWithCapture(fmt.Sprintf(
+				`debug tsdump --format=datadog --dd-api-key="%s" --cluster-label="%s" %s`,
+				apiKey, clusterLabel, dumpFilePath,
+			))
+			require.NoError(t, err)
+			return strings.TrimSpace(buf.String())
+
+		default:
+			t.Fatalf("unknown command: %s", d.Cmd)
+			return ""
+		}
+	})
+}
+
+// TestTSDumpPartialUploadE2E tests the end-to-end functionality of generating failed uploads
+// in the file and re-upload the failed requests to Datadog.
+func TestTSDumpPartialUploadE2E(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	uploadTime := randomTimestamp()
+
+	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
+		return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
+	})()
+	defer testutils.TestingHook(&getHostname, func() string {
+		return "hostname"
+	})()
+
+	datadriven.RunTest(t, "testdata/tsdump_partial_upload_e2e", func(t *testing.T, d *datadriven.TestData) string {
+		var buf strings.Builder
+
+		debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
+		debugTimeSeriesDumpOpts.clusterID = "test-cluster-id"
+		debugTimeSeriesDumpOpts.zendeskTicket = "zd-test"
+		debugTimeSeriesDumpOpts.organizationName = "test-org"
+		debugTimeSeriesDumpOpts.userName = "test-user"
+		debugTimeSeriesDumpOpts.ddApiKey = "dd-api-key"
+		uploadID := newTsdumpUploadID(uploadTime)
+		defer testutils.TestingHook(&datadogSeriesThreshold, 1)()
+		defer testutils.TestingHook(&newUploadID, func(cluster string, time time.Time) string {
+			formattedTime := uploadTime.Format("20060102150405")
+			return strings.ToLower(
+				strings.ReplaceAll(
+					fmt.Sprintf("%s-%s", debugTimeSeriesDumpOpts.clusterLabel, formattedTime), " ", "-",
+				),
+			)
+		})()
+
+		c := NewCLITest(TestCLIParams{})
+		defer c.Cleanup()
+
+		switch d.Cmd {
+		case "upload-datadog":
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				reader, err := gzip.NewReader(r.Body)
+				require.NoError(t, err)
+				body, err := io.ReadAll(reader)
+				require.NoError(t, err)
+				if strings.Contains(string(body), "cockroachdb.sql.query.count") {
+					w.WriteHeader(http.StatusConflict)
+					return
+				}
+				fmt.Fprintln(&buf, trimNonDeterministicOutput(string(body), uploadID))
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer testutils.TestingHook(&hostNameOverride, server.Listener.Addr().String())()
+			defer server.Close()
+			dumpFilePath := generateMockTSDumpFromCSV(t, d.Input)
+
+			// Run the command
+			_, err := c.RunWithCapture(fmt.Sprintf(
+				`debug tsdump --format=datadog --dd-api-key="%s" --cluster-label=%s --upload-workers=1 %s`,
+				debugTimeSeriesDumpOpts.ddApiKey, debugTimeSeriesDumpOpts.clusterLabel, dumpFilePath,
+			))
+			require.NoError(t, err)
+
+			inputDir := filepath.Dir(dumpFilePath)
+			failedRequestsBaseName := fmt.Sprintf(failedRequestsFileNameFormat, uploadID)
+			fileContent := readFileContent(t, filepath.Join(inputDir, failedRequestsBaseName), uploadID)
+			fmt.Fprintln(&buf, fileContent)
+
+			return strings.TrimSpace(buf.String())
+
+		case "partial-upload":
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				reader, err := gzip.NewReader(r.Body)
+				require.NoError(t, err)
+				body, err := io.ReadAll(reader)
+				require.NoError(t, err)
+				fmt.Fprintln(&buf, string(body))
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer testutils.TestingHook(&hostNameOverride, server.Listener.Addr().String())()
+			defer server.Close()
+
+			filePath := generateMockJSONFromInput(t, d.Input)
+			_, err := c.RunWithCapture(fmt.Sprintf(
+				`debug tsdump --format=datadog --dd-api-key="%s" --cluster-label=%s --upload-workers=1 --retry-failed-requests %s`,
+				debugTimeSeriesDumpOpts.ddApiKey, debugTimeSeriesDumpOpts.clusterLabel, filePath,
+			))
+			require.NoError(t, err)
+
+			return strings.TrimSpace(buf.String())
+
+		default:
+			t.Fatalf("unknown command: %s", d.Cmd)
+			return ""
+		}
+	})
+}
+
+func randomTimestamp() time.Time {
+	randomTime := rand.Int63n(time.Now().Unix())
+	randomNow := time.Unix(randomTime, 0)
+	return randomNow
+}
+
+// trimNonDeterministicOutput removes the upload ID from the output string.
+func trimNonDeterministicOutput(out, uploadID string) string {
+	re := regexp.MustCompile(uploadID)
+	out = re.ReplaceAllString(out, ``)
+	return out
+}
+
+func readFileContent(t *testing.T, fileName, uploadID string) string {
+	// Read the content of the file
+	content, err := os.ReadFile(fileName)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Remove(fileName), "failed to remove temporary file")
+	})
+	return trimNonDeterministicOutput(string(content), uploadID)
+}
+
+// TestTSDumpUploadWithEmbeddedMetadataDataDriven tests the store-to-node mapping functionality
+// for time series uploads. It verifies that embedded metadata takes precedence over external
+// YAML files and that node_id tags are correctly applied to store metrics.
+func TestTSDumpUploadWithEmbeddedMetadataDataDriven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "Failing Bazel extended CI job. See CRDB-53617")
+	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
+		return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
+	})()
+	defer testutils.TestingHook(&getHostname, func() string {
+		return "hostname"
+	})()
+
+	datadriven.RunTest(t, "testdata/tsdump_upload_embedded_metadata", func(t *testing.T, d *datadriven.TestData) string {
+		var buf strings.Builder
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			reader, err := gzip.NewReader(r.Body)
+			require.NoError(t, err)
+			body, err := io.ReadAll(reader)
+			require.NoError(t, err)
+			fmt.Fprintln(&buf, string(body))
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer testutils.TestingHook(&hostNameOverride, server.Listener.Addr().String())()
+		defer server.Close()
+
+		c := NewCLITest(TestCLIParams{})
+		defer c.Cleanup()
+
+		// Reset and set common debug options to ensure clean state between test cases
+		debugTimeSeriesDumpOpts.storeToNodeMapYAMLFile = ""
+		debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
+		debugTimeSeriesDumpOpts.clusterID = "test-cluster-id"
+		debugTimeSeriesDumpOpts.zendeskTicket = "zd-test"
+		debugTimeSeriesDumpOpts.organizationName = "test-org"
+		debugTimeSeriesDumpOpts.userName = "test-user"
+
+		clusterLabel := "test-cluster"
+		apiKey := "dd-api-key"
+		if d.HasArg("cluster-label") {
+			d.ScanArgs(t, "cluster-label", &clusterLabel)
+		}
+		if d.HasArg("api-key") {
+			d.ScanArgs(t, "api-key", &apiKey)
+		}
+
+		var dumpFilePath string
+		var extraFlag string
+
+		switch d.Cmd {
+		case "upload-datadog-embedded-only":
+			// Embedded metadata only (no YAML file)
+			// This tests that store metrics get proper node_id tags based on embedded store-to-node mapping
+			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input, withEmbeddedMetadata())
+
+		case "upload-datadog-yaml-only":
+			// YAML file only (no embedded metadata)
+			// This tests that store metrics get proper node_id tags from external YAML when no embedded metadata is present
+			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input)
+
+			yamlContent := `1: "1"
+2: "1" 
+3: "2"`
+			yamlFilePath := createTempYAMLFile(t, yamlContent)
+			extraFlag = fmt.Sprintf("--store-to-node-map-file=%s", yamlFilePath)
+
+		case "upload-datadog-embedded-priority":
+			// Both embedded metadata and YAML file (embedded takes priority)
+			// This tests that embedded metadata is prioritized over external YAML when both are present, proving precedence
+			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input, withEmbeddedMetadata())
+
+			yamlContent := `1: "99"
+2: "99" 
+3: "99"`
+			yamlFilePath := createTempYAMLFile(t, yamlContent)
+			extraFlag = fmt.Sprintf("--store-to-node-map-file=%s", yamlFilePath)
+
+		case "upload-datadog-no-mapping":
+			// No metadata and no YAML file (normal upload)
+			// This tests normal upload behavior when no store-to-node mapping is available, store metrics get only store tags
+			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input)
+			// No extraFlag needed - this tests normal upload without any mapping
+
+		case "upload-datadog-with-regions":
+			// Both store-to-node and node-to-region mappings present.
+			regionMap := map[string]string{"1": "region-1", "2": "region-2"}
+			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input,
+				withEmbeddedMetadata(), withNodeToRegionMap(regionMap))
+
+		case "upload-datadog-regions-no-store-map":
+			// Node-to-region mapping only, no store-to-node mapping.
+			// Store metrics cannot resolve a node ID so they get no region tag.
+			regionMap := map[string]string{"1": "region-1", "2": "region-2"}
+			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input,
+				withNodeToRegionMap(regionMap))
+
+		case "upload-datadog-partial-region-coverage":
+			// Only some nodes have a region entry; others should be omitted.
+			partialRegionMap := map[string]string{"1": "region-1"}
+			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input,
+				withEmbeddedMetadata(), withNodeToRegionMap(partialRegionMap))
+
+		default:
+			t.Fatalf("unknown command: %s", d.Cmd)
+			return ""
+		}
+
+		cmdArgs := fmt.Sprintf(
+			`debug tsdump --format=datadog --dd-api-key="%s" --cluster-label="%s"`,
+			apiKey, clusterLabel,
+		)
+		if extraFlag != "" {
+			cmdArgs += " " + extraFlag
+		}
+		cmdArgs += " " + dumpFilePath
+
+		_, err := c.RunWithCapture(cmdArgs)
+		require.NoError(t, err)
+		return strings.TrimSpace(buf.String())
+	})
+}
+
+// mockTSDumpOption represents a functional option for configuring tsdump generation.
+type mockTSDumpOption func(*mockTSDumpConfig)
+
+type mockTSDumpConfig struct {
+	compression string
+	metadata    *tsdumpmeta.Metadata
+}
+
+// withCompression sets the compression format for the tsdump file.
+func withCompression(compression string) mockTSDumpOption {
+	return func(c *mockTSDumpConfig) {
+		c.compression = compression
+	}
+}
+
+// withEmbeddedMetadata adds embedded metadata to the tsdump file.
+func withEmbeddedMetadata() mockTSDumpOption {
+	return func(c *mockTSDumpConfig) {
+		c.metadata = &tsdumpmeta.Metadata{
+			Version: "v23.1.0",
+			StoreToNodeMap: map[string]string{
+				"1": "1",
+				"2": "1",
+				"3": "2",
+			},
+			CreatedAt: timeutil.Unix(1609459200, 0),
+		}
+	}
+}
+
+// withNodeToRegionMap adds a node-to-region mapping to the embedded metadata.
+// Must be used after withEmbeddedMetadata so the metadata struct is initialized.
+func withNodeToRegionMap(m map[string]string) mockTSDumpOption {
+	return func(c *mockTSDumpConfig) {
+		if c.metadata == nil {
+			c.metadata = &tsdumpmeta.Metadata{
+				Version:   "v23.1.0",
+				CreatedAt: timeutil.Unix(1609459200, 0),
+			}
+		}
+		c.metadata.NodeToRegionMap = m
+	}
+}
+
+// generateMockTSDumpFromCSV creates a mock tsdump file from CSV input string.
+// CSV format: metric_name,timestamp,source,value
+// Example: cr.node.admission.admitted.elastic-cpu,2025-05-26T08:32:00Z,1,1
+// NOTE: this is the same format generated by the `cockroach tsdump` command
+// when --format=csv is used.
+// Options can be used to configure compression and embedded metadata.
+func generateMockTSDumpFromCSV(t *testing.T, csvInput string, options ...mockTSDumpOption) string {
+	t.Helper()
+
+	// Apply options to config
+	config := &mockTSDumpConfig{}
+	for _, option := range options {
+		option(config)
+	}
+
+	// Parse CSV data from input string
+	reader := csv.NewReader(strings.NewReader(csvInput))
+	csvData, err := reader.ReadAll()
+	require.NoError(t, err)
+	require.Greater(t, len(csvData), 0, "CSV input must have at least one data row")
+
+	// Create file and encoder based on compression in single switch
+	var filePattern string
+	var encoder *gob.Encoder
+	tmpFile, err := os.CreateTemp("", filePattern)
+	require.NoError(t, err)
+	defer tmpFile.Close()
+
+	if config.metadata != nil {
+		err = tsdumpmeta.Write(tmpFile, *config.metadata)
+		require.NoError(t, err)
+	}
+
+	switch config.compression {
+	case "gzip":
+		filePattern = "mock_tsdump_*.gob.gz"
+		gzipWriter := gzip.NewWriter(tmpFile)
+		defer func() {
+			require.NoError(t, gzipWriter.Close(), "failed to close gzip writer")
+		}()
+		encoder = gob.NewEncoder(gzipWriter)
+
+	case "zip":
+		filePattern = "mock_tsdump_*.gob.zip"
+		zipWriter := zip.NewWriter(tmpFile)
+		defer func() {
+			require.NoError(t, zipWriter.Close(), "failed to close zip writer")
+		}()
+
+		writer, err := zipWriter.Create("tsdump.gob")
+		require.NoError(t, err)
+		encoder = gob.NewEncoder(writer)
+
+	case "zstd":
+		filePattern = "mock_tsdump_*.gob.zst"
+		zstdWriter, err := zstd.NewWriter(tmpFile)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, zstdWriter.Close(), "failed to close zstd writer")
+		}()
+		encoder = gob.NewEncoder(zstdWriter)
+
+	default:
+		filePattern = "mock_tsdump_*.gob"
+		encoder = gob.NewEncoder(tmpFile)
+	}
+
+	writeTimeSeriesDataFromCSV(t, csvInput, encoder)
+	t.Cleanup(func() {
+		require.NoError(t, os.Remove(tmpFile.Name()), "failed to remove temporary file")
+	})
+	return tmpFile.Name()
+}
+
+// writeTimeSeriesDataFromCSV parses CSV input and encodes time series data into GOB format.
+// Each CSV row becomes a roachpb.KeyValue containing time series data.
+func writeTimeSeriesDataFromCSV(t *testing.T, csvInput string, encoder *gob.Encoder) {
+	t.Helper()
+
+	// Parse CSV data from input string
+	reader := csv.NewReader(strings.NewReader(csvInput))
+	csvData, err := reader.ReadAll()
+	require.NoError(t, err)
+	require.Greater(t, len(csvData), 0, "CSV input must have at least one data row")
+
+	// Process each row (no header expected)
+	for i, row := range csvData {
+		require.Len(t, row, 4, "CSV row %d must have 4 columns: metric_name,timestamp,source,value", i+1)
+
+		metricName := row[0]
+		timestampStr := row[1]
+		source := row[2]
+		valueStr := row[3]
+
+		// Parse timestamp (RFC3339 format)
+		timestamp, err := time.Parse(time.RFC3339, timestampStr)
+		require.NoError(t, err, "invalid timestamp format in row %d: %s (expected RFC3339)", i+1, timestampStr)
+		timestampNanos := timestamp.UnixNano()
+
+		// Parse value
+		value, err := strconv.ParseFloat(valueStr, 64)
+		require.NoError(t, err, "invalid value in row %d: %s", i+1, valueStr)
+
+		// Create KeyValue entry for this data point
+		kv, err := createMockTimeSeriesKV(metricName, source, timestampNanos, value)
+		require.NoError(t, err)
+
+		// Encode to gob format
+		err = encoder.Encode(kv)
+		require.NoError(t, err)
+	}
+}
+
+// createTempYAMLFile creates a temporary YAML file containing store-to-node mapping configuration.
+// Used to test external mapping file functionality in tsdump uploads.
+func createTempYAMLFile(t *testing.T, yamlContent string) string {
+	t.Helper()
+
+	yamlFile, err := os.CreateTemp("", "store_to_node_*.yaml")
+	require.NoError(t, err)
+
+	_, err = yamlFile.WriteString(yamlContent)
+	require.NoError(t, err)
+	yamlFile.Close()
+
+	t.Cleanup(func() {
+		require.NoError(t, os.Remove(yamlFile.Name()), "failed to remove temporary YAML file")
+	})
+
+	return yamlFile.Name()
+}
+
+// createMockTimeSeriesKV creates a roachpb.KeyValue entry that mimics the internal
+// time series storage format used by CockroachDB's time series system.
+func createMockTimeSeriesKV(
+	name, source string, timestamp int64, value float64,
+) (roachpb.KeyValue, error) {
+	// Create TimeSeriesData
+	tsData := tspb.TimeSeriesData{
+		Name:   name,
+		Source: source,
+		Datapoints: []tspb.TimeSeriesDatapoint{
+			{TimestampNanos: timestamp, Value: value},
+		},
+	}
+
+	// Convert to internal format using 10s resolution
+	resolution := ts.Resolution10s
+	idatas, err := tsData.ToInternal(
+		resolution.SlabDuration(),   // 1 hour (3600 * 10^9 ns)
+		resolution.SampleDuration(), // 10 seconds (10 * 10^9 ns)
+		true,                        // columnar format
+	)
+	if err != nil {
+		return roachpb.KeyValue{}, err
+	}
+
+	// Should only be one internal data entry for a single datapoint
+	if len(idatas) != 1 {
+		return roachpb.KeyValue{}, fmt.Errorf("expected 1 internal data entry, got %d", len(idatas))
+	}
+
+	idata := idatas[0]
+
+	// Create the key
+	key := ts.MakeDataKey(name, source, resolution, idata.StartTimestampNanos)
+
+	// Create the value (protobuf-encoded internal data)
+	var roachValue roachpb.Value
+	if err := roachValue.SetProto(&idata); err != nil {
+		return roachpb.KeyValue{}, err
+	}
+
+	return roachpb.KeyValue{Key: key, Value: roachValue}, nil
+}
+
+// createMockTimeSeriesKVWithResolution is like createMockTimeSeriesKV but
+// allows specifying the time series resolution (e.g., ts.Resolution10s,
+// ts.Resolution30m).
+func createMockTimeSeriesKVWithResolution(
+	name, source string, timestamp int64, value float64, resolution ts.Resolution,
+) (roachpb.KeyValue, error) {
+	tsData := tspb.TimeSeriesData{
+		Name:   name,
+		Source: source,
+		Datapoints: []tspb.TimeSeriesDatapoint{
+			{TimestampNanos: timestamp, Value: value},
+		},
+	}
+
+	idatas, err := tsData.ToInternal(
+		resolution.SlabDuration(),
+		resolution.SampleDuration(),
+		true,
+	)
+	if err != nil {
+		return roachpb.KeyValue{}, err
+	}
+
+	if len(idatas) != 1 {
+		return roachpb.KeyValue{}, fmt.Errorf("expected 1 internal data entry, got %d", len(idatas))
+	}
+
+	idata := idatas[0]
+	key := ts.MakeDataKey(name, source, resolution, idata.StartTimestampNanos)
+
+	var roachValue roachpb.Value
+	if err := roachValue.SetProto(&idata); err != nil {
+		return roachpb.KeyValue{}, err
+	}
+
+	return roachpb.KeyValue{Key: key, Value: roachValue}, nil
+}
+
+// generateMockJSONFromInput creates a mock JSON file from input data.
+// The input data is written directly to the JSON file.
+// This is useful for testing JSON file generation functionality.
+func generateMockJSONFromInput(t *testing.T, inputData string) string {
+	t.Helper()
+
+	// Create temporary file
+	tmpFile, err := os.CreateTemp("", "mock_json_*.json")
+	require.NoError(t, err)
+	defer tmpFile.Close()
+
+	// Write input data directly to the JSON file
+	for _, request := range strings.Split(inputData, "\n") {
+		_, err = tmpFile.Write([]byte(request + "\n"))
+		require.NoError(t, err)
+	}
+
+	// All retries are getting succeeded so command itself should remove the file.
+	t.Cleanup(func() {
+		require.Error(t, os.Remove(tmpFile.Name()), "file should not be removed as it is already removed in command")
+	})
+	return tmpFile.Name()
+}
+
+// TestDeltaCalculationForCounters tests the cumulative to delta conversion functionality
+// for counter metrics across multiple dump calls.
+func TestDeltaCalculationForCounters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create a datadogWriter with cumulative to delta processor
+	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name           string
+		metricName     string
+		source         string
+		values         []float64
+		expectedValues []float64
+	}{
+		{
+			name:           "counter with incrementing values",
+			metricName:     "cr.node.test-counter-count",
+			source:         "1",
+			values:         []float64{100, 150, 200},
+			expectedValues: []float64{100, 50, 50}, // first value, then deltas
+		},
+		{
+			name:           "counter starting from zero",
+			metricName:     "cr.node.zero-start-count",
+			source:         "2",
+			values:         []float64{0, 25, 75},
+			expectedValues: []float64{0, 25, 50},
+		},
+		{
+			name:           "counter with no jumps",
+			metricName:     "cr.node.large-jump-count",
+			source:         "3",
+			values:         []float64{1000, 1000, 1000},
+			expectedValues: []float64{1000, 0, 0},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			timestamp := time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC).UnixNano()
+
+			for i, value := range tc.values {
+				// Create mock KeyValue for this metric value
+				kv, err := createMockTimeSeriesKV(tc.metricName, tc.source, timestamp+int64(i)*1e10, value)
+				require.NoError(t, err)
+
+				// Call dump function
+				series, err := writer.dump(&kv)
+				require.NoError(t, err)
+
+				// Verify the metric type is COUNT for counter metrics
+				require.NotNil(t, series.Type)
+				require.Equal(t, *series.Type, datadogV2.METRICINTAKETYPE_COUNT)
+
+				// Verify we got the expected value (first value or delta)
+				require.Len(t, series.Points, 1)
+				actualValue := *series.Points[0].Value
+				expectedValue := tc.expectedValues[i]
+				require.Equal(t, expectedValue, actualValue,
+					"Call %d: expected %f, got %f", i+1, expectedValue, actualValue)
+
+				if i == 0 {
+					// First point's timestamp should be shifted back by 60 days.
+					expectedTS := time.Unix(0, timestamp).Add(-baselineOffset).Unix()
+					require.Equal(t, expectedTS, *series.Points[0].Timestamp,
+						"first point timestamp should be shifted to T-60days")
+				}
+			}
+		})
+	}
+}
+
+// TestDeltaCalculationResetDetection tests that the cumulative to delta processor
+// properly handles counter resets (when counter goes backwards due to process restart).
+func TestDeltaCalculationResetDetection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+	require.NoError(t, err)
+
+	metricName := "cr.node.reset-test-count"
+	source := "1"
+	timestamp := time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC).UnixNano()
+
+	// First call with value 100
+	kv1, err := createMockTimeSeriesKV(metricName, source, timestamp, 100)
+	require.NoError(t, err)
+	series1, err := writer.dump(&kv1)
+	require.NoError(t, err)
+	require.Equal(t, 100.0, *series1.Points[0].Value)
+	// First point timestamp should be shifted back by 60 days.
+	expectedTS := time.Unix(0, timestamp).Add(-baselineOffset).Unix()
+	require.Equal(t, expectedTS, *series1.Points[0].Timestamp)
+
+	// Second call with value 150 (normal increment)
+	kv2, err := createMockTimeSeriesKV(metricName, source, timestamp+1e10, 150)
+	require.NoError(t, err)
+	series2, err := writer.dump(&kv2)
+	require.NoError(t, err)
+	require.Equal(t, 50.0, *series2.Points[0].Value) // delta: 150 - 100
+
+	// Third call with value 50 (reset detected - should handle gracefully)
+	kv3, err := createMockTimeSeriesKV(metricName, source, timestamp+2e10, 50)
+	require.NoError(t, err)
+	series3, err := writer.dump(&kv3)
+	require.NoError(t, err)
+	require.Equal(t, 50.0, *series3.Points[0].Value) // reset: use current value as delta
+
+	// Fourth call with value 75 (normal increment after reset)
+	kv4, err := createMockTimeSeriesKV(metricName, source, timestamp+3e10, 75)
+	require.NoError(t, err)
+	series4, err := writer.dump(&kv4)
+	require.NoError(t, err)
+	require.Equal(t, 25.0, *series4.Points[0].Value) // delta: 75 - 50
+}
+
+// TestDeltaCalculationCrossBatchPersistence tests that cumulative to delta conversion
+// state persists correctly when the same metric appears in different batches.
+func TestDeltaCalculationCrossBatchPersistence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+	require.NoError(t, err)
+
+	metricName := "cr.node.cross-batch-test-count"
+	source := "1"
+
+	timestamp := time.Date(2025, 6, 26, 22, 49, 20, 0, time.UTC).UnixNano()
+
+	// Simulate first batch
+	kv1, err := createMockTimeSeriesKV(metricName, source, timestamp, 100)
+	require.NoError(t, err)
+	series1, err := writer.dump(&kv1)
+	require.NoError(t, err)
+	require.Equal(t, 100.0, *series1.Points[0].Value) // first value
+	// First point timestamp should be shifted back by 60 days.
+	expectedTS := time.Unix(0, timestamp).Add(-baselineOffset).Unix()
+	require.Equal(t, expectedTS, *series1.Points[0].Timestamp)
+
+	// Simulate processing other metrics (different batch)
+	otherKv, err := createMockTimeSeriesKV("cr.node.other-metric-count", "2", timestamp+5e9, 50)
+	require.NoError(t, err)
+	_, err = writer.dump(&otherKv)
+	require.NoError(t, err)
+
+	// Simulate second batch with same metric - state should persist
+	kv2, err := createMockTimeSeriesKV(metricName, source, timestamp+1e10, 180)
+	require.NoError(t, err)
+	series2, err := writer.dump(&kv2)
+	require.NoError(t, err)
+	require.Equal(t, 80.0, *series2.Points[0].Value) // delta: 180 - 100
+
+	// Third batch - should still remember previous value
+	kv3, err := createMockTimeSeriesKV(metricName, source, timestamp+2e10, 220)
+	require.NoError(t, err)
+	series3, err := writer.dump(&kv3)
+	require.NoError(t, err)
+	require.Equal(t, 40.0, *series3.Points[0].Value) // delta: 220 - 180
+}
+
+// TestDeltaCalculationWithUnsortedTimestamps tests that delta calculation works
+// correctly even when timestamps are not in sorted order.
+func TestDeltaCalculationWithUnsortedTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	processor := NewCumulativeToDeltaProcessor()
+
+	// Create a series with timestamps out of order
+	series := &datadogV2.MetricSeries{
+		Metric: "test.counter",
+		Tags:   []string{"node_id:1"},
+		Type:   datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
+		Points: []datadogV2.MetricPoint{
+			{
+				Timestamp: datadog.PtrInt64(1000),  // t=1000
+				Value:     datadog.PtrFloat64(300), // third point chronologically
+			},
+			{
+				Timestamp: datadog.PtrInt64(500),   // t=500
+				Value:     datadog.PtrFloat64(150), // second point chronologically
+			},
+			{
+				Timestamp: datadog.PtrInt64(100),   // t=100
+				Value:     datadog.PtrFloat64(100), // first point chronologically
+			},
+		},
+	}
+
+	// Process the series (it's unsorted, so pass false)
+	err := processor.processCounterMetric(series, false)
+	require.NoError(t, err)
+
+	// After processing, points should be sorted by timestamp and have correct deltas
+	require.Len(t, series.Points, 3)
+
+	// First point's timestamp is shifted back by 60 days; the rest are unchanged.
+	require.Equal(t, time.Unix(100, 0).Add(-baselineOffset).Unix(), *series.Points[0].Timestamp)
+	require.Equal(t, int64(500), *series.Points[1].Timestamp)
+	require.Equal(t, int64(1000), *series.Points[2].Timestamp)
+
+	// Check that delta calculation is correct (based on chronological order)
+	require.Equal(t, 100.0, *series.Points[0].Value) // first point: keep original value (timestamp shifted)
+	require.Equal(t, 50.0, *series.Points[1].Value)  // delta: 150 - 100
+	require.Equal(t, 150.0, *series.Points[2].Value) // delta: 300 - 150
+}
+
+func TestDatadogInit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	now := time.Date(2025, 9, 23, 0, 0, 0, 0, time.UTC)
+	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
+		return now
+	})()
+
+	var (
+		reqCount         int
+		expectedInterval = 30
+	)
+
+	// checkign "all" metrics will make this test flaky as new metrics are added.
+	// So, we can instead check for one representative metric from each namespace.
+	expectedMetrics := map[string]struct{}{
+		"cockroachdb.sql.txns.open":                               {},
+		"cockroachdb.storage.disk-slow":                           {},
+		"cockroachdb.storeliveness.callbacks.processing_duration": {},
+		"cockroachdb.sys.cgo.allocbytes":                          {},
+		"cockroachdb.timeseries.write.bytes":                      {},
+		"cockroachdb.totalbytes":                                  {},
+		"cockroachdb.txn.durations":                               {},
+		"cockroachdb.valbytes":                                    {},
+	}
+
+	receivedMetrics := make(map[string]struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
+
+		reader, err := gzip.NewReader(r.Body)
+		require.NoError(t, err)
+		defer reader.Close()
+
+		body, err := io.ReadAll(reader)
+		require.NoError(t, err)
+
+		var request struct {
+			Series []datadogV2.MetricSeries `json:"series"`
+		}
+
+		require.NoError(t, json.Unmarshal(body, &request))
+		if len(request.Series) > 0 {
+			for _, series := range request.Series {
+				receivedMetrics[series.Metric] = struct{}{}
+				require.NotNil(t, series.Interval, "interval should be set for datadoginit format")
+				require.EqualValues(t, expectedInterval, *series.Interval, "interval should match dd-metric-interval flag")
+
+				require.Contains(t, series.Tags, "cluster_label:\"test-cluster\"", "should include cluster_label tag")
+				require.Contains(t, series.Tags, "cluster_type:SELF_HOSTED", "should include cluster_type tag")
+
+				require.Len(t, series.Points, 1, "should have exactly one point for init")
+				require.EqualValues(t, now.Unix(), *series.Points[0].Timestamp, "timestamp should match mocked current time")
+				require.EqualValues(t, float64(0), *series.Points[0].Value, "value should be 0 for datadoginit")
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
+		reqCount++
+	}))
+	defer server.Close()
+	defer testutils.TestingHook(&hostNameOverride, server.Listener.Addr().String())()
+
+	cmd := `debug tsdump --format=datadoginit --dd-api-key="test-api-key" --cluster-label="test-cluster" --dd-metric-interval=30`
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
+
+	_, err := c.RunWithCapture(cmd)
+	require.NoError(t, err)
+	require.NotZero(t, reqCount, "should have made at least one request to the server")
+
+	// verify that our expected metrics are present in the received metrics
+	for expectedMetric := range expectedMetrics {
+		require.Contains(t, receivedMetrics, expectedMetric, "expected metric %s should be present", expectedMetric)
+	}
+}
+
+// TestGapFillProcessor30MinTo10s tests the gap-filling functionality for 30-minute counter metrics.
+// It verifies that 30-minute resolution counter metrics are correctly interpolated to 10-second resolution
+// with zero-filled gaps between original data points.
+func TestGapFillProcessor30MinTo10s(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	processor := NewGapFillProcessor()
+
+	// Create a mock 30-minute resolution counter metric with 2 data points
+	series := &datadogV2.MetricSeries{
+		Metric:   "cr.node.test-counter-count",
+		Tags:     []string{"node_id:1"},
+		Type:     datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
+		Interval: datadog.PtrInt64(1800), // 30 minutes in seconds
+		Points: []datadogV2.MetricPoint{
+			{
+				Timestamp: datadog.PtrInt64(1000), // t=1000
+				Value:     datadog.PtrFloat64(50), // first 30-min point
+			},
+			{
+				Timestamp: datadog.PtrInt64(2800), // t=2800 (1800 seconds later)
+				Value:     datadog.PtrFloat64(55), // second 30-min point
+			},
+		},
+	}
+
+	// Process the series
+	err := processor.processCounterMetric(series)
+	require.NoError(t, err)
+
+	// Verify the interval was updated to 10 seconds
+	require.NotNil(t, series.Interval)
+	require.Equal(t, int64(10), *series.Interval)
+
+	// Verify we have the correct number of points
+	// Original: 2 points
+	// These 2 points are uniformly distributed in 180 data points.
+	// So expected data points would be 2 * 180 = 360.
+	expectedPoints := 360
+	require.Len(t, series.Points, expectedPoints)
+
+	// Verify the first original point is preserved
+	require.Equal(t, int64(1000), *series.Points[0].Timestamp)
+	require.Equal(t, 50.0/180, *series.Points[0].Value)
+
+	// Verify the first & last interpolated points are zeros with correct timestamps
+	// for first data point
+	require.Equal(t, int64(1010), *series.Points[1].Timestamp)
+	require.Equal(t, 0.0, *series.Points[1].Value)
+
+	require.Equal(t, int64(2790), *series.Points[179].Timestamp)
+	require.Equal(t, 0.0, *series.Points[179].Value)
+
+	// Verify the first & last interpolated points are zeros with correct timestamps
+	index := 180
+	require.Equal(t, int64(2800), *series.Points[index].Timestamp)
+	require.Equal(t, 55.0/180, *series.Points[index].Value)
+
+	// Verify a point near the end has zero value (gap-filled)
+	lastIndex := len(series.Points) - 1
+	require.Equal(t, int64(4590), *series.Points[lastIndex].Timestamp)
+	require.Equal(t, 0.0, *series.Points[lastIndex].Value)
+}
+
+// TestGapFillProcessor60SecTo10s tests the gap-filling functionality for 60-second (1-minute)
+// resolution counter metrics. It verifies that 1-minute resolution counter metrics are correctly
+// interpolated to 10-second resolution with zero-filled gaps between original data points.
+func TestGapFillProcessor60SecTo10s(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	processor := NewGapFillProcessor()
+
+	// Create a mock 60-second resolution counter metric with 3 data points
+	series := &datadogV2.MetricSeries{
+		Metric:   "cr.node.child-counter-count",
+		Tags:     []string{"node_id:1", "label1:value1"},
+		Type:     datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
+		Interval: datadog.PtrInt64(60), // 60 seconds (1 minute)
+		Points: []datadogV2.MetricPoint{
+			{
+				Timestamp: datadog.PtrInt64(1000), // t=1000
+				Value:     datadog.PtrFloat64(60), // first 1-min point
+			},
+			{
+				Timestamp: datadog.PtrInt64(1060),  // t=1060 (60 seconds later)
+				Value:     datadog.PtrFloat64(120), // second 1-min point
+			},
+			{
+				Timestamp: datadog.PtrInt64(1120), // t=1120 (another 60 seconds later)
+				Value:     datadog.PtrFloat64(90), // third 1-min point
+			},
+		},
+	}
+
+	// Process the series
+	err := processor.processCounterMetric(series)
+	require.NoError(t, err)
+
+	// Verify the interval was updated to 10 seconds
+	require.NotNil(t, series.Interval)
+	require.Equal(t, int64(10), *series.Interval)
+
+	// Verify we have the correct number of points
+	// Original: 3 points at 60-second resolution
+	// Each point expands to 6 points (60s / 10s = 6)
+	// Expected: 3 * 6 = 18 points
+	expectedPoints := 18
+	require.Len(t, series.Points, expectedPoints)
+
+	// Verify the first original point: value distributed across 6 points
+	// 60 / 6 = 10
+	require.Equal(t, int64(1000), *series.Points[0].Timestamp)
+	require.Equal(t, 60.0/6, *series.Points[0].Value)
+
+	// Verify the interpolated points after first data point are zeros
+	require.Equal(t, int64(1010), *series.Points[1].Timestamp)
+	require.Equal(t, 0.0, *series.Points[1].Value)
+
+	require.Equal(t, int64(1020), *series.Points[2].Timestamp)
+	require.Equal(t, 0.0, *series.Points[2].Value)
+
+	require.Equal(t, int64(1050), *series.Points[5].Timestamp)
+	require.Equal(t, 0.0, *series.Points[5].Value)
+
+	// Verify the second original point (at index 6): 120 / 6 = 20
+	require.Equal(t, int64(1060), *series.Points[6].Timestamp)
+	require.Equal(t, 120.0/6, *series.Points[6].Value)
+
+	// Verify interpolated points after second data point
+	require.Equal(t, int64(1070), *series.Points[7].Timestamp)
+	require.Equal(t, 0.0, *series.Points[7].Value)
+
+	// Verify the third original point (at index 12): 90 / 6 = 15
+	require.Equal(t, int64(1120), *series.Points[12].Timestamp)
+	require.Equal(t, 90.0/6, *series.Points[12].Value)
+
+	// Verify the last interpolated point
+	lastIndex := len(series.Points) - 1
+	require.Equal(t, int64(1170), *series.Points[lastIndex].Timestamp)
+	require.Equal(t, 0.0, *series.Points[lastIndex].Value)
+}
+
+// TestGapFillProcessorSkipsGaugeMetrics verifies that gauge metrics are not processed
+// by the gap fill processor. Gauges should retain their original interval.
+func TestGapFillProcessorSkipsGaugeMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	processor := NewGapFillProcessor()
+
+	testCases := []struct {
+		name     string
+		interval int64
+	}{
+		{"60-second gauge", 60},
+		{"30-minute gauge", 1800},
+		{"10-second gauge", 10},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			series := &datadogV2.MetricSeries{
+				Metric:   "cr.node.test-gauge",
+				Tags:     []string{"node_id:1"},
+				Type:     datadogV2.METRICINTAKETYPE_GAUGE.Ptr(),
+				Interval: datadog.PtrInt64(tc.interval),
+				Points: []datadogV2.MetricPoint{
+					{
+						Timestamp: datadog.PtrInt64(1000),
+						Value:     datadog.PtrFloat64(100),
+					},
+					{
+						Timestamp: datadog.PtrInt64(1000 + tc.interval),
+						Value:     datadog.PtrFloat64(150),
+					},
+				},
+			}
+
+			originalPointCount := len(series.Points)
+
+			// Process the series
+			err := processor.processCounterMetric(series)
+			require.NoError(t, err)
+
+			// Verify the interval is unchanged
+			require.Equal(t, tc.interval, *series.Interval)
+
+			// Verify points are unchanged
+			require.Len(t, series.Points, originalPointCount)
+			require.Equal(t, 100.0, *series.Points[0].Value)
+			require.Equal(t, 150.0, *series.Points[1].Value)
+		})
+	}
+}
+
+// TestParseChildLabels tests the parseChildLabels function that converts
+// Prometheus-style labels to Datadog tags.
+func TestParseChildLabels(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name         string
+		labelsStr    string
+		expectedTags []string
+	}{
+		{
+			name:         "single label",
+			labelsStr:    `label1="value1"`,
+			expectedTags: []string{"label1:value1"},
+		},
+		{
+			name:         "multiple labels",
+			labelsStr:    `label1="value1", label2="value2"`,
+			expectedTags: []string{"label1:value1", "label2:value2"},
+		},
+		{
+			name:         "empty string",
+			labelsStr:    "",
+			expectedTags: nil,
+		},
+		{
+			name:         "label with special characters in value",
+			labelsStr:    `path="/api/v1/query", method="GET"`,
+			expectedTags: []string{"path:/api/v1/query", "method:GET"},
+		},
+		{
+			name:         "label with numeric value",
+			labelsStr:    `bucket="100", le="0.5"`,
+			expectedTags: []string{"bucket:100", "le:0.5"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tags := parseChildLabels(tc.labelsStr)
+			require.Equal(t, tc.expectedTags, tags)
+		})
+	}
+}
+
+// TestHasTagKey tests the hasTagKey helper function.
+func TestHasTagKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tags := []string{"node_id:1", "store:2", "label:value"}
+
+	testCases := []struct {
+		key      string
+		expected bool
+	}{
+		{"node_id", true},
+		{"store", true},
+		{"label", true},
+		{"missing", false},
+		{"node", false}, // partial match should not work
+		{"", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.key, func(t *testing.T) {
+			result := hasTagKey(tags, tc.key)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+// TestBuildDashboardLink verifies that buildDashboardLink produces a URL whose
+// from_ts/to_ts query parameters reflect the actual tsdump data time range, and
+// that the fallback (now - 30 days) is used when no data was processed.
+func TestBuildDashboardLink(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	now := time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
+	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
+		return now
+	})()
+
+	earliest := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+	latest := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	middle := time.Date(2024, 6, 10, 8, 0, 0, 0, time.UTC)
+
+	type metricInput struct {
+		name       string
+		source     string
+		tsNanos    int64
+		value      float64
+		resolution ts.Resolution
+	}
+
+	testCases := []struct {
+		name           string
+		metrics        []metricInput
+		expectedFromTS int64
+		expectedToTS   int64
+	}{
+		{
+			name: "url reflects actual data time range",
+			metrics: []metricInput{
+				{"cr.node.test.gauge", "1", earliest.UnixNano(), 10, ts.Resolution10s},
+				{"cr.node.test.gauge2", "1", latest.UnixNano(), 20, ts.Resolution10s},
+				{"cr.node.test.gauge3", "1", middle.UnixNano(), 30, ts.Resolution10s},
+			},
+			expectedFromTS: (earliest.Unix() + 10) * 1000,
+			expectedToTS:   latest.Unix() * 1000,
+		},
+		{
+			name: "mixed resolutions uses smallest interval",
+			metrics: []metricInput{
+				{"cr.node.test.gauge", "1", earliest.UnixNano(), 10, ts.Resolution10s},
+				{"cr.node.test.rollup", "1", latest.UnixNano(), 20, ts.Resolution30m},
+			},
+			expectedFromTS: (earliest.Unix() + 10) * 1000,
+			expectedToTS:   latest.Unix() * 1000,
+		},
+		{
+			name:           "fallback when no data points processed",
+			metrics:        nil,
+			expectedFromTS: now.UnixMilli() - (30 * 24 * 60 * 60 * 1000),
+			expectedToTS:   now.UnixMilli(),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+			require.NoError(t, err)
+			debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
+
+			for _, m := range tc.metrics {
+				kv, err := createMockTimeSeriesKVWithResolution(
+					m.name, m.source, m.tsNanos, m.value, m.resolution,
+				)
+				require.NoError(t, err)
+				_, err = writer.dump(&kv)
+				require.NoError(t, err)
+			}
+
+			link := writer.buildDashboardLink()
+			require.Contains(t, link, fmt.Sprintf("from_ts=%d", tc.expectedFromTS))
+			require.Contains(t, link, fmt.Sprintf("to_ts=%d", tc.expectedToTS))
+		})
+	}
+}
+
+// TestSysUptimeMetricMapping verifies that the sys.uptime metric is mapped
+// to sys.uptime.count in the Datadog upload, so it doesn't conflict with
+// the gauge variant (sys.uptime) emitted via the OTel pipeline.
+func TestSysUptimeMetricMapping(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+	require.NoError(t, err)
+
+	timestamp := time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC).UnixNano()
+	kv, err := createMockTimeSeriesKV("cr.node.sys.uptime", "1", timestamp, 12345)
+	require.NoError(t, err)
+
+	series, err := writer.dump(&kv)
+	require.NoError(t, err)
+
+	require.Equal(t, "sys.uptime.count", series.Metric,
+		"sys.uptime should be mapped to sys.uptime.count to avoid type conflict with OTel gauge")
+}
+
+// TestChildMetricDumpParsing tests that child metrics with labels are correctly
+// parsed and converted to Datadog format.
+func TestChildMetricDumpParsing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name               string
+		metricName         string
+		source             string
+		expectedMetricName string
+		expectedTags       []string
+	}{
+		{
+			name:               "child metric with single label",
+			metricName:         `cr.node.changefeed.sink_io_inflight{store="1"}`,
+			source:             "1",
+			expectedMetricName: "changefeed.sink_io_inflight.child",
+			expectedTags:       []string{"store:1", "node_id:1"},
+		},
+		{
+			name:               "child metric with multiple labels",
+			metricName:         `cr.node.sql.exec.latency{app="myapp", action="query"}`,
+			source:             "2",
+			expectedMetricName: "sql.exec.latency.child",
+			expectedTags:       []string{"app:myapp", "action:query", "node_id:2"},
+		},
+		{
+			name:               "child metric with histogram suffix -p50",
+			metricName:         `cr.node.changefeed.sink_io_inflight{store="1"}-p50`,
+			source:             "1",
+			expectedMetricName: "changefeed.sink_io_inflight-p50.child",
+			expectedTags:       []string{"store:1", "node_id:1"},
+		},
+		{
+			name:               "child metric with histogram suffix -avg",
+			metricName:         `cr.node.sql.latency{type="exec"}-avg`,
+			source:             "3",
+			expectedMetricName: "sql.latency-avg.child",
+			expectedTags:       []string{"type:exec", "node_id:3"},
+		},
+		{
+			name:               "child metric with histogram suffix -count",
+			metricName:         `cr.node.distsender.batches{method="scan"}-count`,
+			source:             "1",
+			expectedMetricName: "distsender.batches-count.child",
+			expectedTags:       []string{"method:scan", "node_id:1"},
+		},
+		{
+			name:               "child metric with node_id already in labels",
+			metricName:         `cr.node.test.metric{node_id="5", label="value"}`,
+			source:             "1",
+			expectedMetricName: "test.metric.child",
+			// node_id from labels should be preserved, not overwritten
+			expectedTags: []string{"node_id:5", "label:value"},
+		},
+		{
+			name:               "regular metric without labels (not a child)",
+			metricName:         "cr.node.sql.query.count",
+			source:             "1",
+			expectedMetricName: "sql.query.count",
+			expectedTags:       []string{"node_id:1"},
+		},
+		{
+			name:               "store metric child with store already in labels",
+			metricName:         `cr.store.raft.rcvd{store="3"}`,
+			source:             "3",
+			expectedMetricName: "raft.rcvd.child",
+			// store from labels should be preserved
+			expectedTags: []string{"store:3"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			timestamp := time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC).UnixNano()
+
+			kv, err := createMockTimeSeriesKV(tc.metricName, tc.source, timestamp, 100)
+			require.NoError(t, err)
+
+			series, err := writer.dump(&kv)
+			require.NoError(t, err)
+
+			// Check metric name (after stripping cr.node. or cr.store. prefix)
+			require.Equal(t, tc.expectedMetricName, series.Metric)
+
+			// Check tags contain expected values
+			for _, expectedTag := range tc.expectedTags {
+				require.Contains(t, series.Tags, expectedTag,
+					"expected tag %s not found in %v", expectedTag, series.Tags)
+			}
+		})
+	}
+}

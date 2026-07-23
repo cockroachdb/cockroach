@@ -1,0 +1,60 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "upgradecluster",
+    srcs = [
+        "cluster.go",
+        "nodes.go",
+        "tenant_cluster.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/upgradecluster",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/rpc/rpcbase",
+        "//pkg/server/serverpb",
+        "//pkg/sql/sqlinstance",
+        "//pkg/sql/sqlinstance/instancestorage",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/log",
+        "//pkg/util/netutil",
+        "//pkg/util/quotapool",
+        "//pkg/util/rangedesc",
+        "//pkg/util/retry",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "upgradecluster_test",
+    size = "small",
+    srcs = [
+        "helper_test.go",
+        "main_test.go",
+        "nodes_test.go",
+    ],
+    embed = [":upgradecluster"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/rpc/rpcbase",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/serverpb",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/retry",
+        "//pkg/util/syncutil",
+        "@io_storj_drpc//:drpc",
+        "@org_golang_google_grpc//:grpc",
+    ],
+)

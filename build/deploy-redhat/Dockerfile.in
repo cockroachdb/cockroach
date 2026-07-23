@@ -1,0 +1,14 @@
+FROM @repository@:@tag@
+
+RUN microdnf install -y yum && \
+  yum -v -y update --all && \
+  microdnf clean all && \
+  rm -rf /var/cache/yum
+
+LABEL name="CockroachDB"
+LABEL maintainer="Cockroach Labs"
+LABEL vendor="Cockroach Labs"
+LABEL summary="CockroachDB is a distributed SQL database."
+LABEL description="CockroachDB is a PostgreSQL wire-compatable distributed SQL database."
+
+ENV COCKROACH_CHANNEL=official-openshift

@@ -1,0 +1,1445 @@
+subtest strict
+
+statement ok
+CREATE TABLE ex(
+  foo INT PRIMARY KEY,
+  bar INT UNIQUE,
+  baz INT
+)
+
+statement count 1
+INSERT INTO ex(foo,bar,baz) VALUES (1,1,1)
+
+statement count 0
+INSERT INTO ex(foo,bar,baz) VALUES (1,1,1) ON CONFLICT DO NOTHING
+
+statement count 0
+INSERT INTO ex(foo,bar,baz) VALUES (2,1,1) ON CONFLICT DO NOTHING
+
+# Do not insert conflicting first and last rows.
+statement count 2
+INSERT INTO ex(foo,bar,baz) VALUES (1,2,1), (3,2,2), (6,6,2), (2,1,1) ON CONFLICT DO NOTHING
+
+query III colnames
+SELECT * from ex ORDER BY foo
+----
+foo bar baz
+1   1   1
+3   2   2
+6   6   2
+
+query III colnames
+INSERT INTO ex(foo,bar,baz) VALUES (4,3,1), (5,2,1) ON CONFLICT DO NOTHING RETURNING *
+----
+foo  bar  baz
+4    3    1
+
+statement ok
+CREATE TABLE ex2(
+  a INT PRIMARY KEY,
+  b INT UNIQUE,
+  c INT,
+  d INT,
+  e INT,
+  UNIQUE (c,d)
+)
+
+statement count 1
+INSERT INTO ex2(a,b,c,d,e) VALUES (0,0,0,0,0)
+
+statement count 0
+INSERT INTO ex2(a,b,c,d,e) VALUES (1,0,1,1,0), (2,4,0,0,5) ON CONFLICT DO NOTHING
+
+statement count 3
+INSERT INTO ex2(a,b,c,d,e) VALUES (3,4,5,6,7), (8,9,10,11,12), (13,14,15,16,17) ON CONFLICT DO NOTHING
+
+statement count 0
+INSERT INTO ex2(a,b,c,d,e) VALUES (3,4,5,6,7), (8,9,10,11,12) ON CONFLICT DO NOTHING
+
+statement ok
+CREATE TABLE no_unique(
+  a INT,
+  b INT
+)
+
+statement count 1
+INSERT INTO no_unique(a,b) VALUES (1,2)
+
+statement count 1
+INSERT INTO no_unique(a,b) VALUES (1,2) ON CONFLICT DO NOTHING
+
+statement count 3
+INSERT INTO no_unique(a,b) VALUES (1,2), (1,3), (3,2) ON CONFLICT DO NOTHING
+
+query II colnames
+SELECT * from no_unique ORDER BY a, b
+----
+a  b
+1  2
+1  2
+1  2
+1  3
+3  2
+
+statement count 3
+INSERT INTO no_unique(a,b) VALUES (1,2), (1,2), (1,2) ON CONFLICT DO NOTHING
+
+subtest notstrict
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement count 3
+INSERT INTO kv VALUES (1, 1), (2, 2), (3, 3) ON CONFLICT (k) DO UPDATE SET v = excluded.v
+
+query II
+SELECT * FROM kv ORDER BY (k, v)
+----
+1 1
+2 2
+3 3
+
+statement error multiple assignments to the same column
+INSERT INTO kv VALUES (4, 4), (2, 5), (6, 6) ON CONFLICT (k) DO UPDATE SET v = 1, v = 1
+
+statement count 3
+INSERT INTO kv VALUES (4, 4), (2, 5), (6, 6) ON CONFLICT (k) DO UPDATE SET v = excluded.v
+
+statement count 3
+UPSERT INTO kv VALUES (7, 7), (3, 8), (9, 9)
+
+statement count 1
+INSERT INTO kv VALUES (1, 10) ON CONFLICT (k) DO UPDATE SET v = (SELECT CAST(sum(k) AS INT) FROM kv)
+
+statement error column reference "v" is ambiguous \(candidates: excluded.v, kv.v\)
+INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = v + 1
+
+statement count 1
+INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = kv.v + 20
+
+statement error duplicate key value violates unique constraint "kv_pkey"\nDETAIL: Key \(k\)=\(3\) already exists\.
+INSERT INTO kv VALUES (2, 10) ON CONFLICT (k) DO UPDATE SET k = 3, v = 10
+
+statement count 1
+INSERT INTO kv VALUES (9, 9) ON CONFLICT (k) DO UPDATE SET (k, v) = (excluded.k + 2, excluded.v + 3)
+
+statement count 1
+UPSERT INTO kv VALUES (10, 10)
+
+statement count 2
+UPSERT INTO kv VALUES (10, 11), (10, 12)
+
+query II rowsort
+UPSERT INTO kv VALUES (11, 11), (10, 13) RETURNING k, v
+----
+11 11
+10 13
+
+query I
+UPSERT INTO kv VALUES (11) RETURNING k
+----
+11
+
+query I
+UPSERT INTO kv VALUES (11, 12) RETURNING v
+----
+12
+
+statement count 1
+INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT (k) DO NOTHING RETURNING *
+
+statement count 0
+INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT DO NOTHING
+
+statement count 2
+INSERT INTO kv VALUES (14, 14), (13, 15) ON CONFLICT (k) DO UPDATE SET v = excluded.v + 1
+
+statement count 2
+INSERT INTO kv VALUES (15, 15), (14, 16) ON CONFLICT (k) DO UPDATE SET k = excluded.k * 10
+
+statement count 2
+INSERT INTO kv VALUES (16, 16), (15, 17) ON CONFLICT (k) DO UPDATE SET k = excluded.k * 10, v = excluded.v
+
+query II
+SELECT * FROM kv ORDER BY (k, v)
+----
+1   32
+2   5
+3   8
+4   24
+6   6
+7   7
+10  13
+11  12
+13  16
+16  16
+140 14
+150 17
+
+query II rowsort
+UPSERT INTO kv(k) VALUES (6), (8) RETURNING k,v
+----
+6 6
+8 NULL
+
+query II rowsort
+INSERT INTO kv VALUES (10, 10), (11, 11) ON CONFLICT (k) DO UPDATE SET v = excluded.v RETURNING *
+----
+10 10
+11 11
+
+query II rowsort
+INSERT INTO kv VALUES (10, 2), (11, 3) ON CONFLICT (k) DO UPDATE SET v = excluded.v + kv.v RETURNING *
+----
+10 12
+11 14
+
+query II rowsort
+INSERT INTO kv VALUES (10, 14), (15, 15) ON CONFLICT (k) DO NOTHING RETURNING *
+----
+15 15
+
+statement ok
+CREATE TABLE abc (
+  a INT,
+  b INT,
+  c INT DEFAULT 7,
+  PRIMARY KEY (a, b),
+  INDEX y (b),
+  UNIQUE INDEX z (c)
+)
+
+statement error missing "b" primary key column
+UPSERT INTO abc (a, c) VALUES (1, 1)
+
+statement error missing "a" primary key column
+UPSERT INTO abc (b, c) VALUES (1, 1)
+
+statement count 1
+INSERT INTO abc VALUES (1, 2, 3)
+
+statement count 1
+INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT (c) DO UPDATE SET a = 4
+
+query III
+SELECT * FROM abc
+----
+4 2 3
+
+statement count 1
+INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT (c) DO UPDATE SET b = 5
+
+statement count 1
+INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT (c) DO UPDATE SET c = 6
+
+query III
+SELECT * FROM abc
+----
+4 5 6
+
+statement count 1
+INSERT INTO abc (a, b) VALUES (1, 2) ON CONFLICT (a, b) DO UPDATE SET a = 1, b = 2
+
+statement count 1
+INSERT INTO abc (a, b) VALUES (4, 5) ON CONFLICT (a, b) DO UPDATE SET a = 7, b = 8
+
+query III
+SELECT * FROM abc ORDER BY (a, b, c)
+----
+1 2 7
+7 8 6
+
+statement count 1
+DELETE FROM abc where a = 1
+
+statement count 1
+UPSERT INTO abc VALUES (1, 2)
+
+query III
+SELECT * FROM abc ORDER BY (a, b, c)
+----
+1 2 7
+7 8 6
+
+statement count 1
+UPSERT INTO abc VALUES (1, 2, 5)
+
+query III
+SELECT * FROM abc ORDER BY (a, b, c)
+----
+1 2 5
+7 8 6
+
+statement count 1
+UPSERT INTO abc VALUES (1, 2)
+
+query III
+SELECT * FROM abc ORDER BY (a, b, c)
+----
+1 2 7
+7 8 6
+
+statement count 1
+DELETE FROM abc where a = 1
+
+statement count 1
+INSERT INTO abc VALUES (7, 8, 9) ON CONFLICT (a, b) DO UPDATE SET c = DEFAULT
+
+query III
+SELECT * FROM abc ORDER BY (a, b, c)
+----
+7 8 7
+
+statement ok
+CREATE TABLE excluded (a INT PRIMARY KEY, b INT)
+
+statement error ambiguous source name: "excluded"
+INSERT INTO excluded VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = excluded.b
+
+# Tests for upsert/on conflict returning
+statement ok
+CREATE TABLE upsert_returning (a INT PRIMARY KEY, b INT, c INT, d INT DEFAULT -1)
+
+statement count 1
+INSERT INTO upsert_returning VALUES (1, 1, NULL)
+
+# Handle INSERT ... ON CONFLICT ... RETURNING
+query IIII rowsort
+INSERT INTO upsert_returning (a, c) VALUES (1, 1), (2, 2) ON CONFLICT (a) DO UPDATE SET c = excluded.c RETURNING *
+----
+1 1    1 -1
+2 NULL 2 -1
+
+# Handle INSERT ... ON CONFLICT DO NOTHING ... RETURNING
+query IIII
+INSERT INTO upsert_returning (a, c) VALUES (1, 1), (3, 3) ON CONFLICT (a) DO NOTHING RETURNING *
+----
+3 NULL 3 -1
+
+# Handle UPSERT ... RETURNING
+query IIII rowsort
+UPSERT INTO upsert_returning (a, c) VALUES (1, 10), (3, 30) RETURNING *
+----
+1 1    10 -1
+3 NULL 30 -1
+
+# Ensure returned values are inserted values after conflict resolution
+query I
+SELECT b FROM upsert_returning WHERE a = 1
+----
+1
+
+query I
+INSERT INTO upsert_returning (a, b) VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = excluded.b + upsert_returning.b + 1 RETURNING b
+----
+3
+
+# Handle expressions within returning clause
+query I rowsort
+UPSERT INTO upsert_returning (a, b) VALUES (1, 2), (2, 3), (4, 3) RETURNING a+b+d
+----
+2
+4
+6
+
+# Handle upsert fast path with autocommit
+query IIII rowsort
+UPSERT INTO upsert_returning VALUES (1, 2, 3, 4), (5, 6, 7, 8) RETURNING *
+----
+1 2 3 4
+5 6 7 8
+
+# Handle upsert fast path without autocommit
+statement ok
+BEGIN
+
+query IIII rowsort
+upsert INTO upsert_returning VALUES (1, 5, 4, 3), (6, 5, 4, 3) RETURNING *
+----
+1 5 4 3
+6 5 4 3
+
+statement ok
+COMMIT
+
+# For #22300. Test UPSERT ... RETURNING with UNION.
+query I rowsort
+SELECT a FROM [UPSERT INTO upsert_returning VALUES (7) RETURNING a] UNION VALUES (8)
+----
+7
+8
+
+# For #6710. Add an unused column to disable the fast path which doesn't have this bug.
+statement ok
+CREATE TABLE issue_6710 (a INT PRIMARY KEY, b STRING, c INT)
+
+statement count 2
+INSERT INTO issue_6710 (a, b) VALUES (1, 'foo'), (2, 'bar')
+
+statement count 2
+UPSERT INTO issue_6710 (a, b) VALUES (1, 'test1'), (2, 'test2')
+
+query IT rowsort
+SELECT a, b from issue_6710
+----
+1 test1
+2 test2
+
+statement ok
+CREATE TABLE issue_13962 (a INT PRIMARY KEY, b INT, c INT)
+
+statement count 1
+INSERT INTO issue_13962 VALUES (1, 1, 1)
+
+statement count 1
+INSERT INTO issue_13962 VALUES (1, 2, 2) ON CONFLICT (a) DO UPDATE SET b = excluded.b
+
+query III
+SELECT * FROM issue_13962
+----
+1 2 1
+
+statement ok
+CREATE TABLE issue_14052 (a INT PRIMARY KEY, b INT, c INT)
+
+statement count 2
+INSERT INTO issue_14052 (a, b) VALUES (1, 1), (2, 2)
+
+statement count 2
+UPSERT INTO issue_14052 (a, c) (SELECT a, b from issue_14052)
+
+statement ok
+CREATE TABLE issue_14052_2 (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255),
+  createdAt INT,
+  updatedAt INT
+)
+
+statement count 1
+INSERT INTO issue_14052_2 (id, name, createdAt, updatedAt) VALUES
+  (1, 'original', 1, 1)
+
+# Make sure the fast path isn't taken (createdAt is not in the ON CONFLICT clause)
+statement count 1
+INSERT INTO issue_14052_2 (id, name, createdAt, updatedAt) VALUES
+  (1, 'UPDATED', 2, 2)
+ON CONFLICT (id) DO UPDATE
+  SET id = excluded.id, name = excluded.name, updatedAt = excluded.updatedAt
+
+query ITII
+SELECT * FROM issue_14052_2;
+----
+1  UPDATED  1  2
+
+statement error multiple assignments to the same column
+INSERT INTO issue_14052_2 (id, name, createdAt, updatedAt) VALUES
+  (1, 'FOO', 3, 3)
+ON CONFLICT (id) DO UPDATE
+  SET id = excluded.id, name = excluded.name, name = excluded.name, name = excluded.name
+
+# Make sure the fast path isn't taken (all clauses in the set must be of the form x = excluded.x)
+statement count 1
+INSERT INTO issue_14052_2 (id, name, createdAt, updatedAt) VALUES
+  (1, 'BAR', 4, 5)
+ON CONFLICT (id) DO UPDATE
+  SET name = excluded.name, createdAt = excluded.updatedAt, updatedAt = excluded.updatedAt
+
+query ITII
+SELECT * FROM issue_14052_2;
+----
+1  BAR  5  5
+
+# Make sure the column types are propagated when type checking the ON CONFLICT
+# expressions. See #16873.
+statement ok
+CREATE TABLE issue_16873 (col int PRIMARY KEY, date TIMESTAMP);
+
+# n.b. the fully-qualified names below are required, as there are two providers of
+# the column named `col` here, the original table and the `excluded` pseudo-table.
+statement count 1
+INSERT INTO issue_16873 VALUES (1,clock_timestamp())
+ON CONFLICT (col) DO UPDATE SET date = clock_timestamp() WHERE issue_16873.col = 1;
+
+statement count 1
+INSERT INTO issue_16873 VALUES (1,clock_timestamp())
+ON CONFLICT (col) DO UPDATE SET date = clock_timestamp() WHERE issue_16873.col = 1;
+
+# For #17339.  Support WHERE clause in ON CONFLICT handling.
+statement ok
+CREATE TABLE issue_17339 (a int primary key, b int);
+
+statement count 2
+INSERT INTO issue_17339 VALUES (1, 1), (2, 0);
+
+statement count 1
+INSERT INTO issue_17339 VALUES (1, 0), (2, 2)
+ON CONFLICT (a) DO UPDATE SET b = excluded.b WHERE excluded.b > issue_17339.b;
+
+query II
+SELECT * FROM issue_17339 ORDER BY a;
+----
+1 1
+2 2
+
+statement count 2
+INSERT INTO issue_17339 VALUES (1, 0), (2, 1)
+ON CONFLICT (a) DO UPDATE SET b = excluded.b WHERE TRUE;
+
+query II
+SELECT * FROM issue_17339 ORDER BY a;
+----
+1 0
+2 1
+
+# Regression test for #25726.
+# UPSERT over tables with column families, on the fast path, use the
+# INSERT logic. This has special casing for column families of 1
+# column, and another special casing for column families of 2+
+# columns. The special casing is only for families that do not include
+# the primary key. So we need a table with 3 families: 1 for the PK, 1
+# with just 1 col, and 1 with 2+ cols.
+statement ok
+CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
+  INSERT INTO tu VALUES (1, 2, 3, 4)
+
+statement ok
+UPSERT INTO tu VALUES (1, NULL, NULL, NULL)
+
+query IIII rowsort
+SELECT * FROM tu
+----
+1 NULL NULL NULL
+
+subtest check
+
+statement ok
+CREATE TABLE ab(
+    a INT PRIMARY KEY,
+    b INT, CHECK (b < 1)
+)
+
+statement count 1
+INSERT INTO ab(a, b) VALUES (1, 0);
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
+INSERT INTO ab(a, b) VALUES (1, 0) ON CONFLICT(a) DO UPDATE SET b=12312313;
+
+statement count 1
+INSERT INTO ab(a, b) VALUES (1, 0) ON CONFLICT(a) DO UPDATE SET b=-1;
+
+statement ok
+CREATE TABLE abc_check(
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    CHECK (b < 1),
+    CHECK (c > 1)
+)
+
+statement count 1
+INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2);
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
+INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2) ON CONFLICT(a) DO UPDATE SET b=12312313;
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
+INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2) ON CONFLICT(a) DO UPDATE SET (b, c) = (1, 1);
+
+statement error pq: failed to satisfy CHECK constraint \(c > 1:::INT8\)
+INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2) ON CONFLICT(a) DO UPDATE SET (b, c) = (-1, 1);
+
+statement count 1
+INSERT INTO abc_check(a, b, c) VALUES (2, 0, 3);
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
+INSERT INTO abc_check(c, a, b) VALUES (3, 2, 0) ON CONFLICT(a) DO UPDATE SET b=12312313;
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
+INSERT INTO abc_check(a, c) VALUES (2, 3) ON CONFLICT(a) DO UPDATE SET b=12312313;
+
+statement error pq: failed to satisfy CHECK constraint \(c > 1:::INT8\)
+INSERT INTO abc_check(a, c) VALUES (2, 3) ON CONFLICT(a) DO UPDATE SET c=1;
+
+statement error pq: failed to satisfy CHECK constraint \(c > 1:::INT8\)
+INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET c=1;
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
+INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET b=123123123;
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
+INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET b=123123123;
+
+subtest 29495
+
+statement ok
+CREATE TABLE IF NOT EXISTS example (
+  id SERIAL PRIMARY KEY
+ ,value string NOT NULL
+);
+
+query B
+UPSERT INTO example (value) VALUES ('foo') RETURNING id > 0
+----
+true
+
+statement ok
+DROP TABLE example
+
+subtest contraint_check_validation_ordering
+
+# Verification of column constraints vs CHECK handling. The column
+# constraint verification must take place first.
+#
+# This test requires that the error message for a CHECK constraint
+# validation error be different than a column validation error. So we
+# test the former first, as a sanity check.
+statement ok
+CREATE TABLE tn(x INT NULL CHECK(x IS NOT NULL), y CHAR(4) CHECK(length(y) < 4));
+
+statement error failed to satisfy CHECK constraint
+UPSERT INTO tn(x) VALUES (NULL)
+
+statement error failed to satisfy CHECK constraint
+UPSERT INTO tn(y) VALUES ('abcd')
+
+# Now we test that the column validation occurs before the CHECK constraint.
+statement ok
+CREATE TABLE tn2(x INT NOT NULL CHECK(x IS NOT NULL), y CHAR(3) CHECK(length(y) < 4));
+
+statement error null value in column "x" violates not-null constraint
+UPSERT INTO tn2(x) VALUES (NULL)
+
+statement error value too long for type CHAR\(3\)
+UPSERT INTO tn2(x, y) VALUES (123, 'abcd')
+
+subtest regression_29494
+
+statement disable-cf-mutator ok
+CREATE TABLE t29494(x INT) WITH (schema_locked=false);
+
+statement ok
+INSERT INTO t29494 VALUES (12)
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+# Check that the new column is not visible
+query T
+SELECT create_statement FROM [SHOW CREATE t29494]
+----
+CREATE TABLE public.t29494 (
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC)
+);
+
+# Check that the new column is not usable in RETURNING
+statement error column "y" does not exist
+UPSERT INTO t29494(x) VALUES (123) RETURNING y
+
+# Ditto for INSERT ON CONFLICT
+statement ok
+ROLLBACK;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+statement error column "y" does not exist
+INSERT INTO t29494(x) VALUES (123) ON CONFLICT(rowid) DO UPDATE SET x = 400 RETURNING y
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+query I
+UPSERT INTO t29494(x) VALUES (12) RETURNING *
+----
+12
+
+query I
+UPSERT INTO t29494(x) VALUES (123) RETURNING *
+----
+123
+
+query I
+INSERT INTO t29494(x) VALUES (123) ON CONFLICT(rowid) DO UPDATE SET x = 400 RETURNING *
+----
+123
+
+statement ok
+COMMIT
+
+subtest regression_31255
+
+statement ok
+CREATE TABLE tc(x INT PRIMARY KEY, y INT AS (x+1) STORED)
+
+statement error cannot write directly to computed column "y"
+INSERT INTO tc(x) VALUES (1) ON CONFLICT(x) DO UPDATE SET y = 123
+
+statement error cannot write directly to computed column "y"
+UPSERT INTO tc(x,y) VALUES (1,2)
+
+statement error cannot write directly to computed column "y"
+UPSERT INTO tc VALUES (1,2)
+
+subtest regression_29497
+
+statement ok
+CREATE TABLE t29497(x INT PRIMARY KEY) WITH (schema_locked=false);
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+statement error UPSERT has more expressions than target columns
+UPSERT INTO t29497 VALUES (1, 2)
+
+statement ok
+ROLLBACK;
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+statement error column "y" does not exist
+INSERT INTO t29497(x) VALUES (1) ON CONFLICT (x) DO UPDATE SET y = 456
+
+statement ok
+ROLLBACK
+
+subtest visible_returning_columns
+
+statement ok
+ALTER TABLE tc SET (schema_locked=false);
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TABLE tc DROP COLUMN y
+
+query I colnames,rowsort
+UPSERT INTO tc VALUES (1), (2) RETURNING *
+----
+x
+1
+2
+
+statement ok
+COMMIT
+
+statement ok
+ALTER TABLE tc SET (schema_locked=true);
+
+subtest regression_32762
+
+statement ok
+CREATE TABLE t32762(x INT, y INT, UNIQUE (x,y), CONSTRAINT y_not_null CHECK (y IS NOT NULL))
+
+statement ok
+INSERT INTO t32762(x,y) VALUES (1,2) ON CONFLICT (x,y) DO UPDATE SET x = t32762.x;
+
+statement ok
+INSERT INTO t32762(x,y) VALUES (1,2) ON CONFLICT (x,y) DO UPDATE SET x = t32762.x
+
+subtest regression_33313
+
+statement ok
+CREATE TABLE ex33313(foo INT PRIMARY KEY, bar INT UNIQUE, baz INT);
+  INSERT INTO ex33313 VALUES (1,1,1);
+
+statement count 1
+INSERT INTO ex33313(foo,bar,baz) VALUES (1,2,1), (3,2,2) ON CONFLICT DO NOTHING;
+
+query III colnames
+SELECT * FROM ex33313 ORDER BY foo
+----
+foo  bar  baz
+1    1    1
+3    2    2
+
+# Use Upsert with indexed table, default columns, computed columns, and check
+# columns.
+statement ok
+CREATE TABLE indexed (
+  a DECIMAL PRIMARY KEY,
+  b DECIMAL,
+  c DECIMAL DEFAULT(10.0),
+  d DECIMAL AS (a + c) STORED,
+  UNIQUE INDEX secondary (d, b),
+  CHECK (c > 0)
+)
+
+statement ok
+INSERT INTO indexed VALUES (1, 1, 1); INSERT INTO indexed VALUES (2, 2, 2)
+
+# Use implicit target columns (should set default and computed values).
+statement ok
+UPSERT INTO indexed VALUES (1.0)
+
+query TTTT colnames
+SELECT * FROM indexed@secondary ORDER BY d, b
+----
+a  b     c     d
+2  2     2     4
+1  NULL  10.0  11.0
+
+# Explicitly specify all target columns. Ensure that primary key is not updated,
+# even though an alternate but equal decimal form is in use (1.0 vs. 1).
+statement ok
+UPSERT INTO indexed (a, b, c) VALUES (1.0, 1.0, 1.0)
+
+query TTTT colnames
+SELECT * FROM indexed@secondary ORDER BY d, b
+----
+a  b    c    d
+1  1.0  1.0  2.0
+2  2    2    4
+
+# Ensure that explicit target column does not disturb existing "b" value, but
+# does update the computed column.
+statement ok
+UPSERT INTO indexed (c, a) VALUES (2, 1)
+
+query TTTT colnames
+SELECT * FROM indexed@secondary ORDER BY d, b
+----
+a  b    c  d
+1  1.0  2  3
+2  2    2  4
+
+# Final check to ensure that primary index is correct.
+query TTTT colnames
+SELECT * FROM indexed@indexed_pkey ORDER BY a
+----
+a  b    c  d
+1  1.0  2  3
+2  2    2  4
+
+# Drop the secondary index, allowing the "blind upsert" path to run.
+statement ok
+DROP INDEX indexed@secondary CASCADE
+
+# Use implicit target columns (should set default and computed values).
+statement ok
+UPSERT INTO indexed VALUES (1, 1)
+
+query TTTT colnames,rowsort
+SELECT * FROM indexed
+----
+a  b     c     d
+1  1  10.0  11.0
+2  2     2     4
+
+# Explicitly specify all target columns.
+statement ok
+UPSERT INTO indexed (a, b, c) SELECT 1, 2, 3
+
+query TTTT colnames,rowsort
+SELECT * FROM indexed
+----
+a  b  c  d
+2  2  2  4
+1  2  3  4
+
+# Ensure that explicit target column does not disturb existing "b" value, but
+# does update the computed column.
+query TTTT
+UPSERT INTO indexed (c, a) VALUES (2.0, 1.0) RETURNING *
+----
+1  2  2.0  3.0
+
+query TTTT colnames,rowsort
+SELECT * FROM indexed
+----
+a  b  c    d
+1  2  2.0  3.0
+2  2  2    4
+
+statement ok
+DROP TABLE indexed
+
+subtest regression_35040
+
+statement ok
+CREATE TABLE test35040(a INT PRIMARY KEY, b INT NOT NULL, c INT2)
+
+statement ok
+INSERT INTO test35040(a,b) VALUES(0,0) ON CONFLICT(a) DO UPDATE SET b = NULL
+
+statement error null value in column "b" violates not-null constraint
+INSERT INTO test35040(a,b) VALUES(0,0) ON CONFLICT(a) DO UPDATE SET b = NULL
+
+statement error integer out of range for type int2
+INSERT INTO test35040(a,b) VALUES (0,1) ON CONFLICT(a) DO UPDATE SET c = 111111111;
+
+statement ok
+DROP TABLE test35040
+
+# ------------------------------------------------------------------------------
+# Regression for #35364.
+# ------------------------------------------------------------------------------
+subtest regression_35364
+
+statement ok
+CREATE TABLE t35364(x INT PRIMARY KEY, y DECIMAL(10,1) CHECK(y >= 8.0), UNIQUE INDEX (y))
+
+statement ok
+INSERT INTO t35364(x, y) VALUES (1, 10.2)
+
+# 10.18 should be mapped to 10.2 before the left outer join so that the conflict
+# can be detected, and 7.95 should be mapped to 8.0 so that check constraint
+# will pass.
+statement ok
+INSERT INTO t35364(x, y) VALUES (2, 10.18) ON CONFLICT (y) DO UPDATE SET y=7.95
+
+query IT
+SELECT * FROM t35364
+----
+1  8.0
+
+statement ok
+DROP TABLE t35364
+
+# Check UPSERT syntax.
+statement ok
+CREATE TABLE t35364(
+    x DECIMAL(10,0) CHECK (x >= 0) PRIMARY KEY,
+    y DECIMAL(10,0) CHECK (y >= 0)
+)
+
+statement ok
+UPSERT INTO t35364 (x) VALUES (-0.1)
+
+query TT
+SELECT * FROM t35364
+----
+-0  NULL
+
+statement ok
+UPSERT INTO t35364 (x, y) VALUES (-0.2, -0.3)
+
+query TT
+SELECT * FROM t35364
+----
+-0  -0
+
+statement ok
+UPSERT INTO t35364 (x, y) VALUES (1.5, 2.5)
+
+query TT rowsort
+SELECT * FROM t35364
+----
+-0  -0
+2   3
+
+statement ok
+INSERT INTO t35364 (x) VALUES (1.5) ON CONFLICT (x) DO UPDATE SET x=2.5, y=3.5
+
+query TT rowsort
+SELECT * FROM t35364
+----
+-0  -0
+3   4
+
+# ------------------------------------------------------------------------------
+# Regression for #35970.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE table35970 (
+    a DECIMAL(10,1) PRIMARY KEY,
+    b DECIMAL(10,1),
+    c DECIMAL(10,0),
+    FAMILY fam0 (a, b),
+    FAMILY fam1 (c)
+)
+
+query I
+UPSERT INTO table35970 (a) VALUES (1.5) RETURNING b
+----
+NULL
+
+query I
+INSERT INTO table35970 VALUES (1.5, 1.5, NULL)
+ON CONFLICT (a)
+DO UPDATE SET c = table35970.a+1
+RETURNING b
+----
+NULL
+
+# ------------------------------------------------------------------------------
+# Regression for #38627: make sure that UPSERTs in the presence of column
+# mutations don't cause problems.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE table38627 (a INT PRIMARY KEY, b INT) WITH (schema_locked=false); INSERT INTO table38627 VALUES(1,1)
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
+
+statement ok
+UPSERT INTO table38627 SELECT * FROM table38627 WHERE a=1
+
+query II
+SELECT * from table38627
+----
+1  1
+
+statement ok
+COMMIT
+
+query III
+SELECT * from table38627
+----
+1  1  5
+
+# ------------------------------------------------------------------------------
+# Regression for #44466.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE t44466 (c0 INT PRIMARY KEY, c1 BOOL, c2 INT UNIQUE)
+
+statement ok
+INSERT INTO t44466 (c0) VALUES (0)
+
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+UPSERT INTO t44466 (c2, c0) VALUES (0, 0), (1, 0)
+
+statement ok
+DROP TABLE t44466
+
+# ------------------------------------------------------------------------------
+# Regression for #46395.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE t46395(c0 INT UNIQUE DEFAULT 0, c1 INT);
+
+statement ok
+INSERT INTO t46395(c1) VALUES (0), (1) ON CONFLICT (c0) DO NOTHING;
+
+statement ok
+DROP TABLE t46395
+
+# ------------------------------------------------------------------------------
+# Duplicate primary key inputs.
+# ------------------------------------------------------------------------------
+# Start with no secondary index present.
+statement ok
+CREATE TABLE tdup (x INT PRIMARY KEY, y INT, z INT)
+
+statement ok
+INSERT INTO tdup VALUES (1, 1, 1)
+
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO tdup VALUES (1, 2, 1), (1, 3, 1) ON CONFLICT (x) DO UPDATE SET z=1
+
+# Add secondary index and verify that same error occurs.
+statement ok
+CREATE UNIQUE INDEX ON tdup (y)
+
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO tdup VALUES (1, 2, 1), (1, 3, 1) ON CONFLICT (x) DO UPDATE SET z=1
+
+# Verify that duplicate insert into secondary fails with regular conflict error.
+statement error pq: duplicate key value violates unique constraint "tdup_y_key"\nDETAIL: Key \(y\)=\(2\) already exists\.
+INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (x) DO UPDATE SET z=1
+
+statement ok
+DROP TABLE tdup
+
+# ------------------------------------------------------------------------------
+# Duplicate secondary key inputs.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE tdup (x INT PRIMARY KEY, y INT, z INT, UNIQUE (y, z))
+
+statement ok
+INSERT INTO tdup VALUES (1, 1, 1)
+
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (z, y) DO UPDATE SET z=1
+
+# Verify that NULL values are not treated as duplicates.
+statement ok
+INSERT INTO tdup
+VALUES (2, 2, NULL), (3, 2, NULL), (4, NULL, NULL), (5, NULL, NULL)
+ON CONFLICT (z, y) DO UPDATE SET z=1
+
+query III rowsort
+SELECT * FROM tdup
+----
+1  1     1
+2  2     NULL
+3  2     NULL
+4  NULL  NULL
+5  NULL  NULL
+
+query III rowsort
+SELECT * FROM tdup@tdup_y_z_key
+----
+4  NULL  NULL
+5  NULL  NULL
+1  1     1
+2  2     NULL
+3  2     NULL
+
+# Verify that duplicate secondary key fails with regular conflict error.
+statement error pq: duplicate key value violates unique constraint "tdup_y_z_key"\nDETAIL: Key \(y, z\)=\(1, 2\) already exists\.
+INSERT INTO tdup VALUES (6, 1, 1), (7, 1, 2) ON CONFLICT (y, z) DO UPDATE SET z=2
+
+# With constant grouping columns (no error).
+statement ok
+INSERT INTO tdup SELECT 6, 2, z FROM tdup WHERE z=1
+ON CONFLICT (y, z) DO UPDATE SET z=2
+
+query III rowsort
+SELECT * FROM tdup
+----
+1  1     1
+2  2     NULL
+3  2     NULL
+4  NULL  NULL
+5  NULL  NULL
+6  2     1
+
+# With constant grouping columns (error).
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO tdup SELECT 6, 2, z FROM tdup WHERE z=1
+ON CONFLICT (y, z) DO UPDATE SET z=2
+
+# With constant nullable grouping columns.
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO tdup SELECT x+100, y, y+1 FROM tdup WHERE z IS NULL
+ON CONFLICT (y, z) DO UPDATE SET z=3
+
+statement ok
+DROP TABLE tdup
+
+# ------------------------------------------------------------------------------
+# Duplicate ordered inputs (use streaming distinct).
+# Ensure this test stays synchronized to the EXPLAIN in exec/execbuilder/upsert,
+# so that use of streaming group-by is confirmed.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE target (a INT PRIMARY KEY, b INT, c INT, UNIQUE (b, c))
+
+statement ok
+CREATE TABLE source (x INT PRIMARY KEY, y INT, z INT, INDEX (y, z))
+
+statement ok
+INSERT INTO source
+VALUES (1, 1, 1), (2, 1, 1), (3, 1, NULL), (4, 1, NULL), (5, NULL, NULL), (6, NULL, NULL)
+
+# This upsert statement triggers streaming distinct by using conflict columns
+# (b,c) that are provided by the (y,z) index.
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO target SELECT x, y, z FROM source ON CONFLICT (b, c) DO UPDATE SET b=5
+
+# Ensure that NULL values are treated as distinct.
+statement ok
+INSERT INTO target SELECT x, y, z FROM source WHERE (y IS NULL OR y > 0) AND x <> 1
+ON CONFLICT (b, c) DO UPDATE SET b=5
+
+query III rowsort
+SELECT * FROM target
+----
+2  1     1
+3  1     NULL
+4  1     NULL
+5  NULL  NULL
+6  NULL  NULL
+
+query III rowsort
+SELECT * FROM target@target_b_c_key
+----
+5  NULL  NULL
+6  NULL  NULL
+3  1     NULL
+4  1     NULL
+2  1     1
+
+statement ok
+DROP TABLE source
+
+statement ok
+DROP TABLE target
+
+# ------------------------------------------------------------------------------
+# DO NOTHING with duplicate inputs.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE target (x INT PRIMARY KEY, y INT, z INT, UNIQUE (y, z))
+
+statement ok
+CREATE TABLE source (a INT, b INT, c INT)
+
+# Ensure that duplicates are removed from the input at runtime. NULL values are
+# never considered to be duplicates.
+statement ok
+INSERT INTO source
+VALUES
+    (1, 1, 2),
+    (1, 2, 1),
+    (1, 2, 2),
+    (2, 3, 3),
+    (4, 1, NULL),
+    (5, 1, NULL),
+    (6, NULL, NULL),
+    (7, NULL, NULL)
+
+statement ok
+INSERT INTO target SELECT * FROM source ON CONFLICT DO NOTHING
+
+query III rowsort
+SELECT * FROM target
+----
+1  1     2
+2  3     3
+4  1     NULL
+5  1     NULL
+6  NULL  NULL
+7  NULL  NULL
+
+statement ok
+INSERT INTO target SELECT 8, y, z FROM (VALUES (2, 2), (2, 3)) s(y, z)
+ON CONFLICT (x) DO NOTHING
+
+query III rowsort
+SELECT * FROM target
+----
+1  1     2
+2  3     3
+4  1     NULL
+5  1     NULL
+6  NULL  NULL
+7  NULL  NULL
+8  2     2
+
+statement ok
+DROP TABLE source
+
+statement ok
+DROP TABLE target
+
+# Regression test for #59125. Ensure that valid rows don't get filtered out
+# from ON CONFLICT DO NOTHING.
+statement ok
+CREATE TABLE uniq (
+  x STRING PRIMARY KEY,
+  y STRING UNIQUE,
+  z STRING UNIQUE
+)
+
+statement ok
+INSERT INTO uniq VALUES ('x1', 'y1', 'z1');
+
+# The first row has a conflict due to the unique index on y, so it should be
+# discarded. The second row does not conflict with the existing row, so it
+# should be inserted. The third row is a duplicate of the second row, so it
+# should be discarded.
+statement ok
+INSERT INTO uniq VALUES ('x2', 'y1', 'z2'), ('x2', 'y2', 'z2'), ('x2', 'y2', 'z2')
+ON CONFLICT DO NOTHING
+
+query TTT rowsort
+SELECT * FROM uniq
+----
+x1  y1  z1
+x2  y2  z2
+
+# Regression test for #57434.
+statement ok
+CREATE TABLE target (x INT PRIMARY KEY, y INT, z INT, UNIQUE (y, z))
+
+statement ok
+CREATE TABLE source (a INT, b INT, c INT)
+
+statement ok
+INSERT INTO source VALUES (1, 1, 2), (1, 2, 1)
+
+statement ok
+INSERT INTO target SELECT * FROM source ORDER BY rowid ON CONFLICT DO NOTHING
+
+subtest generated_as_identity
+statement ok
+CREATE TABLE generated_as_id_t (
+  a INT UNIQUE,
+  b INT GENERATED ALWAYS AS IDENTITY,
+  c INT GENERATED BY DEFAULT AS IDENTITY
+)
+
+statement ok
+INSERT INTO generated_as_id_t (a) VALUES (1), (2), (3)
+
+statement error pq: cannot insert into column "b"\nDETAIL: Column "b" is an identity column defined as GENERATED ALWAYS
+INSERT INTO generated_as_id_t (a, b) VALUES (1, 10) ON CONFLICT DO NOTHING
+
+statement error pq: cannot insert into column "b"\nDETAIL: Column "b" is an identity column defined as GENERATED ALWAYS
+INSERT INTO generated_as_id_t (a, b) VALUES (1, 10) ON CONFLICT (a) DO UPDATE SET b=DEFAULT
+
+statement ok
+INSERT INTO generated_as_id_t (a, c) VALUES (1, 10) ON CONFLICT DO NOTHING
+
+
+# Do this fancy query to deal with the fact that transaction restarts on the
+# insert may change the sequence values used for columns b and c. This query
+# just ensures that they have the expected offset from each other.
+query III
+  SELECT a,
+         b - b_min + 1 AS b,
+         c - c_min + 1 AS c
+    FROM generated_as_id_t,
+         (
+              SELECT b AS b_min,
+                     c AS c_min
+                FROM generated_as_id_t
+            ORDER BY a ASC
+               LIMIT 1
+         )
+ORDER BY a
+----
+1  1  1
+2  2  2
+3  3  3
+
+# TODO(janexing): In this INSERT ... ON CONFLICT ... DO UPDATE SET ... DEFAULT
+# edge case, the output is slightly different from PostgreSQL's output.
+# See also https://github.com/cockroachdb/cockroach/issues/69208.
+statement ok
+INSERT INTO generated_as_id_t (a) VALUES (1) ON CONFLICT (a) DO UPDATE SET b=DEFAULT;
+
+# `SELECT * FROM generated_as_id_t` now should give
+# 1  5  1
+# 2  2  2
+# 3  3  3
+# Do this fancy query to deal with the fact that transaction restarts on the
+# insert may change the sequence values used for columns b and c. This query
+# just ensures that they have the expected offset from each other.
+
+query III
+  SELECT a,
+         b - b_row2 AS b,
+         c - c_row2 AS c
+    FROM generated_as_id_t,
+         (
+              SELECT b AS b_row2,
+                     c AS c_row2
+                FROM generated_as_id_t
+            ORDER BY b
+               LIMIT 1
+         )
+ORDER BY a
+----
+1  3  -1
+2  0  0
+3  1  1
+
+subtest explicit_arbiter_indexes
+
+# Test explicitly specified arbiter indexes. Note that these are mostly tested
+# by optbuilder test cases, since they compile to the same outputs that inferred
+# arbiter indexes are.
+statement ok
+CREATE TABLE arbiter_index (a INT, b INT, c INT, PRIMARY KEY (a, b), UNIQUE (c))
+
+statement ok
+INSERT INTO arbiter_index VALUES (1,2,3)
+ON CONFLICT ON CONSTRAINT arbiter_index_pkey DO NOTHING
+
+statement ok
+INSERT INTO arbiter_index VALUES(1,2,3)
+ON CONFLICT ON CONSTRAINT arbiter_index_pkey DO NOTHING
+
+statement ok
+INSERT INTO arbiter_index VALUES(2,2,3)
+ON CONFLICT ON CONSTRAINT arbiter_index_c_key DO UPDATE SET c=10
+
+query III
+SELECT * FROM arbiter_index
+----
+1  2  10
+
+subtest regression_133146
+
+# Regression test for #133146. Columns that are not updated in an UPSERT should
+# not cause not-null constraint violations.
+statement ok
+CREATE TABLE t133146 (
+  id INT PRIMARY KEY,
+  a INT NOT NULL,
+  b INT
+)
+
+statement ok
+INSERT INTO t133146 (id, a, b) VALUES (1, 2, 3)
+
+# This should not cause a not-null constraint violation of column "a" because
+# the value of "a" is not being updated to NULL in the existing row.
+statement ok
+UPSERT INTO t133146 (id, b) VALUES (1, 30)
+
+query III
+SELECT * FROM t133146
+----
+1  2  30
+
+statement ok
+INSERT INTO t133146 (id, b) VALUES (1, 40) ON CONFLICT (id) DO UPDATE SET b = 40
+
+query III
+SELECT * FROM t133146
+----
+1  2  40
+
+statement error pgcode 23502 pq: null value in column \"a\" violates not-null constraint
+UPSERT INTO t133146 (id, a) VALUES (1, NULL)
+
+statement error pgcode 23502 pq: null value in column \"a\" violates not-null constraint
+INSERT INTO t133146 (id, b) VALUES (1, 50) ON CONFLICT (id) DO UPDATE SET a = NULL
+
+statement ok
+CREATE TABLE t133146b (
+  a INT,
+  b INT NOT NULL,
+  id INT PRIMARY KEY
+)
+
+statement ok
+INSERT INTO t133146b (id, a, b) VALUES (1, 2, 3)
+
+statement ok
+UPSERT INTO t133146b (id, b) VALUES (1, 30)
+
+query III
+SELECT * FROM t133146b
+----
+2  30  1
+
+statement ok
+INSERT INTO t133146b (id, b) VALUES (1, 40) ON CONFLICT (id) DO UPDATE SET b = 40
+
+query III
+SELECT * FROM t133146b
+----
+2  40  1
+
+statement error pgcode 23502 pq: null value in column \"b\" violates not-null constraint
+UPSERT INTO t133146b (id, b) VALUES (1, NULL)
+
+statement error pgcode 23502 pq: null value in column \"b\" violates not-null constraint
+INSERT INTO t133146b (id, a) VALUES (1, 20) ON CONFLICT (id) DO UPDATE SET b = NULL

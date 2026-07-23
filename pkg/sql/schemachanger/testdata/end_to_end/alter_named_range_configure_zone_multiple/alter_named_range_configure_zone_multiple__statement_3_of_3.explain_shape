@@ -1,0 +1,9 @@
+/* setup */
+
+/* test */
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 7;
+ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 10000;
+EXPLAIN (DDL, SHAPE) ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10;
+----
+Schema change plan for ALTER RANGE ‹default› CONFIGURE ZONE USING ‹num_replicas› = ‹10›; following ALTER RANGE ‹default› CONFIGURE ZONE USING ‹num_replicas› = ‹7›; ALTER RANGE ‹default› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›;
+ └── execute 1 system table mutations transaction

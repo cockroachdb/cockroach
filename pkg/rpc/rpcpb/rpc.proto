@@ -1,0 +1,41 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.rpc;
+option go_package = "github.com/cockroachdb/cockroach/pkg/rpc/rpcpb";
+
+import "gogoproto/gogo.proto";
+
+// ConnectionClass is the identifier of a group of RPC client sessions that are
+// allowed to share an underlying TCP connection; RPC sessions with different
+// connection classes are guaranteed to use separate gRPC client connections.
+//
+// RPC sessions that share a connection class are arbitrated using the gRPC flow
+// control logic, see google.golang.org/grpc/internal/transport. The lack of
+// support of prioritization in the current gRPC implementation is the reason
+// why we are separating different priority flows across separate TCP
+// connections. Future gRPC improvements may enable further simplification here.
+// See https://github.com/grpc/grpc-go/issues/1448 for progress on gRPC's
+// adoption of HTTP2 priorities.
+enum ConnectionClass {
+  option (gogoproto.goproto_enum_stringer) = false;
+
+  // DEFAULT is the default ConnectionClass used for most client traffic.
+  DEFAULT = 0;
+  // SYSTEM is the ConnectionClass used for system traffic.
+  SYSTEM = 1;
+  // RANGEFEED is the ConnectionClass used for rangefeeds.
+  RANGEFEED = 2;
+  // RAFT is the ConnectionClass used for raft traffic.
+  RAFT = 3;
+
+  // NEXT is greater than all the known connection classes above. This is a
+  // sentinel value that must not be used except for estimating the number of
+  // valid connection classes, e.g. in code that iterates all possible values.
+  //
+  // On adding new classes, NEXT must be updated accordingly.
+  NEXT = 4;
+}

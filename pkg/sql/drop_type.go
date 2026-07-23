@@ -1,0 +1,363 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package sql
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
+)
+
+type dropTypeNode struct {
+	zeroInputPlanNode
+	n      *tree.DropType
+	toDrop map[descpb.ID]*typedesc.Mutable
+}
+
+// Use to satisfy the linter.
+var _ planNode = &dropTypeNode{n: nil}
+
+func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"DROP TYPE",
+	); err != nil {
+		return nil, err
+	}
+
+	node := &dropTypeNode{
+		n:      n,
+		toDrop: make(map[descpb.ID]*typedesc.Mutable),
+	}
+	if n.DropBehavior == tree.DropCascade {
+		return nil, unimplemented.NewWithIssue(51480, "DROP TYPE CASCADE is not yet supported")
+	}
+	for _, name := range n.Names {
+		// Resolve the desired type descriptor.
+		_, typeDesc, err := p.ResolveMutableTypeDescriptor(ctx, name, !n.IfExists)
+		if err != nil {
+			return nil, err
+		}
+		if typeDesc == nil {
+			continue
+		}
+		// If we've already seen this type, then skip it.
+		if _, ok := node.toDrop[typeDesc.ID]; ok {
+			continue
+		}
+		switch typeDesc.Kind {
+		case descpb.TypeDescriptor_ALIAS:
+			// The implicit array types are not directly droppable.
+			return nil, pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"%q is an implicit array type and cannot be modified",
+				name,
+			)
+		case descpb.TypeDescriptor_MULTIREGION_ENUM:
+			// Multi-region enums are not directly droppable.
+			return nil, errors.WithHintf(
+				pgerror.Newf(
+					pgcode.DependentObjectsStillExist,
+					"%q is a multi-region enum and cannot be modified directly",
+					name,
+				),
+				"try ALTER DATABASE DROP REGION %s", name)
+		case descpb.TypeDescriptor_ENUM:
+			sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumDrop)
+		case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
+			return nil, pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"cannot drop type %q because table %q requires it",
+				name, name,
+			)
+		}
+
+		// Check if we can drop the type.
+		if err := p.canDropTypeDesc(ctx, typeDesc, n.DropBehavior); err != nil {
+			return nil, err
+		}
+
+		// Get the array type that needs to be dropped as well.
+		mutArrayDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeDesc.ArrayTypeID)
+		if err != nil {
+			return nil, err
+		}
+		// Ensure that we can drop the array type as well. Exclude
+		// back-references from the type being dropped, since the type and
+		// its array type are always dropped together as a pair. Domain
+		// types add a back-reference from their array type during
+		// creation (via addBackRefsFromAllTypesInType), so without this
+		// exclusion the array type's back-reference to the domain would
+		// prevent dropping.
+		if err := p.canDropTypeDescExcluding(ctx, mutArrayDesc, n.DropBehavior, typeDesc.ID); err != nil {
+			return nil, err
+		}
+		// Record these descriptors for deletion.
+		node.toDrop[typeDesc.ID] = typeDesc
+		node.toDrop[mutArrayDesc.ID] = mutArrayDesc
+	}
+	return node, nil
+}
+
+func (p *planner) canDropTypeDesc(
+	ctx context.Context, desc *typedesc.Mutable, behavior tree.DropBehavior,
+) error {
+	return p.canDropTypeDescExcluding(ctx, desc, behavior, descpb.InvalidID)
+}
+
+// canDropTypeDescExcluding checks whether the type can be dropped, ignoring
+// back-references from excludeID. This is used when dropping a type and its
+// companion array type together — the array type may have a back-reference
+// from the main type that should not block the drop.
+func (p *planner) canDropTypeDescExcluding(
+	ctx context.Context, desc *typedesc.Mutable, behavior tree.DropBehavior, excludeID descpb.ID,
+) error {
+	if err := p.canModifyType(ctx, desc); err != nil {
+		return err
+	}
+	if behavior != tree.DropCascade {
+		var refs []descpb.ID
+		for _, id := range desc.ReferencingDescriptorIDs {
+			if id != excludeID {
+				refs = append(refs, id)
+			}
+		}
+		if len(refs) > 0 {
+			dependentNames, err := p.getFullyQualifiedNamesFromIDs(ctx, refs)
+			if err != nil {
+				return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
+			}
+			return pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"cannot drop type %q because other objects (%v) still depend on it",
+				desc.Name,
+				dependentNames,
+			)
+		}
+	}
+	return nil
+}
+
+func (n *dropTypeNode) startExec(params runParams) error {
+	for _, typeDesc := range n.toDrop {
+		typeFQName, err := getTypeNameFromTypeDescriptor(
+			oneAtATimeSchemaResolver{params.ctx, params.p},
+			typeDesc,
+		)
+		if err != nil {
+			return err
+		}
+		err = params.p.dropTypeImpl(params.ctx, typeDesc, "dropping type "+typeFQName.FQString(), true /* queueJob */)
+		if err != nil {
+			return err
+		}
+		event := &eventpb.DropType{
+			TypeName: typeFQName.FQString(),
+		}
+		// Log a Drop Type event.
+		if err := params.p.logEvent(params.ctx, typeDesc.ID, event); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *planner) addTypeBackReference(
+	ctx context.Context, typeID, ref descpb.ID, jobDesc string,
+) error {
+	mutDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeID)
+	if err != nil {
+		return err
+	}
+
+	// Check if this user has USAGE privilege on the type. If an object has a
+	// dependency on a type, the user must have USAGE privilege on the type to
+	// create a dependency. For implicit array types (ALIAS), check the
+	// privilege on the base element type instead, matching PostgreSQL behavior.
+	if mutDesc.Kind == descpb.TypeDescriptor_ALIAS &&
+		mutDesc.Alias != nil &&
+		mutDesc.Alias.Family() == types.ArrayFamily {
+		baseTypeID := typedesc.GetUserDefinedTypeDescID(mutDesc.Alias.ArrayContents())
+		baseDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, baseTypeID)
+		if err != nil {
+			return err
+		}
+		if err := p.CheckPrivilege(ctx, baseDesc, privilege.USAGE); err != nil {
+			return err
+		}
+	} else {
+		if err := p.CheckPrivilege(ctx, mutDesc, privilege.USAGE); err != nil {
+			return err
+		}
+	}
+
+	if !mutDesc.AddReferencingDescriptorID(ref) {
+		return nil // no-op
+	}
+	return p.writeTypeSchemaChange(ctx, mutDesc, jobDesc)
+}
+
+func (p *planner) removeTypeBackReferences(
+	ctx context.Context, typeIDs []descpb.ID, ref descpb.ID, jobDesc string,
+) error {
+	for _, typeID := range typeIDs {
+		mutDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeID)
+		if err != nil {
+			return err
+		}
+		if mutDesc.RemoveReferencingDescriptorID(ref) {
+			if err := p.writeTypeSchemaChange(ctx, mutDesc, jobDesc); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (p *planner) addBackRefsFromAllTypesInTable(
+	ctx context.Context, desc *tabledesc.Mutable,
+) error {
+	dbDesc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Database(ctx, desc.GetParentID())
+	if err != nil {
+		return err
+	}
+	typeIDs, _, err := desc.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
+		mutDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return mutDesc, nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, id := range typeIDs {
+		jobDesc := fmt.Sprintf("updating type back reference %d for table %d", id, desc.ID)
+		if err := p.addTypeBackReference(ctx, id, desc.ID, jobDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *planner) removeBackRefsFromAllTypesInTable(
+	ctx context.Context, desc *tabledesc.Mutable,
+) error {
+	dbDesc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Database(ctx, desc.GetParentID())
+	if err != nil {
+		return err
+	}
+	typeIDs, _, err := desc.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
+		mutDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return mutDesc, nil
+	})
+	if err != nil {
+		return err
+	}
+	jobDesc := fmt.Sprintf("updating type back references %v for table %d", typeIDs, desc.ID)
+	return p.removeTypeBackReferences(ctx, typeIDs, desc.ID, jobDesc)
+}
+
+func (p *planner) addBackRefsFromAllTypesInType(ctx context.Context, desc *typedesc.Mutable) error {
+	typeIDs := desc.GetIDClosure()
+	for _, id := range typeIDs.Ordered() {
+		if id == desc.ID {
+			// Don't add a self back reference.
+			continue
+		}
+		jobDesc := fmt.Sprintf("updating type back reference %d for type %d", id, desc.ID)
+		if err := p.addTypeBackReference(ctx, id, desc.ID, jobDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *planner) removeBackRefsFromAllTypesInType(
+	ctx context.Context, desc *typedesc.Mutable,
+) error {
+	typeIDs := desc.GetIDClosure()
+	// Don't add a self back reference.
+	typeIDs.Remove(desc.ID)
+	jobDesc := fmt.Sprintf("updating type back references %v for type %d", typeIDs, desc.ID)
+	return p.removeTypeBackReferences(ctx, typeIDs.Ordered(), desc.ID, jobDesc)
+}
+
+// dropTypeImpl does the work of dropping a type and everything that depends on it.
+func (p *planner) dropTypeImpl(
+	ctx context.Context, typeDesc *typedesc.Mutable, jobDesc string, queueJob bool,
+) error {
+	if typeDesc.Dropped() {
+		return errors.Errorf("type %q is already being dropped", typeDesc.Name)
+	}
+
+	// Exit early with an error if the type is undergoing a declarative schema
+	// change.
+	if catalog.HasConcurrentDeclarativeSchemaChange(typeDesc) {
+		return scerrors.ConcurrentSchemaChangeError(typeDesc)
+	}
+
+	// Actually mark the type as dropped.
+	typeDesc.SetDropped()
+
+	// Delete namespace entry for type.
+	b := p.txn.NewBatch()
+	if err := p.dropNamespaceEntry(ctx, b, typeDesc); err != nil {
+		return err
+	}
+	if err := p.txn.Run(ctx, b); err != nil {
+		return err
+	}
+
+	// Delete any comments associated with this type.
+	if err := p.deleteComment(ctx, typeDesc.ID, 0, catalogkeys.TypeCommentType); err != nil {
+		return err
+	}
+
+	// For this type descriptor, delete queued schema change jobs from the job
+	// cache. If the job had already been scheduled, we would also need to mark
+	// these jobs as successful, but that should never happen for types.
+	//
+	// Note that we still wait for jobs removed from the cache to finish running
+	// after the transaction, since they're not removed from the jobsCollection.
+	// Also, changes made here do not affect schema change jobs created in this
+	// transaction with no mutation ID; they remain in the cache, and will be
+	// updated when writing the job record to drop the table.
+	delete(p.ExtendedEvalContext().jobs.uniqueToCreate, typeDesc.ID)
+
+	if err := p.removeBackRefsFromAllTypesInType(ctx, typeDesc); err != nil {
+		return err
+	}
+	// Write updated type descriptor.
+	if queueJob {
+		return p.writeTypeSchemaChange(ctx, typeDesc, jobDesc)
+	}
+	return p.writeTypeDesc(ctx, typeDesc)
+}
+
+func (n *dropTypeNode) Next(params runParams) (bool, error) { return false, nil }
+func (n *dropTypeNode) Values() tree.Datums                 { return tree.Datums{} }
+func (n *dropTypeNode) Close(ctx context.Context)           {}
+func (n *dropTypeNode) ReadingOwnWrites()                   {}

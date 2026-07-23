@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "joberror",
+    srcs = ["errors.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/jobs/joberror",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/sql/flowinfra",
+        "//pkg/sql/sqlerrors",
+        "//pkg/sql/sqlinstance",
+        "//pkg/util/circuit",
+        "//pkg/util/grpcutil",
+        "//pkg/util/sysutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "joberror_test",
+    srcs = ["errors_test.go"],
+    embed = [":joberror"],
+    deps = [
+        "//pkg/util/circuit",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,171 @@
+# This file has some basic tests that manipulate the store liveness fabric.
+# They're more to test the directives themselves than anything else.
+
+add-nodes 2 index=10
+----
+INFO 1 switched to configuration voters=()
+INFO 1 became follower at term 0
+DEBUG 1 reset election elapsed to 0
+INFO newRaft 1 [peers: [], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
+INFO 2 switched to configuration voters=()
+INFO 2 became follower at term 0
+DEBUG 2 reset election elapsed to 0
+INFO newRaft 2 [peers: [], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
+
+store-liveness
+----
+  1 2
+1 1 1
+2 1 1
+
+add-nodes 1
+----
+INFO 3 switched to configuration voters=()
+INFO 3 became follower at term 0
+DEBUG 3 reset election elapsed to 0
+INFO newRaft 3 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
+
+store-liveness
+----
+  1 2 3
+1 1 1 1
+2 1 1 1
+3 1 1 1
+
+# Bump epoch of store 1. This will result in it seeking support from all other
+# stores at epoch 2, which they'll provide successfully.
+bump-epoch 1
+----
+  1 2 3
+1 2 1 1
+2 2 1 1
+3 2 1 1
+
+# Withdraw support from 3 for 2.
+withdraw-support 3 2
+----
+  1 2 3
+1 2 1 1
+2 2 1 1
+3 2 x 1
+
+# Withdraw support from 2 for 3.
+withdraw-support 2 3
+----
+  1 2 3
+1 2 1 1
+2 2 1 x
+3 2 x 1
+
+# Grant support from 2 for 3. This causes 3 to bump its epoch and successfully
+# seek support from 2 at the newer epoch (2).
+grant-support 2 3
+----
+  1 2 3
+1 2 1 1
+2 2 1 2
+3 2 x 2
+
+
+# Repeat this process of withdrawing support and granting support from 2 for 3
+# another time to distinguish 3s epoch from 1s epoch.
+
+withdraw-support 2 3
+----
+  1 2 3
+1 2 1 1
+2 2 1 x
+3 2 x 2
+
+grant-support 2 3
+----
+  1 2 3
+1 2 1 1
+2 2 1 3
+3 2 x 3
+
+# Finally, add another node in the mix. The node should start seeking support
+# from all other stores at epoch 1. Moreover, it should provide support to store
+# 1 at epoch 2 and store 3 at epoch 3.
+add-nodes 1
+----
+INFO 4 switched to configuration voters=()
+INFO 4 became follower at term 0
+DEBUG 4 reset election elapsed to 0
+INFO newRaft 4 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
+
+store-liveness
+----
+  1 2 3 4
+1 2 1 1 1
+2 2 1 3 1
+3 2 x 3 1
+4 2 1 3 1
+
+# Ensure a store can withdraw support from itself.
+
+withdraw-support 4 4
+----
+  1 2 3 4
+1 2 1 1 1
+2 2 1 3 1
+3 2 x 3 1
+4 2 1 3 x
+
+grant-support 4 4
+----
+  1 2 3 4
+1 2 1 1 1
+2 2 1 3 1
+3 2 x 3 1
+4 2 1 3 2
+
+# Ensure epochs do not regress, and ensure that whenever support is granted, it
+# happens at the latest epoch that for_store is seeking support at.
+withdraw-support 1 2
+----
+  1 2 3 4
+1 2 x 1 1
+2 2 1 3 1
+3 2 x 3 1
+4 2 1 3 2
+
+# Withdraw support from 1 for 2 again. Internally, it'll bump the epoch 1 is
+# tracking for 2 twice (so it'll be 3 now).
+withdraw-support 1 2
+----
+  1 2 3 4
+1 2 x 1 1
+2 2 1 3 1
+3 2 x 3 1
+4 2 1 3 2
+
+# Withdraw support from 4 for 2 now. Internally, it'll bump 2's epoch to 2.
+withdraw-support 4 2
+----
+  1 2 3 4
+1 2 x 1 1
+2 2 1 3 1
+3 2 x 3 1
+4 2 x 3 2
+
+# Grant support from 1 for 2; this will happen at epoch 3, which should also be
+# mirrored at state[2][2].
+grant-support 1 2
+----
+  1 2 3 4
+1 2 3 1 1
+2 2 3 3 1
+3 2 x 3 1
+4 2 x 3 2
+
+# Grant support from 4 for 2. This could have happened at epoch 2, but it will
+# happen at epoch 3 instead because of the previous step. Also, note that
+# state[2][2] doesn't regress.
+grant-support 4 2
+----
+  1 2 3 4
+1 2 3 1 1
+2 2 3 3 1
+3 2 x 3 1
+4 2 3 3 2

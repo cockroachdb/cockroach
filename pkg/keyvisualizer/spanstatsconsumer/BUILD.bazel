@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanstatsconsumer",
+    srcs = ["span_stats_consumer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatsconsumer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keyvisualizer/keyvissettings",
+        "//pkg/keyvisualizer/keyvisstorage",
+        "//pkg/keyvisualizer/spanstatskvaccessor",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "spanstatsconsumer_test",
+    srcs = ["span_stats_consumer_test.go"],
+    embed = [":spanstatsconsumer"],
+    deps = [
+        "//pkg/roachpb",
+        "@com_github_stretchr_testify//require",
+    ],
+)

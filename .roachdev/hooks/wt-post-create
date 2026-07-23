@@ -1,0 +1,33 @@
+#!/bin/bash
+set -euo pipefail
+
+SRC="$ROACHDEV_WT_SRC"
+DST="$ROACHDEV_WT_DST"
+
+# Copy .bazelrc.user if it exists in the source repo.
+if [[ -f "$SRC/.bazelrc.user" ]]; then
+  cp -p "$SRC/.bazelrc.user" "$DST/.bazelrc.user"
+fi
+
+# Copy up to 5 most recent dev.<N> binaries from source dev-versions.
+SRC_DEV_VERSIONS="$SRC/bin/dev-versions"
+if [[ -d "$SRC_DEV_VERSIONS" ]]; then
+  DST_DEV_VERSIONS="$DST/bin/dev-versions"
+  mkdir -p "$DST_DEV_VERSIONS"
+  # Use a subshell to scope cd and nullglob. Sorting basenames avoids
+  # mis-sorting when $SRC contains dots (e.g. /Users/jane.doe/...).
+  (
+    cd "$SRC_DEV_VERSIONS"
+    shopt -s nullglob
+    files=(dev.*)
+    shopt -u nullglob
+    if (( ${#files[@]} > 0 )); then
+      printf '%s\n' "${files[@]}" \
+        | sort -t. -k2 -n -r \
+        | head -5 \
+        | while read -r f; do
+            cp -p "$SRC_DEV_VERSIONS/$f" "$DST_DEV_VERSIONS/$f"
+          done
+    fi
+  )
+fi

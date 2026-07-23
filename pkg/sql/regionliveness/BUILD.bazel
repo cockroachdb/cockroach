@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "regionliveness",
+    srcs = [
+        "cleaner.go",
+        "prober.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/regionliveness",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/rowenc/keyside",
+        "//pkg/sql/rowenc/valueside",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlliveness/slbase",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

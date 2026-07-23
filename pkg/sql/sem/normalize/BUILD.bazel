@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "normalize",
+    srcs = [
+        "constant.go",
+        "normalize_exprs.go",
+        "visitor.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/normalize",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "normalize_test",
+    srcs = [
+        "constant_eval_test.go",
+        "normalize_test.go",
+    ],
+    deps = [
+        ":normalize",
+        "//pkg/settings/cluster",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+    ],
+)

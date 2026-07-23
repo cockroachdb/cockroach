@@ -1,0 +1,111 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module";
+
+.chart-wrapper {
+  // The Visualization component uses width: fit-content, which
+  // shrinks it to the SVG's pixel width. Override so the chart
+  // fills its grid column.
+  > :first-child {
+    width: 100%;
+  }
+}
+
+.chart-container {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+.bar-rect {
+  transition: opacity 0.15s ease;
+  &:hover {
+    opacity: 0.8;
+  }
+}
+
+.tooltip {
+  display: none;
+  position: absolute;
+  pointer-events: none;
+  padding: 12px 16px;
+  min-width: 200px;
+  background: #fff;
+  border-radius: 5px;
+  box-shadow: 0px 7px 13px rgba(71, 88, 114, 0.3);
+  z-index: 100;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.4;
+
+  &--visible {
+    display: block;
+  }
+}
+
+.tooltip-timestamp {
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #e0e0e0;
+  font-weight: 600;
+}
+
+.tooltip-group-label {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.tooltip-layer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.tooltip-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.tooltip-value {
+  margin-left: auto;
+  font-family: "Source Sans Pro", sans-serif;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-start;
+  font-size: 10px;
+  margin-top: 12px;
+  padding: 8px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: $headings-color;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
+  cursor: pointer;
+  user-select: none;
+
+  &--hidden {
+    opacity: 0.3;
+  }
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+}

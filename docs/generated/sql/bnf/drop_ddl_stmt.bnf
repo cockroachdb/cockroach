@@ -1,0 +1,12 @@
+drop_ddl_stmt ::=
+	drop_database_stmt
+	| drop_index_stmt
+	| drop_table_stmt
+	| drop_view_stmt
+	| drop_sequence_stmt
+	| drop_schema_stmt
+	| drop_type_stmt
+	| drop_func_stmt
+	| drop_proc_stmt
+	| drop_trigger_stmt
+	| drop_policy_stmt

@@ -1,0 +1,170 @@
+# --------------------------------------------------
+# GenerateConstrainedScans + Partitioning
+# --------------------------------------------------
+
+# Create a truly distributed table. Partitioned appropriately.
+exec-ddl
+CREATE TABLE partitioned (
+    planet STRING, region STRING, subregion STRING, val INT8,
+    PRIMARY KEY (planet, region, subregion, val)
+)
+    PARTITION BY LIST (planet, region, subregion)
+        (
+            PARTITION westcoast VALUES IN (('earth', 'us', 'seattle'), ('earth', 'us', 'cali')),
+            PARTITION eu VALUES IN (('earth', 'eu', DEFAULT)),
+            PARTITION us VALUES IN (('earth', 'us', DEFAULT)),
+            PARTITION earth VALUES IN (('earth', DEFAULT)),
+            PARTITION mars VALUES IN (('mars', DEFAULT)),
+            PARTITION titan VALUES IN (('jupiter', 'titan', DEFAULT)),
+            PARTITION red_spot VALUES IN (('jupiter', 'titan', 'red spot')),
+            PARTITION jupiter VALUES IN (('jupiter', DEFAULT)),
+            PARTITION default VALUES IN (DEFAULT)
+        )
+----
+
+# Use partition values to constrain the scan.
+opt
+EXPLAIN (OPT, VERBOSE)
+  SELECT
+  *
+  FROM
+  partitioned
+  WHERE
+  val = 1
+----
+explain
+ ├── columns: info:7
+ ├── mode: opt, verbose
+ └── select
+      ├── columns: planet:1!null region:2!null subregion:3!null val:4!null
+      ├── key: (1-3)
+      ├── fd: ()-->(4)
+      ├── scan partitioned
+      │    ├── columns: planet:1!null region:2!null subregion:3!null val:4!null
+      │    ├── constraint: /1/2/3/4
+      │    │    ├── [ - /'earth'/'us'/'cali')
+      │    │    ├── [/'earth'/'us'/'cali'/1 - /'earth'/'us'/'cali'/1]
+      │    │    ├── [/'earth'/'us'/e'cali\x00'/1 - /'earth'/'us'/'seattle')
+      │    │    ├── [/'earth'/'us'/'seattle'/1 - /'earth'/'us'/'seattle'/1]
+      │    │    ├── [/'earth'/'us'/e'seattle\x00'/1 - /'jupiter'/'titan'/'red spot')
+      │    │    ├── [/'jupiter'/'titan'/'red spot'/1 - /'jupiter'/'titan'/'red spot'/1]
+      │    │    └── [/'jupiter'/'titan'/e'red spot\x00'/1 - ]
+      │    └── key: (1-4)
+      └── filters
+           └── val:4 = 1 [outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+
+# Regression test for #42147.
+exec-ddl
+CREATE TABLE tab42147 (
+  id INT8 NOT NULL,
+  locality STRING,
+  CONSTRAINT pk PRIMARY KEY (locality ASC, id ASC),
+  CONSTRAINT id UNIQUE (id ASC)
+)
+  PARTITION BY LIST (locality)
+    (
+      PARTITION uswest VALUES IN ('us-west'),
+      PARTITION uscentral VALUES IN ('us-central'),
+      PARTITION asiasoutheast VALUES IN ('asia-southeast')
+    )
+----
+
+opt
+SELECT id FROM tab42147 WHERE id = 1
+----
+scan tab42147@id
+ ├── columns: id:1!null
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# Regression test for #63733. Index spans for in-between values should include
+# NULL values for the first index column if the column is nullable.
+exec-ddl
+CREATE TABLE t63733 (
+    k INT PRIMARY KEY,
+    a STRING,
+    b STRING,
+    INDEX idx (a, b ASC) PARTITION BY LIST (a, b) (
+       PARTITION us_west VALUES IN (('foo', 'bar'))
+    )
+)
+----
+
+opt
+SELECT k FROM t63733@idx WHERE k = 1;
+----
+select
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── scan t63733@idx
+ │    ├── columns: k:1!null
+ │    ├── constraint: /2/3/1
+ │    │    ├── [/NULL - /'foo'/'bar')
+ │    │    ├── [/'foo'/'bar'/1 - /'foo'/'bar'/1]
+ │    │    └── [/'foo'/e'bar\x00'/1 - ]
+ │    ├── flags: force-index=idx
+ │    └── key: (1)
+ └── filters
+      └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+# Verify the same for multiple nullable columns.
+exec-ddl
+CREATE TABLE t63733_multi (
+  a INT,
+  b INT,
+  c INT,
+  INDEX idx (a,b,c) PARTITION BY LIST (a, b) (
+    PARTITION x VALUES IN ((10, 10)),
+    PARTITION y VALUES IN ((20, 20))
+  )
+)
+----
+
+opt
+SELECT * FROM t63733_multi@idx WHERE c = 1
+----
+select
+ ├── columns: a:1 b:2 c:3!null
+ ├── fd: ()-->(3)
+ ├── scan t63733_multi@idx
+ │    ├── columns: a:1 b:2 c:3
+ │    ├── constraint: /1/2/3/4
+ │    │    ├── [/NULL - /10/9/1]
+ │    │    ├── [/10/10/1 - /10/10/1]
+ │    │    ├── [/10/11/1 - /20/19/1]
+ │    │    ├── [/20/20/1 - /20/20/1]
+ │    │    └── [/20/21/1 - ]
+ │    └── flags: force-index=idx
+ └── filters
+      └── c:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+
+# Verify that we don't generate incorrect partitioning if the partitioning
+# values have nulls.
+exec-ddl
+CREATE TABLE t63733_nulls (
+  a INT,
+  b INT,
+  c INT,
+  INDEX idx (a,b,c) PARTITION BY LIST (a, b) (
+    PARTITION x VALUES IN ((NULL, NULL)),
+    PARTITION y VALUES IN ((NULL, 10)),
+    PARTITION z VALUES IN ((10, NULL))
+  )
+)
+----
+
+opt
+SELECT * FROM t63733_nulls@idx WHERE c = 1
+----
+select
+ ├── columns: a:1 b:2 c:3!null
+ ├── fd: ()-->(3)
+ ├── scan t63733_nulls@idx
+ │    ├── columns: a:1 b:2 c:3
+ │    └── flags: force-index=idx
+ └── filters
+      └── c:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]

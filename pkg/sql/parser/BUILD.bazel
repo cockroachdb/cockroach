@@ -1,0 +1,178 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "parser",
+    # We intentionally elide sql.go here (that's done through an exclude
+    # directive in the top-level BUILD.bazel) and instead list the generation
+    # that constructs sql.go on the fly. We pin it lest gazelle removes it
+    # during BUILD file re-generation.
+    srcs = [
+        "help.go",
+        "lexer.go",
+        "parse.go",
+        "scanner.go",
+        "show_syntax.go",
+        ":gen-help-messages",  # keep
+        ":sql-goyacc",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/parser",
+    visibility = ["//visibility:public"],
+    # We pin some go dependencies that are present in auto-generated code, but
+    # are not visible to bazel/gazelle when generating BUILD files.
+    deps = [
+        "//pkg/docs",
+        "//pkg/geo/geopb",  # keep
+        "//pkg/security/username",  # keep
+        "//pkg/sql/lexbase",
+        "//pkg/sql/parser/statements",
+        "//pkg/sql/parserutils",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",  # keep
+        "//pkg/sql/scanner",
+        "//pkg/sql/sem/builtins/builtinsregistry",
+        "//pkg/sql/sem/idxtype",  # keep
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",  # keep
+        "//pkg/sql/sem/tree/treecmp",  # keep
+        "//pkg/sql/sem/tree/treewindow",  # keep
+        "//pkg/sql/types",
+        "//pkg/util/buildutil",
+        "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/vector",  # keep
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",  # keep
+        "@org_golang_x_text//cases",
+        "@org_golang_x_text//language",
+    ],
+)
+
+go_test(
+    name = "parser_test",
+    size = "small",
+    srcs = [
+        "help_test.go",
+        "lexer_test.go",
+        "parse_internal_test.go",
+        "parse_test.go",
+        "scanner_test.go",
+        "unused_keywords_test.go",
+        ":gen-helpmap-test",  # keep
+    ],
+    data = glob(["testdata/**"]) + [
+        "sql.y",
+        "unused_keywords.sh",
+    ],
+    embed = [":parser"],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/sql/lexbase",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
+        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+sh_binary(
+    name = "sql-gen",
+    srcs = ["//pkg/sql/lexbase:sql-gen.sh"],
+)
+
+# Define the target to auto-generate sql.go from the grammar file.
+genrule(
+    name = "sql-goyacc",
+    srcs = [
+        "sql.y",
+        "replace_help_rules.awk",
+    ],
+    outs = ["sql.go"],
+    cmd = """
+$(location :sql-gen) $(location sql.y) sql $(location replace_help_rules.awk) \
+    $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc)
+""",
+    tools = [
+        ":sql-gen",
+        "@org_golang_x_tools//cmd/goyacc",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "help-gen-test",
+    srcs = ["help_gen_test.sh"],
+)
+
+# Define the target to auto-generate a helpmap test helper file.
+genrule(
+    name = "gen-helpmap-test",
+    srcs = [
+        ":sql-goyacc",
+    ],
+    outs = ["helpmap_test.go"],
+    cmd = """
+      $(location :help-gen-test) < $< >$@.tmp
+      mv -f $@.tmp $@
+    """,
+    tools = [
+        ":help-gen-test",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+# Define the target to auto-generate help messages from the grammar file.
+genrule(
+    name = "gen-help-messages",
+    srcs = [
+        ":sql.y",
+        ":help.awk",
+    ],
+    outs = ["help_messages.go"],
+    cmd = """
+      awk -f $(location :help.awk) < $(location :sql.y) > $@
+    """,
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+exports_files(
+    [
+        "reserved_keywords.awk",
+        "sql.y",
+        "help.awk",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+disallowed_imports_test(
+    "parser",
+    disallowed_list = [
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/server",
+        "//pkg/sql/sessiondata",
+        "//pkg/storage",
+        "//pkg/util/log",
+    ],
+    disallowed_prefixes = [
+        "pkg/sql/catalog",
+    ],
+)

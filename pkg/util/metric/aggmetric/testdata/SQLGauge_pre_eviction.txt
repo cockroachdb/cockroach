@@ -1,0 +1,13 @@
+echo
+----
+foo_gauge 10
+foo_gauge{database="1",application_name="0"} 1
+foo_gauge{database="1",application_name="1"} 1
+foo_gauge{database="1",application_name="2"} 1
+foo_gauge{database="1",application_name="3"} 1
+foo_gauge{database="1",application_name="4"} 1
+foo_gauge{database="1",application_name="5"} 1
+foo_gauge{database="1",application_name="6"} 1
+foo_gauge{database="1",application_name="7"} 1
+foo_gauge{database="1",application_name="8"} 1
+foo_gauge{database="1",application_name="9"} 1

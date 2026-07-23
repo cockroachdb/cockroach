@@ -1,0 +1,101 @@
+# Tests in this file verify the enacting of the fallback rate when token bucket
+# requests are erroring out.
+
+configure
+fallback_rate: 1000
+----
+
+# Issue a write that triggers fetch of more tokens and also sets fallback rate.
+write bytes=6141952
+----
+
+wait-for-event
+token-bucket-response
+----
+
+token-bucket
+----
+15000.00 tokens filling @ 0.00 tokens/s
+
+# Trigger failure of further requests.
+configure
+error: true
+----
+
+# Issue a large write that requires 12K more RUs, which forces another fetch and
+# puts the bucket into debt.
+write bytes=12285945
+----
+
+wait-for-event
+low-tokens
+----
+
+# Expect failure of the token bucket request.
+wait-for-event
+token-bucket-response-error
+----
+
+# The fallback rate can take up to two ticks to be applied.
+advance wait=true
+2s
+----
+00:00:02.000
+
+token-bucket
+----
+3000.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens)
+
+# Issue another 5K write which must wait until the fallback rate adds 2K to the
+# bucket in order to complete.
+write bytes=5117945 label=w1
+----
+
+timers
+----
+00:00:04.000
+
+# Advance 1 second and ensure that the write request was not completed.
+advance wait=true
+1s
+----
+00:00:03.000
+
+not-completed label=w1
+----
+
+token-bucket
+----
+4000.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens) (5000.00 waiting tokens)
+
+# Advance another second and ensure that the write request was completed.
+advance wait=true
+1s
+----
+00:00:04.000
+
+await label=w1
+----
+
+token-bucket
+----
+0.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens)
+
+wait-for-event
+token-bucket-response-error
+----
+
+# Clear token bucket errors and ensure we get a successful response.
+configure
+throttle: 100
+fallback_rate: 1000
+----
+
+advance
+10s
+----
+00:00:14.000
+
+wait-for-event
+token-bucket-response
+----

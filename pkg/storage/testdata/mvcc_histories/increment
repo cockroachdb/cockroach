@@ -1,0 +1,91 @@
+# TestMVCCIncrement verifies increment behavior. In particular,
+# incrementing a non-existent key by 0 will create the value.
+
+# Non-transactional increments.
+
+run stats ok
+with k=k
+  increment ts=0,1 inc=0
+  get       ts=0,1
+  increment ts=0,2 inc=2
+----
+>> increment ts=0,1 inc=0 k=k
+inc: current value = 0
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+20
+get: "k" -> /INT/0 @0,1
+>> increment ts=0,2 inc=2 k=k
+inc: current value = 2
+stats: key_bytes=+12 val_count=+1 val_bytes=+6 gc_bytes_age=+1800
+>> at end:
+data: "k"/0,2 -> /INT/2
+data: "k"/0,1 -> /INT/0
+stats: key_count=1 key_bytes=26 val_count=2 val_bytes=12 live_count=1 live_bytes=20 gc_bytes_age=1800
+
+run ok
+clear_range k=k end=-k
+----
+>> at end:
+<no data>
+
+# Transactional increments.
+run stats ok
+with k=k t=a ts=0,1
+  txn_begin
+  txn_step
+  increment
+  txn_step
+  increment
+----
+>> increment k=k t=a ts=0,1
+inc: current value = 1
+inc: lock acquisition = {span=k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=1 durability=Replicated strength=Intent ignored=[]}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+51 live_count=+1 live_bytes=+65 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+100
+>> increment k=k t=a ts=0,1
+inc: current value = 2
+inc: lock acquisition = {span=k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2 durability=Replicated strength=Intent ignored=[]}
+stats: val_bytes=+10 live_bytes=+10
+>> at end:
+txn: "a" meta={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} lock=true stat=PENDING rts=0,1 gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k"/0,1 -> /INT/2
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=18 lock_count=1 lock_age=100
+
+
+# Increments at older timestamp generate WriteTooOld.
+
+run ok
+with k=r
+  increment ts=1
+  increment ts=3
+----
+inc: current value = 1
+inc: current value = 2
+>> at end:
+meta: "k"/0,0 -> txn={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k"/0,1 -> /INT/2
+data: "r"/3.000000000,0 -> /INT/2
+data: "r"/1.000000000,0 -> /INT/1
+
+run error
+increment k=r ts=2
+----
+>> at end:
+meta: "k"/0,0 -> txn={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k"/0,1 -> /INT/2
+data: "r"/3.000000000,0 -> /INT/2
+data: "r"/1.000000000,0 -> /INT/1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "r" at timestamp 2.000000000,0 too old; must write at or above 3.000000000,1
+
+# Ditto with transactional.
+run error
+with t=r
+  txn_begin ts=2
+  increment k=r
+----
+>> at end:
+txn: "r" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=2.000000000,0 gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k"/0,1 -> /INT/2
+data: "r"/3.000000000,0 -> /INT/2
+data: "r"/1.000000000,0 -> /INT/1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "r" at timestamp 2.000000000,0 too old; must write at or above 3.000000000,1

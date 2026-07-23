@@ -1,0 +1,491 @@
+statement ok
+CREATE TABLE ltable(
+  lk int primary key,
+  geom1 geometry,
+  geom2 geometry
+)
+
+statement ok
+INSERT INTO ltable VALUES
+  (1, 'POINT(3.0 3.0)', 'POINT(3.0 3.0)'),
+  (2, 'POINT(4.5 4.5)', 'POINT(3.0 3.0)'),
+  (3, 'POINT(1.5 1.5)', 'POINT(3.0 3.0)'),
+  (4, NULL, 'POINT(3.0 3.0)'),
+  (5, 'POINT(1.5 1.5)', NULL),
+  (6, NULL, NULL)
+
+statement ok
+CREATE TABLE rtable(
+  rk int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO rtable VALUES
+  (11, 'POINT(1.0 1.0)'),
+  (12, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (13, 'POINT(3.0 3.0)'),
+  (14, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (15, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (16, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  14
+2  16
+3  11
+3  12
+3  16
+5  11
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  14
+2  16
+3  11
+3  12
+3  16
+5  11
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  12
+2  13
+2  14
+2  16
+3  12
+3  13
+3  14
+3  16
+4  12
+4  13
+4  14
+4  16
+5  12
+5  16
+
+# Run the same two queries with the primary index to verify that we get the
+# same results.
+query II
+SELECT lk, rk FROM ltable JOIN rtable@rtable_pkey
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@rtable_pkey
+ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  12
+2  13
+2  14
+2  16
+3  12
+3  13
+3  14
+3  16
+4  12
+4  13
+4  14
+4  16
+5  12
+5  16
+
+query II
+SELECT ltable.lk, rtable.rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_Covers(ltable.geom2, rtable.geom)
+AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0 1.0)', rtable.geom))
+----
+1  13
+
+# These queries perform semi-joins, which are converted to paired joins by the
+# optimizer.
+query I
+SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
+ORDER BY lk
+----
+1
+2
+3
+4
+
+query I
+SELECT rk FROM rtable WHERE EXISTS (SELECT * FROM ltable WHERE ST_Intersects(ltable.geom2, rtable.geom))
+ORDER BY rk
+----
+13
+16
+
+# Left join is supported by having the optimizer convert it to a pair of joins.
+query II
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+4  NULL
+5  12
+5  16
+6  NULL
+
+query II
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index ON ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  14
+2  16
+3  11
+3  12
+3  16
+4  NULL
+5  11
+5  12
+5  16
+6  NULL
+
+query II
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
+ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  14
+2  16
+3  11
+3  12
+3  16
+4  NULL
+5  11
+5  12
+5  16
+6  NULL
+
+query II
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+4  NULL
+5  12
+5  16
+6  NULL
+
+query II
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+4  NULL
+5  NULL
+6  NULL
+
+query II
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  12
+2  13
+2  14
+2  16
+3  12
+3  13
+3  14
+3  16
+4  12
+4  13
+4  14
+4  16
+5  12
+5  16
+6  NULL
+
+query III
+WITH q AS (
+  SELECT * FROM ltable WHERE lk > 2
+)
+SELECT lk, count(*), (SELECT count(*) FROM q) FROM (
+  SELECT lk, rk
+  FROM q
+  LEFT JOIN rtable@geom_index ON ST_Intersects(q.geom1, rtable.geom)
+) GROUP BY lk ORDER BY lk
+----
+3  2  4
+4  1  4
+5  2  4
+6  1  4
+
+# Anti-join is supported by having the optimizer convert it to paired joins.
+query I
+SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable@geom_index WHERE ST_Intersects(ltable.geom2, rtable.geom))
+ORDER BY lk
+----
+5
+6
+
+query I
+SELECT rk FROM rtable WHERE NOT EXISTS (SELECT * FROM ltable WHERE ST_Intersects(ltable.geom2, rtable.geom))
+ORDER BY rk
+----
+11
+12
+14
+15
+
+query I
+SELECT lk FROM ltable
+WHERE NOT EXISTS (
+  SELECT * FROM rtable@geom_index WHERE ST_Covers(ltable.geom2, rtable.geom) AND lk > 1 AND rk > 12
+) ORDER BY lk
+----
+1
+5
+6
+
+# Tests where the table with the inverted index has multiple columns in the primary
+# key.
+statement ok
+CREATE TABLE rtable2(
+  rk1 int,
+  geom geometry,
+  rk2 int,
+  primary key (rk1, rk2),
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO rtable2 VALUES
+  (11, 'POINT(1.0 1.0)', 22),
+  (12, 'LINESTRING(1.0 1.0, 2.0 2.0)', 24),
+  (13, 'POINT(3.0 3.0)', 26),
+  (14, 'LINESTRING(4.0 4.0, 5.0 5.0)', 28),
+  (15, 'LINESTRING(40.0 40.0, 41.0 41.0)', 30),
+  (16, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))', 32)
+
+query III
+SELECT lk, rk1, rk2 FROM ltable JOIN rtable2@geom_index ON ST_Intersects(ltable.geom1, rtable2.geom) ORDER BY (lk, rk1, rk2)
+----
+1  13  26
+1  16  32
+2  14  28
+2  16  32
+3  12  24
+3  16  32
+5  12  24
+5  16  32
+
+query III
+SELECT lk, rk1, rk2 FROM ltable LEFT JOIN rtable2@geom_index
+ON ST_Intersects(ltable.geom1, rtable2.geom) ORDER BY (lk, rk1, rk2)
+----
+1  13    26
+1  16    32
+2  14    28
+2  16    32
+3  12    24
+3  16    32
+4  NULL  NULL
+5  12    24
+5  16    32
+6  NULL  NULL
+
+query I
+SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable2@geom_index
+WHERE ST_Intersects(ltable.geom1, rtable2.geom)) ORDER BY lk
+----
+1
+2
+3
+5
+
+query I
+SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable2@geom_index
+WHERE ST_Intersects(ltable.geom1, rtable2.geom)) ORDER BY lk
+----
+4
+6
+
+statement ok
+CREATE TABLE g (
+  k INT PRIMARY KEY,
+  geom GEOMETRY
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON g(geom)
+
+statement ok
+INSERT INTO g VALUES
+  (1, ST_MakePolygon('LINESTRING(0 0, 0 15, 15 15, 15 0, 0 0)'::geometry)),
+  (2, ST_MakePolygon('LINESTRING(0 0, 0 2, 2 2, 2 0, 0 0)'::geometry))
+
+# This query performs an inverted join.
+query II
+SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
+----
+1  1
+1  2
+2  2
+
+# This query performs a cross join followed by a filter.
+query II
+SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
+----
+1  1
+1  2
+2  2
+
+# This query is checking that the results of the previous two queries are identical.
+# There should be no rows output.
+query IIII
+SELECT * FROM
+(SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom)) AS inv_join(k1, k2)
+FULL OUTER JOIN
+(SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom)) AS cross_join(k1, k2)
+ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
+WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
+----
+
+# Regression test for #55648.
+# This query performs an inverted join with an additional filter.
+query II
+SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2
+WHERE ST_Contains(g1.geom, g2.geom)
+  AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
+  AND g2.k < 20
+ORDER BY g1.k, g2.k
+----
+1  1
+1  2
+
+# This query performs a cross join followed by a filter.
+query II
+SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2
+WHERE ST_Contains(g1.geom, g2.geom)
+  AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
+  AND g2.k < 20
+ORDER BY g1.k, g2.k
+----
+1  1
+1  2
+
+# This query is checking that the results of the previous two queries are identical.
+# There should be no rows output.
+query IIII
+SELECT * FROM
+(
+  SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2
+  WHERE ST_Contains(g1.geom, g2.geom)
+  AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
+  AND g2.k < 20
+) AS inv_join(k1, k2)
+FULL OUTER JOIN
+(
+  SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2
+  WHERE ST_Contains(g1.geom, g2.geom)
+  AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
+  AND g2.k < 20
+) AS cross_join(k1, k2)
+ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
+WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
+----
+
+# Regression test for #62686. An inverted join with a geospatial function and a
+# NULL distance argument should not error.
+statement ok
+CREATE TABLE t62686 (
+  c GEOMETRY,
+  INVERTED INDEX (c ASC)
+);
+INSERT INTO t62686 VALUES (ST_GeomFromText('POINT(1 1)'));
+
+statement ok
+SELECT * FROM t62686 t1 JOIN t62686 t2 ON ST_DFullyWithin(t1.c, t2.c, NULL::FLOAT8)

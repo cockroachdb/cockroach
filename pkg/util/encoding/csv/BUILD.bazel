@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "csv",
+    srcs = [
+        "reader.go",
+        "writer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/encoding/csv",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)
+
+go_test(
+    name = "csv_test",
+    size = "small",
+    srcs = [
+        "example_test.go",
+        "reader_test.go",
+        "writer_test.go",
+    ],
+    embed = [":csv"],
+    deps = [
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

@@ -1,0 +1,13 @@
+show_indexes_stmt ::=
+	'SHOW' 'INDEX' 'FROM' table_name 'WITH' 'COMMENT'
+	| 'SHOW' 'INDEX' 'FROM' table_name 
+	| 'SHOW' 'INDEX' 'FROM' 'DATABASE' database_name 'WITH' 'COMMENT'
+	| 'SHOW' 'INDEX' 'FROM' 'DATABASE' database_name 
+	| 'SHOW' 'INDEXES' 'FROM' table_name 'WITH' 'COMMENT'
+	| 'SHOW' 'INDEXES' 'FROM' table_name 
+	| 'SHOW' 'INDEXES' 'FROM' 'DATABASE' database_name 'WITH' 'COMMENT'
+	| 'SHOW' 'INDEXES' 'FROM' 'DATABASE' database_name 
+	| 'SHOW' 'KEYS' 'FROM' table_name 'WITH' 'COMMENT'
+	| 'SHOW' 'KEYS' 'FROM' table_name 
+	| 'SHOW' 'KEYS' 'FROM' 'DATABASE' database_name 'WITH' 'COMMENT'
+	| 'SHOW' 'KEYS' 'FROM' 'DATABASE' database_name 

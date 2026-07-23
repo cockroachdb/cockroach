@@ -1,0 +1,6 @@
+show_csettings_stmt ::=
+	'SHOW' 'CLUSTER' 'SETTING' var_name
+	| 'SHOW' 'CLUSTER' 'SETTING' 'ALL'
+	| 'SHOW' 'ALL' 'CLUSTER' 'SETTINGS'
+	| 'SHOW' 'CLUSTER' 'SETTINGS'
+	| 'SHOW' 'PUBLIC' 'CLUSTER' 'SETTINGS'

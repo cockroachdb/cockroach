@@ -1,0 +1,73 @@
+send
+Query {"String": "DROP TABLE IF EXISTS collated_string_table"}
+Query {"String": "CREATE TABLE collated_string_table (id UUID PRIMARY KEY, email TEXT COLLATE \"en-US-u-ks-level2\" NOT NULL)"}
+Query {"String": "CREATE UNIQUE INDEX ON collated_string_table(email)"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE INDEX"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "INSERT INTO collated_string_table (email,id) VALUES ($1,$2)", "Name": "insert_0"}
+Describe {"Name": "insert_0", "ObjectType": "S"}
+Bind {"ParameterFormatCodes": [1,1], "PreparedStatement": "insert_0", "Parameters": [{"binary":"757365722d31406578616d706c652e636f6d"}, {"binary":"00e8febeba494ee0ae269550e08cae0f"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[25,2950]}
+{"Type":"NoData"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Check without sending ParameterOIDs.
+send
+Parse {"Query": "SELECT u0.id, u0.email FROM collated_string_table AS u0 WHERE (u0.email = $1)", "Name": "select_0"}
+Describe {"Name": "select_0", "ObjectType": "S"}
+Bind {"ParameterFormatCodes": [1], "PreparedStatement": "select_0", "Parameters": [{"binary":"555345522d32406578616d706c652e636f6d"}]}
+Execute
+Sync
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[25]}
+{"Type":"RowDescription","Fields":[{"Name":"id","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":2950,"DataTypeSize":16,"TypeModifier":-1,"Format":0},{"Name":"email","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Check with sending ParameterOIDs.
+send
+Parse {"Query": "SELECT u0.id, u0.email FROM collated_string_table AS u0 WHERE (u0.email = $1)", "Name": "select_1", "ParameterOIDs": [25]}
+Describe {"Name": "select_1", "ObjectType": "S"}
+Bind {"ParameterFormatCodes": [1], "PreparedStatement": "select_1", "Parameters": [{"binary":"555345522d32406578616d706c652e636f6d"}]}
+Execute
+Sync
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[25]}
+{"Type":"RowDescription","Fields":[{"Name":"id","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":2950,"DataTypeSize":16,"TypeModifier":-1,"Format":0},{"Name":"email","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

@@ -1,0 +1,103 @@
+load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_run_binary", "js_test")
+load("@aspect_rules_js//npm:defs.bzl", "npm_package")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("//pkg:protos.bzl", "PROTO_FILES", "SERVER_PROTOS")
+
+npm_link_all_packages(name = "node_modules")
+
+OUTPUT_FILES = [
+    f
+    for files in [
+        [
+            file.replace(".proto", "_pb.js"),
+            file.replace(".proto", "_pb.d.ts"),
+        ]
+        for file in [
+            "dist/" + label.replace("//pkg/", "").replace(":", "/").replace("@com_github_cockroachdb_errors//", "").replace("@com_github_prometheus_client_model//", "")
+            for label in PROTO_FILES
+        ]
+    ]
+    for f in files
+]
+
+PROTOS_CMD = """
+    mkdir -p $(RULEDIR)/dist
+    DESCRIPTOR_SET_IN=$$(for word in $(SRCS); do echo $$word; done | grep '\\.bin$$' | tr -s '\\n' ':')
+    ALL_PROTOS="{}"
+    export PATH=$$PATH:$$(dirname $(NODE_PATH))
+    $(location @com_google_protobuf//:protoc) \
+        --plugin=$(location :node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es) \
+        --es_out $(RULEDIR)/dist \
+        --descriptor_set_in $$DESCRIPTOR_SET_IN \
+        --es_opt target=js+dts \
+        $$ALL_PROTOS""".format(
+    " ".join([label.replace("//pkg/", "").replace(":", "/").replace("@com_github_cockroachdb_errors//", "").replace("@com_github_prometheus_client_model//", "") for label in PROTO_FILES]),
+)
+
+genrule(
+    name = "protos",
+    srcs = [
+        ":node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es",
+    ] + SERVER_PROTOS,
+    outs = OUTPUT_FILES,
+    cmd = PROTOS_CMD,
+    toolchains = ["@nodejs_toolchains//:resolved_toolchain"],
+    tools = [
+        "@com_google_protobuf//:protoc",
+        "@nodejs_toolchains//:resolved_toolchain",
+    ],
+)
+
+genrule(
+    name = "index_ts",
+    srcs = [":protos"],
+    outs = ["index.ts"],
+    cmd = """
+    for f in $(SRCS)
+    do
+        if [[ $$f != *.js ]]
+        then
+            continue
+        fi
+        filename=$$(basename -s .js $$f)
+        filepath=$$(echo $$f | sed 's|^.*dist/||')
+        filepath=$${filepath%.js}
+        import_name=$${filepath/-/_}
+        echo export '*' as $${import_name////_} from \\"./dist/$${filepath}\\"\\; >> $@
+    done
+    """,
+)
+
+ts_project(
+    name = "ts_project",
+    srcs = [
+        "tsconfig.json",
+        ":index_ts",
+        ":protos",
+    ],
+    tsconfig = "tsconfig.json",
+    validate = True,
+    deps = [":node_modules"],
+)
+
+npm_package(
+    name = "crdb-api-client",
+    srcs = [
+        "package.json",
+        "tsconfig.json",
+        ":index_ts",
+        ":protos",
+        ":ts_project",
+    ],
+    package = "@cockroachlabs/crdb-api-client",
+    visibility = ["//visibility:public"],
+)
+
+# rules_js 2.x expects npm_package targets to be named 'pkg' by default
+alias(
+    name = "pkg",
+    actual = ":crdb-api-client",
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,152 @@
+set-time unixSecs=1610000000
+----
+
+query
+SELECT * FROM system.table_metadata
+----
+
+
+query
+CREATE TABLE mytable (a INT, b INT)
+----
+
+
+query
+CREATE TABLE mytable2 (a INT, b INT, c INT)
+----
+
+query
+CREATE TABLE autostats_enabled (a INT) WITH (sql_stats_automatic_collection_enabled = true)
+----
+
+query
+CREATE TABLE autostats_disabled (a INT) WITH (sql_stats_automatic_collection_enabled = false)
+----
+
+query
+CREATE VIEW myview as SELECT * from mytable2
+----
+
+query
+CREATE MATERIALIZED VIEW mymaterializedview as SELECT * from mytable2
+----
+
+query
+CREATE SEQUENCE myseq
+----
+
+query
+INSERT INTO mytable VALUES (1, 2), (3, 4), (5, 6)
+----
+
+flush-stores
+----
+success
+
+update-cache
+----
+updatedTables: 80, errors: 0, run #: 1, duration > 0: true
+
+
+# We are omitting the following columns since they are not deterministic.
+# - total_live_data_bytes,
+# - perc_live_data
+# - total_data_bytes
+# - replication_size_bytes
+# - details.stats_last_updated
+query
+SELECT
+  table_name,
+  db_name,
+  schema_name,
+  db_id,
+  table_id,
+  total_columns,
+  total_indexes,
+  table_type,
+  details->'auto_stats_enabled',
+  store_ids,
+  total_ranges,
+  last_updated,
+  last_update_error
+FROM system.table_metadata
+WHERE db_name <> 'system' OR table_name IN ('comments', 'locations', 'descriptor_id_seq')
+ORDER BY (db_name, table_name)
+----
+autostats_disabled defaultdb public 100 107 2 1 TABLE false {1} 1 2021-01-07 06:13:20 +0000 UTC 
+autostats_enabled defaultdb public 100 106 2 1 TABLE true {1} 1 2021-01-07 06:13:20 +0000 UTC 
+mymaterializedview defaultdb public 100 109 4 1 MATERIALIZED_VIEW null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+myseq defaultdb public 100 110 1 1 SEQUENCE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+mytable defaultdb public 100 104 3 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+mytable2 defaultdb public 100 105 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+myview defaultdb public 100 108 3 1 VIEW null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+comments system public 1 24 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+descriptor_id_seq system public 1 7 1 1 SEQUENCE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+locations system public 1 21 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+
+query
+SELECT count(*) FROM system.table_metadata WHERE perc_live_data > 1
+----
+0
+
+query
+SELECT count(*) FROM system.table_metadata WHERE replication_size_bytes > 0
+----
+80
+
+query
+SELECT count(*) FROM system.table_metadata WHERE total_live_data_bytes > total_data_bytes
+----
+0
+
+# Every TABLE/SEQUENCE/MATERIALIZED_VIEW should have a primary_index_id
+# recorded. Plain views don't have a primary index.
+query
+SELECT count(*) FROM system.table_metadata
+WHERE table_type IN ('TABLE', 'SEQUENCE', 'MATERIALIZED_VIEW')
+  AND (details->>'primary_index_id')::INT IS NULL
+----
+0
+
+# And those same relations should have an index_sizes entry for the
+# primary.
+query
+SELECT count(*) FROM system.table_metadata
+WHERE table_type IN ('TABLE', 'SEQUENCE', 'MATERIALIZED_VIEW')
+  AND details->'index_sizes'->>(details->>'primary_index_id') IS NULL
+----
+0
+
+# Plain views have no live indexes, so index_sizes is empty/absent.
+query
+SELECT details->'index_sizes' FROM system.table_metadata
+WHERE table_name = 'myview'
+----
+<nil>
+
+# mytable2 has a single index (primary). The sum of its index_sizes
+# entries should equal its replication_size_bytes (modulo dropped-index
+# garbage, which there isn't any of for a freshly created table).
+query
+SELECT replication_size_bytes - (
+    SELECT COALESCE(sum(value::INT), 0)
+    FROM jsonb_each_text(details->'index_sizes')
+  )
+FROM system.table_metadata
+WHERE table_name = 'mytable2'
+----
+0
+
+query
+DROP TABLE mytable
+----
+
+prune-cache
+----
+pruned 1 table(s)
+
+
+query
+SELECT count(*) FROM system.table_metadata WHERE table_name = 'mytable'
+----
+0

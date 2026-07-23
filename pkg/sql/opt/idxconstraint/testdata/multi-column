@@ -1,0 +1,164 @@
+index-constraints vars=(a int, b int) index=(a)
+a = 1 AND b = 2
+----
+[/1 - /1]
+Remaining filter: b = 2
+
+index-constraints vars=(a int, b int) index=(b)
+a = 1 AND b = 2
+----
+[/2 - /2]
+Remaining filter: a = 1
+
+index-constraints vars=(a int, b int) index=(a, b)
+a = 1 AND b > NULL
+----
+
+index-constraints vars=(a int, b int) index=(a, b)
+b = 1 AND a > NULL
+----
+
+index-constraints vars=(a int) index=(a)
+a > 2 AND a < 4
+----
+[/3 - /3]
+
+index-constraints vars=(a int) index=(a)
+a >= 2 AND a <= 4
+----
+[/2 - /4]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a > 2 AND b > 5
+----
+[/3/6 - ]
+Remaining filter: b > 5
+
+index-constraints vars=(a int, b int) index=(a, b desc)
+a > 2 AND b < 5
+----
+[/3/4 - ]
+Remaining filter: b < 5
+
+index-constraints vars=(a int, b int) index=(a, b)
+a != 1 AND b > 5
+----
+(/NULL - /0]
+[/2/6 - ]
+Remaining filter: b > 5
+
+index-constraints vars=(a int, b int) index=(a, b)
+a != 1 AND b < 5
+----
+(/NULL - /0/4]
+(/2/NULL - ]
+Remaining filter: b < 5
+
+index-constraints vars=(a int) index=(a)
+a >= 1 AND a <= 5 AND a != 3
+----
+[/1 - /2]
+[/4 - /5]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a >= 1 AND a <= 2 AND b >= 8 AND b <= 9
+----
+[/1/8 - /2/9]
+Remaining filter: (b >= 8) AND (b <= 9)
+
+index-constraints vars=(a int, b int) index=(a desc, b)
+a >= 1 AND a <= 2 AND b >= 8 AND b <= 9
+----
+[/2/8 - /1/9]
+Remaining filter: (b >= 8) AND (b <= 9)
+
+index-constraints vars=(a int, b int) index=(a, b desc)
+a >= 1 AND a <= 2 AND b >= 8 AND b <= 9
+----
+[/1/9 - /2/8]
+Remaining filter: (b >= 8) AND (b <= 9)
+
+index-constraints vars=(a int, b int) index=(a, b)
+a > 1 AND a < 4 AND b > 5 AND b < 8
+----
+[/2/6 - /3/7]
+Remaining filter: (b > 5) AND (b < 8)
+
+index-constraints vars=(a int, b int) index=(a, b)
+a > 1 AND a < 4 AND b = 5
+----
+[/2/5 - /3/5]
+Remaining filter: b = 5
+
+index-constraints vars=(a int, b int) index=(a, b)
+a = 1 AND b > 3 AND b < 5
+----
+[/1/4 - /1/4]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a = 1 AND b > 3 AND b < 8
+----
+[/1/4 - /1/7]
+
+index-constraints vars=(a int) index=(a)
+a > 2 AND a < 1
+----
+
+index-constraints vars=(a int, b int) index=(a, b)
+a = 1 AND b != 2
+----
+(/1/NULL - /1/1]
+[/1/3 - /1]
+
+index-constraints vars=(a int, b int) index=(a, b)
+(a = 0 AND b = 0) OR (a = 10 AND b = 10)
+----
+[/0/0 - /0/0]
+[/10/10 - /10/10]
+
+# Note: columns b and c are not null so that (b, c) <= (15, 25) generates a
+# tight span.
+index-constraints vars=(a int, b int not null, c int not null) index=(a, b, c)
+(a = 1) OR (a = 2 AND (b, c) >= (10, 20) AND (b, c) <= (15, 25))
+----
+[/1 - /1]
+[/2/10/20 - /2/15/25]
+
+index-constraints vars=(a int, b int) index=(a, b)
+a >= 1 AND a <= 5 AND b != 2
+----
+(/1/NULL - /5]
+Remaining filter: b != 2
+
+index-constraints vars=(a int, b int, c int) index=(a, b, c)
+a = 1 AND (c > 0 OR c < 10)
+----
+[/1 - /1]
+Remaining filter: (c > 0) OR (c < 10)
+
+index-constraints vars=(a string, b int) index=(a, b)
+(((a,) > ('us-east1',)) AND ((a,) < ('us-west1',))) OR ((((a,) > ('europe-west2',)) AND ((a,) < ('us-east1',))) OR (((a,) > ('us-west1',)) OR ((a,) < ('europe-west2',))))
+----
+(/NULL - /'europe-west2')
+[/e'europe-west2\x00' - /'us-east1')
+[/e'us-east1\x00' - /'us-west1')
+[/e'us-west1\x00' - ]
+
+# The spans for c are applied after that for b, so we lose information that
+# [/1/76/10 - /1/76/10] and [/3/76/5 - /3/76/5] are not possible.
+index-constraints vars=(a int not null, b int not null, c int not null) index=(a, b, c)
+((a = 1 AND c = 5) OR (a = 3 AND c = 10)) AND (b = 76)
+----
+[/1/76/5 - /1/76/5]
+[/1/76/10 - /1/76/10]
+[/3/76/5 - /3/76/5]
+[/3/76/10 - /3/76/10]
+Remaining filter: ((a = 1) AND (c = 5)) OR ((a = 3) AND (c = 10))
+
+# Unlike the previous example, we can generate 2 column spans for the individual
+# ORed sub-expressions, so the spans are tight.
+index-constraints vars=(a int not null, b int not null, c int not null) index=(a, b, c)
+((a = 1 AND b = 5) OR (a = 3 AND b = 10)) AND (c = 76)
+----
+[/1/5/76 - /1/5/76]
+[/3/10/76 - /3/10/76]

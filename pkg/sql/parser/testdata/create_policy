@@ -1,0 +1,145 @@
+parse
+CREATE POLICY p1 ON xy
+----
+CREATE POLICY p1 ON xy
+CREATE POLICY p1 ON xy -- fully parenthesized
+CREATE POLICY p1 ON xy -- literals removed
+CREATE POLICY _ ON _ -- identifiers removed
+
+parse
+CREATE POLICY p1 on db.schema.xy AS PERMISSIVE
+----
+CREATE POLICY p1 ON db.schema.xy AS PERMISSIVE -- normalized!
+CREATE POLICY p1 ON db.schema.xy AS PERMISSIVE -- fully parenthesized
+CREATE POLICY p1 ON db.schema.xy AS PERMISSIVE -- literals removed
+CREATE POLICY _ ON _._._ AS PERMISSIVE -- identifiers removed
+
+parse
+CREATE POLICY p1 on schema.xy AS RESTRICTIVE FOR ALL
+----
+CREATE POLICY p1 ON schema.xy AS RESTRICTIVE FOR ALL -- normalized!
+CREATE POLICY p1 ON schema.xy AS RESTRICTIVE FOR ALL -- fully parenthesized
+CREATE POLICY p1 ON schema.xy AS RESTRICTIVE FOR ALL -- literals removed
+CREATE POLICY _ ON _._ AS RESTRICTIVE FOR ALL -- identifiers removed
+
+parse
+CREATE POLICY p1 on schema.xy FOR SELECT
+----
+CREATE POLICY p1 ON schema.xy FOR SELECT -- normalized!
+CREATE POLICY p1 ON schema.xy FOR SELECT -- fully parenthesized
+CREATE POLICY p1 ON schema.xy FOR SELECT -- literals removed
+CREATE POLICY _ ON _._ FOR SELECT -- identifiers removed
+
+parse
+CREATE POLICY p1 on schema.xy AS PERMISSIVE FOR INSERT TO PUBLIC
+----
+CREATE POLICY p1 ON schema.xy AS PERMISSIVE FOR INSERT TO public -- normalized!
+CREATE POLICY p1 ON schema.xy AS PERMISSIVE FOR INSERT TO public -- fully parenthesized
+CREATE POLICY p1 ON schema.xy AS PERMISSIVE FOR INSERT TO public -- literals removed
+CREATE POLICY _ ON _._ AS PERMISSIVE FOR INSERT TO _ -- identifiers removed
+
+parse
+CREATE POLICY p1 on schema.xy AS RESTRICTIVE FOR UPDATE TO "role1";
+----
+CREATE POLICY p1 ON schema.xy AS RESTRICTIVE FOR UPDATE TO role1 -- normalized!
+CREATE POLICY p1 ON schema.xy AS RESTRICTIVE FOR UPDATE TO role1 -- fully parenthesized
+CREATE POLICY p1 ON schema.xy AS RESTRICTIVE FOR UPDATE TO role1 -- literals removed
+CREATE POLICY _ ON _._ AS RESTRICTIVE FOR UPDATE TO _ -- identifiers removed
+
+parse
+CREATE POLICY p1 on schema.xy AS RESTRICTIVE FOR UPDATE TO "role1";
+----
+CREATE POLICY p1 ON schema.xy AS RESTRICTIVE FOR UPDATE TO role1 -- normalized!
+CREATE POLICY p1 ON schema.xy AS RESTRICTIVE FOR UPDATE TO role1 -- fully parenthesized
+CREATE POLICY p1 ON schema.xy AS RESTRICTIVE FOR UPDATE TO role1 -- literals removed
+CREATE POLICY _ ON _._ AS RESTRICTIVE FOR UPDATE TO _ -- identifiers removed
+
+parse
+CREATE POLICY p1 on schema.xy FOR DELETE TO "role1",PUBLIC,CURRENT_USER USING (true);
+----
+CREATE POLICY p1 ON schema.xy FOR DELETE TO role1, public, CURRENT_USER USING (true) -- normalized!
+CREATE POLICY p1 ON schema.xy FOR DELETE TO role1, public, CURRENT_USER USING ((true)) -- fully parenthesized
+CREATE POLICY p1 ON schema.xy FOR DELETE TO role1, public, CURRENT_USER USING (_) -- literals removed
+CREATE POLICY _ ON _._ FOR DELETE TO _, _, _ USING (true) -- identifiers removed
+
+parse
+CREATE POLICY p1 on schema.xy FOR DELETE TO SESSION_USER,"role2" USING (tenant_id::TEXT = current_user);
+----
+CREATE POLICY p1 ON schema.xy FOR DELETE TO SESSION_USER, role2 USING (tenant_id::STRING = current_user()) -- normalized!
+CREATE POLICY p1 ON schema.xy FOR DELETE TO SESSION_USER, role2 USING ((((tenant_id)::STRING) = (current_user()))) -- fully parenthesized
+CREATE POLICY p1 ON schema.xy FOR DELETE TO SESSION_USER, role2 USING (tenant_id::STRING = current_user()) -- literals removed
+CREATE POLICY _ ON _._ FOR DELETE TO _, _ USING (_::STRING = current_user()) -- identifiers removed
+
+parse
+CREATE POLICY p1 on schema.xy FOR DELETE TO SESSION_USER,"r1","r2" USING (true) WITH CHECK (crdb_region = "us-east1");
+----
+CREATE POLICY p1 ON schema.xy FOR DELETE TO SESSION_USER, r1, r2 USING (true) WITH CHECK (crdb_region = "us-east1") -- normalized!
+CREATE POLICY p1 ON schema.xy FOR DELETE TO SESSION_USER, r1, r2 USING ((true)) WITH CHECK (((crdb_region) = ("us-east1"))) -- fully parenthesized
+CREATE POLICY p1 ON schema.xy FOR DELETE TO SESSION_USER, r1, r2 USING (_) WITH CHECK (crdb_region = "us-east1") -- literals removed
+CREATE POLICY _ ON _._ FOR DELETE TO _, _, _ USING (true) WITH CHECK (_ = _) -- identifiers removed
+
+# Verify WITH CHECK and USING can be specified in any order
+parse
+CREATE POLICY p1 on schema.xy FOR ALL WITH CHECK (with_check is true) USING ('using' is true);
+----
+CREATE POLICY p1 ON schema.xy FOR ALL USING ('using' IS true) WITH CHECK (with_check IS true) -- normalized!
+CREATE POLICY p1 ON schema.xy FOR ALL USING ((('using') IS (true))) WITH CHECK (((with_check) IS (true))) -- fully parenthesized
+CREATE POLICY p1 ON schema.xy FOR ALL USING ('_' IS NOT DISTINCT FROM _) WITH CHECK (with_check IS NOT DISTINCT FROM _) -- literals removed
+CREATE POLICY _ ON _._ FOR ALL USING ('using' IS true) WITH CHECK (_ IS true) -- identifiers removed
+
+# Verify policy name can be mixed case
+parse
+CREATE POLICY "StartWithCap" on "tAblE1" FOR ALL USING (true);
+----
+CREATE POLICY "StartWithCap" ON "tAblE1" FOR ALL USING (true) -- normalized!
+CREATE POLICY "StartWithCap" ON "tAblE1" FOR ALL USING ((true)) -- fully parenthesized
+CREATE POLICY "StartWithCap" ON "tAblE1" FOR ALL USING (_) -- literals removed
+CREATE POLICY _ ON _ FOR ALL USING (true) -- identifiers removed
+
+# Cannot use dot notation for policy name
+error
+CREATE POLICY a.p1 on xy USING (true);
+----
+at or near ".": syntax error
+DETAIL: source SQL:
+CREATE POLICY a.p1 on xy USING (true)
+               ^
+HINT: try \h CREATE POLICY
+
+# Must use parenthesis around the USING expression
+error
+CREATE POLICY p1 on xy USING true;
+----
+at or near "true": syntax error
+DETAIL: source SQL:
+CREATE POLICY p1 on xy USING true
+                             ^
+HINT: try \h CREATE POLICY
+
+# Must use parenthesis around the CHECK expression
+error
+CREATE POLICY p1 on xy WITH CHECK true;
+----
+at or near "true": syntax error
+DETAIL: source SQL:
+CREATE POLICY p1 on xy WITH CHECK true
+                                  ^
+HINT: try \h CREATE POLICY
+
+# Cannot specify expressions before roles
+error
+CREATE POLICY p1 on xy WITH CHECK (true) USING (true) TO public;
+----
+at or near "to": syntax error
+DETAIL: source SQL:
+CREATE POLICY p1 on xy WITH CHECK (true) USING (true) TO public
+                                                      ^
+
+# Cannot specify expressions before commands
+error
+CREATE POLICY p1 on xy WITH CHECK (true) USING (true) FOR SELECT;
+----
+at or near "for": syntax error
+DETAIL: source SQL:
+CREATE POLICY p1 on xy WITH CHECK (true) USING (true) FOR SELECT
+                                                      ^

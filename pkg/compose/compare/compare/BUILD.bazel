@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "compare_test",
+    srcs = ["compare_test.go"],
+    tags = [
+        "integration",
+        "no-remote-exec",
+    ],
+    visibility = ["//pkg/compose:__subpackages__"],
+    deps = [
+        "//pkg/cmd/cmpconn",
+        "//pkg/geo/geos",
+        "//pkg/internal/sqlsmith",
+        "//pkg/sql/randgen",
+        "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/envutil",
+        "//pkg/util/randutil",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,10 @@
+exec db=defaultdb
+CREATE DATABASE mydb;
+----
+0	
+
+exec db=defaultdb
+ALTER ROLE ALL IN DATABASE mydb SET timezone = 'America/New_York';
+DROP DATABASE mydb;
+----
+0	0	

@@ -1,0 +1,24 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.clusterversion;
+option go_package = "github.com/cockroachdb/cockroach/pkg/clusterversion";
+
+import "roachpb/metadata.proto";
+import "gogoproto/gogo.proto";
+
+// ClusterVersion represents a cluster's "active version". It is returned by the
+// Version cluster setting. Its IsActive() method can be used to determine if a
+// particular migration is to be considered enabled or disabled.
+message ClusterVersion {
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = true;
+
+  reserved 1;
+  // The version of functionality in use in the cluster. This value must
+  // monotonically increase.
+  roachpb.Version active_version = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}

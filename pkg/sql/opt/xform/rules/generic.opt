@@ -1,0 +1,102 @@
+# =============================================================================
+# generic.opt contains exploration rules for optimizing generic query plans.
+# =============================================================================
+
+# GenerateParameterizedJoin is an exploration rule that converts a Select
+# expression with placeholders and stable expression in the filters into an
+# InnerJoin that joins the Select's input with a Values expression that produces
+# the placeholder values and stable expressions.
+#
+# This rule allows generic query plans, in which placeholder values are not
+# known and stable expressions are not folded, to be optimized. By converting
+# the Select into an InnerJoin, the optimizer can, in many cases, plan a lookup
+# join which has similar performance characteristics to the constrained Scan
+# that would be planned if the placeholder values were known.
+#
+# For example, consider a schema and query like:
+#
+#   CREATE TABLE t (i INT PRIMARY KEY)
+#   SELECT * FROM t WHERE i = $1
+#
+# GenerateParameterizedJoin will perform the first transformation below, from a
+# Select into a Join. GenerateLookupJoins will perform the second transformation
+# from a (hash) Join into a LookupJoin.
+#
+#   Select (i=$1)              Join (i=col_$1)         LookupJoin (t@t_pkey)
+# 	    |           ->            /   \           ->          |
+# 	    |                        /     \                      |
+# 	  Scan t             Values ($1)   Scan t              Values ($1)
+#
+[GenerateParameterizedJoin, Explore]
+(Select
+    $scan:(Scan $scanPrivate:*) &
+        (GenericRulesEnabled) &
+        (IsCanonicalScan $scanPrivate)
+    $filters:* &
+        (HasPlaceholdersOrStableExprs (Root)) &
+        (Let
+            (
+                $values
+                $newFilters
+                $parameterizedCols
+                $ok
+            ):(GenerateParameterizedJoinValuesAndFilters
+                $filters
+            )
+            $ok
+        )
+)
+=>
+(Project
+    (InnerJoin
+        $values
+        $scan
+        $newFilters
+        (ParameterizedJoinPrivate $parameterizedCols)
+    )
+    []
+    (OutputCols (Root))
+)
+
+# ConvertParameterizedLookupJoinToPlaceholderScan converts some LookupJoins that
+# ultimately result from GenerateParameterizedJoin into PlaceholderScans. The
+# execution of PlaceholderScans are more efficient than more general-purpose
+# LookupJoins. They also natively support vectorized execution, helping to avoid
+# materialization and columnarization overhead.
+#
+# The rule only applies to inner LookupJoins where all of the following are
+# true:
+#
+#   1. Only key columns are used; no lookup expressions.
+#   2. There is no ON filter.
+#   3. The LookupJoin is not part of a paired join.
+#   4. The lookup index can produce all of the needed output columns.
+#
+[ConvertParameterizedLookupJoinToPlaceholderScan, Explore]
+(Project
+    (LookupJoin
+        $values:(Values [ (Tuple $row:[ ... ]) ])
+        []
+        $lookupPrivate:*
+    )
+    []
+    $outputCols:* &
+        (GenericRulesEnabled) &
+        (HasPlaceholders $values) &
+        (IsConstantsAndPlaceholders $row) &
+        (Let
+            (
+                $span
+                $scanPrivate
+                $ok
+            ):(PlaceholderScanSpanAndPrivate
+                $lookupPrivate
+                $values
+                $row
+                $outputCols
+            )
+            $ok
+        )
+)
+=>
+(PlaceholderScan $span $scanPrivate)

@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "engflow",
+    srcs = ["engflow.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/build/engflow",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/build/bazel/bes",
+        "//pkg/build/util",
+        "//pkg/cmd/bazci/githubpost",
+        "//pkg/cmd/bazci/githubpost/issues",
+        "@com_github_golang_protobuf//proto",
+        "@org_golang_x_net//http2",
+    ],
+)
+
+go_test(
+    name = "engflow_test",
+    srcs = ["engflow_test.go"],
+    embed = [":engflow"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

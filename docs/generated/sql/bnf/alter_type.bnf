@@ -1,0 +1,12 @@
+alter_type_stmt ::=
+	'ALTER' 'TYPE' type_name 'ADD' 'VALUE' value 'BEFORE' value
+	| 'ALTER' 'TYPE' type_name 'ADD' 'VALUE' value 'AFTER' value
+	| 'ALTER' 'TYPE' type_name 'ADD' 'VALUE' value 
+	| 'ALTER' 'TYPE' type_name 'ADD' 'VALUE' 'IF' 'NOT' 'EXISTS' value 'BEFORE' value
+	| 'ALTER' 'TYPE' type_name 'ADD' 'VALUE' 'IF' 'NOT' 'EXISTS' value 'AFTER' value
+	| 'ALTER' 'TYPE' type_name 'ADD' 'VALUE' 'IF' 'NOT' 'EXISTS' value 
+	| 'ALTER' 'TYPE' type_name 'DROP' 'VALUE' value
+	| 'ALTER' 'TYPE' type_name 'RENAME' 'VALUE' value 'TO' value
+	| 'ALTER' 'TYPE' type_name 'RENAME' 'TO' name
+	| 'ALTER' 'TYPE' type_name 'SET' 'SCHEMA' schema_name
+	| 'ALTER' 'TYPE' type_name 'OWNER' 'TO' role_spec

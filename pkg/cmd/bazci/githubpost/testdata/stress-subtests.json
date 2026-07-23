@@ -1,0 +1,109 @@
+{"Action":"output","Output":"Running make with -j8\n"}
+{"Action":"output","Output":"GOPATH set to /Users/benesch/go\n"}
+{"Action":"output","Output":"go test  -exec 'stress ' -tags ' make x86_64_apple_darwin16.7.0' -ldflags '-X github.com/cockroachdb/cockroach/pkg/build.typ=development -extldflags \"-L/usr/local/opt/readline/lib\" -X \"github.com/cockroachdb/cockroach/pkg/build.tag=v2.1.0-alpha.20180702-730-g49b1bbafc-dirty\" -X \"github.com/cockroachdb/cockroach/pkg/build.rev=49b1bbafc12d50cc2d5d1ab0e07de81246b4ef73\" -X \"github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=x86_64-apple-darwin16.7.0\"  ' -run \"TestPretty\" -timeout 0 ./pkg/util/json  -v -args -test.timeout 8m\n"}
+{"Action":"output","Output":"\n"}
+{"Action":"run","Test":"TestPretty"}
+{"Action":"output","Test":"TestPretty","Output":"=== RUN   TestPretty\n"}
+{"Action":"run","Test":"TestPretty/true"}
+{"Action":"output","Test":"TestPretty/true","Output":"=== RUN   TestPretty/true\n"}
+{"Action":"run","Test":"TestPretty/true_(encoded)"}
+{"Action":"output","Test":"TestPretty/true_(encoded)","Output":"=== RUN   TestPretty/true_(encoded)\n"}
+{"Action":"run","Test":"TestPretty/1"}
+{"Action":"output","Test":"TestPretty/1","Output":"=== RUN   TestPretty/1\n"}
+{"Action":"run","Test":"TestPretty/1_(encoded)"}
+{"Action":"output","Test":"TestPretty/1_(encoded)","Output":"=== RUN   TestPretty/1_(encoded)\n"}
+{"Action":"run","Test":"TestPretty/1.0"}
+{"Action":"output","Test":"TestPretty/1.0","Output":"=== RUN   TestPretty/1.0\n"}
+{"Action":"run","Test":"TestPretty/1.0_(encoded)"}
+{"Action":"output","Test":"TestPretty/1.0_(encoded)","Output":"=== RUN   TestPretty/1.0_(encoded)\n"}
+{"Action":"run","Test":"TestPretty/1.00"}
+{"Action":"output","Test":"TestPretty/1.00","Output":"=== RUN   TestPretty/1.00\n"}
+{"Action":"run","Test":"TestPretty/1.00_(encoded)"}
+{"Action":"output","Test":"TestPretty/1.00_(encoded)","Output":"=== RUN   TestPretty/1.00_(encoded)\n"}
+{"Action":"run","Test":"TestPretty/\"hello\""}
+{"Action":"output","Test":"TestPretty/\"hello\"","Output":"=== RUN   TestPretty/\"hello\"\n"}
+{"Action":"run","Test":"TestPretty/\"hello\"_(encoded)"}
+{"Action":"output","Test":"TestPretty/\"hello\"_(encoded)","Output":"=== RUN   TestPretty/\"hello\"_(encoded)\n"}
+{"Action":"run","Test":"TestPretty/[\"hello\"]"}
+{"Action":"output","Test":"TestPretty/[\"hello\"]","Output":"=== RUN   TestPretty/[\"hello\"]\n"}
+{"Action":"run","Test":"TestPretty/[\"hello\"]_(encoded)"}
+{"Action":"output","Test":"TestPretty/[\"hello\"]_(encoded)","Output":"=== RUN   TestPretty/[\"hello\"]_(encoded)\n"}
+{"Action":"run","Test":"TestPretty/[\"hello\",_\"world\"]"}
+{"Action":"output","Test":"TestPretty/[\"hello\",_\"world\"]","Output":"=== RUN   TestPretty/[\"hello\",_\"world\"]\n"}
+{"Action":"run","Test":"TestPretty/[\"hello\",_\"world\"]_(encoded)"}
+{"Action":"output","Test":"TestPretty/[\"hello\",_\"world\"]_(encoded)","Output":"=== RUN   TestPretty/[\"hello\",_\"world\"]_(encoded)\n"}
+{"Action":"run","Test":"TestPretty/[\"hello\",_[\"world\"]]"}
+{"Action":"output","Test":"TestPretty/[\"hello\",_[\"world\"]]","Output":"=== RUN   TestPretty/[\"hello\",_[\"world\"]]\n"}
+{"Action":"run","Test":"TestPretty/[\"hello\",_[\"world\"]]_(encoded)"}
+{"Action":"output","Test":"TestPretty/[\"hello\",_[\"world\"]]_(encoded)","Output":"=== RUN   TestPretty/[\"hello\",_[\"world\"]]_(encoded)\n"}
+{"Action":"run","Test":"TestPretty/{\"a\":_1}"}
+{"Action":"output","Test":"TestPretty/{\"a\":_1}","Output":"=== RUN   TestPretty/{\"a\":_1}\n"}
+{"Action":"run","Test":"TestPretty/{\"a\":_1}_(encoded)"}
+{"Action":"output","Test":"TestPretty/{\"a\":_1}_(encoded)","Output":"=== RUN   TestPretty/{\"a\":_1}_(encoded)\n"}
+{"Action":"run","Test":"TestPretty/{\"a\":_1,_\"b\":_2}"}
+{"Action":"output","Test":"TestPretty/{\"a\":_1,_\"b\":_2}","Output":"=== RUN   TestPretty/{\"a\":_1,_\"b\":_2}\n"}
+{"Action":"run","Test":"TestPretty/{\"a\":_1,_\"b\":_2}_(encoded)"}
+{"Action":"output","Test":"TestPretty/{\"a\":_1,_\"b\":_2}_(encoded)","Output":"=== RUN   TestPretty/{\"a\":_1,_\"b\":_2}_(encoded)\n"}
+{"Action":"run","Test":"TestPretty/{\"a\":_1,_\"b\":_{\"c\":_3}}"}
+{"Action":"output","Test":"TestPretty/{\"a\":_1,_\"b\":_{\"c\":_3}}","Output":"=== RUN   TestPretty/{\"a\":_1,_\"b\":_{\"c\":_3}}\n"}
+{"Action":"run","Test":"TestPretty/{\"a\":_1,_\"b\":_{\"c\":_3}}_(encoded)"}
+{"Action":"output","Test":"TestPretty/{\"a\":_1,_\"b\":_{\"c\":_3}}_(encoded)","Output":"=== RUN   TestPretty/{\"a\":_1,_\"b\":_{\"c\":_3}}_(encoded)\n"}
+{"Action":"output","Test":"TestPretty","Output":"--- FAIL: TestPretty (0.00s)\n"}
+{"Action":"output","Test":"TestPretty/true","Output":"    --- PASS: TestPretty/true (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/true"}
+{"Action":"output","Test":"TestPretty/true_(encoded)","Output":"    --- PASS: TestPretty/true_(encoded) (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/true_(encoded)"}
+{"Action":"output","Test":"TestPretty/1","Output":"    --- PASS: TestPretty/1 (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/1"}
+{"Action":"output","Test":"TestPretty/1_(encoded)","Output":"    --- PASS: TestPretty/1_(encoded) (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/1_(encoded)"}
+{"Action":"output","Test":"TestPretty/1.0","Output":"    --- FAIL: TestPretty/1.0 (0.00s)\n"}
+{"Action":"output","Test":"TestPretty/1.0","Output":"    \tjson_test.go:1656: injected failure\n"}
+{"Action":"fail","Test":"TestPretty/1.0"}
+{"Action":"output","Test":"TestPretty/1.0_(encoded)","Output":"    --- PASS: TestPretty/1.0_(encoded) (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/1.0_(encoded)"}
+{"Action":"output","Test":"TestPretty/1.00","Output":"    --- PASS: TestPretty/1.00 (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/1.00"}
+{"Action":"output","Test":"TestPretty/1.00_(encoded)","Output":"    --- PASS: TestPretty/1.00_(encoded) (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/1.00_(encoded)"}
+{"Action":"output","Test":"TestPretty/\"hello\"","Output":"    --- PASS: TestPretty/\"hello\" (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/\"hello\""}
+{"Action":"output","Test":"TestPretty/\"hello\"_(encoded)","Output":"    --- PASS: TestPretty/\"hello\"_(encoded) (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/\"hello\"_(encoded)"}
+{"Action":"output","Test":"TestPretty/[\"hello\"]","Output":"    --- PASS: TestPretty/[\"hello\"] (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/[\"hello\"]"}
+{"Action":"output","Test":"TestPretty/[\"hello\"]_(encoded)","Output":"    --- PASS: TestPretty/[\"hello\"]_(encoded) (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/[\"hello\"]_(encoded)"}
+{"Action":"output","Test":"TestPretty/[\"hello\",_\"world\"]","Output":"    --- PASS: TestPretty/[\"hello\",_\"world\"] (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/[\"hello\",_\"world\"]"}
+{"Action":"output","Test":"TestPretty/[\"hello\",_\"world\"]_(encoded)","Output":"    --- PASS: TestPretty/[\"hello\",_\"world\"]_(encoded) (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/[\"hello\",_\"world\"]_(encoded)"}
+{"Action":"output","Test":"TestPretty/[\"hello\",_[\"world\"]]","Output":"    --- FAIL: TestPretty/[\"hello\",_[\"world\"]] (0.00s)\n"}
+{"Action":"output","Test":"TestPretty/[\"hello\",_[\"world\"]]","Output":"    \tjson_test.go:1656: injected failure\n"}
+{"Action":"fail","Test":"TestPretty/[\"hello\",_[\"world\"]]"}
+{"Action":"output","Test":"TestPretty/[\"hello\",_[\"world\"]]_(encoded)","Output":"    --- PASS: TestPretty/[\"hello\",_[\"world\"]]_(encoded) (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/[\"hello\",_[\"world\"]]_(encoded)"}
+{"Action":"output","Test":"TestPretty/{\"a\":_1}","Output":"    --- PASS: TestPretty/{\"a\":_1} (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/{\"a\":_1}"}
+{"Action":"output","Test":"TestPretty/{\"a\":_1}_(encoded)","Output":"    --- PASS: TestPretty/{\"a\":_1}_(encoded) (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/{\"a\":_1}_(encoded)"}
+{"Action":"output","Test":"TestPretty/{\"a\":_1,_\"b\":_2}","Output":"    --- PASS: TestPretty/{\"a\":_1,_\"b\":_2} (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/{\"a\":_1,_\"b\":_2}"}
+{"Action":"output","Test":"TestPretty/{\"a\":_1,_\"b\":_2}_(encoded)","Output":"    --- PASS: TestPretty/{\"a\":_1,_\"b\":_2}_(encoded) (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/{\"a\":_1,_\"b\":_2}_(encoded)"}
+{"Action":"output","Test":"TestPretty/{\"a\":_1,_\"b\":_{\"c\":_3}}","Output":"    --- PASS: TestPretty/{\"a\":_1,_\"b\":_{\"c\":_3}} (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/{\"a\":_1,_\"b\":_{\"c\":_3}}"}
+{"Action":"output","Test":"TestPretty/{\"a\":_1,_\"b\":_{\"c\":_3}}_(encoded)","Output":"    --- PASS: TestPretty/{\"a\":_1,_\"b\":_{\"c\":_3}}_(encoded) (0.00s)\n"}
+{"Action":"pass","Test":"TestPretty/{\"a\":_1,_\"b\":_{\"c\":_3}}_(encoded)"}
+{"Action":"fail","Test":"TestPretty"}
+{"Action":"output","Output":"FAIL\n"}
+{"Action":"output","Output":"\n"}
+{"Action":"output","Output":"\n"}
+{"Action":"output","Output":"ERROR: exit status 1\n"}
+{"Action":"output","Output":"\n"}
+{"Action":"output","Output":"1 runs completed, 1 failures, over 0s\n"}
+{"Action":"output","Output":"context canceled\n"}
+{"Action":"output","Output":"FAIL\n"}
+{"Action":"output","Output":"FAIL\tgithub.com/cockroachdb/cockroach/pkg/util/json\t0.050s\n"}
+{"Action":"output","Output":"make: *** [stress] Error 1\n"}
+{"Action":"fail"}

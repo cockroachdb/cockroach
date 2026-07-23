@@ -1,0 +1,414 @@
+# LogicTest: !local-prepared
+
+statement ok
+SET create_table_with_schema_locked=false
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY) WITH (schema_locked = t);
+
+query TT
+show create table t
+----
+t  CREATE TABLE public.t (
+     i INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (i ASC)
+   ) WITH (schema_locked = true);
+
+statement ok
+ALTER TABLE t RESET (schema_locked);
+
+query TT
+show create table t
+----
+t  CREATE TABLE public.t (
+     i INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (i ASC)
+   );
+
+statement ok
+ALTER TABLE t SET (schema_locked = true);
+
+query TT
+show create table t
+----
+t  CREATE TABLE public.t (
+     i INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (i ASC)
+   ) WITH (schema_locked = true);
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
+
+statement ok
+DROP TABLE t;
+
+# This subtest ensures storage parameter "schema_locked" can only be set/reset
+# in a single-statement implicit transaction.
+subtest set_reset_in_single_stmt_implicit_txn
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY) WITH (schema_locked = t);
+
+statement error pq: "schema_locked" can only be set/reset on its own without other parameters in a single-statement implicit transaction.
+ALTER TABLE t SET (schema_locked=f, exclude_data_from_backup=t);
+
+statement error pq: "schema_locked" can only be set/reset on its own without other parameters in a single-statement implicit transaction.
+ALTER TABLE t RESET (exclude_data_from_backup, schema_locked);
+
+statement error pq: "schema_locked" can only be set/reset on its own without other parameters in a single-statement implicit transaction.
+ALTER TABLE t SET (schema_locked=f); CREATE TABLE t2 (i INT PRIMARY KEY);
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+statement error pq: "schema_locked" can only be set/reset on its own without other parameters in a single-statement implicit transaction.
+ALTER TABLE t SET (schema_locked=f);
+
+statement ok
+ROLLBACK
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
+
+statement ok
+DROP TABLE t
+
+# This subtest ensures schema changes are disallowed if the table is schema locked.
+#
+# N.B. We do allow certain schema changes (e.g. GRANT, COMMENT) even when the
+# schema is locked.
+subtest disallow_schema_changes_when_schema_is_locked
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY, j INT, UNIQUE INDEX idx (j)) WITH (schema_locked = t);
+
+statement ok
+INSERT INTO t SELECT i, i+1 FROM generate_series(1,10) AS tmp(i);
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+ALTER TABLE t ADD COLUMN k INT DEFAULT 30;
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+ALTER TABLE t DROP COLUMN j;
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+DROP INDEX idx;
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+CREATE INDEX idx2 ON t(j);
+
+statement ok
+CREATE TABLE ref (a INT PRIMARY KEY, b INT)
+
+# Locked tables cannot be referenced by foreign keys.
+onlyif config local-legacy-schema-changer
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+ALTER TABLE ref ADD CONSTRAINT fk FOREIGN KEY (b) REFERENCES t(j);
+
+# GRANT statements are allowed on the table, as they only affect the
+# table's privilege descriptor.
+statement ok
+GRANT DELETE ON TABLE t TO testuser WITH GRANT OPTION;
+
+# COMMENT statements are allowed on the table, as they don't actually
+# touch the descriptor.
+statement ok
+COMMENT ON TABLE t IS 't is a table';
+COMMENT ON INDEX t@idx IS 'idx is an index';
+COMMENT ON COLUMN t.i IS 'i is a column';
+subtest end
+
+# Declarative schema change can automatically unset and set schema locked.
+subtest declarative_allows_schema_changes
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t ADD COLUMN k INT DEFAULT 30;
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE INDEX idx2 ON t(j);
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP INDEX idx2;
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE ref ADD CONSTRAINT fk FOREIGN KEY (b) REFERENCES t(j);
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t DROP COLUMN j CASCADE;
+
+# Confirm that the table definition still has schema_locked
+query I
+SELECT count(create_statement) FROM [SHOW CREATE TABLE t] WHERE create_statement LIKE '%schema_locked = true%'
+----
+1
+
+onlyif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t SET (schema_locked = false);
+
+# Finally drop the table.
+statement ok
+DROP TABLE t;
+subtest end
+
+subtest zone_config
+
+statement ok
+ALTER TABLE ref SET (schema_locked = true);
+
+# This statement is schema_locked bypassed.
+statement ok
+ALTER TABLE ref CONFIGURE ZONE USING num_replicas = 11;
+
+subtest end
+
+# Test SET/RESET schema_locked with varying session settings.
+subtest set_reset_schema_locked_session_settings
+
+statement ok
+CREATE TABLE t_sl (i INT PRIMARY KEY) WITH (schema_locked = false)
+
+# Test SET schema_locked=true
+statement ok
+ALTER TABLE t_sl SET (schema_locked=true)
+
+query TT
+SHOW CREATE TABLE t_sl
+----
+t_sl  CREATE TABLE public.t_sl (
+        i INT8 NOT NULL,
+        CONSTRAINT t_sl_pkey PRIMARY KEY (i ASC)
+      ) WITH (schema_locked = true);
+
+# Test SET schema_locked=false
+statement ok
+ALTER TABLE t_sl SET (schema_locked=false)
+
+query TT
+SHOW CREATE TABLE t_sl
+----
+t_sl  CREATE TABLE public.t_sl (
+        i INT8 NOT NULL,
+        CONSTRAINT t_sl_pkey PRIMARY KEY (i ASC)
+      );
+
+statement ok
+SET create_table_with_schema_locked = 'true'
+
+# Test RESET schema_locked - should reset to session setting (true).
+statement ok
+ALTER TABLE t_sl RESET (schema_locked)
+
+query TT
+SHOW CREATE TABLE t_sl
+----
+t_sl  CREATE TABLE public.t_sl (
+        i INT8 NOT NULL,
+        CONSTRAINT t_sl_pkey PRIMARY KEY (i ASC)
+      ) WITH (schema_locked = true);
+
+statement ok
+SET create_table_with_schema_locked = 'false'
+
+# Test RESET schema_locked - should reset to session setting (false).
+statement ok
+ALTER TABLE t_sl RESET (schema_locked)
+
+query TT
+SHOW CREATE TABLE t_sl
+----
+t_sl  CREATE TABLE public.t_sl (
+        i INT8 NOT NULL,
+        CONSTRAINT t_sl_pkey PRIMARY KEY (i ASC)
+      );
+
+statement ok
+DROP TABLE t_sl
+
+subtest end
+
+
+# Validate schema_locked can be unset properly in add column txns.
+subtest regression_147993
+
+statement ok
+CREATE TABLE t_147993 (
+  k INT8 NOT NULL,
+  geom1 GEOMETRY(POINT,4326) NULL,
+  geom2 GEOMETRY(POLYGON,4326) NULL,
+  geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+  geom4 GEOMETRY(LINESTRING,4326) NULL,
+  geom5 GEOMETRY(MULTIPOINT,4326) NULL,
+  geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
+  CONSTRAINT t_147993_pkey PRIMARY KEY (k ASC),
+  FAMILY fam (k, geom1, geom2, geom3, geom6)
+) WITH (schema_locked = true);
+
+
+skipif config local-legacy-schema-changer
+statement ok
+SELECT  AddGeometryColumn ('t_147993','geom7',4326,'POINT',2),
+        AddGeometryColumn ('t_147993','geom8',4326,'POINT',2);
+
+
+
+skipif config local-legacy-schema-changer
+query TT
+show create table t_147993
+----
+t_147993  CREATE TABLE public.t_147993 (
+            k INT8 NOT NULL,
+            geom1 GEOMETRY(POINT,4326) NULL,
+            geom2 GEOMETRY(POLYGON,4326) NULL,
+            geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+            geom4 GEOMETRY(LINESTRING,4326) NULL,
+            geom5 GEOMETRY(MULTIPOINT,4326) NULL,
+            geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
+            geom7 GEOMETRY(POINT,4326) NULL,
+            geom8 GEOMETRY(POINT,4326) NULL,
+            CONSTRAINT t_147993_pkey PRIMARY KEY (k ASC),
+            FAMILY fam (k, geom1, geom2, geom3, geom6, geom4, geom5, geom8, geom7)
+          ) WITH (schema_locked = true);
+
+subtest end
+
+# Regression test for #150484: schema_locked cannot be unset with the comma
+# syntax combined with other schema-changing operations. This prevents bypassing
+# the schema_locked protection by unsetting the lock and performing a schema
+# change in the same ALTER TABLE statement.
+subtest regression_150484
+
+statement ok
+CREATE TABLE t_150484 (n INT, m INT, FAMILY (n, m)) WITH (schema_locked=true);
+
+# Combining SET (schema_locked=false) with DROP COLUMN should fail in the legacy schema changer.
+onlyif config local-legacy-schema-changer
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_150484" is locked
+ALTER TABLE t_150484 SET (schema_locked=false), DROP COLUMN n;
+
+# Combining RESET (schema_locked) with ADD COLUMN should fail in the legacy schema changer.
+onlyif config local-legacy-schema-changer
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_150484" is locked
+ALTER TABLE t_150484 RESET (schema_locked), ADD COLUMN k INT;
+
+# Verify the table is still locked and unchanged in the legacy schema changer.
+onlyif config local-legacy-schema-changer
+query TT
+SHOW CREATE TABLE t_150484
+----
+t_150484  CREATE TABLE public.t_150484 (
+            n INT8 NULL,
+            m INT8 NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT t_150484_pkey PRIMARY KEY (rowid ASC),
+            FAMILY fam_0_n_m_rowid (n, m, rowid)
+          ) WITH (schema_locked = true);
+
+# In the declarative schema changer, the above statements are allowed, as we
+# take care to always unlock the table first.
+skipif config local-legacy-schema-changer local-mixed-25.4
+statement ok
+ALTER TABLE t_150484 SET (schema_locked=false), DROP COLUMN n;
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+query TT
+SHOW CREATE TABLE t_150484
+----
+t_150484  CREATE TABLE public.t_150484 (
+            m INT8 NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT t_150484_pkey PRIMARY KEY (rowid ASC),
+            FAMILY fam_0_n_m_rowid (m, rowid)
+          );
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+statement ok
+ALTER TABLE t_150484 SET (schema_locked=true)
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+statement ok
+ALTER TABLE t_150484 RESET (schema_locked), ADD COLUMN k INT;
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+query TT
+SHOW CREATE TABLE t_150484
+----
+t_150484  CREATE TABLE public.t_150484 (
+            m INT8 NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            k INT8 NULL,
+            CONSTRAINT t_150484_pkey PRIMARY KEY (rowid ASC),
+            FAMILY fam_0_n_m_rowid (m, rowid, k)
+          );
+
+statement ok
+DROP TABLE t_150484;
+
+subtest end
+
+# Test the sql.schema.auto_unlock.enabled cluster setting.
+subtest auto_unlock_cluster_setting
+
+statement ok
+CREATE TABLE t_auto_unlock (i INT PRIMARY KEY, j INT) WITH (schema_locked = true)
+
+# Disable auto-unlock.
+statement ok
+SET CLUSTER SETTING sql.schema.auto_unlock.enabled = false
+
+# DDL should be blocked on schema-locked tables.
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_auto_unlock" is locked
+ALTER TABLE t_auto_unlock ADD COLUMN k INT
+
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_auto_unlock" is locked
+CREATE INDEX ON t_auto_unlock (j)
+
+# Manual unlock should still work.
+statement ok
+ALTER TABLE t_auto_unlock SET (schema_locked = false)
+
+# DDL should work after manual unlock.
+statement ok
+ALTER TABLE t_auto_unlock ADD COLUMN k INT
+
+statement ok
+CREATE INDEX ON t_auto_unlock (j)
+
+# Re-lock the table.
+statement ok
+ALTER TABLE t_auto_unlock SET (schema_locked = true)
+
+# DDL should be blocked again.
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_auto_unlock" is locked
+ALTER TABLE t_auto_unlock ADD COLUMN l INT
+
+# Re-enable auto-unlock.
+statement ok
+SET CLUSTER SETTING sql.schema.auto_unlock.enabled = true
+
+# DDL should work again with auto-unlock re-enabled.
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_auto_unlock ADD COLUMN l INT
+
+# DDL is still blocked in the legacy schema changer.
+onlyif config local-legacy-schema-changer
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_auto_unlock" is locked
+ALTER TABLE t_auto_unlock ADD COLUMN l INT
+
+statement ok
+DROP TABLE t_auto_unlock
+
+subtest end

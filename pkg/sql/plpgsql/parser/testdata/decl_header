@@ -1,0 +1,345 @@
+parse
+<<foo>>
+DECLARE
+  var1 integer := 30;
+BEGIN
+END
+----
+<<foo>>
+DECLARE
+var1 INT8 := 30;
+BEGIN
+END foo;
+ -- normalized!
+<<foo>>
+DECLARE
+var1 INT8 := (30);
+BEGIN
+END foo;
+ -- fully parenthesized
+<<foo>>
+DECLARE
+var1 INT8 := _;
+BEGIN
+END foo;
+ -- literals removed
+<<_>>
+DECLARE
+_ INT8 := 30;
+BEGIN
+END _;
+ -- identifiers removed
+
+parse
+<<foo>>
+DECLARE
+  var1 CONSTANT INTEGER COLLATE collation_name NOT NULL := 30;
+BEGIN
+END foo
+----
+<<foo>>
+DECLARE
+var1 CONSTANT INT8 COLLATE collation_name NOT NULL := 30;
+BEGIN
+END foo;
+ -- normalized!
+<<foo>>
+DECLARE
+var1 CONSTANT INT8 COLLATE collation_name NOT NULL := (30);
+BEGIN
+END foo;
+ -- fully parenthesized
+<<foo>>
+DECLARE
+var1 CONSTANT INT8 COLLATE collation_name NOT NULL := _;
+BEGIN
+END foo;
+ -- literals removed
+<<_>>
+DECLARE
+_ CONSTANT INT8 COLLATE _ NOT NULL := 30;
+BEGIN
+END _;
+ -- identifiers removed
+
+parse
+DECLARE
+  var1 CONSTANT INTEGER COLLATE collation_name NOT NULL DEFAULT 30;
+BEGIN
+END
+----
+DECLARE
+var1 CONSTANT INT8 COLLATE collation_name NOT NULL := 30;
+BEGIN
+END;
+ -- normalized!
+DECLARE
+var1 CONSTANT INT8 COLLATE collation_name NOT NULL := (30);
+BEGIN
+END;
+ -- fully parenthesized
+DECLARE
+var1 CONSTANT INT8 COLLATE collation_name NOT NULL := _;
+BEGIN
+END;
+ -- literals removed
+DECLARE
+_ CONSTANT INT8 COLLATE _ NOT NULL := 30;
+BEGIN
+END;
+ -- identifiers removed
+
+parse
+DECLARE
+  "%_2jd9$f foo" integer := 30;
+BEGIN
+END
+----
+DECLARE
+"%_2jd9$f foo" INT8 := 30;
+BEGIN
+END;
+ -- normalized!
+DECLARE
+"%_2jd9$f foo" INT8 := (30);
+BEGIN
+END;
+ -- fully parenthesized
+DECLARE
+"%_2jd9$f foo" INT8 := _;
+BEGIN
+END;
+ -- literals removed
+DECLARE
+_ INT8 := 30;
+BEGIN
+END;
+ -- identifiers removed
+
+error
+DECLARE
+  var1 integer := 30;
+  var2 ALIAS FOR quantity;
+BEGIN
+END
+----
+at or near ";": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+  var1 integer := 30;
+  var2 ALIAS FOR quantity;
+                         ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/169572/
+
+parse
+DECLARE
+  var1 CURSOR FOR SELECT * FROM t1 WHERE id = arg1;
+BEGIN
+END
+----
+DECLARE
+var1 CURSOR FOR SELECT * FROM t1 WHERE id = arg1;
+BEGIN
+END;
+ -- normalized!
+DECLARE
+var1 CURSOR FOR SELECT (*) FROM t1 WHERE ((id) = (arg1));
+BEGIN
+END;
+ -- fully parenthesized
+DECLARE
+var1 CURSOR FOR SELECT * FROM t1 WHERE id = arg1;
+BEGIN
+END;
+ -- literals removed
+DECLARE
+_ CURSOR FOR SELECT * FROM _ WHERE _ = _;
+BEGIN
+END;
+ -- identifiers removed
+
+error
+DECLARE
+  var1 NO SCROLL CURSOR (arg1 INTEGER) FOR SELECT * FROM t1 WHERE id = arg1;
+BEGIN
+END
+----
+at or near "(": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+  var1 NO SCROLL CURSOR (arg1 INTEGER) FOR SELECT * FROM t1 WHERE id = arg1;
+                        ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/117746/
+
+# Correctly handle parsing errors for variable types.
+error
+DECLARE
+  var1 one.two.three.four;
+BEGIN
+END
+----
+at or near "four": syntax error: unable to parse type of variable declaration
+DETAIL: source SQL:
+DECLARE
+  var1 one.two.three.four;
+                     ^
+
+error
+DECLARE
+  var1 one.two.three.four := 0;
+BEGIN
+END
+----
+at or near "four": syntax error: unable to parse type of variable declaration
+DETAIL: source SQL:
+DECLARE
+  var1 one.two.three.four := 0;
+                     ^
+
+error
+DECLARE
+  var1 1;
+BEGIN
+END
+----
+at or near "1": syntax error: unable to parse type of variable declaration
+DETAIL: source SQL:
+DECLARE
+  var1 1;
+       ^
+
+error
+DECLARE
+  var1 'foo';
+BEGIN
+END
+----
+at or near "foo": syntax error: unable to parse type of variable declaration
+DETAIL: source SQL:
+DECLARE
+  var1 'foo';
+       ^
+
+error
+DECLARE
+  var1 xy%ROWTYPE;
+BEGIN
+END
+----
+at or near "rowtype": syntax error: unimplemented: %TYPE and %ROWTYPE syntax
+DETAIL: source SQL:
+DECLARE
+  var1 xy%ROWTYPE;
+          ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/114676/
+
+error
+DECLARE
+  var1 INT;
+  var2 var1%TYPE;
+BEGIN
+END
+----
+at or near "type": syntax error: unimplemented: %TYPE and %ROWTYPE syntax
+DETAIL: source SQL:
+DECLARE
+  var1 INT;
+  var2 var1%TYPE;
+            ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/114676/
+
+pretty
+<<foo>>
+DECLARE
+var1 integer := 30;
+BEGIN
+END
+----
+<<foo>>
+DECLARE
+	var1 INT8 := 30;
+BEGIN
+END foo;
+
+pretty
+DECLARE
+very_long_variable_name CONSTANT INT NOT NULL := some_function(another_long_argument_name, yet_another_argument);
+BEGIN
+END
+----
+DECLARE
+	very_long_variable_name CONSTANT INT8 NOT NULL :=
+		some_function(
+			another_long_argument_name,
+			yet_another_argument
+		);
+BEGIN
+END;
+
+pretty
+DECLARE
+x INT;
+y TEXT NOT NULL := 'hello';
+z CONSTANT DECIMAL := 3.14;
+BEGIN
+END
+----
+DECLARE
+	x INT8;
+	y STRING NOT NULL := 'hello';
+	z CONSTANT DECIMAL := 3.14;
+BEGIN
+END;
+
+pretty
+DECLARE
+name TEXT COLLATE "en_US" NOT NULL := 'default';
+BEGIN
+END
+----
+DECLARE
+	name STRING COLLATE "en_US" NOT NULL := 'default';
+BEGIN
+END;
+
+pretty
+DECLARE
+var1 CURSOR FOR SELECT x, y FROM t1 WHERE id = arg1 AND status = 'active' ORDER BY x;
+BEGIN
+END
+----
+DECLARE
+	var1 CURSOR FOR
+		SELECT
+			x, y
+		FROM
+			t1
+		WHERE
+			id = arg1 AND status = 'active'
+		ORDER BY
+			x;
+BEGIN
+END;
+
+pretty
+DECLARE
+var1 NO SCROLL CURSOR FOR SELECT x, y FROM t1 WHERE id = arg1 AND status = 'active' ORDER BY x;
+BEGIN
+END
+----
+DECLARE
+	var1 NO SCROLL CURSOR FOR
+		SELECT
+			x, y
+		FROM
+			t1
+		WHERE
+			id = arg1 AND status = 'active'
+		ORDER BY
+			x;
+BEGIN
+END;

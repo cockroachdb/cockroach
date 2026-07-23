@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "codec",
+    srcs = ["types.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil/codec",
+    visibility = ["//visibility:public"],
+    deps = ["@in_yaml_go_yaml_v4//:yaml"],
+)
+
+go_test(
+    name = "codec_test",
+    srcs = [
+        "types_registry_test.go",
+        "types_test.go",
+    ],
+    embed = [":codec"],
+    deps = [
+        "//pkg/util/yamlutil",
+        "@com_github_stretchr_testify//require",
+        "@in_yaml_go_yaml_v4//:yaml",
+    ],
+)

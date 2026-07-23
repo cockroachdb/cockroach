@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pprofutil",
+    srcs = ["labels.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/pprofutil",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_logtags//:logtags"],
+)
+
+go_test(
+    name = "pprofutil_test",
+    srcs = ["labels_test.go"],
+    embed = [":pprofutil"],
+    deps = [
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_stretchr_testify//require",
+    ],
+)

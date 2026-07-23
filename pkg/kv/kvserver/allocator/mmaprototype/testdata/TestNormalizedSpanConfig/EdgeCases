@@ -1,0 +1,826 @@
+# This file tests the two-phase constraint normalization process:
+#
+# Phase 1 (normalizeVoterConstraints): Adjusts voter constraints based on their
+# relationship types with all-replica constraints (conjEqualSet,
+# conjStrictSubset, conjStrictSuperset, conjNonIntersecting,
+# conjPossiblyIntersecting).
+#
+# Phase 2 (normalizeEmptyConstraints): Adjusts all-replica constraints using
+# empty constraint slots ([:]:N) to better match voter requirements. This phase
+# can top-up existing constraints or create new ones from the empty pool.
+
+# Voters require [+region=a,-zone=a2]:3, but all-replicas only specify
+# [+region=a]:2 with [:]:2 empty. normalizeVoterConstraints makes no changes
+# since the voter is already stricter. normalizeEmptyConstraints tightens the
+# empty all-replica [:]:2 by moving 2 replicas to [+region=a,-zone=a2]:2.
+normalize num-replicas=4 num-voters=3
+constraint num-replicas=2 +region=a
+voter-constraint num-replicas=3 +region=a -zone=a2
+----
+basic:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:2
+   :2
+ voter-constraints:
+   +region=a,-zone=a2:3
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:2
+   +region=a,-zone=a2:2
+ voter-constraints:
+   +region=a,-zone=a2:3
+
+# All-replicas are evenly split across 3 zones (2 per zone), but the voter
+# constraint [+region=a]:2 only specifies the region. normalizeVoterConstraints
+# makes voters stricter by narrowing them to zone-specific constraints.
+# normalizeEmptyConstraints makes no changes since replicas are already strict.
+#
+# TODO(mma): This result is suboptimal. The 3 voters are placed as 2 in zone=a1,
+# 1 in zone=a2, and 0 in zone=a3. A better distribution would be 1 voter per
+# zone.
+normalize num-replicas=6 num-voters=3
+constraint num-replicas=2 +region=a +zone=a1
+constraint num-replicas=2 +region=a +zone=a2
+constraint num-replicas=2 +region=a +zone=a3
+voter-constraint num-replicas=2 +region=a
+----
+basic:
+ num-replicas=6 num-voters=3
+ constraints:
+   +region=a,+zone=a1:2
+   +region=a,+zone=a2:2
+   +region=a,+zone=a3:2
+ voter-constraints:
+   +region=a:2
+   :1
+normalizeVoterConstraints:
+ num-replicas=6 num-voters=3
+ constraints:
+   +region=a,+zone=a1:2
+   +region=a,+zone=a2:2
+   +region=a,+zone=a3:2
+ voter-constraints:
+   +region=a,+zone=a2:1
+   +region=a,+zone=a1:2
+after:
+ (unchanged)
+
+# Voters require [+region=b]:2, [:]:1, but all-replicas have [+region=a]:2 with
+# [:]:2. [+region=b]:2 can't satisfy [+region=a]:2 (non-intersecting) so it has
+# to match with empty all-replica [:]:2. normalizeVoterConstraints tightens
+# [:]:1 to [+region=a]:1. normalizeEmptyConstraints further tightens [:]:2 to
+# [+region=b]:2.
+normalize num-replicas=4 num-voters=3
+constraint num-replicas=2 +region=a
+voter-constraint num-replicas=2 +region=b
+----
+basic:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:2
+   :2
+ voter-constraints:
+   +region=b:2
+   :1
+normalizeVoterConstraints:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:2
+   :2
+ voter-constraints:
+   +region=b:2
+   +region=a:1
+after:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:2
+   +region=b:2
+ voter-constraints:
+   +region=b:2
+   +region=a:1
+
+# TODO(mma): Suboptimal. With empty constraint listed first,
+# [+region=a,+zone=a1]:1 greedily consumes [:]:1 in Step 2 of
+# normalizeVoterConstraints (conjStrictSubset, processed first). A smarter
+# algorithm would match [+region=a,+zone=a1]:1 with [+region=a]:1 instead,
+# preserving [:]:1 for voters that need it. Read more on Step 2 in the code
+# comments.
+normalize num-replicas=2 num-voters=2
+constraint num-replicas=1
+constraint num-replicas=1 +region=a
+voter-constraint num-replicas=1 +region=a +zone=a1
+----
+basic:
+ num-replicas=2 num-voters=2
+ constraints:
+   :1
+   +region=a:1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   :1
+normalizeVoterConstraints:
+ num-replicas=2 num-voters=2
+ constraints:
+   :1
+   +region=a:1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=a:1
+after:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a,+zone=a1:1
+   +region=a:1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=a:1
+
+# Same as above but with empty constraint listed LAST. Now [+region=a]:1 is
+# processed first, so the voter correctly uses it instead of the empty pool.
+normalize num-replicas=2 num-voters=2
+constraint num-replicas=1 +region=a
+constraint num-replicas=1
+voter-constraint num-replicas=1 +region=a +zone=a1
+----
+basic:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a:1
+   :1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   :1
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a:1
+   +region=a,+zone=a1:1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   :1
+
+# TODO(mma): Suboptimal result from normalizeEmptyConstraints. Voter
+# [+region=a,+zone=a1]:1 can satisfy [+region=a]:1 and [:]:1, while
+# [+region=b]:1 can only satisfy [:]:1. normalizeEmptyConstraints greedily
+# narrows [:]:1 to [+region=a,+zone=a1]:1, leaving [+region=b]:1 unsatisfied (no
+# +region=b in final all-replica constraints).
+normalize num-replicas=2 num-voters=2
+constraint num-replicas=1 +region=a
+voter-constraint num-replicas=1 +region=a +zone=a1
+voter-constraint num-replicas=1 +region=b
+----
+basic:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a:1
+   :1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=b:1
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a:1
+   +region=a,+zone=a1:1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=b:1
+
+# [+region=c]:1 can never be satisfied (non-intersecting with +region=a).
+normalize num-replicas=2 num-voters=2
+constraint num-replicas=2 +region=a
+voter-constraint num-replicas=1 +region=c
+----
+basic:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a:2
+ voter-constraints:
+   +region=c:1
+   :1
+normalizeVoterConstraints:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a:2
+ voter-constraints:
+   +region=c:1
+   +region=a:1
+after:
+ (unchanged)
+err=could not satisfy all voter constraints due to non-intersecting conjunctions in voter and all replica constraints
+
+# Voters specify [+region=a,+dc=dc1]:2, but all-replicas have
+# [+region=a,+zone=a1]:2. Different attribute types (zone vs dc) create
+# ambiguous overlap. normalizeVoterConstraints makes no changes since it can't
+# determine overlap. normalizeEmptyConstraints tightens the empty [:]:2 to
+# [+region=a,+dc=dc1]:2.
+normalize num-replicas=4 num-voters=2
+constraint num-replicas=2 +region=a +zone=a1
+voter-constraint num-replicas=2 +region=a +dc=dc1
+----
+basic:
+ num-replicas=4 num-voters=2
+ constraints:
+   +region=a,+zone=a1:2
+   :2
+ voter-constraints:
+   +region=a,+dc=dc1:2
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=4 num-voters=2
+ constraints:
+   +region=a,+zone=a1:2
+   +region=a,+dc=dc1:2
+ voter-constraints:
+   +region=a,+dc=dc1:2
+err=intersecting conjunctions in constraints and voter constraints
+
+# Sanity check that empty voter constraints are allowed.
+normalize num-replicas=2 num-voters=1
+constraint num-replicas=1 +region=a
+----
+basic:
+ num-replicas=2 num-voters=1
+ constraints:
+   +region=a:1
+   :1
+after:
+ (unchanged)
+
+# Sanity check that empty constraints are not allowed.
+normalize num-replicas=2 num-voters=1
+voter-constraint num-replicas=1 +region=a
+----
+basic:
+ num-replicas=2 num-voters=1
+ constraints:
+   :2
+ voter-constraints:
+   +region=a:1
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=2 num-voters=1
+ constraints:
+   +region=a:1
+   :1
+ voter-constraints:
+   +region=a:1
+
+# Voter constraints left unspecified. This is intentional: when replica
+# constraints are specified but no voter constraints, voters and non-voters
+# together satisfy the replica constraints. This is a dubious configuration
+# (should only be used when there are no non-voters), but we can't infer more.
+normalize num-replicas=4 num-voters=3
+constraint num-replicas=4 +region=a
+----
+basic:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:4
+after:
+ (unchanged)
+
+# Same as above but with explicit empty voter constraint.
+normalize num-replicas=4 num-voters=3
+constraint num-replicas=4 +region=a
+voter-constraint num-replicas=3
+----
+basic:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:4
+ voter-constraints:
+   :3
+normalizeVoterConstraints:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:4
+ voter-constraints:
+   +region=a:3
+after:
+ (unchanged)
+
+# Tests that empty voter constraints is matched with empty all-replica first to
+# avoid unnecessary narrowing. empty voter [:]:1 stays (matched with empty
+# all-replica), the remaining
+# 2 are narrowed to [+region=b]:1 and [+region=a]:1. normalizeEmptyConstraints makes no changes.
+normalize num-replicas=4 num-voters=3
+constraint num-replicas=1 +region=a
+constraint num-replicas=1 +region=b
+constraint num-replicas=1 +region=c
+voter-constraint num-replicas=3
+----
+basic:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:1
+   +region=b:1
+   +region=c:1
+   :1
+ voter-constraints:
+   :3
+normalizeVoterConstraints:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:1
+   +region=b:1
+   +region=c:1
+   :1
+ voter-constraints:
+   +region=b:1
+   +region=a:1
+   :1
+after:
+ (unchanged)
+
+# normalizeVoterConstraints makes voters stricter by distributing the empty
+# voter to specific regions: [+region=b]:1, [+region=a]:1.
+# normalizeEmptyConstraints makes no changes since there's no unconstrained
+# replicas.
+normalize num-replicas=4 num-voters=2
+constraint num-replicas=2 +region=a
+constraint num-replicas=2 +region=b
+voter-constraint num-replicas=2
+----
+basic:
+ num-replicas=4 num-voters=2
+ constraints:
+   +region=a:2
+   +region=b:2
+ voter-constraints:
+   :2
+normalizeVoterConstraints:
+ num-replicas=4 num-voters=2
+ constraints:
+   +region=a:2
+   +region=b:2
+ voter-constraints:
+   +region=b:1
+   +region=a:1
+after:
+ (unchanged)
+
+# normalizeVoterConstraints makes voters stricter: narrows [:]:3 to
+# [+region=us-west,+zone=a]:2 + [:]:1, keeping [+region=us-west]:1 unchanged.
+# normalizeEmptyConstraints tightens the unconstrained replicas by creating
+# [+region=us-west]:1 from it, leaving [:]:1.
+normalize num-replicas=4 num-voters=4
+constraint num-replicas=2 +region=us-west +zone=a
+voter-constraint num-replicas=1 +region=us-west
+----
+basic:
+ num-replicas=4 num-voters=4
+ constraints:
+   +region=us-west,+zone=a:2
+   :2
+ voter-constraints:
+   +region=us-west:1
+   :3
+normalizeVoterConstraints:
+ num-replicas=4 num-voters=4
+ constraints:
+   +region=us-west,+zone=a:2
+   :2
+ voter-constraints:
+   +region=us-west:1
+   +region=us-west,+zone=a:2
+   :1
+after:
+ num-replicas=4 num-voters=4
+ constraints:
+   +region=us-west,+zone=a:2
+   +region=us-west:1
+   :1
+ voter-constraints:
+   +region=us-west:1
+   +region=us-west,+zone=a:2
+   :1
+
+# Voters require [+region=a]:2 and [+region=b]:3, but all-replicas only have
+# [+region=a]:1 with [:]:4 empty. normalizeVoterConstraints makes no changes.
+# normalizeEmptyConstraints tightens the empty pool: tops up [+region=a]:1 to :2
+# and creates [+region=b]:3.
+normalize num-replicas=5 num-voters=5
+constraint num-replicas=1 +region=a
+voter-constraint num-replicas=2 +region=a
+voter-constraint num-replicas=3 +region=b
+----
+basic:
+ num-replicas=5 num-voters=5
+ constraints:
+   +region=a:1
+   :4
+ voter-constraints:
+   +region=a:2
+   +region=b:3
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=5 num-voters=5
+ constraints:
+   +region=a:2
+   +region=b:3
+ voter-constraints:
+   +region=a:2
+   +region=b:3
+
+
+# Voter [+region=us,+zone=us-east,+dc=dc1]:1 is stricter than two overlapping
+# all-replicas. normalizeVoterConstraints makes no changes.
+# normalizeEmptyConstraints tightens the empty pool by creating
+# [+region=us,+zone=us-east,+dc=dc1]:1.
+#
+# TODO(mma): Suboptimal. A smarter phase 2 would narrow one replica from
+# [+region=us:2] to [+region=us,+zone=us-east,+dc=dc1:1], leaving the empty
+# pool [:2] intact.
+normalize num-replicas=6 num-voters=2
+constraint num-replicas=2 +region=us +zone=us-east
+constraint num-replicas=2 +region=us
+voter-constraint num-replicas=1 +region=us +zone=us-east +dc=dc1
+----
+basic:
+ num-replicas=6 num-voters=2
+ constraints:
+   +region=us,+zone=us-east:2
+   +region=us:2
+   :2
+ voter-constraints:
+   +region=us,+zone=us-east,+dc=dc1:1
+   :1
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=6 num-voters=2
+ constraints:
+   +region=us,+zone=us-east:2
+   +region=us:2
+   +region=us,+zone=us-east,+dc=dc1:1
+   :1
+ voter-constraints:
+   +region=us,+zone=us-east,+dc=dc1:1
+   :1
+
+# normalizeVoterConstraints narrows [+region=a]:4 to [+region=a]:2 +
+# [+region=a,+zone=a1]:2. normalizeEmptyConstraints creates [+region=a]:2 from
+# empty.
+normalize num-replicas=4 num-voters=4
+constraint num-replicas=2 +region=a +zone=a1
+voter-constraint num-replicas=4 +region=a
+----
+basic:
+ num-replicas=4 num-voters=4
+ constraints:
+   +region=a,+zone=a1:2
+   :2
+ voter-constraints:
+   +region=a:4
+normalizeVoterConstraints:
+ num-replicas=4 num-voters=4
+ constraints:
+   +region=a,+zone=a1:2
+   :2
+ voter-constraints:
+   +region=a:2
+   +region=a,+zone=a1:2
+after:
+ num-replicas=4 num-voters=4
+ constraints:
+   +region=a,+zone=a1:2
+   +region=a:2
+ voter-constraints:
+   +region=a:2
+   +region=a,+zone=a1:2
+
+# Duplicate empty voter constraints from basic normalization combined.
+normalize num-replicas=6 num-voters=3
+constraint num-replicas=2 +region=a +zone=a1
+constraint num-replicas=2 +region=a +zone=a1
+voter-constraint num-replicas=3 +region=a +zone=a1
+----
+basic:
+ num-replicas=6 num-voters=3
+ constraints:
+   +region=a,+zone=a1:4
+   :2
+ voter-constraints:
+   +region=a,+zone=a1:3
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ (unchanged)
+
+# Duplicate empty voter constraints from basic normalization combined.
+normalize num-replicas=5 num-voters=3
+voter-constraint num-replicas=1
+----
+basic:
+ num-replicas=5 num-voters=3
+ constraints:
+   :5
+ voter-constraints:
+   :3
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ (unchanged)
+
+
+# normalizeVoterConstraints narrowing should not create duplicate voter
+# constraints. Without dedupAndFilterConstraints, this would create duplicate voter
+# constraints. region=a:1 and region=a:1 => region=a:2
+normalize num-replicas=2 num-voters=2
+constraint num-replicas=2 +region=a
+voter-constraint num-replicas=1 +region=a
+voter-constraint num-replicas=1
+----
+basic:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a:2
+ voter-constraints:
+   +region=a:1
+   :1
+normalizeVoterConstraints:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a:2
+ voter-constraints:
+   +region=a:2
+after:
+ (unchanged)
+
+# normalizeEmptyConstraints should not create duplicate all-replica constraints
+# when narrowing. Without dedupAndFilterConstraints, this would create duplicate
+# all-replica constraints. region=a:1 and region=a:1 => region=a:2
+normalize num-replicas=3 num-voters=2
+constraint num-replicas=1 +region=a
+voter-constraint num-replicas=1 +region=a +zone=a1
+voter-constraint num-replicas=1 +region=a +zone=a1
+----
+basic:
+ num-replicas=3 num-voters=2
+ constraints:
+   +region=a:1
+   :2
+ voter-constraints:
+   +region=a,+zone=a1:2
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=3 num-voters=2
+ constraints:
+   +region=a:1
+   +region=a,+zone=a1:2
+ voter-constraints:
+   +region=a,+zone=a1:2
+
+
+# From #106559: num_voters (5) exceeds explicit voter constraints (4), creating
+# implicit empty voter [:]:1. normalizeVoterConstraints makes voters stricter by
+# narrowing the implicit [:]:1 to [+region=eu-west-1]:1.
+# normalizeEmptyConstraints tightens the empty pool by topping up
+# [+region=us-east-1] and [+region=us-west-1] to :2 each.
+normalize num-replicas=6 num-voters=5
+constraint num-replicas=1 +region=eu-west-1
+constraint num-replicas=1 +region=us-central-1
+constraint num-replicas=1 +region=us-east-1
+constraint num-replicas=1 +region=us-west-1
+voter-constraint num-replicas=2 +region=us-west-1
+voter-constraint num-replicas=2 +region=us-east-1
+----
+basic:
+ num-replicas=6 num-voters=5
+ constraints:
+   +region=eu-west-1:1
+   +region=us-central-1:1
+   +region=us-east-1:1
+   +region=us-west-1:1
+   :2
+ voter-constraints:
+   +region=us-west-1:2
+   +region=us-east-1:2
+   :1
+normalizeVoterConstraints:
+ num-replicas=6 num-voters=5
+ constraints:
+   +region=eu-west-1:1
+   +region=us-central-1:1
+   +region=us-east-1:1
+   +region=us-west-1:1
+   :2
+ voter-constraints:
+   +region=us-west-1:2
+   +region=us-east-1:2
+   +region=eu-west-1:1
+after:
+ num-replicas=6 num-voters=5
+ constraints:
+   +region=eu-west-1:1
+   +region=us-central-1:1
+   +region=us-east-1:2
+   +region=us-west-1:2
+ voter-constraints:
+   +region=us-west-1:2
+   +region=us-east-1:2
+   +region=eu-west-1:1
+
+# TODO(mma): Voter [+region=a,+zone=a1]:3 is stricter than all-replica
+# [+region=a]:2. normalizeVoterConstraints makes no changes.
+# normalizeEmptyConstraints creates [+region=a,+zone=a1]:3 from empty but didn't
+# use [+region=a]:2.
+normalize num-replicas=5 num-voters=3
+constraint num-replicas=2 +region=a
+constraint num-replicas=3
+voter-constraint num-replicas=3 +region=a +zone=a1
+----
+basic:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=a:2
+   :3
+ voter-constraints:
+   +region=a,+zone=a1:3
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=a:2
+   +region=a,+zone=a1:3
+ voter-constraints:
+   +region=a,+zone=a1:3
+
+# Voter [+region=a,-zone=a1]:2 forbids zone=a1, but all-replica
+# [+region=a,+zone=a1]:2 requires it. normalizeVoterConstraints makes no
+# changes. normalizeEmptyConstraints tightens the empty pool by creating
+# [+region=a,-zone=a1]:2. 
+#
+# TODO(mma): The error is unnecessary. +zone=a1 and -zone=a1 should be
+# classified as nonIntersecting.
+normalize num-replicas=4 num-voters=2
+constraint num-replicas=2 +region=a +zone=a1
+voter-constraint num-replicas=2 +region=a -zone=a1
+----
+basic:
+ num-replicas=4 num-voters=2
+ constraints:
+   +region=a,+zone=a1:2
+   :2
+ voter-constraints:
+   +region=a,-zone=a1:2
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=4 num-voters=2
+ constraints:
+   +region=a,+zone=a1:2
+   +region=a,-zone=a1:2
+ voter-constraints:
+   +region=a,-zone=a1:2
+err=intersecting conjunctions in constraints and voter constraints
+
+# TODO(mma): Should SQL validate that constraints use the same set of locality
+# tier keys? Here the all-replica constraint uses region+zone but voter
+# constraint only uses zone.
+normalize num-replicas=4 num-voters=2
+constraint num-replicas=2 +region=a +zone=a1
+voter-constraint num-replicas=2 -zone=a1
+----
+basic:
+ num-replicas=4 num-voters=2
+ constraints:
+   +region=a,+zone=a1:2
+   :2
+ voter-constraints:
+   -zone=a1:2
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=4 num-voters=2
+ constraints:
+   +region=a,+zone=a1:2
+   -zone=a1:2
+ voter-constraints:
+   -zone=a1:2
+
+# TODO(mma): False positive error. Voter 1 [+region=a,-zone=a1]:1 must go in
+# zone=a2. Voter 2 [+region=a,-zone=a2]:1 must go in zone=a1. This is
+# satisfiable, but the algorithm returns an error.
+normalize num-replicas=4 num-voters=2
+constraint num-replicas=2 +region=a +zone=a1
+constraint num-replicas=2 +region=a +zone=a2
+voter-constraint num-replicas=1 +region=a -zone=a1
+voter-constraint num-replicas=1 +region=a -zone=a2
+----
+basic:
+ num-replicas=4 num-voters=2
+ constraints:
+   +region=a,+zone=a1:2
+   +region=a,+zone=a2:2
+ voter-constraints:
+   +region=a,-zone=a1:1
+   +region=a,-zone=a2:1
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ (unchanged)
+err=could not satisfy all voter constraints due to non-intersecting conjunctions in voter and all replica constraints
+
+# TODO(mma): normalizeVoterConstraints is suboptimal - should narrow to
+# [+zone=a1,+dc=dc1] for voter 1 and [+zone=a2]:1 for voter 2.
+normalize num-replicas=2 num-voters=2
+constraint num-replicas=1 +region=a +zone=a1 +dc=dc1
+constraint num-replicas=1 +region=a +zone=a2
+voter-constraint num-replicas=1 +region=a
+voter-constraint num-replicas=1 +region=a +zone=a1
+----
+basic:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a,+zone=a1,+dc=dc1:1
+   +region=a,+zone=a2:1
+ voter-constraints:
+   +region=a:1
+   +region=a,+zone=a1:1
+normalizeVoterConstraints:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a,+zone=a1,+dc=dc1:1
+   +region=a,+zone=a2:1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=a,+zone=a1,+dc=dc1:1
+after:
+ (unchanged)
+err=could not satisfy all voter constraints due to non-intersecting conjunctions in voter and all replica constraints
+
+# The normalization result is correct, but the error is unnecessary. Voter
+# [+region=a,+zone=a1,+dc=dc1]:1 can satisfy [+region=a,+zone=a1]:1, and voter
+# [+region=a,+zone=a2]:1 can satisfy [+region=a]:1.
+#
+# TODO(mma): The greedy conjStrictSubset matching may assign voters to the wrong
+# all-replica constraints, causing a spurious error.
+normalize num-replicas=2 num-voters=2
+constraint num-replicas=1 +region=a
+constraint num-replicas=1 +region=a +zone=a1
+voter-constraint num-replicas=1 +region=a +zone=a1 +dc=dc1
+voter-constraint num-replicas=1 +region=a +zone=a2
+----
+basic:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a:1
+   +region=a,+zone=a1:1
+ voter-constraints:
+   +region=a,+zone=a1,+dc=dc1:1
+   +region=a,+zone=a2:1
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ (unchanged)
+err=could not satisfy all voter constraints due to non-intersecting conjunctions in voter and all replica constraints
+
+# TODO(mma): Suboptimal - creates [+region=b,+zone=b1]:2 from empty when voters
+# already satisfy [+region=b]:2. normalizeVoterConstraints makes no changes
+# since empty voter matches empty all-replica. normalizeEmptyConstraints
+# tightens the empty pool: tops up [+region=a]:1 to :2, creates
+# [+region=b,+zone=b1]:2.
+normalize num-replicas=8 num-voters=5
+constraint num-replicas=1 +region=a
+constraint num-replicas=2 +region=b
+voter-constraint num-replicas=2 +region=a
+voter-constraint num-replicas=2 +region=b +zone=b1
+----
+basic:
+ num-replicas=8 num-voters=5
+ constraints:
+   +region=a:1
+   +region=b:2
+   :5
+ voter-constraints:
+   +region=a:2
+   +region=b,+zone=b1:2
+   :1
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=8 num-voters=5
+ constraints:
+   +region=a:2
+   +region=b:2
+   +region=b,+zone=b1:2
+   :2
+ voter-constraints:
+   +region=a:2
+   +region=b,+zone=b1:2
+   :1

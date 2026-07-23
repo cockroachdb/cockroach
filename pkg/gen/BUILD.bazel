@@ -1,0 +1,70 @@
+load(
+    ":gen.bzl",
+    "bnf",
+    "diagrams",
+    "docs",
+    "execgen",
+    "gen",
+    "go_proto",
+    "gomock",
+    "misc",
+    "optgen",
+    "parser",
+    "schemachanger",
+    "stringer",
+    "ui",
+)
+
+execgen()
+
+gomock()
+
+go_proto()
+
+stringer()
+
+optgen()
+
+misc()
+
+docs()
+
+parser()
+
+schemachanger()
+
+diagrams()
+
+bnf()
+
+ui()
+
+gen(
+    name = "gen",
+    srcs = [
+        ":code",
+        ":docs",
+    ],
+)
+
+gen(
+    name = "code",
+    srcs = [
+        ":execgen",
+        ":go_proto",
+        ":gomock",
+        ":misc",
+        ":optgen",
+        ":parser",
+        ":schemachanger",
+        ":stringer",
+    ],
+)
+
+gen(
+    name = "code_full",
+    srcs = [
+        ":code",
+        ":ui",
+    ],
+)

@@ -1,0 +1,69 @@
+contains
+division by zero
+----
+
+reduce
+WITH
+	with_t1 (c1, c2)
+		AS (
+			SELECT 1, 1/0
+		)
+SELECT * FROM with_t1
+----
+SELECT 0 / 0;
+
+reduce
+WITH
+	w
+		AS (
+			VALUES
+				(1),
+				(2),
+				((1 / 0)::INT8)
+		)
+SELECT
+	*
+FROM
+	w;
+----
+VALUES (0 / 0);
+
+reduce
+SELECT
+	1 / 0
+FROM
+	(SELECT 1), (SELECT 2);
+----
+SELECT 0 / 0;
+
+reduce
+CREATE TABLE a (i) AS VALUES (1);
+
+CREATE TABLE b (j) AS VALUES (0);
+
+SELECT
+	c.i / j
+FROM
+	a, a AS c JOIN b ON true;
+----
+----
+CREATE TABLE a (i) AS VALUES (0);
+
+CREATE TABLE b (j) AS VALUES (0);
+
+SELECT c.i / j FROM a AS c JOIN b ON true;
+----
+----
+
+contains
+no data source matches prefix
+----
+
+reduce
+SELECT
+	set_masklen(
+		'4ac:ded4:393a:a371:7690:9d0f:4817:3371/43',
+		tab_1226.col5
+	);
+----
+SELECT set_masklen(NULL, tab_1226.col5);

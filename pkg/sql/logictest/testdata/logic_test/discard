@@ -1,0 +1,295 @@
+# LogicTest: !local-prepared
+statement ok
+SET SEARCH_PATH = foo
+
+query T
+SHOW SEARCH_PATH
+----
+foo
+
+statement ok
+DISCARD ALL
+
+query T
+SHOW SEARCH_PATH
+----
+"$user", public
+
+query T
+SET timezone = 'Europe/Amsterdam'; SHOW TIMEZONE
+----
+Europe/Amsterdam
+
+statement ok
+DISCARD ALL;
+
+query T
+SHOW TIMEZONE
+----
+UTC
+
+query T
+SET TIME ZONE 'Europe/Amsterdam'; SHOW TIME ZONE
+----
+Europe/Amsterdam
+
+statement ok
+DISCARD ALL
+
+query T
+SHOW TIME ZONE
+----
+UTC
+
+statement ok
+PREPARE a AS SELECT 1
+
+statement ok
+DISCARD ALL
+
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+statement error DISCARD ALL cannot run inside a transaction block
+DISCARD ALL
+
+statement ok
+ROLLBACK
+
+statement ok
+CREATE SEQUENCE discard_seq_test START WITH 10
+
+query I
+SELECT nextval('discard_seq_test')
+----
+10
+
+query I
+SELECT lastval()
+----
+10
+
+query I
+SELECT currval('discard_seq_test')
+----
+10
+
+statement ok
+DISCARD SEQUENCES
+
+statement error pgcode 55000 pq: lastval is not yet defined in this session
+SELECT lastval()
+
+statement error pgcode 55000 pq: currval of sequence "test.public.discard_seq_test" is not yet defined in this session
+SELECT currval('discard_seq_test')
+
+statement ok
+CREATE SEQUENCE discard_seq_test_2 START WITH 10
+
+query I
+SELECT nextval('discard_seq_test_2')
+----
+10
+
+statement ok
+DISCARD ALL
+
+statement error pgcode 55000 pq: lastval is not yet defined in this session
+SELECT lastval()
+
+statement ok
+CREATE SEQUENCE S2 PER SESSION CACHE 10
+
+query I
+SELECT nextval('s2')
+----
+1
+
+statement ok
+DISCARD SEQUENCES
+
+query I
+SELECT nextval('s2')
+----
+11
+
+statement ok
+SET experimental_enable_temp_tables=on
+
+query I
+SELECT count(*) FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%'
+----
+0
+
+statement ok
+DISCARD TEMP;
+
+query I
+SELECT count(*) FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%'
+----
+0
+
+statement ok
+CREATE TEMP TABLE test (a int);
+
+statement ok
+CREATE TEMP TABLE test2 (a uuid);
+
+query T rowsort
+SELECT table_name FROM [SHOW TABLES FROM pg_temp]
+----
+test
+test2
+
+statement ok
+DISCARD TEMP;
+
+query T rowsort
+SELECT table_name FROM [SHOW TABLES FROM pg_temp]
+----
+
+#Ensure temp schema is not deleted
+query I
+SELECT count(*) FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%'
+----
+1
+
+statement ok
+UNLISTEN temp
+
+# Check that DISCARD still works in read-only mode.
+
+query T
+SET search_path = bar, public; SHOW search_path
+----
+bar, public
+
+query T
+SET timezone = 'Europe/Amsterdam'; SHOW timezone
+----
+Europe/Amsterdam
+
+statement ok
+PREPARE a AS SELECT 1
+
+statement ok
+CREATE SEQUENCE discard_seq START WITH 10
+
+statement ok
+CREATE TEMP TABLE tempy (a int);
+
+query T rowsort
+SELECT table_name FROM [SHOW TABLES FROM pg_temp]
+----
+tempy
+
+statement ok
+SET default_transaction_read_only = on
+
+statement error cannot execute DROP TABLE in a read-only transaction
+DROP TABLE tempy
+
+# DISCARD should be allowed, even though it drops temporary tables.
+statement ok
+DISCARD ALL
+
+# The DISCARD ALL should have reset default_transaction_read_only.
+query T
+SHOW default_transaction_read_only
+----
+off
+
+query T
+SHOW search_path
+----
+"$user", public
+
+query T
+SHOW timezone
+----
+UTC
+
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement error pgcode 55000 pq: currval of sequence "test.public.discard_seq" is not yet defined in this session
+SELECT currval('discard_seq')
+
+query T rowsort
+SELECT table_name FROM [SHOW TABLES FROM pg_temp]
+----
+
+# Check that DISCARD still works with follower reads.
+
+query T
+SET search_path = bar, public; SHOW search_path
+----
+bar, public
+
+query T
+SET timezone = 'Europe/Amsterdam'; SHOW timezone
+----
+Europe/Amsterdam
+
+statement ok
+PREPARE a AS SELECT 1
+
+statement ok
+CREATE SEQUENCE discard_seq2 START WITH 10
+
+statement ok
+SET experimental_enable_temp_tables = on
+
+statement ok
+CREATE TEMP TABLE tempy (a int)
+
+query T rowsort
+SELECT table_name FROM [SHOW TABLES FROM pg_temp]
+----
+tempy
+
+# Sleep longer than the follower_reads duration so that the DISCARD ALL sees
+# everything we just created.
+query B
+SELECT pg_sleep(5)
+----
+true
+
+statement ok
+SET default_transaction_use_follower_reads = on
+
+# DISCARD should be allowed, even with AOST set.
+statement ok
+DISCARD ALL
+
+# The DISCARD ALL should have reset default_transaction_use_follower_reads.
+query T
+SHOW default_transaction_use_follower_reads
+----
+off
+
+query T
+SHOW search_path
+----
+"$user", public
+
+query T
+SHOW timezone
+----
+UTC
+
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement error pgcode 55000 pq: currval of sequence "test.public.discard_seq2" is not yet defined in this session
+SELECT currval('discard_seq2')
+
+query T rowsort
+SELECT table_name FROM [SHOW TABLES FROM pg_temp]
+----

@@ -1,0 +1,73 @@
+setup
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE TABLE t2(a INT PRIMARY KEY);
+CREATE VIEW v AS SELECT a FROM t2;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+----
+
+build
+CREATE PROCEDURE p(a notmyworkday) LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT 'Monday'::notmyworkday;
+  SELECT nextval('sq1');
+$$;
+----
+- [[Function:{DescID: 110}, PUBLIC], ABSENT]
+  {functionId: 110, isProcedure: true, params: [{class: {}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}, typeName: public.notmyworkday}}], returnType: {type: {family: VoidFamily, oid: 2278}, typeName: VOID}}
+- [[SchemaChild:{DescID: 110, ReferencedDescID: 101}, PUBLIC], ABSENT]
+  {childObjectId: 110, schemaId: 101}
+- [[FunctionName:{DescID: 110}, PUBLIC], ABSENT]
+  {functionId: 110, name: p}
+- [[Owner:{DescID: 110}, PUBLIC], ABSENT]
+  {descriptorId: 110, owner: root}
+- [[UserPrivileges:{DescID: 110, Name: admin}, PUBLIC], ABSENT]
+  {descriptorId: 110, privileges: "2", userName: admin, withGrantOption: "2"}
+- [[UserPrivileges:{DescID: 110, Name: public}, PUBLIC], ABSENT]
+  {descriptorId: 110, privileges: "1048576", userName: public}
+- [[UserPrivileges:{DescID: 110, Name: root}, PUBLIC], ABSENT]
+  {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
+- [[FunctionBody:{DescID: 110}, PUBLIC], ABSENT]
+  {body: "SELECT a FROM t;\nSELECT b FROM t@t_idx_b;\nSELECT c FROM t@t_idx_c;\nSELECT a FROM v;\nSELECT b'@':::@100108;\nSELECT nextval(105:::REGCLASS);", functionId: 110, lang: {lang: SQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [108, 109], usesViews: [{columnIds: [1], viewId: 107}]}
+- [[FunctionParams:{DescID: 110}, PUBLIC], ABSENT]
+  {functionId: 110, params: [{class: {}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}, typeName: public.notmyworkday}}]}
+
+build
+CREATE PROCEDURE p(a notmyworkday) LANGUAGE PLpgSQL AS $$
+  BEGIN
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT 'Monday'::notmyworkday;
+  SELECT nextval('sq1');
+  END
+$$;
+----
+- [[Function:{DescID: 111}, PUBLIC], ABSENT]
+  {functionId: 111, isProcedure: true, params: [{class: {}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}, typeName: public.notmyworkday}}], returnType: {type: {family: VoidFamily, oid: 2278}, typeName: VOID}}
+- [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], ABSENT]
+  {childObjectId: 111, schemaId: 101}
+- [[FunctionName:{DescID: 111}, PUBLIC], ABSENT]
+  {functionId: 111, name: p}
+- [[Owner:{DescID: 111}, PUBLIC], ABSENT]
+  {descriptorId: 111, owner: root}
+- [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], ABSENT]
+  {descriptorId: 111, privileges: "2", userName: admin, withGrantOption: "2"}
+- [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], ABSENT]
+  {descriptorId: 111, privileges: "1048576", userName: public}
+- [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], ABSENT]
+  {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
+- [[FunctionBody:{DescID: 111}, PUBLIC], ABSENT]
+  {body: "BEGIN\nSELECT a FROM t;\nSELECT b FROM t@t_idx_b;\nSELECT c FROM t@t_idx_c;\nSELECT a FROM v;\nSELECT b'@':::@100108;\nSELECT nextval(105:::REGCLASS);\nEND;\n", functionId: 111, lang: {lang: PLPGSQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [108, 109], usesViews: [{columnIds: [1], viewId: 107}]}
+- [[FunctionParams:{DescID: 111}, PUBLIC], ABSENT]
+  {functionId: 111, params: [{class: {}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}, typeName: public.notmyworkday}}]}

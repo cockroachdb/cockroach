@@ -1,0 +1,368 @@
+# Test default table-level permissions.
+# Default user is root.
+statement ok
+CREATE DATABASE a
+
+statement ok
+SET DATABASE = a
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+let $t_id
+SELECT id FROM system.namespace WHERE name = 't'
+
+statement ok
+SELECT * from [$t_id as num_ref]
+
+statement ok
+SHOW GRANTS ON t
+
+statement ok
+CREATE USER bar
+
+statement ok
+GRANT ALL ON t TO bar WITH GRANT OPTION
+
+statement ok
+REVOKE ALL ON t FROM bar
+
+statement ok
+INSERT INTO t VALUES (1, 1), (2, 2)
+
+statement ok
+SELECT * from t
+
+statement count 2
+DELETE FROM t
+
+statement count 0
+DELETE FROM t where k = 1
+
+statement ok
+UPDATE t SET v = 0
+
+statement ok
+UPDATE t SET v = 2 WHERE k = 2
+
+statement ok
+ALTER TABLE t SET (schema_locked=false)
+
+statement ok
+TRUNCATE t
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+let $t_id
+SELECT id FROM system.namespace WHERE name = 't'
+
+# Switch to a user without any privileges.
+user testuser
+
+# This needs to be repeated since session variables are per client.
+statement ok
+SET DATABASE = a
+
+statement ok
+SHOW GRANTS ON t
+
+statement error pq: user testuser has no privileges on relation t
+SHOW COLUMNS FROM t
+
+statement error pq: user testuser does not have SELECT privilege on relation t
+SELECT r FROM t
+
+statement error pq: user testuser does not have SELECT privilege on relation t
+SELECT * from [$t_id as num_ref]
+
+statement error user testuser does not have ALL privilege on relation t
+GRANT ALL ON t TO bar
+
+statement error user testuser does not have ALL privilege on relation t
+REVOKE ALL ON t FROM bar
+
+statement error user testuser does not have INSERT privilege on relation t
+INSERT INTO t VALUES (1, 1), (2, 2)
+
+statement error user testuser does not have SELECT privilege on relation t
+SELECT * FROM t
+
+statement ok
+SELECT 1
+
+statement error user testuser does not have DELETE privilege on relation t
+DELETE FROM t
+
+statement error user testuser does not have DELETE privilege on relation t
+DELETE FROM t where k = 1
+
+statement error user testuser does not have UPDATE privilege on relation t
+UPDATE t SET v = 0
+
+statement error user testuser does not have UPDATE privilege on relation t
+UPDATE t SET v = 2 WHERE k = 2
+
+statement error user testuser does not have DROP or TRUNCATE privilege on relation t
+TRUNCATE t
+
+statement error user testuser does not have DROP privilege on relation t
+DROP TABLE t
+
+# Grant SELECT privilege.
+user root
+
+statement ok
+GRANT SELECT ON t TO testuser WITH GRANT OPTION
+
+user testuser
+
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t
+----
+k  INT8  false  NULL  ·  {t_pkey}  false
+v  INT8  true   NULL  ·  {t_pkey}  false
+
+statement error user testuser does not have ALL privilege on relation t
+GRANT ALL ON t TO bar
+
+statement error user testuser does not have ALL privilege on relation t
+REVOKE ALL ON t FROM bar
+
+statement error user testuser does not have INSERT privilege on relation t
+INSERT INTO t VALUES (1, 1), (2, 2)
+
+statement error user testuser does not have INSERT privilege on relation t
+UPSERT INTO t VALUES (1, 1), (2, 2)
+
+statement ok
+SELECT * FROM t
+
+statement ok
+SELECT 1
+
+statement error user testuser does not have DELETE privilege on relation t
+DELETE FROM t
+
+statement error user testuser does not have DELETE privilege on relation t
+DELETE FROM t where k = 1
+
+statement error user testuser does not have UPDATE privilege on relation t
+UPDATE t SET v = 0
+
+statement error user testuser does not have UPDATE privilege on relation t
+UPDATE t SET v = 2 WHERE k = 2
+
+statement error user testuser does not have DROP or TRUNCATE privilege on relation t
+TRUNCATE t
+
+statement error user testuser does not have DROP privilege on relation t
+DROP TABLE t
+
+# Grant all but SELECT privilege.
+user root
+
+statement ok
+GRANT ALL ON t TO testuser WITH GRANT OPTION
+
+statement ok
+REVOKE SELECT ON t FROM testuser
+
+user testuser
+
+statement ok
+GRANT INSERT ON t TO bar WITH GRANT OPTION
+
+statement ok
+REVOKE INSERT ON t FROM bar
+
+statement error user testuser does not have ALL privilege on relation t
+GRANT ALL ON t TO bar
+
+statement error user testuser does not have SELECT privilege on relation t
+GRANT SELECT ON t TO bar
+
+statement ok
+INSERT INTO t VALUES (1, 1), (2, 2)
+
+statement error user testuser does not have SELECT privilege on relation t
+SELECT * FROM t
+
+statement ok
+SELECT 1
+
+statement error user testuser does not have SELECT privilege on relation t
+DELETE FROM t
+
+statement error user testuser does not have SELECT privilege on relation t
+DELETE FROM t where k = 1
+
+statement error user testuser does not have SELECT privilege on relation t
+UPDATE t SET v = 0
+
+statement error user testuser does not have SELECT privilege on relation t
+UPDATE t SET v = 2 WHERE k = 2
+
+statement ok
+ALTER TABLE t SET (schema_locked=false)
+
+statement ok
+TRUNCATE t
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
+
+statement ok
+DROP TABLE t
+
+# Grant ALL privilege.
+user root
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+statement ok
+GRANT ALL ON t TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+GRANT ALL ON t TO bar WITH GRANT OPTION
+
+statement ok
+REVOKE ALL ON t FROM bar
+
+statement ok
+INSERT INTO t VALUES (1, 1), (2, 2)
+
+statement ok
+SELECT * FROM t
+
+statement ok
+SELECT 1
+
+statement count 2
+DELETE FROM t
+
+statement count 0
+DELETE FROM t where k = 1
+
+statement ok
+UPDATE t SET v = 0
+
+statement ok
+UPDATE t SET v = 2 WHERE k = 2
+
+statement ok
+ALTER TABLE t SET (schema_locked=false)
+
+statement ok
+TRUNCATE t
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
+
+statement ok
+DROP TABLE t
+
+# Grant INSERT privilege.
+user root
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+statement ok
+GRANT INSERT ON t TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+INSERT INTO t VALUES (1, 2)
+
+statement error user testuser does not have SELECT privilege on relation t
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO NOTHING
+
+statement error user testuser does not have SELECT privilege on relation t
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
+
+statement error user testuser does not have SELECT privilege on relation t
+UPSERT INTO t VALUES (1, 2)
+
+user root
+
+statement ok
+GRANT SELECT ON t TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO NOTHING
+
+statement error user testuser does not have UPDATE privilege on relation t
+UPSERT INTO t VALUES (1, 2)
+
+statement error user testuser does not have UPDATE privilege on relation t
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
+
+# Grant UPDATE privilege (in addition to INSERT).
+user root
+
+statement ok
+GRANT UPDATE ON t TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+UPSERT INTO t VALUES (1, 2)
+
+statement ok
+INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
+
+user root
+
+statement ok
+DROP TABLE t
+
+# SHOW privileges.
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+user testuser
+
+statement error user testuser has no privileges on relation t
+SHOW COLUMNS FROM t
+
+statement error user testuser has no privileges on relation t
+SHOW CREATE TABLE t
+
+statement error user testuser has no privileges on relation t
+SHOW INDEX FROM t
+
+statement error user testuser has no privileges on relation t
+SHOW CONSTRAINTS FROM t
+
+user root
+
+statement ok
+GRANT SELECT ON t TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+SHOW COLUMNS FROM t
+
+statement ok
+SHOW CREATE TABLE t
+
+statement ok
+SHOW INDEX FROM t
+
+statement ok
+SHOW CONSTRAINTS FROM t
