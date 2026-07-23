@@ -2,7 +2,12 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "avro",
-    srcs = ["avro.go"],
+    srcs = [
+        "avro.go",
+        "compat.go",
+        "fingerprint.go",
+        "logical_types.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro",
     visibility = ["//visibility:public"],
     deps = [
@@ -25,7 +30,11 @@ go_library(
 
 go_test(
     name = "avro_test",
-    srcs = ["avro_test.go"],
+    srcs = [
+        "adopt_test.go",
+        "avro_test.go",
+        "compat_test.go",
+    ],
     embed = [":avro"],
     deps = [
         "//pkg/ccl/changefeedccl/cdcevent",
@@ -58,6 +67,7 @@ go_test(
         "//pkg/util/timeutil/pgdate",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_linkedin_goavro_v2//:goavro",
         "@com_github_stretchr_testify//require",
     ],
 )
