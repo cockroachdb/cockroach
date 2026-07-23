@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/safesql"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/gorilla/mux"
 )
 
@@ -153,6 +154,36 @@ func (a *apiV2Server) getDatabaseGrants(w http.ResponseWriter, r *http.Request) 
 	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, resp)
 }
 
+// grantsVisibleToUser reports whether sqlUser can see any grant rows for the
+// object targeted by probeQuery. It distinguishes an empty trailing page (an
+// accessible object paged past its last grant) from an object the user cannot
+// see, so callers can 404 only the latter and keep it indistinguishable from a
+// non-existent id.
+//
+// it is the exhausted grants iterator; it is closed before the probe runs
+// because the internal executor runs one statement at a time. The caller's
+// deferred Close is then a safe no-op.
+func grantsVisibleToUser(
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	it isql.Rows,
+	sqlUser username.SQLUsername,
+	opName redact.RedactableString,
+	probeQuery string,
+	qargs ...interface{},
+) (bool, error) {
+	if err := it.Close(); err != nil {
+		return false, err
+	}
+	row, err := ie.QueryRowEx(
+		ctx, opName, nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: sqlUser}, probeQuery, qargs...)
+	if err != nil {
+		return false, err
+	}
+	return row != nil, nil
+}
+
 func getDatabaseGrantsResponseWithPagination(
 	ctx context.Context,
 	ie *sql.InternalExecutor,
@@ -213,10 +244,30 @@ FROM %s.crdb_internal.cluster_database_privileges`, escDbName))
 	}(it)
 
 	ok, err := it.Next(ctx)
-
-	if err != nil || !ok {
-		// If ok is false, the query returned 0 rows.
+	if err != nil {
 		return resp, err
+	}
+	if !ok {
+		// Zero rows means either the user cannot see the database or an accessible
+		// database was paged past its last grant. Only the former must 404, to stay
+		// indistinguishable from a non-existent id. At offset 0 there is no earlier
+		// page, so zero rows already implies no access; past offset 0, probe the
+		// first page to tell the two apart.
+		if offset > 0 {
+			visible, err := grantsVisibleToUser(ctx, ie, it, sqlUser,
+				"get-database-grants-visibility",
+				fmt.Sprintf(
+					`SELECT 1 FROM %s.crdb_internal.cluster_database_privileges LIMIT 1`, escDbName))
+			if err != nil {
+				return resp, err
+			}
+			if visible {
+				// Empty trailing page for a visible database: keep the name, 200.
+				return resp, nil
+			}
+		}
+		resp.Name = ""
+		return resp, nil
 	}
 
 	scanner := makeResultScanner(it.Types())
@@ -430,9 +481,34 @@ WHERE table_name = $ AND table_schema = $`, escDbName),
 	}(it)
 
 	ok, err := it.Next(ctx)
-	if err != nil || !ok {
-		// If ok is false, the query returned 0 rows.
+	if err != nil {
 		return resp, err
+	}
+	if !ok {
+		// Zero rows means either the user cannot see the table or an accessible
+		// table was paged past its last grant. Only the former must 404, to stay
+		// indistinguishable from a non-existent id. At offset 0 there is no earlier
+		// page, so zero rows already implies no access; past offset 0, probe the
+		// first page to tell the two apart.
+		if offset > 0 {
+			visible, err := grantsVisibleToUser(ctx, ie, it, sqlUser,
+				"get-table-grants-visibility",
+				fmt.Sprintf(
+					`SELECT 1 FROM %s.information_schema.table_privileges
+WHERE table_name = $1 AND table_schema = $2 LIMIT 1`, escDbName),
+				resp.TableName, resp.SchemaName)
+			if err != nil {
+				return resp, err
+			}
+			if visible {
+				// Empty trailing page for a visible table: keep the names, 200.
+				return resp, nil
+			}
+		}
+		resp.TableName = ""
+		resp.SchemaName = ""
+		resp.DatabaseName = ""
+		return resp, nil
 	}
 
 	scanner := makeResultScanner(it.Types())
