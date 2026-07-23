@@ -63,6 +63,7 @@ const (
 	SchemaTypeBoolean = `boolean`
 	SchemaTypeBytes   = `bytes`
 	SchemaTypeDouble  = `double`
+	SchemaTypeFloat   = `float`
 	SchemaTypeInt     = `int`
 	SchemaTypeLong    = `long`
 	SchemaTypeNull    = `null`
