@@ -311,10 +311,11 @@ func triggerPanicAndCleanup(
 	}
 	defer release()
 
-	// crdb_internal access is gated behind the allow_unsafe_internals session
-	// variable (default off), so enable it before triggering the panic.
+	// crdb_internal.force_panic is ungated in this release series, so trigger
+	// the panic directly. (The allow_unsafe_internals session variable that
+	// gates it on later releases does not exist here.)
 	panicCmd := exec.Command(cockroachPath, "demo", "--insecure", "-e",
-		"set allow_unsafe_internals = true; select crdb_internal.force_panic('testing');")
+		"select crdb_internal.force_panic('testing');")
 	out, runErr := panicCmd.CombinedOutput()
 	log.Printf("panic command output: %s", string(out))
 
