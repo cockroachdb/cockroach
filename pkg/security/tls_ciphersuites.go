@@ -8,8 +8,8 @@ package security
 import (
 	"crypto/tls"
 	"net"
+	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"golang.org/x/exp/slices"
@@ -78,16 +78,21 @@ func OldCipherSuites() []uint16 {
 	}
 }
 
+// tlsRestrictConfiguration holds the cipher-restrict check applied to inbound
+// TLS connections. A configuration is immutable once constructed;
+// SetTLSCipherSuitesConfigured installs a new instance.
 type tlsRestrictConfiguration struct {
-	syncutil.RWMutex
-	c          []string
 	restrictFn func(*tls.Conn) (error net.Error)
 }
 
-var tlsRestrictConfig = tlsRestrictConfiguration{
-	c:          []string{},
-	restrictFn: func(tlsConn *tls.Conn) (error net.Error) { return },
-}
+// tlsRestrictConfig is the active cipher-restrict configuration, or nil when
+// no cipher allowlist is configured. It is written once at server startup
+// (from the --tls-cipher-suites flag) and read on every inbound connection.
+// The pointer is atomic so that the connection path stays lock-free:
+// restrictFn performs a blocking TLS handshake, and any lock shared across
+// connections here would let a single stalled handshake block all new
+// connections on the node.
+var tlsRestrictConfig atomic.Pointer[tlsRestrictConfiguration]
 
 type allowedTLSCiphers struct {
 	ciphersMapByName map[string]uint16
@@ -152,25 +157,31 @@ func SetTLSCipherSuitesConfigured(ciphers []string) error {
 		}
 	}
 
-	tlsRestrictConfig.configureTLSRestrict(ciphers)
+	configureTLSRestrict(ciphers)
 	return nil
 }
 
-func (*tlsRestrictConfiguration) configureTLSRestrict(ciphers []string) {
-	tlsRestrictConfig.Lock()
-	defer tlsRestrictConfig.Unlock()
-	tlsRestrictConfig.restrictFn = func(tlsConn *tls.Conn) (error net.Error) { return }
-	tlsRestrictConfig.c = ciphers
+func configureTLSRestrict(ciphers []string) {
 	if len(ciphers) == 0 {
+		tlsRestrictConfig.Store(nil)
 		return
 	}
 
-	tlsRestrictConfig.restrictFn = func(tlsConn *tls.Conn) (error net.Error) {
+	// The closure operates solely on state captured at configuration time (the
+	// ciphers slice, never mutated after this point). It runs on every inbound
+	// connection with no lock held, so it must not read shared mutable state.
+	restrictFn := func(tlsConn *tls.Conn) (error net.Error) {
 		if !tlsConn.ConnectionState().HandshakeComplete {
 			// TODO(souravcrl): we need to provide a timebound context for handshake as it
 			// ensures client failures are properly handled, issue: #144754
 			if err := tlsConn.Handshake(); err != nil {
-				// we don't want to close the connection for handshake errors
+				// A failed handshake is deliberately not surfaced here: callers
+				// treat any error returned as a cipher-policy rejection and would
+				// misattribute a transport failure ("cannot use SSL/TLS with the
+				// requested ciphers"). The handshake error is cached on the
+				// tls.Conn, so the regular serving path (pgwire's version read,
+				// net/http's own handshake) hits the same error and closes the
+				// connection with the correct attribution.
 				return nil //nolint:returnerrcheck
 			}
 		}
@@ -179,11 +190,12 @@ func (*tlsRestrictConfiguration) configureTLSRestrict(ciphers []string) {
 		if !ok {
 			return &cipherRestrictError{errors.Errorf("cipher id %v does match implemented tls ciphers", selectedCipherID)}
 		}
-		if !slices.Contains(tlsRestrictConfig.c, cName) {
+		if !slices.Contains(ciphers, cName) {
 			return &cipherRestrictError{errors.Newf("presented cipher %s not in allowed cipher suite list", redact.SafeString(cName))}
 		}
 		return
 	}
+	tlsRestrictConfig.Store(&tlsRestrictConfiguration{restrictFn: restrictFn})
 }
 
 // TLSCipherRestrict restricts the cipher suites used for tls connections to
@@ -191,16 +203,15 @@ func (*tlsRestrictConfiguration) configureTLSRestrict(ciphers []string) {
 // not check for used ciphers in the connection. It returns an error if the used
 // cipher is not present in the configured ciphers for the node.
 var TLSCipherRestrict = func(conn net.Conn) (err net.Error) {
-	var tlsRestrictFn func(*tls.Conn) (error net.Error)
-	{
-		tlsRestrictConfig.Lock()
-		defer tlsRestrictConfig.Unlock()
-		tlsRestrictFn = tlsRestrictConfig.restrictFn
+	cfg := tlsRestrictConfig.Load()
+	if cfg == nil {
+		// No cipher allowlist is configured.
+		return nil
 	}
 	// we always expect a TLS connection here, since this is executed on the
 	// tls.Listener or post applying tls.Server on the incoming connection
 	tlsConn, _ := conn.(*tls.Conn)
-	return tlsRestrictFn(tlsConn)
+	return cfg.restrictFn(tlsConn)
 }
 
 // cipherRestrictError implements net.Error interface so that we can override
