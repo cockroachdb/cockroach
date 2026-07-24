@@ -241,11 +241,8 @@ func (s *authenticationServer) userLogin(
 			return nil, srverrors.APIInternalError(ctx, err)
 		}
 		if expired {
-			return nil, status.Errorf(
-				codes.Unauthenticated,
-				"the password for %s has expired",
-				username,
-			)
+			log.Ops.VWarningf(ctx, 1, "password for user %s has expired", username)
+			return nil, errWebAuthenticationFailure
 		}
 		if !verified {
 			return nil, errWebAuthenticationFailure
@@ -374,10 +371,15 @@ func (s *authenticationServer) DemoLogin(w http.ResponseWriter, req *http.Reques
 	_, _ = w.Write([]byte("you can use the UI now"))
 }
 
-var errWebAuthenticationFailure = status.Errorf(
-	codes.Unauthenticated,
-	"the provided credentials did not match any account on the server",
-)
+// WebAuthenticationFailureMsg is the generic message returned for every DB
+// Console authentication failure — non-existent user, wrong password, or
+// expired password alike. Keeping all failures textually identical prevents an
+// unauthenticated caller from distinguishing them to enumerate valid usernames.
+// The v1 endpoint returns it via errWebAuthenticationFailure; the v2 endpoint
+// writes it directly with http.Error, so both must use this same string.
+const WebAuthenticationFailureMsg = "the provided credentials did not match any account on the server"
+
+var errWebAuthenticationFailure = status.Error(codes.Unauthenticated, WebAuthenticationFailureMsg)
 
 // UserLoginFromSSO is part of the Server interface.
 func (s *authenticationServer) UserLoginFromSSO(
