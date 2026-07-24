@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"testing"
@@ -350,6 +351,66 @@ func TestAuthV2(t *testing.T) {
 		}
 
 	})
+}
+
+// TestAuthV2LoginExpiredPassword verifies that the v2 login endpoint returns
+// the same generic error for an expired password as for any other
+// authentication failure. A distinct expired-password response would let an
+// unauthenticated caller confirm that a username exists (VULM-570).
+func TestAuthV2LoginExpiredPassword(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+
+	const validPassword = "password"
+	for _, stmt := range []string{
+		fmt.Sprintf("CREATE USER validuser WITH PASSWORD '%s'", validPassword),
+		fmt.Sprintf("CREATE USER expireduser WITH PASSWORD '%s' VALID UNTIL '2000-01-01'", validPassword),
+	} {
+		_, err := db.Exec(stmt)
+		require.NoError(t, err)
+	}
+
+	client, err := ts.GetUnauthenticatedHTTPClient()
+	require.NoError(t, err)
+	loginURL := ts.AdminURL().WithPath(apiconstants.APIV2Path + "login/").String()
+	login := func(username, password string) (int, string) {
+		resp, err := client.PostForm(loginURL, url.Values{
+			"username": {username},
+			"password": {password},
+		})
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		return resp.StatusCode, string(body)
+	}
+
+	// A valid login succeeds.
+	status, _ := login("validuser", validPassword)
+	require.Equal(t, http.StatusOK, status)
+
+	// The three failure modes an enumeration attacker compares — a non-existent
+	// user, an existing user with a wrong password, and an existing user with an
+	// expired password — must all return byte-identical responses. Otherwise the
+	// difference reveals which usernames exist (VULM-570). The expired response
+	// in particular must not mention expiry.
+	nonexistentStatus, nonexistentBody := login("nosuchuser", validPassword)
+	require.Equal(t, http.StatusUnauthorized, nonexistentStatus)
+	require.Contains(t, nonexistentBody, authserver.WebAuthenticationFailureMsg)
+
+	wrongStatus, wrongBody := login("validuser", "wrongpassword")
+	require.Equal(t, nonexistentStatus, wrongStatus)
+	require.Equal(t, nonexistentBody, wrongBody)
+
+	expiredStatus, expiredBody := login("expireduser", validPassword)
+	require.Equal(t, nonexistentStatus, expiredStatus)
+	require.Equal(t, nonexistentBody, expiredBody)
+	require.NotContains(t, expiredBody, "expired")
 }
 
 // TestCheckRestartSafe_Criticality tests that we treat raft leader
