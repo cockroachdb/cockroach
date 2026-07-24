@@ -743,13 +743,28 @@ func (b *Builder) scanParams(
 	maxResults, maxResultsOk := b.indexConstraintMaxResults(scan, relProps)
 
 	// If the txn_rows_read_err guardrail is set, make sure that we never read
-	// more than txn_rows_read_err+1 rows on any single scan. Adding a hard limit
-	// of txn_rows_read_err+1 ensures that the results will still be correct since
-	// the conn_executor will return an error if the limit is actually reached.
-	if txnRowsReadErr := b.evalCtx.SessionData().TxnRowsReadErr; txnRowsReadErr > 0 &&
-		(hardLimit == 0 || hardLimit > txnRowsReadErr+1) &&
-		(!maxResultsOk || maxResults > uint64(txnRowsReadErr+1)) {
-		hardLimit = txnRowsReadErr + 1
+	// more than the transaction's remaining read budget (+1 to trip the error)
+	// on any single scan. The budget is txn_rows_read_err reduced by the rows
+	// already read by previous statements in the current explicit transaction.
+	// Adding this hard limit ensures that the results will still be correct
+	// since the conn_executor will return an error once the cumulative limit is
+	// actually reached.
+	//
+	// The reduction is skipped for internal executors: their guardrail
+	// violations are logged rather than returned as errors, so rowsRead can
+	// grow past the limit and would otherwise collapse the cap to a single row
+	// per statement.
+	if txnRowsReadErr := b.evalCtx.SessionData().TxnRowsReadErr; txnRowsReadErr > 0 {
+		remaining := txnRowsReadErr
+		if !b.evalCtx.SessionData().Internal {
+			// The subtraction should always be positive, but we're being
+			// conservative here.
+			remaining = max(txnRowsReadErr-b.evalCtx.TxnRowsRead, 0)
+		}
+		if (hardLimit == 0 || hardLimit > remaining+1) &&
+			(!maxResultsOk || maxResults > uint64(remaining+1)) {
+			hardLimit = remaining + 1
+		}
 	}
 
 	// If this is a bounded staleness query, check that it touches at most one

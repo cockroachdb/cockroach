@@ -4050,6 +4050,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.TxnReadOnly = ex.state.readOnly.Load()
 	evalCtx.TxnImplicit = ex.implicitTxn()
 	evalCtx.TxnIsSingleStmt = false
+	evalCtx.TxnRowsRead = ex.extraTxnState.rowsRead
 	func() {
 		ex.state.mu.Lock()
 		defer ex.state.mu.Unlock()
