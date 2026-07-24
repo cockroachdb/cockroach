@@ -485,7 +485,15 @@ func ListFullBackupsInCollection(
 		return nil, err
 	}
 	for i, backupPath := range backupPaths {
-		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupbase.DeprecatedBackupManifestName)
+		normalizedPath := strings.TrimSuffix(backupPath, "/"+backupbase.DeprecatedBackupManifestName)
+		// For backups into a collection without a prefix, the path may end up not
+		// showing a leading slash. We normalize it here to always have a leading
+		// slash as that is what our backup SQL statements expect (see
+		// DateBasedIntoFolderName).
+		if !strings.HasPrefix(normalizedPath, "/") {
+			normalizedPath = "/" + normalizedPath
+		}
+		backupPaths[i] = normalizedPath
 	}
 	return backupPaths, nil
 }
