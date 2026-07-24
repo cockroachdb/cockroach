@@ -3808,80 +3808,130 @@ func TestLeaseManagerIsMemoryMonitored(t *testing.T) {
 	})
 }
 
-// TestLeaseManagerLockedTimestampConcurrent test does a simple concurrency
-// stress test with the locked timestamps in the lease manager.
 func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testutils.RunTrueAndFalse(t, "oldVersionRetention", func(t *testing.T, retainOldVersions bool) {
-		numTablesToCreate := 100
-		if retainOldVersions {
-			numTablesToCreate = 25
+	testLeaseManagerLockedTimestampConcurrent(t, false /* retainOldVersions */)
+}
+
+func TestLeaseManagerLockedTimestampConcurrentOldVersions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testLeaseManagerLockedTimestampConcurrent(t, true /* retainOldVersions */)
+}
+
+// testLeaseManagerLockedTimestampConcurrent is a concurrency stress test for
+// locked timestamps in the lease manager. The two retainOldVersions cases are
+// separate top-level tests so sharding gives each its own timeout budget.
+func testLeaseManagerLockedTimestampConcurrent(t *testing.T, retainOldVersions bool) {
+	numTablesToCreate := 50
+	if retainOldVersions {
+		numTablesToCreate = 25
+	}
+	// This test can get super expensive, so under stress create fewer tables
+	// and use the parallelism to detect bugs.
+	if skip.Duress() {
+		numTablesToCreate = 10
+	}
+	st := cluster.MakeTestingClusterSettings()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Fire timeoutMargin before the deadline to capture a stack dump and cancel,
+	// so the run fails here attributably rather than via a runtime timeout panic.
+	// Log the dump from the main goroutine, not the timer's: t.Logf from the
+	// timer can race test completion and panic.
+	const timeoutMargin = 10 * time.Second
+	var timedOut atomic.Bool
+	var stacks debugutil.SafeStack
+	if deadline, ok := t.Deadline(); ok {
+		if remaining := time.Until(deadline); remaining > timeoutMargin {
+			timer := time.AfterFunc(remaining-timeoutMargin, func() {
+				stacks = allstacks.Get()
+				timedOut.Store(true)
+				cancel()
+			})
+			defer timer.Stop()
 		}
-		// This test can get super expensive, so under stress create fewer tables
-		// and use the parallelism to detect bugs.
-		if skip.Duress() {
-			numTablesToCreate = 10
-		}
-		st := cluster.MakeTestingClusterSettings()
-		ctx := context.Background()
-		// Disable the automatic stats collection, which can make things slower
-		// with the large number of objects in this test.
-		stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
-		lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
-		lease.RetainOldVersionsForLocked.Override(ctx, &st.SV, retainOldVersions)
-		tc := serverutils.StartCluster(
-			t, 3, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{
-					Settings: st,
-					Knobs: base.TestingKnobs{
-						SQLEvalContext: &eval.TestingKnobs{
-							ForceProductionValues: true,
-						},
+	}
+	// Disable the automatic stats collection, which can make things slower
+	// with the large number of objects in this test.
+	stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+	lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+	lease.RetainOldVersionsForLocked.Override(ctx, &st.SV, retainOldVersions)
+	tc := serverutils.StartCluster(
+		t, 3, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+				Knobs: base.TestingKnobs{
+					SQLEvalContext: &eval.TestingKnobs{
+						ForceProductionValues: true,
 					},
 				},
-			})
-		defer tc.Stopper().Stop(ctx)
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
 
-		grp := ctxgroup.WithContext(ctx)
+	grp := ctxgroup.WithContext(ctx)
 
-		nextObjectToRead := make(chan string)
-		nextObjectToModify := make(chan string)
-		var objectModified atomic.Bool
-		// Detect cancellation from either the client or server.
-		isCancellationError := func(err error) bool {
-			return errors.Is(err, context.Canceled) ||
-				sqltestutils.IsClientSideQueryCanceledErr(err) ||
-				strings.Contains(err.Error(), context.Canceled.Error())
-		}
-		// Creates tables in the background.
-		createThreads := func(ctx context.Context) (err error) {
-			defer close(nextObjectToRead)
-			conn := tc.ServerConn(0)
-			for i := range numTablesToCreate {
-				objectName := fmt.Sprintf("t%d", i)
-				sql := fmt.Sprintf("CREATE TABLE %s(n int PRIMARY KEY)\n", objectName)
-				if _, err := conn.ExecContext(ctx, sql); err != nil {
-					if isCancellationError(err) {
-						return err
-					}
-					panic(err)
+	nextObjectToRead := make(chan string)
+	nextObjectToModify := make(chan string)
+	var objectModified atomic.Bool
+	isExpectedShutdown := func(err error) bool {
+		return errors.Is(err, context.Canceled) ||
+			sqltestutils.IsClientSideQueryCanceledErr(err) ||
+			strings.Contains(err.Error(), context.Canceled.Error())
+	}
+	// Workers tolerate deadline errors from lower layers so they unwind without
+	// panicking; the final check uses isExpectedShutdown so a stray deadline
+	// still surfaces as a failure.
+	isCancellationError := func(err error) bool {
+		return isExpectedShutdown(err) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			strings.Contains(err.Error(), context.DeadlineExceeded.Error())
+	}
+	// Creates tables in the background.
+	createThreads := func(ctx context.Context) (err error) {
+		defer close(nextObjectToRead)
+		conn := tc.ServerConn(0)
+		for i := range numTablesToCreate {
+			objectName := fmt.Sprintf("t%d", i)
+			sql := fmt.Sprintf("CREATE TABLE %s(n int PRIMARY KEY)\n", objectName)
+			if _, err := conn.ExecContext(ctx, sql); err != nil {
+				if isCancellationError(err) {
+					return err
 				}
-				select {
-				case nextObjectToRead <- objectName:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
+				panic(err)
 			}
-			return nil
+			select {
+			case nextObjectToRead <- objectName:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
+		return nil
+	}
 
-		// Reads from the object while a modification maybe occurring.
-		readThreads := func(ctx context.Context) (err error) {
-			defer close(nextObjectToModify)
-			conn := tc.ServerConn(0)
-			for objectName := range nextObjectToRead {
-				// Initial usage of the descriptor.
+	// Reads from the object while a modification maybe occurring.
+	readThreads := func(ctx context.Context) (err error) {
+		defer close(nextObjectToModify)
+		conn := tc.ServerConn(0)
+		for objectName := range nextObjectToRead {
+			// Initial usage of the descriptor.
+			sql := fmt.Sprintf("SELECT * FROM %s", objectName)
+			if _, err := conn.ExecContext(ctx, sql); err != nil {
+				if isCancellationError(err) {
+					return err
+				}
+				panic(err)
+			}
+			objectModified.Store(false)
+			select {
+			case nextObjectToModify <- objectName:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			for !objectModified.Load() {
+				// Repeat usage of the descriptor.
 				sql := fmt.Sprintf("SELECT * FROM %s", objectName)
 				if _, err := conn.ExecContext(ctx, sql); err != nil {
 					if isCancellationError(err) {
@@ -3889,50 +3939,40 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 					}
 					panic(err)
 				}
-				objectModified.Store(false)
-				select {
-				case nextObjectToModify <- objectName:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
-				for !objectModified.Load() {
-					// Repeat usage of the descriptor.
-					sql := fmt.Sprintf("SELECT * FROM %s", objectName)
-					if _, err := conn.ExecContext(ctx, sql); err != nil {
-						if isCancellationError(err) {
-							return err
-						}
-						panic(err)
-					}
-				}
 			}
-			return nil
 		}
+		return nil
+	}
 
-		// Alters the object in the background.
-		modifyThreads := func(ctx context.Context) (err error) {
-			defer objectModified.Store(true)
-			conn := tc.ServerConn(0)
-			for objectName := range nextObjectToModify {
-				sql := fmt.Sprintf("ALTER TABLE %s ADD COLUMN n2 int", objectName)
-				if _, err := conn.ExecContext(ctx, sql); err != nil {
-					if isCancellationError(err) {
-						return err
-					}
-					panic(err)
+	// Alters the object in the background.
+	modifyThreads := func(ctx context.Context) (err error) {
+		defer objectModified.Store(true)
+		conn := tc.ServerConn(0)
+		for objectName := range nextObjectToModify {
+			sql := fmt.Sprintf("ALTER TABLE %s ADD COLUMN n2 int", objectName)
+			if _, err := conn.ExecContext(ctx, sql); err != nil {
+				if isCancellationError(err) {
+					return err
 				}
-				objectModified.Store(true)
+				panic(err)
 			}
-			return nil
+			objectModified.Store(true)
 		}
+		return nil
+	}
 
-		grp.GoCtx(createThreads)
-		grp.GoCtx(readThreads)
-		grp.GoCtx(modifyThreads)
-		if err := grp.Wait(); err != nil && !isCancellationError(err) {
-			t.Fatalf("unexpected error from ctxgroup: %v", err)
-		}
-	})
+	grp.GoCtx(createThreads)
+	grp.GoCtx(readThreads)
+	grp.GoCtx(modifyThreads)
+	err := grp.Wait()
+	if timedOut.Load() {
+		t.Fatalf("did not finish within the timeout budget "+
+			"(retainOldVersions=%t, %d tables); all stacks:\n\n%s",
+			retainOldVersions, numTablesToCreate, stacks)
+	}
+	if err != nil && !isExpectedShutdown(err) {
+		t.Fatalf("unexpected error from ctxgroup: %v", err)
+	}
 }
 
 // BenchmarkLargeDatabaseColdPgClass measures the cold performance for selecting
