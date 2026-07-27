@@ -49,3 +49,50 @@ rollback txn=t1
 
 rollback txn=t2
 ----
+
+# A QueryIntent without ErrorIfMissing set (as sent during transaction
+# recovery) also reports locks it finds missing. The response tells the
+# caller the lock is missing either way, with the same implications for a
+# later attempt to find the lock.
+
+new-txn txn=t3
+----
+
+get txn=t3 k=d lock=Exclusive dur=Unreplicated lock-non-existing
+----
+get: "\xfad"=nil
+
+query-intent txn=t3 k=d lock=Exclusive
+----
+
+print-in-memory-lock-table
+----
+num=1
+ lock: "\xfad"
+  holder: txn: t3 epoch: 0, iso: Serializable, ts: <stripped>, info: unrepl [(str: Exclusive seq: 0)] ineligible-for-export
+
+# And the same on the write path.
+
+new-txn txn=t4
+----
+
+get txn=t4 k=e lock=Exclusive dur=Unreplicated lock-non-existing
+----
+get: "\xfae"=nil
+
+query-intent txn=t4 k=e lock=Exclusive batched-with-put=f
+----
+
+print-in-memory-lock-table
+----
+num=2
+ lock: "\xfad"
+  holder: txn: t3 epoch: 0, iso: Serializable, ts: <stripped>, info: unrepl [(str: Exclusive seq: 0)] ineligible-for-export
+ lock: "\xfae"
+  holder: txn: t4 epoch: 0, iso: Serializable, ts: <stripped>, info: unrepl [(str: Exclusive seq: 0)] ineligible-for-export
+
+rollback txn=t3
+----
+
+rollback txn=t4
+----
