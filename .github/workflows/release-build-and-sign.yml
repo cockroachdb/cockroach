@@ -236,7 +236,7 @@ jobs:
          (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_big_2404]
+    runs-on: [self-hosted, ubuntu_big_ondemand_2404]
     timeout-minutes: 120
     permissions:
       id-token: write
@@ -250,15 +250,6 @@ jobs:
           - linux-amd64-fips
           - linux-s390x
     steps:
-      - name: Free disk space
-        # Best-effort: GitHub-hosted ubuntu-latest runners need this to fit
-        # the build artifacts on a 14 GB disk; self-hosted runners have
-        # plenty of headroom and may not grant the GHA service user sudo,
-        # so tolerate failures here rather than blocking the job.
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || :
-          sudo docker image prune --all --force || :
-          df -h /
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ inputs.sha || github.sha }}
@@ -296,7 +287,7 @@ jobs:
          (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_big_2404]
+    runs-on: [self-hosted, ubuntu_big_ondemand_2404]
     timeout-minutes: 120
     permissions:
       id-token: write
@@ -309,15 +300,6 @@ jobs:
           - darwin-arm64
           - win-amd64
     steps:
-      - name: Free disk space
-        # Best-effort: GitHub-hosted ubuntu-latest runners need this to fit
-        # the build artifacts on a 14 GB disk; self-hosted runners have
-        # plenty of headroom and may not grant the GHA service user sudo,
-        # so tolerate failures here rather than blocking the job.
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || :
-          sudo docker image prune --all --force || :
-          df -h /
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ inputs.sha || github.sha }}
@@ -355,7 +337,7 @@ jobs:
          (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_big_2404]
+    runs-on: [self-hosted, ubuntu_big_ondemand_2404]
     timeout-minutes: 120
     permissions:
       id-token: write
@@ -369,15 +351,6 @@ jobs:
           - linux-amd64-fips
           - linux-s390x
     steps:
-      - name: Free disk space
-        # Best-effort: GitHub-hosted ubuntu-latest runners need this to fit
-        # the build artifacts on a 14 GB disk; self-hosted runners have
-        # plenty of headroom and may not grant the GHA service user sudo,
-        # so tolerate failures here rather than blocking the job.
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || :
-          sudo docker image prune --all --force || :
-          df -h /
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ inputs.sha || github.sha }}
@@ -424,7 +397,7 @@ jobs:
          (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_big_2404]
+    runs-on: [self-hosted, ubuntu_big_ondemand_2404]
     timeout-minutes: 90
     permissions:
       id-token: write
@@ -624,7 +597,7 @@ jobs:
          (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_big_2404]
+    runs-on: [self-hosted, ubuntu_big_ondemand_2404]
     timeout-minutes: 90
     permissions:
       id-token: write
@@ -676,7 +649,7 @@ jobs:
          (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_big_2404]
+    runs-on: [self-hosted, ubuntu_big_ondemand_2404]
     timeout-minutes: 90
     permissions:
       id-token: write
@@ -733,7 +706,7 @@ jobs:
          (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_ondemand_2404]
     timeout-minutes: 60
     permissions:
       id-token: write
@@ -802,7 +775,7 @@ jobs:
          (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_ondemand_2404]
     timeout-minutes: 30
     permissions:
       id-token: write
@@ -846,21 +819,12 @@ jobs:
          (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_ondemand_2404]
     timeout-minutes: 30
     permissions:
       id-token: write
       contents: read
     steps:
-      - name: Free disk space
-        # Best-effort: GitHub-hosted ubuntu-latest runners need this to fit
-        # the build artifacts on a 14 GB disk; self-hosted runners have
-        # plenty of headroom and may not grant the GHA service user sudo,
-        # so tolerate failures here rather than blocking the job.
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || :
-          sudo docker image prune --all --force || :
-          df -h /
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ inputs.sha || github.sha }}
@@ -910,7 +874,7 @@ jobs:
          (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_ondemand_2404]
     timeout-minutes: 30
     permissions:
       id-token: write
@@ -972,7 +936,7 @@ jobs:
          (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_ondemand_2404]
     timeout-minutes: 30
     permissions:
       id-token: write
@@ -1047,7 +1011,7 @@ jobs:
       - generate-sbom
       - publish-cloud-only
       - cloud-rollout
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_ondemand_2404]
     timeout-minutes: 10
     permissions:
       id-token: write
