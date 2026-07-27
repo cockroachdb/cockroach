@@ -22,7 +22,7 @@ import (
 
 type codec interface {
 	compress(uncompressedData []byte) ([]byte, error)
-	decompress(compressedData []byte) ([]byte, error)
+	decompress(compressedData []byte, maxDecompressedSize int) ([]byte, error)
 }
 
 var codecs = map[string]codec{
@@ -45,11 +45,21 @@ func compress(uncompressedData []byte, codecName string) ([]byte, error) {
 }
 
 func decompress(compressedData []byte, codecName string) ([]byte, error) {
+	return decompressWithLimit(compressedData, codecName, builtinconstants.MaxAllocatedStringSize)
+}
+
+// decompressWithLimit is like decompress but caps the decompressed output at
+// maxDecompressedSize bytes, returning errStringTooLarge if it is exceeded. It
+// is separated out so tests can exercise the size-cap enforcement with a small
+// limit rather than allocating the (very large) production limit.
+func decompressWithLimit(
+	compressedData []byte, codecName string, maxDecompressedSize int,
+) ([]byte, error) {
 	c, ok := codecs[strings.ToUpper(codecName)]
 	if !ok {
 		return nil, invalidCompressionCodecError
 	}
-	return c.decompress(compressedData)
+	return c.decompress(compressedData, maxDecompressedSize)
 }
 
 type gzipCodec struct{}
@@ -66,9 +76,10 @@ func (c snappyCodec) compress(uncompressedData []byte) ([]byte, error) {
 	)
 }
 
-func (c snappyCodec) decompress(compressedData []byte) ([]byte, error) {
+func (c snappyCodec) decompress(compressedData []byte, maxDecompressedSize int) ([]byte, error) {
 	return decompressUsing(
 		compressedData,
+		maxDecompressedSize,
 		func(buf io.Reader) (io.ReadCloser, error) {
 			return io.NopCloser(snappy.NewReader(buf)), nil
 		},
@@ -84,9 +95,10 @@ func (c lz4Codec) compress(uncompressedData []byte) ([]byte, error) {
 	)
 }
 
-func (c lz4Codec) decompress(compressedData []byte) ([]byte, error) {
+func (c lz4Codec) decompress(compressedData []byte, maxDecompressedSize int) ([]byte, error) {
 	return decompressUsing(
 		compressedData,
+		maxDecompressedSize,
 		func(buf io.Reader) (io.ReadCloser, error) {
 			return io.NopCloser(lz4.NewReader(buf)), nil
 		},
@@ -116,9 +128,10 @@ func (c noErrorCloser) Close() error {
 	return nil
 }
 
-func (c zstdCodec) decompress(compressedData []byte) ([]byte, error) {
+func (c zstdCodec) decompress(compressedData []byte, maxDecompressedSize int) ([]byte, error) {
 	return decompressUsing(
 		compressedData,
+		maxDecompressedSize,
 		func(buf io.Reader) (io.ReadCloser, error) {
 			r, err := zstd.NewReader(buf)
 			if err != nil {
@@ -138,8 +151,8 @@ func (c gzipCodec) compress(uncompressedData []byte) ([]byte, error) {
 	)
 }
 
-func (c gzipCodec) decompress(compressedData []byte) ([]byte, error) {
-	return decompressUsing(compressedData, func(buf io.Reader) (io.ReadCloser, error) {
+func (c gzipCodec) decompress(compressedData []byte, maxDecompressedSize int) ([]byte, error) {
+	return decompressUsing(compressedData, maxDecompressedSize, func(buf io.Reader) (io.ReadCloser, error) {
 		return gzip.NewReader(buf)
 	})
 }
@@ -166,7 +179,9 @@ func compressUsing(
 // decompressUsing decompresses input data using decompressor returned by
 // the getImpl function.
 func decompressUsing(
-	compressedData []byte, getImpl func(buf io.Reader) (io.ReadCloser, error),
+	compressedData []byte,
+	maxDecompressedSize int,
+	getImpl func(buf io.Reader) (io.ReadCloser, error),
 ) (_ []byte, err error) {
 	r, err := getImpl(bytes.NewBuffer(compressedData))
 	if err != nil {
@@ -177,12 +192,13 @@ func decompressUsing(
 		err = errors.CombineErrors(err, r.Close())
 	}()
 
-	const maxSize = builtinconstants.MaxAllocatedStringSize
-	decompressedBytes, err := io.ReadAll(io.LimitReader(r, maxSize+1))
+	// Read one byte past the limit so we can distinguish output that exactly
+	// fills the cap from output that exceeds it.
+	decompressedBytes, err := io.ReadAll(io.LimitReader(r, int64(maxDecompressedSize)+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(decompressedBytes) > maxSize {
+	if len(decompressedBytes) > maxDecompressedSize {
 		return nil, errStringTooLarge
 	}
 	return decompressedBytes, nil
