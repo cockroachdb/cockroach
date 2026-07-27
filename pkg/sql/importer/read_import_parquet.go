@@ -15,10 +15,13 @@ import (
 	"github.com/apache/arrow/go/v11/parquet/file"
 	"github.com/apache/arrow/go/v11/parquet/schema"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -99,6 +102,12 @@ func (p *parquetInputReader) readFile(
 		return err
 	}
 
+	if err := checkParquetListVersionGate(
+		ctx, p.importCtx.evalCtx.Settings.Version, producer.columnsToRead, producer.columnMetadata,
+	); err != nil {
+		return err
+	}
+
 	// Create row consumer with schema mapping
 	consumer, err := newParquetRowConsumer(p.importCtx, producer, fileCtx, p.opts.StrictMode)
 	if err != nil {
@@ -107,6 +116,32 @@ func (p *parquetInputReader) readFile(
 
 	// Process rows using the standard parallel import pipeline
 	return runParallelImport(ctx, p.importCtx, fileCtx, producer, consumer)
+}
+
+// checkParquetListVersionGate returns a FeatureNotSupported error if any column
+// selected for import is a Parquet array (LIST) column while the cluster has not
+// finalized its upgrade to V26_2, the version at which every node understands
+// LIST columns.
+func checkParquetListVersionGate(
+	ctx context.Context,
+	version clusterversion.Handle,
+	columnsToRead []int,
+	columnMetadata map[int]*parquetColumnMetadata,
+) error {
+	if version.IsActive(ctx, clusterversion.V26_2) {
+		return nil
+	}
+	for _, colIdx := range columnsToRead {
+		meta := columnMetadata[colIdx]
+		if meta == nil || !meta.isList {
+			continue
+		}
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"importing PARQUET column %q as an array requires all nodes to be "+
+				"running v26.2 or later; wait for the cluster upgrade to finalize "+
+				"before retrying", meta.columnName)
+	}
+	return nil
 }
 
 // Default batch size for reading Parquet rows.
