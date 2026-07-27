@@ -111,8 +111,10 @@ creates the staging branch on GitHub, updates the Jira ticket, posts a Slack
 notification, and creates the matching backport label.
 
 Pre-release tickets (e.g. v25.3.1-alpha.1) get a different Slack template.
-Patch-zero releases are skipped — those .0 builds ship from the existing
-release-X.Y branch.`,
+Patch-zero releases are skipped — alphas ship from master, betas from the
+existing release-X.Y branch — with one exception: the first RC (vX.Y.0-rc.1)
+cuts the release-X.Y.0-rc branch that the remaining RCs and the final .0
+ship from.`,
 	RunE: runCutStagingBranches,
 }
 
@@ -256,9 +258,12 @@ func (r *cutRunner) processCandidate(ctx context.Context, c jiraIssue) error {
 		return nil
 	}
 
-	// Patch .0 releases ship from the existing release-X.Y branch — no
-	// staging branch to cut.
-	if v.Patch() == 0 {
+	// Patch .0 releases mostly don't get a staging branch cut: alphas ship
+	// from master, betas from the release-X.Y branch, and later RCs and the
+	// final .0 from the release-X.Y.0-rc branch. The exception is the first
+	// RC — vX.Y.0-rc.1 is the version whose release process cuts
+	// release-X.Y.0-rc from release-X.Y.
+	if v.Patch() == 0 && !isFirstMajorRC(v) {
 		log.Printf("ticket %s: skipping patch-zero release %s", c.Key, v)
 		return nil
 	}
@@ -592,6 +597,15 @@ func deriveBranchNames(v version.Version, hotfix bool) branchNames {
 		base:    fmt.Sprintf("release-%d.%d", year, ordinal),
 		staging: fmt.Sprintf("release-%d.%d.%d-rc", year, ordinal, patch),
 	}
+}
+
+// isFirstMajorRC reports whether v is exactly vX.Y.0-rc.1. The comparison is
+// structural, so cloudonly sub-phases and adhoc builds of rc.1 don't qualify.
+func isFirstMajorRC(v version.Version) bool {
+	if v.Patch() != 0 {
+		return false
+	}
+	return v.Equals(version.MustParse(fmt.Sprintf("v%d.%d.0-rc.1", v.Major().Year, v.Major().Ordinal)))
 }
 
 // isHotfix reports whether a release ticket summary marks a hotfix release.
