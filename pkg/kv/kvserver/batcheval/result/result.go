@@ -85,12 +85,14 @@ func (lResult *LocalResult) IsZero() bool {
 		lResult.AcquiredLocks == nil &&
 		lResult.ResolvedLocks == nil &&
 		lResult.UpdatedTxns == nil &&
+		lResult.ReportedMissingLocks == nil &&
 		lResult.EndTxns == nil &&
 		!lResult.PopulateBarrierResponse &&
 		!lResult.RepopulateSubsumeResponseLAI &&
 		!lResult.GossipFirstRange &&
 		!lResult.MaybeGossipSystemConfig &&
 		!lResult.MaybeGossipSystemConfigIfHaveFailure &&
+		!lResult.MaybeAddToSplitQueue &&
 		lResult.MaybeGossipNodeLiveness == nil &&
 		lResult.Metrics == nil
 }
@@ -100,15 +102,15 @@ func (lResult *LocalResult) String() string {
 		return "LocalResult: nil"
 	}
 	return fmt.Sprintf("LocalResult (reply: %v, "+
-		"#encountered intents: %d, #acquired locks: %d, #resolved locks: %d"+
-		"#updated txns: %d #end txns: %d, "+
+		"#encountered intents: %d, #acquired locks: %d, #resolved locks: %d "+
+		"#updated txns: %d #end txns: %d, #reported missing locks: %d, "+
 		"PopulateBarrierResponse:%t RepopulateSubsumeResponse:%t "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t "+
 		"MaybeGossipSystemConfigIfHaveFailure:%t MaybeAddToSplitQueue:%t "+
 		"MaybeGossipNodeLiveness:%s ",
 		lResult.Reply,
 		len(lResult.EncounteredIntents), len(lResult.AcquiredLocks), len(lResult.ResolvedLocks),
-		len(lResult.UpdatedTxns), len(lResult.EndTxns),
+		len(lResult.UpdatedTxns), len(lResult.EndTxns), len(lResult.ReportedMissingLocks),
 		lResult.PopulateBarrierResponse, lResult.RepopulateSubsumeResponseLAI,
 		lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig,
 		lResult.MaybeGossipSystemConfigIfHaveFailure, lResult.MaybeAddToSplitQueue,

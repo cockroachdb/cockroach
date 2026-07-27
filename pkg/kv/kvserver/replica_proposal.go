@@ -880,6 +880,16 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 		lResult.ResolvedLocks = nil
 	}
 
+	// A QueryIntent that evaluates as part of a write batch (e.g. when the txn
+	// pipeliner prepends QueryIntents to a batch containing writes) reports
+	// locks it found missing here rather than on the read-only path.
+	if lResult.ReportedMissingLocks != nil {
+		for i := range lResult.ReportedMissingLocks {
+			r.concMgr.OnLockMissing(ctx, &lResult.ReportedMissingLocks[i])
+		}
+		lResult.ReportedMissingLocks = nil
+	}
+
 	if lResult.UpdatedTxns != nil {
 		for _, txn := range lResult.UpdatedTxns {
 			r.concMgr.OnTransactionUpdated(ctx, txn)
@@ -1018,9 +1028,10 @@ func (r *Replica) evaluateProposal(
 		// Failed proposals can't have any Result except for what's
 		// allowlisted here.
 		res.Local = result.LocalResult{
-			EncounteredIntents: res.Local.DetachEncounteredIntents(),
-			EndTxns:            res.Local.DetachEndTxns(true /* alwaysOnly */),
-			Metrics:            res.Local.Metrics,
+			EncounteredIntents:   res.Local.DetachEncounteredIntents(),
+			ReportedMissingLocks: res.Local.DetachMissingLocks(),
+			EndTxns:              res.Local.DetachEndTxns(true /* alwaysOnly */),
+			Metrics:              res.Local.Metrics,
 		}
 		res.Replicated.Reset()
 		return ba, &res, false /* needConsensus */, pErr

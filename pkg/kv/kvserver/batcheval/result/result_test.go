@@ -59,6 +59,36 @@ func TestEvalResultIsZero(t *testing.T) {
 	}
 }
 
+// TestLocalResultIsZero sets each field of LocalResult to a non-zero value in
+// turn and asserts that IsZero notices. Fields omitted from IsZero escape the
+// unhandled-field assertion in handleReadWriteLocalEvalResult and are silently
+// dropped on the write path.
+func TestLocalResultIsZero(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var l LocalResult
+	require.True(t, l.IsZero())
+
+	v := reflect.ValueOf(&l).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		name := v.Type().Field(i).Name
+		switch field.Kind() {
+		case reflect.Bool:
+			field.SetBool(true)
+		case reflect.Slice:
+			field.Set(reflect.MakeSlice(field.Type(), 1, 1))
+		case reflect.Ptr:
+			field.Set(reflect.New(field.Type().Elem()))
+		default:
+			t.Fatalf("unhandled kind %s for field %s", field.Kind(), name)
+		}
+		require.False(t, l.IsZero(), "IsZero ignores field %s", name)
+		field.Set(reflect.Zero(field.Type()))
+		require.True(t, l.IsZero())
+	}
+}
+
 func TestMergeAndDestroy(t *testing.T) {
 	var r0, r1, r2 Result
 	r1.Local.Metrics = new(Metrics)
