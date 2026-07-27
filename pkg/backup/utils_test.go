@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -269,12 +270,51 @@ func uriFmtStringAndArgs(uris []string, startIndex int) (string, []interface{}) 
 			fmtString.WriteString(", ")
 		}
 		fmtString.WriteString(fmt.Sprintf("$%d", startIndex+i+1))
-		urisForFormat[i] = uri
+		// External storage and KMS URIs can contain credentials.
+		urisForFormat[i] = sqlutils.UnsafeString(uri)
 	}
 	if len(uris) > 1 {
 		fmtString.WriteString(")")
 	}
 	return fmtString.String(), urisForFormat
+}
+
+type failingSQLDB struct{}
+
+func (failingSQLDB) ExecContext(context.Context, string, ...interface{}) (gosql.Result, error) {
+	return nil, errors.New("injected failure")
+}
+
+func (failingSQLDB) QueryContext(context.Context, string, ...interface{}) (*gosql.Rows, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (failingSQLDB) QueryRowContext(context.Context, string, ...interface{}) *gosql.Row {
+	return nil
+}
+
+type fatalRecorder struct {
+	message string
+}
+
+func (f *fatalRecorder) Fatalf(format string, args ...interface{}) {
+	f.message = fmt.Sprintf(format, args...)
+}
+
+func TestBackupURIArgsRedactedOnSQLFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const secret = "dont-print-this-secret"
+	uri := "s3://bucket?AWS_ACCESS_KEY_ID=access-key&AWS_SECRET_ACCESS_KEY=" + secret
+	uriFmt, uriArgs := uriFmtStringAndArgs([]string{uri}, 0)
+	query := fmt.Sprintf("BACKUP DATABASE data INTO %s", uriFmt)
+	fatal := &fatalRecorder{}
+
+	sqlutils.MakeSQLRunner(failingSQLDB{}).Exec(fatal, query, uriArgs...)
+
+	require.NotContains(t, fatal.message, secret)
+	require.Contains(t, fatal.message, `query="BACKUP DATABASE data INTO $1"`)
+	require.Contains(t, fatal.message, "args=[×]")
 }
 
 // waitForTableSplit waits for the dbName.tableName range to split. This is
