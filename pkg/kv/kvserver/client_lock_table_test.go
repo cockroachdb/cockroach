@@ -132,6 +132,32 @@ func TestClientLockTableDataDriven(t *testing.T) {
 					return fmt.Sprintf("error: %s", err.Error())
 				}
 				return ""
+			case "query-intent":
+				// Sends a QueryIntent for a replicated lock held by the named txn,
+				// outside of any transaction, mirroring the QueryIntents sent during
+				// txn recovery. With batched-with-put=<key>, a Put on that (unrelated)
+				// key is added so that the batch evaluates on the write path, as
+				// happens when the txn pipeliner prepends QueryIntents to a batch
+				// containing writes.
+				txn := evalCtx.mustGetTxn(d)
+				key := evalCtx.getKey(d)
+				str := evalCtx.getLockStr(d)
+				b := db.NewBatch()
+				b.AddRawRequest(&kvpb.QueryIntentRequest{
+					RequestHeader:  kvpb.RequestHeader{Key: key},
+					Txn:            txn.TestingCloneTxn().TxnMeta,
+					Strength:       str,
+					ErrorIfMissing: d.HasArg("error-if-missing"),
+				})
+				if putKey, ok := dd.ScanArgOpt[string](t, d, "batched-with-put"); ok {
+					var v roachpb.Value
+					v.SetString("v")
+					b.AddRawRequest(kvpb.NewPut(append(evalCtx.rangeStartKey.Clone(), []byte(putKey)...), v))
+				}
+				if err := db.Run(ctx, b); err != nil {
+					return fmt.Sprintf("error: %s", err.Error())
+				}
+				return ""
 			case "print-in-memory-lock-table":
 				rangeDesc, err := s.LookupRange(rangeStartKey)
 				if err != nil {

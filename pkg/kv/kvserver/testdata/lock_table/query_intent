@@ -1,0 +1,51 @@
+# Tests that a QueryIntent that reports a lock as missing marks any
+# unreplicated locks held by the same transaction on the same key as
+# ineligible for export, regardless of whether the QueryIntent evaluates on
+# the read path or the write path.
+
+# Read path: the QueryIntent is the only request in its batch.
+
+new-txn txn=t1
+----
+
+get txn=t1 k=a lock=Exclusive dur=Unreplicated lock-non-existing
+----
+get: "\xfaa"=nil
+
+query-intent txn=t1 k=a lock=Exclusive error-if-missing
+----
+error: intent missing
+
+print-in-memory-lock-table
+----
+num=1
+ lock: "\xfaa"
+  holder: txn: t1 epoch: 0, iso: Serializable, ts: <stripped>, info: unrepl [(str: Exclusive seq: 0)] ineligible-for-export
+
+# Write path: the QueryIntent shares a batch with a Put, as happens when the
+# txn pipeliner prepends QueryIntents to a batch that contains writes.
+
+new-txn txn=t2
+----
+
+get txn=t2 k=b lock=Exclusive dur=Unreplicated lock-non-existing
+----
+get: "\xfab"=nil
+
+query-intent txn=t2 k=b lock=Exclusive error-if-missing batched-with-put=c
+----
+error: intent missing
+
+print-in-memory-lock-table
+----
+num=2
+ lock: "\xfaa"
+  holder: txn: t1 epoch: 0, iso: Serializable, ts: <stripped>, info: unrepl [(str: Exclusive seq: 0)] ineligible-for-export
+ lock: "\xfab"
+  holder: txn: t2 epoch: 0, iso: Serializable, ts: <stripped>, info: unrepl [(str: Exclusive seq: 0)] ineligible-for-export
+
+rollback txn=t1
+----
+
+rollback txn=t2
+----
