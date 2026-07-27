@@ -648,6 +648,9 @@ func TestLockTableBasic(t *testing.T) {
 				for _, l := range locks {
 					fmt.Fprintf(&buf, "\n span: %s, txn: %s epo: %d, dur: %s, str: %s",
 						l.Span, l.Txn.ID, l.Txn.Epoch, l.Durability, l.Strength)
+					if len(l.IgnoredSeqNums) > 0 {
+						fmt.Fprintf(&buf, ", ign seq: %v", l.IgnoredSeqNums)
+					}
 				}
 				return buf.String()
 			case "print":
