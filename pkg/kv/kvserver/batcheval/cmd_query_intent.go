@@ -158,10 +158,16 @@ func QueryIntent(
 	}
 
 	res := result.Result{}
-	if !reply.FoundIntent && args.ErrorIfMissing {
+	if !reply.FoundIntent {
+		// Report the missing lock to the lock manager even if the caller didn't
+		// ask for an error: the response tells the caller the lock is missing
+		// either way, so any covering unreplicated lock must be prevented from
+		// re-materializing the lock on disk.
 		l := roachpb.MakeLockAcquisition(args.Txn, args.Key, lock.Replicated, args.Strength, args.IgnoredSeqNums)
 		res.Local.ReportedMissingLocks = []roachpb.LockAcquisition{l}
-		return res, kvpb.NewIntentMissingError(args.Key, intent)
+		if args.ErrorIfMissing {
+			return res, kvpb.NewIntentMissingError(args.Key, intent)
+		}
 	}
 	return res, nil
 }
