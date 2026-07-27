@@ -209,3 +209,23 @@ var SkipUnderlyingViewPrivilegeChecks = settings.RegisterBoolSetting(
 		"This restores pre-v26.2 behavior.",
 	false,
 	settings.WithPublic)
+
+// PostgresCompatibleOwnershipChecks gates the security-audit fixes that require
+// object ownership to modify or drop an object, aligning authorization with
+// PostgreSQL. It defaults to false so existing deployments opt in.
+var PostgresCompatibleOwnershipChecks = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.postgres_compatible_ownership_checks.enabled",
+	"if enabled, object ownership is required to modify or drop objects, "+
+		"aligning authorization with PostgreSQL",
+	false)
+
+// PostgresCompatibleGrantChecks gates the security-audit fixes that require the
+// appropriate privilege to grant or reference an object, aligning authorization
+// with PostgreSQL. It defaults to false so existing deployments opt in.
+var PostgresCompatibleGrantChecks = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.postgres_compatible_grant_checks.enabled",
+	"if enabled, the appropriate privilege is required to grant or reference "+
+		"objects, aligning authorization with PostgreSQL",
+	false)
