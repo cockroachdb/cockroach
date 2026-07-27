@@ -6,10 +6,13 @@
 package sqlproxyccl
 
 import (
+	"context"
 	"crypto/tls"
 	"io"
 	"net"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 )
@@ -143,19 +146,54 @@ var FrontendAdmit = func(
 	}
 
 	if startup, ok := m.(*pgproto3.StartupMessage); ok {
-		// This forwards the remote addr to the backend.
-		startup.Parameters[remoteAddrStartupParam] = conn.RemoteAddr().String()
-		// The client is blocked from using session revival tokens; only the proxy
-		// itself can.
-		if _, ok := startup.Parameters[sessionRevivalTokenStartupParam]; ok {
-			return &FrontendAdmitInfo{
-				Conn: conn,
-				Err: withCode(errors.Newf(
-					"parameter %s is not allowed",
-					sessionRevivalTokenStartupParam),
-					codeUnexpectedStartupMessage),
+		// The backend folds every startup parameter key to lowercase (see
+		// parseClientProvidedSessionParameters in
+		// pkg/sql/pgwire/pre_serve_options.go), so the proxy must match the
+		// reserved keys case-insensitively; otherwise a mixed-case spelling
+		// such as "CRDB:remote_addr" would slip past the checks here yet still
+		// be honored by the backend once it folds the key. Only the reserved
+		// keys are folded; every other key is forwarded verbatim, because
+		// CockroachCloud's BackendDial and the backend rely on transparent
+		// parameter forwarding (see TestProxyModifyRequestParams).
+		var blockedRemoteAddr int
+		for k := range startup.Parameters {
+			switch strings.ToLower(k) {
+			case sessionRevivalTokenStartupParam:
+				// The client is blocked from using session revival tokens; only
+				// the proxy itself can. Catching every case variant closes the
+				// case-mismatch bypass. Log the attempt for visibility into
+				// probing: the raw key (which reveals mixed-case attempts) and
+				// the client address, but never the value, which may be a real
+				// token. This exported signature carries no request context, so
+				// use a background context.
+				log.Ops.Warningf(context.Background(),
+					"blocked reserved startup parameter %q from client %s (connection rejected)",
+					k, conn.RemoteAddr())
+				return &FrontendAdmitInfo{
+					Conn: conn,
+					Err: withCode(errors.Newf(
+						"parameter %s is not allowed",
+						sessionRevivalTokenStartupParam),
+						codeUnexpectedStartupMessage),
+				}
+			case remoteAddrStartupParam:
+				// Drop any client-supplied remote addr, in whatever case it was
+				// sent, so a spoofed value cannot survive. The proxy sets the
+				// real value below. Count and log once after the loop: a client
+				// can pack many case spellings into one message, so a per-variant
+				// log would amplify volume on this pre-auth path.
+				delete(startup.Parameters, k)
+				blockedRemoteAddr++
 			}
 		}
+		if blockedRemoteAddr > 0 {
+			log.Ops.Warningf(context.Background(),
+				"blocked %d client-supplied crdb:remote_addr parameter(s) from client %s",
+				blockedRemoteAddr, conn.RemoteAddr())
+		}
+
+		// This forwards the real remote addr to the backend.
+		startup.Parameters[remoteAddrStartupParam] = conn.RemoteAddr().String()
 		return &FrontendAdmitInfo{Conn: conn, Msg: startup, SniServerName: sniServerName}
 	}
 
