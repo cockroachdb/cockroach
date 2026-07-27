@@ -4589,9 +4589,10 @@ func (t *lockTableImpl) tryClearLocksGE(key roachpb.Key) []roachpb.LockAcquisiti
 						Span: roachpb.Span{
 							Key: l.key,
 						},
-						Txn:        *hl.Value.txn,
-						Durability: lock.Unreplicated,
-						Strength:   str,
+						Txn:            *hl.Value.txn,
+						Durability:     lock.Unreplicated,
+						Strength:       str,
+						IgnoredSeqNums: tl.unreplicatedInfo.ignoredSeqNums,
 					})
 				}
 			}
