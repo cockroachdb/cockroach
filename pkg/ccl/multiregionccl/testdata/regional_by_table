@@ -73,7 +73,7 @@ SELECT * FROM db.rbt WHERE k = 1
 ----
 served locally: false
 
-trace-sql idx=7
+trace-sql idx=7 retry
 SELECT * FROM db.rbt AS OF SYSTEM TIME follower_read_timestamp() WHERE k = 1
 ----
 served locally: true
@@ -223,19 +223,19 @@ LAG_BY_CLUSTER_SETTING
 
 # Perform follower reads from all regions.
 
-trace-sql idx=6
+trace-sql idx=6 retry
 SELECT * FROM db.rbt AS OF SYSTEM TIME follower_read_timestamp() WHERE k = 1
 ----
 served locally: true
 served via follower read: true
 
-trace-sql idx=7
+trace-sql idx=7 retry
 SELECT * FROM db.rbt AS OF SYSTEM TIME follower_read_timestamp() WHERE k = 1
 ----
 served locally: true
 served via follower read: true
 
-trace-sql idx=8
+trace-sql idx=8 retry
 SELECT * FROM db.rbt AS OF SYSTEM TIME follower_read_timestamp() WHERE k = 1
 ----
 served locally: true
