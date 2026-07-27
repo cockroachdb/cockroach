@@ -778,18 +778,19 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	return ctx.Err()
 }
 
-func unstickRestoreSpans(
-	ctx context.Context, execCfg *sql.ExecutorConfig, spans roachpb.Spans,
-) error {
+// unstickRestoreSpans best-effort removes the sticky splits created at the online
+// restore span boundaries. An unsplit failure is not fatal to the restore: a stray
+// sticky split left behind does not affect correctness, so we log a warning and
+// continue rather than failing cleanup.
+func unstickRestoreSpans(ctx context.Context, execCfg *sql.ExecutorConfig, spans roachpb.Spans) {
 	for _, sp := range spans {
 		if err := execCfg.DB.AdminUnsplit(ctx, sp.Key); err != nil {
-			return errors.Wrapf(err, "failed to unsplit %s", sp)
+			log.Dev.Warningf(ctx, "failed to unsplit %s: %v", sp, err)
 		}
 		if err := execCfg.DB.AdminUnsplit(ctx, sp.EndKey); err != nil {
-			return errors.Wrapf(err, "failed to unsplit %s", sp.EndKey)
+			log.Dev.Warningf(ctx, "failed to unsplit %s: %v", sp.EndKey, err)
 		}
 	}
-	return nil
 }
 
 func getExternalBytesOverSpans(
@@ -915,7 +916,8 @@ func (r *restoreResumer) cleanupAfterDownload(
 			log.Dev.Warningf(ctx, "failed to re-enable auto stats on table %d", id)
 		}
 	}
-	return unstickRestoreSpans(ctx, r.execCfg, details.DownloadSpans)
+	unstickRestoreSpans(ctx, r.execCfg, details.DownloadSpans)
+	return nil
 }
 
 func createImportRollbackJob(
@@ -1045,7 +1047,8 @@ func (r *restoreResumer) maybeCleanupFailedOnlineRestore(
 		return errors.Wrapf(err, "failed to get external data after excise")
 	}
 
-	return unstickRestoreSpans(ctx, p.ExecCfg(), details.DownloadSpans)
+	unstickRestoreSpans(ctx, p.ExecCfg(), details.DownloadSpans)
+	return nil
 }
 
 // getNumOnlineRestoreLinkWorkers returns the total number of workers to use for
