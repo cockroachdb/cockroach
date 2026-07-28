@@ -1707,6 +1707,9 @@ func (ulh *unreplicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
 	if len(ulh.ignoredSeqNums) > 0 {
 		sb.Printf(" ign seq: %v", ulh.ignoredSeqNums)
 	}
+	if ulh.ineligibleForExport {
+		sb.SafeString(" ineligible-for-export")
+	}
 }
 
 // Fixed length slice for all supported lock strengths for replicated locks. May
@@ -4932,6 +4935,12 @@ func (t *lockTableImpl) tryClearLocksGE(key roachpb.Key) []roachpb.LockAcquisiti
 			if tl == nil || tl.unreplicatedInfo.isEmpty() {
 				continue
 			}
+			// Don't hand ineligible-for-export locks to the RHS. The RHS lock
+			// table would have no record of the ineligibility, so a later lock
+			// table flush could write the lock to storage.
+			if tl.unreplicatedInfo.ineligibleForExport {
+				continue
+			}
 
 			for _, str := range unreplicatedHolderStrengths {
 				if tl.unreplicatedInfo.held(str) {
@@ -4939,9 +4948,10 @@ func (t *lockTableImpl) tryClearLocksGE(key roachpb.Key) []roachpb.LockAcquisiti
 						Span: roachpb.Span{
 							Key: l.key,
 						},
-						Txn:        *hl.Value.txn,
-						Durability: lock.Unreplicated,
-						Strength:   str,
+						Txn:            *hl.Value.txn,
+						Durability:     lock.Unreplicated,
+						Strength:       str,
+						IgnoredSeqNums: tl.unreplicatedInfo.ignoredSeqNums,
 					})
 				}
 			}

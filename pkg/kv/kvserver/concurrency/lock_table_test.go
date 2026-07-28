@@ -160,6 +160,13 @@ clear [disable]
 
  Calls lockTable.Clear. Optionally disables the lockTable.
 
+mark-ineligible txn=<name> k=<key> strength=<strength>
+----
+<state of lock table>
+
+ Calls lockTable.MarkIneligibleForExport, as the lock manager does when a
+ QueryIntent reports a lock as missing.
+
 print
 ----
 <state of lock table>
@@ -616,6 +623,23 @@ func TestLockTableBasic(t *testing.T) {
 			case "clear":
 				lt.Clear(d.HasArg("disable"))
 				return lt.String()
+			case "mark-ineligible":
+				txnName := dd.ScanArg[string](t, d, "txn")
+				txnMeta, ok := txnsByName[txnName]
+				if !ok {
+					d.Fatalf(t, "unknown txn %s", txnName)
+				}
+				key := dd.ScanArg[string](t, d, "k")
+				strength := ScanLockStrength(t, d)
+				// QueryIntent reports missing locks with replicated durability; see
+				// batcheval.QueryIntent.
+				acq := roachpb.MakeLockAcquisition(
+					*txnMeta, roachpb.Key(key), lock.Replicated, strength, nil /* ignoredSeqNums */)
+				if err := lt.MarkIneligibleForExport(ctx, &acq); err != nil {
+					return err.Error()
+				}
+				return lt.String()
+
 			case "clear-ge":
 				endKeyStr := dd.ScanArg[string](t, d, "key")
 				locks := lt.ClearGE(roachpb.Key(endKeyStr))
@@ -624,6 +648,9 @@ func TestLockTableBasic(t *testing.T) {
 				for _, l := range locks {
 					fmt.Fprintf(&buf, "\n span: %s, txn: %s epo: %d, dur: %s, str: %s",
 						l.Span, l.Txn.ID, l.Txn.Epoch, l.Durability, l.Strength)
+					if len(l.IgnoredSeqNums) > 0 {
+						fmt.Fprintf(&buf, ", ign seq: %v", l.IgnoredSeqNums)
+					}
 				}
 				return buf.String()
 			case "print":
