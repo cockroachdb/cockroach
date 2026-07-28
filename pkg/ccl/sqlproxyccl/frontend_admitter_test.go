@@ -278,7 +278,6 @@ func writeStartupMessage(t *testing.T, conn net.Conn, params map[string]string) 
 // let a mixed-case variant through to be honored by the backend.
 func TestFrontendAdmitMixedCaseSessionRevivalTokenRejected(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.ServerlessOnly(t)
 
 	for _, key := range []string{
 		"crdb:session_revival_token_base64", // canonical case (regression)
@@ -309,7 +308,6 @@ func TestFrontendAdmitMixedCaseSessionRevivalTokenRejected(t *testing.T) {
 // independent of map iteration order.
 func TestFrontendAdmitMixedCaseRemoteAddrOverwritten(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.ServerlessOnly(t)
 
 	realAddr := &net.TCPAddr{IP: net.IP{1, 2, 3, 4}, Port: 26257}
 	for i := 0; i < 50; i++ {
@@ -344,7 +342,6 @@ func TestFrontendAdmitMixedCaseRemoteAddrOverwritten(t *testing.T) {
 // (see TestProxyModifyRequestParams), so the proxy must not fold them.
 func TestFrontendAdmitForwardsNonReservedKeysVerbatim(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
 	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(9e9)))
