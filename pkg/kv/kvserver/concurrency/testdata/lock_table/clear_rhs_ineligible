@@ -1,0 +1,161 @@
+# Test that locks marked as ineligible for export are not handed to the RHS
+# during a range split (ClearGE). A lock is marked ineligible when a
+# QueryIntent reports a lock on the same key as missing; exporting such a lock
+# in any form could allow txn recovery to unexpectedly commit the transaction
+# by finding a lock that the transaction's own commit attempt failed to find.
+
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0
+----
+
+# txn1 acquires unreplicated exclusive locks at a, b, and c.
+
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@a+exclusive@b+exclusive@c
+----
+
+scan r=req1
+----
+start-waiting: false
+
+acquire r=req1 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req1 k=b durability=u strength=exclusive
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req1 k=c durability=u strength=exclusive
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req1
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# QueryIntents for txn1's replicated locks on a and c reported them missing,
+# so the unreplicated locks on a and c are marked as ineligible for export.
+
+mark-ineligible txn=txn1 k=a strength=exclusive
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)] ineligible-for-export
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+mark-ineligible txn=txn1 k=c strength=exclusive
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)] ineligible-for-export
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)] ineligible-for-export
+
+# A split at b hands only the lock on b to the RHS: the lock on c is dropped
+# because it is ineligible for export, and the lock on a is below the split
+# key so it stays put.
+
+clear-ge key=b
+----
+num returned for re-acquisition: 1
+ span: b, txn: 00000000-0000-0000-0000-000000000001 epo: 0, dur: Unreplicated, str: Exclusive
+
+# The lock on a remains in the LHS lock table and keeps its
+# ineligible-for-export flag.
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)] ineligible-for-export
+
+# Ineligibility is tracked per lock holder, not per key. Two transactions
+# hold shared locks on the same key; a QueryIntent reports txn1's lock as
+# missing, so only txn1's holder is marked ineligible and only txn2's lock is
+# handed to the RHS.
+
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0
+----
+
+new-txn txn=txn2 ts=10,1 epoch=0
+----
+
+new-request r=req2 txn=txn1 ts=10,1 spans=shared@a
+----
+
+scan r=req2
+----
+start-waiting: false
+
+acquire r=req2 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+dequeue r=req2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req3 txn=txn2 ts=10,1 spans=shared@a
+----
+
+scan r=req3
+----
+start-waiting: false
+
+acquire r=req3 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+dequeue r=req3
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+mark-ineligible txn=txn1 k=a strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)] ineligible-for-export
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+clear-ge key=a
+----
+num returned for re-acquisition: 1
+ span: a, txn: 00000000-0000-0000-0000-000000000002 epo: 0, dur: Unreplicated, str: Shared
