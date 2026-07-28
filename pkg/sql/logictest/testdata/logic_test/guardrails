@@ -66,9 +66,11 @@ BEGIN
 statement ok
 SELECT * FROM guardrails
 
-# The whole transaction has now read more than transaction_rows_read_err rows,
-# so error.
-query error txn has read 250 rows, which is above the limit
+# The previous statement read all 100 rows of the "guardrails" table, so the
+# remaining read budget for this transaction is 50. The scan below is therefore
+# capped at 51 rows, so the transaction errors out after reading only 151 rows
+# in total instead of running the full 150-row scan.
+query error txn has read 151 rows, which is above the limit
 SELECT * FROM guardrails2
 
 statement ok

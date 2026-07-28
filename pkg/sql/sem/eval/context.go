@@ -109,6 +109,9 @@ type Context struct {
 	// TxnIsSingleStmt specifies the current implicit transaction consists of only
 	// a single statement.
 	TxnIsSingleStmt bool
+	// TxnRowsRead is the number of rows read by previously-executed statements
+	// in the current explicit transaction. It is zero in implicit transactions.
+	TxnRowsRead int64
 	// TxnIsoLevel is the isolation level of the current transaction.
 	TxnIsoLevel isolation.Level
 	Settings    *cluster.Settings

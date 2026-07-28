@@ -129,5 +129,40 @@ vectorized: true
   spans: /1-/11
   parallel
 
+# Within an explicit transaction, the per-scan limit is reduced by the number of
+# rows already read by previous statements, so that the cumulative read budget
+# is respected.
+statement ok
+INSERT INTO guardrails SELECT generate_series(1, 100)
+
+statement ok
+SET transaction_rows_read_err = 50
+
+statement ok
+BEGIN
+
+# This bounded scan reads exactly 10 rows, leaving a remaining budget of 40.
+statement ok
+SELECT * FROM guardrails WHERE i <= 10
+
+# The subsequent scan is capped at 41 (remaining budget 40, +1 to trip the
+# error) rather than the transaction_rows_read_err+1=51 that a single statement
+# gets.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM guardrails
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (i)
+  estimated row count: 1,000 (missing stats)
+  table: guardrails@guardrails_pkey
+  spans: LIMITED SCAN
+  limit: 41
+
+statement ok
+COMMIT
+
 statement ok
 RESET transaction_rows_read_err
