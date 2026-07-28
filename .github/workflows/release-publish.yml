@@ -256,7 +256,7 @@ jobs:
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     name: Update version.txt
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, ubuntu_ondemand_2004]
     timeout-minutes: 60
     permissions:
       id-token: write
@@ -350,7 +350,7 @@ jobs:
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
     name: Publish staged cockroach release
-    runs-on: [self-hosted, ubuntu_big_2004]
+    runs-on: [self-hosted, ubuntu_big_ondemand_2004]
     timeout-minutes: 90
     permissions:
       id-token: write
@@ -449,7 +449,7 @@ jobs:
       }}
     # Reviewer-approval gate is on approve-publish upstream; this job
     # inherits the gate transitively via its needs chain.
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, ubuntu_ondemand_2004]
     timeout-minutes: 60
     permissions:
       id-token: write
@@ -515,7 +515,7 @@ jobs:
       }}
     # Reviewer-approval gate is on approve-publish upstream; this job
     # inherits the gate transitively via its needs chain.
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, ubuntu_ondemand_2004]
     timeout-minutes: 30
     permissions:
       id-token: write
@@ -591,7 +591,7 @@ jobs:
          (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
          startsWith(github.ref, 'refs/heads/staging-v'))
       }}
-    runs-on: [self-hosted, ubuntu_2404]
+    runs-on: [self-hosted, ubuntu_ondemand_2404]
     timeout-minutes: 15
     permissions:
       id-token: write
@@ -659,7 +659,7 @@ jobs:
     # only posts a Slack summary — gating it would block delivery of the
     # final status (especially failure pings) until the same human
     # approves an extra step, defeating the point of the notification.
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, ubuntu_ondemand_2004]
     timeout-minutes: 10
     permissions:
       id-token: write
