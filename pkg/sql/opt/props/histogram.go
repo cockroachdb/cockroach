@@ -712,6 +712,15 @@ func (h *Histogram) addBucket(ctx context.Context, bucket cat.HistogramBucket, d
 	h.buckets = append(h.buckets, bucket)
 }
 
+// CopyWithCol returns a shallow copy of the histogram with a different column
+// ID. Used when propagating histograms through column-remapping operators like
+// WithScan.
+func (h *Histogram) CopyWithCol(col opt.ColumnID) *Histogram {
+	h2 := *h
+	h2.col = col
+	return &h2
+}
+
 // ApplySelectivity returns a histogram with the given selectivity applied. If
 // the selectivity was 1 the returned histogram will be the same as before.
 func (h *Histogram) ApplySelectivity(selectivity Selectivity) *Histogram {

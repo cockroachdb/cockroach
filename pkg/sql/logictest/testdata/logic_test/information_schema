@@ -3923,6 +3923,7 @@ optimizer_use_exists_filter_hoist_rule                           on
 optimizer_use_forecasts                                          on
 optimizer_use_histograms                                         on
 optimizer_use_histograms_for_multi_span_const_columns           off
+optimizer_use_histograms_for_with_scans                          off
 optimizer_use_improved_computed_column_filters_derivation        on
 optimizer_use_improved_disjunction_stats                         on
 optimizer_use_improved_distinct_on_limit_hint_costing            on

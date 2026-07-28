@@ -226,6 +226,7 @@ type Memo struct {
 	inlinePlaceholderEqualities                bool
 	useMinRowCountAntiJoinFix                  bool
 	useHistogramsForMultiSpanConstColumns      bool
+	useHistogramsForWithScans                  bool
 	useBackupsWithIDs                          bool
 	// builtWithStatsRollout records the stats rollout mode under which
 	// this memo was built.
@@ -377,6 +378,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		inlinePlaceholderEqualities:                evalCtx.SessionData().OptimizerInlinePlaceholderEqualities,
 		useMinRowCountAntiJoinFix:                  evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix,
 		useHistogramsForMultiSpanConstColumns:      evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns,
+		useHistogramsForWithScans:                  evalCtx.SessionData().OptimizerUseHistogramsForWithScans,
 		skipUnderlyingViewPrivilegeChecks:          sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV),
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 		useBackupsWithIDs:                          evalCtx.SessionData().UseBackupsWithIDs,
@@ -569,6 +571,7 @@ func (m *Memo) IsStale(
 		m.inlinePlaceholderEqualities != evalCtx.SessionData().OptimizerInlinePlaceholderEqualities ||
 		m.useMinRowCountAntiJoinFix != evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix ||
 		m.useHistogramsForMultiSpanConstColumns != evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns ||
+		m.useHistogramsForWithScans != evalCtx.SessionData().OptimizerUseHistogramsForWithScans ||
 		m.skipUnderlyingViewPrivilegeChecks != sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV) ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel ||
 		m.useBackupsWithIDs != evalCtx.SessionData().UseBackupsWithIDs {

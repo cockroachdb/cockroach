@@ -213,3 +213,125 @@ project
  │         └── filters (true)
  └── projections
       └── id:5 [as=id:11, type=string, outer=(5)]
+
+# Regression test for #172206: histograms must propagate through WithScan.
+# Re-inject stats on table a, this time with skewed histograms on y and s so
+# that histogram-based estimates differ clearly from default selectivities.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-02 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-02 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 400,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 50, "num_range": 400, "distinct_range": 99, "upper_bound": "100"},
+      {"num_eq": 50, "num_range": 4500, "distinct_range": 298, "upper_bound": "400"}
+    ]
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-02 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 10,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 100, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 4000, "num_range": 200, "distinct_range": 2, "upper_bound": "banana"},
+      {"num_eq": 500, "num_range": 200, "distinct_range": 5, "upper_bound": "cherry"}
+    ]
+  },
+  {
+    "columns": ["y","s"],
+    "created_at": "2018-01-02 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 1000
+  }
+]'
+----
+
+# Expect ~450 rows from the histogram, not 5000*(1/3)=1667.
+norm set=optimizer_use_histograms_for_with_scans=true disable=InlineWith
+WITH foo AS (SELECT * FROM a) SELECT * FROM foo WHERE y <= 100
+----
+with &1 (foo)
+ ├── columns: x:6(int!null) y:7(int!null) s:8(string)
+ ├── stats: [rows=450, distinct(7)=100, null(7)=0]
+ │   histogram(7)=  0  0  400  50
+ │                <--- 0 ----- 100
+ ├── key: (6)
+ ├── fd: (6)-->(7,8)
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
+ │    │   histogram(2)=  0  0  400  50   4500  50
+ │    │                <--- 0 ----- 100 ------ 400
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── select
+      ├── columns: x:6(int!null) y:7(int!null) s:8(string)
+      ├── stats: [rows=450, distinct(7)=100, null(7)=0]
+      │   histogram(7)=  0  0  400  50
+      │                <--- 0 ----- 100
+      ├── key: (6)
+      ├── fd: (6)-->(7,8)
+      ├── with-scan &1 (foo)
+      │    ├── columns: x:6(int!null) y:7(int) s:8(string)
+      │    ├── mapping:
+      │    │    ├──  a.x:1(int) => x:6(int)
+      │    │    ├──  a.y:2(int) => y:7(int)
+      │    │    └──  a.s:3(string) => s:8(string)
+      │    ├── stats: [rows=5000, distinct(6)=5000, null(6)=0, distinct(7)=400, null(7)=0]
+      │    │   histogram(7)=  0  0  400  50   4500  50
+      │    │                <--- 0 ----- 100 ------ 400
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      └── filters
+           └── y:7 <= 100 [type=bool, outer=(7), constraints=(/7: (/NULL - /100]; tight)]
+
+# Expect ~4200 rows from the histogram, not 5000*(1/9)=556.
+norm set=optimizer_use_histograms_for_with_scans=true disable=InlineWith
+WITH foo AS (SELECT * FROM a) SELECT * FROM foo WHERE s LIKE 'b%'
+----
+with &1 (foo)
+ ├── columns: x:6(int!null) y:7(int) s:8(string!null)
+ ├── stats: [rows=4201.46, distinct(8)=4.82364, null(8)=0]
+ │   histogram(8)=  0   0   80.855    4000    120.6   0
+ │                <--- 'b' -------- 'banana' ------- 'c'
+ ├── key: (6)
+ ├── fd: (6)-->(7,8)
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(3)=10, null(3)=0]
+ │    │   histogram(3)=  0    100    200    4000    200    500
+ │    │                <--- 'apple' ----- 'banana' ----- 'cherry'
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── select
+      ├── columns: x:6(int!null) y:7(int) s:8(string!null)
+      ├── stats: [rows=4201.46, distinct(8)=4.82364, null(8)=0]
+      │   histogram(8)=  0   0   80.855    4000    120.6   0
+      │                <--- 'b' -------- 'banana' ------- 'c'
+      ├── key: (6)
+      ├── fd: (6)-->(7,8)
+      ├── with-scan &1 (foo)
+      │    ├── columns: x:6(int!null) y:7(int) s:8(string)
+      │    ├── mapping:
+      │    │    ├──  a.x:1(int) => x:6(int)
+      │    │    ├──  a.y:2(int) => y:7(int)
+      │    │    └──  a.s:3(string) => s:8(string)
+      │    ├── stats: [rows=5000, distinct(6)=5000, null(6)=0, distinct(8)=10, null(8)=0]
+      │    │   histogram(8)=  0    100    200    4000    200    500
+      │    │                <--- 'apple' ----- 'banana' ----- 'cherry'
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      └── filters
+           └── s:8 LIKE 'b%' [type=bool, outer=(8), constraints=(/8: [/'b' - /'c'); tight)]
