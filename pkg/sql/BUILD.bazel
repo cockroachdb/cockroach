@@ -656,6 +656,7 @@ go_test(
         "backfill_num_ranges_in_span_test.go",
         "backfill_protected_timestamp_test.go",
         "backfill_test.go",
+        "buffer_test.go",
         "builtin_mem_usage_test.go",
         "builtin_test.go",
         "check_external_connection_test.go",
