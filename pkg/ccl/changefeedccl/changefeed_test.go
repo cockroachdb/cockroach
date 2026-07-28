@@ -11810,10 +11810,11 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 					sendErrWithCtx(ctx, errors.AssertionFailedf("job highwater is nil"))
 					return
 				}
-				// Assert that the retry highwater is equal to the one in the job
-				// record.
-				if !progressHighwater.Equal(retryHighwater) {
-					sendErrWithCtx(ctx, errors.AssertionFailedf("highwater %s does not match job highwater %s",
+				// The retry must not start ahead of the persisted high-water. It may
+				// be behind: a checkpoint can persist between the flow's read and
+				// this one.
+				if !retryHighwater.LessEq(*progressHighwater) {
+					sendErrWithCtx(ctx, errors.AssertionFailedf("highwater %s is ahead of job highwater %s",
 						retryHighwater, progressHighwater))
 					return
 				}
@@ -11873,6 +11874,111 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 		}
 	}
 	cdcTest(t, testFn, feedTestEnterpriseSinks, withAllowChangefeedErr("injects error"))
+}
+
+// TestChangefeedReloadsProgressOnReplan verifies that a replanned changefeed
+// restarts from the high-water persisted in the job record rather than a stale
+// in-memory copy. Regression test for #172822.
+func TestChangefeedReloadsProgressOnReplan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(10 * time.Millisecond)()
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		// NB: The testing knobs below run in separate goroutines, so we avoid
+		// require.* (which may panic) and surface failures via errCh instead.
+		loadProgressErr := func(jobID jobspb.JobID, jobRegistry *jobs.Registry) (jobspb.Progress, error) {
+			job, err := jobRegistry.LoadJob(context.Background(), jobID)
+			if err != nil {
+				return jobspb.Progress{}, err
+			}
+			return job.Progress(), nil
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '10ms'`)
+		defer closeFeed(t, foo)
+
+		initialHighwater := s.Server.Clock().Now()
+
+		jobFeed := foo.(cdctest.EnterpriseTestFeed)
+		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
+
+		// replanCh forces the monitor goroutine to return replanErr. replanRequested
+		// gates the assertion so it only checks the post-replan restart.
+		var replanRequested atomic.Bool
+		replanCh := make(chan struct{}, 1)
+		knobs.ReplanCh = replanCh
+
+		doneCh := make(chan struct{}, 1)
+		errCh := make(chan error, 1)
+		sendErrWithCtx := func(ctx context.Context, err error) {
+			t.Errorf("sending error: %s", err)
+			select {
+			case <-ctx.Done():
+			case errCh <- err:
+			}
+		}
+
+		knobs.StartDistChangefeedInitialHighwater = func(ctx context.Context, retryHighwater hlc.Timestamp) {
+			if !replanRequested.Load() {
+				return
+			}
+			progress, err := loadProgressErr(jobFeed.JobID(), jobRegistry)
+			if err != nil {
+				sendErrWithCtx(ctx, err)
+				return
+			}
+			progressHighwater := progress.GetHighWater()
+			if progressHighwater == nil {
+				sendErrWithCtx(ctx, errors.AssertionFailedf("job highwater is nil"))
+				return
+			}
+			// The restart should begin with the persisted high-water. A checkpoint
+			// only ever advances, so we should never see it roll back below the
+			// value the restart resumes from.
+			if !retryHighwater.LessEq(*progressHighwater) {
+				sendErrWithCtx(ctx, errors.AssertionFailedf(
+					"replan highwater %s is ahead of job highwater %s",
+					retryHighwater, progressHighwater))
+				return
+			}
+			select {
+			case <-ctx.Done():
+			case doneCh <- struct{}{}:
+			}
+		}
+
+		// Wait for a non-empty high-water to persist before requesting the replan.
+		testutils.SucceedsSoon(t, func() error {
+			progress, err := loadProgressErr(jobFeed.JobID(), jobRegistry)
+			if err != nil {
+				return err
+			}
+			progressHighwater := progress.GetHighWater()
+			if progressHighwater != nil && initialHighwater.Less(*progressHighwater) {
+				replanRequested.Store(true)
+				replanCh <- struct{}{}
+				return nil
+			}
+			return errors.Newf("waiting for highwater %s to advance ahead of initial highwater %s",
+				progressHighwater, initialHighwater)
+		})
+
+		select {
+		case <-time.After(30 * time.Second):
+			t.Fatal("test timed out")
+		case err := <-errCh:
+			t.Fatal(err)
+		case <-doneCh:
+		}
+	}
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 // TestChangefeedPubsubResolvedMessages tests that the pubsub sink emits
