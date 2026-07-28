@@ -261,6 +261,13 @@ func TestVerifyPasswordDBConsole(t *testing.T) {
 		}
 	}
 
+	// A user with no password exercises the decoy-hash path in
+	// VerifyPasswordDBConsole: the user exists and may log in to the DB Console,
+	// but has no comparable password hash, so authentication must still fail.
+	if _, err := db.Exec("CREATE USER nopassworduser"); err != nil {
+		t.Fatalf("failed to create user: %s", err)
+	}
+
 	// Set up NOSQLLOGIN global privilege.
 	_, err = db.Exec("GRANT SYSTEM NOSQLLOGIN TO has_global_nosqlogin")
 	require.NoError(t, err)
@@ -286,6 +293,7 @@ func TestVerifyPasswordDBConsole(t *testing.T) {
 		{"root with empty password should fail", "root", "", false},
 		{"empty username and password should fail", "", "", false},
 		{"username does not exist should fail", "doesntexist", "zxcvbn", false},
+		{"user without a password should fail", "nopassworduser", "anything", false},
 
 		{"user with NOLOGIN role option should fail", "richardc", "12345", false},
 		// The NOSQLLOGIN cases are the only cases where SQL and DB Console login outcomes differ.
@@ -592,6 +600,20 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 		}
 		if cookies := response.Cookies(); len(cookies) > 0 {
 			t.Fatalf("expired-password login got cookies %v, wanted empty", cookies)
+		}
+	}
+
+	// Attempt for a user that does not exist. This exercises the !verified
+	// branch that spends decoy password-hash time (see spendDummyPasswordHashTime)
+	// to avoid leaking user existence via timing. The outcome must be identical
+	// to a wrong-password attempt: 401 with no "Set-Cookie".
+	{
+		response, err := tryLogin("nonexistentuser", "wrongpassword")
+		if !testutils.IsError(err, "status: 401") {
+			t.Fatalf("login got error %s, wanted error with 401 status", err)
+		}
+		if cookies := response.Cookies(); len(cookies) > 0 {
+			t.Fatalf("bad login got cookies %v, wanted empty", cookies)
 		}
 	}
 

@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_xdg_go_pbkdf2//:pbkdf2",
         "@com_github_xdg_go_scram//:scram",

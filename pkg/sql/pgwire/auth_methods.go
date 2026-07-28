@@ -179,25 +179,30 @@ func passwordAuthenticator(
 		return err
 	}
 
-	// Expiration check.
-	//
-	// NB: This check is advisory and could be omitted; the retrieval
-	// function ensures that the returned hashedPassword is
-	// security.MissingPasswordHash when the credentials have expired,
-	// so the credential check below would fail anyway.
+	metrics := c.GetTenantSpecificMetrics()
+	dummyHashMethod, dummyHashCost := security.GetConfiguredPasswordHashMethodAndCost(ctx, &execCfg.Settings.SV)
+
+	// An expired password must be rejected like a wrong one. Returning a distinct
+	// error, or skipping the expensive comparison, would let an unauthenticated
+	// client distinguish an expired account by response content or timing and
+	// enumerate users. Spend decoy time and return the generic failure; the audit
+	// log still records the specific reason server-side.
 	if expired {
 		c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_EXPIRED, nil)
-		return errExpiredPassword
-	} else if hashedPassword.Method() == password.HashMissingPassword {
+		_ = password.DummyCompareHashAndCleartextPassword(ctx, passwordStr,
+			dummyHashMethod, dummyHashCost,
+			security.GetExpensiveHashComputeSemWithGauge(ctx, metrics.ConnsWaitingToHash))
+		return security.NewErrPasswordUserAuthFailed(user)
+	}
+	if hashedPassword.Method() == password.HashMissingPassword {
 		c.LogAuthInfof(ctx, "user has no password defined")
 		// NB: the failure reason will be automatically handled by the fallback
 		// in auth.go (and report CREDENTIALS_INVALID).
 	}
 
-	metrics := c.GetTenantSpecificMetrics()
 	// Now check the cleartext password against the retrieved credentials.
 	if err := security.UserAuthPasswordHook(
-		false, passwordStr, hashedPassword, metrics.ConnsWaitingToHash,
+		false, passwordStr, hashedPassword, metrics.ConnsWaitingToHash, dummyHashMethod, dummyHashCost,
 	)(ctx, user.Normalized(), clientConnection); err != nil {
 		if errors.HasType(err, &security.PasswordUserAuthError{}) {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
