@@ -58,6 +58,18 @@ func TestClientLockTableDataDriven(t *testing.T) {
 		require.NoError(t, err)
 		evalCtx := newEvalCtx(t, rangeStartKey, store.StateEngine(), db)
 
+		printInMemoryLockTable := func(d *datadriven.TestData) string {
+			rangeDesc, err := s.LookupRange(rangeStartKey)
+			if err != nil {
+				d.Fatalf(t, "lookup range: %s", err)
+			}
+			r, err := store.GetReplica(rangeDesc.RangeID)
+			if err != nil {
+				d.Fatalf(t, "get replica: %s", err)
+			}
+			return evalCtx.scrubTS(evalCtx.replaceAllTxnUUIDs(r.GetConcurrencyManager().TestingLockTableString()))
+		}
+
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 
 			switch d.Cmd {
@@ -159,15 +171,19 @@ func TestClientLockTableDataDriven(t *testing.T) {
 				}
 				return ""
 			case "print-in-memory-lock-table":
-				rangeDesc, err := s.LookupRange(rangeStartKey)
-				if err != nil {
-					d.Fatalf(t, "lookup range: %s", err)
+				actual := printInMemoryLockTable(d)
+				// Some in-memory lock table updates happen when a command is
+				// applied to the state machine, which can be after the client
+				// has been acknowledged (see CanAckBeforeApplication). Marking
+				// a lock ineligible for export in response to a QueryIntent
+				// batched with a write is one such update. Retry a few times to
+				// give the apply-time update a chance to land.
+				const maxRetries = 100
+				for try := 0; try < maxRetries && actual != d.Expected; try++ {
+					time.Sleep(100 * time.Millisecond)
+					actual = printInMemoryLockTable(d)
 				}
-				r, err := store.GetReplica(rangeDesc.RangeID)
-				if err != nil {
-					d.Fatalf(t, "get replica: %s", err)
-				}
-				return evalCtx.scrubTS(evalCtx.replaceAllTxnUUIDs(r.GetConcurrencyManager().TestingLockTableString()))
+				return actual
 			case "print-replicated-lock-table":
 				startKey := evalCtx.getNamedKey("start", d)
 				endKey := evalCtx.getNamedKey("end", d)
