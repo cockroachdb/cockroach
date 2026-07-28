@@ -572,6 +572,27 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 	return nil
 }
 
+// This test drives a foreground workload for its entire multi-hour duration on
+// 4-vCPU nodes, concurrently with the backups and restores it exists to
+// exercise. Those jobs run at elastic priority, so admission control hands the
+// CPU to the workload first, and there is none to spare: with the workload
+// configuration the other backup-restore tests share, jobs have crawled slowly
+// enough to outlast the job-wait caps in backup_restore_utils.go while still
+// making steady progress. The limits below cap how much CPU the workload draws
+// without changing what it loads, so the test still backs up and restores the
+// same dataset.
+const (
+	// Only this many of the loaded warehouses drive load. TPCC runs with think
+	// times, so this is what bounds its share of the CPU.
+	mixedVersionTPCCActiveWarehouses = 60
+
+	// Bank has no think time and would otherwise run as fast as the cluster
+	// allows. At this rate it still rewrites every row many times an hour, which
+	// is what gives the backups the deep MVCC history they are meant to cover
+	// (see configureGCPolicies, which bounds that history from the other side).
+	mixedVersionBankMaxRate = 100
+)
+
 func registerBackupMixedVersion(r registry.Registry) {
 	// backup/mixed-version tests different states of backup in a mixed
 	// version cluster. The actual state of the cluster when a backup is
@@ -645,8 +666,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 			// for the cluster used in this test without overloading it,
 			// which can make the backups take much longer to finish.
 			const numWarehouses = 100
-			bankInit, bankRun := bankWorkloadCmd(t.L(), testRNG, workloadSeed, c.CRDBNodes(), false)
-			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, workloadSeed, numWarehouses, c.CRDBNodes())
+			bankInit, bankRun := bankWorkloadCmd(t.L(), testRNG, workloadSeed, c.CRDBNodes(), false, mixedVersionBankMaxRate)
+			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, workloadSeed, numWarehouses, mixedVersionTPCCActiveWarehouses, c.CRDBNodes())
 
 			mvt.OnStartup("set short job interval", backupTest.setShortJobIntervals)
 			mvt.OnStartup("configure gc policies", backupTest.configureGCPolicies)

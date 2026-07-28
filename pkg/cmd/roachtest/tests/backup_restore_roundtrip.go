@@ -255,8 +255,8 @@ func initBackgroundWorkloads(
 	if testUtils.mock {
 		numWarehouses = 10
 	}
-	tpccInit, tpccRun := tpccWorkloadCmd(l, testRNG, seed, numWarehouses, roachNodes)
-	bankInit, bankRun := bankWorkloadCmd(l, testRNG, seed, roachNodes, testUtils.mock)
+	tpccInit, tpccRun := tpccWorkloadCmd(l, testRNG, seed, numWarehouses, 0 /* activeWarehouses */, roachNodes)
+	bankInit, bankRun := bankWorkloadCmd(l, testRNG, seed, roachNodes, testUtils.mock, 0 /* maxRate */)
 	scInit, scRun := schemaChangeWorkloadCmd(l, testRNG, seed, roachNodes, testUtils.mock)
 
 	initGroup := t.NewErrorGroup(task.WithContext(ctx))
