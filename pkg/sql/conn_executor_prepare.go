@@ -457,6 +457,18 @@ func (ex *connExecutor) execBind(
 		}
 	}()
 
+	if len(ps.UDTs) > 0 {
+		// A portal retains a reference to the prepared statement. Refresh a stale
+		// enum constant before creating the portal so that its AST and the decoded
+		// query arguments use the same enum version. SQL EXECUTE does this in
+		// execStmtInOpenState; Bind is the corresponding extended-protocol path.
+		p := &ex.planner
+		ex.resetPlanner(ctx, p, ex.state.mu.txn, ex.server.cfg.Clock.PhysicalTime())
+		if err := ex.maybeReparsePrepStmt(ctx, ps, bindCmd.PreparedStatementName); err != nil {
+			return retErr(err)
+		}
+	}
+
 	// Decode the arguments, except for internal queries for which we just verify
 	// that the arguments match what's expected.
 	qargs := make(tree.QueryArguments, numQArgs)

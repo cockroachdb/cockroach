@@ -225,6 +225,46 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"ALTER TYPE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Regression for #172900. The enum constant in the prepared statement was
+# type-checked before the ALTER TYPE. Bind must reparse the statement before
+# creating a portal, otherwise the argument is decoded with the new enum
+# version and comparison fails with "comparison of two different versions of
+# enum".
+send crdb_only
+Parse {"Name": "stale_enum", "Query": "SELECT $1 = 'hi'", "ParameterOIDs": [100104]}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "ALTER TYPE te ADD VALUE 'bonjour'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Bind {"DestinationPortal": "stale_enum", "PreparedStatement": "stale_enum", "ParameterFormatCodes": [0], "Parameters": [{"text":"hi"}]}
+Execute {"Portal": "stale_enum"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"t"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # Reuse original prepared statement now that there's a new enum value.
 send
 Bind {"DestinationPortal": "p", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"hola"}]}
