@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/xdg-go/pbkdf2"
 	"github.com/xdg-go/scram"
@@ -80,6 +81,13 @@ func (h HashMethod) String() string {
 	default:
 		panic(errors.AssertionFailedf("programming error: unknown hash method %d", int(h)))
 	}
+}
+
+// HasComparableHash reports whether a stored hash of this method can be compared
+// against a cleartext password; methods without one compare instantly, which
+// matters to callers guarding against timing side channels.
+func (h HashMethod) HasComparableHash() bool {
+	return h != HashMissingPassword && h != HashInvalidMethod
 }
 
 // GetDefaultCost retrieves the default hashing cost for the given method.
@@ -258,6 +266,80 @@ func CompareHashAndCleartextPassword(
 	ctx context.Context, hashedPassword PasswordHash, password string, hashSem HashSemaphore,
 ) (ok bool, err error) {
 	return hashedPassword.compareWithCleartextPassword(ctx, password, hashSem)
+}
+
+// dummyHashKey identifies a memoized decoy hash by method and cost.
+type dummyHashKey struct {
+	method HashMethod
+	cost   int
+}
+
+// dummyHashes memoizes successfully-generated decoy hashes so the expensive
+// generation happens at most once per (method, cost). Only successes are cached:
+// a failed generation is retried next time, so a transient error can't
+// permanently disable the decoy. The mutex guards only map access; generation
+// runs outside it.
+var dummyHashes struct {
+	syncutil.Mutex
+	m map[dummyHashKey]PasswordHash
+}
+
+// DummyCompareHashAndCleartextPassword runs a decoy password comparison against a
+// throwaway hash of the given method and cost, acquiring hashSem exactly as a
+// real check does. Authentication paths call it on failures that would otherwise
+// skip the expensive comparison (unknown user, no stored hash, expired password),
+// so response latency cannot reveal whether a user exists. Callers should pass
+// the cluster's configured hash method and cost. The boolean result is discarded.
+//
+// The defense is approximate: a user whose stored hash uses a different method or
+// cost than the configured one (e.g. a legacy hash after a config change) has a
+// slightly different real-check latency, so timing may still distinguish them.
+// For a nonexistent user the stored method is unknowable, so the configured one
+// is the best available proxy.
+func DummyCompareHashAndCleartextPassword(
+	ctx context.Context, cleartext string, method HashMethod, cost int, hashSem HashSemaphore,
+) error {
+	h, err := dummyHash(ctx, method, cost)
+	if err != nil {
+		return err
+	}
+	_, err = h.compareWithCleartextPassword(ctx, cleartext, hashSem)
+	return err
+}
+
+func dummyHash(ctx context.Context, method HashMethod, cost int) (PasswordHash, error) {
+	key := dummyHashKey{method: method, cost: cost}
+	if h, ok := lookupDummyHash(key); ok {
+		return h, nil
+	}
+	// The cleartext is irrelevant: the comparison result is always discarded.
+	// Generation runs outside the lock; concurrent first callers for the same key
+	// may each generate, but storeDummyHash keeps a single canonical entry.
+	raw, err := HashPassword(ctx, cost, method, "cockroach-dummy-password", nil /* hashSem */)
+	if err != nil {
+		return nil, errors.Wrap(err, "computing dummy hash")
+	}
+	return storeDummyHash(key, LoadPasswordHash(ctx, raw)), nil
+}
+
+func lookupDummyHash(key dummyHashKey) (PasswordHash, bool) {
+	dummyHashes.Lock()
+	defer dummyHashes.Unlock()
+	h, ok := dummyHashes.m[key]
+	return h, ok
+}
+
+func storeDummyHash(key dummyHashKey, h PasswordHash) PasswordHash {
+	dummyHashes.Lock()
+	defer dummyHashes.Unlock()
+	if existing, ok := dummyHashes.m[key]; ok {
+		return existing
+	}
+	if dummyHashes.m == nil {
+		dummyHashes.m = make(map[dummyHashKey]PasswordHash)
+	}
+	dummyHashes.m[key] = h
+	return h
 }
 
 // compareWithCleartextPassword is part of the PasswordHash interface.
