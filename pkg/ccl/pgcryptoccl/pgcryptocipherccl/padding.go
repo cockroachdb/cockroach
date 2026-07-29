@@ -32,21 +32,22 @@ func pkcsPad(data []byte, blockSize int) ([]byte, error) {
 	return paddedData, nil
 }
 
+// errInvalidPKCSPadding is opaque to prevent padding oracle attacks.
+var errInvalidPKCSPadding = pgerror.New(pgcode.InvalidParameterValue, "decrypt error: invalid PKCS padding")
+
 // pkcsUnpad removes the padding added by pkcsPad.
 func pkcsUnpad(data []byte) ([]byte, error) {
 	if len(data) == 0 {
-		return nil, pgerror.New(pgcode.InvalidParameterValue, "PKCS-padded data is empty")
+		return nil, errInvalidPKCSPadding
 	}
 
 	paddingLen := data[len(data)-1]
 	if paddingLen == 0 || int(paddingLen) > len(data) {
-		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-			"invalid final byte found in PKCS-padded data: %d", paddingLen)
+		return nil, errInvalidPKCSPadding
 	}
 	for i := 1; i < int(paddingLen); i++ {
-		if b := data[len(data)-i-1]; b != paddingLen {
-			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-				"invalid byte found in PKCS-padded data: expected %d, but found %d", paddingLen, b)
+		if data[len(data)-i-1] != paddingLen {
+			return nil, errInvalidPKCSPadding
 		}
 	}
 
