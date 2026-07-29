@@ -178,6 +178,8 @@ func (s *authenticationServer) UserLogin(
 		return nil, srverrors.APIInternalError(ctx, err)
 	}
 	if !verified {
+		// Match the valid-user timing so the error doesn't reveal the user is unknown.
+		s.spendDummyPasswordHashTime(ctx, req.Password)
 		return nil, errWebAuthenticationFailure
 	}
 
@@ -286,6 +288,8 @@ func (s *authenticationServer) DemoLogin(w http.ResponseWriter, req *http.Reques
 		return
 	}
 	if !verified {
+		// Match the valid-user timing so the error doesn't reveal the user is unknown.
+		s.spendDummyPasswordHashTime(ctx, password)
 		fail(errors.New("password invalid"))
 		return
 	}
@@ -524,8 +528,16 @@ func (s *authenticationServer) VerifyPasswordDBConsole(
 		return false, false, err
 	}
 
+	// An expired password or one with no comparable hash skips the comparison
+	// below; spend equivalent time on a decoy so timing does not distinguish
+	// these cases from a wrong password.
 	if expired {
+		s.spendDummyPasswordHashTime(ctx, passwordStr)
 		return false, true, nil
+	}
+	if !hashedPassword.Method().HasComparableHash() {
+		s.spendDummyPasswordHashTime(ctx, passwordStr)
+		return false, false, nil
 	}
 
 	ok, err := password.CompareHashAndCleartextPassword(
@@ -545,6 +557,16 @@ func (s *authenticationServer) VerifyPasswordDBConsole(
 			passwordStr, hashedPassword)
 	}
 	return ok, false, err
+}
+
+// spendDummyPasswordHashTime runs a decoy password comparison so a failing login
+// costs about the same time as a real check, preventing username enumeration via
+// response latency. Callers use it on paths that skip the real comparison.
+func (s *authenticationServer) spendDummyPasswordHashTime(ctx context.Context, cleartext string) {
+	sv := &s.sqlServer.ExecutorConfig().Settings.SV
+	method, cost := security.GetConfiguredPasswordHashMethodAndCost(ctx, sv)
+	_ = password.DummyCompareHashAndCleartextPassword(
+		ctx, cleartext, method, cost, security.GetExpensiveHashComputeSem(ctx))
 }
 
 // VerifyJWT is part of the Server interface.
