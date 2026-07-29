@@ -128,6 +128,20 @@ func GetConfiguredPasswordHashMethod(sv *settings.Values) (method password.HashM
 	return PasswordHashMethod.Get(sv)
 }
 
+// GetConfiguredPasswordHashMethodAndCost returns the configured hash method and
+// its cost. Decoy password checks use these so their latency tracks a real
+// check for the cluster's configured method.
+func GetConfiguredPasswordHashMethodAndCost(
+	ctx context.Context, sv *settings.Values,
+) (password.HashMethod, int) {
+	method := GetConfiguredPasswordHashMethod(sv)
+	cost, err := GetConfiguredPasswordCost(ctx, sv, method)
+	if err != nil {
+		cost = method.GetDefaultCost()
+	}
+	return method, cost
+}
+
 // AutoDetectPasswordHashes is the cluster setting that configures whether
 // the server recognizes pre-hashed passwords.
 var AutoDetectPasswordHashes = settings.RegisterBoolSetting(

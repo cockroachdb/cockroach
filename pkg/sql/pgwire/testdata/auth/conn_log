@@ -315,7 +315,7 @@ authlog 5
 
 connect_unix user=userexpired password=123
 ----
-ERROR: password is expired (SQLSTATE 28000)
+ERROR: password authentication failed for user userexpired (SQLSTATE 28P01)
 
 authlog 5
 .*client_connection_end

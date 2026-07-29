@@ -151,6 +151,8 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !verified {
+		// Match the valid-user timing so a 401 doesn't reveal the user is unknown.
+		a.authServer.spendDummyPasswordHashTime(ctx, r.Form.Get("password"))
 		http.Error(w, WebAuthenticationFailureMsg, http.StatusUnauthorized)
 		return
 	}
