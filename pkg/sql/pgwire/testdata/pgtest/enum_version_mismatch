@@ -1,0 +1,75 @@
+# Regression test for the pgwire extended-protocol enum version mismatch.
+#
+# A prepared statement created via the extended protocol (Parse) that embeds an
+# enum literal has that literal frozen into its AST as a versioned tree.DEnum
+# during type-checking. If the enum's descriptor version later changes, the
+# statement must be re-parsed so the frozen datum is re-resolved to the current
+# version; otherwise executing the portal compares the stale enum datum against
+# a freshly-evaluated one and hits the internal assertion "comparison of two
+# different versions of enum". execBind performs that re-parse for the extended
+# protocol, mirroring maybeReparsePrepStmt on the SQL-level EXECUTE path
+# (*tree.Execute). See #132105.
+
+send
+Query {"String": "DROP TYPE IF EXISTS te"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TYPE te AS ENUM ('hi')"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Prepare a statement comparing a placeholder to an enum literal. Type-checking
+# freezes 'hi' into the AST as a DEnum tagged with the current enum version.
+send crdb_only
+Parse {"Name": "s", "Query": "SELECT $1::te = 'hi'"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Bump the enum's descriptor version.
+send
+Query {"String": "ALTER TYPE te ADD VALUE 'hello'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute the prepared statement via the extended protocol. The stale enum
+# literal frozen into the prepared statement's AST is refreshed at Bind time
+# (see execBind), so the comparison succeeds and returns 't'. Before that fix
+# this failed with an XX000 "comparison of two different versions of enum"
+# error, because the re-parse only ran on the SQL-level EXECUTE path
+# (*tree.Execute), never on the pgwire extended-protocol portal path.
+send crdb_only
+Bind {"DestinationPortal": "p", "PreparedStatement": "s", "ParameterFormatCodes": [0], "Parameters": [{"text":"hi"}]}
+Execute {"Portal": "p"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"t"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
