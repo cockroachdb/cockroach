@@ -253,3 +253,106 @@ func TestFrontendAdmitSessionRevivalToken(t *testing.T) {
 	require.NotNil(t, fe.Conn)
 	require.Nil(t, fe.Msg)
 }
+
+// writeStartupMessage encodes a StartupMessage carrying params and writes it to
+// conn from a new goroutine, so a FrontendAdmit call reading the other end of
+// the pipe can make progress. It injects raw, exact-case parameter keys; a pg
+// client library would normalize keys before sending and so could not exercise
+// the mixed-case handling under test.
+func writeStartupMessage(t *testing.T, conn net.Conn, params map[string]string) {
+	go func() {
+		startup := pgproto3.StartupMessage{
+			ProtocolVersion: pgproto3.ProtocolVersionNumber,
+			Parameters:      params,
+		}
+		buf, err := startup.Encode([]byte{})
+		require.NoError(t, err)
+		_, err = conn.Write(buf)
+		require.NoError(t, err)
+	}()
+}
+
+// TestFrontendAdmitMixedCaseSessionRevivalTokenRejected verifies that the
+// session revival token is rejected regardless of the case the client uses for
+// the key. The backend folds keys to lowercase, so a case-sensitive check would
+// let a mixed-case variant through to be honored by the backend.
+func TestFrontendAdmitMixedCaseSessionRevivalTokenRejected(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, key := range []string{
+		"crdb:session_revival_token_base64", // canonical case (regression)
+		"CRDB:session_revival_token_base64",
+		"Crdb:Session_Revival_Token_Base64",
+		"CRDB:SESSION_REVIVAL_TOKEN_BASE64",
+	} {
+		t.Run(key, func(t *testing.T) {
+			cli, srv := net.Pipe()
+			require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(9e9)))
+			require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(9e9)))
+
+			writeStartupMessage(t, cli, map[string]string{key: "abc"})
+
+			fe := FrontendAdmit(srv, nil)
+			require.EqualError(t, fe.Err, "codeUnexpectedStartupMessage: "+
+				"parameter crdb:session_revival_token_base64 is not allowed")
+			require.Nil(t, fe.Msg)
+		})
+	}
+}
+
+// TestFrontendAdmitMixedCaseRemoteAddrOverwritten verifies that a client cannot
+// spoof its remote address through a mixed-case variant of crdb:remote_addr.
+// Every case variant of the key is dropped and the real address is then set, so
+// neither the spoofed value nor a leftover mixed-case key survives. The client
+// sends two case variants at once, and the loop repeats so the result is proven
+// independent of map iteration order.
+func TestFrontendAdmitMixedCaseRemoteAddrOverwritten(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	realAddr := &net.TCPAddr{IP: net.IP{1, 2, 3, 4}, Port: 26257}
+	for i := 0; i < 50; i++ {
+		cli, srvPipe := net.Pipe()
+		srv := &fakeTCPConn{
+			Conn:       srvPipe,
+			remoteAddr: realAddr,
+			localAddr:  &net.TCPAddr{IP: net.IP{4, 5, 6, 7}},
+		}
+		require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(9e9)))
+		require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(9e9)))
+
+		writeStartupMessage(t, cli, map[string]string{
+			"crdb:remote_addr": "9.9.9.9:9999",
+			"CRDB:remote_addr": "8.8.8.8:8888",
+		})
+
+		fe := FrontendAdmit(srv, nil)
+		require.NoError(t, fe.Err)
+		require.NotNil(t, fe.Msg)
+		require.Equal(t, realAddr.String(), fe.Msg.Parameters[remoteAddrStartupParam])
+		_, hasVariant := fe.Msg.Parameters["CRDB:remote_addr"]
+		require.False(t, hasVariant)
+	}
+}
+
+// TestFrontendAdmitForwardsNonReservedKeysVerbatim verifies that the
+// case-insensitive handling is scoped to the reserved parameters only: a
+// non-reserved key is forwarded to the backend with its original case
+// preserved. The backend folds keys to lowercase itself, and callers such as
+// CockroachCloud's BackendDial read client parameters by their original case
+// (see TestProxyModifyRequestParams), so the proxy must not fold them.
+func TestFrontendAdmitForwardsNonReservedKeysVerbatim(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cli, srv := net.Pipe()
+	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(9e9)))
+	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(9e9)))
+
+	writeStartupMessage(t, cli, map[string]string{"Application_Name": "myapp"})
+
+	fe := FrontendAdmit(srv, nil)
+	require.NoError(t, fe.Err)
+	require.NotNil(t, fe.Msg)
+	require.Equal(t, "myapp", fe.Msg.Parameters["Application_Name"])
+	_, hasFolded := fe.Msg.Parameters["application_name"]
+	require.False(t, hasFolded)
+}
