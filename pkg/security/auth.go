@@ -745,9 +745,17 @@ func IsTenantCertificate(cert *x509.Certificate) bool {
 }
 
 // UserAuthPasswordHook builds an authentication hook based on the security
-// mode, password, and its potentially matching hash.
+// mode, password, and its potentially matching hash. dummyHashMethod and
+// dummyHashCost are the cluster's configured hash method and cost, used to size
+// the decoy comparison performed for users that have no comparable password
+// hash.
 func UserAuthPasswordHook(
-	insecureMode bool, passwordStr string, hashedPassword password.PasswordHash, gauge *metric.Gauge,
+	insecureMode bool,
+	passwordStr string,
+	hashedPassword password.PasswordHash,
+	gauge *metric.Gauge,
+	dummyHashMethod password.HashMethod,
+	dummyHashCost int,
 ) UserAuthHook {
 	return func(ctx context.Context, systemIdentity string, clientConnection bool) error {
 		u, err := username.MakeSQLUsernameFromUserInput(systemIdentity, username.PurposeValidation)
@@ -768,6 +776,14 @@ func UserAuthPasswordHook(
 
 		// If the requested user has an empty password, disallow authentication.
 		if len(passwordStr) == 0 {
+			return NewErrPasswordUserAuthFailed(u)
+		}
+		// A user with no comparable password hash (e.g. one that authenticates via
+		// a client certificate) skips the comparison below. Spend equivalent time
+		// on a decoy so response timing does not reveal that the user exists.
+		if !hashedPassword.Method().HasComparableHash() {
+			_ = password.DummyCompareHashAndCleartextPassword(ctx, passwordStr,
+				dummyHashMethod, dummyHashCost, GetExpensiveHashComputeSemWithGauge(ctx, gauge))
 			return NewErrPasswordUserAuthFailed(u)
 		}
 		ok, err := password.CompareHashAndCleartextPassword(ctx,
