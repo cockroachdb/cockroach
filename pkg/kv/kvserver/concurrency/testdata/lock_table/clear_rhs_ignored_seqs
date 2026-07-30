@@ -1,0 +1,48 @@
+# Test that the ignored sequence numbers tracked on an unreplicated lock are
+# carried over when the lock is handed to the RHS during a range split
+# (ClearGE). The RHS uses the returned LockAcquisitions to re-acquire the
+# locks in its own lock table. A later flush of the RHS lock table consults
+# the ignored sequence numbers to decide whether an existing on-disk
+# replicated lock is held at a rolled-back sequence number and may be
+# overwritten; with nil ignored sequence numbers the flush conservatively
+# skips the write, and the lock is lost once the rolled-back on-disk lock is
+# resolved.
+
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0 seq=2
+----
+
+# txn1 acquires an unreplicated exclusive lock at b at seq 2, with seq 1
+# rolled back.
+
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@b
+----
+
+scan r=req1
+----
+start-waiting: false
+
+acquire r=req1 k=b durability=u strength=exclusive ignored-seqs=1
+----
+num=1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 2)] ign seq: [{1 1}]
+
+dequeue r=req1
+----
+num=1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 2)] ign seq: [{1 1}]
+
+# The acquisition returned for the RHS carries the ignored sequence numbers.
+
+clear-ge key=a
+----
+num returned for re-acquisition: 1
+ span: b, txn: 00000000-0000-0000-0000-000000000001 epo: 0, dur: Unreplicated, str: Exclusive, ign seq: [{1 1}]
+
+print
+----
+num=0

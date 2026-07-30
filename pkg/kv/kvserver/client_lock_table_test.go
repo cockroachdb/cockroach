@@ -57,6 +57,18 @@ func TestClientLockTableDataDriven(t *testing.T) {
 		require.NoError(t, err)
 		evalCtx := newEvalCtx(t, rangeStartKey, store.StateEngine(), db)
 
+		printInMemoryLockTable := func(d *datadriven.TestData) string {
+			rangeDesc, err := s.LookupRange(rangeStartKey)
+			if err != nil {
+				d.Fatalf(t, "lookup range: %s", err)
+			}
+			r, err := store.GetReplica(rangeDesc.RangeID)
+			if err != nil {
+				d.Fatalf(t, "get replica: %s", err)
+			}
+			return evalCtx.scrubTS(evalCtx.replaceAllTxnUUIDs(r.GetConcurrencyManager().TestingLockTableString()))
+		}
+
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 
 			switch d.Cmd {
@@ -131,16 +143,48 @@ func TestClientLockTableDataDriven(t *testing.T) {
 					return fmt.Sprintf("error: %s", err.Error())
 				}
 				return ""
+			case "query-intent":
+				// Sends a QueryIntent for a replicated lock held by the named txn,
+				// outside of any transaction, mirroring the QueryIntents sent during
+				// txn recovery. With batched-with-put=<key>, a Put on that (unrelated)
+				// key is added so that the batch evaluates on the write path, as
+				// happens when the txn pipeliner prepends QueryIntents to a batch
+				// containing writes.
+				txn := evalCtx.mustGetTxn(d)
+				key := evalCtx.getKey(d)
+				str := evalCtx.getLockStr(d)
+				b := db.NewBatch()
+				b.AddRawRequest(&kvpb.QueryIntentRequest{
+					RequestHeader:  kvpb.RequestHeader{Key: key},
+					Txn:            txn.TestingCloneTxn().TxnMeta,
+					Strength:       str,
+					ErrorIfMissing: d.HasArg("error-if-missing"),
+				})
+				if d.HasArg("batched-with-put") {
+					var putKey string
+					d.ScanArgs(t, "batched-with-put", &putKey)
+					var v roachpb.Value
+					v.SetString("v")
+					b.AddRawRequest(kvpb.NewPut(append(evalCtx.rangeStartKey.Clone(), []byte(putKey)...), v))
+				}
+				if err := db.Run(ctx, b); err != nil {
+					return fmt.Sprintf("error: %s", err.Error())
+				}
+				return ""
 			case "print-in-memory-lock-table":
-				rangeDesc, err := s.LookupRange(rangeStartKey)
-				if err != nil {
-					d.Fatalf(t, "lookup range: %s", err)
+				actual := printInMemoryLockTable(d)
+				// Some in-memory lock table updates happen when a command is
+				// applied to the state machine, which can be after the client
+				// has been acknowledged (see CanAckBeforeApplication). Marking
+				// a lock ineligible for export in response to a QueryIntent
+				// batched with a write is one such update. Retry a few times to
+				// give the apply-time update a chance to land.
+				const maxRetries = 100
+				for try := 0; try < maxRetries && actual != d.Expected; try++ {
+					time.Sleep(100 * time.Millisecond)
+					actual = printInMemoryLockTable(d)
 				}
-				r, err := store.GetReplica(rangeDesc.RangeID)
-				if err != nil {
-					d.Fatalf(t, "get replica: %s", err)
-				}
-				return evalCtx.scrubTS(evalCtx.replaceAllTxnUUIDs(r.GetConcurrencyManager().TestingLockTableString()))
+				return actual
 			case "print-replicated-lock-table":
 				startKey := evalCtx.getNamedKey("start", d)
 				endKey := evalCtx.getNamedKey("end", d)
