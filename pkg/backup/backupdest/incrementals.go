@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -77,6 +79,10 @@ func CollectionsAndSubdir(paths []string, subdir string) ([]string, string, erro
 // returned in sorted ascending end time order, with ties broken in ascending
 // start time. All paths are returned with a leading slash.
 //
+// fullBackupVersion is the cluster version recorded in the full backup's
+// manifest. It gates whether the index may be used; see the comment on the
+// version check below for details.
+//
 // TODO (kev-cao): On 26.2, we can fully deprecate the legacy path and remove
 // the `incStore` parameter.
 func FindAllIncrementalPaths(
@@ -85,11 +91,26 @@ func FindAllIncrementalPaths(
 	incStore cloud.ExternalStorage,
 	rootStore cloud.ExternalStorage,
 	subdir string,
+	fullBackupVersion roachpb.Version,
 ) ([]string, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupdest.FindAllIncrementalPaths")
 	defer sp.Finish()
 
 	if !backupinfo.ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) {
+		return LegacyFindPriorBackups(ctx, incStore, OmitManifest)
+	}
+
+	// A full backup written by a pre-v26.1 node cannot be trusted to have a
+	// complete index. In a mixed-version cluster, a full backup could write an
+	// index while an incremental (taken after a downgrade, or on a node that
+	// writes to a different index path) does not, leaving a partial index. A
+	// partial index is indistinguishable from a complete one during this
+	// listing-based resolution and would silently drop prior backups from the
+	// chain. We therefore only trust the index when the full backup was written
+	// on a finalized v26.1+ cluster; otherwise we fall back to the legacy path,
+	// which lists the actual backup directories and is always correct. This
+	// mirrors the version check in backupinfo.IndexExists.
+	if !fullBackupVersion.AtLeast(clusterversion.V26_1.Version()) {
 		return LegacyFindPriorBackups(ctx, incStore, OmitManifest)
 	}
 

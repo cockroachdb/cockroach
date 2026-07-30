@@ -243,7 +243,9 @@ func TestFindAllIncrementalPaths(t *testing.T) {
 				}
 			}
 
-			incs, err := backupdest.FindAllIncrementalPaths(ctx, &execCfg, incStore, store, targetSubdir)
+			incs, err := backupdest.FindAllIncrementalPaths(
+				ctx, &execCfg, incStore, store, targetSubdir, clusterversion.Latest.Version(),
+			)
 			require.NoError(t, err)
 			require.Len(t, incs, len(targetChain)-1)
 
@@ -324,9 +326,40 @@ func TestFindAllIncrementalPathsFallbackLogic(t *testing.T) {
 			end = end.Add(time.Hour)
 		}
 
-		incs, err := backupdest.FindAllIncrementalPaths(ctx, &execCfg, stores.inc, stores.root, subdir)
+		incs, err := backupdest.FindAllIncrementalPaths(
+			ctx, &execCfg, stores.inc, stores.root, subdir, clusterversion.Latest.Version(),
+		)
 		require.NoError(t, err)
 		require.Len(t, incs, numBackups-1)
+	})
+
+	t.Run("pre-v26.1 full backup ignores index", func(t *testing.T) {
+		// A full backup written on a pre-v26.1 cluster may have an incomplete
+		// index in a mixed-version cluster: some layers are indexed while others
+		// are not. FindAllIncrementalPaths must not trust such an index and must
+		// fall back to the legacy listing path, which sees every layer.
+		//
+		// To make the fallback observable, we write a partial index: the full and
+		// first incremental are indexed, but the second incremental is not. Reading
+		// via the index would miss the second incremental, whereas the legacy path
+		// returns both.
+		fullEnd := time.Now().UTC()
+		subdir := fullEnd.Format(backupbase.DateBasedIntoFolderName)
+		stores, uris := getStores(t, subdir)
+		defer stores.cleanup()
+
+		start, end := time.Time{}, fullEnd
+		writeEmptyBackupManifest(t, &execCfg, uris.root, fullEnd, start, end, true /* indexed */)
+		start, end = end, end.Add(time.Hour)
+		writeEmptyBackupManifest(t, &execCfg, uris.root, fullEnd, start, end, true /* indexed */)
+		start, end = end, end.Add(time.Hour)
+		writeEmptyBackupManifest(t, &execCfg, uris.root, fullEnd, start, end, false /* indexed */)
+
+		incs, err := backupdest.FindAllIncrementalPaths(
+			ctx, &execCfg, stores.inc, stores.root, subdir, clusterversion.V25_4.Version(),
+		)
+		require.NoError(t, err)
+		require.Len(t, incs, 2)
 	})
 }
 
