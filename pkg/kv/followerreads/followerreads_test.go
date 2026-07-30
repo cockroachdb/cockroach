@@ -924,11 +924,27 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	// Run a historical query and assert that it's served from the follower (n3).
 	// n4 should attempt to route to n3 because we pretend n3 has a lower latency
 	// (see testing knob).
-	n4.Exec(t, historicalQuery.Load().(string))
-	rec = <-recCh
-
-	// Look at the trace and check that we've served a follower read.
-	require.True(t, kvtestutils.OnlyFollowerReads(rec), "query was not served through follower reads: %s", rec)
+	//
+	// n3 was just added as a non-voter, so its closed timestamp may still lag
+	// the follower_read_timestamp() of the query. When that happens, n3 declines
+	// the follower read and the request is redirected to the leaseholder. We only
+	// retry on that specific, transient condition: the trace must show that n3
+	// was asked to serve the read but couldn't because its closed timestamp was
+	// too low. Any other reason for not getting a follower read (e.g. the request
+	// never reaching n3) is a real failure, so we fail loudly instead of masking
+	// it behind retries.
+	testutils.SucceedsSoon(t, func() error {
+		n4.Exec(t, historicalQuery.Load().(string))
+		rec = <-recCh
+		// Look at the trace and check that we've served a follower read.
+		if kvtestutils.OnlyFollowerReads(rec) {
+			return nil
+		}
+		if !strings.Contains(rec.String(), "closed timestamp too low") {
+			t.Fatalf("query was not served through follower reads: %s", rec)
+		}
+		return errors.Newf("n3 closed timestamp too low; retrying: %s", rec)
+	})
 
 	// Check that the follower read metric was incremented.
 	var followerReadsCountAfter int64
