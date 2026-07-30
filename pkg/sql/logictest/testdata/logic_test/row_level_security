@@ -5784,6 +5784,111 @@ DROP ROLE can_bypassrls;
 statement ok
 DROP ROLE cannot_bypassrls;
 
+# With sql.auth.skip_bypassrls_role_option_check.enabled = true, the BYPASSRLS
+# role option (ALTER ROLE ... BYPASSRLS) no longer exempts a user from RLS,
+# but the global BYPASSRLS privilege (GRANT SYSTEM BYPASSRLS) still does.
+#
+# The setting is a set-once operational knob: changing it takes effect for
+# statements planned afterward, and already-cached plans (e.g. prepared
+# statements) pick up the new value when they are next replanned. The full
+# RLS dependency check (checkRLSDependencies) honors the setting, but the
+# catalog digest fast-path can skip that check for a cached plan because
+# cluster-setting values are not part of the digest. This subtest toggles the
+# setting between executions of the same query, so disable the digest
+# fast-path to force the full check on every execution and keep the
+# assertions deterministic across all logictest configs (including
+# local-prepared, which caches prepared plans).
+subtest bypassrls_skip_role_option
+
+statement ok
+SET ROLE root
+
+statement ok
+SET catalog_digest_staleness_check_enabled = false;
+
+statement ok
+CREATE TABLE skip_ro (id INT PRIMARY KEY, val TEXT);
+
+statement ok
+CREATE USER skip_ro_user;
+
+statement ok
+GRANT ALL ON skip_ro TO skip_ro_user;
+
+statement ok
+ALTER TABLE skip_ro ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY pol1 ON skip_ro TO skip_ro_user USING (val like 'visible: %');
+
+statement ok
+INSERT INTO skip_ro VALUES (0, 'visible: 0'), (1, 'hidden: 1'), (2, 'visible: 2');
+
+# Baseline: setting off (default), role option exempts the user (sees all rows).
+statement ok
+ALTER ROLE skip_ro_user BYPASSRLS;
+
+statement ok
+SET ROLE skip_ro_user;
+
+query IT
+SELECT * FROM skip_ro ORDER BY id;
+----
+0  visible: 0
+1  hidden: 1
+2  visible: 2
+
+# Turn the setting on: the role option is now ignored, RLS applies.
+statement ok
+SET ROLE root
+
+statement ok
+SET CLUSTER SETTING sql.auth.skip_bypassrls_role_option_check.enabled = true;
+
+statement ok
+SET ROLE skip_ro_user;
+
+query IT
+SELECT * FROM skip_ro ORDER BY id;
+----
+0  visible: 0
+2  visible: 2
+
+# The global privilege still exempts the user even with the setting on.
+statement ok
+SET ROLE root
+
+statement ok
+ALTER ROLE skip_ro_user NOBYPASSRLS;
+
+statement ok
+GRANT SYSTEM BYPASSRLS TO skip_ro_user;
+
+statement ok
+SET ROLE skip_ro_user;
+
+query IT
+SELECT * FROM skip_ro ORDER BY id;
+----
+0  visible: 0
+1  hidden: 1
+2  visible: 2
+
+# Cleanup: reset role and setting so later subtests are unaffected.
+statement ok
+SET ROLE root
+
+statement ok
+REVOKE SYSTEM BYPASSRLS FROM skip_ro_user;
+
+statement ok
+RESET CLUSTER SETTING sql.auth.skip_bypassrls_role_option_check.enabled;
+
+statement ok
+RESET catalog_digest_staleness_check_enabled;
+
+subtest end
+
 subtest createrole_pg_roles_pg_authid
 
 statement ok
