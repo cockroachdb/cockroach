@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -451,6 +452,7 @@ func TestAdminRelocateRangeRandom(t *testing.T) {
 func TestReplicaRemovalDuringGet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/171666")
 
 	ctx := context.Background()
 	tc, key, evalDuringReplicaRemoval := setupReplicaRemovalTest(t, ctx)
