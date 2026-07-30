@@ -4392,6 +4392,176 @@ func TestLeaseManagerTxnTimestampAdvance(t *testing.T) {
 	})
 }
 
+// TestTwoVersionInvariantHangAfterInternalRetry is a regression test for a hang
+// in CheckTwoVersionInvariant after an internal auto-retry (#172970).
+//
+// The test drives a multi-statement implicit transaction that first writes a
+// descriptor intent via a legacy-schema-change statement, then has its read
+// timestamp advanced under contention. The advance makes a later descriptor
+// access trip the retryOnModifiedDescriptor error from maybeAdvanceReadTimestamp,
+// which causes the conn executor to auto-retry the whole transaction.
+//
+// It verifies that this retry arms the KV txn sender with a retryable error
+// state, so the auto-retry restarts on a fresh epoch and read timestamp and
+// discards the intents written by the first attempt. If the KV txn were left
+// unarmed, kv.Txn.PrepareForRetry would be a no-op (same epoch, read timestamp,
+// and intents) while the descriptor collection is reset, so the retried
+// execution would re-read its own first-attempt intent (committed version + 1)
+// as the "original" version. CheckTwoVersionInvariant would then wait forever
+// for leases on the currently committed version to drain while other live
+// sessions hold them.
+func TestTwoVersionInvariantHangAfterInternalRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
+	lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+	lease.RetainOldVersionsForLocked.Override(ctx, &st.SV, false)
+
+	var versionToBlock atomic.Int64
+	versionWaitCh := make(chan struct{})
+	versionContinueCh := make(chan struct{})
+	startSchemaChange := make(chan struct{})
+	defer close(startSchemaChange)
+
+	var sideDB *gosql.DB
+	var syncPoint sync.Once
+	var retryErrCount atomic.Int64
+	const markerStmt = "1926374655"
+
+	knobs := base.TestingKnobs{
+		SQLLeaseManager: &lease.ManagerTestingKnobs{
+			TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
+				tbl, _, _, _, _ := descpb.GetDescriptors(descriptor)
+				if tbl != nil && versionToBlock.Load() == int64(tbl.ID) {
+					versionWaitCh <- struct{}{}
+					<-versionContinueCh
+				}
+			},
+		},
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			StatementFilter: func(ctx context.Context, _ *sessiondata.SessionData, stmt string, err error) {
+				if err != nil && strings.Contains(err.Error(), "has been modified at") {
+					retryErrCount.Add(1)
+				}
+			},
+			BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
+				if !strings.Contains(stmt, markerStmt) {
+					return
+				}
+				// This hook runs on the conn executor goroutine of the batch,
+				// between the initial reads and the write that will be pushed.
+				// It must only run on the first execution attempt.
+				syncPoint.Do(func() {
+					// Start the schema change on t1 and wait for the lease
+					// manager to observe the new version (it blocks in
+					// TestingDescriptorRefreshedEvent above).
+					startSchemaChange <- struct{}{}
+					<-versionWaitCh
+					// Conflicting write: forces WriteTooOld on the batch's
+					// subsequent UPDATE, which triggers a server-side refresh
+					// that advances the read timestamp.
+					if _, err := sideDB.Exec("UPDATE t1 SET n = 200 WHERE id = 1"); err != nil {
+						t.Errorf("conflicting update failed: %v", err)
+					}
+					// Unblock the lease refresh.
+					versionToBlock.Store(0)
+					close(versionContinueCh)
+				})
+			},
+		},
+	}
+
+	ts, conn, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st, Knobs: knobs})
+	defer ts.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "CREATE USER testuser")
+	runner.Exec(t, "CREATE SCHEMA s")
+	runner.Exec(t, "CREATE TABLE s.hold(x INT)")
+	runner.Exec(t, "CREATE TABLE t1(id INT PRIMARY KEY, n INT)")
+	runner.Exec(t, "CREATE TABLE t2(n INT)")
+	runner.Exec(t, "INSERT INTO t1 VALUES (1, 100)")
+
+	var tblID int64
+	runner.QueryRow(t, "SELECT 't1'::REGCLASS::OID").Scan(&tblID)
+
+	// A second session that holds a lease on schema s at its current committed
+	// version. This is the lease the buggy two-version check ends up waiting
+	// on. It stays open for the duration of the test.
+	sideDB = ts.SQLConn(t)
+	sqlutils.MakeSQLRunner(sideDB).Exec(t, "SELECT * FROM s.hold")
+
+	// The schema change runs on its own connection; it will block in
+	// WaitForOneVersion until the batch's session releases its t1 lease, so we
+	// do not wait for it to finish.
+	schemaChangeDone := make(chan error, 1)
+	schemaChangeConn := ts.SQLConn(t)
+	go func() {
+		<-startSchemaChange
+		_, err := schemaChangeConn.Exec("ALTER TABLE t1 ADD COLUMN j INT")
+		schemaChangeDone <- err
+	}()
+
+	versionToBlock.Store(tblID)
+
+	// The entire batch is one implicit transaction. The leading ALTER DEFAULT
+	// PRIVILEGES goes through the legacy schema changer, which writes the new
+	// version of schema s's descriptor immediately during statement execution.
+	// On the first attempt the final REGCLASS lookup fails with
+	// retryOnModifiedDescriptor (t1 changed between the old and refreshed read
+	// timestamps) and the conn executor auto-retries the batch internally.
+	// Finally committing the transaction, runs CheckTwoVersionInvariant.
+	batch := "ALTER DEFAULT PRIVILEGES IN SCHEMA s GRANT SELECT ON TABLES TO testuser; " +
+		"SELECT * FROM t1 WHERE id = 999; " +
+		"SELECT " + markerStmt + "; " +
+		"UPDATE t1 SET n = 300 WHERE id = 1; " +
+		"SELECT 't2'::REGCLASS::OID; "
+
+	// Pin the batch to a single connection and tag it with an application name
+	// so that the timeout path below can cancel the session no matter which
+	// statement (or the final auto-commit) it is stuck on.
+	batchConn := ts.SQLConn(t)
+	batchConn.SetMaxOpenConns(1)
+	sqlutils.MakeSQLRunner(batchConn).Exec(t, "SET application_name = 'two-version-batch'")
+	batchDone := make(chan error, 1)
+	go func() {
+		_, err := batchConn.Exec(batch)
+		batchDone <- err
+	}()
+
+	select {
+	case err := <-batchDone:
+		// With the bug fixed, the auto-retry restarts the KV txn, the second
+		// attempt sees the committed version of schema s, and the batch
+		// completes.
+		require.NoError(t, err)
+		// Guard against a vacuous pass by confirming the batch actually
+		// exercised the retryOnModifiedDescriptor path. That path requires the
+		// read timestamp to advance via a server-side refresh within a single
+		// attempt; under duress the batch is instead prone to a client-side
+		// restart (e.g. a ReadWithinUncertaintyInterval retry), which re-reads
+		// t1 at its new version and never trips the modified-descriptor check.
+		if !skip.Duress() {
+			require.GreaterOrEqual(t, retryErrCount.Load(), int64(1),
+				"expected the batch to hit a retryOnModifiedDescriptor error")
+		}
+	case <-time.After(2 * time.Minute):
+		// The batch is stuck in CheckTwoVersionInvariant waiting for leases on
+		// the committed version of schema s to drain, which will never happen.
+		// Cancel its session so the server can shut down cleanly.
+		sideRunner := sqlutils.MakeSQLRunner(sideDB)
+		stuck := sideRunner.QueryStr(t,
+			"SELECT query, phase FROM crdb_internal.cluster_queries WHERE application_name = 'two-version-batch'")
+		sideRunner.Exec(t,
+			"CANCEL SESSIONS (SELECT session_id FROM crdb_internal.cluster_sessions WHERE application_name = 'two-version-batch')")
+		<-batchDone
+		t.Fatalf("batch hung in two-version invariant check; stuck queries: %v", stuck)
+	}
+	require.NoError(t, <-schemaChangeDone)
+}
+
 // TestLeasedDescriptorTypeHydration verifies that leased descriptors hydrated
 // with concurrent schema changes never encounter errors.
 func TestLeasedDescriptorTypeHydration(t *testing.T) {

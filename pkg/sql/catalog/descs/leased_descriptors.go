@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -216,6 +217,19 @@ func (ld *leasedDescriptors) maybeAssertExternalRowDataTS(desc catalog.Descripto
 	})
 }
 
+// forceRetryableErr arms the KV txn with a retryable error state so that the
+// conn executor's auto-retry restarts the transaction, bumping its epoch and
+// discarding the intents written by the current attempt. Without this, a
+// SQL-level retryable error leaves the KV txn untouched: the retried
+// execution re-reads descriptor intents written by the first attempt and
+// records them as "original" versions.
+func forceRetryableErr(ctx context.Context, txn deadlineHolder) error {
+	if kvTxn, ok := txn.(*kv.Txn); ok {
+		return kvTxn.GenerateForcedRetryableErr(ctx, "forcing txn to retry due to modified descriptor")
+	}
+	return nil
+}
+
 // maybeReleaseReadTimestamp releases the read timestamp if one is set.
 func (ld *leasedDescriptors) maybeReleaseReadTimestamp(ctx context.Context) {
 	if !ld.leaseTimestampSet {
@@ -275,6 +289,7 @@ func (ld *leasedDescriptors) maybeAdvanceReadTimestamp(
 				descID:        desc.GetID(),
 				expiration:    newDesc.Underlying().GetModificationTime(),
 				readTimestamp: txn.ReadTimestamp(),
+				forcedErr:     forceRetryableErr(ctx, txn),
 			}
 		}
 		return nil
@@ -424,6 +439,7 @@ func (ld *leasedDescriptors) getResult(
 				descID:        ldesc.GetID(),
 				expiration:    expiration,
 				readTimestamp: readTimestamp,
+				forcedErr:     forceRetryableErr(ctx, txn),
 			}
 		}
 
