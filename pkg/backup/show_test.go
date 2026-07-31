@@ -1415,3 +1415,23 @@ func TestShowBackupsSubqueryClose(t *testing.T) {
 		fmt.Sprintf(`SELECT * FROM [SHOW BACKUPS IN 'nodelocal://1/backup'] WHERE %d::TIMESTAMPTZ < backup_time`, ts),
 	)
 }
+
+func TestShowBackupsIncludesLeadingSlash(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 10
+	_, db, _, cleanup := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanup()
+
+	// This test specifically tests the old SHOW BACKUPS path that lists full
+	// subdirs.
+	db.Exec(t, `SET use_backups_with_ids = false`)
+
+	db.Exec(t, "BACKUP INTO 'nodelocal://1/'")
+
+	var path string
+	db.QueryRow(t, `SELECT path FROM [SHOW BACKUPS IN 'nodelocal://1/']`).Scan(&path)
+
+	require.True(t, strings.HasPrefix(path, "/"), "expected path to start with leading slash, got: %s", path)
+}
