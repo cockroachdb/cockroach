@@ -1,0 +1,56 @@
+# LogicTest: local
+# Regression tests for #172978.
+
+statement ok
+CREATE TABLE big (i INT8 PRIMARY KEY)
+
+statement ok
+INSERT INTO big VALUES (9007199254740993)
+
+query I
+SELECT i FROM big WHERE i = 9007199254740992.0::FLOAT8
+----
+9007199254740993
+
+query I
+SELECT i FROM big WHERE i = ANY(ARRAY[9007199254740992.0]::FLOAT[])
+----
+9007199254740993
+
+statement ok
+CREATE TABLE e (tz TIMESTAMPTZ PRIMARY KEY)
+
+statement ok
+INSERT INTO e VALUES ('2020-06-15 16:00:00+00')
+
+statement ok
+SET TIME ZONE 'UTC'
+
+statement ok
+PREPARE ps AS SELECT count(*) FROM e WHERE tz = '2020-06-15 12:00:00'::TIMESTAMP
+
+statement ok
+PREPARE pp AS SELECT count(*) FROM e WHERE tz = ANY(ARRAY['2020-06-15 12:00:00']::TIMESTAMP[])
+
+query I
+EXECUTE ps
+----
+0
+
+query I
+EXECUTE pp
+----
+0
+
+statement ok
+SET TIME ZONE 'America/New_York'
+
+query I
+EXECUTE ps
+----
+1
+
+query I
+EXECUTE pp
+----
+1

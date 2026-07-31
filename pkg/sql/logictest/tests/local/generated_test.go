@@ -1345,6 +1345,13 @@ func TestLogic_int_size(
 	runLogicTest(t, "int_size")
 }
 
+func TestLogic_issue_172978(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "issue_172978")
+}
+
 func TestLogic_internal_executor(
 	t *testing.T,
 ) {

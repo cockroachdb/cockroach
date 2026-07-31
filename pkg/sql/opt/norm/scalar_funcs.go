@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -117,8 +118,11 @@ func (c *CustomFuncs) IsConstValueEqual(const1, const2 opt.ScalarExpr) bool {
 }
 
 // UnifyComparison attempts to convert a constant expression to the type of the
-// variable expression, if that conversion can round-trip and is monotonic.
-// Otherwise it returns ok=false.
+// variable expression, if that conversion can round-trip and is monotonic. The
+// implicit conversion of the variable to the original type must also be
+// injective; otherwise distinct variable values can compare equal to the
+// constant before the rewrite but not afterwards. Otherwise it returns
+// ok=false.
 func (c *CustomFuncs) UnifyComparison(
 	v *memo.VariableExpr, cnst *memo.ConstExpr,
 ) (_ opt.ScalarExpr, ok bool) {
@@ -132,6 +136,18 @@ func (c *CustomFuncs) UnifyComparison(
 
 	if !isMonotonicConversion(originalType, desiredType) {
 		return nil, false
+	}
+	if !isInjectiveConversion(desiredType, originalType) {
+		return nil, false
+	}
+
+	// Do not fold stable casts into a reusable memo. In particular, converting a
+	// TIMESTAMP constant to TIMESTAMPTZ depends on the session time zone.
+	for _, conversion := range [][2]*types.T{{originalType, desiredType}, {desiredType, originalType}} {
+		volatility, ok := cast.LookupCastVolatility(conversion[0], conversion[1])
+		if !ok || !c.CanFoldOperator(volatility) {
+			return nil, false
+		}
 	}
 
 	// Check that the datum can round-trip between the types. If this is true, it
@@ -155,6 +171,29 @@ func (c *CustomFuncs) UnifyComparison(
 	}
 
 	return c.f.ConstructConst(convertedDatum, desiredType), true
+}
+
+// isInjectiveConversion returns true if converting every value from FROM to TO
+// preserves its identity. This is required because comparison overloads cast
+// the variable to the constant's type before comparing it to the constant.
+//
+// Keep this list deliberately narrow. The round-trip test in UnifyComparison
+// proves only that the constant is representable in the variable's type; it
+// says nothing about other variable values. For example, INT8 to FLOAT8 is not
+// injective above 2^53, even when the FLOAT8 constant round-trips to INT8.
+func isInjectiveConversion(from, to *types.T) bool {
+	switch from.Family() {
+	case types.IntFamily:
+		return to.Family() == types.DecimalFamily
+	case types.DateFamily:
+		switch to.Family() {
+		case types.TimestampFamily, types.TimestampTZFamily:
+			return true
+		}
+	case types.TimestampFamily:
+		return to.Family() == types.TimestampTZFamily
+	}
+	return false
 }
 
 // SimplifyWhens removes known unreachable WHEN cases and constructs a new CASE
