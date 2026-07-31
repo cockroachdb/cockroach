@@ -178,7 +178,33 @@ func ResolveDest(
 		return ResolvedDestination{}, err
 	}
 	defer rootStore.Close()
-	priors, err := FindAllIncrementalPaths(ctx, execCfg, incrementalStore, rootStore, chosenSuffix)
+
+	baseEncryptionOptions, err := backupencryption.GetEncryptionFromBase(
+		ctx, user, makeCloudStorage, plannedBackupDefaultURI, encryption, kmsEnv,
+	)
+	if err != nil {
+		return ResolvedDestination{}, err
+	}
+
+	// Read the cluster version recorded in the full backup's manifest so that
+	// FindAllIncrementalPaths can decide whether the backup index is trustworthy.
+	// A partial index written in a mixed-version cluster must not be used to
+	// resolve the chain; see FindAllIncrementalPaths for details.
+	fullManifestMem := execCfg.RootMemoryMonitor.MakeBoundAccount()
+	defer fullManifestMem.Close(ctx)
+	fullManifest, fullManifestSize, err := backupinfo.ReadBackupManifestFromURI(
+		ctx, &fullManifestMem, plannedBackupDefaultURI, user, makeCloudStorage,
+		baseEncryptionOptions, kmsEnv,
+	)
+	if err != nil {
+		return ResolvedDestination{}, err
+	}
+	fullBackupVersion := fullManifest.ClusterVersion
+	fullManifestMem.Shrink(ctx, fullManifestSize)
+
+	priors, err := FindAllIncrementalPaths(
+		ctx, execCfg, incrementalStore, rootStore, chosenSuffix, fullBackupVersion,
+	)
 	if err != nil {
 		return ResolvedDestination{}, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
 	}
@@ -198,30 +224,30 @@ func ResolveDest(
 	// If startTime is not already set, we will find it via the previous backup
 	// manifest.
 	if startTime.IsEmpty() {
-		baseEncryptionOptions, err := backupencryption.GetEncryptionFromBase(
-			ctx, user, execCfg.DistSQLSrv.ExternalStorageFromURI, prevBackupURIs[0],
-			encryption, kmsEnv,
-		)
-		if err != nil {
-			return ResolvedDestination{}, err
-		}
-
 		// TODO (kev-cao): Once we have completed the backup directory index work, we
 		// can remove the need to read an entire backup manifest just to fetch the
 		// start time. We can instead read the metadata protobuf.
-		mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
-		defer mem.Close(ctx)
-		precedingBackupManifest, size, err := backupinfo.ReadBackupManifestFromURI(
-			ctx, &mem, prevBackupURIs[len(prevBackupURIs)-1], user,
-			execCfg.DistSQLSrv.ExternalStorageFromURI, baseEncryptionOptions, kmsEnv,
-		)
-		if err != nil {
-			return ResolvedDestination{}, err
+		var precedingBackupManifest backuppb.BackupManifest
+		// If there's only one preceding backup URI, it must be the manifest of the
+		// full backup, which we already fetched above.
+		if len(prevBackupURIs) == 1 {
+			precedingBackupManifest = fullManifest
+		} else {
+			mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
+			defer mem.Close(ctx)
+			var size int64
+			precedingBackupManifest, size, err = backupinfo.ReadBackupManifestFromURI(
+				ctx, &mem, prevBackupURIs[len(prevBackupURIs)-1], user,
+				execCfg.DistSQLSrv.ExternalStorageFromURI, baseEncryptionOptions, kmsEnv,
+			)
+			if err != nil {
+				return ResolvedDestination{}, err
+			}
+			if err := mem.Grow(ctx, size); err != nil {
+				return ResolvedDestination{}, err
+			}
+			defer mem.Shrink(ctx, size)
 		}
-		if err := mem.Grow(ctx, size); err != nil {
-			return ResolvedDestination{}, err
-		}
-		defer mem.Shrink(ctx, size)
 		startTime = precedingBackupManifest.EndTime
 		if startTime.IsEmpty() {
 			return ResolvedDestination{}, errors.Errorf("empty end time in prior backup manifest")
