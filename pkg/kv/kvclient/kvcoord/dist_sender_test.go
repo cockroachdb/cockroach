@@ -3787,8 +3787,17 @@ func TestReplicaErrorsMerged(t *testing.T) {
 		sendErr1, sendErr2 error
 		err1, err2         *kvpb.Error
 		expErr             string
+		// expNoSecondSend flags the cases where the request must short-circuit to an
+		// ambiguous error on the first replica without contacting the second (the
+		// non-transactional maybe-applied cases). Every other case is expected to
+		// fall through and contact the second replica, which is asserted by default;
+		// that guards the short-circuit from over-applying to batches it must not
+		// affect, such as commit batches.
+		expNoSecondSend bool
 	}{
-		// The ambiguous error is returned with higher priority for withCommit.
+		// The ambiguous error is returned with higher priority for withCommit. The
+		// commit batch is still retried (the second replica is contacted), unlike
+		// the non-transactional short-circuit cases below.
 		{
 			transactional: true,
 			withCommit:    true,
@@ -3820,24 +3829,27 @@ func TestReplicaErrorsMerged(t *testing.T) {
 			err2:          unavailableError2,
 			expErr:        "unavailable",
 		},
-		// The ambiguous error is returned with higher priority for
-		// non-transactional batches (next 2 test cases). This is the case only
-		// because the test sets NonTransactionalWritesNotIdempotent = true.
-		// Otherwise, the non-transactional requests would be treated like they are
-		// idempotent and the NLHE/RUE would be returned as the last error.
+		// A non-transactional write that may have started returns an ambiguous
+		// error immediately, without contacting the second replica (next 2 test
+		// cases). This is the case only because the test sets
+		// NonTransactionalWritesNotIdempotent = true; otherwise the write would be
+		// treated as idempotent and the NLHE/RUE would be returned as the last
+		// error. The err2 value is therefore never observed.
 		{
-			transactional: false,
-			withCommit:    false,
-			sendErr1:      startedRequestError,
-			err2:          notLeaseHolderErr,
-			expErr:        "result is ambiguous",
+			transactional:   false,
+			withCommit:      false,
+			sendErr1:        startedRequestError,
+			err2:            notLeaseHolderErr,
+			expErr:          "result is ambiguous",
+			expNoSecondSend: true,
 		},
 		{
-			transactional: false,
-			withCommit:    false,
-			sendErr1:      startedRequestError,
-			err2:          unavailableError2,
-			expErr:        "result is ambiguous",
+			transactional:   false,
+			withCommit:      false,
+			sendErr1:        startedRequestError,
+			err2:            unavailableError2,
+			expErr:          "result is ambiguous",
+			expNoSecondSend: true,
 		},
 		// If we know the request did not start, do not return an ambiguous error
 		// (next 2 test cases).
@@ -3855,8 +3867,8 @@ func TestReplicaErrorsMerged(t *testing.T) {
 			err2:          unavailableError2,
 			expErr:        "unavailable",
 		},
-		// The unavailable error is returned with higher priority regardless of
-		// withCommit and transactional (next 3 test cases).
+		// The unavailable error is returned with higher priority for transactional
+		// batches, regardless of withCommit (next 2 test cases).
 		{
 			transactional: true,
 			withCommit:    true,
@@ -3871,12 +3883,17 @@ func TestReplicaErrorsMerged(t *testing.T) {
 			err2:          notLeaseHolderErr,
 			expErr:        "unavailable",
 		},
+		// A non-transactional write short-circuits even on a ReplicaUnavailableError:
+		// it is marked ambiguous (the breaker may have tripped mid-flight), so it is
+		// returned without contacting the second replica. The "unavailable" cause is
+		// still preserved inside the ambiguous error.
 		{
-			transactional: false,
-			withCommit:    false,
-			err1:          unavailableError1,
-			err2:          notLeaseHolderErr,
-			expErr:        "unavailable",
+			transactional:   false,
+			withCommit:      false,
+			err1:            unavailableError1,
+			err2:            notLeaseHolderErr,
+			expErr:          "unavailable",
+			expNoSecondSend: true,
 		},
 	}
 	clock := hlc.NewClockForTesting(nil)
@@ -3907,6 +3924,7 @@ func TestReplicaErrorsMerged(t *testing.T) {
 					Lease: initLease,
 				})
 
+				var node2Sends int
 				transportFn := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 					br := &kvpb.BatchResponse{}
 					switch ba.Replica.NodeID {
@@ -3918,6 +3936,7 @@ func TestReplicaErrorsMerged(t *testing.T) {
 						}
 						return br, nil
 					case 2:
+						node2Sends++
 						if tc.sendErr2 != nil {
 							return nil, tc.sendErr2
 						} else {
@@ -3959,6 +3978,11 @@ func TestReplicaErrorsMerged(t *testing.T) {
 				log.Dev.Infof(ctx, "Error is %v", err)
 				require.ErrorContains(t, err, tc.expErr)
 				require.Nil(t, br)
+				if tc.expNoSecondSend {
+					require.Zero(t, node2Sends, "expected the second replica to not be contacted")
+				} else {
+					require.Positive(t, node2Sends, "expected the second replica to be contacted")
+				}
 			})
 		})
 	}
