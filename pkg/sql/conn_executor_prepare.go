@@ -665,6 +665,27 @@ func (ex *connExecutor) execBind(
 		}
 	}
 
+	// Re-parse the prepared statement if any user-defined types it references
+	// have changed version since it was prepared. Enum literals are frozen into
+	// the AST as versioned tree.DEnum datums during type-checking, so a stale
+	// literal would be compared against values resolved at the current version
+	// (the placeholder arguments decoded above, or freshly-leased catalog
+	// metadata) and hit the "comparison of two different versions of enum"
+	// assertion during Execute.
+	//
+	// This mirrors maybeReparsePrepStmt on the SQL-level EXECUTE path
+	// (*tree.Execute). It must be done separately here because the pgwire
+	// extended protocol (Parse/Bind/Execute) never routes through that path. We
+	// do it after decoding the arguments so that the re-resolved literals and
+	// the decoded placeholder datums both reflect the same (current) version.
+	if len(ps.UDTs) > 0 {
+		p := &ex.planner
+		ex.resetPlanner(ctx, p, ex.state.mu.txn, ex.server.cfg.Clock.PhysicalTime())
+		if err := ex.maybeReparsePrepStmt(ctx, ps, bindCmd.PreparedStatementName); err != nil {
+			return retErr(err)
+		}
+	}
+
 	columnFormatCodes := bindCmd.OutFormats
 	if len(bindCmd.OutFormats) == 1 && numCols > 1 {
 		// Apply the format code to every column.
