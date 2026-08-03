@@ -497,6 +497,7 @@
 /pkg/cmd/release/            @cockroachlabs/dev-inf
 /pkg/cmd/returncheck/        @cockroachlabs/dev-inf
 /pkg/cmd/roachprod/          @cockroachlabs/test-eng
+/pkg/cmd/roachprod-centralized/ @cockroachlabs/test-eng
 /pkg/cmd/roachprod-microbench/ @cockroachlabs/test-eng
 /pkg/cmd/roachprod-stress/   @cockroachlabs/test-eng
 #!/pkg/cmd/roachtest/          @cockroachlabs/test-eng-noreview
