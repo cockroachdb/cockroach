@@ -228,7 +228,7 @@ func (r *commandResult) GetFormatCode(colIdx int) (pgwirebase.FormatCode, error)
 				// doesn't matter.
 				return fmtCode, nil
 			}
-			return 0, errors.AssertionFailedf("could not find format code for column %d in %v", colIdx, r.formatCodes)
+			return 0, errors.Newf("could not find format code for column %d in %v", colIdx, r.formatCodes)
 		}
 		fmtCode = r.formatCodes[colIdx]
 	}
