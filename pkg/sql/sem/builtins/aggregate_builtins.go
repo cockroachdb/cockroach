@@ -4174,6 +4174,11 @@ func (a *decimalSqrDiffAggregate) intermediateResult() (tree.Datum, error) {
 	if a.count.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
+	// sqrDiff is mathematically always >= 0. Clamp to 0 to guard against
+	// negative values from precision loss in the apd decimal arithmetic.
+	if a.sqrDiff.Cmp(decimalZero) < 0 {
+		a.sqrDiff.SetInt64(0)
+	}
 	dd := &tree.DDecimal{}
 	dd.Set(&a.sqrDiff)
 	// Remove trailing zeros. Depending on the order in which the input
@@ -4391,6 +4396,11 @@ func (a *decimalSumSqrDiffsAggregate) Add(
 func (a *decimalSumSqrDiffsAggregate) intermediateResult() (tree.Datum, error) {
 	if a.count.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
+	}
+	// sqrDiff is mathematically always >= 0. Clamp to 0 to guard against
+	// negative values from precision loss in the apd decimal arithmetic.
+	if a.sqrDiff.Cmp(decimalZero) < 0 {
+		a.sqrDiff.SetInt64(0)
 	}
 	dd := &tree.DDecimal{Decimal: a.sqrDiff}
 	return dd, nil
