@@ -4629,7 +4629,8 @@ func (ex *connExecutor) initStatementResult(
 	for i, c := range cols {
 		fmtCode, err := res.GetFormatCode(i)
 		if err != nil {
-			return err
+			return pgerror.New(pgcode.FeatureNotSupported,
+				"cached plan must not change result type")
 		}
 		if err = checkResultType(c.Typ, fmtCode); err != nil {
 			return err
