@@ -180,14 +180,33 @@ func (d *disablingDRPCClientStream) MsgRecv(msg drpc.Message, enc drpc.Encoding)
 // p.{Add,Remove}Partition(from, to)
 // ... run operations
 // p.{Add,Remove}Partition(from, to)
+//
+// In addition to pairwise partitions, a node can be fully isolated from all
+// other nodes with {Add,Remove}NodeIsolation. Unlike a set of pairwise
+// partitions, the isolation does not require knowing the identities of the
+// peers, and extends to nodes that join or restart while it is in effect.
+//
+// Partitions and isolations are reference-counted: each Add call must be
+// matched by a Remove call, and the connection is severed as long as any
+// count affecting it is positive. This allows concurrent actors (e.g. a test
+// worker injecting partitions and TestCluster.CrashNode isolating a crashing
+// node) to independently sever and restore the same connection without
+// cancelling each other's effect.
+//
+// TODO(pav-kv): add tests for this type.
 type Partitioner struct {
 	partitionsEnabled atomic.Bool
 	nodeAddrMap       syncutil.Map[string, roachpb.NodeID]
 	mu                struct {
 		syncutil.Mutex
-		// partitions is a map from NodeID to a set of NodeIDs that the node should
-		// not be able to connect to.
-		partitions map[roachpb.NodeID]map[roachpb.NodeID]struct{}
+		// partitions maps a NodeID to the set of NodeIDs that the node should not
+		// be able to connect to, with the number of times each partition has been
+		// added and not yet removed. Invariant: all counts are positive.
+		partitions map[roachpb.NodeID]map[roachpb.NodeID]int
+		// isolated is the set of NodeIDs that are severed from all other nodes,
+		// in both directions, with the number of times the isolation has been
+		// added and not yet removed. Invariant: all counts are positive.
+		isolated map[roachpb.NodeID]int
 	}
 }
 
@@ -202,6 +221,9 @@ func (p *Partitioner) RegisterNodeAddr(addr string, id roachpb.NodeID) {
 	p.nodeAddrMap.Store(addr, &id)
 }
 
+// AddPartition adds one reference to the partition from one node to another.
+// The partition remains in effect until RemovePartition has been called as
+// many times as AddPartition.
 func (p *Partitioner) AddPartition(from roachpb.NodeID, to roachpb.NodeID) error {
 	if from == to {
 		return errors.Newf("cannot add partition from node %d to itself", from)
@@ -209,15 +231,18 @@ func (p *Partitioner) AddPartition(from roachpb.NodeID, to roachpb.NodeID) error
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.mu.partitions == nil {
-		p.mu.partitions = make(map[roachpb.NodeID]map[roachpb.NodeID]struct{})
+		p.mu.partitions = make(map[roachpb.NodeID]map[roachpb.NodeID]int)
 	}
 	if p.mu.partitions[from] == nil {
-		p.mu.partitions[from] = make(map[roachpb.NodeID]struct{})
+		p.mu.partitions[from] = make(map[roachpb.NodeID]int)
 	}
-	p.mu.partitions[from][to] = struct{}{}
+	p.mu.partitions[from][to]++
 	return nil
 }
 
+// RemovePartition removes one reference to the partition from one node to
+// another, and errors out if the partition does not exist. The partition is
+// lifted once all references are removed.
 func (p *Partitioner) RemovePartition(from roachpb.NodeID, to roachpb.NodeID) error {
 	err := errors.Newf("cannot remove partition from node %d to %d; it doesn't exist", from, to)
 	p.mu.Lock()
@@ -227,9 +252,12 @@ func (p *Partitioner) RemovePartition(from roachpb.NodeID, to roachpb.NodeID) er
 	}
 	if toNodes, ok := p.mu.partitions[from]; ok {
 		if _, ok = toNodes[to]; ok {
-			delete(toNodes, to)
-			if len(toNodes) == 0 {
-				delete(p.mu.partitions, from)
+			toNodes[to]--
+			if toNodes[to] == 0 {
+				delete(toNodes, to)
+				if len(toNodes) == 0 {
+					delete(p.mu.partitions, from)
+				}
 			}
 			return nil
 		}
@@ -237,11 +265,40 @@ func (p *Partitioner) RemovePartition(from roachpb.NodeID, to roachpb.NodeID) er
 	return err
 }
 
+// AddNodeIsolation adds one reference to the full isolation of the given
+// node: all connections to and from it are severed, including with nodes that
+// join or restart while the isolation is in effect. The isolation remains in
+// effect until RemoveNodeIsolation has been called as many times as
+// AddNodeIsolation.
+func (p *Partitioner) AddNodeIsolation(id roachpb.NodeID) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mu.isolated == nil {
+		p.mu.isolated = make(map[roachpb.NodeID]int)
+	}
+	p.mu.isolated[id]++
+}
+
+// RemoveNodeIsolation removes one reference to the full isolation of the
+// given node, and errors out if the node is not isolated.
+func (p *Partitioner) RemoveNodeIsolation(id roachpb.NodeID) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mu.isolated[id] == 0 {
+		return errors.Newf("cannot remove isolation of node %d; it is not isolated", id)
+	}
+	p.mu.isolated[id]--
+	if p.mu.isolated[id] == 0 {
+		delete(p.mu.isolated, id)
+	}
+	return nil
+}
+
 func (p *Partitioner) isPartitioned(from roachpb.NodeID, to roachpb.NodeID) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.mu.partitions == nil {
-		return false
+	if p.mu.isolated[from] > 0 || p.mu.isolated[to] > 0 {
+		return true
 	}
 	if toPartitions, ok := p.mu.partitions[from]; ok {
 		if _, ok := toPartitions[to]; ok {

@@ -2199,23 +2199,16 @@ func (tc *TestCluster) CrashNode(idx int) {
 			"server %d does not have sticky VFS registry; crash emulation requires sticky VFS", idx)
 	}
 
-	// Isolate the crashed node from its peers to prevent any messages from
-	// escaping after the CrashClone calls on VFS below. Without this, durability
-	// signals (such as MsgAppResp messages) after CrashClone could leak.
-	//
-	// Use bidirectional partitions because the partitioner's stream interceptors
-	// block RecvMsg on existing client streams that peers have open to the
-	// crashing node, preventing them from reading responses sent by the crashing
-	// node's server-side handlers.
+	// Partition the node from the rest of the cluster. This prevents side effects
+	// leaking in and out of the node while it's logically dead. Importantly, the
+	// node can't send false durability signals (such as MsgAppResp messages)
+	// after the CrashClone calls on its VFS below.
 	crashingNodeID := tc.Servers[idx].NodeID()
-	for peerIdx := range tc.Servers {
-		if peerIdx == idx {
-			continue
-		}
-		peerNodeID := tc.Servers[peerIdx].NodeID()
-		require.NoError(tc.t, tc.partitioner.AddPartition(crashingNodeID, peerNodeID))
-		require.NoError(tc.t, tc.partitioner.AddPartition(peerNodeID, crashingNodeID))
-	}
+	// The node ID can be zero while the node is starting up. Make sure the ID is
+	// already initialized (otherwise we're partitioning a non-existing 0-th node,
+	// and the ID will change later).
+	require.NotZero(tc.t, crashingNodeID)
+	tc.partitioner.AddNodeIsolation(crashingNodeID)
 
 	crashedVFSesMap := make(map[string]*vfs.MemFS)
 	for i, spec := range serverArgs.StoreSpecs {
@@ -2242,17 +2235,8 @@ func (tc *TestCluster) CrashNode(idx int) {
 		serverKnobs.StickyVFSRegistry.Set(stickyID, crashFS)
 	}
 
-	// Remove all partitions that were added above.
-	// TODO(pav-kv): this cancels any pre-existing partitions. We could fix that
-	// by remembering the previous partitions and restoring them.
-	for peerIdx := range tc.Servers {
-		if peerIdx == idx {
-			continue
-		}
-		peerNodeID := tc.Servers[peerIdx].NodeID()
-		require.NoError(tc.t, tc.partitioner.RemovePartition(crashingNodeID, peerNodeID))
-		require.NoError(tc.t, tc.partitioner.RemovePartition(peerNodeID, crashingNodeID))
-	}
+	// Lift the isolation so that the node can reconnect once restarted.
+	require.NoError(tc.t, tc.partitioner.RemoveNodeIsolation(crashingNodeID))
 }
 
 // ServerStopped determines if a server has been explicitly
