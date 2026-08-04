@@ -1115,7 +1115,7 @@ func testTxnContentionEventsTableHelper(
 	// Filter the fingerprint id to only be the query in the test.
 	// This ensures the event is the one caused in the test and not by some other
 	// internal workflow.
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		rows, errVerify := conn.QueryContext(ctx, `SELECT
 			blocking_txn_id,
 			waiting_txn_id,
@@ -1186,7 +1186,7 @@ func testTxnContentionEventsTableHelper(
 			return fmt.Errorf("transaction_contention_events did not return any rows")
 		}
 		return nil
-	}, 5*time.Second)
+	})
 
 	require.LessOrEqual(t, rowCount, 2, "transaction_contention_events "+
 		"found 3 rows. It should only record first, but there is a chance based "+
