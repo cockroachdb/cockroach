@@ -882,9 +882,30 @@ func encodeContainingArrayInvertedIndexSpans(
 	}
 
 	if val.HasNulls() {
-		// If there are any nulls, return empty spans. This is needed to ensure
-		// that `SELECT ARRAY[NULL, 2] @> ARRAY[NULL, 2]` is false.
-		return &inverted.SpanExpression{Tight: true, Unique: true}, nil
+		// Filter out NULLs. NULL elements cannot contribute to the containment
+		// check since NULL comparisons in SQL are unknown. Generate spans for
+		// the non-NULL elements. If all elements are NULL, there is no
+		// constraint to apply via the inverted index, so return nil to let the
+		// optimizer fall back to a full table scan.
+		keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.LatestIndexDescriptorVersion, true /* excludeNulls */)
+		if err != nil {
+			return nil, err
+		}
+		if len(keys) == 0 {
+			return nil, nil
+		}
+		for _, key := range keys {
+			spanExpr := inverted.ExprForSpan(
+				inverted.MakeSingleValSpan(key), true, /* tight */
+			)
+			spanExpr.Unique = true
+			if invertedExpr == nil {
+				invertedExpr = spanExpr
+			} else {
+				invertedExpr = inverted.And(invertedExpr, spanExpr)
+			}
+		}
+		return invertedExpr, nil
 	}
 
 	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.LatestIndexDescriptorVersion, false /* excludeNulls */)
