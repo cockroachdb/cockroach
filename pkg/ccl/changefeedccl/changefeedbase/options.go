@@ -197,15 +197,20 @@ func ParseAvroSchemaOverrides(raw string, avroMode AvroModeType) (AvroSchemaOver
 		overrides[key] = o
 	}
 
-	// Every configured table must have its value entry, and distinct entries
-	// must not resolve to the same registry subject.
+	// Every configured table must have both its key and value entries, and
+	// distinct entries must not resolve to the same registry subject.
 	effective := make(map[string]string, len(overrides))
 	for key, o := range overrides {
+		var required string
 		if base, ok := strings.CutSuffix(key, avroSubjectSuffixKey); ok {
-			if _, ok := overrides[base+avroSubjectSuffixValue]; !ok {
-				return nil, errors.Newf("%s entry %q requires a matching %q entry",
-					OptAvroSchemas, key, base+avroSubjectSuffixValue)
-			}
+			required = base + avroSubjectSuffixValue
+		} else {
+			base, _ := strings.CutSuffix(key, avroSubjectSuffixValue)
+			required = base + avroSubjectSuffixKey
+		}
+		if _, ok := overrides[required]; !ok {
+			return nil, errors.Newf("%s entry %q requires a matching %q entry",
+				OptAvroSchemas, key, required)
 		}
 		subject := key
 		if o.SubjectName != `` {

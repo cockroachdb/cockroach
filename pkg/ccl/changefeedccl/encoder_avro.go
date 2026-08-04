@@ -6,7 +6,6 @@
 package changefeedccl
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 
@@ -151,9 +150,6 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
 		kafkaName := changefeedbase.SQLNameToKafkaName(tableName)
-		if e.keySchemaDisabled(kafkaName) {
-			return e.encodeJSONKey(ctx, row)
-		}
 		if e.customKeyColumn == "" {
 			registered.schema, err = avro.PrimaryIndexToAvroSchema(row, tableName, e.schemaPrefix)
 			if err != nil {
@@ -394,39 +390,4 @@ func (e *confluentAvroEncoder) versionStrategy(
 	defaultSubject string,
 ) changefeedbase.AvroVersionStrategy {
 	return e.avroSchemas[defaultSubject].Version
-}
-
-// keySchemaDisabled reports whether the avro key schema is disabled for the
-// topic with the given kafka name.
-func (e *confluentAvroEncoder) keySchemaDisabled(kafkaName string) bool {
-	if _, ok := e.avroSchemas[kafkaName+confluentSubjectSuffixKey]; ok {
-		return false
-	}
-	_, ok := e.avroSchemas[kafkaName+confluentSubjectSuffixValue]
-	return ok
-}
-
-// encodeJSONKey encodes the row's key columns as a JSON array, matching the
-// key bytes format=json feeds emit. It is used when the avro key schema is
-// disabled for the topic.
-func (e *confluentAvroEncoder) encodeJSONKey(
-	ctx context.Context, row cdcevent.Row,
-) ([]byte, error) {
-	var it cdcevent.Iterator
-	if e.customKeyColumn == "" {
-		it = row.ForEachKeyColumn()
-	} else {
-		var err error
-		it, err = row.DatumNamed(e.customKeyColumn)
-		if err != nil {
-			return nil, err
-		}
-	}
-	keyJSON, err := (&versionEncoder{}).encodeKeyRawAsArray(ctx, it)
-	if err != nil {
-		return nil, err
-	}
-	var buf bytes.Buffer
-	keyJSON.Format(&buf)
-	return buf.Bytes(), nil
 }
