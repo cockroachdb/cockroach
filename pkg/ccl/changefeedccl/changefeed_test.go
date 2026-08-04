@@ -11885,6 +11885,9 @@ func TestChangefeedReloadsProgressOnReplan(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(10 * time.Millisecond)()
+		// Shrink the retry backoff so the post-replan restart happens promptly
+		// instead of waiting out the 1s default initial backoff.
+		defer testingUseFastRetry()()
 		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
@@ -11899,15 +11902,12 @@ func TestChangefeedReloadsProgressOnReplan(t *testing.T) {
 			return job.Progress(), nil
 		}
 
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '10ms'`)
-		defer closeFeed(t, foo)
-
-		initialHighwater := s.Server.Clock().Now()
-
-		jobFeed := foo.(cdctest.EnterpriseTestFeed)
 		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
+
+		// jobFeed is assigned once feed() returns below. The knobs configured here
+		// capture it by reference but only dereference it after replanRequested is
+		// set, which happens well after the assignment.
+		var jobFeed cdctest.EnterpriseTestFeed
 
 		// replanCh forces the monitor goroutine to return replanErr. replanRequested
 		// gates the assertion so it only checks the post-replan restart.
@@ -11953,6 +11953,15 @@ func TestChangefeedReloadsProgressOnReplan(t *testing.T) {
 			case doneCh <- struct{}{}:
 			}
 		}
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '10ms'`)
+		defer closeFeed(t, foo)
+
+		initialHighwater := s.Server.Clock().Now()
+
+		jobFeed = foo.(cdctest.EnterpriseTestFeed)
 
 		// Wait for a non-empty high-water to persist before requesting the replan.
 		testutils.SucceedsSoon(t, func() error {
