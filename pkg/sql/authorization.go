@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
@@ -750,6 +751,14 @@ func (p *planner) UserHasGlobalPrivilegeOrRoleOption(
 	}
 	maybeRoleOptionName := string(privilege.DisplayName())
 	if roleOption, ok := roleoption.ByName[maybeRoleOptionName]; ok {
+		// Opt-in: when sql.auth.skip_bypassrls_role_option_check.enabled is set,
+		// skip the deprecated BYPASSRLS role option. This avoids the uncached
+		// system.role_options read that RLS planning otherwise performs on every
+		// statement. The global BYPASSRLS privilege checked above still applies.
+		if roleOption == roleoption.BYPASSRLS &&
+			sqlclustersettings.SkipBypassRLSRoleOptionCheck.Get(&p.ExecCfg().Settings.SV) {
+			return false, nil
+		}
 		return p.UserHasRoleOption(ctx, user, roleOption)
 	}
 	return false, nil

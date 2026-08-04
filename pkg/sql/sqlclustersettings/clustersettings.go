@@ -210,6 +210,21 @@ var SkipUnderlyingViewPrivilegeChecks = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+// SkipBypassRLSRoleOptionCheck, when enabled, makes RLS planning skip the
+// BYPASSRLS role option (the legacy ALTER ROLE ... BYPASSRLS form). This
+// avoids an uncached read of system.role_options on every statement against
+// an RLS-enabled table, which can be a cross-region round-trip in multi-region
+// clusters. When enabled, only the global BYPASSRLS privilege (GRANT SYSTEM
+// BYPASSRLS, which is cached) exempts a user from RLS; the deprecated role
+// option no longer takes effect. Off by default; opt-in.
+var SkipBypassRLSRoleOptionCheck = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.skip_bypassrls_role_option_check.enabled",
+	"if true, RLS planning ignores the deprecated BYPASSRLS role option and "+
+		"skips the associated uncached system.role_options read; only the global "+
+		"BYPASSRLS privilege (GRANT SYSTEM BYPASSRLS) exempts a user from RLS",
+	false)
+
 // PostgresCompatibleOwnershipChecks gates the security-audit fixes that require
 // object ownership to modify or drop an object, aligning authorization with
 // PostgreSQL. It defaults to false so existing deployments opt in.
