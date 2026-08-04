@@ -108,6 +108,21 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 				},
 			},
 		},
+		// Check that --advertise-http-addr is not mistaken for --http-addr.
+		{
+			serverpb.NodesResponse{Nodes: []statuspb.NodeStatus{
+				{
+					Desc: roachpb.NodeDescriptor{NodeID: 1},
+					Args: []string{"--advertise-http-addr=node.example:9999", "--http-addr=node.example:5678"},
+				},
+			}},
+			[]haProxyNodeInfo{
+				{
+					NodeID:    1,
+					CheckPort: "5678",
+				},
+			},
+		},
 		// Check that decommission{ing,ed} nodes are not considered for
 		// generating the configuration.
 		{
