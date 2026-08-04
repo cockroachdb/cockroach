@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -337,7 +338,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 			require.NoError(t, err)
 
 			// Setup SelectQueryBuilder.
-			queryBuilder := ttljob.MakeSelectQueryBuilder(
+			queryBuilder, err := ttljob.MakeSelectQueryBuilder(
 				ttljob.SelectQueryParams{
 					RelationName:    relationName,
 					PKColNames:      pkColNames,
@@ -353,9 +354,11 @@ func TestSelectQueryBuilder(t *testing.T) {
 						quotapool.Inf(),
 						math.MaxInt64,
 					),
+					User: username.RootUserName(),
 				},
 				cutoff,
 			)
+			require.NoError(t, err)
 
 			// Verify queryBuilder iterations.
 			i := 0
@@ -458,7 +461,7 @@ func TestDeleteQueryBuilder(t *testing.T) {
 			}
 
 			// Setup DeleteQueryBuilder.
-			queryBuilder := ttljob.MakeDeleteQueryBuilder(
+			queryBuilder, err := ttljob.MakeDeleteQueryBuilder(
 				ttljob.DeleteQueryParams{
 					RelationName:    relationName,
 					PKColNames:      pkColNames,
@@ -470,9 +473,11 @@ func TestDeleteQueryBuilder(t *testing.T) {
 						quotapool.Inf(),
 						math.MaxInt64,
 					),
+					User: username.RootUserName(),
 				},
 				cutoff,
 			)
+			require.NoError(t, err)
 
 			// Verify rows are deleted.
 			rows := make([]tree.Datums, 0, expectedNumRows)
