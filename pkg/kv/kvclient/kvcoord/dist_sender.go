@@ -2825,6 +2825,17 @@ func (ds *DistSender) sendToReplicas(
 		// already have been considered implicitly committed.
 		ba.AmbiguousReplayProtection = ambiguousError != nil
 
+		// A non-transactional write that may have applied must not be retried, since
+		// that could evaluate it a second time. Transactional writes are protected
+		// server-side by AmbiguousReplayProtection (set above), which makes the
+		// server reject such a replay. That mechanism is transaction-only, so we
+		// protect non-transactional writes on the client instead, by returning the
+		// ambiguous error rather than retrying. Commit batches (withCommit) are
+		// excluded here: AmbiguousReplayProtection covers them.
+		if nonIdempotentWrite && ambiguousError != nil {
+			return nil, kvpb.NewAmbiguousResultError(ambiguousError)
+		}
+
 		// In the case that the batch has already seen an ambiguous error, in
 		// addition to enabling ambiguous replay protection, we also need to
 		// disable the ability for the server to forward the read timestamp, as
