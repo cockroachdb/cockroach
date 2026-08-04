@@ -264,6 +264,13 @@ func runUserFileGet(cmd *cobra.Command, args []string) (resErr error) {
 
 	for _, src := range files {
 		file := displayPath + src
+		// The filename originates from the user's file table, whose rows a user
+		// can populate directly via SQL, bypassing the upload-time path checks in
+		// makeFileTableStorage.
+		if !filepath.IsLocal(filepath.FromSlash(file)) {
+			return errors.Newf(
+				"refusing to download %q: filename is not a valid path relative to the destination", file)
+		}
 		var fileDest string
 		if len(files) > 1 {
 			// If we matched multiple files, write their name in to dest or cwd.
