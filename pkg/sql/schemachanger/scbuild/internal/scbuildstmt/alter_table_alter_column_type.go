@@ -6,8 +6,6 @@
 package scbuildstmt
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -20,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -101,7 +100,7 @@ func alterTableAlterColumnType(
 	}
 
 	validateNewTypeForComputedColumn(b, tbl.TableID, colID, tn, newColType.Type)
-	validateAutomaticCastForNewType(b, tbl.TableID, colID, t.Column.String(),
+	validateAutomaticCastForNewType(b, tbl.TableID, colID, t.Column,
 		oldColType.Type, newColType.Type, t.Using != nil)
 
 	kind, err := schemachange.ClassifyConversionFromTree(b, t, oldColType.Type, newColType.Type,
@@ -122,13 +121,25 @@ func alterTableAlterColumnType(
 	}
 }
 
-// ValidateColExprForNewType will ensure that the existing expressions for
+// castColumnToType builds the AST for `colName::typ`, the implicit default
+// expression that converts a column to a new type when no USING clause is
+// specified. Building the AST directly, rather than formatting SQL text and
+// re-parsing it, guarantees the column name is correctly escaped.
+func castColumnToType(colName tree.Name, typ *types.T) *tree.CastExpr {
+	return &tree.CastExpr{
+		Expr:       &tree.ColumnItem{ColumnName: colName},
+		Type:       typ,
+		SyntaxMode: tree.CastShort,
+	}
+}
+
+// validateAutomaticCastForNewType ensures that the existing expressions for
 // DEFAULT and ON UPDATE will work for the new data type.
 func validateAutomaticCastForNewType(
 	b BuildCtx,
 	tableID catid.DescID,
 	colID catid.ColumnID,
-	colName string,
+	colName tree.Name,
 	fromType, toType *types.T,
 	hasUsingExpr bool,
 ) {
@@ -140,17 +151,14 @@ func validateAutomaticCastForNewType(
 	// suggested hint to use one.
 	if !hasUsingExpr {
 		// Compute a suggested default computed expression for inclusion in the error hint.
-		hintExpr, err := parser.ParseExpr(fmt.Sprintf("%s::%s", colName, toType.SQLString()))
-		if err != nil {
-			panic(err)
-		}
+		hintExpr := castColumnToType(colName, toType)
 		panic(errors.WithHintf(
 			pgerror.Newf(
 				pgcode.DatatypeMismatch,
 				"column %q cannot be cast automatically to type %s",
-				colName,
+				string(colName),
 				toType.SQLString(),
-			), "You might need to specify \"USING %s\".", tree.Serialize(hintExpr),
+			), "You might need to specify \"USING %s\".", tree.SerializeForDisplay(hintExpr),
 		))
 	}
 
@@ -173,7 +181,7 @@ func validateAutomaticCastForNewType(
 			pgcode.DatatypeMismatch,
 			"%s for column %q cannot be cast automatically to type %s",
 			exprType,
-			colName,
+			string(colName),
 			toType.SQLString(),
 		))
 	})
@@ -244,10 +252,21 @@ func handleValidationOnlyColumnConversion(
 	// new type and then back to the old type. If the cast back doesn't match the
 	// original value, the check fails. This constraint is temporary and doesn't
 	// need to persist beyond the ALTER operation.
-	expr, err := parser.ParseExpr(fmt.Sprintf("(CAST(CAST(%s AS %s) AS %s) = %s)",
-		t.Column.String(), newColType.Type.SQLString(), oldColType.Type.SQLString(), t.Column.String()))
-	if err != nil {
-		panic(err)
+	colRef := &tree.ColumnItem{ColumnName: t.Column}
+	expr := &tree.ParenExpr{
+		Expr: &tree.ComparisonExpr{
+			Operator: treecmp.MakeComparisonOperator(treecmp.EQ),
+			Left: &tree.CastExpr{
+				Expr: &tree.CastExpr{
+					Expr:       colRef,
+					Type:       newColType.Type,
+					SyntaxMode: tree.CastExplicit,
+				},
+				Type:       oldColType.Type,
+				SyntaxMode: tree.CastExplicit,
+			},
+			Right: colRef,
+		},
 	}
 
 	// The constraint requires a backing index to use, which we will use the
@@ -335,7 +354,7 @@ func handleGeneralColumnConversion(
 	// During the backfill process to populate the new column, the old column is still
 	// referenced by its original name, so we use that in the expression.
 	colName := mustRetrieveColumnName(b, tbl.TableID, col.ColumnID)
-	expr, err := getComputeExpressionForBackfill(b, t, tn, tbl.TableID, colName.Name, newColType)
+	expr, err := getComputeExpressionForBackfill(b, t, tn, tbl.TableID, tree.Name(colName.Name), newColType)
 	if err != nil {
 		panic(err)
 	}
@@ -487,12 +506,13 @@ func getComputeExpressionForBackfill(
 	t *tree.AlterTableAlterColumnType,
 	tn *tree.TableName,
 	tableID catid.DescID,
-	colName string,
+	colName tree.Name,
 	newColType *scpb.ColumnType,
 ) (expr tree.Expr, err error) {
-	// If a USING clause wasn't specified, the default expression is casting the column to the new type.
+	// If a USING clause wasn't specified, the default expression is casting the
+	// column to the new type.
 	if t.Using == nil {
-		return parser.ParseExpr(fmt.Sprintf("%s::%s", colName, newColType.Type.SQLString()))
+		return castColumnToType(colName, newColType.Type), nil
 	}
 
 	expr, err = parser.ParseExpr(t.Using.String())
