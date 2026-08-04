@@ -2015,3 +2015,67 @@ statement ok
 SET use_declarative_schema_changer = $schema_changer_state
 
 subtest end
+
+# Regression test: Column names escaped when transient backfill compute
+# expression is synthesized (see VULM-375)
+subtest special_char_column_name
+
+statement ok
+CREATE TABLE t_sinister_name (id INT PRIMARY KEY, "sinister""; SELECT 1 --" INT)
+
+statement ok
+INSERT INTO t_sinister_name VALUES (1, 42), (2, -7)
+
+statement ok
+ALTER TABLE t_sinister_name ALTER COLUMN "sinister""; SELECT 1 --" SET DATA TYPE STRING
+
+query IT rowsort
+SELECT * FROM t_sinister_name
+----
+1  42
+2  -7
+
+statement ok
+DROP TABLE t_sinister_name
+
+subtest end
+
+# Regression test: the suggested USING hint (built when no automatic cast exists
+# and no USING clause was given) must escape the column name (see VULM-375).
+subtest special_char_column_name_hint
+
+statement ok
+CREATE TABLE t_sinister_hint (id INT PRIMARY KEY, "sinister""; SELECT 1 --" INT)
+
+statement error cannot be cast automatically to type DATE\nHINT: You might need to specify "USING "sinister""; SELECT 1 --"::DATE"
+ALTER TABLE t_sinister_hint ALTER COLUMN "sinister""; SELECT 1 --" SET DATA TYPE DATE
+
+statement ok
+DROP TABLE t_sinister_hint
+
+subtest end
+
+# Regression test: a validation-only conversion (narrowing a string width) adds a
+# transient CHECK constraint referencing the column by name, so the name must be
+# escaped for the ALTER to succeed (see VULM-375).
+subtest special_char_column_name_validate
+
+statement ok
+CREATE TABLE t_sinister_validate (id INT PRIMARY KEY, "sinister""; SELECT 1 --" VARCHAR(10))
+
+statement ok
+INSERT INTO t_sinister_validate VALUES (1, 'ok'), (2, 'fine')
+
+statement ok
+ALTER TABLE t_sinister_validate ALTER COLUMN "sinister""; SELECT 1 --" SET DATA TYPE VARCHAR(5)
+
+query IT rowsort
+SELECT * FROM t_sinister_validate
+----
+1  ok
+2  fine
+
+statement ok
+DROP TABLE t_sinister_validate
+
+subtest end
