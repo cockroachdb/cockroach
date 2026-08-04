@@ -22,10 +22,13 @@ import (
 	"github.com/apache/arrow/go/v11/parquet/file"
 	"github.com/apache/arrow/go/v11/parquet/pqarrow"
 	"github.com/apache/arrow/go/v11/parquet/schema"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -2970,4 +2973,87 @@ func TestParquetConsumerListRouting(t *testing.T) {
 	require.Equal(t, tree.DNull, conv.Datums[1], "null LIST should map to DNull")
 	require.Equal(t, tree.NewDJSON(json.NewArrayBuilder(0).Build()), conv.Datums[2],
 		"empty LIST should map to empty JSONB array")
+}
+
+// TestParquetListImportVersionGate covers checkParquetListVersionGate: importing
+// a Parquet array (LIST) column must be blocked until the cluster has finalized
+// its upgrade to V26_2, at which point every node understands LIST columns
+// (#172329).
+func TestParquetListImportVersionGate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// belowV26_2 returns a version handle whose active version predates V26_2, so
+	// IsActive(V26_2) is false.
+	belowV26_2 := func(t *testing.T) clusterversion.Handle {
+		st := cluster.MakeTestingClusterSettingsWithVersions(
+			clusterversion.V26_2.Version(),
+			clusterversion.V26_1.Version(),
+			false, /* initializeVersion */
+		)
+		require.NoError(t, clusterversion.Initialize(ctx, clusterversion.V26_1.Version(), &st.SV))
+		return st.Version
+	}
+
+	// atLatest returns a version handle whose active version is the latest, so
+	// IsActive(V26_2) is true.
+	atLatest := func(*testing.T) clusterversion.Handle {
+		return cluster.MakeTestingClusterSettings().Version
+	}
+
+	flatOnly := map[int]*parquetColumnMetadata{
+		0: {columnName: "id"},
+	}
+	withList := map[int]*parquetColumnMetadata{
+		0: {columnName: "id"},
+		1: {columnName: "tags", isList: true},
+	}
+
+	tests := []struct {
+		name           string
+		version        func(*testing.T) clusterversion.Handle
+		columnMetadata map[int]*parquetColumnMetadata
+		columnsToRead  []int
+		expectedErr    string
+	}{
+		{
+			name:           "list column blocked before V26_2",
+			version:        belowV26_2,
+			columnMetadata: withList,
+			columnsToRead:  []int{0, 1},
+			expectedErr:    `column "tags" as an array requires all nodes`,
+		},
+		{
+			name:           "flat columns allowed before V26_2",
+			version:        belowV26_2,
+			columnMetadata: flatOnly,
+			columnsToRead:  []int{0},
+		},
+		{
+			name:           "unread list column allowed before V26_2",
+			version:        belowV26_2,
+			columnMetadata: withList,
+			columnsToRead:  []int{0},
+		},
+		{
+			name:           "list column allowed once V26_2 active",
+			version:        atLatest,
+			columnMetadata: withList,
+			columnsToRead:  []int{0, 1},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkParquetListVersionGate(ctx, tc.version(t), tc.columnsToRead, tc.columnMetadata)
+			if tc.expectedErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.expectedErr)
+			require.Equal(t, pgcode.FeatureNotSupported, pgerror.GetPGCode(err))
+		})
+	}
 }
