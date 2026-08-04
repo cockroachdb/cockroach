@@ -525,8 +525,7 @@ func TestAvroEncoderReadOnlyMode(t *testing.T) {
 
 // TestAvroEncoderSubjectOverrides verifies the avro_schemas per-subject
 // configuration: subject-name overrides apply to registration (write mode)
-// and lookup (read mode), a value-only entry disables the key schema and
-// emits JSON message keys, and per-subject version strategies pick the
+// and lookup (read mode), and per-subject version strategies pick the
 // registered version in read mode.
 func TestAvroEncoderSubjectOverrides(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -612,52 +611,6 @@ func TestAvroEncoderSubjectOverrides(t *testing.T) {
 		require.ElementsMatch(t, []string{"acme.foo.key", "acme.foo"}, reg.Subjects())
 	})
 
-	t.Run("a value-only entry disables the key schema", func(t *testing.T) {
-		defer TestingClearSchemaRegistrySingleton()
-		reg := cdctest.StartTestSchemaRegistry()
-		defer reg.Close()
-
-		enc := makeEncoder(t, makeOpts(reg, changefeedbase.AvroSchemaOverrides{
-			"foo-value": {},
-		}))
-		gotKey, err := enc.EncodeKey(ctx, rowInsert)
-		require.NoError(t, err)
-		require.Equal(t, `[1]`, string(gotKey))
-		_, err = enc.EncodeValue(ctx, evCtx, rowInsert, prevRow)
-		require.NoError(t, err)
-
-		// Only the value schema exists in the registry.
-		require.Equal(t, []string{"foo-value"}, reg.Subjects())
-	})
-
-	t.Run("a disabled key schema encodes composite keys as a JSON array", func(t *testing.T) {
-		defer TestingClearSchemaRegistrySingleton()
-		compositeDesc, err := parseTableDesc(`CREATE TABLE bar (a INT, b STRING, PRIMARY KEY (a, b))`)
-		require.NoError(t, err)
-		compositeRow := cdcevent.TestingMakeEventRow(compositeDesc, 0, rowenc.EncDatumRow{
-			rowenc.EncDatum{Datum: tree.NewDInt(1)},
-			rowenc.EncDatum{Datum: tree.NewDString(`bar`)},
-		}, false)
-		compositeTargets := changefeedbase.Targets{}
-		compositeTargets.Add(changefeedbase.Target{
-			Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-			DescID:            compositeDesc.GetID(),
-			StatementTimeName: changefeedbase.StatementTimeName(compositeDesc.GetName()),
-		})
-		reg := cdctest.StartTestSchemaRegistry()
-		defer reg.Close()
-
-		opts := makeOpts(reg, changefeedbase.AvroSchemaOverrides{
-			"bar-value": {},
-		})
-		enc, err := getEncoder(ctx, opts, compositeTargets, false, nil, nil, getTestingEnrichedSourceProvider(t, opts))
-		require.NoError(t, err)
-		gotKey, err := enc.EncodeKey(ctx, compositeRow)
-		require.NoError(t, err)
-		require.Equal(t, `[1, "bar"]`, string(gotKey))
-		require.Empty(t, reg.Subjects())
-	})
-
 	t.Run("per-subject version strategies apply in read mode", func(t *testing.T) {
 		defer TestingClearSchemaRegistrySingleton()
 		reg := cdctest.StartTestSchemaRegistry()
@@ -720,6 +673,7 @@ func TestAvroEncoderSubjectOverrides(t *testing.T) {
 		defer reg.Close()
 
 		enc := makeEncoder(t, makeOpts(reg, changefeedbase.AvroSchemaOverrides{
+			"foo-key":   {},
 			"foo-value": {SubjectName: "acme.foo"},
 		}))
 		_, err := enc.EncodeResolvedTimestamp(ctx, "foo", hlc.Timestamp{WallTime: 1})
