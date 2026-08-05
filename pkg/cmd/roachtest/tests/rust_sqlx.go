@@ -127,6 +127,10 @@ func registerRustSqlx(r registry.Registry) {
 		pgURL.Path = "/sqlx"
 		q := pgURL.Query()
 		q.Set("sslmode", "disable")
+		// Force default_int_size=4 per connection. The cluster setting above is
+		// only eventually consistent, so a session created before it is visible
+		// would create INTEGER columns as INT8 and break sqlx's i32 decode.
+		q.Set("options", "-c default_int_size=4")
 		pgURL.RawQuery = q.Encode()
 		databaseURL := pgURL.String()
 
