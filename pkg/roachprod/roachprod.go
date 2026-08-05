@@ -556,14 +556,21 @@ func IP(l *logger.Logger, clusterName string, external bool) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return clusterIPs(c, external)
+}
 
+func clusterIPs(c *install.SyncedCluster, external bool) ([]string, error) {
 	nodes := c.Nodes
 	ips := make([]string, len(nodes))
+	var err error
 
 	for i := 0; i < len(nodes); i++ {
 		node := nodes[i]
 		if external {
-			ips[i] = c.Host(node)
+			ips[i], err = c.GetExternalIP(node)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			ips[i], err = c.GetInternalIP(node)
 			if err != nil {
@@ -682,11 +689,18 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string, sync bo
 	}
 	// Run ssh-keygen -R serially on each new VM in case an IP address has been recycled
 	for _, v := range cloudCluster.VMs {
-		cmd := exec.Command("ssh-keygen", "-R", v.PublicIP)
+		host := v.PublicIP
+		if host == "" {
+			host = v.PrivateIP
+		}
+		if host == "" {
+			continue
+		}
+		cmd := exec.Command("ssh-keygen", "-R", host)
 
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			l.Printf("could not clear ssh key for hostname %s:\n%s", v.PublicIP, string(out))
+			l.Printf("could not clear ssh key for hostname %s:\n%s", host, string(out))
 		}
 
 	}
@@ -2645,10 +2659,16 @@ func CreatePublicDNS(ctx context.Context, l *logger.Logger, clusterName string) 
 
 	return vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
 		recs := make([]vm.DNSRecord, 0, len(c.VMs))
-		for _, v := range c.VMs {
+		for _, v := range vms {
+			if v.PublicIP == "" {
+				continue
+			}
 			rec := vm.CreateDNSRecord(v.PublicDNS, vm.A, v.PublicIP, 60)
 			rec.Public = true
 			recs = append(recs, rec)
+		}
+		if len(recs) == 0 {
+			return nil
 		}
 		return p.CreateRecords(ctx, recs...)
 	})
