@@ -53,6 +53,76 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// runBeforeFirstBackfillChunk returns a RunBeforeBackfillChunk hook that invokes
+// fn once. fn is read at call time so it can be bound after the server starts.
+func runBeforeFirstBackfillChunk(fn func() error) func(roachpb.Span) error {
+	var done bool
+	return func(roachpb.Span) error {
+		if done {
+			return nil
+		}
+		if err := fn(); err != nil {
+			return err
+		}
+		done = true
+		return nil
+	}
+}
+
+// doubleUpdateWrites updates every row of t.test twice: a net no-op that still
+// populates the temporary index for the merge step to reconcile.
+func doubleUpdateWrites(sqlDB *gosql.DB, maxValue int) func() error {
+	return func() error {
+		if _, err := sqlDB.Exec(fmt.Sprintf(`UPDATE t.test SET v = v + %d WHERE k >= 0`, 2*maxValue)); err != nil {
+			return err
+		}
+		if _, err := sqlDB.Exec(fmt.Sprintf(`UPDATE t.test SET v = v - %d WHERE k >= 0`, 2*maxValue)); err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+// indexBackfillMergeRetryTestingKnobs returns the knobs shared by the
+// index-backfill merge retry tests. Merge scan and ingest are serialized so at
+// most one chunk is in flight, making chunk-based failure injection
+// deterministic.
+func indexBackfillMergeRetryTestingKnobs(
+	populateWrites func(roachpb.Span) error, beforeMergeScanChunk func(roachpb.Key) error,
+) base.TestingKnobs {
+	mergeSerializeCh := make(chan struct{}, 1)
+	return base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			WriteCheckpointInterval:          time.Nanosecond,
+			AlwaysUpdateIndexBackfillDetails: true,
+		},
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk:                     populateWrites,
+			BulkAdderFlushesEveryBatch:                 true,
+			SerializeIndexBackfillCreationAndIngestion: make(chan struct{}, 1),
+			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
+				PushesProgressEveryChunk: true,
+				RunBeforeScanChunk:       beforeMergeScanChunk,
+				RunAfterScanChunk: func() {
+					<-mergeSerializeCh
+				},
+				RunAfterMergeChunk: func() {
+					mergeSerializeCh <- struct{}{}
+				},
+			},
+		},
+		// Decrease the adopt loop interval so that retries happen quickly.
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		GCJob: &sql.GCJobTestingKnobs{
+			SkipWaitingForMVCCGC: true,
+		},
+		KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
+		UpgradeManager: &upgradebase.TestingKnobs{
+			SkipHotRangesLoggerJobBootstrap: true,
+		},
+	}
+}
+
 // Test schema changes are retried and complete properly when there's an error
 // in the merge step. This also checks that a mutation checkpoint reduces the
 // size of the span operated on during a retry.
@@ -62,23 +132,9 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 
 	skip.UnderDuress(t, "this test fails under duress")
 
-	var params base.TestServerArgs
-
-	writesPopulated := false
 	var writesFn func() error
+	populateTempIndexWithWrites := runBeforeFirstBackfillChunk(func() error { return writesFn() })
 
-	populateTempIndexWithWrites := func(sp roachpb.Span) error {
-		if !writesPopulated {
-			if err := writesFn(); err != nil {
-				return err
-			}
-			writesPopulated = true
-		}
-
-		return nil
-	}
-
-	mergeSerializeCh := make(chan struct{}, 1)
 	mergeChunk := 0
 	var seenKey roachpb.Key
 	checkStartingKey := func(key roachpb.Key) error {
@@ -105,35 +161,8 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 	}
 
 	const maxValue = 2000
-	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			WriteCheckpointInterval:          time.Nanosecond,
-			AlwaysUpdateIndexBackfillDetails: true,
-		},
-		DistSQL: &execinfra.TestingKnobs{
-			RunBeforeBackfillChunk:                     populateTempIndexWithWrites,
-			BulkAdderFlushesEveryBatch:                 true,
-			SerializeIndexBackfillCreationAndIngestion: make(chan struct{}, 1),
-			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
-				PushesProgressEveryChunk: true,
-				RunBeforeScanChunk:       checkStartingKey,
-				RunAfterScanChunk: func() {
-					<-mergeSerializeCh
-				},
-				RunAfterMergeChunk: func() {
-					mergeSerializeCh <- struct{}{}
-				},
-			},
-		},
-		// Decrease the adopt loop interval so that retries happen quickly.
-		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		GCJob: &sql.GCJobTestingKnobs{
-			SkipWaitingForMVCCGC: true,
-		},
-		KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
-		UpgradeManager: &upgradebase.TestingKnobs{
-			SkipHotRangesLoggerJobBootstrap: true,
-		},
+	params := base.TestServerArgs{
+		Knobs: indexBackfillMergeRetryTestingKnobs(populateTempIndexWithWrites, checkStartingKey),
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -155,16 +184,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	writesFn = func() error {
-		if _, err := sqlDB.Exec(fmt.Sprintf(`UPDATE t.test SET v = v + %d WHERE k >= 0`, 2*maxValue)); err != nil {
-			return err
-		}
-
-		if _, err := sqlDB.Exec(fmt.Sprintf(`UPDATE t.test SET v = v - %d WHERE k >= 0`, 2*maxValue)); err != nil {
-			return err
-		}
-		return nil
-	}
+	writesFn = doubleUpdateWrites(sqlDB, maxValue)
 
 	// Bulk insert.
 	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {

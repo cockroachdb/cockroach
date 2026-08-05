@@ -71,6 +71,13 @@ func (im *IndexBackfillerMergePlanner) MergeIndexes(
 	}{
 		g: make([]roachpb.SpanGroup, len(progress.SourceIndexIDs)),
 	}
+	// Seed the accumulator with spans merged by prior invocations. addCompleted
+	// unions each flush into completed.g and re-checkpoints the whole group, so
+	// completed.g must start from the durable checkpoint to preserve earlier
+	// invocations' completed spans across retries.
+	for i := range progress.SourceIndexIDs {
+		completed.g[i].Add(progress.CompletedSpans[i]...)
+	}
 	addCompleted := func(idxs []int32, spans []roachpb.Span) (ret [][]roachpb.Span) {
 		completed.Lock()
 		defer completed.Unlock()
