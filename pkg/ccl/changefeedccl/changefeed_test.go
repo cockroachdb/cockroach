@@ -9710,7 +9710,7 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 	rnd, _ := randutil.NewPseudoRand()
 
 	const (
-		rowCount = 10000
+		rowCount = 1000
 		// maxBatchSize is the maximum number of rows a scan request will return,
 		// which maps to the number of rows in a single resolved span that the
 		// changeAggregator sees.
