@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alessio/shellescape"
 	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -248,18 +250,58 @@ func runWithMaybeRetry(
 }
 
 func scpWithRetry(
-	ctx context.Context, l *logger.Logger, src, dest string,
+	ctx context.Context, l *logger.Logger, sshOptions []string, src, dest string,
 ) (*RunResultDetails, error) {
 	scpCtx, cancel := context.WithTimeout(ctx, scpTimeout)
 	defer cancel()
 
 	return runWithMaybeRetry(scpCtx, l, DefaultRetryOpt, defaultSCPShouldRetryFn,
-		func(ctx context.Context) (*RunResultDetails, error) { return scp(ctx, l, src, dest) })
+		func(ctx context.Context) (*RunResultDetails, error) {
+			return scp(ctx, l, sshOptions, src, dest)
+		})
 }
 
-// Host returns the public IP of a node.
+// Host returns the node address used by roachprod commands. It prefers the
+// public IP and falls back to the private IP.
 func (c *SyncedCluster) Host(n Node) string {
-	return c.VMs[n-1].PublicIP
+	v := c.VMs[n-1]
+	if v.PublicIP != "" {
+		return v.PublicIP
+	}
+	return v.PrivateIP
+}
+
+// sshTransportArgs returns additional OpenSSH arguments required to reach a
+// node. GCE VMs tagged for IAP SSH are reached through an IAP TCP tunnel.
+func (c *SyncedCluster) sshTransportArgs(n Node) []string {
+	v := c.VMs[n-1]
+	if v.PublicIP != "" || !gce.UsesIAP(v) {
+		return nil
+	}
+	proxyCommand := fmt.Sprintf(
+		"ProxyCommand=gcloud compute start-iap-tunnel %s 22 --listen-on-stdin --project=%s --zone=%s --verbosity=warning",
+		v.Name, v.Project, v.Zone,
+	)
+	// Starting gcloud and establishing the IAP tunnel can take longer than a
+	// direct TCP connection, especially on the first invocation.
+	return []string{"-o", proxyCommand, "-o", "ConnectTimeout=30"}
+}
+
+// rsyncSSHCommand returns the shell command rsync should use as its remote
+// shell. Quote each argument because transport options such as ProxyCommand
+// contain spaces but must be passed to ssh as a single argument.
+func (c *SyncedCluster) rsyncSSHCommand(n Node) string {
+	args := []string{"ssh"}
+	args = append(args, c.sshTransportArgs(n)...)
+	args = append(args,
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "ControlMaster=auto",
+		"-o", "ControlPath=~/.ssh/%r@%h:%p",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "ControlPersist=2m",
+	)
+	args = append(args, sshAuthArgs()...)
+	return shellescape.QuoteCommand(args)
 }
 
 func (c *SyncedCluster) user(n Node) string {
@@ -288,6 +330,15 @@ func (c *SyncedCluster) GetInternalIP(n Node) (string, error) {
 	ip := c.VMs[n-1].PrivateIP
 	if ip == "" {
 		return "", errors.Errorf("no private IP for node %d", n)
+	}
+	return ip, nil
+}
+
+// GetExternalIP returns the external IP address of the specified node.
+func (c *SyncedCluster) GetExternalIP(n Node) (string, error) {
+	ip := c.VMs[n-1].PublicIP
+	if ip == "" {
+		return "", errors.Errorf("no public IP for node %d", n)
 	}
 	return ip, nil
 }
@@ -457,10 +508,11 @@ func (c *SyncedCluster) newSession(
 		return newLocalSession(cmd)
 	}
 	command := &remoteCommand{
-		node: node,
-		user: c.user(node),
-		host: c.Host(node),
-		cmd:  c.validateHostnameCmd(cmd, node),
+		node:       node,
+		user:       c.user(node),
+		host:       c.Host(node),
+		cmd:        c.validateHostnameCmd(cmd, node),
+		sshOptions: c.sshTransportArgs(node),
 	}
 
 	for _, opt := range options {
@@ -1207,8 +1259,12 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	publicIPs := make([]string, 0, len(c.Nodes))
 	for _, node := range c.Nodes {
 		v := c.VMs[node-1]
-		providerPrivateIPs[v.Provider] = append(providerPrivateIPs[v.Provider], nodeInfo{node: node, ip: v.PrivateIP})
-		publicIPs = append(publicIPs, c.Host(node))
+		if v.PrivateIP != "" {
+			providerPrivateIPs[v.Provider] = append(providerPrivateIPs[v.Provider], nodeInfo{node: node, ip: v.PrivateIP})
+		}
+		if v.PublicIP != "" {
+			publicIPs = append(publicIPs, v.PublicIP)
+		}
 	}
 
 	providerKnownHostData := make(map[string][]byte)
@@ -1221,12 +1277,26 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	}
 	if err := c.Parallel(ctx, l, WithNodes(firstNodes).WithDisplay("scanning hosts"),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
-			// Scan a combination of all remote IPs and local IPs pertaining to this
-			// node's cloud provider.
-			scanIPs := append([]string{}, publicIPs...)
+			// Scan a combination of all public IPs and private IPs pertaining to
+			// this node's cloud provider.
 			nodeProvider := c.VMs[node-1].Provider
+			scanIPs := make([]string, 0, len(publicIPs)+len(providerPrivateIPs[nodeProvider]))
+			seenIPs := make(map[string]struct{})
+			appendIP := func(ip string) {
+				if ip == "" {
+					return
+				}
+				if _, exists := seenIPs[ip]; exists {
+					return
+				}
+				seenIPs[ip] = struct{}{}
+				scanIPs = append(scanIPs, ip)
+			}
+			for _, ip := range publicIPs {
+				appendIP(ip)
+			}
 			for _, nodeInfo := range providerPrivateIPs[nodeProvider] {
-				scanIPs = append(scanIPs, nodeInfo.ip)
+				appendIP(nodeInfo.ip)
 			}
 
 			// ssh-keyscan may return fewer than the desired number of entries if the
@@ -1568,7 +1638,9 @@ func (c *SyncedCluster) getFileFromFirstNode(
 		}
 
 		srcFileName := fmt.Sprintf("%s@%s:%s", c.user(1), c.Host(1), name)
-		if res, _ := scpWithRetry(ctx, l, srcFileName, tmpfile.Name()); res.Err != nil {
+		if res, _ := scpWithRetry(
+			ctx, l, c.sshTransportArgs(1), srcFileName, tmpfile.Name(),
+		); res.Err != nil {
 			cleanup()
 			return "", nil, res.Err
 		}
@@ -1914,7 +1986,14 @@ func (c *SyncedCluster) Put(
 				return
 			}
 
-			res, _ := scpWithRetry(ctx, l, from, to)
+			// With a local source, scp connects to the destination node. In
+			// tree-distribution mode, scp -R connects to the remote source node,
+			// which then reaches the destination over the cluster network.
+			transportNode := nodes[i]
+			if srcIndex != -1 {
+				transportNode = nodes[srcIndex]
+			}
+			res, _ := scpWithRetry(ctx, l, c.sshTransportArgs(transportNode), from, to)
 			results <- result{i, res.Err}
 
 			if res.Err != nil {
@@ -2014,13 +2093,7 @@ func (c *SyncedCluster) Logs(
 			}
 			remote = fmt.Sprintf("%s@%s:%s/", c.user(node), c.Host(node), logDir)
 			// Use control master to mitigate SSH connection setup cost.
-			rsyncArgs = append(rsyncArgs, "--rsh", "ssh "+
-				"-o StrictHostKeyChecking=no "+
-				"-o ControlMaster=auto "+
-				"-o ControlPath=~/.ssh/%r@%h:%p "+
-				"-o UserKnownHostsFile=/dev/null "+
-				"-o ControlPersist=2m "+
-				strings.Join(sshAuthArgs(), " "))
+			rsyncArgs = append(rsyncArgs, "--rsh", c.rsyncSSHCommand(node))
 		}
 		rsyncArgs = append(rsyncArgs, remote, local)
 		cmd := exec.CommandContext(ctx, "rsync", rsyncArgs...)
@@ -2250,7 +2323,10 @@ func (c *SyncedCluster) Get(
 				return
 			}
 
-			res, _ := scpWithRetry(ctx, l, fmt.Sprintf("%s@%s:%s", c.user(nodes[0]), c.Host(nodes[i]), src), dest)
+			res, _ := scpWithRetry(
+				ctx, l, c.sshTransportArgs(nodes[i]),
+				fmt.Sprintf("%s@%s:%s", c.user(nodes[0]), c.Host(nodes[i]), src), dest,
+			)
 			if res.Err == nil {
 				// Make sure all created files and directories are world readable.
 				// The CRDB process intentionally sets a 0007 umask (resulting in
@@ -2431,6 +2507,7 @@ func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args
 			"-o", "UserKnownHostsFile=/dev/null",
 			"-o", "StrictHostKeyChecking=no",
 		}
+		allArgs = append(allArgs, c.sshTransportArgs(targetNode)...)
 		allArgs = append(allArgs, sshAuthArgs()...)
 		allArgs = append(allArgs, sshArgs...)
 		if len(args) > 0 {
@@ -2469,20 +2546,30 @@ func sshVersion3() bool {
 // scp return type conforms to what runWithMaybeRetry expects. A nil error
 // is always returned here since the only error that can happen is an scp error
 // which we do want to be able to retry.
-func scp(ctx context.Context, l *logger.Logger, src, dest string) (*RunResultDetails, error) {
-	args := []string{
-		// Enable recursive copies, compression.
-		"scp", "-r", "-C",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "ConnectTimeout=10",
-	}
-	if sshVersion3() {
+func scpArgs(sshOptions []string, src, dest string, directRemoteCopy bool) []string {
+	// Enable recursive copies and compression.
+	args := []string{"scp", "-r", "-C"}
+	if directRemoteCopy {
 		// Have scp do a direct transfer between two remote hosts (SSH to src node
 		// and execute SCP there using agent-forwarding).
 		args = append(args, "-R", "-A")
 	}
+	// Transport-specific settings come first so they can override defaults;
+	// OpenSSH uses the first value supplied for most configuration options.
+	args = append(args, sshOptions...)
+	args = append(args,
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "ConnectTimeout=10",
+	)
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
+	return args
+}
+
+func scp(
+	ctx context.Context, l *logger.Logger, sshOptions []string, src, dest string,
+) (*RunResultDetails, error) {
+	args := scpArgs(sshOptions, src, dest, sshVersion3())
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.WaitDelay = time.Second // make sure the call below returns when the context is canceled
 

@@ -69,5 +69,6 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@com_google_cloud_go_compute//apiv1/computepb",
+        "@org_golang_google_protobuf//proto",
     ],
 )

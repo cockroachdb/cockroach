@@ -55,6 +55,7 @@ go_test(
     ],
     embed = [":roachprod"],
     deps = [
+        "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",

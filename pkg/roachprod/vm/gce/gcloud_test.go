@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestAllowedLocalSSDCount(t *testing.T) {
@@ -152,6 +154,231 @@ func TestBuildInstancePropertiesLocalSSDDisks(t *testing.T) {
 			assert.Equal(t, tc.expectedSSDCount, providerOpts.SSDCount)
 		})
 	}
+}
+
+func TestBuildInstancePropertiesAddressModeAndSubnet(t *testing.T) {
+	l, err := (&logger.Config{Stdout: io.Discard, Stderr: io.Discard}).NewLogger("")
+	require.NoError(t, err)
+	p := &Provider{Projects: []string{"test-project"}, defaultProject: "default-project"}
+	providerOpts := DefaultProviderOpts()
+	providerOpts.Subnet = "private-subnet"
+
+	privateOpts := vm.DefaultCreateOpts()
+	privateOpts.AddressMode = vm.AddressModePrivate
+	props, err := p.buildInstanceProperties(
+		l, privateOpts, providerOpts, "startup-script", "us-east1-b", nil,
+	)
+	require.NoError(t, err)
+	require.Len(t, props.GetNetworkInterfaces(), 1)
+	require.Empty(t, props.GetNetworkInterfaces()[0].GetAccessConfigs())
+	require.Empty(t, props.GetTags().GetItems())
+	require.Equal(t,
+		"projects/test-project/regions/us-east1/subnetworks/private-subnet",
+		props.GetNetworkInterfaces()[0].GetSubnetwork(),
+	)
+
+	providerOpts.UseIAP = true
+	props, err = p.buildInstanceProperties(
+		l, privateOpts, providerOpts, "startup-script", "us-east1-b", nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []string{iapSSHTag}, props.GetTags().GetItems())
+
+	publicOpts := vm.DefaultCreateOpts()
+	props, err = p.buildInstanceProperties(
+		l, publicOpts, providerOpts, "startup-script", "us-east1-b", nil,
+	)
+	require.NoError(t, err)
+	require.Len(t, props.GetNetworkInterfaces()[0].GetAccessConfigs(), 1)
+	require.Empty(t, props.GetTags().GetItems())
+}
+
+func TestComputeAddressArgs(t *testing.T) {
+	providerOpts := DefaultProviderOpts()
+	publicOpts := vm.DefaultCreateOpts()
+	require.Empty(t, computeAddressArgs(publicOpts, providerOpts))
+
+	privateOpts := vm.DefaultCreateOpts()
+	privateOpts.AddressMode = vm.AddressModePrivate
+	require.Equal(t, []string{"--no-address"}, computeAddressArgs(privateOpts, providerOpts))
+
+	providerOpts.UseIAP = true
+	require.Equal(t,
+		[]string{"--no-address", "--tags", iapSSHTag},
+		computeAddressArgs(privateOpts, providerOpts),
+	)
+	// Public mode keeps the original network arguments even when the IAP flag
+	// is supplied; IAP is only meaningful for private instances.
+	require.Empty(t, computeAddressArgs(publicOpts, providerOpts))
+}
+
+func TestPublicAddressModePreservesNetworkDefaults(t *testing.T) {
+	l, err := (&logger.Config{Stdout: io.Discard, Stderr: io.Discard}).NewLogger("")
+	require.NoError(t, err)
+	p := &Provider{Projects: []string{"test-project"}, defaultProject: "default-project"}
+	providerOpts := DefaultProviderOpts()
+	publicOpts := vm.DefaultCreateOpts()
+	require.Equal(t, vm.AddressModePublic, publicOpts.AddressMode)
+
+	props, err := p.buildInstanceProperties(
+		l, publicOpts, providerOpts, "startup-script", "us-east1-b", nil,
+	)
+	require.NoError(t, err)
+	require.Len(t, props.GetNetworkInterfaces(), 1)
+	networkInterface := props.GetNetworkInterfaces()[0]
+	require.Equal(t,
+		"projects/test-project/regions/us-east1/subnetworks/default",
+		networkInterface.GetSubnetwork(),
+	)
+	require.Len(t, networkInterface.GetAccessConfigs(), 1)
+	require.Equal(t, "External NAT", networkInterface.GetAccessConfigs()[0].GetName())
+	require.Equal(t,
+		computepb.AccessConfig_ONE_TO_ONE_NAT.String(),
+		networkInterface.GetAccessConfigs()[0].GetType(),
+	)
+	require.Empty(t, props.GetTags().GetItems())
+	require.Empty(t, computeAddressArgs(publicOpts, providerOpts))
+
+	zeroValueProps, err := p.buildInstanceProperties(
+		l, vm.CreateOpts{}, providerOpts, "startup-script", "us-east1-b", nil,
+	)
+	require.NoError(t, err)
+	require.Len(t, zeroValueProps.GetNetworkInterfaces()[0].GetAccessConfigs(), 1)
+}
+
+func TestResolveAddressMode(t *testing.T) {
+	defaultProjectProvider := &Provider{
+		Projects:       []string{"default-project"},
+		defaultProject: "default-project",
+	}
+	nonDefaultProjectProvider := &Provider{
+		Projects:       []string{"other-project"},
+		defaultProject: "default-project",
+	}
+
+	mode, err := defaultProjectProvider.resolveAddressMode(vm.AddressModeAuto)
+	require.NoError(t, err)
+	require.Equal(t, vm.AddressModePrivate, mode)
+	mode, err = nonDefaultProjectProvider.resolveAddressMode(vm.AddressModeAuto)
+	require.NoError(t, err)
+	require.Equal(t, vm.AddressModePublic, mode)
+	mode, err = defaultProjectProvider.resolveAddressMode(vm.AddressModePublic)
+	require.NoError(t, err)
+	require.Equal(t, vm.AddressModePublic, mode)
+	mode, err = defaultProjectProvider.resolveAddressMode("")
+	require.NoError(t, err)
+	require.Equal(t, vm.AddressModePublic, mode)
+}
+
+func TestVMNetworkParsing(t *testing.T) {
+	jsonInstance := jsonVM{
+		Name:              "private-json-vm",
+		Labels:            map[string]string{vm.TagLifetime: time.Hour.String()},
+		CreationTimestamp: time.Now(),
+		SelfLink:          "https://www.googleapis.com/compute/v1/projects/test-project/zones/us-east1-b/instances/private-json-vm",
+	}
+	jsonInstance.NetworkInterfaces = []struct {
+		Network       string
+		NetworkIP     string
+		AccessConfigs []struct {
+			Name  string
+			NatIP string
+		}
+	}{
+		{
+			Network:   "projects/test-project/global/networks/private-vpc",
+			NetworkIP: "10.0.0.2",
+		},
+	}
+	jsonInstance.Scheduling.OnHostMaintenance = "MIGRATE"
+	jsonInstance.Tags.Items = []string{iapSSHTag}
+	parsedJSON := jsonInstance.toVM("test-project", "roachprod.example")
+	require.Empty(t, parsedJSON.Errors)
+	require.Equal(t, "10.0.0.2", parsedJSON.PrivateIP)
+	require.Empty(t, parsedJSON.PublicIP)
+	require.Equal(t, "private-vpc", parsedJSON.VPC)
+	require.Equal(t, []string{iapSSHTag}, parsedJSON.NetworkTags)
+	require.True(t, UsesIAP(*parsedJSON))
+
+	sdkVM := (&sdkInstance{&computepb.Instance{
+		Name:              proto.String("private-sdk-vm"),
+		Labels:            map[string]string{vm.TagLifetime: time.Hour.String()},
+		CreationTimestamp: proto.String(time.Now().Format(time.RFC3339)),
+		SelfLink: proto.String(
+			"https://www.googleapis.com/compute/v1/projects/test-project/zones/us-east1-b/instances/private-sdk-vm",
+		),
+		NetworkInterfaces: []*computepb.NetworkInterface{
+			{
+				Network:   proto.String("projects/test-project/global/networks/private-vpc"),
+				NetworkIP: proto.String("10.0.0.3"),
+			},
+		},
+		Scheduling: &computepb.Scheduling{OnHostMaintenance: proto.String("MIGRATE")},
+		Tags:       &computepb.Tags{Items: []string{iapSSHTag}},
+		Zone:       proto.String("projects/test-project/zones/us-east1-b"),
+	}}).toVM("test-project", "roachprod.example")
+	require.Empty(t, sdkVM.Errors)
+	require.Equal(t, "10.0.0.3", sdkVM.PrivateIP)
+	require.Empty(t, sdkVM.PublicIP)
+	require.Equal(t, "private-vpc", sdkVM.VPC)
+	require.Equal(t, []string{iapSSHTag}, sdkVM.NetworkTags)
+	require.True(t, UsesIAP(*sdkVM))
+
+	publicJSONInstance := jsonInstance
+	publicJSONInstance.Name = "public-json-vm"
+	publicJSONInstance.Tags.Items = nil
+	publicJSONInstance.NetworkInterfaces[0].AccessConfigs = []struct {
+		Name  string
+		NatIP string
+	}{
+		{Name: "External NAT", NatIP: "192.0.2.1"},
+	}
+	parsedPublicJSON := publicJSONInstance.toVM("test-project", "roachprod.example")
+	require.Empty(t, parsedPublicJSON.Errors)
+	require.Equal(t, "10.0.0.2", parsedPublicJSON.PrivateIP)
+	require.Equal(t, "192.0.2.1", parsedPublicJSON.PublicIP)
+	require.Equal(t, "private-vpc", parsedPublicJSON.VPC)
+	require.Empty(t, parsedPublicJSON.NetworkTags)
+
+	parsedPublicSDK := (&sdkInstance{&computepb.Instance{
+		Name:              proto.String("public-sdk-vm"),
+		Labels:            map[string]string{vm.TagLifetime: time.Hour.String()},
+		CreationTimestamp: proto.String(time.Now().Format(time.RFC3339)),
+		SelfLink: proto.String(
+			"https://www.googleapis.com/compute/v1/projects/test-project/zones/us-east1-b/instances/public-sdk-vm",
+		),
+		NetworkInterfaces: []*computepb.NetworkInterface{
+			{
+				Network:   proto.String("projects/test-project/global/networks/private-vpc"),
+				NetworkIP: proto.String("10.0.0.4"),
+				AccessConfigs: []*computepb.AccessConfig{
+					{Name: proto.String("External NAT"), NatIP: proto.String("192.0.2.2")},
+				},
+			},
+		},
+		Scheduling: &computepb.Scheduling{OnHostMaintenance: proto.String("MIGRATE")},
+		Zone:       proto.String("projects/test-project/zones/us-east1-b"),
+	}}).toVM("test-project", "roachprod.example")
+	require.Empty(t, parsedPublicSDK.Errors)
+	require.Equal(t, "10.0.0.4", parsedPublicSDK.PrivateIP)
+	require.Equal(t, "192.0.2.2", parsedPublicSDK.PublicIP)
+	require.Equal(t, "private-vpc", parsedPublicSDK.VPC)
+	require.Empty(t, parsedPublicSDK.NetworkTags)
+}
+
+func TestValidateProvisionedAddressMode(t *testing.T) {
+	require.NoError(t, validateProvisionedAddressMode(vm.List{
+		{Name: "private", PrivateIP: "10.0.0.2"},
+	}, vm.AddressModePrivate))
+	require.NoError(t, validateProvisionedAddressMode(vm.List{
+		{Name: "public", PrivateIP: "10.0.0.2", PublicIP: "192.0.2.1"},
+	}, vm.AddressModePublic))
+	require.Error(t, validateProvisionedAddressMode(vm.List{
+		{Name: "unexpected-public", PrivateIP: "10.0.0.2", PublicIP: "192.0.2.1"},
+	}, vm.AddressModePrivate))
+	require.Error(t, validateProvisionedAddressMode(vm.List{
+		{Name: "missing-public", PrivateIP: "10.0.0.2"},
+	}, vm.AddressModePublic))
 }
 
 func TestParseGCECapacityError(t *testing.T) {
