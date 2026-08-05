@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAllowedLocalSSDCount(t *testing.T) {
@@ -64,6 +65,111 @@ func TestAllowedLocalSSDCount(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestComputeAddressArgs(t *testing.T) {
+	providerOpts := DefaultProviderOpts()
+	publicOpts := vm.DefaultCreateOpts()
+	require.Empty(t, computeAddressArgs(publicOpts, providerOpts))
+
+	privateOpts := vm.DefaultCreateOpts()
+	privateOpts.AddressMode = vm.AddressModePrivate
+	require.Equal(t, []string{"--no-address"}, computeAddressArgs(privateOpts, providerOpts))
+
+	providerOpts.UseIAP = true
+	require.Equal(t,
+		[]string{"--no-address", "--tags", iapSSHTag},
+		computeAddressArgs(privateOpts, providerOpts),
+	)
+	// Public mode keeps the original network arguments even when the IAP flag
+	// is supplied; IAP is only meaningful for private instances.
+	require.Empty(t, computeAddressArgs(publicOpts, providerOpts))
+}
+
+func TestResolveAddressMode(t *testing.T) {
+	defaultProjectProvider := &Provider{
+		Projects:       []string{"default-project"},
+		defaultProject: "default-project",
+	}
+	nonDefaultProjectProvider := &Provider{
+		Projects:       []string{"other-project"},
+		defaultProject: "default-project",
+	}
+
+	mode, err := defaultProjectProvider.resolveAddressMode(vm.AddressModeAuto)
+	require.NoError(t, err)
+	require.Equal(t, vm.AddressModePrivate, mode)
+	mode, err = nonDefaultProjectProvider.resolveAddressMode(vm.AddressModeAuto)
+	require.NoError(t, err)
+	require.Equal(t, vm.AddressModePublic, mode)
+	mode, err = defaultProjectProvider.resolveAddressMode(vm.AddressModePublic)
+	require.NoError(t, err)
+	require.Equal(t, vm.AddressModePublic, mode)
+	mode, err = defaultProjectProvider.resolveAddressMode("")
+	require.NoError(t, err)
+	require.Equal(t, vm.AddressModePublic, mode)
+}
+
+func TestVMNetworkParsing(t *testing.T) {
+	jsonInstance := jsonVM{
+		Name:              "private-json-vm",
+		Labels:            map[string]string{vm.TagLifetime: time.Hour.String()},
+		CreationTimestamp: time.Now(),
+		SelfLink:          "https://www.googleapis.com/compute/v1/projects/test-project/zones/us-east1-b/instances/private-json-vm",
+	}
+	jsonInstance.NetworkInterfaces = []struct {
+		Network       string
+		NetworkIP     string
+		AccessConfigs []struct {
+			Name  string
+			NatIP string
+		}
+	}{
+		{
+			Network:   "projects/test-project/global/networks/private-vpc",
+			NetworkIP: "10.0.0.2",
+		},
+	}
+	jsonInstance.Scheduling.OnHostMaintenance = "MIGRATE"
+	jsonInstance.Tags.Items = []string{iapSSHTag}
+	parsedJSON := jsonInstance.toVM("test-project", "roachprod.example")
+	require.Empty(t, parsedJSON.Errors)
+	require.Equal(t, "10.0.0.2", parsedJSON.PrivateIP)
+	require.Empty(t, parsedJSON.PublicIP)
+	require.Equal(t, "private-vpc", parsedJSON.VPC)
+	require.Equal(t, []string{iapSSHTag}, parsedJSON.NetworkTags)
+	require.True(t, UsesIAP(*parsedJSON))
+
+	publicJSONInstance := jsonInstance
+	publicJSONInstance.Name = "public-json-vm"
+	publicJSONInstance.Tags.Items = nil
+	publicJSONInstance.NetworkInterfaces[0].AccessConfigs = []struct {
+		Name  string
+		NatIP string
+	}{
+		{Name: "External NAT", NatIP: "192.0.2.1"},
+	}
+	parsedPublicJSON := publicJSONInstance.toVM("test-project", "roachprod.example")
+	require.Empty(t, parsedPublicJSON.Errors)
+	require.Equal(t, "10.0.0.2", parsedPublicJSON.PrivateIP)
+	require.Equal(t, "192.0.2.1", parsedPublicJSON.PublicIP)
+	require.Equal(t, "private-vpc", parsedPublicJSON.VPC)
+	require.Empty(t, parsedPublicJSON.NetworkTags)
+}
+
+func TestValidateProvisionedAddressMode(t *testing.T) {
+	require.NoError(t, validateProvisionedAddressMode(vm.List{
+		{Name: "private", PrivateIP: "10.0.0.2"},
+	}, vm.AddressModePrivate))
+	require.NoError(t, validateProvisionedAddressMode(vm.List{
+		{Name: "public", PrivateIP: "10.0.0.2", PublicIP: "192.0.2.1"},
+	}, vm.AddressModePublic))
+	require.Error(t, validateProvisionedAddressMode(vm.List{
+		{Name: "unexpected-public", PrivateIP: "10.0.0.2", PublicIP: "192.0.2.1"},
+	}, vm.AddressModePrivate))
+	require.Error(t, validateProvisionedAddressMode(vm.List{
+		{Name: "missing-public", PrivateIP: "10.0.0.2"},
+	}, vm.AddressModePublic))
 }
 
 func TestParseGCECapacityError(t *testing.T) {

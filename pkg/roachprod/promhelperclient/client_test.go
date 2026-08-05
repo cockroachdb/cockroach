@@ -54,8 +54,9 @@ func TestNewPromClient(t *testing.T) {
 			environment CloudEnvironment
 			expected    Reachability
 		}{
-			{"gce", "cockroach-ephemeral", Private},
-			{"gce", Default, Public},
+			{"gce", Default, Private},
+			{"gce", "any-gce-project", Private},
+			{"gce", PublicEnvironment, Public},
 			{"aws", Default, Public},
 			{"azure", Default, Public},
 			{"unknown", Default, None},

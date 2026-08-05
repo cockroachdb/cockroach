@@ -127,6 +127,9 @@ type VM struct {
 	ProviderAccountID string `json:"provider_account_id"`
 	PrivateIP         string `json:"private_ip"`
 	PublicIP          string `json:"public_ip"`
+	// NetworkTags contains provider network tags used to select transport or
+	// firewall behavior. It is empty for providers that do not expose them.
+	NetworkTags []string `json:"network_tags,omitempty"`
 	// The username that should be used to connect to the VM.
 	RemoteUser string `json:"remote_user"`
 	// The VPC value defines an equivalency set for VMs that can route
@@ -291,6 +294,8 @@ type CreateOpts struct {
 	ClusterName  string
 	Lifetime     time.Duration
 	CustomLabels map[string]string
+	// AddressMode controls whether newly created VMs receive public addresses.
+	AddressMode AddressMode
 
 	GeoDistributed bool
 	Arch           string
@@ -311,6 +316,7 @@ func DefaultCreateOpts() CreateOpts {
 	defaultCreateOpts := CreateOpts{
 		ClusterName:    "",
 		Lifetime:       DefaultLifetime,
+		AddressMode:    AddressModePublic,
 		GeoDistributed: false,
 		VMProviders:    []string{},
 		OsVolumeSize:   10,

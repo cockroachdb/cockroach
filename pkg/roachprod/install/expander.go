@@ -358,7 +358,11 @@ func (e *expander) maybeExpandIPAddress(
 		if e.publicIPs == nil {
 			e.publicIPs = make(map[Node]string, len(c.VMs))
 			for _, node := range allNodes(len(c.VMs)) {
-				e.publicIPs[node] = c.Host(node)
+				ip, err := c.GetExternalIP(node)
+				if err != nil {
+					return "", false, err
+				}
+				e.publicIPs[node] = ip
 			}
 		}
 
