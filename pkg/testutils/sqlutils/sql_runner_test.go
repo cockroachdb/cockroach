@@ -8,6 +8,7 @@ package sqlutils_test
 import (
 	"context"
 	gosql "database/sql"
+	"database/sql/driver"
 	"fmt"
 	"testing"
 
@@ -82,4 +83,56 @@ type mockFataler struct {
 
 func (f *mockFataler) Fatalf(s string, args ...interface{}) {
 	f.err = fmt.Sprintf(s, args...)
+}
+
+type failingDB struct{}
+
+func (failingDB) ExecContext(context.Context, string, ...interface{}) (gosql.Result, error) {
+	return nil, fmt.Errorf("injected failure")
+}
+
+func (failingDB) QueryContext(context.Context, string, ...interface{}) (*gosql.Rows, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (failingDB) QueryRowContext(context.Context, string, ...interface{}) *gosql.Row {
+	return nil
+}
+
+func TestSQLRunnerRedactsUnsafeArgsInErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const secret = "dont-print-this-secret"
+	f := &mockFataler{}
+	unsafeString := sqlutils.UnsafeString(
+		"s3://bucket?AWS_SECRET_ACCESS_KEY=" + secret,
+	)
+
+	sqlutils.MakeSQLRunner(failingDB{}).Exec(
+		f, "SELECT $1, $2, $3", "ordinary string", 42, unsafeString,
+	)
+
+	require.NotContains(t, f.err, secret)
+	require.Contains(t, f.err, `query="SELECT $1, $2, $3"`)
+	require.Contains(t, f.err, "args=[ordinary string 42 ×]")
+	require.Contains(t, f.err, "injected failure")
+
+	convertedString, err := driver.DefaultParameterConverter.ConvertValue(unsafeString)
+	require.NoError(t, err)
+	require.Equal(t, string(unsafeString), convertedString)
+}
+
+func TestSQLRunnerUnsafeStringArgument(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	const expected = "database/sql-compatible"
+	var actual string
+	sqlutils.MakeSQLRunner(db).
+		QueryRow(t, "SELECT $1::STRING", sqlutils.UnsafeString(expected)).
+		Scan(&actual)
+	require.Equal(t, expected, actual)
 }
