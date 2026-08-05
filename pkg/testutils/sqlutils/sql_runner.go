@@ -18,16 +18,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
-// SQLRunner wraps a Fataler and *gosql.DB connection and provides
-// convenience functions to run SQL statements and fail the test on any errors.
+// SQLRunner wraps a Fataler and *gosql.DB connection and provides convenience
+// functions to run SQL statements and fail the test on any errors.
+//
+// Query arguments are considered safe in failure messages by default. Wrap
+// sensitive string arguments in UnsafeString to redact them.
 type SQLRunner struct {
 	DB                   DBHandle
 	SucceedsSoonDuration time.Duration // defaults to testutils.DefaultSucceedsSoonDuration or testutils.RaceSucceedsSoonDuration
 	MaxTxnRetries        int           // defaults to 0 for unlimited retries
+}
+
+// UnsafeString marks a string SQL argument as unsafe for inclusion in SQLRunner
+// failure messages. Its underlying string type remains compatible with
+// database/sql.
+type UnsafeString string
+
+// SafeFormat implements redact.SafeFormatter.
+func (s UnsafeString) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.UnsafeString(string(s))
 }
 
 // DBHandle is an interface that applies to *gosql.DB, *gosql.Conn, and
@@ -77,6 +91,21 @@ func fmtMessage(message string) string {
 	return message
 }
 
+// formatArgsForError formats SQL arguments as safe by default to preserve useful
+// test diagnostics. Values that implement redact.SafeFormatter can identify
+// unsafe portions.
+func formatArgsForError(args []interface{}) string {
+	sanitizedArgs := make([]interface{}, len(args))
+	for i, arg := range args {
+		if _, ok := arg.(redact.SafeFormatter); ok {
+			sanitizedArgs[i] = arg
+		} else {
+			sanitizedArgs[i] = redact.Safe(arg)
+		}
+	}
+	return redact.Sprintf("%v", sanitizedArgs).Redact().StripMarkers()
+}
+
 // Exec is a wrapper around gosql.Exec that kills the test on error.
 func (sr *SQLRunner) Exec(t Fataler, query string, args ...interface{}) gosql.Result {
 	helperOrNoop(t)()
@@ -91,7 +120,8 @@ func (sr *SQLRunner) ExecWithMessage(
 	helperOrNoop(t)()
 	r, err := sr.DB.ExecContext(context.Background(), query, args...)
 	if err != nil {
-		t.Fatalf("%serror executing query=%q args=%q: %s", fmtMessage(message), query, args, pgerror.FullError(err))
+		t.Fatalf("%serror executing query=%q args=%s: %s",
+			fmtMessage(message), query, formatArgsForError(args), pgerror.FullError(err))
 	}
 	return r
 }
@@ -159,7 +189,8 @@ func (sr *SQLRunner) ExecRowsAffectedWithMessage(
 		t.Fatalf("%s%v", fmtMessage(message), err)
 	}
 	if numRows != int64(expRowsAffected) {
-		t.Fatalf("%sexpected %d affected rows, got %d on query=%q args=%q", fmtMessage(message), expRowsAffected, numRows, query, args)
+		t.Fatalf("%sexpected %d affected rows, got %d on query=%q args=%s",
+			fmtMessage(message), expRowsAffected, numRows, query, formatArgsForError(args))
 	}
 }
 
