@@ -6589,6 +6589,11 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This test is flaky on release branches that predate the checkpoint fix in
+	// https://github.com/cockroachdb/cockroach/pull/162546, where a lagging span
+	// causes a checkpoint save per range. That fix was not backported this far.
+	skip.WithIssue(t, 158913)
+
 	// Add verbose logging to help debug future failures.
 	require.NoError(t, log.SetVModule("changefeed_processors=1,replica_rangefeed=2,"+
 		"replica_range_lease=3,raft=3"))
