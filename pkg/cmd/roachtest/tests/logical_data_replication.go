@@ -240,7 +240,7 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:                       sp.name,
 			Owner:                      registry.OwnerCDC,
-			Timeout:                    60 * time.Minute,
+			Timeout:                    70 * time.Minute,
 			CompatibleClouds:           registry.OnlyGCE,
 			Suites:                     registry.Suites(registry.Nightly),
 			Cluster:                    sp.clusterSpec.ToSpec(r),
@@ -538,14 +538,15 @@ func verifyConflictCorrectness(
 func TestLDRCreateTablesTPCC(
 	ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup, ldrConfig ldrConfig,
 ) {
-	// duration is 30 minutes because during this time, the following occurs:
+	// duration is 40 minutes because during this time, the following occurs:
 	// - 10 minute initial scan
 	// - 5 mins with logical_replication.consumer.low_admission_priority.enabled =
 	// false (during initial benchmarking, flipping this to true caused the
 	// catchup scan to take 15 minutes).
-	// - 15 mins of steady state. If the above scans take too long, the latency
-	// verifier may trip.
-	duration := 30 * time.Minute
+	// - 25 mins of steady state. If the above scans take too long, the latency
+	// verifier may trip, so give catchup extra headroom to reach steady state
+	// before the workload (and thus the verifier's polling window) ends.
+	duration := 40 * time.Minute
 	schemaWarehouses, workloadWarehouses := 1000, 500
 	if c.IsLocal() {
 		duration = 3 * time.Minute
@@ -582,7 +583,7 @@ func TestLDRCreateTablesTPCC(
 	// Setup LDR after the workload starts. This verifies we can catch up on
 	// backlog, ensures that writing to source table during the initial scan does
 	// not trigger any buts, and allows the test to run more quickly because the
-	// workload 30 minute timer overlaps with the ldr initial scan.
+	// workload timer overlaps with the ldr initial scan.
 	_, rightJobID := setupLDR(ctx, t, c, setup, workload, ldrConfig)
 
 	maxExpectedLatency := 3 * time.Minute
