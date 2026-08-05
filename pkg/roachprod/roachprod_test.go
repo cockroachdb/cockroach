@@ -9,9 +9,12 @@ import (
 	"io"
 	"testing"
 
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func nilLogger() *logger.Logger {
@@ -24,6 +27,27 @@ func nilLogger() *logger.Logger {
 		panic(err)
 	}
 	return l
+}
+
+func TestIPExternalRequiresPublicIP(t *testing.T) {
+	cluster := &install.SyncedCluster{
+		Cluster: cloudcluster.Cluster{VMs: vm.List{{
+			PrivateIP: "10.0.0.1",
+		}}},
+		Nodes: install.Nodes{1},
+	}
+
+	_, err := clusterIPs(cluster, true)
+	require.ErrorContains(t, err, "no public IP for node 1")
+
+	cluster.VMs[0].PublicIP = "192.0.2.1"
+	ips, err := clusterIPs(cluster, true)
+	require.NoError(t, err)
+	require.Equal(t, []string{"192.0.2.1"}, ips)
+
+	ips, err = clusterIPs(cluster, false)
+	require.NoError(t, err)
+	require.Equal(t, []string{"10.0.0.1"}, ips)
 }
 
 func TestVerifyClusterName(t *testing.T) {
