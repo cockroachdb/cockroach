@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -97,6 +98,7 @@ func checkMetadataEntryExists(
 func TestListAndDeleteFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "userfile tests are slow under race because they start a test server")
 
 	ctx := context.Background()
 	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -150,6 +152,7 @@ func TestListAndDeleteFiles(t *testing.T) {
 func TestReadWriteFile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "userfile tests are slow under race because they start a test server")
 
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -325,6 +328,7 @@ func TestReadWriteFile(t *testing.T) {
 func TestUserGrants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "userfile tests are slow under race because they start a test server")
 
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -405,6 +409,7 @@ func getTableGrantees(ctx context.Context, tablename string, conn *gosql.Conn) (
 func TestDifferentUserDisallowed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "userfile tests are slow under race because they start a test server")
 
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -459,6 +464,7 @@ func TestDifferentUserDisallowed(t *testing.T) {
 func TestDifferentRoleDisallowed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "userfile tests are slow under race because they start a test server")
 
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -518,6 +524,7 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 func TestDatabaseScope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "userfile tests are slow under race because they start a test server")
 
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})

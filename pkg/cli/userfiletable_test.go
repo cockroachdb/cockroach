@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -397,6 +398,7 @@ func BenchmarkUserfileUpload(b *testing.B) {
 
 func TestUserFileUploadRecursive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "userfile tests are slow under race because they start a test server")
 
 	c := NewCLITest(TestCLIParams{T: t})
 	defer c.Cleanup()
@@ -480,6 +482,7 @@ func TestUserFileUploadRecursive(t *testing.T) {
 
 func TestUserFileUpload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "userfile tests are slow under race because they start a test server")
 
 	c := NewCLITest(TestCLIParams{T: t})
 	defer c.Cleanup()
@@ -580,6 +583,7 @@ func TestUserFileUpload(t *testing.T) {
 // Uploading the same file with telemetry logs enabled used to crash the node.
 func TestUserFileUploadExistingFile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "userfile tests are slow under race because they start a test server")
 
 	c := NewCLITest(TestCLIParams{T: t})
 	defer c.Cleanup()
@@ -647,6 +651,7 @@ func checkDeletedFiles(t *testing.T, c TestCLI, uri, args string, expectedFiles 
 
 func TestUserfile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "userfile tests are slow under race because they start a test server")
 
 	c := NewCLITest(TestCLIParams{T: t})
 	c.omitArgs = true
@@ -830,6 +835,7 @@ func TestUserfile(t *testing.T) {
 
 func TestUsernameUserfileInteraction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "userfile tests are slow under race because they start a test server")
 
 	c := NewCLITest(TestCLIParams{T: t})
 	c.omitArgs = true

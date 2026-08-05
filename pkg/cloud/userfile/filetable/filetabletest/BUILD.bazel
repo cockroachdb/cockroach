@@ -18,6 +18,7 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/log",
