@@ -73,7 +73,15 @@ const (
 	VolumeTypePersistent VolumeType = "persistent"
 
 	DefaultProjectID = "cockroach-ephemeral"
+	// iapSSHTag targets the firewall rule that permits SSH from IAP's TCP
+	// forwarding address range in private roachprod VPCs.
+	iapSSHTag = "iap-ssh"
 )
+
+// UsesIAP reports whether a VM was created for SSH access through IAP.
+func UsesIAP(v vm.VM) bool {
+	return v.Provider == ProviderName && slices.Contains(v.NetworkTags, iapSSHTag)
+}
 
 var (
 	defaultDefaultProject, defaultMetadataProject, defaultDNSProject, defaultDefaultServiceAccount string
@@ -261,6 +269,9 @@ type jsonVM struct {
 	Name              string
 	Labels            map[string]string
 	CreationTimestamp time.Time
+	Tags              struct {
+		Items []string
+	}
 	NetworkInterfaces []struct {
 		Network       string
 		NetworkIP     string
@@ -312,13 +323,11 @@ func (jsonVM *jsonVM) toVM(project string, dnsDomain string) (ret *vm.VM) {
 	if len(jsonVM.NetworkInterfaces) == 0 {
 		vmErrors = append(vmErrors, vm.NewVMError(vm.ErrBadNetwork))
 	} else {
-		privateIP = jsonVM.NetworkInterfaces[0].NetworkIP
-		if len(jsonVM.NetworkInterfaces[0].AccessConfigs) == 0 {
-			vmErrors = append(vmErrors, vm.NewVMError(vm.ErrBadNetwork))
-		} else {
-			_ = jsonVM.NetworkInterfaces[0].AccessConfigs[0].Name // silence unused warning
-			publicIP = jsonVM.NetworkInterfaces[0].AccessConfigs[0].NatIP
-			vpc = lastComponent(jsonVM.NetworkInterfaces[0].Network)
+		networkInterface := jsonVM.NetworkInterfaces[0]
+		privateIP = networkInterface.NetworkIP
+		vpc = lastComponent(networkInterface.Network)
+		if len(networkInterface.AccessConfigs) > 0 {
+			publicIP = networkInterface.AccessConfigs[0].NatIP
 		}
 	}
 	if jsonVM.Scheduling.OnHostMaintenance == "" {
@@ -385,6 +394,7 @@ func (jsonVM *jsonVM) toVM(project string, dnsDomain string) (ret *vm.VM) {
 		ProviderID:             jsonVM.Name,
 		ProviderAccountID:      projectName,
 		PublicIP:               publicIP,
+		NetworkTags:            jsonVM.Tags.Items,
 		PublicDNS:              fmt.Sprintf("%s.%s", jsonVM.Name, dnsDomain),
 		PublicDNSZone:          dnsDomain,
 		RemoteUser:             remoteUser,
@@ -413,6 +423,8 @@ func DefaultProviderOpts() *ProviderOpts {
 		MachineType:          DefaultMachineType,
 		MinCPUPlatform:       "Intel Ice Lake",
 		Zones:                nil,
+		Subnet:               "default",
+		UseIAP:               false,
 		Image:                DefaultImage,
 		SSDCount:             1,
 		PDVolumeType:         "pd-ssd",
@@ -440,10 +452,15 @@ type ProviderOpts struct {
 	MachineType string
 	// MachineTypeSpecs captures the raw --gce-machine-type flag values.
 	// See ParseMachineTypeSpecs for the supported syntax.
-	MachineTypeSpecs              []string
-	MinCPUPlatform                string
-	BootDiskType                  string
-	Zones                         []string
+	MachineTypeSpecs []string
+	MinCPUPlatform   string
+	BootDiskType     string
+	Zones            []string
+	// Subnet is the subnet name or self-link used for unmanaged instances.
+	Subnet string
+	// UseIAP applies the iap-ssh network tag to private VMs so roachprod
+	// routes SSH through an IAP TCP tunnel.
+	UseIAP                        bool
 	Image                         string
 	SSDCount                      int
 	PDVolumeType                  string
@@ -1351,6 +1368,10 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
 			strings.Join(DefaultZones(string(vm.ArchAMD64), true), ",")))
+	flags.StringVar(&o.Subnet, ProviderName+"-subnet", "default",
+		"subnet name or self-link to use for unmanaged instances")
+	flags.BoolVar(&o.UseIAP, ProviderName+"-use-iap", false,
+		"route SSH to private instances through IAP and apply the iap-ssh network tag")
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
 		"use preemptible GCE instances (lifetime cannot exceed 24h)")
 	flags.BoolVar(&o.UseSpot, ProviderName+"-use-spot", false,
@@ -1451,6 +1472,48 @@ func (o *ProviderOpts) useArmAMI() bool {
 func (o *ProviderOpts) machineTypeSupportsLocalSSD() bool {
 	_, err := AllowedLocalSSDCount(o.MachineType)
 	return err == nil
+}
+
+func (o *ProviderOpts) subnet() string {
+	if o.Subnet == "" {
+		return "default"
+	}
+	return o.Subnet
+}
+
+func (p *Provider) resolveAddressMode(mode vm.AddressMode) (vm.AddressMode, error) {
+	mode, err := vm.NormalizeAddressMode(mode)
+	if err != nil {
+		return "", err
+	}
+	if mode == vm.AddressModeAuto {
+		if p.GetProject() == p.defaultProject {
+			return vm.AddressModePrivate, nil
+		}
+		return vm.AddressModePublic, nil
+	}
+	return mode, nil
+}
+
+func validateProvisionedAddressMode(vms vm.List, mode vm.AddressMode) error {
+	for _, v := range vms {
+		switch mode {
+		case vm.AddressModePrivate:
+			if v.PublicIP != "" {
+				return errors.Errorf("private address mode created VM %q with public IP %s", v.Name, v.PublicIP)
+			}
+			if v.PrivateIP == "" {
+				return errors.Errorf("private address mode created VM %q without a private IP", v.Name)
+			}
+		case vm.AddressModePublic:
+			if v.PublicIP == "" {
+				return errors.Errorf("public address mode created VM %q without a public IP", v.Name)
+			}
+		default:
+			return errors.Errorf("unexpected resolved address mode %q", mode)
+		}
+	}
+	return nil
 }
 
 // autoStorageType returns "pd-ssd" if the machine type supports it, otherwise
@@ -1663,6 +1726,17 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 	return zones, nil
 }
 
+func computeAddressArgs(opts vm.CreateOpts, providerOpts *ProviderOpts) []string {
+	if opts.AddressMode != vm.AddressModePrivate {
+		return nil
+	}
+	args := []string{"--no-address"}
+	if providerOpts.UseIAP {
+		args = append(args, "--tags", iapSSHTag)
+	}
+	return args
+}
+
 // computeInstanceArgs computes the arguments to be passed to the gcloud command
 // to create a VM or create an instance template for a VM. This function must
 // ensure that it returns arguments compatible with both the `gcloud compute instances create` and `gcloud compute
@@ -1704,6 +1778,7 @@ func (p *Provider) computeInstanceArgs(
 		"--image-project", imageProject,
 		"--boot-disk-type", providerOpts.bootDiskType(),
 	}
+	args = append(args, computeAddressArgs(opts, providerOpts)...)
 
 	if project == p.defaultProject && providerOpts.ServiceAccount == "" {
 		providerOpts.ServiceAccount = providerOpts.defaultServiceAccount
@@ -1949,6 +2024,17 @@ func (p *Provider) Create(
 ) (vm.List, error) {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
 	project := p.GetProject()
+	addressMode, err := p.resolveAddressMode(opts.AddressMode)
+	if err != nil {
+		return nil, err
+	}
+	opts.AddressMode = addressMode
+	if providerOpts.Managed && addressMode == vm.AddressModePrivate {
+		return nil, errors.New("private address mode is not supported with --gce-managed yet")
+	}
+	if providerOpts.Managed && providerOpts.subnet() != "default" {
+		return nil, errors.New("--gce-subnet is not supported with --gce-managed yet")
+	}
 	var gcJob bool
 	for _, prj := range projectsWithGC {
 		if prj == p.GetProject() {
@@ -2087,7 +2173,7 @@ func (p *Provider) Create(
 		// Default: CLI-based approach using batched gcloud commands.
 		var vmListMutex syncutil.Mutex
 		g := newLimitedErrorGroup()
-		createArgs := []string{"compute", "instances", "create", "--subnet", "default", "--format", "json"}
+		createArgs := []string{"compute", "instances", "create", "--subnet", providerOpts.subnet(), "--format", "json"}
 		createArgs = append(createArgs, "--labels", labels)
 		createArgs = append(createArgs, instanceArgs...)
 
@@ -2128,6 +2214,9 @@ func (p *Provider) Create(
 		}
 	}
 
+	if err := validateProvisionedAddressMode(vmList, addressMode); err != nil {
+		return nil, err
+	}
 	return vmList, propagateDiskLabels(l, project, labels, zoneToHostNames, opts.SSDOpts.UseLocalSSD,
 		providerOpts.PDVolumeCount, providerOpts.BootDiskOnly)
 }

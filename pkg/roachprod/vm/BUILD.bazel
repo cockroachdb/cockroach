@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "vm",
     srcs = [
+        "address_mode.go",
         "create_capacity_error.go",
         "dns.go",
         "startup.go",
@@ -24,6 +25,7 @@ go_test(
     name = "vm_test",
     size = "small",
     srcs = [
+        "address_mode_test.go",
         "startup_test.go",
         "vm_test.go",
     ],

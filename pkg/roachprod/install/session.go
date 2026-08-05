@@ -47,6 +47,7 @@ type remoteCommand struct {
 	user          string
 	host          string
 	cmd           string
+	sshOptions    []string
 	debugDisabled bool
 	debugName     string
 }
@@ -107,9 +108,11 @@ func newRemoteSession(l *logger.Logger, command *remoteCommand) *remoteSession {
 		}
 	}
 
-	args := []string{
-		command.user + "@" + command.host,
-
+	args := []string{command.user + "@" + command.host}
+	// Transport-specific settings come first so they can override defaults;
+	// OpenSSH uses the first value supplied for most configuration options.
+	args = append(args, command.sshOptions...)
+	args = append(args,
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
 		// Send keep alives every minute to prevent connections without activity
@@ -121,7 +124,7 @@ func newRemoteSession(l *logger.Logger, command *remoteCommand) *remoteSession {
 		// Timeout long connections so failure information is not lost by the roachtest
 		// context cancellation killing hanging roachprod processes.
 		"-o", "ConnectTimeout=5",
-	}
+	)
 	args = append(args, loggingArgs...)
 	args = append(args, sshAuthArgs()...)
 	args = append(args, command.cmd)
