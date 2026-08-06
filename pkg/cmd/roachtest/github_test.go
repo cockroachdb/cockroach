@@ -54,25 +54,30 @@ func TestShouldPost(t *testing.T) {
 		{errors: []error{vmPreemptionError("vm1")}},
 	}
 	testCases := []struct {
-		disableIssues     bool
-		nodeCount         int
-		envGithubAPIToken string
-		envTcBuildBranch  string
-		failures          []failure
-		expectedReason    string
+		disableIssues       bool
+		nodeCount           int
+		envGithubAPIToken   string
+		envTcBuildBranch    string
+		extraCreateBranches []string
+		failures            []failure
+		expectedReason      string
 	}{
 		/* Cases 1 - 4 verify that issues are not posted if any of the relevant criteria checks fail */
 		// disable
-		{true, 1, "token", "master", nil, "issue posting was disabled via command line flag"},
+		{true, 1, "token", "master", nil, nil, "issue posting was disabled via command line flag"},
 		// nodeCount
-		{false, 0, "token", "master", nil, "Cluster.NodeCount is zero"},
+		{false, 0, "token", "master", nil, nil, "Cluster.NodeCount is zero"},
 		// apiToken
-		{false, 1, "", "master", nil, "GitHub API token not set"},
+		{false, 1, "", "master", nil, nil, "GitHub API token not set"},
 		// branch
-		{false, 1, "token", "", nil, `not a release branch: "branch-not-found-in-env"`},
+		{false, 1, "token", "", nil, nil, `not a release branch: "branch-not-found-in-env"`},
+		// A non-release branch not listed in extraCreateBranches is skipped.
+		{false, 1, "token", "roachprod-private", nil, nil, `not a release branch: "roachprod-private"`},
+		// A non-release branch listed in extraCreateBranches is allowed to post.
+		{false, 1, "token", "roachprod-private", []string{"roachprod-private"}, nil, ""},
 		// VM preemtion while test ran
-		{false, 1, "token", "master", preemptionFailure, "non-reportable: preempted VMs: vm1 [owner=test-eng]"},
-		{false, 1, "token", "master", nil, ""},
+		{false, 1, "token", "master", nil, preemptionFailure, "non-reportable: preempted VMs: vm1 [owner=test-eng]"},
+		{false, 1, "token", "master", nil, nil, ""},
 	}
 
 	reg := makeTestRegistry()
@@ -92,7 +97,10 @@ func TestShouldPost(t *testing.T) {
 
 		ti := &testImpl{spec: testSpec}
 		ti.mu.failures = c.failures
-		github := &githubIssues{disable: c.disableIssues}
+		github := &githubIssues{
+			disable:             c.disableIssues,
+			extraCreateBranches: c.extraCreateBranches,
+		}
 
 		skipReason := github.shouldPost(ti)
 		require.Equal(t, c.expectedReason, skipReason)
@@ -124,6 +132,7 @@ func TestCreatePostRequest(t *testing.T) {
 	type githubIssueOpts struct {
 		failures        []failure
 		loadTeamsFailed bool
+		extraLabels     []string
 	}
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "github"), func(t *testing.T, path string) {
@@ -155,7 +164,8 @@ func TestCreatePostRequest(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			if d.Cmd == "post" {
 				github := &githubIssues{
-					teamLoader: teamLoadFn,
+					teamLoader:  teamLoadFn,
+					extraLabels: testCase.extraLabels,
 				}
 				issueInfo := newGithubIssueInfo(testClusterImpl, vmOpts)
 
@@ -244,6 +254,10 @@ F250826 19:49:07.194443 3106 sql/sem/builtins/builtins.go:6063 ⋮ [T1,Vsystem,n
 				testCase.failures = append(testCase.failures, createFailure(refError))
 			case "add-label":
 				ti.spec.ExtraLabels = append(ti.spec.ExtraLabels, d.CmdArgs[0].Vals...)
+			case "add-github-label":
+				// Simulates the --extra-github-issue-labels flag: labels attached to
+				// every issue this invocation files, independent of the test spec.
+				testCase.extraLabels = append(testCase.extraLabels, d.CmdArgs[0].Vals...)
 			case "add-param":
 				ti.AddParam(d.CmdArgs[0].Vals[0], d.CmdArgs[1].Vals[0])
 			case "set-cluster-create-failed":
