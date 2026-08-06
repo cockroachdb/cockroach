@@ -19,16 +19,102 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 )
+
+func TestApplyGCESubnetOverride(t *testing.T) {
+	crdbOpts := gce.DefaultProviderOpts()
+	workloadOpts := gce.DefaultProviderOpts()
+	require.NoError(t, applyGCESubnetOverride(
+		spec.GCE, "staging-vpc-us-east1", crdbOpts, workloadOpts,
+	))
+	require.Equal(t, "staging-vpc-us-east1", crdbOpts.Subnet)
+	require.Equal(t, "staging-vpc-us-east1", workloadOpts.Subnet)
+
+	require.ErrorContains(t,
+		applyGCESubnetOverride(spec.AWS, "subnet", nil, nil),
+		"only valid with --cloud=gce",
+	)
+}
+
+func TestApplyForceInsecure(t *testing.T) {
+	settings := install.MakeClusterSettings(install.SimpleSecureOption(true))
+	applyForceInsecure(&settings, true)
+	require.False(t, settings.Secure)
+}
+
+func TestRoachprodClusterRunnerReachableAddresses(t *testing.T) {
+	origPgURL := roachprodPgURL
+	origAdminURL := roachprodAdminURL
+	defer func() {
+		roachprodPgURL = origPgURL
+		roachprodAdminURL = origAdminURL
+	}()
+
+	c := &clusterImpl{name: "runner-addresses", spec: spec.MakeClusterSpec(1)}
+	var pgOpts roachprod.PGURLOptions
+	roachprodPgURL = func(
+		ctx context.Context,
+		l *logger.Logger,
+		clusterName string,
+		certsDir string,
+		opts roachprod.PGURLOptions,
+	) ([]string, error) {
+		pgOpts = opts
+		return []string{"postgres://root@10.0.0.1:26257/defaultdb?sslmode=disable"}, nil
+	}
+
+	addrs, err := c.ExternalAddr(context.Background(), nil, c.Node(1))
+	require.NoError(t, err)
+	require.Equal(t, []string{"10.0.0.1:26257"}, addrs)
+	require.True(t, pgOpts.UseHost)
+	require.False(t, pgOpts.External)
+
+	ips, err := c.ExternalIP(context.Background(), nil, c.Node(1))
+	require.NoError(t, err)
+	require.Equal(t, []string{"10.0.0.1"}, ips)
+	require.True(t, pgOpts.UseHost)
+	require.False(t, pgOpts.External)
+
+	urls, err := c.ExternalPGUrl(
+		context.Background(), nil, c.Node(1), roachprod.PGURLOptions{External: true},
+	)
+	require.NoError(t, err)
+	require.Equal(t, []string{"postgres://root@10.0.0.1:26257/defaultdb?sslmode=disable"}, urls)
+	require.True(t, pgOpts.UseHost)
+	require.False(t, pgOpts.External)
+
+	var usePublicIP, useHost bool
+	roachprodAdminURL = func(
+		ctx context.Context,
+		l *logger.Logger,
+		clusterName, virtualClusterName string,
+		sqlInstance int,
+		path string,
+		gotUsePublicIP, gotUseHost, openInBrowser bool,
+		secure install.SecureOption,
+	) ([]string, error) {
+		usePublicIP = gotUsePublicIP
+		useHost = gotUseHost
+		return []string{"http://10.0.0.1:26258/"}, nil
+	}
+
+	adminAddrs, err := c.ExternalAdminUIAddr(context.Background(), nil, c.Node(1))
+	require.NoError(t, err)
+	require.Equal(t, []string{"10.0.0.1:26258"}, adminAddrs)
+	require.False(t, usePublicIP)
+	require.True(t, useHost)
+}
 
 func TestClusterNodes(t *testing.T) {
 	c := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNode())}

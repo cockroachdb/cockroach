@@ -721,6 +721,12 @@ type clusterImpl struct {
 	preStartVirtualClusterHooks []install.PreStartHook
 }
 
+var (
+	// Indirections used by focused address-selection tests.
+	roachprodPgURL    = roachprod.PgURL
+	roachprodAdminURL = roachprod.AdminURL
+)
+
 // Name returns the cluster name, i.e. something like `teamcity-....`
 func (c *clusterImpl) Name() string {
 	return c.name
@@ -879,6 +885,35 @@ func createFlagsOverride(opts *vm.CreateOpts) {
 	if roachtestflags.Changed(&roachtestflags.OverrideGeoDistributed) != nil {
 		opts.GeoDistributed = roachtestflags.OverrideGeoDistributed
 	}
+	if roachtestflags.Changed(&roachtestflags.OverrideAddressMode) != nil {
+		opts.AddressMode = roachtestflags.OverrideAddressMode
+	}
+}
+
+func applyGCESubnetOverride(
+	cloud spec.Cloud, subnet string, providerOpts, workloadProviderOpts vm.ProviderOpts,
+) error {
+	if subnet == "" {
+		return nil
+	}
+	if cloud != spec.GCE {
+		return errors.Newf("--gce-subnet is only valid with --cloud=gce, not %s", cloud)
+	}
+	setSubnet := func(opts vm.ProviderOpts) error {
+		if opts == nil {
+			return nil
+		}
+		gceOpts, ok := opts.(*gce.ProviderOpts)
+		if !ok {
+			return errors.AssertionFailedf("expected GCE provider options, got %T", opts)
+		}
+		gceOpts.Subnet = subnet
+		return nil
+	}
+	if err := setSubnet(providerOpts); err != nil {
+		return err
+	}
+	return setSubnet(workloadProviderOpts)
 }
 
 // createRetryPlanner owns safe mutations between roachprod create attempts.
@@ -1105,6 +1140,13 @@ func (f *clusterFactory) newCluster(
 	}
 
 	createFlagsOverride(&createVMOpts)
+	if roachtestflags.Changed(&roachtestflags.GCESubnet) != nil {
+		if err := applyGCESubnetOverride(
+			clusterCloud, roachtestflags.GCESubnet, providerOpts, workloadProviderOpts,
+		); err != nil {
+			return nil, nil, err
+		}
+	}
 	// Make sure expiration is changed if --lifetime override flag
 	// is passed.
 	cfg.spec.Lifetime = createVMOpts.Lifetime
@@ -2322,6 +2364,12 @@ func (c *clusterImpl) configureClusterSettingOptions(
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
 // can either be a specific node, empty (to indicate all nodes), or a pair of
 // nodes indicating a range.
+func applyForceInsecure(settings *install.ClusterSettings, force bool) {
+	if force {
+		settings.Secure = false
+	}
+}
+
 func (c *clusterImpl) StartE(
 	ctx context.Context,
 	l *logger.Logger,
@@ -2377,6 +2425,10 @@ func (c *clusterImpl) StartE(
 	for name, value := range roachtestflags.StartSettings {
 		settings.ClusterSettings[name] = value
 	}
+	if roachtestflags.ForceInsecure {
+		l.Printf("forcing insecure CockroachDB startup via --insecure")
+	}
+	applyForceInsecure(&settings, roachtestflags.ForceInsecure)
 
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
 
@@ -2894,13 +2946,13 @@ func (c *clusterImpl) pgURLErr(
 ) ([]string, error) {
 	opts.Secure = install.SimpleSecureOption(c.IsSecure())
 
-	// Use CockroachNodeCertsDir if it's an internal url with access to the node.
+	// Use CockroachNodeCertsDir if it's an internal URL expanded on a node.
 	certsDir := install.CockroachNodeCertsDir
-	if opts.External {
+	if opts.External || opts.UseHost {
 		certsDir = c.localCertsDir
 	}
 	opts.VirtualClusterName = c.virtualCluster(opts.VirtualClusterName)
-	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(nodes), certsDir, opts)
+	urls, err := roachprodPgURL(ctx, l, c.MakeNodes(nodes), certsDir, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -2917,11 +2969,14 @@ func (c *clusterImpl) InternalPGUrl(
 	return c.pgURLErr(ctx, l, nodes, opts)
 }
 
-// ExternalPGUrl returns the external Postgres endpoint for the specified nodes.
+// ExternalPGUrl returns a Postgres endpoint reachable from the test runner for
+// the specified nodes. It prefers public addresses and falls back to private
+// addresses for private-only clusters.
 func (c *clusterImpl) ExternalPGUrl(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts roachprod.PGURLOptions,
 ) ([]string, error) {
-	opts.External = true
+	opts.External = false
+	opts.UseHost = true
 	return c.pgURLErr(ctx, l, nodes, opts)
 }
 
@@ -2978,8 +3033,9 @@ func (c *clusterImpl) InternalAdminUIAddr(
 	return c.adminUIAddr(ctx, l, nodes, virtualClusterOptions, false /* external */)
 }
 
-// ExternalAdminUIAddr returns the external Admin UI address in the form host:port
-// for the specified nodes.
+// ExternalAdminUIAddr returns an Admin UI address reachable from the test
+// runner in the form host:port for the specified nodes. It prefers public
+// addresses and falls back to private addresses for private-only clusters.
 func (c *clusterImpl) ExternalAdminUIAddr(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts ...option.OptionFunc,
 ) ([]string, error) {
@@ -3038,15 +3094,16 @@ func (c *clusterImpl) adminUIAddr(
 	external bool,
 ) ([]string, error) {
 	var addrs []string
-	adminURLs, err := roachprod.AdminURL(
+	adminURLs, err := roachprodAdminURL(
 		ctx,
 		l,
 		c.MakeNodes(nodes),
 		c.virtualCluster(opts.VirtualClusterName),
 		opts.SQLInstance,
-		"", /* path */
+		"",    /* path */
+		false, /* usePublicIP */
 		external,
-		false,
+		false, /* openInBrowser */
 		install.SimpleSecureOption(false),
 	)
 	if err != nil {
@@ -3081,8 +3138,9 @@ func (c *clusterImpl) InternalAddr(
 	return c.addr(ctx, l, nodes, false)
 }
 
-// ExternalAddr returns the external address in the form host:port for the
-// specified nodes.
+// ExternalAddr returns an address reachable from the test runner in the form
+// host:port for the specified nodes. It prefers public addresses and falls
+// back to private addresses for private-only clusters.
 func (c *clusterImpl) ExternalAddr(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) ([]string, error) {
@@ -3090,10 +3148,10 @@ func (c *clusterImpl) ExternalAddr(
 }
 
 func (c *clusterImpl) addr(
-	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, external bool,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, useHost bool,
 ) ([]string, error) {
 	var addrs []string
-	urls, err := c.pgURLErr(ctx, l, nodes, roachprod.PGURLOptions{External: external})
+	urls, err := c.pgURLErr(ctx, l, nodes, roachprod.PGURLOptions{UseHost: useHost})
 	if err != nil {
 		return nil, err
 	}
@@ -3107,7 +3165,9 @@ func (c *clusterImpl) addr(
 	return addrs, nil
 }
 
-// ExternalIP returns the external IP addresses for the specified nodes.
+// ExternalIP returns IP addresses reachable from the test runner for the
+// specified nodes. It prefers public addresses and falls back to private
+// addresses for private-only clusters.
 func (c *clusterImpl) ExternalIP(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) ([]string, error) {
@@ -3152,10 +3212,11 @@ func (c *clusterImpl) ConnE(
 		return nil, err
 	}
 
-	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), roachprod.PGURLOptions{
+	urls, err := c.pgURLErr(ctx, l, c.Node(node), roachprod.PGURLOptions{
 		VirtualClusterName: connOptions.VirtualClusterName,
 		SQLInstance:        connOptions.SQLInstance,
 		Auth:               connOptions.AuthMode,
+		UseHost:            true,
 	})
 	if err != nil {
 		return nil, err

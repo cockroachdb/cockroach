@@ -75,6 +75,7 @@ func TestProjectConfiguration(t *testing.T) {
 		require.Equal(t, []string{"environment-vm-project"}, provider.Projects)
 		require.Equal(t, "environment-vm-project", VMProject())
 		require.Equal(t, "environment-infra-project", InfraProject())
+		require.Equal(t, "resource-environment-infra-project", InfraResourceName("resource"))
 		require.Equal(t, "environment-infra-project", DefaultProject())
 		require.Equal(t, "environment-metadata-project", MetadataProject())
 		require.Equal(t, "environment-artifacts-bucket", provider.ArtifactsBucket())
@@ -104,6 +105,16 @@ func TestProjectConfiguration(t *testing.T) {
 		require.Equal(t, "roachprod-vm@legacy-project.iam.gserviceaccount.com", DefaultServiceAccount())
 	})
 
+	t.Run("infra project is available before provider initialization", func(t *testing.T) {
+		defaultInfraProject = ""
+		vm.Providers[ProviderName] = &Provider{}
+		unsetEnv(t, "ROACHPROD_GCE_INFRA_PROJECT")
+		t.Setenv("ROACHPROD_GCE_DEFAULT_PROJECT", "legacy-project")
+
+		require.Equal(t, "legacy-project", InfraProject())
+		require.Equal(t, "resource-legacy-project", InfraResourceName("resource"))
+	})
+
 	t.Run("initialized provider keeps project roles distinct", func(t *testing.T) {
 		initTestGCEProjectDefaults(t)
 		provider, err := NewProvider(
@@ -117,6 +128,7 @@ func TestProjectConfiguration(t *testing.T) {
 		require.Equal(t, []string{"vm-project"}, provider.Projects)
 		require.Equal(t, "vm-project", VMProject())
 		require.Equal(t, "infra-project", InfraProject())
+		require.Equal(t, "resource-infra-project", InfraResourceName("resource"))
 		require.Equal(t, "cockroach-test-artifacts-infra-project", vm.ArtifactsBucket())
 		require.Equal(t, "metadata-project", MetadataProject())
 	})
@@ -142,6 +154,7 @@ func TestProjectConfiguration(t *testing.T) {
 		require.Equal(t, []string{"flag-vm-project"}, provider.Projects)
 		require.Equal(t, "flag-vm-project", VMProject())
 		require.Equal(t, "flag-infra-project", InfraProject())
+		require.Equal(t, "resource-flag-infra-project", InfraResourceName("resource"))
 		require.Equal(t, "flag-infra-project", MetadataProject())
 		require.Equal(t, "flag-artifacts-bucket", vm.ArtifactsBucket())
 		require.Equal(t, "flag-infra-project", provider.dnsProviderOpts.DNSProject)

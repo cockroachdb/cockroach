@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 // This test sets up a 3-node CRDB cluster on 8vCPU machines running
@@ -84,12 +86,14 @@ func registerElasticControlForBackups(r registry.Registry) {
 					m.Go(func(ctx context.Context) error {
 						t.Status(fmt.Sprintf("during: creating full backup schedule to run every 20m (<%s)", time.Minute))
 						bucketPrefix := "gs"
+						bucket := testutils.BackupTestingBucketForProject(gce.InfraProject())
 						if cloud == "aws" {
 							bucketPrefix = "s3"
+							bucket = testutils.BackupTestingBucket()
 						}
 						_, err := db.ExecContext(ctx,
 							`CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '*/20 * * * *' FULL BACKUP ALWAYS WITH SCHEDULE OPTIONS ignore_existing_backups;`,
-							bucketPrefix+"://"+backupTestingBucket+"/"+c.Name()+"?AUTH=implicit",
+							bucketPrefix+"://"+bucket+"/"+c.Name()+"?AUTH=implicit",
 						)
 						return err
 					})

@@ -65,7 +65,7 @@ git checkout tc-nightly-main
 Then upload newly built version to cloud storage bucket
 
 gcloud storage cp target/cockroachdb-x.x.x-standalone.jar \
-  gs://cockroach-jepsen/cockroachdb-x.x.x-$(git rev-parse --short HEAD)-standalone.jar
+  gs://cockroach-jepsen-<infra-project>/cockroachdb-x.x.x-$(git rev-parse --short HEAD)-standalone.jar
 
 And update version in binaryVersion.
 
@@ -78,7 +78,7 @@ const envBuildJepsen = "ROACHTEST_BUILD_JEPSEN"
 const jepsenRepo = "https://github.com/cockroachdb/jepsen"
 const repoBranch = "tc-nightly-main"
 
-const gcpPath = "https://storage.googleapis.com/cockroach-jepsen"
+const jepsenBucket = "cockroach-jepsen"
 const binaryVersion = "0.1.0-bd82e2e-standalone"
 
 const (
@@ -334,7 +334,7 @@ func makeJepsenConfig() jepsenConfig {
 	}
 	return jepsenConfig{
 		buildFromSource: false,
-		binaryURL:       gcpPath,
+		binaryURL:       gcsHTTPSURL(jepsenBucket, ""),
 		version:         binaryVersion,
 	}
 }

@@ -22,7 +22,9 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":prometheus"],
     deps = [
+        "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/install",
+        "//pkg/roachprod/vm",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
         "@com_github_stretchr_testify//require",

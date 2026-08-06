@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -74,8 +75,6 @@ const (
 	rows5GiB   = rows100GiB / 20
 	rows3GiB   = rows30GiB / 10
 )
-
-var backupTestingBucket = testutils.BackupTestingBucket()
 
 func destinationName(c cluster.Cluster) string {
 	dest := c.Name()
@@ -133,6 +132,7 @@ func importBankCommand(cockroach string, rows, ranges, csvPort, node int) string
 	return roachtestutil.
 		NewCommand("%s workload fixtures import bank", cockroach).
 		Arg("{pgurl:%d}", node).
+		Flag("bucket-override", gceFixtureBucket()).
 		Flag("db", "bank").
 		Flag("payload-bytes", 10240).
 		Flag("csv-server", fmt.Sprintf("http://localhost:%d", csvPort)).
@@ -501,7 +501,7 @@ func registerBackup(r registry.Registry) {
 						t.Fatal(err)
 					}
 				case spec.GCE:
-					if backupPath, err = getGCSBackupPath(dest); err != nil {
+					if backupPath, err = getGCSBackupPath(dest, gce.InfraProject()); err != nil {
 						t.Fatal(err)
 					}
 					if kmsURI, err = getGCSKMSAssumeRoleURI(); err != nil {
@@ -673,7 +673,7 @@ func registerBackup(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(3, spec.CPU(8)),
 		Leases:            registry.MetamorphicLeases,
 		EncryptionSupport: registry.EncryptionMetamorphic,
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
 		Suites:                    registry.Suites(registry.Nightly),
@@ -744,7 +744,7 @@ func runBackupImportRollback(
 	_, err = conn.Exec(`USE tpch`)
 	require.NoError(t, err)
 	createStmt, err := readFileFromFixture(
-		"gs://cockroach-fixtures-us-east1/tpch-csv/schema/orders.sql?AUTH=implicit", conn)
+		gceFixtureURI("tpch-csv/schema/orders.sql?AUTH=implicit"), conn)
 	require.NoError(t, err)
 	_, err = conn.ExecContext(ctx, createStmt)
 	require.NoError(t, err)
@@ -811,10 +811,10 @@ func runBackupImportRollback(
 	// Import the odd-numbered files.
 	t.Status("importing odd-numbered files")
 	files := []string{
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.1?AUTH=implicit`,
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.3?AUTH=implicit`,
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.5?AUTH=implicit`,
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.7?AUTH=implicit`,
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.1?AUTH=implicit"),
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.3?AUTH=implicit"),
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.5?AUTH=implicit"),
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.7?AUTH=implicit"),
 	}
 	if config.short {
 		files = files[:2]
@@ -845,10 +845,10 @@ func runBackupImportRollback(
 
 	// Import and cancel even-numbered files twice.
 	files = []string{
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.2?AUTH=implicit`,
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.4?AUTH=implicit`,
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.6?AUTH=implicit`,
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.8?AUTH=implicit`,
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.2?AUTH=implicit"),
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.4?AUTH=implicit"),
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.6?AUTH=implicit"),
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.8?AUTH=implicit"),
 	}
 	if config.short {
 		files = files[:1]
@@ -1087,7 +1087,7 @@ func getGCSKMSAssumeRoleURI() (string, error) {
 	return correctURI, nil
 }
 
-func getGCSBackupPath(dest string) (string, error) {
+func getGCSBackupPath(dest, infraProject string) (string, error) {
 	q := make(url.Values)
 	expect := map[string]string{
 		AssumeRoleGCSCredentials:    gcp.CredentialsParam,
@@ -1108,7 +1108,8 @@ func getGCSBackupPath(dest string) (string, error) {
 
 	// Set AUTH to specified
 	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
-	uri := fmt.Sprintf("gs://"+backupTestingBucket+"/gcs/%s?%s", dest, q.Encode())
+	bucket := testutils.BackupTestingBucketForProject(infraProject)
+	uri := fmt.Sprintf("gs://"+bucket+"/gcs/%s?%s", dest, q.Encode())
 
 	return uri, nil
 }
@@ -1130,5 +1131,5 @@ func getAWSBackupPath(dest string) (string, error) {
 	}
 	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
 
-	return fmt.Sprintf("s3://"+backupTestingBucket+"/%s?%s", dest, q.Encode()), nil
+	return fmt.Sprintf("s3://"+testutils.BackupTestingBucket()+"/%s?%s", dest, q.Encode()), nil
 }

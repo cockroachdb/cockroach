@@ -165,8 +165,8 @@ func makeInspectThroughputTest(
 			// Import bulkingest data without the default index. We'll create custom
 			// indexes based on the checks parameter.
 			cmdImport := fmt.Sprintf(
-				"./cockroach workload fixtures import bulkingest {pgurl:1} --a %d --b %d --c %d --payload-bytes %d --index-b-c-a=false",
-				aNum, bNum, cNum, payloadBytes,
+				"./cockroach workload fixtures import bulkingest %s {pgurl:1} --a %d --b %d --c %d --payload-bytes %d --index-b-c-a=false",
+				gceFixtureBucketFlag(), aNum, bNum, cNum, payloadBytes,
 			)
 
 			t.L().Printf("Importing bulkingest data")

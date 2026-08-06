@@ -111,7 +111,10 @@ func importTPCHDataset(
 	if virtualClusterName != "" {
 		tenantSuffix = fmt.Sprintf(":%s", virtualClusterName)
 	}
-	cmd := fmt.Sprintf("./cockroach workload fixtures import tpch --scale-factor=%d --checks=false {pgurl%s%s}", sf, node, tenantSuffix)
+	cmd := fmt.Sprintf(
+		"./cockroach workload fixtures import tpch %s --scale-factor=%d --checks=false {pgurl%s%s}",
+		gceFixtureBucketFlag(), sf, node, tenantSuffix,
+	)
 	return c.RunE(ctx, option.WithNodes(node), cmd)
 }
 
