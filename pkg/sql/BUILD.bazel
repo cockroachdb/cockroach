@@ -721,6 +721,7 @@ go_test(
         "metric_util_test.go",
         "multitenant_admin_function_test.go",
         "mutation_test.go",
+        "mvcc_backfiller_resume_test.go",
         "mvcc_backfiller_test.go",
         "mvcc_statistics_update_job_test.go",
         "normalization_test.go",
