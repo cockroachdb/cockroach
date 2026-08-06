@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
@@ -34,7 +35,13 @@ type GithubPoster interface {
 
 // githubIssues struct implements GithubPoster
 type githubIssues struct {
-	disable     bool
+	disable bool
+	// extraCreateBranches lists branches, beyond the release branches recognized
+	// by issues.Options.IsReleaseBranch, that are allowed to file GitHub issues.
+	extraCreateBranches []string
+	// extraLabels are appended to every issue filed by this invocation,
+	// regardless of the branch.
+	extraLabels []string
 	issuePoster func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest,
 		*issues.Options) (*issues.TestFailureIssue, error)
 	teamLoader func() (team.Map, error)
@@ -140,7 +147,7 @@ var skipConditions = []postIssueCondition{
 		return "GitHub API token not set"
 	},
 	func(g *githubIssues, _ test.Test) string {
-		if defaultOpts.IsReleaseBranch() {
+		if defaultOpts.IsReleaseBranch() || slices.Contains(g.extraCreateBranches, defaultOpts.Branch) {
 			return ""
 		}
 
@@ -258,6 +265,7 @@ func (g *githubIssues) createPostRequest(
 		labels = append(labels, s390xTestFailureLabel)
 	}
 	labels = append(labels, spec.ExtraLabels...)
+	labels = append(labels, g.extraLabels...)
 
 	teams, err := g.teamLoader()
 	if err != nil {

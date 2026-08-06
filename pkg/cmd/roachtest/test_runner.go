@@ -152,6 +152,13 @@ type testRunner struct {
 		skipClusterWipeOnAttach bool
 		// disableIssue disables posting GitHub issues for test failures.
 		disableIssue bool
+		// extraGithubIssueCreateBranches lists branches, in addition to the
+		// release branches recognized by issues.Options.IsReleaseBranch, whose
+		// failures should file GitHub issues.
+		extraGithubIssueCreateBranches []string
+		// extraGithubIssueLabels are additional labels attached to every issue
+		// filed by this invocation, independent of the branch.
+		extraGithubIssueLabels []string
 		// overrideShutdownPromScrapeInterval overrides the default time a test runner waits to
 		// shut down, normally used to ensure a remote prometheus server has scraped the roachtest
 		// endpoint.
@@ -223,6 +230,8 @@ func newTestRunner(cr *clusterRegistry, stopper *stop.Stopper) *testRunner {
 	}
 	r.config.skipClusterWipeOnAttach = !roachtestflags.ClusterWipe
 	r.config.disableIssue = roachtestflags.DisableIssue
+	r.config.extraGithubIssueCreateBranches = roachtestflags.ExtraGithubIssueCreateBranches
+	r.config.extraGithubIssueLabels = roachtestflags.ExtraGithubIssueLabels
 	r.workersMu.workers = make(map[string]*workerStatus)
 	return r
 }
