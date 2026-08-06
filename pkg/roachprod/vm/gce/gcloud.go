@@ -83,11 +83,15 @@ var (
 	defaultDNSProject, defaultArtifactsBucket, defaultServiceAccountOverride string
 	defaultMetadataProjectExplicit, defaultDNSProjectExplicit                bool
 	defaultArtifactsBucketExplicit, defaultServiceAccountExplicit            bool
+	// defaultNetwork and defaultSubnets seed ProviderOpts from the environment
+	// (ROACHPROD_GCE_NETWORK / ROACHPROD_GCE_SUBNETS).
+	defaultNetwork string
+	defaultSubnets map[string]string
 	// projects for which a cron GC job exists.
 	projectsWithGC []string
 )
 
-func initGCEProjectDefaults() {
+func initGCEProjectDefaults() error {
 	// ROACHPROD_GCE_DEFAULT_PROJECT historically controlled both the project
 	// where VMs were created and the project that hosted shared roachprod
 	// infrastructure. Keep it as a fallback for both roles.
@@ -121,7 +125,14 @@ func initGCEProjectDefaults() {
 	defaultServiceAccountOverride, defaultServiceAccountExplicit = os.LookupEnv(
 		"ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT",
 	)
+	defaultNetwork = config.EnvOrDefaultString("ROACHPROD_GCE_NETWORK", "")
+	subnets, err := parseRegionSubnetMap(config.EnvOrDefaultString("ROACHPROD_GCE_SUBNETS", ""))
+	if err != nil {
+		return errors.Wrap(err, "ROACHPROD_GCE_SUBNETS")
+	}
+	defaultSubnets = subnets
 	projectsWithGC = []string{defaultVMProject}
+	return nil
 }
 
 // VMProject returns the GCE project where roachprod creates VMs by default.
@@ -222,7 +233,9 @@ var initialized = false
 // Note that, when roachprod is used as a binary, the defaults for
 // providerInstance properties initialized here can be overriden by flags.
 func Init() error {
-	initGCEProjectDefaults()
+	if err := initGCEProjectDefaults(); err != nil {
+		return err
+	}
 	initDNSDefault()
 
 	providerOpts := []Option{}
@@ -459,10 +472,13 @@ func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
 		// N.B. we set minCPUPlatform to "Intel Ice Lake" by default because it's readily available in the majority of GCE
 		// regions. Furthermore, it gets us closer to AWS instances like m6i which exclusively run Ice Lake.
-		MachineType:          "n2-standard-4",
-		MinCPUPlatform:       "Intel Ice Lake",
-		Zones:                nil,
-		Subnet:               "default",
+		MachineType:    "n2-standard-4",
+		MinCPUPlatform: "Intel Ice Lake",
+		Zones:          nil,
+		Subnet:         "default",
+		Network:        defaultNetwork,
+		// Clone so per-invocation flag parsing doesn't mutate the shared default.
+		Subnets:              maps.Clone(defaultSubnets),
 		UseIAP:               false,
 		Image:                DefaultImage,
 		SSDCount:             1,
@@ -493,8 +509,21 @@ type ProviderOpts struct {
 	MinCPUPlatform string
 	BootDiskType   string
 	Zones          []string
-	// Subnet is the subnet name or self-link used for unmanaged instances.
+	// Subnet is the subnet name or self-link used for unmanaged instances. It
+	// applies to every region; use Subnets for per-region overrides.
 	Subnet string
+	// Network is the VPC network name or self-link for unmanaged instances. Empty
+	// lets GCE infer the network from the subnet (legacy behavior). A self-link
+	// (contains "/") is passed through unchanged to support Shared VPC host
+	// projects; a bare name is qualified into the VM's compute project and
+	// enables the ${project}-vpc-${region} subnet convention (see resolveSubnet).
+	Network string
+	// Subnets maps a GCE region (e.g. "us-east1") to a subnet name or self-link
+	// and takes precedence over Subnet for matching regions. A self-link is
+	// passed through unchanged (Shared VPC); a bare name is qualified into the
+	// compute project and the zone's region. Captured by reference from the
+	// flag/env, so callers must not mutate a shared instance.
+	Subnets map[string]string
 	// UseIAP applies the iap-ssh network tag to private VMs so roachprod
 	// routes SSH through an IAP TCP tunnel.
 	UseIAP           bool
@@ -1489,8 +1518,13 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
 			strings.Join(DefaultZones(string(vm.ArchAMD64), true), ",")))
-	flags.StringVar(&o.Subnet, ProviderName+"-subnet", "default",
-		"subnet name or self-link to use for unmanaged instances")
+	flags.StringVar(&o.Subnet, ProviderName+"-subnet", o.Subnet,
+		"subnet name or self-link to use for unmanaged instances (applies to all regions)")
+	flags.StringVar(&o.Network, ProviderName+"-network", o.Network,
+		"VPC network name or self-link for unmanaged instances; self-links may reference a Shared VPC host project")
+	flags.StringToStringVar(&o.Subnets, ProviderName+"-subnets", o.Subnets,
+		"per-region subnet map, e.g. us-east1=my-subnet,us-west1=projects/host/regions/us-west1/subnetworks/s; "+
+			"overrides --"+ProviderName+"-subnet for matching regions")
 	flags.BoolVar(&o.UseIAP, ProviderName+"-use-iap", false,
 		"route SSH to private instances through IAP and apply the iap-ssh network tag")
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
@@ -1626,6 +1660,147 @@ func (o *ProviderOpts) subnet() string {
 		return "default"
 	}
 	return o.Subnet
+}
+
+// parseRegionSubnetMap parses a "region=subnet,region2=subnet2" string (as
+// accepted by ROACHPROD_GCE_SUBNETS) into a region→subnet map. An empty string
+// yields a nil map. Subnet values may be bare names or self-links.
+func parseRegionSubnetMap(s string) (map[string]string, error) {
+	if s == "" {
+		return nil, nil
+	}
+	result := make(map[string]string)
+	for _, pair := range strings.Split(s, ",") {
+		region, subnet, ok := strings.Cut(pair, "=")
+		if !ok || region == "" || subnet == "" {
+			return nil, errors.Newf("invalid region=subnet entry %q", pair)
+		}
+		result[region] = subnet
+	}
+	return result, nil
+}
+
+// regionFromSubnetSelfLink returns the region embedded in a subnet self-link of
+// the form ".../regions/<region>/subnetworks/<name>", or "" if none is present.
+func regionFromSubnetSelfLink(selfLink string) string {
+	_, after, ok := strings.Cut(selfLink, "regions/")
+	if !ok {
+		return ""
+	}
+	region, _, _ := strings.Cut(after, "/")
+	return region
+}
+
+// explicitNetworkMode reports whether the caller supplied explicit network
+// configuration (a VPC network or a per-region subnet map). In that mode a
+// selected region with no configured subnet is an error rather than a silent
+// fallback to the "default" subnet, which typically does not exist in a custom
+// or Shared VPC.
+func (o *ProviderOpts) explicitNetworkMode() bool {
+	return o.Network != "" || len(o.Subnets) > 0
+}
+
+// resolveNetwork returns the VPC network self-link to attach for project, or ""
+// to let GCE infer the network from the subnet (legacy behavior). A self-link is
+// passed through unchanged to preserve a Shared VPC host project; a bare name is
+// qualified into project.
+func (o *ProviderOpts) resolveNetwork(project string) string {
+	if o.Network == "" {
+		return ""
+	}
+	if strings.Contains(o.Network, "/") {
+		return o.Network
+	}
+	return fmt.Sprintf("projects/%s/global/networks/%s", project, o.Network)
+}
+
+// conventionSubnetName returns the standard per-region subnet name,
+// ${project}-vpc-${region} (e.g. "crl-e2e-infra-staging-vpc-asia-northeast1").
+func conventionSubnetName(project, region string) string {
+	return fmt.Sprintf("%s-vpc-%s", project, region)
+}
+
+// resolveSubnet returns the subnet self-link for zone, in precedence order:
+// (1) the Subnets map, (2) the Subnet shorthand, (3) the ${project}-vpc-${region}
+// convention when a bare --gce-network is set, (4) the default subnet. With an
+// explicit Subnets map but no network, an uncovered region errors rather than
+// falling back to a "default" subnet that a custom VPC won't have.
+func (o *ProviderOpts) resolveSubnet(project, zone string) (string, error) {
+	if len(zone) < 3 {
+		return "", errors.Newf("invalid zone %q: must be at least 3 characters", zone)
+	}
+	region := zone[:len(zone)-2]
+	if subnet, ok := o.Subnets[region]; ok {
+		return o.qualifySubnet(subnet, project, region)
+	}
+	if o.Subnet != "" && o.Subnet != "default" {
+		return o.qualifySubnet(o.Subnet, project, region)
+	}
+	// A bare --gce-network follows the ${project}-vpc-${region} convention, so
+	// callers needn't list every region in --gce-subnets. A self-link may target
+	// a Shared VPC host project whose subnet names we can't infer; skip those.
+	if o.Network != "" && !strings.Contains(o.Network, "/") {
+		return o.qualifySubnet(conventionSubnetName(project, region), project, region)
+	}
+	if o.explicitNetworkMode() {
+		return "", errors.Newf(
+			"no GCE subnet configured for region %q (zone %q); add it to --%s-subnets",
+			region, zone, ProviderName,
+		)
+	}
+	return DefaultSubnetSelfLink(project, region), nil
+}
+
+// qualifySubnet promotes a bare subnet name into a regional self-link in the
+// compute project, or passes a self-link through unchanged (preserving a Shared
+// VPC host project) after checking its region matches the zone's region.
+func (o *ProviderOpts) qualifySubnet(subnet, project, region string) (string, error) {
+	if subnet == "" {
+		return "", errors.Newf("empty GCE subnet configured for region %q", region)
+	}
+	if !strings.Contains(subnet, "/") {
+		return fmt.Sprintf("projects/%s/regions/%s/subnetworks/%s", project, region, subnet), nil
+	}
+	if r := regionFromSubnetSelfLink(subnet); r != "" && r != region {
+		return "", errors.Newf(
+			"subnet %q is in region %q but zone maps to region %q", subnet, r, region,
+		)
+	}
+	return subnet, nil
+}
+
+// validateNetworkConfig resolves the network and every selected zone's subnet up
+// front so a missing or mismatched configuration fails before any VM is created.
+func (o *ProviderOpts) validateNetworkConfig(project string, zones []string) error {
+	seenRegions := make(map[string]struct{}, len(zones))
+	for _, zone := range zones {
+		if len(zone) < 3 {
+			return errors.Newf("invalid zone %q: must be at least 3 characters", zone)
+		}
+		region := zone[:len(zone)-2]
+		if _, ok := seenRegions[region]; ok {
+			continue
+		}
+		seenRegions[region] = struct{}{}
+		if _, err := o.resolveSubnet(project, zone); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// cliNetworkArgs returns the gcloud "compute instances create" flags selecting
+// the subnet (and network, when explicitly configured) for zone.
+func (o *ProviderOpts) cliNetworkArgs(project, zone string) ([]string, error) {
+	subnet, err := o.resolveSubnet(project, zone)
+	if err != nil {
+		return nil, err
+	}
+	args := []string{"--subnet", subnet}
+	if network := o.resolveNetwork(project); network != "" {
+		args = append(args, "--network", network)
+	}
+	return args, nil
 }
 
 func (p *Provider) resolveAddressMode(mode vm.AddressMode) (vm.AddressMode, error) {
@@ -2110,6 +2285,9 @@ func (p *Provider) Create(
 	if providerOpts.Managed && providerOpts.subnet() != "default" {
 		return nil, errors.New("--gce-subnet is not supported with --gce-managed yet")
 	}
+	if providerOpts.Managed && providerOpts.explicitNetworkMode() {
+		return nil, errors.New("--gce-network/--gce-subnets are not supported with --gce-managed yet")
+	}
 	var gcJob bool
 	for _, prj := range projectsWithGC {
 		if prj == p.GetProject() {
@@ -2157,6 +2335,13 @@ func (p *Provider) Create(
 		zoneToHostNames[zone] = append(zoneToHostNames[zone], name)
 	}
 	usedZones := maps.Keys(zoneToHostNames)
+
+	// Resolve the network/subnet for every selected region up front so a missing
+	// or mismatched configuration fails before any VM, template, or MIG is
+	// created. This covers both unmanaged provisioning paths below.
+	if err := providerOpts.validateNetworkConfig(project, usedZones); err != nil {
+		return nil, err
+	}
 
 	var vmList vm.List
 	var vmListMutex syncutil.Mutex
@@ -2240,17 +2425,27 @@ func (p *Provider) Create(
 
 	default:
 		g := newLimitedErrorGroup()
-		createArgs := []string{"compute", "instances", "create", "--subnet", providerOpts.subnet(), "--format", "json"}
+		createArgs := []string{"compute", "instances", "create", "--format", "json"}
 		createArgs = append(createArgs, "--labels", labels)
 		createArgs = append(createArgs, instanceArgs...)
 
 		sem := semaphore.New(MaxConcurrentHosts)
 		l.Printf("Creating %d instances, distributed across [%s]", len(names), strings.Join(usedZones, ", "))
 		for zone, zoneHosts := range zoneToHostNames {
+			// The subnet (and network) are region-specific, so resolve them per
+			// zone rather than baking them into the shared createArgs.
+			networkArgs, err := providerOpts.cliNetworkArgs(project, zone)
+			if err != nil {
+				return nil, err
+			}
 			groupSize := MaxConcurrentHosts / 4
 			for i := 0; i < len(zoneHosts); i += groupSize {
 				hostGroup := zoneHosts[i:min(i+groupSize, len(zoneHosts))]
-				argsWithZone := append(createArgs, "--zone", zone)
+				// Clone createArgs per group: append reuses the backing array, so
+				// concurrent groups sharing it would corrupt each other's args.
+				argsWithZone := slices.Clone(createArgs)
+				argsWithZone = append(argsWithZone, "--zone", zone)
+				argsWithZone = append(argsWithZone, networkArgs...)
 				argsWithZone = append(argsWithZone, hostGroup...)
 
 				g.Go(func() error {
