@@ -155,10 +155,22 @@ func VMProject() string {
 // infrastructure, such as metadata and DNS resources.
 func InfraProject() string {
 	// If the provider was already initialized, reflect flag overrides.
-	if p, ok := vm.Providers[ProviderName].(*Provider); ok {
+	if p, ok := vm.Providers[ProviderName].(*Provider); ok && p.infraProject != "" {
 		return p.infraProject
 	}
-	return defaultInfraProject
+	if defaultInfraProject != "" {
+		return defaultInfraProject
+	}
+	legacyDefaultProject := config.EnvOrDefaultString(
+		"ROACHPROD_GCE_DEFAULT_PROJECT", DefaultProjectID,
+	)
+	return config.EnvOrDefaultString("ROACHPROD_GCE_INFRA_PROJECT", legacyDefaultProject)
+}
+
+// InfraResourceName returns the project-local name for shared infrastructure
+// whose Terraform name is formed by appending the infrastructure project.
+func InfraResourceName(prefix string) string {
+	return prefix + "-" + InfraProject()
 }
 
 // DefaultProject returns the GCE infrastructure project.

@@ -96,8 +96,8 @@ func registerAlterPK(r registry.Registry) {
 
 		setupTest(ctx, t, c)
 		cmd := fmt.Sprintf(
-			"./cockroach workload fixtures import tpcc --warehouses=%d --db=tpcc {pgurl:1}",
-			warehouses,
+			"./cockroach workload fixtures import tpcc %s --warehouses=%d --db=tpcc {pgurl:1}",
+			gceFixtureBucketFlag(), warehouses,
 		)
 		if err := c.RunE(ctx, option.WithNodes(c.Node(c.CRDBNodes()[0])), cmd); err != nil {
 			t.Fatal(err)

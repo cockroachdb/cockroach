@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
 )
 
@@ -80,7 +81,7 @@ func registerBackupS3Clones(r registry.Registry) {
 					ceph := cephManager{
 						t:      t,
 						c:      c,
-						bucket: backupTestingBucket,
+						bucket: testutils.BackupTestingBucket(),
 						// For now, we use the workload node as the cephNode
 						cephNodes: c.Node(c.Spec().NodeCount),
 						key:       randomString(32),
@@ -119,7 +120,7 @@ func registerBackupS3Clones(r registry.Registry) {
 			mgr := minioManager{
 				t:      t,
 				c:      c,
-				bucket: backupTestingBucket,
+				bucket: testutils.BackupTestingBucket(),
 				// For now, we use the workload node as the minio cluster
 				minioNodes: c.Node(c.Spec().NodeCount),
 				key:        randomString(32),

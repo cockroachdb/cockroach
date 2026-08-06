@@ -6,6 +6,7 @@
 package roachprod
 
 import (
+	"context"
 	"io"
 	"testing"
 
@@ -48,6 +49,54 @@ func TestIPExternalRequiresPublicIP(t *testing.T) {
 	ips, err = clusterIPs(cluster, false)
 	require.NoError(t, err)
 	require.Equal(t, []string{"10.0.0.1"}, ips)
+}
+
+func TestPGURLIPsUseHost(t *testing.T) {
+	cluster := &install.SyncedCluster{
+		Cluster: cloudcluster.Cluster{VMs: vm.List{
+			{PrivateIP: "10.0.0.1", PublicIP: "192.0.2.1"},
+			{PrivateIP: "10.0.0.2"},
+		}},
+		Nodes: install.Nodes{1, 2},
+	}
+
+	ips, err := pgURLIPs(cluster, cluster.Nodes, PGURLOptions{UseHost: true})
+	require.NoError(t, err)
+	require.Equal(t, []string{"192.0.2.1", "10.0.0.2"}, ips)
+
+	ips, err = pgURLIPs(cluster, cluster.Nodes, PGURLOptions{})
+	require.NoError(t, err)
+	require.Equal(t, []string{"10.0.0.1", "10.0.0.2"}, ips)
+
+	_, err = pgURLIPs(cluster, cluster.Nodes, PGURLOptions{External: true})
+	require.ErrorContains(t, err, "no public IP for node 2")
+}
+
+func TestURLGeneratorUseHost(t *testing.T) {
+	cluster := &install.SyncedCluster{
+		Cluster: cloudcluster.Cluster{VMs: vm.List{
+			{PrivateIP: "10.0.0.1", PublicIP: "192.0.2.1"},
+			{PrivateIP: "10.0.0.2"},
+		}},
+		Nodes: install.Nodes{1, 2},
+	}
+
+	urls, err := urlGenerator(
+		context.Background(), cluster, nilLogger(), cluster.Nodes,
+		urlConfig{useHost: true, port: 26258},
+	)
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"http://192.0.2.1:26258/",
+		"http://10.0.0.2:26258/",
+	}, urls)
+
+	cluster.VMs[1].PrivateIP = ""
+	_, err = urlGenerator(
+		context.Background(), cluster, nilLogger(), cluster.Nodes,
+		urlConfig{useHost: true, port: 26258},
+	)
+	require.ErrorContains(t, err, "no host address for node 2")
 }
 
 func TestVerifyClusterName(t *testing.T) {

@@ -122,7 +122,12 @@ Local Clusters
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 			createVMOpts.ClusterName = args[0]
-			opts := cloud.ClusterCreateOpts{Nodes: numNodes, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer}
+			opts := cloud.ClusterCreateOpts{
+				Nodes:                 numNodes,
+				CreateOpts:            createVMOpts,
+				ProviderOptsContainer: providerOptsContainer,
+				KeepClusterOnFailure:  keepClusterOnFailure,
+			}
 			return roachprod.Create(context.Background(), config.Logger, username, &opts)
 		}),
 	}

@@ -43,8 +43,8 @@ func registerDisaggRebalance(r registry.Registry) {
 			// Checks are turned off as they take a while for high warehouse counts on
 			// top of disaggregated storage.
 			cmd := fmt.Sprintf(
-				"./cockroach workload fixtures import tpcc --warehouses=%d --checks=false {pgurl:1}",
-				warehouses,
+				"./cockroach workload fixtures import tpcc %s --warehouses=%d --checks=false {pgurl:1}",
+				gceFixtureBucketFlag(), warehouses,
 			)
 			m := c.NewDeprecatedMonitor(ctx, c.Range(1, 3))
 			m.Go(func(ctx context.Context) error {

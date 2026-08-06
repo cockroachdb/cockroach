@@ -322,6 +322,9 @@ type ClusterCreateOpts struct {
 	Nodes                 int
 	CreateOpts            vm.CreateOpts
 	ProviderOptsContainer vm.ProviderOptionsContainer
+	// KeepClusterOnFailure preserves any cloud resources created when cluster
+	// creation fails. This is useful for diagnosing VM initialization failures.
+	KeepClusterOnFailure bool
 }
 
 // Extracts o.CreateOpts.VMProviders from the provided opts.
