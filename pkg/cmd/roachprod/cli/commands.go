@@ -126,6 +126,9 @@ Local Clusters
 			if err != nil {
 				return err
 			}
+			for _, opt := range opts {
+				opt.KeepClusterOnFailure = keepClusterOnFailure
+			}
 			return roachprod.Create(context.Background(), config.Logger, username, opts...)
 		}),
 	}

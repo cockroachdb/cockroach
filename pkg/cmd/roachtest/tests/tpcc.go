@@ -291,6 +291,7 @@ func tpccImportCmdWithCockroachBinary(
 	crdbBinary string, db string, workloadCmd string, warehouses int, extraArgs ...string,
 ) string {
 	return roachtestutil.NewCommand("%s workload fixtures import %s", crdbBinary, workloadCmd).
+		Flag("bucket-override", gceFixtureBucket()).
 		MaybeFlag(db != "", "db", db).
 		Flag("warehouses", warehouses).
 		Arg("%s", strings.Join(extraArgs, " ")).
@@ -779,6 +780,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		cmd := roachtestutil.NewCommand(
 			"%s workload fixtures import bank", h.VersionedCockroachPath(t)).
 			Arg("{pgurl%s}", randomNode).
+			Flag("bucket-override", gceFixtureBucket()).
 			Flag("payload-bytes", 10240).
 			Flag("rows", bankRows).
 			Flag("seed", 4).

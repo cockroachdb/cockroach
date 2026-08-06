@@ -1449,7 +1449,7 @@ func (bc *backupCollection) uri() string {
 	if bc.nodelocal {
 		externalStorage = "nodelocal://1/"
 	}
-	return fmt.Sprintf("%s%s/mixed-version/%s_%s?AUTH=implicit", externalStorage, testutils.BackupTestingBucketLongTTL(), bc.name, bc.nonce)
+	return fmt.Sprintf("%s%s/mixed-version/%s_%s?AUTH=implicit", externalStorage, gceLongTTLBackupBucket(), bc.name, bc.nonce)
 }
 
 func (bc *backupCollection) encryptionOption() *encryptionPassphrase {

@@ -1816,18 +1816,21 @@ func (c *SyncedCluster) shouldAdvertisePublicIP() bool {
 // default, runs an incremental every 15 minutes and a full every hour. On
 // `roachprod create`, the user can provide a different recurrence using the
 // 'schedule-backup-args' flag. If roachprod is local, the backups get stored in
-// nodelocal, and otherwise in 'gs://cockroachdb-backup-testing'.
+// nodelocal, and otherwise in the backup testing bucket for the configured GCE
+// infrastructure project.
 // This cmd also ensures that only one schedule will be created for the cluster.
 func (c *SyncedCluster) createFixedBackupSchedule(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts,
 ) error {
-	externalStoragePath := fmt.Sprintf("gs://%s", testutils.BackupTestingBucket())
 	for _, cloud := range c.Clouds() {
 		if !strings.Contains(cloud, gce.ProviderName) {
 			l.Printf(`no scheduled backup created as there exists a vm not on google cloud`)
 			return nil
 		}
 	}
+	externalStoragePath := fmt.Sprintf(
+		"gs://%s", testutils.BackupTestingBucketForProject(gce.InfraProject()),
+	)
 	l.Printf("%s (%s): creating backup schedule", c.Name, startOpts.VirtualClusterName)
 	auth := "AUTH=implicit"
 	collectionPath := fmt.Sprintf(`%s/roachprod-scheduled-backups/%s/%s/%v?%s`,

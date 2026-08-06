@@ -202,8 +202,8 @@ func registerTPCCSevereOverload(r registry.Registry) {
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 			t.Status("initializing (~30m)")
 			cmd := fmt.Sprintf(
-				"./cockroach workload fixtures import tpcc --checks=false --warehouses=%d {pgurl:1}",
-				warehouseCount,
+				"./cockroach workload fixtures import tpcc %s --checks=false --warehouses=%d {pgurl:1}",
+				gceFixtureBucketFlag(), warehouseCount,
 			)
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 

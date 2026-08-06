@@ -13,7 +13,7 @@ end_test
 
 start_test "Sanity check workload fixtures url."
 send "$argv workload fixtures url tpcc\r"
-eexpect "gs://cockroach-fixtures-us-east1/workload/tpcc"
+eexpect "gs://cockroach-fixtures-us-east1-crl-e2e-infra/workload/tpcc"
 end_test
 
 # Clean up.

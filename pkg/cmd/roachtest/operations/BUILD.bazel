@@ -41,6 +41,7 @@ go_library(
         "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/tests",
+		"//pkg/roachprod/vm/gce",
         "//pkg/server/license/licensepb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/lexbase",
@@ -66,6 +67,7 @@ go_test(
     embed = [":operations"],
     deps = [
         "//pkg/cmd/roachtest/operations/changefeeds",
+        "//pkg/cmd/roachtest/spec",
         "@com_github_stretchr_testify//require",
     ],
 )

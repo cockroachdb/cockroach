@@ -117,7 +117,7 @@ func registerSnapshotOverload(r registry.Registry) {
 			t.Status(fmt.Sprintf("initializing tpcc dataset (<%s)", 20*time.Minute))
 			if !t.SkipInit() {
 				warehouses := roachtestutil.IfLocal(c, " --warehouses=10", " --warehouses=2000")
-				c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload fixtures import tpcc --checks=false"+warehouses+" {pgurl:1}")
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload fixtures import tpcc "+gceFixtureBucketFlag()+" --checks=false"+warehouses+" {pgurl:1}")
 			}
 
 			const iters = 4
