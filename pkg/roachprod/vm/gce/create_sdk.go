@@ -94,16 +94,15 @@ func (p *Provider) buildInstanceProperties(
 	if err != nil {
 		return nil, err
 	}
-	if len(zone) < 3 {
-		return nil, errors.Newf("invalid zone %q: must be at least 3 characters", zone)
-	}
-	region := zone[:len(zone)-2]
 	project := p.GetProject()
-	subnet := providerOpts.subnet()
-	if !strings.Contains(subnet, "/") {
-		subnet = fmt.Sprintf("projects/%s/regions/%s/subnetworks/%s", project, region, subnet)
+	subnet, err := providerOpts.resolveSubnet(project, zone)
+	if err != nil {
+		return nil, err
 	}
 	networkInterface := &computepb.NetworkInterface{Subnetwork: proto.String(subnet)}
+	if network := providerOpts.resolveNetwork(project); network != "" {
+		networkInterface.Network = proto.String(network)
+	}
 	if addressMode == vm.AddressModePublic {
 		networkInterface.AccessConfigs = []*computepb.AccessConfig{
 			{
