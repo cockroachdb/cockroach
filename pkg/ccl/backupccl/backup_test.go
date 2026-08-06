@@ -11397,3 +11397,97 @@ CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
 		sqlDB.Exec(t, `DROP DATABASE test`)
 	}
 }
+
+// TestBackupSpansRederivationDeterministic verifies that a resuming table or
+// database backup accepts its checkpoint before and after a post-planning schema
+// change, since its spans are rederived from the frozen job targets.
+func TestBackupSpansRederivationDeterministic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+	}}
+
+	const numAccounts = 10
+	tc, systemDB, _, cleanupFn := backupRestoreTestSetupWithParams(
+		t, singleNode, numAccounts, InitManualReplication, params,
+	)
+	defer cleanupFn()
+
+	srv := tc.Server(0)
+	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
+	registry := srv.JobRegistry().(*jobs.Registry)
+
+	systemDB.Exec(t, `CREATE DATABASE d2; CREATE TABLE d2.t(i INT PRIMARY KEY, j INT); INSERT INTO d2.t VALUES (1, 1), (2, 2)`)
+
+	// pauseAfterCheckpoint runs backupStmt until it persists its details and first
+	// checkpoint, then pauses, and returns the paused job's details.
+	pauseAfterCheckpoint := func(t *testing.T, backupStmt string) jobspb.BackupDetails {
+		systemDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
+		defer systemDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		systemDB.ExpectErr(t, "backup.after.details_has_checkpoint", backupStmt)
+		var jobID jobspb.JobID
+		testutils.SucceedsSoon(t, func() error {
+			return systemDB.DB.QueryRowContext(ctx,
+				"SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'BACKUP' AND status = 'paused' "+
+					"ORDER BY created DESC LIMIT 1").Scan(&jobID)
+		})
+		job, err := registry.LoadJob(ctx, jobID)
+		require.NoError(t, err)
+		return job.Details().(jobspb.BackupDetails)
+	}
+
+	// resumeManifest reloads and validates the checkpoint exactly as a resuming
+	// backup does, failing the test if resume would reject it.
+	resumeManifest := func(t *testing.T, details jobspb.BackupDetails) {
+		store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, details.URI, username.RootUserName())
+		require.NoError(t, err)
+		defer store.Close()
+		mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
+		defer mem.Close(ctx)
+		var r backupResumer
+		_, _, err = r.readManifestOnResume(
+			ctx, &mem, &execCfg, store, details, username.RootUserName(), nil,
+		)
+		require.NoError(t, err)
+	}
+
+	// Table and database backups rederive their spans from the frozen job
+	// targets, so a schema change after planning must not move them.
+	rederivedCases := []struct {
+		name       string
+		backupStmt string
+		mutate     func(t *testing.T)
+	}{
+		{
+			name:       "table backup pins indexes across a new index",
+			backupStmt: `BACKUP TABLE d2.t INTO 'nodelocal://1/tbl'`,
+			// A secondary index added after planning would add an index span if the
+			// target were re-resolved live; the frozen job details must not pick it up.
+			mutate: func(t *testing.T) { systemDB.Exec(t, `CREATE INDEX idx ON d2.t (j)`) },
+		},
+		{
+			name:       "database backup pins targets across a new table",
+			backupStmt: `BACKUP DATABASE d2 INTO 'nodelocal://1/db'`,
+			// A table added to the target database after planning is not in the
+			// resolved targets, so it must not appear in the rederived spans.
+			mutate: func(t *testing.T) { systemDB.Exec(t, `CREATE TABLE d2.added (i INT PRIMARY KEY)`) },
+		},
+		{
+			name:       "revision history backup pins targets across a schema change",
+			backupStmt: `BACKUP DATABASE d2 INTO 'nodelocal://1/rh' WITH revision_history`,
+			mutate:     func(t *testing.T) { systemDB.Exec(t, `ALTER TABLE d2.t ADD COLUMN k INT`) },
+		},
+	}
+	for _, tc := range rederivedCases {
+		t.Run(tc.name, func(t *testing.T) {
+			details := pauseAfterCheckpoint(t, tc.backupStmt)
+			resumeManifest(t, details)
+			tc.mutate(t)
+			resumeManifest(t, details)
+		})
+	}
+}

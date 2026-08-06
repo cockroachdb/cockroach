@@ -120,6 +120,11 @@ func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Spa
 	return cov.Slice()
 }
 
+// spansEqual reports whether a and b cover the same key space.
+func spansEqual(a []roachpb.Span, b []roachpb.Span) bool {
+	return len(filterSpans(a, b)) == 0 && len(filterSpans(b, a)) == 0
+}
+
 // backup exports a snapshot of every kv entry into ranged sstables.
 //
 // The output is an sstable per range with files in the following locations:
@@ -1614,31 +1619,21 @@ func createBackupManifest(
 
 	startTime := jobDetails.StartTime
 
-	var tables []catalog.TableDescriptor
 	statsFiles := make(map[descpb.ID]string)
 	for _, desc := range targetDescs {
-		switch desc := desc.(type) {
-		case catalog.TableDescriptor:
-			tables = append(tables, desc)
+		if _, ok := desc.(catalog.TableDescriptor); ok {
 			// TODO (anzo): look into the tradeoffs of having all objects in the array to be in the same file,
 			// vs having each object in a separate file, or somewhere in between.
 			statsFiles[desc.GetID()] = backupinfo.BackupStatisticsFileName
 		}
 	}
 
-	var newSpans roachpb.Spans
-	var priorIDs map[descpb.ID]descpb.ID
-
-	var revs []backuppb.BackupManifest_DescriptorRevision
-	if mvccFilter == backuppb.MVCCFilter_All {
-		priorIDs = make(map[descpb.ID]descpb.ID)
-		revs, err = getRelevantDescChanges(ctx, execCfg, startTime, endTime, targetDescs,
-			jobDetails.ResolvedCompleteDbs, priorIDs, jobDetails.FullCluster)
-		if err != nil {
-			return backuppb.BackupManifest{}, err
-		}
+	tableSpans, revs, priorIDs, err := deriveBackupTableSpans(ctx, execCfg, jobDetails, targetDescs)
+	if err != nil {
+		return backuppb.BackupManifest{}, err
 	}
 
+	var newSpans roachpb.Spans
 	var spans []roachpb.Span
 	var tenants []mtinfopb.TenantInfoWithUsage
 	tenantSpans, tenantInfos, err := getTenantInfo(ctx, execCfg.Codec, txn, jobDetails)
@@ -1646,13 +1641,8 @@ func createBackupManifest(
 		return backuppb.BackupManifest{}, err
 	}
 	spans = append(spans, tenantSpans...)
-	tenants = append(tenants, tenantInfos...)
-
-	tableSpans, err := spansForAllTableIndexes(execCfg, tables, revs)
-	if err != nil {
-		return backuppb.BackupManifest{}, err
-	}
 	spans = append(spans, tableSpans...)
+	tenants = append(tenants, tenantInfos...)
 
 	if len(prevBackups) > 0 {
 		tablesInPrev := make(map[descpb.ID]struct{})
@@ -1910,6 +1900,46 @@ func getBackupDetailAndManifest(
 	return updatedDetails, backupManifest, nil
 }
 
+// deriveBackupTableSpans computes the key spans to export for the given resolved
+// target descriptors. For revision_history backups it also resolves the relevant
+// descriptor revisions (which the spans and the manifest both depend on) and the
+// prior-ID map those revisions produce. Tenant spans are not included; the caller
+// prepends those.
+func deriveBackupTableSpans(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	jobDetails jobspb.BackupDetails,
+	targetDescs []catalog.Descriptor,
+) (
+	spans []roachpb.Span,
+	revs []backuppb.BackupManifest_DescriptorRevision,
+	priorIDs map[descpb.ID]descpb.ID,
+	_ error,
+) {
+	var tables []catalog.TableDescriptor
+	for _, desc := range targetDescs {
+		if table, ok := desc.(catalog.TableDescriptor); ok {
+			tables = append(tables, table)
+		}
+	}
+
+	if jobDetails.RevisionHistory {
+		priorIDs = make(map[descpb.ID]descpb.ID)
+		var err error
+		revs, err = getRelevantDescChanges(ctx, execCfg, jobDetails.StartTime, jobDetails.EndTime,
+			targetDescs, jobDetails.ResolvedCompleteDbs, priorIDs, jobDetails.FullCluster)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	spans, err := spansForAllTableIndexes(execCfg, tables, revs)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return spans, revs, priorIDs, nil
+}
+
 func (b *backupResumer) readManifestOnResume(
 	ctx context.Context,
 	mem *mon.BoundAccount,
@@ -1956,6 +1986,24 @@ func (b *backupResumer) readManifestOnResume(
 		mem.Shrink(ctx, memSize)
 		return nil, 0, errors.Newf("cannot resume backup started on another cluster (%s != %s)",
 			desc.ClusterID, cfg.NodeInfo.LogicalClusterID())
+	}
+
+	// Reject a checkpoint whose spans disagree with the trusted job details.
+	if !details.FullCluster && len(details.SpecificTenantIds) == 0 {
+		targetDescs := make([]catalog.Descriptor, 0, len(details.ResolvedTargets))
+		for i := range details.ResolvedTargets {
+			targetDescs = append(targetDescs, backupinfo.NewDescriptorForManifest(&details.ResolvedTargets[i]))
+		}
+		spans, _, _, err := deriveBackupTableSpans(ctx, cfg, details, targetDescs)
+		if err != nil {
+			mem.Shrink(ctx, memSize)
+			return nil, 0, errors.Wrap(err, "recomputing backup spans on resume")
+		}
+		if !spansEqual(spans, desc.Spans) || len(filterSpans(desc.IntroducedSpans, spans)) > 0 {
+			mem.Shrink(ctx, memSize)
+			return nil, 0, jobs.MarkAsPermanentJobError(
+				errors.New("backup checkpoint spans do not match rederived spans"))
+		}
 	}
 	return &desc, memSize, nil
 }
