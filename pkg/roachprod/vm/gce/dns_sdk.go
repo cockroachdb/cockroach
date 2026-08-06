@@ -39,12 +39,12 @@ type sdkDNSProvider struct {
 
 	// publicZone is the gce zone used to manage A records for all clusters (e.g. roachprod).
 	publicZone string
-	// publicDomain is the DNS domain used to manage A records for all clusters (e.g. roachprod.crdb.io).
+	// publicDomain is the DNS domain used to manage A records for all clusters (e.g. roachprod.crdb.dev).
 	publicDomain string
 
 	// managedZone is the managed zone for SRV records (e.g. roachprod-managed).
 	managedZone string
-	// managedDomain is the domain for SRV records (e.g. roachprod-managed.crdb.io).
+	// managedDomain is the domain for SRV records (e.g. roachprod-managed.crdb.dev).
 	managedDomain string
 
 	recordsCache struct {
@@ -550,8 +550,9 @@ func (n *sdkDNSProvider) syncPublicDNS(ctx context.Context, l *logger.Logger, vm
 			l.Printf("debug: skipping VM %s with too long name for DNS sync", v.Name)
 			continue
 		}
-		if v.PublicIP == "" {
-			l.Printf("debug: skipping VM %s with no public IP for DNS sync", v.Name)
+		ip := v.DNSIP()
+		if ip == "" {
+			l.Printf("debug: skipping VM %s with no IP for DNS sync", v.Name)
 			continue
 		}
 
@@ -559,13 +560,13 @@ func (n *sdkDNSProvider) syncPublicDNS(ctx context.Context, l *logger.Logger, vm
 
 		// Group IPs by name (in case multiple VMs have the same DNS name)
 		if existing, ok := recordsByName[recordName]; ok {
-			existing.Rrdatas = append(existing.Rrdatas, v.PublicIP)
+			existing.Rrdatas = append(existing.Rrdatas, ip)
 		} else {
 			recordsByName[recordName] = &dns.ResourceRecordSet{
 				Name:    recordName,
 				Type:    "A",
 				Ttl:     60,
-				Rrdatas: []string{v.PublicIP},
+				Rrdatas: []string{ip},
 			}
 		}
 	}

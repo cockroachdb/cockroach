@@ -432,10 +432,10 @@ The --details flag adjusts the output format to include per-node details:
   local [local]: (no expiration)
     localhost		127.0.0.1	127.0.0.1
   marc-test: [aws gce] 5h33m57s remaining
-    marc-test-0001	marc-test-0001.us-east1-b.cockroach-ephemeral	10.142.0.18	35.229.60.91
-    marc-test-0002	marc-test-0002.us-east1-b.cockroach-ephemeral	10.142.0.17	35.231.0.44
-    marc-test-0003	marc-test-0003.us-east1-b.cockroach-ephemeral	10.142.0.19	35.229.111.100
-    marc-test-0004	marc-test-0004.us-east1-b.cockroach-ephemeral	10.142.0.20	35.231.102.125
+    marc-test-0001	marc-test-0001.us-east1-b.crl-e2e-infra	10.142.0.18	35.229.60.91
+    marc-test-0002	marc-test-0002.us-east1-b.crl-e2e-infra	10.142.0.17	35.231.0.44
+    marc-test-0003	marc-test-0003.us-east1-b.crl-e2e-infra	10.142.0.19	35.229.111.100
+    marc-test-0004	marc-test-0004.us-east1-b.crl-e2e-infra	10.142.0.20	35.231.102.125
   Syncing...
 
 The first and second column are the node hostname and fully qualified name
