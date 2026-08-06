@@ -18,11 +18,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // register external connection providers.
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -624,4 +626,43 @@ func TestImportIntoRowCountCheckAfterIngestRetry(t *testing.T) {
 				[][]string{{fmt.Sprintf("%d", tc.totalRows)}})
 		})
 	}
+}
+
+// TestImportIntoRequiresUsageOnExternalConnection asserts that IMPORT INTO
+// requires USAGE on the external connection holding its data files.
+func TestImportIntoRequiresUsageOnExternalConnection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// nodelocal reads come from the storage layer's external IO directory.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		ExternalIODir:     t.TempDir(),
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	rootDB := sqlutils.MakeSQLRunner(srv.SQLConn(t))
+	rootDB.Exec(t, `CREATE TABLE src (id INT PRIMARY KEY)`)
+	rootDB.Exec(t, `INSERT INTO src VALUES (1), (2)`)
+	rootDB.Exec(t, `CREATE TABLE dst (id INT PRIMARY KEY)`)
+	rootDB.Exec(t, `CREATE USER testuser`)
+	rootDB.Exec(t, `GRANT INSERT, DROP ON TABLE dst TO testuser`)
+
+	// Seed a real CSV file so the import fails on privileges, not on input.
+	rootDB.Exec(t, `CREATE EXTERNAL CONNECTION import_src AS 'nodelocal://1/usage-import'`)
+	var exported string
+	var numRows, numBytes int
+	rootDB.QueryRow(t, `EXPORT INTO CSV 'external://import_src' FROM SELECT * FROM src`).
+		Scan(&exported, &numRows, &numBytes)
+
+	userDB := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.User(username.TestUser)))
+
+	importStmt := fmt.Sprintf(`IMPORT INTO dst CSV DATA ('external://import_src/%s')`, exported)
+	userDB.ExpectErr(t,
+		"user testuser does not have USAGE privilege on external_connection import_src",
+		importStmt)
+
+	rootDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION import_src TO testuser`)
+	userDB.Exec(t, importStmt)
 }
