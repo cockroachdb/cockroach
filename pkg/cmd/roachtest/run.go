@@ -168,10 +168,12 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	}
 
 	github := &githubIssues{
-		disable:     runner.config.disableIssue,
-		dryRun:      runner.config.dryRunIssuePosting,
-		issuePoster: issues.Post,
-		teamLoader:  team.DefaultLoadTeams,
+		disable:             runner.config.disableIssue,
+		dryRun:              runner.config.dryRunIssuePosting,
+		extraCreateBranches: runner.config.extraGithubIssueCreateBranches,
+		extraLabels:         runner.config.extraGithubIssueLabels,
+		issuePoster:         issues.Post,
+		teamLoader:          team.DefaultLoadTeams,
 	}
 
 	runnerL.Printf("global random seed: %d", globalSeed)

@@ -469,6 +469,26 @@ var (
 		Usage: `Enable dry-run mode for GitHub issue posting (formats issues but doesn't post them)`,
 	})
 
+	ExtraGithubIssueCreateBranches []string
+	_                              = registerRunFlag(&ExtraGithubIssueCreateBranches, FlagInfo{
+		Name: "extra-github-issue-create-branches",
+		Usage: `
+			Additional branches (beyond master and release-*) whose test failures
+			should file GitHub issues. Issues created on these branches still get
+			the automatic branch-<name> label, keeping them de-duplicated and
+			distinct from master/release issues`,
+	})
+
+	ExtraGithubIssueLabels []string
+	_                      = registerRunFlag(&ExtraGithubIssueLabels, FlagInfo{
+		Name: "extra-github-issue-labels",
+		Usage: `
+			Additional GitHub labels to attach to every issue this invocation
+			files, independent of the branch. Useful for distinguishing failures
+			from a specific job (e.g. an architecture or environment) that runs on
+			an already-posting branch`,
+	})
+
 	PromPort int = 2113
 	_            = registerRunFlag(&PromPort, FlagInfo{
 		Name: "prom-port",
