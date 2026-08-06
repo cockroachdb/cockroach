@@ -68,7 +68,7 @@ func TestProjectConfiguration(t *testing.T) {
 		t.Setenv("ROACHPROD_GCE_ARTIFACTS_BUCKET", "environment-artifacts-bucket")
 		t.Setenv("ROACHPROD_GCE_DNS_PROJECT", "environment-dns-project")
 		t.Setenv("ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT", "environment-service-account")
-		initGCEProjectDefaults()
+		require.NoError(t, initGCEProjectDefaults())
 
 		provider, err := NewProvider()
 		require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestProjectConfiguration(t *testing.T) {
 		unsetEnv(t, "ROACHPROD_GCE_DNS_PROJECT")
 		unsetEnv(t, "ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT")
 		t.Setenv("ROACHPROD_GCE_DEFAULT_PROJECT", "legacy-project")
-		initGCEProjectDefaults()
+		require.NoError(t, initGCEProjectDefaults())
 
 		provider, err := NewProvider()
 		require.NoError(t, err)
@@ -249,7 +249,7 @@ func initTestGCEProjectDefaults(t *testing.T) {
 	unsetEnv(t, "ROACHPROD_GCE_DNS_MANAGED_ZONE")
 	unsetEnv(t, "ROACHPROD_GCE_DNS_MANAGED_DOMAIN")
 	t.Setenv("ROACHPROD_GCE_DEFAULT_PROJECT", DefaultProjectID)
-	initGCEProjectDefaults()
+	require.NoError(t, initGCEProjectDefaults())
 	initDNSDefault()
 }
 
