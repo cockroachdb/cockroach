@@ -80,3 +80,69 @@ RESTORE TABLE foo FROM LATEST IN 'external://testuser-ec' WITH into_db=failsdb;
 NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on databases failsdb
 
 subtest end
+
+subtest show-backups-privileges
+
+exec-sql
+GRANT BACKUP ON TABLE foo TO testuser;
+CREATE EXTERNAL CONNECTION "show-ec" AS 'nodelocal://1/show';
+----
+
+exec-sql
+BACKUP TABLE foo INTO 'external://show-ec';
+----
+
+exec-sql user=testuser
+SHOW BACKUPS IN 'external://show-ec'
+----
+pq: user testuser does not have USAGE privilege on external_connection show-ec
+
+exec-sql
+GRANT USAGE ON EXTERNAL CONNECTION "show-ec" TO testuser;
+----
+
+exec-sql user=testuser
+SHOW BACKUPS IN 'external://show-ec'
+----
+
+subtest end
+
+subtest backup-schedule-privileges
+
+exec-sql
+CREATE EXTERNAL CONNECTION "schedule-ec" AS 'nodelocal://1/schedule';
+CREATE EXTERNAL CONNECTION "schedule-ec-2" AS 'nodelocal://1/schedule-2';
+----
+
+exec-sql user=testuser
+CREATE SCHEDULE scheduletest FOR BACKUP TABLE foo INTO 'external://schedule-ec' RECURRING '@daily' FULL BACKUP ALWAYS;
+----
+pq: failed to dry run backup: user testuser does not have USAGE privilege on external_connection schedule-ec
+
+exec-sql
+GRANT USAGE ON EXTERNAL CONNECTION "schedule-ec" TO testuser;
+----
+
+exec-sql user=testuser
+CREATE SCHEDULE scheduletest FOR BACKUP TABLE foo INTO 'external://schedule-ec' RECURRING '@daily' FULL BACKUP ALWAYS;
+----
+
+let $scheduleID
+with schedules as (show schedules for backup) select id from schedules where label='scheduletest';
+----
+
+# ALTER needs the same check as CREATE SCHEDULE.
+exec-sql user=testuser
+ALTER BACKUP SCHEDULE $scheduleID SET INTO 'external://schedule-ec-2';
+----
+pq: failed to dry run backup: user testuser does not have USAGE privilege on external_connection schedule-ec-2
+
+exec-sql
+GRANT USAGE ON EXTERNAL CONNECTION "schedule-ec-2" TO testuser;
+----
+
+exec-sql user=testuser
+ALTER BACKUP SCHEDULE $scheduleID SET INTO 'external://schedule-ec-2';
+----
+
+subtest end
