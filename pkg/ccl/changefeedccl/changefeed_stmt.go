@@ -1776,10 +1776,6 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 	}
 
-	progress, resolvedSpans, err := reloadJobProgress(ctx, jobID, execCfg)
-	if err != nil {
-		return err
-	}
 	var prevResult flowResult
 	knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
@@ -1815,13 +1811,56 @@ func (b *changefeedResumer) resumeWithRetries(
 	// to avoid updating the job status too frequently.
 	var lastRunStatusUpdate time.Time
 
-	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
-		// Capture the current highwater before running the flow so we can
-		// detect if the changefeed made forward progress. If it did, the
-		// retry backoff is reset regardless of how long the flow ran.
-		var preFlowHighWater hlc.Timestamp
+	// preFlowHighWater is the highwater at the start of the previous attempt, used
+	// to detect forward progress across a failed attempt so the backoff can reset.
+	// The zero value sorts before any real timestamp, so a nil -> non-nil highwater
+	// transition counts as progress and resets the backoff.
+	var preFlowHighWater hlc.Timestamp
+
+	r := getRetry(ctx, maxBackoff, backoffReset)
+	for {
+		// Reload progress on every attempt. The coordinator (changeFrontier)
+		// reloads its start highwater from the job record, so the aggregators we
+		// plan here must start from the same state; otherwise a restart can seed
+		// them from stale progress and regress the frontier, tripping the
+		// forwardFrontier assertion and redelivering stale data (#172822).
+		progress, resolvedSpans, err := reloadJobProgress(ctx, jobID, execCfg)
+		if err != nil {
+			// Retry elsewhere: propagating a retryable error clears the job's
+			// claim so the registry can readopt it (possibly on this node).
+			return jobs.MarkAsRetryJobError(err)
+		}
+		if knobs != nil && knobs.AfterReloadJobProgressForRetry != nil {
+			if err := knobs.AfterReloadJobProgressForRetry(); err != nil {
+				return jobs.MarkAsRetryJobError(err)
+			}
+		}
+
+		// Reset the backoff if the highwater advanced since the previous attempt
+		// started, indicating forward progress before the last error.
+		var curHighWater hlc.Timestamp
 		if hw := progress.GetHighWater(); hw != nil {
-			preFlowHighWater = *hw
+			curHighWater = *hw
+		}
+		resetOnProgress := changefeedbase.ResetBackoffOnHighwaterAdvance.Get(&execCfg.Settings.SV)
+		if resetOnProgress && preFlowHighWater.Less(curHighWater) {
+			log.Changefeed.Infof(ctx,
+				"changefeed %d highwater advanced (%s -> %s); resetting retry backoff",
+				jobID, preFlowHighWater, curHighWater)
+			r.Reset()
+			if knobs != nil && knobs.OnRetryBackoffReset != nil {
+				knobs.OnRetryBackoffReset()
+			}
+		}
+		preFlowHighWater = curHighWater
+
+		// Advance the retry after resetting the backoff so a reset triggered by
+		// forward progress takes effect on this attempt's wait rather than the
+		// next one. Next returns immediately on the first attempt; on later
+		// attempts it blocks for the backoff duration and returns false only
+		// when the context is canceled.
+		if !r.Next() {
+			break
 		}
 
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
@@ -1924,6 +1963,12 @@ func (b *changefeedResumer) resumeWithRetries(
 
 			// Poll for updated configuration or new database tables if hibernating.
 			g.GoCtx(func(ctx context.Context) error {
+				// replanCh is nil outside of tests, so the corresponding select
+				// case is never taken. Tests set it to force a replan on demand.
+				var replanCh chan struct{}
+				if knobs != nil {
+					replanCh = knobs.ReplanCh
+				}
 				t := time.NewTicker(15 * time.Second)
 				defer t.Stop()
 				for {
@@ -1932,6 +1977,8 @@ func (b *changefeedResumer) resumeWithRetries(
 						return ctx.Err()
 					case <-changefeedDoneCh:
 						return nil
+					case <-replanCh:
+						return replanErr
 					case <-t.C:
 						newDest, err := reloadDest(ctx, jobID, execCfg)
 						if err != nil {
@@ -1982,34 +2029,6 @@ func (b *changefeedResumer) resumeWithRetries(
 				return err
 			}
 			sli.ErrorRetries.Inc(1)
-		}
-
-		var err error
-		progress, resolvedSpans, err = reloadJobProgress(ctx, jobID, execCfg)
-		if err != nil {
-			// Any errors during reconciliation are retry-able.
-			// When retry-able error propagates to jobs registry, it will clear out
-			// claim information, and will restart this job somewhere else (though,
-			// it's possible that the job gets restarted on this node).
-			return jobs.MarkAsRetryJobError(err)
-		}
-		if knobs != nil && knobs.AfterReloadJobProgressForRetry != nil {
-			if err := knobs.AfterReloadJobProgressForRetry(); err != nil {
-				return jobs.MarkAsRetryJobError(err)
-			}
-		}
-
-		// Reset retry backoff if the highwater advanced, indicating the
-		// changefeed made meaningful forward progress before the error.
-		resetOnProgress := changefeedbase.ResetBackoffOnHighwaterAdvance.Get(&execCfg.Settings.SV)
-		if hw := progress.GetHighWater(); resetOnProgress && hw != nil && preFlowHighWater.Less(*hw) {
-			log.Changefeed.Infof(ctx,
-				"changefeed %d highwater advanced (%s -> %s); resetting retry backoff",
-				jobID, preFlowHighWater, *hw)
-			r.Reset()
-			if knobs != nil && knobs.OnRetryBackoffReset != nil {
-				knobs.OnRetryBackoffReset()
-			}
 		}
 	}
 

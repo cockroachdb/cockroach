@@ -62,9 +62,16 @@ type TestingKnobs struct {
 	// of the changefeed. Note that this will be called when the changefeed starts and subsequently when the changefeed
 	// is retried.
 	StartDistChangefeedInitialHighwater func(ctx context.Context, initialHighwater hlc.Timestamp)
-	// AfterReloadJobProgressForRetry is called after the changefeed reloads
-	// the job progress during a transient error retry.
+	// AfterReloadJobProgressForRetry is called after the changefeed reloads the
+	// job progress at the start of each retry loop attempt. Returning a non-nil
+	// error aborts the attempt with a retryable error.
 	AfterReloadJobProgressForRetry func() error
+	// ReplanCh, if set, forces a replan when it becomes readable: the changefeed
+	// monitor goroutine selects on it and, on receiving, tears down and replans
+	// the flow (as if the sink destination changed), exercising the replanErr
+	// restart path. A nil channel is never selected, so unset means no forced
+	// replan.
+	ReplanCh chan struct{}
 	// This is currently used to test negative timestamp in cursor i.e of the form
 	// "-3us". Check TestChangefeedCursor for more info. This function needs to be in the
 	// knobs as current statement time will only be available once the create changefeed statement
