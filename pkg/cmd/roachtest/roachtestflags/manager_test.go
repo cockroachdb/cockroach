@@ -9,8 +9,24 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
+
+func TestManagerStringArray(t *testing.T) {
+	m := &manager{}
+	var values []string
+	m.RegisterFlag(runCmdID, &values, FlagInfo{Name: "extra-label"})
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	m.AddFlagsToCommand(runCmdID, flags)
+
+	require.NoError(t, flags.Parse([]string{
+		"--extra-label", "private-gce",
+		"--extra-label", "release-25.4",
+	}))
+	require.Equal(t, []string{"private-gce", "release-25.4"}, values)
+	require.NotNil(t, m.Changed(&values))
+}
 
 type testValues struct {
 	intVal    int
