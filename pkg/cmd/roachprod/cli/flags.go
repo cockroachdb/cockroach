@@ -107,6 +107,16 @@ var (
 	fetchLogsTimeout time.Duration
 )
 
+// Intended to be called once from drtprod main package to update defaults which differ from roachprod.
+func UpdateFlagDefaults() {
+	// N.B. Both roachprod and drtprod default to secure mode via the flag defaults.
+	// However, roachprod has runtime logic in overrideBasedOnClusterSettings() that
+	// forces insecure mode for clusters in the default GCP project.
+	// drtprod explicitly sets secure=true here to ensure secure mode is used.
+	secure = true
+	insecure = envutil.EnvOrDefaultBool("COCKROACH_ROACHPROD_INSECURE", false)
+}
+
 func initRootCmdFlags(rootCmd *cobra.Command) {
 	rootCmd.PersistentFlags().BoolVarP(&config.Quiet, "quiet", "q",
 		!term.IsTerminal(int(os.Stdout.Fd())), "disable fancy progress output")

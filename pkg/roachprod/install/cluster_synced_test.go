@@ -21,6 +21,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestComplexSecureOptionE2EProjects(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		project  string
+		insecure bool
+	}{
+		{name: "production", project: gce.DefaultProjectID, insecure: true},
+		{name: "staging", project: gce.StagingProjectID, insecure: true},
+		{name: "custom", project: "custom-project", insecure: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &SyncedCluster{
+				Cluster: cloudcluster.Cluster{
+					Name: "test-cluster",
+					VMs: vm.List{{
+						Provider: gce.ProviderName,
+						Project:  tc.project,
+					}},
+				},
+				ClusterSettings: ClusterSettings{Secure: true},
+			}
+
+			err := (ComplexSecureOption{DefaultSecure: true}).overrideBasedOnClusterSettings(c)
+			require.NoError(t, err)
+			require.Equal(t, !tc.insecure, c.Secure)
+		})
+	}
+}
+
 func TestHostAndSSHTransport(t *testing.T) {
 	privateCluster := &SyncedCluster{Cluster: cloudcluster.Cluster{VMs: vm.List{
 		{
