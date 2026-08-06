@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -42,24 +43,33 @@ func (backup) startPerturbation(ctx context.Context, t test.Test, v variations) 
 	startTime := timeutil.Now()
 	db := v.Conn(ctx, t.L(), v.targetNodes()[0])
 	defer db.Close()
+	backupURL := backupDestination(
+		v.Cloud(), gce.InfraProject(), v.targetNodes()[0], v.Name(),
+	)
+	cmd := fmt.Sprintf(`BACKUP INTO '%s' AS OF SYSTEM TIME '-10s'`, backupURL)
+	_, err := db.ExecContext(ctx, cmd)
+	require.NoError(t, err)
+	return timeutil.Since(startTime)
+}
+
+func backupDestination(cloud spec.Cloud, infraProject string, localNode int, name string) string {
 	var bucketPrefix string
 	backupTestingBucket := testutils.BackupTestingBucket()
-	switch v.Cloud() {
+	switch cloud {
 	case spec.GCE:
 		bucketPrefix = "gs"
+		backupTestingBucket = testutils.BackupTestingBucketForProject(infraProject)
 	case spec.AWS:
 		bucketPrefix = "s3"
 	case spec.Azure:
 		bucketPrefix = "azure"
 	default:
 		bucketPrefix = "nodelocal"
-		backupTestingBucket = strconv.Itoa(v.targetNodes()[0])
+		backupTestingBucket = strconv.Itoa(localNode)
 	}
-	backupURL := fmt.Sprintf("%s://%s/perturbation-backups/%s?AUTH=implicit", bucketPrefix, backupTestingBucket, v.Name())
-	cmd := fmt.Sprintf(`BACKUP INTO '%s' AS OF SYSTEM TIME '-10s'`, backupURL)
-	_, err := db.ExecContext(ctx, cmd)
-	require.NoError(t, err)
-	return timeutil.Since(startTime)
+	return fmt.Sprintf(
+		"%s://%s/perturbation-backups/%s?AUTH=implicit", bucketPrefix, backupTestingBucket, name,
+	)
 }
 
 func (backup) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {

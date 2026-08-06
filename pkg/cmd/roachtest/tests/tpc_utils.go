@@ -98,7 +98,7 @@ func loadTPCHDataset(
 	if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING backup.restore_span.target_size = '64MiB';"); err != nil {
 		return err
 	}
-	tpchURL := fmt.Sprintf("gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=%d/backup?AUTH=implicit", sf)
+	tpchURL := gceFixtureURI(fmt.Sprintf("workload/tpch/scalefactor=%d/backup?AUTH=implicit", sf))
 	if _, err := db.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS tpch;`); err != nil {
 		return err
 	}

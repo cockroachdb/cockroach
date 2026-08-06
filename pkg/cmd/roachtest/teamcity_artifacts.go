@@ -17,6 +17,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -25,7 +26,7 @@ const (
 	artifactsZipName           = "artifacts.zip"
 	artifactFailoverMarkerName = "artifacts-failover.txt"
 
-	defaultRoachtestArtifactFailoverBucket = "roachtest-artifact-failover"
+	roachtestArtifactFailoverBucketPrefix = "roachtest-artifact-failover"
 
 	// Optional env vars for setting failover limit and GCS bucket for custom
 	// failover behavior and testing.
@@ -129,7 +130,7 @@ func roachtestArtifactFailoverBucket() string {
 	if bucket := os.Getenv(roachtestArtifactFailoverBucketEnv); bucket != "" {
 		return bucket
 	}
-	return defaultRoachtestArtifactFailoverBucket
+	return gce.InfraResourceName(roachtestArtifactFailoverBucketPrefix)
 }
 
 // roachtestArtifactFailoverMaxBytes returns the artifacts.zip size threshold

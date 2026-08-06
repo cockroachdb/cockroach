@@ -72,3 +72,18 @@ func TestRestoreRegisteredNames(t *testing.T) {
 	})
 	require.Equal(t, expectedRestoreTests, r.testNames)
 }
+
+func TestRestoreBackupCollectionUsesProjectScopedGCEBucket(t *testing.T) {
+	backup := backupSpecs{
+		version:           "v22.2.0",
+		cloud:             spec.GCE,
+		fullBackupDir:     "LATEST",
+		workload:          tpceRestore{customers: 25000},
+		numBackupsInChain: 48,
+	}
+	require.Equal(
+		t,
+		"'gs://"+gceFixtureBucket()+"/backups/tpc-e/customers=25000/v22.2.0/inc-count=48?AUTH=implicit'",
+		backup.backupCollection(),
+	)
+}

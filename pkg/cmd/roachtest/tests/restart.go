@@ -34,7 +34,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	// amount of data.
 	t.Status("importing tpcc fixture")
 	c.Run(ctx, option.WithNodes(workloadNode),
-		"./cockroach workload fixtures import tpcc --warehouses=100 --fks=false --checks=false {pgurl:1}",
+		"./cockroach workload fixtures import tpcc "+gceFixtureBucketFlag()+" --warehouses=100 --fks=false --checks=false {pgurl:1}",
 	)
 
 	// Wait a full scanner cycle (10m) for the raft log queue to truncate the

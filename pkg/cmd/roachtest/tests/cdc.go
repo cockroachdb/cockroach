@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	roachprodaws "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -90,6 +91,11 @@ const (
 	azureEventHubKafkaSink sinkType = "azure-event-hub"
 	mskSink                sinkType = "msk"
 	nullSink               sinkType = "null"
+)
+
+const (
+	cdcCloudStorageBucket = "roachtest-cdc-output"
+	cdcPubsubTopicName    = "roachtest-cdc-pubsub-sink"
 )
 
 var envVars = []string{
@@ -213,9 +219,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		sinkURI = "null://"
 	case cloudStorageSink:
 		ts := timeutil.Now().Format(`20060102150405`)
-		// cockroach-tmp is a multi-region bucket with a TTL to clean up old
-		// data.
-		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit"
+		sinkURI = cloudStorageSinkURIForProject(ts, gce.InfraProject())
 	case webhookSink:
 		ct.t.Status("webhook install")
 		webhookNode := ct.sinkNodes
@@ -262,7 +266,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		sinkDestHost.RawQuery = params.Encode()
 		sinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
 	case pubsubSink:
-		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
+		sinkURI = pubsubSinkURIForProject(gce.InfraProject())
 	case kafkaSink:
 		kafka, _ := setupKafka(ct.ctx, ct.t, ct.cluster, ct.sinkNodes)
 		kafka.mon = ct.mon
@@ -329,6 +333,24 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 	}
 
 	return sinkURI
+}
+
+func cloudStorageSinkURIForProject(timestamp, project string) string {
+	return "experimental-gs://" + gcsBucketForProject(cdcCloudStorageBucket, project) +
+		"/roachtest/" + timestamp + "?AUTH=implicit"
+}
+
+func pubsubSinkURIForProject(project string) string {
+	return changefeedccl.GcpScheme + `://` + project +
+		"?AUTH=implicit&topic_name=" + cdcPubsubTopicName + "&region=us-east1"
+}
+
+func cdcAssumeRoleChainForProject(project string) string {
+	return fmt.Sprintf(
+		"cdc-roachtest-intermediate@%[1]s.iam.gserviceaccount.com,"+
+			"cdc-roachtest@%[1]s.iam.gserviceaccount.com",
+		project,
+	)
 }
 
 type tpccArgs struct {
@@ -639,6 +661,10 @@ func (ct *cdcTester) verifyMetrics(
 	ctx context.Context, check func(metrics map[string]*prompb.MetricFamily) (ok bool),
 ) {
 	parser := expfmt.TextParser{}
+	scheme := "https"
+	if !ct.cluster.IsSecure() {
+		scheme = "http"
+	}
 
 	testutils.SucceedsSoon(ct.t, func() error {
 		uiAddrs, err := ct.cluster.ExternalAdminUIAddr(ctx, ct.logger, ct.cluster.CRDBNodes())
@@ -646,7 +672,7 @@ func (ct *cdcTester) verifyMetrics(
 			return err
 		}
 		for _, uiAddr := range uiAddrs {
-			uiAddr = fmt.Sprintf("https://%s/_status/vars", uiAddr)
+			uiAddr = fmt.Sprintf("%s://%s/_status/vars", scheme, uiAddr)
 			out, err := exec.Command("curl", "-kf", uiAddr).Output()
 			if err != nil {
 				return err
@@ -844,14 +870,25 @@ func (ct *cdcTester) startGrafana() {
 		if err != nil {
 			ct.t.Errorf("error starting prometheus/grafana: %s", err)
 		}
-		nodeURLs, err := ct.cluster.ExternalIP(ct.ctx, ct.t.L(), ct.workloadNode)
+		nodeURLs, err := externalOrInternalIP(ct.ctx, ct.cluster, ct.t.L(), ct.workloadNode)
 		if err != nil {
-			ct.t.Errorf("error getting grafana node external ip: %s", err)
+			ct.t.Errorf("error getting grafana node ip: %s", err)
+			return
 		}
 		ct.t.Status(fmt.Sprintf("started grafana at http://%s:3000/d/928XNlN4k/basic?from=now-15m&to=now", nodeURLs[0]))
 	} else {
 		ct.t.Status("skipping grafana installation")
 	}
+}
+
+func externalOrInternalIP(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger, nodes option.NodeListOption,
+) ([]string, error) {
+	ips, err := c.ExternalIP(ctx, l, nodes)
+	if err == nil {
+		return ips, nil
+	}
+	return c.InternalIP(ctx, l, nodes)
 }
 
 type latencyTargets struct {
@@ -2054,8 +2091,7 @@ func registerCDC(r registry.Registry) {
 
 	// In order to run this test, the service account corresponding to the
 	// implicit credentials must have the Service Account Token Creator role on
-	// the first account on the assume-role chain:
-	// cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com. See
+	// the first project-scoped account on the assume-role chain. See
 	// https://cloud.google.com/iam/docs/create-short-lived-credentials-direct.
 	r.Add(registry.TestSpec{
 		Name:             "cdc/pubsub-sink/assume-role",
@@ -2078,7 +2114,7 @@ func registerCDC(r registry.Registry) {
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType:   pubsubSink,
-				assumeRole: "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
+				assumeRole: cdcAssumeRoleChainForProject(gce.InfraProject()),
 				targets:    allTpccTargets,
 				opts:       map[string]string{"initial_scan": "'no'"},
 			})
@@ -2095,8 +2131,7 @@ func registerCDC(r registry.Registry) {
 
 	// In order to run this test, the service account corresponding to the
 	// implicit credentials must have the Service Account Token Creator role on
-	// the first account on the assume-role chain:
-	// cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com. See
+	// the first project-scoped account on the assume-role chain. See
 	// https://cloud.google.com/iam/docs/create-short-lived-credentials-direct.
 	r.Add(registry.TestSpec{
 		Name:             "cdc/cloud-sink-gcs/assume-role",
@@ -2119,7 +2154,7 @@ func registerCDC(r registry.Registry) {
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType:   cloudStorageSink,
-				assumeRole: "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
+				assumeRole: cdcAssumeRoleChainForProject(gce.InfraProject()),
 				targets:    allTpccTargets,
 				opts:       map[string]string{"initial_scan": "'no'"},
 			})
@@ -2848,7 +2883,7 @@ func (k kafkaManager) confluentDownloadScript() string {
 	var downloadURL string
 	var downloadSHA string
 	if k.useKafka2 {
-		downloadURL = "https://storage.googleapis.com/cockroach-test-artifacts/confluent/confluent-community-6.1.0.tar.gz"
+		downloadURL = roachtestArtifactURL("confluent/confluent-community-6.1.0.tar.gz")
 		downloadSHA = "53b0e2f08c4cfc55087fa5c9120a614ef04d306db6ec3bcd7710f89f05355355"
 	} else {
 		downloadURL = "https://packages.confluent.io/archive/7.4/confluent-community-7.4.0.tar.gz"
@@ -3480,7 +3515,7 @@ func (k kafkaManager) sinkURLOAuth(ctx context.Context, creds clientcredentials.
 }
 
 func (k kafkaManager) advertiseURLs(ctx context.Context) []string {
-	ips, err := k.c.ExternalIP(ctx, k.t.L(), k.kafkaSinkNodes)
+	ips, err := externalOrInternalIP(ctx, k.c, k.t.L(), k.kafkaSinkNodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -3491,7 +3526,7 @@ func (k kafkaManager) advertiseURLs(ctx context.Context) []string {
 }
 
 func (k kafkaManager) consumerURL(ctx context.Context) string {
-	ips, err := k.c.ExternalIP(ctx, k.t.L(), k.kafkaSinkNodes)
+	ips, err := externalOrInternalIP(ctx, k.c, k.t.L(), k.kafkaSinkNodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -3610,7 +3645,8 @@ func (tw *tpccWorkload) install(ctx context.Context, c cluster.Cluster) {
 	// For fixtures import, use the version built into the cockroach binary so
 	// the tpcc workload-versions match on release branches.
 	c.Run(ctx, option.WithNodes(tw.workloadNodes), fmt.Sprintf(
-		`./cockroach workload fixtures import tpcc --warehouses=%d --checks=false {pgurl%s}`,
+		`./cockroach workload fixtures import tpcc %s --warehouses=%d --checks=false {pgurl%s}`,
+		gceFixtureBucketFlag(),
 		tw.tpccWarehouseCount,
 		tw.sqlNodes.RandNode(),
 	))

@@ -114,9 +114,9 @@ type searchData struct {
 
 // vecbench benchmarks vector index in-memory build and search performance on a
 // variety of datasets. Datasets are downloaded from the
-// cockroach-fixtures-us-east1 GCP bucket (vecindex directory). Here is a list
-// of available datasets, most of which are derived from datasets on
-// ann-benchmarks.com:
+// cockroach-fixtures-us-east1-crl-e2e-infra GCP bucket (vecindex directory).
+// Here is a list of available datasets, most of which are derived from
+// datasets on ann-benchmarks.com:
 //
 //	fashion-mnist-784-euclidean (60K vectors, 784 dims)
 //	gist-960-euclidean (1M vectors, 960 dims)

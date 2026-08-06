@@ -74,7 +74,7 @@ func registerIndexOverload(r registry.Registry) {
 				// We need a big enough size so index creation will take enough time.
 				t.Status("initializing tpcc dataset ", duration)
 				warehouses := roachtestutil.IfLocal(c, " --warehouses=1", " --warehouses=2000")
-				c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload fixtures import tpcc --checks=false"+warehouses+" {pgurl:1}")
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload fixtures import tpcc "+gceFixtureBucketFlag()+" --checks=false"+warehouses+" {pgurl:1}")
 
 				// Setting this low allows us to hit overload. In a larger cluster with
 				// more nodes and larger tables, it will hit the unmodified 1000 limit.
