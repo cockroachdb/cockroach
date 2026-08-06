@@ -662,6 +662,13 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.Fault.StopNode = 0
 	config.Ops.Fault.RestartNode = 0
 	config.Ops.Fault.CrashNode = 0
+
+	// TODO(#173099): VIR is disabled because toggling it on exposes a bug where
+	// MVCCIncrementalIterator ignores intents below StartTime, causing Refresh
+	// and RefreshRange to erroneously skip virtually-resolved intents. Re-enable
+	// once that bug is fixed. Note that kvnemesis_test.go also forces the VIR
+	// cluster setting off at startup to defeat its metamorphic default.
+	config.Ops.ChangeSetting.ToggleVirtualIntentResolution = 0
 	return config
 }
 
