@@ -2497,7 +2497,7 @@ func formatActiveQuery(query serverpb.ActiveQuery) string {
 	var sb strings.Builder
 	sql := tree.AsStringWithFlags(parsed.AST, tree.FmtSimple,
 		tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, p *tree.Placeholder) {
-			if int(p.Idx) > len(query.Placeholders) {
+			if int(p.Idx) >= len(query.Placeholders) {
 				ctx.Printf("$%d", p.Idx+1)
 				return
 			}
