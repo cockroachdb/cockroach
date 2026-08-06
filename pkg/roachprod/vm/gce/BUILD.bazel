@@ -8,6 +8,7 @@ go_library(
         "fast_dns.go",
         "gcloud.go",
         "infra_provider.go",
+        "provider_options.go",
         "utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce",
@@ -39,6 +40,7 @@ go_test(
     size = "small",
     srcs = [
         "gcloud_test.go",
+        "project_config_test.go",
         "utils_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -51,6 +53,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

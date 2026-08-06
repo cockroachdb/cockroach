@@ -12,6 +12,11 @@ import (
 )
 
 func TestGenericStartupArgs(t *testing.T) {
+	t.Run("ArtifactsBucket", func(t *testing.T) {
+		t.Setenv(artifactsBucketEnv, "test-artifacts-bucket")
+		args := DefaultStartupArgs()
+		require.Equal(t, "test-artifacts-bucket", args.ArtifactsBucket)
+	})
 	t.Run("WithVMName", func(t *testing.T) {
 		args := DefaultStartupArgs(WithVMName("test"))
 		require.Equal(t, args.VMName, "test")

@@ -66,7 +66,8 @@ const (
 	// VolumeTypeStandard represents an attached persistent disk.
 	VolumeTypePersistent VolumeType = "persistent"
 
-	DefaultProjectID = "cockroach-ephemeral"
+	DefaultProjectID = "crl-e2e-infra"
+	StagingProjectID = "crl-e2e-infra-staging"
 	// iapSSHTag targets the firewall rule that permits SSH from IAP's TCP
 	// forwarding address range in private roachprod VPCs.
 	iapSSHTag = "iap-ssh"
@@ -78,40 +79,136 @@ func UsesIAP(v vm.VM) bool {
 }
 
 var (
-	defaultDefaultProject, defaultMetadataProject, defaultDNSProject, defaultDefaultServiceAccount string
+	defaultVMProject, defaultInfraProject, defaultMetadataProject            string
+	defaultDNSProject, defaultArtifactsBucket, defaultServiceAccountOverride string
+	defaultMetadataProjectExplicit, defaultDNSProjectExplicit                bool
+	defaultArtifactsBucketExplicit, defaultServiceAccountExplicit            bool
 	// projects for which a cron GC job exists.
 	projectsWithGC []string
 )
 
 func initGCEProjectDefaults() {
-	defaultDefaultProject = config.EnvOrDefaultString(
+	// ROACHPROD_GCE_DEFAULT_PROJECT historically controlled both the project
+	// where VMs were created and the project that hosted shared roachprod
+	// infrastructure. Keep it as a fallback for both roles.
+	legacyDefaultProject := config.EnvOrDefaultString(
 		"ROACHPROD_GCE_DEFAULT_PROJECT", DefaultProjectID,
 	)
-	defaultMetadataProject = config.EnvOrDefaultString(
+	defaultVMProject = config.EnvOrDefaultString(
+		"ROACHPROD_GCE_PROJECT", legacyDefaultProject,
+	)
+	defaultInfraProject = config.EnvOrDefaultString(
+		"ROACHPROD_GCE_INFRA_PROJECT", legacyDefaultProject,
+	)
+	defaultMetadataProject, defaultMetadataProjectExplicit = os.LookupEnv(
 		"ROACHPROD_GCE_METADATA_PROJECT",
-		defaultDefaultProject,
 	)
-	defaultDNSProject = config.EnvOrDefaultString(
-		"ROACHPROD_GCE_DNS_PROJECT", "cockroach-shared",
+	if !defaultMetadataProjectExplicit {
+		defaultMetadataProject = defaultInfraProject
+	}
+	defaultDNSProject, defaultDNSProjectExplicit = os.LookupEnv("ROACHPROD_GCE_DNS_PROJECT")
+	if !defaultDNSProjectExplicit {
+		defaultDNSProject = defaultInfraProject
+	}
+	defaultArtifactsBucket, defaultArtifactsBucketExplicit = os.LookupEnv(
+		"ROACHPROD_GCE_ARTIFACTS_BUCKET",
 	)
+	if !defaultArtifactsBucketExplicit {
+		defaultArtifactsBucket = artifactsBucketForProject(defaultInfraProject)
+	}
 
 	// Service account to use if the default project is in use.
-	defaultDefaultServiceAccount = config.EnvOrDefaultString(
+	defaultServiceAccountOverride, defaultServiceAccountExplicit = os.LookupEnv(
 		"ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT",
-		"21965078311-compute@developer.gserviceaccount.com",
 	)
-	projectsWithGC = []string{defaultDefaultProject}
+	projectsWithGC = []string{defaultVMProject}
 }
 
-// DefaultProject returns the default GCE project. This is used to determine whether
-// certain features, such as DNS names are enabled.
-func DefaultProject() string {
-	// If the provider was already initialized, read the default project from the
-	// provider.
-	if p, ok := vm.Providers[ProviderName].(*Provider); ok {
-		return p.defaultProject
+// VMProject returns the GCE project where roachprod creates VMs by default.
+// It reflects single-project flag overrides after provider initialization and
+// the environment-derived VM project default before initialization.
+func VMProject() string {
+	if p, ok := vm.Providers[ProviderName].(*Provider); ok && len(p.Projects) == 1 && p.Projects[0] != "" {
+		return p.Projects[0]
 	}
-	return defaultDefaultProject
+	if defaultVMProject != "" {
+		return defaultVMProject
+	}
+	legacyDefaultProject := config.EnvOrDefaultString(
+		"ROACHPROD_GCE_DEFAULT_PROJECT", DefaultProjectID,
+	)
+	return config.EnvOrDefaultString("ROACHPROD_GCE_PROJECT", legacyDefaultProject)
+}
+
+// InfraProject returns the GCE project that hosts shared roachprod
+// infrastructure, such as metadata and DNS resources.
+func InfraProject() string {
+	// If the provider was already initialized, reflect flag overrides.
+	if p, ok := vm.Providers[ProviderName].(*Provider); ok {
+		return p.infraProject
+	}
+	return defaultInfraProject
+}
+
+// DefaultProject returns the GCE infrastructure project.
+//
+// Deprecated: use InfraProject instead.
+func DefaultProject() string {
+	return InfraProject()
+}
+
+// MetadataProject returns the GCE project used to store and fetch shared SSH
+// keys. It reflects provider flag overrides after provider initialization and
+// the environment-derived metadata project default before initialization.
+func MetadataProject() string {
+	if p, ok := vm.Providers[ProviderName].(*Provider); ok {
+		return p.metadataProject
+	}
+	return defaultMetadataProject
+}
+
+// DefaultServiceAccount returns the service account roachprod attaches to VMs
+// in the infrastructure project when the create options do not specify an
+// override.
+func DefaultServiceAccount() string {
+	if defaultServiceAccountExplicit {
+		return defaultServiceAccountOverride
+	}
+	return vmServiceAccount(InfraProject())
+}
+
+func vmServiceAccount(project string) string {
+	return fmt.Sprintf("roachprod-vm@%s.iam.gserviceaccount.com", project)
+}
+
+func artifactsBucketForProject(project string) string {
+	return "cockroach-test-artifacts-" + project
+}
+
+// IsInsecureProject reports whether project hosts ephemeral engineering test
+// clusters that should default to insecure mode.
+func IsInsecureProject(project string) bool {
+	return project == DefaultProjectID || project == StagingProjectID
+}
+
+// DefaultNetworkSelfLink returns the self-link for roachprod's default GCE
+// network in project. Passing an empty project uses VMProject, matching
+// roachprod create behavior when the caller does not override the project.
+func DefaultNetworkSelfLink(project string) string {
+	if project == "" {
+		project = VMProject()
+	}
+	return fmt.Sprintf("projects/%s/global/networks/default", project)
+}
+
+// DefaultSubnetSelfLink returns the regional self-link for the subnet roachprod
+// uses when GCE create callers do not pass an explicit subnet. This is the
+// structured equivalent of the CLI create path's --subnet=default flag.
+func DefaultSubnetSelfLink(project, region string) string {
+	if project == "" {
+		project = VMProject()
+	}
+	return fmt.Sprintf("projects/%s/regions/%s/subnetworks/default", project, region)
 }
 
 // Denotes if this provider was successfully initialized.
@@ -128,28 +225,58 @@ func Init() error {
 	initGCEProjectDefaults()
 	initDNSDefault()
 
-	providerInstance := &Provider{}
-	providerInstance.Projects = []string{defaultDefaultProject}
+	providerOpts := []Option{}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
-		fmt.Printf("WARN: `GCE_PROJECT` is deprecated; please, use `ROACHPROD_GCE_DEFAULT_PROJECT` instead\n")
-		providerInstance.Projects = []string{projectFromEnv}
+		fmt.Printf("WARN: `GCE_PROJECT` is deprecated; please, use `ROACHPROD_GCE_PROJECT` instead\n")
+		providerOpts = append(providerOpts, WithProject(projectFromEnv))
+	}
+	providerInstance, err := NewProvider(providerOpts...)
+	if err != nil {
+		vm.Providers[ProviderName] = flagstub.New(
+			&Provider{}, fmt.Sprintf("unable to init gce provider: %s", err),
+		)
+		return err
 	}
 	if _, err := exec.LookPath("gcloud"); err != nil {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, "please install the gcloud CLI utilities "+
 			"(https://cloud.google.com/sdk/downloads)")
 		return errors.New("gcloud not found")
 	}
-	providerInstance.dnsProvider = NewDNSProvider()
-
-	providerInstance.defaultProject = defaultDefaultProject
-	providerInstance.metadataProject = defaultMetadataProject
-
 	initialized = true
 	vm.Providers[ProviderName] = providerInstance
 	Infrastructure = providerInstance
 
 	return nil
+}
+
+// NewProvider returns a new GCE provider with the given options applied.
+func NewProvider(options ...Option) (*Provider, error) {
+	p := &Provider{
+		dnsProvider:              NewDNSProvider(),
+		dnsProviderOpts:          NewDNSProviderDefaultOptions(),
+		dnsProjectExplicit:       defaultDNSProjectExplicit,
+		dnsPublicDomainExplicit:  dnsDefaultDomainExplicit,
+		dnsManagedDomainExplicit: dnsDefaultManagedDomainExplicit,
+		Projects:                 []string{},
+		infraProject:             defaultInfraProject,
+		artifactsBucket:          defaultArtifactsBucket,
+		artifactsBucketExplicit:  defaultArtifactsBucketExplicit,
+		metadataProject:          defaultMetadataProject,
+		metadataProjectExplicit:  defaultMetadataProjectExplicit,
+	}
+
+	for _, option := range options {
+		option.apply(p)
+	}
+
+	// If no projects were specified by the options, use the default project.
+	if len(p.Projects) == 0 {
+		p.Projects = []string{defaultVMProject}
+	}
+
+	p.updateDNSProvider()
+	return p, nil
 }
 
 func runJSONCommand(args []string, parsed interface{}) error {
@@ -346,8 +473,9 @@ func DefaultProviderOpts() *ProviderOpts {
 		UseSpot:              false,
 		preemptible:          false,
 
-		defaultServiceAccount: defaultDefaultServiceAccount,
-		ServiceAccount:        os.Getenv("GCE_SERVICE_ACCOUNT"),
+		defaultServiceAccount:         DefaultServiceAccount(),
+		defaultServiceAccountExplicit: defaultServiceAccountExplicit,
+		ServiceAccount:                os.Getenv("GCE_SERVICE_ACCOUNT"),
 	}
 }
 
@@ -402,22 +530,57 @@ type ProviderOpts struct {
 
 	ServiceAccount string
 
-	// The service account to use if the default project is in use and no
+	// The service account to use if the infrastructure project is in use and no
 	// ServiceAccount was specified.
-	defaultServiceAccount string
+	defaultServiceAccount         string
+	defaultServiceAccountExplicit bool
 }
 
 // Provider is the GCE implementation of the vm.Provider interface.
 type Provider struct {
 	*dnsProvider
-	Projects []string
+	dnsProviderOpts dnsOpts
+	// dnsProjectExplicit is true when the DNS project was configured
+	// independently. Otherwise it follows infraProject.
+	dnsProjectExplicit bool
+	// DNS domains follow infraProject unless independently configured.
+	dnsPublicDomainExplicit  bool
+	dnsManagedDomainExplicit bool
+	Projects                 []string
 
 	// The project to use for looking up metadata. In particular, this includes
 	// user keys.
 	metadataProject string
 
-	// The project that provides the core roachprod services.
-	defaultProject string
+	// The project that provides shared roachprod infrastructure.
+	infraProject string
+	// The GCS bucket that provides shared roachprod artifacts.
+	artifactsBucket string
+
+	// metadataProjectExplicit is true when metadataProject was configured
+	// independently. Otherwise it follows infraProject.
+	metadataProjectExplicit bool
+	// artifactsBucketExplicit is true when artifactsBucket was configured
+	// independently. Otherwise it follows infraProject.
+	artifactsBucketExplicit bool
+}
+
+type dnsOpts struct {
+	DNSProject    string
+	PublicZone    string
+	PublicDomain  string
+	ManagedZone   string
+	ManagedDomain string
+}
+
+func NewDNSProviderDefaultOptions() dnsOpts {
+	return dnsOpts{
+		DNSProject:    defaultDNSProject,
+		PublicZone:    dnsDefaultZone,
+		PublicDomain:  dnsDefaultDomain,
+		ManagedZone:   dnsDefaultManagedZone,
+		ManagedDomain: dnsDefaultManagedDomain,
+	}
 }
 
 // LogEntry represents a single log entry from the gcloud logging(stack driver)
@@ -539,7 +702,7 @@ func buildFilterCliArgs(
 	// construct full resource names
 	vmFullResourceNames := make([]string, len(vms))
 	for i, vmNode := range vms {
-		// example format : projects/cockroach-ephemeral/zones/us-east1-b/instances/test-name
+		// example format: projects/<project>/zones/us-east1-b/instances/test-name
 		vmFullResourceNames[i] = "projects/" + projectName + "/zones/" + vmNode.Zone + "/instances/" + vmNode.Name
 	}
 	// Prepend vmFullResourceNames with "protoPayload.resourceName=" to help with filter construction.
@@ -854,7 +1017,7 @@ func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) 
 	{
 		// We're running the equivalent of:
 		//  	gcloud compute instances describe irfansharif-snapshot-0001 \
-		//  		--project cockroach-ephemeral --zone us-east1-b \
+		//  		--project <project> --zone us-east1-b \
 		// 			--format json(disks)
 		//
 		// We'll use this data to filter out boot disks.
@@ -876,7 +1039,7 @@ func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) 
 
 	{
 		// We're running the equivalent of
-		// 		gcloud compute disks list --project cockroach-ephemeral \
+		// 		gcloud compute disks list --project <project> \
 		//			--filter "users:(irfansharif-snapshot-0001)" --format json
 		//
 		// This contains more per-disk metadata than the command above, but
@@ -1053,6 +1216,55 @@ type ProjectsVal struct {
 	Provider               *Provider
 }
 
+// projectValue is a pflag.Value for one of the provider-level GCE project
+// roles. It keeps related defaults in sync when a flag changes.
+type projectValue struct {
+	get func() string
+	set func(string)
+}
+
+// stringValue is a pflag.Value for provider configuration that permits an
+// empty value, such as disabling a DNS domain.
+type stringValue struct {
+	get func() string
+	set func(string)
+}
+
+// Set is part of the pflag.Value interface.
+func (v stringValue) Set(value string) error {
+	v.set(value)
+	return nil
+}
+
+// Type is part of the pflag.Value interface.
+func (v stringValue) Type() string {
+	return "string"
+}
+
+// String is part of the pflag.Value interface.
+func (v stringValue) String() string {
+	return v.get()
+}
+
+// Set is part of the pflag.Value interface.
+func (v projectValue) Set(project string) error {
+	if project == "" {
+		return fmt.Errorf("empty GCE project")
+	}
+	v.set(project)
+	return nil
+}
+
+// Type is part of the pflag.Value interface.
+func (v projectValue) Type() string {
+	return "GCE project name"
+}
+
+// String is part of the pflag.Value interface.
+func (v projectValue) String() string {
+	return v.get()
+}
+
 // DefaultZones is the list of  zones used by default for cluster creation.
 // If the geo flag is specified, nodes are distributed between zones.
 // These are GCP zones available according to this page:
@@ -1138,6 +1350,95 @@ func (p *Provider) GetProjects() []string {
 	return p.Projects
 }
 
+func (p *Provider) setInfraProject(project string) {
+	p.infraProject = project
+	if !p.artifactsBucketExplicit {
+		p.artifactsBucket = artifactsBucketForProject(project)
+	}
+	if !p.metadataProjectExplicit {
+		p.metadataProject = project
+	}
+	if !p.dnsProjectExplicit {
+		p.dnsProviderOpts.DNSProject = project
+	}
+	publicDomain, managedDomain := defaultDNSDomains(project)
+	if !p.dnsPublicDomainExplicit {
+		p.dnsProviderOpts.PublicDomain = publicDomain
+	}
+	if !p.dnsManagedDomainExplicit {
+		p.dnsProviderOpts.ManagedDomain = managedDomain
+	}
+	p.updateDNSProvider()
+}
+
+// ArtifactsBucket returns the GCS bucket that hosts shared roachprod
+// artifacts.
+func (p *Provider) ArtifactsBucket() string {
+	return p.artifactsBucket
+}
+
+func (p *Provider) setArtifactsBucket(bucket string) {
+	p.artifactsBucket = bucket
+	p.artifactsBucketExplicit = true
+}
+
+func (p *Provider) setMetadataProject(project string) {
+	p.metadataProject = project
+	p.metadataProjectExplicit = true
+}
+
+func (p *Provider) updateDNSProject(project string) {
+	p.dnsProviderOpts.DNSProject = project
+	p.updateDNSProvider()
+}
+
+func (p *Provider) setDNSProject(project string) {
+	p.dnsProjectExplicit = true
+	p.updateDNSProject(project)
+}
+
+func (p *Provider) setDNSPublicZone(zone string) {
+	p.dnsProviderOpts.PublicZone = zone
+	p.updateDNSProvider()
+}
+
+func (p *Provider) setDNSPublicDomain(domain string) {
+	p.dnsPublicDomainExplicit = true
+	p.dnsProviderOpts.PublicDomain = domain
+	p.updateDNSProvider()
+}
+
+func (p *Provider) setDNSManagedZone(zone string) {
+	p.dnsProviderOpts.ManagedZone = zone
+	p.updateDNSProvider()
+}
+
+func (p *Provider) setDNSManagedDomain(domain string) {
+	p.dnsManagedDomainExplicit = true
+	p.dnsProviderOpts.ManagedDomain = domain
+	p.updateDNSProvider()
+}
+
+// updateDNSProvider applies flag changes to the provider instance constructed
+// during initialization.
+func (p *Provider) updateDNSProvider() {
+	if p.dnsProvider == nil {
+		return
+	}
+	p.dnsProvider.dnsProject = p.dnsProviderOpts.DNSProject
+	p.dnsProvider.publicZone = p.dnsProviderOpts.PublicZone
+	p.dnsProvider.publicDomain = p.dnsProviderOpts.PublicDomain
+	p.dnsProvider.managedZone = p.dnsProviderOpts.ManagedZone
+	p.dnsProvider.managedDomain = p.dnsProviderOpts.ManagedDomain
+}
+
+func (p *Provider) defaultServiceAccountFor(opts *ProviderOpts) string {
+	if opts.defaultServiceAccountExplicit {
+		return opts.defaultServiceAccount
+	}
+	return vmServiceAccount(p.infraProject)
+}
+
 // ConfigureCreateFlags implements vm.ProviderOptions.
 func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.MachineType, "machine-type", "n2-standard-4", "DEPRECATED")
@@ -1149,9 +1450,15 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.StringVar(&o.ServiceAccount, ProviderName+"-service-account",
 		o.ServiceAccount, "Service account to use")
-	flags.StringVar(&o.defaultServiceAccount,
-		ProviderName+"-default-service-account", defaultDefaultServiceAccount,
-		"Service account to use if the default project is in use and no "+
+	flags.Var(stringValue{
+		get: func() string { return o.defaultServiceAccount },
+		set: func(value string) {
+			o.defaultServiceAccount = value
+			o.defaultServiceAccountExplicit = true
+		},
+	},
+		ProviderName+"-default-service-account",
+		"Service account to use if the infrastructure project is in use and no "+
 			"--gce-service-account was specified")
 
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
@@ -1221,48 +1528,83 @@ func (p *Provider) ConfigureProviderFlags(flags *pflag.FlagSet, opt vm.MultipleP
 
 	// Flags about DNS override the default values in
 	// dnsProvider.
-	dnsProviderInstance := p.dnsProvider
-	flags.StringVar(
-		&dnsProviderInstance.dnsProject, ProviderName+"-dns-project",
-		dnsProviderInstance.dnsProject,
+	flags.Var(
+		stringValue{
+			get: func() string { return p.dnsProviderOpts.DNSProject },
+			set: p.setDNSProject,
+		},
+		ProviderName+"-dns-project",
 		"project to use to set up DNS",
 	)
-	flags.StringVar(
-		&dnsProviderInstance.publicZone,
+	flags.Var(
+		stringValue{
+			get: func() string { return p.dnsProviderOpts.PublicZone },
+			set: p.setDNSPublicZone,
+		},
 		ProviderName+"-dns-zone",
-		dnsProviderInstance.publicZone,
 		"zone file in gcloud project to use to set up public DNS records",
 	)
-	flags.StringVar(
-		&dnsProviderInstance.publicDomain,
+	flags.Var(
+		stringValue{
+			get: func() string { return p.dnsProviderOpts.PublicDomain },
+			set: p.setDNSPublicDomain,
+		},
 		ProviderName+"-dns-domain",
-		dnsProviderInstance.publicDomain,
-		"zone domian in gcloud project to use to set up public DNS records",
+		"zone domain in gcloud project to use to set up public DNS records",
 	)
-	flags.StringVar(
-		&dnsProviderInstance.managedZone,
-		ProviderName+"managed-dns-zone",
-		dnsProviderInstance.managedZone,
+	flags.Var(
+		stringValue{
+			get: func() string { return p.dnsProviderOpts.ManagedZone },
+			set: p.setDNSManagedZone,
+		},
+		ProviderName+"-managed-dns-zone",
 		"zone file in gcloud project to use to set up DNS SRV records",
 	)
-	flags.StringVar(
-		&dnsProviderInstance.managedDomain,
-		ProviderName+"managed-dns-domain",
-		dnsProviderInstance.managedDomain,
+	flags.Var(
+		stringValue{
+			get: func() string { return p.dnsProviderOpts.ManagedDomain },
+			set: p.setDNSManagedDomain,
+		},
+		ProviderName+"-managed-dns-domain",
 		"zone file in gcloud project to use to set up DNS SRV records",
 	)
 
 	// Flags about the GCE project to use override the defaults in
 	// the provider.
-	flags.StringVar(
-		&p.metadataProject, ProviderName+"-metadata-project",
-		p.metadataProject,
-		"google cloud project to use to store and fetch SSH keys",
+	flags.Var(
+		projectValue{
+			get: func() string { return p.metadataProject },
+			set: p.setMetadataProject,
+		},
+		ProviderName+"-metadata-project",
+		"google cloud project to use to store and fetch SSH keys; defaults to --gce-infra-project",
 	)
-	flags.StringVar(
-		&p.defaultProject, ProviderName+"-default-project",
-		p.defaultProject,
-		"google cloud project to use to run core roachprod services",
+	flags.Var(
+		projectValue{
+			get: func() string { return p.infraProject },
+			set: p.setInfraProject,
+		},
+		ProviderName+"-infra-project",
+		"google cloud project that hosts shared roachprod infrastructure",
+	)
+	flags.Var(
+		stringValue{
+			get: func() string { return p.artifactsBucket },
+			set: p.setArtifactsBucket,
+		},
+		ProviderName+"-artifacts-bucket",
+		"GCS bucket that hosts shared roachprod artifacts; defaults from --gce-infra-project",
+	)
+	flags.Var(
+		projectValue{
+			get: func() string { return p.infraProject },
+			set: p.setInfraProject,
+		},
+		ProviderName+"-default-project",
+		"deprecated alias for --gce-infra-project",
+	)
+	_ = flags.MarkDeprecated(
+		ProviderName+"-default-project", "use --"+ProviderName+"-infra-project instead",
 	)
 }
 
@@ -1292,7 +1634,7 @@ func (p *Provider) resolveAddressMode(mode vm.AddressMode) (vm.AddressMode, erro
 		return "", err
 	}
 	if mode == vm.AddressModeAuto {
-		if p.GetProject() == p.defaultProject {
+		if p.GetProject() == p.infraProject {
 			return vm.AddressModePrivate, nil
 		}
 		return vm.AddressModePublic, nil
@@ -1520,8 +1862,8 @@ func (p *Provider) computeInstanceArgs(
 	}
 	args = append(args, computeAddressArgs(opts, providerOpts)...)
 
-	if project == p.defaultProject && providerOpts.ServiceAccount == "" {
-		providerOpts.ServiceAccount = providerOpts.defaultServiceAccount
+	if project == p.infraProject && providerOpts.ServiceAccount == "" {
+		providerOpts.ServiceAccount = p.defaultServiceAccountFor(providerOpts)
 	}
 	if providerOpts.ServiceAccount != "" {
 		args = append(args, "--service-account", providerOpts.ServiceAccount)
@@ -3440,7 +3782,7 @@ func (p *Provider) ProjectActive(project string) bool {
 // lastComponent splits a url path and returns only the last part. This is
 // used because some fields in GCE APIs are defined using URLs like:
 //
-//	"https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n2-standard-16"
+//	"https://www.googleapis.com/compute/v1/projects/crl-e2e-infra/zones/us-east1-b/machineTypes/n2-standard-16"
 //
 // We want to strip this down to "n2-standard-16", so we only want the last
 // component.
@@ -3452,7 +3794,7 @@ func lastComponent(url string) string {
 // zoneFromSelfLink splits a GCE self link and returns the zone. This is used
 // because some fields in GCE APIs are defined using URLs like:
 //
-//	"https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n2-standard-16"
+//	"https://www.googleapis.com/compute/v1/projects/crl-e2e-infra/zones/us-east1-b/machineTypes/n2-standard-16"
 //
 // We want to extract the "us-east1-b" part, which is the zone.
 func zoneFromSelfLink(selfLink string) string {

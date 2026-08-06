@@ -264,7 +264,7 @@ func (c *SyncedCluster) allowServiceRegistration() bool {
 		if cVM.Provider != gce.ProviderName {
 			return false
 		}
-		if cVM.Project != gce.DefaultProject() {
+		if cVM.Project != gce.VMProject() {
 			return false
 		}
 	}
