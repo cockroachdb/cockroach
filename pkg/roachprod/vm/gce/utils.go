@@ -353,8 +353,7 @@ func (p *Provider) GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 
 // AddUserAuthorizedKey adds the authorized key provided to the set of
 // keys installed on clusters managed by roachprod. Currently, these
-// keys are stored in the project metadata for the roachprod's
-// `DefaultProject`.
+// keys are stored in the configured metadata project.
 func AddUserAuthorizedKey(ak AuthorizedKey) error {
 	existingKeys, err := Infrastructure.GetUserAuthorizedKeys()
 	if err != nil {
@@ -369,7 +368,7 @@ func AddUserAuthorizedKey(ak AuthorizedKey) error {
 	return SetUserAuthorizedKeys(newKeys)
 }
 
-// SetUserAuthorizedKeys updates the default project metadata with the
+// SetUserAuthorizedKeys updates the configured metadata project with the
 // keys provided. Note that this overwrites any existing keys -- all
 // existing keys need to be passed in the `keys` list provided in
 // order for them to continue to exist after this function is called.
@@ -387,7 +386,7 @@ func SetUserAuthorizedKeys(keys AuthorizedKeys) (retErr error) {
 	}
 
 	cmd := exec.Command("gcloud", "compute", "project-info", "add-metadata",
-		fmt.Sprintf("--project=%s", DefaultProject()),
+		fmt.Sprintf("--project=%s", MetadataProject()),
 		fmt.Sprintf("--metadata-from-file=ssh-keys=%s", tmpFile.Name()),
 	)
 

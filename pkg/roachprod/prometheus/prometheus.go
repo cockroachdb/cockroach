@@ -253,10 +253,11 @@ func Init(
 export ARCH=$(dpkg --print-architecture)
 if [ ! -x node_exporter/node_exporter ]; then
 	rm -rf node_exporter && mkdir -p node_exporter && curl -fsSL \
-		https://storage.googleapis.com/cockroach-test-artifacts/prometheus/node_exporter-%s.linux-${ARCH}.tar.gz |
+		%[1]s/prometheus/node_exporter-%[2]s.linux-${ARCH}.tar.gz |
 		tar zxv --strip-components 1 -C node_exporter
 fi
 `,
+				vm.ArtifactsBaseURL(),
 				vm.NodeExporterVersion,
 			)); err != nil {
 			return nil, errors.Wrap(err, "unable to download node_exporter")
@@ -310,7 +311,8 @@ fi
 		fmt.Sprintf(`
 export ARCH=$(dpkg --print-architecture)
 sudo rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
-curl -fsSL https://storage.googleapis.com/cockroach-test-artifacts/prometheus/prometheus-%s.linux-${ARCH}.tar.gz | tar zxv --strip-components=1`,
+curl -fsSL %[1]s/prometheus/prometheus-%[2]s.linux-${ARCH}.tar.gz | tar zxv --strip-components=1`,
+			vm.ArtifactsBaseURL(),
 			vm.PrometheusVersion,
 		)); err != nil {
 		return nil, errors.Wrap(err, "unable to download prometheus")

@@ -306,7 +306,7 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 	// overwrite if we don't have all the VMs of interest, so we only do it if we
 	// have a list of all VMs from both AWS and GCE (so if both providers have
 	// been used to get the VMs and for GCP also if we listed the VMs in the
-	// default project).
+	// default VM project).
 	refreshDNS := true
 
 	if p := vm.Providers[gce.ProviderName]; !p.Active() {
@@ -314,7 +314,7 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 	} else {
 		var defaultProjectFound bool
 		for _, prj := range p.(*gce.Provider).GetProjects() {
-			if prj == gce.DefaultProject() {
+			if prj == gce.VMProject() {
 				defaultProjectFound = true
 				break
 			}
@@ -2660,10 +2660,11 @@ func CreatePublicDNS(ctx context.Context, l *logger.Logger, clusterName string) 
 	return vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
 		recs := make([]vm.DNSRecord, 0, len(c.VMs))
 		for _, v := range vms {
-			if v.PublicIP == "" {
+			ip := v.DNSIP()
+			if ip == "" {
 				continue
 			}
-			rec := vm.CreateDNSRecord(v.PublicDNS, vm.A, v.PublicIP, 60)
+			rec := vm.CreateDNSRecord(v.PublicDNS, vm.A, ip, 60)
 			rec.Public = true
 			recs = append(recs, rec)
 		}
