@@ -10,7 +10,40 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/changefeeds"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/stretchr/testify/require"
 )
+
+func TestBackupTestingBucketForProject(t *testing.T) {
+	t.Setenv("BACKUP_TESTING_BUCKET", "")
+	require.Equal(
+		t,
+		"cockroachdb-backup-testing-crl-e2e-infra-staging",
+		backupTestingBucketForProject(spec.GCE, "crl-e2e-infra-staging"),
+	)
+	require.Equal(
+		t,
+		"cockroachdb-backup-testing",
+		backupTestingBucketForProject(spec.AWS, "crl-e2e-infra-staging"),
+	)
+	require.Equal(
+		t,
+		"cockroachdb-backup-testing",
+		backupTestingBucketForProject(spec.Azure, "crl-e2e-infra-staging"),
+	)
+
+	t.Setenv("BACKUP_TESTING_BUCKET", "explicit-bucket")
+	require.Equal(
+		t,
+		"explicit-bucket",
+		backupTestingBucketForProject(spec.GCE, "crl-e2e-infra-staging"),
+	)
+	require.Equal(
+		t,
+		"explicit-bucket",
+		backupTestingBucketForProject(spec.AWS, "crl-e2e-infra-staging"),
+	)
+}
 
 func TestParseConfigs(t *testing.T) {
 	tests := []struct {

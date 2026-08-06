@@ -1158,9 +1158,12 @@ func Get(ctx context.Context, l *logger.Logger, clusterName, src, dest string) e
 }
 
 type PGURLOptions struct {
-	Database           string
-	Secure             install.SecureOption
-	External           bool
+	Database string
+	Secure   install.SecureOption
+	External bool
+	// UseHost selects the same node address roachprod uses for SSH: public when
+	// available, otherwise private. External takes precedence when both are set.
+	UseHost            bool
 	VirtualClusterName string
 	SQLInstance        int
 	Auth               install.PGAuthMode
@@ -1175,18 +1178,9 @@ func PgURL(
 		return nil, err
 	}
 	nodes := c.Nodes
-	ips := make([]string, len(nodes))
-	if opts.External {
-		for i := 0; i < len(nodes); i++ {
-			ips[i] = c.VMs[nodes[i]-1].PublicIP
-		}
-	} else {
-		for i := 0; i < len(nodes); i++ {
-			ip, err := c.GetInternalIP(nodes[i])
-			if err == nil {
-				ips[i] = ip
-			}
-		}
+	ips, err := pgURLIPs(c, nodes, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	var urls []string
@@ -1212,9 +1206,32 @@ func PgURL(
 	return urls, nil
 }
 
+func pgURLIPs(c *install.SyncedCluster, nodes install.Nodes, opts PGURLOptions) ([]string, error) {
+	ips := make([]string, len(nodes))
+	for i, node := range nodes {
+		var err error
+		switch {
+		case opts.External:
+			ips[i], err = c.GetExternalIP(node)
+		case opts.UseHost:
+			ips[i] = c.Host(node)
+			if ips[i] == "" {
+				err = errors.Errorf("no host address for node %d", node)
+			}
+		default:
+			ips[i], err = c.GetInternalIP(node)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ips, nil
+}
+
 type urlConfig struct {
 	path               string
 	usePublicIP        bool
+	useHost            bool
 	openInBrowser      bool
 	secure             bool
 	port               int
@@ -1231,23 +1248,31 @@ func urlGenerator(
 ) ([]string, error) {
 	var urls []string
 	for i, node := range nodes {
-		host := vm.Name(c.Name, int(node)) + "." + gce.Infrastructure.DNSDomain()
+		var host string
+		if uConfig.useHost {
+			host = c.Host(node)
+			if host == "" {
+				return nil, errors.Errorf("no host address for node %d", node)
+			}
+		} else {
+			host = vm.Name(c.Name, int(node)) + "." + gce.Infrastructure.DNSDomain()
 
-		// There are no DNS entries for local clusters.
-		if c.IsLocal() {
-			uConfig.usePublicIP = true
-		}
-
-		// verify DNS is working / fallback to IPs if not.
-		if i == 0 && !uConfig.usePublicIP {
-			if _, err := net.LookupHost(host); err != nil {
-				l.Errorf("host %s is unreachable, falling back to public IPs. DNS entries might be outdated, run `roachprod sync`.", host)
+			// There are no DNS entries for local clusters.
+			if c.IsLocal() {
 				uConfig.usePublicIP = true
 			}
-		}
 
-		if uConfig.usePublicIP {
-			host = c.VMs[node-1].PublicIP
+			// Verify DNS is working / fallback to IPs if not.
+			if i == 0 && !uConfig.usePublicIP {
+				if _, err := net.LookupHost(host); err != nil {
+					l.Errorf("host %s is unreachable, falling back to public IPs. DNS entries might be outdated, run `roachprod sync`.", host)
+					uConfig.usePublicIP = true
+				}
+			}
+
+			if uConfig.usePublicIP {
+				host = c.VMs[node-1].PublicIP
+			}
 		}
 		port := uConfig.port
 		if port == 0 {
@@ -1302,7 +1327,7 @@ func AdminURL(
 	clusterName, virtualClusterName string,
 	sqlInstance int,
 	path string,
-	usePublicIP, openInBrowser bool,
+	usePublicIP, useHost, openInBrowser bool,
 	secure install.SecureOption,
 ) ([]string, error) {
 	c, err := GetClusterFromCache(l, clusterName, secure)
@@ -1312,6 +1337,7 @@ func AdminURL(
 	uConfig := urlConfig{
 		path:               path,
 		usePublicIP:        usePublicIP,
+		useHost:            useHost,
 		openInBrowser:      openInBrowser,
 		secure:             c.ClusterSettings.Secure,
 		virtualClusterName: virtualClusterName,
@@ -1759,6 +1785,14 @@ func Create(
 			if retErr == nil {
 				return
 			}
+			if opts[0].KeepClusterOnFailure {
+				l.Errorf(
+					"Preserving partially-created cluster %q for debugging (create err: %s)",
+					clusterName, retErr,
+				)
+				l.Printf("Run `roachprod destroy %s` when debugging is complete", clusterName)
+				return
+			}
 			l.Errorf("Cleaning up partially-created cluster (prev err: %s)", retErr)
 			if err := cleanupFailedCreate(l, clusterName); err != nil {
 				l.Errorf("Error while cleaning up partially-created cluster: %s", err)
@@ -2145,7 +2179,7 @@ func GrafanaURL(
 	grafanaNode := install.Nodes{nodes[len(nodes)-1]}
 
 	uConfig := urlConfig{
-		usePublicIP:   true,
+		useHost:       true,
 		openInBrowser: openInBrowser,
 		secure:        false,
 		port:          3000,

@@ -608,8 +608,8 @@ func runDecommissionBench(
 	rampDuration := 3 * time.Minute
 	rampStarted := make(chan struct{})
 	importCmd := fmt.Sprintf(
-		`./cockroach workload fixtures import tpcc --warehouses=%d`,
-		benchSpec.warehouses,
+		`./cockroach workload fixtures import tpcc %s --warehouses=%d`,
+		gceFixtureBucketFlag(), benchSpec.warehouses,
 	)
 	workloadCmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
 		"%s --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,

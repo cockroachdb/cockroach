@@ -71,6 +71,7 @@ var (
 	deployGracePeriod     = 300
 	pause                 = time.Duration(0)
 	createVMOpts          = vm.DefaultCreateOpts()
+	keepClusterOnFailure  bool
 	startOpts             = roachprod.DefaultStartOpts()
 	stageOS               string
 	stageArch             string
@@ -160,6 +161,8 @@ func initCreateCmdFlags(createCmd *cobra.Command) {
 	createCmd.Flags().Var(&createVMOpts.AddressMode, "address-mode",
 		"VM address mode: public preserves current behavior; private omits public addresses; "+
 			"auto uses private addresses in the default GCE project and public addresses otherwise")
+	createCmd.Flags().BoolVar(&keepClusterOnFailure, "keep-on-failure", false,
+		"Preserve any VMs created if cluster setup fails, for debugging")
 
 	// N.B. We set "usage=roachprod" as the default, custom label for billing tracking.
 	createCmd.Flags().StringToStringVar(&createVMOpts.CustomLabels,

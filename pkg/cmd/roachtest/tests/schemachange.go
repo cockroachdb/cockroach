@@ -29,7 +29,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 		Name:    `schemachange/during/kv`,
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(5),
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
@@ -397,8 +397,8 @@ func makeSchemaChangeBulkIngestTest(
 			cmdWrite := fmt.Sprintf(
 				// For fixtures import, use the version built into the cockroach binary
 				// so the tpcc workload-versions match on release branches.
-				"./cockroach workload fixtures import bulkingest {pgurl:1} --a %d --b %d --c %d --payload-bytes %d --index-b-c-a=false",
-				aNum, bNum, cNum, payloadBytes,
+				"./cockroach workload fixtures import bulkingest %s {pgurl:1} --a %d --b %d --c %d --payload-bytes %d --index-b-c-a=false",
+				gceFixtureBucketFlag(), aNum, bNum, cNum, payloadBytes,
 			)
 
 			// Set up histogram exporter for performance metrics.

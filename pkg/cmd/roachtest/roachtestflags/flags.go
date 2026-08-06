@@ -518,6 +518,13 @@ var (
 						Always collect artifacts during test teardown, even if the test did not
 						time out or fail.`,
 	})
+
+	ForceInsecure bool
+	_             = registerRunFlag(&ForceInsecure, FlagInfo{
+		Name: "insecure",
+		Usage: `Force CockroachDB storage clusters started by the roachprod backend
+			to use insecure mode, overriding test-provided secure settings.`,
+	})
 )
 
 // The flags below override the final cluster configuration. They have no
@@ -567,6 +574,19 @@ var (
 	_                      = registerRunFlag(&OverrideGeoDistributed, FlagInfo{
 		Name:  "geo",
 		Usage: `Create geo-distributed cluster`,
+	})
+
+	OverrideAddressMode vm.AddressMode
+	_                   = registerRunFlag(&OverrideAddressMode, FlagInfo{
+		Name: "address-mode",
+		Usage: `VM address mode: public preserves current behavior; private omits
+			public addresses; auto lets the provider select the address mode.`,
+	})
+
+	GCESubnet string
+	_         = registerRunFlag(&GCESubnet, FlagInfo{
+		Name:  "gce-subnet",
+		Usage: `GCE subnet name or self-link to use for CRDB and workload nodes`,
 	})
 )
 
