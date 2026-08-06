@@ -179,6 +179,171 @@ func TestResolveAddressMode(t *testing.T) {
 	require.Equal(t, vm.AddressModePublic, mode)
 }
 
+func TestParseRegionSubnetMap(t *testing.T) {
+	m, err := parseRegionSubnetMap("")
+	require.NoError(t, err)
+	require.Nil(t, m)
+
+	m, err = parseRegionSubnetMap("us-east1=a,us-west1=projects/host/regions/us-west1/subnetworks/b")
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{
+		"us-east1": "a",
+		"us-west1": "projects/host/regions/us-west1/subnetworks/b",
+	}, m)
+
+	_, err = parseRegionSubnetMap("bogus")
+	require.Error(t, err)
+	_, err = parseRegionSubnetMap("us-east1=")
+	require.Error(t, err)
+}
+
+func TestResolveNetwork(t *testing.T) {
+	const project = "test-project"
+	require.Equal(t, "", (&ProviderOpts{}).resolveNetwork(project))
+	require.Equal(t, "projects/test-project/global/networks/my-vpc",
+		(&ProviderOpts{Network: "my-vpc"}).resolveNetwork(project))
+	// A self-link keeps its (possibly Shared VPC host) project.
+	require.Equal(t, "projects/host/global/networks/shared",
+		(&ProviderOpts{Network: "projects/host/global/networks/shared"}).resolveNetwork(project))
+}
+
+func TestResolveSubnet(t *testing.T) {
+	const project = "test-project"
+	for _, tc := range []struct {
+		name        string
+		opts        ProviderOpts
+		zone        string
+		expected    string
+		expectedErr string
+	}{
+		{
+			name:     "legacy default when no config",
+			opts:     ProviderOpts{Subnet: "default"},
+			zone:     "us-east1-b",
+			expected: "projects/test-project/regions/us-east1/subnetworks/default",
+		},
+		{
+			name:     "single subnet name is promoted",
+			opts:     ProviderOpts{Subnet: "my-subnet"},
+			zone:     "us-east1-b",
+			expected: "projects/test-project/regions/us-east1/subnetworks/my-subnet",
+		},
+		{
+			name:     "single subnet self-link passes through",
+			opts:     ProviderOpts{Subnet: "projects/test-project/regions/us-east1/subnetworks/my-subnet"},
+			zone:     "us-east1-b",
+			expected: "projects/test-project/regions/us-east1/subnetworks/my-subnet",
+		},
+		{
+			name:     "per-region map selects the zone's region",
+			opts:     ProviderOpts{Subnets: map[string]string{"us-east1": "east-subnet", "us-west1": "west-subnet"}},
+			zone:     "us-west1-a",
+			expected: "projects/test-project/regions/us-west1/subnetworks/west-subnet",
+		},
+		{
+			name:     "map takes precedence over single subnet",
+			opts:     ProviderOpts{Subnet: "shorthand", Subnets: map[string]string{"us-east1": "east-subnet"}},
+			zone:     "us-east1-b",
+			expected: "projects/test-project/regions/us-east1/subnetworks/east-subnet",
+		},
+		{
+			name:     "single subnet covers a region absent from the map",
+			opts:     ProviderOpts{Subnet: "shorthand", Subnets: map[string]string{"us-east1": "east-subnet"}},
+			zone:     "us-west1-a",
+			expected: "projects/test-project/regions/us-west1/subnetworks/shorthand",
+		},
+		{
+			name:     "shared VPC host-project self-link is not rewritten",
+			opts:     ProviderOpts{Subnets: map[string]string{"us-east1": "projects/host-project/regions/us-east1/subnetworks/shared"}},
+			zone:     "us-east1-b",
+			expected: "projects/host-project/regions/us-east1/subnetworks/shared",
+		},
+		{
+			name:        "missing region in explicit-subnets mode errors",
+			opts:        ProviderOpts{Subnets: map[string]string{"us-east1": "east-subnet"}},
+			zone:        "us-west1-a",
+			expectedErr: `no GCE subnet configured for region "us-west1"`,
+		},
+		{
+			name:     "bare network derives the convention subnet",
+			opts:     ProviderOpts{Network: "my-vpc"},
+			zone:     "asia-northeast1-a",
+			expected: "projects/test-project/regions/asia-northeast1/subnetworks/test-project-vpc-asia-northeast1",
+		},
+		{
+			name:     "map overrides the convention for its region",
+			opts:     ProviderOpts{Network: "my-vpc", Subnets: map[string]string{"us-east1": "east-subnet"}},
+			zone:     "us-east1-b",
+			expected: "projects/test-project/regions/us-east1/subnetworks/east-subnet",
+		},
+		{
+			name:     "convention still applies to regions absent from the map",
+			opts:     ProviderOpts{Network: "my-vpc", Subnets: map[string]string{"us-east1": "east-subnet"}},
+			zone:     "us-west1-a",
+			expected: "projects/test-project/regions/us-west1/subnetworks/test-project-vpc-us-west1",
+		},
+		{
+			name:        "shared VPC network self-link does not derive and errors",
+			opts:        ProviderOpts{Network: "projects/host/global/networks/shared"},
+			zone:        "us-east1-b",
+			expectedErr: `no GCE subnet configured for region "us-east1"`,
+		},
+		{
+			name:        "empty subnet value errors",
+			opts:        ProviderOpts{Subnets: map[string]string{"us-east1": ""}},
+			zone:        "us-east1-b",
+			expectedErr: `empty GCE subnet configured for region "us-east1"`,
+		},
+		{
+			name:        "self-link region mismatch errors",
+			opts:        ProviderOpts{Subnets: map[string]string{"us-east1": "projects/host/regions/us-west1/subnetworks/wrong"}},
+			zone:        "us-east1-b",
+			expectedErr: `is in region "us-west1" but zone maps to region "us-east1"`,
+		},
+		{
+			name:        "invalid zone errors",
+			opts:        ProviderOpts{Subnet: "x"},
+			zone:        "ab",
+			expectedErr: "invalid zone",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.opts.resolveSubnet(project, tc.zone)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+}
+
+func TestCLINetworkArgs(t *testing.T) {
+	const project = "test-project"
+
+	args, err := (&ProviderOpts{Subnet: "my-subnet"}).cliNetworkArgs(project, "us-east1-b")
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"--subnet", "projects/test-project/regions/us-east1/subnetworks/my-subnet",
+	}, args)
+
+	args, err = (&ProviderOpts{
+		Subnets: map[string]string{"us-east1": "s"},
+		Network: "vpc",
+	}).cliNetworkArgs(project, "us-east1-b")
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"--subnet", "projects/test-project/regions/us-east1/subnetworks/s",
+		"--network", "projects/test-project/global/networks/vpc",
+	}, args)
+
+	_, err = (&ProviderOpts{
+		Subnets: map[string]string{"us-east1": "s"},
+	}).cliNetworkArgs(project, "us-west1-a")
+	require.Error(t, err)
+}
+
 func TestVMNetworkParsing(t *testing.T) {
 	jsonInstance := jsonVM{
 		Name:              "private-json-vm",
