@@ -123,7 +123,7 @@ func getInsecureEnvVar() (bool, bool) {
 func UpdateFlagDefaults() {
 	// N.B. Both roachprod and drtprod default to secure mode via the flag defaults.
 	// However, roachprod has runtime logic in overrideBasedOnClusterSettings() that
-	// forces insecure mode for clusters in the cockroach-ephemeral GCP project.
+	// forces insecure mode for clusters in the default GCP project.
 	// drtprod explicitly sets secure=true here to ensure secure mode is used.
 	secure = true
 	// insecure and insecureEnvSet are already initialized via getInsecureEnvVar()

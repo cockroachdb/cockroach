@@ -131,8 +131,8 @@ func (p *Provider) buildInstanceProperties(
 	// Configure the service account.
 	var serviceAccounts []*computepb.ServiceAccount
 	sa := providerOpts.ServiceAccount
-	if sa == "" && p.GetProject() == p.defaultProject {
-		sa = providerOpts.defaultServiceAccount
+	if sa == "" && p.GetProject() == p.infraProject {
+		sa = p.defaultServiceAccountFor(providerOpts)
 	}
 	if sa != "" {
 		serviceAccounts = []*computepb.ServiceAccount{

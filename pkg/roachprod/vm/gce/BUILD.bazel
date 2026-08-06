@@ -53,6 +53,7 @@ go_test(
     srcs = [
         "gcloud_test.go",
         "machine_type_test.go",
+        "project_config_test.go",
         "utils_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -66,6 +67,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@com_google_cloud_go_compute//apiv1/computepb",

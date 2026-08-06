@@ -77,12 +77,81 @@ func TestAllowedLocalSSDCount(t *testing.T) {
 	}
 }
 
+func TestDefaultServiceAccount(t *testing.T) {
+	assert.Equal(t, "roachprod-vm@test-project.iam.gserviceaccount.com", vmServiceAccount("test-project"))
+	assert.Equal(t, DefaultProviderOpts().defaultServiceAccount, DefaultServiceAccount())
+	assert.False(t, DefaultProviderOpts().UseIAP)
+}
+
+// TestDefaultArtifactsBucket keeps vm's provider-independent fallback in sync
+// with the bucket GCE derives from its default infrastructure project. The vm
+// package cannot derive this itself because importing gce would create a cycle.
+func TestDefaultArtifactsBucket(t *testing.T) {
+	require.Equal(t, vm.DefaultArtifactsBucket, artifactsBucketForProject(DefaultProjectID))
+}
+
+func TestDNSDefaults(t *testing.T) {
+	oldInfraProject := defaultInfraProject
+	oldZone := dnsDefaultZone
+	oldDomain := dnsDefaultDomain
+	oldDomainExplicit := dnsDefaultDomainExplicit
+	oldManagedZone := dnsDefaultManagedZone
+	oldManagedDomain := dnsDefaultManagedDomain
+	oldManagedDomainExplicit := dnsDefaultManagedDomainExplicit
+	t.Cleanup(func() {
+		defaultInfraProject = oldInfraProject
+		dnsDefaultZone = oldZone
+		dnsDefaultDomain = oldDomain
+		dnsDefaultDomainExplicit = oldDomainExplicit
+		dnsDefaultManagedZone = oldManagedZone
+		dnsDefaultManagedDomain = oldManagedDomain
+		dnsDefaultManagedDomainExplicit = oldManagedDomainExplicit
+	})
+
+	unsetEnv(t, "ROACHPROD_GCE_DNS_ZONE")
+	unsetEnv(t, "ROACHPROD_GCE_DNS_DOMAIN")
+	unsetEnv(t, "ROACHPROD_DNS")
+	unsetEnv(t, "ROACHPROD_GCE_DNS_MANAGED_ZONE")
+	unsetEnv(t, "ROACHPROD_GCE_DNS_MANAGED_DOMAIN")
+	for _, tc := range []struct {
+		name          string
+		infraProject  string
+		publicDomain  string
+		managedDomain string
+	}{
+		{
+			name:          "production",
+			infraProject:  DefaultProjectID,
+			publicDomain:  "roachprod.crdb.dev",
+			managedDomain: "roachprod-managed.crdb.dev",
+		},
+		{
+			name:          "staging",
+			infraProject:  StagingProjectID,
+			publicDomain:  "roachprod.staging.crdb.dev",
+			managedDomain: "roachprod-managed.staging.crdb.dev",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defaultInfraProject = tc.infraProject
+			initDNSDefault()
+
+			require.Equal(t, "roachprod", dnsDefaultZone)
+			require.Equal(t, tc.publicDomain, dnsDefaultDomain)
+			require.False(t, dnsDefaultDomainExplicit)
+			require.Equal(t, "roachprod-managed", dnsDefaultManagedZone)
+			require.Equal(t, tc.managedDomain, dnsDefaultManagedDomain)
+			require.False(t, dnsDefaultManagedDomainExplicit)
+		})
+	}
+}
+
 func TestBuildInstancePropertiesLocalSSDDisks(t *testing.T) {
 	l, err := (&logger.Config{Stdout: io.Discard, Stderr: io.Discard}).NewLogger("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &Provider{Projects: []string{"test-project"}, defaultProject: "default-project"}
+	p := &Provider{Projects: []string{"test-project"}, infraProject: "default-project"}
 
 	testCases := []struct {
 		name                 string
@@ -159,7 +228,7 @@ func TestBuildInstancePropertiesLocalSSDDisks(t *testing.T) {
 func TestBuildInstancePropertiesAddressModeAndSubnet(t *testing.T) {
 	l, err := (&logger.Config{Stdout: io.Discard, Stderr: io.Discard}).NewLogger("")
 	require.NoError(t, err)
-	p := &Provider{Projects: []string{"test-project"}, defaultProject: "default-project"}
+	p := &Provider{Projects: []string{"test-project"}, infraProject: "default-project"}
 	providerOpts := DefaultProviderOpts()
 	providerOpts.Subnet = "private-subnet"
 
@@ -215,7 +284,7 @@ func TestComputeAddressArgs(t *testing.T) {
 func TestPublicAddressModePreservesNetworkDefaults(t *testing.T) {
 	l, err := (&logger.Config{Stdout: io.Discard, Stderr: io.Discard}).NewLogger("")
 	require.NoError(t, err)
-	p := &Provider{Projects: []string{"test-project"}, defaultProject: "default-project"}
+	p := &Provider{Projects: []string{"test-project"}, infraProject: "default-project"}
 	providerOpts := DefaultProviderOpts()
 	publicOpts := vm.DefaultCreateOpts()
 	require.Equal(t, vm.AddressModePublic, publicOpts.AddressMode)
@@ -248,12 +317,12 @@ func TestPublicAddressModePreservesNetworkDefaults(t *testing.T) {
 
 func TestResolveAddressMode(t *testing.T) {
 	defaultProjectProvider := &Provider{
-		Projects:       []string{"default-project"},
-		defaultProject: "default-project",
+		Projects:     []string{"default-project"},
+		infraProject: "default-project",
 	}
 	nonDefaultProjectProvider := &Provider{
-		Projects:       []string{"other-project"},
-		defaultProject: "default-project",
+		Projects:     []string{"other-project"},
+		infraProject: "default-project",
 	}
 
 	mode, err := defaultProjectProvider.resolveAddressMode(vm.AddressModeAuto)

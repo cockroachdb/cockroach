@@ -15,14 +15,12 @@ installations (`gcloud components update`).
 
 ## Summary
 
-* By default, clusters are created in the [cockroach-ephemeral] GCE
-  project. Use the `--gce-project` flag or `GCE_PROJECT` environment
+* By default, clusters are created in the [crl-e2e-infra] GCE project.
+  Use the `--gce-project` flag or `ROACHPROD_GCE_PROJECT` environment
   variable to create clusters in a different GCE project. Note that
-  the `lifetime` functionality requires `roachprod gc
-  --gce-project=<name>` to be run periodically (i.e. via a
-  cronjob). This is only provided out-of-the-box for the
-  [cockroach-ephemeral] cluster.
-* Anyone can connect to any port on VMs in [cockroach-ephemeral].
+  lifetime-based cleanup requires `roachprod gc --gce-project=<name>`
+  to be run periodically for that project.
+* The default e2e projects create insecure CockroachDB clusters.
   **DO NOT STORE SENSITIVE DATA**.
 * Cluster names are prefixed with the user creating them. For example,
   `roachprod create test` creates the `marc-test` cluster.
@@ -44,6 +42,30 @@ export ROACHPROD_EMAIL_DOMAIN=developer.gserviceaccount.com
 ```
 
 For a full list, see `config.go` and `flags.go`.
+
+The GCE VM project and the project hosting shared roachprod infrastructure can
+be configured independently. `--gce-project` selects where VMs are created.
+`--gce-infra-project` selects the defaults for DNS, SSH metadata, the VM service
+account, and the shared artifacts bucket. The metadata and artifacts defaults
+can be overridden with `--gce-metadata-project` and `--gce-artifacts-bucket`.
+
+To create a private one-node smoke-test cluster using the staging
+infrastructure and verify its private DNS record:
+
+```bash
+export CLUSTER="${USER}-e2e-staging-dns"
+roachprod create "${CLUSTER}" \
+  --nodes=1 \
+  --lifetime=1h \
+  --clouds=gce \
+  --gce-project=crl-e2e-infra-staging \
+  --gce-infra-project=crl-e2e-infra-staging \
+  --address-mode=private \
+  --gce-use-iap
+dig +short "${CLUSTER}-0001.roachprod.staging.crdb.dev" A
+```
+
+The `dig` result should be the VM's private RFC1918 address.
 
 ## Cluster quick-start using roachprod
 
@@ -94,9 +116,9 @@ $ roachprod create foo
 Creating cluster marc-foo with 3 nodes
 OK
 marc-foo: 23h59m42s remaining
-  marc-foo-0000   [marc-foo-0000.us-east1-b.cockroach-ephemeral]
-  marc-foo-0001   [marc-foo-0001.us-east1-b.cockroach-ephemeral]
-  marc-foo-0002   [marc-foo-0002.us-east1-b.cockroach-ephemeral]
+  marc-foo-0000   [marc-foo-0000.us-east1-b.crl-e2e-infra]
+  marc-foo-0001   [marc-foo-0001.us-east1-b.crl-e2e-infra]
+  marc-foo-0002   [marc-foo-0002.us-east1-b.crl-e2e-infra]
 Syncing...
 ```
 
@@ -130,15 +152,15 @@ Here's what to expect when the options are combined:
 
 ```
 $ crl-ssh marc-foo all df -h /
-1: marc-foo-0000.us-east1-b.cockroach-ephemeral
+1: marc-foo-0000.us-east1-b.crl-e2e-infra
 Filesystem      Size  Used Avail Use% Mounted on
 /dev/sda1        49G  1.2G   48G   3% /
 
-2: marc-foo-0001.us-east1-b.cockroach-ephemeral
+2: marc-foo-0001.us-east1-b.crl-e2e-infra
 Filesystem      Size  Used Avail Use% Mounted on
 /dev/sda1        49G  1.2G   48G   3% /
 
-3: marc-foo-0002.us-east1-b.cockroach-ephemeral
+3: marc-foo-0002.us-east1-b.crl-e2e-infra
 Filesystem      Size  Used Avail Use% Mounted on
 /dev/sda1        49G  1.2G   48G   3% /
 ```
@@ -162,7 +184,7 @@ marc-foo: status 3/3
 set up keys.
 
 ```
-$ ssh marc-foo-0000.us-east1-b.cockroach-ephemeral
+$ ssh marc-foo-0000.us-east1-b.crl-e2e-infra
 ```
 
 ### List clusters
@@ -221,5 +243,5 @@ connection to a remote cluster node. The strings for each error code are:
 
 * Detect crashed cockroach nodes.
 
-[cockroach-ephemeral]: https://console.cloud.google.com/home/dashboard?project=cockroach-ephemeral
+[crl-e2e-infra]: https://console.cloud.google.com/home/dashboard?project=crl-e2e-infra
 [gcloud installed]: https://cloud.google.com/sdk/downloads
