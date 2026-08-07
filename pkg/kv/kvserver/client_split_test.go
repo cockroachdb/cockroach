@@ -4417,6 +4417,7 @@ func TestSplitWithExternalFilesFastStats(t *testing.T) {
 					Store: &kvserver.StoreTestingKnobs{
 						DisableMergeQueue:              true,
 						DisableSplitQueue:              true,
+						DisableGCQueue:                 true,
 						DisableCanAckBeforeApplication: true,
 					},
 				},
