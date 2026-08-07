@@ -1440,7 +1440,8 @@ func (cr *commandRegistry) buildAdminurlCmd() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		Run: wrap(func(cmd *cobra.Command, args []string) error {
 			urls, err := roachprod.AdminURL(
-				context.Background(), config.Logger, args[0], virtualClusterName, sqlInstance, adminurlPath, adminurlIPs, urlOpen, isSecure,
+				context.Background(), config.Logger, args[0], virtualClusterName, sqlInstance,
+				adminurlPath, adminurlIPs, false /* useHost */, urlOpen, isSecure,
 			)
 			if err != nil {
 				return err
