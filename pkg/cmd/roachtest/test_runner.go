@@ -800,7 +800,8 @@ func (r *testRunner) runWorker(
 		}
 
 		// Verify that the deprecated workload is available if needed.
-		if testToRun.spec.RequiresDeprecatedWorkload && workload[arch] == "" {
+		if testToRun.spec.RequiresDeprecatedWorkload && workload[arch] == "" &&
+			(roachtestflags.CockroachStage == "" || !testToRun.spec.Cluster.WorkloadNode) {
 			return errors.Errorf("%s requires deprecated workload binary but one was not found", testToRun.spec.Name)
 		}
 

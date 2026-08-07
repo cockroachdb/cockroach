@@ -118,6 +118,8 @@ sudo iptables %[1]s INPUT  -s {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
 sudo iptables %[1]s OUTPUT -d {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
 sudo iptables %[1]s INPUT  -s {ip:%[2]d} -p tcp --sport {pgport:%[2]d} -j DROP;
 sudo iptables %[1]s OUTPUT -d {ip:%[2]d} -p tcp --sport {pgport:%[2]d} -j DROP;
+`
+	bidirectionalPublicPartitionCmd = `
 sudo iptables %[1]s INPUT  -s {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
 sudo iptables %[1]s OUTPUT -d {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
 sudo iptables %[1]s INPUT  -s {ip:%[2]d:public} -p tcp --sport {pgport:%[2]d} -j DROP;
@@ -126,22 +128,36 @@ sudo iptables %[1]s OUTPUT -d {ip:%[2]d:public} -p tcp --sport {pgport:%[2]d} -j
 	// Drop all incoming traffic from the ip address.
 	asymmetricInputPartitionCmd = `
 sudo iptables %[1]s INPUT -s {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
+`
+	asymmetricPublicInputPartitionCmd = `
 sudo iptables %[1]s INPUT -s {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
 `
 
 	// Drop all outgoing traffic to the ip address.
 	asymmetricOutputPartitionCmd = `
 sudo iptables %[1]s OUTPUT -d {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
+`
+	asymmetricPublicOutputPartitionCmd = `
 sudo iptables %[1]s OUTPUT -d {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
 `
 )
 
-func constructIPTablesRule(partitionCmd string, targetNode install.Node, addRule bool) string {
+func constructIPTablesRule(
+	partitionCmd string,
+	publicPartitionCmd string,
+	targetNode install.Node,
+	addRule bool,
+	includePublicIP bool,
+) string {
 	addOrDropRule := "-D"
 	if addRule {
 		addOrDropRule = "-A"
 	}
-	return fmt.Sprintf(partitionTemplateWrapper, fmt.Sprintf(partitionCmd, addOrDropRule, targetNode))
+	rules := fmt.Sprintf(partitionCmd, addOrDropRule, targetNode)
+	if includePublicIP {
+		rules += fmt.Sprintf(publicPartitionCmd, addOrDropRule, targetNode)
+	}
+	return fmt.Sprintf(partitionTemplateWrapper, rules)
 }
 
 func (f *IPTablesPartitionFailure) Inject(
@@ -150,16 +166,29 @@ func (f *IPTablesPartitionFailure) Inject(
 	partitions := args.(NetworkPartitionArgs).Partitions
 	for _, partition := range partitions {
 		for _, destinationNode := range partition.Destination {
+			hasPublicIP, err := f.hasPublicIP(destinationNode)
+			if err != nil {
+				return err
+			}
 			var cmd string
 			switch partition.Type {
 			case Bidirectional:
-				cmd = constructIPTablesRule(bidirectionalPartitionCmd, destinationNode, true /* addRule */)
+				cmd = constructIPTablesRule(
+					bidirectionalPartitionCmd, bidirectionalPublicPartitionCmd,
+					destinationNode, true /* addRule */, hasPublicIP,
+				)
 				l.Printf("Dropping packets between nodes %d and node %d", partition.Source, destinationNode)
 			case Incoming:
-				cmd = constructIPTablesRule(asymmetricInputPartitionCmd, destinationNode, true /* addRule */)
+				cmd = constructIPTablesRule(
+					asymmetricInputPartitionCmd, asymmetricPublicInputPartitionCmd,
+					destinationNode, true /* addRule */, hasPublicIP,
+				)
 				l.Printf("Dropping packets from node %d to nodes %d", destinationNode, partition.Source)
 			case Outgoing:
-				cmd = constructIPTablesRule(asymmetricOutputPartitionCmd, destinationNode, true /* addRule */)
+				cmd = constructIPTablesRule(
+					asymmetricOutputPartitionCmd, asymmetricPublicOutputPartitionCmd,
+					destinationNode, true /* addRule */, hasPublicIP,
+				)
 				l.Printf("Dropping packets from nodes %d to node %d", partition.Source, destinationNode)
 			default:
 				panic("unhandled default case")
@@ -178,16 +207,29 @@ func (f *IPTablesPartitionFailure) Recover(
 	partitions := args.(NetworkPartitionArgs).Partitions
 	for _, partition := range partitions {
 		for _, destinationNode := range partition.Destination {
+			hasPublicIP, err := f.hasPublicIP(destinationNode)
+			if err != nil {
+				return err
+			}
 			var cmd string
 			switch partition.Type {
 			case Bidirectional:
-				cmd = constructIPTablesRule(bidirectionalPartitionCmd, destinationNode, false /* addRule */)
+				cmd = constructIPTablesRule(
+					bidirectionalPartitionCmd, bidirectionalPublicPartitionCmd,
+					destinationNode, false /* addRule */, hasPublicIP,
+				)
 				l.Printf("Resuming packets between nodes %d and node %d", partition.Source, destinationNode)
 			case Incoming:
-				cmd = constructIPTablesRule(asymmetricInputPartitionCmd, destinationNode, false /* addRule */)
+				cmd = constructIPTablesRule(
+					asymmetricInputPartitionCmd, asymmetricPublicInputPartitionCmd,
+					destinationNode, false /* addRule */, hasPublicIP,
+				)
 				l.Printf("Resuming packets from node %d to nodes %d", destinationNode, partition.Source)
 			case Outgoing:
-				cmd = constructIPTablesRule(asymmetricOutputPartitionCmd, destinationNode, false /* addRule */)
+				cmd = constructIPTablesRule(
+					asymmetricOutputPartitionCmd, asymmetricPublicOutputPartitionCmd,
+					destinationNode, false /* addRule */, hasPublicIP,
+				)
 				l.Printf("Resuming packets from nodes %d to node %d", partition.Source, destinationNode)
 			default:
 				panic("unhandled default case")

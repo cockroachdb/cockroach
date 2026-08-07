@@ -32,10 +32,17 @@ go_library(
 
 go_test(
     name = "failures_test",
-    srcs = ["failer_test.go"],
+    srcs = [
+        "failer_test.go",
+        "latency_test.go",
+        "network_partition_test.go",
+    ],
     embed = [":failures"],
     deps = [
+        "//pkg/roachprod/cloud",
+        "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

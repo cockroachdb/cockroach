@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -946,6 +948,7 @@ func TestVerifyLibraries(t *testing.T) {
 		name             string
 		verifyLibs       []string
 		libraryFilePaths []string
+		cockroachStage   string
 		expectedError    error
 	}{
 		{
@@ -967,6 +970,13 @@ func TestVerifyLibraries(t *testing.T) {
 			libraryFilePaths: nil,
 			expectedError: errors.Wrap(errors.Errorf("missing required library %s (arch=\"amd64\")",
 				"required_b"), "cluster.VerifyLibraries"),
+		},
+		{
+			name:             "staged libraries are resolved remotely",
+			verifyLibs:       registry.LibGEOS,
+			libraryFilePaths: nil,
+			cockroachStage:   "latest",
+			expectedError:    nil,
 		},
 		{
 			name:             "single match",
@@ -993,8 +1003,11 @@ func TestVerifyLibraries(t *testing.T) {
 			expectedError:    nil,
 		},
 	}
+	originalCockroachStage := roachtestflags.CockroachStage
+	defer func() { roachtestflags.CockroachStage = originalCockroachStage }()
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			roachtestflags.CockroachStage = tc.cockroachStage
 			libraryFilePaths = map[vm.CPUArch][]string{vm.ArchAMD64: tc.libraryFilePaths}
 			actualError := VerifyLibraries(tc.verifyLibs, vm.ArchAMD64)
 			if tc.expectedError == nil {

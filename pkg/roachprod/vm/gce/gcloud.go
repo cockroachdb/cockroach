@@ -490,6 +490,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		Subnets:              maps.Clone(defaultSubnets),
 		UseIAP:               false,
 		Image:                DefaultImage,
+		BootDiskType:         "pd-ssd",
 		SSDCount:             1,
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
@@ -1492,7 +1493,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
-	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", "pd-ssd",
+	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", o.BootDiskType,
 		"Type of the boot disk volume")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "Intel Ice Lake",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
