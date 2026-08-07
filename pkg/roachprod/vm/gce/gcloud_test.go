@@ -72,6 +72,7 @@ func TestDefaultServiceAccount(t *testing.T) {
 	assert.Equal(t, "roachprod-vm@test-project.iam.gserviceaccount.com", vmServiceAccount("test-project"))
 	assert.Equal(t, DefaultProviderOpts().defaultServiceAccount, DefaultServiceAccount())
 	assert.False(t, DefaultProviderOpts().UseIAP)
+	assert.Equal(t, "pd-ssd", DefaultProviderOpts().BootDiskType)
 }
 
 // TestDefaultArtifactsBucket keeps vm's provider-independent fallback in sync
