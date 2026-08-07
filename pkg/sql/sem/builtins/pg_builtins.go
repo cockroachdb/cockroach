@@ -466,11 +466,11 @@ func makePGPrivilegeInquiryDef(
 					// Remove the first argument.
 					args = args[1:]
 				} else {
-					if evalCtx.SessionData().User().Undefined() {
+					user = evalCtx.EffectiveUser()
+					if user.Undefined() {
 						// Wut... is this possible?
 						return tree.DNull, nil
 					}
-					user = evalCtx.SessionData().User()
 				}
 				ret, err := fn(ctx, evalCtx, args, user)
 				if err != nil {
