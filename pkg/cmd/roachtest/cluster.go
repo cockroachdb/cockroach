@@ -231,6 +231,13 @@ func findBinaryOrLibrary(
 // VerifyLibraries verifies that the required libraries, specified by name, are
 // available for the target environment.
 func VerifyLibraries(requiredLibs []string, arch vm.CPUArch) error {
+	// When Cockroach is staged from edge artifacts, its matching native
+	// libraries are staged remotely as well. There is no local library to
+	// verify in that mode.
+	if roachtestflags.CockroachStage != "" {
+		return nil
+	}
+
 	foundLibraryPaths := libraryFilePaths[arch]
 
 	for _, requiredLib := range requiredLibs {
@@ -2163,7 +2170,17 @@ func (c *clusterImpl) PutCockroach(ctx context.Context, l *logger.Logger, t *tes
 		if stageVersion == "latest" {
 			stageVersion = "" // Stage() expects empty string for latest
 		}
-		return c.Stage(ctx, l, "cockroach", stageVersion, ".", c.All())
+		if err := c.Stage(ctx, l, "cockroach", stageVersion, ".", c.All()); err != nil {
+			return err
+		}
+		if len(t.spec.NativeLibs) > 0 {
+			// Staging cockroach fetches its libraries on a best-effort basis for
+			// compatibility with older artifacts. Tests that declare native-library
+			// requirements need the strict variant so a missing remote library fails
+			// during setup rather than in the test body.
+			return c.Stage(ctx, l, "lib", stageVersion, ".", c.All())
+		}
+		return nil
 	}
 	return c.PutE(ctx, l, t.Cockroach(), test.DefaultCockroachPath, c.All())
 }
@@ -2223,6 +2240,13 @@ func (c *clusterImpl) PutDeprecatedWorkload(
 	ctx context.Context, l *logger.Logger, t *testImpl,
 ) error {
 	if t.spec.RequiresDeprecatedWorkload && t.spec.Cluster.WorkloadNode {
+		if roachtestflags.CockroachStage != "" {
+			stageVersion := roachtestflags.CockroachStage
+			if stageVersion == "latest" {
+				stageVersion = ""
+			}
+			return c.Stage(ctx, l, "workload", stageVersion, ".", c.WorkloadNode())
+		}
 		return c.PutE(ctx, l, t.DeprecatedWorkload(), test.DefaultDeprecatedWorkloadPath, c.WorkloadNode())
 	}
 	return nil
@@ -2500,6 +2524,15 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 	settings install.ClusterSettings,
 ) error {
 	l.Printf("starting virtual cluster")
+	if roachtestflags.ForceInsecure {
+		l.Printf("forcing insecure CockroachDB startup via --insecure")
+	}
+	// Keep virtual-cluster security consistent with the storage cluster when the
+	// runner was explicitly asked to force insecure starts. In addition to
+	// rendering --insecure for roachprod, mutating settings here prevents the
+	// secure-only certificate refetch below.
+	applyForceInsecure(&settings, roachtestflags.ForceInsecure)
+
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.virtualClusterSettings, settings)
 
 	// By default, we assume every node in the cluster is part of the

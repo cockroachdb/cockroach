@@ -554,12 +554,14 @@ func DefaultProviderOpts() *ProviderOpts {
 		Subnets:              maps.Clone(defaultSubnets),
 		UseIAP:               false,
 		Image:                DefaultImage,
+		BootDiskType:         "auto",
 		SSDCount:             1,
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
 		PDVolumeCount:        1,
 		TerminateOnMigration: false,
 		UseSpot:              false,
+		UseBulkInsert:        true,
 		preemptible:          false,
 
 		defaultServiceAccount:         DefaultServiceAccount(),
@@ -1635,7 +1637,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		[]string{DefaultMachineType},
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types). "+
 			"Supports TYPE or TYPE=COUNT, and may be repeated or comma-separated.")
-	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", "auto",
+	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", o.BootDiskType,
 		"Type of the boot disk volume; defaults to pd-ssd if supported, otherwise hyperdisk-balanced")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "best",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform); "+
@@ -1689,7 +1691,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"the number of visible threads per physical core (valid values: 1 or 2), default is 0 (auto)")
 	flags.BoolVar(&o.BootDiskOnly, ProviderName+"-boot-disk-only", o.BootDiskOnly,
 		"Only attach the boot disk. No additional volumes will be provisioned even if specified.")
-	flags.BoolVar(&o.UseBulkInsert, ProviderName+"-use-bulk-insert", true,
+	flags.BoolVar(&o.UseBulkInsert, ProviderName+"-use-bulk-insert", o.UseBulkInsert,
 		"use GCP Compute SDK's BulkInsert API for creating VMs (more efficient for large clusters)")
 }
 
