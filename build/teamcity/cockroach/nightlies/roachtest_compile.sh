@@ -45,5 +45,5 @@ fi
 # host-architecture tooling (roachtest/roachprod/libgeos) only when the host
 # arch is itself one of the requested targets, so exactly one per-arch build
 # warms it instead of every build redundantly recompiling it.
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e BUILD_VCS_NUMBER -e GOOGLE_EPHEMERAL_CREDENTIALS -e TC_BUILD_BRANCH -e BAZEL_STORAGE_ACCESS_TOKEN" \
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e BUILD_VCS_NUMBER -e GOOGLE_EPHEMERAL_CREDENTIALS -e ROACHPROD_GCE_INFRA_PROJECT -e TC_BUILD_BRANCH -e BAZEL_STORAGE_ACCESS_TOKEN" \
   run_bazel build/teamcity/cockroach/nightlies/roachtest_compile_and_cache.sh --skip-host-tooling-unless-native-arch "$@"
