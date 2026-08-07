@@ -7,13 +7,15 @@ package roachprod
 
 import (
 	"context"
+	"errors"
 	"io"
 	"testing"
 
-	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,9 +32,104 @@ func nilLogger() *logger.Logger {
 	return l
 }
 
+func TestSelectGCClouds(t *testing.T) {
+	selected, err := selectGCClouds(nil)
+	require.NoError(t, err)
+	require.Equal(t, supportedGCClouds, selected)
+
+	selected, err = selectGCClouds([]string{"gce", "aws", "gce"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"gce", "aws"}, selected)
+
+	_, err = selectGCClouds([]string{"local"})
+	require.ErrorContains(t, err, "unsupported cloud provider")
+}
+
+func TestGCGCEInventoryFailureSkipsDestructiveOperations(t *testing.T) {
+	var (
+		mu     syncutil.Mutex
+		called = make(map[string]int)
+	)
+	recordCall := func(name string) {
+		mu.Lock()
+		defer mu.Unlock()
+		called[name]++
+	}
+
+	operations := gcOperations{
+		loadClusters: func() error {
+			recordCall("load")
+			return nil
+		},
+		providerActive: func(string) bool { return true },
+		gcAWS:          func(*logger.Logger, bool) error { return nil },
+		gcAzure:        func(*logger.Logger, bool) error { return nil },
+		gcIBM:          func(*logger.Logger, bool) error { return nil },
+		listGCE: func(*logger.Logger) (*cloud.Cloud, error) {
+			recordCall("list-gce")
+			return nil, errors.New("inventory unavailable")
+		},
+		gcClusters: func(*logger.Logger, *cloud.Cloud, bool) error {
+			recordCall("gc-clusters")
+			return nil
+		},
+		gcDNS: func(*logger.Logger, *cloud.Cloud, bool) error {
+			recordCall("gc-dns")
+			return nil
+		},
+	}
+
+	err := gc(nilLogger(), GCOptions{Clouds: []string{"gce"}}, operations)
+	require.ErrorContains(t, err, "listing GCE resources for gc")
+	require.Equal(t, 1, called["load"])
+	require.Equal(t, 1, called["list-gce"])
+	require.Zero(t, called["gc-clusters"])
+	require.Zero(t, called["gc-dns"])
+}
+
+func TestGCProviderFailuresAreIndependent(t *testing.T) {
+	var (
+		mu     syncutil.Mutex
+		called = make(map[string]int)
+	)
+	recordCall := func(name string) {
+		mu.Lock()
+		defer mu.Unlock()
+		called[name]++
+	}
+
+	operations := gcOperations{
+		loadClusters: func() error { return nil },
+		providerActive: func(name string) bool {
+			return name != "aws"
+		},
+		gcAWS:   func(*logger.Logger, bool) error { return nil },
+		gcAzure: func(*logger.Logger, bool) error { return nil },
+		gcIBM:   func(*logger.Logger, bool) error { return nil },
+		listGCE: func(*logger.Logger) (*cloud.Cloud, error) {
+			recordCall("list-gce")
+			return cloud.NewCloud(), nil
+		},
+		gcClusters: func(*logger.Logger, *cloud.Cloud, bool) error {
+			recordCall("gc-clusters")
+			return nil
+		},
+		gcDNS: func(*logger.Logger, *cloud.Cloud, bool) error {
+			recordCall("gc-dns")
+			return nil
+		},
+	}
+
+	err := gc(nilLogger(), GCOptions{Clouds: []string{"aws", "gce"}}, operations)
+	require.ErrorContains(t, err, `cloud provider "aws" is not active`)
+	require.Equal(t, 1, called["list-gce"])
+	require.Equal(t, 1, called["gc-clusters"])
+	require.Equal(t, 1, called["gc-dns"])
+}
+
 func TestIPExternalRequiresPublicIP(t *testing.T) {
 	cluster := &install.SyncedCluster{
-		Cluster: cloudcluster.Cluster{VMs: vm.List{{
+		Cluster: cloud.Cluster{VMs: vm.List{{
 			PrivateIP: "10.0.0.1",
 		}}},
 		Nodes: install.Nodes{1},
@@ -53,7 +150,7 @@ func TestIPExternalRequiresPublicIP(t *testing.T) {
 
 func TestPGURLIPsUseHost(t *testing.T) {
 	cluster := &install.SyncedCluster{
-		Cluster: cloudcluster.Cluster{VMs: vm.List{
+		Cluster: cloud.Cluster{VMs: vm.List{
 			{PrivateIP: "10.0.0.1", PublicIP: "192.0.2.1"},
 			{PrivateIP: "10.0.0.2"},
 		}},
@@ -74,7 +171,7 @@ func TestPGURLIPsUseHost(t *testing.T) {
 
 func TestURLGeneratorUseHost(t *testing.T) {
 	cluster := &install.SyncedCluster{
-		Cluster: cloudcluster.Cluster{VMs: vm.List{
+		Cluster: cloud.Cluster{VMs: vm.List{
 			{PrivateIP: "10.0.0.1", PublicIP: "192.0.2.1"},
 			{PrivateIP: "10.0.0.2"},
 		}},
