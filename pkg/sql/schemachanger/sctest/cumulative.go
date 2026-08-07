@@ -62,24 +62,35 @@ type rollbackStageTracker struct {
 	checkedExplainInRollback bool
 }
 
-// stageDiscovery counts post-commit stages during the first schema change
-// execution. It is populated from the BeforeStage knob under its mutex.
+// stageDiscovery counts post-commit stages during the discovery pass of a
+// schema change execution. It is populated from the BeforeStage knob under its
+// mutex. Unlike a "count once" tracker, it overwrites the counts on every
+// observed plan until frozen, so the last-observed (job) plan wins. This
+// matters because the BeforeStage knob is installed at cluster creation and
+// observes plans for setup statements (e.g. CREATE SEQUENCE, CREATE INDEX) that
+// run through the declarative schema changer and plan with zero post-commit
+// stages. Recording only the first plan would lock in 0 and cause the
+// per-stage cases to skip. Overwriting until the discovery pass completes (and
+// then freezing) ensures the schema change job's plan is the one counted. It
+// also enables multi-statement test definitions, where only the final job plan
+// carries the post-commit stages.
 type stageDiscovery struct {
 	syncutil.Mutex
-	counted                      bool
+	frozen                       bool
 	postCommitCount              int
 	postCommitNonRevertibleCount int
 }
 
-// countStagesOnce records stage counts from p on the first call; subsequent
-// calls are no-ops.
-func (d *stageDiscovery) countStagesOnce(p scplan.Plan) {
+// observe overwrites the stage counts from p. It is a no-op once the discovery
+// is frozen.
+func (d *stageDiscovery) observe(p scplan.Plan) {
 	d.Lock()
 	defer d.Unlock()
-	if d.counted {
+	if d.frozen {
 		return
 	}
-	d.counted = true
+	d.postCommitCount = 0
+	d.postCommitNonRevertibleCount = 0
 	for _, s := range p.Stages {
 		switch s.Phase {
 		case scop.PostCommitPhase:
@@ -88,6 +99,15 @@ func (d *stageDiscovery) countStagesOnce(p scplan.Plan) {
 			d.postCommitNonRevertibleCount++
 		}
 	}
+}
+
+// freeze stops the discovery from overwriting the stage counts. It is called
+// once the discovery pass completes so that subsequent per-stage executions
+// (which observe plans with injected failures) do not clobber the counts.
+func (d *stageDiscovery) freeze() {
+	d.Lock()
+	defer d.Unlock()
+	d.frozen = true
 }
 
 // counts returns the discovered stage counts.
@@ -112,11 +132,11 @@ func Rollback(t *testing.T, relPath string, factory TestServerFactory) {
 	skip.UnderDeadlock(t)
 
 	var prepData rollbackPrepData
-	t.Cleanup(func() {
+	defer func() {
 		if prepData.server.Stopper != nil {
 			prepData.server.Stopper(t)
 		}
-	})
+	}()
 	cumulativeTestForEachPostCommitStage(t, relPath, factory,
 		func(t *testing.T, spec CumulativeTestSpec) PrepResult[rollbackPrepData] {
 			result := rollbackPrepare(t, factory, spec)
@@ -143,7 +163,7 @@ func rollbackPrepare(
 
 	knobs := &scexec.TestingKnobs{
 		BeforeStage: func(p scplan.Plan, stageIdx int) error {
-			discovery.countStagesOnce(p)
+			discovery.observe(p)
 
 			// Read scenario state under the lock, then perform expensive
 			// work (explain diagrams, assertions) outside it so we don't
@@ -260,6 +280,7 @@ func rollbackPrepare(
 	require.NoError(t, setupSchemaChange(ctx, t, spec, db))
 	maybeSkipUnderSecondaryTenant(t, spec, args.server.Server)
 	require.NoError(t, executeSchemaChangeTxn(ctx, t, spec, db))
+	discovery.freeze()
 
 	switchToSystemForDropDB(t, tdb, spec)
 	waitForSchemaChangesToFinish(t, tdb)
@@ -297,6 +318,9 @@ func rollbackCase(t *testing.T, args rollbackPrepData, cs CumulativeTestCaseSpec
 	tdb.Exec(t, "USE system")
 	tdb.Exec(t, "SET use_declarative_schema_changer = 'on'")
 	tdb.Exec(t, fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", cs.DatabaseName))
+	if cs.CreateDatabaseStmt != "" {
+		tdb.Exec(t, cs.CreateDatabaseStmt)
+	}
 
 	require.NoError(t, setupSchemaChange(ctx, t, cs.CumulativeTestSpec, db))
 	tdb.Exec(t, fmt.Sprintf("USE %q", cs.DatabaseName))
@@ -689,7 +713,7 @@ func pausePrepare(
 
 	knobs := &scexec.TestingKnobs{
 		BeforeStage: func(p scplan.Plan, stageIdx int) error {
-			discovery.countStagesOnce(p)
+			discovery.observe(p)
 
 			// Check if a pause scenario is active.
 			scenario.Lock()
@@ -736,6 +760,7 @@ func pausePrepare(
 	require.NoError(t, setupSchemaChange(ctx, t, spec, db))
 	maybeSkipUnderSecondaryTenant(t, spec, args.server.Server)
 	require.NoError(t, executeSchemaChangeTxn(ctx, t, spec, db))
+	discovery.freeze()
 
 	switchToSystemForDropDB(t, tdb, spec)
 	waitForSchemaChangesToFinish(t, tdb)
@@ -776,6 +801,9 @@ func pauseCase(t *testing.T, args pausePrepData, cs CumulativeTestCaseSpec) {
 			"DROP DATABASE IF EXISTS %q CASCADE", cs.DatabaseName,
 		),
 	)
+	if cs.CreateDatabaseStmt != "" {
+		tdb.Exec(t, cs.CreateDatabaseStmt)
+	}
 
 	require.NoError(t, setupSchemaChange(ctx, t, cs.CumulativeTestSpec, db))
 
