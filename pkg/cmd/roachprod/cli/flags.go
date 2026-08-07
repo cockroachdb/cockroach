@@ -34,6 +34,7 @@ var (
 	username              string
 	database              string
 	dryrun                bool
+	gcClouds              []string
 	destroyAllMine        bool
 	destroyAllLocal       bool
 	extendLifetime        time.Duration
@@ -405,7 +406,12 @@ func initOpentelemetryStartCmdFlags(opentelemetryStartCmd *cobra.Command) {
 func initGCCmdFlags(gcCmd *cobra.Command) {
 	gcCmd.Flags().BoolVarP(&dryrun,
 		"dry-run", "n", dryrun, "dry run (don't perform any actions)")
-	gcCmd.Flags().StringVar(&config.SlackToken, "slack-token", "", "Slack bot token")
+	gcCmd.Flags().StringSliceVarP(&gcClouds,
+		"clouds", "c", nil,
+		"cloud providers to garbage-collect; defaults to gce, aws, azure, and ibm, all of which must be active")
+	gcCmd.Flags().StringVar(
+		&config.SlackToken, "slack-token", "",
+		"Slack bot token (defaults to SLACK_TOKEN)")
 	// Allow each Provider to inject additional configuration flags
 	for _, provider := range vm.Providers {
 		if provider.Active() {

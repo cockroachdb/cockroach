@@ -634,15 +634,22 @@ func (cr *commandRegistry) buildSyncCmd() *cobra.Command {
 func (cr *commandRegistry) buildGCCmd() *cobra.Command {
 	gcCmd := &cobra.Command{
 		Use:   "gc",
-		Short: "GC expired clusters and unused AWS keypairs\n",
-		Long: `Garbage collect expired clusters and unused SSH keypairs in AWS.
+		Short: "GC expired clusters and unused AWS key pairs\n",
+		Long: `Garbage collect expired clusters, unused SSH key pairs in AWS, and
+dangling GCE DNS records.
 
-Destroys expired clusters, sending email if properly configured. Usually run
-hourly by a cronjob so it is not necessary to run manually.
+Destroys expired resources and sends Slack notifications when configured. This
+command is intended to run as a scheduled job.
 `,
 		Args: cobra.NoArgs,
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
-			return roachprod.GC(config.Logger, dryrun)
+			if config.SlackToken == "" {
+				config.SlackToken = config.EnvOrDefaultString("SLACK_TOKEN", "")
+			}
+			return roachprod.GC(config.Logger, roachprod.GCOptions{
+				DryRun: dryrun,
+				Clouds: gcClouds,
+			})
 		}),
 	}
 	cr.addToExcludeFromBashCompletion(gcCmd)
