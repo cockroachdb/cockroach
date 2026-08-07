@@ -100,9 +100,6 @@ func (p *Provider) buildInstanceProperties(
 		return nil, err
 	}
 	networkInterface := &computepb.NetworkInterface{Subnetwork: proto.String(subnet)}
-	if network := providerOpts.resolveNetwork(project); network != "" {
-		networkInterface.Network = proto.String(network)
-	}
 	if addressMode == vm.AddressModePublic {
 		networkInterface.AccessConfigs = []*computepb.AccessConfig{
 			{
