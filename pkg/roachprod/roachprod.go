@@ -1987,60 +1987,166 @@ func Shrink(ctx context.Context, l *logger.Logger, clusterName string, numNodes 
 	return saveCluster(l, &c.Cluster)
 }
 
+var supportedGCClouds = []string{
+	gce.ProviderName,
+	aws.ProviderName,
+	azure.ProviderName,
+	ibm.ProviderName,
+}
+
+// GCOptions controls which cloud providers are garbage-collected.
+type GCOptions struct {
+	DryRun bool
+	// Clouds is the set of cloud providers to garbage-collect. An empty set
+	// selects all supported remote cloud providers.
+	Clouds []string
+}
+
+type gcOperations struct {
+	loadClusters   func() error
+	providerActive func(string) bool
+	gcAWS          func(*logger.Logger, bool) error
+	gcAzure        func(*logger.Logger, bool) error
+	gcIBM          func(*logger.Logger, bool) error
+	listGCE        func(*logger.Logger) (*cloud.Cloud, error)
+	gcClusters     func(*logger.Logger, *cloud.Cloud, bool) error
+	gcDNS          func(*logger.Logger, *cloud.Cloud, bool) error
+}
+
+func defaultGCOperations() gcOperations {
+	return gcOperations{
+		loadClusters: LoadClusters,
+		providerActive: func(name string) bool {
+			provider, ok := vm.Providers[name]
+			return ok && provider.Active()
+		},
+		gcAWS:   cloud.GCAWS,
+		gcAzure: cloud.GCAzure,
+		gcIBM:   cloud.GCIBM,
+		listGCE: func(l *logger.Logger) (*cloud.Cloud, error) {
+			return cloud.ListCloud(l, vm.ListOptions{
+				IncludeEmptyClusters: true,
+				IncludeProviders:     []string{gce.ProviderName},
+				BailOnProviderError:  true,
+			})
+		},
+		gcClusters: cloud.GCClusters,
+		gcDNS:      cloud.GCDNS,
+	}
+}
+
+func selectGCClouds(requested []string) ([]string, error) {
+	if len(requested) == 0 {
+		return append([]string(nil), supportedGCClouds...), nil
+	}
+
+	supported := make(map[string]struct{}, len(supportedGCClouds))
+	for _, name := range supportedGCClouds {
+		supported[name] = struct{}{}
+	}
+
+	selected := make([]string, 0, len(requested))
+	seen := make(map[string]struct{}, len(requested))
+	for _, name := range requested {
+		name = strings.TrimSpace(name)
+		if _, ok := supported[name]; !ok {
+			return nil, errors.Errorf(
+				"unsupported cloud provider %q for gc (supported providers: %s)",
+				name, strings.Join(supportedGCClouds, ", "),
+			)
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		selected = append(selected, name)
+	}
+	return selected, nil
+}
+
 // GC garbage-collects expired clusters, unused SSH key pairs in AWS, and unused
-// DNS records.
-func GC(l *logger.Logger, dryrun bool) error {
-	if err := LoadClusters(); err != nil {
+// GCE DNS records.
+func GC(l *logger.Logger, options GCOptions) error {
+	return gc(l, options, defaultGCOperations())
+}
+
+func gc(l *logger.Logger, options GCOptions, operations gcOperations) error {
+	selectedClouds, err := selectGCClouds(options.Clouds)
+	if err != nil {
+		return err
+	}
+	if err := operations.loadClusters(); err != nil {
 		return err
 	}
 
-	// Use the `addOpFn` helper to run GC operations concurrently and collect
-	// errors.
-	errorsChan := make(chan error, 8)
-	var wg sync.WaitGroup
+	var (
+		wg             sync.WaitGroup
+		errorsMu       syncutil.Mutex
+		combinedErrors error
+	)
+	addError := func(err error) {
+		if err == nil {
+			return
+		}
+		errorsMu.Lock()
+		defer errorsMu.Unlock()
+		combinedErrors = errors.CombineErrors(combinedErrors, err)
+	}
 	addOpFn := func(fn func() error) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errorsChan <- fn()
+			addError(fn())
 		}()
 	}
 
-	// GC of aws need to be handled separately because gcCmd supports this operation on multiple aws account.
-	// Handles AWS garbage collection by assuming a unique IAM role (`roachprod-gc-cronjob`) in each AWS account.
-	// This is necessary because a single IAM user cannot perform actions across multiple AWS accounts.
-	// Temporary AWS credentials are generated via STS for each account to run garbage collection.
-	addOpFn(func() error {
-		return cloud.GCAWS(l, dryrun)
-	})
+	runGCE := false
+	for _, cloudName := range selectedClouds {
+		if !operations.providerActive(cloudName) {
+			addError(errors.Errorf(
+				"cloud provider %q is not active; check its credentials and required CLI tools",
+				cloudName,
+			))
+			continue
+		}
 
-	addOpFn(func() error {
-		return cloud.GCAzure(l, dryrun)
-	})
-
-	addOpFn(func() error {
-		return cloud.GCIBM(l, dryrun)
-	})
-
-	// ListCloud may fail for a provider, but we can still attempt GC on
-	// the clusters we do have.
-	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{gce.ProviderName}})
-	addOpFn(func() error {
-		return cloud.GCClusters(l, cld, dryrun)
-	})
-	addOpFn(func() error {
-		return cloud.GCDNS(l, cld, dryrun)
-	})
-
-	// Wait for all operations to finish and combine all errors.
-	go func() {
-		wg.Wait()
-		close(errorsChan)
-	}()
-	var combinedErrors error
-	for err := range errorsChan {
-		combinedErrors = errors.CombineErrors(combinedErrors, err)
+		switch cloudName {
+		case aws.ProviderName:
+			// AWS GC supports multiple accounts by assuming the configured GC
+			// role in each account.
+			addOpFn(func() error {
+				return operations.gcAWS(l, options.DryRun)
+			})
+		case azure.ProviderName:
+			addOpFn(func() error {
+				return operations.gcAzure(l, options.DryRun)
+			})
+		case ibm.ProviderName:
+			addOpFn(func() error {
+				return operations.gcIBM(l, options.DryRun)
+			})
+		case gce.ProviderName:
+			runGCE = true
+		}
 	}
+
+	if runGCE {
+		// DNS GC infers dangling records from the GCE inventory. Never run
+		// either cleanup operation with a partial inventory.
+		cld, err := operations.listGCE(l)
+		if err != nil {
+			addError(errors.Wrap(err, "listing GCE resources for gc"))
+		} else {
+			addOpFn(func() error {
+				return operations.gcClusters(l, cld, options.DryRun)
+			})
+			addOpFn(func() error {
+				return operations.gcDNS(l, cld, options.DryRun)
+			})
+		}
+	}
+
+	wg.Wait()
 	return combinedErrors
 }
 

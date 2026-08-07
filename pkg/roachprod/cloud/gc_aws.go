@@ -336,9 +336,12 @@ func gc(l *logger.Logger, dryrun bool) error {
 		keyPairErr = gcAWSKeyPairs(l, dryrun)
 	}()
 
-	cld, _ := ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{rochprodaws.ProviderName}})
-	err := GCClusters(l, cld, dryrun)
-	combinedError = errors.CombineErrors(combinedError, err)
+	cld, err := listCloudForGC(l, rochprodaws.ProviderName)
+	if err != nil {
+		combinedError = errors.CombineErrors(combinedError, err)
+	} else {
+		combinedError = errors.CombineErrors(combinedError, GCClusters(l, cld, dryrun))
+	}
 
 	wg.Wait()
 	combinedError = errors.CombineErrors(combinedError, keyPairErr)
@@ -414,6 +417,10 @@ func GCAWS(l *logger.Logger, dryrun bool) error {
 		unsetAwsEnvVariables, err := stsCredentials(roleArn, roleSessionName, "")
 		if err != nil {
 			l.Errorf("failed to get sts credentials for account: %s,  %v", accountID, err)
+			combinedErrors = errors.CombineErrors(
+				combinedErrors,
+				errors.Wrapf(err, "failed to get STS credentials for AWS account %s", accountID),
+			)
 			continue
 		}
 

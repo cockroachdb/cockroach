@@ -6,11 +6,173 @@
 package cloud
 
 import (
+	"context"
+	"errors"
+	"io"
 	"testing"
 
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+type fakeDNSProvider struct {
+	records     []vm.DNSRecord
+	listErr     error
+	deleteCalls int
+	deleted     []string
+}
+
+func (*fakeDNSProvider) CreateRecords(context.Context, ...vm.DNSRecord) error {
+	return nil
+}
+
+func (*fakeDNSProvider) LookupRecords(context.Context, vm.DNSType, string) ([]vm.DNSRecord, error) {
+	return nil, nil
+}
+
+func (p *fakeDNSProvider) ListRecords(context.Context) ([]vm.DNSRecord, error) {
+	return p.records, p.listErr
+}
+
+func (*fakeDNSProvider) DeleteSRVRecordsBySubdomain(context.Context, string) error {
+	return nil
+}
+
+func (p *fakeDNSProvider) DeleteSRVRecordsByName(_ context.Context, names ...string) error {
+	p.deleteCalls++
+	p.deleted = append(p.deleted, names...)
+	return nil
+}
+
+func (*fakeDNSProvider) DeletePublicRecordsByName(context.Context, ...string) error {
+	return nil
+}
+
+func (*fakeDNSProvider) Domain() string {
+	return "roachprod.example"
+}
+
+func (*fakeDNSProvider) PublicDomain() string {
+	return "roachprod-public.example"
+}
+
+func (*fakeDNSProvider) ProviderName() string {
+	return gce.ProviderName
+}
+
+func (*fakeDNSProvider) SyncDNS(*logger.Logger, vm.List) error {
+	return nil
+}
+
+func (*fakeDNSProvider) SyncDNSWithContext(context.Context, *logger.Logger, vm.List) error {
+	return nil
+}
+
+func testLogger(t *testing.T) *logger.Logger {
+	t.Helper()
+	cfg := logger.Config{Stdout: io.Discard, Stderr: io.Discard}
+	l, err := cfg.NewLogger("")
+	require.NoError(t, err)
+	return l
+}
+
+func withoutSlack(t *testing.T) {
+	t.Helper()
+	oldToken := config.SlackToken
+	config.SlackToken = ""
+	t.Cleanup(func() {
+		config.SlackToken = oldToken
+	})
+}
+
+func TestGCClustersDoesNotRequireSlack(t *testing.T) {
+	withoutSlack(t)
+	require.NoError(t, GCClusters(testLogger(t), NewCloud(), false))
+}
+
+func TestGCDNSUsesConfiguredGCEProvider(t *testing.T) {
+	withoutSlack(t)
+	oldProvider, hadProvider := vm.DNSProviders[gce.ProviderName]
+	provider := &fakeDNSProvider{records: []vm.DNSRecord{
+		{Name: "_sql._tcp.live.roachprod.example.", Type: vm.SRV},
+		{Name: "_sql._tcp.dead.roachprod.example.", Type: vm.SRV},
+	}}
+	vm.DNSProviders[gce.ProviderName] = provider
+	t.Cleanup(func() {
+		if hadProvider {
+			vm.DNSProviders[gce.ProviderName] = oldProvider
+		} else {
+			delete(vm.DNSProviders, gce.ProviderName)
+		}
+	})
+
+	cld := NewCloud()
+	cld.Clusters["live"] = &cloudcluster.Cluster{Name: "live"}
+	require.NoError(t, GCDNS(testLogger(t), cld, false))
+	require.Equal(t, 1, provider.deleteCalls)
+	require.Equal(t, []string{"_sql._tcp.dead.roachprod.example."}, provider.deleted)
+}
+
+func TestGCDNSSkipsDeleteWhenNoRecordsAreDangling(t *testing.T) {
+	withoutSlack(t)
+	oldProvider, hadProvider := vm.DNSProviders[gce.ProviderName]
+	provider := &fakeDNSProvider{records: []vm.DNSRecord{
+		{Name: "_sql._tcp.live.roachprod.example.", Type: vm.SRV},
+	}}
+	vm.DNSProviders[gce.ProviderName] = provider
+	t.Cleanup(func() {
+		if hadProvider {
+			vm.DNSProviders[gce.ProviderName] = oldProvider
+		} else {
+			delete(vm.DNSProviders, gce.ProviderName)
+		}
+	})
+
+	cld := NewCloud()
+	cld.Clusters["live"] = &cloudcluster.Cluster{Name: "live"}
+	require.NoError(t, GCDNS(testLogger(t), cld, false))
+	require.Zero(t, provider.deleteCalls)
+	require.Empty(t, provider.deleted)
+}
+
+func TestGCDNSReportsUnavailableProvider(t *testing.T) {
+	oldProvider, hadProvider := vm.DNSProviders[gce.ProviderName]
+	delete(vm.DNSProviders, gce.ProviderName)
+	t.Cleanup(func() {
+		if hadProvider {
+			vm.DNSProviders[gce.ProviderName] = oldProvider
+		}
+	})
+
+	err := GCDNS(testLogger(t), NewCloud(), false)
+	require.ErrorContains(t, err, "GCE DNS provider is unavailable")
+	require.ErrorContains(t, err, "--gce-infra-project")
+}
+
+func TestGCDNSPropagatesListFailure(t *testing.T) {
+	withoutSlack(t)
+	oldProvider, hadProvider := vm.DNSProviders[gce.ProviderName]
+	provider := &fakeDNSProvider{listErr: errors.New("cannot access DNS zone")}
+	vm.DNSProviders[gce.ProviderName] = provider
+	t.Cleanup(func() {
+		if hadProvider {
+			vm.DNSProviders[gce.ProviderName] = oldProvider
+		} else {
+			delete(vm.DNSProviders, gce.ProviderName)
+		}
+	})
+
+	err := GCDNS(testLogger(t), NewCloud(), false)
+	require.ErrorContains(t, err, "cannot access DNS zone")
+	require.Zero(t, provider.deleteCalls)
+	require.Empty(t, provider.deleted)
+}
 
 func TestGetTagsValues(t *testing.T) {
 	IAMUserNameKey := "IAMUserName"
