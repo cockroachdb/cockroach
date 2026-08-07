@@ -30,17 +30,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestApplyGCESubnetOverride(t *testing.T) {
+func TestApplyGCESubnetsOverride(t *testing.T) {
 	crdbOpts := gce.DefaultProviderOpts()
 	workloadOpts := gce.DefaultProviderOpts()
-	require.NoError(t, applyGCESubnetOverride(
-		spec.GCE, "staging-vpc-us-east1", crdbOpts, workloadOpts,
+	subnets := map[string]string{
+		"us-east1": "staging-vpc-us-east1",
+		"us-west1": "staging-vpc-us-west1",
+	}
+	require.NoError(t, applyGCESubnetsOverride(
+		spec.GCE, subnets, crdbOpts, workloadOpts,
 	))
-	require.Equal(t, "staging-vpc-us-east1", crdbOpts.Subnet)
-	require.Equal(t, "staging-vpc-us-east1", workloadOpts.Subnet)
+	require.Equal(t, subnets, crdbOpts.Subnets)
+	require.Equal(t, subnets, workloadOpts.Subnets)
+
+	// Each provider gets its own map so later retry mutations cannot leak between
+	// the CRDB and workload node configurations or back into the parsed flag.
+	crdbOpts.Subnets["us-east1"] = "changed"
+	require.Equal(t, "staging-vpc-us-east1", subnets["us-east1"])
+	require.Equal(t, "staging-vpc-us-east1", workloadOpts.Subnets["us-east1"])
 
 	require.ErrorContains(t,
-		applyGCESubnetOverride(spec.AWS, "subnet", nil, nil),
+		applyGCESubnetsOverride(spec.AWS, subnets, nil, nil),
 		"only valid with --cloud=gce",
 	)
 }
