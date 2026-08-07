@@ -5871,6 +5871,9 @@ SELECT
 			system.namespace
 		WHERE
 			id = $1 AND id NOT IN (SELECT id FROM system.descriptor)
+			-- Temporary schemas have a namespace entry and no descriptor by
+			-- design, so they are not corruptions and must not be deleted.
+			AND NOT ("parentID" != 0 AND "parentSchemaID" = 0 AND name LIKE 'pg\_temp\_%')
 	)
 	WHEN 'comment'
 	THEN (
