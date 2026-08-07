@@ -66,3 +66,67 @@ explain
            │    └── (3, 4)
            └── filters
                 └── x:1 = column1:5
+
+
+build
+EXPLAIN (VERBOSE) SELECT CASE WHEN true THEN ('a', 2) ELSE NULL:::RECORD END
+----
+explain
+ ├── columns: info:2
+ ├── mode: verbose
+ └── project
+      ├── columns: case:1
+      ├── values
+      │    └── ()
+      └── projections
+           └── CASE WHEN true THEN ('a', 2) ELSE NULL::RECORD END [as=case:1]
+
+
+build 
+EXPLAIN (VERBOSE) SELECT NULL:::FLOAT;
+----
+explain
+ ├── columns: info:2
+ ├── mode: verbose
+ └── project
+      ├── columns: float8:1
+      ├── values
+      │    └── ()
+      └── projections
+           └── NULL::FLOAT8 [as=float8:1]
+
+
+build 
+EXPLAIN (VERBOSE) SELECT NULL:::int:::float;
+----
+explain
+ ├── columns: info:2
+ ├── mode: verbose
+ └── project
+      ├── columns: float8:1
+      ├── values
+      │    └── ()
+      └── projections
+           └── NULL::FLOAT8 [as=float8:1]
+
+build 
+EXPLAIN (VERBOSE) SELECT (SELECT NULL):::FLOAT
+----
+explain
+ ├── columns: info:3
+ ├── mode: verbose
+ └── project
+      ├── columns: float8:2
+      ├── values
+      │    └── ()
+      └── projections
+           └── cast: FLOAT8 [as=float8:2]
+                └── subquery
+                     └── max1-row
+                          ├── columns: "?column?":1
+                          └── project
+                               ├── columns: "?column?":1
+                               ├── values
+                               │    └── ()
+                               └── projections
+                                    └── NULL [as="?column?":1]
