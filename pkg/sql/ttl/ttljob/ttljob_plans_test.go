@@ -125,25 +125,25 @@ func TestQueryPlansDataDriven(t *testing.T) {
 				var tableID int64
 				row := runner.QueryRow(t, fmt.Sprintf("SELECT '%s'::REGCLASS::OID;", tableName))
 				row.Scan(&tableID)
-				info, err := getTableInfo(ctx, db, descpb.ID(tableID), true /* runAsOwner */)
+				relationName, _, pkColNames, pkColTypes, pkColDirs, _, _, err := getTableInfo(
+					ctx, db, descpb.ID(tableID),
+				)
 				require.NoError(t, err)
 
 				switch strings.ToLower(builder) {
 				case "select":
-					selectBuilder, err := MakeSelectQueryBuilder(
+					selectBuilder := MakeSelectQueryBuilder(
 						SelectQueryParams{
-							RelationName:    info.relationName,
-							PKColNames:      info.pkColNames,
-							PKColDirs:       info.pkColDirs,
-							PKColTypes:      info.pkColTypes,
+							RelationName:    relationName,
+							PKColNames:      pkColNames,
+							PKColDirs:       pkColDirs,
+							PKColTypes:      pkColTypes,
 							Bounds:          selectBounds,
 							SelectBatchSize: ttlbase.DefaultSelectBatchSizeValue,
 							TTLExpr:         catpb.DefaultTTLExpirationExpr,
-							User:            info.owner,
 						},
 						cutoff.UTC(),
 					)
-					require.NoError(t, err)
 					// TODO(yuzefovich): this function might not work if
 					// multiple bounds are specified.
 					replacePlaceholders := func(query string) string {
@@ -169,16 +169,14 @@ func TestQueryPlansDataDriven(t *testing.T) {
 					return getExplainPlan(selectQuery, overrides)
 
 				case "delete":
-					deleteBuilder, err := MakeDeleteQueryBuilder(
+					deleteBuilder := MakeDeleteQueryBuilder(
 						DeleteQueryParams{
-							RelationName: info.relationName,
-							PKColNames:   info.pkColNames,
+							RelationName: relationName,
+							PKColNames:   pkColNames,
 							TTLExpr:      catpb.DefaultTTLExpirationExpr,
-							User:         info.owner,
 						},
 						cutoff.UTC(),
 					)
-					require.NoError(t, err)
 					replacePlaceholders := func(query string) string {
 						query = strings.ReplaceAll(query, "'", "''")
 						for i := len(deleteIDs) - 1; i >= 0; i-- {
