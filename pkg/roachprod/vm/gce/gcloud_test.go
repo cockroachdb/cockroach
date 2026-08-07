@@ -81,6 +81,16 @@ func TestDefaultArtifactsBucket(t *testing.T) {
 	require.Equal(t, vm.DefaultArtifactsBucket, artifactsBucketForProject(DefaultProjectID))
 }
 
+func TestStatefulIPArgs(t *testing.T) {
+	public := statefulIPArgs(vm.AddressModePublic)
+	require.Contains(t, public, "--stateful-internal-ip")
+	require.Contains(t, public, "--stateful-external-ip")
+
+	private := statefulIPArgs(vm.AddressModePrivate)
+	require.Contains(t, private, "--stateful-internal-ip")
+	require.NotContains(t, private, "--stateful-external-ip")
+}
+
 func TestDNSDefaults(t *testing.T) {
 	oldInfraProject := defaultInfraProject
 	oldZone := dnsDefaultZone
@@ -363,6 +373,7 @@ func TestVMNetworkParsing(t *testing.T) {
 	require.Equal(t, "10.0.0.2", parsedJSON.PrivateIP)
 	require.Empty(t, parsedJSON.PublicIP)
 	require.Equal(t, "private-vpc", parsedJSON.VPC)
+	require.Equal(t, vm.AddressModePrivate, parsedJSON.AddressMode)
 	require.Equal(t, []string{iapSSHTag}, parsedJSON.NetworkTags)
 	require.True(t, UsesIAP(*parsedJSON))
 
@@ -380,6 +391,7 @@ func TestVMNetworkParsing(t *testing.T) {
 	require.Equal(t, "10.0.0.2", parsedPublicJSON.PrivateIP)
 	require.Equal(t, "192.0.2.1", parsedPublicJSON.PublicIP)
 	require.Equal(t, "private-vpc", parsedPublicJSON.VPC)
+	require.Equal(t, vm.AddressModePublic, parsedPublicJSON.AddressMode)
 	require.Empty(t, parsedPublicJSON.NetworkTags)
 }
 
@@ -632,4 +644,124 @@ func TestComputeGrowDistribution(t *testing.T) {
 	if err := quick.Check(testDistribution, &c); err != nil {
 		t.Error(err)
 	}
+}
+
+func TestTemplateAddressMode(t *testing.T) {
+	public := jsonInstanceTemplate{}
+	public.Properties.NetworkInterfaces = []struct {
+		Name          string `json:"name"`
+		Network       string `json:"network"`
+		AccessConfigs []struct {
+			NatIP string `json:"natIP"`
+		} `json:"accessConfigs"`
+	}{{Name: "nic0", Network: "default", AccessConfigs: []struct {
+		NatIP string `json:"natIP"`
+	}{{NatIP: "34.1.2.3"}}}}
+
+	private := jsonInstanceTemplate{}
+	private.Properties.NetworkInterfaces = []struct {
+		Name          string `json:"name"`
+		Network       string `json:"network"`
+		AccessConfigs []struct {
+			NatIP string `json:"natIP"`
+		} `json:"accessConfigs"`
+	}{{Name: "nic0", Network: "my-vpc"}}
+
+	require.Equal(t, vm.AddressModePublic, templateAddressMode(public))
+	require.Equal(t, vm.AddressModePrivate, templateAddressMode(private))
+	require.Equal(t, vm.AddressModePublic, templateAddressMode(jsonInstanceTemplate{}))
+}
+
+func TestPreservedNetworkIP(t *testing.T) {
+	require.Equal(t, "", preservedNetworkIP(nil, "nic0"))
+	require.Equal(t, "", preservedNetworkIP(map[string]*PreservedStatePreservedNetworkIp{}, "nic0"))
+	require.Equal(t, "", preservedNetworkIP(map[string]*PreservedStatePreservedNetworkIp{"nic0": nil}, "nic0"))
+
+	ip := &PreservedStatePreservedNetworkIp{}
+	ip.IpAddress.Literal = "10.0.0.5"
+	require.Equal(t, "10.0.0.5", preservedNetworkIP(map[string]*PreservedStatePreservedNetworkIp{"nic0": ip}, "nic0"))
+}
+
+func TestManagedInstanceToVMPrivate(t *testing.T) {
+	internal := &PreservedStatePreservedNetworkIp{}
+	internal.IpAddress.Literal = "10.0.0.5"
+
+	j := &managedInstanceGroupInstance{
+		Name:     "c-0001",
+		Instance: "https://www.googleapis.com/compute/v1/projects/p/zones/us-east1-b/instances/c-0001",
+	}
+	j.PreservedStateFromPolicy = PreservedState{
+		InternalIPs: map[string]*PreservedStatePreservedNetworkIp{"nic0": internal},
+		// No ExternalIPs entry: this is the private case.
+	}
+
+	tmpl := jsonInstanceTemplate{}
+	tmpl.Properties.Labels = map[string]string{vm.TagLifetime: "12h0m0s"}
+	tmpl.Properties.NetworkInterfaces = []struct {
+		Name          string `json:"name"`
+		Network       string `json:"network"`
+		AccessConfigs []struct {
+			NatIP string `json:"natIP"`
+		} `json:"accessConfigs"`
+	}{{Name: "nic0", Network: "projects/p/global/networks/my-vpc"}}
+
+	v := j.toVM("p", "us-east1-b", tmpl, "roachprod.example.com")
+
+	require.Equal(t, "10.0.0.5", v.PrivateIP)
+	require.Equal(t, "", v.PublicIP)
+	require.Equal(t, vm.AddressModePrivate, v.AddressMode)
+	require.Equal(t, "my-vpc", v.VPC)
+	for _, e := range v.Errors {
+		require.False(t, errors.Is(e, vm.ErrBadNetwork), "unexpected ErrBadNetwork: %v", e)
+	}
+}
+
+func TestManagedInstanceToVMMissingPrivateIP(t *testing.T) {
+	j := &managedInstanceGroupInstance{Name: "c-0002"}
+	j.PreservedStateFromPolicy = PreservedState{} // no internal IP
+
+	tmpl := jsonInstanceTemplate{}
+	tmpl.Properties.Labels = map[string]string{vm.TagLifetime: "12h0m0s"}
+	tmpl.Properties.NetworkInterfaces = []struct {
+		Name          string `json:"name"`
+		Network       string `json:"network"`
+		AccessConfigs []struct {
+			NatIP string `json:"natIP"`
+		} `json:"accessConfigs"`
+	}{{Name: "nic0", Network: "projects/p/global/networks/my-vpc"}}
+
+	v := j.toVM("p", "us-east1-b", tmpl, "roachprod.example.com")
+
+	found := false
+	for _, e := range v.Errors {
+		if errors.Is(e, vm.ErrBadNetwork) {
+			found = true
+		}
+	}
+	require.True(t, found, "expected ErrBadNetwork when private IP is absent")
+}
+
+func TestRejectPrivateManagedLoadBalancer(t *testing.T) {
+	// Public VMs carry a public IP; load-balancer creation is allowed.
+	require.NoError(t, rejectPrivateManagedLoadBalancer(vm.List{
+		{Name: "c-0001", AddressMode: vm.AddressModePublic, PublicIP: "34.1.2.3"},
+		{Name: "c-0002", AddressMode: vm.AddressModePublic, PublicIP: "34.1.2.4"},
+	}))
+
+	// Rejected when a VM is explicitly resolved as private.
+	err := rejectPrivateManagedLoadBalancer(vm.List{
+		{Name: "c-0001", AddressMode: vm.AddressModePublic, PublicIP: "34.1.2.3"},
+		{Name: "c-0002", AddressMode: vm.AddressModePrivate},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "private managed instance groups")
+
+	// Rejected when the resolved mode was not persisted (empty AddressMode, e.g.
+	// cluster state written by an older roachprod) but the VM has no public IP --
+	// the reliable private signal that is always present in cached state.
+	err = rejectPrivateManagedLoadBalancer(vm.List{
+		{Name: "c-0001", PrivateIP: "10.0.0.5"},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "private managed instance groups")
 }
