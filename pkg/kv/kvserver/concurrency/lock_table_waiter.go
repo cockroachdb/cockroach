@@ -887,6 +887,14 @@ func (c *txnStatusCache) add(txn *roachpb.Transaction, pendingAt roachpb.Observe
 	if txn.Status.IsFinalized() {
 		c.finalizedTxns.add(txn)
 	} else {
+		// Only a push that found a PENDING record proves that the clock
+		// observation was captured before the pushee committed and
+		// acknowledged its client. A successful push can also return a
+		// STAGING record (e.g. when the record's timestamp already exceeds
+		// the push timestamp).
+		if txn.Status != roachpb.PENDING {
+			pendingAt = roachpb.ObservedTimestamp{}
+		}
 		c.pendingTxns.add(txn, pendingAt)
 	}
 }
@@ -973,7 +981,10 @@ type pendingTxnCache struct {
 // pendingTxnCacheEntry holds a pending transaction and the clock observation
 // captured when the transaction was pushed. The clock observation allows
 // readers with uncertainty intervals to reuse cached push results if their
-// observed timestamp on this node is <= ClockWhilePending.
+// observed timestamp on this node is <= ClockWhilePending. ClockWhilePending
+// is empty if the transaction has only ever been observed by pushes that
+// could not prove it was PENDING (e.g. pushes that found a STAGING record),
+// in which case readers with uncertainty intervals cannot use the entry.
 type pendingTxnCacheEntry struct {
 	Txn               *roachpb.Transaction
 	ClockWhilePending roachpb.ObservedTimestamp
@@ -993,22 +1004,26 @@ func (c *pendingTxnCache) get(id uuid.UUID) (*pendingTxnCacheEntry, bool) {
 func (c *pendingTxnCache) add(
 	txn *roachpb.Transaction, clockObservation roachpb.ObservedTimestamp,
 ) {
-	assert(!clockObservation.Timestamp.IsEmpty(), "pendingTxnCache: clock observation must be non-empty")
+	// Only pushes that could not prove the transaction was PENDING (e.g.
+	// pushes that found a STAGING record) may omit the clock observation;
+	// see txnStatusCache.add.
+	assert(txn.Status != roachpb.PENDING || !clockObservation.Timestamp.IsEmpty(),
+		"pendingTxnCache: pending transaction without clock observation")
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// All observations must come from the same node.
-	if c.nodeID == 0 {
-		c.nodeID = clockObservation.NodeID
+	if !clockObservation.Timestamp.IsEmpty() {
+		if c.nodeID == 0 {
+			c.nodeID = clockObservation.NodeID
+		}
+		assert(clockObservation.NodeID == c.nodeID, "pendingTxnCache: unexpected NodeID")
 	}
-	assert(clockObservation.NodeID == c.nodeID, "pendingTxnCache: unexpected NodeID")
 
 	if idx := c.getIdxLocked(txn.ID); idx >= 0 {
 		currentEntry := c.txns[idx]
 		newEntry := *currentEntry
-		assert(!currentEntry.ClockWhilePending.Timestamp.IsEmpty(), "pendingTxnCache: cache entry without clock observation")
-		assert(clockObservation.NodeID == currentEntry.ClockWhilePending.NodeID, "pendingTxnCache: NodeID mismatch on update")
 
 		// Only update the cached transaction if the inbound copy has a newer
 		// WriteTimestamp.

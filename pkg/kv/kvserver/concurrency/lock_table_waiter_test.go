@@ -1052,7 +1052,21 @@ func TestPendingTxnCacheClockWhilePending(t *testing.T) {
 		require.Equal(t, obs, entry.ClockWhilePending)
 	})
 
-	t.Run("empty observation panics", func(t *testing.T) {
+	t.Run("empty observation does not overwrite existing observation", func(t *testing.T) {
+		var c pendingTxnCache
+		txn := makeTxnProto("txn")
+		obs := makeObs(1, 100)
+
+		c.add(txn.Clone(), obs)
+		staging := txn.Clone()
+		staging.Status = roachpb.STAGING
+		c.add(staging, roachpb.ObservedTimestamp{})
+		entry, ok := c.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, obs, entry.ClockWhilePending)
+	})
+
+	t.Run("pending txn with empty observation panics", func(t *testing.T) {
 		var c pendingTxnCache
 		txn := makeTxnProto("txn")
 
@@ -1108,6 +1122,89 @@ func TestPendingTxnCacheClockWhilePending(t *testing.T) {
 		entry, ok := c.get(txn.ID)
 		require.True(t, ok)
 		require.Equal(t, obs1, entry.ClockWhilePending)
+	})
+}
+
+// TestTxnStatusCacheStagingObservation verifies that clock observations from
+// pushes that found a STAGING transaction record are not stored in the
+// pendingTxnCache.
+func TestTxnStatusCacheStagingObservation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	makeObs := func(wallTime int64) roachpb.ObservedTimestamp {
+		return roachpb.ObservedTimestamp{
+			NodeID:    1,
+			Timestamp: hlc.ClockTimestamp{WallTime: wallTime},
+		}
+	}
+
+	t.Run("staging push does not advance a pending entry's observation", func(t *testing.T) {
+		var c txnStatusCache
+		txn := makeTxnProto("txn")
+		obs1 := makeObs(100)
+		c.add(txn.Clone(), obs1)
+
+		// A parallel commit attempt at the same write timestamp leaves the
+		// cached PENDING proto in place, so the STAGING push's later
+		// observation must not be merged into the entry.
+		staging := txn.Clone()
+		staging.Status = roachpb.STAGING
+		c.add(staging, makeObs(200))
+
+		entry, ok := c.pendingTxns.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, roachpb.PENDING, entry.Txn.Status)
+		require.Equal(t, obs1, entry.ClockWhilePending)
+	})
+
+	t.Run("staging-only entry stores no observation", func(t *testing.T) {
+		var c txnStatusCache
+		txn := makeTxnProto("txn")
+		staging := txn.Clone()
+		staging.Status = roachpb.STAGING
+		c.add(staging, makeObs(100))
+
+		entry, ok := c.pendingTxns.get(txn.ID)
+		require.True(t, ok)
+		require.True(t, entry.ClockWhilePending.Timestamp.IsEmpty())
+	})
+
+	t.Run("pending push observation is kept when staging advances the txn", func(t *testing.T) {
+		var c txnStatusCache
+		txn := makeTxnProto("txn")
+		obs1 := makeObs(100)
+		c.add(txn.Clone(), obs1)
+
+		staging := txn.Clone()
+		staging.Status = roachpb.STAGING
+		staging.WriteTimestamp = staging.WriteTimestamp.Add(1, 0)
+		c.add(staging, makeObs(200))
+
+		entry, ok := c.pendingTxns.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, roachpb.STAGING, entry.Txn.Status)
+		require.Equal(t, obs1, entry.ClockWhilePending)
+	})
+
+	t.Run("pending push after staging stores the pending observation", func(t *testing.T) {
+		var c txnStatusCache
+		txn := makeTxnProto("txn")
+		staging := txn.Clone()
+		staging.Status = roachpb.STAGING
+		c.add(staging, makeObs(100))
+
+		// The transaction's parallel commit attempt failed and it returned to
+		// PENDING at a higher timestamp.
+		pending := txn.Clone()
+		pending.WriteTimestamp = pending.WriteTimestamp.Add(1, 0)
+		obs2 := makeObs(200)
+		c.add(pending, obs2)
+
+		entry, ok := c.pendingTxns.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, roachpb.PENDING, entry.Txn.Status)
+		require.Equal(t, obs2, entry.ClockWhilePending)
 	})
 }
 
