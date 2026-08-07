@@ -29,6 +29,10 @@ release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
 is_customized_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo "")"
 is_release_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^((staging|release|rc)-(v)?[0-9][0-9]\.[0-9](\.0)?).*|master$" || echo "")"
 
+# Tracing is disabled across the whole selection below because this script runs
+# with `set -x`, which would otherwise echo the chosen service-account key to
+# the build log.
+{ set +x; } 2>/dev/null
 if [[ -z "${DRY_RUN}" ]] ; then
   if [[ -z "${is_release_build}" ]] ; then
     # export the variable to avoid shell escaping
@@ -48,6 +52,7 @@ else
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_DEV"
 fi
+set -x
 
 cat << EOF
 
