@@ -88,3 +88,19 @@ func TestJoinTokenVersion(t *testing.T) {
 		require.EqualValues(t, err, errInvalidJoinToken)
 	})
 }
+
+func TestGenerateJoinTokenUniqueness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cm, err := NewCertificateManager(certnames.EmbeddedCertsDir, CommandTLSSettings{})
+	require.NoError(t, err)
+
+	token1, err := GenerateJoinToken(cm)
+	require.NoError(t, err)
+
+	token2, err := GenerateJoinToken(cm)
+	require.NoError(t, err)
+
+	require.NotEqual(t, token1.SharedSecret, token2.SharedSecret, "subsequent tokens should not have identical shared secrets")
+}
