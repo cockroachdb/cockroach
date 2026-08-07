@@ -196,6 +196,11 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 
 	st := cluster.MakeTestingClusterSettings()
 	kvcoord.NonTransactionalWritesNotIdempotent.Override(ctx, &st.SV, true)
+	// TODO(#173099): force VIR off. Its default is metamorphic, so it can start
+	// enabled even though NewDefaultConfig no longer generates the toggle
+	// operation. VIR currently exposes a bug where MVCCIncrementalIterator
+	// ignores intents below StartTime; remove this override once that is fixed.
+	concurrency.VirtualIntentResolution.Override(ctx, &st.SV, false)
 	if cfg.leaseTypeOverride != 0 {
 		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, cfg.leaseTypeOverride)
 	}
