@@ -10,6 +10,8 @@
 
 set -eo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/../../util/roachtest_bucket_util.sh"
+
 if [[ "$GOOGLE_EPHEMERAL_CREDENTIALS" ]]; then
   echo "$GOOGLE_EPHEMERAL_CREDENTIALS" > creds.json
   gcloud auth activate-service-account --key-file=creds.json
