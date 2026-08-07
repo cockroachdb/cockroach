@@ -401,3 +401,86 @@ func TestTemporaryObjectCleanupRetriesWithPoisonedTransaction(t *testing.T) {
 		})
 	}
 }
+
+// TestLiveTempSchemaIsNotACatalogCorruption verifies that a live session's
+// temporary schema is not mistaken for catalog corruption. A temp schema is by
+// design a system.namespace entry with no system.descriptor row (see
+// Collection.InsertTempSchemaToBatch), which is the same shape as a dangling
+// namespace entry. It must be neither reported nor repaired, and must remain
+// collectable by cleanupSessionTempObjects.
+//
+// This is the call chain FirstUpgradeFromReleasePrecondition's auto-repair loop
+// runs during major-version upgrades, against every temp schema in the cluster.
+func TestLiveTempSchemaIsNotACatalogCorruption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Session A creates a temp table and stays open.
+	connA, err := db.Conn(ctx)
+	require.NoError(t, err)
+	defer func() { _ = connA.Close() }()
+	_, err = connA.ExecContext(ctx, `SET experimental_enable_temp_tables = true`)
+	require.NoError(t, err)
+	_, err = connA.ExecContext(ctx, `CREATE TEMP TABLE t (k INT PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = connA.ExecContext(ctx, `INSERT INTO t VALUES (1)`)
+	require.NoError(t, err)
+
+	var schemaName string
+	var schemaID, tableID int
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT name, id FROM system.namespace WHERE name LIKE 'pg\_temp\_%' AND "parentSchemaID" = 0`,
+	).Scan(&schemaName, &schemaID))
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT id FROM system.namespace WHERE name = 't' AND "parentSchemaID" = $1`, schemaID,
+	).Scan(&tableID))
+
+	// Neither the schema nor the table it holds is a repairable corruption.
+	var n int
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT count(*) FROM crdb_internal.kv_repairable_catalog_corruptions WHERE id IN ($1, $2)`,
+		schemaID, tableID,
+	).Scan(&n))
+	require.Zero(t, n)
+
+	// Repair is a no-op even when handed the id directly, which is how the
+	// upgrade precondition's loop terminates: a NULL result does not count as
+	// a repair.
+	var repaired gosql.NullBool
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT crdb_internal.repair_catalog_corruption($1, 'namespace')`, schemaID,
+	).Scan(&repaired))
+	require.False(t, repaired.Valid)
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT count(*) FROM system.namespace WHERE id = $1`, schemaID).Scan(&n))
+	require.Equal(t, 1, n)
+
+	// The schema is still resolvable by name from another session, and the
+	// owning session still sees its data.
+	require.NoError(t, db.QueryRowContext(ctx,
+		fmt.Sprintf(`SELECT k FROM defaultdb.%s.t`, schemaName)).Scan(&n))
+	require.Equal(t, 1, n)
+	require.NoError(t, connA.QueryRowContext(ctx, `SELECT k FROM t`).Scan(&n))
+	require.Equal(t, 1, n)
+
+	// Session-exit cleanup still finds the schema and drops everything under
+	// it, scheduling GC of the table's data.
+	isTempSchema, sessionID, err := temporarySchemaSessionID(schemaName)
+	require.NoError(t, err)
+	require.True(t, isTempSchema)
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	require.NoError(t,
+		cleanupSessionTempObjects(ctx, execCfg.InternalDB, execCfg.Codec, sessionID))
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT count(*) FROM system.namespace WHERE id IN ($1, $2)`, schemaID, tableID).Scan(&n))
+	require.Zero(t, n)
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT count(*) FROM crdb_internal.jobs
+		  WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE '%'||$1||'%'`,
+		schemaName).Scan(&n))
+	require.NotZero(t, n)
+}
