@@ -225,7 +225,7 @@ ORDER BY aggregated_ts ASC
 LIMIT 1024
 RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -404,7 +404,7 @@ DELETE FROM system.transaction_statistics
   LIMIT 1024
  RETURNING aggregated_ts, fingerprint_id, app_name, node_id
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -452,7 +452,7 @@ AND (
   LIMIT 1024
  RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -501,7 +501,7 @@ DELETE FROM system.transaction_statistics
       LIMIT 1024
      RETURNING aggregated_ts, fingerprint_id, app_name, node_id
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project

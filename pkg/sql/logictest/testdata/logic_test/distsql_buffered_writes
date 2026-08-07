@@ -38,7 +38,7 @@ INSERT INTO kv VALUES (3, 3);
 query T
 SELECT info FROM [EXPLAIN SELECT crdb_internal_mvcc_timestamp FROM kv] WHERE info LIKE 'distribution%'
 ----
-distribution: local
+distribution: local (systemColumnsAndBufferedWritesProhibited)
 
 # The tableoid system column doesn't require MVCC decoding, so it doesn't
 # disable DistSQL.
@@ -71,7 +71,7 @@ INSERT INTO kv VALUES (4, 4);
 query T
 SELECT info FROM [EXPLAIN SELECT kv2.crdb_internal_mvcc_timestamp FROM kv AS kv1 INNER LOOKUP JOIN kv AS kv2 ON kv1.v = kv2.k] WHERE info LIKE 'distribution%'
 ----
-distribution: local
+distribution: local (systemColumnsAndBufferedWritesProhibited)
 
 # Executing this query will flush the buffer and disable buffered writes for the
 # txn.

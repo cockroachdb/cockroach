@@ -11,7 +11,7 @@ query T
 EXPLAIN WITH a AS (INSERT INTO t SELECT * FROM t2 RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -41,7 +41,7 @@ query T
 EXPLAIN WITH a AS (DELETE FROM t RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -73,7 +73,7 @@ query T
 EXPLAIN WITH a AS (UPDATE t SET x = x + 1 RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -107,7 +107,7 @@ query T
 EXPLAIN WITH a AS (UPSERT INTO t VALUES (2), (3) RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -137,7 +137,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x] LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -166,7 +166,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM [DELETE FROM t RETURNING x] LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -196,7 +196,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM [UPDATE t SET x = x + 1 RETURNING x] LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -229,7 +229,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM [UPSERT INTO t VALUES (2), (3) RETURNING x] LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -259,7 +259,7 @@ distribution: local
 query T
 EXPLAIN SELECT count(*) FROM [INSERT INTO t SELECT * FROM t2 RETURNING x]
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -287,7 +287,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x], t
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -325,7 +325,7 @@ EXPLAIN WITH a AS (INSERT INTO t SELECT * FROM t2 RETURNING x),
              b AS (INSERT INTO t SELECT x+1 FROM a RETURNING x)
         SELECT * FROM b LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -371,7 +371,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x]
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -399,7 +399,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO t SELECT x+1 FROM [INSERT INTO t SELECT * FROM t2 RETURNING x]
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -431,7 +431,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x+10 AS r] WHERE r < 3 LIMIT 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -466,7 +466,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x+10 AS r] WHERE r < 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │

@@ -401,7 +401,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lV1v6jgQhu_3V
 query T
 EXPLAIN (DISTSQL) SELECT max(a), min(b) FROM data HAVING min(b) > 2
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • root
 │
@@ -699,7 +699,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyklVtvokAYhu_3V
 query T
 EXPLAIN (DISTSQL) SELECT max(t.a), min(t.b), avg(t.c)  FROM (VALUES (1, 2, 3), (4, 5, 6), (7, 8, 0)) AS t(a, b, c) WHERE b > 3
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • group (scalar)
 │ estimated row count: 1
@@ -716,7 +716,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9v0zwUh-_fT
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, '222'), (2, '444')) t1(a,b) JOIN (VALUES (1, 100.0), (3, 32.0)) t2(a,b) ON t1.a = t2.a
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • hash join
 │ estimated row count: 2
@@ -1079,7 +1079,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMl1tv4kYUx9_7K
 query T
 EXPLAIN (DISTSQL) SELECT array_agg((a, a)) FROM data
 ----
-distribution: local
+distribution: local (aggDistSQLBlocklist)
 ·
 • group (scalar)
 │

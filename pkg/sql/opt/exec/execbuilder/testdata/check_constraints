@@ -21,7 +21,7 @@ CREATE TABLE t9 (
 query T
 EXPLAIN (VERBOSE) UPDATE t9 SET b = b + 1 WHERE a = 5
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -54,7 +54,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t9 SET a = 2 WHERE a = 5
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update

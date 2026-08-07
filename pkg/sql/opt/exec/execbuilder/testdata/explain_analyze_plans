@@ -298,7 +298,7 @@ EXPLAIN ANALYZE (DISTSQL) EXPLAIN SELECT 1
 query T
 EXPLAIN (DISTSQL) SELECT sum(k) FROM kv WHERE FALSE
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • group (scalar)
 │ estimated row count: 1

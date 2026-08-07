@@ -3,21 +3,21 @@
 query T
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • norows
 
 query T
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE NULL
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • norows
 
 query T
 EXPLAIN (PLAN, VERBOSE) SELECT 1 a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -28,7 +28,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE,PLAN) SELECT 1 a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -40,7 +40,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT 1 a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -74,14 +74,14 @@ EXPLAIN (TYPES) SELECT $1
 query T
 EXPLAIN CREATE DATABASE foo
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • create database
 
 query T
 EXPLAIN CREATE TABLE foo (x INT)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • create table
 
@@ -91,7 +91,7 @@ CREATE TABLE foo (x INT)
 query T
 EXPLAIN CREATE INDEX a ON foo(x)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • create index
 
@@ -101,7 +101,7 @@ CREATE DATABASE foo
 query T
 EXPLAIN DROP DATABASE foo
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • drop database
 
@@ -111,7 +111,7 @@ distribution: local
 query T
 SELECT * FROM [EXPLAIN SHOW JOBS] WHERE info NOT LIKE '%size%' AND info NOT LIKE '%filter%'
 ----
-distribution: local
+distribution: local (funcDistSQLBlocklist)
 ·
 • sort
 │ order: -column71,-created
@@ -160,21 +160,21 @@ CREATE INDEX a ON foo(x)
 query T
 EXPLAIN DROP INDEX foo@a
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • drop index
 
 query T
 EXPLAIN ALTER TABLE foo ADD COLUMN y INT
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • alter table
 
 query T
 EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • split
@@ -191,7 +191,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42) WITH EXPIRATION '2200-01-01 00:00:00.0'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • split
@@ -208,7 +208,7 @@ vectorized: true
 query T
 EXPLAIN ALTER TABLE foo RELOCATE VALUES (ARRAY[1], 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • relocate table
 │ index: foo@foo_pkey
@@ -219,7 +219,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) ALTER TABLE foo RELOCATE VALUES (ARRAY[1], 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • relocate table
@@ -236,7 +236,7 @@ vectorized: true
 query T
 EXPLAIN ALTER INDEX foo@a RELOCATE VALUES (ARRAY[1], 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • relocate table
 │ index: foo@a
@@ -247,7 +247,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) ALTER INDEX foo@a RELOCATE VALUES (ARRAY[1], 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • relocate table
@@ -264,14 +264,14 @@ vectorized: true
 query T
 EXPLAIN DROP TABLE foo
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • drop table
 
 query T
 EXPLAIN ALTER RANGE 20+2 RELOCATE FROM 30+3 TO 40+4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • relocate range
 │ replicas: VOTERS
@@ -284,7 +284,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) ALTER RANGE 20+2 RELOCATE LEASE TO 40+4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • relocate range
@@ -301,7 +301,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) ALTER RANGE 20+2 RELOCATE FROM 30+3 TO 40+4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • relocate range
@@ -319,7 +319,7 @@ vectorized: true
 query T
 EXPLAIN ALTER RANGE RELOCATE FROM 30+3 TO 40+4 FOR SELECT 20+2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • relocate range
 │ replicas: VOTERS
@@ -332,7 +332,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) ALTER RANGE RELOCATE FROM 30+3 TO 40+4 FOR SELECT 20+2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • relocate range
@@ -350,7 +350,7 @@ vectorized: true
 query T
 EXPLAIN SHOW DATABASES
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • sort
 │ order: +name
@@ -361,7 +361,7 @@ distribution: local
 query T
 SELECT * FROM [EXPLAIN SHOW TABLES] WHERE info NOT LIKE '%size%'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • sort
 │ order: +nspname,+relname
@@ -415,7 +415,7 @@ query T
 SELECT regexp_replace(info, 'classoid = [0-9]+', 'classoid = <oid>') AS info
 FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE info NOT LIKE '%size%'
 ----
-distribution: local
+distribution: local (oidProhibited, unsupportedPlanNode)
 ·
 • sort
 │ order: +nspname,+relname
@@ -484,7 +484,7 @@ distribution: local
 query T
 SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE info NOT LIKE '%size%'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • filter
 │ filter: variable = 'database'
@@ -495,7 +495,7 @@ distribution: local
 query T
 SELECT * FROM [EXPLAIN SHOW SCHEMAS] WHERE info NOT LIKE '%size%'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • sort
 │ order: +nspname
@@ -521,49 +521,49 @@ distribution: local
 query T
 SELECT * FROM [EXPLAIN SHOW TIME ZONE] WHERE info NOT LIKE '%size%'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • show
 
 query T
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION] WHERE info NOT LIKE '%size%'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • show
 
 query T
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_PRIORITY] WHERE info NOT LIKE '%size%'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • show
 
 query T
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS] WHERE info NOT LIKE '%size%'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • show
 
 query T
 SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE info NOT LIKE '%size%'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • show
 
 query T
 SELECT * FROM [EXPLAIN SHOW TRANSACTION PRIORITY] WHERE info NOT LIKE '%size%'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • show
 
 query T
 EXPLAIN SHOW COLUMNS FROM foo
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • sort
 │ order: +ordinal_position,+column_name,+crdb_sql_type,+is_nullable,+column_default,+generation_expression,+indices,+is_hidden
@@ -594,7 +594,7 @@ distribution: local
 query T
 SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE info NOT LIKE '%size%'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -648,7 +648,7 @@ distribution: local
 query T
 EXPLAIN SHOW INDEX FROM foo
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • sort
 │ order: +index_name,+seq_in_index
@@ -695,7 +695,7 @@ distribution: local
 query T
 EXPLAIN SHOW INDEX FROM DATABASE test
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • sort
 │ order: +table_name,+index_name,+non_unique
@@ -734,7 +734,7 @@ distribution: local
 query T
 EXPLAIN SELECT pg_get_indexdef(oid, 1, true) FROM pg_class WHERE relkind = 'i' LIMIT 1
 ----
-distribution: local
+distribution: local (routineProhibited, unsupportedPlanNode)
 ·
 • render
 │
@@ -760,7 +760,7 @@ JOIN "".crdb_internal.table_indexes AS ti
   ON (si.table_name = ti.descriptor_name) AND (si.index_name = ti.index_name)
 WHERE column_name != 'rowid'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • render
 │
@@ -813,7 +813,7 @@ DROP TABLE table_2
 query T
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • sort
 │ order: +conname,+constraint_type,+condef,+convalidated
@@ -851,7 +851,7 @@ ANALYZE system.role_members
 query T retry
 EXPLAIN SHOW USERS
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 3
@@ -911,7 +911,7 @@ CREATE SEQUENCE select_test
 query T
 EXPLAIN (VERBOSE) SELECT * FROM select_test
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • sequence select
@@ -921,7 +921,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT last_value FROM select_test
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • project
@@ -941,7 +941,7 @@ CREATE TABLE t (
 query T
 EXPLAIN INSERT INTO t VALUES (1, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: t(k, v)
@@ -954,7 +954,7 @@ INSERT INTO t VALUES (1, 2)
 query T
 EXPLAIN SELECT * FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -964,7 +964,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -976,7 +976,7 @@ vectorized: true
 query T
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -989,7 +989,7 @@ CREATE TABLE t2 (x INT PRIMARY KEY)
 query T
 EXPLAIN (PLAN) SELECT * FROM t INNER LOOKUP JOIN t2 ON t.k = t2.x
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: t2@t2_pkey
@@ -1004,7 +1004,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1021,7 +1021,7 @@ vectorized: true
 query T
 EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • values
   size: 3 columns, 2 rows
@@ -1029,7 +1029,7 @@ distribution: local
 query T
 EXPLAIN VALUES (1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • values
   size: 1 column, 1 row
@@ -1037,7 +1037,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
 ----
-distribution: local
+distribution: local (ordinalityProhibited)
 vectorized: true
 ·
 • limit
@@ -1058,7 +1058,7 @@ vectorized: true
 query T
 EXPLAIN SELECT DISTINCT v FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: v
@@ -1071,7 +1071,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • limit
@@ -1099,7 +1099,7 @@ CREATE TABLE tc (a INT, b INT, INDEX c(a), FAMILY "primary" (a, b, rowid))
 query T
 EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -1128,7 +1128,7 @@ SET index_recommendations_enabled = 'false'
 query T
 EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -1158,7 +1158,7 @@ SET index_recommendations_enabled = 'true'
 query T
 EXPLAIN SELECT * FROM system.table_statistics WHERE name = 'foo'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: name = 'foo'
@@ -1171,7 +1171,7 @@ distribution: local
 query T
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -1186,7 +1186,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT 42 AS a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -1197,7 +1197,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT * FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1209,7 +1209,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES,VERBOSE) SELECT k FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1221,7 +1221,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT * FROM t WHERE v > 123
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1242,7 +1242,7 @@ index recommendations: 1
 query T
 EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -1258,7 +1258,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • norows
@@ -1267,7 +1267,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • delete
@@ -1297,7 +1297,7 @@ index recommendations: 1
 query T
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • update
@@ -1331,7 +1331,7 @@ index recommendations: 1
 query T
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union
@@ -1351,7 +1351,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT DISTINCT k FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1363,7 +1363,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT v FROM t ORDER BY v
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -1384,7 +1384,7 @@ index recommendations: 1
 query T
 EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1400,7 +1400,7 @@ CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
 query T
 EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1432,7 +1432,7 @@ CREATE TABLE another_db.sc.t (
 query T
 EXPLAIN SELECT * FROM another_db.sc.t WHERE a = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: a = 1
@@ -1460,7 +1460,7 @@ USE test;
 query T
 EXPLAIN (TYPES) SELECT abs(2-3) AS a
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -1472,7 +1472,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -2131,7 +2131,7 @@ distribute
 query T
 EXPLAIN SELECT string_agg(x, y) FROM (VALUES ('foo', 'foo'), ('bar', 'bar')) t(x, y)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (scalar)
 │ estimated row count: 1
@@ -2142,7 +2142,7 @@ distribution: local
 query T
 EXPLAIN SELECT corr(a, b) FROM tc;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (scalar)
 │
@@ -2159,7 +2159,7 @@ WITH
   b AS MATERIALIZED (EXPLAIN SELECT k, v FROM t)
 SELECT * FROM a, b
 ----
-NULL  distribution: local
+NULL  distribution: local (distributing disabled)
 NULL  ·
 NULL  • scan
 NULL    missing stats
@@ -2170,7 +2170,7 @@ NULL    spans: FULL SCAN
 query T
 EXPLAIN EXPLAIN SELECT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • explain
 
@@ -2181,7 +2181,7 @@ EXPLAIN (VERBOSE) EXPLAIN ANALYZE (DISTSQL) SELECT 1
 query T
 EXPLAIN SELECT * FROM t WHERE k IN (10, 20, 30, 40, 50, 60, 70, 80)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -2202,7 +2202,7 @@ CREATE TABLE u (
 query T
 EXPLAIN UPSERT INTO u VALUES (1, 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • upsert
 │ into: u(k, v)
@@ -2223,7 +2223,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO u VALUES (1, 1) ON CONFLICT DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert
 │ into: u(k, v)
@@ -2253,7 +2253,7 @@ CREATE TABLE ab (a INT, b INT)
 query T
 EXPLAIN (VERBOSE) SELECT attnum FROM pg_attribute WHERE attrelid = 'ab'::regclass AND attname = 'b';
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • project
@@ -2289,7 +2289,7 @@ ALTER TABLE percent INJECT STATISTICS '[
 query T
 EXPLAIN SELECT * FROM percent
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1,000,000 (100% of the table; stats collected <hidden> ago)
@@ -2299,7 +2299,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 AND 150000
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 150,000 (15% of the table; stats collected <hidden> ago)
@@ -2309,7 +2309,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 AND 20000
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 20,000 (2.0% of the table; stats collected <hidden> ago)
@@ -2319,7 +2319,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 AND 1234
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1,234 (0.12% of the table; stats collected <hidden> ago)
@@ -2329,7 +2329,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 AND 980
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 980 (0.10% of the table; stats collected <hidden> ago)
@@ -2339,7 +2339,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 and 100
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 100 (0.01% of the table; stats collected <hidden> ago)
@@ -2349,7 +2349,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 and 99
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 99 (<0.01% of the table; stats collected <hidden> ago)
@@ -2359,7 +2359,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM percent WHERE a = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
@@ -2370,7 +2370,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO t2 SELECT x FROM t2 WHERE false
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • insert fast path
   into: t2(x)
@@ -2585,7 +2585,7 @@ ALTER TABLE very_large_table INJECT STATISTICS '[
 query T
 EXPLAIN SELECT t1.k FROM very_large_table AS t1, very_large_table AS t2;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • cross join
 │ estimated row count: 9,223,372,036,854,775,807
@@ -2613,7 +2613,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t_float
                  31, 32, 33, 34, 35, 36, 37, 38, 39, 40
                 );
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -2647,7 +2647,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT k FROM t_hints WHERE k >= 100
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • filter
@@ -2661,7 +2661,7 @@ statement hints: 1
 query T
 EXPLAIN (VERBOSE) SELECT k FROM t_hints WHERE k >= 100
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 statement hints: 1
 ·

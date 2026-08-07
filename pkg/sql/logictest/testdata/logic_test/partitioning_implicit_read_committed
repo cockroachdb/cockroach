@@ -193,7 +193,7 @@ SELECT * FROM overwrite ORDER BY pk
 query T
 EXPLAIN INSERT INTO t VALUES (1, 'two', 3, 4, 5)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: t(pk, a, b, c, d, j)
@@ -227,7 +227,7 @@ UPDATE t SET pk = 1 WHERE c = 6;
 query T
 EXPLAIN UPDATE t SET c = 4 WHERE pk = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: t
@@ -266,7 +266,7 @@ UPDATE t SET c = 4 WHERE pk = 2
 query T
 EXPLAIN UPSERT INTO t VALUES (1, 'five', 3, 4, 15)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • upsert
 │ into: t(pk, a, b, c, d, j)
@@ -309,7 +309,7 @@ UPSERT INTO t VALUES (1, 'five', 3, 4, 15)
 query T
 EXPLAIN INSERT INTO t VALUES (1, 'three', 3, 4, 15) ON CONFLICT DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • insert
 │ into: t(pk, a, b, c, d, j)
@@ -342,7 +342,7 @@ INSERT INTO t VALUES (1, 'three', 3, 4, 15) ON CONFLICT DO NOTHING
 query T
 EXPLAIN INSERT INTO t VALUES (1, 'one', 3, 4, 5) ON CONFLICT (pk) DO UPDATE SET d = t.d + 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • upsert
 │ into: t(pk, a, b, c, d, j)

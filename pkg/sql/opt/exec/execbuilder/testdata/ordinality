@@ -6,7 +6,7 @@ CREATE TABLE foo (x CHAR PRIMARY KEY); INSERT INTO foo(x) VALUES ('a'), ('b')
 query T
 EXPLAIN (VERBOSE) SELECT max(ordinality) FROM foo WITH ORDINALITY
 ----
-distribution: local
+distribution: local (ordinalityProhibited)
 vectorized: true
 ·
 • group (scalar)
@@ -27,7 +27,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality
 ----
-distribution: local
+distribution: local (ordinalityProhibited)
 vectorized: true
 ·
 • filter
@@ -49,7 +49,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality DESC
 ----
-distribution: local
+distribution: local (ordinalityProhibited)
 vectorized: true
 ·
 • sort
@@ -76,7 +76,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
 ----
-distribution: local
+distribution: local (ordinalityProhibited)
 vectorized: true
 ·
 • ordinality
@@ -94,7 +94,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
 ----
-distribution: local
+distribution: local (ordinalityProhibited)
 vectorized: true
 ·
 • filter

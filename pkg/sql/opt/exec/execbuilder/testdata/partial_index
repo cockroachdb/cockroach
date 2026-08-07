@@ -36,7 +36,7 @@ CREATE TABLE vec (
 query T
 EXPLAIN SELECT b FROM t WHERE b > 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -46,7 +46,7 @@ distribution: local
 query T
 EXPLAIN SELECT t1.a FROM t t1 INNER LOOKUP JOIN t t2 ON t1.a = t2.b AND t2.b > 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: t@b_partial (partial index)
@@ -60,7 +60,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -70,7 +70,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c = 'foo'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: c = 'foo'
@@ -86,7 +86,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: inv@inv_pkey
@@ -111,7 +111,7 @@ CREATE TABLE b (b INT, INDEX (b) WHERE b IS NOT NULL)
 query T
 EXPLAIN SELECT * FROM a JOIN b ON a = b
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • merge join
 │ equality: (a) = (b)
@@ -165,7 +165,7 @@ CREATE TABLE t70116 (
 query T
 EXPLAIN SELECT count(1) FROM t70116@a_idx WHERE b > 0
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (scalar)
 │
@@ -1089,7 +1089,7 @@ Del (locking) /Table/116/1/20/0
 query T
 EXPLAIN SELECT a FROM vec@i WHERE c IN ('foo', 'bar') ORDER BY b <-> '[1,2]' LIMIT 10
 ----
-distribution: local
+distribution: local (vectorSearchProhibited)
 ·
 • top-k
 │ order: +column8

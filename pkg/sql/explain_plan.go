@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -63,7 +64,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		// Note that we delay adding the annotation about the distribution until
 		// after the plan is finalized (when the physical plan is successfully
 		// created).
-		distribution, _ := params.p.getPlanDistribution(params.ctx, plan.main, notPostquery)
+		distribution, _, reason := params.p.getPlanDistribution(params.ctx, plan.main, notPostquery)
 
 		outerSubqueries := params.p.curPlan.subqueryPlans
 		distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
@@ -83,13 +84,18 @@ func (e *explainPlanNode) startExec(params runParams) error {
 				}
 				return err
 			}
-			ob.AddDistribution(distribution.String())
+			ob.AddDistribution(distributionWithReason(distribution, reason))
 			// For regular EXPLAIN, simply skip emitting the "vectorized" information.
 		} else {
 			// There might be an issue making the physical plan, but that should not
 			// cause an error or panic, so swallow the error. See #40677 for example.
 			finalizePlanWithRowCount(params.ctx, planCtx, physicalPlan, plan.mainRowCount)
-			ob.AddDistribution(physicalPlan.Distribution.String())
+			finalDist := physicalPlan.Distribution
+			finalReason := reason
+			if finalDist == physicalplan.LocalPlan && distribution.WillDistribute() {
+				finalReason = "single flow moved to gateway"
+			}
+			ob.AddDistribution(distributionWithReason(finalDist, finalReason))
 			flows, flowsCleanup := physicalPlan.GenerateFlowSpecs()
 			defer flowsCleanup(flows)
 
@@ -263,6 +269,17 @@ func closeExplainNode(ctx context.Context, n exec.Node) {
 	default:
 		panic(errors.AssertionFailedf("unknown plan node type %T", n))
 	}
+}
+
+// distributionWithReason formats a plan distribution with an optional reason
+// string. When the reason is non-empty it is appended in parentheses, e.g.
+// "local (rowLevelLockingProhibited)".
+func distributionWithReason(dist physicalplan.PlanDistribution, reason string) string {
+	s := dist.String()
+	if reason != "" {
+		s += " (" + reason + ")"
+	}
+	return s
 }
 
 // closeExplainPlan closes the provided explain plan.

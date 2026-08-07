@@ -292,7 +292,7 @@ Scan /Table/108/2/2.01/3.001/0, /Table/108/2/2.01/3.001/2/1
 query T
 EXPLAIN SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats

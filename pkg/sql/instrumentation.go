@@ -146,10 +146,11 @@ type instrumentationHelper struct {
 
 	queryLevelStatsWithErr *execstats.QueryLevelStatsWithErr
 
-	explainPlan      *explain.Plan
-	distribution     physicalplan.PlanDistribution
-	vectorized       bool
-	containsMutation bool
+	explainPlan        *explain.Plan
+	distribution       physicalplan.PlanDistribution
+	distributionReason string
+	vectorized         bool
+	containsMutation   bool
 	// generic is true if the plan can be fully-optimized once and re-used
 	// without re-optimization. Plans without placeholders and fold-able stable
 	// expressions, and plans utilizing the placeholder fast-path are always
@@ -866,9 +867,12 @@ func (ih *instrumentationHelper) RecordExplainPlan(explainPlan *explain.Plan) {
 
 // RecordPlanInfo records top-level information about the plan.
 func (ih *instrumentationHelper) RecordPlanInfo(
-	distribution physicalplan.PlanDistribution, vectorized, containsMutation, generic, optimized bool,
+	distribution physicalplan.PlanDistribution,
+	distributionReason string,
+	vectorized, containsMutation, generic, optimized bool,
 ) {
 	ih.distribution = distribution
+	ih.distributionReason = distributionReason
 	ih.vectorized = vectorized
 	ih.containsMutation = containsMutation
 	ih.generic = generic
@@ -891,7 +895,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	}
 	ob.AddPlanningTime(phaseTimes.GetPlanningLatency())
 	ob.AddExecutionTime(phaseTimes.GetRunLatency())
-	ob.AddDistribution(ih.distribution.String())
+	ob.AddDistribution(distributionWithReason(ih.distribution, ih.distributionReason))
 	ob.AddVectorized(ih.vectorized)
 	ob.AddPlanType(ih.generic, ih.optimized)
 	ob.AddTableStatsMode(ih.tableStatsRollout.String())

@@ -17,7 +17,7 @@ EXPLAIN SELECT
   ARRAY(SELECT (o_id, ship) FROM o WHERE o.c_id = c.c_id ORDER BY o_id)
 FROM c ORDER BY c_id
 ----
-distribution: local
+distribution: local (aggDistSQLBlocklist)
 ·
 • sort
 │ order: +c_id

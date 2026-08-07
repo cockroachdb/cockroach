@@ -17,7 +17,7 @@ ALTER TABLE sharded_primary INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE, TYPES) INSERT INTO sharded_primary (a) VALUES (1), (2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -46,7 +46,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM sharded_primary WHERE (a % 2) = 0 ORDER BY a LIMIT 10;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • limit
@@ -296,7 +296,7 @@ CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH (bucket_count=
 query T
 EXPLAIN (VERBOSE, TYPES) INSERT INTO sharded_secondary (a) VALUES (1), (2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -327,7 +327,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM sharded_secondary WHERE a > 100 ORDER BY a LIMIT 10;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • limit
@@ -525,7 +525,7 @@ EXPLAIN (VERBOSE) SELECT * FROM sharded_primary_with_many_column_types WHERE (i2
                          ('127.0.0.' || 1::STRING)::INET,
                          1::VARBIT(1));
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -620,7 +620,7 @@ CREATE TABLE t_hash_indexed (
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -637,7 +637,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t_hash_indexed SET a = 4321 WHERE a = 1234;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -666,7 +666,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_hash_indexed VALUES (4321, 8765);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -689,7 +689,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (a) DO UPDATE SET a = 4321
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -746,7 +746,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -783,7 +783,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (a) DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -837,7 +837,7 @@ CREATE UNIQUE INDEX idx_t_hash_indexed ON t_hash_indexed (b) USING HASH WITH (bu
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -854,7 +854,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t_hash_indexed SET b = 8765 WHERE a = 4321;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -883,7 +883,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO t_hash_indexed VALUES (4321, 8765);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -932,7 +932,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (a) DO UPDATE SET b = 8765
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -994,7 +994,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (b) DO UPDATE SET b = 8765
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -1056,7 +1056,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (111, 222), (333, 444) ON CONFLICT (b) DO UPDATE SET b = excluded.b
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -1118,7 +1118,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -1177,7 +1177,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (111, 222), (333, 444) ON CONFLICT DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -1238,7 +1238,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (b) DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -1278,7 +1278,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (111, 222), (333, 444) ON CONFLICT (b) DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -1338,7 +1338,7 @@ CREATE TABLE t_child_pk (
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_child_pk VALUES (123, 321);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -1408,7 +1408,7 @@ CREATE TABLE t_child_sec (
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_child_sec VALUES (123, 321);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -1474,7 +1474,7 @@ query T
 EXPLAIN (VERBOSE)
 INSERT INTO t130334 VALUES (1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -1493,7 +1493,7 @@ query T
 EXPLAIN (VERBOSE)
 UPSERT INTO t130334 VALUES (1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -1547,7 +1547,7 @@ query T
 EXPLAIN (VERBOSE)
 UPDATE t130334 SET a = 1 WHERE true
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update

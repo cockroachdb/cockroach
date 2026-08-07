@@ -1406,7 +1406,7 @@ SELECT crdb_internal.clear_table_stats_cache();
 query T
 EXPLAIN SELECT * FROM ka WHERE a > 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 4 (40% of the table; stats collected <hidden> ago)
@@ -1416,7 +1416,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM ka WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -1429,7 +1429,7 @@ SET optimizer_use_merged_partial_statistics = on
 query T
 EXPLAIN SELECT * FROM ka WHERE a > 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 5 (45% of the table; stats collected <hidden> ago)
@@ -1439,7 +1439,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM ka WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (9.1% of the table; stats collected <hidden> ago)
@@ -1471,7 +1471,7 @@ SELECT crdb_internal.clear_table_stats_cache();
 query T
 EXPLAIN SELECT * FROM ka WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats

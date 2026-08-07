@@ -11,7 +11,7 @@ CREATE TABLE twocolumn (x INT, y INT); INSERT INTO twocolumn(x, y) VALUES (44,51
 query T
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • hash join
 │ equality: (x) = (x)
@@ -29,7 +29,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • hash join
 │ equality: (x) = (y)
@@ -47,7 +47,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • cross join
 │
@@ -67,7 +67,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • hash join
 │ equality: (x) = (y)
@@ -85,7 +85,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • hash join
 │ equality: (x) = (y)
@@ -108,7 +108,7 @@ EXPLAIN SELECT * FROM
   JOIN twocolumn AS c (d, e) ON a.b = c.d AND c.d = onecolumn.x
 LIMIT 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • limit
 │ count: 1
@@ -146,7 +146,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • cross join (inner)
@@ -168,7 +168,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -194,7 +194,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -220,7 +220,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -246,7 +246,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, 2 two FROM onecolumn) NATURAL FULL JOIN (SELECT x, y+1 plus1 FROM twocolumn)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -287,7 +287,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
                   INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -387,7 +387,7 @@ EXPLAIN (VERBOSE) SELECT
            con.conname,
            pos.n
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • project
@@ -532,7 +532,7 @@ CREATE TABLE cards(id INT PRIMARY KEY, cust INT NOT NULL REFERENCES customers(id
 query T
 EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cust
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • render
 │
@@ -553,7 +553,7 @@ CREATE TABLE pairs (a INT, b INT)
 query T
 EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • hash join
 │ equality: (b) = (n)
@@ -573,7 +573,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -607,7 +607,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a * b / 2 AS div, n, sq FROM pairs, square) WHERE div = sq
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -646,7 +646,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -678,7 +678,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -720,7 +720,7 @@ SELECT *
   FROM (SELECT * FROM pairs LEFT JOIN square ON b = sq AND a > 1 AND n < 6)
  WHERE b > 1 AND (n IS NULL OR n > 1) AND (n IS NULL OR a  < sq)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -762,7 +762,7 @@ SELECT *
   FROM (SELECT * FROM pairs RIGHT JOIN square ON b = sq AND a > 1 AND n < 6)
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -800,7 +800,7 @@ SELECT *
   FROM (SELECT * FROM pairs JOIN square ON b = sq AND a > 1 AND n < 6)
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (inner)
@@ -836,7 +836,7 @@ CREATE TABLE t2 (col3 INT, y INT, x INT, col4 INT)
 query T
 EXPLAIN (VERBOSE) SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -875,7 +875,7 @@ CREATE TABLE pkBAD (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,d))
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (inner)
@@ -900,7 +900,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pkBA NATURAL JOIN pkBAD
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -931,7 +931,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -960,7 +960,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a = r.a AND l.b = r.b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • merge join (inner)
@@ -995,7 +995,7 @@ CREATE TABLE str2 (a INT PRIMARY KEY, s STRING COLLATE en_u_ks_level1)
 query T
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1021,7 +1021,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1047,7 +1047,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 RIGHT OUTER JOIN str2 USING(s)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -1076,7 +1076,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 FULL OUTER JOIN str2 USING(s)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -1107,7 +1107,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM str1 RIGHT OUTER JOIN str2 USING(a, s)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -1147,7 +1147,7 @@ CREATE TABLE xyv (x INT, y INT, v INT, PRIMARY KEY(x,y,v))
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1176,7 +1176,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1205,7 +1205,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1234,7 +1234,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1273,7 +1273,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • merge join (inner)
@@ -1299,7 +1299,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • merge join (inner)
@@ -1325,7 +1325,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • merge join (left outer)
@@ -1351,7 +1351,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • merge join (left outer)
@@ -1380,7 +1380,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1409,7 +1409,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1438,7 +1438,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1476,7 +1476,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • merge join (left outer)
@@ -1502,7 +1502,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • merge join (left outer)
@@ -1529,7 +1529,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1569,7 +1569,7 @@ CREATE TABLE r (a INT PRIMARY KEY, b2 INT, FAMILY (a))
 query T
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1598,7 +1598,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • merge join (left outer)
@@ -1624,7 +1624,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1653,7 +1653,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • merge join (left outer)
@@ -1699,7 +1699,7 @@ CREATE TABLE abg (
 query T
 EXPLAIN SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR ((a,b)=(1,2) AND c < 6) OR ((a,b,c)=(1,2,6) AND d > 8))
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • merge join
 │ equality: (a, b) = (a, b)
@@ -1736,7 +1736,7 @@ CREATE TABLE bar (
 query T
 EXPLAIN (VERBOSE) SELECT * FROM foo NATURAL JOIN bar
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1764,7 +1764,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (b)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1791,7 +1791,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1819,7 +1819,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b, c)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1847,7 +1847,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.b = bar.b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • cross join (inner)
@@ -1871,7 +1871,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (inner)
@@ -1895,7 +1895,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.b = bar.b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • cross join (inner)
@@ -1919,7 +1919,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (inner)
@@ -1944,7 +1944,7 @@ vectorized: true
 query T
 EXPLAIN SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = bar.d
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • hash join
 │ equality: (a, c) = (a, c)
@@ -1976,7 +1976,7 @@ CREATE TABLE zigzag (
 query T
 EXPLAIN SELECT a,b,c FROM zigzag@{NO_ZIGZAG_JOIN} WHERE b = 5 AND c = 6.0
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: c = 6.0
@@ -1995,7 +1995,7 @@ SET enable_zigzag_join = false
 query T
 EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: c = 6.0
@@ -2016,7 +2016,7 @@ SET enable_zigzag_join = true
 query T
 EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • zigzag join
   pred: (b = 5) AND (c = 6.0)
@@ -2032,7 +2032,7 @@ distribution: local
 query T
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: zigzag@zigzag_pkey
@@ -2052,7 +2052,7 @@ distribution: local
 query T
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: zigzag@zigzag_pkey
@@ -2086,7 +2086,7 @@ CREATE TABLE zigzag2 (
 query T
 EXPLAIN SELECT * FROM zigzag2 WHERE a = 1 AND b = 2 AND c IS NULL
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: c IS NULL
@@ -2107,7 +2107,7 @@ RESET enable_zigzag_join
 query T
 EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • merge join
 │ equality: (x) = (x)
@@ -2132,7 +2132,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM onecolumn NATURAL INNER MERGE JOIN twocolumn
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • merge join
 │ equality: (x) = (x)
@@ -2157,7 +2157,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM onecolumn CROSS MERGE JOIN twocolumn WHERE onecolumn.x = twocolumn.x
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • merge join
 │ equality: (x) = (x)
@@ -2191,7 +2191,7 @@ EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn ON onecolumn.x > twoc
 query T
 EXPLAIN SELECT * FROM cards LEFT OUTER HASH JOIN customers ON customers.id = cards.cust
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • render
 │

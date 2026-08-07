@@ -164,7 +164,7 @@ WHERE table_id = 0
 AND kind = 1
 FOR UPDATE OF table_statistics_locks
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 ·
 • group (scalar)
 │

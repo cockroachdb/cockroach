@@ -13,7 +13,7 @@ CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (d, e));
 query T
 EXPLAIN SELECT a, b, c FROM abc WHERE EXISTS (SELECT * FROM def WHERE a=d OR a=e)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: a, b
@@ -59,7 +59,7 @@ distribution: local
 query T
 EXPLAIN SELECT c FROM abc WHERE EXISTS (SELECT * FROM def WHERE a=d OR a=e)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: a, b
@@ -105,7 +105,7 @@ distribution: local
 query T
 EXPLAIN SELECT a, b, c FROM abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=d OR a=e)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • intersect all
 │
@@ -139,7 +139,7 @@ distribution: local
 query T
 EXPLAIN SELECT c FROM abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=d OR a=e)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • intersect all
 │
@@ -173,7 +173,7 @@ distribution: local
 query T
 EXPLAIN SELECT a, b, c FROM abc, def WHERE a=d OR a=e
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: a, b, d, e
@@ -210,7 +210,7 @@ distribution: local
 query T
 EXPLAIN SELECT c FROM abc, def WHERE a=d OR a=e
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: a, b, d, e
