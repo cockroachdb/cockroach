@@ -49,6 +49,11 @@ be configured independently. `--gce-project` selects where VMs are created.
 account, and the shared artifacts bucket. The metadata and artifacts defaults
 can be overridden with `--gce-metadata-project` and `--gce-artifacts-bucket`.
 
+`roachprod gc` is fail-closed: it defaults to all supported remote cloud
+providers and returns an error if any selected provider is inactive or cannot
+be inventoried. Ad-hoc runs that intentionally target only configured
+providers must select them explicitly with `--clouds`.
+
 To create a private one-node smoke-test cluster using the staging
 infrastructure and verify its private DNS record:
 

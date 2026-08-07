@@ -55,10 +55,12 @@ go_test(
     ],
     embed = [":roachprod"],
     deps = [
+        "//pkg/roachprod/cloud",
         "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
+        "//pkg/util/syncutil",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

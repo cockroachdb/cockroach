@@ -292,6 +292,9 @@ func (n *sdkDNSProvider) ListRecords(ctx context.Context) ([]vm.DNSRecord, error
 func (n *sdkDNSProvider) deleteRecords(
 	ctx context.Context, zone string, recordType vm.DNSType, names ...string,
 ) error {
+	if len(names) == 0 {
+		return nil
+	}
 	for _, name := range names {
 		err := n.withRecordLock(name, func() error {
 			// First, list the records to delete
