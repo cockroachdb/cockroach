@@ -13,11 +13,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -220,8 +218,6 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 func (m *rowLevelTTLMetrics) fetchStatistics(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	user username.SQLUsername,
-	descOverrides map[uint32]sessiondata.DescriptorOverride,
 	relationName string,
 	details jobspb.RowLevelTTLDetails,
 	aostDuration time.Duration,
@@ -274,7 +270,7 @@ func (m *rowLevelTTLMetrics) fetchStatistics(
 			ctx,
 			c.opName,
 			nil,
-			getInternalExecutorOverride(user, descOverrides, sessiondatapb.SystemLowQoS),
+			getInternalExecutorOverride(sessiondatapb.SystemLowQoS),
 			c.query,
 			c.args...,
 		)
