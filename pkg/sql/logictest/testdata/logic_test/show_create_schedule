@@ -1,0 +1,20 @@
+# LogicTest: local
+
+# SHOW CREATE SCHEDULE requires the VIEWCLUSTERMETADATA privilege.
+
+statement error user testuser does not have VIEWCLUSTERMETADATA privilege
+SHOW CREATE SCHEDULE 123
+
+user root
+
+# Regression test: SHOW CREATE SCHEDULE should return an error for
+# non-existent schedule IDs instead of panicking (#164710).
+statement error schedule with id 999999 does not exist
+SHOW CREATE SCHEDULE 999999
+
+# SHOW CREATE ALL SCHEDULES should return empty results when there
+# are no schedules.
+query IT colnames
+SHOW CREATE ALL SCHEDULES
+----
+schedule_id  create_statement
