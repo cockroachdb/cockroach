@@ -161,6 +161,13 @@ type VM struct {
 	ProviderAccountID string `json:"provider_account_id"`
 	PrivateIP         string `json:"private_ip"`
 	PublicIP          string `json:"public_ip"`
+	// AddressMode is the resolved address mode of the VM. It is populated by GCE
+	// managed-instance-group discovery, derived from the saved instance
+	// template's network access-config (a private template has no external
+	// access-config). It is currently unset for other providers and paths; the
+	// zero value normalizes to public. When a durable address-mode label lands
+	// (see cockroachdb/cockroach#173112), discovery can read that instead.
+	AddressMode AddressMode `json:"address_mode"`
 	// NetworkTags contains provider network tags used to select transport or
 	// firewall behavior. It is empty for providers that do not expose them.
 	NetworkTags []string `json:"network_tags,omitempty"`

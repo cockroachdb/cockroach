@@ -520,6 +520,7 @@ func (jsonVM *jsonVM) toVM(project string, dnsDomain string) (ret *vm.VM) {
 		ProviderID:             jsonVM.Name,
 		ProviderAccountID:      projectName,
 		PublicIP:               publicIP,
+		AddressMode:            inferAddressMode(publicIP),
 		NetworkTags:            jsonVM.Tags.Items,
 		PublicDNS:              fmt.Sprintf("%s.%s", jsonVM.Name, dnsDomain),
 		PublicDNSZone:          dnsDomain,
@@ -2367,6 +2368,18 @@ func createInstanceTemplates(
 	return zonesInstanceTemplates, nil
 }
 
+// statefulIPArgs returns the stateful-IP flags for a managed instance group.
+// Private MIGs have no external address, so only internal IPs are made
+// stateful; public MIGs also preserve external IPs so they remain stable across
+// auto-healing, updates, and recreation.
+func statefulIPArgs(mode vm.AddressMode) []string {
+	args := []string{"--stateful-internal-ip", "enabled,auto-delete=on-permanent-instance-deletion"}
+	if mode != vm.AddressModePrivate {
+		args = append(args, "--stateful-external-ip", "enabled,auto-delete=on-permanent-instance-deletion")
+	}
+	return args
+}
+
 // createInstanceGroups creates an instance group in each zone, for the cluster
 func createInstanceGroups(
 	l *logger.Logger,
@@ -2379,11 +2392,11 @@ func createInstanceGroups(
 	// Note that we set the IP addresses to be stateful so that they remain the
 	// same when instances are auto-healed, updated, or recreated.
 	createGroupArgs := []string{"compute", "instance-groups", "managed", "create",
-		"--size", "0",
-		"--stateful-external-ip", "enabled,auto-delete=on-permanent-instance-deletion",
-		"--stateful-internal-ip", "enabled,auto-delete=on-permanent-instance-deletion",
+		"--size", "0"}
+	createGroupArgs = append(createGroupArgs, statefulIPArgs(opts.AddressMode)...)
+	createGroupArgs = append(createGroupArgs,
 		"--project", project,
-		groupName}
+		groupName)
 
 	// Determine the number of stateful disks the instance group should retain. If
 	// we don't use a local SSD, we have the number of persistent disks plus a
@@ -2456,9 +2469,6 @@ func (p *Provider) Create(
 		return nil, err
 	}
 	opts.AddressMode = addressMode
-	if providerOpts.Managed && addressMode == vm.AddressModePrivate {
-		return nil, errors.New("private address mode is not supported with --gce-managed yet")
-	}
 	var gcJob bool
 	for _, prj := range projectsWithGC {
 		if prj == p.GetProject() {
@@ -3102,12 +3112,27 @@ func loadBalancerResourceName(clusterName string, port int, resourceType string)
 // group. Additionally, a health check is created for the given port. A proxy is
 // used to support global load balancing. The different parts of the load
 // balancer are created sequentially, as they depend on each other.
-func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) error {
-	if err := checkSDKVersion("450.0.0" /* minVersion */, "required by load balancers"); err != nil {
-		return err
+// rejectPrivateManagedLoadBalancer refuses load-balancer creation for a private
+// MIG. Internal load balancing is tracked separately; until then we must not
+// create a public external frontend for a private cluster.
+func rejectPrivateManagedLoadBalancer(vms vm.List) error {
+	for _, v := range vms {
+		if v.AddressMode == vm.AddressModePrivate || v.PublicIP == "" {
+			return errors.New("load balancer creation is not supported for private managed instance groups yet")
+		}
 	}
+	return nil
+}
+
+func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) error {
 	if !isManaged(vms) {
 		return errors.New("load balancer creation is only supported for managed instance groups")
+	}
+	if err := rejectPrivateManagedLoadBalancer(vms); err != nil {
+		return err
+	}
+	if err := checkSDKVersion("450.0.0" /* minVersion */, "required by load balancers"); err != nil {
+		return err
 	}
 	project := vms[0].Project
 	clusterName, err := vms[0].ClusterName()
@@ -3400,8 +3425,11 @@ type jsonInstanceTemplate struct {
 		Labels            map[string]string `json:"labels"`
 		MachineType       string            `json:"machineType"`
 		NetworkInterfaces []struct {
-			Name    string `json:"name"`
-			Network string `json:"network"`
+			Name          string `json:"name"`
+			Network       string `json:"network"`
+			AccessConfigs []struct {
+				NatIP string `json:"natIP"`
+			} `json:"accessConfigs"`
 		} `json:"networkInterfaces"`
 		Scheduling struct {
 			AutomaticRestart  bool   `json:"automaticRestart"`
@@ -3540,6 +3568,41 @@ type PreservedStatePreservedNetworkIp struct {
 	}
 }
 
+// templateAddressMode derives the resolved address mode from a saved instance
+// template. A private MIG template is created with --no-address, so its first
+// network interface carries no access config; a public template carries one.
+// The template is the source of truth reused across grow/recreate, so mode is
+// never re-evaluated against current provider defaults.
+func templateAddressMode(t jsonInstanceTemplate) vm.AddressMode {
+	nics := t.Properties.NetworkInterfaces
+	if len(nics) > 0 && len(nics[0].AccessConfigs) == 0 {
+		return vm.AddressModePrivate
+	}
+	return vm.AddressModePublic
+}
+
+// inferAddressMode derives the resolved address mode of a discovered instance
+// from its public address. A private instance has no external access config and
+// therefore no public IP. This is used by the plain-instance discovery paths
+// (list/sync), which enumerate MIG members and standalone VMs alike, so the
+// resolved mode is populated consistently regardless of how a VM was created.
+func inferAddressMode(publicIP string) vm.AddressMode {
+	if publicIP == "" {
+		return vm.AddressModePrivate
+	}
+	return vm.AddressModePublic
+}
+
+// preservedNetworkIP returns the literal address for nic from a preserved-state
+// IP map, or "" if the map is nil or the entry/address is absent. Private MIGs
+// have no preserved external IP, so callers must tolerate a missing entry.
+func preservedNetworkIP(ips map[string]*PreservedStatePreservedNetworkIp, nic string) string {
+	if ip, ok := ips[nic]; ok && ip != nil {
+		return ip.IpAddress.Literal
+	}
+	return ""
+}
+
 // toVM converts a managed instance group instance to a vm.VM struct
 // based on data found in both the instance and the instance template.
 // TODO(ludo): arch and CPU platform are not available at this time,
@@ -3597,6 +3660,19 @@ func (j *managedInstanceGroupInstance) toVM(
 		}
 	}
 
+	privateIP := preservedNetworkIP(j.PreservedStateFromPolicy.InternalIPs, "nic0")
+	publicIP := preservedNetworkIP(j.PreservedStateFromPolicy.ExternalIPs, "nic0")
+	if privateIP == "" {
+		vmErrors = append(vmErrors, vm.NewVMError(vm.ErrBadNetwork))
+	}
+
+	var vpc string
+	if len(instanceTemplate.Properties.NetworkInterfaces) == 0 {
+		vmErrors = append(vmErrors, vm.NewVMError(vm.ErrBadNetwork))
+	} else {
+		vpc = lastComponent(instanceTemplate.Properties.NetworkInterfaces[0].Network)
+	}
+
 	return &vm.VM{
 		Name:                   j.Name,
 		CreatedAt:              timeutil.Now(),
@@ -3604,14 +3680,15 @@ func (j *managedInstanceGroupInstance) toVM(
 		Lifetime:               lifetime,
 		Preemptible:            instanceTemplate.Properties.Scheduling.Preemptible,
 		Labels:                 instanceTemplate.Properties.Labels,
-		PrivateIP:              j.PreservedStateFromPolicy.InternalIPs["nic0"].IpAddress.Literal,
+		PrivateIP:              privateIP,
 		Provider:               ProviderName,
 		DNSProvider:            ProviderName,
 		ProviderID:             lastComponent(j.Instance),
-		PublicIP:               j.PreservedStateFromPolicy.ExternalIPs["nic0"].IpAddress.Literal,
+		PublicIP:               publicIP,
 		PublicDNS:              fmt.Sprintf("%s.%s", j.Name, dnsDomain),
 		RemoteUser:             remoteUser,
-		VPC:                    lastComponent(instanceTemplate.Properties.NetworkInterfaces[0].Network),
+		AddressMode:            templateAddressMode(instanceTemplate),
+		VPC:                    vpc,
 		MachineType:            instanceTemplate.Properties.MachineType,
 		Zone:                   zone,
 		Project:                project,
