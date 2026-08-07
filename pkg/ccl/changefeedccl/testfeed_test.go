@@ -325,8 +325,18 @@ func (e *externalConnectionFeedFactory) Feed(
 		e.logger.Log("ran create external connection")
 		if err != nil {
 			e.logger.Log("error creating external connection:" + err.Error())
+			return err
 		}
-		return err
+		// This factory rewrites every sink into an external connection created
+		// as root. Grant USAGE to everyone so that a feed created by some other
+		// user does not fail on a connection the harness introduced.
+		grantStmt := fmt.Sprintf(
+			`GRANT USAGE ON EXTERNAL CONNECTION %s TO public`, randomExternalConnectionName)
+		if _, err := e.db.Exec(grantStmt); err != nil {
+			e.logger.Log("error granting usage on external connection:" + err.Error())
+			return err
+		}
+		return nil
 	}
 
 	args = append([]interface{}{c}, args...)
