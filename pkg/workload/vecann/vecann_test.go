@@ -42,6 +42,7 @@ func TestVecann(t *testing.T) {
 }
 
 func TestDatasetLoaderBucketName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	require.Equal(t, defaultBucketName, (&DatasetLoader{}).effectiveBucketName())
 	require.Equal(
 		t, "configured-fixture-bucket",
