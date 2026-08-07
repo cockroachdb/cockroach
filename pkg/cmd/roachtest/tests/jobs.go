@@ -168,8 +168,8 @@ func createTablesWithChangefeeds(
 		sqlDBs[i] = sqlutils.MakeSQLRunner(conn)
 		defer conn.Close() //nolint:deferloop
 	}
-
 	sqlDBs[0].Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true;`)
+
 	for i := 0; i < tableCount; i++ {
 		sqlDB := sqlDBs[rng.Intn(nodeCount)]
 		tableName := tableNamePrefix + fmt.Sprintf("%d", i)
