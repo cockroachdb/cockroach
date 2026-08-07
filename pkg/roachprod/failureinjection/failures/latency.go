@@ -131,11 +131,13 @@ sudo tc filter add dev ${NETWORK_IFACE} parent 1: protocol ip prio ${CLASS} u32 
 match ip dst {ip:%[5]d}/32 \
 match ip dport {pgport:%[5]d} 0xffff \
 flowid 1:${CLASS}
+`
 
+	addPublicFilterCmd = `
 # Same as above but with the public IP.
 sudo tc filter add dev ${NETWORK_IFACE} parent 1: protocol ip prio ${CLASS} u32 \
-match ip dst {ip:%[5]d:public}/32 \
-match ip dport {pgport:%[5]d} 0xffff \
+match ip dst {ip:%[1]d:public}/32 \
+match ip dport {pgport:%[1]d} 0xffff \
 flowid 1:${CLASS}
 `
 
@@ -154,6 +156,16 @@ NETWORK_IFACE=%[1]s
 sudo tc qdisc del dev ${NETWORK_IFACE} root
 `
 )
+
+func constructLatencyFilterCmd(
+	iface string, class, handle int, delay time.Duration, dest install.Node, includePublicIP bool,
+) string {
+	cmd := fmt.Sprintf(addFilterCmd, iface, class, handle, delay, dest)
+	if includePublicIP {
+		cmd += fmt.Sprintf(addPublicFilterCmd, dest)
+	}
+	return cmd
+}
 
 // findNextOpenClass returns the lowest available class number that
 // can be used to add a new latency rule.
@@ -178,6 +190,10 @@ func (f *NetworkLatency) Inject(ctx context.Context, l *logger.Logger, args Fail
 			if err != nil {
 				return err
 			}
+			hasPublicIP, err := f.hasPublicIP(dest)
+			if err != nil {
+				return err
+			}
 
 			// Enforce we don't have duplicate rules, as it complicates the removal process of filters
 			// and is something the user likely didn't intend.
@@ -193,7 +209,7 @@ func (f *NetworkLatency) Inject(ctx context.Context, l *logger.Logger, args Fail
 				if iface == "lo" {
 					continue
 				}
-				cmd += fmt.Sprintf(addFilterCmd, iface, class, handle, latency.Delay, dest)
+				cmd += constructLatencyFilterCmd(iface, class, handle, latency.Delay, dest, hasPublicIP)
 			}
 			l.Printf("Adding artificial latency from nodes %d to node %d", latency.Source, dest)
 			if err := f.Run(ctx, l, latency.Source, cmd); err != nil {

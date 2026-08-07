@@ -6,11 +6,49 @@
 package install
 
 import (
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
+
+func TestStageLibraries(t *testing.T) {
+	var mu syncutil.Mutex
+	var commands []string
+	c := &SyncedCluster{
+		Cluster: cloud.Cluster{VMs: vm.List{{}, {}}},
+		Nodes:   Nodes{1, 2},
+		sessionProvider: func(_ Node, cmd string) session {
+			mu.Lock()
+			commands = append(commands, cmd)
+			mu.Unlock()
+			return NewMockSession(DefaultMockSessionOptions())
+		},
+	}
+	l := nilLogger()
+	defer l.Close()
+
+	require.NoError(t, StageApplication(
+		context.Background(), l, c, "lib", "test-sha", "linux", vm.ArchAMD64, ".",
+	))
+	require.Len(t, commands, len(crdbLibraries)*len(c.Nodes))
+	for _, library := range crdbLibraries {
+		wantURL := "https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/" +
+			library + ".linux-gnu-amd64.test-sha.so"
+		matches := 0
+		for _, cmd := range commands {
+			if strings.Contains(cmd, wantURL) {
+				matches++
+				require.NotContains(t, cmd, "optional library")
+			}
+		}
+		require.Equal(t, len(c.Nodes), matches)
+	}
+}
 
 func TestURLsForApplication(t *testing.T) {
 	type args struct {

@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "failures",
@@ -18,5 +18,20 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "failures_test",
+    srcs = [
+        "latency_test.go",
+        "network_partition_test.go",
+    ],
+    embed = [":failures"],
+    deps = [
+        "//pkg/roachprod/cloud",
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/vm",
+        "@com_github_stretchr_testify//require",
     ],
 )
