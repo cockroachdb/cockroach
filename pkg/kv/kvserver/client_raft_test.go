@@ -6262,7 +6262,12 @@ func TestRaftPreVote(t *testing.T) {
 					Settings: st,
 					RaftConfig: base.RaftConfig{
 						RaftEnableCheckQuorum: true,
-						RaftTickInterval:      200 * time.Millisecond, // speed up test
+						// Leave RaftTickInterval at its default (500ms) rather than speeding
+						// up the test: the default election timeout (4-8 ticks = 2-4s) is on
+						// par with the store liveness support duration (3s), so both lease
+						// variants detect a missing leader on the same timescale. A shorter
+						// tick shrinks only the expiration variant's CheckQuorum margin to
+						// sub-second, which flakes under CI jitter. See #172864.
 					},
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
