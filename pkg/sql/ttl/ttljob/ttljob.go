@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -61,24 +59,6 @@ var replanStabilityWindow = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
-// runAsTableOwnerEnabled gates whether the TTL job runs its SELECT/DELETE/stats
-// statements as the TTL table's owner (with scoped descriptor overrides for the
-// foreign-key cascade closure) rather than as the internal node user. It exists
-// as an emergency opt-out: if the owner-based execution path misbehaves on a
-// cluster, an operator can restore the previous node-user behavior without a
-// binary rollback. It is marked unsafe because disabling it reintroduces the
-// privilege-escalation behavior this change fixed — user-defined code reached by
-// the TTL delete would again run with node privileges — so it should only be
-// flipped to work around an incident.
-var runAsTableOwnerEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.ttl.run_as_table_owner.unsafe.enabled",
-	"if true, row-level TTL jobs run their SELECT, DELETE, and statistics "+
-		"statements as the TTL table's owner rather than the internal node user",
-	true,
-	settings.WithUnsafe,
-)
-
 // rowLevelTTLResumer implements the TTL job. The job can run on any node, but
 // the job node distributes SELECT/DELETE work via DistSQL to ttlProcessor
 // nodes. DistSQL divides work into spans that each ttlProcessor scans in a
@@ -98,39 +78,9 @@ var _ jobs.Resumer = (*rowLevelTTLResumer)(nil)
 
 // Resume implements the jobs.Resumer interface.
 func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (retErr error) {
-	jobExecCtx := execCtx.(sql.JobExecContext)
-	execCfg := jobExecCtx.ExecCfg()
-	db := execCfg.InternalDB
-
-	details := t.job.Details().(jobspb.RowLevelTTLDetails)
-	runAsOwner := runAsTableOwnerEnabled.Get(&execCfg.Settings.SV)
-
 	defer func() {
 		if retErr == nil {
 			return
-		} else if pgerror.GetPGCode(retErr) == pgcode.InsufficientPrivilege {
-			// Running as the table owner is more restrictive than running as the
-			// node user, so it can surface a genuine privilege gap that node never
-			// hit: e.g. a row-level DELETE trigger that writes to an audit table
-			// the owner cannot write to. Fail the run permanently so an operator
-			// notices, rather than retrying the misconfiguration forever while
-			// expired rows silently accumulate. A rare false positive — a schema
-			// change committed under the job's snapshotted overrides — is harmless:
-			// the TTL schedule is created with OnError=RETRY_SCHED, so it fires
-			// again at the next cron tick, and the next Resume recomputes overrides
-			// from fresh descriptors, healing the race on that scheduled run.
-			if runAsOwner {
-				// Name the escape hatch in the error itself. This failure mode is
-				// new in this release and can first appear during an unattended
-				// upgrade, so the job's error text — which is all an operator sees
-				// in SHOW JOBS — needs to be self-contained enough to act on.
-				retErr = errors.Wrapf(retErr,
-					"TTL job hit a privilege error while running as the table owner; "+
-						"grant the owner the missing privileges, or set the cluster "+
-						"setting %s to false to run as the internal node user instead",
-					runAsTableOwnerEnabled.Name())
-			}
-			retErr = jobs.MarkAsPermanentJobError(retErr)
 		} else if joberror.IsPermanentBulkJobError(retErr) && !errors.Is(retErr, sql.ErrPlanChanged) {
 			retErr = jobs.MarkAsPermanentJobError(retErr)
 		} else {
@@ -138,14 +88,9 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		}
 	}()
 
-	// owner and descOverrides identify the SQL session that the row-count
-	// statistics statements run as: the table owner's identity plus the
-	// per-descriptor privilege overrides computed by ttlSessionOverrides. They
-	// are populated in the transaction below and consumed by the stats
-	// goroutine; the delete processors compute their own overrides in
-	// getTableInfo.
-	var owner username.SQLUsername
-	var descOverrides map[uint32]sessiondata.DescriptorOverride
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	execCfg := jobExecCtx.ExecCfg()
+	db := execCfg.InternalDB
 
 	settingsValues := execCfg.SV()
 	if err := ttlbase.CheckJobEnabled(settingsValues); err != nil {
@@ -159,6 +104,8 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		knobs = *ttlKnobs
 	}
 
+	details := t.job.Details().(jobspb.RowLevelTTLDetails)
+
 	aostDuration := ttlbase.DefaultAOSTDuration
 	if knobs.AOSTDuration != nil {
 		aostDuration = *knobs.AOSTDuration
@@ -168,8 +115,7 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 	var relationName string
 	var entirePKSpan roachpb.Span
 	if err := db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		lookupTable := makeTableLookup(txn)
-		desc, err := lookupTable(ctx, details.TableID)
+		desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)
 		if err != nil {
 			return err
 		}
@@ -202,9 +148,7 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		relationName = tn.FQString()
 
 		entirePKSpan = desc.PrimaryIndexSpan(execCfg.Codec)
-
-		owner, descOverrides, err = ttlSessionOverrides(ctx, lookupTable, desc, runAsOwner)
-		return err
+		return nil
 	}); err != nil {
 		return err
 	}
@@ -223,9 +167,7 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 
 		statsGroup.GoCtx(func(ctx context.Context) error {
 			// Do once initially to ensure we have some base statistics.
-			if err := metrics.fetchStatistics(
-				ctx, execCfg, owner, descOverrides, relationName, details, aostDuration, ttlExpr,
-			); err != nil {
+			if err := metrics.fetchStatistics(ctx, execCfg, relationName, details, aostDuration, ttlExpr); err != nil {
 				return err
 			}
 			// Wait until poll interval is reached, or early exit when we are done
@@ -235,9 +177,7 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 				case <-ctx.Done():
 					return nil
 				case <-time.After(rowLevelTTL.RowStatsPollInterval):
-					if err := metrics.fetchStatistics(
-						ctx, execCfg, owner, descOverrides, relationName, details, aostDuration, ttlExpr,
-					); err != nil {
+					if err := metrics.fetchStatistics(ctx, execCfg, relationName, details, aostDuration, ttlExpr); err != nil {
 						return err
 					}
 				}
