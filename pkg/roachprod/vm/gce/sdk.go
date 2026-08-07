@@ -283,6 +283,7 @@ func (i *sdkInstance) toVM(project, dnsDomain string) *vm.VM {
 		ProviderID:             i.GetName(),
 		ProviderAccountID:      projectName,
 		PublicIP:               publicIP,
+		AddressMode:            inferAddressMode(publicIP),
 		NetworkTags:            i.GetTags().GetItems(),
 		PublicDNS:              fmt.Sprintf("%s.%s", i.GetName(), dnsDomain),
 		PublicDNSZone:          dnsDomain,
