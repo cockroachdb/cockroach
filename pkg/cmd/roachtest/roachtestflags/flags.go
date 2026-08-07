@@ -633,10 +633,11 @@ var (
 			public addresses; auto lets the provider select the address mode.`,
 	})
 
-	GCESubnet string
-	_         = registerRunFlag(&GCESubnet, FlagInfo{
-		Name:  "gce-subnet",
-		Usage: `GCE subnet name or self-link to use for CRDB and workload nodes`,
+	GCESubnets map[string]string
+	_          = registerRunFlag(&GCESubnets, FlagInfo{
+		Name: "gce-subnets",
+		Usage: `GCE region=subnet mappings to use for CRDB and workload nodes; each
+			selected region must have an entry`,
 	})
 )
 
