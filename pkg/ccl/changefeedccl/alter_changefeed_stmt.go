@@ -211,6 +211,16 @@ func alterDatabaseChangefeed(
 		return err
 	}
 
+	hasSelect, hasChangefeed, err := checkPrivilegesForDescriptor(ctx, p, databaseDescriptor)
+	if err != nil {
+		return err
+	}
+	if err := authorizeUserToCreateChangefeed(
+		ctx, p, newSinkURI, hasSelect, hasChangefeed,
+		tree.ChangefeedLevelDatabase, newOptions.GetConfluentSchemaRegistry()); err != nil {
+		return err
+	}
+
 	newChangefeedStmt := &tree.CreateChangefeed{
 		Level:          tree.ChangefeedLevelDatabase,
 		DatabaseTarget: tree.ChangefeedDatabaseTarget(databaseDescriptor.GetName()),
