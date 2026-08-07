@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"math/rand"
 	"net"
 	"net/http"
@@ -871,16 +872,16 @@ func createFlagsOverride(opts *vm.CreateOpts) {
 	}
 }
 
-func applyGCESubnetOverride(
-	cloud spec.Cloud, subnet string, providerOpts, workloadProviderOpts vm.ProviderOpts,
+func applyGCESubnetsOverride(
+	cloud spec.Cloud, subnets map[string]string, providerOpts, workloadProviderOpts vm.ProviderOpts,
 ) error {
-	if subnet == "" {
+	if len(subnets) == 0 {
 		return nil
 	}
 	if cloud != spec.GCE {
-		return errors.Newf("--gce-subnet is only valid with --cloud=gce, not %s", cloud)
+		return errors.Newf("--gce-subnets is only valid with --cloud=gce, not %s", cloud)
 	}
-	setSubnet := func(opts vm.ProviderOpts) error {
+	setSubnets := func(opts vm.ProviderOpts) error {
 		if opts == nil {
 			return nil
 		}
@@ -888,13 +889,13 @@ func applyGCESubnetOverride(
 		if !ok {
 			return errors.AssertionFailedf("expected GCE provider options, got %T", opts)
 		}
-		gceOpts.Subnet = subnet
+		gceOpts.Subnets = maps.Clone(subnets)
 		return nil
 	}
-	if err := setSubnet(providerOpts); err != nil {
+	if err := setSubnets(providerOpts); err != nil {
 		return err
 	}
-	return setSubnet(workloadProviderOpts)
+	return setSubnets(workloadProviderOpts)
 }
 
 // createRetryPlanner owns safe mutations between roachprod create attempts.
@@ -1115,9 +1116,9 @@ func (f *clusterFactory) newCluster(
 	}
 
 	createFlagsOverride(&createVMOpts)
-	if roachtestflags.Changed(&roachtestflags.GCESubnet) != nil {
-		if err := applyGCESubnetOverride(
-			clusterCloud, roachtestflags.GCESubnet, providerOpts, workloadProviderOpts,
+	if roachtestflags.Changed(&roachtestflags.GCESubnets) != nil {
+		if err := applyGCESubnetsOverride(
+			clusterCloud, roachtestflags.GCESubnets, providerOpts, workloadProviderOpts,
 		); err != nil {
 			return nil, nil, err
 		}

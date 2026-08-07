@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -197,14 +198,15 @@ func TestParseRegionSubnetMap(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestResolveNetwork(t *testing.T) {
-	const project = "test-project"
-	require.Equal(t, "", (&ProviderOpts{}).resolveNetwork(project))
-	require.Equal(t, "projects/test-project/global/networks/my-vpc",
-		(&ProviderOpts{Network: "my-vpc"}).resolveNetwork(project))
-	// A self-link keeps its (possibly Shared VPC host) project.
-	require.Equal(t, "projects/host/global/networks/shared",
-		(&ProviderOpts{Network: "projects/host/global/networks/shared"}).resolveNetwork(project))
+func TestDefaultNetworkResources(t *testing.T) {
+	require.Equal(t,
+		"projects/test-project/global/networks/test-project-vpc",
+		DefaultNetworkSelfLink("test-project"),
+	)
+	require.Equal(t,
+		"projects/test-project/regions/us-east1/subnetworks/test-project-vpc-us-east1",
+		DefaultSubnetSelfLink("test-project", "us-east1"),
+	)
 }
 
 func TestResolveSubnet(t *testing.T) {
@@ -217,22 +219,10 @@ func TestResolveSubnet(t *testing.T) {
 		expectedErr string
 	}{
 		{
-			name:     "legacy default when no config",
-			opts:     ProviderOpts{Subnet: "default"},
+			name:     "project convention when no config",
+			opts:     ProviderOpts{},
 			zone:     "us-east1-b",
-			expected: "projects/test-project/regions/us-east1/subnetworks/default",
-		},
-		{
-			name:     "single subnet name is promoted",
-			opts:     ProviderOpts{Subnet: "my-subnet"},
-			zone:     "us-east1-b",
-			expected: "projects/test-project/regions/us-east1/subnetworks/my-subnet",
-		},
-		{
-			name:     "single subnet self-link passes through",
-			opts:     ProviderOpts{Subnet: "projects/test-project/regions/us-east1/subnetworks/my-subnet"},
-			zone:     "us-east1-b",
-			expected: "projects/test-project/regions/us-east1/subnetworks/my-subnet",
+			expected: "projects/test-project/regions/us-east1/subnetworks/test-project-vpc-us-east1",
 		},
 		{
 			name:     "per-region map selects the zone's region",
@@ -241,16 +231,10 @@ func TestResolveSubnet(t *testing.T) {
 			expected: "projects/test-project/regions/us-west1/subnetworks/west-subnet",
 		},
 		{
-			name:     "map takes precedence over single subnet",
-			opts:     ProviderOpts{Subnet: "shorthand", Subnets: map[string]string{"us-east1": "east-subnet"}},
-			zone:     "us-east1-b",
-			expected: "projects/test-project/regions/us-east1/subnetworks/east-subnet",
-		},
-		{
-			name:     "single subnet covers a region absent from the map",
-			opts:     ProviderOpts{Subnet: "shorthand", Subnets: map[string]string{"us-east1": "east-subnet"}},
-			zone:     "us-west1-a",
-			expected: "projects/test-project/regions/us-west1/subnetworks/shorthand",
+			name:        "map must cover every selected region",
+			opts:        ProviderOpts{Subnets: map[string]string{"us-east1": "east-subnet"}},
+			zone:        "us-west1-a",
+			expectedErr: `no GCE subnet configured for region "us-west1"`,
 		},
 		{
 			name:     "shared VPC host-project self-link is not rewritten",
@@ -259,34 +243,10 @@ func TestResolveSubnet(t *testing.T) {
 			expected: "projects/host-project/regions/us-east1/subnetworks/shared",
 		},
 		{
-			name:        "missing region in explicit-subnets mode errors",
-			opts:        ProviderOpts{Subnets: map[string]string{"us-east1": "east-subnet"}},
-			zone:        "us-west1-a",
-			expectedErr: `no GCE subnet configured for region "us-west1"`,
-		},
-		{
-			name:     "bare network derives the convention subnet",
-			opts:     ProviderOpts{Network: "my-vpc"},
-			zone:     "asia-northeast1-a",
-			expected: "projects/test-project/regions/asia-northeast1/subnetworks/test-project-vpc-asia-northeast1",
-		},
-		{
-			name:     "map overrides the convention for its region",
-			opts:     ProviderOpts{Network: "my-vpc", Subnets: map[string]string{"us-east1": "east-subnet"}},
+			name:     "map overrides the default for its region",
+			opts:     ProviderOpts{Subnets: map[string]string{"us-east1": "east-subnet"}},
 			zone:     "us-east1-b",
 			expected: "projects/test-project/regions/us-east1/subnetworks/east-subnet",
-		},
-		{
-			name:     "convention still applies to regions absent from the map",
-			opts:     ProviderOpts{Network: "my-vpc", Subnets: map[string]string{"us-east1": "east-subnet"}},
-			zone:     "us-west1-a",
-			expected: "projects/test-project/regions/us-west1/subnetworks/test-project-vpc-us-west1",
-		},
-		{
-			name:        "shared VPC network self-link does not derive and errors",
-			opts:        ProviderOpts{Network: "projects/host/global/networks/shared"},
-			zone:        "us-east1-b",
-			expectedErr: `no GCE subnet configured for region "us-east1"`,
 		},
 		{
 			name:        "empty subnet value errors",
@@ -302,7 +262,7 @@ func TestResolveSubnet(t *testing.T) {
 		},
 		{
 			name:        "invalid zone errors",
-			opts:        ProviderOpts{Subnet: "x"},
+			opts:        ProviderOpts{},
 			zone:        "ab",
 			expectedErr: "invalid zone",
 		},
@@ -319,28 +279,60 @@ func TestResolveSubnet(t *testing.T) {
 	}
 }
 
-func TestCLINetworkArgs(t *testing.T) {
+func TestValidateSubnetConfigRequiresEverySelectedRegion(t *testing.T) {
+	opts := &ProviderOpts{
+		Subnets: map[string]string{"us-east1": "custom-east"},
+	}
+	require.NoError(t, opts.validateSubnetConfig(
+		"test-project", []string{"us-east1-b", "us-east1-c"},
+	))
+	require.ErrorContains(t, opts.validateSubnetConfig(
+		"test-project", []string{"us-east1-b", "us-west1-a"},
+	), `no GCE subnet configured for region "us-west1"`)
+
+	opts.Subnets["us-west1"] = "custom-west"
+	require.NoError(t, opts.validateSubnetConfig(
+		"test-project", []string{"us-east1-b", "us-west1-a"},
+	))
+}
+
+func TestSubnetCreateFlags(t *testing.T) {
+	opts := DefaultProviderOpts()
+	flags := pflag.NewFlagSet("gce-subnets", pflag.ContinueOnError)
+	opts.ConfigureCreateFlags(flags)
+
+	require.Nil(t, flags.Lookup("gce-subnet"))
+	require.Nil(t, flags.Lookup("gce-network"))
+	require.NotNil(t, flags.Lookup("gce-subnets"))
+	require.NoError(t, flags.Parse([]string{
+		"--gce-subnets=us-east1=custom-east,us-west1=custom-west",
+	}))
+	require.Equal(t, map[string]string{
+		"us-east1": "custom-east",
+		"us-west1": "custom-west",
+	}, opts.Subnets)
+}
+
+func TestCLISubnetArgs(t *testing.T) {
 	const project = "test-project"
 
-	args, err := (&ProviderOpts{Subnet: "my-subnet"}).cliNetworkArgs(project, "us-east1-b")
+	args, err := (&ProviderOpts{}).cliSubnetArgs(project, "us-east1-b")
 	require.NoError(t, err)
 	require.Equal(t, []string{
-		"--subnet", "projects/test-project/regions/us-east1/subnetworks/my-subnet",
+		"--subnet", "projects/test-project/regions/us-east1/subnetworks/test-project-vpc-us-east1",
 	}, args)
 
 	args, err = (&ProviderOpts{
 		Subnets: map[string]string{"us-east1": "s"},
-		Network: "vpc",
-	}).cliNetworkArgs(project, "us-east1-b")
+	}).cliSubnetArgs(project, "us-east1-b")
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		"--subnet", "projects/test-project/regions/us-east1/subnetworks/s",
-		"--network", "projects/test-project/global/networks/vpc",
 	}, args)
 
 	_, err = (&ProviderOpts{
 		Subnets: map[string]string{"us-east1": "s"},
-	}).cliNetworkArgs(project, "us-west1-a")
+	}).cliSubnetArgs(project, "us-west1-a")
 	require.Error(t, err)
 }
 
