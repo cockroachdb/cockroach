@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -238,7 +239,26 @@ func (s *topLevelServer) DecommissionPreCheck(
 				continue
 			}
 
-			action, _, recording, rErr := evalStore.AllocatorCheckRange(ctx, &desc, collectTraces, overrideStorePool)
+			// Retry logic for handling temporarily throttled stores. Store throttling
+			// typically lasts 5 seconds after a failed reservation, so we retry with
+			// appropriate delays to allow throttles to expire.
+			var action allocatorimpl.AllocatorAction
+			var recording tracingpb.Recording
+			var rErr error
+			retryOpts := retry.Options{
+				InitialBackoff: 3 * time.Second,
+				MaxBackoff:     5 * time.Second,
+				Multiplier:     1.0,
+				MaxRetries:     3,
+			}
+			for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+				action, _, recording, rErr = evalStore.AllocatorCheckRange(ctx, &desc, collectTraces, overrideStorePool)
+				if rErr != nil && errors.Is(rErr, allocatorimpl.ErrThrottledStores) {
+					log.KvDistribution.Infof(ctx, "allocator found throttled stores for r%d, retrying: %v", desc.RangeID, rErr)
+					continue
+				}
+				break
+			}
 			rangesChecked += 1
 			actionCounts[action.String()] += 1
 
