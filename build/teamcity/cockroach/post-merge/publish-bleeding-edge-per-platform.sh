@@ -16,8 +16,12 @@ source "$dir/teamcity-support.sh"
 source "$dir/teamcity-bazel-support.sh"
 
 gcs_bucket="cockroach-edge-artifacts-prod"
-# export the variable to avoid shell escaping
+# Export the variable to avoid shell escaping. Tracing is disabled around the
+# assignment because this script runs with `set -x`, which would otherwise echo
+# the service-account key to the build log.
+{ set +x; } 2>/dev/null
 export gcs_credentials="$GCS_CREDENTIALS_PROD"
+set -x
 platform="${PLATFORM:?PLATFORM must be specified}"
 
 BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform" run_bazel << 'EOF'
