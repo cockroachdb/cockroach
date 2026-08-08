@@ -315,6 +315,21 @@ func (s *systemStatusServer) statsForSpan(
 			storeIDs[repl.StoreID] = struct{}{}
 		}
 
+		// Only collect MVCC stats for ranges where this node holds a replica.
+		// Without this filter, every node reports the full logical size for all
+		// ranges, and the fan-out coordinator's sum across nodes gives
+		// numNodes × logical instead of RF × logical. See #173182.
+		hasReplica := false
+		for _, repl := range voterAndNonVoterReplicas {
+			if s.stores.HasStore(repl.StoreID) {
+				hasReplica = true
+				break
+			}
+		}
+		if !hasReplica {
+			continue
+		}
+
 		// Is the descriptor fully contained by the request span?
 		if rSpan.ContainsKeyRange(descSpan.Key, desc.EndKey) {
 			// Collect into fullyContainedKeys batch.
