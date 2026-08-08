@@ -9,6 +9,21 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/server/license/license
 
 import "gogoproto/gogo.proto";
 
+// Feature enumerates the entitlements a license can grant. A license carries
+// the subset of these features that the holder is permitted to use, allowing
+// the binary to gate functionality based on what the customer has purchased.
+enum Feature {
+    FEATURE_UNSPECIFIED = 0;
+    CHANGEFEED = 1;
+    BACKUP = 2;
+    RESTORE = 3;
+    EXPORT = 4;
+    IMPORT = 5;
+    MULTIREGION = 6;
+    LDR_BIDIRECTIONAL = 7;
+    PCR_MULTIREGION = 8;
+}
+
 message License {
     reserved 1;
     int64 valid_until_unix_sec = 2;
@@ -43,4 +58,9 @@ message License {
     // dependencies, as the generated code is also used in other repositories.
     bytes license_id = 6;
     bytes organization_id = 7;
+
+    // features lists the entitlements this license grants its holder. Field
+    // number 12 is chosen to stay wire-compatible with the managed-service
+    // proto, which already uses field numbers 8 through 11.
+    repeated Feature features = 12;
 }

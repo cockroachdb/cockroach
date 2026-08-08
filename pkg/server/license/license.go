@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -20,6 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+func init() {
+	// Wire the license read path into the featureflag package so feature
+	// gates can consult license entitlements without creating an import
+	// cycle (featureflag must not import server/license).
+	featureflag.GetLicenseHook = GetLicense
+}
 
 // LicenseTTLMetadata is the metric metadata for seconds until license expiry.
 var LicenseTTLMetadata = metric.Metadata{
