@@ -197,6 +197,50 @@ func TestURLGeneratorUseHost(t *testing.T) {
 	require.ErrorContains(t, err, "no host address for node 2")
 }
 
+func TestURLGeneratorDNSFallbackUsesHost(t *testing.T) {
+	cluster := &install.SyncedCluster{
+		Cluster: cloudcluster.Cluster{
+			Name: "private-cluster",
+			VMs: vm.List{
+				{PrivateIP: "10.0.0.1"},
+				{PrivateIP: "10.0.0.2"},
+			},
+		},
+		Nodes: install.Nodes{1, 2},
+	}
+	var lookups int
+	urls, err := urlGenerator(
+		context.Background(), cluster, nilLogger(), cluster.Nodes,
+		urlConfig{
+			port:      26258,
+			dnsDomain: "roachprod.test",
+			lookupHost: func(string) ([]string, error) {
+				lookups++
+				return nil, errors.New("DNS unavailable")
+			},
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, lookups)
+	require.Equal(t, []string{
+		"http://10.0.0.1:26258/",
+		"http://10.0.0.2:26258/",
+	}, urls)
+}
+
+func TestURLGeneratorRejectsEmptyPublicIP(t *testing.T) {
+	cluster := &install.SyncedCluster{
+		Cluster: cloudcluster.Cluster{VMs: vm.List{{PrivateIP: "10.0.0.1"}}},
+		Nodes:   install.Nodes{1},
+	}
+
+	_, err := urlGenerator(
+		context.Background(), cluster, nilLogger(), cluster.Nodes,
+		urlConfig{usePublicIP: true, port: 26258},
+	)
+	require.ErrorContains(t, err, "no public IP for node 1")
+}
+
 func TestVerifyClusterName(t *testing.T) {
 	findActiveAccounts = func(l *logger.Logger) (map[string]string, error) {
 		return map[string]string{"1": "user1", "2": "user2", "3": "USER4"}, nil

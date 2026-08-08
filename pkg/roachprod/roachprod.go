@@ -1247,6 +1247,8 @@ type urlConfig struct {
 	path               string
 	usePublicIP        bool
 	useHost            bool
+	dnsDomain          string
+	lookupHost         func(string) ([]string, error)
 	openInBrowser      bool
 	secure             bool
 	port               int
@@ -1262,32 +1264,46 @@ func urlGenerator(
 	uConfig urlConfig,
 ) ([]string, error) {
 	var urls []string
+	useHost := uConfig.useHost
+	lookupHost := uConfig.lookupHost
+	if lookupHost == nil {
+		lookupHost = net.LookupHost
+	}
 	for i, node := range nodes {
 		var host string
-		if uConfig.useHost {
+		if useHost {
 			host = c.Host(node)
-			if host == "" {
-				return nil, errors.Errorf("no host address for node %d", node)
-			}
+		} else if uConfig.usePublicIP {
+			host = c.VMs[node-1].PublicIP
 		} else {
-			host = vm.Name(c.Name, int(node)) + "." + gce.Infrastructure.DNSDomain()
+			dnsDomain := uConfig.dnsDomain
+			if dnsDomain == "" {
+				dnsDomain = gce.Infrastructure.DNSDomain()
+			}
+			host = vm.Name(c.Name, int(node)) + "." + dnsDomain
 
 			// There are no DNS entries for local clusters.
 			if c.IsLocal() {
-				uConfig.usePublicIP = true
+				useHost = true
 			}
 
-			// Verify DNS is working / fallback to IPs if not.
-			if i == 0 && !uConfig.usePublicIP {
-				if _, err := net.LookupHost(host); err != nil {
-					l.Errorf("host %s is unreachable, falling back to public IPs. DNS entries might be outdated, run `roachprod sync`.", host)
-					uConfig.usePublicIP = true
+			// Verify DNS is working / fallback to node addresses if not.
+			if i == 0 && !uConfig.usePublicIP && !useHost {
+				if _, err := lookupHost(host); err != nil {
+					l.Errorf("host %s is unreachable, falling back to node addresses. DNS entries might be outdated, run `roachprod sync`.", host)
+					useHost = true
 				}
 			}
 
-			if uConfig.usePublicIP {
-				host = c.VMs[node-1].PublicIP
+			if useHost {
+				host = c.Host(node)
 			}
+		}
+		if host == "" {
+			if uConfig.usePublicIP && !useHost {
+				return nil, errors.Errorf("no public IP for node %d", node)
+			}
+			return nil, errors.Errorf("no host address for node %d", node)
 		}
 		port := uConfig.port
 		if port == 0 {
