@@ -3013,19 +3013,6 @@ func addrToHostPort(addr string) (string, int, error) {
 	return host, port, nil
 }
 
-// InternalAdminUIAddr returns the internal Admin UI address in the form host:port
-// for the specified nodes.
-func (c *clusterImpl) InternalAdminUIAddr(
-	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts ...option.OptionFunc,
-) ([]string, error) {
-	var virtualClusterOptions option.VirtualClusterOptions
-	if err := option.Apply(&virtualClusterOptions, opts...); err != nil {
-		return nil, err
-	}
-
-	return c.adminUIAddr(ctx, l, nodes, virtualClusterOptions, false /* external */)
-}
-
 // ExternalAdminUIAddr returns an Admin UI address reachable from the test
 // runner in the form host:port for the specified nodes. It prefers public
 // addresses and falls back to private addresses for private-only clusters.
@@ -3037,7 +3024,7 @@ func (c *clusterImpl) ExternalAdminUIAddr(
 		return nil, err
 	}
 
-	return c.adminUIAddr(ctx, l, nodes, virtualClusterOptions, true /* external */)
+	return c.adminUIAddr(ctx, l, nodes, virtualClusterOptions)
 }
 
 func (c *clusterImpl) SQLPorts(
@@ -3084,7 +3071,6 @@ func (c *clusterImpl) adminUIAddr(
 	l *logger.Logger,
 	nodes option.NodeListOption,
 	opts option.VirtualClusterOptions,
-	external bool,
 ) ([]string, error) {
 	var addrs []string
 	adminURLs, err := roachprodAdminURL(
@@ -3095,7 +3081,7 @@ func (c *clusterImpl) adminUIAddr(
 		opts.SQLInstance,
 		"",    /* path */
 		false, /* usePublicIP */
-		external,
+		true,  /* useHost */
 		false, /* openInBrowser */
 		install.SimpleSecureOption(false),
 	)
