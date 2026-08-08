@@ -172,8 +172,8 @@ DELETE FROM system.table_metadata
 WHERE table_id IN (
   SELECT table_id
   FROM system.table_metadata
-  WHERE table_id NOT IN (
-    SELECT id FROM system.namespace
+  WHERE NOT EXISTS (
+    SELECT 1 FROM system.namespace WHERE id = table_id
   )
   LIMIT $1
 )
