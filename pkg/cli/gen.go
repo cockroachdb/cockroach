@@ -190,6 +190,46 @@ var vCPUDependentClusterSettings = map[settings.InternalKey]struct{}{
 	"sql.stats.automatic_full_concurrency_limit":       {},
 }
 
+// formatSettingBounds renders a numeric setting's validation bounds in the
+// canonical form for SET CLUSTER SETTING. Empty strings mean unbounded.
+func formatSettingBounds(s settings.NonMaskedSetting) (minStr, maxStr string) {
+	switch v := s.(type) {
+	case *settings.IntSetting:
+		min, max := v.Bounds()
+		if min != nil {
+			minStr = settings.EncodeInt(*min)
+		}
+		if max != nil {
+			maxStr = settings.EncodeInt(*max)
+		}
+	case *settings.ByteSizeSetting:
+		min, max := v.Bounds()
+		if min != nil {
+			minStr = settings.EncodeInt(*min)
+		}
+		if max != nil {
+			maxStr = settings.EncodeInt(*max)
+		}
+	case *settings.FloatSetting:
+		min, max := v.Bounds()
+		if min != nil {
+			minStr = settings.EncodeFloat(*min)
+		}
+		if max != nil {
+			maxStr = settings.EncodeFloat(*max)
+		}
+	case *settings.DurationSetting:
+		min, max := v.Bounds()
+		if min != nil {
+			minStr = settings.EncodeDuration(*min)
+		}
+		if max != nil {
+			maxStr = settings.EncodeDuration(*max)
+		}
+	}
+	return minStr, maxStr
+}
+
 var genSettingsListCmd = &cobra.Command{
 	Use:   "settings-list",
 	Short: "output a list of available cluster settings",
@@ -291,6 +331,8 @@ This session variable default should now be configured using %s`,
 					row = append(row, "reserved")
 				}
 			}
+			minStr, maxStr := formatSettingBounds(setting)
+			row = append(row, minStr, maxStr)
 			rows = append(rows, row)
 		}
 
@@ -304,6 +346,8 @@ This session variable default should now be configured using %s`,
 			cols = append(cols, "Visibility")
 			align += "d"
 		}
+		cols = append(cols, "Min", "Max")
+		align += "dd"
 		sliceIter := clisqlexec.NewRowSliceIter(rows, align)
 		return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, cols, sliceIter)
 	},
