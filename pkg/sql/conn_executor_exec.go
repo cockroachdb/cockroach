@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/advisorylock"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -2773,6 +2774,15 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 	if err != nil {
 		return err
 	}
+	// Capture the advisory lock manager state so it can be restored
+	// on retry. The KV savepoint rollback correctly releases the
+	// advisory locks, but the manager's in-memory stack is not
+	// notified of the read-committed savepoint since it is not a
+	// SQL savepoint.
+	var advisoryLockSnap advisorylock.RewindSnapshot
+	if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+		advisoryLockSnap = mgr.ExportRewindSnapshot()
+	}
 
 	// Use retry with exponential backoff and full jitter to reduce collisions for
 	// high-contention workloads. See https://en.wikipedia.org/wiki/Exponential_backoff and
@@ -2854,6 +2864,12 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		res.SetError(nil)
 		if err := ex.state.mu.txn.RollbackToSavepoint(ctx, readCommittedSavePointToken); err != nil {
 			return err
+		}
+		// Restore the advisory lock manager state to what it was before
+		// the statement executed, since the KV savepoint rollback has
+		// released the advisory locks but the manager was not notified.
+		if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+			mgr.ApplyRewindSnapshot(advisoryLockSnap)
 		}
 		if err := ex.state.mu.txn.PrepareForPartialRetry(ctx); err != nil {
 			return err
