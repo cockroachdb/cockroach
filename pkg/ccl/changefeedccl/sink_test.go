@@ -856,6 +856,129 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 	})
 }
 
+func TestKafkaTopLevelCompression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	u, err := url.Parse("kafka://localhost:9092")
+	require.NoError(t, err)
+	sinkURL := &changefeedbase.SinkURL{URL: u}
+
+	tests := []struct {
+		name          string
+		jsonConfig    changefeedbase.SinkSpecificJSONConfig
+		compression   string
+		expectedCodec sarama.CompressionCodec // verified on the v1 sink only
+		expectedErr   string
+	}{
+		{name: "gzip", jsonConfig: `{}`, compression: "gzip", expectedCodec: sarama.CompressionGZIP},
+		{name: "snappy", jsonConfig: `{}`, compression: "snappy", expectedCodec: sarama.CompressionSnappy},
+		{name: "lz4", jsonConfig: `{}`, compression: "lz4", expectedCodec: sarama.CompressionLZ4},
+		{name: "zstd", jsonConfig: `{}`, compression: "zstd", expectedCodec: sarama.CompressionZSTD},
+		{
+			name:          "option value is case-insensitive",
+			jsonConfig:    `{}`,
+			compression:   "GZIP",
+			expectedCodec: sarama.CompressionGZIP,
+		},
+		{
+			name:        "invalid codec",
+			jsonConfig:  `{}`,
+			compression: "invalid",
+			expectedErr: "unsupported compression codec",
+		},
+		{
+			name:        "conflict with json codec",
+			jsonConfig:  `{"Compression":"ZSTD"}`,
+			compression: "gzip",
+			expectedErr: "conflicts with kafka_sink_config",
+		},
+		{
+			name:        "conflict with explicit json NONE",
+			jsonConfig:  `{"Compression":"NONE"}`,
+			compression: "gzip",
+			expectedErr: "conflicts with kafka_sink_config",
+		},
+		{
+			// Go's JSON decoding matches struct fields case-insensitively, so
+			// conflict detection must too.
+			name:        "conflict with lowercase json key",
+			jsonConfig:  `{"compression":"NONE"}`,
+			compression: "gzip",
+			expectedErr: "conflicts with kafka_sink_config",
+		},
+		{
+			name:          "matching json codec",
+			jsonConfig:    `{"Compression":"GZIP"}`,
+			compression:   "gzip",
+			expectedCodec: sarama.CompressionGZIP,
+		},
+		{
+			name:          "json codec alone is unaffected",
+			jsonConfig:    `{"Compression":"ZSTD"}`,
+			compression:   "",
+			expectedCodec: sarama.CompressionZSTD,
+		},
+		{
+			name:          "explicit json NONE alone disables compression",
+			jsonConfig:    `{"Compression":"NONE"}`,
+			compression:   "",
+			expectedCodec: sarama.CompressionNone,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run("v1/"+tc.name, func(t *testing.T) {
+			cfg, err := buildKafkaConfig(ctx, sinkURL, tc.jsonConfig, tc.compression, nil, nil)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedCodec, cfg.Producer.Compression)
+		})
+		t.Run("v2/"+tc.name, func(t *testing.T) {
+			_, err := buildKgoConfig(ctx, sinkURL, tc.jsonConfig, tc.compression, nil)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestKafkaCompressionOptionOnOlderNode documents the mixed-version behavior
+// of the top-level compression option on Kafka sinks. Nodes that predate the
+// option's addition to KafkaValidOptions reject it during sink construction,
+// which happens both at CREATE CHANGEFEED time and when a node resumes the
+// changefeed job. A changefeed created on a new-version node can therefore
+// fail sink construction when adopted by an older node; that failure is
+// marked retryable by the change aggregator (see the getEventSink error
+// handling in changefeed_processors.go), so the changefeed retries rather
+// than failing permanently, and recovers once the flow lands on new-version
+// nodes.
+func TestKafkaCompressionOptionOnOlderNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// KafkaValidOptions as of v26.1, before the compression option was
+	// permitted on Kafka sinks.
+	oldKafkaValidOptions := make(map[string]struct{})
+	for opt := range changefeedbase.KafkaValidOptions {
+		if opt != changefeedbase.OptCompression {
+			oldKafkaValidOptions[opt] = struct{}{}
+		}
+	}
+
+	opts := map[string]string{changefeedbase.OptCompression: "gzip"}
+	err := validateSinkOptions(opts, oldKafkaValidOptions)
+	require.ErrorContains(t, err, "this sink is incompatible with option compression")
+
+	require.NoError(t, validateSinkOptions(opts, changefeedbase.KafkaValidOptions))
+}
+
 func TestKafkaSinkTracksMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
