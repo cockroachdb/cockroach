@@ -280,14 +280,13 @@ func DescribeEntries(ents []pb.Entry, f EntryFormatter) string {
 	return buf.String()
 }
 
-// entryEncodingSize represents the protocol buffer encoding size of one or more
-// entries.
-type entryEncodingSize uint64
+// entrySize represents the estimated size of one or more entries.
+type entrySize uint64
 
-func entsSize(ents []pb.Entry) entryEncodingSize {
-	var size entryEncodingSize
+func entsSize(ents []pb.Entry) entrySize {
+	var size entrySize
 	for _, ent := range ents {
-		size += entryEncodingSize(ent.Size())
+		size += entrySize(ent.SizeEst())
 	}
 	return size
 }
@@ -296,14 +295,13 @@ func entsSize(ents []pb.Entry) entryEncodingSize {
 // its total byte size does not exceed maxSize. Always returns a non-empty slice
 // if the input is non-empty, so, as an exception, if the size of the first
 // entry exceeds maxSize, a non-empty slice with just this entry is returned.
-func limitSize(ents []pb.Entry, maxSize entryEncodingSize) []pb.Entry {
+func limitSize(ents []pb.Entry, maxSize entrySize) []pb.Entry {
 	if len(ents) == 0 {
 		return ents
 	}
-	size := ents[0].Size()
-	for limit := 1; limit < len(ents); limit++ {
-		size += ents[limit].Size()
-		if entryEncodingSize(size) > maxSize {
+	size := ents[0].SizeEst()
+	for limit, ln := 1, len(ents); limit < ln; limit++ {
+		if size += ents[limit].SizeEst(); entrySize(size) > maxSize {
 			return ents[:limit]
 		}
 	}

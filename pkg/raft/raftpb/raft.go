@@ -80,6 +80,27 @@ func (s LogSpan) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("(%d,%d]", s.After, s.Last)
 }
 
+// EntryOverhead is a size overhead of Entry excluding the Entry.Data payload.
+// TODO(pav-kv): should this be arch-dependent, or we are good with a crude
+// estimate that accurate only on 64-bit? Any non-zero constant seems good.
+const EntryOverhead = 48
+
+// SizeEst returns an estimated size of the Entry.
+//
+// Should be used when calling the precise proto Size() is unnecessary, for
+// example when implementing flow control with soft/best-effort limiting. The
+// exact Size() method spends CPU for little benefit.
+//
+// An alternative fast method is to use bare len(Entry.Data), but it is not
+// recommended because it can return zero. For example, flow control based on
+// this approach would be vulnerable to creating unlimited runs of entries with
+// empty Data, which are possible in raft.
+//
+// Another benefit of SizeEst() is predictability and convenience for tests.
+func (m *Entry) SizeEst() uint64 {
+	return EntryOverhead + uint64(len(m.Data))
+}
+
 // Priority specifies per-entry priorities, that are local to the interaction
 // between a leader-replica pair, i.e., they are not an invariant of a
 // particular entry in the raft log (the replica could be the leader itself or
