@@ -799,3 +799,33 @@ TABLE t130591_1 INTERSECT TABLE t130591_1;
 
 statement count 1
 TABLE t130591_1 UNION TABLE t130591_1;
+
+# Regression test for #172870. UNION ALL with BIT/VARBIT expressions that have
+# width constraints should not cause vectorized execution internal errors. The
+# bug was that ReplaceCol used Type().Identical() which rejected types like
+# VARBIT(1) vs VARBIT (different Width) even though they have the same physical
+# representation in the vectorized engine.
+
+query T
+SELECT IF(false, ARRAY[]::VARBIT(1)[], NULL) GROUP BY 1 UNION ALL SELECT NULL;
+----
+NULL
+NULL
+
+query T
+SELECT IF(false, ARRAY[]::BIT(1)[], NULL) GROUP BY 1 UNION ALL SELECT NULL;
+----
+NULL
+NULL
+
+query T
+SELECT IF(false, B''::VARBIT(1), NULL) GROUP BY 1 UNION ALL SELECT NULL;
+----
+NULL
+NULL
+
+query T
+SELECT IF(false, B''::BIT(1), NULL) GROUP BY 1 UNION ALL SELECT NULL;
+----
+NULL
+NULL
