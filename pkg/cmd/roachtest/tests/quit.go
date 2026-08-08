@@ -247,7 +247,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 
 			q.t.L().Printf("retrieving ranges for node %d\n", i)
 			// Get the report via HTTP.
-			adminAddrs, err := q.c.InternalAdminUIAddr(ctx, q.t.L(), q.c.Node(i))
+			adminAddrs, err := q.c.ExternalAdminUIAddr(ctx, q.t.L(), q.c.Node(i))
 			if err != nil {
 				q.Fatal(err)
 			}
