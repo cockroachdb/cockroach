@@ -1387,6 +1387,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		systemTenantNameContainer,
 		pgPreServer.SendRoutingError,
 		tenantCapabilitiesWatcher,
+		appRegistry,
 		cfg.DisableSQLServer,
 		cfg.BaseConfig.DisableTLSForHTTP,
 		cfg.Insecure,

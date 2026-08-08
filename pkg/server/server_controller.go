@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
@@ -83,6 +85,11 @@ type serverController struct {
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName)
 
 	tenantWaiter *singleflight.Group
+	metrics      *serverControllerMetrics
+
+	muxWaiters      atomic.Int64
+	muxRejectEvery  log.EveryN
+	muxTimeoutEvery log.EveryN
 
 	// draining is set when the surrounding server starts draining, and
 	// prevents further creation of new tenant servers.
@@ -135,6 +142,7 @@ func newServerController(
 	systemTenantNameContainer *roachpb.TenantNameContainer,
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName),
 	watcher *tenantcapabilitieswatcher.Watcher,
+	registry *metric.Registry,
 	disableSQLServer bool,
 	disableTLSForHTTP bool,
 	insecure bool,
@@ -149,10 +157,13 @@ func newServerController(
 		sendSQLRoutingError: sendSQLRoutingError,
 		watcher:             watcher,
 		tenantWaiter:        singleflight.NewGroup("tenant server poller", "poll"),
+		metrics:             makeServerControllerMetrics(registry),
 		drainCh:             make(chan struct{}),
 		disableSQLServer:    disableSQLServer,
 		disableTLSForHTTP:   disableTLSForHTTP,
 		insecure:            insecure,
+		muxRejectEvery:      log.Every(10 * time.Second),
+		muxTimeoutEvery:     log.Every(10 * time.Second),
 	}
 	c.orchestrator = newChannelOrchestrator(parentStopper, c)
 	c.mu.servers = map[roachpb.TenantName]*serverState{
