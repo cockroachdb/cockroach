@@ -1792,39 +1792,39 @@ limit
  │    │    │         ├── key: (4)
  │    │    │         ├── fd: ()-->(107), (4)-->(101,103,104)
  │    │    │         ├── select
- │    │    │         │    ├── columns: ws_item_sk:4!null return_ratio:101 currency_ratio:102 rank:103 rank:104 rank_1_orderby_1_1:105 rank_2_orderby_1_1:106
+ │    │    │         │    ├── columns: ws_item_sk:4!null return_ratio:101 currency_ratio:102!null rank:103 rank:104 rank_1_orderby_1_1:105 rank_2_orderby_1_1:106!null
  │    │    │         │    ├── immutable
  │    │    │         │    ├── key: (4)
  │    │    │         │    ├── fd: (4)-->(101-104), (101)==(105), (105)==(101), (102)==(106), (106)==(102)
  │    │    │         │    ├── window partition=() ordering=+(102|106)
- │    │    │         │    │    ├── columns: ws_item_sk:4!null return_ratio:101 currency_ratio:102 rank:103 rank:104 rank_1_orderby_1_1:105 rank_2_orderby_1_1:106
+ │    │    │         │    │    ├── columns: ws_item_sk:4!null return_ratio:101 currency_ratio:102!null rank:103 rank:104 rank_1_orderby_1_1:105 rank_2_orderby_1_1:106!null
  │    │    │         │    │    ├── immutable
  │    │    │         │    │    ├── key: (4)
  │    │    │         │    │    ├── fd: (4)-->(101-104), (101)==(105), (105)==(101), (102)==(106), (106)==(102)
  │    │    │         │    │    ├── window partition=() ordering=+(101|105)
- │    │    │         │    │    │    ├── columns: ws_item_sk:4!null return_ratio:101 currency_ratio:102 rank:103 rank_1_orderby_1_1:105 rank_2_orderby_1_1:106
+ │    │    │         │    │    │    ├── columns: ws_item_sk:4!null return_ratio:101 currency_ratio:102!null rank:103 rank_1_orderby_1_1:105 rank_2_orderby_1_1:106!null
  │    │    │         │    │    │    ├── immutable
  │    │    │         │    │    │    ├── key: (4)
  │    │    │         │    │    │    ├── fd: (4)-->(101-103), (101)==(105), (105)==(101), (102)==(106), (106)==(102)
  │    │    │         │    │    │    ├── project
- │    │    │         │    │    │    │    ├── columns: rank_1_orderby_1_1:105 rank_2_orderby_1_1:106 ws_item_sk:4!null return_ratio:101 currency_ratio:102
+ │    │    │         │    │    │    │    ├── columns: rank_1_orderby_1_1:105 rank_2_orderby_1_1:106!null ws_item_sk:4!null return_ratio:101 currency_ratio:102!null
  │    │    │         │    │    │    │    ├── immutable
  │    │    │         │    │    │    │    ├── key: (4)
  │    │    │         │    │    │    │    ├── fd: (4)-->(101,102), (101)==(105), (105)==(101), (102)==(106), (106)==(102)
  │    │    │         │    │    │    │    ├── project
- │    │    │         │    │    │    │    │    ├── columns: return_ratio:101 currency_ratio:102 ws_item_sk:4!null
+ │    │    │         │    │    │    │    │    ├── columns: return_ratio:101 currency_ratio:102!null ws_item_sk:4!null
  │    │    │         │    │    │    │    │    ├── immutable
  │    │    │         │    │    │    │    │    ├── key: (4)
  │    │    │         │    │    │    │    │    ├── fd: (4)-->(101,102)
  │    │    │         │    │    │    │    │    ├── group-by (streaming)
- │    │    │         │    │    │    │    │    │    ├── columns: ws_item_sk:4!null sum:94 sum:96 sum:98 sum:100
+ │    │    │         │    │    │    │    │    │    ├── columns: ws_item_sk:4!null sum:94 sum:96!null sum:98!null sum:100!null
  │    │    │         │    │    │    │    │    │    ├── grouping columns: ws_item_sk:4!null
  │    │    │         │    │    │    │    │    │    ├── internal-ordering: +4
  │    │    │         │    │    │    │    │    │    ├── immutable
  │    │    │         │    │    │    │    │    │    ├── key: (4)
  │    │    │         │    │    │    │    │    │    ├── fd: (4)-->(94,96,98,100)
  │    │    │         │    │    │    │    │    │    ├── project
- │    │    │         │    │    │    │    │    │    │    ├── columns: column93:93 column95:95 column97:97 column99:99 ws_item_sk:4!null
+ │    │    │         │    │    │    │    │    │    │    ├── columns: column93:93 column95:95!null column97:97!null column99:99!null ws_item_sk:4!null
  │    │    │         │    │    │    │    │    │    │    ├── immutable
  │    │    │         │    │    │    │    │    │    │    ├── ordering: +4
  │    │    │         │    │    │    │    │    │    │    ├── inner-join (lookup date_dim)
@@ -1865,9 +1865,9 @@ limit
  │    │    │         │    │    │    │    │    │    │    │         └── d_moy:71 = 11 [outer=(71), constraints=(/71: [/11 - /11]; tight), fd=()-->(71)]
  │    │    │         │    │    │    │    │    │    │    └── projections
  │    │    │         │    │    │    │    │    │    │         ├── COALESCE(wr_return_quantity:51, 0) [as=column93:93, outer=(51)]
- │    │    │         │    │    │    │    │    │    │         ├── COALESCE(ws_quantity:19, 0) [as=column95:95, outer=(19)]
- │    │    │         │    │    │    │    │    │    │         ├── COALESCE(wr_return_amt:52::DECIMAL, 0) [as=column97:97, outer=(52), immutable]
- │    │    │         │    │    │    │    │    │    │         └── COALESCE(ws_net_paid:30::DECIMAL, 0) [as=column99:99, outer=(30), immutable]
+ │    │    │         │    │    │    │    │    │    │         ├── ws_quantity:19 [as=column95:95, outer=(19)]
+ │    │    │         │    │    │    │    │    │    │         ├── wr_return_amt:52::DECIMAL [as=column97:97, outer=(52), immutable]
+ │    │    │         │    │    │    │    │    │    │         └── ws_net_paid:30::DECIMAL [as=column99:99, outer=(30), immutable]
  │    │    │         │    │    │    │    │    │    └── aggregations
  │    │    │         │    │    │    │    │    │         ├── sum [as=sum:94, outer=(93)]
  │    │    │         │    │    │    │    │    │         │    └── column93:93
@@ -1904,39 +1904,39 @@ limit
  │    │              ├── key: (123)
  │    │              ├── fd: ()-->(217), (123)-->(211,213,214)
  │    │              ├── select
- │    │              │    ├── columns: cs_item_sk:123!null return_ratio:211 currency_ratio:212 rank:213 rank:214 rank_1_orderby_1_1:215 rank_2_orderby_1_1:216
+ │    │              │    ├── columns: cs_item_sk:123!null return_ratio:211 currency_ratio:212!null rank:213 rank:214 rank_1_orderby_1_1:215 rank_2_orderby_1_1:216!null
  │    │              │    ├── immutable
  │    │              │    ├── key: (123)
  │    │              │    ├── fd: (123)-->(211-214), (211)==(215), (215)==(211), (212)==(216), (216)==(212)
  │    │              │    ├── window partition=() ordering=+(212|216)
- │    │              │    │    ├── columns: cs_item_sk:123!null return_ratio:211 currency_ratio:212 rank:213 rank:214 rank_1_orderby_1_1:215 rank_2_orderby_1_1:216
+ │    │              │    │    ├── columns: cs_item_sk:123!null return_ratio:211 currency_ratio:212!null rank:213 rank:214 rank_1_orderby_1_1:215 rank_2_orderby_1_1:216!null
  │    │              │    │    ├── immutable
  │    │              │    │    ├── key: (123)
  │    │              │    │    ├── fd: (123)-->(211-214), (211)==(215), (215)==(211), (212)==(216), (216)==(212)
  │    │              │    │    ├── window partition=() ordering=+(211|215)
- │    │              │    │    │    ├── columns: cs_item_sk:123!null return_ratio:211 currency_ratio:212 rank:213 rank_1_orderby_1_1:215 rank_2_orderby_1_1:216
+ │    │              │    │    │    ├── columns: cs_item_sk:123!null return_ratio:211 currency_ratio:212!null rank:213 rank_1_orderby_1_1:215 rank_2_orderby_1_1:216!null
  │    │              │    │    │    ├── immutable
  │    │              │    │    │    ├── key: (123)
  │    │              │    │    │    ├── fd: (123)-->(211-213), (211)==(215), (215)==(211), (212)==(216), (216)==(212)
  │    │              │    │    │    ├── project
- │    │              │    │    │    │    ├── columns: rank_1_orderby_1_1:215 rank_2_orderby_1_1:216 cs_item_sk:123!null return_ratio:211 currency_ratio:212
+ │    │              │    │    │    │    ├── columns: rank_1_orderby_1_1:215 rank_2_orderby_1_1:216!null cs_item_sk:123!null return_ratio:211 currency_ratio:212!null
  │    │              │    │    │    │    ├── immutable
  │    │              │    │    │    │    ├── key: (123)
  │    │              │    │    │    │    ├── fd: (123)-->(211,212), (211)==(215), (215)==(211), (212)==(216), (216)==(212)
  │    │              │    │    │    │    ├── project
- │    │              │    │    │    │    │    ├── columns: return_ratio:211 currency_ratio:212 cs_item_sk:123!null
+ │    │              │    │    │    │    │    ├── columns: return_ratio:211 currency_ratio:212!null cs_item_sk:123!null
  │    │              │    │    │    │    │    ├── immutable
  │    │              │    │    │    │    │    ├── key: (123)
  │    │              │    │    │    │    │    ├── fd: (123)-->(211,212)
  │    │              │    │    │    │    │    ├── group-by (streaming)
- │    │              │    │    │    │    │    │    ├── columns: cs_item_sk:123!null sum:204 sum:206 sum:208 sum:210
+ │    │              │    │    │    │    │    │    ├── columns: cs_item_sk:123!null sum:204 sum:206!null sum:208!null sum:210!null
  │    │              │    │    │    │    │    │    ├── grouping columns: cs_item_sk:123!null
  │    │              │    │    │    │    │    │    ├── internal-ordering: +123
  │    │              │    │    │    │    │    │    ├── immutable
  │    │              │    │    │    │    │    │    ├── key: (123)
  │    │              │    │    │    │    │    │    ├── fd: (123)-->(204,206,208,210)
  │    │              │    │    │    │    │    │    ├── project
- │    │              │    │    │    │    │    │    │    ├── columns: column203:203 column205:205 column207:207 column209:209 cs_item_sk:123!null
+ │    │              │    │    │    │    │    │    │    ├── columns: column203:203 column205:205!null column207:207!null column209:209!null cs_item_sk:123!null
  │    │              │    │    │    │    │    │    │    ├── immutable
  │    │              │    │    │    │    │    │    │    ├── ordering: +123
  │    │              │    │    │    │    │    │    │    ├── inner-join (lookup date_dim)
@@ -1977,9 +1977,9 @@ limit
  │    │              │    │    │    │    │    │    │    │         └── d_moy:181 = 11 [outer=(181), constraints=(/181: [/11 - /11]; tight), fd=()-->(181)]
  │    │              │    │    │    │    │    │    │    └── projections
  │    │              │    │    │    │    │    │    │         ├── COALESCE(cr_return_quantity:161, 0) [as=column203:203, outer=(161)]
- │    │              │    │    │    │    │    │    │         ├── COALESCE(cs_quantity:126, 0) [as=column205:205, outer=(126)]
- │    │              │    │    │    │    │    │    │         ├── COALESCE(cr_return_amount:162::DECIMAL, 0) [as=column207:207, outer=(162), immutable]
- │    │              │    │    │    │    │    │    │         └── COALESCE(cs_net_paid:137::DECIMAL, 0) [as=column209:209, outer=(137), immutable]
+ │    │              │    │    │    │    │    │    │         ├── cs_quantity:126 [as=column205:205, outer=(126)]
+ │    │              │    │    │    │    │    │    │         ├── cr_return_amount:162::DECIMAL [as=column207:207, outer=(162), immutable]
+ │    │              │    │    │    │    │    │    │         └── cs_net_paid:137::DECIMAL [as=column209:209, outer=(137), immutable]
  │    │              │    │    │    │    │    │    └── aggregations
  │    │              │    │    │    │    │    │         ├── sum [as=sum:204, outer=(203)]
  │    │              │    │    │    │    │    │         │    └── column203:203
@@ -2016,39 +2016,39 @@ limit
  │              ├── key: (225)
  │              ├── fd: ()-->(314), (225)-->(308,310,311)
  │              ├── select
- │              │    ├── columns: ss_item_sk:225!null return_ratio:308 currency_ratio:309 rank:310 rank:311 rank_1_orderby_1_1:312 rank_2_orderby_1_1:313
+ │              │    ├── columns: ss_item_sk:225!null return_ratio:308 currency_ratio:309!null rank:310 rank:311 rank_1_orderby_1_1:312 rank_2_orderby_1_1:313!null
  │              │    ├── immutable
  │              │    ├── key: (225)
  │              │    ├── fd: (225)-->(308-311), (308)==(312), (312)==(308), (309)==(313), (313)==(309)
  │              │    ├── window partition=() ordering=+(309|313)
- │              │    │    ├── columns: ss_item_sk:225!null return_ratio:308 currency_ratio:309 rank:310 rank:311 rank_1_orderby_1_1:312 rank_2_orderby_1_1:313
+ │              │    │    ├── columns: ss_item_sk:225!null return_ratio:308 currency_ratio:309!null rank:310 rank:311 rank_1_orderby_1_1:312 rank_2_orderby_1_1:313!null
  │              │    │    ├── immutable
  │              │    │    ├── key: (225)
  │              │    │    ├── fd: (225)-->(308-311), (308)==(312), (312)==(308), (309)==(313), (313)==(309)
  │              │    │    ├── window partition=() ordering=+(308|312)
- │              │    │    │    ├── columns: ss_item_sk:225!null return_ratio:308 currency_ratio:309 rank:310 rank_1_orderby_1_1:312 rank_2_orderby_1_1:313
+ │              │    │    │    ├── columns: ss_item_sk:225!null return_ratio:308 currency_ratio:309!null rank:310 rank_1_orderby_1_1:312 rank_2_orderby_1_1:313!null
  │              │    │    │    ├── immutable
  │              │    │    │    ├── key: (225)
  │              │    │    │    ├── fd: (225)-->(308-310), (308)==(312), (312)==(308), (309)==(313), (313)==(309)
  │              │    │    │    ├── project
- │              │    │    │    │    ├── columns: rank_1_orderby_1_1:312 rank_2_orderby_1_1:313 ss_item_sk:225!null return_ratio:308 currency_ratio:309
+ │              │    │    │    │    ├── columns: rank_1_orderby_1_1:312 rank_2_orderby_1_1:313!null ss_item_sk:225!null return_ratio:308 currency_ratio:309!null
  │              │    │    │    │    ├── immutable
  │              │    │    │    │    ├── key: (225)
  │              │    │    │    │    ├── fd: (225)-->(308,309), (308)==(312), (312)==(308), (309)==(313), (313)==(309)
  │              │    │    │    │    ├── project
- │              │    │    │    │    │    ├── columns: return_ratio:308 currency_ratio:309 ss_item_sk:225!null
+ │              │    │    │    │    │    ├── columns: return_ratio:308 currency_ratio:309!null ss_item_sk:225!null
  │              │    │    │    │    │    ├── immutable
  │              │    │    │    │    │    ├── key: (225)
  │              │    │    │    │    │    ├── fd: (225)-->(308,309)
  │              │    │    │    │    │    ├── group-by (streaming)
- │              │    │    │    │    │    │    ├── columns: ss_item_sk:225!null sum:301 sum:303 sum:305 sum:307
+ │              │    │    │    │    │    │    ├── columns: ss_item_sk:225!null sum:301 sum:303!null sum:305!null sum:307!null
  │              │    │    │    │    │    │    ├── grouping columns: ss_item_sk:225!null
  │              │    │    │    │    │    │    ├── internal-ordering: +225
  │              │    │    │    │    │    │    ├── immutable
  │              │    │    │    │    │    │    ├── key: (225)
  │              │    │    │    │    │    │    ├── fd: (225)-->(301,303,305,307)
  │              │    │    │    │    │    │    ├── project
- │              │    │    │    │    │    │    │    ├── columns: column300:300 column302:302 column304:304 column306:306 ss_item_sk:225!null
+ │              │    │    │    │    │    │    │    ├── columns: column300:300 column302:302!null column304:304!null column306:306!null ss_item_sk:225!null
  │              │    │    │    │    │    │    │    ├── immutable
  │              │    │    │    │    │    │    │    ├── ordering: +225
  │              │    │    │    │    │    │    │    ├── inner-join (lookup date_dim)
@@ -2089,9 +2089,9 @@ limit
  │              │    │    │    │    │    │    │    │         └── d_moy:278 = 11 [outer=(278), constraints=(/278: [/11 - /11]; tight), fd=()-->(278)]
  │              │    │    │    │    │    │    │    └── projections
  │              │    │    │    │    │    │    │         ├── COALESCE(sr_return_quantity:258, 0) [as=column300:300, outer=(258)]
- │              │    │    │    │    │    │    │         ├── COALESCE(ss_quantity:233, 0) [as=column302:302, outer=(233)]
- │              │    │    │    │    │    │    │         ├── COALESCE(sr_return_amt:259::DECIMAL, 0) [as=column304:304, outer=(259), immutable]
- │              │    │    │    │    │    │    │         └── COALESCE(ss_net_paid:243::DECIMAL, 0) [as=column306:306, outer=(243), immutable]
+ │              │    │    │    │    │    │    │         ├── ss_quantity:233 [as=column302:302, outer=(233)]
+ │              │    │    │    │    │    │    │         ├── sr_return_amt:259::DECIMAL [as=column304:304, outer=(259), immutable]
+ │              │    │    │    │    │    │    │         └── ss_net_paid:243::DECIMAL [as=column306:306, outer=(243), immutable]
  │              │    │    │    │    │    │    └── aggregations
  │              │    │    │    │    │    │         ├── sum [as=sum:301, outer=(300)]
  │              │    │    │    │    │    │         │    └── column300:300
