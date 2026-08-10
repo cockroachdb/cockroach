@@ -239,6 +239,7 @@ type ioLoadListener struct {
 
 	l0CompactedBytes        *metric.Counter
 	l0TokensProduced        *metric.Counter
+	bypassedWorkCount       *metric.Counter
 	diskWriteByteTokensUsed [admissionpb.NumStoreWorkTypes]*metric.Counter
 }
 
@@ -750,6 +751,14 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 		metrics.Levels[0], cumIngestedBytes, metrics.DiskStats.BytesWritten, sas,
 		io.aux.recentUnflushedMemTableTooLarge)
 	io.copyAuxEtcFromPerWorkEstimator()
+	// Export the number of requests that bypassed admission control this
+	// interval (e.g. below-raft replication writes not subject to replication
+	// admission control). This is the same per-interval count reported in the
+	// [accounting] section of the IO admission controller log. Guard against a
+	// negative delta from non-monotonic stats so the counter stays monotonic.
+	if bypassed := io.adjustTokensResult.aux.perWorkTokensAux.intBypassedWorkCount; bypassed > 0 {
+		io.bypassedWorkCount.Inc(bypassed)
+	}
 	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
 	l0WriteLM, l0IngestLM, ingestLM, writeAmpLM := io.perWorkTokenEstimator.getModelsAtDone()
