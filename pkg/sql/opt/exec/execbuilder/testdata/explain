@@ -566,7 +566,7 @@ EXPLAIN SHOW COLUMNS FROM foo
 distribution: local
 ·
 • sort
-│ order: +ordinal_position,+column_name,+crdb_sql_type,+is_nullable,+column_default,+generation_expression,+indices,+is_hidden
+│ order: +ordinal_position,+column_name,+crdb_sql_type,+is_nullable,+column_default,+generation_expression,+indexes,+is_hidden
 │
 └── • render
     │
