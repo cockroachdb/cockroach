@@ -277,7 +277,9 @@ func TestAuthorizeViaJob(t *testing.T) {
 	sd.SessionData = m.SessionData
 	sd.LocalOnlySessionData = m.LocalOnlySessionData
 
-	getManager := func(t *testing.T, u string) eval.ReplicationStreamManager {
+	getManagerWithTxn := func(
+		t *testing.T, u string,
+	) (eval.ReplicationStreamManager, descs.Txn) {
 		sqlUser, err := username.MakeSQLUsernameFromUserInput(u, username.PurposeValidation)
 		require.NoError(t, err)
 		txn := kvDB.NewTxn(ctx, "test")
@@ -290,8 +292,25 @@ func TestAuthorizeViaJob(t *testing.T) {
 		mgr, err := newReplicationStreamManager(ctx, pi.EvalContext(),
 			p.(resolver.SchemaResolver), pi.InternalSQLTxn(), clusterunique.ID{})
 		require.NoError(t, err)
+		return mgr, pi.InternalSQLTxn()
+	}
+	getManager := func(t *testing.T, u string) eval.ReplicationStreamManager {
+		mgr, _ := getManagerWithTxn(t, u)
 		return mgr
 	}
+
+	t.Run("owner authorizes stream created in caller transaction", func(t *testing.T) {
+		mgr, txn := getManagerWithTxn(t, "alice")
+		jr := makeProducerJobRecordForLogicalReplication(
+			registry, time.Hour, aliceUsername, uuid.MakeV4(),
+			nil /* spans */, []uint32{100}, "uncommitted")
+		_, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn)
+		require.NoError(t, err)
+
+		authCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		require.NoError(t, mgr.AuthorizeViaJob(authCtx, streampb.StreamID(jr.JobID)))
+	})
 
 	viaJobTests := []struct {
 		name        string
