@@ -15,6 +15,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/connectionlatency"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/debug"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/fktxn"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/geospatial"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/indexes"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/insights"
