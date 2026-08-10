@@ -2259,6 +2259,29 @@ func TestUserPrivileges(t *testing.T) {
 		reverseJobID := GetReverseJobID(ctx, t, dbA, jobAID2)
 		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, reverseJobID)
 	})
+	t.Run("bidi-reverse-uri-requires-usage-at-create-time", func(t *testing.T) {
+		reverseURL := replicationtestutils.GetExternalConnectionURI(
+			t, s, s, serverutils.DBName("a"), serverutils.User(username.TestUser),
+		)
+		createStmtBidi := "CREATE LOGICALLY REPLICATED TABLES (tab_clone_3) FROM TABLES (tab) ON $1 WITH BIDIRECTIONAL ON $2"
+
+		// Grant all required permissions except for USAGE on the reverseURL external connection.
+		dbA.Exec(t, `GRANT CREATE ON DATABASE a TO testuser`)
+		dbB.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONSOURCE TO %s", username.TestUser+"3"))
+		dbB.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser+"3"))
+
+		testuser.ExpectErr(t,
+			fmt.Sprintf("user %s does not have USAGE privilege on external_connection %s",
+				username.TestUser+"3", reverseURL.Host),
+			createStmtBidi, dbBURL2.String(), reverseURL.String())
+
+		dbA.Exec(t, fmt.Sprintf(`GRANT USAGE ON EXTERNAL CONNECTION "%s" TO %s`,
+			reverseURL.Host, username.TestUser+"3"))
+		var bidiJobID jobspb.JobID
+		testuser.QueryRow(t, createStmtBidi, dbBURL2.String(), reverseURL.String()).Scan(&bidiJobID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, bidiJobID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, GetReverseJobID(ctx, t, dbA, bidiJobID))
+	})
 	t.Run("ldr-source-requires-usage-on-external-connection", func(t *testing.T) {
 		usageURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 		testuser2.ExpectErr(t,
