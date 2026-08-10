@@ -960,3 +960,57 @@ statement ok
 CLOSE foo_first;
 
 subtest end
+
+subtest regression_172772
+
+# Regression for #172772:
+# A WITH HOLD cursor persisted at COMMIT must not observe writes from after DECLARE.
+
+statement ok
+CREATE TABLE bigq (a INT PRIMARY KEY, b STRING)
+
+statement ok
+INSERT INTO bigq SELECT g, 'placeholder' FROM generate_series(1, 11) AS g
+
+statement ok
+BEGIN
+
+statement ok
+DECLARE cq CURSOR WITH HOLD FOR SELECT a FROM bigq ORDER BY a
+
+# Write after DECLARE, before COMMIT.
+statement ok
+INSERT INTO bigq VALUES (100, 'blargh')
+
+# Read advances the txn read seqnum so persistCursor would stamp rows
+# with a post-DECLARE seqnum without the fix.
+statement ok
+SELECT count(*) FROM bigq
+
+statement ok
+COMMIT
+
+# Must return only rows 1..11 (the DECLARE-time snapshot).
+# Without the fix, FETCH also returns 100.
+query I rowsort
+FETCH ALL cq
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+
+statement ok
+CLOSE cq
+
+statement ok
+DROP TABLE bigq
+
+subtest end
