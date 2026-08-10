@@ -10,6 +10,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -155,6 +156,10 @@ func ingestionPlanHook(
 
 		configUri, err := streamclient.ParseConfigUri(from)
 		if err != nil {
+			return err
+		}
+
+		if err := replicationutils.CheckSourceExternalConnectionUsage(ctx, p, configUri); err != nil {
 			return err
 		}
 
