@@ -478,13 +478,25 @@ func isJobTerminalOrTerminating(state jobs.State) bool {
 		state == jobs.StateReverting
 }
 
-func checkJobOwnership(
+func (r *replicationStreamManagerImpl) checkJobOwnership(
 	ctx context.Context, planHook sql.PlanHookState, streamID streampb.StreamID,
 ) (jobs.State, error) {
-	row, err := planHook.ExecCfg().InternalDB.Executor().QueryRowEx(
-		ctx, "check-replication-stream-owner", nil, /* fresh txn */
-		sessiondata.NodeUserSessionDataOverride,
-		"SELECT owner, status, job_type FROM system.jobs WHERE id = $1", int64(streamID))
+	const query = "SELECT owner, status, job_type FROM system.jobs WHERE id = $1"
+	var row tree.Datums
+	var err error
+	if r.evalCtx.AsOfSystemTime != nil {
+		// plan_logical_replication runs in an AOST transaction whose timestamp
+		// can predate the producer job.
+		row, err = planHook.ExecCfg().InternalDB.Executor().QueryRowEx(
+			ctx, "check-replication-stream-owner", nil, /* fresh txn */
+			sessiondata.NodeUserSessionDataOverride, query, int64(streamID))
+	} else {
+		// Use the builtin's transaction. A fresh nested transaction can block
+		// behind the caller's job writes or a concurrent job-startup update.
+		row, err = r.txn.QueryRowEx(
+			ctx, "check-replication-stream-owner", r.txn.KV(),
+			sessiondata.NodeUserSessionDataOverride, query, int64(streamID))
+	}
 	if err != nil {
 		return "", err
 	}
@@ -523,7 +535,7 @@ func (r *replicationStreamManagerImpl) AuthorizeViaJob(
 	if !ok {
 		return errors.AssertionFailedf("expected planner to implement PlanHookState")
 	}
-	state, err := checkJobOwnership(ctx, planHook, streamID)
+	state, err := r.checkJobOwnership(ctx, planHook, streamID)
 	if err != nil {
 		return err
 	}
@@ -546,7 +558,7 @@ func (r *replicationStreamManagerImpl) AuthorizeViaJobAllowTerminal(
 	if !ok {
 		return false, errors.AssertionFailedf("expected planner to implement PlanHookState")
 	}
-	if _, err := checkJobOwnership(ctx, planHook, streamID); err != nil {
+	if _, err := r.checkJobOwnership(ctx, planHook, streamID); err != nil {
 		if jobs.HasJobNotFoundError(err) {
 			return true, nil
 		}
