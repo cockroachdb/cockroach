@@ -254,7 +254,7 @@ timeline for the draining:
   (Which means the total duration of the lease transfer stage is not totally
   determined by the value of `server.shutdown.lease_transfer_iteration.timeout"`.
   We [propose][Lease Transfer Issue] to rename this cluster setting with
-  `server.shutdown.lease_transfer_iteration.timeout"`, and document it seperately with
+  `server.shutdown.lease_transfer_iteration.timeout"`, and document it separately with
   the other three waiting periods.)
 
 # Demo with changes from Technical Design
