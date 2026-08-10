@@ -844,7 +844,11 @@ type lockTable interface {
 	//
 	// The clockObs parameter is the clock observation taken before the push. It
 	// is used to establish a lower bound on when the transaction was known to be
-	// pending. This can be zero for finalized transactions.
+	// pending. This can be zero for finalized transactions, which have no use
+	// for it. It is also discarded for STAGING transactions: a STAGING record
+	// may belong to an implicitly committed transaction that has already
+	// acknowledged its client, so the observation proves nothing about when the
+	// transaction was pending.
 	PushedTransactionUpdated(txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp)
 
 	// QueryLockTableState returns detailed metadata on locks managed by the lockTable.
