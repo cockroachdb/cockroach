@@ -505,87 +505,84 @@ func TestShowQueries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const multiByte = "💩"
-	const selectBase = "SELECT * FROM "
+	ctx := context.Background()
 
-	maxLen := sql.MaxSQLBytes - utf8.RuneLen('…')
+	const (
+		multiByte            = "💩"
+		selectBase           = "SELECT * FROM "
+		lowQueryTextMaxBytes = 1000
+	)
+
+	maxLen := lowQueryTextMaxBytes - utf8.RuneLen('…')
 
 	// Craft a statement that would naively be truncated mid-rune.
 	tableName := strings.Repeat("a", maxLen-len(selectBase)-(len(multiByte)-1)) + multiByte
 	// Push the total length over the truncation threshold.
-	tableName += strings.Repeat("a", sql.MaxSQLBytes-len(tableName)+1)
+	tableName += strings.Repeat("a", lowQueryTextMaxBytes-len(tableName)+1)
 	selectStmt := selectBase + tableName
 
 	if r, _ := utf8.DecodeLastRuneInString(selectStmt[:maxLen]); r != utf8.RuneError {
 		t.Fatalf("expected naive truncation to produce invalid utf8, got %c", r)
 	}
-	expectedSelectStmt := selectStmt
-	for i := range expectedSelectStmt {
-		if i > maxLen {
-			_, prevLen := utf8.DecodeLastRuneInString(expectedSelectStmt[:i])
-			expectedSelectStmt = expectedSelectStmt[:i-prevLen]
-			break
-		}
-	}
-	expectedSelectStmt = expectedSelectStmt + "…"
+	truncatedSelectStmt := selectBase +
+		strings.Repeat("a", maxLen-len(selectBase)-(len(multiByte)-1)) + "…"
 
 	var conn1 *gosql.DB
 	var conn2 *gosql.DB
 
 	execKnobs := &sql.ExecutorTestingKnobs{}
+	type showQueriesObservation struct {
+		stmts []string
+		err   error
+	}
+	showQueriesResult := make(chan showQueriesObservation, 1)
 
-	found := false
-	var failure error
+	collectShowQueries := func() ([]string, error) {
+		const showQuery = "SELECT node_id, (now() - start)::FLOAT8, query FROM [SHOW CLUSTER QUERIES]"
 
-	execKnobs.StatementFilter = func(ctx context.Context, _ *sessiondata.SessionData, stmt string, err error) {
-		if stmt == selectStmt {
-			found = true
-			const showQuery = "SELECT node_id, (now() - start)::FLOAT8, query FROM [SHOW CLUSTER QUERIES]"
+		rows, err := conn1.Query(showQuery)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
 
-			rows, err := conn1.Query(showQuery)
-			if err != nil {
-				t.Fatal(err)
+		var stmts []string
+		for rows.Next() {
+			var nodeID int
+			var stmt string
+			var delta float64
+			if err := rows.Scan(&nodeID, &delta, &stmt); err != nil {
+				return nil, err
 			}
-			defer rows.Close()
-
-			var stmts []string
-			for rows.Next() {
-				var nodeID int
-				var stmt string
-				var delta float64
-				if err := rows.Scan(&nodeID, &delta, &stmt); err != nil {
-					failure = err
-					return
-				}
-				stmts = append(stmts, stmt)
-				if nodeID < 1 || nodeID > 2 {
-					failure = fmt.Errorf("invalid node ID: %d", nodeID)
-					return
-				}
-
-				// The delta measures how long ago or in the future (in
-				// seconds) the start time is. It must be
-				// "close to now", otherwise we have a problem with the time
-				// accounting.
-				if math.Abs(delta) > 10 {
-					failure = fmt.Errorf("start time too far in the past or the future: expected <10s, got %.3fs", delta)
-					return
-				}
-			}
-			if err := rows.Err(); err != nil {
-				failure = err
-				return
+			stmts = append(stmts, stmt)
+			if nodeID < 1 || nodeID > 2 {
+				return nil, fmt.Errorf("invalid node ID: %d", nodeID)
 			}
 
-			foundSelect := false
-			for _, stmt := range stmts {
-				if stmt == expectedSelectStmt {
-					foundSelect = true
-				}
+			// The delta measures how long ago or in the future (in seconds) the
+			// start time is. It must be "close to now", otherwise we have a
+			// problem with the time accounting.
+			if math.Abs(delta) > 10 {
+				return nil, fmt.Errorf("start time too far in the past or the future: expected <10s, got %.3fs", delta)
 			}
-			if !foundSelect {
-				failure = fmt.Errorf("original query not found in SHOW QUERIES. expected: %s\nactual: %v", selectStmt, stmts)
-			}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return stmts, nil
+	}
+
+	execKnobs.StatementFilter = func(_ context.Context, _ *sessiondata.SessionData, stmt string, _ error) {
+		if stmt != selectStmt {
+			return
+		}
+		stmts, err := collectShowQueries()
+		select {
+		case showQueriesResult <- showQueriesObservation{stmts: stmts, err: err}:
+		default:
+			// Observation already recorded (e.g. a retry of selectStmt fired
+			// the filter twice). Drop the extra observation; the first fire
+			// captured the target query while it was active.
 		}
 	}
 
@@ -599,23 +596,47 @@ func TestShowQueries(t *testing.T) {
 				},
 			},
 		})
-	defer tc.Stopper().Stop(context.Background())
+	defer tc.Stopper().Stop(ctx)
 
 	conn1 = tc.ServerConn(0)
 	conn2 = tc.ServerConn(1)
 	sqlutils.CreateTable(t, conn1, tableName, "num INT", 0, nil)
 
-	if _, err := conn2.Exec(selectStmt); err != nil {
-		t.Fatal(err)
+	setActiveQueryTextMaxBytes := func(maxBytes int64) {
+		_, err := conn1.Exec(fmt.Sprintf(
+			"SET CLUSTER SETTING %s = '%dB'",
+			string(sql.ActiveQueryTextMaxBytes.Name()), maxBytes,
+		))
+		require.NoError(t, err)
+		testutils.SucceedsSoon(t, func() error {
+			for i := 0; i < tc.NumServers(); i++ {
+				if got := sql.ActiveQueryTextMaxBytes.Get(&tc.Server(i).ClusterSettings().SV); got != maxBytes {
+					return errors.Newf("expected node %d to have active query text limit %d, got %d",
+						i, maxBytes, got)
+				}
+			}
+			return nil
+		})
 	}
 
-	if failure != nil {
-		t.Fatal(failure)
+	runSelectAndCheck := func(maxBytes int64, expectedSelectStmt string) {
+		setActiveQueryTextMaxBytes(maxBytes)
+		if _, err := conn2.Exec(selectStmt); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case result := <-showQueriesResult:
+			require.NoError(t, result.err)
+			require.Containsf(t, result.stmts, expectedSelectStmt,
+				"query not found in SHOW QUERIES. expected: %s\nactual: %v",
+				expectedSelectStmt, result.stmts)
+		default:
+			t.Fatal("statement filter did not observe target query")
+		}
 	}
 
-	if !found {
-		t.Fatalf("knob did not activate in test")
-	}
+	runSelectAndCheck(lowQueryTextMaxBytes, truncatedSelectStmt)
+	runSelectAndCheck(int64(len(selectStmt)), selectStmt)
 
 	// Now check the behavior on error.
 	tc.StopServer(1)
