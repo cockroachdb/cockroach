@@ -211,6 +211,14 @@ func IsInsecureProject(project string) bool {
 	return project == DefaultProjectID || project == StagingProjectID
 }
 
+// usesVPCConvention reports whether project follows the ${project}-vpc /
+// ${project}-vpc-${region} network layout used by the e2e-infra projects, which
+// have no "default" subnet. Other projects keep the legacy "default" network and
+// subnet, which GCE resolves as before.
+func usesVPCConvention(project string) bool {
+	return project == DefaultProjectID || project == StagingProjectID
+}
+
 // DefaultNetworkSelfLink returns the self-link for roachprod's default GCE
 // network in project. Passing an empty project uses VMProject, matching
 // roachprod create behavior when the caller does not override the project.
@@ -218,7 +226,11 @@ func DefaultNetworkSelfLink(project string) string {
 	if project == "" {
 		project = VMProject()
 	}
-	return fmt.Sprintf("projects/%s/global/networks/%s-vpc", project, project)
+	network := "default"
+	if usesVPCConvention(project) {
+		network = fmt.Sprintf("%s-vpc", project)
+	}
+	return fmt.Sprintf("projects/%s/global/networks/%s", project, network)
 }
 
 // DefaultSubnetSelfLink returns the regional self-link for the subnet roachprod
@@ -227,9 +239,11 @@ func DefaultSubnetSelfLink(project, region string) string {
 	if project == "" {
 		project = VMProject()
 	}
-	return fmt.Sprintf(
-		"projects/%s/regions/%s/subnetworks/%s-vpc-%s", project, region, project, region,
-	)
+	subnet := "default"
+	if usesVPCConvention(project) {
+		subnet = fmt.Sprintf("%s-vpc-%s", project, region)
+	}
+	return fmt.Sprintf("projects/%s/regions/%s/subnetworks/%s", project, region, subnet)
 }
 
 // Denotes if this provider was successfully initialized.
