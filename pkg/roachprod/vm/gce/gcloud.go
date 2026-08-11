@@ -98,7 +98,11 @@ var (
 func initGCEProjectDefaults() error {
 	// ROACHPROD_GCE_DEFAULT_PROJECT historically controlled both the project
 	// where VMs were created and the project that hosted shared roachprod
-	// infrastructure. Keep it as a fallback for both roles.
+	// infrastructure. It remains the shared fallback for both roles, so the VM
+	// project and the infra project resolve to the same default unless one is
+	// overridden via its own environment variable. Keeping these defaults in
+	// sync avoids silently splitting a bare roachprod setup across two projects;
+	// TestProjectDefaultsShareBase locks this invariant.
 	legacyDefaultProject := config.EnvOrDefaultString(
 		"ROACHPROD_GCE_DEFAULT_PROJECT", DefaultProjectID,
 	)
@@ -222,6 +226,14 @@ func IsInsecureProject(project string) bool {
 // have no "default" subnet. Other projects keep the legacy "default" network and
 // subnet, which GCE resolves as before.
 func usesVPCConvention(project string) bool {
+	return project == DefaultProjectID || project == StagingProjectID
+}
+
+// isPrivateOnlyProject reports whether project's roachprod VPC omits external
+// (public) IP access, so VMs created there must use private addresses. The
+// crl-e2e-infra projects (prod and staging) are provisioned this way. Auto
+// address mode resolves to private for these projects and public elsewhere.
+func isPrivateOnlyProject(project string) bool {
 	return project == DefaultProjectID || project == StagingProjectID
 }
 
@@ -1931,7 +1943,7 @@ func (p *Provider) resolveAddressMode(mode vm.AddressMode) (vm.AddressMode, erro
 		return "", err
 	}
 	if mode == vm.AddressModeAuto {
-		if p.GetProject() == p.infraProject {
+		if isPrivateOnlyProject(p.GetProject()) {
 			return vm.AddressModePrivate, nil
 		}
 		return vm.AddressModePublic, nil
