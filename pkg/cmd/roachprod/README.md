@@ -45,9 +45,13 @@ For a full list, see `config.go` and `flags.go`.
 
 The GCE VM project and the project hosting shared roachprod infrastructure can
 be configured independently. `--gce-project` selects where VMs are created.
-`--gce-infra-project` selects the defaults for DNS, SSH metadata, the VM service
-account, and the shared artifacts bucket. The metadata and artifacts defaults
-can be overridden with `--gce-metadata-project` and `--gce-artifacts-bucket`.
+`--gce-infra-project` selects the defaults for DNS, SSH key storage, the VM
+service account, and the shared artifacts bucket. The standard production and
+staging metadata projects store SSH keys in
+`gs://roachprod-ssh-keys-<project>/ssh-keys`; other metadata projects continue
+to use GCE project metadata. `--gce-metadata-project` overrides the SSH key
+project and therefore selects its backing store. The artifacts default can be
+overridden with `--gce-artifacts-bucket`.
 
 `roachprod gc` is fail-closed: it defaults to all supported remote cloud
 providers and returns an error if any selected provider is inactive or cannot

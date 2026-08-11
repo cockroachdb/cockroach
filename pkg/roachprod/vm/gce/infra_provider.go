@@ -13,8 +13,8 @@ import (
 // InfraProvider is the API for GCP resources that are used as shared
 // infrastructure by clusters on other other clouds.
 type InfraProvider interface {
-	// GetUserAuthorizedKeys reads user public keys from the configured metadata
-	// project and returns them formatted for use in an authorized_keys file.
+	// GetUserAuthorizedKeys reads user public keys from shared infrastructure
+	// storage and returns them formatted for use in an authorized_keys file.
 	GetUserAuthorizedKeys() (AuthorizedKeys, error)
 	// SyncDNS replaces the configured DNS zone with the supplied hosts.
 	SyncDNS(l *logger.Logger, vms vm.List) error
