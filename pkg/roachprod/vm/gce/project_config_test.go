@@ -6,14 +6,129 @@
 package gce
 
 import (
+	stderrors "errors"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
+
+const (
+	testAuthorizedKeyOne = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILyYGn4rW/pcTHNpM024oWgrhNmQw3o+9VR6JhkNU7/I key-one"
+	testAuthorizedKeyTwo = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINp57QcrLGXgHKTadWdw7TO8BHKWOnhymmJ1UgWbyE8A key-two"
+)
+
+func TestParseUserAuthorizedKeysValidKeysAndFormatting(t *testing.T) {
+	metadata := strings.Join([]string{
+		"zoe:" + testAuthorizedKeyTwo,
+		"anna:" + testAuthorizedKeyOne,
+		"anna:" + testAuthorizedKeyTwo,
+	}, "\n") + "\n"
+
+	keys, issues, err := ParseUserAuthorizedKeys(metadata)
+
+	require.NoError(t, err)
+	require.Empty(t, issues)
+	require.Len(t, keys, 3)
+	require.Equal(t, []string{"anna", "anna", "zoe"}, []string{keys[0].User, keys[1].User, keys[2].User})
+	require.Equal(t, "key-one", keys[0].Comment)
+	require.Equal(t, "key-two", keys[1].Comment)
+	require.Equal(t, testAuthorizedKeyOne+"\n"+testAuthorizedKeyTwo+"\n"+testAuthorizedKeyTwo+"\n", string(keys.AsSSH()))
+	require.NotContains(t, string(keys.AsSSH()), "anna:")
+	require.Equal(
+		t,
+		"anna:"+testAuthorizedKeyOne+"\n"+
+			"anna:"+testAuthorizedKeyTwo+"\n"+
+			"zoe:"+testAuthorizedKeyTwo+"\n",
+		string(keys.AsProjectMetadata()),
+	)
+	require.Equal(t, testAuthorizedKeyOne, keys[0].Format(len(testAuthorizedKeyOne)+10))
+	require.Equal(t, "ssh-e... key-one", keys[0].Format(5))
+}
+
+func TestParseUserAuthorizedKeysSkipsEmptyAndInfrastructureUsers(t *testing.T) {
+	metadata := strings.Join([]string{
+		"",
+		config.RootUser + ":" + testAuthorizedKeyOne,
+		config.SharedUser + ":" + testAuthorizedKeyTwo,
+		"user:" + testAuthorizedKeyOne,
+		"",
+	}, "\n")
+
+	keys, issues, err := ParseUserAuthorizedKeys(metadata)
+
+	require.NoError(t, err)
+	require.Empty(t, issues)
+	require.Len(t, keys, 1)
+	require.Equal(t, "user", keys[0].User)
+}
+
+func TestParseUserAuthorizedKeysIssues(t *testing.T) {
+	keys, issues, err := ParseUserAuthorizedKeys("malformed\nalice:not-a-key\n")
+
+	require.NoError(t, err)
+	require.Empty(t, keys)
+	require.Len(t, issues, 2)
+	require.Equal(t, AuthorizedKeyMalformedLine, issues[0].Kind)
+	require.Equal(t, 1, issues[0].Line)
+	require.Empty(t, issues[0].User)
+	require.NoError(t, issues[0].Err)
+	require.Equal(t, "malformed", issues[0].rawLine)
+	require.Equal(t, AuthorizedKeyInvalidKey, issues[1].Kind)
+	require.Equal(t, 2, issues[1].Line)
+	require.Equal(t, "alice", issues[1].User)
+	require.Error(t, issues[1].Err)
+	require.Empty(t, issues[1].rawLine)
+}
+
+func TestParseUserAuthorizedKeysScannerError(t *testing.T) {
+	metadata := "alice:" + strings.Repeat("x", 1024*1024)
+
+	keys, issues, err := ParseUserAuthorizedKeys(metadata)
+
+	require.ErrorContains(t, err, "failed to read SSH key data")
+	require.Empty(t, keys)
+	require.Empty(t, issues)
+}
+
+func TestParseUserAuthorizedKeysDoesNotLog(t *testing.T) {
+	stderr := captureGCEStderr(t, func() {
+		_, issues, err := ParseUserAuthorizedKeys("malformed\nalice:not-a-key\n")
+		require.NoError(t, err)
+		require.Len(t, issues, 2)
+	})
+
+	require.Empty(t, stderr)
+}
+
+func TestLogAuthorizedKeyParseIssuesRedactsInvalidKeys(t *testing.T) {
+	stderr := captureGCEStderr(t, func() {
+		logAuthorizedKeyParseIssues([]AuthorizedKeyParseIssue{
+			{
+				Kind:    AuthorizedKeyMalformedLine,
+				Line:    1,
+				rawLine: "malformed-line",
+			},
+			{
+				Kind:    AuthorizedKeyInvalidKey,
+				Line:    2,
+				User:    "alice",
+				Err:     stderrors.New("parse failed"),
+				rawLine: "ssh-ed25519 SECRET invalid",
+			},
+		})
+	})
+
+	require.Contains(t, stderr, `malformed public key line "malformed-line"`)
+	require.Contains(t, stderr, `line 2 for user "alice": parse failed`)
+	require.NotContains(t, stderr, "SECRET")
+	require.NotContains(t, stderr, "ssh-ed25519 SECRET")
+}
 
 func TestProjectConfiguration(t *testing.T) {
 	oldVMProject := defaultVMProject
@@ -278,4 +393,21 @@ func unsetEnv(t *testing.T, key string) {
 			require.NoError(t, os.Unsetenv(key))
 		}
 	})
+}
+
+func captureGCEStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	oldStderr := os.Stderr
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = writer
+	defer func() {
+		os.Stderr = oldStderr
+	}()
+
+	fn()
+	require.NoError(t, writer.Close())
+	output, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	return string(output)
 }
