@@ -160,6 +160,30 @@ func TestDNSDefaults(t *testing.T) {
 	}
 }
 
+// TestProjectDefaultsShareBase locks the invariant that, absent per-role
+// environment overrides, the VM project and the infra project resolve to the
+// same default. roachprod exposes both as separate concepts (VMs can live in a
+// private project while shared infrastructure lives elsewhere), but their
+// defaults must match so a bare setup does not silently split work across two
+// projects. If a future change points one default at a different project (e.g.
+// the infra project at staging), this test forces that divergence to be
+// deliberate.
+func TestProjectDefaultsShareBase(t *testing.T) {
+	// Restore every global initGCEProjectDefaults mutates once the environment
+	// is back. Registered before unsetEnv so it runs last (t.Cleanup is LIFO),
+	// i.e. after the environment has been restored.
+	t.Cleanup(func() {
+		require.NoError(t, initGCEProjectDefaults())
+	})
+	unsetEnv(t, "ROACHPROD_GCE_DEFAULT_PROJECT")
+	unsetEnv(t, "ROACHPROD_GCE_PROJECT")
+	unsetEnv(t, "ROACHPROD_GCE_INFRA_PROJECT")
+
+	require.NoError(t, initGCEProjectDefaults())
+	require.Equal(t, DefaultProjectID, defaultVMProject)
+	require.Equal(t, defaultVMProject, defaultInfraProject)
+}
+
 func TestBuildInstancePropertiesLocalSSDDisks(t *testing.T) {
 	l, err := (&logger.Config{Stdout: io.Discard, Stderr: io.Discard}).NewLogger("")
 	if err != nil {
@@ -268,6 +292,7 @@ func TestBuildInstancePropertiesAddressModeAndSubnet(t *testing.T) {
 	require.Equal(t, []string{iapSSHTag}, props.GetTags().GetItems())
 
 	publicOpts := vm.DefaultCreateOpts()
+	publicOpts.AddressMode = vm.AddressModePublic
 	props, err = p.buildInstanceProperties(
 		l, publicOpts, providerOpts, "startup-script", "us-east1-b", nil,
 	)
@@ -301,6 +326,7 @@ func TestPublicAddressModePreservesSubnetDefaults(t *testing.T) {
 	p := &Provider{Projects: []string{"test-project"}, infraProject: "default-project"}
 	providerOpts := DefaultProviderOpts()
 	publicOpts := vm.DefaultCreateOpts()
+	publicOpts.AddressMode = vm.AddressModePublic
 	require.Equal(t, vm.AddressModePublic, publicOpts.AddressMode)
 
 	props, err := p.buildInstanceProperties(
@@ -331,27 +357,51 @@ func TestPublicAddressModePreservesSubnetDefaults(t *testing.T) {
 }
 
 func TestResolveAddressMode(t *testing.T) {
-	defaultProjectProvider := &Provider{
-		Projects:     []string{"default-project"},
-		infraProject: "default-project",
+	tests := []struct {
+		name     string
+		project  string
+		mode     vm.AddressMode
+		expected vm.AddressMode
+	}{
+		{
+			name:     "auto resolves to private in the prod infra project",
+			project:  DefaultProjectID,
+			mode:     vm.AddressModeAuto,
+			expected: vm.AddressModePrivate,
+		},
+		{
+			name:     "auto resolves to private in the staging infra project",
+			project:  StagingProjectID,
+			mode:     vm.AddressModeAuto,
+			expected: vm.AddressModePrivate,
+		},
+		{
+			name:     "auto resolves to public in a public-capable project",
+			project:  "cockroach-ephemeral",
+			mode:     vm.AddressModeAuto,
+			expected: vm.AddressModePublic,
+		},
+		{
+			name:     "explicit public is preserved in a private-only project",
+			project:  DefaultProjectID,
+			mode:     vm.AddressModePublic,
+			expected: vm.AddressModePublic,
+		},
+		{
+			name:     "empty normalizes to public",
+			project:  DefaultProjectID,
+			mode:     "",
+			expected: vm.AddressModePublic,
+		},
 	}
-	nonDefaultProjectProvider := &Provider{
-		Projects:     []string{"other-project"},
-		infraProject: "default-project",
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &Provider{Projects: []string{tc.project}}
+			mode, err := p.resolveAddressMode(tc.mode)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, mode)
+		})
 	}
-
-	mode, err := defaultProjectProvider.resolveAddressMode(vm.AddressModeAuto)
-	require.NoError(t, err)
-	require.Equal(t, vm.AddressModePrivate, mode)
-	mode, err = nonDefaultProjectProvider.resolveAddressMode(vm.AddressModeAuto)
-	require.NoError(t, err)
-	require.Equal(t, vm.AddressModePublic, mode)
-	mode, err = defaultProjectProvider.resolveAddressMode(vm.AddressModePublic)
-	require.NoError(t, err)
-	require.Equal(t, vm.AddressModePublic, mode)
-	mode, err = defaultProjectProvider.resolveAddressMode("")
-	require.NoError(t, err)
-	require.Equal(t, vm.AddressModePublic, mode)
 }
 
 func TestParseRegionSubnetMap(t *testing.T) {
