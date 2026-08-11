@@ -360,9 +360,12 @@ type CreateOpts struct {
 // DefaultCreateOpts returns a new vm.CreateOpts with default values set.
 func DefaultCreateOpts() CreateOpts {
 	defaultCreateOpts := CreateOpts{
-		ClusterName:    "",
-		Lifetime:       DefaultLifetime,
-		AddressMode:    AddressModePublic,
+		ClusterName: "",
+		Lifetime:    DefaultLifetime,
+		// Default to auto: the GCE provider resolves this to private addresses in
+		// the infra project (crl-e2e-infra), which cannot provision public IPs,
+		// and to public addresses everywhere else.
+		AddressMode:    AddressModeAuto,
 		GeoDistributed: false,
 		VMProviders:    []string{},
 		OsVolumeSize:   10,
