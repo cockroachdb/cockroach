@@ -64,6 +64,33 @@ const (
 	GCloud
 )
 
+// GetGCECredentials returns cloud-platform credentials using the same source
+// selection as IAP authentication.
+func GetGCECredentials(
+	ctx context.Context, opts IAPTokenSourceOptions,
+) (creds *google.Credentials, method IAPAuthMethod, err error) {
+	if cj := os.Getenv(CredentialsEnvironmentVariable); cj != "" {
+		creds, err = gcp.CredentialsFromJSON(ctx, []byte(cj), cloudPlatformScope)
+		if err != nil {
+			return nil, Env, errors.Wrap(err, "failed to get credentials from environment variable")
+		}
+		return creds, Env, nil
+	}
+
+	if !opts.ForceGcloud {
+		creds, err = google.FindDefaultCredentials(ctx, cloudPlatformScope)
+		method = ADC
+	}
+	if err != nil || opts.ForceGcloud {
+		creds, err = gcloudconfig.GetCredentials("")
+		if err != nil {
+			return nil, GCloud, errors.Wrap(err, "failed to get default credentials")
+		}
+		method = GCloud
+	}
+	return creds, method, nil
+}
+
 // NewIAPTokenSource returns a new IAPTokenSource struct with the given options.
 func NewIAPTokenSource(opts IAPTokenSourceOptions) (*IAPTokenSourceImpl, error) {
 
@@ -75,50 +102,10 @@ func NewIAPTokenSource(opts IAPTokenSourceOptions) (*IAPTokenSourceImpl, error) 
 		return nil, errors.New("ServiceAccountEmail is required")
 	}
 
-	var method IAPAuthMethod
-
 	ctx := context.Background()
-	var err error
-	var creds *google.Credentials
-	if cj := os.Getenv(CredentialsEnvironmentVariable); cj != "" {
-		// In case a GOOGLE_EPHEMERAL_CREDENTIALS environment variable exist,
-		// it takes precedence over other sources, and we use it as our identity.
-		creds, err = gcp.CredentialsFromJSON(ctx, []byte(cj), cloudPlatformScope)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get credentials from environment variable")
-		}
-
-		method = Env
-	} else {
-		// Unless ForceGcloud is set, we try to use ADC first.
-		// ForceGcloud might be set if we were able to detect ADC, but there was
-		// an error obtaining the credentials during the impersonation.
-		if !opts.ForceGcloud {
-			// Try and access Google's Application Default Credentials (ADC).
-			// This is the default way to get credentials in a GCP environment,
-			// and it checks the following sources, in order:
-			// - Environment variable GOOGLE_APPLICATION_CREDENTIALS
-			// - Default service account file (APP_DATA/application_default_credentials.json)
-			// - App Engine standard environment
-			// - GCE metadata server
-			creds, err = google.FindDefaultCredentials(ctx, cloudPlatformScope)
-
-			method = ADC
-		}
-
-		// Either error while looking for ADC or ForceGcloud is set (meaning ADC
-		// was not attempted).
-		if err != nil || opts.ForceGcloud {
-			// We default to using `gcloud auth print-identity-token`.
-			// This is useful if `gcloud auth application-default login` was not run
-			// or if the user has a different set of credentials for application default.
-			creds, err = gcloudconfig.GetCredentials("")
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to get default credentials")
-			}
-
-			method = GCloud
-		}
+	creds, method, err := GetGCECredentials(ctx, opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
 	// Create a new ID token source with the impersonate config.

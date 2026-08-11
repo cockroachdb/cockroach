@@ -181,9 +181,11 @@ func DefaultProject() string {
 	return InfraProject()
 }
 
-// MetadataProject returns the GCE project used to store and fetch shared SSH
-// keys. It reflects provider flag overrides after provider initialization and
-// the environment-derived metadata project default before initialization.
+// MetadataProject returns the GCE project that selects the backing store for
+// shared SSH keys. The standard production and staging projects use dedicated
+// buckets; other projects use GCE project metadata. It reflects provider flag
+// overrides after provider initialization and the environment-derived default
+// before initialization.
 func MetadataProject() string {
 	if p, ok := vm.Providers[ProviderName].(*Provider); ok {
 		return p.metadataProject
@@ -1634,7 +1636,7 @@ func (p *Provider) ConfigureProviderFlags(flags *pflag.FlagSet, opt vm.MultipleP
 			set: p.setMetadataProject,
 		},
 		ProviderName+"-metadata-project",
-		"google cloud project to use to store and fetch SSH keys; defaults to --gce-infra-project",
+		"google cloud project used to select the SSH key store; defaults to --gce-infra-project",
 	)
 	flags.Var(
 		projectValue{

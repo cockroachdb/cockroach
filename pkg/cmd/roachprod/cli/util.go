@@ -162,11 +162,15 @@ func printPublicKeyTable(keys gce.AuthorizedKeys, includeSize bool) error {
 		return err
 	}
 
-	const maxProjectMetadataBytes = 262144 /* 256 KiB */
-	metadataLen := len(keys.AsProjectMetadata())
+	storageLen := len(keys.AsStorageFile())
+	if bucket, ok := gce.SSHKeysBucketForProject(gce.MetadataProject()); ok {
+		_, err = fmt.Printf("\nTOTAL: %d bytes (gs://%s/ssh-keys)\n", storageLen, bucket)
+		return err
+	}
 
-	usage := int(float64(metadataLen*100) / float64(maxProjectMetadataBytes))
-	_, err = fmt.Printf("\nTOTAL: %d bytes (usage: %d%%)\n", metadataLen, usage)
+	const maxProjectMetadataBytes = 262144 /* 256 KiB */
+	usage := int(float64(storageLen*100) / float64(maxProjectMetadataBytes))
+	_, err = fmt.Printf("\nTOTAL: %d bytes (usage: %d%%)\n", storageLen, usage)
 	return err
 }
 
