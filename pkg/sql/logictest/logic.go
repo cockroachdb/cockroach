@@ -3792,6 +3792,17 @@ func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (b
 		return true, nil
 	}
 
+	// Prepared statements are closed after finishExecStatement below has consumed
+	// the result, so that each statement outlives the result it produced.
+	var preps []*gosql.Stmt
+	defer func() {
+		for _, prep := range preps {
+			if closeErr := prep.Close(); closeErr != nil {
+				t.Errorf("%s: %s\nerror when closing prepared statement: %s",
+					stmt.sql, stmt.pos, formatErr(closeErr))
+			}
+		}
+	}()
 	var res gosql.Result
 	var execErr error
 	if t.cfg.PrepareQueries {
@@ -3808,6 +3819,7 @@ func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (b
 				prep, execErr = t.db.Prepare(p.SQL)
 				if execErr == nil {
 					res, execErr = prep.Exec()
+					preps = append(preps, prep)
 				}
 				if execErr != nil {
 					// As soon as a non-nil error is encountered, leave the loop and let
@@ -3909,6 +3921,17 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		return nil
 	}
 
+	// Prepared statements are closed after finishExecQuery below has consumed and
+	// closed their rows, so that each statement outlives the rows it produced.
+	var preps []*gosql.Stmt
+	defer func() {
+		for _, prep := range preps {
+			if closeErr := prep.Close(); closeErr != nil {
+				t.Errorf("%s: %s\nerror when closing prepared statement: %s",
+					query.sql, query.pos, formatErr(closeErr))
+			}
+		}
+	}()
 	var rowses []*gosql.Rows
 	var execErr error
 	if t.cfg.PrepareQueries {
@@ -3973,6 +3996,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			if execErr == nil {
 				rows, execErr = prep.Query(args...)
 				rowses = append(rowses, rows)
+				preps = append(preps, prep)
 			}
 			if execErr != nil {
 				// As soon as a non-nil error is encountered, leave the loop and let
