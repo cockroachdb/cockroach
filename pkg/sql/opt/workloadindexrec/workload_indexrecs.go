@@ -23,7 +23,7 @@ import (
 func FindWorkloadRecs(
 	ctx context.Context, evalCtx *eval.Context, ts *tree.DTimestampTZ,
 ) ([]WorkloadIndexRec, error) {
-	cis, dis, err := collectIndexRecs(ctx, evalCtx, ts)
+	cis, uniqueCis, dis, err := collectIndexRecs(ctx, evalCtx, ts)
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +55,19 @@ func FindWorkloadRecs(
 		})
 	}
 
+	// Unique index recommendations are passed through unmerged. The trie merge
+	// treats uniqueness as part of the index shape and cannot preserve a UNIQUE
+	// constraint across merged leaves (e.g. merging a unique (a) with another
+	// statement's (a, b) yields a leaf that cannot be unique on (a)). Emitting a
+	// non-unique index in place of a unique one would silently weaken the
+	// recommendation, so unique recommendations bypass the merge entirely.
+	for _, uci := range uniqueCis {
+		newCis = append(newCis, WorkloadIndexRec{
+			Index:          uci.index.String() + ";",
+			FingerprintIds: []uint64{uci.fingerprintId},
+		})
+	}
+
 	return newCis, nil
 }
 
@@ -62,17 +75,18 @@ func FindWorkloadRecs(
 // system.statement_statistics with the time later than ts.
 func collectIndexRecs(
 	ctx context.Context, evalCtx *eval.Context, ts *tree.DTimestampTZ,
-) ([]createIndex, []dropIndex, error) {
+) ([]createIndex, []createIndex, []dropIndex, error) {
 	query := `SELECT index_recommendations, fingerprint_id FROM system.statement_statistics
 						 WHERE (statistics -> 'statistics' ->> 'lastExecAt')::TIMESTAMPTZ > $1
 						 AND array_length(index_recommendations, 1) > 0;`
 	indexRecs, err := evalCtx.Planner.QueryIteratorEx(ctx, "get-candidates-for-workload-indexrecs",
 		sessiondata.NoSessionDataOverride, query, ts.Time)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	var cis []createIndex
+	var uniqueCis []createIndex
 	var dis []dropIndex
 	var ok bool
 
@@ -84,7 +98,7 @@ func collectIndexRecs(
 		if err != nil {
 			err = errors.CombineErrors(err, indexRecs.Close())
 			indexRecs = nil
-			return cis, dis, err
+			return cis, uniqueCis, dis, err
 		}
 
 		if !ok {
@@ -94,21 +108,21 @@ func collectIndexRecs(
 		indexes := tree.MustBeDArray(indexRecs.Cur()[0])
 		fingerprintId, e := sqlstatsutil.DatumToUint64(indexRecs.Cur()[1])
 		if e != nil {
-			return cis, dis, err
+			return cis, uniqueCis, dis, err
 		}
 		for _, index := range indexes.Array {
 			indexStr, ok := index.(*tree.DString)
 			if !ok {
 				err = errors.CombineErrors(errors.Newf("%s is not a string!", index.String()), indexRecs.Close())
 				indexRecs = nil
-				return cis, dis, err
+				return cis, uniqueCis, dis, err
 			}
 
 			indexStrArr := r.FindStringSubmatch(string(*indexStr))
 			if indexStrArr == nil {
 				err = errors.CombineErrors(errors.Newf("%s is not a valid index recommendation!", string(*indexStr)), indexRecs.Close())
 				indexRecs = nil
-				return cis, dis, err
+				return cis, uniqueCis, dis, err
 			}
 
 			// Since Alter index recommendation only makes invisible indexes visible,
@@ -121,7 +135,7 @@ func collectIndexRecs(
 			if err != nil {
 				err = errors.CombineErrors(errors.Newf("%s is not a valid index operation!", indexStrArr[2]), indexRecs.Close())
 				indexRecs = nil
-				return cis, dis, err
+				return cis, uniqueCis, dis, err
 			}
 
 			for _, stmt := range stmts {
@@ -129,7 +143,13 @@ func collectIndexRecs(
 				case *tree.CreateIndex:
 					// Ignore all the inverted, vector, partial, sharded, etc. indexes right now.
 					if stmt.Type == idxtype.FORWARD && stmt.Predicate == nil && stmt.Sharded == nil {
-						cis = append(cis, createIndex{fingerprintId: fingerprintId, index: *stmt})
+						if stmt.Unique {
+							// Unique index recommendations are passed through unmerged later
+							// (see FindWorkloadRecs) so the UNIQUE constraint is preserved.
+							uniqueCis = append(uniqueCis, createIndex{fingerprintId: fingerprintId, index: *stmt})
+						} else {
+							cis = append(cis, createIndex{fingerprintId: fingerprintId, index: *stmt})
+						}
 					}
 				case *tree.DropIndex:
 					dis = append(dis, dropIndex{fingerprintId: fingerprintId, index: *stmt})
@@ -138,7 +158,7 @@ func collectIndexRecs(
 		}
 	}
 
-	return cis, dis, nil
+	return cis, uniqueCis, dis, nil
 }
 
 // WorkloadIndexRec contains an index recommendation and the fingerprint ids
