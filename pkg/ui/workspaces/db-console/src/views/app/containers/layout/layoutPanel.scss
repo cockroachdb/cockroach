@@ -5,7 +5,7 @@
 
 @import 'src/components/core/index.scss';
 
-$side-panel-width: 140px;
+$side-panel-width: 160px;
 $top-bar-height: 50px;
 $container-top-offset: 120px;
 
@@ -54,9 +54,17 @@ $container-top-offset: 120px;
   width: calc(100% - #{$side-panel-width});
   overflow: auto;
   margin: $spacing-large 0 0;
+  // Main workspace pane is the white primary surface; warm gray stays on the
+  // rail/sidebar as its distinct tone (2026 brand — white primary surface).
+  background-color: $colors--white;
 }
 
 .layout-panel__sidebar {
   min-width: $side-panel-width;
-  margin: $spacing-large $spacing-medium $spacing-large $spacing-xx-large;
+  // Warm-gray rail anchored flush to the left edge and the header's bottom
+  // (not a floating card). Only a right gutter separates it from the white
+  // content pane; the rail is the ONLY warm surface (2026 brand).
+  margin: 0 $spacing-medium 0 0;
+  background-color: $colors--neutral-1;
+  padding: $spacing-medium $spacing-small;
 }
