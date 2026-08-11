@@ -310,7 +310,7 @@ func TestPublicAddressModePreservesSubnetDefaults(t *testing.T) {
 	require.Len(t, props.GetNetworkInterfaces(), 1)
 	networkInterface := props.GetNetworkInterfaces()[0]
 	require.Equal(t,
-		"projects/test-project/regions/us-east1/subnetworks/test-project-vpc-us-east1",
+		"projects/test-project/regions/us-east1/subnetworks/default",
 		networkInterface.GetSubnetwork(),
 	)
 	require.Empty(t, networkInterface.GetNetwork())
@@ -373,30 +373,49 @@ func TestParseRegionSubnetMap(t *testing.T) {
 }
 
 func TestDefaultNetworkResources(t *testing.T) {
+	// e2e-infra projects follow the ${project}-vpc / ${project}-vpc-${region}
+	// convention.
 	require.Equal(t,
-		"projects/test-project/global/networks/test-project-vpc",
+		"projects/crl-e2e-infra-staging/global/networks/crl-e2e-infra-staging-vpc",
+		DefaultNetworkSelfLink(StagingProjectID),
+	)
+	require.Equal(t,
+		"projects/crl-e2e-infra-staging/regions/us-east1/subnetworks/crl-e2e-infra-staging-vpc-us-east1",
+		DefaultSubnetSelfLink(StagingProjectID, "us-east1"),
+	)
+	// Other projects fall back to the legacy "default" network and subnet.
+	require.Equal(t,
+		"projects/test-project/global/networks/default",
 		DefaultNetworkSelfLink("test-project"),
 	)
 	require.Equal(t,
-		"projects/test-project/regions/us-east1/subnetworks/test-project-vpc-us-east1",
+		"projects/test-project/regions/us-east1/subnetworks/default",
 		DefaultSubnetSelfLink("test-project", "us-east1"),
 	)
 }
 
 func TestResolveSubnet(t *testing.T) {
-	const project = "test-project"
+	const defaultProject = "test-project"
 	for _, tc := range []struct {
 		name        string
+		project     string
 		opts        ProviderOpts
 		zone        string
 		expected    string
 		expectedErr string
 	}{
 		{
-			name:     "project convention when no config",
+			name:     "default subnet when no config",
 			opts:     ProviderOpts{},
 			zone:     "us-east1-b",
-			expected: "projects/test-project/regions/us-east1/subnetworks/test-project-vpc-us-east1",
+			expected: "projects/test-project/regions/us-east1/subnetworks/default",
+		},
+		{
+			name:     "e2e-infra project uses the vpc convention when no config",
+			project:  StagingProjectID,
+			opts:     ProviderOpts{},
+			zone:     "us-east1-b",
+			expected: "projects/crl-e2e-infra-staging/regions/us-east1/subnetworks/crl-e2e-infra-staging-vpc-us-east1",
 		},
 		{
 			name:     "per-region map selects the zone's region",
@@ -442,7 +461,11 @@ func TestResolveSubnet(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := tc.opts.resolveSubnet(project, tc.zone)
+			proj := tc.project
+			if proj == "" {
+				proj = defaultProject
+			}
+			got, err := tc.opts.resolveSubnet(proj, tc.zone)
 			if tc.expectedErr != "" {
 				require.ErrorContains(t, err, tc.expectedErr)
 				return
@@ -493,7 +516,7 @@ func TestCLISubnetArgs(t *testing.T) {
 	args, err := (&ProviderOpts{}).cliSubnetArgs(project, "us-east1-b")
 	require.NoError(t, err)
 	require.Equal(t, []string{
-		"--subnet", "projects/test-project/regions/us-east1/subnetworks/test-project-vpc-us-east1",
+		"--subnet", "projects/test-project/regions/us-east1/subnetworks/default",
 	}, args)
 
 	args, err = (&ProviderOpts{
@@ -525,10 +548,10 @@ func TestBuildInstancePropertiesSubnets(t *testing.T) {
 		props.GetNetworkInterfaces()[0].GetSubnetwork())
 	require.Empty(t, props.GetNetworkInterfaces()[0].GetNetwork())
 
-	// With no overrides, Subnetwork follows the project convention.
+	// With no overrides, an ordinary project uses the default subnet.
 	props, err = p.buildInstanceProperties(l, opts, DefaultProviderOpts(), "startup-script", "us-east1-b", nil)
 	require.NoError(t, err)
-	require.Equal(t, "projects/test-project/regions/us-east1/subnetworks/test-project-vpc-us-east1",
+	require.Equal(t, "projects/test-project/regions/us-east1/subnetworks/default",
 		props.GetNetworkInterfaces()[0].GetSubnetwork())
 	require.Empty(t, props.GetNetworkInterfaces()[0].GetNetwork())
 
