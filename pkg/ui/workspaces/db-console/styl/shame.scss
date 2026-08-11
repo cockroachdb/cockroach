@@ -59,7 +59,7 @@
   border: none !important;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
   max-height: 200px;
-  font-family: Lato-Regular;
+  font-family: Geist-Regular;
   font-size: 14px;
   text-transform: none;
   letter-spacing: 0;
@@ -94,7 +94,7 @@
   }
 }
 .nvtooltip {
-  font-family: Lato-Regular !important;
+  font-family: Geist-Regular !important;
   color: $body-color !important;
   padding: 15px 20px !important;
   background: rgba(255, 255, 255, 0.98) !important;
@@ -139,12 +139,12 @@
 
   text {
     fill: $headings-color;
-    font-family: Lato-Regular;
+    font-family: Geist-Regular;
     font-size: 11px;
   }
 
   .nv-axislabel {
-    font-family: Lato-Regular;
+    font-family: Geist-Regular;
     fill: $headings-color;
   }
 }
@@ -172,7 +172,7 @@
     font-size: 12px;
     border-radius: 4px;
     background-color: $body-color;
-    font-family: Lato-Regular;
+    font-family: Geist-Regular;
     color: #fff;
     box-shadow: none;
     padding: 5px 8px;
@@ -183,13 +183,13 @@
     .crdb-ant-tooltip-inner {
       background-color: #000;
       pre {
-        font-family: RobotoMono-Medium;
+        font-family: GeistMono-Medium;
         font-size: 12px;
         color: #e7ecf3;
         letter-spacing: 0.7px;
         line-height: 24px;
         ._text-bold {
-          font-family: RobotoMono-Bold;
+          font-family: GeistMono-Medium;
           color: #0055ff;
         }
       }
@@ -226,7 +226,7 @@
 
 .crdb-ant-fullcalendar {
   font-size: 12px;
-  font-family: Lato-Regular;
+  font-family: Geist-Regular;
 }
 
 .crdb-ant-fullcalendar-selected-day {
@@ -269,7 +269,7 @@
 
 .crdb-ant-fullcalendar-date, .crdb-ant-time-picker-panel li {
   color: #5F6C87;
-  font-family: Lato-Regular;
+  font-family: Geist-Regular;
   font-size: 12px;
   &.crdb-ant-time-picker-panel-addon-option-disabled {
     color: #a3a5af;
@@ -302,7 +302,7 @@
 
 .crdb-ant-calendar-today-btn {
   width: 100%;
-  font-family: Lato-Bold;
+  font-family: Geist-Bold;
   color: $link-color;
   text-align: center;
   font-size: 14px;
@@ -360,7 +360,7 @@
     }
   }
   span {
-    font-family: SourceSansPro-SemiBold;
+    font-family: Geist-Medium;
     font-size: 14px;
     line-height: 1.71;
     letter-spacing: 0.1px;
@@ -382,7 +382,7 @@
     a {
       color: $body-color;
       font-size: 14px;
-      font-family: Lato-Medium;
+      font-family: Geist-Medium;
       &:hover {
         color: $link-color;
       }
@@ -457,7 +457,7 @@
       width: auto;
       color: #f6f6f6;
       font-size: 12px;
-      font-family: Lato-Bold;
+      font-family: Geist-Bold;
       line-height: 2;
       letter-spacing: 0.1px;
       &:hover {
@@ -493,12 +493,12 @@
   }
   .drawer__content {
     color: #f6f6f6;
-    font-family: RobotoMono-Regular;
+    font-family: GeistMono-Regular;
     font-size: 12px;
     line-height: 24px;
     ._text-bold {
       color: #0055ff;
-      font-family: RobotoMono-Bold;
+      font-family: GeistMono-Medium;
     }
   }
 }
@@ -508,7 +508,7 @@
     border-bottom: 1px solid $grey2;
   }
   .crdb-ant-tabs-tab {
-    font-family: SourceSansPro-Regular;
+    font-family: Geist-Regular;
     font-size: 16px;
     line-height: 1.5;
     letter-spacing: normal;

@@ -16,7 +16,7 @@ $stats-table-tr--bg: $colors--neutral-0;
 %table-base {
   width: 100%;
   border-collapse: collapse;
-  font-family: SourceSansPro-Regular;
+  font-family: Geist-Regular;
   font-weight: 300;
   line-height: 22px;
   font-size: 14px;
@@ -45,14 +45,14 @@ $stats-table-tr--bg: $colors--neutral-0;
 
     &--summary {
       background-color: $background-color;
-      font-family: SourceSansPro-SemiBold;
+      font-family: Geist-Medium;
       font-size: 14px;
       font-weight: bold;
       line-height: 1.71;
       letter-spacing: 0.1px;
       color: $popover-color;
       .bar-chart .label {
-        font-family: SourceSansPro-Regular;
+        font-family: Geist-Regular;
         font-size: 14px;
         font-weight: bold;
         line-height: 1.71;

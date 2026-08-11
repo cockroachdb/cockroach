@@ -4,11 +4,11 @@
 // included in the /LICENSE file.
 
 // Font families are loaded via CSS
-$font-family--base: SourceSansPro-Regular;
-$font-family--bold: SourceSansPro-Bold;
-$font-family--semi-bold: SourceSansPro-SemiBold;
-$font-family--monospace: RobotoMono-Medium;
-$font-family--lato-regular: Lato-Regular;
+$font-family--base: Geist-Regular;       // was SourceSansPro-Regular
+$font-family--bold: Geist-Bold;          // was SourceSansPro-Bold
+$font-family--semi-bold: Geist-Medium;   // was SourceSansPro-SemiBold
+$font-family--monospace: GeistMono-Medium; // was RobotoMono-Medium
+$font-family--lato-regular: Geist-Regular; // was Lato-Regular
 
 $font-weight--extra-bold: 900;
 $font-weight--bold: 600;
