@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/api/option"
 )
@@ -21,7 +22,9 @@ import (
 func getBlob(
 	client *storage.Client, branch string, os string, arch string, blob string,
 ) *storage.ObjectHandle {
-	return client.Bucket("cockroach-nightly").Object(fmt.Sprintf("binaries/%s/%s/%s/%s", branch, os, arch, blob))
+	return client.Bucket(gce.InfraResourceName("cockroach-nightly")).Object(
+		fmt.Sprintf("binaries/%s/%s/%s/%s", branch, os, arch, blob),
+	)
 }
 
 func checkLatest(

@@ -18,7 +18,9 @@
 DEFAULT_BRANCH="master"
 DEFAULT_OS=$(uname | tr '[:upper:]' '[:lower:]')
 DEFAULT_ARCH=$(arch | tr '[:upper:]' '[:lower:]')
-BUCKET="cockroach-nightly"
+DEFAULT_PROJECT="${ROACHPROD_GCE_DEFAULT_PROJECT:-crl-e2e-infra}"
+INFRA_PROJECT="${ROACHPROD_GCE_INFRA_PROJECT:-$DEFAULT_PROJECT}"
+BUCKET="cockroach-nightly-$INFRA_PROJECT"
 
 DEST_DIR=${1:-.}
 DEST_FILE="$DEST_DIR/roachprod"
