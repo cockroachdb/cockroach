@@ -436,7 +436,7 @@ func AddUserAuthorizedKey(ak AuthorizedKey) error {
 // passed in the keys list for them to continue to exist after this function
 // is called.
 func SetUserAuthorizedKeys(keys AuthorizedKeys) (retErr error) {
-	if metadataProject := MetadataProject(); usesGCSForSSHKeys(metadataProject) {
+	if metadataProject := MetadataProject(); !isLegacyProject(metadataProject) {
 		return setUserAuthorizedKeysInGCS(context.Background(), metadataProject, keys)
 	}
 
