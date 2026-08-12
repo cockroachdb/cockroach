@@ -52,3 +52,29 @@ HINT: You have attempted to use a feature that is not yet implemented.<STANDARD 
 --
 List the numeric CIDR notation instead, for example: 127.0.0.1/8.
 Alternatively, use 'all' (without quotes) for any IPv4/IPv6 address.
+
+
+# The cert-scram-sha-256 method accepts the "map" option (like cert-password),
+# so its certificate path can bind SANs to a SQL user in SAN mode.
+set_hba
+host all all all cert-scram-sha-256 map=testing
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all all all cert-scram-sha-256 map=testing
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER ADDRESS METHOD             OPTIONS
+loopback all      all  all     trust
+host     all      root all     cert-password
+host     all      all  all     cert-scram-sha-256 map=testing
+
+
+# The pure scram-sha-256 method authenticates the client-provided user
+# directly, so it rejects the "map" option.
+set_hba
+host all all all scram-sha-256 map=testing
+----
+ERROR: the HBA method "scram-sha-256" does not accept options
