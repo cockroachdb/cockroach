@@ -119,7 +119,9 @@ func runStoreMetrics(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(1))
 
 	t.Status("restarting node")
-	c.Start(ctx, t.L(), startOpts, startSettings, c.Node(1))
+	restartOpts := startOpts
+	restartOpts.RoachprodOpts.IsRestart = true
+	c.Start(ctx, t.L(), restartOpts, startSettings, c.Node(1))
 
 	t.Status("checking metrics parity between stores after restart")
 	metricsMap2, err := getMetricsMap(ctx)

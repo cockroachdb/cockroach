@@ -653,6 +653,25 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		// `--start-single-node` flag will handle all of this for us.
 		shouldInit := startOpts.Target == StartDefault && !c.useStartSingleNode() && !startOpts.SkipInit
 
+		// We only need to serialize node startup when JoinNodeRequests will
+		// actually be sent — that is, on a true fresh bootstrap. If the
+		// cluster was already initialized in a prior Start() call (an
+		// "implicit restart" where the caller invokes Start() without
+		// IsRestart=true), each node rejoins with the NodeID already
+		// persisted on disk, so the wait would be both unnecessary and
+		// harmful: restart scenarios may need multiple nodes to come up
+		// together to form quorum.
+		shouldWait := shouldInit
+		if shouldInit {
+			bootstrapped, err := c.clusterAlreadyBootstrapped(ctx, l, startOpts.GetInitTarget())
+			if err != nil {
+				return errors.Wrap(err, "checking cluster bootstrap state")
+			}
+			if bootstrapped {
+				shouldWait = false
+			}
+		}
+
 		for _, node := range c.Nodes {
 			// NB: if cockroach started successfully, we ignore the output as it is
 			// some harmless start messaging.
@@ -661,12 +680,17 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 			}
 			// We reserve a few special operations (bootstrapping, and setting
 			// cluster settings) to the InitTarget.
-			if startOpts.GetInitTarget() != node {
-				continue
-			}
-
-			if shouldInit {
+			if startOpts.GetInitTarget() == node && shouldInit {
 				if err := c.initializeCluster(ctx, l, node); err != nil {
+					return err
+				}
+			}
+			if shouldWait {
+				// Wait for each node's join to complete before starting the next.
+				// We can't predict which NodeID this node will be assigned (it depends
+				// on what else has joined the cluster), so we only check that some
+				// NodeID exists. The serialization is what prevents the race in #142313.
+				if err := c.waitForNodeID(ctx, l, node); err != nil {
 					return err
 				}
 			}
@@ -994,6 +1018,57 @@ func (c *SyncedCluster) startNodeWithResult(
 	}
 
 	return c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-start-script"))
+}
+
+// waitForNodeID polls until the given node has been assigned a NodeID. This
+// serializes startup so concurrent JoinNodeRequests cannot race and assign
+// out-of-order IDs. See #142313.
+func (c *SyncedCluster) waitForNodeID(ctx context.Context, l *logger.Logger, node Node) error {
+	retryOpts := retry.Options{
+		InitialBackoff: 100 * time.Millisecond,
+		MaxBackoff:     time.Second,
+		MaxRetries:     10,
+	}
+	return retryOpts.Do(ctx, func(ctx context.Context) error {
+		results, err := c.ExecSQL(ctx, l, Nodes{node}, SystemInterfaceName, 0,
+			AuthRootCert, "", []string{"--format", "csv", "-e", "SELECT crdb_internal.node_id()"})
+		if err != nil {
+			return err
+		}
+		if results[0].Err != nil {
+			return results[0].Err
+		}
+		lines := strings.Split(strings.TrimSpace(results[0].CombinedOut), "\n")
+		if len(lines) < 2 {
+			return errors.Newf("unexpected output: %q", results[0].CombinedOut)
+		}
+		got, err := strconv.Atoi(strings.TrimSpace(lines[1]))
+		if err != nil {
+			return err
+		}
+		if got <= 0 {
+			return errors.Newf("node %d: NodeID not yet assigned", node)
+		}
+		return nil
+	})
+}
+
+// clusterAlreadyBootstrapped reports whether the cluster appears to have
+// been initialized in a prior Start() call, based on the sentinel file
+// written by generateInitCmd after a successful cockroach init.
+func (c *SyncedCluster) clusterAlreadyBootstrapped(
+	ctx context.Context, l *logger.Logger, initTarget Node,
+) (bool, error) {
+	sentinel := fmt.Sprintf("%s/cluster-bootstrapped", c.NodeDir(initTarget, 1))
+	cmd := fmt.Sprintf("test -e %s && echo yes || echo no", sentinel)
+	res, err := c.runCmdOnSingleNode(ctx, l, initTarget, cmd, defaultCmdOpts("check-bootstrapped"))
+	if err != nil {
+		return false, err
+	}
+	if res.Err != nil {
+		return false, res.Err
+	}
+	return strings.TrimSpace(res.CombinedOut) == "yes", nil
 }
 
 // N.B. not thread-safe because startOpts is shared and may be mutated.

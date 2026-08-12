@@ -351,7 +351,9 @@ func runMultiTenantMultiRegion(ctx context.Context, t test.Test, c cluster.Clust
 	require.NoErrorf(t, grp.WaitE(), "waited for go routines, expected no error.")
 
 	// Restart the KV storage servers first.
-	c.Start(ctx, t.L(), systemStartOpts, install.MakeClusterSettings(), killedRegion)
+	systemRestartOpts := systemStartOpts
+	systemRestartOpts.RoachprodOpts.IsRestart = true
+	c.Start(ctx, t.L(), systemRestartOpts, install.MakeClusterSettings(), killedRegion)
 	// Re-add dead tenants back again.
 	killedRegionStartOpts := option.StartVirtualClusterOpts(
 		virtualCluster, killedRegion, option.NoBackupSchedule,

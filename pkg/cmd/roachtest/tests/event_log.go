@@ -84,7 +84,9 @@ func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// Stop and Start Node 3, and verify the node restart message.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(3))
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.IsRestart = true
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(3))
 
 	err = retry.ForDuration(10*time.Second, func() error {
 		// Query all node restart events. There should only be one.

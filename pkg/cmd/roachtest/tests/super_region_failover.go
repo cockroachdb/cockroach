@@ -237,7 +237,9 @@ func runSurviveRegionFailure(
 
 	// Recover us-east-1.
 	t.Status("recovering us-east-1 nodes")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(),
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.IsRestart = true
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(),
 		c.Nodes(usEastNodes...))
 
 	// Reconnect to node 1 for recovery checks.
@@ -297,7 +299,9 @@ func runSurviveZoneFailure(
 
 	// Recover the killed node.
 	t.Status(fmt.Sprintf("recovering node %d", targetNode))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(),
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.IsRestart = true
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(),
 		c.Node(targetNode))
 
 	rConn := c.Conn(ctx, t.L(), 1)
