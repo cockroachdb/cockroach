@@ -355,15 +355,25 @@ func (e *expander) maybeExpandIPAddress(
 	var err error
 	switch m[3] {
 	case ":public":
+		// Resolve only the requested nodes. Public IPs are optional, so resolving
+		// every VM before applying the selector would make a valid explicit-public
+		// expansion fail because an unrelated VM is private-only.
+		nodes, err := ListNodes(m[1][1:], len(c.VMs))
+		if err != nil {
+			return "", false, err
+		}
 		if e.publicIPs == nil {
 			e.publicIPs = make(map[Node]string, len(c.VMs))
-			for _, node := range allNodes(len(c.VMs)) {
-				ip, err := c.GetExternalIP(node)
-				if err != nil {
-					return "", false, err
-				}
-				e.publicIPs[node] = ip
+		}
+		for _, node := range nodes {
+			if _, ok := e.publicIPs[node]; ok {
+				continue
 			}
+			ip, err := c.GetExternalIP(node)
+			if err != nil {
+				return "", false, err
+			}
+			e.publicIPs[node] = ip
 		}
 
 		s, err = e.maybeExpandMap(c, e.publicIPs, m[1])

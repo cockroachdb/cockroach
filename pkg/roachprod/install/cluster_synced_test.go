@@ -100,6 +100,34 @@ func TestHostAndSSHTransport(t *testing.T) {
 	require.Equal(t, "192.0.2.1", publicIP)
 }
 
+func TestPublicIPExpanderSkipsUnselectedPrivateNodes(t *testing.T) {
+	c := &SyncedCluster{Cluster: cloudcluster.Cluster{VMs: vm.List{
+		{
+			Name:      "public-vm",
+			Provider:  gce.ProviderName,
+			PrivateIP: "10.0.0.2",
+			PublicIP:  "192.0.2.1",
+		},
+		{
+			Name:      "private-vm",
+			Provider:  gce.ProviderName,
+			PrivateIP: "10.0.0.3",
+		},
+	}}}
+	e := &expander{node: 1}
+
+	publicIP, err := e.expand(
+		context.Background(), nil, c, ExpanderConfig{}, "{ip:1:public}",
+	)
+	require.NoError(t, err)
+	require.Equal(t, "192.0.2.1", publicIP)
+
+	_, err = e.expand(
+		context.Background(), nil, c, ExpanderConfig{}, "{ip:2:public}",
+	)
+	require.ErrorContains(t, err, "no public IP for node 2")
+}
+
 // TestRoachprodEnv tests the roachprodEnvRegex and roachprodEnvValue methods.
 func TestRoachprodEnv(t *testing.T) {
 	cases := []struct {
