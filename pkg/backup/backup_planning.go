@@ -560,6 +560,10 @@ func backupPlanHook(
 			return err
 		}
 
+		if err := sql.MaybeCheckDestinationPrivileges(ctx, p, kms); err != nil {
+			return err
+		}
+
 		// Check that a node will currently be able to run this before we create it.
 		if executionLocality.NonEmpty() {
 			if _, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, executionLocality); err != nil {

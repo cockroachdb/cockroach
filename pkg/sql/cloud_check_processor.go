@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -322,37 +322,49 @@ func checkDestinationPrivileges(
 
 	// Check destination specific privileges.
 	for _, uri := range to {
-		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
-		if err != nil {
-			return err
-		}
-
 		// Check if the destination requires the user to be an admin or have the
-		// `EXTERNALIOIMPLICITACCESS` privilege.
-		requiresImplicitAccess := opts.enforceImplicitAccess && !conf.AccessIsWithExplicitAuth() &&
-			!p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound
-		if requiresImplicitAccess {
-			hasImplicitAccessPrivilege, err := p.HasPrivilege(
-				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS, p.User())
+		// `EXTERNALIOIMPLICITACCESS` privilege. Resolving the URI is confined to
+		// this branch because `to` may hold KMS URIs, whose schemes are registered
+		// as KMS rather than as external storage, so ExternalStorageConfFromURI
+		// rejects them.
+		if opts.enforceImplicitAccess {
+			conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
 			if err != nil {
 				return err
 			}
-			if !hasImplicitAccessPrivilege {
-				return pgerror.Newf(
-					pgcode.InsufficientPrivilege,
-					"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified %s URI",
-					conf.Provider.String())
+			requiresImplicitAccess := !conf.AccessIsWithExplicitAuth() &&
+				!p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound
+			if requiresImplicitAccess {
+				hasImplicitAccessPrivilege, err := p.HasPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS, p.User())
+				if err != nil {
+					return err
+				}
+				if !hasImplicitAccessPrivilege {
+					return pgerror.Newf(
+						pgcode.InsufficientPrivilege,
+						"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified %s URI",
+						conf.Provider.String())
+				}
 			}
 		}
 
 		// If the resource being used is an External Connection, check that the user
 		// has adequate privileges.
-		if opts.enforceUsage && conf.Provider == cloudpb.ExternalStorageProvider_external {
-			ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
-				ConnectionName: conf.ExternalConnectionConfig.Name,
-			}
-			if err := p.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE); err != nil {
+		if opts.enforceUsage {
+			name, err := externalconn.ConnectionNameFromURI(uri)
+			if err != nil {
 				return err
+			}
+			// The name is empty only for a URI with some other scheme. An
+			// external:// URI that names no connection returns an error.
+			if name != "" {
+				ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
+					ConnectionName: name,
+				}
+				if err := p.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE); err != nil {
+					return err
+				}
 			}
 		}
 	}

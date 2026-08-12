@@ -19,20 +19,43 @@ import (
 
 const Scheme = "external"
 
+// ConnectionNameFromURI returns the name of the external connection an
+// external://<name> URI refers to. It returns "" for a URI with any other
+// scheme, and an error for an external:// URI that names no connection.
+// Callers may therefore pass URIs of mixed kinds.
+func ConnectionNameFromURI(uri string) (string, error) {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return "", err
+	}
+	if parsed.Scheme != Scheme {
+		return "", nil
+	}
+	return connectionNameFromURI(parsed)
+}
+
+func connectionNameFromURI(uri *url.URL) (string, error) {
+	if uri.Host == "" {
+		return "", errors.Newf("host component of an external URI must refer to an "+
+			"existing External Connection object: %s", uri.String())
+	}
+	return uri.Host, nil
+}
+
 func makeExternalConnectionConfig(
 	uri *url.URL, args cloud.ExternalStorageURIContext,
 ) (cloudpb.ExternalStorage_ExternalConnectionConfig, error) {
 	externalConnCfg := cloudpb.ExternalStorage_ExternalConnectionConfig{}
-	if uri.Host == "" {
-		return externalConnCfg, errors.Newf("host component of an external URI must refer to an "+
-			"existing External Connection object: %s", uri.String())
+	name, err := connectionNameFromURI(uri)
+	if err != nil {
+		return externalConnCfg, err
 	}
 	if args.CurrentUser.Undefined() {
 		return externalConnCfg, errors.Errorf("user creating the external connection storage must be specified")
 	}
 	normUser := args.CurrentUser.Normalized()
 	externalConnCfg.User = normUser
-	externalConnCfg.Name = uri.Host
+	externalConnCfg.Name = name
 	externalConnCfg.Path = uri.Path
 	return externalConnCfg, nil
 }
@@ -48,6 +71,12 @@ func parseExternalConnectionURL(
 	return conf, err
 }
 
+// makeExternalConnectionStorage builds the storage held by the named external
+// connection. USAGE on the connection is checked at planning time, in
+// sql.CheckDestinationPrivileges, and deliberately not here. A job that resumes
+// replays the URIs persisted in its details instead of replanning, so a check
+// on this path would fail a job that was authorized when it was planned.
+// Anything that does replan, such as a scheduled backup, is checked again.
 func makeExternalConnectionStorage(
 	ctx context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
@@ -55,9 +84,6 @@ func makeExternalConnectionStorage(
 	if cfg.Name == "" {
 		return nil, errors.New("invalid ExternalConnectionConfig with an empty name")
 	}
-
-	// TODO(adityamaru): Use the `user` in `cfg` to perform privilege checks on
-	// the external connection object we are about to retrieve.
 
 	// Retrieve the external connection object from the system table.
 	var ec ExternalConnection
