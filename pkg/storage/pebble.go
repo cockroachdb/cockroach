@@ -533,6 +533,14 @@ var baselineDeletionRate = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var walPreallocateSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.wal_prealloc_size",
+	"number of bytes to preallocate for WAL files (0 disables preallocation)",
+	DefaultMemtableSize*110/100,
+	settings.NonNegativeInt,
+)
+
 var tombstoneDenseCompactionThreshold = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"storage.tombstone_dense_compaction_threshold",
@@ -974,6 +982,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 	cfg.opts.TargetByteDeletionRate = func() int {
 		return int(baselineDeletionRate.Get(&cfg.settings.SV))
+	}
+	if cfg.opts.WALPreallocateSize == nil {
+		cfg.opts.WALPreallocateSize = func() int { return int(walPreallocateSize.Get(&cfg.settings.SV)) }
 	}
 	cfg.opts.Experimental.TombstoneDenseCompactionThreshold = func() float64 {
 		return 0.01 * float64(tombstoneDenseCompactionThreshold.Get(&cfg.settings.SV))
