@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math/rand"
@@ -61,6 +62,32 @@ func TestApplyForceInsecure(t *testing.T) {
 	settings := install.MakeClusterSettings(install.SimpleSecureOption(true))
 	applyForceInsecure(&settings, true)
 	require.False(t, settings.Secure)
+}
+
+func TestLogClusterStartOverrides(t *testing.T) {
+	origStartEnv := roachtestflags.StartEnv
+	origStartSettings := roachtestflags.StartSettings
+	origForceInsecure := roachtestflags.ForceInsecure
+	t.Cleanup(func() {
+		roachtestflags.StartEnv = origStartEnv
+		roachtestflags.StartSettings = origStartSettings
+		roachtestflags.ForceInsecure = origForceInsecure
+	})
+
+	roachtestflags.StartEnv = []string{"A=1", "B=2"}
+	roachtestflags.StartSettings = map[string]string{"setting.name": "value"}
+	roachtestflags.ForceInsecure = true
+
+	var output bytes.Buffer
+	l, err := (&logger.Config{Stdout: &output, Stderr: &output}).NewLogger("")
+	require.NoError(t, err)
+	logClusterStartOverrides(l)
+	logClusterStartOverrides(nil)
+
+	logs := output.String()
+	require.Contains(t, logs, "applying --start-env: A=1 B=2")
+	require.Contains(t, logs, "forcing insecure CockroachDB startup via --insecure")
+	require.Contains(t, logs, "applying --start-setting setting.name = value")
 }
 
 func TestRoachprodClusterRunnerReachableAddresses(t *testing.T) {
