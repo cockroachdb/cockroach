@@ -146,3 +146,48 @@ ALTER BACKUP SCHEDULE $scheduleID SET INTO 'external://schedule-ec-2';
 ----
 
 subtest end
+
+subtest alter-backup-privileges
+
+exec-sql
+CREATE EXTERNAL CONNECTION "alter-backup-ec" AS 'nodelocal://1/alter-backup';
+----
+
+exec-sql
+BACKUP TABLE foo INTO 'external://alter-backup-ec' WITH kms='testkms:///alter-old?AUTH=implicit';
+----
+
+exec-sql
+ALTER BACKUP LATEST IN 'external://alter-backup-ec' ADD NEW_KMS='testkms:///alter-new?AUTH=implicit' WITH OLD_KMS='testkms:///alter-old?AUTH=implicit';
+----
+
+exec-sql
+SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true;
+----
+
+exec-sql user=testuser
+ALTER BACKUP LATEST IN 'external://alter-backup-ec' ADD NEW_KMS='testkms:///alter-nogrant?AUTH=implicit' WITH OLD_KMS='testkms:///alter-old?AUTH=implicit';
+----
+pq: user testuser does not have USAGE privilege on external_connection alter-backup-ec
+
+exec-sql
+SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false;
+----
+
+exec-sql user=testuser
+ALTER BACKUP LATEST IN 'external://alter-backup-ec' ADD NEW_KMS='testkms:///alter-setting-off?AUTH=implicit' WITH OLD_KMS='testkms:///alter-old?AUTH=implicit';
+----
+
+exec-sql
+SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true;
+----
+
+exec-sql
+GRANT USAGE ON EXTERNAL CONNECTION "alter-backup-ec" TO testuser;
+----
+
+exec-sql user=testuser
+ALTER BACKUP LATEST IN 'external://alter-backup-ec' ADD NEW_KMS='testkms:///alter-newer?AUTH=implicit' WITH OLD_KMS='testkms:///alter-old?AUTH=implicit';
+----
+
+subtest end

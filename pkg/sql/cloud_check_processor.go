@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -273,6 +274,44 @@ func (p *proc) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 // CheckDestinationPrivileges iterates over the External Storage URIs and
 // ensures the user has adequate privileges to use each of them.
 func CheckDestinationPrivileges(ctx context.Context, p PlanHookState, to []string) error {
+	// It is a bug to allow users access to an external connection without a USAGE
+	// privilege on it, or to a destination the node authenticates to implicitly
+	// without EXTERNALIOIMPLICITACCESS. These options only exist to be able to put
+	// that breaking change behind a cluster setting.
+	//
+	// TODO(aerfrei): remove the cluster setting, and these options with it.
+	return checkDestinationPrivileges(ctx, p, to, destinationPrivilegeOptions{
+		enforceImplicitAccess: true,
+		enforceUsage:          true,
+	})
+}
+
+// MaybeCheckDestinationPrivileges checks only the external connection USAGE
+// privilege on each destination, and only when
+// sql.auth.external_connection.require_usage_privilege.enabled is set. It is
+// for statements that reached a connection's credentials without asking for
+// USAGE, so that a backport can ship without the new requirement.
+func MaybeCheckDestinationPrivileges(ctx context.Context, p PlanHookState, to []string) error {
+	// TODO(aerfrei): enforce implicit access for these statements as well. The
+	// cluster setting above only covers USAGE, so that half needs a gate of its
+	// own.
+	return checkDestinationPrivileges(ctx, p, to, destinationPrivilegeOptions{
+		enforceImplicitAccess: false,
+		enforceUsage: sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(
+			&p.ExecCfg().Settings.SV),
+	})
+}
+
+// destinationPrivilegeOptions selects which of the destination privilege checks
+// to enforce.
+type destinationPrivilegeOptions struct {
+	enforceImplicitAccess bool
+	enforceUsage          bool
+}
+
+func checkDestinationPrivileges(
+	ctx context.Context, p PlanHookState, to []string, opts destinationPrivilegeOptions,
+) error {
 	isAdmin, err := p.UserHasAdminRole(ctx, p.User())
 	if err != nil {
 		return err
@@ -290,22 +329,25 @@ func CheckDestinationPrivileges(ctx context.Context, p PlanHookState, to []strin
 
 		// Check if the destination requires the user to be an admin or have the
 		// `EXTERNALIOIMPLICITACCESS` privilege.
-		requiresImplicitAccess := !conf.AccessIsWithExplicitAuth()
-		hasImplicitAccessPrivilege, privErr :=
-			p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS, p.User())
-		if privErr != nil {
-			return privErr
-		}
-		if requiresImplicitAccess && !(p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound || hasImplicitAccessPrivilege) {
-			return pgerror.Newf(
-				pgcode.InsufficientPrivilege,
-				"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified %s URI",
-				conf.Provider.String())
+		requiresImplicitAccess := opts.enforceImplicitAccess && !conf.AccessIsWithExplicitAuth() &&
+			!p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound
+		if requiresImplicitAccess {
+			hasImplicitAccessPrivilege, err := p.HasPrivilege(
+				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS, p.User())
+			if err != nil {
+				return err
+			}
+			if !hasImplicitAccessPrivilege {
+				return pgerror.Newf(
+					pgcode.InsufficientPrivilege,
+					"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified %s URI",
+					conf.Provider.String())
+			}
 		}
 
 		// If the resource being used is an External Connection, check that the user
 		// has adequate privileges.
-		if conf.Provider == cloudpb.ExternalStorageProvider_external {
+		if opts.enforceUsage && conf.Provider == cloudpb.ExternalStorageProvider_external {
 			ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
 				ConnectionName: conf.ExternalConnectionConfig.Name,
 			}
