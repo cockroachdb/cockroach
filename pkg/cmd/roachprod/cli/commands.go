@@ -2217,8 +2217,9 @@ func roachprodUpdateSupported(goos, goarch string) bool {
 func (cr *commandRegistry) buildUpdateCmd() *cobra.Command {
 	updateCmd := &cobra.Command{
 		Use:   "update",
-		Short: "check gs://cockroach-nightly for a new roachprod binary; update if available",
-		Long: "Attempts to download the latest roachprod binary (on master) from gs://cockroach-nightly. " +
+		Short: "check the infrastructure project's nightly bucket for a new roachprod binary; update if available",
+		Long: "Attempts to download the latest roachprod binary (on master) from the infrastructure " +
+			"project's cockroach-nightly bucket. " +
 			" Swaps the current binary with it. The current roachprod binary will be backed up" +
 			" and can be restored via `roachprod update --revert`.",
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
