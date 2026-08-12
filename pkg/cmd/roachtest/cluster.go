@@ -2370,6 +2370,18 @@ func applyForceInsecure(settings *install.ClusterSettings, force bool) {
 	}
 }
 
+// logClusterStartOverrides records CLI-provided start inputs at the roachtest
+// boundary. A nil logger is valid for callers that intentionally suppress
+// start logging.
+func logClusterStartOverrides(l *logger.Logger) {
+	if l == nil {
+		return
+	}
+	if roachtestflags.ForceInsecure {
+		l.Printf("forcing insecure CockroachDB startup via --insecure")
+	}
+}
+
 func (c *clusterImpl) StartE(
 	ctx context.Context,
 	l *logger.Logger,
@@ -2387,6 +2399,7 @@ func (c *clusterImpl) StartE(
 	if c.t.Spec().(*registry.TestSpec).Benchmark {
 		startOpts.RoachprodOpts.ScheduleBackups = false
 	}
+	logClusterStartOverrides(l)
 
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
 	// Remove in v23.2.
@@ -2414,9 +2427,6 @@ func (c *clusterImpl) StartE(
 		settings.ClusterSettings["server.cpu_profile.total_dump_size_limit"] = "256 MiB"
 	}
 
-	if roachtestflags.ForceInsecure {
-		l.Printf("forcing insecure CockroachDB startup via --insecure")
-	}
 	applyForceInsecure(&settings, roachtestflags.ForceInsecure)
 
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
@@ -2486,9 +2496,7 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 	settings install.ClusterSettings,
 ) error {
 	l.Printf("starting virtual cluster")
-	if roachtestflags.ForceInsecure {
-		l.Printf("forcing insecure CockroachDB startup via --insecure")
-	}
+	logClusterStartOverrides(l)
 	// Keep virtual-cluster security consistent with the storage cluster when the
 	// runner was explicitly asked to force insecure starts. In addition to
 	// rendering --insecure for roachprod, mutating settings here prevents the
