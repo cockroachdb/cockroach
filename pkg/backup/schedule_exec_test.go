@@ -14,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -113,6 +115,64 @@ func TestBackupFailedUpdatesMetrics(t *testing.T) {
 	require.True(t, ok)
 
 	require.Greater(t, metrics.LastKMSInaccessibleErrorTime.Value(), int64(0))
+}
+
+// TestScheduledBackupKMSExternalConnectionUsage exercises the USAGE check on a
+// KMS external connection from the scheduled backup executor rather than from a
+// statement typed by a user. A schedule is replanned as its owner on every run,
+// so the check runs again each time. A schedule that names a KMS external
+// connection its owner has no USAGE on therefore keeps running only for as long
+// as the check is off, and stops making progress the moment it is turned on.
+// Granting USAGE back lets it make progress again.
+func TestScheduledBackupKMSExternalConnectionUsage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+	th.setOverrideAsOfClauseKnob(t)
+
+	th.sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+	th.sqlDB.Exec(t, `CREATE USER testuser`)
+	th.sqlDB.Exec(t, `GRANT BACKUP ON TABLE foo TO testuser`)
+	th.sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION "dest-ec" AS 'nodelocal://1/schedule-kms'`)
+	th.sqlDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION "dest-ec" TO testuser`)
+	th.sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION "kms-ec" AS 'testkms:///schedule-key?AUTH=implicit'`)
+	th.sqlDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION "kms-ec" TO testuser`)
+
+	testuserDB := sqlutils.MakeSQLRunner(th.server.SQLConn(t, serverutils.User("testuser")))
+	testuserDB.Exec(t, `CREATE SCHEDULE kms_sched FOR BACKUP TABLE defaultdb.public.foo
+INTO 'external://dest-ec' WITH kms = 'external://kms-ec'
+RECURRING '@hourly' FULL BACKUP ALWAYS`)
+
+	var scheduleID jobspb.ScheduleID
+	th.sqlDB.QueryRow(t,
+		`SELECT id FROM [SHOW SCHEDULES FOR BACKUP] WHERE label = 'kms_sched'`,
+	).Scan(&scheduleID)
+
+	runSchedule := func() {
+		t.Helper()
+		th.env.SetTime(th.loadSchedule(t, scheduleID).NextRun().Add(time.Second))
+		require.NoError(t, th.executeSchedules())
+	}
+
+	// Losing the grant is not enough to break the schedule while the check is
+	// off. The run still succeeds.
+	th.sqlDB.Exec(t, `SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
+	th.sqlDB.Exec(t, `REVOKE USAGE ON EXTERNAL CONNECTION "kms-ec" FROM testuser`)
+	runSchedule()
+	th.waitForSuccessfulScheduledJobCount(t, scheduleID, 1)
+
+	th.sqlDB.Exec(t, `SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
+	runSchedule()
+	require.Contains(t, th.loadSchedule(t, scheduleID).ScheduleStatus(),
+		"user testuser does not have USAGE privilege on external_connection kms-ec")
+	th.waitForSuccessfulScheduledJobCount(t, scheduleID, 1)
+
+	// Restoring the grant unblocks the schedule.
+	th.sqlDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION "kms-ec" TO testuser`)
+	runSchedule()
+	th.waitForSuccessfulScheduledJobCount(t, scheduleID, 2)
 }
 
 func createSchedule(t *testing.T, updatesLastBackupMetric bool) *jobs.ScheduledJob {

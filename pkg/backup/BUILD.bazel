@@ -235,6 +235,8 @@ go_test(
         "//pkg/cloud/amazon",
         "//pkg/cloud/azure",
         "//pkg/cloud/cloudpb",
+        "//pkg/cloud/externalconn",
+        "//pkg/cloud/externalconn/connectionpb",
         "//pkg/cloud/gcp",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/cloud/nodelocal",
