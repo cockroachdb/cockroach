@@ -22,14 +22,10 @@ const sshKeysObjectName = "ssh-keys"
 // projects use GCS; custom metadata projects retain the legacy GCE
 // project-metadata backend.
 func SSHKeysBucketForProject(project string) (string, bool) {
-	if !usesGCSForSSHKeys(project) {
+	if isLegacyProject(project) {
 		return "", false
 	}
 	return "roachprod-ssh-keys-" + project, true
-}
-
-func usesGCSForSSHKeys(metadataProject string) bool {
-	return metadataProject == DefaultProjectID || metadataProject == StagingProjectID
 }
 
 type sshKeysObjectStore interface {
@@ -58,8 +54,8 @@ func (s *gcsSSHKeysObjectStore) WriteObject(
 ) (retErr error) {
 	writer := s.client.Bucket(bucket).Object(object).NewWriter(ctx)
 	defer func() { retErr = errors.CombineErrors(retErr, writer.Close()) }()
-	_, err := writer.Write(contents)
-	return err
+	_, retErr = writer.Write(contents)
+	return retErr
 }
 
 func (s *gcsSSHKeysObjectStore) Close() error {

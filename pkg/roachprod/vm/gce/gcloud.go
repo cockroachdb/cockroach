@@ -220,23 +220,14 @@ func artifactsBucketForProject(project string) string {
 // IsInsecureProject reports whether project hosts ephemeral engineering test
 // clusters that should default to insecure mode.
 func IsInsecureProject(project string) bool {
-	return project == DefaultProjectID || project == StagingProjectID
+	return !isLegacyProject(project)
 }
 
-// usesVPCConvention reports whether project follows the ${project}-vpc /
-// ${project}-vpc-${region} network layout used by the e2e-infra projects, which
-// have no "default" subnet. Other projects keep the legacy "default" network and
-// subnet, which GCE resolves as before.
-func usesVPCConvention(project string) bool {
-	return project == DefaultProjectID || project == StagingProjectID
-}
-
-// isPrivateOnlyProject reports whether project's roachprod VPC omits external
-// (public) IP access, so VMs created there must use private addresses. The
-// crl-e2e-infra projects (prod and staging) are provisioned this way. Auto
-// address mode resolves to private for these projects and public elsewhere.
-func isPrivateOnlyProject(project string) bool {
-	return project == DefaultProjectID || project == StagingProjectID
+// isLegacyProject reports whether project retains the legacy GCE defaults
+// instead of the dedicated configuration used by the production and staging
+// e2e-infra projects.
+func isLegacyProject(project string) bool {
+	return project != DefaultProjectID && project != StagingProjectID
 }
 
 // DefaultNetworkSelfLink returns the self-link for roachprod's default GCE
@@ -247,7 +238,7 @@ func DefaultNetworkSelfLink(project string) string {
 		project = VMProject()
 	}
 	network := "default"
-	if usesVPCConvention(project) {
+	if !isLegacyProject(project) {
 		network = fmt.Sprintf("%s-vpc", project)
 	}
 	return fmt.Sprintf("projects/%s/global/networks/%s", project, network)
@@ -260,7 +251,7 @@ func DefaultSubnetSelfLink(project, region string) string {
 		project = VMProject()
 	}
 	subnet := "default"
-	if usesVPCConvention(project) {
+	if !isLegacyProject(project) {
 		subnet = fmt.Sprintf("%s-vpc-%s", project, region)
 	}
 	return fmt.Sprintf("projects/%s/regions/%s/subnetworks/%s", project, region, subnet)
@@ -1945,7 +1936,7 @@ func (p *Provider) resolveAddressMode(mode vm.AddressMode) (vm.AddressMode, erro
 		return "", err
 	}
 	if mode == vm.AddressModeAuto {
-		if isPrivateOnlyProject(p.GetProject()) {
+		if !isLegacyProject(p.GetProject()) {
 			return vm.AddressModePrivate, nil
 		}
 		return vm.AddressModePublic, nil
