@@ -191,3 +191,158 @@ ALTER BACKUP LATEST IN 'external://alter-backup-ec' ADD NEW_KMS='testkms:///alte
 ----
 
 subtest end
+
+subtest backup-kms-privileges
+
+exec-sql
+GRANT BACKUP ON TABLE foo TO testuser;
+CREATE EXTERNAL CONNECTION "kms-dest-ec" AS 'nodelocal://1/kms-dest';
+GRANT USAGE ON EXTERNAL CONNECTION "kms-dest-ec" TO testuser;
+CREATE EXTERNAL CONNECTION "kms-ec" AS 'testkms:///kms-key?AUTH=implicit';
+----
+
+exec-sql user=testuser
+BACKUP TABLE foo INTO 'external://kms-dest-ec' WITH kms='external://kms-ec';
+----
+pq: user testuser does not have USAGE privilege on external_connection kms-ec
+
+exec-sql
+GRANT USAGE ON EXTERNAL CONNECTION "kms-ec" TO testuser;
+----
+
+exec-sql user=testuser
+BACKUP TABLE foo INTO 'external://kms-dest-ec' WITH kms='external://kms-ec';
+----
+
+subtest end
+
+subtest alter-backup-kms-privileges
+
+exec-sql
+CREATE EXTERNAL CONNECTION "alter-dest-ec" AS 'nodelocal://1/alter-dest';
+GRANT USAGE ON EXTERNAL CONNECTION "alter-dest-ec" TO testuser;
+CREATE EXTERNAL CONNECTION "alter-old-kms-ec" AS 'testkms:///alter-old?AUTH=implicit';
+GRANT USAGE ON EXTERNAL CONNECTION "alter-old-kms-ec" TO testuser;
+CREATE EXTERNAL CONNECTION "alter-new-kms-ec" AS 'testkms:///alter-new?AUTH=implicit';
+----
+
+exec-sql
+BACKUP TABLE foo INTO 'external://alter-dest-ec' WITH kms='external://alter-old-kms-ec';
+----
+
+exec-sql user=testuser
+ALTER BACKUP LATEST IN 'external://alter-dest-ec' ADD NEW_KMS='external://alter-new-kms-ec' WITH OLD_KMS='external://alter-old-kms-ec';
+----
+pq: user testuser does not have USAGE privilege on external_connection alter-new-kms-ec
+
+exec-sql
+GRANT USAGE ON EXTERNAL CONNECTION "alter-new-kms-ec" TO testuser;
+----
+
+exec-sql user=testuser
+ALTER BACKUP LATEST IN 'external://alter-dest-ec' ADD NEW_KMS='external://alter-new-kms-ec' WITH OLD_KMS='external://alter-old-kms-ec';
+----
+
+exec-sql
+REVOKE USAGE ON EXTERNAL CONNECTION "alter-old-kms-ec" FROM testuser;
+----
+
+exec-sql user=testuser
+ALTER BACKUP LATEST IN 'external://alter-dest-ec' ADD NEW_KMS='external://alter-new-kms-ec' WITH OLD_KMS='external://alter-old-kms-ec';
+----
+pq: user testuser does not have USAGE privilege on external_connection alter-old-kms-ec
+
+subtest end
+
+subtest show-backup-restore-kms-privileges
+
+exec-sql
+CREATE EXTERNAL CONNECTION "read-dest-ec" AS 'nodelocal://1/read-dest';
+GRANT USAGE ON EXTERNAL CONNECTION "read-dest-ec" TO testuser;
+CREATE EXTERNAL CONNECTION "read-kms-ec" AS 'testkms:///read-key?AUTH=implicit';
+CREATE DATABASE readdb;
+GRANT RESTORE ON DATABASE readdb TO testuser;
+----
+
+exec-sql
+BACKUP TABLE foo INTO 'external://read-dest-ec' WITH kms='external://read-kms-ec';
+----
+
+exec-sql user=testuser
+SHOW BACKUP LATEST IN 'external://read-dest-ec' WITH kms='external://read-kms-ec';
+----
+pq: user testuser does not have USAGE privilege on external_connection read-kms-ec
+
+exec-sql user=testuser
+RESTORE TABLE foo FROM LATEST IN 'external://read-dest-ec' WITH into_db=readdb, kms='external://read-kms-ec';
+----
+pq: user testuser does not have USAGE privilege on external_connection read-kms-ec
+
+exec-sql
+GRANT USAGE ON EXTERNAL CONNECTION "read-kms-ec" TO testuser;
+----
+
+exec-sql user=testuser
+SHOW BACKUP LATEST IN 'external://read-dest-ec' WITH kms='external://read-kms-ec';
+----
+
+exec-sql user=testuser
+RESTORE TABLE foo FROM LATEST IN 'external://read-dest-ec' WITH into_db=readdb, kms='external://read-kms-ec';
+----
+
+subtest end
+
+# With the setting off, none of the three call sites require USAGE on the
+# external connection named in a KMS URI. Turning the setting on fails the very
+# same statements. testuser is never granted USAGE on off-kms-ec.
+subtest kms-privileges-setting-flip
+
+exec-sql
+SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false;
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION "off-kms-ec" AS 'testkms:///off-key?AUTH=implicit';
+----
+
+exec-sql user=testuser
+BACKUP TABLE foo INTO 'external://kms-dest-ec' WITH kms='external://off-kms-ec';
+----
+
+exec-sql user=testuser
+SHOW BACKUP LATEST IN 'external://kms-dest-ec' WITH kms='external://off-kms-ec';
+----
+
+exec-sql user=testuser
+ALTER BACKUP LATEST IN 'external://kms-dest-ec' ADD NEW_KMS='external://off-kms-ec' WITH OLD_KMS='external://off-kms-ec';
+----
+
+exec-sql
+SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true;
+----
+
+exec-sql user=testuser
+BACKUP TABLE foo INTO 'external://kms-dest-ec' WITH kms='external://off-kms-ec';
+----
+pq: user testuser does not have USAGE privilege on external_connection off-kms-ec
+
+exec-sql user=testuser
+SHOW BACKUP LATEST IN 'external://kms-dest-ec' WITH kms='external://off-kms-ec';
+----
+pq: user testuser does not have USAGE privilege on external_connection off-kms-ec
+
+exec-sql user=testuser
+ALTER BACKUP LATEST IN 'external://kms-dest-ec' ADD NEW_KMS='external://off-kms-ec' WITH OLD_KMS='external://off-kms-ec';
+----
+pq: user testuser does not have USAGE privilege on external_connection off-kms-ec
+
+subtest end
+
+subtest external-uri-without-connection-name
+
+exec-sql user=testuser
+ALTER BACKUP LATEST IN 'external://alter-dest-ec' ADD NEW_KMS='external:///' WITH OLD_KMS='external://alter-old-kms-ec';
+----
+pq: host component of an external URI must refer to an existing External Connection object: external:///
+
+subtest end
