@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math/rand"
@@ -61,6 +62,24 @@ func TestApplyForceInsecure(t *testing.T) {
 	settings := install.MakeClusterSettings(install.SimpleSecureOption(true))
 	applyForceInsecure(&settings, true)
 	require.False(t, settings.Secure)
+}
+
+func TestLogClusterStartOverrides(t *testing.T) {
+	origForceInsecure := roachtestflags.ForceInsecure
+	t.Cleanup(func() {
+		roachtestflags.ForceInsecure = origForceInsecure
+	})
+
+	roachtestflags.ForceInsecure = true
+
+	var output bytes.Buffer
+	l, err := (&logger.Config{Stdout: &output, Stderr: &output}).NewLogger("")
+	require.NoError(t, err)
+	logClusterStartOverrides(l)
+	logClusterStartOverrides(nil)
+
+	logs := output.String()
+	require.Contains(t, logs, "forcing insecure CockroachDB startup via --insecure")
 }
 
 func TestRoachprodClusterRunnerReachableAddresses(t *testing.T) {
