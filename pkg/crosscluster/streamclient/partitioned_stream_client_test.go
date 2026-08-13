@@ -127,24 +127,26 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 	t.Run("wrong-job-type", func(t *testing.T) {
 		var targetStreamID streampb.StreamID
 		h.SysSQL.QueryRow(t, "SELECT crdb_internal.create_sql_schema_telemetry_job()").Scan(&targetStreamID)
+		h.SysSQL.Exec(t, "UPDATE system.jobs SET owner = 'root' WHERE id = $1", targetStreamID)
 
+		const wrongType = "not a replication stream job"
 		t.Run("plan fails", func(t *testing.T) {
 			_, err := client.PlanPhysicalReplication(ctx, targetStreamID)
-			require.ErrorContains(t, err, "not a replication stream job")
+			require.ErrorContains(t, err, wrongType)
 		})
 		t.Run("heartbeat fails", func(t *testing.T) {
 			_, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-			require.ErrorContains(t, err, "not a replication stream job")
+			require.ErrorContains(t, err, wrongType)
 		})
 		t.Run("subscribe fails", func(t *testing.T) {
 			subscription, err := client.Subscribe(ctx, targetStreamID, 1, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
 			require.NoError(t, err)
 			err = subscription.Subscribe(ctx)
-			require.ErrorContains(t, err, "not a replication stream job")
+			require.ErrorContains(t, err, wrongType)
 		})
 		t.Run("complete fails", func(t *testing.T) {
 			err := client.Complete(ctx, targetStreamID, true)
-			require.ErrorContains(t, err, "not a replication stream job")
+			require.ErrorContains(t, err, wrongType)
 		})
 	})
 	t.Run("paused-job", func(t *testing.T) {
@@ -181,7 +183,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 		expectStreamState(targetStreamID, jobs.StateCanceled)
 		t.Run("plan fails", func(t *testing.T) {
 			_, err := client.PlanPhysicalReplication(ctx, targetStreamID)
-			require.ErrorContains(t, err, "must be running")
+			require.ErrorContains(t, err, "is not running")
 		})
 		t.Run("heartbeat returns STREAM_INACTIVE", func(t *testing.T) {
 			// Heartbeat early exits but with a nil error if the job
@@ -194,7 +196,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			subscription, err := client.Subscribe(ctx, targetStreamID, 1, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
 			require.NoError(t, err)
 			err = subscription.Subscribe(ctx)
-			require.ErrorContains(t, err, "must be running")
+			require.ErrorContains(t, err, "is not running")
 		})
 		t.Run("complete succeeds", func(t *testing.T) {
 			// This one is a bit surprising that we allow updating
