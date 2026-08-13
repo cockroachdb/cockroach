@@ -105,7 +105,6 @@ go_test(
         "cluster_test.go",
         "github_test.go",
         "main_test.go",
-        "run_test.go",
         "teamcity_artifacts_test.go",
         "test_filter_test.go",
         "test_impl_test.go",
