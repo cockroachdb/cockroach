@@ -431,6 +431,11 @@ create table defaultdb."../system"(x int);
 		t.Fatal(err)
 	}
 
+	// Strip non-deterministic messages before filtering: the sensitive-setting
+	// scrub warning names a log file and a count that vary between runs, and
+	// it matches the filter below by way of "redactable".
+	out = eraseNonDeterministicZipOutput(out)
+
 	re := regexp.MustCompile(`(?m)^.*(table|database).*$`)
 	out = strings.Join(re.FindAllString(out, -1), "\n")
 
@@ -637,6 +642,15 @@ func eraseNonDeterministicZipOutput(out string) string {
 	re = regexp.MustCompile(`(?m)^\[node \d+\] writing dump.*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving goroutine_dump.*$` + "\n")
+	out = re.ReplaceAllString(out, ``)
+
+	// Log entries mentioning a sensitive cluster setting are scrubbed client
+	// side, and every cluster has at least one benign such entry (the
+	// bootstrap step that initializes cluster.secret). Neither the count nor
+	// the name of the log file holding them is stable across runs. The
+	// aggregate summary written into the zip itself is deterministic and is
+	// left in place.
+	re = regexp.MustCompile(`(?m)^WARNING: \d+ log entries in .* mentioned sensitive cluster settings.*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
 
 	return out
@@ -1259,6 +1273,14 @@ func TestScrubEventsResponse(t *testing.T) {
 			EventType: "garbage",
 			Info:      `not json {`,
 		},
+		{
+			// An event type unknown to this binary (e.g. from a newer
+			// server) still has its statement text and placeholder values
+			// hidden; Value is only hidden for setting-change events.
+			EventType: "future_event_type",
+			Info: `{"Value": "kept-value", "Statement": "SELECT 'x'", ` +
+				`"PlaceholderValues": ["'x'"], "Other": "kept"}`,
+		},
 	}}
 	scrubEventsResponse(resp)
 
@@ -1283,4 +1305,18 @@ func TestScrubEventsResponse(t *testing.T) {
 	require.Equal(t, float64(1), decode(resp.Events[3].Info)["NodeID"])
 	// Unparsable info is emptied rather than passed through.
 	require.Equal(t, "", resp.Events[4].Info)
+	require.Equal(t, "<hidden>", decode(resp.Events[5].Info)["Statement"])
+	require.Equal(t, hidden, decode(resp.Events[5].Info)["PlaceholderValues"])
+	require.Equal(t, "kept-value", decode(resp.Events[5].Info)["Value"])
+	require.Equal(t, "kept", decode(resp.Events[5].Info)["Other"])
+
+	// Scrubbing is idempotent: a second pass leaves the response unchanged.
+	scrubbed := make([]string, len(resp.Events))
+	for i, e := range resp.Events {
+		scrubbed[i] = e.Info
+	}
+	scrubEventsResponse(resp)
+	for i, e := range resp.Events {
+		require.Equal(t, scrubbed[i], e.Info, "event %d", i)
+	}
 }
