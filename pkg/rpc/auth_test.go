@@ -1215,6 +1215,80 @@ func TestTenantAuthRequest(t *testing.T) {
 	}
 }
 
+// TestTenantAuthBatchRejectsCommitTriggers verifies that a secondary tenant
+// cannot attach an InternalCommitTrigger to an EndTxn (VULM-477). The rejection
+// lives in authBatch rather than in the capability authorizer, so it must hold
+// regardless of which capability authorizer is configured, and regardless of
+// which (if any) sub-trigger is populated — including an empty-but-non-nil
+// trigger, which is the exact predicate the check uses and which would crash the
+// node if it reached batcheval.
+func TestTenantAuthBatchRejectsCommitTriggers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tenID := roachpb.MustMakeTenantID(10)
+	const method = "/cockroach.roachpb.Internal/Batch"
+
+	// Anchor the EndTxn on a key inside the tenant's keyspace, so the only
+	// objection to the batch is the commit trigger (the trigger check runs before
+	// the keyspace check).
+	key := roachpb.Key(prefix(10, "a"))
+	batchWithTrigger := func(ct *roachpb.InternalCommitTrigger) *kvpb.BatchRequest {
+		return &kvpb.BatchRequest{Requests: makeReqs(&kvpb.EndTxnRequest{
+			RequestHeader:         kvpb.RequestHeader{Key: key},
+			Commit:                true,
+			InternalCommitTrigger: ct,
+		})}
+	}
+
+	triggers := []struct {
+		name    string
+		trigger *roachpb.InternalCommitTrigger
+	}{
+		{"empty", &roachpb.InternalCommitTrigger{}},
+		{"sticky-bit", &roachpb.InternalCommitTrigger{StickyBitTrigger: &roachpb.StickyBitTrigger{}}},
+		{"split", &roachpb.InternalCommitTrigger{SplitTrigger: &roachpb.SplitTrigger{}}},
+		{"merge", &roachpb.InternalCommitTrigger{MergeTrigger: &roachpb.MergeTrigger{}}},
+		{"change-replicas", &roachpb.InternalCommitTrigger{ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{}}},
+		{"modified-span", &roachpb.InternalCommitTrigger{ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{}}},
+	}
+
+	// The rejection is a structural property of authBatch, not a capability
+	// decision: it must hold even when the configured authorizer would grant the
+	// batch. Exercise both a mock that grants everything and the allow-everything
+	// authorizer.
+	authzs := []struct {
+		name  string
+		authz tenantcapabilities.Authorizer
+	}{
+		{"capabilities-granted", mockAuthorizer{hasCapabilityForBatch: true, hasCrossTenantRead: true}},
+		{"allow-everything", tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()},
+	}
+
+	for _, az := range authzs {
+		t.Run(az.name, func(t *testing.T) {
+			for _, tc := range triggers {
+				t.Run(tc.name, func(t *testing.T) {
+					err := rpc.TestingAuthorizeTenantRequest(
+						ctx, &settings.Values{}, tenID, method, batchWithTrigger(tc.trigger), az.authz)
+					require.Error(t, err)
+					require.Equal(t, codes.Unauthenticated, status.Code(err))
+					require.Regexp(t, `internal commit triggers may only be issued by the system tenant`, err)
+				})
+			}
+			// A trigger-free committing EndTxn in the tenant's keyspace is allowed.
+			t.Run("no-trigger", func(t *testing.T) {
+				ba := &kvpb.BatchRequest{Requests: makeReqs(&kvpb.EndTxnRequest{
+					RequestHeader: kvpb.RequestHeader{Key: key},
+					Commit:        true,
+				})}
+				require.NoError(t, rpc.TestingAuthorizeTenantRequest(
+					ctx, &settings.Values{}, tenID, method, ba, az.authz))
+			})
+		})
+	}
+}
+
 // TestSpecialTenantID ensures that tenant ID with special encodings
 // are handled properly by authz code.
 func TestSpecialTenantID(t *testing.T) {
