@@ -48,23 +48,21 @@ func TestAdminAPISettings(t *testing.T) {
 		settings.Sensitive,
 	)
 	testUsers := map[string]struct {
-		userName           string
-		consoleOnly        bool
-		redactableSettings bool
-		grantRole          string
+		userName    string
+		consoleOnly bool
+		grantRole   string
 	}{
-		// Admin users should be able to se all cluster settings without redaction.
-		"admin_user": {userName: "admin_user", redactableSettings: false, grantRole: "ADMIN"},
-		// Users with MODIFYCLUSTERSETTING should be able to see all cluster
-		// settings without redaction
-		"modify_settings_user": {userName: "modify_settings_user", redactableSettings: false, grantRole: "SYSTEM MODIFYCLUSTERSETTING"},
-		// Users with VIEWCLUSTERSETTING should be able to see all cluster
-		// settings, but sensitive settings are redacted
-		"view_settings_user": {userName: "view_settings_user", redactableSettings: true, grantRole: "SYSTEM VIEWCLUSTERSETTING"},
+		// Sensitive settings are redacted in the Settings endpoint for ALL
+		// users, including admins - the response feeds debug zip
+		// settings.json, which is shared externally. Privileged users read
+		// sensitive values via SQL instead.
+		"admin_user":           {userName: "admin_user", grantRole: "ADMIN"},
+		"modify_settings_user": {userName: "modify_settings_user", grantRole: "SYSTEM MODIFYCLUSTERSETTING"},
+		"view_settings_user":   {userName: "view_settings_user", grantRole: "SYSTEM VIEWCLUSTERSETTING"},
 		// Users with VIEWACTIVITY and VIEWACTIVITYREDACTED should only be able to
 		// see console specific settings.
-		"view_activity_user":          {userName: "view_activity_user", redactableSettings: true, grantRole: "SYSTEM VIEWACTIVITY", consoleOnly: true},
-		"view_activity_redacted_user": {userName: "view_activity_redacted_user", redactableSettings: true, grantRole: "SYSTEM VIEWACTIVITYREDACTED", consoleOnly: true},
+		"view_activity_user":          {userName: "view_activity_user", grantRole: "SYSTEM VIEWACTIVITY", consoleOnly: true},
+		"view_activity_redacted_user": {userName: "view_activity_redacted_user", grantRole: "SYSTEM VIEWACTIVITYREDACTED", consoleOnly: true},
 	}
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer ts.Stopper().Stop(ctx)
@@ -116,11 +114,12 @@ func TestAdminAPISettings(t *testing.T) {
 					require.True(t, ok)
 					settingResponse := resp.KeyValues[keyAsString]
 					settingVal := settingResponse.Value
-					// If the setting is "sensitive", the setting is not empty, the
-					// redact_sensitive_settings is true, and the user being tested
-					// is not allowed to see sensitive settings, the value should
-					// be redacted
-					if settings.TestingIsSensitive(setting) && settingVal != "" && redactSensitive && u.redactableSettings {
+					// Non-empty sensitive settings are redacted for every user,
+					// regardless of privileges and of the
+					// redact_sensitive_settings knob (which governs the SQL
+					// surface, not this endpoint). The empty string is
+					// preserved to distinguish unset from set.
+					if settings.TestingIsSensitive(setting) && settingVal != "" {
 						require.Equalf(t, "<redacted>", settingVal, "Expected %s to be <redacted>, but got %s", keyAsString, settingVal)
 					} else {
 						require.NotEqualf(t, "<redacted>", settingVal, "Expected %s to be %s, but got <redacted>", keyAsString, settingVal)
@@ -245,5 +244,22 @@ func TestAdminAPILocations(t *testing.T) {
 		if !reflect.DeepEqual(res.Locations[i], expLoc) {
 			t.Errorf("%d: expected location %v, but got %v", i, expLoc, res.Locations[i])
 		}
+	}
+}
+
+// TestConsoleSettingsNotSensitive ensures that the settings whitelisted for
+// low-privilege console users are never marked sensitive. Their values are
+// returned by the Settings API to users with only VIEWACTIVITY or
+// VIEWACTIVITYREDACTED, and the DB Console reads some of them functionally,
+// so a sensitive marker (which redacts the value in the API response) would
+// both indicate a leak and silently break console features.
+func TestConsoleSettingsNotSensitive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, k := range settings.ConsoleKeys() {
+		s, ok := settings.LookupForLocalAccessByKey(k, true /* forSystemTenant */)
+		require.Truef(t, ok, "console setting %s not found in registry", k)
+		require.Falsef(t, s.IsSensitive(),
+			"console setting %s must not be marked sensitive", s.Name())
 	}
 }
