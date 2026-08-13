@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "avro.go",
         "compat.go",
-        "fingerprint.go",
         "logical_types.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro",

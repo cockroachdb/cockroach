@@ -143,9 +143,7 @@ func TestNewEnvelopeRecordWithRegisteredSchema(t *testing.T) {
 		require.NoError(t, err)
 
 		// The envelope encodes with the registered schema verbatim.
-		registeredFP, err := SchemaFingerprint(registered)
-		require.NoError(t, err)
-		require.Equal(t, registeredFP, adopted.codec.Rabin)
+		require.Equal(t, registered, adopted.codec.Schema())
 
 		encoded, err := adopted.BinaryFromRow(nil, Metadata{}, nilRow, afterRow, nilRow, "")
 		require.NoError(t, err)
@@ -397,7 +395,7 @@ func TestNewEnvelopeRecordWithRegisteredSchema(t *testing.T) {
 		_, err := wrappedEnvelopeWithRegisteredSchema(
 			t, narrowDesc, EnvelopeOpts{AfterField: true}, registered)
 		requireRetryable(t, err)
-		require.Contains(t, err.Error(), `envelope field "updated"`)
+		require.Contains(t, err.Error(), `top-level field "updated"`)
 	})
 
 	t.Run("errors when registered is missing an envelope field", func(t *testing.T) {
@@ -406,7 +404,7 @@ func TestNewEnvelopeRecordWithRegisteredSchema(t *testing.T) {
 		_, err := wrappedEnvelopeWithRegisteredSchema(
 			t, narrowDesc, EnvelopeOpts{AfterField: true, UpdatedField: true}, registered)
 		requireRetryable(t, err)
-		require.Contains(t, err.Error(), `missing envelope field "updated"`)
+		require.Contains(t, err.Error(), `missing top-level field "updated"`)
 	})
 
 	t.Run("errors on a record name mismatch", func(t *testing.T) {
@@ -521,5 +519,66 @@ func TestNewEnvelopeRecordWithRegisteredSchema(t *testing.T) {
 			t, narrowDesc, EnvelopeOpts{AfterField: true}, string(out))
 		requireRetryable(t, err)
 		require.Contains(t, err.Error(), "does not match")
+	})
+}
+
+// keySchema builds a key record for the table's primary index.
+func keySchema(t *testing.T, tableDesc catalog.TableDescriptor, tableName string) *DataRecord {
+	t.Helper()
+	key, err := PrimaryIndexToAvroSchema(
+		cdcevent.TestingMakeEventRow(tableDesc, 0, nil, false), tableName, "")
+	require.NoError(t, err)
+	return key
+}
+
+func TestNewDataRecordWithRegisteredSchema(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	desc, err := parseTableDesc(`CREATE TABLE foo (a INT, b STRING, PRIMARY KEY (a, b))`)
+	require.NoError(t, err)
+	rows, err := parseValues(desc, `VALUES (1, 'x')`)
+	require.NoError(t, err)
+	keyRow := cdcevent.TestingMakeEventRow(desc, 0, rows[0], false)
+	narrowDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	require.NoError(t, err)
+
+	t.Run("adopts a registered key whose columns are reordered", func(t *testing.T) {
+		reorderedDesc, err := parseTableDesc(`CREATE TABLE foo (a INT, b STRING, PRIMARY KEY (b, a))`)
+		require.NoError(t, err)
+		registered := keySchema(t, reorderedDesc, `foo`).Schema()
+		local := keySchema(t, desc, `foo`)
+		require.NotEqual(t, local.Schema(), registered)
+
+		adopted, err := NewDataRecordWithRegisteredSchema(local, registered)
+		require.NoError(t, err)
+		require.Equal(t, registered, adopted.Schema())
+
+		encoded, err := adopted.BinaryFromRow(nil, keyRow.ForEachKeyColumn())
+		require.NoError(t, err)
+		codec, err := goavro.NewCodec(registered)
+		require.NoError(t, err)
+		native, rest, err := codec.NativeFromBinary(encoded)
+		require.NoError(t, err)
+		require.Empty(t, rest)
+		key := native.(map[string]interface{})
+		require.Equal(t, map[string]interface{}{"long": int64(1)}, key["a"])
+		require.Equal(t, map[string]interface{}{"string": "x"}, key["b"])
+	})
+
+	t.Run("errors when the registered key has an extra column", func(t *testing.T) {
+		registered := keySchema(t, desc, `foo`).Schema()
+
+		_, err := NewDataRecordWithRegisteredSchema(keySchema(t, narrowDesc, `foo`), registered)
+		requireRetryable(t, err)
+		require.Contains(t, err.Error(), `top-level field "b"`)
+	})
+
+	t.Run("errors when the registered key drops a column", func(t *testing.T) {
+		registered := keySchema(t, narrowDesc, `foo`).Schema()
+
+		_, err := NewDataRecordWithRegisteredSchema(keySchema(t, desc, `foo`), registered)
+		requireRetryable(t, err)
+		require.Contains(t, err.Error(), `missing top-level field "b"`)
 	})
 }
