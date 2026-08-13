@@ -31,7 +31,13 @@ func acmeEnv(fields string) string {
 		fields + `]}],"default":null}]}`
 }
 
-func TestCheckRegisteredEnvelopeCompat(t *testing.T) {
+// keyRec builds a key schema: the bare record of key columns that
+// PrimaryIndexToAvroSchema produces.
+func keyRec(fields string) string {
+	return `{"type":"record","name":"foo","fields":[` + fields + `]}`
+}
+
+func TestCheckRegisteredSchemaCompat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -278,7 +284,7 @@ func TestCheckRegisteredEnvelopeCompat(t *testing.T) {
 			registered: `{"type":"record","name":"foo_envelope","fields":[` +
 				`{"name":"after","type":["null",{"type":"record","name":"foo","fields":[` + fa + `]}]},` +
 				`{"name":"updated","type":["null","string"]}]}`,
-			expectErr: `envelope field "updated"`,
+			expectErr: `top-level field "updated"`,
 		},
 		{
 			name: "envelope is missing a field",
@@ -286,13 +292,35 @@ func TestCheckRegisteredEnvelopeCompat(t *testing.T) {
 				`{"name":"after","type":["null",{"type":"record","name":"foo","fields":[` + fa + `]}]},` +
 				`{"name":"updated","type":["null","string"]}]}`,
 			registered: afterEnv("foo", fa),
-			expectErr:  `missing envelope field "updated"`,
+			expectErr:  `missing top-level field "updated"`,
 		},
 		{
 			name:       "envelope record name mismatch",
 			local:      afterEnv("foo", fa),
 			registered: `{"type":"record","name":"other_envelope","fields":[{"name":"after","type":["null",{"type":"record","name":"foo","fields":[` + fa + `]}]}]}`,
 			expectErr:  "does not match",
+		},
+
+		// --- Key records, whose root fields are the key columns ---
+		{
+			// Field order drives the binary layout, so an exact-match check
+			// would reject this; the walk matches fields by name and the
+			// registered schema does the encoding, so the order is its own.
+			name:       "key with reordered columns",
+			local:      keyRec(fa + `,` + fb),
+			registered: keyRec(fb + `,` + fa),
+		},
+		{
+			name:       "key with an extra column",
+			local:      keyRec(fa),
+			registered: keyRec(fa + `,{"name":"b","type":["null","string"],"default":null}`),
+			expectErr:  `top-level field "b"`,
+		},
+		{
+			name:       "key missing a column",
+			local:      keyRec(fa + `,` + fb),
+			registered: keyRec(fa),
+			expectErr:  `missing top-level field "b"`,
 		},
 
 		// --- Registered schema validation ---
@@ -320,7 +348,7 @@ func TestCheckRegisteredEnvelopeCompat(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := CheckRegisteredEnvelopeCompat(tc.local, tc.registered)
+			err := CheckRegisteredSchemaCompat(tc.local, tc.registered)
 			if tc.expectErr != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.expectErr)

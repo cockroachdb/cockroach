@@ -45,9 +45,9 @@ import (
 //   - A registered record may not omit a field the changefeed produces, where
 //     the spec drops it: the column would silently vanish from the wire, so
 //     the mismatch is reported rather than the data lost.
-//   - Envelope-level fields must match exactly; a missing or extra
-//     before/after/updated/... is an error naming the field, because those
-//     correspond to changefeed options rather than table columns.
+//   - Root-level fields must match exactly; a missing or extra
+//     before/after/updated/... or key column is an error naming the field,
+//     because those correspond to changefeed options rather than table columns.
 //   - Type promotions (int→long, string↔bytes, ...) are not accepted: the
 //     bytes are encoded with the registered schema and goavro selects union
 //     branches by type name, so a promoted value would need a re-mapping
@@ -77,13 +77,14 @@ import (
 // logical type, and record name the changefeed emits exists identically on
 // the registered side.
 
-// CheckRegisteredEnvelopeCompat reports whether registeredSchemaJSON can
-// represent every value of the envelope this changefeed produces, described by
-// localSchemaJSON: whether it is safe to re-encode the changefeed's values with
-// the registered schema (see the file comment). The check is pure: it does not
-// mutate either schema, so a latest-compatible version walk can run it against
-// many candidate versions before choosing one.
-func CheckRegisteredEnvelopeCompat(localSchemaJSON, registeredSchemaJSON string) error {
+// CheckRegisteredSchemaCompat reports whether registeredSchemaJSON can
+// represent every value the schema described by localSchemaJSON produces,
+// whether that is a value envelope or a key record: whether it is safe to
+// re-encode the changefeed's values with the registered schema (see the file
+// comment). The check is pure: it does not mutate either schema, so a
+// latest-compatible version walk can run it against many candidate versions
+// before choosing one.
+func CheckRegisteredSchemaCompat(localSchemaJSON, registeredSchemaJSON string) error {
 	local, localNames, err := parseSchema(localSchemaJSON)
 	if err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(
@@ -97,33 +98,55 @@ func CheckRegisteredEnvelopeCompat(localSchemaJSON, registeredSchemaJSON string)
 		return errors.Wrap(err, "parsing the registered schema")
 	}
 	c := &compatChecker{writerNames: localNames, readerNames: registeredNames}
-	return c.compareEnvelope(local, registered)
+	return c.compareRootRecord(local, registered)
 }
 
 // NewEnvelopeRecordWithRegisteredSchema creates an envelope record that
 // encodes with registeredSchemaJSON, provided that schema can represent every
-// value local produces (see CheckRegisteredEnvelopeCompat). The returned
-// record encodes with a codec built from the registered schema verbatim, so
-// the bytes match the schema whose ID the sink stamps on each message.
+// value local produces (see CheckRegisteredSchemaCompat).
 func NewEnvelopeRecordWithRegisteredSchema(
 	local *EnvelopeRecord, registeredSchemaJSON string,
 ) (*EnvelopeRecord, error) {
-	if err := CheckRegisteredEnvelopeCompat(local.codec.Schema(), registeredSchemaJSON); err != nil {
-		return nil, err
-	}
-	// The check validated the registered schema, so building its codec can
-	// only fail on a code bug.
-	registeredCodec, err := goavro.NewCodec(registeredSchemaJSON)
+	registeredCodec, err := registeredCodecFor(local.codec.Schema(), registeredSchemaJSON)
 	if err != nil {
-		return nil, errors.NewAssertionErrorWithWrappedErrf(
-			err, "building codec for validated registered schema")
+		return nil, err
 	}
 	envelope := *local
 	envelope.codec = registeredCodec
 	return &envelope, nil
 }
 
-// parseSchema parses an envelope schema into its record node plus the
+// NewDataRecordWithRegisteredSchema is NewEnvelopeRecordWithRegisteredSchema
+// for the key record.
+func NewDataRecordWithRegisteredSchema(
+	local *DataRecord, registeredSchemaJSON string,
+) (*DataRecord, error) {
+	registeredCodec, err := registeredCodecFor(local.codec.Schema(), registeredSchemaJSON)
+	if err != nil {
+		return nil, err
+	}
+	record := *local
+	record.codec = registeredCodec
+	return &record, nil
+}
+
+// registeredCodecFor checks registeredSchemaJSON against localSchemaJSON and
+// returns a codec built from the registered schema verbatim.
+func registeredCodecFor(localSchemaJSON, registeredSchemaJSON string) (*goavro.Codec, error) {
+	if err := CheckRegisteredSchemaCompat(localSchemaJSON, registeredSchemaJSON); err != nil {
+		return nil, err
+	}
+	// The check validated the registered schema, so building its codec can
+	// only fail on a code bug.
+	codec, err := goavro.NewCodec(registeredSchemaJSON)
+	if err != nil {
+		return nil, errors.NewAssertionErrorWithWrappedErrf(
+			err, "building codec for validated registered schema")
+	}
+	return codec, nil
+}
+
+// parseSchema parses a schema into its root record node plus the
 // named-type table its references resolve through.
 func parseSchema(schemaJSON string) (map[string]interface{}, namedTypes, error) {
 	var tree interface{}
@@ -163,13 +186,13 @@ var primitiveNames = map[string]struct{}{
 	SchemaTypeString:  {},
 }
 
-func (c *compatChecker) compareEnvelope(wRec, rRec map[string]interface{}) error {
+func (c *compatChecker) compareRootRecord(wRec, rRec map[string]interface{}) error {
 	wFull := recordFullName(wRec, ``)
 	rFull := recordFullName(rRec, ``)
 	if wFull != rFull {
 		return errors.Newf(
-			"registered envelope record %q does not match envelope record %q produced by this "+
-				"changefeed", rFull, wFull)
+			"registered record %q does not match record %q produced by this changefeed",
+			rFull, wFull)
 	}
 	childNS := namespaceOf(wFull)
 
@@ -178,24 +201,24 @@ func (c *compatChecker) compareEnvelope(wRec, rRec map[string]interface{}) error
 	wByName := indexByName(wFields)
 	rByName := indexByName(rFields)
 
-	// Envelope field-name sets must match exactly; envelope fields correspond
-	// to changefeed options, unlike record fields below the envelope, which
-	// follow the resolution rules for field-set differences.
+	// Root field-name sets must match exactly; root fields correspond to
+	// changefeed options and key columns, unlike the record fields below them,
+	// which follow the resolution rules for field-set differences.
 	for _, wf := range wFields {
 		if _, ok := rByName[fieldName(wf)]; !ok {
 			return errors.Newf(
-				"the registered schema is missing envelope field %q produced by this changefeed; "+
-					"envelope fields are set by changefeed options, so adjust the options or "+
-					"register a schema version with a matching envelope",
+				"the registered schema is missing top-level field %q produced by this changefeed; "+
+					"top-level fields are set by changefeed options and key columns, so adjust "+
+					"those or register a schema version with a matching top level",
 				fieldName(wf))
 		}
 	}
 	for _, rf := range rFields {
 		if _, ok := wByName[fieldName(rf)]; !ok {
 			return errors.Newf(
-				"the registered schema has envelope field %q that this changefeed does not "+
-					"produce; envelope fields are set by changefeed options, so adjust the "+
-					"options or register a schema version with a matching envelope",
+				"the registered schema has top-level field %q that this changefeed does not "+
+					"produce; top-level fields are set by changefeed options and key columns, so "+
+					"adjust those or register a schema version with a matching top level",
 				fieldName(rf))
 		}
 	}
