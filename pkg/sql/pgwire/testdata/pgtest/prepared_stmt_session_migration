@@ -1,0 +1,143 @@
+# Regression test for a session-migration prepared-statement shape bug.
+#
+# A prepared SELECT * whose unqualified table is resolved via search_path used to
+# be re-prepared during crdb_internal.deserialize_session before the migrated
+# session data (search_path) was applied. Under a destination search_path that
+# could not resolve the table, the re-prepare failed, the failure was swallowed,
+# and the statement was kept with zero result columns; a later Bind/Execute then
+# tripped a result-shape assertion. DeserializeSessionState now applies the
+# migrated session data before re-preparing, so the statement keeps its two
+# result columns and Bind/Execute succeeds.
+
+send
+Query {"String": "CREATE SCHEMA IF NOT EXISTS s"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE SCHEMA"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE s.t (a INT PRIMARY KEY, b INT)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "INSERT INTO s.t VALUES (1, 10)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET search_path = s"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Prepare SELECT * over the wire; the server describes a two-column shape.
+send
+Parse {"Name": "s1", "Query": "SELECT * FROM t WHERE a = $1", "ParameterOIDs": [23]}
+Describe {"ObjectType": "S", "Name": "s1"}
+Sync
+----
+
+until ignore_table_oids ignore_type_oids ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[23]}
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Stash the serialized session (which captures search_path=s and s1) in a table
+# so it can be deserialized later under a different search_path. Use INSERT ...
+# VALUES so the serialize_session eval runs on the gateway (a CREATE TABLE AS
+# would distribute it, where the session state is unavailable).
+send
+Query {"String": "CREATE TABLE public.saved (s BYTES)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "INSERT INTO public.saved VALUES (crdb_internal.serialize_session())"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Move search_path away from s, emulating a fresh destination pod that has not
+# yet applied the migrated session.
+send
+Query {"String": "SET search_path = public"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Drop the server-side prepared statement so deserialize can re-create it.
+send
+Query {"String": "DEALLOCATE ALL"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Deserialize: succeeds with no error.
+send
+Query {"String": "SELECT crdb_internal.deserialize_session(s) FROM public.saved"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"crdb_internal.deserialize_session","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":16,"DataTypeSize":1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"t"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Bind with a single result format code (which applies to all result columns),
+# then Execute. Because the statement was re-prepared under the migrated
+# search_path during deserialize, it retains its two result columns, and
+# Bind/Execute succeeds and returns the row.
+send
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"1"}], "ResultFormatCodes": [0]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"10"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

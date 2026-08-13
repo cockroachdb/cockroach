@@ -271,3 +271,63 @@ SELECT crdb_internal.deserialize_session(decode('$session_hex', 'hex'))
 true
 
 subtest end
+
+subtest search_path_result_shape
+
+# A prepared statement whose unqualified table is resolved through search_path
+# must keep its result columns across a session migration. Deserialization
+# applies the migrated session data (here search_path=sp) before re-preparing,
+# so the statement re-prepares under the same search_path it was created with.
+
+exec
+DEALLOCATE ALL
+----
+
+exec
+CREATE SCHEMA sp
+----
+
+exec
+CREATE TABLE sp.spt (a INT PRIMARY KEY, b INT)
+----
+
+exec
+INSERT INTO sp.spt VALUES (1, 10)
+----
+
+exec
+SET search_path = sp
+----
+
+wire_prepare sp_stmt
+SELECT * FROM spt WHERE a = $1
+----
+
+wire_query sp_stmt 1
+----
+1 10
+
+let $sp_session
+SELECT encode(crdb_internal.serialize_session(), 'hex')
+----
+
+# Emulate a destination pod whose search_path cannot resolve spt, then apply the
+# migrated session; deserialize must restore search_path=sp before re-preparing.
+exec
+SET search_path = public
+----
+
+exec
+DEALLOCATE ALL
+----
+
+query
+SELECT crdb_internal.deserialize_session(decode('$sp_session', 'hex'))
+----
+true
+
+wire_query sp_stmt 1
+----
+1 10
+
+subtest end
