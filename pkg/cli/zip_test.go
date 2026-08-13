@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1301,4 +1303,37 @@ func TestCommandFlags(t *testing.T) {
 	if err = r.Close(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestRedactSensitiveSettingValues verifies the client-side scrub of the
+// Settings RPC response that feeds settings.json. The server also redacts
+// sensitive values; the client-side pass protects zips collected from older
+// servers.
+func TestRedactSensitiveSettingValues(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Pick a real sensitive setting from the registry compiled into the CLI.
+	var sensitiveKey string
+	for _, k := range settings.Keys(true /* forSystemTenant */) {
+		if s, ok := settings.LookupForLocalAccessByKey(k, true /* forSystemTenant */); ok && s.IsSensitive() {
+			sensitiveKey = string(k)
+			break
+		}
+	}
+	require.NotEmpty(t, sensitiveKey, "no sensitive setting registered")
+
+	resp := &serverpb.SettingsResponse{KeyValues: map[string]serverpb.SettingsResponse_Value{
+		sensitiveKey:                   {Value: "hunter2"},
+		"unknown.old.setting":          {Value: "harmless"},
+		"kv.range_merge.queue.enabled": {Value: "true"},
+	}}
+	redactSensitiveSettingValues(resp)
+	require.Equal(t, "<redacted>", resp.KeyValues[sensitiveKey].Value)
+	require.Equal(t, "harmless", resp.KeyValues["unknown.old.setting"].Value)
+	require.Equal(t, "true", resp.KeyValues["kv.range_merge.queue.enabled"].Value)
+
+	// The empty string is preserved to distinguish unset from set.
+	resp.KeyValues[sensitiveKey] = serverpb.SettingsResponse_Value{Value: ""}
+	redactSensitiveSettingValues(resp)
+	require.Equal(t, "", resp.KeyValues[sensitiveKey].Value)
 }
