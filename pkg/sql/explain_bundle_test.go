@@ -110,6 +110,43 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		)
 	})
 
+	// Values of sensitive cluster settings must never appear in the bundle,
+	// even when the collector is privileged - bundles are meant to be shared.
+	// A modified sensitive setting is called out with a comment instead.
+	t.Run("sensitive settings", func(t *testing.T) {
+		const secret = "hunter2-test-secret"
+		r.Exec(t, fmt.Sprintf(
+			"SET CLUSTER SETTING server.oidc_authentication.client_secret = '%s'", secret))
+		defer r.Exec(t, "RESET CLUSTER SETTING server.oidc_authentication.client_secret")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 123")
+		contentCheck := func(name, contents string) error {
+			if strings.Contains(contents, secret) {
+				return errors.Errorf("%s contains the sensitive setting value", name)
+			}
+			if name == "env.sql" {
+				if !strings.Contains(contents,
+					"-- cluster setting server.oidc_authentication.client_secret "+
+						"is modified from its default value (value redacted)",
+				) {
+					return errors.Errorf(
+						"env.sql missing modified-comment for sensitive setting, got:\n%s", contents)
+				}
+				// A modified non-sensitive setting still gets its SET statement.
+				if !strings.Contains(contents,
+					"SET CLUSTER SETTING sql.stmt_diagnostics.bundle_chunk_size",
+				) {
+					return errors.Errorf(
+						"env.sql missing SET statement for non-sensitive setting, got:\n%s", contents)
+				}
+			}
+			return nil
+		}
+		checkBundle(
+			t, fmt.Sprint(rows), "", contentCheck, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
+	})
+
 	// Check that we get separate diagrams for subqueries.
 	t.Run("subqueries", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT EXISTS (SELECT * FROM abc WHERE c=1)")
