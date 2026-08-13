@@ -376,9 +376,14 @@ ALTER JOB $testuser_job_id OWNER TO otherrole
 # Regression test for schema owners' privileges: Schema owners implicitly hold
 # the DROP privilege on relations in their schema. Operations gated on other
 # privileges or on relation ownership are not available to them (see VULM-376).
+# This behavior is gated behind the postgres_compatible_ownership_checks
+# cluster setting, which defaults to off.
 subtest schema_owner_does_not_imply_object_owner
 
 user root
+
+statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled = true
 
 statement ok
 CREATE ROLE sc_owner;
@@ -386,7 +391,8 @@ CREATE ROLE obj_owner;
 GRANT sc_owner, obj_owner TO testuser;
 CREATE SCHEMA defaultdb.owned_sc AUTHORIZATION sc_owner;
 CREATE SCHEMA defaultdb.owned_sc2 AUTHORIZATION sc_owner;
-GRANT CREATE, USAGE ON SCHEMA defaultdb.owned_sc TO obj_owner
+GRANT CREATE, USAGE ON SCHEMA defaultdb.owned_sc TO obj_owner;
+GRANT CREATE ON DATABASE defaultdb TO sc_owner
 
 user testuser
 
@@ -451,6 +457,10 @@ DROP SCHEMA defaultdb.owned_sc2
 user root
 
 statement ok
+RESET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled
+
+statement ok
+REVOKE CREATE ON DATABASE defaultdb FROM sc_owner;
 REVOKE sc_owner, obj_owner FROM testuser;
 DROP ROLE sc_owner;
 DROP ROLE obj_owner
