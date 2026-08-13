@@ -99,6 +99,7 @@ go_library(
     name = "serverpb",
     srcs = [
         "admin.go",
+        "events_redaction.go",
         "status.go",
     ],
     embed = [":serverpb_go_proto"],
@@ -107,6 +108,8 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/util/errorutil",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/log/logpb",
         "//pkg/util/metric",
         "@com_github_prometheus_client_model//go",
         "@org_golang_google_grpc//:go_default_library",
@@ -116,7 +119,13 @@ go_library(
 go_test(
     name = "serverpb_test",
     size = "medium",
-    srcs = ["admin_test.go"],
+    srcs = [
+        "admin_test.go",
+        "events_redaction_test.go",
+    ],
     embed = [":serverpb"],
-    deps = ["@com_github_stretchr_testify//assert"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
 )

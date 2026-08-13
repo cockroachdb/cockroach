@@ -43,7 +43,12 @@ func makeClusterWideZipRequests(
 		// act on the output to special case decommissioned nodes).
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.Events(ctx, &serverpb.EventsRequest{})
+				resp, err := admin.Events(ctx, &serverpb.EventsRequest{})
+				if err != nil {
+					return nil, err
+				}
+				scrubEventsResponse(resp)
+				return resp, nil
 			},
 			pathName: prefix + eventsName,
 		},
@@ -74,6 +79,21 @@ func makeClusterWideZipRequests(
 		})
 	}
 	return zipRequests
+}
+
+// scrubEventsResponse enforces the redacted-events contract on an Events RPC
+// response, using the same helper the server applies when serving the
+// redacted form. This matters only for zips collected from older servers,
+// which leave placeholder values (and the value in tenant setting-change
+// events) intact.
+//
+// TODO(drewk): remove this re-scrub once every release that predates the
+// server-side redaction of placeholder values is out of support.
+func scrubEventsResponse(resp *serverpb.EventsResponse) {
+	for i := range resp.Events {
+		event := &resp.Events[i]
+		event.Info = serverpb.RedactEventInfo(event.EventType, event.Info)
+	}
 }
 
 // redactSensitiveSettingValues replaces the values of Sensitive-marked
