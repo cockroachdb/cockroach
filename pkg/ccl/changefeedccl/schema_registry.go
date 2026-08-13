@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/linkedin/goavro/v2"
 )
 
 const confluentSchemaContentType = `application/vnd.schemaregistry.v1+json`
@@ -46,14 +45,15 @@ type schemaRegistry interface {
 	RegisterSchemaForSubject(ctx context.Context, subject string, schema string) (int32, error)
 
 	// LookupSchemaIDForSubject resolves a schema ID for subject using strategy
-	// without modifying the registry. The selected schema must have the same
-	// Avro parsing-canonical fingerprint as localSchema. Under latest_compatible,
-	// mismatched versions are skipped until a match is found.
+	// without modifying the registry. Each candidate version is offered to
+	// accept, which rejects it by returning an error; under latest_compatible,
+	// rejected versions are skipped until one is accepted.
 	LookupSchemaIDForSubject(
 		ctx context.Context,
 		subject string,
 		localSchema string,
 		strategy changefeedbase.AvroVersionStrategy,
+		accept func(registeredSchema string) error,
 	) (int32, error)
 }
 
@@ -291,16 +291,17 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 }
 
 // LookupSchemaIDForSubject implements the schemaRegistry interface. It fetches
-// a registered version of the subject from the schema registry over HTTP and
-// selects one according to strategy.
+// registered versions of the subject over HTTP and selects one according to
+// strategy, validating each candidate through accept.
 func (r *confluentSchemaRegistry) LookupSchemaIDForSubject(
 	ctx context.Context,
 	subject string,
 	localSchema string,
 	strategy changefeedbase.AvroVersionStrategy,
+	accept func(registeredSchema string) error,
 ) (int32, error) {
 	if strategy.Kind == changefeedbase.AvroVersionLatestCompatible {
-		return r.lookupLatestCompatibleSchema(ctx, subject, localSchema)
+		return r.lookupLatestCompatibleSchema(ctx, subject, accept)
 	}
 	version := "latest"
 	if strategy.Kind == changefeedbase.AvroVersionPin {
@@ -310,9 +311,7 @@ func (r *confluentSchemaRegistry) LookupSchemaIDForSubject(
 	if err != nil {
 		return 0, err
 	}
-	// TODO (sachin): implement a schema backward compatibility check to
-	// handle different schema versions.
-	if err := verifyRegisteredSchemaMatches(subject, localSchema, meta.Schema); err != nil {
+	if err := accept(meta.Schema); err != nil {
 		return 0, err
 	}
 	return meta.ID, nil
@@ -388,16 +387,11 @@ func (r *confluentSchemaRegistry) lookUpAllVersions(
 }
 
 // lookupLatestCompatibleSchema resolves the ID of the newest registered
-// version of the subject that matches localSchema, walking versions newest to
+// version of the subject that accept approves, walking versions newest to
 // oldest.
 func (r *confluentSchemaRegistry) lookupLatestCompatibleSchema(
-	ctx context.Context, subject string, localSchema string,
+	ctx context.Context, subject string, accept func(registeredSchema string) error,
 ) (int32, error) {
-	localFingerprint, err := localSchemaFingerprint(subject, localSchema)
-	if err != nil {
-		return 0, err
-	}
-
 	versions, err := r.lookUpAllVersions(ctx, subject)
 	if err != nil {
 		return 0, err
@@ -410,7 +404,7 @@ func (r *confluentSchemaRegistry) lookupLatestCompatibleSchema(
 		if err != nil {
 			return 0, err
 		}
-		if err := verifyRegisteredSchemaMatchesFingerprint(subject, localFingerprint, meta.Schema); err != nil {
+		if err := accept(meta.Schema); err != nil {
 			rejectionReasons = append(rejectionReasons,
 				fmt.Sprintf("version %d: %v", version, err))
 			log.Changefeed.VInfof(ctx, 1,
@@ -427,47 +421,6 @@ func (r *confluentSchemaRegistry) lookupLatestCompatibleSchema(
 		subject, changefeedbase.AvroVersionStrategy{
 			Kind: changefeedbase.AvroVersionLatestCompatible,
 		}.String(), strings.Join(rejectionReasons, "; "))
-}
-
-// verifyRegisteredSchemaMatches returns an error unless registeredSchema and
-// localSchema have the same Avro parsing-canonical fingerprint.
-func verifyRegisteredSchemaMatches(subject, localSchema, registeredSchema string) error {
-	localFingerprint, err := localSchemaFingerprint(subject, localSchema)
-	if err != nil {
-		return err
-	}
-	return verifyRegisteredSchemaMatchesFingerprint(subject, localFingerprint, registeredSchema)
-}
-
-// localSchemaFingerprint returns the Avro parsing-canonical (Rabin) fingerprint
-// of localSchema.
-func localSchemaFingerprint(subject, localSchema string) (uint64, error) {
-	localCodec, err := goavro.NewCodec(localSchema)
-	if err != nil {
-		return 0, errors.NewAssertionErrorWithWrappedErrf(err,
-			"fingerprinting local avro schema for subject %q", subject)
-	}
-	return localCodec.Rabin, nil
-}
-
-// verifyRegisteredSchemaMatchesFingerprint verifies that the
-// registeredSchema matches with the given local fingerprint.
-func verifyRegisteredSchemaMatchesFingerprint(
-	subject string, localFingerprint uint64, registeredSchema string,
-) error {
-	registeredCodec, err := goavro.NewCodec(registeredSchema)
-	if err != nil {
-		return errors.Wrapf(err,
-			"the registered avro schema for subject %q is not valid avro", subject)
-	}
-	if localFingerprint != registeredCodec.Rabin {
-		return errors.Newf(
-			"registered avro schema for subject %q (fingerprint %x) does not match the schema "+
-				"generated by this changefeed (fingerprint %x); register a matching schema version "+
-				"out-of-band to allow the changefeed to make progress in read mode",
-			subject, registeredCodec.Rabin, localFingerprint)
-	}
-	return nil
 }
 
 func (r *confluentSchemaRegistry) doWithRetry(ctx context.Context, fn func() error) error {
@@ -524,25 +477,31 @@ type schemaRegistryCacheKey struct {
 	strategy string
 }
 
+// schemaRegistryCacheEntry is a cached schema resolution.
+type schemaRegistryCacheEntry struct {
+	id               int32
+	registeredSchema string
+}
+
 type schemaRegistryCache struct {
 	mu syncutil.Mutex
-	// cache[schemaRegistryCacheKey]registeredSchemaID
+	// entries maps schemaRegistryCacheKey to schemaRegistryCacheEntry.
 	entries *cache.UnorderedCache
 }
 
-// Get returns the already-registered id for this key if present, and
-// a bool indicating a hit or miss.
-func (src *schemaRegistryCache) Get(key schemaRegistryCacheKey) (int32, bool) {
+// Get returns the cached resolution for this key if present, and a bool
+// indicating a hit or miss.
+func (src *schemaRegistryCache) Get(key schemaRegistryCacheKey) (schemaRegistryCacheEntry, bool) {
 	v, ok := src.entries.Get(key)
 	if ok {
-		return v.(int32), true
+		return v.(schemaRegistryCacheEntry), true
 	}
-	return 0, false
+	return schemaRegistryCacheEntry{}, false
 }
 
-// Add caches a registered schema id.
-func (src *schemaRegistryCache) Add(key schemaRegistryCacheKey, id int32) {
-	src.entries.Add(key, id)
+// Add caches a schema resolution.
+func (src *schemaRegistryCache) Add(key schemaRegistryCacheKey, entry schemaRegistryCacheEntry) {
+	src.entries.Add(key, entry)
 }
 
 type schemaRegistryWithCache struct {
@@ -564,13 +523,12 @@ func (csr *schemaRegistryWithCache) RegisterSchemaForSubject(
 	}
 	csr.cache.mu.Lock()
 	defer csr.cache.mu.Unlock()
-	id, ok := csr.cache.Get(cacheKey)
-	if ok {
-		return id, nil
+	if entry, ok := csr.cache.Get(cacheKey); ok {
+		return entry.id, nil
 	}
 	id, err := csr.base.RegisterSchemaForSubject(ctx, subject, schema)
 	if err == nil {
-		csr.cache.Add(cacheKey, id)
+		csr.cache.Add(cacheKey, schemaRegistryCacheEntry{id: id})
 	}
 	return id, err
 }
@@ -580,20 +538,31 @@ func (csr *schemaRegistryWithCache) RegisterSchemaForSubject(
 // causes a table schema change to re-resolve the ID rather than reuse a stale
 // one, and keying on strategy keeps version selections independent.
 func (csr *schemaRegistryWithCache) LookupSchemaIDForSubject(
-	ctx context.Context, subject string, schema string, strategy changefeedbase.AvroVersionStrategy,
+	ctx context.Context,
+	subject string,
+	schema string,
+	strategy changefeedbase.AvroVersionStrategy,
+	accept func(registeredSchema string) error,
 ) (int32, error) {
 	cacheKey := schemaRegistryCacheKey{
 		subject: subject, schema: schema, strategy: strategy.String(),
 	}
 	csr.cache.mu.Lock()
 	defer csr.cache.mu.Unlock()
-	id, ok := csr.cache.Get(cacheKey)
-	if ok {
-		return id, nil
+	if entry, ok := csr.cache.Get(cacheKey); ok {
+		if err := accept(entry.registeredSchema); err != nil {
+			return 0, err
+		}
+		return entry.id, nil
 	}
-	id, err := csr.base.LookupSchemaIDForSubject(ctx, subject, schema, strategy)
+	var accepted string
+	id, err := csr.base.LookupSchemaIDForSubject(ctx, subject, schema, strategy,
+		func(registeredSchema string) error {
+			accepted = registeredSchema
+			return accept(registeredSchema)
+		})
 	if err == nil {
-		csr.cache.Add(cacheKey, id)
+		csr.cache.Add(cacheKey, schemaRegistryCacheEntry{id: id, registeredSchema: accepted})
 	}
 	return id, err
 }
