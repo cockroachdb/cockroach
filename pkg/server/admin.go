@@ -1957,7 +1957,7 @@ func (s *adminServer) Settings(
 	it, err := s.internalExecutor.QueryIteratorEx(
 		ctx, "get-cluster-settings", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
-		"SELECT variable, value, type, description, public from crdb_internal.cluster_settings",
+		"SELECT variable, value, type, description, public, sensitive from crdb_internal.cluster_settings",
 	)
 
 	if err != nil {
@@ -1971,14 +1971,25 @@ func (s *adminServer) Settings(
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
 		var responseValue serverpb.SettingsResponse_Value
+		var sensitive bool
 		if scanErr := scanner.ScanAll(
 			row,
 			&responseValue.Name,
 			&responseValue.Value,
 			&responseValue.Type,
 			&responseValue.Description,
-			&responseValue.Public); scanErr != nil {
+			&responseValue.Public,
+			&sensitive); scanErr != nil {
 			return nil, srverrors.ServerError(ctx, scanErr)
+		}
+		// Never return the values of sensitive settings (secrets such as auth
+		// material), regardless of the caller's privileges: this endpoint feeds
+		// artifacts that are shared externally (debug zip settings.json).
+		// Privileged users can still read the values via SQL (SHOW CLUSTER
+		// SETTING). The empty string is preserved so that unset can be
+		// distinguished from set, mirroring MaskedSetting.String.
+		if sensitive && responseValue.Value != "" {
+			responseValue.Value = "<redacted>"
 		}
 		internalKey, found, _ := settings.NameToKey(settings.SettingName(responseValue.Name))
 
@@ -2013,6 +2024,11 @@ func (s *adminServer) Settings(
 					var responseValue serverpb.SettingsResponse_Value
 					responseValue.Name = string(consoleSetting.Name())
 					responseValue.Value = consoleSetting.String(&s.st.SV)
+					// ConsoleKeys are all non-sensitive today; guard against a sensitive
+					// setting being added to the list.
+					if consoleSetting.IsSensitive() && responseValue.Value != "" {
+						responseValue.Value = "<redacted>"
+					}
 					responseValue.Type = consoleSetting.Typ()
 					responseValue.Description = consoleSetting.Description()
 					responseValue.Public = consoleSetting.Visibility() == settings.Public
@@ -2023,7 +2039,6 @@ func (s *adminServer) Settings(
 				}
 			}
 		}
-
 	}
 
 	resp.KeyValues = respSettings
