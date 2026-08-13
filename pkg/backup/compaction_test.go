@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -395,8 +396,17 @@ func TestScheduledBackupCompaction(t *testing.T) {
 
 	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 4")
 	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 3")
-	schedules, err := th.createBackupSchedule(
-		t, "CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly'", "nodelocal://1/backup",
+
+	th.sqlDB.Exec(t, "CREATE DATABASE testdb")
+	th.sqlDB.Exec(t, "CREATE TABLE testdb.foo (a INT PRIMARY KEY)")
+	th.sqlDB.Exec(t, "INSERT INTO testdb.foo VALUES (1)")
+
+	th.sqlDB.Exec(t, "CREATE USER testuser")
+	th.sqlDB.Exec(t, "GRANT BACKUP ON DATABASE testdb TO testuser")
+	th.sqlDB.Exec(t, "GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO testuser")
+	schedules, err := th.createBackupScheduleOverConn(
+		t, th.server.SQLConn(t, serverutils.User("testuser")),
+		"CREATE SCHEDULE FOR BACKUP DATABASE testdb INTO $1 RECURRING '@hourly'", "nodelocal://1/backup",
 	)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(schedules))
@@ -649,6 +659,87 @@ func TestBackupCompactionUnsupportedOptions(t *testing.T) {
 			require.ErrorContains(t, err, tc.error)
 		})
 	}
+}
+
+// TestBackupCompactionPrivileges verifies that crdb_internal.backup_compaction
+// requires the BACKUP system privilege plus whatever privileges the destination
+// itself demands: EXTERNALIOIMPLICITACCESS for a destination that uses implicit
+// auth, and USAGE for an external connection.
+func TestBackupCompactionPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tempDir, tempDirCleanup := testutils.TempDir(t)
+	defer tempDirCleanup()
+	tc, db, cleanupDB := backupRestoreTestSetupEmpty(
+		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{},
+	)
+	defer cleanupDB()
+
+	db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
+	db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
+
+	// newCompactor creates user and writes a compactable chain of backups into
+	// the collection as root. It returns a function that plans a compaction of
+	// that chain as user and waits for the resulting job to succeed.
+	newCompactor := func(t *testing.T, user string, collectionURI string) func() error {
+		db.Exec(t, fmt.Sprintf("CREATE USER %s", user))
+		conn := tc.Server(0).ApplicationLayer().SQLConn(t, serverutils.User(user))
+
+		uris := []string{collectionURI}
+		start := getTime()
+		db.Exec(t, fullBackupQuery(fullCluster, uris, start, noOpts))
+		for i := range 3 {
+			db.Exec(t, "INSERT INTO foo VALUES ($1, $1)", i+2)
+			db.Exec(t, incBackupQuery(fullCluster, uris, noAOST, noOpts))
+		}
+		end := getTime()
+		db.Exec(t, incBackupQuery(fullCluster, uris, end, noOpts))
+		fullPath := getLatestFullDir(t, db, uris[0])
+		backupStmt := fullBackupQuery(fullCluster, uris, noAOST, noOpts)
+
+		return func() error {
+			var jobID jobspb.JobID
+			if err := conn.QueryRow(
+				`SELECT crdb_internal.backup_compaction($1, $2, $3, $4::DECIMAL, $5::DECIMAL)`,
+				0, backupStmt, fullPath, start.AsOfSystemTime(), end.AsOfSystemTime(),
+			).Scan(&jobID); err != nil {
+				return err
+			}
+			jobutils.WaitForJobToSucceed(t, db, jobID)
+			return nil
+		}
+	}
+
+	t.Run("implicit auth destination", func(t *testing.T) {
+		compact := newCompactor(t, "testuser", "nodelocal://1/backup/implicit")
+
+		require.ErrorContains(t, compact(),
+			"only users with the admin role or the BACKUP system privilege are allowed to compact backups")
+
+		db.Exec(t, "GRANT SYSTEM BACKUP TO testuser")
+		require.ErrorContains(t, compact(),
+			"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege "+
+				"are allowed to access the specified nodelocal URI")
+
+		db.Exec(t, "GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO testuser")
+		require.NoError(t, compact())
+	})
+
+	t.Run("external connection destination", func(t *testing.T) {
+		db.Exec(t, "CREATE EXTERNAL CONNECTION backups AS 'nodelocal://1/backup/extconn'")
+		compact := newCompactor(t, "testuser2", "external://backups")
+
+		require.ErrorContains(t, compact(),
+			"only users with the admin role or the BACKUP system privilege are allowed to compact backups")
+
+		db.Exec(t, "GRANT SYSTEM BACKUP TO testuser2")
+		require.ErrorContains(t, compact(),
+			"user testuser2 does not have USAGE privilege on external_connection backups")
+
+		db.Exec(t, "GRANT USAGE ON EXTERNAL CONNECTION backups TO testuser2")
+		require.NoError(t, compact())
+	})
 }
 
 func TestCompactionCheckpointing(t *testing.T) {

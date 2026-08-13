@@ -31,9 +31,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -190,6 +194,30 @@ func maybeStartCompactionJob(
 	return jobID, err
 }
 
+// checkCompactionPrivileges verifies that the user is allowed to compact the
+// backup chain in the given collection.
+func checkCompactionPrivileges(
+	ctx context.Context, p sql.PlanHookState, collectionURIs []string,
+) error {
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if hasAdmin {
+		return nil
+	}
+	if err := p.CheckPrivilegeForUser(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.BACKUP, p.User(),
+	); err != nil {
+		return pgerror.Wrapf(
+			err,
+			pgcode.InsufficientPrivilege,
+			"only users with the admin role or the BACKUP system privilege are allowed to compact backups",
+		)
+	}
+	return sql.CheckDestinationPrivileges(ctx, p, collectionURIs)
+}
+
 // StartCompactionJob kicks off an asynchronous job to compact the backups at
 // the collection URI within the start and end timestamps.
 //
@@ -208,6 +236,11 @@ func StartCompactionJob(
 	if !ok {
 		return 0, errors.New("missing job execution context")
 	}
+
+	if err := checkCompactionPrivileges(ctx, planHook, collectionURI); err != nil {
+		return 0, err
+	}
+
 	details := jobspb.BackupDetails{
 		ScheduleID: scheduleID,
 		StartTime:  start,
