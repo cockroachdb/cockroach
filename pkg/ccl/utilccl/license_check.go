@@ -53,6 +53,10 @@ var EnterpriseLicense = settings.RegisterStringSetting(
 	// still mark them explicitly in case a future code change flips the
 	// default.
 	settings.WithReportable(false),
+	// The license is a bearer credential: anyone holding the encoded
+	// string can install it on another cluster, so it must not appear in
+	// diagnostics artifacts.
+	settings.Sensitive,
 	settings.WithPublic,
 )
 
