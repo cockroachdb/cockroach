@@ -781,9 +781,15 @@ func checkReplicationPrivileges(
 // checkSourceExternalConnectionUsage requires the caller to hold USAGE on the
 // external connection named as the LDR source. A non-external source has no
 // connection to check and is a no-op.
+//
+// The LDR source only gained this check in v26.4, so it is gated on
+// RequireUsagePrivilegeOnExternalConnections.
 func checkSourceExternalConnectionUsage(
 	ctx context.Context, p sql.PlanHookState, configUri streamclient.ConfigUri,
 ) error {
+	if !sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(&p.ExecCfg().Settings.SV) {
+		return nil
+	}
 	name, ok := configUri.ExternalConnectionName()
 	if !ok {
 		return nil

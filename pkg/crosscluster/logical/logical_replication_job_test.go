@@ -2459,6 +2459,9 @@ func TestUserPrivileges(t *testing.T) {
 		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, reverseJobID)
 	})
 	t.Run("bidi-reverse-uri-requires-usage-at-create-time", func(t *testing.T) {
+		dbA.Exec(t, `SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
+		defer dbA.Exec(t, `RESET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled`)
+
 		reverseURL := replicationtestutils.GetExternalConnectionURI(
 			t, s, s, serverutils.DBName("a"), serverutils.User(username.TestUser),
 		)
@@ -2482,11 +2485,20 @@ func TestUserPrivileges(t *testing.T) {
 		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, GetReverseJobID(ctx, t, dbA, bidiJobID))
 	})
 	t.Run("ldr-source-requires-usage-on-external-connection", func(t *testing.T) {
+		dbA.Exec(t, `SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
+		defer dbA.Exec(t, `RESET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled`)
+
 		usageURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 		testuser2.ExpectErr(t,
 			fmt.Sprintf("user %s does not have USAGE privilege on external_connection %s",
 				username.TestUser+"2", usageURL.Host),
 			createStmt, usageURL.String())
+
+		dbA.Exec(t, `SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
+		var noUsageJobID jobspb.JobID
+		testuser2.QueryRow(t, createStmt, usageURL.String()).Scan(&noUsageJobID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, noUsageJobID)
+		dbA.Exec(t, `SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
 
 		dbA.Exec(t, fmt.Sprintf(`GRANT USAGE ON EXTERNAL CONNECTION "%s" TO %s`,
 			usageURL.Host, username.TestUser+"2"))
