@@ -57,6 +57,11 @@ type debugZipContext struct {
 	firstNodeSQLConn clisqlclient.Conn
 
 	sem semaphore.Semaphore
+
+	// sensitiveScrub accumulates what was scrubbed client-side because it
+	// referenced sensitive cluster settings; shared across tenants and
+	// surfaced in a warning file at the end of the run.
+	sensitiveScrub *sensitiveScrubStats
 }
 
 var filterFlags = map[string]struct{}{
@@ -241,8 +246,15 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		return s.fail(err)
 	}
 
+	scrubStats := &sensitiveScrubStats{}
+
 	z := newZipper(out)
 	defer func() {
+		// Write the scrub summary from the defer rather than at the end of
+		// the happy path: collection can bail out at any point, and a partial
+		// zip still contains the scrubbed data, so it still needs to explain
+		// what is missing from it.
+		retErr = errors.CombineErrors(retErr, writeSensitiveScrubWarning(zr, z, scrubStats))
 		cErr := z.close()
 		retErr = errors.CombineErrors(retErr, cErr)
 	}()
@@ -319,6 +331,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				firstNodeSQLConn: sqlConn,
 				sem:              semaphore.New(zipCtx.concurrency),
 				prefix:           debugBase + prefix,
+				sensitiveScrub:   scrubStats,
 			}
 
 			// Fetch the cluster-wide details.
@@ -415,6 +428,26 @@ done
 	}
 
 	return nil
+}
+
+// writeSensitiveScrubWarning surfaces any client-side scrubbing of
+// sensitive-setting content, both to the collector on stderr and - via a
+// warning file in the artifact - to whoever the zip is shared with. It is a
+// no-op when nothing was scrubbed.
+//
+// The reporter is driven even when the write fails, so that a collector who
+// cannot get the warning into the artifact still learns on the console that
+// the artifact has gaps.
+func writeSensitiveScrubWarning(zr *zipReporter, z *zipper, stats *sensitiveScrubStats) error {
+	contents := stats.warningFileContents()
+	if contents == "" {
+		return nil
+	}
+	s := zr.start("sensitive-settings scrub summary")
+	err := z.createRaw(s, debugBase+"/"+sensitiveSettingsWarningFileName, []byte(contents))
+	zr.info("WARNING: some collected data referenced sensitive cluster settings "+
+		"and was scrubbed; see %s inside the zip", sensitiveSettingsWarningFileName)
+	return err
 }
 
 type jobTrace struct {
@@ -582,6 +615,15 @@ func (zc *debugZipContext) dumpTableDataForZip(
 				// A non-retry error. If we have a fallback, try with that.
 				if fallback {
 					fallback = false
+
+					// The fallback dump of some tables lacks the primary
+					// query's sensitive-setting scrubbing, which deserves a
+					// loud callout.
+					if !zipCtx.redact {
+						if _, ok := sensitiveScrubFallbackTables[table]; ok {
+							zc.sensitiveScrub.addFallbackTable(table)
+						}
+					}
 
 					query = tableQuery.fallback
 					numRetries = 1 // Reset counter since this is a different query.
