@@ -376,7 +376,8 @@ func (e *expander) maybeExpandIPAddress(
 			e.publicIPs[node] = ip
 		}
 
-		s, err = e.maybeExpandMap(c, e.publicIPs, m[1])
+		expanded, expandErr := e.maybeExpandMap(c, e.publicIPs, m[1])
+		return expanded, expandErr == nil, expandErr
 	default:
 		if e.privateIPs == nil {
 			e.privateIPs = make(map[Node]string, len(c.VMs))
