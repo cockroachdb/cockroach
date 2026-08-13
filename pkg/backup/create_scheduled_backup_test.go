@@ -200,9 +200,18 @@ func (h *testHelper) waitForSuccessfulScheduledJobCount(
 func (h *testHelper) createBackupSchedule(
 	t *testing.T, query string, args ...interface{},
 ) ([]*jobs.ScheduledJob, error) {
+	return h.createBackupScheduleOverConn(t, h.sqlDB.DB, query, args...)
+}
+
+// createBackupScheduleOverConn is createBackupSchedule, but it runs the query
+// over the supplied connection instead of the helper's root connection. This
+// lets a test create schedules owned by a non-admin user.
+func (h *testHelper) createBackupScheduleOverConn(
+	t *testing.T, conn sqlutils.DBHandle, query string, args ...interface{},
+) ([]*jobs.ScheduledJob, error) {
 	// Execute statement and get the list of schedule IDs created by the query.
 	ctx := context.Background()
-	rows, err := h.sqlDB.DB.QueryContext(ctx, query, args...)
+	rows, err := conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
