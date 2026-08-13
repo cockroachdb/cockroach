@@ -146,6 +146,15 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		}
 	}
 
+	// Never record the values of sensitive settings (secrets) in the
+	// structured event: it is persisted to system.eventlog and emitted to
+	// logs that are collected into shareable diagnostics (debug zips).
+	// "DEFAULT" (resets) and the empty string are preserved, as they reveal
+	// nothing.
+	if n.setting.IsSensitive() && reportedValue != "DEFAULT" && reportedValue != "" {
+		reportedValue = "<redacted>"
+	}
+
 	// Finally, log the event.
 	return params.p.logEvent(
 		params.ctx,
