@@ -2035,16 +2035,25 @@ func (s *adminServer) Settings(
 		if !ok {
 			continue
 		}
-
 		var altered *time.Time
 		if val, ok := alteredSettings[k]; ok {
 			altered = val
+		}
+		// Never return the values of sensitive settings (secrets such as auth
+		// material), regardless of the caller's privileges: this endpoint feeds
+		// artifacts that are shared externally (debug zip settings.json).
+		// Privileged users can still read the values via SQL (SHOW CLUSTER
+		// SETTING). The empty string is preserved so that unset can be
+		// distinguished from set, mirroring MaskedSetting.String.
+		value := v.String(&s.st.SV)
+		if v.IsSensitive() && value != "" {
+			value = "<redacted>"
 		}
 		resp.KeyValues[string(k)] = serverpb.SettingsResponse_Value{
 			Type: v.Typ(),
 			Name: string(v.Name()),
 			// Note: v.String() redacts the values if the purpose is not "LocalAccess".
-			Value:       v.String(&s.st.SV),
+			Value:       value,
 			Description: v.Description(),
 			Public:      v.Visibility() == settings.Public,
 			LastUpdated: altered,
