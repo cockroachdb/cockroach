@@ -411,6 +411,8 @@ func (zc *debugZipContext) getLogFiles(
 		// transfers somehow.
 
 		nodePrinter.info("%d log files found", len(logs.Files))
+
+		sensitiveNames := sensitiveSettingNames()
 		var warnings []string
 		for _, file := range logs.Files {
 			ctime := extractTimeFromFileName(file.Name)
@@ -448,6 +450,7 @@ func (zc *debugZipContext) getLogFiles(
 			}
 			sf = logPrinter.start("writing output")
 			warnRedactLeak := false
+			numScrubbed, numTombstoned := 0, 0
 			if err := func() error {
 				// Use a closure so that the zipper is only locked once per
 				// created log file.
@@ -474,6 +477,22 @@ func (zc *debugZipContext) getLogFiles(
 						// We're also going to print a warning at the end.
 						warnRedactLeak = true
 					}
+					// Even without --redact, entries mentioning a sensitive
+					// cluster setting are scrubbed: they may carry the
+					// setting's value (a secret), e.g. in the statement text
+					// of a SET CLUSTER SETTING, and debug zips are meant to
+					// be shared. This covers historical entries written by
+					// versions that did not yet redact these at the source.
+					if !zipCtx.redact {
+						scrubbed, tombstoned := scrubSensitiveSettingLogEntry(
+							&e, sensitiveNames, "REDACTEDBYZIP (message mentioned a sensitive cluster setting)")
+						if scrubbed {
+							numScrubbed++
+						}
+						if tombstoned {
+							numTombstoned++
+						}
+					}
 					if err := log.FormatLegacyEntry(e, logOut); err != nil {
 						return err
 					}
@@ -488,6 +507,12 @@ func (zc *debugZipContext) getLogFiles(
 				// part of the main zip output.
 				warnings = append(warnings,
 					fmt.Sprintf("server-side redaction failed for %s, completed client-side (--redact=true)", file.Name))
+			}
+			if numScrubbed > 0 {
+				zc.sensitiveScrub.addLogEntries(numScrubbed-numTombstoned, numTombstoned)
+				warnings = append(warnings,
+					fmt.Sprintf("%d log entries in %s mentioned sensitive cluster settings and were scrubbed client-side (%d were not redactable and were replaced entirely)",
+						numScrubbed, file.Name, numTombstoned))
 			}
 		}
 		for _, w := range warnings {

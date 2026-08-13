@@ -80,6 +80,7 @@ debug/nodes/1/status.json
 debug/pprof-summary.sh
 debug/rangelog.json
 debug/reports/problemranges.json
+debug/sensitive_settings_warning.txt
 debug/settings.json
 debug/system.database_role_settings.txt
 debug/system.descriptor.txt
@@ -259,6 +260,7 @@ debug/hot-ranges-tenant.sh
 debug/hot-ranges.sh
 deterministic.log
 debug/pprof-summary.sh
+debug/sensitive_settings_warning.txt
 debug/tenant_ranges.err.txt
 
 #include json and log files
@@ -278,6 +280,7 @@ debug/nodes/1/status.json
 debug/pprof-summary.sh
 debug/rangelog.json
 debug/reports/problemranges.json
+debug/sensitive_settings_warning.txt
 debug/settings.json
 debug/tenant_ranges.err.txt
 
@@ -431,6 +434,7 @@ debug/nodes/1/status.json
 debug/pprof-summary.sh
 debug/rangelog.json
 debug/reports/problemranges.json
+debug/sensitive_settings_warning.txt
 debug/settings.json
 debug/tenant_ranges.err.txt
 
@@ -508,6 +512,7 @@ debug/nodes/1/lsm.txt
 debug/nodes/1/stacks.txt
 debug/nodes/1/stacks_with_labels.txt
 debug/pprof-summary.sh
+debug/sensitive_settings_warning.txt
 debug/system.database_role_settings.txt
 debug/system.descriptor.txt
 debug/system.eventlog.txt
