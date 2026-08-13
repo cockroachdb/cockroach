@@ -1998,6 +1998,21 @@ func (s *adminServer) Settings(
 			return nil, srverrors.ServerError(ctx, scanErr)
 		}
 		internalKey, found, _ := settings.NameToKey(settings.SettingName(responseValue.Name))
+		// Never return the values of sensitive settings (secrets such as auth
+		// material), regardless of the caller's privileges: this endpoint feeds
+		// artifacts that are shared externally (debug zip settings.json).
+		// Privileged users can still read the values via SQL (SHOW CLUSTER
+		// SETTING). The empty string is preserved so that unset can be
+		// distinguished from set, mirroring MaskedSetting.String.
+		// crdb_internal.cluster_settings does not expose a "sensitive" column on
+		// this release branch, so sensitivity is read from the in-memory registry.
+		if found && responseValue.Value != "" {
+			if cs, ok := settings.LookupForLocalAccessByKey(
+				internalKey, s.sqlServer.execCfg.Codec.ForSystemTenant(),
+			); ok && cs.IsSensitive() {
+				responseValue.Value = "<redacted>"
+			}
+		}
 
 		if found && (len(keyFilter) == 0 || keyFilter[string(internalKey)]) {
 			if lastUpdated, found := alteredSettings[internalKey]; found {
@@ -2030,6 +2045,11 @@ func (s *adminServer) Settings(
 					var responseValue serverpb.SettingsResponse_Value
 					responseValue.Name = string(consoleSetting.Name())
 					responseValue.Value = consoleSetting.String(&s.st.SV)
+					// ConsoleKeys are all non-sensitive today; guard against a
+					// sensitive setting being added to the list.
+					if consoleSetting.IsSensitive() && responseValue.Value != "" {
+						responseValue.Value = "<redacted>"
+					}
 					responseValue.Type = consoleSetting.Typ()
 					responseValue.Description = consoleSetting.Description()
 					responseValue.Public = consoleSetting.Visibility() == settings.Public
@@ -2040,7 +2060,6 @@ func (s *adminServer) Settings(
 				}
 			}
 		}
-
 	}
 
 	resp.KeyValues = respSettings
