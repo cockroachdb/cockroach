@@ -591,6 +591,7 @@ var jsonOption = OptionPermittedValues{Type: OptionTypeJSON}
 var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptAvroSchemaPrefix:                   stringOption,
 	OptAvroMode:                           enum("read", "write"),
+	OptAvroSchemas:                        jsonOption,
 	OptConfluentSchemaRegistry:            stringOption,
 	OptCursor:                             timestampOption,
 	OptCustomKeyColumn:                    stringOption,
@@ -655,7 +656,9 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptAvroMode, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptPartitionAlg)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptAvroMode, OptAvroSchemas,
+	OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders,
+	OptPartitionAlg)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)

@@ -930,6 +930,13 @@ func createChangefeedJobRecord(
 	if err != nil {
 		return nil, changefeedbase.Targets{}, err
 	}
+	if changefeedStmt.Level == tree.ChangefeedLevelTable {
+		if err := validateAvroSchemasMatchTargets(
+			encodingOpts, targets, tableNameToDescriptor,
+		); err != nil {
+			return nil, changefeedbase.Targets{}, err
+		}
+	}
 	sourceProvider, err := newEnrichedSourceProvider(encodingOpts, enrichedSourceData{})
 	if err != nil {
 		return nil, changefeedbase.Targets{}, err
