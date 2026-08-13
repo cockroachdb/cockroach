@@ -1469,8 +1469,6 @@ func (s *adminServer) usersHelper(
 	return &resp, nil
 }
 
-var eventSetClusterSettingName = logpb.GetEventTypeName(&eventpb.SetClusterSetting{})
-
 // combineAllErrors combines all passed-in errors into a single object.
 func combineAllErrors(errs []error) error {
 	var combinedErrors error
@@ -1580,16 +1578,11 @@ func (s *adminServer) eventsHelper(
 		if err := scanner.ScanIndex(row, 3, &event.Info); err != nil {
 			return nil, err
 		}
-		if event.EventType == eventSetClusterSettingName {
-			if redactEvents {
-				event.Info = redactSettingsChange(event.Info)
-			}
-		}
 		if err := scanner.ScanIndex(row, 4, &event.UniqueID); err != nil {
 			return nil, err
 		}
 		if redactEvents {
-			event.Info = redactStatement(event.Info)
+			event.Info = serverpb.RedactEventInfo(event.EventType, event.Info)
 		}
 
 		resp.Events = append(resp.Events, event)
@@ -1598,36 +1591,6 @@ func (s *adminServer) eventsHelper(
 		return nil, err
 	}
 	return &resp, nil
-}
-
-// make a best-effort attempt at redacting the setting value.
-func redactSettingsChange(info string) string {
-	var s eventpb.SetClusterSetting
-	if err := json.Unmarshal([]byte(info), &s); err != nil {
-		return ""
-	}
-	s.Value = "<hidden>"
-	ret, err := json.Marshal(s)
-	if err != nil {
-		return ""
-	}
-	return string(ret)
-}
-
-// make a best-effort attempt at redacting the statement details.
-func redactStatement(info string) string {
-	s := map[string]interface{}{}
-	if err := json.Unmarshal([]byte(info), &s); err != nil {
-		return info
-	}
-	if _, ok := s["Statement"]; ok {
-		s["Statement"] = "<hidden>"
-	}
-	ret, err := json.Marshal(s)
-	if err != nil {
-		return ""
-	}
-	return string(ret)
 }
 
 // RangeLog is an endpoint that returns the latest range log entries.
