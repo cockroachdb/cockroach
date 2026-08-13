@@ -208,6 +208,12 @@ func spanErr(rSpan, tenSpan roachpb.RSpan) error {
 func (a tenantAuthorizer) authBatch(
 	ctx context.Context, sv *settings.Values, tenID roachpb.TenantID, args *kvpb.BatchRequest,
 ) error {
+	// Reject requests that are never valid from a tenant, regardless of its
+	// capabilities or which capability authorizer is configured.
+	if err := rejectInvalidBatchFromTenant(args); err != nil {
+		return err
+	}
+
 	if err := a.capabilitiesAuthorizer.HasCapabilityForBatch(ctx, tenID, args); err != nil {
 		if errors.HasAssertionFailure(err) {
 			logcrash.ReportOrPanic(ctx, sv, "%v", err)
@@ -227,6 +233,26 @@ func (a tenantAuthorizer) authBatch(
 			return nil
 		}
 		return spanErr(rSpan, tenSpan)
+	}
+	return nil
+}
+
+// rejectInvalidBatchFromTenant returns an error if the batch contains requests
+// that should never be accepted from a secondary tenant, irrespective of its
+// capabilities or which capability authorizer is configured.
+func rejectInvalidBatchFromTenant(args *kvpb.BatchRequest) error {
+	for _, ru := range args.Requests {
+		// Commit triggers drive privileged range operations (splits, merges,
+		// replica changes, sticky-bit updates, node-liveness gossip) and are
+		// KV-internal machinery, not a grantable capability. A secondary tenant has
+		// no legitimate reason to attach one — the SQL layer never produces them —
+		// and an empty trigger that reached batcheval would crash the node
+		// (RunCommitTrigger fatals on an unrecognized trigger). KV-issued triggers
+		// authenticate as a privileged peer (system/node), not as a tenant, so they
+		// never reach authBatch.
+		if et, ok := ru.GetInner().(*kvpb.EndTxnRequest); ok && et.InternalCommitTrigger != nil {
+			return authErrorf("internal commit triggers may only be issued by the system tenant")
+		}
 	}
 	return nil
 }
