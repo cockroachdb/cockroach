@@ -202,3 +202,37 @@ SELECT count(*) FROM system.tenant_settings ts
 JOIN system.tenants t ON t.id = ts.tenant_id AND t.name = 'foo1234'
 ----
 0
+
+subtest sensitive_setting_redaction
+
+# The value of a sensitive setting (a secret) must not be recorded in the
+# set_tenant_cluster_setting event, which is persisted to system.eventlog and
+# collected into shareable diagnostics. Resets are still recorded as DEFAULT.
+
+statement ok
+ALTER TENANT [10] SET CLUSTER SETTING server.oidc_authentication.client_secret = 'hunter2-secret'
+
+statement ok
+ALTER TENANT [10] SET CLUSTER SETTING server.oidc_authentication.client_secret = DEFAULT
+
+query TT retry,rowsort
+SELECT info::JSONB->>'SettingName', info::JSONB->>'Value'
+FROM system.eventlog
+WHERE "eventType" = 'set_tenant_cluster_setting'
+AND info LIKE '%client_secret%'
+----
+server.oidc_authentication.client_secret  <redacted>
+server.oidc_authentication.client_secret  DEFAULT
+
+# Non-sensitive settings continue to record their value verbatim.
+
+statement ok
+ALTER TENANT [10] SET CLUSTER SETTING sql.defaults.idle_in_session_timeout = '10s'
+
+query TT retry,rowsort
+SELECT info::JSONB->>'SettingName', info::JSONB->>'Value'
+FROM system.eventlog
+WHERE "eventType" = 'set_tenant_cluster_setting'
+AND info LIKE '%idle_in_session_timeout%'
+----
+sql.defaults.idle_in_session_timeout  00:00:10
