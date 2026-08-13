@@ -40,6 +40,17 @@ func GenerateLDRTable(
 			if columnDef.Type.(*types.T).Family() == types.RefCursorFamily {
 				return false
 			}
+			// These type families do not support keyside encoding, which means
+			// they cannot be used with crdb_internal.datums_to_bytes. Diff
+			// excludes them from its row hash, so a table containing one produces
+			// a spurious fingerprint cross-check mismatch in TestDiffRandomSchema.
+			switch columnDef.Type.(*types.T).Family() {
+			case types.TSVectorFamily,
+				types.TSQueryFamily,
+				types.JsonpathFamily,
+				types.PGVectorFamily:
+				return false
+			}
 			// We don't allow the special '"char"' column because pgwire truncates the value to 1 byte.
 			// TODO(jeffswenson): remove this once #149427 is fixed.
 			if columnDef.Type.(*types.T).Family() == types.StringFamily && columnDef.Type.(*types.T).Width() == 1 {
