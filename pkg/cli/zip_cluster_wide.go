@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
@@ -70,7 +71,12 @@ func makeClusterWideZipRequests(
 	if zipCtx.files.shouldIncludeFile(path.Join(prefix, settingsFile)) {
 		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.Settings(ctx, &serverpb.SettingsRequest{})
+				resp, err := admin.Settings(ctx, &serverpb.SettingsRequest{})
+				if err != nil {
+					return nil, err
+				}
+				redactSensitiveSettingValues(resp)
+				return resp, nil
 			},
 			pathName: prefix + settingsName,
 		})
@@ -92,6 +98,24 @@ func makeClusterWideZipRequests(
 
 	}
 	return zipRequests
+}
+
+// redactSensitiveSettingValues replaces the values of Sensitive-marked
+// cluster settings in a Settings RPC response, using the settings registry
+// compiled into this client. The server already redacts these values (see
+// (*adminServer).Settings), so this matters only for zips collected from
+// older servers that still return them raw.
+func redactSensitiveSettingValues(resp *serverpb.SettingsResponse) {
+	for key, v := range resp.KeyValues {
+		setting, ok := settings.LookupForLocalAccessByKey(
+			settings.InternalKey(key), true /* forSystemTenant */)
+		// The empty string is preserved so that unset can be distinguished
+		// from set, mirroring the server-side behavior.
+		if ok && setting.IsSensitive() && v.Value != "" {
+			v.Value = "<redacted>"
+			resp.KeyValues[key] = v
+		}
+	}
 }
 
 // collectClusterData runs the data collection that only needs to
