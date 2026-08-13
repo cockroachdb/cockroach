@@ -541,6 +541,14 @@ var walPreallocateSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var flushableIngestLimitMultiplierDuringFailover = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.flushable_ingest_limit_multiplier_during_failover",
+	"factor by which to increase the flushable queue limit during failover",
+	4,
+	settings.PositiveInt,
+)
+
 var tombstoneDenseCompactionThreshold = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"storage.tombstone_dense_compaction_threshold",
@@ -985,6 +993,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 	if cfg.opts.WALPreallocateSize == nil {
 		cfg.opts.WALPreallocateSize = func() int { return int(walPreallocateSize.Get(&cfg.settings.SV)) }
+	}
+	if cfg.opts.FlushableIngestLimitMultiplierDuringFailover == nil {
+		cfg.opts.FlushableIngestLimitMultiplierDuringFailover = func() int { return int(flushableIngestLimitMultiplierDuringFailover.Get(&cfg.settings.SV)) }
 	}
 	cfg.opts.Experimental.TombstoneDenseCompactionThreshold = func() float64 {
 		return 0.01 * float64(tombstoneDenseCompactionThreshold.Get(&cfg.settings.SV))
