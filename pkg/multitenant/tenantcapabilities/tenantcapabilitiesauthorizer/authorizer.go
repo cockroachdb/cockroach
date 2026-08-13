@@ -267,6 +267,10 @@ var reqMethodToCap = map[kvpb.Method]methodCapability{
 
 	// The following have dynamic capabilities, depending on the type of request
 	// and the request's contents.
+	// NB: an EndTxn carrying an InternalCommitTrigger is rejected for secondary
+	// tenants by the RPC tenant authorizer (authBatch, in pkg/rpc) before the
+	// capability check runs — a commit trigger is not a grantable capability.
+	// Here we only classify ordinary and prepared EndTxns.
 	kvpb.EndTxn: dynamicCap(func(req kvpb.Request) tenantcapabilitiespb.ID {
 		et := req.(*kvpb.EndTxnRequest)
 		if et.Prepare {
