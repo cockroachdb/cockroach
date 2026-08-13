@@ -73,6 +73,7 @@ go_test(
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
         "//pkg/roachprod/vm/gce/testutils",
         "//pkg/roachprod/vm/local",
         "//pkg/testutils/datapathutils",
