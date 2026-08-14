@@ -35,6 +35,14 @@ func init() {
 	}
 }
 
+func rejectAsOfSystemTime(evalCtx *eval.Context, name string) error {
+	if evalCtx.AsOfSystemTime == nil {
+		return nil
+	}
+	return pgerror.Newf(pgcode.FeatureNotSupported,
+		"%s cannot be used in an AS OF SYSTEM TIME query", name)
+}
+
 // replication builtins contains the cluster to cluster replication built-in functions indexed by name.
 //
 // For use in other packages, see AllBuiltinNames and GetBuiltinProperties().
@@ -116,6 +124,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := rejectAsOfSystemTime(evalCtx, "crdb_internal.start_replication_stream"); err != nil {
+					return nil, err
+				}
 				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
@@ -147,6 +158,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := rejectAsOfSystemTime(evalCtx, "crdb_internal.start_replication_stream"); err != nil {
+					return nil, err
+				}
 				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
@@ -194,6 +208,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := rejectAsOfSystemTime(evalCtx, "crdb_internal.replication_stream_progress"); err != nil {
+					return nil, err
+				}
 				if args[0] == tree.DNull || args[1] == tree.DNull {
 					return tree.DNull, errors.New("stream_id or frontier_ts cannot be specified with null argument")
 				}
@@ -206,8 +223,18 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				streamID := streampb.StreamID(int(tree.MustBeDInt(args[0])))
-				if err := mgr.AuthorizeViaJob(ctx, streamID); err != nil {
+				notFound, err := mgr.AuthorizeViaJobAllowTerminal(ctx, streamID)
+				if err != nil {
 					return nil, err
+				}
+				if notFound {
+					rawStatus, err := protoutil.Marshal(&streampb.StreamReplicationStatus{
+						StreamStatus: streampb.StreamReplicationStatus_STREAM_INACTIVE,
+					})
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDBytes(tree.DBytes(rawStatus)), nil
 				}
 				sps, err := mgr.HeartbeatReplicationStream(ctx, streamID, frontier)
 				if err != nil {
@@ -242,6 +269,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 				[]string{"stream_event"},
 			),
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+				if err := rejectAsOfSystemTime(evalCtx, "crdb_internal.stream_partition"); err != nil {
+					return nil, err
+				}
 				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
@@ -273,6 +303,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := rejectAsOfSystemTime(evalCtx, "crdb_internal.replication_stream_spec"); err != nil {
+					return nil, err
+				}
 				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
@@ -312,6 +345,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := rejectAsOfSystemTime(evalCtx, "crdb_internal.complete_replication_stream"); err != nil {
+					return nil, err
+				}
 				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
@@ -319,15 +355,20 @@ var replicationBuiltins = map[string]builtinDefinition{
 
 				streamID := int64(tree.MustBeDInt(args[0]))
 				successfulIngestion := bool(tree.MustBeDBool(args[1]))
-				if err := mgr.AuthorizeViaJob(ctx, streampb.StreamID(streamID)); err != nil {
+				notFound, err := mgr.AuthorizeViaJobAllowTerminal(ctx, streampb.StreamID(streamID))
+				if err != nil {
 					return nil, err
+				}
+				if notFound {
+					return nil, pgerror.Newf(pgcode.UndefinedObject,
+						"job with ID %d does not exist", streamID)
 				}
 				if err := mgr.CompleteReplicationStream(
 					ctx, streampb.StreamID(streamID), successfulIngestion,
 				); err != nil {
 					return nil, err
 				}
-				return tree.NewDInt(tree.DInt(streamID)), err
+				return tree.NewDInt(tree.DInt(streamID)), nil
 			},
 			Info: "This function can be used on the producer side to complete and clean up a replication stream." +
 				"'successful_ingestion' indicates whether the stream ingestion finished successfully.",
@@ -350,6 +391,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 				[]string{"stream_event"},
 			),
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+				if err := rejectAsOfSystemTime(evalCtx, "crdb_internal.setup_span_configs_stream"); err != nil {
+					return nil, err
+				}
 				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
@@ -549,6 +593,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := rejectAsOfSystemTime(evalCtx, "crdb_internal.start_replication_stream_for_tables"); err != nil {
+					return nil, err
+				}
 				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
@@ -591,6 +638,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := rejectAsOfSystemTime(evalCtx, "crdb_internal.logical_replication_inject_failures"); err != nil {
+					return nil, err
+				}
 				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err

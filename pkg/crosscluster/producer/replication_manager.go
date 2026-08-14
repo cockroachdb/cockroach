@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -36,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -448,6 +451,62 @@ func (r *replicationStreamManagerImpl) DebugGetLogicalConsumerStatuses(
 	return res, nil
 }
 
+func isJobTerminalOrTerminating(state jobs.State) bool {
+	return state.Terminal() ||
+		state == jobs.StateCancelRequested ||
+		state == jobs.StateReverting
+}
+
+func (r *replicationStreamManagerImpl) checkJobOwnership(
+	ctx context.Context, planHook sql.PlanHookState, streamID streampb.StreamID,
+) (jobs.State, error) {
+	const query = "SELECT owner, status, job_type FROM system.jobs WHERE id = $1"
+	var row tree.Datums
+	var err error
+	if r.evalCtx.AsOfSystemTime != nil {
+		// plan_logical_replication runs in an AOST transaction whose timestamp
+		// can predate the producer job.
+		row, err = planHook.ExecCfg().InternalDB.Executor().QueryRowEx(
+			ctx, "check-replication-stream-owner", nil, /* fresh txn */
+			sessiondata.NodeUserSessionDataOverride, query, int64(streamID))
+	} else {
+		// Use the builtin's transaction. A fresh nested transaction can block
+		// behind the caller's job writes or a concurrent job-startup update.
+		row, err = r.txn.QueryRowEx(
+			ctx, "check-replication-stream-owner", r.txn.KV(),
+			sessiondata.NodeUserSessionDataOverride, query, int64(streamID))
+	}
+	if err != nil {
+		return "", err
+	}
+	if row == nil {
+		return "", jobs.NewJobNotFoundError(jobspb.JobID(streamID))
+	}
+	caller := planHook.User()
+	notOwned := pgerror.Newf(pgcode.InsufficientPrivilege,
+		"user %s does not own stream %d", caller, streamID)
+	if row[0] == tree.DNull {
+		return "", notOwned
+	}
+	owner := username.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(row[0])))
+	if caller != owner {
+		return "", notOwned
+	}
+	if row[2] == tree.DNull {
+		return "", notAReplicationJobError(jobspb.JobID(streamID))
+	}
+	jobType, err := jobspb.TypeFromString(string(tree.MustBeDString(row[2])))
+	if err != nil {
+		return "", err
+	}
+	if jobType != jobspb.TypeReplicationStreamProducer {
+		return "", notAReplicationJobError(jobspb.JobID(streamID))
+	}
+	return jobs.State(string(tree.MustBeDString(row[1]))), nil
+}
+
+// AuthorizeViaJob authorizes the caller to operate on the producer job
+// identified by streamID.
 func (r *replicationStreamManagerImpl) AuthorizeViaJob(
 	ctx context.Context, streamID streampb.StreamID,
 ) error {
@@ -455,19 +514,37 @@ func (r *replicationStreamManagerImpl) AuthorizeViaJob(
 	if !ok {
 		return errors.AssertionFailedf("expected planner to implement PlanHookState")
 	}
-
-	globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(ctx, planHook)
+	state, err := r.checkJobOwnership(ctx, planHook, streamID)
 	if err != nil {
 		return err
 	}
-
-	if err := jobsauth.Authorize(
-		ctx, planHook, jobspb.JobID(streamID), planHook.User(), jobsauth.ControlAccess, globalPrivileges,
-	); err != nil {
-		return err
+	if isJobTerminalOrTerminating(state) {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"stream %d is not running (state: %s)", streamID, state)
 	}
 	r.authorized = true
 	return nil
+}
+
+// AuthorizeViaJobAllowTerminal is the same as AuthorizeViaJob, but does not
+// reject terminal/terminating jobs. If the producer job does not exist it
+// returns notFound = true so the caller doesn't need to import jobs package
+// and check for jobs.HasJobNotFoundError.
+func (r *replicationStreamManagerImpl) AuthorizeViaJobAllowTerminal(
+	ctx context.Context, streamID streampb.StreamID,
+) (notFound bool, _ error) {
+	planHook, ok := r.evalCtx.Planner.(sql.PlanHookState)
+	if !ok {
+		return false, errors.AssertionFailedf("expected planner to implement PlanHookState")
+	}
+	if _, err := r.checkJobOwnership(ctx, planHook, streamID); err != nil {
+		if jobs.HasJobNotFoundError(err) {
+			return true, nil
+		}
+		return false, err
+	}
+	r.authorized = true
+	return false, nil
 }
 
 // AuthorizeViaReplicationPriv ensures the user has the REPLICATIONSOUCE privilege. If tableNames is passed, then table level auth is tried.
