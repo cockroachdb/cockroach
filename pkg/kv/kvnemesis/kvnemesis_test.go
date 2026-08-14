@@ -553,8 +553,11 @@ func TestKVNemesisMultiNode_Partition_Liveness(t *testing.T) {
 			// leader lease. These manifest as poisoned latches held by the
 			// partitioned expiration-lease holder that can't upgrade the lease.
 			// See #157966 for a detailed example.
-			// TODO(mira): We can mitigate this in other ways too: client timeouts,
-			// lease transfers only among protected nodes (n1 and n2).
+			//
+			// The zone config lease preferences (see setAndVerifyZoneConfigs) keep
+			// queue-driven transfers on the protected nodes, but generated
+			// TransferLease ops pick arbitrary targets and bypass preferences, so
+			// they remain disabled.
 			cfg.Ops.ChangeLease.TransferLease = 0
 		},
 	})
@@ -874,7 +877,8 @@ func setAndVerifyZoneConfigs(
 			num_replicas = 3,
 			num_voters = 3,
 			constraints = '{"+node=n1": 1, "+node=n2": 1}',
-			voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`,
+			voter_constraints = '{"+node=n1": 1, "+node=n2": 1}',
+			lease_preferences = '[[+node=n1], [+node=n2]]'`,
 	)
 
 	// Ensure the liveness, meta and system ranges are also constrained.
@@ -885,7 +889,8 @@ func setAndVerifyZoneConfigs(
 				num_replicas = 3,
 				num_voters = 3,
 				constraints = '{"+node=n1": 1, "+node=n2": 1}',
-				voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`, r),
+				voter_constraints = '{"+node=n1": 1, "+node=n2": 1}',
+				lease_preferences = '[[+node=n1], [+node=n2]]'`, r),
 		)
 	}
 
@@ -934,6 +939,11 @@ func setAndVerifyZoneConfigs(
 						return errors.Errorf(
 							"range %d does not have expected constraints: %v",
 							desc.RangeID, spanConfig.Constraints,
+						)
+					}
+					if len(spanConfig.LeasePreferences) == 0 {
+						return errors.Errorf(
+							"range %d has no lease preferences in span config yet", desc.RangeID,
 						)
 					}
 				}
