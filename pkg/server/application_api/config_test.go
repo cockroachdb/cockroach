@@ -342,3 +342,20 @@ func TestAdminAPILocations(t *testing.T) {
 		}
 	}
 }
+
+// TestConsoleSettingsNotSensitive ensures that the settings whitelisted for
+// low-privilege console users are never marked sensitive. Their values are
+// returned by the Settings API to users with only VIEWACTIVITY or
+// VIEWACTIVITYREDACTED, and the DB Console reads some of them functionally,
+// so a sensitive marker (which redacts the value in the API response) would
+// both indicate a leak and silently break console features.
+func TestConsoleSettingsNotSensitive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, k := range settings.ConsoleKeys() {
+		s, ok := settings.LookupForLocalAccessByKey(k, true /* forSystemTenant */)
+		require.Truef(t, ok, "console setting %s not found in registry", k)
+		require.Falsef(t, s.IsSensitive(),
+			"console setting %s must not be marked sensitive", s.Name())
+	}
+}

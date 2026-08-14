@@ -1152,17 +1152,18 @@ func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer, all bool) error {
 		"stmtEnvCollector",
 		nil, /* txn */
 		sessiondata.NoSessionDataOverride,
-		fmt.Sprintf(`SELECT variable, value, default_value FROM crdb_internal.cluster_settings%s`, suffix),
+		fmt.Sprintf(`SELECT variable, value, default_value, origin FROM crdb_internal.cluster_settings%s`, suffix),
 	)
 	if err != nil {
 		return err
 	}
 	for _, r := range rows {
-		// The datums should always be DString, but we should be defensive.
+		// The datums should always have these types, but we should be defensive.
 		setting, ok1 := r[0].(*tree.DString)
 		value, ok2 := r[1].(*tree.DString)
 		def, ok3 := r[2].(*tree.DString)
-		if ok1 && ok2 && ok3 {
+		origin, ok4 := r[3].(*tree.DString)
+		if ok1 && ok2 && ok3 && ok4 {
 			var skip bool
 			// Ignore some settings that might differ from their default values
 			// but aren't useful in stmt bundles.
@@ -1183,6 +1184,38 @@ func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer, all bool) error {
 				}
 			}
 			if skip {
+				continue
+			}
+			// crdb_internal.cluster_settings does not expose a "sensitive"
+			// column on this release branch, so determine sensitivity from the
+			// in-memory registry instead. The marker is a static property of
+			// the setting and does not depend on tenant class.
+			var sensitive bool
+			if key, found, _ := settings.NameToKey(settings.SettingName(*setting)); found {
+				if s, ok := settings.LookupForLocalAccessByKey(
+					key, true, /* forSystemTenant */
+				); ok {
+					sensitive = s.IsSensitive()
+				}
+			}
+			if sensitive {
+				// Sensitive settings hold secrets (e.g. auth material), and
+				// their values must never be included in bundles, which are
+				// meant to be shared. The value column may also be masked
+				// depending on the user's privileges, in which case it can
+				// differ from the default even for an unmodified setting, so
+				// modification is detected via origin instead.
+				modified := string(*origin) != "default"
+				if !all && !modified {
+					continue
+				}
+				// Note whether the setting is modified, but never its value
+				// (or default), even for privileged collectors.
+				modifiedStr := "is not modified from its default value"
+				if modified {
+					modifiedStr = "is modified from its default value"
+				}
+				fmt.Fprintf(w, "-- cluster setting %s %s (value redacted)\n", *setting, modifiedStr)
 				continue
 			}
 			// All cluster settings, regardless of the type, accept values in
