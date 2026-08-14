@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	enc_hex "encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/url"
@@ -33,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1192,4 +1195,92 @@ func TestZipJobTrace(t *testing.T) {
 	close(blockCh)
 	jobutils.WaitForJobToSucceed(t, runner, importJobID)
 	jobutils.WaitForJobToSucceed(t, runner, importJobID2)
+}
+
+// TestRedactSensitiveSettingValues verifies the client-side scrub of the
+// Settings RPC response that feeds settings.json. The server also redacts
+// sensitive values; the client-side pass protects zips collected from older
+// servers.
+func TestRedactSensitiveSettingValues(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Pick a real sensitive setting from the registry compiled into the CLI.
+	var sensitiveKey string
+	for _, k := range settings.Keys(true /* forSystemTenant */) {
+		if s, ok := settings.LookupForLocalAccessByKey(k, true /* forSystemTenant */); ok && s.IsSensitive() {
+			sensitiveKey = string(k)
+			break
+		}
+	}
+	require.NotEmpty(t, sensitiveKey, "no sensitive setting registered")
+
+	resp := &serverpb.SettingsResponse{KeyValues: map[string]serverpb.SettingsResponse_Value{
+		sensitiveKey:                   {Value: "hunter2"},
+		"unknown.old.setting":          {Value: "harmless"},
+		"kv.range_merge.queue.enabled": {Value: "true"},
+	}}
+	redactSensitiveSettingValues(resp)
+	require.Equal(t, "<redacted>", resp.KeyValues[sensitiveKey].Value)
+	require.Equal(t, "harmless", resp.KeyValues["unknown.old.setting"].Value)
+	require.Equal(t, "true", resp.KeyValues["kv.range_merge.queue.enabled"].Value)
+
+	// The empty string is preserved to distinguish unset from set.
+	resp.KeyValues[sensitiveKey] = serverpb.SettingsResponse_Value{Value: ""}
+	redactSensitiveSettingValues(resp)
+	require.Equal(t, "", resp.KeyValues[sensitiveKey].Value)
+}
+
+func TestScrubEventsResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	resp := &serverpb.EventsResponse{Events: []serverpb.EventsResponse_Event{
+		{
+			EventType: "set_cluster_setting",
+			Info: `{"SettingName": "server.oidc_authentication.client_secret", ` +
+				`"Value": "hunter2-secret", ` +
+				`"Statement": "SET CLUSTER SETTING \"server.oidc_authentication.client_secret\" = $1", ` +
+				`"PlaceholderValues": ["'hunter2-secret'"]}`,
+		},
+		{
+			EventType: "set_tenant_cluster_setting",
+			Info: `{"SettingName": "server.oidc_authentication.client_secret", ` +
+				`"Value": "hunter2-secret", "TenantId": "2"}`,
+		},
+		{
+			EventType: "create_role",
+			Info: `{"RoleName": "app", "Statement": "CREATE ROLE app WITH PASSWORD $1", ` +
+				`"PlaceholderValues": ["'hunter2-secret'"]}`,
+		},
+		{
+			EventType: "node_join",
+			Info:      `{"NodeID": 1}`,
+		},
+		{
+			EventType: "garbage",
+			Info:      `not json {`,
+		},
+	}}
+	scrubEventsResponse(resp)
+
+	for i, e := range resp.Events {
+		require.NotContains(t, e.Info, "hunter2-secret", "event %d", i)
+	}
+	decode := func(info string) map[string]interface{} {
+		m := map[string]interface{}{}
+		require.NoError(t, json.Unmarshal([]byte(info), &m))
+		return m
+	}
+	hidden := []interface{}{"<hidden>"}
+	require.Equal(t, "<hidden>", decode(resp.Events[0].Info)["Value"])
+	require.Equal(t, "<hidden>", decode(resp.Events[0].Info)["Statement"])
+	require.Equal(t, hidden, decode(resp.Events[0].Info)["PlaceholderValues"])
+	require.Equal(t, "<hidden>", decode(resp.Events[1].Info)["Value"])
+	require.Equal(t, "2", decode(resp.Events[1].Info)["TenantId"])
+	require.Equal(t, "<hidden>", decode(resp.Events[2].Info)["Statement"])
+	require.Equal(t, hidden, decode(resp.Events[2].Info)["PlaceholderValues"])
+	require.Equal(t, "app", decode(resp.Events[2].Info)["RoleName"])
+	// A non-setting event's other fields pass through untouched.
+	require.Equal(t, float64(1), decode(resp.Events[3].Info)["NodeID"])
+	// Unparsable info is emptied rather than passed through.
+	require.Equal(t, "", resp.Events[4].Info)
 }

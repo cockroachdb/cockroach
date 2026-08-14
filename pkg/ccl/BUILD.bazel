@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "ccl",
@@ -31,5 +31,16 @@ go_library(
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl",
         "//pkg/server/license",
+    ],
+)
+
+go_test(
+    name = "ccl_test",
+    srcs = ["sensitive_settings_test.go"],
+    embed = [":ccl"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
     ],
 )
