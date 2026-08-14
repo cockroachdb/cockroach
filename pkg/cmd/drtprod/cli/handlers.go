@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/drtprod/cli/commands"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cli"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/spf13/cobra"
 )
 
@@ -24,11 +25,22 @@ func setEnvIfNotExists(key, value string) {
 }
 
 func init() {
-	// Set environment variables for the GCE project and DNS configurations if not already set.
+	// Pin DRT's legacy split between the cockroach-drt compute and metadata
+	// project and the cockroach-shared DNS project. Keeping every role explicit
+	// prevents changes to the general roachprod defaults from affecting DRT.
+	// ROACHPROD_GCE_DEFAULT_PROJECT remains set for scripts that have not yet
+	// migrated to the role-specific variables.
+	setEnvIfNotExists("ROACHPROD_GCE_DEFAULT_PROJECT", "cockroach-drt")
+	setEnvIfNotExists("ROACHPROD_GCE_PROJECT", os.Getenv("ROACHPROD_GCE_DEFAULT_PROJECT"))
+	setEnvIfNotExists("ROACHPROD_GCE_INFRA_PROJECT", os.Getenv("ROACHPROD_GCE_DEFAULT_PROJECT"))
+	setEnvIfNotExists("ROACHPROD_GCE_METADATA_PROJECT", os.Getenv("ROACHPROD_GCE_DEFAULT_PROJECT"))
+	setEnvIfNotExists("ROACHPROD_GCE_DNS_PROJECT", "cockroach-shared")
+	setEnvIfNotExists("ROACHPROD_GCE_ARTIFACTS_BUCKET", vm.DefaultArtifactsBucket)
 	setEnvIfNotExists("ROACHPROD_DNS", "drt.crdb.io")
 	setEnvIfNotExists("ROACHPROD_GCE_DNS_DOMAIN", "drt.crdb.io")
 	setEnvIfNotExists("ROACHPROD_GCE_DNS_ZONE", "drt")
-	setEnvIfNotExists("ROACHPROD_GCE_DEFAULT_PROJECT", "cockroach-drt")
+	setEnvIfNotExists("ROACHPROD_GCE_DNS_MANAGED_DOMAIN", "roachprod-managed.crdb.io")
+	setEnvIfNotExists("ROACHPROD_GCE_DNS_MANAGED_ZONE", "roachprod-managed")
 	setEnvIfNotExists("ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT", "622274581499-compute@developer.gserviceaccount.com")
 
 	if _, exists := os.LookupEnv("DD_API_KEY"); !exists {

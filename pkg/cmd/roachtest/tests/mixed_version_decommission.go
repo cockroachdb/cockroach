@@ -42,7 +42,7 @@ func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cl
 		"preload data",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 			node, db := h.RandomDB(rng)
-			cmd := `./cockroach workload fixtures import tpcc --warehouses=100 {pgurl:1}`
+			cmd := `./cockroach workload fixtures import tpcc ` + gceFixtureBucketFlag() + ` --warehouses=100 {pgurl:1}`
 			if err := c.RunE(ctx, option.WithNodes(c.Node(node)), cmd); err != nil {
 				return errors.Wrap(err, "failed to import fixtures")
 			}

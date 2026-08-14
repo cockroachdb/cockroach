@@ -36,30 +36,41 @@ const (
 
 var (
 	dnsDefaultZone, dnsDefaultDomain, dnsDefaultManagedZone, dnsDefaultManagedDomain string
+	dnsDefaultDomainExplicit, dnsDefaultManagedDomainExplicit                        bool
 )
 
 func initDNSDefault() {
+	defaultPublicDomain, defaultManagedDomain := defaultDNSDomains(defaultInfraProject)
 	dnsDefaultZone = config.EnvOrDefaultString(
 		"ROACHPROD_GCE_DNS_ZONE",
 		"roachprod",
 	)
-	dnsDefaultDomain = config.EnvOrDefaultString(
-		"ROACHPROD_GCE_DNS_DOMAIN",
+	dnsDefaultDomain, dnsDefaultDomainExplicit = os.LookupEnv("ROACHPROD_GCE_DNS_DOMAIN")
+	if !dnsDefaultDomainExplicit {
 		// Preserve the legacy environment variable name for backwards
 		// compatibility.
-		config.EnvOrDefaultString(
-			"ROACHPROD_DNS",
-			"roachprod.crdb.io",
-		),
-	)
+		dnsDefaultDomain, dnsDefaultDomainExplicit = os.LookupEnv("ROACHPROD_DNS")
+	}
+	if !dnsDefaultDomainExplicit {
+		dnsDefaultDomain = defaultPublicDomain
+	}
 	dnsDefaultManagedZone = config.EnvOrDefaultString(
 		"ROACHPROD_GCE_DNS_MANAGED_ZONE",
 		"roachprod-managed",
 	)
-	dnsDefaultManagedDomain = config.EnvOrDefaultString(
+	dnsDefaultManagedDomain, dnsDefaultManagedDomainExplicit = os.LookupEnv(
 		"ROACHPROD_GCE_DNS_MANAGED_DOMAIN",
-		"roachprod-managed.crdb.io",
 	)
+	if !dnsDefaultManagedDomainExplicit {
+		dnsDefaultManagedDomain = defaultManagedDomain
+	}
+}
+
+func defaultDNSDomains(infraProject string) (publicDomain, managedDomain string) {
+	if infraProject == StagingProjectID {
+		return "roachprod.staging.crdb.dev", "roachprod-managed.staging.crdb.dev"
+	}
+	return "roachprod.crdb.dev", "roachprod-managed.crdb.dev"
 }
 
 var ErrDNSOperation = fmt.Errorf("error during Google Cloud DNS operation")
@@ -75,12 +86,12 @@ type dnsProvider struct {
 
 	// publicZone is the gce zone used to manage A records for all clusters (e.g. roachprod).
 	publicZone string
-	// publicDomain is the DNS domain used to manage A records for all clusters (e.g. roachprod.crdb.io).
+	// publicDomain is the DNS domain used to manage A records for all clusters (e.g. roachprod.crdb.dev).
 	publicDomain string
 
 	// managedZone is the managed zone for SRV records (e.g. roachprod-managed).
 	managedZone string
-	// managedDomain is the domain for SRV records (e.g. roachprod-managed.crdb.io).
+	// managedDomain is the domain for SRV records (e.g. roachprod-managed.crdb.dev).
 	managedDomain string
 
 	recordsCache struct {
@@ -234,6 +245,9 @@ func (n *dnsProvider) ListRecords(ctx context.Context) ([]vm.DNSRecord, error) {
 func (n *dnsProvider) deleteRecords(
 	ctx context.Context, zone string, recordType vm.DNSType, names ...string,
 ) error {
+	if len(names) == 0 {
+		return nil
+	}
 	for _, name := range names {
 		err := n.withRecordLock(name, func() error {
 			args := []string{"--project", n.dnsProject, "dns", "record-sets", "delete", name,

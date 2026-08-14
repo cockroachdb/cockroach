@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,11 @@ func TestArtifactsZipSize(t *testing.T) {
 }
 
 func TestRoachtestArtifactFailoverBucket(t *testing.T) {
-	require.Equal(t, defaultRoachtestArtifactFailoverBucket, roachtestArtifactFailoverBucket())
+	require.Equal(
+		t,
+		gce.InfraResourceName(roachtestArtifactFailoverBucketPrefix),
+		roachtestArtifactFailoverBucket(),
+	)
 
 	t.Setenv(roachtestArtifactFailoverBucketEnv, "roachtest-artifact-failover-smoke")
 	require.Equal(t, "roachtest-artifact-failover-smoke", roachtestArtifactFailoverBucket())
@@ -93,7 +98,7 @@ func TestFailoverOversizedArtifactsZip(t *testing.T) {
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.WithinDuration(t, start.Add(roachtestArtifactFailoverUploadTimeout), deadline, time.Second)
-			require.Equal(t, defaultRoachtestArtifactFailoverBucket, bucket)
+			require.Equal(t, gce.InfraResourceName(roachtestArtifactFailoverBucketPrefix), bucket)
 			require.Equal(t, path.Join("teamcity", "12345", "kv/restart/nodes=12", "run_1", artifactsZipName), object)
 			require.Equal(t, zipPath, filePath)
 			return nil
@@ -102,7 +107,12 @@ func TestFailoverOversizedArtifactsZip(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, uploaded)
 	require.Equal(t, int64(10), result.sizeBytes)
-	require.Equal(t, "gs://roachtest-artifact-failover/teamcity/12345/kv/restart/nodes=12/run_1/artifacts.zip", result.gcsURI)
+	require.Equal(
+		t,
+		"gs://"+gce.InfraResourceName(roachtestArtifactFailoverBucketPrefix)+
+			"/teamcity/12345/kv/restart/nodes=12/run_1/artifacts.zip",
+		result.gcsURI,
+	)
 
 	require.FileExists(t, zipPath)
 	require.NoFileExists(t, filepath.Join(artifactsDir, artifactFailoverMarkerName))

@@ -22,6 +22,10 @@ fi
 arm_probability="${ARM_PROBABILITY:-0.5}"
 fips_probability="${FIPS_PROBABILITY:-0.02}"
 export ROACHTEST_BUILD_CACHE=true
+source "$root/build/teamcity/util/roachtest_bucket_util.sh"
+# Resolve this before compilation because the build cache and binary uploads
+# share the project-scoped nightly bucket for every roachtest cloud.
+export ROACHTEST_NIGHTLY_BUCKET="$(roachtest_nightly_shared_bucket)"
 
 arch=amd64
 if [[ ${CLOUD} == "ibm" ]]; then

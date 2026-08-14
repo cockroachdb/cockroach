@@ -43,6 +43,7 @@ go_test(
     name = "testutils_test",
     size = "small",
     srcs = [
+        "backup_test.go",
         "hook_test.go",
         "net_test.go",
         "soon_test.go",

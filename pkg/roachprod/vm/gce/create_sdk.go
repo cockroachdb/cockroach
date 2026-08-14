@@ -90,22 +90,25 @@ func (p *Provider) buildInstanceProperties(
 	}
 
 	// Configure networking.
-	if len(zone) < 3 {
-		return nil, errors.Newf("invalid zone %q: must be at least 3 characters", zone)
+	addressMode, err := vm.NormalizeAddressMode(opts.AddressMode)
+	if err != nil {
+		return nil, err
 	}
-	region := zone[:len(zone)-2]
 	project := p.GetProject()
-	networkInterfaces := []*computepb.NetworkInterface{
-		{
-			Subnetwork: proto.String(fmt.Sprintf("projects/%s/regions/%s/subnetworks/default", project, region)),
-			AccessConfigs: []*computepb.AccessConfig{
-				{
-					Name: proto.String("External NAT"),
-					Type: proto.String(computepb.AccessConfig_ONE_TO_ONE_NAT.String()),
-				},
-			},
-		},
+	subnet, err := providerOpts.resolveSubnet(project, zone)
+	if err != nil {
+		return nil, err
 	}
+	networkInterface := &computepb.NetworkInterface{Subnetwork: proto.String(subnet)}
+	if addressMode == vm.AddressModePublic {
+		networkInterface.AccessConfigs = []*computepb.AccessConfig{
+			{
+				Name: proto.String("External NAT"),
+				Type: proto.String(computepb.AccessConfig_ONE_TO_ONE_NAT.String()),
+			},
+		}
+	}
+	networkInterfaces := []*computepb.NetworkInterface{networkInterface}
 
 	// Configure scheduling.
 	scheduling := &computepb.Scheduling{}
@@ -124,8 +127,8 @@ func (p *Provider) buildInstanceProperties(
 	// Configure the service account.
 	var serviceAccounts []*computepb.ServiceAccount
 	sa := providerOpts.ServiceAccount
-	if sa == "" && p.GetProject() == p.defaultProject {
-		sa = providerOpts.defaultServiceAccount
+	if sa == "" && p.GetProject() == p.infraProject {
+		sa = p.defaultServiceAccountFor(providerOpts)
 	}
 	if sa != "" {
 		serviceAccounts = []*computepb.ServiceAccount{
@@ -154,6 +157,9 @@ func (p *Provider) buildInstanceProperties(
 		Scheduling:        scheduling,
 		ServiceAccounts:   serviceAccounts,
 		Metadata:          metadata,
+	}
+	if addressMode == vm.AddressModePrivate && providerOpts.UseIAP {
+		props.Tags = &computepb.Tags{Items: []string{iapSSHTag}}
 	}
 
 	if platform := providerOpts.minCPUPlatform(); platform != "" {

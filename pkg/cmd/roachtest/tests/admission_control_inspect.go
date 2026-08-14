@@ -185,8 +185,8 @@ func makeInspectAdmissionControlTest(
 
 				// Import bulkingest data with the default secondary index
 				cmdImport := fmt.Sprintf(
-					"./cockroach workload fixtures import bulkingest {pgurl:1} --a %d --b %d --c %d --payload-bytes %d",
-					aNum, bNum, cNum, payloadBytes,
+					"./cockroach workload fixtures import bulkingest %s {pgurl:1} --a %d --b %d --c %d --payload-bytes %d",
+					gceFixtureBucketFlag(), aNum, bNum, cNum, payloadBytes,
 				)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdImport)
 

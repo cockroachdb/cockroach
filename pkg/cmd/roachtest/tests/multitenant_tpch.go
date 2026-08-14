@@ -151,7 +151,7 @@ func registerMultiTenantTPCH(r registry.Registry) {
 				Owner:     registry.OwnerSQLQueries,
 				Benchmark: true,
 				Cluster:   r.MakeClusterSpec(1 /* nodeCount */),
-				// Uses gs://cockroach-fixtures-us-east1. See:
+				// Uses the project-local GCE fixture bucket. See:
 				// https://github.com/cockroachdb/cockroach/issues/105968
 				CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 				Suites:           registry.Suites(registry.Nightly),

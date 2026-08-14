@@ -309,7 +309,7 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 	// overwrite if we don't have all the VMs of interest, so we only do it if we
 	// have a list of all VMs from both AWS and GCE (so if both providers have
 	// been used to get the VMs and for GCP also if we listed the VMs in the
-	// default project).
+	// default VM project).
 	refreshDNS := true
 
 	if p := vm.Providers[gce.ProviderName]; !p.Active() {
@@ -317,7 +317,7 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 	} else {
 		var defaultProjectFound bool
 		for _, prj := range p.(*gce.Provider).GetProjects() {
-			if prj == gce.DefaultProject() {
+			if prj == gce.VMProject() {
 				defaultProjectFound = true
 				break
 			}
@@ -559,14 +559,21 @@ func IP(l *logger.Logger, clusterName string, external bool) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return clusterIPs(c, external)
+}
 
+func clusterIPs(c *install.SyncedCluster, external bool) ([]string, error) {
 	nodes := c.Nodes
 	ips := make([]string, len(nodes))
+	var err error
 
 	for i := 0; i < len(nodes); i++ {
 		node := nodes[i]
 		if external {
-			ips[i] = c.Host(node)
+			ips[i], err = c.GetExternalIP(node)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			ips[i], err = c.GetInternalIP(node)
 			if err != nil {
@@ -685,11 +692,18 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string, sync bo
 	}
 	// Run ssh-keygen -R serially on each new VM in case an IP address has been recycled
 	for _, v := range cloudCluster.VMs {
-		cmd := exec.Command("ssh-keygen", "-R", v.PublicIP)
+		host := v.PublicIP
+		if host == "" {
+			host = v.PrivateIP
+		}
+		if host == "" {
+			continue
+		}
+		cmd := exec.Command("ssh-keygen", "-R", host)
 
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			l.Printf("could not clear ssh key for hostname %s:\n%s", v.PublicIP, string(out))
+			l.Printf("could not clear ssh key for hostname %s:\n%s", host, string(out))
 		}
 
 	}
@@ -1158,9 +1172,12 @@ func Get(ctx context.Context, l *logger.Logger, clusterName, src, dest string) e
 }
 
 type PGURLOptions struct {
-	Database                string
-	Secure                  install.SecureOption
-	External                bool
+	Database string
+	Secure   install.SecureOption
+	External bool
+	// UseHost selects the same node address roachprod uses for SSH: public when
+	// available, otherwise private. External takes precedence when both are set.
+	UseHost                 bool
 	VirtualClusterName      string
 	SQLInstance             int
 	Auth                    install.PGAuthMode
@@ -1176,18 +1193,9 @@ func PgURL(
 		return nil, err
 	}
 	nodes := c.Nodes
-	ips := make([]string, len(nodes))
-	if opts.External {
-		for i := 0; i < len(nodes); i++ {
-			ips[i] = c.VMs[nodes[i]-1].PublicIP
-		}
-	} else {
-		for i := 0; i < len(nodes); i++ {
-			ip, err := c.GetInternalIP(nodes[i])
-			if err == nil {
-				ips[i] = ip
-			}
-		}
+	ips, err := pgURLIPs(c, nodes, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	var urls []string
@@ -1213,9 +1221,34 @@ func PgURL(
 	return urls, nil
 }
 
+func pgURLIPs(c *install.SyncedCluster, nodes install.Nodes, opts PGURLOptions) ([]string, error) {
+	ips := make([]string, len(nodes))
+	for i, node := range nodes {
+		var err error
+		switch {
+		case opts.External:
+			ips[i], err = c.GetExternalIP(node)
+		case opts.UseHost:
+			ips[i] = c.Host(node)
+			if ips[i] == "" {
+				err = errors.Errorf("no host address for node %d", node)
+			}
+		default:
+			ips[i], err = c.GetInternalIP(node)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ips, nil
+}
+
 type urlConfig struct {
 	path               string
 	usePublicIP        bool
+	useHost            bool
+	dnsDomain          string
+	lookupHost         func(string) ([]string, error)
 	openInBrowser      bool
 	secure             bool
 	port               int
@@ -1231,24 +1264,46 @@ func urlGenerator(
 	uConfig urlConfig,
 ) ([]string, error) {
 	var urls []string
+	useHost := uConfig.useHost
+	lookupHost := uConfig.lookupHost
+	if lookupHost == nil {
+		lookupHost = net.LookupHost
+	}
 	for i, node := range nodes {
-		host := vm.Name(c.Name, int(node)) + "." + gce.Infrastructure.DNSDomain()
+		var host string
+		if useHost {
+			host = c.Host(node)
+		} else if uConfig.usePublicIP {
+			host = c.VMs[node-1].PublicIP
+		} else {
+			dnsDomain := uConfig.dnsDomain
+			if dnsDomain == "" {
+				dnsDomain = gce.Infrastructure.DNSDomain()
+			}
+			host = vm.Name(c.Name, int(node)) + "." + dnsDomain
 
-		// There are no DNS entries for local clusters.
-		if c.IsLocal() {
-			uConfig.usePublicIP = true
-		}
+			// There are no DNS entries for local clusters.
+			if c.IsLocal() {
+				useHost = true
+			}
 
-		// verify DNS is working / fallback to IPs if not.
-		if i == 0 && !uConfig.usePublicIP {
-			if _, err := net.LookupHost(host); err != nil {
-				l.Errorf("host %s is unreachable, falling back to public IPs. DNS entries might be outdated, run `roachprod sync`.", host)
-				uConfig.usePublicIP = true
+			// Verify DNS is working / fallback to node addresses if not.
+			if i == 0 && !uConfig.usePublicIP && !useHost {
+				if _, err := lookupHost(host); err != nil {
+					l.Errorf("host %s is unreachable, falling back to node addresses. DNS entries might be outdated, run `roachprod sync`.", host)
+					useHost = true
+				}
+			}
+
+			if useHost {
+				host = c.Host(node)
 			}
 		}
-
-		if uConfig.usePublicIP {
-			host = c.VMs[node-1].PublicIP
+		if host == "" {
+			if uConfig.usePublicIP && !useHost {
+				return nil, errors.Errorf("no public IP for node %d", node)
+			}
+			return nil, errors.Errorf("no host address for node %d", node)
 		}
 		port := uConfig.port
 		if port == 0 {
@@ -1303,7 +1358,7 @@ func AdminURL(
 	clusterName, virtualClusterName string,
 	sqlInstance int,
 	path string,
-	usePublicIP, openInBrowser bool,
+	usePublicIP, useHost, openInBrowser bool,
 	secure install.SecureOption,
 ) ([]string, error) {
 	c, err := GetClusterFromCache(l, clusterName, secure)
@@ -1313,6 +1368,7 @@ func AdminURL(
 	uConfig := urlConfig{
 		path:               path,
 		usePublicIP:        usePublicIP,
+		useHost:            useHost,
 		openInBrowser:      openInBrowser,
 		secure:             c.ClusterSettings.Secure,
 		virtualClusterName: virtualClusterName,
@@ -1789,6 +1845,14 @@ func Create(
 			if retErr == nil {
 				return
 			}
+			if opts[0].KeepClusterOnFailure {
+				l.Errorf(
+					"Preserving partially-created cluster %q for debugging (create err: %s)",
+					clusterName, retErr,
+				)
+				l.Printf("Run `roachprod destroy %s` when debugging is complete", clusterName)
+				return
+			}
 			l.Errorf("Cleaning up partially-created cluster (prev err: %s)", retErr)
 			if err := cleanupFailedCreate(l, clusterName, includeProviders); err != nil {
 				l.Errorf("Error while cleaning up partially-created cluster: %s", err)
@@ -1939,60 +2003,166 @@ func Shrink(ctx context.Context, l *logger.Logger, clusterName string, numNodes 
 	return saveCluster(l, &c.Cluster)
 }
 
+var supportedGCClouds = []string{
+	gce.ProviderName,
+	aws.ProviderName,
+	azure.ProviderName,
+	ibm.ProviderName,
+}
+
+// GCOptions controls which cloud providers are garbage-collected.
+type GCOptions struct {
+	DryRun bool
+	// Clouds is the set of cloud providers to garbage-collect. An empty set
+	// selects all supported remote cloud providers.
+	Clouds []string
+}
+
+type gcOperations struct {
+	loadClusters   func() error
+	providerActive func(string) bool
+	gcAWS          func(*logger.Logger, bool) error
+	gcAzure        func(*logger.Logger, bool) error
+	gcIBM          func(*logger.Logger, bool) error
+	listGCE        func(*logger.Logger) (*cloud.Cloud, error)
+	gcClusters     func(*logger.Logger, *cloud.Cloud, bool) error
+	gcDNS          func(*logger.Logger, *cloud.Cloud, bool) error
+}
+
+func defaultGCOperations() gcOperations {
+	return gcOperations{
+		loadClusters: LoadClusters,
+		providerActive: func(name string) bool {
+			provider, ok := vm.Providers[name]
+			return ok && provider.Active()
+		},
+		gcAWS:   cloud.GCAWS,
+		gcAzure: cloud.GCAzure,
+		gcIBM:   cloud.GCIBM,
+		listGCE: func(l *logger.Logger) (*cloud.Cloud, error) {
+			return cloud.ListCloud(l, vm.ListOptions{
+				IncludeEmptyClusters: true,
+				IncludeProviders:     []string{gce.ProviderName},
+				BailOnProviderError:  true,
+			})
+		},
+		gcClusters: cloud.GCClusters,
+		gcDNS:      cloud.GCDNS,
+	}
+}
+
+func selectGCClouds(requested []string) ([]string, error) {
+	if len(requested) == 0 {
+		return append([]string(nil), supportedGCClouds...), nil
+	}
+
+	supported := make(map[string]struct{}, len(supportedGCClouds))
+	for _, name := range supportedGCClouds {
+		supported[name] = struct{}{}
+	}
+
+	selected := make([]string, 0, len(requested))
+	seen := make(map[string]struct{}, len(requested))
+	for _, name := range requested {
+		name = strings.TrimSpace(name)
+		if _, ok := supported[name]; !ok {
+			return nil, errors.Errorf(
+				"unsupported cloud provider %q for gc (supported providers: %s)",
+				name, strings.Join(supportedGCClouds, ", "),
+			)
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		selected = append(selected, name)
+	}
+	return selected, nil
+}
+
 // GC garbage-collects expired clusters, unused SSH key pairs in AWS, and unused
-// DNS records.
-func GC(l *logger.Logger, dryrun bool) error {
-	if err := LoadClusters(); err != nil {
+// GCE DNS records.
+func GC(l *logger.Logger, options GCOptions) error {
+	return gc(l, options, defaultGCOperations())
+}
+
+func gc(l *logger.Logger, options GCOptions, operations gcOperations) error {
+	selectedClouds, err := selectGCClouds(options.Clouds)
+	if err != nil {
+		return err
+	}
+	if err := operations.loadClusters(); err != nil {
 		return err
 	}
 
-	// Use the `addOpFn` helper to run GC operations concurrently and collect
-	// errors.
-	errorsChan := make(chan error, 8)
-	var wg sync.WaitGroup
+	var (
+		wg             sync.WaitGroup
+		errorsMu       syncutil.Mutex
+		combinedErrors error
+	)
+	addError := func(err error) {
+		if err == nil {
+			return
+		}
+		errorsMu.Lock()
+		defer errorsMu.Unlock()
+		combinedErrors = errors.CombineErrors(combinedErrors, err)
+	}
 	addOpFn := func(fn func() error) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errorsChan <- fn()
+			addError(fn())
 		}()
 	}
 
-	// GC of aws need to be handled separately because gcCmd supports this operation on multiple aws account.
-	// Handles AWS garbage collection by assuming a unique IAM role (`roachprod-gc-cronjob`) in each AWS account.
-	// This is necessary because a single IAM user cannot perform actions across multiple AWS accounts.
-	// Temporary AWS credentials are generated via STS for each account to run garbage collection.
-	addOpFn(func() error {
-		return cloud.GCAWS(l, dryrun)
-	})
+	runGCE := false
+	for _, cloudName := range selectedClouds {
+		if !operations.providerActive(cloudName) {
+			addError(errors.Errorf(
+				"cloud provider %q is not active; check its credentials and required CLI tools",
+				cloudName,
+			))
+			continue
+		}
 
-	addOpFn(func() error {
-		return cloud.GCAzure(l, dryrun)
-	})
-
-	addOpFn(func() error {
-		return cloud.GCIBM(l, dryrun)
-	})
-
-	// ListCloud may fail for a provider, but we can still attempt GC on
-	// the clusters we do have.
-	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{gce.ProviderName}})
-	addOpFn(func() error {
-		return cloud.GCClusters(l, cld, dryrun)
-	})
-	addOpFn(func() error {
-		return cloud.GCDNS(l, cld, dryrun)
-	})
-
-	// Wait for all operations to finish and combine all errors.
-	go func() {
-		wg.Wait()
-		close(errorsChan)
-	}()
-	var combinedErrors error
-	for err := range errorsChan {
-		combinedErrors = errors.CombineErrors(combinedErrors, err)
+		switch cloudName {
+		case aws.ProviderName:
+			// AWS GC supports multiple accounts by assuming the configured GC
+			// role in each account.
+			addOpFn(func() error {
+				return operations.gcAWS(l, options.DryRun)
+			})
+		case azure.ProviderName:
+			addOpFn(func() error {
+				return operations.gcAzure(l, options.DryRun)
+			})
+		case ibm.ProviderName:
+			addOpFn(func() error {
+				return operations.gcIBM(l, options.DryRun)
+			})
+		case gce.ProviderName:
+			runGCE = true
+		}
 	}
+
+	if runGCE {
+		// DNS GC infers dangling records from the GCE inventory. Never run
+		// either cleanup operation with a partial inventory.
+		cld, err := operations.listGCE(l)
+		if err != nil {
+			addError(errors.Wrap(err, "listing GCE resources for gc"))
+		} else {
+			addOpFn(func() error {
+				return operations.gcClusters(l, cld, options.DryRun)
+			})
+			addOpFn(func() error {
+				return operations.gcDNS(l, cld, options.DryRun)
+			})
+		}
+	}
+
+	wg.Wait()
 	return combinedErrors
 }
 
@@ -2295,7 +2465,7 @@ func GrafanaURL(
 	grafanaNode := install.Nodes{nodes[len(nodes)-1]}
 
 	uConfig := urlConfig{
-		usePublicIP:   true,
+		useHost:       true,
 		openInBrowser: openInBrowser,
 		secure:        false,
 		port:          3000,
@@ -2843,10 +3013,17 @@ func CreatePublicDNS(ctx context.Context, l *logger.Logger, clusterName string) 
 
 	return vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
 		recs := make([]vm.DNSRecord, 0, len(c.VMs))
-		for _, v := range c.VMs {
-			rec := vm.CreateDNSRecord(v.PublicDNS, vm.A, v.PublicIP, 60)
+		for _, v := range vms {
+			ip := v.DNSIP()
+			if ip == "" {
+				continue
+			}
+			rec := vm.CreateDNSRecord(v.PublicDNS, vm.A, ip, 60)
 			rec.Public = true
 			recs = append(recs, rec)
+		}
+		if len(recs) == 0 {
+			return nil
 		}
 		return p.CreateRecords(ctx, recs...)
 	})

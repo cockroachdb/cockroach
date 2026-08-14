@@ -9,6 +9,8 @@ import "github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 
 type ProviderOptions struct {
 	Project          string
+	InfraProject     string
+	ArtifactsBucket  string
 	MetadataProject  string
 	DNSProject       string
 	DNSPublicZone    string
@@ -34,52 +36,68 @@ func WithProject(project string) OptionFunc {
 	}
 }
 
-// WithDefaultProject returns an option to set the default project.
-func WithDefaultProject(project string) OptionFunc {
+// WithInfraProject returns an option to set the project that hosts shared
+// roachprod infrastructure.
+func WithInfraProject(project string) OptionFunc {
 	return func(p *Provider) {
-		p.defaultProject = project
+		p.setInfraProject(project)
 	}
+}
+
+// WithArtifactsBucket returns an option to set the GCS bucket that hosts
+// shared roachprod artifacts.
+func WithArtifactsBucket(bucket string) OptionFunc {
+	return func(p *Provider) {
+		p.setArtifactsBucket(bucket)
+	}
+}
+
+// WithDefaultProject returns an option to set the infrastructure project.
+//
+// Deprecated: use WithInfraProject instead.
+func WithDefaultProject(project string) OptionFunc {
+	return WithInfraProject(project)
 }
 
 // WithMetadataProject returns an option to set the metadata project.
 func WithMetadataProject(project string) OptionFunc {
 	return func(p *Provider) {
-		p.metadataProject = project
+		p.setMetadataProject(project)
 	}
 }
 
 // WithDNSProject returns an option to set the DNS project.
 func WithDNSProject(project string) OptionFunc {
 	return func(p *Provider) {
-		p.dnsProviderOpts.DNSProject = project
+		p.setDNSProject(project)
 	}
 }
 
 // WithDNSPublicZone returns an option to set the public DNS zone.
 func WithDNSPublicZone(zone string) OptionFunc {
 	return func(p *Provider) {
-		p.dnsProviderOpts.PublicZone = zone
+		p.setDNSPublicZone(zone)
 	}
 }
 
 // WithDNSPublicDomain returns an option to set the public DNS domain.
 func WithDNSPublicDomain(domain string) OptionFunc {
 	return func(p *Provider) {
-		p.dnsProviderOpts.PublicDomain = domain
+		p.setDNSPublicDomain(domain)
 	}
 }
 
 // WithDNSManagedZone returns an option to set the managed DNS zone.
 func WithDNSManagedZone(zone string) OptionFunc {
 	return func(p *Provider) {
-		p.dnsProviderOpts.ManagedZone = zone
+		p.setDNSManagedZone(zone)
 	}
 }
 
 // WithDNSManagedDomain returns an option to set the managed DNS domain.
 func WithDNSManagedDomain(domain string) OptionFunc {
 	return func(p *Provider) {
-		p.dnsProviderOpts.ManagedDomain = domain
+		p.setDNSManagedDomain(domain)
 	}
 }
 
@@ -108,6 +126,12 @@ func (po *ProviderOptions) ToOptions() []Option {
 	var opts []Option
 	if po.Project != "" {
 		opts = append(opts, WithProject(po.Project))
+	}
+	if po.InfraProject != "" {
+		opts = append(opts, WithInfraProject(po.InfraProject))
+	}
+	if po.ArtifactsBucket != "" {
+		opts = append(opts, WithArtifactsBucket(po.ArtifactsBucket))
 	}
 	if po.MetadataProject != "" {
 		opts = append(opts, WithMetadataProject(po.MetadataProject))

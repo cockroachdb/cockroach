@@ -80,6 +80,7 @@ go_test(
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
         "//pkg/roachprod/vm/gce/testutils",
         "//pkg/roachprod/vm/local",
         "//pkg/testutils/datapathutils",
