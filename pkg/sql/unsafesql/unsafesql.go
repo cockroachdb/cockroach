@@ -25,10 +25,8 @@ var allowUnsafeSetting = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.override.allow_unsafe_internals.enabled",
 	"overrides the allow_unsafe_internals session variable behavior"+
-		" as a failsafe in case of emergencies. This setting should not be"+
-		" externally visible.",
-	envutil.EnvOrDefaultBool("COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS", false),
-	settings.Sensitive)
+		" as a failsafe in case of emergencies",
+	envutil.EnvOrDefaultBool("COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS", false))
 
 // The accessedLogLimiter is used to limit the rate of logging unsafe internal access
 // events. It is set to allow ten events per second.
