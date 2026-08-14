@@ -129,7 +129,12 @@ func MakeTransport(
 			return nil, errors.Wrap(err, "could not load system root CA pool")
 		}
 		if !roots.AppendCertsFromPEM([]byte(pem)) {
-			return nil, errors.Errorf("failed to parse root CA certificate from %q", pem)
+			// Do not include the PEM in the error: it is the value of a
+			// cluster setting, and errors end up in logs and job records
+			// that are collected into diagnostics artifacts.
+			return nil, errors.Errorf(
+				"failed to parse root CA certificate from the %s cluster setting",
+				httpCustomCA.Name())
 		}
 		tlsConf = &tls.Config{RootCAs: roots}
 	}
