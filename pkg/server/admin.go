@@ -1474,8 +1474,6 @@ func (s *adminServer) usersHelper(
 	return &resp, nil
 }
 
-var eventSetClusterSettingName = logpb.GetEventTypeName(&eventpb.SetClusterSetting{})
-
 // combineAllErrors combines all passed-in errors into a single object.
 func combineAllErrors(errs []error) error {
 	var combinedErrors error
@@ -1585,16 +1583,11 @@ func (s *adminServer) eventsHelper(
 		if err := scanner.ScanIndex(row, 3, &event.Info); err != nil {
 			return nil, err
 		}
-		if event.EventType == eventSetClusterSettingName {
-			if redactEvents {
-				event.Info = redactSettingsChange(event.Info)
-			}
-		}
 		if err := scanner.ScanIndex(row, 4, &event.UniqueID); err != nil {
 			return nil, err
 		}
 		if redactEvents {
-			event.Info = redactStatement(event.Info)
+			event.Info = serverpb.RedactEventInfo(event.EventType, event.Info)
 		}
 
 		resp.Events = append(resp.Events, event)
@@ -1603,36 +1596,6 @@ func (s *adminServer) eventsHelper(
 		return nil, err
 	}
 	return &resp, nil
-}
-
-// make a best-effort attempt at redacting the setting value.
-func redactSettingsChange(info string) string {
-	var s eventpb.SetClusterSetting
-	if err := json.Unmarshal([]byte(info), &s); err != nil {
-		return ""
-	}
-	s.Value = "<hidden>"
-	ret, err := json.Marshal(s)
-	if err != nil {
-		return ""
-	}
-	return string(ret)
-}
-
-// make a best-effort attempt at redacting the statement details.
-func redactStatement(info string) string {
-	s := map[string]interface{}{}
-	if err := json.Unmarshal([]byte(info), &s); err != nil {
-		return info
-	}
-	if _, ok := s["Statement"]; ok {
-		s["Statement"] = "<hidden>"
-	}
-	ret, err := json.Marshal(s)
-	if err != nil {
-		return ""
-	}
-	return string(ret)
 }
 
 // RangeLog is an endpoint that returns the latest range log entries.
@@ -1998,6 +1961,21 @@ func (s *adminServer) Settings(
 			return nil, srverrors.ServerError(ctx, scanErr)
 		}
 		internalKey, found, _ := settings.NameToKey(settings.SettingName(responseValue.Name))
+		// Never return the values of sensitive settings (secrets such as auth
+		// material), regardless of the caller's privileges: this endpoint feeds
+		// artifacts that are shared externally (debug zip settings.json).
+		// Privileged users can still read the values via SQL (SHOW CLUSTER
+		// SETTING). The empty string is preserved so that unset can be
+		// distinguished from set, mirroring MaskedSetting.String.
+		// crdb_internal.cluster_settings does not expose a "sensitive" column on
+		// this release branch, so sensitivity is read from the in-memory registry.
+		if found && responseValue.Value != "" {
+			if cs, ok := settings.LookupForLocalAccessByKey(
+				internalKey, s.sqlServer.execCfg.Codec.ForSystemTenant(),
+			); ok && cs.IsSensitive() {
+				responseValue.Value = "<redacted>"
+			}
+		}
 
 		if found && (len(keyFilter) == 0 || keyFilter[string(internalKey)]) {
 			if lastUpdated, found := alteredSettings[internalKey]; found {
@@ -2030,6 +2008,11 @@ func (s *adminServer) Settings(
 					var responseValue serverpb.SettingsResponse_Value
 					responseValue.Name = string(consoleSetting.Name())
 					responseValue.Value = consoleSetting.String(&s.st.SV)
+					// ConsoleKeys are all non-sensitive today; guard against a
+					// sensitive setting being added to the list.
+					if consoleSetting.IsSensitive() && responseValue.Value != "" {
+						responseValue.Value = "<redacted>"
+					}
 					responseValue.Type = consoleSetting.Typ()
 					responseValue.Description = consoleSetting.Description()
 					responseValue.Public = consoleSetting.Visibility() == settings.Public
@@ -2040,7 +2023,6 @@ func (s *adminServer) Settings(
 				}
 			}
 		}
-
 	}
 
 	resp.KeyValues = respSettings
