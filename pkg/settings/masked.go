@@ -35,7 +35,7 @@ func (s *MaskedSetting) String(sv *Values) string {
 	}
 	isSensitive := false
 	if st, ok := s.setting.(internalSetting); ok {
-		isSensitive = st.isSensitive()
+		isSensitive = st.IsSensitive()
 	}
 	sensitiveRedactionEnabled := redactSensitiveSettingsEnabled.Get(sv)
 	// Non-reportable settings are always redacted. Sensitive settings are
@@ -54,6 +54,16 @@ func (s *MaskedSetting) DefaultString() string {
 // Visibility returns the visibility setting for the underlying setting.
 func (s *MaskedSetting) Visibility() Visibility {
 	return s.setting.Visibility()
+}
+
+// IsSensitive returns whether the underlying setting is sensitive.
+func (s *MaskedSetting) IsSensitive() bool {
+	return s.setting.IsSensitive()
+}
+
+// IsReportable returns whether the underlying setting is reportable.
+func (s *MaskedSetting) IsReportable() bool {
+	return s.setting.IsReportable()
 }
 
 // InternalKey returns the key string for the underlying setting.
