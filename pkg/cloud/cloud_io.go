@@ -56,6 +56,10 @@ var httpCustomCA = settings.RegisterStringSetting(
 	"cloudstorage.http.custom_ca",
 	"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
 	"",
+	settings.WithReportable(false),
+	// Marked sensitive for consistency with the other custom-CA settings
+	// (e.g. server.ldap_authentication.domain.custom_ca).
+	settings.Sensitive,
 	settings.WithPublic)
 
 // WriteChunkSize is used to control the size of each chunk that is buffered and

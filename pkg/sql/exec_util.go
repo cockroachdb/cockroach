@@ -172,6 +172,10 @@ var ClusterSecret = settings.RegisterStringSetting(
 	// still mark them explicitly in case a future code change flips the
 	// default.
 	settings.WithReportable(false),
+	// The secret is the salt used to anonymize identifiers in telemetry
+	// reports, so sharing it in diagnostics artifacts would allow the
+	// recipient to de-anonymize those reports.
+	settings.Sensitive,
 )
 
 // ClusterLabel is an application-level free-form string that is not

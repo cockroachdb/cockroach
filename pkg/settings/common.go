@@ -67,7 +67,7 @@ func (c common) Visibility() Visibility {
 	return c.visibility
 }
 
-func (c common) isReportable() bool {
+func (c common) IsReportable() bool {
 	return !c.nonReportable
 }
 
@@ -75,7 +75,7 @@ func (c *common) isRetired() bool {
 	return c.retired
 }
 
-func (c *common) isSensitive() bool {
+func (c *common) IsSensitive() bool {
 	return c.sensitive
 }
 
@@ -150,17 +150,17 @@ type internalSetting interface {
 
 	init(class Class, key InternalKey, description string, slot slotIdx)
 	isRetired() bool
-	isSensitive() bool
+	IsSensitive() bool
 	getSlot() slotIdx
 
-	// isReportable indicates whether the value of the setting can be
+	// IsReportable indicates whether the value of the setting can be
 	// included in user-facing reports such as that produced by SHOW ALL
 	// CLUSTER SETTINGS.
 	// This only affects reports though; direct access is unconstrained.
 	// For example, `enterprise.license` is non-reportable:
 	// it cannot be listed, but can be accessed with `SHOW CLUSTER
 	// SETTING enterprise.license` or SET CLUSTER SETTING.
-	isReportable() bool
+	IsReportable() bool
 
 	setToDefault(ctx context.Context, sv *Values)
 
@@ -179,7 +179,7 @@ func TestingIsReportable(s Setting) bool {
 		return false
 	}
 	if e, ok := s.(internalSetting); ok {
-		return e.isReportable()
+		return e.IsReportable()
 	}
 	return true
 }
@@ -187,7 +187,7 @@ func TestingIsReportable(s Setting) bool {
 // TestingIsSensitive is used in testing for sensitivity.
 func TestingIsSensitive(s Setting) bool {
 	if e, ok := s.(internalSetting); ok {
-		return e.isSensitive()
+		return e.IsSensitive()
 	}
 	return false
 }

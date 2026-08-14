@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
@@ -47,7 +48,12 @@ func makeClusterWideZipRequests(
 	if zipCtx.files.shouldIncludeFile(eventsFile) {
 		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.Events(ctx, &serverpb.EventsRequest{})
+				resp, err := admin.Events(ctx, &serverpb.EventsRequest{})
+				if err != nil {
+					return nil, err
+				}
+				scrubEventsResponse(resp)
+				return resp, nil
 			},
 			pathName: prefix + eventsName,
 		})
@@ -69,7 +75,12 @@ func makeClusterWideZipRequests(
 	if zipCtx.files.shouldIncludeFile(settingsFile) {
 		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.Settings(ctx, &serverpb.SettingsRequest{})
+				resp, err := admin.Settings(ctx, &serverpb.SettingsRequest{})
+				if err != nil {
+					return nil, err
+				}
+				redactSensitiveSettingValues(resp)
+				return resp, nil
 			},
 			pathName: prefix + settingsName,
 		})
@@ -91,6 +102,39 @@ func makeClusterWideZipRequests(
 
 	}
 	return zipRequests
+}
+
+// scrubEventsResponse enforces the redacted-events contract on an Events RPC
+// response, using the same helper the server applies when serving the
+// redacted form. This matters only for zips collected from older servers,
+// which leave placeholder values (and the value in tenant setting-change
+// events) intact.
+//
+// TODO(drewk): remove this re-scrub once every release that predates the
+// server-side redaction of placeholder values is out of support.
+func scrubEventsResponse(resp *serverpb.EventsResponse) {
+	for i := range resp.Events {
+		event := &resp.Events[i]
+		event.Info = serverpb.RedactEventInfo(event.EventType, event.Info)
+	}
+}
+
+// redactSensitiveSettingValues replaces the values of Sensitive-marked
+// cluster settings in a Settings RPC response, using the settings registry
+// compiled into this client. The server already redacts these values (see
+// (*adminServer).Settings), so this matters only for zips collected from
+// older servers that still return them raw.
+func redactSensitiveSettingValues(resp *serverpb.SettingsResponse) {
+	for key, v := range resp.KeyValues {
+		setting, ok := settings.LookupForLocalAccessByKey(
+			settings.InternalKey(key), true /* forSystemTenant */)
+		// The empty string is preserved so that unset can be distinguished
+		// from set, mirroring the server-side behavior.
+		if ok && setting.IsSensitive() && v.Value != "" {
+			v.Value = "<redacted>"
+			resp.KeyValues[key] = v
+		}
+	}
 }
 
 // collectClusterData runs the data collection that only needs to
