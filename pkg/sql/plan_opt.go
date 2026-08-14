@@ -1146,7 +1146,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	if stmt.ExpectedTypes != nil {
 		cols := result.main.planColumns()
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type")
+			return RevalidateCachedQuery()
 		}
 	}
 
