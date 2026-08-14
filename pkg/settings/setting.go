@@ -77,6 +77,10 @@ type Setting interface {
 	// retrieving all settings.
 	Visibility() Visibility
 
+	IsSensitive() bool
+
+	IsReportable() bool
+
 	// IsUnsafe returns whether the setting is unsafe, and thus requires
 	// a special interlock to set.
 	IsUnsafe() bool
