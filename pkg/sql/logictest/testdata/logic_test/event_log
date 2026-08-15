@@ -527,6 +527,33 @@ ORDER BY "timestamp", info
 1  {"EventType": "set_cluster_setting", "SettingName": "cloudstorage.http.custom_ca", "Statement": "SET CLUSTER SETTING \"cloudstorage.http.custom_ca\" = 'hunter2-secret'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "<redacted>"}
 1  {"EventType": "set_cluster_setting", "SettingName": "cloudstorage.http.custom_ca", "Statement": "SET CLUSTER SETTING \"cloudstorage.http.custom_ca\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}
 
+# A password bound via a placeholder is substituted in the recorded
+# placeholder values, matching the '*****' substitution in the statement
+# text.
+##################
+
+statement ok
+PREPARE create_pwrole AS CREATE ROLE pwrole WITH PASSWORD $1
+
+statement ok
+EXECUTE create_pwrole('hunter2-role-secret')
+
+statement ok
+PREPARE alter_pwrole AS ALTER ROLE pwrole WITH PASSWORD $1
+
+statement ok
+EXECUTE alter_pwrole('hunter2-role-secret-2')
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'TxnReadTimestamp'
+FROM system.eventlog
+WHERE "eventType" IN ('create_role', 'alter_role')
+AND info LIKE '%pwrole%'
+ORDER BY "timestamp", info
+----
+1  {"EventType": "create_role", "PlaceholderValues": ["'*****'"], "RoleName": "pwrole", "Statement": "CREATE ROLE pwrole WITH PASSWORD '*****'", "Tag": "CREATE ROLE", "User": "root"}
+1  {"EventType": "alter_role", "Options": ["PASSWORD"], "PlaceholderValues": ["'*****'"], "RoleName": "pwrole", "Statement": "ALTER ROLE pwrole WITH PASSWORD '*****'", "Tag": "ALTER ROLE", "User": "root"}
+
 # Set and unset zone configs
 ##################
 
