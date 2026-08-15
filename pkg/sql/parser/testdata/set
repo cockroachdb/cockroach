@@ -258,75 +258,84 @@ SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED -- ide
 parse
 SET CLUSTER SETTING a = 3
 ----
-SET CLUSTER SETTING a = 3
-SET CLUSTER SETTING a = (3) -- fully parenthesized
-SET CLUSTER SETTING a = _ -- literals removed
-SET CLUSTER SETTING a = 3 -- identifiers removed
+SET CLUSTER SETTING a = '*****' -- normalized!
+SET CLUSTER SETTING a = '*****' -- fully parenthesized
+SET CLUSTER SETTING a = '*****' -- literals removed
+SET CLUSTER SETTING a = '*****' -- identifiers removed
+SET CLUSTER SETTING a = 3 -- passwords exposed
 
 parse
 EXPLAIN SET CLUSTER SETTING a = 3
 ----
-EXPLAIN SET CLUSTER SETTING a = 3
-EXPLAIN SET CLUSTER SETTING a = (3) -- fully parenthesized
-EXPLAIN SET CLUSTER SETTING a = _ -- literals removed
-EXPLAIN SET CLUSTER SETTING a = 3 -- identifiers removed
+EXPLAIN SET CLUSTER SETTING a = '*****' -- normalized!
+EXPLAIN SET CLUSTER SETTING a = '*****' -- fully parenthesized
+EXPLAIN SET CLUSTER SETTING a = '*****' -- literals removed
+EXPLAIN SET CLUSTER SETTING a = '*****' -- identifiers removed
+EXPLAIN SET CLUSTER SETTING a = 3 -- passwords exposed
 
 parse
 SET CLUSTER SETTING a = '3s'
 ----
-SET CLUSTER SETTING a = '3s'
-SET CLUSTER SETTING a = ('3s') -- fully parenthesized
-SET CLUSTER SETTING a = '_' -- literals removed
-SET CLUSTER SETTING a = '3s' -- identifiers removed
+SET CLUSTER SETTING a = '*****' -- normalized!
+SET CLUSTER SETTING a = '*****' -- fully parenthesized
+SET CLUSTER SETTING a = '*****' -- literals removed
+SET CLUSTER SETTING a = '*****' -- identifiers removed
+SET CLUSTER SETTING a = '3s' -- passwords exposed
 
 parse
 SET CLUSTER SETTING a = '3'
 ----
-SET CLUSTER SETTING a = '3'
-SET CLUSTER SETTING a = ('3') -- fully parenthesized
-SET CLUSTER SETTING a = '_' -- literals removed
-SET CLUSTER SETTING a = '3' -- identifiers removed
+SET CLUSTER SETTING a = '*****' -- normalized!
+SET CLUSTER SETTING a = '*****' -- fully parenthesized
+SET CLUSTER SETTING a = '*****' -- literals removed
+SET CLUSTER SETTING a = '*****' -- identifiers removed
+SET CLUSTER SETTING a = '3' -- passwords exposed
 
 parse
 SET CLUSTER SETTING a = 3.0
 ----
-SET CLUSTER SETTING a = 3.0
-SET CLUSTER SETTING a = (3.0) -- fully parenthesized
-SET CLUSTER SETTING a = _ -- literals removed
-SET CLUSTER SETTING a = 3.0 -- identifiers removed
+SET CLUSTER SETTING a = '*****' -- normalized!
+SET CLUSTER SETTING a = '*****' -- fully parenthesized
+SET CLUSTER SETTING a = '*****' -- literals removed
+SET CLUSTER SETTING a = '*****' -- identifiers removed
+SET CLUSTER SETTING a = 3.0 -- passwords exposed
 
 parse
 SET CLUSTER SETTING a = $1
 ----
-SET CLUSTER SETTING a = $1
-SET CLUSTER SETTING a = ($1) -- fully parenthesized
-SET CLUSTER SETTING a = $1 -- literals removed
-SET CLUSTER SETTING a = $1 -- identifiers removed
+SET CLUSTER SETTING a = '*****' -- normalized!
+SET CLUSTER SETTING a = '*****' -- fully parenthesized
+SET CLUSTER SETTING a = '*****' -- literals removed
+SET CLUSTER SETTING a = '*****' -- identifiers removed
+SET CLUSTER SETTING a = $1 -- passwords exposed
 
 parse
 SET CLUSTER SETTING a = off
 ----
-SET CLUSTER SETTING a = off
-SET CLUSTER SETTING a = (off) -- fully parenthesized
-SET CLUSTER SETTING a = off -- literals removed
-SET CLUSTER SETTING a = _ -- identifiers removed
+SET CLUSTER SETTING a = '*****' -- normalized!
+SET CLUSTER SETTING a = '*****' -- fully parenthesized
+SET CLUSTER SETTING a = '*****' -- literals removed
+SET CLUSTER SETTING a = '*****' -- identifiers removed
+SET CLUSTER SETTING a = off -- passwords exposed
 
 
 parse
 SET CLUSTER SETTING a = on
 ----
-SET CLUSTER SETTING a = "on" -- normalized!
-SET CLUSTER SETTING a = ("on") -- fully parenthesized
-SET CLUSTER SETTING a = "on" -- literals removed
-SET CLUSTER SETTING a = _ -- identifiers removed
+SET CLUSTER SETTING a = '*****' -- normalized!
+SET CLUSTER SETTING a = '*****' -- fully parenthesized
+SET CLUSTER SETTING a = '*****' -- literals removed
+SET CLUSTER SETTING a = '*****' -- identifiers removed
+SET CLUSTER SETTING a = "on" -- passwords exposed
 
 parse
 SET CLUSTER SETTING a TO 1
 ----
-SET CLUSTER SETTING a = 1 -- normalized!
-SET CLUSTER SETTING a = (1) -- fully parenthesized
-SET CLUSTER SETTING a = _ -- literals removed
-SET CLUSTER SETTING a = 1 -- identifiers removed
+SET CLUSTER SETTING a = '*****' -- normalized!
+SET CLUSTER SETTING a = '*****' -- fully parenthesized
+SET CLUSTER SETTING a = '*****' -- literals removed
+SET CLUSTER SETTING a = '*****' -- identifiers removed
+SET CLUSTER SETTING a = 1 -- passwords exposed
 
 
 parse
