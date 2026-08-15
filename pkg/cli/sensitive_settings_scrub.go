@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
@@ -19,10 +20,12 @@ import (
 
 // Log entries mentioning a sensitive cluster setting may carry the setting's
 // value (a secret), e.g. the statement text of SET CLUSTER SETTING in SQL
-// exec logs or the settings-change structured event. Debug zips and merged
-// logs are meant to be shared with Cockroach Labs, so such entries are
-// scrubbed client-side even when no redaction was requested - including
-// historical entries written by older server versions.
+// exec logs or the settings-change structured event. The same goes for
+// role-change structured events that recorded a bound password in their
+// placeholder values. Debug zips and merged logs are meant to be shared with
+// Cockroach Labs, so such entries are scrubbed client-side even when no
+// redaction was requested - including historical entries written by older
+// server versions.
 
 // sensitiveSettingNames returns the lowercased names and internal keys of all
 // Sensitive-marked cluster settings known to this client's registry. The
@@ -46,18 +49,22 @@ var sensitiveSettingNames = sync.OnceValue(func() []string {
 })
 
 // scrubSensitiveSettingLogEntry scrubs the given log entry if its message
-// mentions a sensitive cluster setting. Redactable entries are redacted in
-// place, which removes the unsafe payloads (among them the secret) while
-// preserving the rest of the message. Non-redactable entries offer no way to
-// locate the secret within the message, so the entire message is replaced
-// with the tombstone string.
+// mentions a sensitive cluster setting or is a role-change event carrying
+// raw bound placeholder values (a bound password). Redactable entries are
+// redacted in place, which removes the unsafe payloads (among them the
+// secret) while preserving the rest of the message. Non-redactable entries
+// offer no way to locate the secret within the message, so the entire
+// message is replaced with the tombstone string.
 func scrubSensitiveSettingLogEntry(
 	e *logpb.Entry, names []string, tombstone string,
 ) (scrubbed, tombstoned bool) {
-	msg := strings.ToLower(e.Message)
-	mentions := slices.ContainsFunc(names, func(n string) bool {
-		return strings.Contains(msg, n)
-	})
+	mentions := roleEventWithRawBinds(e.Message)
+	if !mentions {
+		msg := strings.ToLower(e.Message)
+		mentions = slices.ContainsFunc(names, func(n string) bool {
+			return strings.Contains(msg, n)
+		})
+	}
 	if !mentions {
 		return false, false
 	}
@@ -67,6 +74,50 @@ func scrubSensitiveSettingLogEntry(
 	}
 	e.Message = tombstone
 	return true, true
+}
+
+// roleEventWithRawBinds reports whether the message looks like a role-change
+// structured event that recorded raw placeholder values, which can carry a
+// bound password (CREATE ROLE ... WITH PASSWORD $1). Events written since
+// password binds began being substituted at write time carry the
+// substitution marker among the placeholder values and are skipped, so this
+// rule fires only for historical entries and goes quiet once they age out of
+// retention.
+//
+// The marker is looked for in the placeholder values alone, not in the
+// message at large: the statement text renders a password option as
+// PASSWORD '*****' whether the password was a literal or a placeholder (see
+// tree.KVOptions.formatAsRoleOptions), so a message-wide search matches every
+// role event and would let the entries this rule exists for slip through.
+func roleEventWithRawBinds(msg string) bool {
+	if !strings.Contains(msg, `"EventType":"create_role"`) &&
+		!strings.Contains(msg, `"EventType":"alter_role"`) {
+		return false
+	}
+	binds, ok := placeholderValues(msg)
+	return ok && !strings.Contains(binds, tree.PasswordSubstitution)
+}
+
+// placeholderValues returns the text of the message's PlaceholderValues JSON
+// array and whether the field was present. The array is taken to end at the
+// first ']', which a value containing that byte cuts short - JSON does not
+// escape it. Erring short is deliberate: a span that stops before the
+// substitution marker costs an unnecessary scrub, whereas one that ran past
+// the array could pick up the marker from the statement text and skip a scrub
+// that was needed. A field with no ']' at all (a truncated message) yields the
+// empty span for the same reason.
+func placeholderValues(msg string) (string, bool) {
+	const field = `"PlaceholderValues":[`
+	start := strings.Index(msg, field)
+	if start < 0 {
+		return "", false
+	}
+	rest := msg[start+len(field):]
+	end := strings.IndexByte(rest, ']')
+	if end < 0 {
+		return "", true
+	}
+	return rest[:end], true
 }
 
 // sensitiveScrubFallbackTables lists the zip tables whose unredacted primary
@@ -140,15 +191,16 @@ this artifact, the following was scrubbed or degraded during collection:
 `)
 	if s.redactedEntries > 0 {
 		fmt.Fprintf(&sb,
-			"- %d log entries mentioning a sensitive cluster setting had their\n"+
-				"  unsafe payloads redacted.\n", s.redactedEntries)
+			"- %d log entries referencing a sensitive cluster setting or a bound\n"+
+				"  password had their unsafe payloads redacted.\n", s.redactedEntries)
 	}
 	if s.tombstonedEntries > 0 {
 		fmt.Fprintf(&sb,
-			"- %d log entries mentioning a sensitive cluster setting were not\n"+
-				"  redactable (redactable logging is disabled) and were replaced\n"+
-				"  entirely with REDACTEDBYZIP. Enable redactable logs to preserve\n"+
-				"  the non-sensitive parts of such entries in future zips.\n",
+			"- %d log entries referencing a sensitive cluster setting or a bound\n"+
+				"  password were not redactable (redactable logging is disabled) and\n"+
+				"  were replaced entirely with REDACTEDBYZIP. Enable redactable logs\n"+
+				"  to preserve the non-sensitive parts of such entries in future\n"+
+				"  zips.\n",
 			s.tombstonedEntries)
 	}
 	if len(s.fallbackTables) > 0 {
