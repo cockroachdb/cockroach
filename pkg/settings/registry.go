@@ -549,6 +549,31 @@ func LookupForDisplayByKey(
 	return s, true
 }
 
+// IsSensitiveByName reports whether the value of the named setting must be
+// kept out of shareable diagnostics (see the Sensitive option). Aliases and
+// internal keys are resolved via NameToKey.
+//
+// A name that does not resolve to a registered setting returns true: an
+// unrecognized name cannot be proven non-sensitive, and a SET CLUSTER SETTING
+// carrying it is about to fail resolution against this same registry anyway -
+// most likely a typo, possibly of a sensitive setting's name, whose would-be
+// secret must still be redacted. Nothing useful is hidden in exchange: only
+// statements that error render with a substituted value. (In processes that
+// only format statements without executing them, this hides values for any
+// name absent from the linked registry; FmtShowPasswords preserves fidelity
+// where a caller needs it.)
+func IsSensitiveByName(name SettingName) bool {
+	key, ok, _ := NameToKey(name)
+	if !ok {
+		return true
+	}
+	s, ok := registry[key]
+	if !ok {
+		return true
+	}
+	return s.IsSensitive()
+}
+
 // ForSystemTenant can be passed to Lookup for code that runs only on the system
 // tenant.
 const ForSystemTenant = true

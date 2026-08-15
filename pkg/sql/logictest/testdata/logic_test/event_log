@@ -511,8 +511,10 @@ ORDER BY "timestamp", info
 1  {"DefaultValue": "false", "EventType": "set_cluster_setting", "SettingName": "sql.vecindex.deterministic_fixups.enabled", "Statement": "SET CLUSTER SETTING \"sql.vecindex.deterministic_fixups.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
 1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.label", "Statement": "SET CLUSTER SETTING \"cluster.label\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
 
-# Values of sensitive settings (secrets) are redacted in the event, while
-# resets remain recorded as DEFAULT.
+# Values of sensitive settings (secrets) are redacted in the event: the Value
+# field is replaced with <redacted> at write time, and the statement text
+# renders the value as '*****' (statement formatting substitutes sensitive
+# setting values, like passwords). Resets remain recorded as DEFAULT.
 ##################
 
 statement ok
@@ -528,7 +530,7 @@ WHERE "eventType" = 'set_cluster_setting'
 AND info LIKE '%client_secret%'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "set_cluster_setting", "SettingName": "server.oidc_authentication.client_secret", "Statement": "SET CLUSTER SETTING \"server.oidc_authentication.client_secret\" = 'hunter2-secret'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "<redacted>"}
+1  {"EventType": "set_cluster_setting", "SettingName": "server.oidc_authentication.client_secret", "Statement": "SET CLUSTER SETTING \"server.oidc_authentication.client_secret\" = '*****'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "<redacted>"}
 1  {"EventType": "set_cluster_setting", "SettingName": "server.oidc_authentication.client_secret", "Statement": "SET CLUSTER SETTING \"server.oidc_authentication.client_secret\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}
 
 # A password bound via a placeholder is substituted in the recorded
