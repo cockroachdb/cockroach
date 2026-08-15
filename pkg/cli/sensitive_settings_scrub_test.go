@@ -66,6 +66,40 @@ func TestScrubSensitiveSettingLogEntry(t *testing.T) {
 			redactable:      false,
 			expectedMessage: "exec SET CLUSTER SETTING cluster.label = 'hunter2-secret'",
 		},
+		{
+			name: "role event with raw bound password is scrubbed",
+			message: `{"EventType":"create_role","RoleName":"‹app›",` +
+				`"PlaceholderValues":["‹'hunter2-secret'›"]}`,
+			redactable:       true,
+			expectedMessage:  `{"EventType":"create_role","RoleName":"‹×›","PlaceholderValues":["‹×›"]}`,
+			expectedScrubbed: true,
+		},
+		{
+			name: "role event with substituted password binds is untouched",
+			message: `{"EventType":"alter_role","RoleName":"‹app›",` +
+				`"PlaceholderValues":["‹'*****'›"]}`,
+			redactable: true,
+			expectedMessage: `{"EventType":"alter_role","RoleName":"‹app›",` +
+				`"PlaceholderValues":["‹'*****'›"]}`,
+		},
+		{
+			// The statement text renders any password option as '*****',
+			// placeholder or not, so the marker there says nothing about the
+			// binds.
+			name: "role event with substituted statement but raw binds is scrubbed",
+			message: `{"EventType":"create_role","Statement":"‹CREATE ROLE app WITH PASSWORD '*****'›",` +
+				`"PlaceholderValues":["‹'hunter2-secret'›"]}`,
+			redactable: true,
+			expectedMessage: `{"EventType":"create_role","Statement":"‹×›",` +
+				`"PlaceholderValues":["‹×›"]}`,
+			expectedScrubbed: true,
+		},
+		{
+			name:            "role event without placeholder values is untouched",
+			message:         `{"EventType":"create_role","RoleName":"‹app›"}`,
+			redactable:      true,
+			expectedMessage: `{"EventType":"create_role","RoleName":"‹app›"}`,
+		},
 	}
 
 	for _, tc := range tests {
