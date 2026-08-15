@@ -1153,6 +1153,24 @@ var zipSystemTables = DebugZipTableRegistry{
 			FROM system.descriptor`,
 	},
 	"system.eventlog": {
+		// A password bound via a placeholder (CREATE ROLE ... WITH PASSWORD
+		// $1) was recorded raw in the PlaceholderValues field of the info
+		// payload by historical rows, so that field is dropped for
+		// role-change events. Their Statement field is safe: password
+		// literals are substituted with '*****' at write time.
+		customQueryUnredacted: `SELECT
+	timestamp,
+	"eventType",
+	"targetID",
+	"reportingID",
+	CASE
+		WHEN "eventType" IN ('create_role', 'alter_role')
+			AND info::jsonb ? 'PlaceholderValues'
+		THEN (info::jsonb - 'PlaceholderValues')::string
+		ELSE info
+	END AS info,
+	"uniqueID"
+FROM system.eventlog`,
 		nonSensitiveCols: NonSensitiveColumns{
 			"timestamp",
 			`"eventType"`,

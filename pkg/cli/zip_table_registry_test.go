@@ -204,6 +204,46 @@ func TestCustomQuery(t *testing.T) {
 	executeAllCustomQuerys(t, sqlDB, zipSystemTables)
 }
 
+// TestRoleEventPlaceholdersScrubbedFromZipDumps verifies that the unredacted
+// eventlog dump drops the placeholder values of historical role-change events
+// - which carried the raw bound password - while keeping their statement text.
+func TestRoleEventPlaceholdersScrubbedFromZipDumps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(srv.SQLConn(t))
+
+	const secret = "hunter2-zip-secret"
+
+	// Simulate a pre-fix role-change event with a bound password: the
+	// statement text is safe ('*****' substitution) but PlaceholderValues
+	// carried the raw password.
+	sqlDB.Exec(t,
+		`INSERT INTO system.eventlog (timestamp, "eventType", "targetID", "reportingID", info) VALUES (now(), 'create_role', 0, 1, $1)`,
+		fmt.Sprintf(`{"EventType": "create_role", "RoleName": "app", `+
+			`"Statement": "CREATE ROLE app WITH PASSWORD '*****'", "PlaceholderValues": ["'%s'"], "User": "root"}`,
+			secret))
+
+	// Go through QueryForTable rather than reading the registry entry
+	// directly: without an unredacted query it hands back a plain `TABLE`,
+	// which is exactly the leak being guarded against.
+	tableQuery, err := zipSystemTables.QueryForTable("system.eventlog", false /* redact */)
+	require.NoError(t, err)
+
+	var info string
+	sqlDB.QueryRow(t,
+		"SELECT info FROM ("+tableQuery.query+`) WHERE info LIKE '%create_role%'`,
+	).Scan(&info)
+	require.Contains(t, info, `CREATE ROLE app WITH PASSWORD '*****'`)
+	require.NotContains(t, info, "PlaceholderValues")
+	require.NotContains(t, info, secret)
+}
+
 func executeSelectOnNonSensitiveColumns(
 	t *testing.T, sqlDB *sqlutils.SQLRunner, tableRegistry DebugZipTableRegistry,
 ) {
