@@ -303,6 +303,15 @@ func TestSensitiveSettingScrubbedFromZipDumps(t *testing.T) {
 	insertEvent("some.retired.setting", secret)
 	insertEvent("cluster.label", "not-a-secret")
 
+	// Simulate a pre-fix role-change event with a bound password: the
+	// statement text is safe ('*****' substitution) but PlaceholderValues
+	// carried the raw password.
+	sqlDB.Exec(t,
+		`INSERT INTO system.eventlog (timestamp, "eventType", "targetID", "reportingID", info) VALUES (now(), 'create_role', 0, 1, $1)`,
+		fmt.Sprintf(`{"EventType": "create_role", "RoleName": "app", `+
+			`"Statement": "CREATE ROLE app WITH PASSWORD '*****'", "PlaceholderValues": ["'%s'"], "User": "root"}`,
+			secret))
+
 	// Populate last_active_query with a sensitive SET, on a dedicated
 	// connection so the test's own queries don't displace it. The session
 	// stays open (idle) for the rest of the test, which is exactly the
@@ -353,6 +362,15 @@ func TestSensitiveSettingScrubbedFromZipDumps(t *testing.T) {
 			`) WHERE info LIKE '%cluster.label%' AND info LIKE '%not-a-secret%'`,
 	).Scan(&info)
 	require.Contains(t, info, `SET CLUSTER SETTING cluster.label = 'not-a-secret'`)
+
+	// The role event keeps its statement; only the placeholder values are
+	// dropped.
+	sqlDB.QueryRow(t,
+		"SELECT info FROM ("+zipSystemTables["system.eventlog"].customQueryUnredacted+
+			`) WHERE info LIKE '%create_role%'`,
+	).Scan(&info)
+	require.Contains(t, info, `CREATE ROLE app WITH PASSWORD '*****'`)
+	require.NotContains(t, info, "PlaceholderValues")
 }
 
 // TestSettingsZipDumpsJoinOnInternalKey verifies that the system.settings and

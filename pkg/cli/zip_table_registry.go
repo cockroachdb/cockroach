@@ -1444,6 +1444,12 @@ var zipSystemTables = DebugZipTableRegistry{
 		// name with no match in the registry (retired or renamed) is
 		// conservatively treated as sensitive. Resets (Value = 'DEFAULT')
 		// carry no secret and are left intact.
+		//
+		// Role-change events have an analogous hole: a password bound via a
+		// placeholder (CREATE ROLE ... WITH PASSWORD $1) was recorded raw in
+		// PlaceholderValues by historical rows, so that field is dropped for
+		// them. Their Statement field is safe: password literals are
+		// substituted with '*****' at write time.
 		customQueryUnredacted: `SELECT
 	timestamp,
 	"eventType",
@@ -1457,6 +1463,9 @@ var zipSystemTables = DebugZipTableRegistry{
 				WHERE cs.variable = info::jsonb ->> 'SettingName' AND NOT cs.sensitive
 			)
 		THEN (((info::jsonb || '{"Value": "<redacted>"}') - 'Statement') - 'PlaceholderValues')::string
+		WHEN "eventType" IN ('create_role', 'alter_role')
+			AND info::jsonb ? 'PlaceholderValues'
+		THEN (info::jsonb - 'PlaceholderValues')::string
 		ELSE info
 	END AS info,
 	"uniqueID"
@@ -1476,6 +1485,9 @@ FROM system.eventlog`,
 		WHEN "eventType" IN ('set_cluster_setting', 'set_tenant_cluster_setting')
 			AND COALESCE(info::jsonb ->> 'Value', '') NOT IN ('', 'DEFAULT')
 		THEN (((info::jsonb || '{"Value": "<redacted>"}') - 'Statement') - 'PlaceholderValues')::string
+		WHEN "eventType" IN ('create_role', 'alter_role')
+			AND info::jsonb ? 'PlaceholderValues'
+		THEN (info::jsonb - 'PlaceholderValues')::string
 		ELSE info
 	END AS info,
 	"uniqueID"
