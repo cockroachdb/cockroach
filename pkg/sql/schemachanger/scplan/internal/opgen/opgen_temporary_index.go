@@ -33,16 +33,6 @@ func init() {
 					}
 				}),
 
-				emit(func(this *scpb.TemporaryIndex, md *opGenContext) *scop.MaybeAddSplitForIndex {
-					// Avoid adding splits for tables without any data (i.e. newly created ones).
-					if checkIfDescriptorIsWithoutData(this.TableID, md) {
-						return nil
-					}
-					return &scop.MaybeAddSplitForIndex{
-						TableID: this.TableID,
-						IndexID: this.IndexID,
-					}
-				}),
 			),
 			to(scpb.Status_WRITE_ONLY,
 				emit(func(this *scpb.TemporaryIndex) *scop.MakeDeleteOnlyIndexWriteOnly {

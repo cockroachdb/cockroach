@@ -23,24 +23,6 @@ func init() {
 						IsSecondaryIndex: true,
 					}
 				}),
-				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.MaybeAddSplitForIndex {
-					// Avoid adding splits for tables without any data (i.e. newly created ones).
-					// Non-backfilled indexes will still try and add split points.
-					if checkIfDescriptorIsWithoutData(this.TableID, md) {
-						return nil
-					}
-					// Truncate will not have a temporary index ID since no backfill is
-					// required. It will use the source index to copy splits from.
-					var copyIndexID descpb.IndexID
-					if this.TemporaryIndexID == 0 {
-						copyIndexID = this.RecreateSourceIndexID
-					}
-					return &scop.MaybeAddSplitForIndex{
-						TableID:     this.TableID,
-						IndexID:     this.IndexID,
-						CopyIndexID: copyIndexID,
-					}
-				}),
 				emit(func(this *scpb.SecondaryIndex) *scop.SetAddedIndexPartialPredicate {
 					if this.EmbeddedExpr == nil {
 						return nil

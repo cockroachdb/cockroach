@@ -366,5 +366,25 @@ func runBackfill(
 	job *jobs.Job,
 	table catalog.TableDescriptor,
 ) error {
+	// Split and scatter index spans during backfill execution in the post-commit
+	// job rather than during pre-commit. This ensures range splits are only
+	// created once index identities are durable, preventing orphaned non-transactional
+	// splits if the schema-change transaction aborts.
+	for _, destIndexID := range progress.DestIndexIDs {
+		idxToBackfill, err := catalog.MustFindIndexByID(table, destIndexID)
+		if err != nil {
+			return err
+		}
+		var copyIndexSource catalog.Index
+		if progress.SourceIndexID != 0 {
+			copyIndexSource, err = catalog.MustFindIndexByID(table, progress.SourceIndexID)
+			if err != nil {
+				return err
+			}
+		}
+		if err := splitter.MaybeSplitIndexSpans(ctx, table, idxToBackfill, copyIndexSource); err != nil {
+			return err
+		}
+	}
 	return backfiller.BackfillIndexes(ctx, progress, tracker, job, table)
 }

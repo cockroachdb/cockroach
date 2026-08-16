@@ -27,7 +27,6 @@ type deferredState struct {
 	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
 	scheduleIDsToDelete          []jobspb.ScheduleID
 	statsToRefresh               catalog.DescriptorIDSet
-	indexesToSplitAndScatter     []indexesToSplitAndScatter
 	ttlScheduleMetadataUpdates   []ttlScheduleMetadataUpdate
 	ttlScheduleCronUpdates       []ttlScheduleCronUpdate
 	ttlSchedulesToCreate         []ttlScheduleToCreate
@@ -38,11 +37,6 @@ type databaseRoleSettingToDelete struct {
 	dbID catid.DescID
 }
 
-type indexesToSplitAndScatter struct {
-	tableID     catid.DescID
-	indexID     catid.IndexID
-	copyIndexID catid.IndexID
-}
 
 type ttlScheduleMetadataUpdate struct {
 	tableID descpb.ID
@@ -77,12 +71,8 @@ func (s *deferredState) DeleteDatabaseRoleSettings(ctx context.Context, dbID des
 func (s *deferredState) AddIndexForMaybeSplitAndScatter(
 	tableID catid.DescID, indexID catid.IndexID, copyIndexID catid.IndexID,
 ) {
-	s.indexesToSplitAndScatter = append(s.indexesToSplitAndScatter,
-		indexesToSplitAndScatter{
-			tableID:     tableID,
-			indexID:     indexID,
-			copyIndexID: copyIndexID,
-		})
+	// No-op: range splits for backfilled indexes are executed post-commit
+	// in runBackfill rather than during pre-commit.
 }
 
 func (s *deferredState) DeleteSchedule(scheduleID jobspb.ScheduleID) {
@@ -273,27 +263,7 @@ func (s *deferredState) exec(
 			return err
 		}
 	}
-	for _, idx := range s.indexesToSplitAndScatter {
-		descs, err := c.MustReadImmutableDescriptors(ctx, idx.tableID)
-		if err != nil {
-			return err
-		}
-		tableDesc := descs[0].(catalog.TableDescriptor)
-		idxDesc, err := catalog.MustFindIndexByID(tableDesc, idx.indexID)
-		if err != nil {
-			return err
-		}
-		var copyIndexSource catalog.Index
-		if idx.copyIndexID != 0 {
-			copyIndexSource, err = catalog.MustFindIndexByID(tableDesc, idx.copyIndexID)
-			if err != nil {
-				return err
-			}
-		}
-		if err := iss.MaybeSplitIndexSpans(ctx, tableDesc, idxDesc, copyIndexSource); err != nil {
-			return err
-		}
-	}
+
 	s.statsToRefresh.ForEach(q.AddTableForStatsRefresh)
 	// Note that we perform the system.jobs writes last in order to acquire locks
 	// on the job rows in question as late as possible. If a restart is

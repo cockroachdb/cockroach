@@ -190,3 +190,46 @@ func TestIndexSplitAndScatterWithStats(t *testing.T) {
 	})
 
 }
+// TestIndexSplitAndScatterAbortedTransactionNoSurvivingSplits verifies that when a
+// transaction creating an index is aborted, no range splits are created or survive on KV
+// to corrupt subsequent index ID reuses (e.g. by TRUNCATE or new index creation).
+func TestIndexSplitAndScatterAbortedTransactionNoSurvivingSplits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t)
+
+	ctx := context.Background()
+	var splitCount atomic.Int64
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforeIndexSplitAndScatter: func(splitPoints [][]byte) {
+					splitCount.Add(int64(len(splitPoints)))
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	runner.Exec(t, "SET CLUSTER SETTING schemachanger.backfiller.skip_splits_for_small_tables.enabled = false")
+	runner.Exec(t, "CREATE TABLE t_abort (k INT PRIMARY KEY, v INT, s STRING)")
+	runner.Exec(t, "INSERT INTO t_abort SELECT i, i, repeat('a', 100) FROM generate_series(1, 1000) AS g(i)")
+	runner.Exec(t, "CREATE STATISTICS st FROM t_abort")
+
+	// Begin an explicit transaction, create an index, and abort it.
+	splitCount.Store(0)
+	txn, err := sqlDB.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	_, err = txn.ExecContext(ctx, "CREATE INDEX idx_aborted ON t_abort (v, s)")
+	require.NoError(t, err)
+	err = txn.Rollback()
+	require.NoError(t, err)
+
+	// Verify that no range splits were executed for the aborted transaction.
+	require.Equal(t, int64(0), splitCount.Load(), "aborted index creation must not create pre-commit range splits")
+
+	// Now create a committed index; verify that split and scatter proceeds cleanly.
+	runner.Exec(t, "CREATE INDEX idx_committed ON t_abort (v)")
+	require.Greater(t, splitCount.Load(), int64(0), "committed index backfill should execute split and scatter")
+}
