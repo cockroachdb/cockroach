@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/errors"
 )
 
@@ -87,6 +88,47 @@ type TableQuery struct {
 	fallback string
 }
 
+// sensitiveSettingsPlaceholder marks the spot in a registry query that wants
+// the list of Sensitive-marked setting names and keys known to this client,
+// rendered as a SQL array literal. Releases from 25.4 read
+// crdb_internal.cluster_settings.sensitive instead; that column does not
+// exist here, so the client's own registry stands in for it.
+const sensitiveSettingsPlaceholder = "__sensitive_settings__"
+
+// sensitiveSettingsArray renders the list as a SQL array literal. It is
+// called from QueryForTable rather than at package initialization: settings
+// registered by packages initialized after this one - the CCL settings among
+// them - would otherwise be missing from the result.
+func sensitiveSettingsArray() string {
+	return renderSensitiveSettingsArray(sensitiveSettingNames())
+}
+
+func renderSensitiveSettingsArray(names []string) string {
+	elems := make([]string, 0, len(names))
+	for _, n := range names {
+		if n == "" {
+			continue
+		}
+		elems = append(elems, lexbase.EscapeSQLString(n))
+	}
+	if len(elems) == 0 {
+		// A setting always compares unequal to every element, so an empty
+		// list scrubs nothing. Typed because an untyped empty ARRAY[] has no
+		// element type to compare against.
+		return "ARRAY[]::STRING[]"
+	}
+	return "ARRAY[" + strings.Join(elems, ", ") + "]"
+}
+
+// expandSensitiveSettings substitutes the sensitive settings list into a
+// registry query. The list is only built for queries that ask for it.
+func expandSensitiveSettings(query string) string {
+	if !strings.Contains(query, sensitiveSettingsPlaceholder) {
+		return query
+	}
+	return strings.ReplaceAll(query, sensitiveSettingsPlaceholder, sensitiveSettingsArray())
+}
+
 // QueryForTable produces the appropriate query for `debug zip` for the given
 // table to use, taking redaction into account. If the provided tableName does
 // not exist in the registry, or no redacted config exists in the registry for
@@ -98,12 +140,18 @@ func (r DebugZipTableRegistry) QueryForTable(tableName string, redact bool) (Tab
 	}
 	if !redact {
 		if tableConfig.customQueryUnredacted != "" {
-			return TableQuery{tableConfig.customQueryUnredacted, tableConfig.customQueryUnredactedFallback}, nil
+			return TableQuery{
+				expandSensitiveSettings(tableConfig.customQueryUnredacted),
+				expandSensitiveSettings(tableConfig.customQueryUnredactedFallback),
+			}, nil
 		}
 		return TableQuery{fmt.Sprintf("TABLE %s", tableName), ""}, nil
 	}
 	if tableConfig.customQueryRedacted != "" {
-		return TableQuery{tableConfig.customQueryRedacted, tableConfig.customQueryRedactedFallback}, nil
+		return TableQuery{
+			expandSensitiveSettings(tableConfig.customQueryRedacted),
+			expandSensitiveSettings(tableConfig.customQueryRedactedFallback),
+		}, nil
 	}
 	if len(tableConfig.nonSensitiveCols) == 0 {
 		return TableQuery{}, errors.Newf("requested redacted query for table %s, but no non-sensitive columns defined", tableName)
@@ -130,6 +178,20 @@ func (r DebugZipTableRegistry) GetTables() []string {
 	sort.Strings(tables)
 	return tables
 }
+
+const queriesTableQueryUnredacted = `SELECT
+	query_id, txn_id, node_id, session_id, user_name, start,
+	crdb_internal.hide_sql_constants(query) AS query,
+	client_address, application_name, distributed, phase, full_scan
+FROM crdb_internal.%s`
+
+const sessionsTableQueryUnredacted = `SELECT
+	node_id, session_id, user_name, client_address, application_name,
+	crdb_internal.hide_sql_constants(active_queries) AS active_queries,
+	crdb_internal.hide_sql_constants(last_active_query) AS last_active_query,
+	num_txns_executed, session_start, active_query_start, kv_txn,
+	alloc_bytes, max_alloc_bytes, status, session_end, trace_id, goroutine_id
+FROM crdb_internal.%s`
 
 var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	"crdb_internal.cluster_contention_events": {
@@ -185,6 +247,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_queries": {
+		customQueryUnredacted: fmt.Sprintf(queriesTableQueryUnredacted, "cluster_queries"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"query_id",
@@ -201,6 +264,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_sessions": {
+		customQueryUnredacted: fmt.Sprintf(sessionsTableQueryUnredacted, "cluster_sessions"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",
@@ -222,6 +286,15 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_settings": {
+		customQueryUnredacted: `SELECT
+			variable,
+			CASE WHEN lower(variable) = ANY (__sensitive_settings__) THEN '<redacted>' ELSE value END value,
+			type,
+			public,
+			description,
+			default_value,
+			origin
+		FROM crdb_internal.cluster_settings`,
 		customQueryRedacted: `SELECT
 			variable,
 			CASE WHEN type = 's' AND value != default_value THEN '<redacted>' ELSE value END value,
@@ -814,6 +887,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.node_queries": {
+		customQueryUnredacted: fmt.Sprintf(queriesTableQueryUnredacted, "node_queries"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"query_id",
@@ -838,6 +912,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.node_sessions": {
+		customQueryUnredacted: fmt.Sprintf(sessionsTableQueryUnredacted, "node_sessions"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",
@@ -1090,17 +1165,61 @@ var zipSystemTables = DebugZipTableRegistry{
 			FROM system.descriptor`,
 	},
 	"system.eventlog": {
-		// A password bound via a placeholder (CREATE ROLE ... WITH PASSWORD
-		// $1) was recorded raw in the PlaceholderValues field of the info
-		// payload by historical rows, so that field is dropped for
-		// role-change events. Their Statement field is safe: password
-		// literals are substituted with '*****' at write time.
+		// Setting-change events carry the new value in the info payload - in
+		// the Value field, and (for historical rows written before the value
+		// was redacted at write time) in the raw statement text of the
+		// Statement and PlaceholderValues fields. For sensitive settings
+		// these are secrets, so the info payload is rewritten for such rows:
+		// Value is replaced and the statement fields are dropped. The
+		// SettingName recorded here is the setting's user-visible name;
+		// sensitiveSettingNames() returns names and internal keys alike, so
+		// the match covers renamed settings either way. A name with no match
+		// in the server's registry (retired, or written by a newer version
+		// before a downgrade) is conservatively treated as sensitive. Resets
+		// (Value = 'DEFAULT') carry no secret and are left intact.
+		//
+		// Role-change events have an analogous hole: a password bound via a
+		// placeholder (CREATE ROLE ... WITH PASSWORD $1) was recorded raw in
+		// PlaceholderValues by historical rows, so that field is dropped for
+		// them. Their Statement field is safe: password literals are
+		// substituted with '*****' at write time.
 		customQueryUnredacted: `SELECT
 	timestamp,
 	"eventType",
 	"targetID",
 	"reportingID",
 	CASE
+		WHEN "eventType" IN ('set_cluster_setting', 'set_tenant_cluster_setting')
+			AND COALESCE(info::jsonb ->> 'Value', '') NOT IN ('', 'DEFAULT')
+			AND (
+				lower(info::jsonb ->> 'SettingName') = ANY (__sensitive_settings__)
+				OR NOT EXISTS (
+					SELECT 1 FROM crdb_internal.cluster_settings cs
+					WHERE cs.variable = info::jsonb ->> 'SettingName'
+				)
+			)
+		THEN (((info::jsonb || '{"Value": "<redacted>"}') - 'Statement') - 'PlaceholderValues')::string
+		WHEN "eventType" IN ('create_role', 'alter_role')
+			AND info::jsonb ? 'PlaceholderValues'
+		THEN (info::jsonb - 'PlaceholderValues')::string
+		ELSE info
+	END AS info,
+	"uniqueID"
+FROM system.eventlog`,
+		// The fallback redacts every setting-change event rather than only
+		// the sensitive ones. It drops the per-row registry lookup, which is
+		// what makes it cheap enough to survive the reason it is usually
+		// reached: the primary query exceeding the zip's statement timeout on
+		// a large eventlog.
+		customQueryUnredactedFallback: `SELECT
+	timestamp,
+	"eventType",
+	"targetID",
+	"reportingID",
+	CASE
+		WHEN "eventType" IN ('set_cluster_setting', 'set_tenant_cluster_setting')
+			AND COALESCE(info::jsonb ->> 'Value', '') NOT IN ('', 'DEFAULT')
+		THEN (((info::jsonb || '{"Value": "<redacted>"}') - 'Statement') - 'PlaceholderValues')::string
 		WHEN "eventType" IN ('create_role', 'alter_role')
 			AND info::jsonb ? 'PlaceholderValues'
 		THEN (info::jsonb - 'PlaceholderValues')::string
@@ -1328,8 +1447,29 @@ FROM system.scheduled_jobs`,
 			"executor_type",
 		},
 	},
+	// Values of sensitive settings (secrets) are redacted even in unredacted
+	// zips. Which settings those are is decided by this client's own compiled-in
+	// registry; the server-side `crdb_internal.cluster_settings.sensitive`
+	// column that later releases consult does not exist here. The `name`
+	// column holds the setting's internal key, not its user-visible name -
+	// sensitiveSettingNames() returns both, so the match covers either. The
+	// left join remains, now solely to spot a row naming a setting the server
+	// does not have (retired, or written by a newer version before a
+	// downgrade); nothing is known about such a row, so it is conservatively
+	// treated as sensitive. It is a left join, not an inner one, so that the
+	// row survives into the dump rather than vanishing from it.
 	"system.settings": {
-		customQueryUnredacted: `SELECT * FROM system.settings`,
+		customQueryUnredacted: `
+SELECT
+	name,
+	CASE
+		WHEN cs.key IS NULL OR lower(s.name) = ANY (__sensitive_settings__) THEN '<redacted>'
+		ELSE s.value
+	END value,
+	s."lastUpdated",
+	s."valueType"
+FROM system.settings s
+LEFT JOIN crdb_internal.cluster_settings cs ON cs.key = s.name`,
 		customQueryRedacted: `SELECT * FROM (
     		SELECT *
     		FROM system.settings
@@ -1537,6 +1677,39 @@ limit 5000;`,
 		},
 	},
 	"system.tenant_settings": {
+		// As for system.settings: sensitive values are redacted even in
+		// unredacted zips, decided against this client's registry, and a name
+		// the server's registry does not have is conservatively treated as
+		// sensitive. The empty string is preserved to distinguish unset from
+		// set.
+		customQueryUnredacted: `SELECT
+	tenant_id,
+	name,
+	CASE
+		WHEN ts.value != '' AND (
+			lower(ts.name) = ANY (__sensitive_settings__)
+			OR NOT EXISTS (
+				SELECT 1 FROM crdb_internal.cluster_settings cs
+				WHERE cs.key = ts.name
+			)
+		)
+		THEN '<redacted>'
+		ELSE ts.value
+	END AS value,
+	last_updated,
+	value_type,
+	reason
+FROM system.tenant_settings ts`,
+		// The fallback drops the per-row registry lookup, so it cannot tell a
+		// secret from an ordinary override; every set value is redacted.
+		customQueryUnredactedFallback: `SELECT
+	tenant_id,
+	name,
+	CASE WHEN ts.value != '' THEN '<redacted>' ELSE ts.value END AS value,
+	last_updated,
+	value_type,
+	reason
+FROM system.tenant_settings ts`,
 		customQueryRedacted: `SELECT * FROM (
 			SELECT *
 			FROM system.tenant_settings

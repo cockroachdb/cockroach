@@ -154,6 +154,15 @@ func TestTableRegistryConfigs(t *testing.T) {
 				"table %q has both customQueryRedacted and nonSensitiveCols. These fields are mutually exclusive.",
 				table)
 		}
+		// Redacted zips must stay redacted even when a query times out or
+		// fails: a fallback that runs in place of the redacted query could
+		// silently reintroduce sensitive data. If a redacted fallback ever
+		// becomes necessary, it must redact at least as much as the primary
+		// query, and this check should be replaced with one that verifies
+		// that property.
+		if regConfig.customQueryRedactedFallback != "" {
+			t.Fatalf("table %q has a customQueryRedactedFallback; redacted queries must not have fallbacks", table)
+		}
 	}
 
 	for table, regConfig := range zipInternalTablesPerCluster {
@@ -170,15 +179,26 @@ func TestTableRegistryConfigs(t *testing.T) {
 func executeAllCustomQuerys(
 	t *testing.T, sqlDB *sqlutils.SQLRunner, tableRegistry DebugZipTableRegistry,
 ) {
+	// The queries are taken from QueryForTable rather than read off the
+	// config: registry queries can carry placeholders that only QueryForTable
+	// expands, and the raw form is not valid SQL.
+	execute := func(table string, redact bool) {
+		tq, err := tableRegistry.QueryForTable(table, redact)
+		require.NoError(t, err)
+		for _, q := range []string{tq.query, tq.fallback} {
+			if q == "" {
+				continue
+			}
+			rows := sqlDB.Query(t, q)
+			require.NoError(t, rows.Err(), "failed to select for table %s (redact=%t)", table, redact)
+		}
+	}
 	for table, regConfig := range tableRegistry {
 		if regConfig.customQueryRedacted != "" {
-			rows := sqlDB.Query(t, regConfig.customQueryRedacted)
-			require.NoError(t, rows.Err(), "failed to select for table %s redacted", table)
+			execute(table, true /* redact */)
 		}
-
 		if regConfig.customQueryUnredacted != "" {
-			rows := sqlDB.Query(t, regConfig.customQueryUnredacted)
-			require.NoError(t, rows.Err(), "failed to select for table %s unredacted", table)
+			execute(table, false /* redact */)
 		}
 	}
 }
@@ -327,6 +347,141 @@ func TestStoredCredentialsScrubbedFromZipDumps(t *testing.T) {
 				fmt.Sprintf("SELECT %s FROM (%s) WHERE %s", tc.value, query, tc.key))
 			require.Lenf(t, rows, 1, "row missing from the %s dump", tc.table)
 			require.Equal(t, "<redacted>", rows[0][0])
+		})
+	}
+}
+
+// TestSensitiveSettingsArray checks the rendering of the setting list that
+// stands in for crdb_internal.cluster_settings.sensitive on this release.
+func TestSensitiveSettingsArray(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	got := sensitiveSettingsArray()
+	require.True(t, strings.HasPrefix(got, "ARRAY["), got)
+	require.Contains(t, got, "'cloudstorage.http.custom_ca'")
+	require.NotContains(t, got, "'kv.range_merge.queue.enabled'")
+
+	// The degenerate case cannot arise while any package defining a sensitive
+	// setting is linked in, but it must still be valid SQL that matches
+	// nothing rather than a syntax error.
+	require.Equal(t, "ARRAY[]::STRING[]", renderSensitiveSettingsArray(nil))
+	// Names are escaped rather than hand-quoted.
+	require.Equal(t, `ARRAY[e'a\'b']`, renderSensitiveSettingsArray([]string{"", "a'b"}))
+}
+
+// TestSensitiveSettingScrubbedFromZipDumps verifies that the unredacted zip
+// queries never emit the values of sensitive cluster settings: neither from
+// system.settings and system.tenant_settings, nor from historical eventlog
+// rows (written before values were redacted at write time, including the raw
+// statement text in the info payload), nor from events naming a setting that
+// no longer matches the registry.
+func TestSensitiveSettingScrubbedFromZipDumps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(srv.SQLConn(t))
+
+	const secret = "hunter2-zip-secret"
+	// The exemplar is a sensitive setting defined in pkg/cloud, which is
+	// linked into this test binary. A setting whose defining package is not
+	// would be invisible to sensitiveSettingNames() here.
+	const sensitiveSetting = "cloudstorage.http.custom_ca"
+
+	// Simulate pre-fix eventlog rows: one for a sensitive setting with the
+	// raw value and statement text, one for a setting unknown to the
+	// registry (retired/renamed), and one for a non-sensitive setting.
+	insertEvent := func(name, value string) {
+		info := fmt.Sprintf(
+			`{"EventType": "set_cluster_setting", "SettingName": "%s", "Value": "%s", `+
+				`"Statement": "SET CLUSTER SETTING %s = '%s'", "PlaceholderValues": ["'%s'"], "User": "root"}`,
+			name, value, name, value, value)
+		sqlDB.Exec(t,
+			`INSERT INTO system.eventlog (timestamp, "eventType", "targetID", "reportingID", info) VALUES (now(), 'set_cluster_setting', 0, 1, $1)`,
+			info)
+	}
+	insertEvent(sensitiveSetting, secret)
+	insertEvent("some.retired.setting", secret)
+	insertEvent("cluster.label", "not-a-secret")
+
+	sqlDB.Exec(t, fmt.Sprintf(
+		"SET CLUSTER SETTING %s = '%s'", sensitiveSetting, secret))
+	sqlDB.Exec(t, fmt.Sprintf(
+		"ALTER TENANT ALL SET CLUSTER SETTING %s = '%s'", sensitiveSetting, secret))
+
+	for _, table := range []string{
+		"system.eventlog",
+		"system.settings",
+		"system.tenant_settings",
+	} {
+		t.Run(table, func(t *testing.T) {
+			tableQuery, err := zipSystemTables.QueryForTable(table, false /* redact */)
+			require.NoError(t, err)
+			requireNoSecretInQuery(t, sqlDB, secret, tableQuery.query)
+			// The fallback runs whenever the primary query fails - most often
+			// when it times out on a busy cluster. It must hold the secret
+			// back just as tightly.
+			if tableQuery.fallback != "" {
+				requireNoSecretInQuery(t, sqlDB, secret, tableQuery.fallback)
+			}
+		})
+	}
+
+	// The non-sensitive event passes through intact, including its statement.
+	eventlogQuery, err := zipSystemTables.QueryForTable("system.eventlog", false /* redact */)
+	require.NoError(t, err)
+	var info string
+	sqlDB.QueryRow(t,
+		"SELECT info FROM ("+eventlogQuery.query+
+			`) WHERE info LIKE '%cluster.label%' AND info LIKE '%not-a-secret%'`,
+	).Scan(&info)
+	require.Contains(t, info, `SET CLUSTER SETTING cluster.label = 'not-a-secret'`)
+}
+
+// TestSettingsZipDumpsJoinOnInternalKey verifies that the system.settings and
+// system.tenant_settings dumps match rows against the setting registry by
+// internal key. Their `name` column holds the key, not the user-visible name,
+// so matching on the name silently loses every setting renamed via
+// WithName(): the row is either dropped from the dump or conservatively
+// redacted.
+func TestSettingsZipDumpsJoinOnInternalKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(srv.SQLConn(t))
+
+	// A non-sensitive setting whose user-visible name differs from its
+	// internal key. The assertion below keeps the test honest if the setting
+	// is ever un-renamed - pick another renamed setting rather than dropping
+	// the coverage.
+	const name = "kv.transaction.write_pipelining.enabled"
+	const key = "kv.transaction.write_pipelining_enabled"
+	var gotKey string
+	sqlDB.QueryRow(t,
+		"SELECT key FROM crdb_internal.cluster_settings WHERE variable = $1", name).Scan(&gotKey)
+	require.Equalf(t, key, gotKey,
+		"%s is no longer a renamed setting; this test needs one to be meaningful", name)
+
+	sqlDB.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = false", name))
+	sqlDB.Exec(t, fmt.Sprintf("ALTER TENANT ALL SET CLUSTER SETTING %s = false", name))
+
+	for _, table := range []string{"system.settings", "system.tenant_settings"} {
+		t.Run(table, func(t *testing.T) {
+			tableQuery, err := zipSystemTables.QueryForTable(table, false /* redact */)
+			require.NoError(t, err)
+			rows := sqlDB.QueryStr(t,
+				"SELECT value FROM ("+tableQuery.query+") WHERE name = $1", key)
+			require.Lenf(t, rows, 1, "row for %s missing from the %s dump", key, table)
+			require.Equal(t, "false", rows[0][0])
 		})
 	}
 }
