@@ -1117,8 +1117,21 @@ FROM system.eventlog`,
 		},
 	},
 	"system.external_connections": {
-		// `connection_details` column may contain customer infra IP addresses,
-		// URI params containing access keys, etc.
+		// `connection_details` holds the encoded endpoint URI, whose query
+		// params carry the credentials used to reach it (cloud storage access
+		// keys, Kafka SASL passwords, and the like). There is no way to strip
+		// just the credentials from the encoded proto in SQL, and a denylist
+		// of parameter names would fail open as new providers are added, so
+		// the whole column is dropped from unredacted zips too.
+		customQueryUnredacted: `SELECT
+	connection_name,
+	created,
+	updated,
+	connection_type,
+	'<redacted>' AS connection_details,
+	owner,
+	owner_id
+FROM system.external_connections`,
 		nonSensitiveCols: NonSensitiveColumns{
 			"connection_name",
 			"created",
@@ -1286,8 +1299,23 @@ FROM system.eventlog`,
 		},
 	},
 	"system.scheduled_jobs": {
-		// `execution_args` column contains BACKUP statements which can contain
-		// sensitive URI params, such as AWS keys.
+		// `execution_args` holds the statement the schedule runs, typically a
+		// BACKUP whose collection URI carries cloud storage credentials in its
+		// query params. As with system.external_connections, the credentials
+		// cannot be separated from the rest of the encoded proto in SQL, so
+		// the whole column is dropped from unredacted zips too.
+		customQueryUnredacted: `SELECT
+	schedule_id,
+	schedule_name,
+	created,
+	owner,
+	next_run,
+	schedule_state,
+	schedule_expr,
+	schedule_details,
+	executor_type,
+	'<redacted>' AS execution_args
+FROM system.scheduled_jobs`,
 		nonSensitiveCols: NonSensitiveColumns{
 			"schedule_id",
 			"schedule_name",
@@ -1371,9 +1399,10 @@ FROM system.eventlog`,
 		},
 	},
 	"system.statement_diagnostics": {
-		// `bundle_chunks` column contains diagnostic bundle bytes, which
-		// contain unredacted information such as SQL arguments and
-		// unredacted trace logs.
+		// `trace` column contains the bundle's trace payload, with unredacted
+		// information such as SQL arguments and log messages. `bundle_chunks`
+		// holds only chunk IDs; the bundle bytes they refer to live in
+		// system.statement_bundle_chunks, which zips do not collect.
 		nonSensitiveCols: NonSensitiveColumns{
 			"id",
 			"statement_fingerprint",
