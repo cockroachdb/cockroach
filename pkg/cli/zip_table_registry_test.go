@@ -244,6 +244,93 @@ func TestRoleEventPlaceholdersScrubbedFromZipDumps(t *testing.T) {
 	require.NotContains(t, info, secret)
 }
 
+// requireNoSecretInQuery runs query and fails if secret appears in any column
+// of any row it returns.
+func requireNoSecretInQuery(t *testing.T, sqlDB *sqlutils.SQLRunner, secret string, query string) {
+	t.Helper()
+	rows := sqlDB.Query(t, query)
+	defer rows.Close()
+	cols, err := rows.Columns()
+	require.NoError(t, err)
+	vals := make([]interface{}, len(cols))
+	for i := range vals {
+		vals[i] = new(interface{})
+	}
+	for rows.Next() {
+		require.NoError(t, rows.Scan(vals...))
+		for i, v := range vals {
+			raw := *(v.(*interface{}))
+			// BYTES columns scan as []byte, which fmt renders as a list of
+			// decimal byte values - the secret would slip through the
+			// substring check below.
+			s, ok := raw.([]byte)
+			if !ok {
+				s = []byte(fmt.Sprint(raw))
+			}
+			require.NotContainsf(t, string(s), secret,
+				"secret leaked in column %s of query:\n%s", cols[i], query)
+		}
+	}
+	require.NoError(t, rows.Err())
+}
+
+// TestStoredCredentialsScrubbedFromZipDumps verifies that the unredacted zip
+// queries do not emit the columns that hold endpoint credentials: the encoded
+// connection URI in system.external_connections, and the scheduled statement
+// in system.scheduled_jobs. Both carry cloud storage keys in URI query params.
+func TestStoredCredentialsScrubbedFromZipDumps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(srv.SQLConn(t))
+
+	const secret = "hunter2-zip-access-key"
+
+	// The rows are written directly rather than through CREATE EXTERNAL
+	// CONNECTION / CREATE SCHEDULE, which would try to reach the endpoint. All
+	// the dumps see is the encoded proto, so the bytes only need to contain
+	// the secret, not be a well-formed one.
+	sqlDB.Exec(t, `INSERT INTO system.external_connections
+		(connection_name, connection_type, connection_details, owner, owner_id)
+		VALUES ('backup-target', 'STORAGE', $1, 'root', 1)`,
+		[]byte("s3://bucket/path?AWS_SECRET_ACCESS_KEY="+secret))
+	sqlDB.Exec(t, `INSERT INTO system.scheduled_jobs
+		(schedule_id, schedule_name, owner, executor_type, execution_args)
+		VALUES (1, 'nightly', 'root', 'scheduled-backup-executor', $1)`,
+		[]byte("BACKUP INTO 's3://bucket/path?AWS_SECRET_ACCESS_KEY="+secret+"'"))
+
+	for _, tc := range []struct {
+		table string
+		// key identifies the row inserted above, so the check cannot pass
+		// just because the dump returned nothing.
+		key   string
+		value string
+	}{
+		{"system.external_connections", "connection_name = 'backup-target'", "connection_details"},
+		{"system.scheduled_jobs", "schedule_id = 1", "execution_args"},
+	} {
+		t.Run(tc.table, func(t *testing.T) {
+			// Go through QueryForTable rather than reading the registry entry
+			// directly: without an unredacted query it hands back a plain
+			// `TABLE`, which is exactly the leak being guarded against.
+			tableQuery, err := zipSystemTables.QueryForTable(tc.table, false /* redact */)
+			require.NoError(t, err)
+			query := tableQuery.query
+			requireNoSecretInQuery(t, sqlDB, secret, query)
+
+			rows := sqlDB.QueryStr(t,
+				fmt.Sprintf("SELECT %s FROM (%s) WHERE %s", tc.value, query, tc.key))
+			require.Lenf(t, rows, 1, "row missing from the %s dump", tc.table)
+			require.Equal(t, "<redacted>", rows[0][0])
+		})
+	}
+}
+
 func executeSelectOnNonSensitiveColumns(
 	t *testing.T, sqlDB *sqlutils.SQLRunner, tableRegistry DebugZipTableRegistry,
 ) {
