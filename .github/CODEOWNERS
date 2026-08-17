@@ -53,12 +53,10 @@
 /pkg/sql/stats/              @cockroachdb/sql-queries-prs
 
 /pkg/sql/col*                @cockroachdb/sql-queries-prs
-/pkg/sql/create_stats*       @cockroachdb/sql-queries-prs
 /pkg/sql/distsql*.go         @cockroachdb/sql-queries-prs
 /pkg/sql/execinfra/          @cockroachdb/sql-queries-prs
 /pkg/sql/execinfra/merge_metrics.go @cockroachdb/sql-foundations-prs
 /pkg/sql/execinfrapb/        @cockroachdb/sql-queries-prs
-/pkg/sql/execstats/          @cockroachdb/sql-queries-prs
 /pkg/sql/execinfrapb/processors_bulk_io.proto     @cockroachdb/disaster-recovery
 /pkg/sql/execinfrapb/processors_changefeeds.proto @cockroachdb/cdc-prs
 /pkg/sql/execinfrapb/processors_export.proto      @cockroachdb/cdc-prs
@@ -87,7 +85,7 @@
 
 /pkg/sql/appstatspb           @cockroachdb/obs-prs
 /pkg/sql/contention/          @cockroachdb/obs-prs
-/pkg/sql/execstats/           @cockroachdb/obs-prs
+/pkg/sql/execstats/           @cockroachdb/sql-queries-prs @cockroachdb/obs-prs
 /pkg/sql/scheduledlogging/    @cockroachdb/obs-prs
 /pkg/sql/sqlstats/            @cockroachdb/obs-prs
 /pkg/sql/sqlliveness/         @cockroachdb/server-prs
@@ -138,6 +136,7 @@
 /pkg/sql/alter*.go           @cockroachdb/sql-foundations-prs
 /pkg/sql/backfill*.go        @cockroachdb/sql-foundations-prs
 /pkg/sql/create*.go          @cockroachdb/sql-foundations-prs
+/pkg/sql/create_stats*       @cockroachdb/sql-queries-prs
 /pkg/sql/database*.go        @cockroachdb/sql-foundations-prs
 /pkg/sql/drop*.go            @cockroachdb/sql-foundations-prs
 /pkg/sql/grant*.go           @cockroachdb/sql-foundations-prs
@@ -185,8 +184,8 @@
 /pkg/cli/mt_proxy.go         @cockroachdb/sqlproxy-prs  @cockroachdb/server-prs
 /pkg/cli/mt_start_sql.go     @cockroachdb/sqlproxy-prs  @cockroachdb/server-prs
 /pkg/cli/mt_test_directory.go @cockroachdb/sqlproxy-prs @cockroachdb/server-prs
-/pkg/cli/nodelocal*.go       @cockroachdb/disaster-recovery
 /pkg/cli/node*.go            @cockroachdb/kv-prs         @cockroachdb/cli-prs
+/pkg/cli/nodelocal*.go       @cockroachdb/disaster-recovery
 /pkg/cli/rpc*.go             @cockroachdb/kv-prs         @cockroachdb/cli-prs
 /pkg/cli/sql*.go             @cockroachdb/sql-foundations-prs   @cockroachdb/cli-prs
 /pkg/cli/start*.go           @cockroachdb/server-prs     @cockroachdb/cli-prs
@@ -277,8 +276,6 @@
 /pkg//backup/*_job.go        @cockroachdb/disaster-recovery @cockroachdb/jobs-prs
 /pkg/sql/exec_util_backup.go @cockroachdb/disaster-recovery
 /pkg/revert/          @cockroachdb/disaster-recovery
-/pkg/storage/encryption.go           @cockroachdb/disaster-recovery
-/pkg/storage/external_sst_reader.go  @cockroachdb/disaster-recovery
 /pkg/cloud/                  @cockroachdb/disaster-recovery
 /pkg/sql/distsql_plan_bulk*  @cockroachdb/disaster-recovery
 /pkg/sql/catalog/externalcatalog            @cockroachdb/disaster-recovery
@@ -374,6 +371,8 @@
 /pkg/raft/ @cockroachdb/kv-prs
 
 /pkg/storage/                @cockroachdb/storage
+/pkg/storage/encryption.go           @cockroachdb/disaster-recovery
+/pkg/storage/external_sst_reader.go  @cockroachdb/disaster-recovery
 /pkg/storage/fs/             @cockroachdb/storage
 
 /pkg/ui/                     @cockroachdb/obs-prs
