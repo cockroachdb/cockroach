@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -116,6 +117,34 @@ func JoinPathPreservingTrailingSlash(prefix, suffix string) string {
 		out += "/"
 	}
 	return out
+}
+
+// SanitizedJoin joins userPath onto basePath and returns the result, verifying
+// that the joined path does not escape above basePath via ".." segments. NB:
+// this helper only returns an error if the ".." sequence escapes the base path.
+func SanitizedJoin(basePath, userPath string) (string, error) {
+	joined := path.Join(basePath, userPath)
+	if basePath == "" {
+		if strings.HasPrefix(joined, "..") {
+			return "", errors.New("the provided path escapes the base directory")
+		}
+		return joined, nil
+	}
+	// path.Join cleans joined (dropping any trailing slash), so clean basePath
+	// the same way before comparing. Otherwise a trailing slash in basePath
+	// (e.g. "/backups/" from url.Parse("s3://bucket/backups/")) produces a
+	// doubled slash in the prefix check ("/backups//") and rejects legitimate
+	// subdirectory joins.
+	basePath = path.Clean(basePath)
+	if basePath == "/" {
+		return joined, nil
+	}
+	// joined == basePath covers the case where userPath is empty or ".",
+	// since the prefix check requires a trailing slash.
+	if !strings.HasPrefix(joined, basePath+"/") && joined != basePath {
+		return "", errors.New("the provided path escapes the base directory")
+	}
+	return joined, nil
 }
 
 // ParseRoleString parses a comma separated string of roles into a list of
