@@ -213,14 +213,7 @@ func StageApplication(
 		return err
 	}
 
-	switch applicationName {
-	case "cockroach":
-		err := stageRemoteBinary(
-			ctx, l, c, applicationName, "cockroach/cockroach", version, archInfo.DebugArchitecture, destDir,
-		)
-		if err != nil {
-			return err
-		}
+	stageLibraries := func(failOnNotFound bool) error {
 		// NOTE: libraries may not be present in older versions.
 		// Use the sha for the binary to download the same remote library.
 		for _, library := range crdbLibraries {
@@ -234,11 +227,23 @@ func StageApplication(
 				archInfo.DebugArchitecture,
 				archInfo.LibraryExtension,
 				destDir,
+				failOnNotFound,
 			); err != nil {
 				return err
 			}
 		}
 		return nil
+	}
+
+	switch applicationName {
+	case "cockroach":
+		err := stageRemoteBinary(
+			ctx, l, c, applicationName, "cockroach/cockroach", version, archInfo.DebugArchitecture, destDir,
+		)
+		if err != nil {
+			return err
+		}
+		return stageLibraries(false /* failOnNotFound */)
 	case "workload":
 		// N.B. After https://github.com/cockroachdb/cockroach/issues/103563, only arm64 build uses the $os-$arch suffix.
 		// E.g., workload.LATEST is for linux-amd64, workload.linux-gnu-arm64.LATEST is for linux-arm64.
@@ -254,6 +259,8 @@ func StageApplication(
 		return StageCockroachRelease(ctx, l, c, releaseTypeRelease, version, archInfo.ReleaseArchitecture, archInfo.ReleaseArchiveExtension, destDir)
 	case "customized":
 		return StageCockroachRelease(ctx, l, c, releaseTypeCustomized, version, archInfo.ReleaseArchitecture, archInfo.ReleaseArchiveExtension, destDir)
+	case "lib":
+		return stageLibraries(true /* failOnNotFound */)
 	default:
 		return fmt.Errorf("unknown application %s", applicationName)
 	}
@@ -355,12 +362,14 @@ func stageRemoteBinary(
 // StageOptionalRemoteLibrary downloads a library from the cockroach edge with
 // the provided application path to each specified by the cluster to <dir>/lib.
 // If no SHA is specified, the latest build of the library is used instead.
-// It will not error if the library does not exist on the edge.
+// If failOnNotFound is false, it will not error if the library does not exist on the edge.
+// If failOnNotFound is true, it will return an error if the library cannot be downloaded.
 func StageOptionalRemoteLibrary(
 	ctx context.Context,
 	l *logger.Logger,
 	c *SyncedCluster,
 	libraryName, urlPathBase, SHA, arch, ext, dir string,
+	failOnNotFound bool,
 ) error {
 	url, err := getEdgeURL(urlPathBase, SHA, arch, ext)
 	if err != nil {
@@ -369,14 +378,26 @@ func StageOptionalRemoteLibrary(
 	libDir := filepath.Join(dir, "lib")
 	target := filepath.Join(libDir, libraryName+ext)
 	l.Printf("Resolved library url for %s: %s", libraryName, url)
-	cmdStr := fmt.Sprintf(
-		`mkdir -p "%s" && \
+
+	var cmdStr string
+	if failOnNotFound {
+		cmdStr = fmt.Sprintf(
+			`mkdir -p "%s" && curl -sfSL -o "%s" "%s"`,
+			libDir,
+			target,
+			url,
+		)
+	} else {
+		cmdStr = fmt.Sprintf(
+			`mkdir -p "%s" && \
 curl -sfSL -o "%s" "%s" 2>/dev/null || echo 'optional library %s not found; continuing...'`,
-		libDir,
-		target,
-		url,
-		libraryName+ext,
-	)
+			libDir,
+			target,
+			url,
+			libraryName+ext,
+		)
+	}
+
 	return c.Run(
 		ctx, l, l.Stdout, l.Stderr, WithNodes(c.Nodes), fmt.Sprintf("staging library (%s)", libraryName), cmdStr,
 	)
