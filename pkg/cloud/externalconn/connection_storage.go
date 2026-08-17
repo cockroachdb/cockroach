@@ -8,7 +8,6 @@ package externalconn
 import (
 	"context"
 	"net/url"
-	"path"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
@@ -84,7 +83,12 @@ func makeExternalConnectionStorage(
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to parse `nodelocal` URI")
 		}
-		uri.Path = path.Join(uri.Path, cfg.Path)
+		joinedPath, err := cloud.SanitizedJoin(uri.Path, cfg.Path)
+		if err != nil {
+			return nil, errors.Wrap(err,
+				"the subdirectory in the external:// URI escapes the external connection's base directory")
+		}
+		uri.Path = joinedPath
 		return cloud.ExternalStorageFromURI(ctx, uri.String(), args.IOConf, args.Settings,
 			args.BlobClientFactory, username.MakeSQLUsernameFromPreNormalizedString(cfg.User),
 			args.DB, args.Limiters, args.MetricsRecorder, args.Options...)
