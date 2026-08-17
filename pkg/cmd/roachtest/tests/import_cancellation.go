@@ -31,7 +31,7 @@ func registerImportCancellation(r registry.Registry) {
 		Owner:   registry.OwnerSQLQueries,
 		Timeout: 6 * time.Hour,
 		Cluster: r.MakeClusterSpec(6, spec.CPU(32)),
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-scoped cockroach-fixtures-us-east1 bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
@@ -78,8 +78,9 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		"orders":   8,
 		"lineitem": 2,
 	}
+	fixtureBaseURI := strings.TrimSuffix(tpchBaseURL("csv"), "/")
 	for tbl := range tablesToNumFiles {
-		fixtureURL := fmt.Sprintf("gs://cockroach-fixtures-us-east1/tpch-csv/schema/%s.sql?AUTH=implicit", tbl)
+		fixtureURL := fmt.Sprintf("%s/schema/%s.sql?AUTH=implicit", fixtureBaseURI, tbl)
 		createStmt, err := readCreateTableFromFixture(fixtureURL, conn)
 		if err != nil {
 			t.Fatal(err)
@@ -100,10 +101,11 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	}
 
 	test := importCancellationTest{
-		Test:    t,
-		c:       c,
-		rootRng: rng,
-		seed:    seed,
+		Test:           t,
+		c:              c,
+		rootRng:        rng,
+		seed:           seed,
+		fixtureBaseURI: fixtureBaseURI,
 	}
 	m := c.NewDeprecatedMonitor(ctx)
 	t.Status("running imports with seed ", seed)
@@ -158,15 +160,17 @@ type importCancellationTest struct {
 	c       cluster.Cluster
 	rootRng *rand.Rand
 	seed    int64
+	// fixtureBaseURI has no trailing slash.
+	fixtureBaseURI string
 }
 
 func (t *importCancellationTest) makeFilename(tableName string, number int, numFiles int) string {
 	// Tables with more than one files have the number as a suffix on the
 	// filename, `<tablename>.tbl.1`. Tables with a single file do not.
 	if numFiles > 1 {
-		return fmt.Sprintf(`'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.%[2]d?AUTH=implicit'`, tableName, number)
+		return fmt.Sprintf(`'%[1]s/sf-100/%[2]s.tbl.%[3]d?AUTH=implicit'`, t.fixtureBaseURI, tableName, number)
 	}
-	return fmt.Sprintf(`'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl?AUTH=implicit'`, tableName)
+	return fmt.Sprintf(`'%[1]s/sf-100/%[2]s.tbl?AUTH=implicit'`, t.fixtureBaseURI, tableName)
 }
 
 func (t *importCancellationTest) runImportSequence(

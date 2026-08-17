@@ -6,6 +6,7 @@
 package tests
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -93,5 +94,22 @@ func TestTPCHBaseURLForProject(t *testing.T) {
 		t,
 		"gs://cockroach-fixtures-us-east1-crl-e2e-infra-staging/tpch-parquet/",
 		tpchBaseURLForProject("parquet", "crl-e2e-infra-staging"),
+	)
+}
+
+func TestImportCancellationFilename(t *testing.T) {
+	fixtureBaseURI := strings.TrimSuffix(
+		tpchBaseURLForProject("csv", "crl-e2e-infra-staging"), "/",
+	)
+	test := importCancellationTest{fixtureBaseURI: fixtureBaseURI}
+	require.Equal(
+		t,
+		"'gs://cockroach-fixtures-us-east1-crl-e2e-infra-staging/tpch-csv/sf-100/region.tbl?AUTH=implicit'",
+		test.makeFilename("region", 1, 1),
+	)
+	require.Equal(
+		t,
+		"'gs://cockroach-fixtures-us-east1-crl-e2e-infra-staging/tpch-csv/sf-100/part.tbl.2?AUTH=implicit'",
+		test.makeFilename("part", 2, 8),
 	)
 }
