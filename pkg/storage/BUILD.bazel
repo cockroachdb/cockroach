@@ -165,6 +165,7 @@ go_test(
         "storage_test.go",
         "store_properties_test.go",
         "temp_engine_test.go",
+        "wal_failover_ingest_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":storage"],
