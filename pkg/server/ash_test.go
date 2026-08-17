@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
@@ -192,4 +193,95 @@ func TestASHVirtualTableAccessControl(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestASHClusterSettingsSeparateProcessTenantCanModify(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	_, tenantDB := serverutils.StartTenant(t, srv, base.TestTenantArgs{
+		TenantName: "ext-ash",
+		TenantID:   serverutils.TestTenantID(),
+	})
+	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
+
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "obs.ash.enabled", value: "true", want: "true"},
+		{name: "obs.ash.sample_interval", value: "'250ms'", want: "00:00:00.25"},
+		{name: "obs.ash.buffer_size", value: "2048", want: "2048"},
+		{name: "obs.ash.log_interval", value: "'2m'", want: "00:02:00"},
+		{name: "obs.ash.log_top_n", value: "7", want: "7"},
+	} {
+		tenantSQL.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = %s", tc.name, tc.value))
+		tenantSQL.CheckQueryResults(t,
+			fmt.Sprintf("SHOW CLUSTER SETTING %s", tc.name),
+			[][]string{{tc.want}},
+		)
+	}
+}
+
+func TestASHClusterSettingsSharedProcessTenantDoesNotControlSampler(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ash.ResetGlobalSamplerForTesting()
+
+	ctx := context.Background()
+	srv, systemDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	systemSQL := sqlutils.MakeSQLRunner(systemDB)
+	systemSQL.Exec(t, `SET CLUSTER SETTING obs.ash.enabled = true`)
+	systemSQL.Exec(t, `SET CLUSTER SETTING obs.ash.sample_interval = '10ms'`)
+
+	_, tenantDB := serverutils.StartSharedProcessTenant(t, srv, base.TestSharedProcessTenantArgs{
+		TenantName: "shared-ash",
+		TenantID:   serverutils.TestTenantID(),
+	})
+	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
+	tenantSQL.Exec(t, `SET CLUSTER SETTING obs.ash.enabled = false`)
+	tenantSQL.Exec(t, `SET application_name = 'shared_process_app'`)
+	tenantSQL.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY, data STRING)`)
+	tenantSQL.Exec(t, `INSERT INTO t SELECT i, repeat('x', 32) FROM generate_series(1, 2000) AS g(i)`)
+
+	testutils.SucceedsSoon(t, func() error {
+		tenantSQL.Exec(t, `SELECT count(*) FROM t WHERE data LIKE '%x%'`)
+
+		var count int
+		tenantSQL.QueryRow(t,
+			`SELECT count(*) FROM crdb_internal.node_active_session_history WHERE app_name = 'shared_process_app'`,
+		).Scan(&count)
+		if count == 0 {
+			return errors.Newf("expected ASH samples for shared-process tenant despite tenant-local disabled setting")
+		}
+		return nil
+	})
+
+	tenantSQL.CheckQueryResults(t,
+		`SHOW CLUSTER SETTING obs.ash.enabled`,
+		[][]string{{"false"}},
+	)
+
+	// Give the sampler another tick and verify samples continue to appear,
+	// demonstrating that the process-global sampler is still driven by the
+	// system tenant's settings in shared-process mode.
+	time.Sleep(25 * time.Millisecond)
+	tenantSQL.Exec(t, `SELECT count(*) FROM t WHERE data LIKE '%x%'`)
+	var finalCount int
+	tenantSQL.QueryRow(t,
+		`SELECT count(*) FROM crdb_internal.node_active_session_history WHERE app_name = 'shared_process_app'`,
+	).Scan(&finalCount)
+	require.NotZero(t, finalCount)
 }
