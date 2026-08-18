@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -29,11 +30,14 @@ import (
 //
 // For each CRDB node, the function:
 //  1. Finds the matching snapshot by node number suffix
-//  2. Creates a temporary pd-ssd disk from the snapshot
-//  3. Attaches and mounts it read-only
+//  2. Creates a temporary pd-ssd disk from the snapshot and attaches it
+//  3. Mounts it read-only
 //  4. Removes existing data at /mnt/data1/cockroach and copies snapshot
 //     data in its place via rsync
 //  5. Cleans up (unmount, detach, delete the temporary disk)
+//
+// Steps 2 and 5 run on the roachtest runner, since cluster VMs hold no
+// permission to mutate cloud resources.
 //
 // All nodes are processed in parallel.
 func CopySnapshotDataToNodes(
@@ -78,60 +82,54 @@ func copySnapshotDataToNode(
 	}
 	l.Printf("n%d: using snapshot %s (ID: %s)", nodeID, snap.Name, snap.ID)
 
-	// Query the GCE zone from instance metadata rather than hardcoding it.
-	getZoneCmd := `curl -sf -H "Metadata-Flavor: Google" ` +
-		`http://metadata.google.internal/computeMetadata/v1/instance/zone`
-	zoneOutput, err := c.RunWithDetailsSingleNode(
-		ctx, l, option.WithNodes(node), getZoneCmd,
-	)
-	if err != nil {
-		return fmt.Errorf("n%d: failed to get zone from GCE metadata: %w", nodeID, err)
-	}
-	// Zone format: projects/PROJECT_NUMBER/zones/ZONE_NAME
-	zoneParts := strings.Split(strings.TrimSpace(zoneOutput.Stdout), "/")
-	if len(zoneParts) < 4 || zoneParts[len(zoneParts)-2] != "zones" {
-		return fmt.Errorf(
-			"n%d: unexpected zone format from metadata: %q", nodeID, zoneOutput.Stdout,
-		)
-	}
-	zone := zoneParts[len(zoneParts)-1]
-
 	// Use a per-node temp disk name to avoid collisions when running in
 	// parallel across nodes.
 	tempDiskName := fmt.Sprintf("%s-temp-snapshot-%04d", c.Name(), nodeID)
-	deviceName := fmt.Sprintf("snapshot-disk-%04d", nodeID)
 
-	// Create a temporary disk from the snapshot. Retry transient GCE API
-	// errors (e.g. HTTP 502) which can occur when many nodes create disks
-	// in parallel against the same zone.
+	// Create a temporary disk from the snapshot and attach it. Retry transient
+	// GCE API errors (e.g. HTTP 502) which can occur when many nodes create
+	// disks in parallel against the same zone.
 	//
 	// We use a count-based retry (rather than a duration-based one) because a
-	// single `gcloud compute disks create` invocation can itself take several
-	// minutes to fail with a transient error; a short duration-based budget
-	// would be exhausted on the first attempt before any retry occurs (see
-	// #170038). Retries are bounded only by the test's context, not by an
-	// extra timeout layered on top.
-	l.Printf("n%d: creating temp disk %s from snapshot in zone %s",
-		nodeID, tempDiskName, zone)
-	createDiskCmd := fmt.Sprintf(
-		`gcloud compute disks create %s --source-snapshot=%s --zone=%s --type=pd-ssd --quiet`,
-		tempDiskName, snap.ID, zone,
-	)
+	// single disk creation call can itself take several minutes to fail with a
+	// transient error; a short duration-based budget would be exhausted on the
+	// first attempt before any retry occurs (see #170038). Retries are bounded
+	// only by the test's context, not by an extra timeout layered on top.
+	l.Printf("n%d: creating temp disk %s from snapshot", nodeID, tempDiskName)
+	createOpts := vm.VolumeCreateOpts{
+		Name: tempDiskName,
+		Type: "pd-ssd",
+	}
 	const createDiskAttempts = 3
 	createDiskBackoff := retry.Options{
 		InitialBackoff: 30 * time.Second,
 		MaxBackoff:     30 * time.Second,
 		Multiplier:     1,
 	}
+	var attached vm.AttachedVolume
 	var createDiskErr error
 	if err := retry.WithMaxAttempts(ctx, createDiskBackoff, createDiskAttempts, func() error {
-		result, err := c.RunWithDetailsSingleNode(
-			ctx, l, option.WithNodes(node), createDiskCmd,
+		var err error
+		attached, err = roachprod.AttachVolumeFromSnapshot(
+			ctx, l, c.Name(), nodeID, snap, createOpts,
 		)
 		if err == nil {
 			return nil
 		}
-		if isGCETransientError(result.Stderr) {
+		// A prior attempt can create the disk and then lose the response (e.g. an
+		// HTTP 502 after a successful create), so the retry finds our
+		// uniquely-named disk already there. No provider API describes an
+		// unattached disk; attach and delete need only its name and zone.
+		if isGCEAlreadyExistsError(err.Error()) {
+			l.Printf("n%d: disk %s already exists (created by prior attempt), reusing it",
+				nodeID, tempDiskName)
+			attached, createDiskErr = roachprod.AttachVolume(ctx, l, c.Name(), nodeID, vm.Volume{
+				ProviderResourceID: tempDiskName,
+				Name:               tempDiskName,
+			})
+			return nil
+		}
+		if isGCETransientError(err.Error()) {
 			l.Printf("n%d: transient GCE error creating disk, retrying: %v", nodeID, err)
 			return err
 		}
@@ -163,33 +161,18 @@ func copySnapshotDataToNode(
 		}
 
 		l.Printf("n%d: cleaning up temp disk %s", nodeID, tempDiskName)
-		detachCmd := fmt.Sprintf(
-			`gcloud compute instances detach-disk $(hostname) --disk=%s --zone=%s --quiet`,
-			tempDiskName, zone,
-		)
-		_ = c.RunE(cleanupCtx, option.WithNodes(node), detachCmd)
-		deleteCmd := fmt.Sprintf(
-			`gcloud compute disks delete %s --zone=%s --quiet`,
-			tempDiskName, zone,
-		)
-		_ = c.RunE(cleanupCtx, option.WithNodes(node), deleteCmd)
+		if err := roachprod.DetachAndDeleteVolume(
+			cleanupCtx, l, c.Name(), nodeID, attached.Volume,
+		); err != nil {
+			l.Printf("n%d: warning: failed to delete temp disk %s: %v", nodeID, tempDiskName, err)
+		}
 	}()
 
-	// Attach the temporary disk.
-	l.Printf("n%d: attaching temp disk", nodeID)
-	attachCmd := fmt.Sprintf(
-		`gcloud compute instances attach-disk $(hostname) --disk=%s --zone=%s --device-name=%s --quiet`,
-		tempDiskName, zone, deviceName,
-	)
-	if err := c.RunE(ctx, option.WithNodes(node), attachCmd); err != nil {
-		return fmt.Errorf("n%d: failed to attach snapshot disk: %w", nodeID, err)
-	}
-
 	// Mount the temporary disk read-only.
-	l.Printf("n%d: mounting snapshot disk", nodeID)
+	l.Printf("n%d: mounting snapshot disk at %s", nodeID, attached.DevicePath)
 	mountCmd := fmt.Sprintf(
-		`sudo mkdir -p /mnt/snapshot && sudo mount -o ro /dev/disk/by-id/google-%s /mnt/snapshot`,
-		deviceName,
+		`sudo mkdir -p /mnt/snapshot && sudo mount -o ro %s /mnt/snapshot`,
+		attached.DevicePath,
 	)
 	if err := c.RunE(ctx, option.WithNodes(node), mountCmd); err != nil {
 		return fmt.Errorf("n%d: failed to mount snapshot disk: %w", nodeID, err)
@@ -208,20 +191,40 @@ func copySnapshotDataToNode(
 	return nil
 }
 
-// isGCETransientError checks whether stderr from a gcloud command
-// indicates a transient server-side error worth retrying.
-func isGCETransientError(stderr string) bool {
+// isGCEAlreadyExistsError checks whether a gcloud failure indicates the
+// resource already exists. This can happen on a retry after a prior attempt's
+// response was lost (e.g. HTTP 502): the server created the resource but the
+// client never got the success response.
+func isGCEAlreadyExistsError(msg string) bool {
+	return strings.Contains(msg, "already exists")
+}
+
+// isGCETransientError checks whether a gcloud failure is a transient
+// server-side error worth retrying.
+//
+// The failure this guards against is an HTML error page served by Google's
+// front end rather than a structured Compute API error, so there is no reason
+// code to match on and substring matching is the only option (see #168296):
+//
+//	ERROR: (gcloud.compute.disks.create) Could not fetch resource:
+//	 - <html>...<title>Error 502 (Server Error)!!1</title>...
+//	   <p><b>502.</b> <ins>That's an error.</ins>
+//	   <p>Please try again in 30 seconds.
+//
+// Patterns must not collide with a digit sequence in the gcloud command line,
+// which is part of the matched text: a bare "502" also matches a snapshot ID.
+func isGCETransientError(msg string) bool {
 	transientPatterns := []string{
-		"502",
-		"503",
+		"Error 502",
+		"Error 503",
 		"Server Error",
-		"try again",
+		"Please try again",
 		"Rate Limit",
 		"RATE_LIMIT",
 		"rate limit",
 	}
 	for _, p := range transientPatterns {
-		if strings.Contains(stderr, p) {
+		if strings.Contains(msg, p) {
 			return true
 		}
 	}
