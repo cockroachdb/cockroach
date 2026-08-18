@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,7 +79,8 @@ func largeSchemaBackupRestore(r registry.Registry, numTables int) {
 			}
 
 			dest := destinationName(c)
-			uri := `gs://` + backupTestingBucket + `/` + dest + `?AUTH=implicit`
+			bucket := testutils.BackupTestingBucketForProject(gce.InfraProject())
+			uri := `gs://` + bucket + `/` + dest + `?AUTH=implicit`
 			t.L().Printf("Backing up to %s\n", uri)
 			_, err := conn.ExecContext(ctx, "BACKUP INTO $1 WITH REVISION_HISTORY", uri)
 			require.NoError(t, err)

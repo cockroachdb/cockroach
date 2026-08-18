@@ -331,14 +331,14 @@ func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c clust
 	require.NoError(t, err)
 	defer db.Close()
 
-	grp := t.NewErrorGroup(task.WithContext(ctx))
+	grp := t.NewGroup(task.WithContext(ctx), task.Name("client-query"))
 	// Startup a connection on the client server, which will be running a
 	// long transaction (i.e. just the sleep builtin).
 	var runOutput install.RunResultDetails
 	grp.Go(func(ctx context.Context, l *logger.Logger) error {
 		urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(c.Node(1)), certsDir, roachprod.PGURLOptions{
-			External: true,
-			Secure:   install.SimpleSecureOption(true),
+			UseHost: true,
+			Secure:  install.SimpleSecureOption(true),
 		})
 		if err != nil {
 			return err
@@ -411,7 +411,7 @@ sudo iptables -F OUTPUT;
 	require.Greaterf(t, timeutil.Since(blockStartTime), time.Second*30, "connection dropped earlier than expected")
 	t.L().Printf("Connection was dropped after %s", timeutil.Since(blockStartTime))
 	// We expect the connection to be dropped with the lower keep alive settings.
-	require.NoError(t, grp.WaitE())
+	grp.Wait()
 	require.Contains(t, runOutput.Stderr, "If the server is running, check --host client-side and --advertise server-side",
 		"Did not detect connection failure %s %d", runOutput.Stderr, runOutput.RemoteExitStatus)
 }

@@ -71,6 +71,7 @@ type StartupArgs struct {
 	EnableFIPS           bool     // Enable FIPS mode
 	EnableCron           bool     // Enable cron service
 	ChronyServers        []string // List of NTP servers to use
+	ArtifactsBucket      string   // GCS bucket hosting shared roachprod artifacts
 	NodeExporterPort     int      // Port that NodeExporter listens on
 	EbpfExporterPort     int      // Port that EbpfExporter listens on
 }
@@ -87,6 +88,7 @@ func DefaultStartupArgs(overrides ...IArgOverride) StartupArgs {
 			"time3.google.com",
 			"time4.google.com",
 		},
+		ArtifactsBucket:  ArtifactsBucket(),
 		NodeExporterPort: NodeExporterPort,
 		EbpfExporterPort: EbpfExporterPort,
 	}
@@ -239,7 +241,7 @@ const startupScriptNodeExporter = `
 export ARCH=$(dpkg --print-architecture)
 export DEFAULT_USER_HOME="/home/$(id -nu 1000)"
 mkdir -p ${DEFAULT_USER_HOME}/node_exporter && curl -fsSL \
-	https://storage.googleapis.com/cockroach-test-artifacts/prometheus/node_exporter-` + NodeExporterVersion + `.linux-${ARCH}.tar.gz |
+	https://storage.googleapis.com/{{ if .ArtifactsBucket }}{{ .ArtifactsBucket }}{{ else }}{{ artifactsBucket }}{{ end }}/prometheus/node_exporter-` + NodeExporterVersion + `.linux-${ARCH}.tar.gz |
 	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/node_exporter \
 	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/node_exporter
 
@@ -259,7 +261,7 @@ const startupScriptEbpfExporter = `
 export ARCH=$(dpkg --print-architecture)
 export DEFAULT_USER_HOME="/home/$(id -nu 1000)"
 mkdir -p ${DEFAULT_USER_HOME}/ebpf_exporter && curl -fsSL \
-	https://storage.googleapis.com/cockroach-test-artifacts/prometheus/ebpf_exporter-` + EbpfExporterVersion + `.linux-${ARCH}.tar.gz |
+	https://storage.googleapis.com/{{ if .ArtifactsBucket }}{{ .ArtifactsBucket }}{{ else }}{{ artifactsBucket }}{{ end }}/prometheus/ebpf_exporter-` + EbpfExporterVersion + `.linux-${ARCH}.tar.gz |
 	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/ebpf_exporter \
 	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/ebpf_exporter
 
@@ -332,7 +334,9 @@ const startupScriptUlimits = `
 sudo sh -c 'echo "root - nofile 1048576\n* - nofile 1048576" > /etc/security/limits.d/10-roachprod-nofiles.conf'`
 
 func GenerateStartupScript(w io.Writer, cloudSpecificTemplate string, args any) error {
-	t := template.New("start")
+	t := template.New("start").Funcs(template.FuncMap{
+		"artifactsBucket": ArtifactsBucket,
+	})
 	for name, tmpl := range StartupScriptTemplateParts {
 		var err error
 

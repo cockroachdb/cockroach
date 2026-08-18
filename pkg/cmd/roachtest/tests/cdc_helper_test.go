@@ -30,6 +30,31 @@ func TestExtractTableNameFromFileName(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestCloudStorageSinkURIForProject(t *testing.T) {
+	require.Equal(
+		t,
+		"experimental-gs://roachtest-cdc-output-crl-e2e-infra-staging/roachtest/20260102030405?AUTH=implicit",
+		cloudStorageSinkURIForProject("20260102030405", "crl-e2e-infra-staging"),
+	)
+}
+
+func TestPubsubSinkURIForProject(t *testing.T) {
+	require.Equal(
+		t,
+		"gcpubsub://crl-e2e-infra-staging?AUTH=implicit&topic_name=roachtest-cdc-pubsub-sink&region=us-east1",
+		pubsubSinkURIForProject("crl-e2e-infra-staging"),
+	)
+}
+
+func TestCDCAssumeRoleChainForProject(t *testing.T) {
+	require.Equal(
+		t,
+		"cdc-roachtest-intermediate@crl-e2e-infra-staging.iam.gserviceaccount.com,"+
+			"cdc-roachtest@crl-e2e-infra-staging.iam.gserviceaccount.com",
+		cdcAssumeRoleChainForProject("crl-e2e-infra-staging"),
+	)
+}
+
 // TestUpsertStmtForTable verifies that upsertStmtForTable correctly formats
 // upsert statement for the given target table and args.
 func TestUpsertStmtForTable(t *testing.T) {

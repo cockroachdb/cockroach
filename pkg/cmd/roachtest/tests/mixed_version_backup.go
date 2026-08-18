@@ -1076,7 +1076,7 @@ func (bc *backupCollection) uri() string {
 	if bc.nodelocal {
 		externalStorage = "nodelocal://1/"
 	}
-	return fmt.Sprintf("%s%s/mixed-version/%s_%s?AUTH=implicit", externalStorage, testutils.BackupTestingBucketLongTTL(), bc.name, bc.nonce)
+	return fmt.Sprintf("%s%s/mixed-version/%s_%s?AUTH=implicit", externalStorage, gceLongTTLBackupBucket(), bc.name, bc.nonce)
 }
 
 func (bc *backupCollection) encryptionOption() *encryptionPassphrase {
@@ -3041,7 +3041,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(5, spec.WorkloadNode()),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		NativeLibs:        registry.LibGEOS,
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
 		Suites:                    registry.Suites(registry.MixedVersion, registry.Nightly),

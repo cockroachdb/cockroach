@@ -81,9 +81,9 @@ var flagDBConnStr = flag.String("db", "postgresql://root@localhost:26257",
 
 // vecbench benchmarks vector index in-memory build and search performance on a
 // variety of datasets. Datasets are downloaded from the
-// cockroach-fixtures-us-east1 GCP bucket (vecindex directory). Here is a list
-// of available datasets, most of which are derived from datasets on
-// ann-benchmarks.com:
+// cockroach-fixtures-us-east1-crl-e2e-infra GCP bucket (vecindex directory).
+// Here is a list of available datasets, most of which are derived from
+// datasets on ann-benchmarks.com:
 //
 //	images-512-euclidean (1M vectors, 512 dims)
 //	fashion-mnist-784-euclidean (60K vectors, 784 dims)

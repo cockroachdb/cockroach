@@ -101,6 +101,14 @@ func makeGenericFailure(
 	return &genericFailure, nil
 }
 
+// hasPublicIP reports whether node has a public IP.
+func (f *GenericFailure) hasPublicIP(node install.Node) (bool, error) {
+	if node < 1 || int(node) > len(f.c.VMs) {
+		return false, errors.Errorf("node %d is outside cluster of size %d", node, len(f.c.VMs))
+	}
+	return f.c.VMs[node-1].PublicIP != "", nil
+}
+
 func (f *GenericFailure) Run(
 	ctx context.Context, l *logger.Logger, node install.Nodes, args ...string,
 ) error {

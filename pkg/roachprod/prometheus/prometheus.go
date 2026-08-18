@@ -247,16 +247,21 @@ func Init(
 	promAsInstallNodes := install.Nodes{cfg.PrometheusNode}
 
 	if len(cfg.NodeExporter) > 0 {
+		prometheusNodeIP, err := nodeHost(c, cfg.PrometheusNode)
+		if err != nil {
+			return nil, err
+		}
 		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(cfg.NodeExporter).WithShouldRetryFn(install.AlwaysTrue),
 			"download node exporter",
 			fmt.Sprintf(`
 export ARCH=$(dpkg --print-architecture)
 if [ ! -x node_exporter/node_exporter ]; then
 	rm -rf node_exporter && mkdir -p node_exporter && curl -fsSL \
-		https://storage.googleapis.com/cockroach-test-artifacts/prometheus/node_exporter-%s.linux-${ARCH}.tar.gz |
+		%[1]s/prometheus/node_exporter-%[2]s.linux-${ARCH}.tar.gz |
 		tar zxv --strip-components 1 -C node_exporter
 fi
 `,
+				vm.ArtifactsBaseURL(),
 				vm.NodeExporterVersion,
 			)); err != nil {
 			return nil, errors.Wrap(err, "unable to download node_exporter")
@@ -266,7 +271,7 @@ fi
 		// Also make it reachable by the Prometheus node in case of firewall rules.
 		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(cfg.NodeExporter), "init node exporter",
 			fmt.Sprintf(`
-sudo iptables -C INPUT -p tcp -s {ip:%[1]d:public} --dport %[2]d -j ACCEPT || sudo iptables -I INPUT -p tcp -s {ip:%[1]d:public} --dport %[2]d -j ACCEPT;
+sudo iptables -C INPUT -p tcp -s %[1]s --dport %[2]d -j ACCEPT || sudo iptables -I INPUT -p tcp -s %[1]s --dport %[2]d -j ACCEPT;
 if ! systemctl is-active --quiet node_exporter; then
 	# Flag we're starting a node_exporter instance
 	touch %[4]s
@@ -278,10 +283,10 @@ if ! systemctl is-active --quiet node_exporter; then
 		# Somehow proper unit doesn't exists, create transient one
 		cd node_exporter &&
 		sudo systemd-run --unit node_exporter --same-dir ./node_exporter \
-			--web.listen-address=":%[2]d" --web.telemetry-path="%[3]s"
+				--web.listen-address=":%[2]d" --web.telemetry-path="%[3]s"
 	fi
 fi
-`, cfg.PrometheusNode, vm.NodeExporterPort, vm.NodeExporterMetricsPath, nodeExporterStarted),
+`, prometheusNodeIP, vm.NodeExporterPort, vm.NodeExporterMetricsPath, nodeExporterStarted),
 		); err != nil {
 			// TODO(msbutler): download binary for target platform. currently we
 			// hardcode downloading the linux binary.
@@ -310,7 +315,8 @@ fi
 		fmt.Sprintf(`
 export ARCH=$(dpkg --print-architecture)
 sudo rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
-curl -fsSL https://storage.googleapis.com/cockroach-test-artifacts/prometheus/prometheus-%s.linux-${ARCH}.tar.gz | tar zxv --strip-components=1`,
+curl -fsSL %[1]s/prometheus/prometheus-%[2]s.linux-${ARCH}.tar.gz | tar zxv --strip-components=1`,
+			vm.ArtifactsBaseURL(),
 			vm.PrometheusVersion,
 		)); err != nil {
 		return nil, errors.Wrap(err, "unable to download prometheus")
@@ -529,13 +535,17 @@ func Shutdown(
 	}
 	// Stop node_exporter if it was started by grafana-start.
 	// Drop the firewall rule added for the Prometheus node.
-	if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(nodes), "stop node exporter",
+	prometheusNodeIP, hostErr := nodeHost(c, promNode[0])
+	if hostErr != nil {
+		l.Printf("Failed to resolve Prometheus node address: %v", hostErr)
+		shutdownErr = errors.CombineErrors(shutdownErr, hostErr)
+	} else if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(nodes), "stop node exporter",
 		fmt.Sprintf(`
-sudo iptables -D INPUT -p tcp -s {ip:%d:public} --dport %d -j ACCEPT || true;
+sudo iptables -D INPUT -p tcp -s %s --dport %d -j ACCEPT || true;
 if [ -f %s ] ; then
 	sudo systemctl stop node_exporter || echo 'Stopped node exporter'
 fi
-`, promNode[0], vm.NodeExporterPort, nodeExporterStarted)); err != nil {
+`, prometheusNodeIP, vm.NodeExporterPort, nodeExporterStarted)); err != nil {
 		l.Printf("Failed to stop node exporter: %v", err)
 		shutdownErr = errors.CombineErrors(shutdownErr, err)
 	}
@@ -576,10 +586,22 @@ func makeNodeIPMap(c *install.SyncedCluster) (map[install.Node]string, error) {
 		return nil, err
 	}
 	nodeIP := make(map[install.Node]string)
-	for i, n := range nodes {
-		nodeIP[n] = c.VMs[nodes[i]-1].PublicIP
+	for _, n := range nodes {
+		host, err := nodeHost(c, n)
+		if err != nil {
+			return nil, err
+		}
+		nodeIP[n] = host
 	}
 	return nodeIP, nil
+}
+
+func nodeHost(c *install.SyncedCluster, node install.Node) (string, error) {
+	host := c.Host(node)
+	if host == "" {
+		return "", errors.Errorf("no host address for node %d", node)
+	}
+	return host, nil
 }
 
 // makeYAMLConfig creates a prometheus YAML config for the server to use.

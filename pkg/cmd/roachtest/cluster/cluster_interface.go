@@ -102,7 +102,6 @@ type Cluster interface {
 
 	// URLs and Ports for the Admin UI.
 
-	InternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption, opts ...option.OptionFunc) ([]string, error)
 	ExternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption, opts ...option.OptionFunc) ([]string, error)
 	AdminUIPorts(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]int, error)
 

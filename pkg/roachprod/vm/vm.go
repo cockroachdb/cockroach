@@ -45,7 +45,33 @@ const (
 	ArchUnknown = CPUArch("unknown")
 
 	DefaultLifetime = 12 * time.Hour
+
+	// DefaultArtifactsBucket is the GCS bucket hosting shared roachprod
+	// artifacts when no GCE provider or environment override is configured.
+	DefaultArtifactsBucket = "cockroach-test-artifacts-crl-e2e-infra"
+	artifactsBucketEnv     = "ROACHPROD_GCE_ARTIFACTS_BUCKET"
 )
+
+type artifactsBucketProvider interface {
+	ArtifactsBucket() string
+}
+
+// ArtifactsBucket returns the GCS bucket hosting shared roachprod artifacts.
+// GCE owns this infrastructure even when roachprod creates VMs in another
+// cloud, so the registered GCE provider supplies the effective value.
+func ArtifactsBucket() string {
+	if provider, ok := Providers["gce"].(artifactsBucketProvider); ok {
+		if bucket := provider.ArtifactsBucket(); bucket != "" {
+			return bucket
+		}
+	}
+	return config.EnvOrDefaultString(artifactsBucketEnv, DefaultArtifactsBucket)
+}
+
+// ArtifactsBaseURL returns the public base URL for shared roachprod artifacts.
+func ArtifactsBaseURL() string {
+	return "https://storage.googleapis.com/" + ArtifactsBucket()
+}
 
 // UnimplementedError is returned when a method is not implemented by a
 // provider. An error is returned instead of panicking to isolate failures to a
@@ -114,7 +140,10 @@ type VM struct {
 
 	// PublicDNS is the public DNS name that can be used to connect to the VM.
 	PublicDNS string `json:"public_dns"`
-	// The DNS provider to use for DNS operations performed for this VM.
+	// PublicDNSZone is the public DNS zone that can be used to connect to the VM
+	// (e.g. roachprod.crdb.dev).
+	PublicDNSZone string `json:"public_dns_zone"`
+	// The DNS provider to use for DNS operations performed for this VM (e.g. gce).
 	DNSProvider string `json:"dns_provider"`
 
 	// The name of the cloud provider that hosts the VM instance
@@ -127,6 +156,16 @@ type VM struct {
 	ProviderAccountID string `json:"provider_account_id"`
 	PrivateIP         string `json:"private_ip"`
 	PublicIP          string `json:"public_ip"`
+	// AddressMode is the resolved address mode of the VM. It is populated by GCE
+	// managed-instance-group discovery, derived from the saved instance
+	// template's network access-config (a private template has no external
+	// access-config). It is currently unset for other providers and paths; the
+	// zero value normalizes to public. When a durable address-mode label lands
+	// (see cockroachdb/cockroach#173112), discovery can read that instead.
+	AddressMode AddressMode `json:"address_mode"`
+	// NetworkTags contains provider network tags used to select transport or
+	// firewall behavior. It is empty for providers that do not expose them.
+	NetworkTags []string `json:"network_tags,omitempty"`
 	// The username that should be used to connect to the VM.
 	RemoteUser string `json:"remote_user"`
 	// The VPC value defines an equivalency set for VMs that can route
@@ -201,17 +240,27 @@ func (vm *VM) Locality() (string, error) {
 	return fmt.Sprintf("cloud=%s,region=%s,zone=%s", vm.Provider, region, vm.Zone), nil
 }
 
+// DNSIP returns the address to publish in DNS. Public addresses retain their
+// existing behavior, while private-only VMs publish their private address.
+func (vm *VM) DNSIP() string {
+	if vm.PublicIP != "" {
+		return vm.PublicIP
+	}
+	return vm.PrivateIP
+}
+
 // ZoneEntry returns a line representing the VMs DNS zone entry
 func (vm *VM) ZoneEntry() (string, error) {
 	if len(vm.Name) >= 60 {
 		return "", errors.Errorf("Name too long: %s", vm.Name)
 	}
-	if vm.PublicIP == "" {
+	ip := vm.DNSIP()
+	if ip == "" {
 		return "", errors.Errorf("Missing IP address: %s", vm.Name)
 	}
 	// TODO(rail): We should probably skip local VMs too. They add a bunch of
-	// entries for localhost.roachprod.crdb.io pointing to 127.0.0.1.
-	return fmt.Sprintf("%s 60 IN A %s\n", vm.Name, vm.PublicIP), nil
+	// entries for localhost.roachprod.crdb.dev pointing to 127.0.0.1.
+	return fmt.Sprintf("%s 60 IN A %s\n", vm.Name, ip), nil
 }
 
 func (vm *VM) AttachVolume(l *logger.Logger, v Volume) (deviceName string, _ error) {
@@ -291,6 +340,8 @@ type CreateOpts struct {
 	ClusterName  string
 	Lifetime     time.Duration
 	CustomLabels map[string]string
+	// AddressMode controls whether newly created VMs receive public addresses.
+	AddressMode AddressMode
 
 	GeoDistributed bool
 	Arch           string
@@ -309,8 +360,12 @@ type CreateOpts struct {
 // DefaultCreateOpts returns a new vm.CreateOpts with default values set.
 func DefaultCreateOpts() CreateOpts {
 	defaultCreateOpts := CreateOpts{
-		ClusterName:    "",
-		Lifetime:       DefaultLifetime,
+		ClusterName: "",
+		Lifetime:    DefaultLifetime,
+		// Default to auto: the GCE provider resolves this to private addresses in
+		// the infra project (crl-e2e-infra), which cannot provision public IPs,
+		// and to public addresses everywhere else.
+		AddressMode:    AddressModeAuto,
 		GeoDistributed: false,
 		VMProviders:    []string{},
 		OsVolumeSize:   10,

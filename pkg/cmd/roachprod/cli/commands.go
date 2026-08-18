@@ -71,6 +71,8 @@ components match. For example, the tag "a/b" will match both "a/b" and
   local      - Use a provided local binary, must provide the path to the binary.`
 	workloadApp = `
   workload   - Cockroach workload application.`
+	libHelp = `
+  lib        - Supplementary Cockroach libraries (libgeos).`
 )
 
 var bashCompletion = os.ExpandEnv("$HOME/.roachprod/bash-completion.sh")
@@ -122,7 +124,12 @@ Local Clusters
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 			createVMOpts.ClusterName = args[0]
-			opts := cloud.ClusterCreateOpts{Nodes: numNodes, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer}
+			opts := cloud.ClusterCreateOpts{
+				Nodes:                 numNodes,
+				CreateOpts:            createVMOpts,
+				ProviderOptsContainer: providerOptsContainer,
+				KeepClusterOnFailure:  keepClusterOnFailure,
+			}
 			return roachprod.Create(context.Background(), config.Logger, username, &opts)
 		}),
 	}
@@ -387,10 +394,10 @@ The --details flag adjusts the output format to include per-node details:
   local [local]: (no expiration)
     localhost		127.0.0.1	127.0.0.1
   marc-test: [aws gce] 5h33m57s remaining
-    marc-test-0001	marc-test-0001.us-east1-b.cockroach-ephemeral	10.142.0.18	35.229.60.91
-    marc-test-0002	marc-test-0002.us-east1-b.cockroach-ephemeral	10.142.0.17	35.231.0.44
-    marc-test-0003	marc-test-0003.us-east1-b.cockroach-ephemeral	10.142.0.19	35.229.111.100
-    marc-test-0004	marc-test-0004.us-east1-b.cockroach-ephemeral	10.142.0.20	35.231.102.125
+    marc-test-0001	marc-test-0001.us-east1-b.crl-e2e-infra	10.142.0.18	35.229.60.91
+    marc-test-0002	marc-test-0002.us-east1-b.crl-e2e-infra	10.142.0.17	35.231.0.44
+    marc-test-0003	marc-test-0003.us-east1-b.crl-e2e-infra	10.142.0.19	35.229.111.100
+    marc-test-0004	marc-test-0004.us-east1-b.crl-e2e-infra	10.142.0.20	35.231.102.125
   Syncing...
 
 The first and second column are the node hostname and fully qualified name
@@ -629,15 +636,22 @@ func (cr *commandRegistry) buildSyncCmd() *cobra.Command {
 func (cr *commandRegistry) buildGCCmd() *cobra.Command {
 	gcCmd := &cobra.Command{
 		Use:   "gc",
-		Short: "GC expired clusters and unused AWS keypairs\n",
-		Long: `Garbage collect expired clusters and unused SSH keypairs in AWS.
+		Short: "GC expired clusters and unused AWS key pairs\n",
+		Long: `Garbage collect expired clusters, unused SSH key pairs in AWS, and
+dangling GCE DNS records.
 
-Destroys expired clusters, sending email if properly configured. Usually run
-hourly by a cronjob so it is not necessary to run manually.
+Destroys expired resources and sends Slack notifications when configured. This
+command is intended to run as a scheduled job.
 `,
 		Args: cobra.NoArgs,
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
-			return roachprod.GC(config.Logger, dryrun)
+			if config.SlackToken == "" {
+				config.SlackToken = config.EnvOrDefaultString("SLACK_TOKEN", "")
+			}
+			return roachprod.GC(config.Logger, roachprod.GCOptions{
+				DryRun: dryrun,
+				Clouds: gcClouds,
+			})
 		}),
 	}
 	cr.addToExcludeFromBashCompletion(gcCmd)
@@ -1330,7 +1344,10 @@ Some examples of usage:
 
   -- Stage customized binary of CockroachDB at version v23.2.0-alpha.2-4375-g7cd2b76ed00
   roachprod stage my-cluster customized v23.2.0-alpha.2-4375-g7cd2b76ed00
-`, strings.TrimSpace(cockroachApp+workloadApp+releaseApp+customizedApp)),
+
+  -- Stage the most recent edge build of the libraries (libgeos):
+  roachprod stage my-cluster lib
+`, strings.TrimSpace(cockroachApp+workloadApp+releaseApp+customizedApp+libHelp)),
 		Args: cobra.RangeArgs(2, 3),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
 			versionArg := ""
@@ -1494,7 +1511,8 @@ func (cr *commandRegistry) buildAdminurlCmd() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
 			urls, err := roachprod.AdminURL(
-				context.Background(), config.Logger, args[0], virtualClusterName, sqlInstance, adminurlPath, adminurlIPs, urlOpen, isSecure,
+				context.Background(), config.Logger, args[0], virtualClusterName, sqlInstance,
+				adminurlPath, adminurlIPs, false /* useHost */, urlOpen, isSecure,
 			)
 			if err != nil {
 				return err
@@ -2002,8 +2020,9 @@ func roachprodUpdateSupported(goos, goarch string) bool {
 func (cr *commandRegistry) buildUpdateCmd() *cobra.Command {
 	updateCmd := &cobra.Command{
 		Use:   "update",
-		Short: "check gs://cockroach-nightly for a new roachprod binary; update if available",
-		Long: "Attempts to download the latest roachprod binary (on master) from gs://cockroach-nightly. " +
+		Short: "check the infrastructure project's nightly bucket for a new roachprod binary; update if available",
+		Long: "Attempts to download the latest roachprod binary (on master) from the infrastructure " +
+			"project's cockroach-nightly bucket. " +
 			" Swaps the current binary with it. The current roachprod binary will be backed up" +
 			" and can be restored via `roachprod update --revert`.",
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {

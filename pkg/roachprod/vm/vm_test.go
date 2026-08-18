@@ -79,6 +79,20 @@ func TestVM_ZoneEntry(t *testing.T) {
 			expected:    "just_a_test 60 IN A 1.1.1.1\n",
 		},
 		{
+			description: "Private-only VM",
+			vm:          VM{Name: "just_a_test", PrivateIP: "10.0.0.1"},
+			expected:    "just_a_test 60 IN A 10.0.0.1\n",
+		},
+		{
+			description: "Public IP preferred when present",
+			vm: VM{
+				Name:      "just_a_test",
+				PublicIP:  "1.1.1.1",
+				PrivateIP: "10.0.0.1",
+			},
+			expected: "just_a_test 60 IN A 1.1.1.1\n",
+		},
+		{
 			description: "Too long name",
 			vm: VM{
 				Name:     "very_very_very_very_very_very_very_very_very_very_very_very_very_very_long_name",

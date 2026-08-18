@@ -47,7 +47,7 @@ func registerMultiStoreIndexBackfill(r registry.Registry) {
 				install.MakeClusterSettings(), c.CRDBNodes())
 			// Approx. 1.5 TiB of (3x) replicated data, 4 billion rows.
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()),
-				"./cockroach workload fixtures import bulkingest --a 2000 "+
+				"./cockroach workload fixtures import bulkingest "+gceFixtureBucketFlag()+" --a 2000 "+
 					"--b 2000 --c 1000 --index-b-c-a=false --files-per-node=10 "+
 					"--batches-by-b=false {pgurl:1}")
 
