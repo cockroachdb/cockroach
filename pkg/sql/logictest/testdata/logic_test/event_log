@@ -505,6 +505,53 @@ ORDER BY "timestamp", info
 1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
 1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.label", "Statement": "SET CLUSTER SETTING \"cluster.label\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
 
+# Values of sensitive settings (secrets) are redacted in the event, while
+# resets remain recorded as DEFAULT.
+##################
+
+statement ok
+SET CLUSTER SETTING cloudstorage.http.custom_ca = 'hunter2-secret'
+
+statement ok
+SET CLUSTER SETTING cloudstorage.http.custom_ca = DEFAULT
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp'
+FROM system.eventlog
+WHERE "eventType" = 'set_cluster_setting'
+AND info LIKE '%custom_ca%'
+ORDER BY "timestamp", info
+----
+1  {"EventType": "set_cluster_setting", "SettingName": "cloudstorage.http.custom_ca", "Statement": "SET CLUSTER SETTING \"cloudstorage.http.custom_ca\" = 'hunter2-secret'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "<redacted>"}
+1  {"EventType": "set_cluster_setting", "SettingName": "cloudstorage.http.custom_ca", "Statement": "SET CLUSTER SETTING \"cloudstorage.http.custom_ca\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}
+
+# A password bound via a placeholder is substituted in the recorded
+# placeholder values, matching the '*****' substitution in the statement
+# text.
+##################
+
+statement ok
+PREPARE create_pwrole AS CREATE ROLE pwrole WITH PASSWORD $1
+
+statement ok
+EXECUTE create_pwrole('hunter2-role-secret')
+
+statement ok
+PREPARE alter_pwrole AS ALTER ROLE pwrole WITH PASSWORD $1
+
+statement ok
+EXECUTE alter_pwrole('hunter2-role-secret-2')
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'TxnReadTimestamp'
+FROM system.eventlog
+WHERE "eventType" IN ('create_role', 'alter_role')
+AND info LIKE '%pwrole%'
+ORDER BY "timestamp", info
+----
+1  {"EventType": "create_role", "PlaceholderValues": ["'*****'"], "RoleName": "pwrole", "Statement": "CREATE ROLE pwrole WITH PASSWORD '*****'", "Tag": "CREATE ROLE", "User": "root"}
+1  {"EventType": "alter_role", "Options": ["PASSWORD"], "PlaceholderValues": ["'*****'"], "RoleName": "pwrole", "Statement": "ALTER ROLE pwrole WITH PASSWORD '*****'", "Tag": "ALTER ROLE", "User": "root"}
+
 # Set and unset zone configs
 ##################
 
