@@ -278,30 +278,58 @@ func parseCreateStatement(createStmtSQL string) (*tree.CreateTable, error) {
 
 // generateInsertStmtVals generates random data for a string builder thats
 // used after the VALUES keyword in an INSERT statement.
-func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool) string {
+func generateInsertStmtVals(
+	rng *rand.Rand, colTypes []*types.T, nullable []bool, restrictRange []bool,
+) string {
 	var valBuilder strings.Builder
 	valBuilder.WriteString("(")
 	comma := ""
 	for j := 0; j < len(colTypes); j++ {
 		valBuilder.WriteString(comma)
 		var d tree.Datum
-		if rng.Intn(10) < 4 {
-			// 40% of the time, use a corner case value
-			d = randInterestingDatum(rng, colTypes[j])
-		}
-		if colTypes[j] == types.RegType {
-			// RandDatum is naive to the constraint that a RegType < len(types.OidToType),
-			// at least before linking and user defined types are added.
-			d = tree.NewDOidWithType(oid.Oid(rng.Intn(len(types.OidToType))), types.RegType)
-		}
-		if d == nil {
-			d = RandDatum(rng, colTypes[j], nullable[j])
+		if restrictRange[j] && colTypes[j].Family() == types.IntFamily {
+			// This column feeds a computed expression; keep its magnitude small
+			// enough that evaluating the expression cannot overflow int64.
+			d = randBoundedIntDatum(rng, colTypes[j], nullable[j])
+		} else {
+			if rng.Intn(10) < 4 {
+				// 40% of the time, use a corner case value
+				d = randInterestingDatum(rng, colTypes[j])
+			}
+			if colTypes[j] == types.RegType {
+				// RandDatum is naive to the constraint that a RegType < len(types.OidToType),
+				// at least before linking and user defined types are added.
+				d = tree.NewDOidWithType(oid.Oid(rng.Intn(len(types.OidToType))), types.RegType)
+			}
+			if d == nil {
+				d = RandDatum(rng, colTypes[j], nullable[j])
+			}
 		}
 		valBuilder.WriteString(tree.AsStringWithFlags(d, tree.FmtParsable))
 		comma = ", "
 	}
 	valBuilder.WriteString(")")
 	return valBuilder.String()
+}
+
+// computedColumnRefs returns the set of column names referenced by any computed
+// column's expression in createStmt.
+func computedColumnRefs(createStmt *tree.CreateTable) map[tree.Name]struct{} {
+	refs := make(map[tree.Name]struct{})
+	for _, def := range createStmt.Defs {
+		col, ok := def.(*tree.ColumnTableDef)
+		if !ok || !col.Computed.Computed || col.Computed.Expr == nil {
+			continue
+		}
+		_, _ = tree.SimpleVisit(col.Computed.Expr,
+			func(expr tree.Expr) (bool, tree.Expr, error) {
+				if un, ok := expr.(*tree.UnresolvedName); ok && un.NumParts >= 1 {
+					refs[tree.Name(un.Parts[0])] = struct{}{}
+				}
+				return true, expr, nil
+			})
+	}
+	return refs
 }
 
 // TODO(butler): develop new helper function PopulateDatabaseWithRandData which calls
@@ -344,12 +372,16 @@ func PopulateTableWithRandData(
 		}
 	}
 
+	// Find columns that feed a computed expression so their values can be bounded.
+	computedRefs := computedColumnRefs(createStmt)
+
 	// Populate helper objects for insert statement creation and error out if a
 	// column's constraints will make it impossible to execute random insert
 	// statements.
 
 	colTypes := make([]*types.T, 0)
 	nullable := make([]bool, 0)
+	restrictRange := make([]bool, 0)
 	var colNameBuilder strings.Builder
 	comma := ""
 	for _, def := range createStmt.Defs {
@@ -378,6 +410,8 @@ func PopulateTableWithRandData(
 			}
 			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type))
 			nullable = append(nullable, col.Nullable.Nullability == tree.Null)
+			_, isComputedRef := computedRefs[col.Name]
+			restrictRange = append(restrictRange, isComputedRef)
 
 			colNameBuilder.WriteString(comma)
 			colNameBuilder.WriteString(col.Name.String())
@@ -386,7 +420,7 @@ func PopulateTableWithRandData(
 	}
 
 	for i := 0; i < numInserts; i++ {
-		insertVals := generateInsertStmtVals(rng, colTypes, nullable)
+		insertVals := generateInsertStmtVals(rng, colTypes, nullable, restrictRange)
 		insertStmt := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s;",
 			tree.NameString(tableName),
 			colNameBuilder.String(),
