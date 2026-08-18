@@ -30,6 +30,7 @@ go_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/raftlog",
+        "//pkg/kv/kvserver/spanset",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/rpc",

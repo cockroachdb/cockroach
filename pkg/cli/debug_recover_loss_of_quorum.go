@@ -324,6 +324,10 @@ func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
 	} else {
 		var stores []kvstorage.Engines
 		for _, storeSpec := range debugRecoverCollectInfoOpts.Stores.Specs {
+			// TODO(sep-raft-log): handle stores bootstrapped with separated
+			// engines. Today we open a single engine at storeSpec.Path and wrap
+			// it via kvstorage.MakeEngines, which works only for the legacy
+			// single-engine layout. We probably need a function like OpenEngines().
 			eng, err := OpenEngine(storeSpec.Path, stopper, fs.ReadOnly, storage.MustExist)
 			if err != nil {
 				return errors.WithHint(errors.Wrapf(err,
@@ -812,9 +816,12 @@ func applyRecoveryToLocalStore(
 	defer stopper.Stop(ctx)
 
 	var localNodeID roachpb.NodeID
-	batches := make(map[roachpb.StoreID]storage.Batch)
+	batches := make(map[roachpb.StoreID]loqrecovery.StoreBatches)
 	stores := make([]kvstorage.Engines, len(debugRecoverExecuteOpts.Stores.Specs))
 	for i, storeSpec := range debugRecoverExecuteOpts.Stores.Specs {
+		// TODO(sep-raft-log): handle stores bootstrapped with separated
+		// engines. See the matching TODO in runDebugDeadReplicaCollect for
+		// details.
 		eng, err := OpenEngine(storeSpec.Path, stopper, fs.ReadWrite, storage.MustExist)
 		if err != nil {
 			return errors.Wrapf(err, "failed to open store at path %q. ensure that store path is "+
@@ -823,7 +830,7 @@ func applyRecoveryToLocalStore(
 		store := kvstorage.MakeEngines(eng)
 		stores[i] = store
 
-		batch := store.TODOBothEngines().NewBatch()
+		batch := loqrecovery.NewStoreBatches(store)
 		defer store.Close() //nolint:deferloop
 		defer batch.Close() //nolint:deferloop
 
@@ -846,7 +853,6 @@ func applyRecoveryToLocalStore(
 	}
 
 	updateTime := timeutil.Now()
-	// TODO(sep-raft-log): batches need to work with the split log/state engines.
 	prepReport, err := loqrecovery.PrepareUpdateReplicas(
 		ctx, nodeUpdates, uuid.DefaultGenerator, updateTime, localNodeID, batches)
 	if err != nil {
