@@ -193,8 +193,44 @@ func (p *planner) getCommonSQLEventDetails(opt redactionOptions) eventpb.CommonS
 		for idx, val := range pls {
 			commonSQLEventDetails.PlaceholderValues[idx] = val.String()
 		}
+		// The statement text above substitutes '*****' for password
+		// literals (formatting without FmtShowPasswords), but a password
+		// bound via a placeholder would survive in the recorded
+		// placeholder values. Substitute those the same way.
+		for _, idx := range passwordPlaceholderIdxs(p.stmt.AST) {
+			if int(idx) < len(commonSQLEventDetails.PlaceholderValues) {
+				commonSQLEventDetails.PlaceholderValues[idx] = tree.PasswordSubstitution
+			}
+		}
 	}
 	return commonSQLEventDetails
+}
+
+// passwordPlaceholderIdxs returns the indexes of any placeholders used as the
+// value of a password role option in stmt, e.g. the $1 in
+// CREATE ROLE foo WITH PASSWORD $1.
+func passwordPlaceholderIdxs(ast tree.Statement) []tree.PlaceholderIdx {
+	var opts tree.KVOptions
+	switch n := ast.(type) {
+	case *tree.CreateRole:
+		opts = n.KVOptions
+	case *tree.AlterRole:
+		opts = n.KVOptions
+	default:
+		return nil
+	}
+	var idxs []tree.PlaceholderIdx
+	for _, opt := range opts {
+		// Password options are recognized by key suffix, mirroring
+		// KVOptions.formatAsRoleOptions.
+		if !strings.HasSuffix(string(opt.Key), "password") {
+			continue
+		}
+		if ph, ok := opt.Value.(*tree.Placeholder); ok {
+			idxs = append(idxs, ph.Idx)
+		}
+	}
+	return idxs
 }
 
 // logEventsWithOptions is like logEvent() but it gives control to the

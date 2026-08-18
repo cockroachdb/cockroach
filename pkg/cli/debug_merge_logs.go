@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"container/heap"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -68,9 +69,24 @@ func writeLogStream(
 	g, ctx := errgroup.WithContext(context.Background())
 	entryChan := make(chan entryInfo, chanSize) // read -> bufferWrites
 	writeChan := make(chan *bytes.Buffer)       // bufferWrites -> write
+	sensitiveNames := sensitiveSettingNames()
+	var numScrubbed, numTombstoned int
 	read := func() error {
 		defer close(entryChan)
 		for e, ok := s.peek(); ok; e, ok = s.peek() {
+			// Entries mentioning a sensitive cluster setting may carry the
+			// setting's value (a secret), and merged logs are typically
+			// produced to be shared for support - scrub such entries even
+			// when no redaction was requested.
+			scrubbed, tombstoned := scrubSensitiveSettingLogEntry(
+				&e, sensitiveNames,
+				"REDACTEDBYMERGELOGS (message mentioned a sensitive cluster setting)")
+			if scrubbed {
+				numScrubbed++
+			}
+			if tombstoned {
+				numTombstoned++
+			}
 			select {
 			case entryChan <- entryInfo{Entry: e, fileInfo: s.fileInfo()}:
 			case <-ctx.Done():
@@ -155,7 +171,15 @@ func writeLogStream(
 	g.Go(read)
 	g.Go(bufferWrites)
 	g.Go(write)
-	return g.Wait()
+	if err := g.Wait(); err != nil {
+		return err
+	}
+	if numScrubbed > 0 {
+		fmt.Fprintf(stderr,
+			"warning: %d log entries mentioned sensitive cluster settings and were scrubbed (%d were not redactable and were replaced entirely)\n",
+			numScrubbed, numTombstoned)
+	}
+	return nil
 }
 
 // mergedStream is a merged heap of log streams.
