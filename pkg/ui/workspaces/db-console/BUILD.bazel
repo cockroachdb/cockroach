@@ -72,6 +72,7 @@ webpack_bin.webpack_cli(
         "db-console-ccl/assets/login-background.png",
         "db-console-ccl/assets/not-found.svg",
         "db-console-ccl/assets/questionMap.svg",
+        "db-console-ccl/assets/signup-panel-art.png",
     ],
     args = [
         "--config",
@@ -112,6 +113,7 @@ webpack_bin.webpack_cli(
         "db-console-oss/assets/heroBannerLp.png",
         "db-console-oss/assets/login-background.png",
         "db-console-oss/assets/not-found.svg",
+        "db-console-oss/assets/signup-panel-art.png",
     ],
     args = [
         "--config",

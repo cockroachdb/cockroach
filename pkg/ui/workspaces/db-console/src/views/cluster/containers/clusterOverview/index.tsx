@@ -14,6 +14,7 @@ import EmailSubscription from "src/views/dashboard/emailSubscription";
 import OverviewListAlerts from "src/views/shared/containers/alerts/overviewListAlerts";
 import createChartComponent from "src/views/shared/util/d3-react";
 
+import { AegisBanner } from "./aegisBanner";
 import capacityChart from "./capacity";
 import "./cluster.scss";
 import {
@@ -219,12 +220,15 @@ export default function ClusterOverview({
   return (
     <div className="cluster-page">
       <Helmet title="Cluster Overview" />
-      <EmailSubscription />
+      <AegisBanner />
       <OverviewListAlerts />
       <section className="section cluster-overview">
         <ClusterSummary />
       </section>
       <section className="cluster-overview--fixed">{children}</section>
+      {/* Release-notes email signup, demoted below the content now that the
+          Aegis banner holds the prominent top slot. */}
+      <EmailSubscription />
     </div>
   );
 }
