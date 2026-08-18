@@ -471,7 +471,7 @@ func waitForInterrupt() <-chan os.Signal {
 }
 
 // getCluster retrieves the cluster from the cache using the global isSecure option.
-// This ensures ephemeral clusters in cockroach-ephemeral project default to insecure mode.
+// This ensures clusters in the e2e infrastructure projects use insecure mode.
 func getCluster(clusterName string) (*install.SyncedCluster, error) {
 	return roachprod.GetClusterFromCache(
 		config.Logger,

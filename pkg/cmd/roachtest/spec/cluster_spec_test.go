@@ -370,6 +370,19 @@ func TestGCEWorkloadUsesMachineCompatibleVolumeType(t *testing.T) {
 	}
 }
 
+func TestGCERoachprodOptsUseBulkInsertByDefault(t *testing.T) {
+	s := MakeClusterSpec(1, DisableLocalSSD())
+	params := RoachprodClusterConfig{
+		Cloud:         GCE,
+		PreferredArch: vm.ArchAMD64,
+	}
+
+	_, providerOpts, workloadProviderOpts, _, _, err := s.RoachprodOpts(params)
+	require.NoError(t, err)
+	require.True(t, providerOpts.(*gce.ProviderOpts).UseBulkInsert)
+	require.True(t, workloadProviderOpts.(*gce.ProviderOpts).UseBulkInsert)
+}
+
 func TestGCELocalSSDWorkloadBootDiskOnlyAvoidsLSSDMachineType(t *testing.T) {
 	s := MakeClusterSpec(5, WorkloadNode())
 	params := RoachprodClusterConfig{

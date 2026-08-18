@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -59,11 +60,7 @@ const (
 	AssumeRoleAWSSecretKeyEnvVar = "AWS_SECRET_ACCESS_KEY_ASSUME_ROLE"
 	AssumeRoleAWSRoleEnvVar      = "AWS_ROLE_ARN"
 
-	KMSKeyNameAEnvVar           = "GOOGLE_KMS_KEY_A"
-	KMSKeyNameBEnvVar           = "GOOGLE_KMS_KEY_B"
-	KMSGCSCredentials           = "GOOGLE_EPHEMERAL_CREDENTIALS"
-	AssumeRoleGCSCredentials    = "GOOGLE_CREDENTIALS_ASSUME_ROLE"
-	AssumeRoleGCSServiceAccount = "GOOGLE_SERVICE_ACCOUNT"
+	KMSGCSCredentials = "GOOGLE_EPHEMERAL_CREDENTIALS"
 
 	// rows2TiB is the number of rows to import to load 2TB of data (when
 	// replicated).
@@ -75,7 +72,38 @@ const (
 	rows3GiB   = rows30GiB / 10
 )
 
-var backupTestingBucket = testutils.BackupTestingBucket()
+type gceBackupResources struct {
+	project                  string
+	backupBucket             string
+	kmsKeyA                  string
+	kmsKeyB                  string
+	assumeRoleServiceAccount string
+}
+
+// resolveGCEBackupResources uses roachprod's infrastructure-project
+// resolution, including flag and environment overrides and the default
+// project.
+func resolveGCEBackupResources() gceBackupResources {
+	return gceBackupResourcesForProject(gce.InfraProject())
+}
+
+func gceBackupResourcesForProject(project string) gceBackupResources {
+	return gceBackupResources{
+		project:      project,
+		backupBucket: testutils.BackupTestingBucketForProject(project),
+		kmsKeyA: fmt.Sprintf(
+			"projects/%s/locations/us-central1/keyRings/kms-backup-test/cryptoKeys/key-A",
+			project,
+		),
+		kmsKeyB: fmt.Sprintf(
+			"projects/%s/locations/northamerica-northeast2/keyRings/kms-backup-test-2/cryptoKeys/key-B",
+			project,
+		),
+		assumeRoleServiceAccount: fmt.Sprintf(
+			"backup-testing@%s.iam.gserviceaccount.com", project,
+		),
+	}
+}
 
 func destinationName(c cluster.Cluster) string {
 	dest := c.Name()
@@ -133,6 +161,7 @@ func importBankCommand(cockroach string, rows, ranges, csvPort, node int) string
 	return roachtestutil.
 		NewCommand("%s workload fixtures import bank", cockroach).
 		Arg("{pgurl:%d}", node).
+		Flag("bucket-override", gceFixtureBucket()).
 		Flag("db", "bank").
 		Flag("payload-bytes", 10240).
 		Flag("csv-server", fmt.Sprintf("http://localhost:%d", csvPort)).
@@ -501,10 +530,11 @@ func registerBackup(r registry.Registry) {
 						t.Fatal(err)
 					}
 				case spec.GCE:
-					if backupPath, err = getGCSBackupPath(dest); err != nil {
+					resources := resolveGCEBackupResources()
+					if backupPath, err = getGCSBackupPath(dest, resources); err != nil {
 						t.Fatal(err)
 					}
-					if kmsURI, err = getGCSKMSAssumeRoleURI(); err != nil {
+					if kmsURI, err = getGCSKMSAssumeRoleURI(resources); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -602,12 +632,13 @@ func registerBackup(r registry.Registry) {
 						}
 					case spec.GCE:
 						t.Status(`running encrypted backup with GCS KMS`)
-						kmsURIA, err = getGCSKMSURI(KMSKeyNameAEnvVar)
+						resources := resolveGCEBackupResources()
+						kmsURIA, err = getGCSKMSURI(resources.kmsKeyA)
 						if err != nil {
 							return err
 						}
 
-						kmsURIB, err = getGCSKMSURI(KMSKeyNameBEnvVar)
+						kmsURIB, err = getGCSKMSURI(resources.kmsKeyB)
 						if err != nil {
 							return err
 						}
@@ -673,7 +704,7 @@ func registerBackup(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(3, spec.CPU(8)),
 		Leases:            registry.MetamorphicLeases,
 		EncryptionSupport: registry.EncryptionMetamorphic,
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
 		Suites:                    registry.Suites(registry.Nightly),
@@ -744,7 +775,7 @@ func runBackupImportRollback(
 	_, err = conn.Exec(`USE tpch`)
 	require.NoError(t, err)
 	createStmt, err := readFileFromFixture(
-		"gs://cockroach-fixtures-us-east1/tpch-csv/schema/orders.sql?AUTH=implicit", conn)
+		gceFixtureURI("tpch-csv/schema/orders.sql?AUTH=implicit"), conn)
 	require.NoError(t, err)
 	_, err = conn.ExecContext(ctx, createStmt)
 	require.NoError(t, err)
@@ -811,10 +842,10 @@ func runBackupImportRollback(
 	// Import the odd-numbered files.
 	t.Status("importing odd-numbered files")
 	files := []string{
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.1?AUTH=implicit`,
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.3?AUTH=implicit`,
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.5?AUTH=implicit`,
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.7?AUTH=implicit`,
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.1?AUTH=implicit"),
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.3?AUTH=implicit"),
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.5?AUTH=implicit"),
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.7?AUTH=implicit"),
 	}
 	if config.short {
 		files = files[:2]
@@ -845,10 +876,10 @@ func runBackupImportRollback(
 
 	// Import and cancel even-numbered files twice.
 	files = []string{
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.2?AUTH=implicit`,
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.4?AUTH=implicit`,
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.6?AUTH=implicit`,
-		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.8?AUTH=implicit`,
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.2?AUTH=implicit"),
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.4?AUTH=implicit"),
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.6?AUTH=implicit"),
+		gceFixtureURI("tpch-csv/sf-100/orders.tbl.8?AUTH=implicit"),
 	}
 	if config.short {
 		files = files[:1]
@@ -1030,87 +1061,47 @@ func getAWSKMSAssumeRoleURI() (string, error) {
 	return correctURI, nil
 }
 
-func getGCSKMSURI(keyIDEnvVariable string) (string, error) {
+func getGCSEphemeralAuthParams(assumeRoleServiceAccount string) (url.Values, error) {
+	credentials := os.Getenv(KMSGCSCredentials)
+	if credentials == "" {
+		return nil, errors.Newf(
+			"env variable %s must be present to run the GCE backup test", KMSGCSCredentials,
+		)
+	}
+
 	q := make(url.Values)
-	expect := map[string]string{
-		KMSGCSCredentials: gcp.CredentialsParam,
+	// Nightlies provide JSON credentials, which have to be base64 encoded in
+	// GCS and GCP KMS URIs.
+	q.Set(gcp.CredentialsParam, base64.StdEncoding.EncodeToString([]byte(credentials)))
+	if assumeRoleServiceAccount != "" {
+		q.Set(gcp.AssumeRoleParam, assumeRoleServiceAccount)
 	}
-	for env, param := range expect {
-		v := os.Getenv(env)
-		if v == "" {
-			return "", errors.Newf("env variable %s must be present to run the KMS test", env)
-		}
-		// Nightlies load in json file of credentials but we want base64 encoded
-		q.Add(param, base64.StdEncoding.EncodeToString([]byte(v)))
-	}
-
-	keyID := os.Getenv(keyIDEnvVariable)
-	if keyID == "" {
-		return "", errors.Newf("", "%s env var must be set", keyIDEnvVariable)
-	}
-
-	// Set AUTH to specified
 	q.Set(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
-	correctURI := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
-
-	return correctURI, nil
+	return q, nil
 }
 
-func getGCSKMSAssumeRoleURI() (string, error) {
-	q := make(url.Values)
-	expect := map[string]string{
-		AssumeRoleGCSCredentials:    gcp.CredentialsParam,
-		AssumeRoleGCSServiceAccount: gcp.AssumeRoleParam,
+func getGCSKMSURI(keyName string) (string, error) {
+	q, err := getGCSEphemeralAuthParams("")
+	if err != nil {
+		return "", err
 	}
-	for env, param := range expect {
-		v := os.Getenv(env)
-		if v == "" {
-			return "", errors.Newf("env variable %s must be present to run the KMS test", env)
-		}
-		// Nightly env uses JSON credentials, which have to be base64 encoded.
-		if param == gcp.CredentialsParam {
-			v = base64.StdEncoding.EncodeToString([]byte(v))
-		}
-		q.Add(param, v)
-	}
-
-	// Get AWS Key ARN from env variable.
-	keyName := os.Getenv(KMSKeyNameAEnvVar)
-	if keyName == "" {
-		return "", errors.Newf("env variable %s must be present to run the KMS test", KMSKeyNameAEnvVar)
-	}
-
-	// Set AUTH to specified
-	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
-	correctURI := fmt.Sprintf("gs:///%s?%s", keyName, q.Encode())
-
-	return correctURI, nil
+	return fmt.Sprintf("gs:///%s?%s", keyName, q.Encode()), nil
 }
 
-func getGCSBackupPath(dest string) (string, error) {
-	q := make(url.Values)
-	expect := map[string]string{
-		AssumeRoleGCSCredentials:    gcp.CredentialsParam,
-		AssumeRoleGCSServiceAccount: gcp.AssumeRoleParam,
+func getGCSKMSAssumeRoleURI(resources gceBackupResources) (string, error) {
+	q, err := getGCSEphemeralAuthParams(resources.assumeRoleServiceAccount)
+	if err != nil {
+		return "", err
 	}
-	for env, param := range expect {
-		v := os.Getenv(env)
-		if v == "" {
-			return "", errors.Errorf("env variable %s must be present to run the assume role test", env)
-		}
+	return fmt.Sprintf("gs:///%s?%s", resources.kmsKeyA, q.Encode()), nil
+}
 
-		// Nightly env uses JSON credentials, which have to be base64 encoded.
-		if param == gcp.CredentialsParam {
-			v = base64.StdEncoding.EncodeToString([]byte(v))
-		}
-		q.Add(param, v)
+func getGCSBackupPath(dest string, resources gceBackupResources) (string, error) {
+	q, err := getGCSEphemeralAuthParams(resources.assumeRoleServiceAccount)
+	if err != nil {
+		return "", err
 	}
-
-	// Set AUTH to specified
-	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
-	uri := fmt.Sprintf("gs://"+backupTestingBucket+"/gcs/%s?%s", dest, q.Encode())
-
-	return uri, nil
+	return fmt.Sprintf("gs://%s/gcs/%s?%s", resources.backupBucket, dest, q.Encode()), nil
 }
 
 func getAWSBackupPath(dest string) (string, error) {
@@ -1130,5 +1121,5 @@ func getAWSBackupPath(dest string) (string, error) {
 	}
 	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
 
-	return fmt.Sprintf("s3://"+backupTestingBucket+"/%s?%s", dest, q.Encode()), nil
+	return fmt.Sprintf("s3://"+testutils.BackupTestingBucket()+"/%s?%s", dest, q.Encode()), nil
 }

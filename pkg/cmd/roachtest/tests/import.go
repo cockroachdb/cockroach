@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -77,6 +78,16 @@ type tpchDataset struct {
 	staticDataset
 }
 
+func tpchBaseURL(format string) string {
+	return tpchBaseURLForProject(format, gce.InfraProject())
+}
+
+func tpchBaseURLForProject(format, project string) string {
+	return fmt.Sprintf(
+		"gs://%s/tpch-%s/", gcsBucketForProject("cockroach-fixtures-us-east1", project), format,
+	)
+}
+
 // init() implements the dataset interface. We use scale factor 1 for local clusters and scale
 // factor 100 for roachprod clusters.
 func (tpch *tpchDataset) init(
@@ -89,7 +100,7 @@ func (tpch *tpchDataset) init(
 	}()
 	conn := c.Conn(ctx, l, 1)
 	defer conn.Close()
-	baseURL := "gs://cockroach-fixtures-us-east1/tpch-csv/"
+	baseURL := tpchBaseURL("csv")
 	var scale string
 	if c.IsLocal() {
 		scale = "sf-1"
@@ -1081,7 +1092,7 @@ func registerImportTPCC(r registry.Registry) {
 		tick, perfBuf := initBulkJobPerfArtifacts(timeout, t, exporter)
 		defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
 
-		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081' {pgurl:1}`
+		workloadStr := `./cockroach workload fixtures import tpcc %s --warehouses=%d --csv-server='http://localhost:8081' {pgurl:1}`
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
 			if c.Spec().Geo {
@@ -1089,7 +1100,7 @@ func registerImportTPCC(r registry.Registry) {
 				// test.
 				c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach sql -e "SET CLUSTER SETTING bulkio.import.retry_duration = '20m';" --url={pgurl:1}`)
 			}
-			cmd := fmt.Sprintf(workloadStr, warehouses)
+			cmd := fmt.Sprintf(workloadStr, gceFixtureBucketFlag(), warehouses)
 			// Tick once before starting the import, and once after to capture the
 			// total elapsed time. This is used by roachperf to compute and display
 			// the average MB/sec per node.

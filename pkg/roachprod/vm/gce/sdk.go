@@ -202,13 +202,11 @@ func (i *sdkInstance) toVM(project, dnsDomain string) *vm.VM {
 	if len(i.GetNetworkInterfaces()) == 0 {
 		vmErrors = append(vmErrors, vm.NewVMError(vm.ErrBadNetwork))
 	} else {
-		privateIP = i.GetNetworkInterfaces()[0].GetNetworkIP()
-		if len(i.GetNetworkInterfaces()[0].GetAccessConfigs()) == 0 {
-			vmErrors = append(vmErrors, vm.NewVMError(vm.ErrBadNetwork))
-		} else {
-			_ = i.GetNetworkInterfaces()[0].GetAccessConfigs()[0].GetName() // silence unused warning
-			publicIP = i.GetNetworkInterfaces()[0].GetAccessConfigs()[0].GetNatIP()
-			vpc = lastComponent(i.GetNetworkInterfaces()[0].GetNetwork())
+		networkInterface := i.GetNetworkInterfaces()[0]
+		privateIP = networkInterface.GetNetworkIP()
+		vpc = lastComponent(networkInterface.GetNetwork())
+		if len(networkInterface.GetAccessConfigs()) > 0 {
+			publicIP = networkInterface.GetAccessConfigs()[0].GetNatIP()
 		}
 	}
 	if i.GetScheduling().GetOnHostMaintenance() == "" {
@@ -285,6 +283,8 @@ func (i *sdkInstance) toVM(project, dnsDomain string) *vm.VM {
 		ProviderID:             i.GetName(),
 		ProviderAccountID:      projectName,
 		PublicIP:               publicIP,
+		AddressMode:            inferAddressMode(publicIP),
+		NetworkTags:            i.GetTags().GetItems(),
 		PublicDNS:              fmt.Sprintf("%s.%s", i.GetName(), dnsDomain),
 		PublicDNSZone:          dnsDomain,
 		RemoteUser:             remoteUser,

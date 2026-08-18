@@ -12,11 +12,121 @@ import (
 	"testing"
 	"time"
 
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestHostAndSSHTransport(t *testing.T) {
+	privateCluster := &SyncedCluster{Cluster: cloudcluster.Cluster{VMs: vm.List{
+		{
+			Name:      "private-vm",
+			Provider:  gce.ProviderName,
+			Project:   "test-project",
+			Zone:      "us-central1-c",
+			PrivateIP: "10.0.0.2",
+			NetworkTags: []string{
+				"iap-ssh",
+			},
+		},
+	}}}
+	require.Equal(t, "10.0.0.2", privateCluster.Host(1))
+	iapTransport := []string{
+		"-o",
+		"ProxyCommand=gcloud compute start-iap-tunnel private-vm 22 --listen-on-stdin " +
+			"--project=test-project --zone=us-central1-c --verbosity=warning",
+		"-o",
+		"ConnectTimeout=30",
+	}
+	require.Equal(t, iapTransport, privateCluster.sshTransportArgs(1))
+	_, err := privateCluster.GetExternalIP(1)
+	require.ErrorContains(t, err, "no public IP")
+	_, err = (&expander{node: 1}).expand(
+		context.Background(), nil, privateCluster, ExpanderConfig{}, "{ip:1:public}",
+	)
+	require.ErrorContains(t, err, "no public IP")
+
+	scpCommand := scpArgs(iapTransport, "source", "destination", false)
+	require.Equal(t, append(
+		[]string{"scp", "-r", "-C"}, append(iapTransport,
+			"-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10",
+		)...), scpCommand[:3+len(iapTransport)+4])
+	require.Equal(t, []string{"source", "destination"}, scpCommand[len(scpCommand)-2:])
+	treeSCPCommand := scpArgs(iapTransport, "source", "destination", true)
+	require.Equal(t, []string{"scp", "-r", "-C", "-R", "-A"}, treeSCPCommand[:5])
+	require.Equal(t, iapTransport, treeSCPCommand[5:5+len(iapTransport)])
+	require.Contains(t, privateCluster.rsyncSSHCommand(1), "'"+iapTransport[1]+"'")
+
+	directPrivateCluster := &SyncedCluster{Cluster: cloudcluster.Cluster{VMs: vm.List{
+		{
+			Name:      "direct-private-vm",
+			Provider:  gce.ProviderName,
+			Project:   "test-project",
+			Zone:      "us-central1-c",
+			PrivateIP: "10.0.0.4",
+		},
+	}}}
+	require.Equal(t, "10.0.0.4", directPrivateCluster.Host(1))
+	require.Empty(t, directPrivateCluster.sshTransportArgs(1))
+	require.NotContains(t, directPrivateCluster.rsyncSSHCommand(1), "start-iap-tunnel")
+
+	publicCluster := &SyncedCluster{Cluster: cloudcluster.Cluster{VMs: vm.List{
+		{
+			Name:      "public-vm",
+			Provider:  gce.ProviderName,
+			Project:   "test-project",
+			Zone:      "us-central1-c",
+			PrivateIP: "10.0.0.3",
+			PublicIP:  "192.0.2.1",
+			NetworkTags: []string{
+				"iap-ssh",
+			},
+		},
+	}}}
+	require.Equal(t, "192.0.2.1", publicCluster.Host(1))
+	require.Empty(t, publicCluster.sshTransportArgs(1))
+	require.NotContains(t, publicCluster.rsyncSSHCommand(1), "start-iap-tunnel")
+	publicIP, err := publicCluster.GetExternalIP(1)
+	require.NoError(t, err)
+	require.Equal(t, "192.0.2.1", publicIP)
+	publicIP, err = (&expander{node: 1}).expand(
+		context.Background(), nil, publicCluster, ExpanderConfig{}, "{ip:1:public}",
+	)
+	require.NoError(t, err)
+	require.Equal(t, "192.0.2.1", publicIP)
+}
+
+func TestPublicIPExpanderSkipsUnselectedPrivateNodes(t *testing.T) {
+	c := &SyncedCluster{Cluster: cloudcluster.Cluster{VMs: vm.List{
+		{
+			Name:      "public-vm",
+			Provider:  gce.ProviderName,
+			PrivateIP: "10.0.0.2",
+			PublicIP:  "192.0.2.1",
+		},
+		{
+			Name:      "private-vm",
+			Provider:  gce.ProviderName,
+			PrivateIP: "10.0.0.3",
+		},
+	}}}
+	e := &expander{node: 1}
+
+	publicIP, err := e.expand(
+		context.Background(), nil, c, ExpanderConfig{}, "{ip:1:public}",
+	)
+	require.NoError(t, err)
+	require.Equal(t, "192.0.2.1", publicIP)
+
+	_, err = e.expand(
+		context.Background(), nil, c, ExpanderConfig{}, "{ip:2:public}",
+	)
+	require.ErrorContains(t, err, "no public IP for node 2")
+}
 
 // TestRoachprodEnv tests the roachprodEnvRegex and roachprodEnvValue methods.
 func TestRoachprodEnv(t *testing.T) {

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
@@ -92,7 +93,8 @@ outer:
 	default:
 		scheme = ""
 	}
-	bucket := fmt.Sprintf("%s://%s/operation-backup-restore/%d/?AUTH=implicit", scheme, testutils.BackupTestingBucket(), timeutil.Now().UnixNano())
+	bucket := fmt.Sprintf("%s://%s/operation-backup-restore/%d/?AUTH=implicit",
+		scheme, backupTestingBucket(c.Cloud()), timeutil.Now().UnixNano())
 
 	backupTS := hlc.Timestamp{WallTime: timeutil.Now().Add(-10 * time.Second).UTC().UnixNano()}
 
@@ -199,6 +201,17 @@ outer:
 	}
 
 	return cleanup
+}
+
+func backupTestingBucket(cloud spec.Cloud) string {
+	return backupTestingBucketForProject(cloud, gce.InfraProject())
+}
+
+func backupTestingBucketForProject(cloud spec.Cloud, infraProject string) string {
+	if cloud == spec.GCE {
+		return testutils.BackupTestingBucketForProject(infraProject)
+	}
+	return testutils.BackupTestingBucket()
 }
 
 func runBackupRestoreFn(

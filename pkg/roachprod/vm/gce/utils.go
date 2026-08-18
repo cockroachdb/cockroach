@@ -8,11 +8,11 @@ package gce
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -213,23 +213,23 @@ func (p *Provider) DNSDomain() string {
 	return p.dnsProvider.PublicDomain()
 }
 
+// AuthorizedKey is one user-owned SSH public key from the shared key pool.
 type AuthorizedKey struct {
 	User    string
 	Key     ssh.PublicKey
 	Comment string
 }
 
-// Format formats an authorized key for display. When `maxLen` is 0,
-// we return the entire key, truncating it to that length
-// otherwise. The comment associated with the key, if available, is
-// always displayed.
+// Format formats an authorized key for display. When maxLen is greater than 0
+// and shorter than the formatted key, the key is truncated to that length. The
+// comment associated with the key, if available, is always displayed.
 func (k AuthorizedKey) Format(maxLen int) string {
 	formatted := string(ssh.MarshalAuthorizedKey(k.Key))
 	// Drop new line character if present. We add it when formatting a
-	// set of keys in `AsSSSH` or `AsProjectMetadata`.
+	// set of keys in AsSSH or AsStorageFile.
 	formatted = strings.TrimSuffix(formatted, "\n")
 
-	if maxLen > 0 {
+	if maxLen > 0 && maxLen < len(formatted) {
 		formatted = formatted[:maxLen] + "..."
 	}
 
@@ -245,6 +245,7 @@ func (k AuthorizedKey) String() string {
 	return k.Format(0)
 }
 
+// AuthorizedKeys is an ordered set of SSH public keys from shared storage.
 type AuthorizedKeys []AuthorizedKey
 
 // AsSSH returns a marshaled version of the authorized keys in a
@@ -259,10 +260,9 @@ func (ak AuthorizedKeys) AsSSH() []byte {
 	return buf.Bytes()
 }
 
-// AsProjectMetadata returns a marshaled version of the authorized
-// keys in a format that can be pushed to GCE's project metadata
-// storage.
-func (ak AuthorizedKeys) AsProjectMetadata() []byte {
+// AsStorageFile returns a marshaled version of the authorized keys that
+// preserves the username associated with each key.
+func (ak AuthorizedKeys) AsStorageFile() []byte {
 	var buf bytes.Buffer
 
 	for _, k := range ak {
@@ -272,34 +272,60 @@ func (ak AuthorizedKeys) AsProjectMetadata() []byte {
 	return buf.Bytes()
 }
 
-// GetUserAuthorizedKeys implements the InfraProvider interface.
-func (p *Provider) GetUserAuthorizedKeys() (AuthorizedKeys, error) {
-	var outBuf bytes.Buffer
-	// The below command will return a stream of user:pubkey as text.
-	cmd := exec.Command("gcloud", "compute", "project-info", "describe",
-		"--project="+p.metadataProject,
-		"--format=value(commonInstanceMetadata.ssh-keys)")
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = &outBuf
+// AsProjectMetadata returns a marshaled version of the authorized keys in the
+// legacy GCE project-metadata format.
+func (ak AuthorizedKeys) AsProjectMetadata() []byte {
+	return ak.AsStorageFile()
+}
 
-	if err := cmd.Run(); err != nil {
-		return nil, err
-	}
+// AuthorizedKeyParseIssueKind classifies a non-fatal line-level key-data parse
+// issue.
+type AuthorizedKeyParseIssueKind string
 
+const (
+	AuthorizedKeyMalformedLine AuthorizedKeyParseIssueKind = "malformed-line"
+	AuthorizedKeyInvalidKey    AuthorizedKeyParseIssueKind = "invalid-key"
+)
+
+// AuthorizedKeyParseIssue describes one skipped metadata line.
+type AuthorizedKeyParseIssue struct {
+	// Kind identifies why this line was skipped.
+	Kind AuthorizedKeyParseIssueKind
+	// Line is the 1-based line number in the serialized SSH key data.
+	Line int
+	// User is the username when it was parsed before the failure.
+	User string
+	// Err is the underlying parse error for invalid SSH public keys.
+	Err error
+	// rawLine preserves the malformed input line for legacy roachprod
+	// diagnostics. Keep it unexported so reusable callers cannot accidentally
+	// log SSH key material.
+	rawLine string
+}
+
+// ParseUserAuthorizedKeys converts serialized user SSH keys into sorted
+// authorized keys and non-fatal parse diagnostics.
+func ParseUserAuthorizedKeys(contents string) (AuthorizedKeys, []AuthorizedKeyParseIssue, error) {
 	var authorizedKeys AuthorizedKeys
-	scanner := bufio.NewScanner(&outBuf)
+	var issues []AuthorizedKeyParseIssue
+	scanner := bufio.NewScanner(strings.NewReader(contents))
+	lineNumber := 0
 	for scanner.Scan() {
+		lineNumber++
 		line := scanner.Text()
 		if line == "" {
 			continue
 		}
-		// N.B. Below, we skip over invalid public keys as opposed to failing. Since we don't control how these keys are
-		// uploaded, it's possible for a key to become invalid.
-		// N.B. This implies that an operation like `AddUserAuthorizedKey` has the side effect of removing invalid
-		// keys, since they are skipped here, and the result is then uploaded via `SetUserAuthorizedKeys`.
+		// Skip over invalid public keys instead of failing. Since roachprod does
+		// not control every metadata write, one bad key must not prevent callers
+		// from preserving the valid keys.
 		colonIdx := strings.IndexRune(line, ':')
 		if colonIdx == -1 {
-			fmt.Fprintf(os.Stderr, "WARN: malformed public key line %q\n", line)
+			issues = append(issues, AuthorizedKeyParseIssue{
+				Kind:    AuthorizedKeyMalformedLine,
+				Line:    lineNumber,
+				rawLine: line,
+			})
 			continue
 		}
 
@@ -312,28 +338,85 @@ func (p *Provider) GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 
 		pubKey, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(key))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARN: failed to parse public key in project metadata: %v\n%q\n", err, key)
+			issues = append(issues, AuthorizedKeyParseIssue{
+				Kind: AuthorizedKeyInvalidKey,
+				Line: lineNumber,
+				User: user,
+				Err:  err,
+			})
 			continue
 		}
 		authorizedKeys = append(authorizedKeys, AuthorizedKey{User: user, Key: pubKey, Comment: comment})
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("failed to read public keys from project metadata: %w", err)
+		return nil, issues, errors.Wrap(err, "failed to read SSH key data")
 	}
 
-	// For consistency, return keys sorted by username.
-	sort.Slice(authorizedKeys, func(i, j int) bool {
-		return authorizedKeys[i].User < authorizedKeys[j].User
+	// For consistency, return keys sorted by username while preserving source
+	// order for keys belonging to the same user.
+	slices.SortStableFunc(authorizedKeys, func(a, b AuthorizedKey) int {
+		return strings.Compare(a.User, b.User)
 	})
 
+	return authorizedKeys, issues, nil
+}
+
+func logAuthorizedKeyParseIssues(issues []AuthorizedKeyParseIssue) {
+	for _, issue := range issues {
+		switch issue.Kind {
+		case AuthorizedKeyMalformedLine:
+			fmt.Fprintf(os.Stderr, "WARN: malformed public key line %q\n", issue.rawLine)
+		case AuthorizedKeyInvalidKey:
+			if issue.User != "" {
+				fmt.Fprintf(
+					os.Stderr,
+					"WARN: failed to parse public key data on line %d for user %q: %v\n",
+					issue.Line, issue.User, issue.Err,
+				)
+			} else {
+				fmt.Fprintf(
+					os.Stderr,
+					"WARN: failed to parse public key data on line %d: %v\n",
+					issue.Line, issue.Err,
+				)
+			}
+		}
+	}
+}
+
+// GetUserAuthorizedKeys implements the InfraProvider interface.
+func (p *Provider) GetUserAuthorizedKeys() (AuthorizedKeys, error) {
+	if _, ok := SSHKeysBucketForProject(p.metadataProject); ok {
+		authorizedKeys, issues, err := GetUserAuthorizedKeysFromGCS(
+			context.Background(), p.metadataProject,
+		)
+		logAuthorizedKeyParseIssues(issues)
+		return authorizedKeys, err
+	}
+
+	var outBuf bytes.Buffer
+	// The below command will return a stream of user:pubkey as text.
+	cmd := exec.Command("gcloud", "compute", "project-info", "describe",
+		"--project="+p.metadataProject,
+		"--format=value(commonInstanceMetadata.ssh-keys)")
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = &outBuf
+
+	if err := cmd.Run(); err != nil {
+		return nil, err
+	}
+
+	authorizedKeys, issues, err := ParseUserAuthorizedKeys(outBuf.String())
+	logAuthorizedKeyParseIssues(issues)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse SSH keys from GCE project metadata")
+	}
 	return authorizedKeys, nil
 }
 
 // AddUserAuthorizedKey adds the authorized key provided to the set of
-// keys installed on clusters managed by roachprod. Currently, these
-// keys are stored in the project metadata for the roachprod's
-// `DefaultProject`.
+// keys installed on clusters managed by roachprod.
 func AddUserAuthorizedKey(ak AuthorizedKey) error {
 	existingKeys, err := Infrastructure.GetUserAuthorizedKeys()
 	if err != nil {
@@ -348,11 +431,15 @@ func AddUserAuthorizedKey(ak AuthorizedKey) error {
 	return SetUserAuthorizedKeys(newKeys)
 }
 
-// SetUserAuthorizedKeys updates the default project metadata with the
-// keys provided. Note that this overwrites any existing keys -- all
-// existing keys need to be passed in the `keys` list provided in
-// order for them to continue to exist after this function is called.
+// SetUserAuthorizedKeys updates the configured shared SSH key storage. Note
+// that this overwrites any existing keys -- all existing keys need to be
+// passed in the keys list for them to continue to exist after this function
+// is called.
 func SetUserAuthorizedKeys(keys AuthorizedKeys) (retErr error) {
+	if metadataProject := MetadataProject(); !isLegacyProject(metadataProject) {
+		return setUserAuthorizedKeysInGCS(context.Background(), metadataProject, keys)
+	}
+
 	tmpFile, err := os.CreateTemp("", "ssh-keys-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
@@ -366,7 +453,7 @@ func SetUserAuthorizedKeys(keys AuthorizedKeys) (retErr error) {
 	}
 
 	cmd := exec.Command("gcloud", "compute", "project-info", "add-metadata",
-		fmt.Sprintf("--project=%s", DefaultProject()),
+		fmt.Sprintf("--project=%s", MetadataProject()),
 		fmt.Sprintf("--metadata-from-file=ssh-keys=%s", tmpFile.Name()),
 	)
 

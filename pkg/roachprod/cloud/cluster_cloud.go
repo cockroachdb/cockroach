@@ -263,6 +263,9 @@ type ClusterCreateOpts struct {
 	Nodes                 int
 	CreateOpts            vm.CreateOpts
 	ProviderOptsContainer vm.ProviderOptionsContainer
+	// KeepClusterOnFailure preserves any cloud resources created when cluster
+	// creation fails. This is useful for diagnosing VM initialization failures.
+	KeepClusterOnFailure bool
 }
 
 // Extracts o.CreateOpts.VMProviders from the provided opts.
@@ -296,7 +299,36 @@ func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) (*cloudcluster.C
 		nodesCreated++
 		return vm.Name(name, nodesCreated)
 	}
+	autoUsesGCEPolicy := true
 	for _, o := range opts {
+		for _, provider := range o.CreateOpts.VMProviders {
+			if provider != gce.ProviderName {
+				autoUsesGCEPolicy = false
+				break
+			}
+		}
+	}
+	for _, o := range opts {
+		addressMode, err := vm.NormalizeAddressMode(o.CreateOpts.AddressMode)
+		if err != nil {
+			return nil, err
+		}
+		if addressMode == vm.AddressModePrivate {
+			for _, provider := range o.CreateOpts.VMProviders {
+				if provider != gce.ProviderName {
+					return nil, errors.Errorf(
+						"address mode %q is not supported by provider %q", addressMode, provider,
+					)
+				}
+			}
+		}
+		if addressMode == vm.AddressModeAuto && !autoUsesGCEPolicy {
+			// Avoid producing a mixed-address cluster when a create spans
+			// providers. Auto is currently GCE-specific; all other creates
+			// retain the historical public-address behavior.
+			addressMode = vm.AddressModePublic
+		}
+		o.CreateOpts.AddressMode = addressMode
 		providerCount := len(o.CreateOpts.VMProviders)
 		if providerCount == 0 {
 			return nil, errors.New("no VMProviders configured")

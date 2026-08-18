@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/cmd/drtprod/cli/commands",
         "//pkg/cmd/roachprod/cli",
+        "//pkg/roachprod/vm",
         "@com_github_spf13_cobra//:cobra",
     ],
 )

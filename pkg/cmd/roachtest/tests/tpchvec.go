@@ -596,7 +596,7 @@ func registerTPCHVec(r registry.Registry) {
 		Owner:     registry.OwnerSQLQueries,
 		Benchmark: true,
 		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
@@ -613,7 +613,7 @@ func registerTPCHVec(r registry.Registry) {
 		Name:    "tpchvec/disk",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
@@ -627,7 +627,7 @@ func registerTPCHVec(r registry.Registry) {
 		Owner:     registry.OwnerSQLQueries,
 		Benchmark: true,
 		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
@@ -645,7 +645,7 @@ func registerTPCHVec(r registry.Registry) {
 		Owner:     registry.OwnerSQLQueries,
 		Benchmark: true,
 		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
@@ -663,7 +663,7 @@ func registerTPCHVec(r registry.Registry) {
 		Owner:     registry.OwnerSQLQueries,
 		Benchmark: true,
 		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
@@ -686,7 +686,7 @@ func registerTPCHVec(r registry.Registry) {
 		Name:    "tpchvec/bench",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
