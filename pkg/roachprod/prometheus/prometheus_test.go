@@ -9,11 +9,27 @@ import (
 	"fmt"
 	"testing"
 
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMakeNodeIPMapUsesAvailableHost(t *testing.T) {
+	c := &install.SyncedCluster{Cluster: cloudcluster.Cluster{VMs: vm.List{
+		{PrivateIP: "10.0.0.1", PublicIP: "192.0.2.1"},
+		{PrivateIP: "10.0.0.2"},
+	}}}
+
+	got, err := makeNodeIPMap(c)
+	require.NoError(t, err)
+	require.Equal(t, map[install.Node]string{
+		1: "192.0.2.1",
+		2: "10.0.0.2",
+	}, got)
+}
 
 var nodeIPMap = map[install.Node]string{
 	install.Node(1): "127.0.0.1",

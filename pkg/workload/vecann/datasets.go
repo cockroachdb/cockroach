@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const bucketName = "cockroach-fixtures-us-east1"
+const defaultBucketName = "cockroach-fixtures-us-east1-crl-e2e-infra"
 const bucketDirName = "vecindex"
 
 // Dataset describes a set of vectors to be benchmarked.
@@ -87,6 +87,9 @@ func (d *Dataset) Reset() {
 type DatasetLoader struct {
 	// DatasetName is the name of the dataset (e.g. dbpedia-openai-100k-angular).
 	DatasetName string
+	// BucketName is the GCS bucket that stores the dataset. If empty, the
+	// production e2e fixture bucket is used.
+	BucketName string
 	// CacheFolder is the path to the temporary folder where datasets will be
 	// cached. It defaults to ~/.cache/workload-datasets.
 	CacheFolder string
@@ -99,6 +102,13 @@ type DatasetLoader struct {
 
 	// Data manages the test, train, and neighbors files that contain the dataset.
 	Data Dataset
+}
+
+func (dl *DatasetLoader) effectiveBucketName() string {
+	if dl.BucketName != "" {
+		return dl.BucketName
+	}
+	return defaultBucketName
 }
 
 // Load checks whether the given dataset has been downloaded. If not, it
@@ -269,6 +279,7 @@ func (dl *DatasetLoader) downloadAndUnzip(
 		err = errors.CombineErrors(err, client.Close())
 	}()
 
+	bucketName := dl.effectiveBucketName()
 	bucket := client.Bucket(bucketName)
 	object := bucket.Object(objectName)
 	attrs, err := object.Attrs(ctx)

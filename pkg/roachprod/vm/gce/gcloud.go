@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -65,44 +66,189 @@ const (
 	// VolumeTypeStandard represents an attached persistent disk.
 	VolumeTypePersistent VolumeType = "persistent"
 
-	DefaultProjectID = "cockroach-ephemeral"
+	DefaultProjectID = "crl-e2e-infra"
+	StagingProjectID = "crl-e2e-infra-staging"
+	// iapSSHTag targets the firewall rule that permits SSH from IAP's TCP
+	// forwarding address range in private roachprod VPCs.
+	iapSSHTag = "iap-ssh"
 )
 
+// UsesIAP reports whether a VM was created for SSH access through IAP.
+func UsesIAP(v vm.VM) bool {
+	return v.Provider == ProviderName && slices.Contains(v.NetworkTags, iapSSHTag)
+}
+
 var (
-	defaultDefaultProject, defaultMetadataProject, defaultDNSProject, defaultDefaultServiceAccount string
+	defaultVMProject, defaultInfraProject, defaultMetadataProject            string
+	defaultDNSProject, defaultArtifactsBucket, defaultServiceAccountOverride string
+	defaultMetadataProjectExplicit, defaultDNSProjectExplicit                bool
+	defaultArtifactsBucketExplicit, defaultServiceAccountExplicit            bool
+	// defaultSubnets seeds ProviderOpts from ROACHPROD_GCE_SUBNETS.
+	defaultSubnets map[string]string
 	// projects for which a cron GC job exists.
 	projectsWithGC []string
 )
 
-func initGCEProjectDefaults() {
-	defaultDefaultProject = config.EnvOrDefaultString(
+func initGCEProjectDefaults() error {
+	// ROACHPROD_GCE_DEFAULT_PROJECT historically controlled both the project
+	// where VMs were created and the project that hosted shared roachprod
+	// infrastructure. It remains the shared fallback for both roles, so the VM
+	// project and the infra project resolve to the same default unless one is
+	// overridden via its own environment variable. Keeping these defaults in
+	// sync avoids silently splitting a bare roachprod setup across two projects;
+	// TestProjectDefaultsShareBase locks this invariant.
+	legacyDefaultProject := config.EnvOrDefaultString(
 		"ROACHPROD_GCE_DEFAULT_PROJECT", DefaultProjectID,
 	)
-	defaultMetadataProject = config.EnvOrDefaultString(
+	defaultVMProject = config.EnvOrDefaultString(
+		"ROACHPROD_GCE_PROJECT", legacyDefaultProject,
+	)
+	defaultInfraProject = config.EnvOrDefaultString(
+		"ROACHPROD_GCE_INFRA_PROJECT", legacyDefaultProject,
+	)
+	defaultMetadataProject, defaultMetadataProjectExplicit = os.LookupEnv(
 		"ROACHPROD_GCE_METADATA_PROJECT",
-		defaultDefaultProject,
 	)
-	defaultDNSProject = config.EnvOrDefaultString(
-		"ROACHPROD_GCE_DNS_PROJECT", "cockroach-shared",
+	if !defaultMetadataProjectExplicit {
+		defaultMetadataProject = defaultInfraProject
+	}
+	defaultDNSProject, defaultDNSProjectExplicit = os.LookupEnv("ROACHPROD_GCE_DNS_PROJECT")
+	if !defaultDNSProjectExplicit {
+		defaultDNSProject = defaultInfraProject
+	}
+	defaultArtifactsBucket, defaultArtifactsBucketExplicit = os.LookupEnv(
+		"ROACHPROD_GCE_ARTIFACTS_BUCKET",
 	)
+	if !defaultArtifactsBucketExplicit {
+		defaultArtifactsBucket = artifactsBucketForProject(defaultInfraProject)
+	}
 
 	// Service account to use if the default project is in use.
-	defaultDefaultServiceAccount = config.EnvOrDefaultString(
+	defaultServiceAccountOverride, defaultServiceAccountExplicit = os.LookupEnv(
 		"ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT",
-		"21965078311-compute@developer.gserviceaccount.com",
 	)
-	projectsWithGC = []string{defaultDefaultProject}
+	subnets, err := parseRegionSubnetMap(config.EnvOrDefaultString("ROACHPROD_GCE_SUBNETS", ""))
+	if err != nil {
+		return errors.Wrap(err, "ROACHPROD_GCE_SUBNETS")
+	}
+	defaultSubnets = subnets
+	projectsWithGC = []string{defaultVMProject}
+	return nil
 }
 
-// DefaultProject returns the default GCE project. This is used to determine whether
-// certain features, such as DNS names are enabled.
-func DefaultProject() string {
-	// If the provider was already initialized, read the default project from the
-	// provider.
-	if p, ok := vm.Providers[ProviderName].(*Provider); ok {
-		return p.defaultProject
+// VMProject returns the GCE project where roachprod creates VMs by default.
+// It reflects single-project flag overrides after provider initialization and
+// the environment-derived VM project default before initialization.
+func VMProject() string {
+	if p, ok := vm.Providers[ProviderName].(*Provider); ok && len(p.Projects) == 1 && p.Projects[0] != "" {
+		return p.Projects[0]
 	}
-	return defaultDefaultProject
+	if defaultVMProject != "" {
+		return defaultVMProject
+	}
+	legacyDefaultProject := config.EnvOrDefaultString(
+		"ROACHPROD_GCE_DEFAULT_PROJECT", DefaultProjectID,
+	)
+	return config.EnvOrDefaultString("ROACHPROD_GCE_PROJECT", legacyDefaultProject)
+}
+
+// InfraProject returns the GCE project that hosts shared roachprod
+// infrastructure, such as metadata and DNS resources.
+func InfraProject() string {
+	// If the provider was already initialized, reflect flag overrides.
+	if p, ok := vm.Providers[ProviderName].(*Provider); ok && p.infraProject != "" {
+		return p.infraProject
+	}
+	if defaultInfraProject != "" {
+		return defaultInfraProject
+	}
+	legacyDefaultProject := config.EnvOrDefaultString(
+		"ROACHPROD_GCE_DEFAULT_PROJECT", DefaultProjectID,
+	)
+	return config.EnvOrDefaultString("ROACHPROD_GCE_INFRA_PROJECT", legacyDefaultProject)
+}
+
+// InfraResourceName returns the project-local name for shared infrastructure
+// whose Terraform name is formed by appending the infrastructure project.
+func InfraResourceName(prefix string) string {
+	return prefix + "-" + InfraProject()
+}
+
+// DefaultProject returns the GCE infrastructure project.
+//
+// Deprecated: use InfraProject instead.
+func DefaultProject() string {
+	return InfraProject()
+}
+
+// MetadataProject returns the GCE project that selects the backing store for
+// shared SSH keys. The standard production and staging projects use dedicated
+// buckets; other projects use GCE project metadata. It reflects provider flag
+// overrides after provider initialization and the environment-derived default
+// before initialization.
+func MetadataProject() string {
+	if p, ok := vm.Providers[ProviderName].(*Provider); ok {
+		return p.metadataProject
+	}
+	return defaultMetadataProject
+}
+
+// DefaultServiceAccount returns the service account roachprod attaches to VMs
+// in the infrastructure project when the create options do not specify an
+// override.
+func DefaultServiceAccount() string {
+	if defaultServiceAccountExplicit {
+		return defaultServiceAccountOverride
+	}
+	return vmServiceAccount(InfraProject())
+}
+
+func vmServiceAccount(project string) string {
+	return fmt.Sprintf("roachprod-vm@%s.iam.gserviceaccount.com", project)
+}
+
+func artifactsBucketForProject(project string) string {
+	return "cockroach-test-artifacts-" + project
+}
+
+// IsInsecureProject reports whether project hosts ephemeral engineering test
+// clusters that should default to insecure mode.
+func IsInsecureProject(project string) bool {
+	return !isLegacyProject(project)
+}
+
+// isLegacyProject reports whether project retains the legacy GCE defaults
+// instead of the dedicated configuration used by the production and staging
+// e2e-infra projects.
+func isLegacyProject(project string) bool {
+	return project != DefaultProjectID && project != StagingProjectID
+}
+
+// DefaultNetworkSelfLink returns the self-link for roachprod's default GCE
+// network in project. Passing an empty project uses VMProject, matching
+// roachprod create behavior when the caller does not override the project.
+func DefaultNetworkSelfLink(project string) string {
+	if project == "" {
+		project = VMProject()
+	}
+	network := "default"
+	if !isLegacyProject(project) {
+		network = fmt.Sprintf("%s-vpc", project)
+	}
+	return fmt.Sprintf("projects/%s/global/networks/%s", project, network)
+}
+
+// DefaultSubnetSelfLink returns the regional self-link for the subnet roachprod
+// uses when GCE create callers do not pass an explicit subnet.
+func DefaultSubnetSelfLink(project, region string) string {
+	if project == "" {
+		project = VMProject()
+	}
+	subnet := "default"
+	if !isLegacyProject(project) {
+		subnet = fmt.Sprintf("%s-vpc-%s", project, region)
+	}
+	return fmt.Sprintf("projects/%s/regions/%s/subnetworks/%s", project, region, subnet)
 }
 
 // Denotes if this provider was successfully initialized.
@@ -116,31 +262,63 @@ var initialized = false
 // Note that, when roachprod is used as a binary, the defaults for
 // providerInstance properties initialized here can be overriden by flags.
 func Init() error {
-	initGCEProjectDefaults()
+	if err := initGCEProjectDefaults(); err != nil {
+		return err
+	}
 	initDNSDefault()
 
-	providerInstance := &Provider{}
-	providerInstance.Projects = []string{defaultDefaultProject}
+	providerOpts := []Option{}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
-		fmt.Printf("WARN: `GCE_PROJECT` is deprecated; please, use `ROACHPROD_GCE_DEFAULT_PROJECT` instead\n")
-		providerInstance.Projects = []string{projectFromEnv}
+		fmt.Printf("WARN: `GCE_PROJECT` is deprecated; please, use `ROACHPROD_GCE_PROJECT` instead\n")
+		providerOpts = append(providerOpts, WithProject(projectFromEnv))
+	}
+	providerInstance, err := NewProvider(providerOpts...)
+	if err != nil {
+		vm.Providers[ProviderName] = flagstub.New(
+			&Provider{}, fmt.Sprintf("unable to init gce provider: %s", err),
+		)
+		return err
 	}
 	if _, err := exec.LookPath("gcloud"); err != nil {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, "please install the gcloud CLI utilities "+
 			"(https://cloud.google.com/sdk/downloads)")
 		return errors.New("gcloud not found")
 	}
-	providerInstance.dnsProvider = NewDNSProvider()
-
-	providerInstance.defaultProject = defaultDefaultProject
-	providerInstance.metadataProject = defaultMetadataProject
-
 	initialized = true
 	vm.Providers[ProviderName] = providerInstance
 	Infrastructure = providerInstance
 
 	return nil
+}
+
+// NewProvider returns a new GCE provider with the given options applied.
+func NewProvider(options ...Option) (*Provider, error) {
+	p := &Provider{
+		dnsProvider:              NewDNSProvider(),
+		dnsProviderOpts:          NewDNSProviderDefaultOptions(),
+		dnsProjectExplicit:       defaultDNSProjectExplicit,
+		dnsPublicDomainExplicit:  dnsDefaultDomainExplicit,
+		dnsManagedDomainExplicit: dnsDefaultManagedDomainExplicit,
+		Projects:                 []string{},
+		infraProject:             defaultInfraProject,
+		artifactsBucket:          defaultArtifactsBucket,
+		artifactsBucketExplicit:  defaultArtifactsBucketExplicit,
+		metadataProject:          defaultMetadataProject,
+		metadataProjectExplicit:  defaultMetadataProjectExplicit,
+	}
+
+	for _, option := range options {
+		option.apply(p)
+	}
+
+	// If no projects were specified by the options, use the default project.
+	if len(p.Projects) == 0 {
+		p.Projects = []string{defaultVMProject}
+	}
+
+	p.updateDNSProvider()
+	return p, nil
 }
 
 func runJSONCommand(args []string, parsed interface{}) error {
@@ -173,6 +351,9 @@ type jsonVM struct {
 	Name              string
 	Labels            map[string]string
 	CreationTimestamp time.Time
+	Tags              struct {
+		Items []string
+	}
 	NetworkInterfaces []struct {
 		Network       string
 		NetworkIP     string
@@ -224,13 +405,11 @@ func (jsonVM *jsonVM) toVM(project string, dnsDomain string) (ret *vm.VM) {
 	if len(jsonVM.NetworkInterfaces) == 0 {
 		vmErrors = append(vmErrors, vm.ErrBadNetwork)
 	} else {
-		privateIP = jsonVM.NetworkInterfaces[0].NetworkIP
-		if len(jsonVM.NetworkInterfaces[0].AccessConfigs) == 0 {
-			vmErrors = append(vmErrors, vm.ErrBadNetwork)
-		} else {
-			_ = jsonVM.NetworkInterfaces[0].AccessConfigs[0].Name // silence unused warning
-			publicIP = jsonVM.NetworkInterfaces[0].AccessConfigs[0].NatIP
-			vpc = lastComponent(jsonVM.NetworkInterfaces[0].Network)
+		networkInterface := jsonVM.NetworkInterfaces[0]
+		privateIP = networkInterface.NetworkIP
+		vpc = lastComponent(networkInterface.Network)
+		if len(networkInterface.AccessConfigs) > 0 {
+			publicIP = networkInterface.AccessConfigs[0].NatIP
 		}
 	}
 	if jsonVM.Scheduling.OnHostMaintenance == "" {
@@ -297,6 +476,8 @@ func (jsonVM *jsonVM) toVM(project string, dnsDomain string) (ret *vm.VM) {
 		ProviderID:             jsonVM.Name,
 		ProviderAccountID:      projectName,
 		PublicIP:               publicIP,
+		AddressMode:            inferAddressMode(publicIP),
+		NetworkTags:            jsonVM.Tags.Items,
 		PublicDNS:              fmt.Sprintf("%s.%s", jsonVM.Name, dnsDomain),
 		RemoteUser:             remoteUser,
 		VPC:                    vpc,
@@ -321,10 +502,14 @@ func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
 		// N.B. we set minCPUPlatform to "Intel Ice Lake" by default because it's readily available in the majority of GCE
 		// regions. Furthermore, it gets us closer to AWS instances like m6i which exclusively run Ice Lake.
-		MachineType:          "n2-standard-4",
-		MinCPUPlatform:       "Intel Ice Lake",
-		Zones:                nil,
+		MachineType:    "n2-standard-4",
+		MinCPUPlatform: "Intel Ice Lake",
+		Zones:          nil,
+		// Clone so per-invocation flag parsing doesn't mutate the shared default.
+		Subnets:              maps.Clone(defaultSubnets),
+		UseIAP:               false,
 		Image:                DefaultImage,
+		BootDiskType:         "pd-ssd",
 		SSDCount:             1,
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
@@ -333,8 +518,9 @@ func DefaultProviderOpts() *ProviderOpts {
 		UseSpot:              false,
 		preemptible:          false,
 
-		defaultServiceAccount: defaultDefaultServiceAccount,
-		ServiceAccount:        os.Getenv("GCE_SERVICE_ACCOUNT"),
+		defaultServiceAccount:         DefaultServiceAccount(),
+		defaultServiceAccountExplicit: defaultServiceAccountExplicit,
+		ServiceAccount:                os.Getenv("GCE_SERVICE_ACCOUNT"),
 	}
 }
 
@@ -348,10 +534,19 @@ type ProviderOpts struct {
 	// projects represent the GCE projects to operate on. Accessed through
 	// GetProject() or GetProjects() depending on whether the command accepts
 	// multiple projects or a single one.
-	MachineType      string
-	MinCPUPlatform   string
-	BootDiskType     string
-	Zones            []string
+	MachineType    string
+	MinCPUPlatform string
+	BootDiskType   string
+	Zones          []string
+	// Subnets maps a GCE region (e.g. "us-east1") to a subnet name or self-link
+	// and, when non-empty, must cover every selected region. A self-link is passed
+	// through unchanged (Shared VPC); a bare name is qualified into the compute
+	// project and the zone's region. Captured by reference from the flag/env, so
+	// callers must not mutate a shared instance.
+	Subnets map[string]string
+	// UseIAP applies the iap-ssh network tag to private VMs so roachprod
+	// routes SSH through an IAP TCP tunnel.
+	UseIAP           bool
 	Image            string
 	SSDCount         int
 	PDVolumeType     string
@@ -384,22 +579,57 @@ type ProviderOpts struct {
 
 	ServiceAccount string
 
-	// The service account to use if the default project is in use and no
+	// The service account to use if the infrastructure project is in use and no
 	// ServiceAccount was specified.
-	defaultServiceAccount string
+	defaultServiceAccount         string
+	defaultServiceAccountExplicit bool
 }
 
 // Provider is the GCE implementation of the vm.Provider interface.
 type Provider struct {
 	*dnsProvider
-	Projects []string
+	dnsProviderOpts dnsOpts
+	// dnsProjectExplicit is true when the DNS project was configured
+	// independently. Otherwise it follows infraProject.
+	dnsProjectExplicit bool
+	// DNS domains follow infraProject unless independently configured.
+	dnsPublicDomainExplicit  bool
+	dnsManagedDomainExplicit bool
+	Projects                 []string
 
 	// The project to use for looking up metadata. In particular, this includes
 	// user keys.
 	metadataProject string
 
-	// The project that provides the core roachprod services.
-	defaultProject string
+	// The project that provides shared roachprod infrastructure.
+	infraProject string
+	// The GCS bucket that provides shared roachprod artifacts.
+	artifactsBucket string
+
+	// metadataProjectExplicit is true when metadataProject was configured
+	// independently. Otherwise it follows infraProject.
+	metadataProjectExplicit bool
+	// artifactsBucketExplicit is true when artifactsBucket was configured
+	// independently. Otherwise it follows infraProject.
+	artifactsBucketExplicit bool
+}
+
+type dnsOpts struct {
+	DNSProject    string
+	PublicZone    string
+	PublicDomain  string
+	ManagedZone   string
+	ManagedDomain string
+}
+
+func NewDNSProviderDefaultOptions() dnsOpts {
+	return dnsOpts{
+		DNSProject:    defaultDNSProject,
+		PublicZone:    dnsDefaultZone,
+		PublicDomain:  dnsDefaultDomain,
+		ManagedZone:   dnsDefaultManagedZone,
+		ManagedDomain: dnsDefaultManagedDomain,
+	}
 }
 
 // LogEntry represents a single log entry from the gcloud logging(stack driver)
@@ -521,7 +751,7 @@ func buildFilterCliArgs(
 	// construct full resource names
 	vmFullResourceNames := make([]string, len(vms))
 	for i, vmNode := range vms {
-		// example format : projects/cockroach-ephemeral/zones/us-east1-b/instances/test-name
+		// example format: projects/<project>/zones/us-east1-b/instances/test-name
 		vmFullResourceNames[i] = "projects/" + projectName + "/zones/" + vmNode.Zone + "/instances/" + vmNode.Name
 	}
 	// Prepend vmFullResourceNames with "protoPayload.resourceName=" to help with filter construction.
@@ -836,7 +1066,7 @@ func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) 
 	{
 		// We're running the equivalent of:
 		//  	gcloud compute instances describe irfansharif-snapshot-0001 \
-		//  		--project cockroach-ephemeral --zone us-east1-b \
+		//  		--project <project> --zone us-east1-b \
 		// 			--format json(disks)
 		//
 		// We'll use this data to filter out boot disks.
@@ -858,7 +1088,7 @@ func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) 
 
 	{
 		// We're running the equivalent of
-		// 		gcloud compute disks list --project cockroach-ephemeral \
+		// 		gcloud compute disks list --project <project> \
 		//			--filter "users:(irfansharif-snapshot-0001)" --format json
 		//
 		// This contains more per-disk metadata than the command above, but
@@ -1035,6 +1265,55 @@ type ProjectsVal struct {
 	Provider               *Provider
 }
 
+// projectValue is a pflag.Value for one of the provider-level GCE project
+// roles. It keeps related defaults in sync when a flag changes.
+type projectValue struct {
+	get func() string
+	set func(string)
+}
+
+// stringValue is a pflag.Value for provider configuration that permits an
+// empty value, such as disabling a DNS domain.
+type stringValue struct {
+	get func() string
+	set func(string)
+}
+
+// Set is part of the pflag.Value interface.
+func (v stringValue) Set(value string) error {
+	v.set(value)
+	return nil
+}
+
+// Type is part of the pflag.Value interface.
+func (v stringValue) Type() string {
+	return "string"
+}
+
+// String is part of the pflag.Value interface.
+func (v stringValue) String() string {
+	return v.get()
+}
+
+// Set is part of the pflag.Value interface.
+func (v projectValue) Set(project string) error {
+	if project == "" {
+		return fmt.Errorf("empty GCE project")
+	}
+	v.set(project)
+	return nil
+}
+
+// Type is part of the pflag.Value interface.
+func (v projectValue) Type() string {
+	return "GCE project name"
+}
+
+// String is part of the pflag.Value interface.
+func (v projectValue) String() string {
+	return v.get()
+}
+
 // DefaultZones is the list of  zones used by default for cluster creation.
 // If the geo flag is specified, nodes are distributed between zones.
 // These are GCP zones available according to this page:
@@ -1120,6 +1399,95 @@ func (p *Provider) GetProjects() []string {
 	return p.Projects
 }
 
+func (p *Provider) setInfraProject(project string) {
+	p.infraProject = project
+	if !p.artifactsBucketExplicit {
+		p.artifactsBucket = artifactsBucketForProject(project)
+	}
+	if !p.metadataProjectExplicit {
+		p.metadataProject = project
+	}
+	if !p.dnsProjectExplicit {
+		p.dnsProviderOpts.DNSProject = project
+	}
+	publicDomain, managedDomain := defaultDNSDomains(project)
+	if !p.dnsPublicDomainExplicit {
+		p.dnsProviderOpts.PublicDomain = publicDomain
+	}
+	if !p.dnsManagedDomainExplicit {
+		p.dnsProviderOpts.ManagedDomain = managedDomain
+	}
+	p.updateDNSProvider()
+}
+
+// ArtifactsBucket returns the GCS bucket that hosts shared roachprod
+// artifacts.
+func (p *Provider) ArtifactsBucket() string {
+	return p.artifactsBucket
+}
+
+func (p *Provider) setArtifactsBucket(bucket string) {
+	p.artifactsBucket = bucket
+	p.artifactsBucketExplicit = true
+}
+
+func (p *Provider) setMetadataProject(project string) {
+	p.metadataProject = project
+	p.metadataProjectExplicit = true
+}
+
+func (p *Provider) updateDNSProject(project string) {
+	p.dnsProviderOpts.DNSProject = project
+	p.updateDNSProvider()
+}
+
+func (p *Provider) setDNSProject(project string) {
+	p.dnsProjectExplicit = true
+	p.updateDNSProject(project)
+}
+
+func (p *Provider) setDNSPublicZone(zone string) {
+	p.dnsProviderOpts.PublicZone = zone
+	p.updateDNSProvider()
+}
+
+func (p *Provider) setDNSPublicDomain(domain string) {
+	p.dnsPublicDomainExplicit = true
+	p.dnsProviderOpts.PublicDomain = domain
+	p.updateDNSProvider()
+}
+
+func (p *Provider) setDNSManagedZone(zone string) {
+	p.dnsProviderOpts.ManagedZone = zone
+	p.updateDNSProvider()
+}
+
+func (p *Provider) setDNSManagedDomain(domain string) {
+	p.dnsManagedDomainExplicit = true
+	p.dnsProviderOpts.ManagedDomain = domain
+	p.updateDNSProvider()
+}
+
+// updateDNSProvider applies flag changes to the provider instance constructed
+// during initialization.
+func (p *Provider) updateDNSProvider() {
+	if p.dnsProvider == nil {
+		return
+	}
+	p.dnsProvider.dnsProject = p.dnsProviderOpts.DNSProject
+	p.dnsProvider.publicZone = p.dnsProviderOpts.PublicZone
+	p.dnsProvider.publicDomain = p.dnsProviderOpts.PublicDomain
+	p.dnsProvider.managedZone = p.dnsProviderOpts.ManagedZone
+	p.dnsProvider.managedDomain = p.dnsProviderOpts.ManagedDomain
+}
+
+func (p *Provider) defaultServiceAccountFor(opts *ProviderOpts) string {
+	if opts.defaultServiceAccountExplicit {
+		return opts.defaultServiceAccount
+	}
+	return vmServiceAccount(p.infraProject)
+}
+
 // ConfigureCreateFlags implements vm.ProviderOptions.
 func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.MachineType, "machine-type", "n2-standard-4", "DEPRECATED")
@@ -1131,14 +1499,20 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.StringVar(&o.ServiceAccount, ProviderName+"-service-account",
 		o.ServiceAccount, "Service account to use")
-	flags.StringVar(&o.defaultServiceAccount,
-		ProviderName+"-default-service-account", defaultDefaultServiceAccount,
-		"Service account to use if the default project is in use and no "+
+	flags.Var(stringValue{
+		get: func() string { return o.defaultServiceAccount },
+		set: func(value string) {
+			o.defaultServiceAccount = value
+			o.defaultServiceAccountExplicit = true
+		},
+	},
+		ProviderName+"-default-service-account",
+		"Service account to use if the infrastructure project is in use and no "+
 			"--gce-service-account was specified")
 
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
-	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", "pd-ssd",
+	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", o.BootDiskType,
 		"Type of the boot disk volume")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "Intel Ice Lake",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
@@ -1164,6 +1538,11 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
 			strings.Join(DefaultZones(string(vm.ArchAMD64), true), ",")))
+	flags.StringToStringVar(&o.Subnets, ProviderName+"-subnets", o.Subnets,
+		"per-region subnet map, e.g. us-east1=my-subnet,us-west1=projects/host/regions/us-west1/subnetworks/s; "+
+			"must cover every region selected by --"+ProviderName+"-zones")
+	flags.BoolVar(&o.UseIAP, ProviderName+"-use-iap", false,
+		"route SSH to private instances through IAP and apply the iap-ssh network tag")
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
 		"use preemptible GCE instances (lifetime cannot exceed 24h)")
 	flags.BoolVar(&o.UseSpot, ProviderName+"-use-spot", false,
@@ -1199,48 +1578,83 @@ func (p *Provider) ConfigureProviderFlags(flags *pflag.FlagSet, opt vm.MultipleP
 
 	// Flags about DNS override the default values in
 	// dnsProvider.
-	dnsProviderInstance := p.dnsProvider
-	flags.StringVar(
-		&dnsProviderInstance.dnsProject, ProviderName+"-dns-project",
-		dnsProviderInstance.dnsProject,
+	flags.Var(
+		stringValue{
+			get: func() string { return p.dnsProviderOpts.DNSProject },
+			set: p.setDNSProject,
+		},
+		ProviderName+"-dns-project",
 		"project to use to set up DNS",
 	)
-	flags.StringVar(
-		&dnsProviderInstance.publicZone,
+	flags.Var(
+		stringValue{
+			get: func() string { return p.dnsProviderOpts.PublicZone },
+			set: p.setDNSPublicZone,
+		},
 		ProviderName+"-dns-zone",
-		dnsProviderInstance.publicZone,
 		"zone file in gcloud project to use to set up public DNS records",
 	)
-	flags.StringVar(
-		&dnsProviderInstance.publicDomain,
+	flags.Var(
+		stringValue{
+			get: func() string { return p.dnsProviderOpts.PublicDomain },
+			set: p.setDNSPublicDomain,
+		},
 		ProviderName+"-dns-domain",
-		dnsProviderInstance.publicDomain,
-		"zone domian in gcloud project to use to set up public DNS records",
+		"zone domain in gcloud project to use to set up public DNS records",
 	)
-	flags.StringVar(
-		&dnsProviderInstance.managedZone,
-		ProviderName+"managed-dns-zone",
-		dnsProviderInstance.managedZone,
+	flags.Var(
+		stringValue{
+			get: func() string { return p.dnsProviderOpts.ManagedZone },
+			set: p.setDNSManagedZone,
+		},
+		ProviderName+"-managed-dns-zone",
 		"zone file in gcloud project to use to set up DNS SRV records",
 	)
-	flags.StringVar(
-		&dnsProviderInstance.managedDomain,
-		ProviderName+"managed-dns-domain",
-		dnsProviderInstance.managedDomain,
+	flags.Var(
+		stringValue{
+			get: func() string { return p.dnsProviderOpts.ManagedDomain },
+			set: p.setDNSManagedDomain,
+		},
+		ProviderName+"-managed-dns-domain",
 		"zone file in gcloud project to use to set up DNS SRV records",
 	)
 
 	// Flags about the GCE project to use override the defaults in
 	// the provider.
-	flags.StringVar(
-		&p.metadataProject, ProviderName+"-metadata-project",
-		p.metadataProject,
-		"google cloud project to use to store and fetch SSH keys",
+	flags.Var(
+		projectValue{
+			get: func() string { return p.metadataProject },
+			set: p.setMetadataProject,
+		},
+		ProviderName+"-metadata-project",
+		"google cloud project used to select the SSH key store; defaults to --gce-infra-project",
 	)
-	flags.StringVar(
-		&p.defaultProject, ProviderName+"-default-project",
-		p.defaultProject,
-		"google cloud project to use to run core roachprod services",
+	flags.Var(
+		projectValue{
+			get: func() string { return p.infraProject },
+			set: p.setInfraProject,
+		},
+		ProviderName+"-infra-project",
+		"google cloud project that hosts shared roachprod infrastructure",
+	)
+	flags.Var(
+		stringValue{
+			get: func() string { return p.artifactsBucket },
+			set: p.setArtifactsBucket,
+		},
+		ProviderName+"-artifacts-bucket",
+		"GCS bucket that hosts shared roachprod artifacts; defaults from --gce-infra-project",
+	)
+	flags.Var(
+		projectValue{
+			get: func() string { return p.infraProject },
+			set: p.setInfraProject,
+		},
+		ProviderName+"-default-project",
+		"deprecated alias for --gce-infra-project",
+	)
+	_ = flags.MarkDeprecated(
+		ProviderName+"-default-project", "use --"+ProviderName+"-infra-project instead",
 	)
 }
 
@@ -1255,6 +1669,139 @@ func newLimitedErrorGroup() *errgroup.Group {
 // useArmAMI returns true if the machine type is an arm64 machine type.
 func (o *ProviderOpts) useArmAMI() bool {
 	return strings.HasPrefix(strings.ToLower(o.MachineType), "t2a-")
+}
+
+// parseRegionSubnetMap parses a "region=subnet,region2=subnet2" string (as
+// accepted by ROACHPROD_GCE_SUBNETS) into a region→subnet map. An empty string
+// yields a nil map. Subnet values may be bare names or self-links.
+func parseRegionSubnetMap(s string) (map[string]string, error) {
+	if s == "" {
+		return nil, nil
+	}
+	result := make(map[string]string)
+	for _, pair := range strings.Split(s, ",") {
+		region, subnet, ok := strings.Cut(pair, "=")
+		if !ok || region == "" || subnet == "" {
+			return nil, errors.Newf("invalid region=subnet entry %q", pair)
+		}
+		result[region] = subnet
+	}
+	return result, nil
+}
+
+// regionFromSubnetSelfLink returns the region embedded in a subnet self-link of
+// the form ".../regions/<region>/subnetworks/<name>", or "" if none is present.
+func regionFromSubnetSelfLink(selfLink string) string {
+	_, after, ok := strings.Cut(selfLink, "regions/")
+	if !ok {
+		return ""
+	}
+	region, _, _ := strings.Cut(after, "/")
+	return region
+}
+
+// resolveSubnet returns the subnet self-link for zone from the complete Subnets
+// map, or the ${project}-vpc-${region} default when there is no override. GCE
+// infers the parent VPC from the selected subnet.
+func (o *ProviderOpts) resolveSubnet(project, zone string) (string, error) {
+	if len(zone) < 3 {
+		return "", errors.Newf("invalid zone %q: must be at least 3 characters", zone)
+	}
+	region := zone[:len(zone)-2]
+	if subnet, ok := o.Subnets[region]; ok {
+		return o.qualifySubnet(subnet, project, region)
+	}
+	if len(o.Subnets) > 0 {
+		return "", errors.Newf(
+			"no GCE subnet configured for region %q (zone %q); add it to --%s-subnets",
+			region, zone, ProviderName,
+		)
+	}
+	return DefaultSubnetSelfLink(project, region), nil
+}
+
+// qualifySubnet promotes a bare subnet name into a regional self-link in the
+// compute project, or passes a self-link through unchanged (preserving a Shared
+// VPC host project) after checking its region matches the zone's region.
+func (o *ProviderOpts) qualifySubnet(subnet, project, region string) (string, error) {
+	if subnet == "" {
+		return "", errors.Newf("empty GCE subnet configured for region %q", region)
+	}
+	if !strings.Contains(subnet, "/") {
+		return fmt.Sprintf("projects/%s/regions/%s/subnetworks/%s", project, region, subnet), nil
+	}
+	if r := regionFromSubnetSelfLink(subnet); r != "" && r != region {
+		return "", errors.Newf(
+			"subnet %q is in region %q but zone maps to region %q", subnet, r, region,
+		)
+	}
+	return subnet, nil
+}
+
+// validateSubnetConfig resolves every selected zone's subnet up front so a
+// missing or mismatched configuration fails before any VM is created.
+func (o *ProviderOpts) validateSubnetConfig(project string, zones []string) error {
+	seenRegions := make(map[string]struct{}, len(zones))
+	for _, zone := range zones {
+		if len(zone) < 3 {
+			return errors.Newf("invalid zone %q: must be at least 3 characters", zone)
+		}
+		region := zone[:len(zone)-2]
+		if _, ok := seenRegions[region]; ok {
+			continue
+		}
+		seenRegions[region] = struct{}{}
+		if _, err := o.resolveSubnet(project, zone); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// cliSubnetArgs returns the gcloud create flag selecting the subnet for zone.
+// It is valid for both instances and instance templates.
+func (o *ProviderOpts) cliSubnetArgs(project, zone string) ([]string, error) {
+	subnet, err := o.resolveSubnet(project, zone)
+	if err != nil {
+		return nil, err
+	}
+	args := []string{"--subnet", subnet}
+	return args, nil
+}
+
+func (p *Provider) resolveAddressMode(mode vm.AddressMode) (vm.AddressMode, error) {
+	mode, err := vm.NormalizeAddressMode(mode)
+	if err != nil {
+		return "", err
+	}
+	if mode == vm.AddressModeAuto {
+		if !isLegacyProject(p.GetProject()) {
+			return vm.AddressModePrivate, nil
+		}
+		return vm.AddressModePublic, nil
+	}
+	return mode, nil
+}
+
+func validateProvisionedAddressMode(vms vm.List, mode vm.AddressMode) error {
+	for _, v := range vms {
+		switch mode {
+		case vm.AddressModePrivate:
+			if v.PublicIP != "" {
+				return errors.Errorf("private address mode created VM %q with public IP %s", v.Name, v.PublicIP)
+			}
+			if v.PrivateIP == "" {
+				return errors.Errorf("private address mode created VM %q without a private IP", v.Name)
+			}
+		case vm.AddressModePublic:
+			if v.PublicIP == "" {
+				return errors.Errorf("public address mode created VM %q without a public IP", v.Name)
+			}
+		default:
+			return errors.Errorf("unexpected resolved address mode %q", mode)
+		}
+	}
+	return nil
 }
 
 // ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
@@ -1397,6 +1944,17 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 	return zones, nil
 }
 
+func computeAddressArgs(opts vm.CreateOpts, providerOpts *ProviderOpts) []string {
+	if opts.AddressMode != vm.AddressModePrivate {
+		return nil
+	}
+	args := []string{"--no-address"}
+	if providerOpts.UseIAP {
+		args = append(args, "--tags", iapSSHTag)
+	}
+	return args
+}
+
 // computeInstanceArgs computes the arguments to be passed to the gcloud command
 // to create a VM or create an instance template for a VM. This function must
 // ensure that it returns arguments compatible with both the `gcloud compute
@@ -1443,9 +2001,10 @@ func (p *Provider) computeInstanceArgs(
 		"--image-project", imageProject,
 		"--boot-disk-type", providerOpts.BootDiskType,
 	}
+	args = append(args, computeAddressArgs(opts, providerOpts)...)
 
-	if project == p.defaultProject && providerOpts.ServiceAccount == "" {
-		providerOpts.ServiceAccount = providerOpts.defaultServiceAccount
+	if project == p.infraProject && providerOpts.ServiceAccount == "" {
+		providerOpts.ServiceAccount = p.defaultServiceAccountFor(providerOpts)
 	}
 	if providerOpts.ServiceAccount != "" {
 		args = append(args, "--service-account", providerOpts.ServiceAccount)
@@ -1600,6 +2159,18 @@ func createInstanceTemplates(
 	return zonesInstanceTemplates, nil
 }
 
+// statefulIPArgs returns the stateful-IP flags for a managed instance group.
+// Private MIGs have no external address, so only internal IPs are made
+// stateful; public MIGs also preserve external IPs so they remain stable across
+// auto-healing, updates, and recreation.
+func statefulIPArgs(mode vm.AddressMode) []string {
+	args := []string{"--stateful-internal-ip", "enabled,auto-delete=on-permanent-instance-deletion"}
+	if mode != vm.AddressModePrivate {
+		args = append(args, "--stateful-external-ip", "enabled,auto-delete=on-permanent-instance-deletion")
+	}
+	return args
+}
+
 // createInstanceGroups creates an instance group in each zone, for the cluster
 func createInstanceGroups(
 	l *logger.Logger, project, clusterName string, zones []string, opts vm.CreateOpts,
@@ -1608,11 +2179,11 @@ func createInstanceGroups(
 	// Note that we set the IP addresses to be stateful, so that they remain the
 	// same when instances are auto-healed, updated, or recreated.
 	createGroupArgs := []string{"compute", "instance-groups", "managed", "create",
-		"--size", "0",
-		"--stateful-external-ip", "enabled,auto-delete=on-permanent-instance-deletion",
-		"--stateful-internal-ip", "enabled,auto-delete=on-permanent-instance-deletion",
+		"--size", "0"}
+	createGroupArgs = append(createGroupArgs, statefulIPArgs(opts.AddressMode)...)
+	createGroupArgs = append(createGroupArgs,
 		"--project", project,
-		groupName}
+		groupName)
 
 	// Determine the number of stateful disks the instance group should retain. If
 	// we don't use a local SSD, we use 2 stateful disks, a boot disk and a
@@ -1681,6 +2252,11 @@ func (p *Provider) Create(
 ) (vm.List, error) {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
 	project := p.GetProject()
+	addressMode, err := p.resolveAddressMode(opts.AddressMode)
+	if err != nil {
+		return nil, err
+	}
+	opts.AddressMode = addressMode
 	var gcJob bool
 	for _, prj := range projectsWithGC {
 		if prj == p.GetProject() {
@@ -1729,13 +2305,24 @@ func (p *Provider) Create(
 	}
 	usedZones := maps.Keys(zoneToHostNames)
 
+	// Resolve the subnet for every selected region up front so a missing or
+	// mismatched configuration fails before any VM, template, or MIG is
+	// created. This covers all provisioning paths below.
+	if err := providerOpts.validateSubnetConfig(project, usedZones); err != nil {
+		return nil, err
+	}
+
 	var vmList vm.List
 	var vmListMutex syncutil.Mutex
 	switch {
 	case providerOpts.Managed:
 		zoneToInstanceArgs := make(map[string][]string)
 		for _, zone := range usedZones {
-			zoneToInstanceArgs[zone] = instanceArgs
+			subnetArgs, err := providerOpts.cliSubnetArgs(project, zone)
+			if err != nil {
+				return nil, err
+			}
+			zoneToInstanceArgs[zone] = append(slices.Clone(instanceArgs), subnetArgs...)
 		}
 		// If spot instance are requested for specific zones, set the instance args
 		// for those zones to use spot instances.
@@ -1756,7 +2343,11 @@ func (p *Provider) Create(
 				if _, ok := zoneToInstanceArgs[zone]; !ok {
 					return nil, errors.Newf("the managed spot zone %q is not in the list of zones for the cluster", zone)
 				}
-				zoneToInstanceArgs[zone] = spotInstanceArgs
+				subnetArgs, err := providerOpts.cliSubnetArgs(project, zone)
+				if err != nil {
+					return nil, err
+				}
+				zoneToInstanceArgs[zone] = append(slices.Clone(spotInstanceArgs), subnetArgs...)
 			}
 		}
 
@@ -1811,17 +2402,27 @@ func (p *Provider) Create(
 
 	default:
 		g := newLimitedErrorGroup()
-		createArgs := []string{"compute", "instances", "create", "--subnet", "default", "--format", "json"}
+		createArgs := []string{"compute", "instances", "create", "--format", "json"}
 		createArgs = append(createArgs, "--labels", labels)
 		createArgs = append(createArgs, instanceArgs...)
 
 		sem := semaphore.New(MaxConcurrentHosts)
 		l.Printf("Creating %d instances, distributed across [%s]", len(names), strings.Join(usedZones, ", "))
 		for zone, zoneHosts := range zoneToHostNames {
+			// The subnet is region-specific, so resolve it per zone rather than
+			// baking it into the shared createArgs.
+			subnetArgs, err := providerOpts.cliSubnetArgs(project, zone)
+			if err != nil {
+				return nil, err
+			}
 			groupSize := MaxConcurrentHosts / 4
 			for i := 0; i < len(zoneHosts); i += groupSize {
 				hostGroup := zoneHosts[i:min(i+groupSize, len(zoneHosts))]
-				argsWithZone := append(createArgs, "--zone", zone)
+				// Clone createArgs per group: append reuses the backing array, so
+				// concurrent groups sharing it would corrupt each other's args.
+				argsWithZone := slices.Clone(createArgs)
+				argsWithZone = append(argsWithZone, "--zone", zone)
+				argsWithZone = append(argsWithZone, subnetArgs...)
 				argsWithZone = append(argsWithZone, hostGroup...)
 
 				g.Go(func() error {
@@ -1850,6 +2451,10 @@ func (p *Provider) Create(
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if err := validateProvisionedAddressMode(vmList, addressMode); err != nil {
+		return nil, err
 	}
 	return vmList, propagateDiskLabels(l, project, labels, zoneToHostNames, opts.SSDOpts.UseLocalSSD, providerOpts.PDVolumeCount)
 }
@@ -2286,12 +2891,27 @@ func loadBalancerResourceName(clusterName string, port int, resourceType string)
 // group. Additionally, a health check is created for the given port. A proxy is
 // used to support global load balancing. The different parts of the load
 // balancer are created sequentially, as they depend on each other.
-func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) error {
-	if err := checkSDKVersion("450.0.0" /* minVersion */, "required by load balancers"); err != nil {
-		return err
+// rejectPrivateManagedLoadBalancer refuses load-balancer creation for a private
+// MIG. Internal load balancing is tracked separately; until then we must not
+// create a public external frontend for a private cluster.
+func rejectPrivateManagedLoadBalancer(vms vm.List) error {
+	for _, v := range vms {
+		if v.AddressMode == vm.AddressModePrivate || v.PublicIP == "" {
+			return errors.New("load balancer creation is not supported for private managed instance groups yet")
+		}
 	}
+	return nil
+}
+
+func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) error {
 	if !isManaged(vms) {
 		return errors.New("load balancer creation is only supported for managed instance groups")
+	}
+	if err := rejectPrivateManagedLoadBalancer(vms); err != nil {
+		return err
+	}
+	if err := checkSDKVersion("450.0.0" /* minVersion */, "required by load balancers"); err != nil {
+		return err
 	}
 	project := vms[0].Project
 	clusterName, err := vms[0].ClusterName()
@@ -2578,8 +3198,11 @@ type jsonInstanceTemplate struct {
 		Labels            map[string]string `json:"labels"`
 		MachineType       string            `json:"machineType"`
 		NetworkInterfaces []struct {
-			Name    string `json:"name"`
-			Network string `json:"network"`
+			Name          string `json:"name"`
+			Network       string `json:"network"`
+			AccessConfigs []struct {
+				NatIP string `json:"natIP"`
+			} `json:"accessConfigs"`
 		} `json:"networkInterfaces"`
 		Scheduling struct {
 			AutomaticRestart  bool   `json:"automaticRestart"`
@@ -2718,6 +3341,41 @@ type PreservedStatePreservedNetworkIp struct {
 	}
 }
 
+// templateAddressMode derives the resolved address mode from a saved instance
+// template. A private MIG template is created with --no-address, so its first
+// network interface carries no access config; a public template carries one.
+// The template is the source of truth reused across grow/recreate, so mode is
+// never re-evaluated against current provider defaults.
+func templateAddressMode(t jsonInstanceTemplate) vm.AddressMode {
+	nics := t.Properties.NetworkInterfaces
+	if len(nics) > 0 && len(nics[0].AccessConfigs) == 0 {
+		return vm.AddressModePrivate
+	}
+	return vm.AddressModePublic
+}
+
+// inferAddressMode derives the resolved address mode of a discovered instance
+// from its public address. A private instance has no external access config and
+// therefore no public IP. This is used by the plain-instance discovery paths
+// (list/sync), which enumerate MIG members and standalone VMs alike, so the
+// resolved mode is populated consistently regardless of how a VM was created.
+func inferAddressMode(publicIP string) vm.AddressMode {
+	if publicIP == "" {
+		return vm.AddressModePrivate
+	}
+	return vm.AddressModePublic
+}
+
+// preservedNetworkIP returns the literal address for nic from a preserved-state
+// IP map, or "" if the map is nil or the entry/address is absent. Private MIGs
+// have no preserved external IP, so callers must tolerate a missing entry.
+func preservedNetworkIP(ips map[string]*PreservedStatePreservedNetworkIp, nic string) string {
+	if ip, ok := ips[nic]; ok && ip != nil {
+		return ip.IpAddress.Literal
+	}
+	return ""
+}
+
 // toVM converts a managed instance group instance to a vm.VM struct
 // based on data found in both the instance and the instance template.
 // TODO(ludo): arch and CPU platform are not available at this time,
@@ -2775,6 +3433,19 @@ func (j *managedInstanceGroupInstance) toVM(
 		}
 	}
 
+	privateIP := preservedNetworkIP(j.PreservedStateFromPolicy.InternalIPs, "nic0")
+	publicIP := preservedNetworkIP(j.PreservedStateFromPolicy.ExternalIPs, "nic0")
+	if privateIP == "" {
+		vmErrors = append(vmErrors, vm.ErrBadNetwork)
+	}
+
+	var vpc string
+	if len(instanceTemplate.Properties.NetworkInterfaces) == 0 {
+		vmErrors = append(vmErrors, vm.ErrBadNetwork)
+	} else {
+		vpc = lastComponent(instanceTemplate.Properties.NetworkInterfaces[0].Network)
+	}
+
 	return &vm.VM{
 		Name:                   j.Name,
 		CreatedAt:              timeutil.Now(),
@@ -2782,14 +3453,15 @@ func (j *managedInstanceGroupInstance) toVM(
 		Lifetime:               lifetime,
 		Preemptible:            instanceTemplate.Properties.Scheduling.Preemptible,
 		Labels:                 instanceTemplate.Properties.Labels,
-		PrivateIP:              j.PreservedStateFromPolicy.InternalIPs["nic0"].IpAddress.Literal,
+		PrivateIP:              privateIP,
 		Provider:               ProviderName,
 		DNSProvider:            ProviderName,
 		ProviderID:             lastComponent(j.Instance),
-		PublicIP:               j.PreservedStateFromPolicy.ExternalIPs["nic0"].IpAddress.Literal,
+		PublicIP:               publicIP,
 		PublicDNS:              fmt.Sprintf("%s.%s", j.Name, dnsDomain),
 		RemoteUser:             remoteUser,
-		VPC:                    lastComponent(instanceTemplate.Properties.NetworkInterfaces[0].Network),
+		AddressMode:            templateAddressMode(instanceTemplate),
+		VPC:                    vpc,
 		MachineType:            instanceTemplate.Properties.MachineType,
 		Zone:                   zone,
 		Project:                project,
@@ -3349,7 +4021,7 @@ func (p *Provider) ProjectActive(project string) bool {
 // lastComponent splits a url path and returns only the last part. This is
 // used because some fields in GCE APIs are defined using URLs like:
 //
-//	"https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n2-standard-16"
+//	"https://www.googleapis.com/compute/v1/projects/crl-e2e-infra/zones/us-east1-b/machineTypes/n2-standard-16"
 //
 // We want to strip this down to "n2-standard-16", so we only want the last
 // component.
@@ -3361,7 +4033,7 @@ func lastComponent(url string) string {
 // zoneFromSelfLink splits a GCE self link and returns the zone. This is used
 // because some fields in GCE APIs are defined using URLs like:
 //
-//	"https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n2-standard-16"
+//	"https://www.googleapis.com/compute/v1/projects/crl-e2e-infra/zones/us-east1-b/machineTypes/n2-standard-16"
 //
 // We want to extract the "us-east1-b" part, which is the zone.
 func zoneFromSelfLink(selfLink string) string {

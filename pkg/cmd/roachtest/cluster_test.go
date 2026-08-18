@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math/rand"
@@ -14,18 +15,135 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 )
+
+func TestApplyGCESubnetsOverride(t *testing.T) {
+	crdbOpts := gce.DefaultProviderOpts()
+	workloadOpts := gce.DefaultProviderOpts()
+	subnets := map[string]string{
+		"us-east1": "staging-vpc-us-east1",
+		"us-west1": "staging-vpc-us-west1",
+	}
+	require.NoError(t, applyGCESubnetsOverride(
+		spec.GCE, subnets, crdbOpts, workloadOpts,
+	))
+	require.Equal(t, subnets, crdbOpts.Subnets)
+	require.Equal(t, subnets, workloadOpts.Subnets)
+
+	// Each provider gets its own map so later retry mutations cannot leak between
+	// the CRDB and workload node configurations or back into the parsed flag.
+	crdbOpts.Subnets["us-east1"] = "changed"
+	require.Equal(t, "staging-vpc-us-east1", subnets["us-east1"])
+	require.Equal(t, "staging-vpc-us-east1", workloadOpts.Subnets["us-east1"])
+
+	require.ErrorContains(t,
+		applyGCESubnetsOverride(spec.AWS, subnets, nil, nil),
+		"only valid with --cloud=gce",
+	)
+}
+
+func TestApplyForceInsecure(t *testing.T) {
+	settings := install.MakeClusterSettings(install.SimpleSecureOption(true))
+	applyForceInsecure(&settings, true)
+	require.False(t, settings.Secure)
+}
+
+func TestLogClusterStartOverrides(t *testing.T) {
+	origForceInsecure := roachtestflags.ForceInsecure
+	t.Cleanup(func() {
+		roachtestflags.ForceInsecure = origForceInsecure
+	})
+
+	roachtestflags.ForceInsecure = true
+
+	var output bytes.Buffer
+	l, err := (&logger.Config{Stdout: &output, Stderr: &output}).NewLogger("")
+	require.NoError(t, err)
+	logClusterStartOverrides(l)
+	logClusterStartOverrides(nil)
+
+	logs := output.String()
+	require.Contains(t, logs, "forcing insecure CockroachDB startup via --insecure")
+}
+
+func TestRoachprodClusterRunnerReachableAddresses(t *testing.T) {
+	origPgURL := roachprodPgURL
+	origAdminURL := roachprodAdminURL
+	defer func() {
+		roachprodPgURL = origPgURL
+		roachprodAdminURL = origAdminURL
+	}()
+
+	c := &clusterImpl{name: "runner-addresses", spec: spec.MakeClusterSpec(1)}
+	var pgOpts roachprod.PGURLOptions
+	roachprodPgURL = func(
+		ctx context.Context,
+		l *logger.Logger,
+		clusterName string,
+		certsDir string,
+		opts roachprod.PGURLOptions,
+	) ([]string, error) {
+		pgOpts = opts
+		return []string{"postgres://root@10.0.0.1:26257/defaultdb?sslmode=disable"}, nil
+	}
+
+	addrs, err := c.ExternalAddr(context.Background(), nil, c.Node(1))
+	require.NoError(t, err)
+	require.Equal(t, []string{"10.0.0.1:26257"}, addrs)
+	require.True(t, pgOpts.UseHost)
+	require.False(t, pgOpts.External)
+
+	ips, err := c.ExternalIP(context.Background(), nil, c.Node(1))
+	require.NoError(t, err)
+	require.Equal(t, []string{"10.0.0.1"}, ips)
+	require.True(t, pgOpts.UseHost)
+	require.False(t, pgOpts.External)
+
+	urls, err := c.ExternalPGUrl(
+		context.Background(), nil, c.Node(1), roachprod.PGURLOptions{External: true},
+	)
+	require.NoError(t, err)
+	require.Equal(t, []string{"postgres://root@10.0.0.1:26257/defaultdb?sslmode=disable"}, urls)
+	require.True(t, pgOpts.UseHost)
+	require.False(t, pgOpts.External)
+
+	var usePublicIP, useHost bool
+	roachprodAdminURL = func(
+		ctx context.Context,
+		l *logger.Logger,
+		clusterName, virtualClusterName string,
+		sqlInstance int,
+		path string,
+		gotUsePublicIP, gotUseHost, openInBrowser bool,
+		secure install.SecureOption,
+	) ([]string, error) {
+		usePublicIP = gotUsePublicIP
+		useHost = gotUseHost
+		return []string{"http://10.0.0.1:26258/"}, nil
+	}
+
+	adminAddrs, err := c.ExternalAdminUIAddr(context.Background(), nil, c.Node(1))
+	require.NoError(t, err)
+	require.Equal(t, []string{"10.0.0.1:26258"}, adminAddrs)
+	require.False(t, usePublicIP)
+	require.True(t, useHost)
+}
 
 func TestClusterNodes(t *testing.T) {
 	c := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNode())}
@@ -849,6 +967,7 @@ func TestVerifyLibraries(t *testing.T) {
 		name             string
 		verifyLibs       []string
 		libraryFilePaths []string
+		cockroachStage   string
 		expectedError    error
 	}{
 		{
@@ -870,6 +989,13 @@ func TestVerifyLibraries(t *testing.T) {
 			libraryFilePaths: nil,
 			expectedError: errors.Wrap(errors.Errorf("missing required library %s (arch=\"amd64\")",
 				"required_b"), "cluster.VerifyLibraries"),
+		},
+		{
+			name:             "staged libraries are resolved remotely",
+			verifyLibs:       registry.LibGEOS,
+			libraryFilePaths: nil,
+			cockroachStage:   "latest",
+			expectedError:    nil,
 		},
 		{
 			name:             "single match",
@@ -896,8 +1022,11 @@ func TestVerifyLibraries(t *testing.T) {
 			expectedError:    nil,
 		},
 	}
+	originalCockroachStage := roachtestflags.CockroachStage
+	defer func() { roachtestflags.CockroachStage = originalCockroachStage }()
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			roachtestflags.CockroachStage = tc.cockroachStage
 			libraryFilePaths = map[vm.CPUArch][]string{vm.ArchAMD64: tc.libraryFilePaths}
 			actualError := VerifyLibraries(tc.verifyLibs, vm.ArchAMD64)
 			if tc.expectedError == nil {

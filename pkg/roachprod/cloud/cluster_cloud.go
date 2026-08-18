@@ -232,18 +232,35 @@ func (c *Cluster) IsEmptyCluster() bool {
 // ListCloud returns information about all instances (across all available
 // providers).
 func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
-	cloud := &Cloud{
-		Clusters: make(Clusters),
-	}
-
 	providerNames := vm.AllProviderNames()
 	if len(options.IncludeProviders) > 0 {
 		providerNames = options.IncludeProviders
 	}
-	providerVMs := make([]vm.List, len(providerNames))
+	providers := make([]vm.Provider, 0, len(providerNames))
+	for _, providerName := range providerNames {
+		providers = append(providers, vm.Providers[providerName])
+	}
+	return listCloudWithProviders(l, options, providers)
+}
+
+// NewCloud returns an empty Cloud ready to receive cluster inventory.
+func NewCloud() *Cloud {
+	return &Cloud{
+		Clusters:     make(Clusters),
+		BadInstances: vm.List{},
+	}
+}
+
+// listCloudWithProviders is the provider-instance form of ListCloud. It lets
+// callers list an account-specific provider without mutating the global
+// provider registry while another cloud listing may be running.
+func listCloudWithProviders(
+	l *logger.Logger, options vm.ListOptions, providers []vm.Provider,
+) (*Cloud, error) {
+	cloud := NewCloud()
+	providerVMs := make([]vm.List, len(providers))
 	var g errgroup.Group
-	for i, providerName := range providerNames {
-		provider := vm.Providers[providerName]
+	for i, provider := range providers {
 		g.Go(func() error {
 			var err error
 			providerVMs[i], err = provider.List(l, options)
@@ -322,6 +339,9 @@ type ClusterCreateOpts struct {
 	Nodes                 int
 	CreateOpts            vm.CreateOpts
 	ProviderOptsContainer vm.ProviderOptionsContainer
+	// KeepClusterOnFailure preserves any cloud resources created when cluster
+	// creation fails. This is useful for diagnosing VM initialization failures.
+	KeepClusterOnFailure bool
 }
 
 // Extracts o.CreateOpts.VMProviders from the provided opts.
@@ -356,7 +376,36 @@ func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) (*Cluster, error
 		nodesCreated++
 		return vm.Name(name, nodesCreated)
 	}
+	autoUsesGCEPolicy := true
 	for _, o := range opts {
+		for _, provider := range o.CreateOpts.VMProviders {
+			if provider != gce.ProviderName {
+				autoUsesGCEPolicy = false
+				break
+			}
+		}
+	}
+	for _, o := range opts {
+		addressMode, err := vm.NormalizeAddressMode(o.CreateOpts.AddressMode)
+		if err != nil {
+			return nil, err
+		}
+		if addressMode == vm.AddressModePrivate {
+			for _, provider := range o.CreateOpts.VMProviders {
+				if provider != gce.ProviderName {
+					return nil, errors.Errorf(
+						"address mode %q is not supported by provider %q", addressMode, provider,
+					)
+				}
+			}
+		}
+		if addressMode == vm.AddressModeAuto && !autoUsesGCEPolicy {
+			// Avoid producing a mixed-address cluster when a create spans
+			// providers. Auto is currently GCE-specific; all other creates
+			// retain the historical public-address behavior.
+			addressMode = vm.AddressModePublic
+		}
+		o.CreateOpts.AddressMode = addressMode
 		providerCount := len(o.CreateOpts.VMProviders)
 		if providerCount == 0 {
 			return nil, errors.New("no VMProviders configured")
@@ -534,9 +583,16 @@ func DestroyCluster(l *logger.Logger, c *Cluster) error {
 	// DNS entries are destroyed first to ensure that the GC job will not try
 	// and clean-up entries prematurely.
 	stopSpinner := ui.NewDefaultSpinner(l, "Destroying DNS entries").Start()
+	publicRecords := make([]string, 0, len(c.VMs))
+	for _, v := range c.VMs {
+		publicRecords = append(publicRecords, v.PublicDNS)
+	}
 	dnsErr := vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
-		return p.DeleteRecordsBySubdomain(context.Background(), c.Name)
+		publicRecordsErr := p.DeletePublicRecordsByName(context.Background(), publicRecords...)
+		srvRecordsErr := p.DeleteSRVRecordsBySubdomain(context.Background(), c.Name)
+		return errors.CombineErrors(publicRecordsErr, srvRecordsErr)
 	})
+
 	stopSpinner()
 
 	stopSpinner = ui.NewDefaultSpinner(l, "Destroying VMs").Start()

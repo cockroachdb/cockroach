@@ -9,6 +9,7 @@
 set -euo pipefail
 
 source $root/build/teamcity/util/roachtest_arch_util.sh
+source $root/build/teamcity/util/roachtest_bucket_util.sh
 
 if [ "$#" -eq 0 ]; then
   echo "Builds components necessary for roachtests and stages them in bin/ and/or lib/."
@@ -133,7 +134,7 @@ if $all_local; then
   exit 0
 fi
 
-cache_bucket="cockroach-nightly"
+cache_bucket="${ROACHTEST_NIGHTLY_BUCKET:-$(roachtest_nightly_shared_bucket)}"
 cache_sha="${BUILD_VCS_NUMBER:-$(git rev-parse HEAD)}"
 
 # Try to download cached artifacts from GCS before building.

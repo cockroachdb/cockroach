@@ -77,7 +77,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
 
 # If validation passes its safe to update the copy in storage.
 if [ $exit_status = 0 ]; then
-  gsutil cp  $ARTIFACTS_DIR/corpus/* gs://cockroach-corpus/corpus-$TC_BUILD_BRANCH/
+  gsutil cp  $ARTIFACTS_DIR/corpus/* gs://cockroach-corpus-crl-e2e-infra/corpus-$TC_BUILD_BRANCH/
 fi
 
 # Generate a corpus for all mixed version variants
@@ -104,5 +104,5 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
 
 # If validation passes its safe to update the copy in storage.
 if [ $exit_status = 0 ]; then
-  gsutil cp  $ARTIFACTS_DIR/corpus-mixed/* gs://cockroach-corpus/corpus-mixed-$TC_BUILD_BRANCH/
+  gsutil cp  $ARTIFACTS_DIR/corpus-mixed/* gs://cockroach-corpus-crl-e2e-infra/corpus-mixed-$TC_BUILD_BRANCH/
 fi

@@ -1,10 +1,8 @@
 steps:
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build',
+         '--file', 'pkg/cmd/roachprod/docker/Dockerfile',
          '--tag', 'gcr.io/cockroach-dev-inf/cockroachlabs/roachprod:$_SHA',
-         '--build-arg', 'SHA=$_SHA',
-         '--build-arg', 'OWNER=$_OWNER',
-         '--build-arg', 'REPO=$_REPO',
          '--build-arg', 'BAZEL_IMAGE=$_BAZEL_IMAGE',
          '.']
 images:

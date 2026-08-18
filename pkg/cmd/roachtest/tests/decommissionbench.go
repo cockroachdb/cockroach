@@ -608,8 +608,8 @@ func runDecommissionBench(
 	rampDuration := 3 * time.Minute
 	rampStarted := make(chan struct{})
 	importCmd := fmt.Sprintf(
-		`./cockroach workload fixtures import tpcc --warehouses=%d`,
-		benchSpec.warehouses,
+		`./cockroach workload fixtures import tpcc %s --warehouses=%d`,
+		gceFixtureBucketFlag(), benchSpec.warehouses,
 	)
 	workloadCmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
 		"%s --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
@@ -1119,13 +1119,14 @@ func runSingleDecommission(
 // logLSMHealth is a convenience method that logs the output of /debug/lsm.
 func logLSMHealth(ctx context.Context, l *logger.Logger, c cluster.Cluster, target int) error {
 	l.Printf("LSM Health of node%d", target)
-	adminAddrs, err := c.InternalAdminUIAddr(ctx, l, c.Node(target))
+	adminUIPorts, err := c.AdminUIPorts(
+		ctx, l, c.Node(target), install.SystemInterfaceName, 0, /* sqlInstance */
+	)
 	if err != nil {
 		return err
 	}
 	result, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(c.Node(target)),
-		"curl", "-s", fmt.Sprintf("http://%s/debug/lsm",
-			adminAddrs[0]))
+		"curl", "-s", fmt.Sprintf("http://localhost:%d/debug/lsm", adminUIPorts[0]))
 	if err == nil {
 		l.Printf(result.Stdout)
 	} else {

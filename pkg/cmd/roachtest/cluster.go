@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"math/rand"
 	"net"
 	"net/http"
@@ -228,6 +229,13 @@ func findBinaryOrLibrary(
 // VerifyLibraries verifies that the required libraries, specified by name, are
 // available for the target environment.
 func VerifyLibraries(requiredLibs []string, arch vm.CPUArch) error {
+	// When Cockroach is staged from edge artifacts, its matching native
+	// libraries are staged remotely as well. There is no local library to
+	// verify in that mode.
+	if roachtestflags.CockroachStage != "" {
+		return nil
+	}
+
 	foundLibraryPaths := libraryFilePaths[arch]
 
 	for _, requiredLib := range requiredLibs {
@@ -325,7 +333,10 @@ func initBinariesAndLibraries() {
 	cockroachPath := roachtestflags.CockroachPath
 	cockroachEAPath := roachtestflags.CockroachEAPath
 	workloadPath := roachtestflags.WorkloadPath
-	cockroach[defaultArch], _ = resolveBinary("cockroach", cockroachPath, defaultArch, true, false)
+	// Skip cockroach binary validation if using --cockroach-stage
+	if roachtestflags.CockroachStage == "" {
+		cockroach[defaultArch], _ = resolveBinary("cockroach", cockroachPath, defaultArch, true, false)
+	}
 	// Let the test runner verify the workload binary exists if TestSpec.RequiresDeprecatedWorkload is true.
 	workload[defaultArch], _ = resolveBinary("workload", workloadPath, defaultArch, false, false)
 	cockroachEA[defaultArch], err = resolveBinary("cockroach-ea", cockroachEAPath, defaultArch, false, true)
@@ -336,7 +347,9 @@ func initBinariesAndLibraries() {
 	if roachtestflags.ARM64Probability > 0 && defaultArch != vm.ArchARM64 {
 		fmt.Printf("Locating and verifying binaries for os=%q, arch=%q\n", defaultOSName, vm.ArchARM64)
 		// We need to verify we have all the required binaries for arm64.
-		cockroach[vm.ArchARM64], _ = resolveBinary("cockroach", cockroachPath, vm.ArchARM64, true, false)
+		if roachtestflags.CockroachStage == "" {
+			cockroach[vm.ArchARM64], _ = resolveBinary("cockroach", cockroachPath, vm.ArchARM64, true, false)
+		}
 		workload[vm.ArchARM64], _ = resolveBinary("workload", workloadPath, vm.ArchARM64, true, false)
 		cockroachEA[vm.ArchARM64], err = resolveBinary("cockroach-ea", cockroachEAPath, vm.ArchARM64, false, true)
 		if err != nil {
@@ -346,7 +359,9 @@ func initBinariesAndLibraries() {
 	if roachtestflags.FIPSProbability > 0 && defaultArch != vm.ArchFIPS {
 		fmt.Printf("Locating and verifying binaries for os=%q, arch=%q\n", defaultOSName, vm.ArchFIPS)
 		// We need to verify we have all the required binaries for fips.
-		cockroach[vm.ArchFIPS], _ = resolveBinary("cockroach", cockroachPath, vm.ArchFIPS, true, false)
+		if roachtestflags.CockroachStage == "" {
+			cockroach[vm.ArchFIPS], _ = resolveBinary("cockroach", cockroachPath, vm.ArchFIPS, true, false)
+		}
 		workload[vm.ArchFIPS], _ = resolveBinary("workload", workloadPath, vm.ArchFIPS, true, false)
 		cockroachEA[vm.ArchFIPS], err = resolveBinary("cockroach-ea", cockroachEAPath, vm.ArchFIPS, false, true)
 		if err != nil {
@@ -703,6 +718,12 @@ type clusterImpl struct {
 	preStartVirtualClusterHooks []install.PreStartHook
 }
 
+var (
+	// Indirections used by focused address-selection tests.
+	roachprodPgURL    = roachprod.PgURL
+	roachprodAdminURL = roachprod.AdminURL
+)
+
 // Name returns the cluster name, i.e. something like `teamcity-....`
 func (c *clusterImpl) Name() string {
 	return c.name
@@ -860,6 +881,35 @@ func createFlagsOverride(opts *vm.CreateOpts) {
 	if roachtestflags.Changed(&roachtestflags.OverrideGeoDistributed) != nil {
 		opts.GeoDistributed = roachtestflags.OverrideGeoDistributed
 	}
+	if roachtestflags.Changed(&roachtestflags.OverrideAddressMode) != nil {
+		opts.AddressMode = roachtestflags.OverrideAddressMode
+	}
+}
+
+func applyGCESubnetsOverride(
+	cloud spec.Cloud, subnets map[string]string, providerOpts, workloadProviderOpts vm.ProviderOpts,
+) error {
+	if len(subnets) == 0 {
+		return nil
+	}
+	if cloud != spec.GCE {
+		return errors.Newf("--gce-subnets is only valid with --cloud=gce, not %s", cloud)
+	}
+	setSubnets := func(opts vm.ProviderOpts) error {
+		if opts == nil {
+			return nil
+		}
+		gceOpts, ok := opts.(*gce.ProviderOpts)
+		if !ok {
+			return errors.AssertionFailedf("expected GCE provider options, got %T", opts)
+		}
+		gceOpts.Subnets = maps.Clone(subnets)
+		return nil
+	}
+	if err := setSubnets(providerOpts); err != nil {
+		return err
+	}
+	return setSubnets(workloadProviderOpts)
 }
 
 // createRetryPlanner owns safe mutations between roachprod create attempts.
@@ -1080,6 +1130,13 @@ func (f *clusterFactory) newCluster(
 	}
 
 	createFlagsOverride(&createVMOpts)
+	if roachtestflags.Changed(&roachtestflags.GCESubnets) != nil {
+		if err := applyGCESubnetsOverride(
+			clusterCloud, roachtestflags.GCESubnets, providerOpts, workloadProviderOpts,
+		); err != nil {
+			return nil, nil, err
+		}
+	}
 	// Make sure expiration is changed if --lifetime override flag
 	// is passed.
 	cfg.spec.Lifetime = createVMOpts.Lifetime
@@ -2091,7 +2148,21 @@ func (c *clusterImpl) PutE(
 func (c *clusterImpl) PutCockroach(ctx context.Context, l *logger.Logger, t *testImpl) error {
 	if roachtestflags.CockroachStage != "" {
 		// Use staging instead of upload when --cockroach-stage is specified
-		return c.Stage(ctx, l, "cockroach", roachtestflags.CockroachStage, ".", c.All())
+		stageVersion := roachtestflags.CockroachStage
+		if stageVersion == "latest" {
+			stageVersion = "" // Stage() expects empty string for latest
+		}
+		if err := c.Stage(ctx, l, "cockroach", stageVersion, ".", c.All()); err != nil {
+			return err
+		}
+		if len(t.spec.NativeLibs) > 0 {
+			// Staging cockroach fetches its libraries on a best-effort basis for
+			// compatibility with older artifacts. Tests that declare native-library
+			// requirements need the strict variant so a missing remote library fails
+			// during setup rather than in the test body.
+			return c.Stage(ctx, l, "lib", stageVersion, ".", c.All())
+		}
+		return nil
 	}
 	return c.PutE(ctx, l, t.Cockroach(), test.DefaultCockroachPath, c.All())
 }
@@ -2151,6 +2222,13 @@ func (c *clusterImpl) PutDeprecatedWorkload(
 	ctx context.Context, l *logger.Logger, t *testImpl,
 ) error {
 	if t.spec.RequiresDeprecatedWorkload && t.spec.Cluster.WorkloadNode {
+		if roachtestflags.CockroachStage != "" {
+			stageVersion := roachtestflags.CockroachStage
+			if stageVersion == "latest" {
+				stageVersion = ""
+			}
+			return c.Stage(ctx, l, "workload", stageVersion, ".", c.WorkloadNode())
+		}
 		return c.PutE(ctx, l, t.DeprecatedWorkload(), test.DefaultDeprecatedWorkloadPath, c.WorkloadNode())
 	}
 	return nil
@@ -2293,6 +2371,24 @@ func (c *clusterImpl) configureClusterSettingOptions(
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
 // can either be a specific node, empty (to indicate all nodes), or a pair of
 // nodes indicating a range.
+func applyForceInsecure(settings *install.ClusterSettings, force bool) {
+	if force {
+		settings.Secure = false
+	}
+}
+
+// logClusterStartOverrides records CLI-provided start inputs at the roachtest
+// boundary. A nil logger is valid for callers that intentionally suppress
+// start logging.
+func logClusterStartOverrides(l *logger.Logger) {
+	if l == nil {
+		return
+	}
+	if roachtestflags.ForceInsecure {
+		l.Printf("forcing insecure CockroachDB startup via --insecure")
+	}
+}
+
 func (c *clusterImpl) StartE(
 	ctx context.Context,
 	l *logger.Logger,
@@ -2310,6 +2406,7 @@ func (c *clusterImpl) StartE(
 	if c.t.Spec().(*registry.TestSpec).Benchmark {
 		startOpts.RoachprodOpts.ScheduleBackups = false
 	}
+	logClusterStartOverrides(l)
 
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
 	// Remove in v23.2.
@@ -2336,6 +2433,8 @@ func (c *clusterImpl) StartE(
 		settings.ClusterSettings["server.cpu_profile.cpu_usage_combined_threshold"] = "1"
 		settings.ClusterSettings["server.cpu_profile.total_dump_size_limit"] = "256 MiB"
 	}
+
+	applyForceInsecure(&settings, roachtestflags.ForceInsecure)
 
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
 
@@ -2404,6 +2503,13 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 	settings install.ClusterSettings,
 ) error {
 	l.Printf("starting virtual cluster")
+	logClusterStartOverrides(l)
+	// Keep virtual-cluster security consistent with the storage cluster when the
+	// runner was explicitly asked to force insecure starts. In addition to
+	// rendering --insecure for roachprod, mutating settings here prevents the
+	// secure-only certificate refetch below.
+	applyForceInsecure(&settings, roachtestflags.ForceInsecure)
+
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.virtualClusterSettings, settings)
 
 	// By default, we assume every node in the cluster is part of the
@@ -2845,13 +2951,13 @@ func (c *clusterImpl) pgURLErr(
 ) ([]string, error) {
 	opts.Secure = install.SimpleSecureOption(c.IsSecure())
 
-	// Use CockroachNodeCertsDir if it's an internal url with access to the node.
+	// Use CockroachNodeCertsDir if it's an internal URL expanded on a node.
 	certsDir := install.CockroachNodeCertsDir
-	if opts.External {
+	if opts.External || opts.UseHost {
 		certsDir = c.localCertsDir
 	}
 	opts.VirtualClusterName = c.virtualCluster(opts.VirtualClusterName)
-	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(nodes), certsDir, opts)
+	urls, err := roachprodPgURL(ctx, l, c.MakeNodes(nodes), certsDir, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -2871,11 +2977,14 @@ func (c *clusterImpl) InternalPGUrl(
 // Silence unused warning.
 var _ = (&clusterImpl{}).InternalPGUrl
 
-// ExternalPGUrl returns the external Postgres endpoint for the specified nodes.
+// ExternalPGUrl returns a Postgres endpoint reachable from the test runner for
+// the specified nodes. It prefers public addresses and falls back to private
+// addresses for private-only clusters.
 func (c *clusterImpl) ExternalPGUrl(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts roachprod.PGURLOptions,
 ) ([]string, error) {
-	opts.External = true
+	opts.External = false
+	opts.UseHost = true
 	return c.pgURLErr(ctx, l, nodes, opts)
 }
 
@@ -2919,21 +3028,9 @@ func addrToHostPort(addr string) (string, int, error) {
 	return host, port, nil
 }
 
-// InternalAdminUIAddr returns the internal Admin UI address in the form host:port
-// for the specified nodes.
-func (c *clusterImpl) InternalAdminUIAddr(
-	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts ...option.OptionFunc,
-) ([]string, error) {
-	var virtualClusterOptions option.VirtualClusterOptions
-	if err := option.Apply(&virtualClusterOptions, opts...); err != nil {
-		return nil, err
-	}
-
-	return c.adminUIAddr(ctx, l, nodes, virtualClusterOptions, false /* external */)
-}
-
-// ExternalAdminUIAddr returns the external Admin UI address in the form host:port
-// for the specified nodes.
+// ExternalAdminUIAddr returns an Admin UI address reachable from the test
+// runner in the form host:port for the specified nodes. It prefers public
+// addresses and falls back to private addresses for private-only clusters.
 func (c *clusterImpl) ExternalAdminUIAddr(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts ...option.OptionFunc,
 ) ([]string, error) {
@@ -2942,7 +3039,7 @@ func (c *clusterImpl) ExternalAdminUIAddr(
 		return nil, err
 	}
 
-	return c.adminUIAddr(ctx, l, nodes, virtualClusterOptions, true /* external */)
+	return c.adminUIAddr(ctx, l, nodes, virtualClusterOptions)
 }
 
 func (c *clusterImpl) SQLPorts(
@@ -2989,18 +3086,18 @@ func (c *clusterImpl) adminUIAddr(
 	l *logger.Logger,
 	nodes option.NodeListOption,
 	opts option.VirtualClusterOptions,
-	external bool,
 ) ([]string, error) {
 	var addrs []string
-	adminURLs, err := roachprod.AdminURL(
+	adminURLs, err := roachprodAdminURL(
 		ctx,
 		l,
 		c.MakeNodes(nodes),
 		c.virtualCluster(opts.VirtualClusterName),
 		opts.SQLInstance,
-		"", /* path */
-		external,
-		false,
+		"",    /* path */
+		false, /* usePublicIP */
+		true,  /* useHost */
+		false, /* openInBrowser */
 		install.SimpleSecureOption(false),
 	)
 	if err != nil {
@@ -3035,8 +3132,9 @@ func (c *clusterImpl) InternalAddr(
 	return c.addr(ctx, l, nodes, false)
 }
 
-// ExternalAddr returns the external address in the form host:port for the
-// specified nodes.
+// ExternalAddr returns an address reachable from the test runner in the form
+// host:port for the specified nodes. It prefers public addresses and falls
+// back to private addresses for private-only clusters.
 func (c *clusterImpl) ExternalAddr(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) ([]string, error) {
@@ -3044,10 +3142,10 @@ func (c *clusterImpl) ExternalAddr(
 }
 
 func (c *clusterImpl) addr(
-	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, external bool,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, useHost bool,
 ) ([]string, error) {
 	var addrs []string
-	urls, err := c.pgURLErr(ctx, l, nodes, roachprod.PGURLOptions{External: external})
+	urls, err := c.pgURLErr(ctx, l, nodes, roachprod.PGURLOptions{UseHost: useHost})
 	if err != nil {
 		return nil, err
 	}
@@ -3061,7 +3159,9 @@ func (c *clusterImpl) addr(
 	return addrs, nil
 }
 
-// ExternalIP returns the external IP addresses for the specified nodes.
+// ExternalIP returns IP addresses reachable from the test runner for the
+// specified nodes. It prefers public addresses and falls back to private
+// addresses for private-only clusters.
 func (c *clusterImpl) ExternalIP(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) ([]string, error) {
@@ -3106,10 +3206,11 @@ func (c *clusterImpl) ConnE(
 		return nil, err
 	}
 
-	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), roachprod.PGURLOptions{
+	urls, err := c.pgURLErr(ctx, l, c.Node(node), roachprod.PGURLOptions{
 		VirtualClusterName: connOptions.VirtualClusterName,
 		SQLInstance:        connOptions.SQLInstance,
 		Auth:               connOptions.AuthMode,
+		UseHost:            true,
 	})
 	if err != nil {
 		return nil, err

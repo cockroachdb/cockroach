@@ -66,8 +66,9 @@ func registerTPCDSVec(r registry.Registry) {
 			t.Fatal(err)
 		}
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
-		if _, err := clusterConn.Exec(
-			`RESTORE DATABASE tpcds FROM LATEST IN 'gs://cockroach-fixtures-us-east1/workload/tpcds/scalefactor=1/backup_25_3?AUTH=implicit';`,
+		if _, err := clusterConn.Exec(fmt.Sprintf(
+			`RESTORE DATABASE tpcds FROM LATEST IN '%s';`,
+			gceFixtureURI("workload/tpcds/scalefactor=1/backup_25_3?AUTH=implicit")),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -183,7 +184,7 @@ func registerTPCDSVec(r registry.Registry) {
 		Owner:     registry.OwnerSQLQueries,
 		Benchmark: true,
 		Cluster:   r.MakeClusterSpec(3),
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),

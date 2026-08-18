@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAllowedLocalSSDCount(t *testing.T) {
@@ -64,6 +66,419 @@ func TestAllowedLocalSSDCount(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDefaultServiceAccount(t *testing.T) {
+	assert.Equal(t, "roachprod-vm@test-project.iam.gserviceaccount.com", vmServiceAccount("test-project"))
+	assert.Equal(t, DefaultProviderOpts().defaultServiceAccount, DefaultServiceAccount())
+	assert.False(t, DefaultProviderOpts().UseIAP)
+	assert.Equal(t, "pd-ssd", DefaultProviderOpts().BootDiskType)
+}
+
+// TestDefaultArtifactsBucket keeps vm's provider-independent fallback in sync
+// with the bucket GCE derives from its default infrastructure project. The vm
+// package cannot derive this itself because importing gce would create a cycle.
+func TestDefaultArtifactsBucket(t *testing.T) {
+	require.Equal(t, vm.DefaultArtifactsBucket, artifactsBucketForProject(DefaultProjectID))
+}
+
+func TestStatefulIPArgs(t *testing.T) {
+	public := statefulIPArgs(vm.AddressModePublic)
+	require.Contains(t, public, "--stateful-internal-ip")
+	require.Contains(t, public, "--stateful-external-ip")
+
+	private := statefulIPArgs(vm.AddressModePrivate)
+	require.Contains(t, private, "--stateful-internal-ip")
+	require.NotContains(t, private, "--stateful-external-ip")
+}
+
+func TestDNSDefaults(t *testing.T) {
+	oldInfraProject := defaultInfraProject
+	oldZone := dnsDefaultZone
+	oldDomain := dnsDefaultDomain
+	oldDomainExplicit := dnsDefaultDomainExplicit
+	oldManagedZone := dnsDefaultManagedZone
+	oldManagedDomain := dnsDefaultManagedDomain
+	oldManagedDomainExplicit := dnsDefaultManagedDomainExplicit
+	t.Cleanup(func() {
+		defaultInfraProject = oldInfraProject
+		dnsDefaultZone = oldZone
+		dnsDefaultDomain = oldDomain
+		dnsDefaultDomainExplicit = oldDomainExplicit
+		dnsDefaultManagedZone = oldManagedZone
+		dnsDefaultManagedDomain = oldManagedDomain
+		dnsDefaultManagedDomainExplicit = oldManagedDomainExplicit
+	})
+
+	unsetEnv(t, "ROACHPROD_GCE_DNS_ZONE")
+	unsetEnv(t, "ROACHPROD_GCE_DNS_DOMAIN")
+	unsetEnv(t, "ROACHPROD_DNS")
+	unsetEnv(t, "ROACHPROD_GCE_DNS_MANAGED_ZONE")
+	unsetEnv(t, "ROACHPROD_GCE_DNS_MANAGED_DOMAIN")
+	for _, tc := range []struct {
+		name          string
+		infraProject  string
+		publicDomain  string
+		managedDomain string
+	}{
+		{
+			name:          "production",
+			infraProject:  DefaultProjectID,
+			publicDomain:  "roachprod.crdb.dev",
+			managedDomain: "roachprod-managed.crdb.dev",
+		},
+		{
+			name:          "staging",
+			infraProject:  StagingProjectID,
+			publicDomain:  "roachprod.staging.crdb.dev",
+			managedDomain: "roachprod-managed.staging.crdb.dev",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defaultInfraProject = tc.infraProject
+			initDNSDefault()
+
+			require.Equal(t, "roachprod", dnsDefaultZone)
+			require.Equal(t, tc.publicDomain, dnsDefaultDomain)
+			require.False(t, dnsDefaultDomainExplicit)
+			require.Equal(t, "roachprod-managed", dnsDefaultManagedZone)
+			require.Equal(t, tc.managedDomain, dnsDefaultManagedDomain)
+			require.False(t, dnsDefaultManagedDomainExplicit)
+		})
+	}
+}
+
+// TestProjectDefaultsShareBase locks the invariant that, absent per-role
+// environment overrides, the VM project and the infra project resolve to the
+// same default. roachprod exposes both as separate concepts (VMs can live in a
+// private project while shared infrastructure lives elsewhere), but their
+// defaults must match so a bare setup does not silently split work across two
+// projects. If a future change points one default at a different project (e.g.
+// the infra project at staging), this test forces that divergence to be
+// deliberate.
+func TestProjectDefaultsShareBase(t *testing.T) {
+	// Restore every global initGCEProjectDefaults mutates once the environment
+	// is back. Registered before unsetEnv so it runs last (t.Cleanup is LIFO),
+	// i.e. after the environment has been restored.
+	t.Cleanup(func() {
+		require.NoError(t, initGCEProjectDefaults())
+	})
+	unsetEnv(t, "ROACHPROD_GCE_DEFAULT_PROJECT")
+	unsetEnv(t, "ROACHPROD_GCE_PROJECT")
+	unsetEnv(t, "ROACHPROD_GCE_INFRA_PROJECT")
+
+	require.NoError(t, initGCEProjectDefaults())
+	require.Equal(t, DefaultProjectID, defaultVMProject)
+	require.Equal(t, defaultVMProject, defaultInfraProject)
+}
+func TestComputeAddressArgs(t *testing.T) {
+	providerOpts := DefaultProviderOpts()
+	publicOpts := vm.DefaultCreateOpts()
+	require.Empty(t, computeAddressArgs(publicOpts, providerOpts))
+
+	privateOpts := vm.DefaultCreateOpts()
+	privateOpts.AddressMode = vm.AddressModePrivate
+	require.Equal(t, []string{"--no-address"}, computeAddressArgs(privateOpts, providerOpts))
+
+	providerOpts.UseIAP = true
+	require.Equal(t,
+		[]string{"--no-address", "--tags", iapSSHTag},
+		computeAddressArgs(privateOpts, providerOpts),
+	)
+	// Public mode keeps the original network arguments even when the IAP flag
+	// is supplied; IAP is only meaningful for private instances.
+	require.Empty(t, computeAddressArgs(publicOpts, providerOpts))
+}
+
+func TestResolveAddressMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		project  string
+		mode     vm.AddressMode
+		expected vm.AddressMode
+	}{
+		{
+			name:     "auto resolves to private in the prod infra project",
+			project:  DefaultProjectID,
+			mode:     vm.AddressModeAuto,
+			expected: vm.AddressModePrivate,
+		},
+		{
+			name:     "auto resolves to private in the staging infra project",
+			project:  StagingProjectID,
+			mode:     vm.AddressModeAuto,
+			expected: vm.AddressModePrivate,
+		},
+		{
+			name:     "auto resolves to public in a public-capable project",
+			project:  "cockroach-ephemeral",
+			mode:     vm.AddressModeAuto,
+			expected: vm.AddressModePublic,
+		},
+		{
+			name:     "explicit public is preserved in a private-only project",
+			project:  DefaultProjectID,
+			mode:     vm.AddressModePublic,
+			expected: vm.AddressModePublic,
+		},
+		{
+			name:     "empty normalizes to public",
+			project:  DefaultProjectID,
+			mode:     "",
+			expected: vm.AddressModePublic,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &Provider{Projects: []string{tc.project}}
+			mode, err := p.resolveAddressMode(tc.mode)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, mode)
+		})
+	}
+}
+
+func TestParseRegionSubnetMap(t *testing.T) {
+	m, err := parseRegionSubnetMap("")
+	require.NoError(t, err)
+	require.Nil(t, m)
+
+	m, err = parseRegionSubnetMap("us-east1=a,us-west1=projects/host/regions/us-west1/subnetworks/b")
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{
+		"us-east1": "a",
+		"us-west1": "projects/host/regions/us-west1/subnetworks/b",
+	}, m)
+
+	_, err = parseRegionSubnetMap("bogus")
+	require.Error(t, err)
+	_, err = parseRegionSubnetMap("us-east1=")
+	require.Error(t, err)
+}
+
+func TestDefaultNetworkResources(t *testing.T) {
+	// e2e-infra projects follow the ${project}-vpc / ${project}-vpc-${region}
+	// convention.
+	require.Equal(t,
+		"projects/crl-e2e-infra-staging/global/networks/crl-e2e-infra-staging-vpc",
+		DefaultNetworkSelfLink(StagingProjectID),
+	)
+	require.Equal(t,
+		"projects/crl-e2e-infra-staging/regions/us-east1/subnetworks/crl-e2e-infra-staging-vpc-us-east1",
+		DefaultSubnetSelfLink(StagingProjectID, "us-east1"),
+	)
+	// Other projects fall back to the legacy "default" network and subnet.
+	require.Equal(t,
+		"projects/test-project/global/networks/default",
+		DefaultNetworkSelfLink("test-project"),
+	)
+	require.Equal(t,
+		"projects/test-project/regions/us-east1/subnetworks/default",
+		DefaultSubnetSelfLink("test-project", "us-east1"),
+	)
+}
+
+func TestResolveSubnet(t *testing.T) {
+	const defaultProject = "test-project"
+	for _, tc := range []struct {
+		name        string
+		project     string
+		opts        ProviderOpts
+		zone        string
+		expected    string
+		expectedErr string
+	}{
+		{
+			name:     "default subnet when no config",
+			opts:     ProviderOpts{},
+			zone:     "us-east1-b",
+			expected: "projects/test-project/regions/us-east1/subnetworks/default",
+		},
+		{
+			name:     "e2e-infra project uses the vpc convention when no config",
+			project:  StagingProjectID,
+			opts:     ProviderOpts{},
+			zone:     "us-east1-b",
+			expected: "projects/crl-e2e-infra-staging/regions/us-east1/subnetworks/crl-e2e-infra-staging-vpc-us-east1",
+		},
+		{
+			name:     "per-region map selects the zone's region",
+			opts:     ProviderOpts{Subnets: map[string]string{"us-east1": "east-subnet", "us-west1": "west-subnet"}},
+			zone:     "us-west1-a",
+			expected: "projects/test-project/regions/us-west1/subnetworks/west-subnet",
+		},
+		{
+			name:        "map must cover every selected region",
+			opts:        ProviderOpts{Subnets: map[string]string{"us-east1": "east-subnet"}},
+			zone:        "us-west1-a",
+			expectedErr: `no GCE subnet configured for region "us-west1"`,
+		},
+		{
+			name:     "shared VPC host-project self-link is not rewritten",
+			opts:     ProviderOpts{Subnets: map[string]string{"us-east1": "projects/host-project/regions/us-east1/subnetworks/shared"}},
+			zone:     "us-east1-b",
+			expected: "projects/host-project/regions/us-east1/subnetworks/shared",
+		},
+		{
+			name:     "map overrides the default for its region",
+			opts:     ProviderOpts{Subnets: map[string]string{"us-east1": "east-subnet"}},
+			zone:     "us-east1-b",
+			expected: "projects/test-project/regions/us-east1/subnetworks/east-subnet",
+		},
+		{
+			name:        "empty subnet value errors",
+			opts:        ProviderOpts{Subnets: map[string]string{"us-east1": ""}},
+			zone:        "us-east1-b",
+			expectedErr: `empty GCE subnet configured for region "us-east1"`,
+		},
+		{
+			name:        "self-link region mismatch errors",
+			opts:        ProviderOpts{Subnets: map[string]string{"us-east1": "projects/host/regions/us-west1/subnetworks/wrong"}},
+			zone:        "us-east1-b",
+			expectedErr: `is in region "us-west1" but zone maps to region "us-east1"`,
+		},
+		{
+			name:        "invalid zone errors",
+			opts:        ProviderOpts{},
+			zone:        "ab",
+			expectedErr: "invalid zone",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			proj := tc.project
+			if proj == "" {
+				proj = defaultProject
+			}
+			got, err := tc.opts.resolveSubnet(proj, tc.zone)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+}
+
+func TestValidateSubnetConfigRequiresEverySelectedRegion(t *testing.T) {
+	opts := &ProviderOpts{
+		Subnets: map[string]string{"us-east1": "custom-east"},
+	}
+	require.NoError(t, opts.validateSubnetConfig(
+		"test-project", []string{"us-east1-b", "us-east1-c"},
+	))
+	require.ErrorContains(t, opts.validateSubnetConfig(
+		"test-project", []string{"us-east1-b", "us-west1-a"},
+	), `no GCE subnet configured for region "us-west1"`)
+
+	opts.Subnets["us-west1"] = "custom-west"
+	require.NoError(t, opts.validateSubnetConfig(
+		"test-project", []string{"us-east1-b", "us-west1-a"},
+	))
+}
+
+func TestSubnetCreateFlags(t *testing.T) {
+	opts := DefaultProviderOpts()
+	flags := pflag.NewFlagSet("gce-subnets", pflag.ContinueOnError)
+	opts.ConfigureCreateFlags(flags)
+
+	require.Nil(t, flags.Lookup("gce-subnet"))
+	require.Nil(t, flags.Lookup("gce-network"))
+	require.NotNil(t, flags.Lookup("gce-subnets"))
+	require.NoError(t, flags.Parse([]string{
+		"--gce-subnets=us-east1=custom-east,us-west1=custom-west",
+	}))
+	require.Equal(t, map[string]string{
+		"us-east1": "custom-east",
+		"us-west1": "custom-west",
+	}, opts.Subnets)
+}
+
+func TestCLISubnetArgs(t *testing.T) {
+	const project = "test-project"
+
+	args, err := (&ProviderOpts{}).cliSubnetArgs(project, "us-east1-b")
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"--subnet", "projects/test-project/regions/us-east1/subnetworks/default",
+	}, args)
+
+	args, err = (&ProviderOpts{
+		Subnets: map[string]string{"us-east1": "s"},
+	}).cliSubnetArgs(project, "us-east1-b")
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"--subnet", "projects/test-project/regions/us-east1/subnetworks/s",
+	}, args)
+
+	_, err = (&ProviderOpts{
+		Subnets: map[string]string{"us-east1": "s"},
+	}).cliSubnetArgs(project, "us-west1-a")
+	require.Error(t, err)
+}
+
+func TestVMNetworkParsing(t *testing.T) {
+	jsonInstance := jsonVM{
+		Name:              "private-json-vm",
+		Labels:            map[string]string{vm.TagLifetime: time.Hour.String()},
+		CreationTimestamp: time.Now(),
+		SelfLink:          "https://www.googleapis.com/compute/v1/projects/test-project/zones/us-east1-b/instances/private-json-vm",
+	}
+	jsonInstance.NetworkInterfaces = []struct {
+		Network       string
+		NetworkIP     string
+		AccessConfigs []struct {
+			Name  string
+			NatIP string
+		}
+	}{
+		{
+			Network:   "projects/test-project/global/networks/private-vpc",
+			NetworkIP: "10.0.0.2",
+		},
+	}
+	jsonInstance.Scheduling.OnHostMaintenance = "MIGRATE"
+	jsonInstance.Tags.Items = []string{iapSSHTag}
+	parsedJSON := jsonInstance.toVM("test-project", "roachprod.example")
+	require.Empty(t, parsedJSON.Errors)
+	require.Equal(t, "10.0.0.2", parsedJSON.PrivateIP)
+	require.Empty(t, parsedJSON.PublicIP)
+	require.Equal(t, "private-vpc", parsedJSON.VPC)
+	require.Equal(t, vm.AddressModePrivate, parsedJSON.AddressMode)
+	require.Equal(t, []string{iapSSHTag}, parsedJSON.NetworkTags)
+	require.True(t, UsesIAP(*parsedJSON))
+
+	publicJSONInstance := jsonInstance
+	publicJSONInstance.Name = "public-json-vm"
+	publicJSONInstance.Tags.Items = nil
+	publicJSONInstance.NetworkInterfaces[0].AccessConfigs = []struct {
+		Name  string
+		NatIP string
+	}{
+		{Name: "External NAT", NatIP: "192.0.2.1"},
+	}
+	parsedPublicJSON := publicJSONInstance.toVM("test-project", "roachprod.example")
+	require.Empty(t, parsedPublicJSON.Errors)
+	require.Equal(t, "10.0.0.2", parsedPublicJSON.PrivateIP)
+	require.Equal(t, "192.0.2.1", parsedPublicJSON.PublicIP)
+	require.Equal(t, "private-vpc", parsedPublicJSON.VPC)
+	require.Equal(t, vm.AddressModePublic, parsedPublicJSON.AddressMode)
+	require.Empty(t, parsedPublicJSON.NetworkTags)
+}
+
+func TestValidateProvisionedAddressMode(t *testing.T) {
+	require.NoError(t, validateProvisionedAddressMode(vm.List{
+		{Name: "private", PrivateIP: "10.0.0.2"},
+	}, vm.AddressModePrivate))
+	require.NoError(t, validateProvisionedAddressMode(vm.List{
+		{Name: "public", PrivateIP: "10.0.0.2", PublicIP: "192.0.2.1"},
+	}, vm.AddressModePublic))
+	require.Error(t, validateProvisionedAddressMode(vm.List{
+		{Name: "unexpected-public", PrivateIP: "10.0.0.2", PublicIP: "192.0.2.1"},
+	}, vm.AddressModePrivate))
+	require.Error(t, validateProvisionedAddressMode(vm.List{
+		{Name: "missing-public", PrivateIP: "10.0.0.2"},
+	}, vm.AddressModePublic))
 }
 
 func TestParseGCECapacityError(t *testing.T) {
@@ -300,4 +715,124 @@ func TestComputeGrowDistribution(t *testing.T) {
 	if err := quick.Check(testDistribution, &c); err != nil {
 		t.Error(err)
 	}
+}
+
+func TestTemplateAddressMode(t *testing.T) {
+	public := jsonInstanceTemplate{}
+	public.Properties.NetworkInterfaces = []struct {
+		Name          string `json:"name"`
+		Network       string `json:"network"`
+		AccessConfigs []struct {
+			NatIP string `json:"natIP"`
+		} `json:"accessConfigs"`
+	}{{Name: "nic0", Network: "default", AccessConfigs: []struct {
+		NatIP string `json:"natIP"`
+	}{{NatIP: "34.1.2.3"}}}}
+
+	private := jsonInstanceTemplate{}
+	private.Properties.NetworkInterfaces = []struct {
+		Name          string `json:"name"`
+		Network       string `json:"network"`
+		AccessConfigs []struct {
+			NatIP string `json:"natIP"`
+		} `json:"accessConfigs"`
+	}{{Name: "nic0", Network: "my-vpc"}}
+
+	require.Equal(t, vm.AddressModePublic, templateAddressMode(public))
+	require.Equal(t, vm.AddressModePrivate, templateAddressMode(private))
+	require.Equal(t, vm.AddressModePublic, templateAddressMode(jsonInstanceTemplate{}))
+}
+
+func TestPreservedNetworkIP(t *testing.T) {
+	require.Equal(t, "", preservedNetworkIP(nil, "nic0"))
+	require.Equal(t, "", preservedNetworkIP(map[string]*PreservedStatePreservedNetworkIp{}, "nic0"))
+	require.Equal(t, "", preservedNetworkIP(map[string]*PreservedStatePreservedNetworkIp{"nic0": nil}, "nic0"))
+
+	ip := &PreservedStatePreservedNetworkIp{}
+	ip.IpAddress.Literal = "10.0.0.5"
+	require.Equal(t, "10.0.0.5", preservedNetworkIP(map[string]*PreservedStatePreservedNetworkIp{"nic0": ip}, "nic0"))
+}
+
+func TestManagedInstanceToVMPrivate(t *testing.T) {
+	internal := &PreservedStatePreservedNetworkIp{}
+	internal.IpAddress.Literal = "10.0.0.5"
+
+	j := &managedInstanceGroupInstance{
+		Name:     "c-0001",
+		Instance: "https://www.googleapis.com/compute/v1/projects/p/zones/us-east1-b/instances/c-0001",
+	}
+	j.PreservedStateFromPolicy = PreservedState{
+		InternalIPs: map[string]*PreservedStatePreservedNetworkIp{"nic0": internal},
+		// No ExternalIPs entry: this is the private case.
+	}
+
+	tmpl := jsonInstanceTemplate{}
+	tmpl.Properties.Labels = map[string]string{vm.TagLifetime: "12h0m0s"}
+	tmpl.Properties.NetworkInterfaces = []struct {
+		Name          string `json:"name"`
+		Network       string `json:"network"`
+		AccessConfigs []struct {
+			NatIP string `json:"natIP"`
+		} `json:"accessConfigs"`
+	}{{Name: "nic0", Network: "projects/p/global/networks/my-vpc"}}
+
+	v := j.toVM("p", "us-east1-b", tmpl, "roachprod.example.com")
+
+	require.Equal(t, "10.0.0.5", v.PrivateIP)
+	require.Equal(t, "", v.PublicIP)
+	require.Equal(t, vm.AddressModePrivate, v.AddressMode)
+	require.Equal(t, "my-vpc", v.VPC)
+	for _, e := range v.Errors {
+		require.False(t, errors.Is(e, vm.ErrBadNetwork), "unexpected ErrBadNetwork: %v", e)
+	}
+}
+
+func TestManagedInstanceToVMMissingPrivateIP(t *testing.T) {
+	j := &managedInstanceGroupInstance{Name: "c-0002"}
+	j.PreservedStateFromPolicy = PreservedState{} // no internal IP
+
+	tmpl := jsonInstanceTemplate{}
+	tmpl.Properties.Labels = map[string]string{vm.TagLifetime: "12h0m0s"}
+	tmpl.Properties.NetworkInterfaces = []struct {
+		Name          string `json:"name"`
+		Network       string `json:"network"`
+		AccessConfigs []struct {
+			NatIP string `json:"natIP"`
+		} `json:"accessConfigs"`
+	}{{Name: "nic0", Network: "projects/p/global/networks/my-vpc"}}
+
+	v := j.toVM("p", "us-east1-b", tmpl, "roachprod.example.com")
+
+	found := false
+	for _, e := range v.Errors {
+		if errors.Is(e, vm.ErrBadNetwork) {
+			found = true
+		}
+	}
+	require.True(t, found, "expected ErrBadNetwork when private IP is absent")
+}
+
+func TestRejectPrivateManagedLoadBalancer(t *testing.T) {
+	// Public VMs carry a public IP; load-balancer creation is allowed.
+	require.NoError(t, rejectPrivateManagedLoadBalancer(vm.List{
+		{Name: "c-0001", AddressMode: vm.AddressModePublic, PublicIP: "34.1.2.3"},
+		{Name: "c-0002", AddressMode: vm.AddressModePublic, PublicIP: "34.1.2.4"},
+	}))
+
+	// Rejected when a VM is explicitly resolved as private.
+	err := rejectPrivateManagedLoadBalancer(vm.List{
+		{Name: "c-0001", AddressMode: vm.AddressModePublic, PublicIP: "34.1.2.3"},
+		{Name: "c-0002", AddressMode: vm.AddressModePrivate},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "private managed instance groups")
+
+	// Rejected when the resolved mode was not persisted (empty AddressMode, e.g.
+	// cluster state written by an older roachprod) but the VM has no public IP --
+	// the reliable private signal that is always present in cached state.
+	err = rejectPrivateManagedLoadBalancer(vm.List{
+		{Name: "c-0001", PrivateIP: "10.0.0.5"},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "private managed instance groups")
 }

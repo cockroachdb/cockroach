@@ -8,8 +8,7 @@ package tests
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
+	"path"
 	"regexp"
 	"strings"
 
@@ -27,7 +26,7 @@ func registerDeclSchemaChangeCompatMixedVersions(r registry.Registry) {
 		Name:    "schemachange/mixed-versions-compat",
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
@@ -45,14 +44,20 @@ func fetchCorpusToTmpDir(
 	versionNumber string,
 	alternateVersion string,
 ) (corpusFilePath string, cleanupFn func()) {
-	tmpDir, err := os.MkdirTemp("", "corpus")
+	details, err := c.RunWithDetailsSingleNode(
+		ctx, t.L(), option.WithNodes(c.Node(1)), "mktemp -d /tmp/corpus.XXXXXX",
+	)
 	if err != nil {
-		t.Fatalf("unable to create temp directory for corpus: %v", err)
+		t.Fatalf("unable to create remote temp directory for corpus: %v", err)
 	}
-	corpusFilePath = filepath.Join(tmpDir, "corpus")
+	tmpDir := strings.TrimSpace(details.Stdout)
+	if tmpDir == "" {
+		t.Fatal("unable to create remote temp directory for corpus: empty path")
+	}
+	corpusFilePath = path.Join(tmpDir, "corpus")
 	// Callback for cleaning up the temporary directory.
 	cleanupFn = func() {
-		err := os.RemoveAll(tmpDir)
+		err := c.RunE(ctx, option.WithNodes(c.Node(1)), "rm", "-rf", tmpDir)
 		if err != nil {
 			t.L().Printf("failed to clean up tmp directory %v", err)
 		}
@@ -63,7 +68,8 @@ func fetchCorpusToTmpDir(
 	}
 	for i, version := range versionsToCheck {
 		err = c.RunE(ctx, option.WithNodes(c.Node(1)),
-			fmt.Sprintf(" gsutil cp gs://cockroach-corpus/corpus-%s/corpus %s",
+			fmt.Sprintf(" gsutil cp gs://%s/corpus-%s/corpus %s",
+				gcsBucket("cockroach-corpus"),
 				version,
 				corpusFilePath))
 		if err != nil && i != len(versionsToCheck)-1 {

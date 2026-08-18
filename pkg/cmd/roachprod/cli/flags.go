@@ -34,6 +34,7 @@ var (
 	username              string
 	database              string
 	dryrun                bool
+	gcClouds              []string
 	destroyAllMine        bool
 	destroyAllLocal       bool
 	extendLifetime        time.Duration
@@ -71,6 +72,7 @@ var (
 	deployGracePeriod     = 300
 	pause                 = time.Duration(0)
 	createVMOpts          = vm.DefaultCreateOpts()
+	keepClusterOnFailure  bool
 	startOpts             = roachprod.DefaultStartOpts()
 	stageOS               string
 	stageArch             string
@@ -110,7 +112,10 @@ var (
 
 // Intended to be called once from drtprod main package to update defaults which differ from roachprod.
 func UpdateFlagDefaults() {
-	// N.B. unlike roachprod, which defaults to "insecure mode", drtprod defaults to "secure mode".
+	// N.B. Both roachprod and drtprod default to secure mode via the flag defaults.
+	// However, roachprod has runtime logic in overrideBasedOnClusterSettings() that
+	// forces insecure mode for clusters in the default GCP project.
+	// drtprod explicitly sets secure=true here to ensure secure mode is used.
 	secure = true
 	insecure = envutil.EnvOrDefaultBool("COCKROACH_ROACHPROD_INSECURE", false)
 }
@@ -154,6 +159,11 @@ func initCreateCmdFlags(createCmd *cobra.Command) {
 		"geo", false, "Create geo-distributed cluster")
 	createCmd.Flags().StringVar(&createVMOpts.Arch, "arch", "",
 		"architecture override for VM [amd64, arm64, fips]; N.B. fips implies amd64 with openssl")
+	createCmd.Flags().Var(&createVMOpts.AddressMode, "address-mode",
+		"VM address mode: public preserves current behavior; private omits public addresses; "+
+			"auto uses private addresses in the default GCE project and public addresses otherwise")
+	createCmd.Flags().BoolVar(&keepClusterOnFailure, "keep-on-failure", false,
+		"Preserve any VMs created if cluster setup fails, for debugging")
 
 	// N.B. We set "usage=roachprod" as the default, custom label for billing tracking.
 	createCmd.Flags().StringToStringVar(&createVMOpts.CustomLabels,
@@ -396,7 +406,12 @@ func initOpentelemetryStartCmdFlags(opentelemetryStartCmd *cobra.Command) {
 func initGCCmdFlags(gcCmd *cobra.Command) {
 	gcCmd.Flags().BoolVarP(&dryrun,
 		"dry-run", "n", dryrun, "dry run (don't perform any actions)")
-	gcCmd.Flags().StringVar(&config.SlackToken, "slack-token", "", "Slack bot token")
+	gcCmd.Flags().StringSliceVarP(&gcClouds,
+		"clouds", "c", nil,
+		"cloud providers to garbage-collect; defaults to gce, aws, azure, and ibm, all of which must be active")
+	gcCmd.Flags().StringVar(
+		&config.SlackToken, "slack-token", "",
+		"Slack bot token (defaults to SLACK_TOKEN)")
 	// Allow each Provider to inject additional configuration flags
 	for _, provider := range vm.Providers {
 		if provider.Active() {

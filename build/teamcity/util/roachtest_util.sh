@@ -11,6 +11,7 @@ gcs_setup_credentials
 
 # defines get_host_arch
 source  $root/build/teamcity/util/roachtest_arch_util.sh
+source  $root/build/teamcity/util/roachtest_bucket_util.sh
 
 # Early bind the stats dir. Roachtest invocations can take ages, and we want the
 # date at the time of the start of the run (which identifies the version of the
@@ -28,17 +29,37 @@ fi
 
 COMMIT_SHA=$(git rev-parse --short HEAD)
 
+# upload_stats_allowed reports whether the current branch may upload perf
+# artifacts to roachperf. Release branches (master, release-*, ...) always may.
+# ROACHTEST_UPLOAD_STATS_BRANCHES is a comma-separated allowlist of additional
+# branches (e.g. the long-lived roachprod-private staging branch). The
+# destination stays project-scoped (see roachtest_nightly_perf_bucket), so each
+# branch's data lands under its own infrastructure project.
+function upload_stats_allowed {
+  if tc_release_branch; then
+    return 0
+  fi
+  local branch extra b
+  branch=$(tc_build_branch)
+  IFS=',' read -ra extra <<< "${ROACHTEST_UPLOAD_STATS_BRANCHES:-}"
+  for b in ${extra[@]+"${extra[@]}"}; do
+    # Trim surrounding whitespace; skip empties left
+    # by stray or trailing commas.
+    b="${b#"${b%%[![:space:]]*}"}"
+    b="${b%"${b##*[![:space:]]}"}"
+    if [[ -n "${b}" && "${branch}" == "${b}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Set up a function we'll invoke at the end.
 function upload_stats {
-  if tc_release_branch; then
-    bucket="${ROACHTEST_BUCKET:-cockroach-nightly-${CLOUD}}"
+  if upload_stats_allowed; then
+    bucket="$(roachtest_nightly_perf_bucket "${CLOUD}")"
     if [[ "${EXPORT_OPENMETRICS}" == "true" ]]; then
         bucket="${ROACHTEST_BUCKET:-crl-artifacts-roachperf-openmetrics/${CLOUD}}"
-    fi
-
-    if [[ "${CLOUD}" == "gce" && "${EXPORT_OPENMETRICS}" == "false" ]]; then
-        # GCE, having been there first, gets an exemption.
-        bucket="cockroach-nightly"
     fi
 
     branch=$(tc_build_branch)
@@ -85,7 +106,7 @@ set -x
 # Uploads roachprod and roachtest binaries to GCS.
 function upload_binaries {
   if tc_release_branch; then
-      bucket="cockroach-nightly"
+      bucket="${ROACHTEST_NIGHTLY_BUCKET:-$(roachtest_nightly_shared_bucket)}"
       branch=$(tc_build_branch)
       arch=$(get_host_arch)
       os=linux

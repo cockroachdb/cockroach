@@ -461,26 +461,6 @@ func (mr *MockClusterMockRecorder) InternalAddr(arg0, arg1, arg2 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InternalAddr", reflect.TypeOf((*MockCluster)(nil).InternalAddr), arg0, arg1, arg2)
 }
 
-// InternalAdminUIAddr mocks base method.
-func (m *MockCluster) InternalAdminUIAddr(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 ...option.OptionFunc) ([]string, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1, arg2}
-	for _, a := range arg3 {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "InternalAdminUIAddr", varargs...)
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// InternalAdminUIAddr indicates an expected call of InternalAdminUIAddr.
-func (mr *MockClusterMockRecorder) InternalAdminUIAddr(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InternalAdminUIAddr", reflect.TypeOf((*MockCluster)(nil).InternalAdminUIAddr), varargs...)
-}
-
 // InternalIP mocks base method.
 func (m *MockCluster) InternalIP(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption) ([]string, error) {
 	m.ctrl.T.Helper()
