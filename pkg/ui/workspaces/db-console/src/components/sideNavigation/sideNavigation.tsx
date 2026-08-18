@@ -24,11 +24,10 @@ export interface NavigationItem {
 
 export function NavigationItem(props: NavigationItem) {
   const { children, isActive, disabled } = props;
-  let textType = TextTypes.Body;
-
-  if (isActive) {
-    textType = TextTypes.BodyStrong;
-  }
+  // REBRAND (2026): selection is conveyed by the pill fill + text color only
+  // (never weight), so the active item keeps the base Body weight rather than
+  // switching to BodyStrong.
+  const textType = TextTypes.Body;
 
   const classes = cn("side-navigation__navigation-item", {
     "side-navigation__navigation-item--active": isActive,

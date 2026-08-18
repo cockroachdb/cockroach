@@ -72,5 +72,7 @@ $container-top-offset: 120px;
   // content pane; the rail is the ONLY warm surface (2026 brand).
   margin: 0 $spacing-medium 0 0;
   background-color: $colors--neutral-1;
-  padding: $spacing-medium $spacing-small;
+  // Tight rail padding (12px / 8px) so the pill rows sit with an even inset
+  // from the rail edges (2026 cc-console treatment).
+  padding: $spacing-smaller $spacing-x-small;
 }
