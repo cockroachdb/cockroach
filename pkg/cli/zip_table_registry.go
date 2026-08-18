@@ -131,6 +131,120 @@ func (r DebugZipTableRegistry) GetTables() []string {
 	return tables
 }
 
+// queriesTableQueryUnredacted and sessionsTableQueryUnredacted are the
+// unredacted zip queries for the query/session introspection tables
+// (parameterized by table name). They dump all columns raw, except that
+// statement text mentioning a sensitive cluster setting has its constants
+// hidden: `SET CLUSTER SETTING <sensitive> = '<secret>'` typed in a session
+// would otherwise land in the zip with the secret intact - including via
+// last_active_query, which lingers on an idle session until its next
+// statement runs.
+//
+// Each has a *Fallback twin, run when the primary query fails. A fallback
+// must not itself depend on `cluster_settings.sensitive`, since the most
+// common reason to reach it is a server predating that column; it must also
+// stay cheap, since the next most common reason is the primary query hitting
+// the zip's statement timeout on a busy cluster. Both properties follow from
+// dropping the per-row lookup and hiding constants unconditionally, at the
+// cost of also hiding them in statements that mention no sensitive setting.
+// The fallbacks project only long-standing columns, so that a server old
+// enough to lack the newer ones still yields rows.
+const queriesTableQueryUnredacted = `SELECT
+	query_id,
+	txn_id,
+	node_id,
+	session_id,
+	user_name,
+	start,
+	CASE
+		WHEN EXISTS (
+			SELECT 1 FROM crdb_internal.cluster_settings cs
+			WHERE cs.sensitive AND q.query LIKE '%%' || cs.variable || '%%'
+		)
+		THEN crdb_internal.hide_sql_constants(q.query)
+		ELSE q.query
+	END AS query,
+	client_address,
+	application_name,
+	distributed,
+	phase,
+	full_scan,
+	plan_gist,
+	"database",
+	isolation_level,
+	num_txn_retries,
+	num_txn_auto_retries
+FROM crdb_internal.%[1]s q`
+
+const sessionsTableQueryUnredacted = `SELECT
+	node_id,
+	session_id,
+	user_name,
+	client_address,
+	application_name,
+	CASE
+		WHEN EXISTS (
+			SELECT 1 FROM crdb_internal.cluster_settings cs
+			WHERE cs.sensitive AND s.active_queries LIKE '%%' || cs.variable || '%%'
+		)
+		THEN crdb_internal.hide_sql_constants(s.active_queries)
+		ELSE s.active_queries
+	END AS active_queries,
+	CASE
+		WHEN EXISTS (
+			SELECT 1 FROM crdb_internal.cluster_settings cs
+			WHERE cs.sensitive AND s.last_active_query LIKE '%%' || cs.variable || '%%'
+		)
+		THEN crdb_internal.hide_sql_constants(s.last_active_query)
+		ELSE s.last_active_query
+	END AS last_active_query,
+	num_txns_executed,
+	session_start,
+	active_query_start,
+	kv_txn,
+	alloc_bytes,
+	max_alloc_bytes,
+	status,
+	session_end,
+	pg_backend_pid,
+	trace_id,
+	goroutine_id,
+	authentication_method,
+	isolation_level
+FROM crdb_internal.%[1]s s`
+
+const queriesTableQueryUnredactedFallback = `SELECT
+	query_id,
+	txn_id,
+	node_id,
+	session_id,
+	user_name,
+	start,
+	crdb_internal.hide_sql_constants(query) AS query,
+	client_address,
+	application_name,
+	distributed,
+	phase,
+	full_scan
+FROM crdb_internal.%[1]s`
+
+const sessionsTableQueryUnredactedFallback = `SELECT
+	node_id,
+	session_id,
+	user_name,
+	client_address,
+	application_name,
+	crdb_internal.hide_sql_constants(active_queries) AS active_queries,
+	crdb_internal.hide_sql_constants(last_active_query) AS last_active_query,
+	session_start,
+	active_query_start,
+	kv_txn,
+	alloc_bytes,
+	max_alloc_bytes,
+	status,
+	session_end
+FROM crdb_internal.%[1]s`
+
 var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	"crdb_internal.cluster_contention_events": {
 		// `key` column contains the contended key, which may contain sensitive
@@ -196,6 +310,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_queries": {
+		customQueryUnredacted:         fmt.Sprintf(queriesTableQueryUnredacted, "cluster_queries"),
+		customQueryUnredactedFallback: fmt.Sprintf(queriesTableQueryUnredactedFallback, "cluster_queries"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"query_id",
@@ -214,6 +330,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_sessions": {
+		customQueryUnredacted:         fmt.Sprintf(sessionsTableQueryUnredacted, "cluster_sessions"),
+		customQueryUnredactedFallback: fmt.Sprintf(sessionsTableQueryUnredactedFallback, "cluster_sessions"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",
@@ -710,7 +828,7 @@ WITH setting_events AS (
 SELECT
 	info_json ->> 'SettingName' as setting_name,
 	CASE
-      WHEN cs.sensitive AND info_json ->> 'Value' <> 'DEFAULT' THEN '<redacted>'
+      WHEN (cs.variable IS NULL OR cs.sensitive) AND info_json ->> 'Value' <> 'DEFAULT' THEN '<redacted>'
       ELSE info_json ->> 'Value'
 	END value,
 	info_json ->> 'DefaultValue' as default_value,
@@ -718,7 +836,7 @@ SELECT
 	info_json ->> 'ApplicationName' as application_name,
 	se.timestamp
 FROM setting_events se
-JOIN crdb_internal.cluster_settings cs on cs.variable = se.info_json ->> 'SettingName'
+LEFT JOIN crdb_internal.cluster_settings cs on cs.variable = se.info_json ->> 'SettingName'
 ORDER BY setting_name, timestamp`,
 		customQueryRedacted: `
 WITH setting_events AS (
@@ -731,7 +849,7 @@ WITH setting_events AS (
 SELECT
 	info_json ->> 'SettingName' as setting_name,
 	CASE
-      WHEN (cs.sensitive OR NOT cs.reportable) AND info_json ->> 'Value' <> 'DEFAULT' THEN '<redacted>'
+      WHEN (cs.variable IS NULL OR cs.sensitive OR NOT cs.reportable) AND info_json ->> 'Value' <> 'DEFAULT' THEN '<redacted>'
       ELSE info_json ->> 'Value'
  	END value,
 	info_json ->> 'DefaultValue' as default_value,
@@ -739,7 +857,7 @@ SELECT
 	info_json ->> 'ApplicationName' as application_name,
 	se.timestamp
 FROM setting_events se
-JOIN crdb_internal.cluster_settings cs on cs.variable = se.info_json ->> 'SettingName'
+LEFT JOIN crdb_internal.cluster_settings cs on cs.variable = se.info_json ->> 'SettingName'
 ORDER BY setting_name, timestamp`,
 	},
 }
@@ -920,6 +1038,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.node_queries": {
+		customQueryUnredacted:         fmt.Sprintf(queriesTableQueryUnredacted, "node_queries"),
+		customQueryUnredactedFallback: fmt.Sprintf(queriesTableQueryUnredactedFallback, "node_queries"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"query_id",
@@ -958,6 +1078,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
       ) ORDER BY node_id`,
 	},
 	"crdb_internal.node_sessions": {
+		customQueryUnredacted:         fmt.Sprintf(sessionsTableQueryUnredacted, "node_sessions"),
+		customQueryUnredactedFallback: fmt.Sprintf(sessionsTableQueryUnredactedFallback, "node_sessions"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",
@@ -1296,6 +1418,63 @@ var zipSystemTables = DebugZipTableRegistry{
 			FROM system.descriptor`,
 	},
 	"system.eventlog": {
+		// Setting-change events carry the new value in the info payload -
+		// in the Value field, and (for historical rows written before the
+		// value was redacted at write time) in the raw statement text of the
+		// Statement and PlaceholderValues fields. For sensitive settings
+		// these are secrets, so the info payload is rewritten for such rows:
+		// Value is replaced and the statement fields are dropped. A setting
+		// name with no match in the registry (retired or renamed) is
+		// conservatively treated as sensitive. Resets (Value = 'DEFAULT')
+		// carry no secret and are left intact.
+		//
+		// Role-change events have an analogous hole: a password bound via a
+		// placeholder (CREATE ROLE ... WITH PASSWORD $1) was recorded raw in
+		// PlaceholderValues by historical rows, so that field is dropped for
+		// them. Their Statement field is safe: password literals are
+		// substituted with '*****' at write time.
+		customQueryUnredacted: `SELECT
+	timestamp,
+	"eventType",
+	"targetID",
+	"reportingID",
+	CASE
+		WHEN "eventType" IN ('set_cluster_setting', 'set_tenant_cluster_setting')
+			AND COALESCE(info::jsonb ->> 'Value', '') NOT IN ('', 'DEFAULT')
+			AND NOT EXISTS (
+				SELECT 1 FROM crdb_internal.cluster_settings cs
+				WHERE cs.variable = info::jsonb ->> 'SettingName' AND NOT cs.sensitive
+			)
+		THEN (((info::jsonb || '{"Value": "<redacted>"}') - 'Statement') - 'PlaceholderValues')::string
+		WHEN "eventType" IN ('create_role', 'alter_role')
+			AND info::jsonb ? 'PlaceholderValues'
+		THEN (info::jsonb - 'PlaceholderValues')::string
+		ELSE info
+	END AS info,
+	"uniqueID"
+FROM system.eventlog`,
+		// The fallback redacts every setting-change event rather than only
+		// the sensitive ones: it cannot consult `cluster_settings.sensitive`,
+		// since a server predating that column is the most common reason to
+		// end up here. Dropping the lookup also keeps it cheap enough to
+		// survive the second most common reason, the primary query exceeding
+		// the zip's statement timeout on a large eventlog.
+		customQueryUnredactedFallback: `SELECT
+	timestamp,
+	"eventType",
+	"targetID",
+	"reportingID",
+	CASE
+		WHEN "eventType" IN ('set_cluster_setting', 'set_tenant_cluster_setting')
+			AND COALESCE(info::jsonb ->> 'Value', '') NOT IN ('', 'DEFAULT')
+		THEN (((info::jsonb || '{"Value": "<redacted>"}') - 'Statement') - 'PlaceholderValues')::string
+		WHEN "eventType" IN ('create_role', 'alter_role')
+			AND info::jsonb ? 'PlaceholderValues'
+		THEN (info::jsonb - 'PlaceholderValues')::string
+		ELSE info
+	END AS info,
+	"uniqueID"
+FROM system.eventlog`,
 		nonSensitiveCols: NonSensitiveColumns{
 			"timestamp",
 			`"eventType"`,
@@ -1305,8 +1484,21 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.external_connections": {
-		// `connection_details` column may contain customer infra IP addresses,
-		// URI params containing access keys, etc.
+		// `connection_details` holds the encoded endpoint URI, whose query
+		// params carry the credentials used to reach it (cloud storage access
+		// keys, Kafka SASL passwords, and the like). There is no way to strip
+		// just the credentials from the encoded proto in SQL, and a denylist
+		// of parameter names would fail open as new providers are added, so
+		// the whole column is dropped from unredacted zips too.
+		customQueryUnredacted: `SELECT
+	connection_name,
+	created,
+	updated,
+	connection_type,
+	'<redacted>' AS connection_details,
+	owner,
+	owner_id
+FROM system.external_connections`,
 		nonSensitiveCols: NonSensitiveColumns{
 			"connection_name",
 			"created",
@@ -1527,8 +1719,23 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.scheduled_jobs": {
-		// `execution_args` column contains BACKUP statements which can contain
-		// sensitive URI params, such as AWS keys.
+		// `execution_args` holds the statement the schedule runs, typically a
+		// BACKUP whose collection URI carries cloud storage credentials in its
+		// query params. As with system.external_connections, the credentials
+		// cannot be separated from the rest of the encoded proto in SQL, so
+		// the whole column is dropped from unredacted zips too.
+		customQueryUnredacted: `SELECT
+	schedule_id,
+	schedule_name,
+	created,
+	owner,
+	next_run,
+	schedule_state,
+	schedule_expr,
+	schedule_details,
+	executor_type,
+	'<redacted>' AS execution_args
+FROM system.scheduled_jobs`,
 		nonSensitiveCols: NonSensitiveColumns{
 			"schedule_id",
 			"schedule_name",
@@ -1541,30 +1748,35 @@ var zipSystemTables = DebugZipTableRegistry{
 			"executor_type",
 		},
 	},
+	// The `name` column holds the setting's internal key, which is immutable,
+	// and not its user-visible name, which `WithName()` can change - so the
+	// join is on `cs.key`, not `cs.variable`. It is a left join because a row
+	// can outlive the setting it names (retired settings, or a value written
+	// by a newer version before a downgrade); such a row is conservatively
+	// treated as sensitive, since nothing is known about it.
 	"system.settings": {
 		customQueryUnredacted: `
-SELECT 
-     name,
-     CASE
-          WHEN cs.sensitive THEN '<redacted>'
-          ELSE s.value
-     END value,
+SELECT
+	name,
+	CASE
+		WHEN cs.key IS NULL OR cs.sensitive THEN '<redacted>'
+		ELSE s.value
+	END value,
 	s."lastUpdated",
 	s."valueType"
 FROM system.settings s
-JOIN crdb_internal.cluster_settings cs ON cs.variable = s.name`,
+LEFT JOIN crdb_internal.cluster_settings cs ON cs.key = s.name`,
 		customQueryRedacted: `
-SELECT 
-     name,
-     CASE
-          WHEN cs.sensitive THEN '<redacted>'
-          WHEN NOT cs.reportable THEN '<redacted>'
-          ELSE s.value
-     END value,
+SELECT
+	name,
+	CASE
+		WHEN cs.key IS NULL OR cs.sensitive OR NOT cs.reportable THEN '<redacted>'
+		ELSE s.value
+	END value,
 	s."lastUpdated",
 	s."valueType"
 FROM system.settings s
-JOIN crdb_internal.cluster_settings cs ON cs.variable = s.name`,
+LEFT JOIN crdb_internal.cluster_settings cs ON cs.key = s.name`,
 	},
 	"system.span_configurations": {
 		nonSensitiveCols: NonSensitiveColumns{
@@ -1627,9 +1839,10 @@ JOIN crdb_internal.cluster_settings cs ON cs.variable = s.name`,
 		},
 	},
 	"system.statement_diagnostics": {
-		// `bundle_chunks` column contains diagnostic bundle bytes, which
-		// contain unredacted information such as SQL arguments and
-		// unredacted trace logs.
+		// `trace` column contains the bundle's trace payload, with unredacted
+		// information such as SQL arguments and log messages. `bundle_chunks`
+		// holds only chunk IDs; the bundle bytes they refer to live in
+		// system.statement_bundle_chunks, which zips do not collect.
 		nonSensitiveCols: NonSensitiveColumns{
 			"id",
 			"statement_fingerprint",
@@ -1797,6 +2010,39 @@ limit 5000;`,
 		},
 	},
 	"system.tenant_settings": {
+		// Values of sensitive settings (secrets) are redacted even in
+		// unredacted zips. The `name` column holds the setting's internal
+		// key rather than its user-visible name, so the lookup is on
+		// `cs.key`. A key with no match in the registry (a retired setting)
+		// is conservatively treated as sensitive; the empty string is
+		// preserved to distinguish unset from set.
+		customQueryUnredacted: `SELECT
+	tenant_id,
+	name,
+	CASE
+		WHEN ts.value != '' AND NOT EXISTS (
+			SELECT 1 FROM crdb_internal.cluster_settings cs
+			WHERE cs.key = ts.name AND NOT cs.sensitive
+		)
+		THEN '<redacted>'
+		ELSE ts.value
+	END AS value,
+	last_updated,
+	value_type,
+	reason
+FROM system.tenant_settings ts`,
+		// Without `cluster_settings.sensitive` - absent on the older servers
+		// that make up most of the traffic on this path - there is no way to
+		// tell a secret from an ordinary override, so every set value is
+		// redacted.
+		customQueryUnredactedFallback: `SELECT
+	tenant_id,
+	name,
+	CASE WHEN ts.value != '' THEN '<redacted>' ELSE ts.value END AS value,
+	last_updated,
+	value_type,
+	reason
+FROM system.tenant_settings ts`,
 		customQueryRedacted: `SELECT * FROM (
 			SELECT *
 			FROM system.tenant_settings
@@ -1831,10 +2077,9 @@ limit 5000;`,
 		},
 	},
 	"system.transaction_diagnostics": {
+		// `bundle_chunks` holds only chunk IDs; the bundle bytes they refer to
+		// live in system.statement_bundle_chunks, which zips do not collect.
 		nonSensitiveCols: NonSensitiveColumns{
-			// `bundle_chunks` column contains diagnostic bundle bytes, which
-			// contain unredacted information such as SQL arguments and
-			// unredacted trace logs.
 			"id",
 			"transaction_fingerprint_id",
 			"statement_fingerprint_ids",
