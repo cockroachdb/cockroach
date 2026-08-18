@@ -22,11 +22,17 @@ $container-top-offset: 120px;
 }
 
 .layout-panel__header {
+  // REBRAND (2026): black masthead carrying the white symbol-only Cockroach
+  // mark + "/ CockroachDB" breadcrumb, matching the cc-console /
+  // migration-assistant top-nav treatment. Light text color so the right-side
+  // items (license notice) stay legible on the dark bar; the insecure-mode
+  // indicator is already orange and reads fine.
   height: $top-bar-height;
   min-height: $top-bar-height;
-  background-color: $colors--white;
-  box-shadow: 0 0 4px 0 #9aa1ab54;
-  z-index: 0;
+  background-color: #000000;
+  color: $colors--white;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  z-index: 1;
 }
 
 .layout-panel__header > * {

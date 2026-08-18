@@ -1,0 +1,30 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import 'src/components/core/index.scss';
+
+.console-header-brand {
+  display: flex;
+  align-items: center;
+  gap: $spacing-smaller; // 12px
+}
+
+.console-header-brand__mark {
+  display: block;
+  color: $colors--white;
+}
+
+.console-header-brand__separator {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+}
+
+.console-header-brand__label {
+  // Geist-Medium (weight 500) so the label reads as a distinct 500 face rather
+  // than a synthesized bold of the regular weight.
+  font-family: $font-family--semi-bold;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.92);
+}

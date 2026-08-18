@@ -10,7 +10,6 @@ import { useLocation } from "react-router-dom";
 
 import {
   GlobalNavigation,
-  CockroachLabsLockupIcon,
   Left,
   Right,
   PageHeader,
@@ -27,6 +26,8 @@ import { HealthMonitor } from "src/views/app/containers/healthMonitor";
 import TimeWindowManager from "src/views/app/containers/metricsTimeManager";
 import RequireLogin from "src/views/login/requireLogin";
 import { ThrottleNotificationBar } from "src/views/shared/components/alertBar/alertBar";
+
+import { ConsoleHeaderBrand } from "./consoleHeaderBrand";
 
 import "./layout.scss";
 import "./layoutPanel.scss";
@@ -78,7 +79,7 @@ function Layout({ children }: LayoutProps): React.ReactElement {
           <div className="layout-panel__header">
             <GlobalNavigation>
               <Left>
-                <CockroachLabsLockupIcon height={26} />
+                <ConsoleHeaderBrand />
               </Left>
               <Right>
                 <LicenseNotification />
