@@ -3393,3 +3393,74 @@ func TestAdoptionDelayAfterJobFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, claimID.Valid, "expected job to still have a claim_instance_id after failure")
 }
+
+// TestNoAdoptionDelayAfterTerminalJobFailure verifies that a job which fails
+// into a terminal state has its claim cleared immediately, without holding it
+// for an adoption cycle. The hold added in #158597 exists to throttle
+// re-adoption hot loops, but a terminal job is never re-adopted, so holding its
+// claim would only needlessly delay surfacing the error to a synchronous
+// caller. See #173450.
+func TestNoAdoptionDelayAfterTerminalJobFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+
+	ctx := context.Background()
+	// Use a long adoption/claim-hold interval so that, were the claim held for
+	// a cycle, the assertion below would time out.
+	knobs := jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour, time.Hour, time.Hour)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: knobs,
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	cleanup := jobs.TestingRegisterConstructor(
+		jobspb.TypeRestore,
+		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+			return jobstest.FakeResumer{
+				OnResume: func(ctx context.Context) error {
+					return errors.New("job failed")
+				},
+				// Reverting succeeds, so the job reaches the terminal failed
+				// state.
+				FailOrCancel: func(ctx context.Context) error {
+					return nil
+				},
+			}
+		},
+		jobs.UsesTenantCostControl,
+	)
+	defer cleanup()
+
+	registry := s.JobRegistry().(*jobs.Registry)
+	rec := jobs.Record{
+		Details:  jobspb.RestoreDetails{},
+		Progress: jobspb.RestoreProgress{},
+		Username: username.TestUserName(),
+	}
+
+	testJobID := registry.MakeJobID()
+	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, testJobID, nil /* txn */)
+	require.NoError(t, err)
+	registry.TestingNudgeAdoptionQueue()
+
+	testutils.SucceedsSoon(t, func() error {
+		var state string
+		var claimID gosql.NullInt64
+		if err := db.QueryRow(
+			"SELECT status, claim_instance_id FROM system.jobs WHERE id = $1", testJobID,
+		).Scan(&state, &claimID); err != nil {
+			return err
+		}
+		if jobs.State(state) != jobs.StateFailed {
+			return errors.Newf("expected job to be failed, got %s", state)
+		}
+		if claimID.Valid {
+			return errors.New("expected claim_instance_id to be cleared after terminal failure")
+		}
+		return nil
+	})
+}

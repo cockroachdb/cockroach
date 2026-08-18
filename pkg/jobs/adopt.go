@@ -500,7 +500,7 @@ func (r *Registry) runJob(
 	defer span.Finish()
 
 	// Run the actual job.
-	_, err := r.stepThroughStateMachine(ctx, execCtx, resumer, job, state, finalResumeError)
+	finalState, err := r.stepThroughStateMachine(ctx, execCtx, resumer, job, state, finalResumeError)
 	// If the context has been canceled, disregard errors for the sake of logging
 	// as presumably they are due to the context cancellation which commonly
 	// happens during shutdown.
@@ -522,12 +522,22 @@ func (r *Registry) runJob(
 		// and is immediately re-adopted by another node, causing a hot loop of job
 		// status changes. See #158597 for more info.
 		//
+		// This only matters for jobs left in a non-terminal (claimable) state,
+		// which the adopt loop will re-adopt: e.g. a job whose OnFailOrCancel
+		// keeps failing and so keeps bouncing through the reverting state. A
+		// job that has reached a terminal state won't be re-adopted, so there
+		// is no hot loop to throttle; holding the claim would only needlessly
+		// delay surfacing the error to a synchronous caller by a full adoption
+		// interval. See #173450 for more info.
+		//
 		// NB: The node that holds this claim also will not rerun the job until
 		// this interval elapses and the job is removed from the list of currently
 		// running jobs.
-		select {
-		case <-ctx.Done():
-		case <-time.After(r.GetLoopInterval(adoptIntervalSetting, r.knobs.IntervalOverrides.ClaimTTLOnFailure)):
+		if !finalState.Terminal() {
+			select {
+			case <-ctx.Done():
+			case <-time.After(r.GetLoopInterval(adoptIntervalSetting, r.knobs.IntervalOverrides.ClaimTTLOnFailure)):
+			}
 		}
 		r.maybeClearLease(job, err)
 	}
