@@ -244,6 +244,50 @@ func TestCanApplyWAGNode(t *testing.T) {
 			}},
 			shouldApply: false,
 		}, {
+			name: "multi-event destroy+create same range, needs apply",
+			states: map[roachpb.RangeID]persistedRangeState{
+				// Old replica 5 exists, uninitialized.
+				1: {mark: replicaMark(5, 0)},
+			},
+			node: wagpb.Node{Events: []wagpb.Event{
+				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 5, Index: 0}, Type: wagpb.EventDestroy},
+				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 10, Index: 0}, Type: wagpb.EventCreate},
+			}},
+			shouldApply: true,
+		}, {
+			name: "multi-event destroy+create same range, already applied",
+			states: map[roachpb.RangeID]persistedRangeState{
+				// New replica 10 already exists (destroy+create already applied).
+				1: {mark: replicaMark(10, 10)},
+			},
+			node: wagpb.Node{Events: []wagpb.Event{
+				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 5, Index: 0}, Type: wagpb.EventDestroy},
+				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 10, Index: 0}, Type: wagpb.EventCreate},
+			}},
+			shouldApply: false,
+		}, {
+			name: "multi-event destroy+create initialized replica, needs apply",
+			states: map[roachpb.RangeID]persistedRangeState{
+				// Initialized replica 5, applied up to index 42.
+				1: {mark: replicaMark(5, 0), appliedIndex: 42},
+			},
+			node: wagpb.Node{Events: []wagpb.Event{
+				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 5, Index: 42}, Type: wagpb.EventDestroy},
+				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 10, Index: 0}, Type: wagpb.EventCreate},
+			}},
+			shouldApply: true,
+			expCatchUps: []raftCatchUpTarget{{rangeID: 1, index: 42}},
+		}, {
+			name: "multi-event destroy+create initialized replica, already applied",
+			states: map[roachpb.RangeID]persistedRangeState{
+				1: {mark: replicaMark(10, 10)},
+			},
+			node: wagpb.Node{Events: []wagpb.Event{
+				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 5, Index: 42}, Type: wagpb.EventDestroy},
+				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 10, Index: 0}, Type: wagpb.EventCreate},
+			}},
+			shouldApply: false,
+		}, {
 			name: "multi-event disagreement returns error",
 			states: map[roachpb.RangeID]persistedRangeState{
 				1: {mark: replicaMark(3, 0), appliedIndex: 100},
