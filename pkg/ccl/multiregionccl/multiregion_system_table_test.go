@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -729,9 +730,29 @@ func TestDropRegionSystemDatabaseMultiTenant(t *testing.T) {
 	// The session was created with crdb_region=aws-us-east-1 (the original
 	// primary) and cannot be moved, so we must delete it. Release() stops
 	// the heartbeat and deletes the session from storage.
+	//
+	// The DDL above repartitions system.sqlliveness and rewrites its zone
+	// configs, so the ranges holding this session's row keep splitting,
+	// merging and moving leases for a while afterwards. Each of those bumps
+	// the range's timestamp cache, which prevents the delete from creating
+	// its transaction record (ABORT_REASON_TIMESTAMP_CACHE_REJECTED). kv.Txn
+	// absorbs those aborts, but retries them without backoff, so a stretch of
+	// churn can burn the whole kv.transaction.internal.max_auto_retries budget
+	// and surface as ErrAutoRetryLimitExhausted. Keep retrying until the
+	// ranges settle.
 	provider := tenantServer.ExecutorConfig().(sql.ExecutorConfig).SQLLiveness
-	_, err = provider.Release(ctx)
-	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		// Release is safe to call repeatedly: the drain signal and heartbeat
+		// shutdown are once-only, and re-deleting the session row is a no-op.
+		_, err := provider.Release(ctx)
+		if !kv.IsAutoRetryLimitExhaustedError(err) {
+			// Not the transient condition described above, so fail now rather
+			// than spinning until the deadline. Also covers err == nil.
+			require.NoError(t, err)
+			return nil
+		}
+		return err
+	})
 
 	// The old SQL connection is no longer usable after releasing the session.
 	// Start a fresh tenant whose session will be in aws-eu-central-1 (the
