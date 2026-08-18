@@ -2205,7 +2205,7 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeBackfill(t *testing.T) {
 		}
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo
-WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`,
+WITH resolved = '1s', no_initial_scan`,
 			optOutOfMetamorphicDBLevelChangefeed{
 				reason: "db level changefeeds don't support ADD/DROP TARGETS in ALTER CHANGEFEEDs",
 			})
@@ -2432,7 +2432,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo
-WITH resolved = '100ms', min_checkpoint_frequency='1ns'`, optOutOfMetamorphicDBLevelChangefeed{
+WITH resolved = '100ms'`, optOutOfMetamorphicDBLevelChangefeed{
 			reason: "db level changefeeds don't support ADD/DROP TARGETS in ALTER CHANGEFEEDs",
 		})
 
