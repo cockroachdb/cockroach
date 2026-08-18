@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -490,11 +491,10 @@ func (p *planner) mustGetMutableFunctionForAlter(
 		return nil, err
 	}
 	fnID := funcdesc.UserDefinedFunctionOIDToID(ol.Oid)
-	mut, err := p.checkFunctionOwnership(ctx, fnID)
-	if err != nil {
-		return nil, err
+	if sqlclustersettings.PostgresCompatibleOwnershipChecks.Get(&p.ExecCfg().Settings.SV) {
+		return p.checkFunctionOwnership(ctx, fnID)
 	}
-	return mut, nil
+	return p.checkPrivilegesForDropFunction(ctx, fnID)
 }
 
 func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor_FunctionSignature {

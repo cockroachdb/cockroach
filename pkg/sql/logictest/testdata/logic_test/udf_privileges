@@ -812,6 +812,9 @@ subtest end
 subtest alter_requires_function_ownership
 
 statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled = true
+
+statement ok
 CREATE USER alter_schema_owner;
 CREATE USER alter_func_creator;
 GRANT alter_schema_owner, alter_func_creator TO testuser;
@@ -888,5 +891,60 @@ DROP SCHEMA test_alter_target_schema;
 REVOKE alter_schema_owner, alter_func_creator FROM testuser;
 DROP USER alter_schema_owner;
 DROP USER alter_func_creator;
+
+statement ok
+RESET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled
+
+subtest end
+
+# When the postgres-compatible ownership checks are disabled (the default), ALTER
+# falls back to the legacy behavior where owning the routine's parent schema is
+# sufficient, even without owning the routine itself.
+subtest alter_gate_disabled_allows_schema_owner
+
+statement ok
+CREATE USER gate_schema_owner;
+CREATE USER gate_func_creator;
+GRANT gate_schema_owner, gate_func_creator TO testuser;
+CREATE SCHEMA test_gate_schema;
+ALTER SCHEMA test_gate_schema OWNER TO gate_schema_owner;
+GRANT CREATE ON SCHEMA test_gate_schema TO gate_func_creator;
+GRANT USAGE ON SCHEMA test_gate_schema TO gate_func_creator;
+GRANT USAGE ON SCHEMA test_gate_schema TO gate_schema_owner;
+
+# gate_func_creator creates a function and a procedure in the schema.
+user testuser
+
+statement ok
+SET ROLE gate_func_creator
+
+statement ok
+CREATE FUNCTION test_gate_schema.my_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE PROCEDURE test_gate_schema.my_proc() LANGUAGE PLpgSQL AS $$ BEGIN NULL; END; $$;
+
+# The schema owner does not own the routines, but with the setting off, schema
+# ownership alone lets them alter (the pre-fix behavior).
+statement ok
+SET ROLE gate_schema_owner
+
+statement ok
+ALTER FUNCTION test_gate_schema.my_func() SECURITY DEFINER;
+
+statement ok
+ALTER FUNCTION test_gate_schema.my_func() IMMUTABLE;
+
+statement ok
+ALTER PROCEDURE test_gate_schema.my_proc() RENAME TO my_proc_renamed;
+
+# Clean up.
+user root
+
+statement ok
+DROP SCHEMA test_gate_schema CASCADE;
+REVOKE gate_schema_owner, gate_func_creator FROM testuser;
+DROP USER gate_schema_owner;
+DROP USER gate_func_creator;
 
 subtest end
