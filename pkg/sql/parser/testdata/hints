@@ -9,17 +9,83 @@ SELECT 'a' FROM _@_ -- identifiers removed
 parse
 SELECT 'a' FROM t@primary
 ----
-SELECT 'a' FROM t@primary
-SELECT ('a') FROM t@primary -- fully parenthesized
-SELECT '_' FROM t@primary -- literals removed
+SELECT 'a' FROM t@"primary" -- normalized!
+SELECT ('a') FROM t@"primary" -- fully parenthesized
+SELECT '_' FROM t@"primary" -- literals removed
 SELECT 'a' FROM _@_ -- identifiers removed
 
 parse
 SELECT 'a' FROM t@like
 ----
-SELECT 'a' FROM t@like
-SELECT ('a') FROM t@like -- fully parenthesized
-SELECT '_' FROM t@like -- literals removed
+SELECT 'a' FROM t@"like" -- normalized!
+SELECT ('a') FROM t@"like" -- fully parenthesized
+SELECT '_' FROM t@"like" -- literals removed
+SELECT 'a' FROM _@_ -- identifiers removed
+
+# Regression tests for #165400: reserved keywords used as index names after '@'
+# must be quoted to ensure parse-format-reparse roundtrips succeed.
+#
+# The original failure was a COPY wrapping an UPSERT with an index hint whose
+# name was the reserved keyword FOR:
+#
+#   COPY ( UPSERT INTO ident @ FOR * TABLE error ORDER BY ... ) TO STDOUT ...
+#
+# The parser accepted this because opt_descendant ('*') separated FOR from the
+# next token TABLE. But the formatter dropped '*' (parsed but not stored in the
+# AST) and output the index name unquoted as '@for'. On re-parse, without the
+# '*' separator, the LALR parser hit a conflict at 'FOR TABLE' and failed.
+#
+# The fix quotes reserved keywords used as index names after '@', making the
+# formatted output safe to re-parse regardless of surrounding context.
+
+# Reduced reproducer from #165400: the original failing statement.
+parse
+COPY ( UPSERT INTO ident @ FOR * TABLE error ORDER BY INDEX_AFTER_ORDER_BY_BEFORE_AT INDEX_AFTER_ORDER_BY_BEFORE_AT @ INTERVAL DESC RETURNING NOTHING_AFTER_RETURNING ) TO STDOUT WITH ( ESCAPE 'string' )
+----
+COPY (UPSERT INTO ident@"for" TABLE error ORDER BY INDEX "index_after_order_by_before_at"@"interval" DESC RETURNING NOTHING) TO STDOUT WITH (ESCAPE 'string') -- normalized!
+COPY (UPSERT INTO ident@"for" TABLE error ORDER BY INDEX "index_after_order_by_before_at"@"interval" DESC RETURNING NOTHING) TO STDOUT WITH (ESCAPE ('string')) -- fully parenthesized
+COPY (UPSERT INTO ident@"for" TABLE error ORDER BY INDEX "index_after_order_by_before_at"@"interval" DESC RETURNING NOTHING) TO STDOUT WITH (ESCAPE '_') -- literals removed
+COPY (UPSERT INTO _@_ TABLE _ ORDER BY INDEX _@_ DESC RETURNING NOTHING) TO STDOUT WITH (ESCAPE 'string') -- identifiers removed
+
+# Test that unquoted reserved keywords parse as index names after '@'.
+parse
+SELECT 'a' FROM t@for
+----
+SELECT 'a' FROM t@"for" -- normalized!
+SELECT ('a') FROM t@"for" -- fully parenthesized
+SELECT '_' FROM t@"for" -- literals removed
+SELECT 'a' FROM _@_ -- identifiers removed
+
+parse
+SELECT 'a' FROM t@"for"
+----
+SELECT 'a' FROM t@"for"
+SELECT ('a') FROM t@"for" -- fully parenthesized
+SELECT '_' FROM t@"for" -- literals removed
+SELECT 'a' FROM _@_ -- identifiers removed
+
+parse
+SELECT 'a' FROM t@"select"
+----
+SELECT 'a' FROM t@"select"
+SELECT ('a') FROM t@"select" -- fully parenthesized
+SELECT '_' FROM t@"select" -- literals removed
+SELECT 'a' FROM _@_ -- identifiers removed
+
+parse
+SELECT 'a' FROM t@"table"
+----
+SELECT 'a' FROM t@"table"
+SELECT ('a') FROM t@"table" -- fully parenthesized
+SELECT '_' FROM t@"table" -- literals removed
+SELECT 'a' FROM _@_ -- identifiers removed
+
+parse
+SELECT 'a' FROM t@"from"
+----
+SELECT 'a' FROM t@"from"
+SELECT ('a') FROM t@"from" -- fully parenthesized
+SELECT '_' FROM t@"from" -- literals removed
 SELECT 'a' FROM _@_ -- identifiers removed
 
 parse
