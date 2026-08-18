@@ -979,28 +979,6 @@ func (r *raft) appliedTo(index uint64) {
 	newApplied := max(index, oldApplied)
 	r.raftLog.appliedTo(newApplied)
 
-	if r.config.AutoLeave && newApplied >= r.pendingConfIndex && r.state == pb.StateLeader {
-		// If the current (and most recent, at least for this leader's term)
-		// configuration should be auto-left, initiate that now. We use a
-		// nil Data which unmarshals into an empty ConfChangeV2 and has the
-		// benefit that appendEntry can never refuse it based on its size
-		// (which registers as zero).
-		m, err := confChangeToMsg(nil)
-		if err != nil {
-			panic(err)
-		}
-		// NB: this proposal can't be dropped due to size, but can be dropped if a
-		// leadership transfer is in progress or the config change is not allowed
-		// for another reason. We'll keep checking this condition on each applied
-		// entry, so either the leadership transfer will succeed and the new leader
-		// will leave the joint configuration, or the leadership transfer will fail,
-		// and we will propose the config change on the next advance.
-		if err := r.Step(m); err != nil {
-			r.logger.Debugf("not initiating automatic transition out of joint configuration %s: %v", r.config, err)
-		} else {
-			r.logger.Infof("initiating automatic transition out of joint configuration %s", r.config)
-		}
-	}
 }
 
 func (r *raft) appliedSnap(index uint64) {
@@ -2705,8 +2683,8 @@ func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
 		}
 		if cc.LeaveJoint() {
 			return changer.LeaveJoint()
-		} else if autoLeave, ok := cc.EnterJoint(); ok {
-			return changer.EnterJoint(autoLeave, cc.Changes...)
+		} else if cc.EnterJoint() {
+			return changer.EnterJoint(cc.Changes...)
 		}
 		return changer.Simple(cc.Changes...)
 	}()

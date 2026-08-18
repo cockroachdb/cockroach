@@ -77,12 +77,10 @@ func (c ConfChangeV2) AsV2() ConfChangeV2 { return c }
 // AsV1 returns ConfChange{} and false.
 func (c ConfChangeV2) AsV1() (ConfChange, bool) { return ConfChange{}, false }
 
-// EnterJoint returns two bools. The second bool is true if and only if this
-// config change will use Joint Consensus, which is the case if it contains more
-// than one change or if the use of Joint Consensus was requested explicitly.
-// The first bool can only be true if second one is, and indicates whether the
-// Joint State will be left automatically.
-func (c ConfChangeV2) EnterJoint() (autoLeave bool, ok bool) {
+// EnterJoint returns true if and only if this config change will use Joint
+// Consensus, which is the case if it contains more than one change or if the
+// use of Joint Consensus was requested explicitly.
+func (c ConfChangeV2) EnterJoint() bool {
 	// NB: in theory, more config changes could qualify for the "simple"
 	// protocol but it depends on the config on top of which the changes apply.
 	// For example, adding two learners is not OK if both nodes are part of the
@@ -90,20 +88,14 @@ func (c ConfChangeV2) EnterJoint() (autoLeave bool, ok bool) {
 	// applying the conf change). In practice, these distinctions should not
 	// matter, so we keep it simple and use Joint Consensus liberally.
 	if c.Transition != ConfChangeTransitionAuto || len(c.Changes) > 1 {
-		// Use Joint Consensus.
-		var autoLeave bool
 		switch c.Transition {
-		case ConfChangeTransitionAuto:
-			autoLeave = true
-		case ConfChangeTransitionJointImplicit:
-			autoLeave = true
-		case ConfChangeTransitionJointExplicit:
+		case ConfChangeTransitionAuto, ConfChangeTransitionJointExplicit:
 		default:
 			panic(fmt.Sprintf("unknown transition: %+v", c))
 		}
-		return autoLeave, true
+		return true
 	}
-	return false, false
+	return false
 }
 
 // LeaveJoint is true if the configuration change leaves a joint configuration.
