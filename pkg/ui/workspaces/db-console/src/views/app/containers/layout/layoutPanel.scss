@@ -45,7 +45,9 @@ $container-top-offset: 120px;
 }
 
 .layout-panel__navigation-bar > * {
-  margin: 0 $spacing-xx-large;
+  // 20px left-aligns the cluster title with the sidebar menu text (rail 8px
+  // padding + nav-row 12px padding), instead of the former 48px indent.
+  margin: 0 $spacing-medium-small;
 }
 
 .layout-panel__body {
