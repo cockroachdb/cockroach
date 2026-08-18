@@ -74,3 +74,43 @@ func TestPopulateTableWithRandData(t *testing.T) {
 	}
 	require.Equal(t, true, success)
 }
+
+// TestPopulateTableWithRandDataComputedNoOverflow verifies that columns feeding a
+// computed expression are populated with values small enough that evaluating the
+// expression does not overflow.
+//
+// Regression test (#169987).
+func TestPopulateTableWithRandDataComputedNoOverflow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, dbConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(dbConn)
+	rng, _ := randutil.NewTestRand()
+
+	const createTable = `CREATE TABLE t (
+		a INT8,
+		b INT8 NOT NULL,
+		c INT4,
+		d INT2,
+		e STRING,
+		s INT8 AS (a + b + c) VIRTUAL,
+		absa INT8 AS (abs(a)) VIRTUAL,
+		lowere STRING AS (lower(e)) VIRTUAL
+	)`
+
+	for i := 0; i < 20; i++ {
+		sqlDB.Exec(t, "DROP TABLE IF EXISTS t")
+		sqlDB.Exec(t, createTable)
+
+		numRowsInserted, err := randgen.PopulateTableWithRandData(rng, dbConn, "t", 100, nil)
+		require.NoError(t, err)
+		require.Greaterf(t, numRowsInserted, 0, "iteration %d inserted no rows", i)
+
+		_, err = dbConn.ExecContext(ctx, "SELECT * FROM t")
+		require.NoErrorf(t, err, "iteration %d: evaluating a virtual computed column overflowed", i)
+	}
+}
