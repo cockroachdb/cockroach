@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "mock_webhook_sink.go",
         "nemeses.go",
+        "perturbation.go",
         "row.go",
         "schema_registry.go",
         "testfeed.go",
@@ -27,6 +28,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/isql",
+        "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
