@@ -134,7 +134,7 @@ word $
 error
 $.1e
 ----
-lexical error: invalid floating point literal
+lexical error: trailing junk after numeric literal at or near "1e"
 DETAIL: source SQL:
 $.1e
   ^
@@ -162,10 +162,68 @@ $."2e"
 error
 $.2e
 ----
-lexical error: invalid floating point literal
+lexical error: trailing junk after numeric literal at or near "2e"
 DETAIL: source SQL:
 $.2e
   ^
+
+# An unquoted key that starts with a digit is read as a number, so the rest of
+# the key is trailing junk. Postgres reports these the same way, naming the
+# numeric prefix and the first character that follows it.
+error
+$.2ee
+----
+lexical error: trailing junk after numeric literal at or near "2e"
+DETAIL: source SQL:
+$.2ee
+  ^
+
+error
+$.2f
+----
+lexical error: trailing junk after numeric literal at or near "2f"
+DETAIL: source SQL:
+$.2f
+  ^
+
+error
+$.2x
+----
+lexical error: trailing junk after numeric literal at or near "2x"
+DETAIL: source SQL:
+$.2x
+  ^
+
+error
+$.2e5x
+----
+lexical error: trailing junk after numeric literal at or near "2e5x"
+DETAIL: source SQL:
+$.2e5x
+  ^
+
+error
+$.12abc
+----
+lexical error: trailing junk after numeric literal at or near "12a"
+DETAIL: source SQL:
+$.12abc
+  ^
+
+# A bare 0x is a malformed hexadecimal literal rather than a key, and keeps the
+# diagnostic that says so. Postgres also accepts 0x2 as a number here.
+error
+$[0x]
+----
+at or near "invalid hexadecimal numeric literal": syntax error
+DETAIL: source SQL:
+$[0x]
+  ^
+
+parse
+$.abc[0x2]
+----
+$."abc"[2] -- normalized!
 
 parse
 $var

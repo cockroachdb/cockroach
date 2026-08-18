@@ -6,6 +6,7 @@
 package scanner
 
 import (
+	"fmt"
 	"strings"
 
 	sqllexbase "github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -25,7 +26,6 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 		return
 	}
 
-	// TODO(#144258): We still need to handle $.Xc where X is any digit and c is any character.
 	switch ch {
 	case '$':
 		// Root path ($)
@@ -146,5 +146,33 @@ func (s *JSONPathScanner) scanIdent(lval ScanSymType) {
 
 // scanNumber is similar to Scanner.scanNumber, but uses Jsonpath tokens.
 func (s *JSONPathScanner) scanNumber(lval ScanSymType, ch int) {
+	start := s.pos - 1
 	s.scanNumberImpl(lval, ch, lexbase.ERROR, lexbase.FCONST, lexbase.ICONST)
+	if lval.ID() != lexbase.ERROR {
+		return
+	}
+
+	// scanNumberImpl explains a malformed literal in terms of the numeric
+	// syntax it was trying to read, so `2x` is reported as a bad hexadecimal
+	// literal and `2e` as a bad floating point literal. Neither reads well for
+	// a jsonpath, where such a token is an accessor key that was written
+	// without quotes. Postgres reports the numeric prefix together with the
+	// first identifier character that follows it as trailing junk, which is
+	// already how scanNumberImpl describes `2a`. Describe the remaining
+	// digit-then-identifier cases the same way.
+	junk := s.pos
+	switch lval.Str() {
+	case errInvalidHexNumeric:
+		// s.pos is on the character that could not continue the literal.
+	case errInvalidFloatLiteral:
+		// s.pos is past the exponent marker, which is itself the junk unless a
+		// sign follows it. A sign cannot appear in an identifier, so leaving
+		// junk pointing at it keeps the more specific diagnostic below.
+		junk--
+	default:
+		return
+	}
+	if junk < len(s.in) && isIdentMiddle(int(s.in[junk])) {
+		lval.SetStr(fmt.Sprintf("trailing junk after numeric literal at or near %q", s.in[start:junk+1]))
+	}
 }

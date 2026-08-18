@@ -21,6 +21,7 @@ const eof = -1
 const errUnterminated = "unterminated string"
 const errInvalidUTF8 = "invalid UTF-8 byte sequence"
 const errInvalidHexNumeric = "invalid hexadecimal numeric literal"
+const errInvalidFloatLiteral = "invalid floating point literal"
 const singleQuote = '\''
 const identQuote = '"'
 
@@ -789,7 +790,7 @@ func (s *Scanner) scanNumberImpl(lval ScanSymType, ch int, errorID, fconstID, ic
 			}
 			if !lexbase.IsDigit(ch) {
 				lval.SetID(errorID)
-				lval.SetStr("invalid floating point literal")
+				lval.SetStr(errInvalidFloatLiteral)
 				return
 			}
 			continue
