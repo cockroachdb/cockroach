@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrsettings"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/metrics"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -120,7 +121,7 @@ func (r *logicalReplicationResumer) ingest(
 		replanOracle,
 		func() time.Duration { return crosscluster.LogicalReplanFrequency.Get(execCfg.SV()) },
 	)
-	metrics := execCfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
+	metrics := execCfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*metrics.Metrics)
 
 	// Store only the original plan diagram
 	jobsprofiler.StorePlanDiagram(ctx,

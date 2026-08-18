@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrtestutils"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/metrics"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient/randclient"
@@ -1952,7 +1953,7 @@ func TestFlushErrorHandling(t *testing.T) {
 
 	dlq := mockDLQ(0)
 	lrw := &logicalReplicationWriterProcessor{
-		metrics:   MakeMetrics(0).(*Metrics),
+		metrics:   metrics.MakeMetrics(0).(*metrics.Metrics),
 		dlqClient: &dlq,
 	}
 	writerWorkers.Override(ctx, &serverCfg.Settings.SV, 1)

@@ -10,9 +10,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/metrics"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnapply"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnpb"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -154,6 +156,7 @@ func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 
 	sv := &p.FlowCtx.Cfg.Settings.SV
 	numWriters := int(txnNumWriters.Get(sv))
+	m := p.FlowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*metrics.Metrics)
 	writers := make([]txnwriter.TransactionWriter, 0, numWriters)
 	for range numWriters {
 		writer, err := txnwriter.NewTransactionWriter(
@@ -162,6 +165,8 @@ func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 			p.FlowCtx.Cfg.LeaseManager.(*lease.Manager),
 			p.FlowCtx.Codec(),
 			p.FlowCtx.Cfg.Settings,
+			m,
+			p.spec.MetricsLabel,
 		)
 		if err != nil {
 			for _, w := range writers {
@@ -181,6 +186,7 @@ func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 				CreateTime: timeutil.Now().UnixNano(),
 			}, false /* atGateway */)
 		},
+		m, p.spec.MetricsLabel,
 	)
 	if err != nil {
 		return errors.Wrap(err, "creating applier")

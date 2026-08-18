@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/metrics"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -44,12 +45,17 @@ type TransactionWriter interface {
 	Close(ctx context.Context)
 }
 
+// NewTransactionWriter constructs a writer. A nil metrics is allowed
+// to indicate the TransactionWriter should not record metrics; used
+// by non transaction mode paths that have their own metrics.
 func NewTransactionWriter(
 	ctx context.Context,
 	db isql.DB,
 	leaseMgr *lease.Manager,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
+	m *metrics.Metrics,
+	metricsLabel string,
 ) (TransactionWriter, error) {
 	sd := sql.NewInternalSessionData(ctx, settings, "txn-writer")
 	session, err := sqlwriter.NewInternalSession(ctx, db, sd, settings)
@@ -63,6 +69,8 @@ func NewTransactionWriter(
 		codec:             codec,
 		sd:                sd,
 		settings:          settings,
+		metrics:           m,
+		metricsLabel:      metricsLabel,
 		session:           session,
 		tableWriters:      make(map[descpb.ID]*sqlwriter.RowWriter),
 		tableReaders:      make(map[descpb.ID]sqlwriter.RowReader),
@@ -71,11 +79,13 @@ func NewTransactionWriter(
 }
 
 type transactionWriter struct {
-	db       isql.DB
-	leaseMgr *lease.Manager
-	codec    keys.SQLCodec
-	sd       *sessiondata.SessionData
-	settings *cluster.Settings
+	db           isql.DB
+	leaseMgr     *lease.Manager
+	codec        keys.SQLCodec
+	sd           *sessiondata.SessionData
+	settings     *cluster.Settings
+	metrics      *metrics.Metrics
+	metricsLabel string
 
 	session           isql.Session
 	tableWriters      map[descpb.ID]*sqlwriter.RowWriter

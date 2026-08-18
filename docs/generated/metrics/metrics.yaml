@@ -8450,6 +8450,66 @@ layers:
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/cdc
+    - name: logical_replication.txn_applier.horizon_wait_txns
+      exported_name: logical_replication_txn_applier_horizon_wait_txns
+      labeled_name: 'logical_replication.txn_applier.in_flight_txns{type: horizon_wait}'
+      description: Number of in-flight transactions waiting for the global frontier to advance past their event horizon
+      y_axis_label: Transactions
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/cdc
+    - name: logical_replication.txn_applier.horizon_wait_txns_by_label
+      exported_name: logical_replication_txn_applier_horizon_wait_txns_by_label
+      labeled_name: 'logical_replication.txn_applier.in_flight_txns_by_label{type: horizon_wait}'
+      description: Number of in-flight transactions waiting for the global frontier to advance past their event horizon, by job scope
+      y_axis_label: Transactions
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/cdc
+    - name: logical_replication.txn_applier.ready_txns
+      exported_name: logical_replication_txn_applier_ready_txns
+      labeled_name: 'logical_replication.txn_applier.in_flight_txns{type: ready}'
+      description: Number of in-flight transactions that are ready to be applied or currently being applied
+      y_axis_label: Transactions
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/cdc
+    - name: logical_replication.txn_applier.ready_txns_by_label
+      exported_name: logical_replication_txn_applier_ready_txns_by_label
+      labeled_name: 'logical_replication.txn_applier.in_flight_txns_by_label{type: ready}'
+      description: Number of in-flight transactions that are ready to be applied or currently being applied, by job scope
+      y_axis_label: Transactions
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/cdc
+    - name: logical_replication.txn_applier.txn_wait_txns
+      exported_name: logical_replication_txn_applier_txn_wait_txns
+      labeled_name: 'logical_replication.txn_applier.in_flight_txns{type: txn_wait}'
+      description: Number of in-flight transactions blocked on a peer transaction's completion
+      y_axis_label: Transactions
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/cdc
+    - name: logical_replication.txn_applier.txn_wait_txns_by_label
+      exported_name: logical_replication_txn_applier_txn_wait_txns_by_label
+      labeled_name: 'logical_replication.txn_applier.in_flight_txns_by_label{type: txn_wait}'
+      description: Number of in-flight transactions blocked on a peer transaction's completion, by job scope
+      y_axis_label: Transactions
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/cdc
     - name: obs.clustermetrics.flush.count
       exported_name: obs_clustermetrics_flush_count
       description: Number of cluster metrics flush operations

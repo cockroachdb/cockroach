@@ -63,10 +63,11 @@ func PlanTxnReplication(
 	}
 
 	spec := buildCoordinatorSpec(job, sourcePlan, applierIDs, replicatedTime, endTime)
+	payload := job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
 
 	plan := planCtx.NewPhysicalPlan()
 	if err := buildTxnReplicationPlan(
-		ctx, plan, applierInstanceIDs, spec,
+		ctx, plan, applierInstanceIDs, spec, payload.MetricsLabel,
 	); err != nil {
 		return nil, nil, nil, err
 	}
@@ -84,6 +85,7 @@ func buildTxnReplicationPlan(
 	plan *sql.PhysicalPlan,
 	applierInstanceIDs []base.SQLInstanceID,
 	spec execinfrapb.TxnLDRCoordinatorSpec,
+	metricsLabel string,
 ) error {
 	applierIDs := make([]int32, len(applierInstanceIDs))
 	for i, instanceID := range applierInstanceIDs {
@@ -138,6 +140,7 @@ func buildTxnReplicationPlan(
 			AllApplierIds: applierIDs,
 			JobID:         spec.JobID,
 			Schema:        spec.Schema,
+			MetricsLabel:  metricsLabel,
 		}
 
 		pIdx := plan.AddProcessor(physicalplan.Processor{
