@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -824,10 +825,36 @@ func (i *immediateVisitor) UpdateTriggerBackReferencesInRelations(
 		}
 
 		removeBackRefs := !isInForwardRefs
+
+		// sourceHasLiveTriggerRef reports whether any trigger still present on
+		// this table (op.TableID) references ref.ID. When false during a drop, a
+		// TriggerID==0 back-ref from op.TableID to ref.ID can only be a pre-v26.2
+		// leaked orphan (see the sweep comment below), so it is safe to remove.
+		sourceHasLiveTriggerRef := false
+		for _, triggerRefs := range refsByTriggerID {
+			if triggerRefs.Contains(ref.ID) {
+				sourceHasLiveTriggerRef = true
+				break
+			}
+		}
+
 		newDependedOnBy := referenced.DependedOnBy[:0]
 		for _, backRef := range referenced.DependedOnBy {
-			if removeBackRefs && backRef.ID == op.TableID && backRef.TriggerID == op.TriggerID {
-				continue
+			if removeBackRefs && backRef.ID == op.TableID {
+				// Remove this trigger's own correctly-tagged back-ref.
+				if backRef.TriggerID == op.TriggerID {
+					continue
+				}
+				// Sweep pre-v26.2 trigger back-ref orphans. Before v26.2,
+				// trigger back-refs carried no TriggerID, so dropping one
+				// of several triggers could leave an untagged (TriggerID==0)
+				// back-ref behind (#173259). Sequences are excluded because
+				// column-default back-refs also carry TriggerID==0 and must be preserved.
+				if backRef.TriggerID == 0 && !sourceHasLiveTriggerRef && !referenced.IsSequence() {
+					log.Dev.Infof(ctx, "sweeping trigger back-ref orphan from table %d to relation %d",
+						op.TableID, ref.ID)
+					continue
+				}
 			}
 			newBackRefIsDupe = newBackRefIsDupe || backRef.Equal(newBackRef)
 			newDependedOnBy = append(newDependedOnBy, backRef)
