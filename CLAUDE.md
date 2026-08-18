@@ -134,6 +134,7 @@ Use the `/commit-helper` skill when creating commits and PRs.
 The following repo-specific skills are available:
 
 - `/commit-helper` — Create commits and PRs with properly formatted messages and release notes.
+- `/deflake` — Deflake a flaky unit test: reproduce deterministically first, then fix with proof.
 - `/file-crdb-issue` — File GitHub issues using CockroachDB templates and labeling conventions.
 - `/review-crdb` — Review code changes or PRs for correctness and reviewability.
 
