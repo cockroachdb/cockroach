@@ -1029,21 +1029,25 @@ func (p *Provider) CreateVolume(
 		err = errors.New("Creating a volume with IOPS is not supported at this time.")
 		return vol, err
 	}
+	// A volume created from a snapshot inherits the snapshot's size when no size
+	// is requested, so only an unsourced volume needs one.
+	if vco.Size == 0 && vco.SourceSnapshotID == "" {
+		return vol, errors.New("Cannot create a volume of size 0")
+	}
+
 	args := []string{
 		"compute",
 		"--project", p.GetProject(),
 		"disks",
 		"create", vco.Name,
-		"--size", strconv.Itoa(vco.Size),
 		"--zone", vco.Zone,
 		"--format", "json",
 	}
+	if vco.Size != 0 {
+		args = append(args, "--size", strconv.Itoa(vco.Size))
+	}
 	if vco.SourceSnapshotID != "" {
 		args = append(args, "--source-snapshot", vco.SourceSnapshotID)
-	}
-
-	if vco.Size == 0 {
-		return vol, errors.New("Cannot create a volume of size 0")
 	}
 
 	if vco.Encrypted {

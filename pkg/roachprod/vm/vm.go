@@ -564,9 +564,11 @@ type Volume struct {
 type VolumeCreateOpts struct {
 	Name string
 	// N.B. Customer managed encryption is not supported at this time
-	Encrypted        bool
-	Architecture     string
-	IOPS             int
+	Encrypted    bool
+	Architecture string
+	IOPS         int
+	// Size of the volume in GB. Leave it zero to inherit the size of
+	// SourceSnapshotID; providers reject a zero size without one.
 	Size             int
 	Type             string
 	SourceSnapshotID string
