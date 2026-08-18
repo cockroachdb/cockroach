@@ -457,6 +457,15 @@ func writeSettingInternal(
 			}
 		}
 
+		// Never record the values of sensitive settings (secrets) in the
+		// structured event or the DEV log: the event is persisted to
+		// system.eventlog, and both feed logs that are collected into
+		// shareable diagnostics (debug zips). "DEFAULT" (resets) and the
+		// empty string are preserved, as they reveal nothing.
+		if setting.IsSensitive() && reportedValue != "DEFAULT" && reportedValue != "" {
+			reportedValue = "<redacted>"
+		}
+
 		if setting.IsUnsafe() {
 			// Also mention the change in the non-structured DEV log.
 			log.Dev.Warningf(ctx, "unsafe setting changed: %q -> %v", name, reportedValue)
