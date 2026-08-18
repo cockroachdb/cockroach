@@ -8,14 +8,7 @@ import React, { useEffect, useRef } from "react";
 import { Helmet } from "react-helmet";
 import { useLocation } from "react-router-dom";
 
-import {
-  GlobalNavigation,
-  Left,
-  Right,
-  PageHeader,
-  Text,
-  TextTypes,
-} from "src/components";
+import { GlobalNavigation, Left, Right, PageHeader } from "src/components";
 import { TimezoneProvider } from "src/contexts/timezoneProvider";
 import { getDataFromServer } from "src/util/dataFromServer";
 import ErrorBoundary from "src/views/app/components/errorMessage/errorBoundary";
@@ -27,6 +20,7 @@ import TimeWindowManager from "src/views/app/containers/metricsTimeManager";
 import RequireLogin from "src/views/login/requireLogin";
 import { ThrottleNotificationBar } from "src/views/shared/components/alertBar/alertBar";
 
+import { ClusterTitle } from "./clusterTitle";
 import { ConsoleHeaderBrand } from "./consoleHeaderBrand";
 
 import "./layout.scss";
@@ -89,12 +83,15 @@ function Layout({ children }: LayoutProps): React.ReactElement {
           </div>
           <div className="layout-panel__navigation-bar">
             <PageHeader>
-              <Text textType={TextTypes.Heading2} noWrap>
-                {getDataFromServer().FeatureFlags.is_observability_service
-                  ? "(Obs Service) "
-                  : ""}
-                {clusterName || `Cluster id: ${clusterId || ""}`}
-              </Text>
+              <ClusterTitle
+                clusterName={clusterName}
+                clusterId={clusterId}
+                prefix={
+                  getDataFromServer().FeatureFlags.is_observability_service
+                    ? "(Obs Service) "
+                    : undefined
+                }
+              />
               <Badge text={clusterVersion} />
               <TenantDropdown />
             </PageHeader>

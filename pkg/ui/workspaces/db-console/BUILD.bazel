@@ -59,8 +59,10 @@ webpack_bin.webpack_cli(
     ],
     outs = [
         "db-console-ccl/assets/Geist-Bold.woff2",
+        "db-console-ccl/assets/Geist-Light.woff2",
         "db-console-ccl/assets/Geist-Medium.woff2",
         "db-console-ccl/assets/Geist-Regular.woff2",
+        "db-console-ccl/assets/GeistMono-Light.woff2",
         "db-console-ccl/assets/GeistMono-Medium.woff2",
         "db-console-ccl/assets/GeistMono-Regular.woff2",
         "db-console-ccl/assets/bundle.js",
@@ -98,8 +100,10 @@ webpack_bin.webpack_cli(
     ],
     outs = [
         "db-console-oss/assets/Geist-Bold.woff2",
+        "db-console-oss/assets/Geist-Light.woff2",
         "db-console-oss/assets/Geist-Medium.woff2",
         "db-console-oss/assets/Geist-Regular.woff2",
+        "db-console-oss/assets/GeistMono-Light.woff2",
         "db-console-oss/assets/GeistMono-Medium.woff2",
         "db-console-oss/assets/GeistMono-Regular.woff2",
         "db-console-oss/assets/bundle.js",
