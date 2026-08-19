@@ -809,6 +809,9 @@ subtest end
 subtest alter_requires_function_ownership
 
 statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled = true
+
+statement ok
 CREATE USER alter_schema_owner;
 CREATE USER alter_func_creator;
 GRANT alter_schema_owner, alter_func_creator TO testuser;
@@ -885,5 +888,61 @@ DROP SCHEMA test_alter_target_schema;
 REVOKE alter_schema_owner, alter_func_creator FROM testuser;
 DROP USER alter_schema_owner;
 DROP USER alter_func_creator;
+
+subtest end
+
+# With the setting disabled (the default), ALTER falls back to the legacy check,
+# where owning the parent schema is sufficient to alter a routine in it.
+subtest alter_ownership_check_disabled
+
+statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled = false
+
+statement ok
+CREATE USER alter_schema_owner;
+CREATE USER alter_func_creator;
+GRANT alter_schema_owner, alter_func_creator TO testuser;
+CREATE SCHEMA test_alter_schema;
+ALTER SCHEMA test_alter_schema OWNER TO alter_schema_owner;
+GRANT CREATE ON SCHEMA test_alter_schema TO alter_func_creator;
+GRANT USAGE ON SCHEMA test_alter_schema TO alter_func_creator;
+GRANT USAGE ON SCHEMA test_alter_schema TO alter_schema_owner;
+
+user testuser
+
+statement ok
+SET ROLE alter_func_creator
+
+statement ok
+CREATE FUNCTION test_alter_schema.my_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE PROCEDURE test_alter_schema.my_proc() LANGUAGE SQL AS $$ SELECT 1 $$;
+
+# The schema owner does not own the routines but owns the schema, so the legacy
+# check lets it alter them.
+statement ok
+SET ROLE alter_schema_owner
+
+statement ok
+ALTER FUNCTION test_alter_schema.my_func() SECURITY DEFINER;
+
+statement ok
+ALTER FUNCTION test_alter_schema.my_func() IMMUTABLE;
+
+statement ok
+ALTER PROCEDURE test_alter_schema.my_proc() RENAME TO my_proc_renamed;
+
+# Clean up.
+user root
+
+statement ok
+DROP SCHEMA test_alter_schema CASCADE;
+REVOKE alter_schema_owner, alter_func_creator FROM testuser;
+DROP USER alter_schema_owner;
+DROP USER alter_func_creator;
+
+statement ok
+RESET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled
 
 subtest end
