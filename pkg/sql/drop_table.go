@@ -179,26 +179,15 @@ func (p *planner) prepareDrop(
 func (p *planner) canDropTable(
 	ctx context.Context, tableDesc *tabledesc.Mutable, checkOwnership bool,
 ) error {
-	var err error
-	hasOwnership := false
 	// This checkOwnership stuff is rather unfortunate, but is required when an
 	// active session has created a temporary object in a database that is being
 	// dropped by a different session. The session trying to drop the database
 	// can't resolve the temporary schema, and would therefore return an
 	// error if we tried to check for ownership on the schema.
-	if checkOwnership {
-		// If the user owns the schema the table is part of, they can drop the table.
-		hasOwnership, err = p.HasOwnershipOnSchema(
-			ctx, tableDesc.GetParentSchemaID(), tableDesc.GetParentID())
-		if err != nil {
-			return err
-		}
-	}
-	if !hasOwnership {
+	if !checkOwnership {
 		return p.CheckPrivilege(ctx, tableDesc, privilege.DROP)
 	}
-
-	return nil
+	return p.checkDropPrivilegeOrSchemaOwnership(ctx, tableDesc)
 }
 
 // canRemoveFKBackReference returns an error if the input backreference isn't

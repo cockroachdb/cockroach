@@ -946,6 +946,25 @@ func (p *planner) HasOwnershipOnSchema(
 	return hasOwnership, nil
 }
 
+// checkDropPrivilegeOrSchemaOwnership returns nil if the current user may
+// perform a DROP-gated operation on the relation: they either hold the DROP
+// privilege directly, or they own the schema containing the relation. Schema
+// owners implicitly hold DROP on relations in their schema, so this is used by
+// DROP as well as by rename and set-schema, which are likewise gated on DROP.
+func (p *planner) checkDropPrivilegeOrSchemaOwnership(
+	ctx context.Context, tableDesc catalog.TableDescriptor,
+) error {
+	hasOwnership, err := p.HasOwnershipOnSchema(
+		ctx, tableDesc.GetParentSchemaID(), tableDesc.GetParentID())
+	if err != nil {
+		return err
+	}
+	if hasOwnership {
+		return nil
+	}
+	return p.CheckPrivilege(ctx, tableDesc, privilege.DROP)
+}
+
 // HasViewActivityOrViewActivityRedactedRole is part of the eval.SessionAccessor interface.
 // It returns 2 boolean values - the first indicating if we have either privilege requested,
 // and the second indicating  whether or not it was VIEWACTIVITYREDACTED.

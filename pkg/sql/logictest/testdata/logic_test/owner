@@ -353,3 +353,97 @@ ALTER JOB $testuser_job_id OWNER TO testuser3
 # are not a member of.
 statement error testuser3 cannot transfer ownership to otherrole
 ALTER JOB $testuser_job_id OWNER TO otherrole
+
+# Regression test for schema owners' privileges: Schema owners implicitly hold
+# the DROP privilege on relations in their schema. Operations gated on other
+# privileges or on relation ownership are not available to them (see VULM-376).
+# This behavior is gated behind the postgres_compatible_ownership_checks
+# cluster setting, which defaults to off.
+subtest schema_owner_does_not_imply_object_owner
+
+user root
+
+statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled = true
+
+statement ok
+CREATE ROLE sc_owner;
+CREATE ROLE obj_owner;
+GRANT sc_owner, obj_owner TO testuser;
+CREATE SCHEMA defaultdb.owned_sc AUTHORIZATION sc_owner;
+CREATE SCHEMA defaultdb.owned_sc2 AUTHORIZATION sc_owner;
+GRANT CREATE, USAGE ON SCHEMA defaultdb.owned_sc TO obj_owner;
+GRANT CREATE ON DATABASE defaultdb TO sc_owner
+
+user testuser
+
+statement ok
+SET ROLE obj_owner;
+CREATE TABLE defaultdb.owned_sc.t (c1 INT PRIMARY KEY);
+CREATE VIEW defaultdb.owned_sc.v AS SELECT c1 FROM defaultdb.owned_sc.t;
+CREATE SEQUENCE defaultdb.owned_sc.seq
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE defaultdb.owned_sc.t ENABLE ROW LEVEL SECURITY;
+CREATE POLICY p ON defaultdb.owned_sc.t USING (true)
+
+statement ok
+SET ROLE sc_owner
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42501 pq: must be owner of table t or have CREATE privilege on table t
+ALTER TABLE defaultdb.owned_sc.t ADD COLUMN c2 INT
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42501 pq: must be owner of table t or have CREATE privilege on table t
+ALTER TABLE defaultdb.owned_sc.t DISABLE ROW LEVEL SECURITY
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42501 pq: must be owner of relation t
+DROP POLICY p ON defaultdb.owned_sc.t
+
+# Schema owners may DROP objects in their schema they do not own — tables,
+# views, and sequences alike — matching Postgres and the DROP TABLE below.
+statement ok
+DROP VIEW defaultdb.owned_sc.v
+
+statement ok
+DROP SEQUENCE defaultdb.owned_sc.seq
+
+# In contrast to the owner-only operations above, RENAME and SET SCHEMA are
+# gated on the DROP privilege, which schema owners hold implicitly on relations
+# in their schema. So the schema owner may rename and relocate the table even
+# though they do not own it, in both the legacy and declarative schema changers.
+# This is an intentional divergence from Postgres, which requires ownership of
+# the relation for both. The statements round-trip so the table is left at
+# owned_sc.t for the shared cleanup below.
+statement ok
+ALTER TABLE defaultdb.owned_sc.t RENAME TO t_moved
+
+statement ok
+ALTER TABLE defaultdb.owned_sc.t_moved RENAME TO t
+
+statement ok
+ALTER TABLE defaultdb.owned_sc.t SET SCHEMA owned_sc2
+
+statement ok
+ALTER TABLE defaultdb.owned_sc2.t SET SCHEMA owned_sc
+
+statement ok
+DROP TABLE defaultdb.owned_sc.t;
+DROP SCHEMA defaultdb.owned_sc;
+DROP SCHEMA defaultdb.owned_sc2
+
+user root
+
+statement ok
+RESET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled
+
+statement ok
+REVOKE CREATE ON DATABASE defaultdb FROM sc_owner;
+REVOKE sc_owner, obj_owner FROM testuser;
+DROP ROLE sc_owner;
+DROP ROLE obj_owner
+
+subtest end
