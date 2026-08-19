@@ -5766,8 +5766,8 @@ func TestChangefeedAvroReadMode(t *testing.T) {
 				`schema_change_policy=nobackfill, avro_schemas='{`+
 				`"renamed-key": {"subject_name": "acme.renamed.key"}, `+
 				`"renamed-value": {"subject_name": "acme.renamed"}, `+
-				`"pinned-key": {}, "pinned-value": {"version": "pin(1)"}, `+
-				`"compat-key": {}, "compat-value": {"version": "latest_compatible"}}'`, reg.URL()))
+				`"pinned-value": {"version": "pin(1)"}, `+
+				`"compat-value": {"version": "latest_compatible"}}'`, reg.URL()))
 		defer closeFeed(t, readFeed)
 
 		// Every message decodes under the schema id the sink stamped on it, so
@@ -7864,20 +7864,12 @@ func TestChangefeedErrors(t *testing.T) {
 		`kafka://nope`, `https://schemareg-nope/?ca_cert=Zm9v`,
 	)
 
-	// Every avro_schemas key names a subject of a watched table, so that a
-	// typo does not silently leave the subject on its default settings.
-	sqlDB.ExpectErrWithTimeout(
-		t, `avro_schemas key "nope-(key|value)" does not match a watched table`,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', confluent_schema_registry=$2, avro_schemas=$3`,
-		`kafka://nope`, schemaReg.URL(), `{"nope-key": {}, "nope-value": {}}`,
-	)
-	// Subject names carry avro_schema_prefix, so an unprefixed key does not
-	// match once a prefix is set.
+	// Every avro_schemas key names a subject of a watched table.
 	sqlDB.ExpectErrWithTimeout(
 		t, `avro_schemas key "foo-(key|value)" does not match a watched table`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', confluent_schema_registry=$2, `+
 			`avro_schema_prefix='super', avro_schemas=$3`,
-		`kafka://nope`, schemaReg.URL(), `{"foo-key": {}, "foo-value": {}}`,
+		`kafka://nope`, schemaReg.URL(), `{"foo-key": {"subject_name": "acme.foo.key"}}`,
 	)
 
 	// Sanity check webhook sink options.

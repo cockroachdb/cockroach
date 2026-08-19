@@ -166,6 +166,7 @@ func ParseAvroSchemaOverrides(raw string, avroMode AvroModeType) (AvroSchemaOver
 			return nil, errors.Newf("%s entry %q must be a JSON object", OptAvroSchemas, key)
 		}
 		var o AvroSchemaOverride
+		hasOverride := false
 		for entryIt.Next() {
 			text, err := entryIt.Value().AsText()
 			if err != nil || text == nil {
@@ -179,6 +180,7 @@ func ParseAvroSchemaOverrides(raw string, avroMode AvroModeType) (AvroSchemaOver
 						OptAvroSchemas, key, avroSchemasSubjectNameField)
 				}
 				o.SubjectName = *text
+				hasOverride = true
 			case avroSchemasVersionField:
 				if avroMode != OptAvroModeRead {
 					return nil, errors.Errorf(
@@ -189,30 +191,26 @@ func ParseAvroSchemaOverrides(raw string, avroMode AvroModeType) (AvroSchemaOver
 				if err != nil {
 					return nil, errors.Wrapf(err, "%s entry %q", OptAvroSchemas, key)
 				}
+				hasOverride = true
 			default:
 				return nil, errors.Newf(`%s entry %q has unknown field %q; use %q and %q`,
 					OptAvroSchemas, key, entryIt.Key(),
 					avroSchemasSubjectNameField, avroSchemasVersionField)
 			}
 		}
+		if !hasOverride {
+			return nil, errors.Newf(
+				`%s entry %q must specify at least one of %q or %q`,
+				OptAvroSchemas, key, avroSchemasSubjectNameField, avroSchemasVersionField)
+		}
 		overrides[key] = o
 	}
 
-	// Every configured table must have both its key and value entries, and
-	// distinct entries must not resolve to the same registry subject.
+	// Distinct overrides must not resolve to the same registry subject. Key and
+	// value entries are independent; an omitted entry uses its default subject
+	// name and, in read mode, the latest registered version.
 	effective := make(map[string]string, len(overrides))
 	for key, o := range overrides {
-		var required string
-		if base, ok := strings.CutSuffix(key, avroSubjectSuffixKey); ok {
-			required = base + avroSubjectSuffixValue
-		} else {
-			base, _ := strings.CutSuffix(key, avroSubjectSuffixValue)
-			required = base + avroSubjectSuffixKey
-		}
-		if _, ok := overrides[required]; !ok {
-			return nil, errors.Newf("%s entry %q requires a matching %q entry",
-				OptAvroSchemas, key, required)
-		}
 		subject := key
 		if o.SubjectName != `` {
 			subject = o.SubjectName
