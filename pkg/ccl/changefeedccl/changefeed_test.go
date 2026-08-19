@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -5334,6 +5335,64 @@ func TestChangefeedAvroReadMode(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("sinkless"))
 }
 
+func TestChangefeedAvroResolvedSubject(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		t.Run("write mode", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE write_resolved (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO write_resolved VALUES (1)`)
+			writeFeed := feed(t, f, fmt.Sprintf(
+				`CREATE CHANGEFEED FOR write_resolved WITH format=avro, resolved, `+
+					`avro_resolved_subject='acme.write.resolved', confluent_schema_registry='%s'`,
+				reg.URL()))
+			defer closeFeed(t, writeFeed)
+
+			require.Equal(t, []string{
+				`write_resolved: {"a":{"long":1}}->{"after":{"write_resolved":{"a":{"long":1}}}}`,
+			}, readAvroPayloads(t, reg, writeFeed, 1))
+			expectResolvedTimestampAvroWithRegistry(t, reg, writeFeed)
+			assertRegisteredSubjects(t, reg, []string{
+				`write_resolved-key`, `write_resolved-value`, `acme.write.resolved`,
+			})
+		})
+
+		t.Run("read mode", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE read_resolved (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO read_resolved VALUES (1)`)
+			registerAvroKeySubject(t, reg, `read_resolved-key`,
+				`CREATE TABLE read_resolved (a INT PRIMARY KEY)`)
+			registerAvroValueSubject(t, reg, `read_resolved-value`,
+				`CREATE TABLE read_resolved (a INT PRIMARY KEY)`)
+			resolvedSchema, err := avro.NewEnvelopeRecord(
+				avroResolvedSchemaName, avro.EnvelopeOpts{ResolvedField: true},
+				nil, nil, nil, nil, "")
+			require.NoError(t, err)
+			reg.RegisterSchema(`acme.read.resolved`, resolvedSchema.Schema())
+			seeded := reg.RegistrationCount()
+
+			readFeed := feed(t, f, fmt.Sprintf(
+				`CREATE CHANGEFEED FOR read_resolved WITH format=avro, avro_mode=read, resolved, `+
+					`avro_resolved_subject='acme.read.resolved', confluent_schema_registry='%s'`,
+				reg.URL()))
+			defer closeFeed(t, readFeed)
+
+			require.Equal(t, []string{
+				`read_resolved: {"a":{"long":1}}->{"after":{"read_resolved":{"a":{"long":1}}}}`,
+			}, readAvroPayloads(t, reg, readFeed, 1))
+			expectResolvedTimestampAvroWithRegistry(t, reg, readFeed)
+			require.Equal(t, seeded, reg.RegistrationCount())
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
+}
+
 func TestChangefeedAvroNotice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -5349,6 +5408,10 @@ func TestChangefeedAvroNotice(t *testing.T) {
 
 	sql := fmt.Sprintf("CREATE CHANGEFEED FOR d.foo INTO 'null://' WITH format=experimental_avro, confluent_schema_registry='%s'", schemaReg.URL())
 	expectNotice(t, s.Server, sql, `avro is no longer experimental, use format=avro`)
+
+	sql = fmt.Sprintf("CREATE CHANGEFEED FOR d.foo INTO 'null://' WITH format=avro, resolved='1s', confluent_schema_registry='%s'", schemaReg.URL())
+	expectNotice(t, s.Server, sql,
+		`resolved Avro schemas will use the value subject; set avro_resolved_subject to use a separate subject`)
 }
 
 func TestChangefeedResolvedNotice(t *testing.T) {
@@ -7314,6 +7377,18 @@ func TestChangefeedErrors(t *testing.T) {
 			`confluent_schema_registry=$2, avro_schemas=$3`,
 		`kafka://nope`, schemaReg.URL(),
 		`{"foo-value": {"subject_name": "bar-value"}}`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `avro_resolved_subject "foo-value" conflicts with key/value subject "foo-value"`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', avro_mode='read', resolved, `+
+			`avro_resolved_subject='foo-value', confluent_schema_registry=$2`,
+		`kafka://nope`, schemaReg.URL(),
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `avro_resolved_subject cannot be empty`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', resolved, `+
+			`avro_resolved_subject='', confluent_schema_registry=$2`,
+		`kafka://nope`, schemaReg.URL(),
 	)
 
 	// Sanity check webhook sink options.

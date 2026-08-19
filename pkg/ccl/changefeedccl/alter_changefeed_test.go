@@ -650,6 +650,8 @@ func TestAlterChangefeedErrors(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		schemaReg := cdctest.StartTestSchemaRegistry()
+		defer schemaReg.Close()
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
@@ -678,6 +680,15 @@ func TestAlterChangefeedErrors(t *testing.T) {
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
 		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
+
+		sqlDB.ExpectErr(t,
+			`avro_resolved_subject "foo-value" conflicts with key/value subject "foo-value"`,
+			fmt.Sprintf(
+				`ALTER CHANGEFEED %d SET format=avro, avro_mode=read, resolved, `+
+					`avro_resolved_subject='foo-value', confluent_schema_registry='%s'`,
+				feed.JobID(), schemaReg.URL(),
+			),
+		)
 
 		sqlDB.ExpectErr(t,
 			`pq: target "TABLE baz" does not exist`,

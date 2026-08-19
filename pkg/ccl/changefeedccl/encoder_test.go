@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/base64"
+	"encoding/binary"
 	gojson "encoding/json"
 	"fmt"
 	"math/rand"
@@ -667,18 +668,74 @@ func TestAvroEncoderSubjectOverrides(t *testing.T) {
 		})
 	})
 
-	t.Run("resolved timestamps use the overridden subject", func(t *testing.T) {
+	t.Run("legacy resolved timestamps use the value subject override", func(t *testing.T) {
 		defer TestingClearSchemaRegistrySingleton()
 		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		enc := makeEncoder(t, makeOpts(reg, changefeedbase.AvroSchemaOverrides{
-			"foo-key":   {},
 			"foo-value": {SubjectName: "acme.foo"},
 		}))
 		_, err := enc.EncodeResolvedTimestamp(ctx, "foo", hlc.Timestamp{WallTime: 1})
 		require.NoError(t, err)
 		require.Equal(t, []string{"acme.foo"}, reg.Subjects())
+	})
+
+	t.Run("dedicated resolved subject is shared across topics", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		opts := makeOpts(reg, nil)
+		opts.AvroResolvedSubject = "acme.resolved"
+		enc := makeEncoder(t, opts)
+		_, err := enc.EncodeResolvedTimestamp(ctx, "foo", hlc.Timestamp{WallTime: 1})
+		require.NoError(t, err)
+		_, err = enc.EncodeResolvedTimestamp(ctx, "bar", hlc.Timestamp{WallTime: 2})
+		require.NoError(t, err)
+		require.Equal(t, []string{"acme.resolved"}, reg.Subjects())
+		require.Equal(t, 1, reg.RegistrationCount())
+	})
+
+	t.Run("read mode uses latest resolved subject version", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		const subject = "acme.resolved"
+		v1, err := avro.NewEnvelopeRecord(
+			avroResolvedSchemaName, avro.EnvelopeOpts{ResolvedField: true}, nil, nil, nil, nil, "")
+		require.NoError(t, err)
+		reg.RegisterSchema(subject, v1.Schema())
+		latestID := reg.RegisterSchema(subject, v1.Schema())
+		seeded := reg.RegistrationCount()
+
+		opts := makeOpts(reg, nil)
+		opts.AvroMode = changefeedbase.OptAvroModeRead
+		opts.AvroResolvedSubject = subject
+		enc := makeEncoder(t, opts)
+		encoded, err := enc.EncodeResolvedTimestamp(ctx, "foo", hlc.Timestamp{WallTime: 1})
+		require.NoError(t, err)
+		require.Equal(t, uint32(latestID), binary.BigEndian.Uint32(encoded[1:5]))
+
+		var decoded map[string]interface{}
+		require.NoError(t, gojson.Unmarshal(avroToJSON(t, reg, encoded), &decoded))
+		require.Contains(t, decoded, "resolved")
+		require.Equal(t, seeded, reg.RegistrationCount())
+	})
+
+	t.Run("read mode rejects a missing resolved subject in registry", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		opts := makeOpts(reg, nil)
+		opts.AvroMode = changefeedbase.OptAvroModeRead
+		opts.AvroResolvedSubject = "missing.resolved"
+		enc := makeEncoder(t, opts)
+		_, err := enc.EncodeResolvedTimestamp(ctx, "foo", hlc.Timestamp{WallTime: 1})
+		require.ErrorContains(t, err, "missing.resolved")
+		require.Equal(t, 0, reg.RegistrationCount())
 	})
 }
 

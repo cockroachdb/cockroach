@@ -494,6 +494,31 @@ func expectResolvedTimestampAvro(t testing.TB, f cdctest.TestFeed) hlc.Timestamp
 	return parseTimeToHLC(t, resolved.(map[string]interface{})[`string`].(string))
 }
 
+func expectResolvedTimestampAvroWithRegistry(
+	t testing.TB, reg *cdctest.SchemaRegistry, f cdctest.TestFeed,
+) hlc.Timestamp {
+	t.Helper()
+	m, err := f.Next()
+	if err != nil {
+		t.Fatal(err)
+	} else if m == nil {
+		t.Fatal(`expected message`)
+	}
+	if m.Key != nil {
+		t.Fatalf(`unexpected row %s: %s -> %s`, m.Topic, m.Key, m.Value)
+	}
+	if m.Resolved == nil {
+		t.Fatal(`expected a resolved timestamp notification`)
+	}
+
+	var resolvedNative interface{}
+	if err := gojson.Unmarshal(avroToJSON(t, reg, m.Resolved), &resolvedNative); err != nil {
+		t.Fatal(err)
+	}
+	resolved := resolvedNative.(map[string]interface{})[`resolved`]
+	return parseTimeToHLC(t, resolved.(map[string]interface{})[`string`].(string))
+}
+
 var serverSetupStatements = `
 SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
