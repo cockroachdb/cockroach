@@ -1600,12 +1600,13 @@ func (r *Registry) resumerConstructorForPayload(payload *jobspb.Payload) (Constr
 
 // stepThroughStateMachine implements the state machine of the job lifecycle.
 // The job is executed with the ctx, so ctx must only be canceled if the job
-// should also be canceled. resultsCh is passed to the resumable func and should
-// be closed by the caller after errCh sends a value. errCh returns an error if
-// the job was not completed with success. state is the current job state.
+// should also be canceled. state is the current job state.
+//
+// It returns the state that the job was ultimately left in, together with an
+// error if the job was not completed with success.
 func (r *Registry) stepThroughStateMachine(
 	ctx context.Context, execCtx interface{}, resumer Resumer, job *Job, state State, jobErr error,
-) error {
+) (State, error) {
 	payload := job.Payload()
 	jobType := payload.Type()
 	if jobErr != nil {
@@ -1637,7 +1638,7 @@ func (r *Registry) stepThroughStateMachine(
 	switch state {
 	case StateRunning:
 		if jobErr != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+			return state, errors.NewAssertionErrorWithWrappedErrf(jobErr,
 				"job %d: resuming with non-nil error", job.ID())
 		}
 		resumeCtx := logtags.AddTag(ctx, "job", redact.Sprintf("%s id=%d", jobType, job.ID()))
@@ -1647,7 +1648,7 @@ func (r *Registry) stepThroughStateMachine(
 		defer undo()
 
 		if err := job.NoTxn().started(ctx); err != nil {
-			return err
+			return state, err
 		}
 
 		var err error
@@ -1674,10 +1675,10 @@ func (r *Registry) stepThroughStateMachine(
 			// TODO(ajwerner): We'll also end up here if the job was canceled or
 			// paused. We should make this error clearer.
 			jm.ResumeRetryError.Inc(1)
-			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
+			return state, errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
 		if IsLeaseRelocationError(err) {
-			return err
+			return state, err
 		}
 
 		if pauseOnErrErr := r.CheckPausepoint("after_exec_error"); pauseOnErrErr != nil {
@@ -1686,9 +1687,10 @@ func (r *Registry) stepThroughStateMachine(
 
 		if errors.Is(err, errPauseSelfSentinel) {
 			if err := r.PauseRequested(ctx, nil, job.ID(), err.Error()); err != nil {
-				return err
+				return state, err
 			}
-			return errors.Wrap(err, PauseRequestExplained)
+			// The job just transitioned to pause-requested, so report that.
+			return StatePauseRequested, errors.Wrap(err, PauseRequestExplained)
 		}
 		// TODO(spaskob): enforce a limit on retries.
 
@@ -1698,58 +1700,57 @@ func (r *Registry) stepThroughStateMachine(
 			if nonCancelableRetry {
 				err = errors.Wrapf(err, "non-cancelable")
 			}
-			return onExecutionFailed(err)
+			return state, onExecutionFailed(err)
 		}
 
 		jm.ResumeFailed.Inc(1)
 		if sErr := (*InvalidStateError)(nil); errors.As(err, &sErr) {
 			if sErr.state != StateCancelRequested && sErr.state != StatePauseRequested {
-				return errors.NewAssertionErrorWithWrappedErrf(sErr,
+				return state, errors.NewAssertionErrorWithWrappedErrf(sErr,
 					"job %d: unexpected state %s provided for a running job", job.ID(), sErr.state)
 			}
-			return sErr
+			return state, sErr
 		}
 		return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StateReverting, err)
 	case StatePauseRequested:
-		return errors.Errorf("job %s", state)
+		return state, errors.Errorf("job %s", state)
 	case StateCancelRequested:
-		return errors.Errorf("job %s", state)
+		return state, errors.Errorf("job %s", state)
 	case StatePaused:
-		return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+		return state, errors.NewAssertionErrorWithWrappedErrf(jobErr,
 			"job %d: unexpected state %s provided to state machine", job.ID(), state)
 	case StateCanceled:
 		if err := job.NoTxn().canceled(ctx); err != nil {
 			// If we can't transactionally mark the job as canceled then it will be
 			// restarted during the next adopt loop and reverting will be retried.
-			return errors.WithSecondaryError(
+			return StateReverting, errors.WithSecondaryError(
 				errors.Wrapf(err, "job %d: could not mark as canceled", job.ID()),
 				jobErr,
 			)
 		}
 		telemetry.Inc(TelemetryMetrics[jobType].Canceled)
 		r.removeFromWaitingSets(job.ID())
-		return errors.WithSecondaryError(errors.Errorf("job %s", state), jobErr)
+		return state, errors.WithSecondaryError(errors.Errorf("job %s", state), jobErr)
 	case StateSucceeded:
 		if jobErr != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+			// Assertion failure: the job never reached the succeeded state, so
+			// it remains in the running state.
+			return StateRunning, errors.NewAssertionErrorWithWrappedErrf(jobErr,
 				"job %d: successful but unexpected error provided", job.ID())
 		}
-		err := job.NoTxn().succeeded(ctx, nil /* fn */)
-		switch {
-		case err == nil:
-			telemetry.Inc(TelemetryMetrics[jobType].Successful)
-			r.removeFromWaitingSets(job.ID())
-		default:
+		if err := job.NoTxn().succeeded(ctx, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as succeeded then it will be
 			// restarted during the next adopt loop and it will be retried.
-			err = errors.Wrapf(err, "job %d: could not mark as succeeded", job.ID())
+			return StateRunning, errors.Wrapf(err, "job %d: could not mark as succeeded", job.ID())
 		}
-		return err
+		telemetry.Inc(TelemetryMetrics[jobType].Successful)
+		r.removeFromWaitingSets(job.ID())
+		return state, nil
 	case StateReverting:
 		if err := job.NoTxn().reverted(ctx, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as reverting then it will be
 			// restarted during the next adopt loop and it will be retried.
-			return errors.WithSecondaryError(
+			return StateRunning, errors.WithSecondaryError(
 				errors.Wrapf(err, "job %d: could not mark as reverting", job.ID()),
 				jobErr,
 			)
@@ -1779,43 +1780,43 @@ func (r *Registry) stepThroughStateMachine(
 		if onFailOrCancelCtx.Err() != nil {
 			// The context was canceled. Tell the user, but don't attempt to
 			// mark the job as failed because it can be resumed by another node.
-			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
+			return state, errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
-		return onExecutionFailed(err)
+		return state, onExecutionFailed(err)
 	case StateFailed:
 		if jobErr == nil {
-			return errors.AssertionFailedf("job %d: has StateFailed but no error was provided", job.ID())
+			return StateReverting, errors.AssertionFailedf("job %d: has StateFailed but no error was provided", job.ID())
 		}
 		if err := job.NoTxn().failed(ctx, jobErr); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
-			return errors.WithSecondaryError(
+			return StateReverting, errors.WithSecondaryError(
 				errors.Wrapf(err, "job %d: could not mark as failed", job.ID()),
 				jobErr,
 			)
 		}
 		telemetry.Inc(TelemetryMetrics[jobType].Failed)
 		r.removeFromWaitingSets(job.ID())
-		return jobErr
+		return state, jobErr
 	case StateRevertFailed:
 		// TODO(sajjad): Remove StateRevertFailed and related code in other places in v22.1.
 		// v21.2 modified all reverting jobs to retry instead of go to revert-failed. Therefore,
 		// revert-failed state is not reachable after 21.2.
 		if jobErr == nil {
-			return errors.AssertionFailedf("job %d: has StateRevertFailed but no error was provided",
+			return StateReverting, errors.AssertionFailedf("job %d: has StateRevertFailed but no error was provided",
 				job.ID())
 		}
 		if err := job.NoTxn().revertFailed(ctx, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
-			return errors.WithSecondaryError(
+			return StateReverting, errors.WithSecondaryError(
 				errors.Wrapf(err, "job %d: could not mark as revert field", job.ID()),
 				jobErr,
 			)
 		}
-		return jobErr
+		return state, jobErr
 	default:
-		return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+		return state, errors.NewAssertionErrorWithWrappedErrf(jobErr,
 			"job %d: has unsupported state %s", job.ID(), state)
 	}
 }
