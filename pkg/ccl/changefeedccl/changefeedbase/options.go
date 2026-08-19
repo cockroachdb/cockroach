@@ -206,21 +206,6 @@ func ParseAvroSchemaOverrides(raw string, avroMode AvroModeType) (AvroSchemaOver
 		overrides[key] = o
 	}
 
-	// Distinct overrides must not resolve to the same registry subject. Key and
-	// value entries are independent; an omitted entry uses its default subject
-	// name and, in read mode, the latest registered version.
-	effective := make(map[string]string, len(overrides))
-	for key, o := range overrides {
-		subject := key
-		if o.SubjectName != `` {
-			subject = o.SubjectName
-		}
-		if other, ok := effective[subject]; ok {
-			return nil, errors.Newf("%s entries %q and %q resolve to the same subject %q",
-				OptAvroSchemas, other, key, subject)
-		}
-		effective[subject] = key
-	}
 	return overrides, nil
 }
 
