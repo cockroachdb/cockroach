@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
@@ -75,7 +77,19 @@ outer:
 	}
 
 	o.Status(fmt.Sprintf("backing db %s (full)", dbName))
-	bucket := fmt.Sprintf("gs://%s/operation-backup-restore/%d/?AUTH=implicit", testutils.BackupTestingBucket(), timeutil.Now().UnixNano())
+	var scheme string
+	switch c.Cloud() {
+	case spec.AWS:
+		scheme = "s3"
+	case spec.Azure:
+		scheme = "azure"
+	case spec.GCE:
+		scheme = "gs"
+	default:
+		scheme = ""
+	}
+	bucket := fmt.Sprintf("%s://%s/operation-backup-restore/%d/?AUTH=implicit",
+		scheme, backupTestingBucket(c.Cloud()), timeutil.Now().UnixNano())
 
 	backupTS := hlc.Timestamp{WallTime: timeutil.Now().Add(-10 * time.Second).UTC().UnixNano()}
 
@@ -153,6 +167,17 @@ outer:
 	}
 
 	return &backupRestoreCleanup{db: restoreDBName}
+}
+
+func backupTestingBucket(cloud spec.Cloud) string {
+	return backupTestingBucketForProject(cloud, gce.InfraProject())
+}
+
+func backupTestingBucketForProject(cloud spec.Cloud, infraProject string) string {
+	if cloud == spec.GCE {
+		return testutils.BackupTestingBucketForProject(infraProject)
+	}
+	return testutils.BackupTestingBucket()
 }
 
 func runBackupRestoreFn(

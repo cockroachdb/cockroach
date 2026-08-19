@@ -50,6 +50,10 @@ type CloudEnvironment string
 
 const (
 	Default CloudEnvironment = "default"
+	// PublicEnvironment explicitly selects public reachability for network
+	// topologies, such as roachmgr-owned isolated VPCs, that are not reachable
+	// by centralized Prometheus over private networking.
+	PublicEnvironment CloudEnvironment = "public"
 )
 
 // Reachability is the reachability of the node provider.
@@ -76,8 +80,8 @@ var (
 	// and their reachability.
 	supportedPromProviders = map[string]map[CloudEnvironment]Reachability{
 		gce.ProviderName: {
-			Default:               Public,
-			"cockroach-ephemeral": Private,
+			Default:           Private,
+			PublicEnvironment: Public,
 		},
 		aws.ProviderName: {
 			Default: Public,

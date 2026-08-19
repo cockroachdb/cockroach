@@ -570,4 +570,12 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 	if roachtestflags.SelectiveTests && selectProbFlagInfo != nil {
 		printErrAndExit(fmt.Errorf("select-probability and selective-tests=true are incompatible. Disable one of them"))
 	}
+
+	// --cockroach and --cockroach-stage flags are mutually exclusive.
+	cockroachFlagInfo := roachtestflags.Changed(&roachtestflags.CockroachPath)
+	cockroachStageFlagInfo := roachtestflags.Changed(&roachtestflags.CockroachStage)
+	if cockroachFlagInfo != nil && cockroachStageFlagInfo != nil {
+		printErrAndExit(fmt.Errorf("--cockroach and --cockroach-stage are mutually exclusive. Use one or the other"))
+	}
+
 }

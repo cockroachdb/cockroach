@@ -35,10 +35,10 @@ func registerSQLSmith(r registry.Registry) {
 		"seed":                      sqlsmith.Setups["seed"],
 		sqlsmith.RandTableSetupName: sqlsmith.Setups[sqlsmith.RandTableSetupName],
 		"tpch-sf1": func(r *rand.Rand) []string {
-			return []string{`
-RESTORE TABLE tpch.* FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup?AUTH=implicit'
+			return []string{fmt.Sprintf(`
+RESTORE TABLE tpch.* FROM '/' IN '%s'
 WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
-`}
+`, gceFixtureURI("workload/tpch/scalefactor=1/backup?AUTH=implicit"))}
 		},
 		"tpcc": func(r *rand.Rand) []string {
 			const version = "version=2.1.0,fks=true,interleaved=false,seed=1,warehouses=1"
@@ -57,10 +57,11 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 				stmts = append(
 					stmts,
 					fmt.Sprintf(`
-RESTORE TABLE tpcc.%s FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpcc/%[2]s/%[1]s?AUTH=implicit'
+RESTORE TABLE tpcc.%s FROM '/' IN '%s'
 WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 `,
-						t, version,
+						t,
+						gceFixtureURI(fmt.Sprintf("workload/tpcc/%s/%s?AUTH=implicit", version, t)),
 					),
 				)
 			}
@@ -326,7 +327,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			Name:    fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			Owner:   registry.OwnerSQLQueries,
 			Cluster: clusterSpec,
-			// Uses gs://cockroach-fixtures-us-east1. See:
+			// Uses the project-local GCE fixture bucket. See:
 			// https://github.com/cockroachdb/cockroach/issues/105968
 			CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 			Suites:           registry.Suites(registry.Nightly),

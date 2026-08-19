@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const tpchLineitemFmt = `https://storage.googleapis.com/cockroach-fixtures-us-east1/tpch-csv/sf-%d/lineitem.tbl.1`
+const tpchLineitemBucket = "cockroach-fixtures-us-east1"
 
 // There's an extra dummy field because the file above ends lines with delimiter and standard CSV behavior is to
 // interpret that as a column.
@@ -68,7 +68,8 @@ func initTest(ctx context.Context, t test.Test, c cluster.Cluster, sf int) {
 	} else {
 		t.L().Printf("when running locally, ensure that psql is installed")
 	}
-	csv := fmt.Sprintf(tpchLineitemFmt, sf)
+	object := fmt.Sprintf("tpch-csv/sf-%d/lineitem.tbl.1", sf)
+	csv := gcsHTTPSURL(tpchLineitemBucket, object)
 	c.Run(ctx, option.WithNodes(c.Node(1)), "rm -f /tmp/lineitem-table.csv")
 	c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("curl '%s' -o /tmp/lineitem-table.csv", csv))
 }

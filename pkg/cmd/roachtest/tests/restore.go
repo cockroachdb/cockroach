@@ -705,8 +705,8 @@ func (bs backupSpecs) backupCollection() string {
 		return fmt.Sprintf(`'s3://cockroach-fixtures-us-east-2/backups/%s/%s/inc-count=%d%s?AUTH=implicit'`,
 			bs.workload.fixtureDir(), bs.version, bs.numBackupsInChain, properties)
 	case "gs":
-		return fmt.Sprintf(`'gs://cockroach-fixtures-us-east1/backups/%s/%s/inc-count=%d%s?AUTH=implicit'`,
-			bs.workload.fixtureDir(), bs.version, bs.numBackupsInChain, properties)
+		return fmt.Sprintf(`'gs://%s/backups/%s/%s/inc-count=%d%s?AUTH=implicit'`,
+			gceFixtureBucket(), bs.workload.fixtureDir(), bs.version, bs.numBackupsInChain, properties)
 	default:
 		panic(fmt.Sprintf("unknown storage prefix: %s", bs.storagePrefix()))
 	}
@@ -795,7 +795,7 @@ func (tpce tpceRestore) init(
 	spec.init(ctx, t, c, tpceCmdOptions{
 		customers:      tpce.customers,
 		racks:          sp.nodes,
-		connectionOpts: tpceConnectionOpts{fixtureBucket: defaultFixtureBucket},
+		connectionOpts: tpceConnectionOpts{fixtureBucket: gceFixtureURI("tpce-csv")},
 	})
 }
 
@@ -809,7 +809,7 @@ func (tpce tpceRestore) run(
 		customers:      tpce.customers,
 		racks:          sp.nodes,
 		threads:        sp.cpus * sp.nodes,
-		connectionOpts: tpceConnectionOpts{fixtureBucket: defaultFixtureBucket},
+		connectionOpts: tpceConnectionOpts{fixtureBucket: gceFixtureURI("tpce-csv")},
 	})
 	out := details.Output(true)
 	t.L().Printf("TPCE run details: \n%s\n", out)
@@ -1001,7 +1001,7 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 
 func (rd *restoreDriver) defaultClusterSettings() []install.ClusterSettingOption {
 	return []install.ClusterSettingOption{
-		install.SecureOption(false),
+		install.SimpleSecureOption(false),
 	}
 }
 

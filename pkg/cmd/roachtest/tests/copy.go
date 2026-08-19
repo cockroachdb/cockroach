@@ -59,9 +59,9 @@ func registerCopy(r registry.Registry) {
 			}
 
 			t.Status("importing Bank fixture")
-			c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf(
-				"./cockroach workload fixtures load bank --rows=%d --payload-bytes=%d --seed %d {pgurl:1}",
-				rows, payload, fixturesRandomSeed))
+			c.Run(ctx, option.WithNodes(c.Node(1)), copyBankFixtureLoadCommand(
+				rows, payload, fixturesRandomSeed,
+			))
 			if _, err := db.Exec("ALTER TABLE bank.bank RENAME TO bank.bank_orig"); err != nil {
 				t.Fatalf("failed to rename table: %v", err)
 			}
@@ -188,6 +188,13 @@ func registerCopy(r registry.Registry) {
 			},
 		})
 	}
+}
+
+func copyBankFixtureLoadCommand(rows, payload, seed int) string {
+	return fmt.Sprintf(
+		"./cockroach workload fixtures load bank %s --rows=%d --payload-bytes=%d --seed %d {pgurl:1}",
+		gceFixtureBucketFlag(), rows, payload, seed,
+	)
 }
 
 func getDefaultRangeSize(

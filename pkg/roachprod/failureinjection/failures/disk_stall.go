@@ -40,7 +40,7 @@ type CGroupDiskStaller struct {
 }
 
 func MakeCgroupDiskStaller(clusterName string, l *logger.Logger, secure bool) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(secure))
+	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SimpleSecureOption(secure))
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +327,7 @@ type DmsetupDiskStaller struct {
 func MakeDmsetupDiskStaller(
 	clusterName string, l *logger.Logger, secure bool,
 ) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(secure))
+	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SimpleSecureOption(secure))
 	if err != nil {
 		return nil, err
 	}

@@ -73,10 +73,14 @@ func (m *manager) AddFlagsToCommand(cmd cmdID, cmdFlags *pflag.FlagSet) {
 			cmdFlags.StringVarP(p, f.Name, f.Shorthand, *p, usage)
 		case *map[string]string:
 			cmdFlags.StringToStringVarP(p, f.Name, f.Shorthand, *p, usage)
+		case *[]string:
+			cmdFlags.StringArrayVarP(p, f.Name, f.Shorthand, *p, usage)
 		case *spec.Cloud:
 			cmdFlags.VarP(&cloudValue{val: p}, f.Name, f.Shorthand, usage)
 		case *vm.Filesystem:
 			cmdFlags.VarP(&filesystemValue{val: p}, f.Name, f.Shorthand, usage)
+		case *vm.AddressMode:
+			cmdFlags.VarP(p, f.Name, f.Shorthand, usage)
 		default:
 			panic(fmt.Sprintf("unsupported pointer type %T", p))
 		}

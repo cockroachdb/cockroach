@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
@@ -34,10 +35,21 @@ func readCreateTableFromFixture(fixtureURI string, gatewayDB *gosql.DB) (string,
 	return string(row), err
 }
 
+func tpchBaseURL(format string) string {
+	return tpchBaseURLForProject(format, gce.InfraProject())
+}
+
+func tpchBaseURLForProject(format, project string) string {
+	return fmt.Sprintf(
+		"gs://%s/tpch-%s/", gcsBucketForProject("cockroach-fixtures-us-east1", project), format,
+	)
+}
+
 func registerImportNodeShutdown(r registry.Registry) {
 	getImportRunner := func(ctx context.Context, t test.Test, gatewayNode int) jobStarter {
 		startImport := func(c cluster.Cluster, l *logger.Logger) (jobspb.JobID, error) {
 			var jobID jobspb.JobID
+			fixtureBaseURI := strings.TrimSuffix(tpchBaseURL("csv"), "/")
 			// partsupp is 11.2 GiB.
 			tableName := "partsupp"
 			if c.IsLocal() {
@@ -47,21 +59,21 @@ func registerImportNodeShutdown(r registry.Registry) {
 			importStmt := fmt.Sprintf(`
 				IMPORT INTO %[1]s
 				CSV DATA (
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.1?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.2?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.3?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.4?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.5?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.6?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.7?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.8?AUTH=implicit'
+				'%[2]s/sf-100/%[1]s.tbl.1?AUTH=implicit',
+				'%[2]s/sf-100/%[1]s.tbl.2?AUTH=implicit',
+				'%[2]s/sf-100/%[1]s.tbl.3?AUTH=implicit',
+				'%[2]s/sf-100/%[1]s.tbl.4?AUTH=implicit',
+				'%[2]s/sf-100/%[1]s.tbl.5?AUTH=implicit',
+				'%[2]s/sf-100/%[1]s.tbl.6?AUTH=implicit',
+				'%[2]s/sf-100/%[1]s.tbl.7?AUTH=implicit',
+				'%[2]s/sf-100/%[1]s.tbl.8?AUTH=implicit'
 				) WITH  delimiter='|', detached
-			`, tableName)
+			`, tableName, fixtureBaseURI)
 			gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
 			defer gatewayDB.Close()
 
 			createStmt, err := readCreateTableFromFixture(
-				fmt.Sprintf("gs://cockroach-fixtures-us-east1/tpch-csv/schema/%s.sql?AUTH=implicit", tableName), gatewayDB)
+				fmt.Sprintf("%s/schema/%s.sql?AUTH=implicit", fixtureBaseURI, tableName), gatewayDB)
 			if err != nil {
 				return jobID, err
 			}
@@ -82,7 +94,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		Name:    "import/nodeShutdown/worker",
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(4),
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
@@ -100,7 +112,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		Name:    "import/nodeShutdown/coordinator",
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(4),
-		// Uses gs://cockroach-fixtures-us-east1. See:
+		// Uses the project-local GCE fixture bucket. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
@@ -132,7 +144,7 @@ func registerImportTPCC(r registry.Registry) {
 		tick, perfBuf := initBulkJobPerfArtifacts(timeout, t, exporter)
 		defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
 
-		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081' {pgurl:1}`
+		workloadStr := `./cockroach workload fixtures import tpcc %s --warehouses=%d --csv-server='http://localhost:8081' {pgurl:1}`
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
 			if c.Spec().Geo {
@@ -140,7 +152,7 @@ func registerImportTPCC(r registry.Registry) {
 				// test.
 				c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach sql -e "SET CLUSTER SETTING bulkio.import.retry_duration = '20m';" --url={pgurl:1}`)
 			}
-			cmd := fmt.Sprintf(workloadStr, warehouses)
+			cmd := fmt.Sprintf(workloadStr, gceFixtureBucketFlag(), warehouses)
 			// Tick once before starting the import, and once after to capture the
 			// total elapsed time. This is used by roachperf to compute and display
 			// the average MB/sec per node.
@@ -231,7 +243,7 @@ func registerImportTPCH(r registry.Registry) {
 			Owner:     registry.OwnerSQLFoundations,
 			Benchmark: true,
 			Cluster:   r.MakeClusterSpec(item.nodes),
-			// Uses gs://cockroach-fixtures-us-east1. See:
+			// Uses the project-local GCE fixture bucket. See:
 			// https://github.com/cockroachdb/cockroach/issues/105968
 			CompatibleClouds:  registry.Clouds(spec.GCE, spec.Local),
 			Suites:            registry.Suites(registry.Nightly),
@@ -239,6 +251,7 @@ func registerImportTPCH(r registry.Registry) {
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				fixtureBaseURI := strings.TrimSuffix(tpchBaseURL("csv"), "/")
 				exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
 				tick, perfBuf := initBulkJobPerfArtifacts(item.timeout, t, exporter)
 				defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
@@ -291,7 +304,7 @@ func registerImportTPCH(r registry.Registry) {
 					defer t.WorkerStatus()
 
 					createStmt, err := readCreateTableFromFixture(
-						"gs://cockroach-fixtures-us-east1/tpch-csv/schema/lineitem.sql?AUTH=implicit", conn)
+						fixtureBaseURI+"/schema/lineitem.sql?AUTH=implicit", conn)
 					if err != nil {
 						return err
 					}
@@ -305,19 +318,19 @@ func registerImportTPCH(r registry.Registry) {
 					// total elapsed time. This is used by roachperf to compute and display
 					// the average MB/sec per node.
 					tick()
-					_, err = conn.Exec(`
+					_, err = conn.Exec(fmt.Sprintf(`
 						IMPORT INTO csv.lineitem
 						CSV DATA (
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.1?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.2?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.3?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.4?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.5?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.6?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.7?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.8?AUTH=implicit'
+						'%[1]s/sf-100/lineitem.tbl.1?AUTH=implicit',
+						'%[1]s/sf-100/lineitem.tbl.2?AUTH=implicit',
+						'%[1]s/sf-100/lineitem.tbl.3?AUTH=implicit',
+						'%[1]s/sf-100/lineitem.tbl.4?AUTH=implicit',
+						'%[1]s/sf-100/lineitem.tbl.5?AUTH=implicit',
+						'%[1]s/sf-100/lineitem.tbl.6?AUTH=implicit',
+						'%[1]s/sf-100/lineitem.tbl.7?AUTH=implicit',
+						'%[1]s/sf-100/lineitem.tbl.8?AUTH=implicit'
 						) WITH  delimiter='|'
-					`)
+					`, fixtureBaseURI))
 					if err != nil {
 						return errors.Wrap(err, "import failed")
 					}

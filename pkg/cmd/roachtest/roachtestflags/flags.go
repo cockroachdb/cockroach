@@ -112,6 +112,15 @@ var (
 		Usage: `Absolute path to cockroach binary to use`,
 	})
 
+	CockroachStage string
+	_              = registerRunFlag(&CockroachStage, FlagInfo{
+		Name: "cockroach-stage",
+		Usage: `
+			Stage cockroach binary from cloud storage instead of uploading local binary.
+			Specify version/SHA (e.g., "latest", "v23.2.0", or commit SHA).
+			Mutually exclusive with --cockroach.`,
+	})
+
 	ConfigPath string
 	_          = registerRunOpsFlag(&ConfigPath, FlagInfo{
 		Name: "config",
@@ -437,6 +446,26 @@ var (
 		Usage: `Disable posting GitHub issue for failures`,
 	})
 
+	ExtraGithubIssueCreateBranches []string
+	_                              = registerRunFlag(&ExtraGithubIssueCreateBranches, FlagInfo{
+		Name: "extra-github-issue-create-branches",
+		Usage: `
+			Additional branches (beyond master and release-*) whose test failures
+			should file GitHub issues. Issues created on these branches still get
+			the automatic branch-<name> label, keeping them de-duplicated and
+			distinct from master/release issues`,
+	})
+
+	ExtraGithubIssueLabels []string
+	_                      = registerRunFlag(&ExtraGithubIssueLabels, FlagInfo{
+		Name: "extra-github-issue-labels",
+		Usage: `
+			Additional GitHub labels to attach to every issue this invocation
+			files, independent of the branch. Useful for distinguishing failures
+			from a specific job (e.g. an architecture or environment) that runs on
+			an already-posting branch`,
+	})
+
 	PromPort int = 2113
 	_            = registerRunFlag(&PromPort, FlagInfo{
 		Name: "prom-port",
@@ -489,6 +518,13 @@ var (
 						Always collect artifacts during test teardown, even if the test did not
 						time out or fail.`,
 	})
+
+	ForceInsecure bool
+	_             = registerRunFlag(&ForceInsecure, FlagInfo{
+		Name: "insecure",
+		Usage: `Force CockroachDB storage clusters started by the roachprod backend
+			to use insecure mode, overriding test-provided secure settings.`,
+	})
 )
 
 // The flags below override the final cluster configuration. They have no
@@ -538,6 +574,20 @@ var (
 	_                      = registerRunFlag(&OverrideGeoDistributed, FlagInfo{
 		Name:  "geo",
 		Usage: `Create geo-distributed cluster`,
+	})
+
+	OverrideAddressMode vm.AddressMode
+	_                   = registerRunFlag(&OverrideAddressMode, FlagInfo{
+		Name: "address-mode",
+		Usage: `VM address mode: public preserves current behavior; private omits
+			public addresses; auto lets the provider select the address mode.`,
+	})
+
+	GCESubnets map[string]string
+	_          = registerRunFlag(&GCESubnets, FlagInfo{
+		Name: "gce-subnets",
+		Usage: `GCE region=subnet mappings to use for CRDB and workload nodes; each
+			selected region must have an entry`,
 	})
 )
 

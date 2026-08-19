@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -96,21 +97,22 @@ func makeSlackClient() *slack.Client {
 }
 
 func findChannel(client *slack.Client, name string, nextCursor string) (string, error) {
-	if client != nil {
-		channels, cursor, err := client.GetConversationsForUser(
-			&slack.GetConversationsForUserParameters{Cursor: nextCursor},
-		)
-		if err != nil {
-			return "", err
+	if client == nil {
+		return "", errNoSlackClient
+	}
+	channels, cursor, err := client.GetConversationsForUser(
+		&slack.GetConversationsForUserParameters{Cursor: nextCursor},
+	)
+	if err != nil {
+		return "", err
+	}
+	for _, channel := range channels {
+		if channel.Name == name {
+			return channel.ID, nil
 		}
-		for _, channel := range channels {
-			if channel.Name == name {
-				return channel.ID, nil
-			}
-		}
-		if cursor != "" {
-			return findChannel(client, name, cursor)
-		}
+	}
+	if cursor != "" {
+		return findChannel(client, name, cursor)
 	}
 	return "", fmt.Errorf("not found")
 }
@@ -264,7 +266,7 @@ func postStatus(
 }
 
 func postError(l *logger.Logger, client *slack.Client, channel string, err error, dryrun bool) {
-	l.Printf("Posting error to Slack: %v", err)
+	l.Printf("GC error: %v", err)
 	if client == nil || channel == "" {
 		return
 	}
@@ -416,10 +418,13 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 
 	channel, err := findChannel(client, "roachprod-status", "")
 	if err != nil {
-		l.Printf("could not find the slack channel: %q, err: %v", "roachprod-status", err)
-		return err
+		if !errors.Is(err, errNoSlackClient) {
+			l.Printf("could not find the slack channel: %q, err: %v", "roachprod-status", err)
+		}
+		channel = ""
 	}
 
+	var combinedErrors error
 	if len(badVMs) > 0 {
 		// Destroy bad VMs.
 		var deletedVMs []resourceDescription
@@ -457,6 +462,7 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 
 			return err
 		}); err != nil {
+			combinedErrors = errors.CombineErrors(combinedErrors, err)
 			postError(l, client, channel, err, dryrun)
 		}
 
@@ -518,12 +524,13 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 				})
 			}
 		} else {
+			combinedErrors = errors.CombineErrors(combinedErrors, err)
 			postError(l, client, channel, err, dryrun)
 		}
 	}
 
 	reportDeletedResources(l, client, channel, "clusters", destroyedClusters, dryrun)
-	return nil
+	return combinedErrors
 }
 
 // GCDNS deletes dangling DNS records for clusters that have been destroyed.
@@ -537,55 +544,82 @@ func GCDNS(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 	for _, cluster := range cloud.Clusters {
 		clusterNames[cluster.Name] = struct{}{}
 	}
-	// Ensure all DNS providers do not have records for clusters that are no
-	// longer present.
+	// GCE is currently the only remote DNS provider whose records are managed
+	// by GC. The configured provider reflects --gce-infra-project and any
+	// explicit DNS overrides.
+	registeredProvider, ok := vm.Providers[gce.ProviderName]
+	if !ok {
+		return errors.New(
+			"GCE DNS provider is unavailable; verify gcloud and the --gce-infra-project configuration",
+		)
+	}
+	provider, ok := registeredProvider.(vm.DNSProvider)
+	if !ok {
+		return errors.New(
+			"GCE DNS provider is unavailable; verify gcloud and the --gce-infra-project configuration",
+		)
+	}
+
 	ctx := context.Background()
-	for _, provider := range vm.Providers {
-		p, ok := provider.(vm.DNSProvider)
-		if !ok {
+	records, err := provider.ListRecords(ctx)
+	if err != nil {
+		return err
+	}
+	danglingRecordNames := make(map[string]struct{})
+	for _, record := range records {
+		nameParts := strings.Split(record.Name, ".")
+		// Only consider DNS records that contain a cluster name.
+		if len(nameParts) < 3 {
 			continue
 		}
-		records, err := p.ListRecords(ctx)
-		if err != nil {
-			return err
+		dnsClusterName := nameParts[2]
+		if _, exists := clusterNames[dnsClusterName]; !exists {
+			danglingRecordNames[record.Name] = struct{}{}
 		}
-		danglingRecordNames := make(map[string]struct{})
-		for _, record := range records {
-			nameParts := strings.Split(record.Name, ".")
-			// Only consider DNS records that contain a cluster name.
-			if len(nameParts) < 3 {
-				continue
-			}
-			dnsClusterName := nameParts[2]
-			if _, exists := clusterNames[dnsClusterName]; !exists {
-				danglingRecordNames[record.Name] = struct{}{}
-			}
-		}
-
-		client := makeSlackClient()
-		channel, _ := findChannel(client, "roachprod-status", "")
-		recordNames := maps.Keys(danglingRecordNames)
-		sort.Strings(recordNames)
-
-		if err := destroyResource(dryrun, func() error {
-			return p.DeleteRecordsByName(ctx, recordNames...)
-		}); err != nil {
-			return err
-		}
-
-		deletedRecords := make([]resourceDescription, 0, len(recordNames))
-		for _, name := range recordNames {
-			deletedRecords = append(deletedRecords, resourceDescription{
-				Description: name,
-				// Display record names in backticks so that special characters in
-				// the domain name (such as underscores) are not interpreted as markup.
-				SlackDescription: fmt.Sprintf("`%s`", name),
-			})
-		}
-
-		reportDeletedResources(l, client, channel, "dangling DNS records", deletedRecords, dryrun)
 	}
+
+	recordNames := maps.Keys(danglingRecordNames)
+	sort.Strings(recordNames)
+	if len(recordNames) == 0 {
+		return nil
+	}
+
+	if err := destroyResource(dryrun, func() error {
+		return provider.DeleteSRVRecordsByName(ctx, recordNames...)
+	}); err != nil {
+		return err
+	}
+
+	client := makeSlackClient()
+	channel, _ := findChannel(client, "roachprod-status", "")
+	deletedRecords := make([]resourceDescription, 0, len(recordNames))
+	for _, name := range recordNames {
+		deletedRecords = append(deletedRecords, resourceDescription{
+			Description: name,
+			// Display record names in backticks so that special characters in
+			// the domain name (such as underscores) are not interpreted as markup.
+			SlackDescription: fmt.Sprintf("`%s`", name),
+		})
+	}
+
+	reportDeletedResources(l, client, channel, "dangling DNS records", deletedRecords, dryrun)
 	return nil
+}
+
+func listCloudForGC(l *logger.Logger, providerName string) (*Cloud, error) {
+	provider, ok := vm.Providers[providerName]
+	if !ok {
+		return nil, errors.Errorf("cloud provider %q is not registered", providerName)
+	}
+	return listCloudForGCWithProvider(l, provider)
+}
+
+func listCloudForGCWithProvider(l *logger.Logger, provider vm.Provider) (*Cloud, error) {
+	options := vm.ListOptions{
+		IncludeEmptyClusters: true,
+		IncludeProviders:     []string{provider.Name()},
+	}
+	return listCloudWithProviders(l, options, []vm.Provider{provider})
 }
 
 // GCAzure iterates through subscription IDs passed in --azure-subscription-names
@@ -603,7 +637,10 @@ func GCAzure(l *logger.Logger, dryrun bool) error {
 	if len(azureSubscriptions) == 0 {
 		// If no subscription names were specified, then fall back to cleaning up
 		// the subscription ID specified in the env or the default subscription.
-		cld, _ := ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{azure.ProviderName}})
+		cld, err := listCloudForGC(l, azure.ProviderName)
+		if err != nil {
+			return err
+		}
 		return GCClusters(l, cld, dryrun)
 	}
 
@@ -616,7 +653,11 @@ func GCAzure(l *logger.Logger, dryrun bool) error {
 			continue
 		}
 
-		cld, _ := ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{azure.ProviderName}})
+		cld, err := listCloudForGC(l, azure.ProviderName)
+		if err != nil {
+			combinedErrors = errors.CombineErrors(combinedErrors, err)
+			continue
+		}
 		if err := GCClusters(l, cld, dryrun); err != nil {
 			combinedErrors = errors.CombineErrors(combinedErrors, err)
 		}

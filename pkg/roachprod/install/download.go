@@ -14,11 +14,7 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-)
-
-const (
-	// We store downloadable content in a public bucket to allow for easy curling.
-	gcsCacheBaseURL = "https://storage.googleapis.com/cockroach-test-artifacts"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 //go:embed scripts/download.sh
@@ -44,7 +40,7 @@ func Download(
 	// SHA-bar.txt
 	cacheBasename := fmt.Sprintf("%s-%s", sha, basename)
 	// https://storage.googleapis.com/SOME_BUCKET/SHA-bar.txt
-	gcsCacheURL, err := url.Parse(path.Join(gcsCacheBaseURL, cacheBasename))
+	gcsCacheURL, err := url.Parse(path.Join(vm.ArtifactsBaseURL(), cacheBasename))
 	if err != nil {
 		return err
 	}

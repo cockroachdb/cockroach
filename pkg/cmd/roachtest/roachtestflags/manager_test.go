@@ -8,9 +8,45 @@ package roachtestflags
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
+
+func TestManagerStringArray(t *testing.T) {
+	m := &manager{}
+	var values []string
+	m.RegisterFlag(runCmdID, &values, FlagInfo{Name: "extra-label"})
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	m.AddFlagsToCommand(runCmdID, flags)
+
+	require.NoError(t, flags.Parse([]string{
+		"--extra-label", "private-gce",
+		"--extra-label", "release-25.4",
+	}))
+	require.Equal(t, []string{"private-gce", "release-25.4"}, values)
+	require.NotNil(t, m.Changed(&values))
+}
+
+func TestManagerAddressMode(t *testing.T) {
+	m := &manager{}
+	var mode vm.AddressMode
+	m.RegisterFlag(runCmdID, &mode, FlagInfo{Name: "address-mode"})
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	m.AddFlagsToCommand(runCmdID, flags)
+
+	require.NoError(t, flags.Parse([]string{"--address-mode=private"}))
+	require.Equal(t, vm.AddressModePrivate, mode)
+	require.NotNil(t, m.Changed(&mode))
+
+	var invalid vm.AddressMode
+	invalidManager := &manager{}
+	invalidManager.RegisterFlag(runCmdID, &invalid, FlagInfo{Name: "address-mode"})
+	invalidFlags := pflag.NewFlagSet("test-invalid", pflag.ContinueOnError)
+	invalidManager.AddFlagsToCommand(runCmdID, invalidFlags)
+	require.ErrorContains(t, invalidFlags.Parse([]string{"--address-mode=invalid"}), "invalid address mode")
+}
 
 type testValues struct {
 	intVal    int

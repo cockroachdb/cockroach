@@ -147,6 +147,7 @@ func (bd *backupDriver) initWorkload(ctx context.Context) {
 
 	cmd := roachtestutil.NewCommand("./cockroach workload fixtures import tpcc").
 		Arg("%q", urls[0]).
+		Flag("bucket-override", gceFixtureBucket()).
 		Option("checks=false").
 		Flag("warehouses", bd.sp.fixture.ImportWarehouses).
 		String()
@@ -262,7 +263,7 @@ func newFixtureRegistry(ctx context.Context, t test.Test, c cluster.Cluster) *bl
 
 		uri = url.URL{
 			Scheme:   "gs",
-			Host:     "cockroach-fixtures-us-east1",
+			Host:     gcsBucket("cockroach-fixtures-us-east1"),
 			RawQuery: "AUTH=implicit",
 		}
 	default:
