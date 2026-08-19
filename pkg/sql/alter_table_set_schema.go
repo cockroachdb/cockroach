@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -67,8 +66,12 @@ func (p *planner) AlterTableSetSchema(
 			"cannot move objects into or out of temporary schemas")
 	}
 
-	// The user needs DROP privilege on the table to set the schema.
-	err = p.CheckPrivilege(ctx, tableDesc, privilege.DROP)
+	// Postgres requires ownership of the relation to set the schema of a table.
+	// Accepting the DROP privilege is an intentional divergence so that the
+	// move can be delegated without granting full ownership. Schema owners hold
+	// DROP implicitly on relations in their schema, matching the declarative
+	// schema changer.
+	err = p.checkDropPrivilegeOrSchemaOwnership(ctx, tableDesc)
 	if err != nil {
 		return nil, err
 	}
