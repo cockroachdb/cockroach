@@ -37,13 +37,12 @@ func TestOptionsValidations(t *testing.T) {
 		{map[string]string{"initial_scan_only": "", "resolved": ""}, true, "cannot specify both initial_scan='only'"},
 		{map[string]string{"initial_scan_only": "", "resolved": ""}, true, "cannot specify both initial_scan='only'"},
 		{map[string]string{"key_column": "b"}, false, "requires the unordered option"},
-		{map[string]string{"format": "avro", "avro_mode": "read", "resolved": ""}, false,
-			"resolved is not supported with avro_mode=read"},
 		{map[string]string{"format": "avro", "avro_mode": "read", "resolved": "10s"}, false,
-			"resolved is not supported with avro_mode=read"},
+			"resolved with avro_mode=read requires avro_resolved_subject"},
+		{map[string]string{"format": "avro", "avro_mode": "read", "resolved": "10s",
+			"avro_resolved_subject": "acme.resolved"}, false, ""},
 		{map[string]string{"format": "avro", "avro_mode": "write", "resolved": "10s"}, false, ""},
 		{map[string]string{"format": "avro", "avro_mode": "read"}, false, ""},
-		{map[string]string{"avro_mode": "read", "resolved": "10s"}, false, ""},
 	}
 
 	for _, test := range tests {
@@ -77,6 +76,9 @@ func TestEncodingOptionsValidations(t *testing.T) {
 		{EncodingOptions{Format: OptFormatJSON, AvroMode: OptAvroModeRead}, "avro_mode is only usable with format=avro"},
 		{EncodingOptions{Format: OptFormatAvro, AvroMode: OptAvroModeWrite}, ""},
 		{EncodingOptions{Format: OptFormatJSON, AvroMode: OptAvroModeWrite}, "avro_mode is only usable with format=avro"},
+		{EncodingOptions{Format: OptFormatAvro, AvroResolvedSubject: "acme.resolved"}, ""},
+		{EncodingOptions{Format: OptFormatJSON, AvroResolvedSubject: "acme.resolved"},
+			"avro_resolved_subject is only usable with format=avro"},
 		{EncodingOptions{Format: OptFormatJSON}, ""},
 	}
 

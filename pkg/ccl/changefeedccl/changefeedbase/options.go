@@ -271,6 +271,7 @@ const (
 const (
 	OptAvroSchemaPrefix                   = `avro_schema_prefix`
 	OptAvroMode                           = `avro_mode`
+	OptAvroResolvedSubject                = `avro_resolved_subject`
 	OptAvroSchemas                        = `avro_schemas`
 	OptConfluentSchemaRegistry            = `confluent_schema_registry`
 	OptCursor                             = `cursor`
@@ -574,6 +575,7 @@ var jsonOption = OptionPermittedValues{Type: OptionTypeJSON}
 var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptAvroSchemaPrefix:                   stringOption,
 	OptAvroMode:                           enum("read", "write"),
+	OptAvroResolvedSubject:                stringOption,
 	OptAvroSchemas:                        jsonOption,
 	OptConfluentSchemaRegistry:            stringOption,
 	OptCursor:                             timestampOption,
@@ -639,7 +641,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptAvroMode, OptAvroSchemas,
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptAvroMode, OptAvroResolvedSubject, OptAvroSchemas,
 	OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders,
 	OptPartitionAlg)
 
@@ -845,6 +847,13 @@ func (s StatementOptions) DeprecationWarnings() []string {
 		if _, isSet := s.m[retiredOpt]; isSet {
 			return []string{fmt.Sprintf("%s option is no longer needed", retiredOpt)}
 		}
+	}
+	if s.m[OptFormat] == string(OptFormatAvro) &&
+		s.m[OptAvroMode] != string(OptAvroModeRead) &&
+		s.IsSet(OptResolvedTimestamps) && !s.IsSet(OptAvroResolvedSubject) {
+		return []string{fmt.Sprintf(
+			"resolved Avro schemas will use the value subject; set %s to use a separate subject",
+			OptAvroResolvedSubject)}
 	}
 
 	return []string{}
@@ -1090,6 +1099,7 @@ type EncodingOptions struct {
 	EncodeJSONValueNullAsObject bool
 	AvroSchemaPrefix            string
 	AvroMode                    AvroModeType
+	AvroResolvedSubject         string
 	AvroSchemas                 AvroSchemaOverrides
 	SchemaRegistryURI           string
 	Compression                 string
@@ -1141,6 +1151,10 @@ func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 	} else {
 		o.AvroMode = AvroModeType(avroMode)
 	}
+	if s.IsSet(OptAvroResolvedSubject) && s.m[OptAvroResolvedSubject] == `` {
+		return o, errors.Newf(`%s cannot be empty`, OptAvroResolvedSubject)
+	}
+	o.AvroResolvedSubject = s.m[OptAvroResolvedSubject]
 
 	if raw, ok := s.m[OptAvroSchemas]; ok {
 		o.AvroSchemas, err = ParseAvroSchemaOverrides(raw, o.AvroMode)
@@ -1191,6 +1205,10 @@ func (e EncodingOptions) Validate() error {
 
 	if e.AvroMode != `` && e.Format != OptFormatAvro {
 		return errors.Errorf(`%s is only usable with %s=%s`, OptAvroMode, OptFormat, OptFormatAvro)
+	}
+	if e.AvroResolvedSubject != `` && e.Format != OptFormatAvro {
+		return errors.Errorf(`%s is only usable with %s=%s`,
+			OptAvroResolvedSubject, OptFormat, OptFormatAvro)
 	}
 
 	if e.AvroSchemas != nil && e.Format != OptFormatAvro {
@@ -1644,16 +1662,17 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 		}
 	}
 
-	// Resolved-timestamp messages are encoded against a second schema under
-	// the same <topic>-value subject as row messages. Read mode resolves only
-	// the subject's latest registered version, which cannot serve both
-	// shapes.
-	//
-	// TODO(CRDB-64294): Support resolved-timestamp schemas in avro_mode=read.
+	if s.IsSet(OptAvroResolvedSubject) && !s.IsSet(OptResolvedTimestamps) {
+		return errors.Newf(`%s requires the %s option`,
+			OptAvroResolvedSubject, OptResolvedTimestamps)
+	}
+
 	if s.m[OptFormat] == string(OptFormatAvro) &&
 		s.m[OptAvroMode] == string(OptAvroModeRead) && s.IsSet(OptResolvedTimestamps) {
-		return errors.Newf(`%s is not supported with %s=%s`,
-			OptResolvedTimestamps, OptAvroMode, OptAvroModeRead)
+		if !s.IsSet(OptAvroResolvedSubject) || s.m[OptAvroResolvedSubject] == `` {
+			return errors.Newf(`%s with %s=%s requires %s`,
+				OptResolvedTimestamps, OptAvroMode, OptAvroModeRead, OptAvroResolvedSubject)
+		}
 	}
 
 	if err := validateAvroSchemaPrefix(s.m[OptAvroSchemaPrefix]); err != nil {
