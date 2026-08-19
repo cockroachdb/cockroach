@@ -951,6 +951,70 @@ func TestSchemaChangerFailsOnMissingDesc(t *testing.T) {
 		[][]string{{"failed"}})
 }
 
+// TestRollbackPermanentErrorReachesTerminalState verifies that a permanent
+// error raised by the rollback itself takes the job to a terminal state rather
+// than leaving it to be re-adopted in reverting on every adoption.
+func TestRollbackPermanentErrorReachesTerminalState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var rollbackAttempts atomic.Int32
+
+	// The statements are persisted in each descriptor's declarative schema
+	// changer state, so this identifies the schema change under test on both
+	// the forward and the rollback plan.
+	targetsAddColumn := func(p scplan.Plan) bool {
+		return len(p.TargetState.Statements) > 0 &&
+			strings.Contains(p.TargetState.Statements[0].Statement, "ADD COLUMN")
+	}
+
+	var params base.TestServerArgs
+	params.Knobs = base.TestingKnobs{
+		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+			BeforeStage: func(p scplan.Plan, stageIdx int) error {
+				if !targetsAddColumn(p) || stageIdx > 0 {
+					return nil
+				}
+				if !p.Params.InRollback {
+					// Fail the forward path with an unmarked error so the job
+					// reverts carrying a non-permanent resume error.
+					if p.Params.ExecutionPhase == scop.PostCommitPhase {
+						return errors.New("boom")
+					}
+					return nil
+				}
+				// Every rollback attempt fails permanently.
+				rollbackAttempts.Add(1)
+				return catalog.ErrDescriptorNotFound
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
+	tdb.ExpectErr(t, "boom", `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
+
+	testutils.SucceedsSoon(t, func() error {
+		var state string
+		tdb.QueryRow(t, `SELECT status FROM crdb_internal.jobs
+                                  WHERE statement LIKE '%ADD COLUMN%'
+                                    AND job_type = 'NEW SCHEMA CHANGE'`).Scan(&state)
+		if state != string(jobs.StateFailed) {
+			return errors.Newf("job still in %q", state)
+		}
+		return nil
+	})
+	// The rollback is attempted once and then abandoned, not re-driven on
+	// every adoption.
+	require.Equal(t, int32(1), rollbackAttempts.Load())
+}
+
 // TestCreateObjectConcurrency validates that concurrent create object with
 // independent references never hit txn retry errors. All objects are created
 // under the same schema.
