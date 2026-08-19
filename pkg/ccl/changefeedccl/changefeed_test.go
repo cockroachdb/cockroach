@@ -8168,6 +8168,16 @@ func TestChangefeedErrors(t *testing.T) {
 		`kafka://nope`, schemaReg.URL(), `{"foo-key": {"subject_name": "acme.foo.key"}}`,
 	)
 
+	// Overrides are also checked against subjects that use their default name.
+	sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+	sqlDB.ExpectErrWithTimeout(
+		t, `resolve to the same registry subject "bar-value"`,
+		`CREATE CHANGEFEED FOR foo, bar INTO $1 WITH format='avro', `+
+			`confluent_schema_registry=$2, avro_schemas=$3`,
+		`kafka://nope`, schemaReg.URL(),
+		`{"foo-value": {"subject_name": "bar-value"}}`,
+	)
+
 	// Sanity check webhook sink options.
 	sqlDB.ExpectErrWithTimeout(
 		t, `param insecure_tls_skip_verify must be a bool`,

@@ -434,7 +434,8 @@ func (e *confluentAvroEncoder) versionStrategy(
 }
 
 // validateAvroSchemasMatchTargets checks that every avro_schemas entry refers
-// to a watched table.
+// to a watched table and that overrides do not collide with another topic's
+// explicitly configured or default subject.
 func validateAvroSchemasMatchTargets(
 	encodingOpts changefeedbase.EncodingOptions,
 	targets changefeedbase.Targets,
@@ -463,6 +464,23 @@ func validateAvroSchemasMatchTargets(
 		if !slices.Contains(topics, base) {
 			return errors.Newf("%s key %q does not match a watched table",
 				changefeedbase.OptAvroSchemas, key)
+		}
+	}
+
+	effectiveSubjects := make(map[string]string, len(topics)*2)
+	for _, topic := range topics {
+		for _, suffix := range []string{confluentSubjectSuffixKey, confluentSubjectSuffixValue} {
+			defaultSubject := topic + suffix
+			effectiveSubject := defaultSubject
+			if override, ok := encodingOpts.AvroSchemas[defaultSubject]; ok && override.SubjectName != "" {
+				effectiveSubject = override.SubjectName
+			}
+			if other, ok := effectiveSubjects[effectiveSubject]; ok {
+				return errors.Newf(
+					`%s subjects %q and %q resolve to the same registry subject %q`,
+					changefeedbase.OptAvroSchemas, other, defaultSubject, effectiveSubject)
+			}
+			effectiveSubjects[effectiveSubject] = defaultSubject
 		}
 	}
 	return nil
