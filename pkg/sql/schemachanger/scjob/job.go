@@ -62,13 +62,6 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 ) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	execCfg := execCtx.ExecCfg()
-	// Permanent error has been hit, so there is no rollback
-	// from here. Only if the status is reverting will these be
-	// treated as fatal.
-	if jobs.IsPermanentJobError(err) && n.job.State() == jobs.StateReverting {
-		log.Dev.Warningf(ctx, "schema change will not rollback; permanent error detected: %v", err)
-		return nil
-	}
 	n.rollbackCause = err
 
 	// Clean up any protected timestamps as a last resort, in case the job
@@ -76,7 +69,15 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 	if err := execCfg.ProtectedTimestampManager.Unprotect(ctx, n.job); err != nil {
 		log.Dev.Warningf(ctx, "unable to revert protected timestamp %v", err)
 	}
-	return n.run(ctx, execCtx)
+	runErr := n.run(ctx, execCtx)
+	// If the rollback itself hit a permanent error it will never make progress,
+	// so don't keep retrying it: return nil to let the job reach a terminal
+	// state instead of bouncing through reverting on every adoption.
+	if runErr != nil && jobs.IsPermanentJobError(runErr) {
+		log.Dev.Warningf(ctx, "schema change will not rollback; permanent error detected: %v", runErr)
+		return nil
+	}
+	return runErr
 }
 
 // CollectProfile writes the current phase's explain output, captured earlier,
