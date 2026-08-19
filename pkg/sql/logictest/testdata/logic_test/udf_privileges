@@ -884,6 +884,9 @@ subtest end
 subtest alter_requires_function_ownership
 
 statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled = true
+
+statement ok
 CREATE USER alter_schema_owner;
 CREATE USER alter_func_creator;
 GRANT alter_schema_owner, alter_func_creator TO testuser;
@@ -960,5 +963,74 @@ DROP SCHEMA test_alter_target_schema;
 REVOKE alter_schema_owner, alter_func_creator FROM testuser;
 DROP USER alter_schema_owner;
 DROP USER alter_func_creator;
+
+statement ok
+RESET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled
+
+subtest end
+
+# When the cluster setting is disabled (the default), the pre-fix behavior is
+# retained: owning the parent schema is sufficient to alter a routine, even
+# without owning the routine itself.
+subtest alter_ownership_gate_disabled
+
+statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled = false
+
+statement ok
+CREATE USER gate_schema_owner;
+CREATE USER gate_func_creator;
+GRANT gate_schema_owner, gate_func_creator TO testuser;
+CREATE SCHEMA test_gate_schema;
+ALTER SCHEMA test_gate_schema OWNER TO gate_schema_owner;
+GRANT CREATE ON SCHEMA test_gate_schema TO gate_func_creator;
+GRANT USAGE ON SCHEMA test_gate_schema TO gate_func_creator;
+GRANT USAGE ON SCHEMA test_gate_schema TO gate_schema_owner;
+
+user testuser
+
+statement ok
+SET ROLE gate_func_creator
+
+statement ok
+CREATE FUNCTION test_gate_schema.gate_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE PROCEDURE test_gate_schema.gate_proc() LANGUAGE PLpgSQL AS $$ BEGIN NULL; END; $$;
+
+# The schema owner does not own the routines, but with the gate disabled schema
+# ownership alone permits altering them.
+statement ok
+SET ROLE gate_schema_owner
+
+statement ok
+ALTER FUNCTION test_gate_schema.gate_func() SECURITY DEFINER;
+
+statement ok
+ALTER PROCEDURE test_gate_schema.gate_proc() RENAME TO gate_proc_renamed;
+
+# Enabling the setting flips the same schema owner back to being denied.
+user root
+
+statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled = true
+
+# testuser is still acting as gate_schema_owner from above.
+user testuser
+
+statement error pgcode 42501 must be owner of function gate_func
+ALTER FUNCTION test_gate_schema.gate_func() IMMUTABLE;
+
+# Clean up.
+user root
+
+statement ok
+RESET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled
+
+statement ok
+DROP SCHEMA test_gate_schema CASCADE;
+REVOKE gate_schema_owner, gate_func_creator FROM testuser;
+DROP USER gate_schema_owner;
+DROP USER gate_func_creator;
 
 subtest end
