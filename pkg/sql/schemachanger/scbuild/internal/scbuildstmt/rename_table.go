@@ -20,7 +20,9 @@ import (
 
 // RenameTable implements ALTER TABLE ... RENAME TO for the declarative schema changer.
 func RenameTable(b BuildCtx, n *tree.RenameTable) {
-	// Determine what type of object we're resolving based on the statement.
+	// Postgres requires ownership of the relation to rename a table. Accepting
+	// the DROP privilege is an intentional divergence so that renaming can be
+	// delegated without granting full ownership.
 	elts := b.ResolveRelation(n.Name, ResolveParams{
 		IsExistenceOptional: n.IfExists,
 		RequiredPrivilege:   privilege.DROP,

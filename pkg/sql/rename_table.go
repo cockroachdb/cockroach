@@ -35,9 +35,8 @@ type renameTableNode struct {
 // RenameTable renames the table, view or sequence.
 // Privileges: DROP on source table/view/sequence, CREATE on destination database.
 //
-//	Notes: postgres requires the table owner.
-//	       mysql requires ALTER, DROP on the original table, and CREATE, INSERT
-//	       on the new table (and does not copy privileges over).
+//	Notes: postgres requires DROP on the relation (i.e. ownership) and CREATE on
+//	       the schema containing it.
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
@@ -73,7 +72,12 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return nil, sqlerrors.NewUndefinedRelationError(&oldTn)
 	}
 
-	if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
+	// Postgres requires ownership of the relation to rename it. Accepting the
+	// DROP privilege is an intentional divergence so that renaming can be
+	// delegated without granting full ownership. Schema owners hold DROP
+	// implicitly on relations in their schema, matching the declarative schema
+	// changer.
+	if err := p.checkDropPrivilegeOrSchemaOwnership(ctx, tableDesc); err != nil {
 		return nil, err
 	}
 

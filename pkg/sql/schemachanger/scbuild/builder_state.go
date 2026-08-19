@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1157,14 +1158,20 @@ func (b *builderState) resolveRelation(
 		}
 	}
 
-	// If we own the schema then we can manipulate the underlying relation,
-	// regardless what privilege is required on relation.
 	b.ensureDescriptor(rel.GetID())
 	c := b.descCache[rel.GetID()]
-	b.ensureDescriptor(rel.GetParentSchemaID())
-	if b.descCache[rel.GetParentSchemaID()].hasOwnership {
-		c.hasOwnership = true
-		return c
+
+	// When postgres_compatible_ownership_checks is disabled (the default),
+	// schema owners implicitly own all relations in the schema, preserving
+	// pre-existing behavior.
+	if !sqlclustersettings.PostgresCompatibleOwnershipChecks.Get(
+		&b.clusterSettings.SV,
+	) {
+		b.ensureDescriptor(rel.GetParentSchemaID())
+		if b.descCache[rel.GetParentSchemaID()].hasOwnership {
+			c.hasOwnership = true
+			return c
+		}
 	}
 
 	err, found := c.privileges[p.RequiredPrivilege]
@@ -1176,6 +1183,15 @@ func (b *builderState) resolveRelation(
 	}
 	if err == nil {
 		return c
+	}
+	// Schema owners may DROP objects in the schema even when they do not own
+	// those objects.
+	if p.RequiredPrivilege == privilege.DROP {
+		b.ensureDescriptor(rel.GetParentSchemaID())
+		if b.descCache[rel.GetParentSchemaID()].hasOwnership {
+			c.privileges[p.RequiredPrivilege] = nil
+			return c
+		}
 	}
 	if p.RequiredPrivilege != privilege.CREATE {
 		panic(err)
