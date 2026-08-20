@@ -1161,6 +1161,13 @@ func TestLogic_impure(
 	runLogicTest(t, "impure")
 }
 
+func TestLogic_index_conflict_writes_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "index_conflict_writes_read_committed")
+}
+
 func TestLogic_index_join(
 	t *testing.T,
 ) {

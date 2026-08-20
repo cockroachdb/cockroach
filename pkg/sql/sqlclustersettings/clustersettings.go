@@ -225,6 +225,21 @@ var SkipBypassRLSRoleOptionCheck = settings.RegisterBoolSetting(
 		"BYPASSRLS privilege (GRANT SYSTEM BYPASSRLS) exempts a user from RLS",
 	false)
 
+// IndexConflictWritesEnabled controls whether mutations under weak
+// (non-serializable) isolation force writes to columns that are read—but not
+// otherwise written—to maintain a secondary index. These forced writes
+// materialize the write-write conflicts that prevent index corruption; see
+// maybeForceIndexConflictWrites and issue #173610.
+var IndexConflictWritesEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.mutations.index_conflict_writes.unsafe.enabled",
+	"if enabled, mutations under READ COMMITTED or REPEATABLE READ isolation force "+
+		"writes to unmodified column families that are read to maintain a secondary "+
+		"index. Disabling this allows a concurrent modification of such a family to "+
+		"go undetected, corrupting the index.",
+	true,
+	settings.WithUnsafe)
+
 // RequireUsagePrivilegeOnExternalConnections exists to revert the external
 // connection USAGE checks added in v26.4. Turning it off does not remove the
 // checks that were already in place. It is only a failsafe: nothing depends on
