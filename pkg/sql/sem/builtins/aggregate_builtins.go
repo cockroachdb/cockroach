@@ -5012,9 +5012,11 @@ func (a *jsonAggregate) Size() int64 {
 }
 
 // validateInputFractions validates that the inputs are expected and returns an
-// array containing either a single fraction or multiple fractions.
-func validateInputFractions(datum tree.Datum) ([]float64, bool, error) {
+// array containing either a single fraction or multiple fractions, along with
+// a parallel slice marking which positions were NULL.
+func validateInputFractions(datum tree.Datum) ([]float64, []bool, bool, error) {
 	fractions := make([]float64, 0)
+	nulls := make([]bool, 0)
 	singleInput := false
 
 	validate := func(fraction float64) error {
@@ -5029,22 +5031,31 @@ func validateInputFractions(datum tree.Datum) ([]float64, bool, error) {
 		fraction := float64(tree.MustBeDFloat(datum))
 		singleInput = true
 		if err := validate(fraction); err != nil {
-			return nil, false, err
+			return nil, nil, false, err
 		}
 		fractions = append(fractions, fraction)
+		nulls = append(nulls, false)
 	} else if t.Family() == types.ArrayFamily && t.ArrayContents().Family() == types.FloatFamily {
 		fractionsDatum := tree.MustBeDArray(datum)
 		for _, f := range fractionsDatum.Array {
+			if f == tree.DNull {
+				// Match PostgreSQL: NULL fractions are propagated to the
+				// output array rather than causing an internal error.
+				fractions = append(fractions, 0)
+				nulls = append(nulls, true)
+				continue
+			}
 			fraction := float64(tree.MustBeDFloat(f))
 			if err := validate(fraction); err != nil {
-				return nil, false, err
+				return nil, nil, false, err
 			}
 			fractions = append(fractions, fraction)
+			nulls = append(nulls, false)
 		}
 	} else {
 		panic(errors.AssertionFailedf("unexpected input type, %s", datum.ResolvedType()))
 	}
-	return fractions, singleInput, nil
+	return fractions, nulls, singleInput, nil
 }
 
 type percentileDiscAggregate struct {
@@ -5055,8 +5066,9 @@ type percentileDiscAggregate struct {
 	acc mon.BoundAccount
 	// We need singleInput to differentiate whether the input was a single
 	// fraction, or an array of fractions.
-	singleInput bool
-	fractions   []float64
+	singleInput    bool
+	fractions      []float64
+	fractionNulls  []bool
 }
 
 func newPercentileDiscAggregate(
@@ -5073,11 +5085,12 @@ func (a *percentileDiscAggregate) Add(
 	ctx context.Context, datum tree.Datum, others ...tree.Datum,
 ) error {
 	if len(a.fractions) == 0 && datum != tree.DNull {
-		fractions, singleInput, err := validateInputFractions(datum)
+		fractions, fractionNulls, singleInput, err := validateInputFractions(datum)
 		if err != nil {
 			return err
 		}
 		a.fractions = fractions
+		a.fractionNulls = fractionNulls
 		a.singleInput = singleInput
 	}
 
@@ -5101,7 +5114,13 @@ func (a *percentileDiscAggregate) Result() (tree.Datum, error) {
 
 	if len(a.fractions) > 0 {
 		res := tree.NewDArray(a.arr.ParamTyp)
-		for _, fraction := range a.fractions {
+		for i, fraction := range a.fractions {
+			if a.fractionNulls[i] {
+				if err := res.Append(tree.DNull); err != nil {
+					return nil, err
+				}
+				continue
+			}
 			// If zero fraction is specified then give the first index, otherwise account
 			// for row index which uses zero-based indexing.
 			if fraction == 0.0 {
@@ -5132,6 +5151,7 @@ func (a *percentileDiscAggregate) Reset(ctx context.Context) {
 	a.acc.Empty(ctx)
 	a.singleInput = false
 	a.fractions = a.fractions[:0]
+	a.fractionNulls = a.fractionNulls[:0]
 }
 
 // Close allows the aggregate to release the memory it requested during
@@ -5153,8 +5173,9 @@ type percentileContAggregate struct {
 	acc mon.BoundAccount
 	// We need singleInput to differentiate whether the input was a single
 	// fraction, or an array of fractions.
-	singleInput bool
-	fractions   []float64
+	singleInput    bool
+	fractions      []float64
+	fractionNulls  []bool
 }
 
 func newPercentileContAggregate(
@@ -5171,11 +5192,12 @@ func (a *percentileContAggregate) Add(
 	ctx context.Context, datum tree.Datum, others ...tree.Datum,
 ) error {
 	if len(a.fractions) == 0 && datum != tree.DNull {
-		fractions, singleInput, err := validateInputFractions(datum)
+		fractions, fractionNulls, singleInput, err := validateInputFractions(datum)
 		if err != nil {
 			return err
 		}
 		a.fractions = fractions
+		a.fractionNulls = fractionNulls
 		a.singleInput = singleInput
 	}
 
@@ -5210,7 +5232,13 @@ func (a *percentileContAggregate) Result() (tree.Datum, error) {
 	// If the input specified was a single fraction, then return a single value.
 	if len(a.fractions) > 0 {
 		res := tree.NewDArray(a.arr.ParamTyp)
-		for _, fraction := range a.fractions {
+		for i, fraction := range a.fractions {
+			if a.fractionNulls[i] {
+				if err := res.Append(tree.DNull); err != nil {
+					return nil, err
+				}
+				continue
+			}
 			rowNumber := 1.0 + (fraction * (float64(a.arr.Len()) - 1.0))
 			ceilRowNumber := int(math.Ceil(rowNumber))
 			floorRowNumber := int(math.Floor(rowNumber))
@@ -5261,6 +5289,7 @@ func (a *percentileContAggregate) Reset(ctx context.Context) {
 	a.acc.Empty(ctx)
 	a.singleInput = false
 	a.fractions = a.fractions[:0]
+	a.fractionNulls = a.fractionNulls[:0]
 }
 
 // Close allows the aggregate to release the memory it requested during
