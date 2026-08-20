@@ -3956,7 +3956,7 @@ func (d *DJSON) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 
 // IsMin implements the Datum interface.
 func (d *DJSON) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
-	return d.JSON == json.NullJSONValue
+	return d.JSON.Type() == json.ArrayJSONType && d.JSON.Len() == 0
 }
 
 // Max implements the Datum interface.
@@ -3966,7 +3966,7 @@ func (d *DJSON) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 
 // Min implements the Datum interface.
 func (d *DJSON) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return &DJSON{json.NullJSONValue}, true
+	return &DJSON{json.NewArrayBuilder(0).Build()}, true
 }
 
 // AmbiguousFormat implements the Datum interface.
