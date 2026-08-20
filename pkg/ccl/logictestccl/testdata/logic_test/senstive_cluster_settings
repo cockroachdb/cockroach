@@ -18,6 +18,24 @@ SET CLUSTER SETTING server.host_based_authentication.configuration =
 host all fake_user all cert map=crdb
 host all all all trust'
 
+# Verify that a sensitive setting whose value is bound via a placeholder is
+# applied with the real value. Statement-text formatting substitutes '*****'
+# for sensitive values, which must never bleed into the applied value.
+statement ok
+PREPARE set_sensitive_secret AS SET CLUSTER SETTING server.oidc_authentication.client_secret = $1
+
+statement ok
+EXECUTE set_sensitive_secret('fake_bound_client_secret')
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_secret
+----
+fake_bound_client_secret
+
+# Restore the value the rest of this test expects (again via placeholder).
+statement ok
+EXECUTE set_sensitive_secret('fake_client_secret')
+
 statement ok
 SET CLUSTER SETTING server.redact_sensitive_settings.enabled = false
 
@@ -290,3 +308,9 @@ SHOW CLUSTER SETTING server.host_based_authentication.configuration FOR TENANT [
 host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
 host all fake_user all cert map=crdb
 host all all all trust
+
+# Leave the host-cluster-root session with its own identity: a later
+# `user host-cluster-*` directive re-runs framework setup on this session,
+# which requires more than testuser's privileges.
+statement ok
+RESET ROLE

@@ -179,20 +179,6 @@ func (r DebugZipTableRegistry) GetTables() []string {
 	return tables
 }
 
-const queriesTableQueryUnredacted = `SELECT
-	query_id, txn_id, node_id, session_id, user_name, start,
-	crdb_internal.hide_sql_constants(query) AS query,
-	client_address, application_name, distributed, phase, full_scan
-FROM crdb_internal.%s`
-
-const sessionsTableQueryUnredacted = `SELECT
-	node_id, session_id, user_name, client_address, application_name,
-	crdb_internal.hide_sql_constants(active_queries) AS active_queries,
-	crdb_internal.hide_sql_constants(last_active_query) AS last_active_query,
-	num_txns_executed, session_start, active_query_start, kv_txn,
-	alloc_bytes, max_alloc_bytes, status, session_end, trace_id, goroutine_id
-FROM crdb_internal.%s`
-
 var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	"crdb_internal.cluster_contention_events": {
 		// `key` column contains the contended key, which may contain sensitive
@@ -247,7 +233,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_queries": {
-		customQueryUnredacted: fmt.Sprintf(queriesTableQueryUnredacted, "cluster_queries"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"query_id",
@@ -264,7 +249,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_sessions": {
-		customQueryUnredacted: fmt.Sprintf(sessionsTableQueryUnredacted, "cluster_sessions"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",
@@ -876,7 +860,6 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.node_queries": {
-		customQueryUnredacted: fmt.Sprintf(queriesTableQueryUnredacted, "node_queries"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"query_id",
@@ -913,7 +896,6 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
       ) ORDER BY node_id`,
 	},
 	"crdb_internal.node_sessions": {
-		customQueryUnredacted: fmt.Sprintf(sessionsTableQueryUnredacted, "node_sessions"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",
