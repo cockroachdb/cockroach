@@ -2558,5 +2558,20 @@ SELECT width_bucket(true, '{}'::BOOL[]);
 query error pgcode 42804 could not determine polymorphic type because input has type unknown
 SELECT width_bucket(true, '{}');
 
+query error thresholds array must not contain NULLs
+SELECT width_bucket(5, ARRAY[1, NULL::int, 7])
+
+query error thresholds array must not contain NULLs
+SELECT width_bucket(5, ARRAY[NULL::int])
+
+query error thresholds array must not contain NULLs
+SELECT width_bucket(5.5, ARRAY[1.5, NULL::float8, 7.5]::float8[])
+
+query I
+SELECT width_bucket(5, ARRAY[1, 3, 7]);
+----
+2
+
 query error pgcode 42804 could not determine polymorphic type because input has type unknown
 SELECT array_to_string('{}', 'foo');
+
