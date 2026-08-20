@@ -3681,6 +3681,14 @@ func (ex *connExecutor) convertRetryableErrorIntoUserVisibleError(
 // makeErrEvent takes an error and returns either an eventRetryableErr or an
 // eventNonRetryableErr, depending on the error type.
 func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event, fsm.EventPayload) {
+	// Any error attributed to a statement that may carry a secret may quote
+	// that secret, and the payload error becomes the transaction's recorded
+	// error. Mark it so that recording surfaces reduce it to its
+	// redaction-safe parts; the client still receives the full message.
+	if stmtMayHaveSecret(stmt) {
+		err = sqlstats.MarkSecretError(err)
+	}
+
 	// Check for MinTimestampBoundUnsatisfiableError errors.
 	// If this is detected, it means we are potentially able to retry with a lower
 	// MaxTimestampBound set if our MinTimestampBound was bumped up from the
