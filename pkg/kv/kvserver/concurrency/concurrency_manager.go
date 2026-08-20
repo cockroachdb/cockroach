@@ -184,7 +184,7 @@ var PushUsingCachedClockObservation = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.concurrency.push_pending_from_cache.enabled",
 	"whether intents from pending transactions can be resolved using cached clock observations",
-	true,
+	false,
 )
 
 // MaxLockFlushSize is the maximum number of lock bytes that we will attempt to
