@@ -803,6 +803,12 @@ var mathBuiltins = map[string]builtinDefinition{
 				}
 
 				for i, v := range thresholds.Array {
+					if v == tree.DNull {
+						return nil, pgerror.New(
+							pgcode.InvalidArgumentForWidthBucketFunction,
+							"thresholds array must not contain NULLs",
+						)
+					}
 					if cmp, err := operand.Compare(ctx, evalCtx, v); err != nil {
 						return tree.NewDInt(0), err
 					} else if cmp < 0 {
