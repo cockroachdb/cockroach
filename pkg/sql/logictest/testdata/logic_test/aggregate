@@ -3535,6 +3535,51 @@ SELECT
   percentile_disc(ARRAY[0.25, 0.50, 1.25]::float[]) WITHIN GROUP (ORDER BY f)
 FROM osagg
 
+# Test with NULL fractions: NULLs must be propagated to the output array
+# instead of causing an internal error (pgcode XX000).
+query T
+SELECT
+  percentile_disc(ARRAY[0.25::float8, NULL::float8]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+{0.05,NULL}
+
+query T
+SELECT
+  percentile_cont(ARRAY[0.25::float8, NULL::float8]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+{0.7625,NULL}
+
+query T
+SELECT
+  percentile_disc(ARRAY[0.25::float8, NULL::float8, 0.75::float8]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+{0.05,NULL,4}
+
+query T
+SELECT
+  percentile_cont(ARRAY[0.25::float8, NULL::float8, 0.75::float8]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+{0.7625,NULL,4.25}
+
+# NULL fractions in interval input as well
+query T
+SELECT
+  percentile_disc(ARRAY[0.25::float8, NULL::float8]) WITHIN GROUP (ORDER BY i)
+FROM osagg
+----
+{"1 mon",NULL}
+
+query T
+SELECT
+  percentile_cont(ARRAY[0.25::float8, NULL::float8]) WITHIN GROUP (ORDER BY i)
+FROM osagg
+----
+{"1 mon",NULL}
+
 query T
 SELECT
   percentile_cont(ARRAY[0.25, 0.5, 0.75]::float[]) WITHIN GROUP (ORDER BY i)
