@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -249,6 +250,13 @@ func makeStmtBundleBuilder(
 		flags: flags, db: db, p: p, ie: ie, requesterUsername: requesterUsername,
 		plan: plan, trace: trace, placeholders: placeholders, sv: sv,
 	}
+	// A bundle whose target statement may carry a secret is collected as if
+	// redacted, regardless of the requested mode: its raw text, placeholder
+	// arguments, execution trace, and error text can all carry the secret,
+	// and such a bundle loses little by being redacted.
+	if !b.flags.RedactValues && b.targetMayHaveSecret(stmtRawSQL) {
+		b.flags.RedactValues = true
+	}
 	err := b.buildPrettyStatement(stmtRawSQL)
 	if err != nil {
 		return stmtBundleBuilder{}, err
@@ -301,6 +309,22 @@ func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) error {
 		b.stmt = "-- no statement"
 	}
 	return nil
+}
+
+// targetMayHaveSecret reports whether the bundle's target statement may
+// carry a secret (see stmtMayHaveSecret). It uses the planned statement's
+// classification when available and otherwise re-parses the raw SQL (the
+// early-error case, where planning did not complete).
+func (b *stmtBundleBuilder) targetMayHaveSecret(stmtRawSQL string) bool {
+	if b.plan.stmt != nil && b.plan.stmt.AST != nil {
+		return !b.plan.stmt.NoSecret
+	}
+	parsed, err := parser.ParseOne(stmtRawSQL)
+	if err != nil {
+		// Text that cannot be parsed cannot be classified; fail closed.
+		return true
+	}
+	return stmtMayHaveSecret(parsed.AST)
 }
 
 // ReplacePlaceholdersWithValuesForBundle takes the contents of statement.sql

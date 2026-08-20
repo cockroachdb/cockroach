@@ -218,6 +218,13 @@ const StmtFingerprintPlaceholder = '_'
 // passwords unless FmtShowPasswords is specified.
 const PasswordSubstitution = "'*****'"
 
+// RedactedValueSubstitution is recorded in place of a bound placeholder value
+// that may carry a secret on observability surfaces. Unlike
+// PasswordSubstitution it is not a parsable SQL literal: it never appears
+// inside statement text, and it distinguishes a value the system withheld
+// from a literal '*****' a client could have bound.
+const RedactedValueSubstitution = "<redacted>"
+
 // ColumnLimit is the max character limit for columns in summarized queries
 const ColumnLimit = 15
 
