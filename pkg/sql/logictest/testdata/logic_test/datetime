@@ -2064,6 +2064,14 @@ make_date
 statement error pgcode 22008 pq: year value of 0 is not valid
 SELECT make_date(0, 11, 11)
 
+# Out-of-range month/day components must be rejected, matching PostgreSQL
+# (Go's time.Date silently normalizes them).
+statement error pgcode 22008 pq: date field value out of range
+SELECT make_date(2020, 13, 1)
+
+statement error pgcode 22008 pq: date field value out of range
+SELECT make_date(2020, 1, 32)
+
 subtest end
 
 subtest make_timestamp
@@ -2107,6 +2115,14 @@ select make_timestamp(1, 1, 1, 0, 0, 0.1234);
 
 statement error pgcode 22008 pq: year value of 0 is not valid
 SELECT make_timestamp(0, 7, 15, 8, 15, 23.5);
+
+# Out-of-range month/day/time components must be rejected, matching
+# PostgreSQL (Go's time.Date silently normalizes them).
+statement error pgcode 22008 pq: date field value out of range
+SELECT make_timestamp(2020, 13, 1, 0, 0, 0)
+
+statement error pgcode 22008 pq: time field value out of range
+SELECT make_timestamp(2020, 1, 1, 0, 60, 0)
 
 subtest end
 
