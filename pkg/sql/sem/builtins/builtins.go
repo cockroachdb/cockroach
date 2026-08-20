@@ -2727,6 +2727,14 @@ var regularBuiltins = map[string]builtinDefinition{
 				if year == 0 {
 					return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "year value of 0 is not valid")
 				}
+				// Validate month/day ranges, matching PostgreSQL. Go's
+				// time.Date silently normalizes out-of-range values (e.g.
+				// month 13 rolls over to the next year); PostgreSQL rejects
+				// them with an error.
+				if month < 1 || month > 12 || day < 1 || day > 31 {
+					return nil, pgerror.Newf(pgcode.DatetimeFieldOverflow,
+						"date field value out of range: %04d-%02d-%02d", year, month, day)
+				}
 				// PostgreSQL's make_date treats a negative year argument as
 				// "N BC" (no year zero in SQL semantics), but Go's time.Date
 				// uses astronomical numbering (year 0 = 1 BC). Shift negative
@@ -13138,6 +13146,14 @@ func makeTimestampStatementBuiltinOverload(withOutputTZ bool, withInputTZ bool) 
 			if year == 0 {
 				return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "year value of 0 is not valid")
 			}
+			// Validate month/day/hour/minute/second ranges, matching
+			// PostgreSQL. Go's time.Date silently normalizes out-of-range
+			// values (e.g. month 13 rolls over to the next year); PostgreSQL
+			// rejects them with an error.
+			if month < 1 || month > 12 || day < 1 || day > 31 {
+				return nil, pgerror.Newf(pgcode.DatetimeFieldOverflow,
+					"date field value out of range: %04d-%02d-%02d", year, month, day)
+			}
 			// PostgreSQL's make_timestamp(tz) treats a negative year argument
 			// as "N BC" (no year zero in SQL semantics), but Go's time.Date
 			// uses astronomical numbering (year 0 = 1 BC). Shift negative
@@ -13149,6 +13165,12 @@ func makeTimestampStatementBuiltinOverload(withOutputTZ bool, withInputTZ bool) 
 			hour := int(tree.MustBeDInt(args[3]))
 			min := int(tree.MustBeDInt(args[4]))
 			sec := float64(tree.MustBeDFloat(args[5]))
+			// PG accepts hour == 24 (it normalizes to the next day), but
+			// rejects minute/second values outside [0, 60). See #173599.
+			if hour < 0 || hour > 24 || min < 0 || min > 59 || sec < 0 || sec >= 60 {
+				return nil, pgerror.Newf(pgcode.DatetimeFieldOverflow,
+					"time field value out of range: %02d:%02d:%02d", hour, min, int(sec))
+			}
 			truncatedSec, remainderSec := math.Modf(sec)
 			nsec := remainderSec * float64(time.Second)
 			t := time.Date(year, month, day, hour, min, int(truncatedSec), int(nsec), location)
