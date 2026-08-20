@@ -2029,6 +2029,15 @@ type ExecutorTestingKnobs struct {
 	// for synchronizing statement execution.
 	BeforeExecute func(ctx context.Context, stmt string, descriptors *descs.Collection)
 
+	// AfterActiveQueryAdded is called once a statement has been registered on
+	// the session's active-query list, before execution proceeds. sql is the
+	// registered query text (constants-hidden for an unresolved EXECUTE). It
+	// reaches statements that never make it to BeforeExecute - e.g. an EXECUTE
+	// with a placeholder argument, which is rejected during resolution - so
+	// tests can inspect the active-query surfaces while such a statement is
+	// registered.
+	AfterActiveQueryAdded func(sql string)
+
 	// AfterExecute is like StatementFilter, but it runs in the same goroutine of the
 	// statement.
 	AfterExecute func(ctx context.Context, stmt string, isInternal bool, err error)
@@ -2764,6 +2773,14 @@ type queryMeta struct {
 	// If set, this query will not be reported as part of SHOW QUERIES. This is
 	// set based on the statement implementing tree.HiddenFromShowQueries.
 	hidden bool
+
+	// noSecret indicates that the query is known not to carry a secret in
+	// its raw text or bound placeholder values (see stmtMayHaveSecret). Set
+	// at registration by addActiveQuery, and later by
+	// restoreActiveQueryText once an EXECUTE's resolved target proves
+	// secret-free. While unset, serialize redacts the query's placeholder
+	// values.
+	noSecret bool
 
 	progressAtomic uint64
 

@@ -1949,6 +1949,11 @@ type connExecutor struct {
 		// query that ran on this session.
 		LastActiveQuery tree.Statement
 
+		// LastActiveQueryNoSecret is the final queryMeta.noSecret value of
+		// the query in LastActiveQuery. While unset, serialize renders the
+		// query with constants hidden.
+		LastActiveQueryNoSecret bool
+
 		// IdleInSessionTimeout is returned by the AfterFunc call that cancels the
 		// session if the idle time exceeds the idle_in_session_timeout.
 		IdleInSessionTimeout timeout
@@ -3104,7 +3109,7 @@ func (ex *connExecutor) execCopyOut(
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
 	queryID := ex.server.cfg.GenerateID()
-	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
+	ex.addActiveQuery(cmd.ParsedStmt, !stmtMayHaveSecret(cmd.ParsedStmt.AST), nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1,
 		ex.sessionData().Database, ex.sessionData().ApplicationName)
 
@@ -3294,6 +3299,7 @@ func (ex *connExecutor) setCopyLoggingFields(stmt statements.Statement[tree.Stat
 	// These fields need to be set for logging purposes.
 	ex.planner.stmt = Statement{
 		Statement: stmt,
+		NoSecret:  !stmtMayHaveSecret(stmt.AST),
 	}
 	ann := tree.MakeAnnotations(stmt.NumAnnotations)
 	ex.planner.extendedEvalCtx.Context.Annotations = &ann
@@ -3320,7 +3326,7 @@ func (ex *connExecutor) execCopyIn(
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
 	queryID := ex.server.cfg.GenerateID()
-	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
+	ex.addActiveQuery(cmd.ParsedStmt, !stmtMayHaveSecret(cmd.ParsedStmt.AST), nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1,
 		ex.sessionData().Database, ex.sessionData().ApplicationName)
 
@@ -4704,13 +4710,22 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			continue
 		}
 		sqlNoConstants := truncateSQL(tree.FormatStatementHideConstants(parsed.AST))
+		// A query that may carry a secret was registered with its text
+		// constants-hidden (see addActiveQuery), so stmt.SQL is safe to
+		// render as-is; its bound placeholder values may carry the secret,
+		// so redact them while preserving arity.
+		hidePlaceholders := !query.noSecret
 		nPlaceholders := 0
 		if query.placeholders != nil {
 			nPlaceholders = len(query.placeholders.Values)
 		}
 		placeholders := make([]string, nPlaceholders)
 		for i := range placeholders {
-			placeholders[i] = tree.AsStringWithFlags(query.placeholders.Values[i], tree.FmtSimple)
+			if hidePlaceholders {
+				placeholders[i] = tree.RedactedValueSubstitution
+			} else {
+				placeholders[i] = tree.AsStringWithFlags(query.placeholders.Values[i], tree.FmtSimple)
+			}
 		}
 		sql := truncateSQL(query.stmt.SQL)
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
@@ -4744,6 +4759,11 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	if ex.mu.LastActiveQuery != nil {
 		lastActiveQuery = truncateSQL(ex.mu.LastActiveQuery.String())
 		lastActiveQueryNoConstants = truncateSQL(tree.FormatStatementHideConstants(ex.mu.LastActiveQuery))
+		// If the query ended still classified as possibly carrying a secret,
+		// its raw text may carry it; render with constants hidden.
+		if !ex.mu.LastActiveQueryNoSecret {
+			lastActiveQuery = lastActiveQueryNoConstants
+		}
 	}
 	status := serverpb.Session_IDLE
 	if len(activeQueries) > 0 {
