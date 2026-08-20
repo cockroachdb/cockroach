@@ -1,0 +1,97 @@
+# Bound placeholder values of credential-class statements must not be
+# recorded in sampled_query events: role passwords (CREATE ROLE ... WITH
+# PASSWORD $1) and sensitive cluster setting values (SET CLUSTER SETTING
+# <sensitive> = $1) are substituted with '<redacted>' when the common SQL
+# event details are built. Bound values of non-sensitive statements are
+# recorded (as redactable strings).
+#
+# Statement fingerprint IDs are stubbed: their hash inputs differ across
+# versions, and the IDs are not what is under test here.
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
+----
+
+subtest sensitive_cluster_setting
+
+spy-sql
+PREPARE set_sensitive AS SET CLUSTER SETTING server.oidc_authentication.client_secret = $1
+----
+
+spy-sql stubStatementFingerprintId=2089211486577459310
+EXECUTE set_sensitive('hunter2-telemetry-secret')
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlaceholderValues": [
+		"‹\u003credacted\u003e›"
+	],
+	"PlanGist": "Ais=",
+	"SkippedQueries": 1,
+	"Statement": "SET CLUSTER SETTING \"server.oidc_authentication.client_secret\" = '*****'",
+	"StatementFingerprintID": "2089211486577459310",
+	"StmtPosInTxn": 1,
+	"Tag": "SET CLUSTER SETTING",
+	"User": "root"
+}
+
+subtest end
+
+subtest role_password
+
+spy-sql
+PREPARE create_pwrole AS CREATE ROLE pwrole WITH PASSWORD $1
+----
+
+spy-sql stubStatementFingerprintId=9877533781049855100
+EXECUTE create_pwrole('hunter2-telemetry-role-secret')
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlaceholderValues": [
+		"‹\u003credacted\u003e›"
+	],
+	"PlanGist": "Ais=",
+	"SkippedQueries": 1,
+	"Statement": "CREATE ROLE pwrole WITH PASSWORD '*****'",
+	"StatementFingerprintID": "9877533781049855100",
+	"StmtPosInTxn": 1,
+	"Tag": "CREATE ROLE",
+	"User": "root"
+}
+
+subtest end
+
+subtest non_sensitive_control
+
+spy-sql
+PREPARE set_label AS SET CLUSTER SETTING cluster.label = $1
+----
+
+spy-sql stubStatementFingerprintId=5751906557187617982
+EXECUTE set_label('some label')
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlaceholderValues": [
+		"‹'some label'›"
+	],
+	"PlanGist": "Ais=",
+	"SkippedQueries": 1,
+	"Statement": "SET CLUSTER SETTING \"cluster.label\" = $1",
+	"StatementFingerprintID": "5751906557187617982",
+	"StmtPosInTxn": 1,
+	"Tag": "SET CLUSTER SETTING",
+	"User": "root"
+}
+
+subtest end

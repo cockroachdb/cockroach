@@ -546,6 +546,15 @@ PREPARE alter_pwrole AS ALTER ROLE pwrole WITH PASSWORD $1
 statement ok
 EXECUTE alter_pwrole('hunter2-role-secret-2')
 
+# When a statement carries a secret, every bound value is substituted, not
+# just the secret positions: the VALID UNTIL argument below is hidden along
+# with the password.
+statement ok
+PREPARE alter_pwrole_until AS ALTER ROLE pwrole WITH PASSWORD $1 VALID UNTIL $2
+
+statement ok
+EXECUTE alter_pwrole_until('hunter2-role-secret-3', '2035-01-01')
+
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'TxnReadTimestamp'
 FROM system.eventlog
@@ -553,8 +562,35 @@ WHERE "eventType" IN ('create_role', 'alter_role')
 AND info LIKE '%pwrole%'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "create_role", "PlaceholderValues": ["'*****'"], "RoleName": "pwrole", "Statement": "CREATE ROLE pwrole WITH PASSWORD '*****'", "Tag": "CREATE ROLE", "User": "root"}
-1  {"EventType": "alter_role", "Options": ["PASSWORD"], "PlaceholderValues": ["'*****'"], "RoleName": "pwrole", "Statement": "ALTER ROLE pwrole WITH PASSWORD '*****'", "Tag": "ALTER ROLE", "User": "root"}
+1  {"EventType": "create_role", "PlaceholderValues": ["<redacted>"], "RoleName": "pwrole", "Statement": "CREATE ROLE pwrole WITH PASSWORD '*****'", "Tag": "CREATE ROLE", "User": "root"}
+1  {"EventType": "alter_role", "Options": ["PASSWORD"], "PlaceholderValues": ["<redacted>"], "RoleName": "pwrole", "Statement": "ALTER ROLE pwrole WITH PASSWORD '*****'", "Tag": "ALTER ROLE", "User": "root"}
+1  {"EventType": "alter_role", "Options": ["PASSWORD", "VALID UNTIL"], "PlaceholderValues": ["<redacted>", "<redacted>"], "RoleName": "pwrole", "Statement": "ALTER ROLE pwrole WITH PASSWORD '*****' VALID UNTIL $2", "Tag": "ALTER ROLE", "User": "root"}
+
+# A sensitive setting value bound via a placeholder is likewise substituted
+# in the recorded placeholder values. (Contrast with the cluster.label event
+# above, where the bound value of a non-sensitive setting is recorded
+# verbatim.) cloudstorage.http.custom_ca is the sensitive setting here
+# because it is registered in the base (non-CCL) binary that runs this test.
+##################
+
+statement ok
+PREPARE set_sensitive AS SET CLUSTER SETTING cloudstorage.http.custom_ca = $1
+
+statement ok
+EXECUTE set_sensitive('hunter2-bound-secret')
+
+statement ok
+RESET CLUSTER SETTING cloudstorage.http.custom_ca
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'TxnReadTimestamp'
+FROM system.eventlog
+WHERE "eventType" = 'set_cluster_setting'
+AND info LIKE '%custom_ca%'
+AND info::JSONB ? 'PlaceholderValues'
+ORDER BY "timestamp", info
+----
+1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["<redacted>"], "SettingName": "cloudstorage.http.custom_ca", "Statement": "SET CLUSTER SETTING \"cloudstorage.http.custom_ca\" = '*****'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "<redacted>"}
 
 # Set and unset zone configs
 ##################
