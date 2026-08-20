@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1255,6 +1256,140 @@ func (mb *mutationBuilder) mutationColumnIDs() opt.ColSet {
 		}
 	}
 	return cols
+}
+
+// maybeForceIndexConflictWrites materializes write-write conflicts for
+// secondary index maintenance under weak (non-serializable) isolation.
+//
+// Maintaining a secondary index requires reading every column its entries are
+// built from: the index's key and stored columns, plus a partial index's
+// predicate columns. When one of those columns lives in a column family the
+// mutation does not otherwise write, that read is guarded only by a best-effort
+// unreplicated lock, which can be lost across a range split, lease transfer, or
+// merge. Weak isolation has no read refresh to catch a concurrent modification,
+// so the mutation can build its index entry from a stale value, leaving the
+// index inconsistent with the primary index (issue #173610). SERIALIZABLE is
+// safe because its read refresh detects the change.
+//
+// Usually the index writes themselves serialize the two transactions, because
+// both touch the old entry's key. The gap is entries that do not exist: a
+// partial index has none for a row outside its predicate, and — since index
+// entries are split per column family and an all-NULL family produces no KV at
+// all — even a full index has none for a family whose stored columns are all
+// NULL. For example, given
+//
+//	CREATE TABLE t (x INT PRIMARY KEY, y INT, z INT, w INT,
+//	                INDEX (y) STORING (z, w),
+//	                FAMILY (x), FAMILY (y), FAMILY (z), FAMILY (w))
+//
+// and row (1, 2, 3, NULL), an UPDATE of y reads w, finds NULL, and writes no
+// w-family index entry under either the old or the new key, while a concurrent
+// UPDATE of w to 7 writes the w-family entry under the old key. The two share
+// no KV, so both commit and the index keeps an orphan entry under y = 2.
+//
+// To close the gap, the mutation also writes the columns it reads for index
+// maintenance. Adding a column to the update set makes the row updater emit a
+// Put — or a Del tombstone for a family that holds no value — for that column's
+// family, which is a replicated write intent even when no live KV exists, so a
+// concurrent writer of the same family conflicts.
+//
+// A single pass suffices because a forced write is a value-preserving
+// self-assignment of the fetched value. It makes
+// SimplifyPartialIndexProjections and the row updater treat every index
+// containing a forced column as "maintained", but it never moves the row into
+// or out of an index nor changes any entry's key or stored values, so the
+// updater either elides the identical entry or rewrites it in place. Only the
+// columns the mutation actually changes pull indexes into the maintained-index
+// check below.
+//
+// Four kinds of column are left out:
+//
+//   - Columns the mutation already writes, whose families are covered already.
+//   - Primary key columns: a concurrent change to one rewrites the entire row,
+//     which already conflicts.
+//   - Computed columns: a computed value cannot change unless a concurrent
+//     writer also writes a column it references, and a virtual computed column
+//     belongs to no family and so cannot be written at all.
+//   - DeleteOnly columns, which by definition may only be written by a delete.
+//     This can leave a family unprotected while a column is dropped alongside
+//     an index that references it, but the index is not visible to concurrent
+//     readers during that window.
+func (mb *mutationBuilder) maybeForceIndexConflictWrites() {
+	// Only weak isolation levels are affected; SERIALIZABLE is protected by read
+	// refreshes.
+	if mb.b.evalCtx.TxnIsoLevel == isolation.Serializable {
+		return
+	}
+	if !sqlclustersettings.IndexConflictWritesEnabled.Get(&mb.b.evalCtx.Settings.SV) {
+		return
+	}
+	// With a single column family the whole row is one KV, so any concurrent
+	// writer of the row already conflicts with this mutation.
+	if mb.tab.FamilyCount() == 1 {
+		return
+	}
+
+	// updatedCols holds the target table columns the mutation writes. Forced
+	// writes are deliberately kept out of it so that they cannot pull further
+	// indexes into the maintained-index check below.
+	var updatedCols opt.ColSet
+	for ord, colID := range mb.updateColIDs {
+		if colID != 0 {
+			updatedCols.Add(mb.tabID.ColumnID(ord))
+		}
+	}
+	if updatedCols.Empty() {
+		return
+	}
+
+	var deleteOnlyCols opt.ColSet
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+		if mb.tab.Column(i).Kind() == cat.DeleteOnly {
+			deleteOnlyCols.Add(mb.tabID.ColumnID(i))
+		}
+	}
+
+	// The primary index is excluded: maintaining it reads nothing beyond the
+	// families the mutation already writes.
+	tabMeta := mb.md.TableMeta(mb.tabID)
+	var forcedCols opt.ColSet
+	for i, n := cat.PrimaryIndex+1, mb.tab.DeletableIndexCount(); i < n; i++ {
+		indexCols := tabMeta.IndexColumnsMapInverted(i)
+		if pred, isPartial := tabMeta.PartialIndexPredicate(i); isPartial {
+			indexCols.UnionWith(pred.(*memo.FiltersExpr).OuterCols())
+		}
+		// The mutation maintains this index only if it writes one of the columns
+		// read to maintain it; when it does, a concurrent modification of any of
+		// them must conflict.
+		if indexCols.Intersects(updatedCols) {
+			// Drop DeleteOnly columns only after the test above. A DeleteOnly column
+			// carrying an ON UPDATE expression is in the update set, so removing one
+			// first could make an index the mutation really does maintain look
+			// untouched.
+			indexCols.DifferenceWith(deleteOnlyCols)
+			forcedCols.UnionWith(indexCols)
+		}
+	}
+	forcedCols.DifferenceWith(updatedCols)
+	forcedCols.DifferenceWith(tabMeta.IndexKeyColumns(cat.PrimaryIndex))
+
+	forcedCols.ForEach(func(colID opt.ColumnID) {
+		ord := mb.tabID.ColumnOrdinal(colID)
+		if mb.tab.Column(ord).IsComputed() {
+			return
+		}
+		// A missing fetch column would make the assignment below a silent no-op,
+		// costing the conflict write with no error and no visible plan change.
+		// buildInputForUpdate scans the table including mutation columns, and the
+		// only columns setFetchColIDs leaves out are system columns, which cannot
+		// be index columns.
+		if mb.fetchColIDs[ord] == 0 {
+			panic(errors.AssertionFailedf(
+				"no fetch column for forced index conflict write on column %d", ord,
+			))
+		}
+		mb.updateColIDs[ord] = mb.fetchColIDs[ord]
+	})
 }
 
 // projectPartialIndexPutCols builds a Project that synthesizes boolean PUT

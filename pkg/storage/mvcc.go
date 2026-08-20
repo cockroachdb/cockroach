@@ -2032,7 +2032,14 @@ func MVCCDelete(
 	buf := newPutBuffer()
 	defer buf.release()
 
-	// TODO(yuzefovich): can we avoid the put if the key does not exist?
+	// Writing a tombstone even when the key does not exist is depended upon by
+	// SQL. A row's column families are separate keys, and a family whose columns
+	// are all NULL has no key at all. Under weak isolation the optimizer forces a
+	// write of such a family so that the tombstone materializes a write-write
+	// conflict with a concurrent writer of it; without that conflict a secondary
+	// index can be left inconsistent with the primary index. See
+	// maybeForceIndexConflictWrites in pkg/sql/opt/optbuilder/mutation_builder.go
+	// and cockroachdb/cockroach#173610.
 	return mvccPutInternal(
 		ctx, rw, iter, ltScanner, key, timestamp, noValue, buf, nil, opts)
 }

@@ -594,6 +594,12 @@ func TestMemoIsStale(t *testing.T) {
 	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, true)
 	notStale()
 
+	// Stale index_conflict_writes.unsafe.enabled.
+	sqlclustersettings.IndexConflictWritesEnabled.Override(ctx, &evalCtx.Settings.SV, false)
+	stale()
+	sqlclustersettings.IndexConflictWritesEnabled.Override(ctx, &evalCtx.Settings.SV, true)
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)

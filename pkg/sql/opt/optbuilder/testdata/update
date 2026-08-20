@@ -1931,6 +1931,620 @@ UPDATE multi_col_fam_checks SET d = 4, e = 5
 error (0A000): unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
 
 # ------------------------------------------------------------------------------
+# Test forced column-family writes for secondary indexes under weak isolation
+# (issue #173610). When a mutation maintains a secondary index, the columns read
+# to build its entries must be written even if the mutation would not otherwise
+# write them, so that concurrent modifications of their families conflict rather
+# than silently corrupting the index.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE part_idx_fam (
+  id     INT PRIMARY KEY,
+  status STRING NOT NULL,
+  claim  STRING,
+  data   STRING,
+  FAMILY f_status (id, status),
+  FAMILY f_claim (claim),
+  FAMILY f_data (data),
+  INDEX idx (claim, status) WHERE status = 'running'
+)
+----
+
+# Under serializable, moving a row into the partial index does not force a write
+# of the claim column family (read refreshes protect the read).
+build isolation=Serializable
+UPDATE part_idx_fam SET status = 'running' WHERE id = 1
+----
+update part_idx_fam
+ ├── columns: <none>
+ ├── fetch columns: id:7 status:8 claim:9 data:10
+ ├── update-mapping:
+ │    └── status_new:13 => status:2
+ ├── partial index put columns: partial_index_put1:14
+ ├── partial index del columns: partial_index_del1:15
+ └── project
+      ├── columns: partial_index_put1:14!null partial_index_del1:15!null id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12 status_new:13!null
+      ├── project
+      │    ├── columns: status_new:13!null id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── scan part_idx_fam
+      │    │    │    ├── columns: id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── idx: filters
+      │    │    │    │         └── status:8 = 'running'
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         └── 'running' [as=status_new:13]
+      └── projections
+           ├── status_new:13 = 'running' [as=partial_index_put1:14]
+           └── status:8 = 'running' [as=partial_index_del1:15]
+
+# Under read committed, the claim column family (read to build the index entry)
+# is force-written via a self-assignment, so the update-mapping includes claim.
+build isolation=ReadCommitted
+UPDATE part_idx_fam SET status = 'running' WHERE id = 1
+----
+update part_idx_fam
+ ├── columns: <none>
+ ├── fetch columns: id:7 status:8 claim:9 data:10
+ ├── update-mapping:
+ │    ├── status_new:13 => status:2
+ │    └── claim:9 => claim:3
+ ├── partial index put columns: partial_index_put1:14
+ ├── partial index del columns: partial_index_del1:15
+ └── project
+      ├── columns: partial_index_put1:14!null partial_index_del1:15!null id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12 status_new:13!null
+      ├── project
+      │    ├── columns: status_new:13!null id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── scan part_idx_fam
+      │    │    │    ├── columns: id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── idx: filters
+      │    │    │    │         └── status:8 = 'running'
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         └── 'running' [as=status_new:13]
+      └── projections
+           ├── status_new:13 = 'running' [as=partial_index_put1:14]
+           └── status:8 = 'running' [as=partial_index_del1:15]
+
+# Snapshot (REPEATABLE READ) behaves like read committed.
+build isolation=Snapshot
+UPDATE part_idx_fam SET status = 'running' WHERE id = 1
+----
+update part_idx_fam
+ ├── columns: <none>
+ ├── fetch columns: id:7 status:8 claim:9 data:10
+ ├── update-mapping:
+ │    ├── status_new:13 => status:2
+ │    └── claim:9 => claim:3
+ ├── partial index put columns: partial_index_put1:14
+ ├── partial index del columns: partial_index_del1:15
+ └── project
+      ├── columns: partial_index_put1:14!null partial_index_del1:15!null id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12 status_new:13!null
+      ├── project
+      │    ├── columns: status_new:13!null id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── scan part_idx_fam
+      │    │    │    ├── columns: id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── idx: filters
+      │    │    │    │         └── status:8 = 'running'
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         └── 'running' [as=status_new:13]
+      └── projections
+           ├── status_new:13 = 'running' [as=partial_index_put1:14]
+           └── status:8 = 'running' [as=partial_index_del1:15]
+
+# When the mutation already writes the claim family, no extra write is forced.
+build isolation=ReadCommitted
+UPDATE part_idx_fam SET status = 'running', claim = 'x' WHERE id = 1
+----
+update part_idx_fam
+ ├── columns: <none>
+ ├── fetch columns: id:7 status:8 claim:9 data:10
+ ├── update-mapping:
+ │    ├── status_new:13 => status:2
+ │    └── claim_new:14 => claim:3
+ ├── partial index put columns: partial_index_put1:15
+ ├── partial index del columns: partial_index_del1:16
+ └── project
+      ├── columns: partial_index_put1:15!null partial_index_del1:16!null id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12 status_new:13!null claim_new:14!null
+      ├── project
+      │    ├── columns: status_new:13!null claim_new:14!null id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── scan part_idx_fam
+      │    │    │    ├── columns: id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── idx: filters
+      │    │    │    │         └── status:8 = 'running'
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         ├── 'running' [as=status_new:13]
+      │         └── 'x' [as=claim_new:14]
+      └── projections
+           ├── status_new:13 = 'running' [as=partial_index_put1:15]
+           └── status:8 = 'running' [as=partial_index_del1:16]
+
+# When the mutation does not maintain the partial index (data is neither an index
+# nor a predicate column), no write is forced.
+build isolation=ReadCommitted
+UPDATE part_idx_fam SET data = 'x' WHERE id = 1
+----
+update part_idx_fam
+ ├── columns: <none>
+ ├── fetch columns: id:7 status:8 claim:9 data:10
+ ├── update-mapping:
+ │    └── data_new:13 => data:4
+ ├── partial index put columns: partial_index_put1:14
+ ├── partial index del columns: partial_index_put1:14
+ └── project
+      ├── columns: partial_index_put1:14!null id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12 data_new:13!null
+      ├── project
+      │    ├── columns: data_new:13!null id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── scan part_idx_fam
+      │    │    │    ├── columns: id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── idx: filters
+      │    │    │    │         └── status:8 = 'running'
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         └── 'x' [as=data_new:13]
+      └── projections
+           └── status:8 = 'running' [as=partial_index_put1:14]
+
+exec-ddl
+CREATE TABLE part_idx_inverted (
+  id INT PRIMARY KEY,
+  b  INT,
+  j  JSONB,
+  FAMILY f_id (id, b),
+  FAMILY f_j (j),
+  INVERTED INDEX idx (j) WHERE b > 0
+)
+----
+
+# The partial inverted index's source column j lives in an otherwise-unwritten
+# family; building the inverted entries reads j, so under read committed j's
+# family is force-written. IndexColumnsMapInverted maps the inverted key column
+# to its source column j.
+build isolation=ReadCommitted
+UPDATE part_idx_inverted SET b = 5 WHERE id = 1
+----
+update part_idx_inverted
+ ├── columns: <none>
+ ├── fetch columns: id:7 b:8 j:9
+ ├── update-mapping:
+ │    ├── b_new:13 => b:2
+ │    └── j:9 => j:3
+ ├── partial index put columns: partial_index_put1:14
+ ├── partial index del columns: partial_index_del1:15
+ └── project
+      ├── columns: partial_index_put1:14!null partial_index_del1:15 id:7!null b:8 j:9 crdb_internal_mvcc_timestamp:10 tableoid:11 b_new:13!null
+      ├── project
+      │    ├── columns: b_new:13!null id:7!null b:8 j:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    ├── select
+      │    │    ├── columns: id:7!null b:8 j:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    ├── scan part_idx_inverted
+      │    │    │    ├── columns: id:7!null b:8 j:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── idx: filters
+      │    │    │    │         └── b:8 > 0
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         └── 5 [as=b_new:13]
+      └── projections
+           ├── b_new:13 > 0 [as=partial_index_put1:14]
+           └── b:8 > 0 [as=partial_index_del1:15]
+
+# Under serializable, no families are force-written.
+build isolation=Serializable
+UPDATE part_idx_inverted SET b = 5 WHERE id = 1
+----
+update part_idx_inverted
+ ├── columns: <none>
+ ├── fetch columns: id:7 b:8 j:9
+ ├── update-mapping:
+ │    └── b_new:13 => b:2
+ ├── partial index put columns: partial_index_put1:14
+ ├── partial index del columns: partial_index_del1:15
+ └── project
+      ├── columns: partial_index_put1:14!null partial_index_del1:15 id:7!null b:8 j:9 crdb_internal_mvcc_timestamp:10 tableoid:11 b_new:13!null
+      ├── project
+      │    ├── columns: b_new:13!null id:7!null b:8 j:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    ├── select
+      │    │    ├── columns: id:7!null b:8 j:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    ├── scan part_idx_inverted
+      │    │    │    ├── columns: id:7!null b:8 j:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── idx: filters
+      │    │    │    │         └── b:8 > 0
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         └── 5 [as=b_new:13]
+      └── projections
+           ├── b_new:13 > 0 [as=partial_index_put1:14]
+           └── b:8 > 0 [as=partial_index_del1:15]
+
+exec-ddl
+CREATE TABLE part_idx_cascade (
+  id     INT PRIMARY KEY,
+  status STRING NOT NULL,
+  claim  STRING,
+  data   STRING,
+  FAMILY f_status (id, status),
+  FAMILY f_claim (claim),
+  FAMILY f_data (data),
+  INDEX idx (claim, status) WHERE status = 'running',
+  INDEX idx2 (claim) WHERE data = 'x'
+)
+----
+
+# Forcing a write to the claim family (for idx) makes the normalization rule treat
+# idx2 (keyed on claim) as maintained, so its PUT/DEL columns are still projected.
+# But the forced claim write is a value-preserving self-assignment: it does not
+# move the row into or out of idx2, so idx2's predicate column data (in yet another
+# unwritten family) is not force-written. Only claim ends up in the update-mapping.
+build isolation=ReadCommitted
+UPDATE part_idx_cascade SET status = 'running' WHERE id = 1
+----
+update part_idx_cascade
+ ├── columns: <none>
+ ├── fetch columns: id:7 status:8 claim:9 data:10
+ ├── update-mapping:
+ │    ├── status_new:13 => status:2
+ │    └── claim:9 => claim:3
+ ├── partial index put columns: partial_index_put1:14 partial_index_put2:16
+ ├── partial index del columns: partial_index_del1:15 partial_index_put2:16
+ └── project
+      ├── columns: partial_index_put1:14!null partial_index_del1:15!null partial_index_put2:16 id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12 status_new:13!null
+      ├── project
+      │    ├── columns: status_new:13!null id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── scan part_idx_cascade
+      │    │    │    ├── columns: id:7!null status:8!null claim:9 data:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── partial index predicates
+      │    │    │    │    ├── idx: filters
+      │    │    │    │    │    └── status:8 = 'running'
+      │    │    │    │    └── idx2: filters
+      │    │    │    │         └── data:10 = 'x'
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         └── 'running' [as=status_new:13]
+      └── projections
+           ├── status_new:13 = 'running' [as=partial_index_put1:14]
+           ├── status:8 = 'running' [as=partial_index_del1:15]
+           └── data:10 = 'x' [as=partial_index_put2:16]
+
+exec-ddl
+CREATE TABLE part_idx_storing (
+  id INT PRIMARY KEY,
+  a  INT,
+  b  INT,
+  c  INT,
+  FAMILY f_a (id, a),
+  FAMILY f_b (b),
+  FAMILY f_c (c),
+  INDEX idx (a) STORING (c) WHERE b > 0
+)
+----
+
+# Moving a row into the partial index reads both the key column a and the STORING
+# column c to build the entry. Under read committed both families (a and c) are
+# force-written, not just the key family.
+build isolation=ReadCommitted
+UPDATE part_idx_storing SET b = 5 WHERE id = 1
+----
+update part_idx_storing
+ ├── columns: <none>
+ ├── fetch columns: id:7 a:8 b:9 c:10
+ ├── update-mapping:
+ │    ├── a:8 => a:2
+ │    ├── b_new:13 => b:3
+ │    └── c:10 => c:4
+ ├── partial index put columns: partial_index_put1:14
+ ├── partial index del columns: partial_index_del1:15
+ └── project
+      ├── columns: partial_index_put1:14!null partial_index_del1:15 id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12 b_new:13!null
+      ├── project
+      │    ├── columns: b_new:13!null id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── scan part_idx_storing
+      │    │    │    ├── columns: id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── idx: filters
+      │    │    │    │         └── b:9 > 0
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         └── 5 [as=b_new:13]
+      └── projections
+           ├── b_new:13 > 0 [as=partial_index_put1:14]
+           └── b:9 > 0 [as=partial_index_del1:15]
+
+# Under serializable, no families are force-written.
+build isolation=Serializable
+UPDATE part_idx_storing SET b = 5 WHERE id = 1
+----
+update part_idx_storing
+ ├── columns: <none>
+ ├── fetch columns: id:7 a:8 b:9 c:10
+ ├── update-mapping:
+ │    └── b_new:13 => b:3
+ ├── partial index put columns: partial_index_put1:14
+ ├── partial index del columns: partial_index_del1:15
+ └── project
+      ├── columns: partial_index_put1:14!null partial_index_del1:15 id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12 b_new:13!null
+      ├── project
+      │    ├── columns: b_new:13!null id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── scan part_idx_storing
+      │    │    │    ├── columns: id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── idx: filters
+      │    │    │    │         └── b:9 > 0
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         └── 5 [as=b_new:13]
+      └── projections
+           ├── b_new:13 > 0 [as=partial_index_put1:14]
+           └── b:9 > 0 [as=partial_index_del1:15]
+
+# Updating only the key column a still maintains the index; the predicate
+# column b and the STORING column c are read to build the entry, so their
+# families are force-written even though neither is updated.
+build isolation=ReadCommitted
+UPDATE part_idx_storing SET a = 5 WHERE id = 1
+----
+update part_idx_storing
+ ├── columns: <none>
+ ├── fetch columns: id:7 a:8 b:9 c:10
+ ├── update-mapping:
+ │    ├── a_new:13 => a:2
+ │    ├── b:9 => b:3
+ │    └── c:10 => c:4
+ ├── partial index put columns: partial_index_put1:14
+ ├── partial index del columns: partial_index_put1:14
+ └── project
+      ├── columns: partial_index_put1:14 id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12 a_new:13!null
+      ├── project
+      │    ├── columns: a_new:13!null id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── scan part_idx_storing
+      │    │    │    ├── columns: id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── idx: filters
+      │    │    │    │         └── b:9 > 0
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         └── 5 [as=a_new:13]
+      └── projections
+           └── b:9 > 0 [as=partial_index_put1:14]
+
+exec-ddl
+CREATE TABLE full_idx_fam (
+  id INT PRIMARY KEY,
+  a  INT,
+  b  INT,
+  c  INT,
+  FAMILY f_id (id),
+  FAMILY f_a (a),
+  FAMILY f_b (b),
+  FAMILY f_c (c),
+  INDEX idx (a) STORING (b)
+)
+----
+
+# A full (non-partial) secondary index needs the same treatment: changing the key
+# column a reads the STORING column b to build the new entry, and when b's family
+# holds no value the index writes alone do not serialize with a concurrent writer
+# of b. Note that id is not force-written: a concurrent change to a primary key
+# column rewrites the whole row, which already conflicts. Nor is c, which the
+# index does not read.
+build isolation=ReadCommitted
+UPDATE full_idx_fam SET a = 5 WHERE id = 1
+----
+update full_idx_fam
+ ├── columns: <none>
+ ├── fetch columns: id:7 a:8 b:9 c:10
+ ├── update-mapping:
+ │    ├── a_new:13 => a:2
+ │    └── b:9 => b:3
+ └── project
+      ├── columns: a_new:13!null id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      ├── select
+      │    ├── columns: id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── scan full_idx_fam
+      │    │    ├── columns: id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:7 = 1
+      └── projections
+           └── 5 [as=a_new:13]
+
+# The index is not maintained when only c is updated, so nothing is forced.
+build isolation=ReadCommitted
+UPDATE full_idx_fam SET c = 5 WHERE id = 1
+----
+update full_idx_fam
+ ├── columns: <none>
+ ├── fetch columns: id:7 a:8 b:9 c:10
+ ├── update-mapping:
+ │    └── c_new:13 => c:4
+ └── project
+      ├── columns: c_new:13!null id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      ├── select
+      │    ├── columns: id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── scan full_idx_fam
+      │    │    ├── columns: id:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:7 = 1
+      └── projections
+           └── 5 [as=c_new:13]
+
+exec-ddl
+CREATE TABLE one_fam (
+  id INT PRIMARY KEY,
+  a  INT,
+  b  INT,
+  INDEX idx (a) STORING (b)
+)
+----
+
+# With a single column family the whole row is one KV, so a concurrent writer
+# already conflicts and nothing is forced.
+build isolation=ReadCommitted
+UPDATE one_fam SET a = 5 WHERE id = 1
+----
+update one_fam
+ ├── columns: <none>
+ ├── fetch columns: id:6 a:7 b:8
+ ├── update-mapping:
+ │    └── a_new:11 => a:2
+ └── project
+      ├── columns: a_new:11!null id:6!null a:7 b:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── select
+      │    ├── columns: id:6!null a:7 b:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── scan one_fam
+      │    │    ├── columns: id:6!null a:7 b:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:6 = 1
+      └── projections
+           └── 5 [as=a_new:11]
+
+exec-ddl
+CREATE TABLE computed_idx_fam (
+  id INT PRIMARY KEY,
+  a  INT,
+  b  INT,
+  v  INT AS (b + 1) VIRTUAL,
+  FAMILY f_id (id),
+  FAMILY f_a (a),
+  FAMILY f_b (b),
+  INDEX idx (a) STORING (v)
+)
+----
+
+# A computed index column is skipped: it belongs to no column family, so writing
+# it would accomplish nothing. This leaves b's family unprotected even though a
+# concurrent change to b changes v.
+build isolation=ReadCommitted
+UPDATE computed_idx_fam SET a = 5 WHERE id = 1
+----
+update computed_idx_fam
+ ├── columns: <none>
+ ├── fetch columns: id:7 a:8 b:9 v:10
+ ├── update-mapping:
+ │    └── a_new:13 => a:2
+ └── project
+      ├── columns: v_comp:14 id:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 tableoid:12 a_new:13!null
+      ├── project
+      │    ├── columns: a_new:13!null id:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: id:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── project
+      │    │    │    ├── columns: v:10 id:7!null a:8 b:9 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── scan computed_idx_fam
+      │    │    │    │    ├── columns: id:7!null a:8 b:9 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── v:10
+      │    │    │    │    │         └── b:9 + 1
+      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── projections
+      │    │    │         └── b:9 + 1 [as=v:10]
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         └── 5 [as=a_new:13]
+      └── projections
+           └── b:9 + 1 [as=v_comp:14]
+
+exec-ddl
+CREATE TABLE vec_idx_fam (
+  id INT PRIMARY KEY,
+  a  INT,
+  b  INT,
+  v  VECTOR(3),
+  FAMILY f_id (id),
+  FAMILY f_a (a),
+  FAMILY f_b (b),
+  FAMILY f_v (v),
+  INDEX idx_ab (a) STORING (b),
+  VECTOR INDEX idx_v (b, v)
+)
+----
+
+# Forcing a write of b for idx_ab also puts b in the update set the row updater
+# reads, so the vector index is maintained at runtime even though
+# projectVectorIndexColsForUpdate ran first and saw only a in the update set,
+# and so projected no PUT/DEL partition columns for it. That is a no-op rather
+# than a bug only because encodeVectorIndexKey reads a NULL partition key as
+# "not being updated".
+build isolation=ReadCommitted
+UPDATE vec_idx_fam SET a = 5 WHERE id = 1
+----
+update vec_idx_fam
+ ├── columns: <none>
+ ├── fetch columns: id:7 a:8 b:9 v:10
+ ├── update-mapping:
+ │    ├── a_new:13 => a:2
+ │    └── b:9 => b:3
+ ├── vector index del partition columns: null1:14
+ ├── vector index put partition columns: null1:14
+ ├── vector index put quantized vector columns: null1:14
+ └── project
+      ├── columns: null1:14 id:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 tableoid:12 a_new:13!null
+      ├── project
+      │    ├── columns: a_new:13!null id:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: id:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── scan vec_idx_fam
+      │    │    │    ├── columns: id:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:7 = 1
+      │    └── projections
+      │         └── 5 [as=a_new:13]
+      └── projections
+           └── NULL::UNKNOWN [as=null1:14]
+
+# ------------------------------------------------------------------------------
 # Test assignment casts.
 # ------------------------------------------------------------------------------
 

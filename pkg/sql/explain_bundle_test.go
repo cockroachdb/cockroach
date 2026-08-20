@@ -1486,6 +1486,11 @@ func TestExplainBundleEnv(t *testing.T) {
 	require.NoError(t, c.PrintClusterSettings(&sb, true /* all */))
 	vars = strings.Split(sb.String(), "\n")
 	for _, line := range vars {
+		// An unsafe setting cannot be replayed without first setting the
+		// session's interlock key, which is not what this test is checking.
+		if strings.Contains(line, "unsafe") {
+			continue
+		}
 		_, err := sqlDB.ExecContext(ctx, line)
 		if err != nil {
 			t.Fatalf("unexpectedly couldn't execute %s: %v", line, err)
