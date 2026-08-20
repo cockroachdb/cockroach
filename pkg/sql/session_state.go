@@ -114,7 +114,7 @@ func serializeSessionState(
 // DeserializeSessionState deserializes the given state into the current session.
 func (p *planner) DeserializeSessionState(
 	ctx context.Context, state *tree.DBytes,
-) (*tree.DBool, error) {
+) (_ *tree.DBool, retErr error) {
 	evalCtx := p.ExtendedEvalContext()
 	if !evalCtx.TxnIsSingleStmt {
 		return nil, pgerror.Newf(
@@ -143,6 +143,17 @@ func (p *planner) DeserializeSessionState(
 	if err := p.checkCanBecomeUser(ctx, sd.User()); err != nil {
 		return nil, err
 	}
+
+	// Apply the migrated session data before re-preparing the statements below,
+	// so that they resolve names under the origin session's search_path and
+	// database. Restore the prior session data if deserialization fails.
+	oldSessionData := *p.SessionData()
+	*p.SessionData() = *sd
+	defer func() {
+		if retErr != nil {
+			*p.SessionData() = oldSessionData
+		}
+	}()
 
 	for _, prepStmt := range m.PreparedStatements {
 		stmts, err := parser.ParseWithOptions(
@@ -220,8 +231,6 @@ func (p *planner) DeserializeSessionState(
 			return nil, err
 		}
 	}
-
-	*p.SessionData() = *sd
 
 	return tree.MakeDBool(true), nil
 }
