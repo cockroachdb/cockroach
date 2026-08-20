@@ -235,6 +235,13 @@ type Memo struct {
 	// view queries, so the memo must be invalidated when it changes.
 	skipUnderlyingViewPrivilegeChecks bool
 
+	// indexConflictWritesEnabled is the value of the IndexConflictWritesEnabled
+	// cluster setting when the memo was created. It changes whether mutations
+	// force writes to otherwise-unwritten column families to prevent secondary
+	// index corruption under weak isolation, which alters the built plan, so the
+	// memo must be invalidated when it changes.
+	indexConflictWritesEnabled bool
+
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
 
@@ -352,6 +359,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useHistogramsForMultiSpanConstColumns:      evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns,
 		usePartialIndexPredicateOptionalFilters:    evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters,
 		skipUnderlyingViewPrivilegeChecks:          sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV),
+		indexConflictWritesEnabled:                 sqlclustersettings.IndexConflictWritesEnabled.Get(&evalCtx.Settings.SV),
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -539,6 +547,7 @@ func (m *Memo) IsStale(
 		m.useHistogramsForMultiSpanConstColumns != evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns ||
 		m.usePartialIndexPredicateOptionalFilters != evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters ||
 		m.skipUnderlyingViewPrivilegeChecks != sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV) ||
+		m.indexConflictWritesEnabled != sqlclustersettings.IndexConflictWritesEnabled.Get(&evalCtx.Settings.SV) ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}

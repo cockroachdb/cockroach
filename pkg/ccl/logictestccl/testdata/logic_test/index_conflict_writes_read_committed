@@ -1,0 +1,352 @@
+# LogicTest: local
+
+# Restricted to one config: KV traces are config-specific, and every race subtest
+# names its isolation level explicitly rather than relying on the config default,
+# so the other configs would only cost CI time.
+#
+# The kvtrace subtests come first so that appending scenarios below cannot shift
+# the table IDs their expected traces hard-code. The race subtests that follow
+# rely on pg_sleep timing windows and each skip under duress, where those windows
+# are unreliable.
+
+subtest forced_write_kvtrace
+
+statement ok
+CREATE TABLE t173610_kv (
+  id     INT PRIMARY KEY,
+  status STRING NOT NULL,
+  claim  STRING,
+  FAMILY f_status (id, status),
+  FAMILY f_claim  (claim),
+  INDEX idx (claim, status) WHERE status = 'running'
+)
+
+statement ok
+INSERT INTO t173610_kv VALUES (1, 'paused', NULL), (2, 'paused', NULL), (3, 'paused', NULL)
+
+# Under serializable there is no forced write of the claim family.
+query T kvtrace
+UPDATE t173610_kv SET status = 'running' WHERE id = 1
+----
+Scan /Table/106/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/106/1/1/0 -> /TUPLE/2:2:Bytes/running
+Put /Table/106/2/NULL/"running"/1/0 -> /BYTES/
+
+# Under read committed the claim family is force-written (a Del tombstone, since
+# claim is NULL) to materialize a write-write conflict.
+statement ok
+SET default_transaction_isolation = 'read committed'
+
+query T kvtrace
+UPDATE t173610_kv SET status = 'running' WHERE id = 2
+----
+Scan /Table/106/1/{2-3} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/106/1/2/0 -> /TUPLE/2:2:Bytes/running
+Del (locking) /Table/106/1/2/1/1
+Put /Table/106/2/NULL/"running"/2/0 -> /BYTES/
+
+statement ok
+SET default_transaction_isolation = 'serializable'
+
+subtest end
+
+subtest partial_index_corruption_173610
+
+skip under duress
+
+# Regression test for #173610. When an UPDATE moves a row into a partial index's
+# predicate, it must read the indexed columns to build the new index entry. If
+# those columns live in a different column family than the predicate columns, the
+# mutation scan reads a family that the UPDATE does not write. Under READ COMMITTED
+# that read is guarded only by a best-effort unreplicated lock, which can be lost
+# across a range split, lease transfer, or merge (simulated here by disabling
+# implicit FOR UPDATE locking). A concurrent transaction can then change the
+# indexed column without blocking, and because READ COMMITTED does not refresh
+# reads, the UPDATE builds the index entry from the stale value, leaving the
+# partial index inconsistent with the primary index.
+#
+# The two pg_sleeps below make the interleaving deterministic: TxnA reads claim at
+# t=0 and holds until t=2s, while TxnB waits until t=0.5s to write claim (so TxnA's
+# read comes first) and commits well before TxnA wakes. If a slow machine delays
+# TxnA's read past TxnB's write, the race is not exercised and the test passes
+# vacuously; it never false-fails.
+
+statement ok
+CREATE TABLE t173610 (
+  id     INT PRIMARY KEY,
+  status STRING NOT NULL,
+  claim  STRING,
+  FAMILY f_status (id, status),
+  FAMILY f_claim  (claim),
+  INDEX idx (claim, status) WHERE status = 'running'
+)
+
+statement ok
+INSERT INTO t173610 VALUES (1, 'paused', NULL)
+
+statement ok
+GRANT ALL ON TABLE t173610 TO testuser
+
+# TxnA reads claim (NULL) during its mutation scan, then sleeps without holding a
+# lock on the row. It is written as a single compound statement so that it runs on
+# a single connection: the logic test framework backs each user with a connection
+# pool, and SET/BEGIN/COMMIT issued as separate statements are not guaranteed to
+# land on the same connection.
+user root
+
+statement async txnA
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL enable_implicit_select_for_update = off; UPDATE t173610 SET status = 'running' WHERE id = 1 AND pg_sleep(2); COMMIT
+
+# TxnB waits until TxnA's read has happened, then writes claim in the other column
+# family and commits during TxnA's remaining sleep. It is not blocked, because TxnA
+# holds no lock.
+user testuser
+
+statement ok
+WITH s AS (SELECT pg_sleep(0.5)) UPDATE t173610 SET claim = 's2' WHERE id = 1
+
+user root
+
+awaitstatement txnA
+
+# The row now has claim = 's2'.
+query TT
+SELECT status, claim FROM t173610 WHERE id = 1
+----
+running  s2
+
+# The partial index agrees with the primary index: TxnA's forced write to the
+# claim column family conflicted with TxnB, so TxnA re-read the updated claim
+# before building the index entry.
+query IT
+SELECT id, claim FROM t173610@idx WHERE status = 'running'
+----
+1  s2
+
+subtest end
+
+subtest partial_index_corruption_173610_repeatable_read
+
+skip under duress
+
+# The same scenario under REPEATABLE READ (snapshot) isolation, which also does
+# not refresh reads and so is subject to the same anomaly without the fix.
+
+statement ok
+CREATE TABLE t173610_rr (
+  id     INT PRIMARY KEY,
+  status STRING NOT NULL,
+  claim  STRING,
+  FAMILY f_status (id, status),
+  FAMILY f_claim  (claim),
+  INDEX idx (claim, status) WHERE status = 'running'
+)
+
+statement ok
+INSERT INTO t173610_rr VALUES (1, 'paused', NULL)
+
+statement ok
+GRANT ALL ON TABLE t173610_rr TO testuser
+
+user root
+
+statement async txnArr
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; SET LOCAL enable_implicit_select_for_update = off; UPDATE t173610_rr SET status = 'running' WHERE id = 1 AND pg_sleep(2); COMMIT
+
+user testuser
+
+statement ok
+WITH s AS (SELECT pg_sleep(0.5)) UPDATE t173610_rr SET claim = 's2' WHERE id = 1
+
+user root
+
+awaitstatement txnArr
+
+query TT
+SELECT status, claim FROM t173610_rr WHERE id = 1
+----
+running  s2
+
+query IT
+SELECT id, claim FROM t173610_rr@idx WHERE status = 'running'
+----
+1  s2
+
+subtest end
+
+subtest storing_partial_index_corruption_173610
+
+skip under duress
+
+# The anomaly for a STORING column. The index stores c, which lives in its own
+# family. TxnA (READ COMMITTED) moves the row into the index and reads c to build
+# the entry, so c's family must be force-written too — not just the key and
+# predicate families. TxnB is pinned to SERIALIZABLE (so it does not force-write,
+# and independent of the config's default isolation) and modifies only c; without
+# forcing c's family there would be no conflict.
+
+statement ok
+CREATE TABLE t173610_storing (
+  id INT PRIMARY KEY,
+  a  INT,
+  b  INT,
+  c  INT,
+  FAMILY f_a (id, a),
+  FAMILY f_b (b),
+  FAMILY f_c (c),
+  INDEX idx (a) STORING (c) WHERE b > 0
+)
+
+statement ok
+INSERT INTO t173610_storing VALUES (1, 10, -5, 100)
+
+statement ok
+GRANT ALL ON TABLE t173610_storing TO testuser
+
+user root
+
+statement async txnStoring
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL enable_implicit_select_for_update = off; UPDATE t173610_storing SET b = 5 WHERE id = 1 AND pg_sleep(2); COMMIT
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; WITH s AS (SELECT pg_sleep(0.5)) UPDATE t173610_storing SET c = 200 WHERE id = 1; COMMIT
+
+user root
+
+awaitstatement txnStoring
+
+query I
+SELECT c FROM t173610_storing WHERE id = 1
+----
+200
+
+# The partial index's stored c agrees with the primary index (200, not the stale
+# 100 that TxnA read).
+query II
+SELECT a, c FROM t173610_storing@idx WHERE b > 0
+----
+10  200
+
+subtest end
+
+subtest predicate_flip_partial_index_corruption_173610
+
+skip under duress
+
+# The reverse direction: the row starts IN the index, and the concurrent
+# transaction flips the predicate column so the row must leave it. TxnA (READ
+# COMMITTED) updates only the key column claim, which maintains the index and
+# reads the predicate column status from an otherwise-unwritten family; that
+# family is force-written. TxnB (pinned SERIALIZABLE, so it does not
+# force-write) flips status to 'paused'. Without the forced write, TxnA would
+# rebuild the index entry from the stale status = 'running' and leave a ghost
+# row in the index.
+
+statement ok
+CREATE TABLE t173610_flip (
+  id     INT PRIMARY KEY,
+  status STRING NOT NULL,
+  claim  STRING,
+  FAMILY f_id    (id),
+  FAMILY f_status (status),
+  FAMILY f_claim (claim),
+  INDEX idx (claim, status) WHERE status = 'running'
+)
+
+statement ok
+INSERT INTO t173610_flip VALUES (1, 'running', 'x1')
+
+statement ok
+GRANT ALL ON TABLE t173610_flip TO testuser
+
+user root
+
+statement async txnFlip
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL enable_implicit_select_for_update = off; UPDATE t173610_flip SET claim = 'x2' WHERE id = 1 AND pg_sleep(2); COMMIT
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; WITH s AS (SELECT pg_sleep(0.5)) UPDATE t173610_flip SET status = 'paused' WHERE id = 1; COMMIT
+
+user root
+
+awaitstatement txnFlip
+
+# The primary index has TxnB's status flip and TxnA's claim update.
+query TT
+SELECT status, claim FROM t173610_flip WHERE id = 1
+----
+paused  x2
+
+# The row left the partial index: TxnA's forced write of the status family
+# conflicted with TxnB, so TxnA re-read status = 'paused' and did not rebuild
+# the index entry.
+query IT
+SELECT id, claim FROM t173610_flip@idx WHERE status = 'running'
+----
+
+subtest end
+
+subtest full_index_null_family_corruption_173610
+
+skip under duress
+
+# The same anomaly without a partial index. Index entries are split per column
+# family, and a family whose stored columns are all NULL produces no index KV at
+# all, so the usual serialization — both transactions writing the old entry's key
+# — does not happen. TxnA (READ COMMITTED) changes the key column y and reads
+# w = NULL, so it writes no w-family index entry under either the old or the new
+# key. TxnB (pinned SERIALIZABLE, so it does not force-write) sets w, writing the
+# w-family entry under the old key. Without the forced write of w's family the
+# two transactions share no KV and the index is left with an orphaned w entry
+# under y = 2.
+
+statement ok
+CREATE TABLE t173610_full (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  w INT,
+  FAMILY f_x (x),
+  FAMILY f_y (y),
+  FAMILY f_z (z),
+  FAMILY f_w (w),
+  INDEX idx (y) STORING (z, w)
+)
+
+statement ok
+INSERT INTO t173610_full VALUES (1, 2, 3, NULL)
+
+statement ok
+GRANT ALL ON TABLE t173610_full TO testuser
+
+user root
+
+statement async txnFull
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL enable_implicit_select_for_update = off; UPDATE t173610_full SET y = 20 WHERE x = 1 AND pg_sleep(2); COMMIT
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; WITH s AS (SELECT pg_sleep(0.5)) UPDATE t173610_full SET w = 7 WHERE x = 1; COMMIT
+
+user root
+
+awaitstatement txnFull
+
+query IIII
+SELECT x, y, z, w FROM t173610_full WHERE x = 1
+----
+1  20  3  7
+
+# The index agrees with the primary index: TxnA's forced write of the w family
+# conflicted with TxnB, so TxnA re-read w = 7 and moved the whole entry to y = 20.
+query IIII
+SELECT x, y, z, w FROM t173610_full@idx
+----
+1  20  3  7
+
+subtest end

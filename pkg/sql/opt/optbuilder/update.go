@@ -415,6 +415,10 @@ func (mb *mutationBuilder) buildUpdate(
 
 	mb.buildRowLevelAfterTriggers(opt.UpdateOp)
 
+	// Under weak isolation, force writes to unmodified column families read to
+	// maintain a secondary index, to prevent index corruption (issue #173610).
+	mb.maybeForceIndexConflictWrites()
+
 	private := mb.makeMutationPrivate(returning != nil, false /* vectorInsert */)
 	for _, col := range mb.extraAccessibleCols {
 		if col.id != 0 {

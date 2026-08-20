@@ -152,6 +152,13 @@ func TestCCLLogic_hash_sharded_index_read_committed(
 	runCCLLogicTest(t, "hash_sharded_index_read_committed")
 }
 
+func TestCCLLogic_index_conflict_writes_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "index_conflict_writes_read_committed")
+}
+
 func TestCCLLogic_nested_routines(
 	t *testing.T,
 ) {
