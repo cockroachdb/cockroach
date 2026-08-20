@@ -16,11 +16,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
@@ -489,4 +494,143 @@ func TestSensitiveSettingLastActiveQueryRedaction(t *testing.T) {
 				"expected substituted value, got: %s", lastActive)
 		})
 	}
+}
+
+// TestSensitiveSettingFailedSetErrorRecording verifies that the error of a
+// failed SET CLUSTER SETTING targeting a sensitive setting is reduced to its
+// redaction-safe parts on the recording surfaces that unredacted debug zips
+// collect: SQL stats last_error and transaction execution insights. Setting
+// validation errors can quote the offending input (HBA config parse errors
+// echo config tokens, which can include an LDAP bind password). The
+// client-visible error deliberately keeps its full text - it is an
+// interactive privileged surface, and the client supplied the value.
+func TestSensitiveSettingFailedSetErrorRecording(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	runner := sqlutils.MakeSQLRunner(db)
+
+	const secret = "hunter2-validation-secret"
+	_, err := db.Exec(
+		"SET CLUSTER SETTING server.host_based_authentication.configuration = " +
+			"'host all all all ldap " + secret + "'")
+	require.Error(t, err)
+	// The client keeps the full error, including the echoed value.
+	require.ErrorContains(t, err, secret)
+
+	// The recorded error in SQL statement statistics must be the reduced
+	// form: `last_error` is dumped raw by unredacted debug zips. Statement
+	// stats are ingested asynchronously, so poll for the row.
+	testutils.SucceedsSoon(t, func() error {
+		rows := runner.QueryStr(t,
+			`SELECT last_error FROM crdb_internal.node_statement_statistics
+			 WHERE key LIKE '%host_based_authentication%' AND last_error IS NOT NULL`)
+		if len(rows) == 0 {
+			return errors.New("no statement statistics row for the failed SET yet")
+		}
+		for _, row := range rows {
+			require.NotContains(t, row[0], secret)
+		}
+		return nil
+	})
+
+	// The failed implicit transaction is recorded as a transaction insight
+	// carrying the statement's error; it must be the reduced form as well.
+	// Note that the failed SET is not itself a statement insight (SET
+	// statements are ignored by the insights detector), which is why the
+	// transaction-level error is the surface to check.
+	testutils.SucceedsSoon(t, func() error {
+		rows := runner.QueryStr(t,
+			`SELECT last_error_redactable FROM crdb_internal.node_txn_execution_insights
+			 WHERE last_error_redactable IS NOT NULL`)
+		if len(rows) == 0 {
+			return errors.New("no transaction insight for the failed SET yet")
+		}
+		for _, row := range rows {
+			require.NotContains(t, row[0], secret)
+		}
+		return nil
+	})
+
+	// A non-sensitive setting keeps its full recorded error, including the
+	// echoed offending value.
+	_, err = db.Exec("SET CLUSTER SETTING sql.defaults.distsql = 'bogus-mode'")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "bogus-mode")
+	testutils.SucceedsSoon(t, func() error {
+		rows := runner.QueryStr(t,
+			`SELECT last_error FROM crdb_internal.node_statement_statistics
+			 WHERE key LIKE '%sql.defaults.distsql%' AND last_error IS NOT NULL`)
+		if len(rows) == 0 {
+			return errors.New("no statement statistics row for the failed non-sensitive SET yet")
+		}
+		require.Contains(t, rows[0][0], "bogus-mode")
+		return nil
+	})
+}
+
+// TestSensitiveSettingFailedSetLogRedaction verifies that the error of a failed
+// SET CLUSTER SETTING targeting a sensitive setting is reduced to its
+// redaction-safe parts in the statement execution log event (query_execute,
+// which backs failed_query). Its ErrorText is dumped raw by unredacted debug
+// zips, and setting validation errors can quote the offending input. A failed
+// non-sensitive SET keeps its full error, echoed value included.
+func TestSensitiveSettingFailedSetLogRedaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	spy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_SQL_EXEC},
+		[]string{"query_execute"},
+		logtestutils.FromLogEntry[eventpb.QueryExecute],
+		func(_ logpb.Entry, qe eventpb.QueryExecute) bool {
+			return qe.ErrorText != "" && qe.Tag == "SET CLUSTER SETTING"
+		},
+	)
+	cleanup := log.InterceptWith(ctx, spy)
+	defer cleanup()
+
+	runner := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
+	runner.Exec(t, "SET CLUSTER SETTING sql.trace.log_statement_execute = true")
+
+	const secret = "hunter2-exec-log-secret"
+	db := s.ApplicationLayer().SQLConn(t)
+	_, err := db.Exec(
+		"SET CLUSTER SETTING server.host_based_authentication.configuration = " +
+			"'host all all all ldap " + secret + "'")
+	require.Error(t, err)
+	// The client keeps the full error, including the echoed value.
+	require.ErrorContains(t, err, secret)
+
+	// A non-sensitive setting keeps its full error as a control.
+	_, err = db.Exec("SET CLUSTER SETTING sql.defaults.distsql = 'bogus-mode'")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "bogus-mode")
+
+	log.FlushAllSync()
+
+	var sawSensitive, sawControl bool
+	for _, qe := range spy.GetLogs(logpb.Channel_SQL_EXEC) {
+		stmt := qe.Statement.StripMarkers()
+		errText := string(qe.ErrorText)
+		switch {
+		case strings.Contains(stmt, "host_based_authentication"):
+			require.NotContains(t, errText, secret)
+			sawSensitive = true
+		case strings.Contains(stmt, "sql.defaults.distsql"):
+			require.Contains(t, errText, "bogus-mode")
+			sawControl = true
+		}
+	}
+	require.True(t, sawSensitive, "no query_execute log for the failed sensitive SET")
+	require.True(t, sawControl, "no query_execute log for the failed non-sensitive SET")
 }
