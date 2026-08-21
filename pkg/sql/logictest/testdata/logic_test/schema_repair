@@ -313,6 +313,70 @@ ORDER BY 1
 12345  namespace   true
 12345  namespace   NULL
 
+subtest temp_schema_is_not_a_corruption
+
+# A temporary schema is a system.namespace entry with no system.descriptor row by
+# design (see Collection.InsertTempSchemaToBatch), which is the same shape as a
+# dangling namespace entry. It must be neither reported nor repaired.
+
+let $db_id
+SELECT id FROM system.namespace WHERE "parentID" = 0 AND name = current_database()
+
+let $public_schema_id
+SELECT id FROM system.namespace WHERE "parentID" = $db_id AND name = 'public'
+
+# The entry is inserted directly rather than by creating a temp table: a real
+# temp schema's name embeds the session id, which is not deterministic.
+statement ok
+SELECT crdb_internal.unsafe_upsert_namespace_entry($db_id, 0, 'pg_temp_1_2', 12400, true)
+
+query B
+SELECT EXISTS(
+	SELECT 1 FROM "".crdb_internal.kv_repairable_catalog_corruptions WHERE id = 12400
+)
+----
+false
+
+# Repair is a no-op even when the id is passed explicitly.
+query B
+SELECT crdb_internal.repair_catalog_corruption(12400, 'namespace')
+----
+NULL
+
+# Only entries shaped like a schema -- directly under a database -- are exempt. A
+# database or an object named like a temporary schema is still a corruption.
+statement ok
+SELECT crdb_internal.unsafe_upsert_namespace_entry(0, 0, 'pg_temp_1_3', 12401, true);
+SELECT crdb_internal.unsafe_upsert_namespace_entry($db_id, $public_schema_id, 'pg_temp_1_4', 12402, true)
+
+query TIT
+SELECT name, id, corruption
+FROM "".crdb_internal.kv_repairable_catalog_corruptions
+WHERE id IN (12400, 12401, 12402)
+ORDER BY id
+----
+pg_temp_1_3  12401  namespace
+pg_temp_1_4  12402  namespace
+
+query BB
+SELECT
+	crdb_internal.repair_catalog_corruption(12401, 'namespace'),
+	crdb_internal.repair_catalog_corruption(12402, 'namespace')
+----
+true  true
+
+# The controls were repaired away; the temporary schema entry survived.
+query TI
+SELECT name, id FROM system.namespace WHERE id IN (12400, 12401, 12402)
+----
+pg_temp_1_2  12400
+
+# unsafe_delete_namespace_entry remains the escape hatch for removing one.
+statement ok
+SELECT crdb_internal.unsafe_delete_namespace_entry($db_id, 0, 'pg_temp_1_2', 12400, true)
+
+subtest end
+
 # Check that `SET descriptor_validation = off ` disables validation.
 # We do so by corrupting a table descriptor and assert on the successful
 # execution of DDL statements so as to not acquire a lease on the corrupt
