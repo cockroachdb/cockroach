@@ -44,7 +44,12 @@ run_bazel() {
     artifacts_dir=$root/artifacts
     mkdir -p "$artifacts_dir"
     vols="${vols} --volume ${artifacts_dir}:/artifacts"
-    cache=/home/agent/.bzlhome24
+    # Bazel's cache/output base (this dir is the container's $HOME, so it also
+    # holds the sandbox, execroot, and per-test TEST_TMPDIR) is the fsync-heavy
+    # hot path. On agents that expose local instance-store NVMe as scratch (via
+    # CRDB_BAZEL_SCRATCH), keep it off the network-attached EBS root; elsewhere
+    # it stays under /home/agent unchanged.
+    cache=${CRDB_BAZEL_SCRATCH:-/home/agent}/.bzlhome24
     mkdir -p $cache
     vols="${vols} --volume ${root}:/go/src/github.com/cockroachdb/cockroach"
     vols="${vols} --volume ${cache}:/home/roach"
