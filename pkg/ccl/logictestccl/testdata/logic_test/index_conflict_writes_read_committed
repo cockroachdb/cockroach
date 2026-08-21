@@ -174,6 +174,112 @@ SELECT id, claim FROM t173610_rr@idx WHERE status = 'running'
 
 subtest end
 
+subtest upsert_partial_index_corruption_173610
+
+skip under duress
+
+# The same anomaly via UPSERT, which updates the existing row's status (moving it
+# into the partial index) while leaving claim in the other family unwritten. The
+# pg_sleep is in the input SELECT, so TxnA reads at its statement timestamp, which
+# is before TxnB's write.
+
+statement ok
+CREATE TABLE t173610_upsert (
+  id     INT PRIMARY KEY,
+  status STRING NOT NULL,
+  claim  STRING,
+  FAMILY f_status (id, status),
+  FAMILY f_claim  (claim),
+  INDEX idx (claim, status) WHERE status = 'running'
+)
+
+statement ok
+INSERT INTO t173610_upsert VALUES (1, 'paused', NULL)
+
+statement ok
+GRANT ALL ON TABLE t173610_upsert TO testuser
+
+user root
+
+statement async txnUpsert
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL enable_implicit_select_for_update = off; UPSERT INTO t173610_upsert (id, status) SELECT 1, 'running' WHERE pg_sleep(2); COMMIT
+
+user testuser
+
+statement ok
+WITH s AS (SELECT pg_sleep(0.5)) UPDATE t173610_upsert SET claim = 's2' WHERE id = 1
+
+user root
+
+awaitstatement txnUpsert
+
+query TT
+SELECT status, claim FROM t173610_upsert WHERE id = 1
+----
+running  s2
+
+# The partial index agrees with the primary index: TxnA's forced write to the
+# claim column family conflicted with TxnB on the upsert's conflict path.
+query IT
+SELECT id, claim FROM t173610_upsert@idx WHERE status = 'running'
+----
+1  s2
+
+subtest end
+
+subtest insert_on_conflict_partial_index_corruption_173610
+
+skip under duress
+
+# The same anomaly via INSERT ... ON CONFLICT DO UPDATE. The pg_sleep is in the
+# DO UPDATE WHERE clause, which is evaluated after the existing row (including
+# claim) is fetched, so TxnA reads claim before TxnB's write.
+
+statement ok
+CREATE TABLE t173610_ioc (
+  id     INT PRIMARY KEY,
+  status STRING NOT NULL,
+  claim  STRING,
+  FAMILY f_status (id, status),
+  FAMILY f_claim  (claim),
+  INDEX idx (claim, status) WHERE status = 'running'
+)
+
+statement ok
+INSERT INTO t173610_ioc VALUES (1, 'paused', NULL)
+
+statement ok
+GRANT ALL ON TABLE t173610_ioc TO testuser
+
+user root
+
+statement async txnIoc
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL enable_implicit_select_for_update = off; INSERT INTO t173610_ioc (id, status) VALUES (1, 'running') ON CONFLICT (id) DO UPDATE SET status = 'running' WHERE pg_sleep(2); COMMIT
+
+user testuser
+
+statement ok
+WITH s AS (SELECT pg_sleep(0.5)) UPDATE t173610_ioc SET claim = 's2' WHERE id = 1
+
+user root
+
+awaitstatement txnIoc
+
+query TT
+SELECT status, claim FROM t173610_ioc WHERE id = 1
+----
+running  s2
+
+# The partial index agrees with the primary index: TxnA's forced write to the
+# claim column family conflicted with TxnB on the INSERT ... ON CONFLICT update
+# path.
+query IT
+SELECT id, claim FROM t173610_ioc@idx WHERE status = 'running'
+----
+1  s2
+
+subtest end
+
 subtest storing_partial_index_corruption_173610
 
 skip under duress

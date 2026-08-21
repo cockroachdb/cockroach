@@ -1261,15 +1261,16 @@ func (mb *mutationBuilder) mutationColumnIDs() opt.ColSet {
 // maybeForceIndexConflictWrites materializes write-write conflicts for
 // secondary index maintenance under weak (non-serializable) isolation.
 //
-// Maintaining a secondary index requires reading every column its entries are
-// built from: the index's key and stored columns, plus a partial index's
-// predicate columns. When one of those columns lives in a column family the
-// mutation does not otherwise write, that read is guarded only by a best-effort
-// unreplicated lock, which can be lost across a range split, lease transfer, or
-// merge. Weak isolation has no read refresh to catch a concurrent modification,
-// so the mutation can build its index entry from a stale value, leaving the
-// index inconsistent with the primary index (issue #173610). SERIALIZABLE is
-// safe because its read refresh detects the change.
+// Maintaining a secondary index — in an UPDATE, or on the conflict (update) path
+// of an UPSERT or INSERT ... ON CONFLICT DO UPDATE — requires reading every
+// column its entries are built from: the index's key and stored columns, plus a
+// partial index's predicate columns. When one of those columns lives in a column
+// family the mutation does not otherwise write, that read is guarded only by a
+// best-effort unreplicated lock, which can be lost across a range split, lease
+// transfer, or merge. Weak isolation has no read refresh to catch a concurrent
+// modification, so the mutation can build its index entry from a stale value,
+// leaving the index inconsistent with the primary index (issue #173610).
+// SERIALIZABLE is safe because its read refresh detects the change.
 //
 // Usually the index writes themselves serialize the two transactions, because
 // both touch the old entry's key. The gap is entries that do not exist: a
@@ -1301,6 +1302,24 @@ func (mb *mutationBuilder) mutationColumnIDs() opt.ColSet {
 // updater either elides the identical entry or rewrites it in place. Only the
 // columns the mutation actually changes pull indexes into the maintained-index
 // check below.
+//
+// Both call sites must invoke this after the check constraint, uniqueness, and
+// foreign key columns have been built, since those key off the update set: a
+// forced write added earlier would pull in checks the mutation does not need,
+// and would trip the multi-column-family check constraint restriction that
+// addCheckConstraintCols imposes under weak isolation.
+//
+// The vector index projections must run first too, and there the ordering cuts
+// the other way. projectVectorIndexColsForUpdate reads the update set to decide
+// whether to build a vector index's PUT and DEL partition columns, while
+// row.indexNeedsUpdate reads it again after this function has added to it. A
+// forced write of a column that a vector index also covers therefore leaves
+// that index maintained at runtime with NULL partition keys, which is a no-op
+// only because encodeVectorIndexKey reads a NULL partition key as "not being
+// updated". Running this first would instead project real partition columns and
+// rewrite an index entry the mutation has no reason to touch. The upsert path
+// does not have the NULL case at all: its insert branch maintains every index,
+// so projectVectorIndexColsForUpsert always projects real partition columns.
 //
 // Four kinds of column are left out:
 //
@@ -1379,10 +1398,10 @@ func (mb *mutationBuilder) maybeForceIndexConflictWrites() {
 			return
 		}
 		// A missing fetch column would make the assignment below a silent no-op,
-		// costing the conflict write with no error and no visible plan change.
-		// buildInputForUpdate scans the table including mutation columns, and the
-		// only columns setFetchColIDs leaves out are system columns, which cannot
-		// be index columns.
+		// costing the conflict write with no error and no visible plan change. The
+		// mutation input scan includes mutation columns, and the only columns
+		// setFetchColIDs leaves out are system columns, which cannot be index
+		// columns.
 		if mb.fetchColIDs[ord] == 0 {
 			panic(errors.AssertionFailedf(
 				"no fetch column for forced index conflict write on column %d", ord,
