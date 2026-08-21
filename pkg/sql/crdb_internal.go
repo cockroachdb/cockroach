@@ -6699,7 +6699,9 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 //     crdb_internal.repaired_descriptor,
 //   - 'namespace' corruptions denote corruptions in the system.namespace
 //     table which can be repaired by removing the corresponding record with
-//     crdb_internal.unsafe_delete_namespace_entry.
+//     crdb_internal.unsafe_delete_namespace_entry. Excludes the system
+//     database's public schema and temporary schemas, which are
+//     descriptorless by design.
 var crdbInternalRepairableCatalogCorruptions = virtualSchemaView{
 	comment: "known corruptions in the catalog which can be repaired using builtin functions like " +
 		"crdb_internal.repaired_descriptor",
@@ -6770,7 +6772,19 @@ CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
 				SELECT
 					parent_id, parent_schema_id, name, id,
 					CASE
-					WHEN descriptor IS NULL AND id != 29 THEN 'namespace'
+					WHEN descriptor IS NULL
+						AND id != 29
+						-- Temporary schemas have a namespace entry and no
+						-- descriptor by design, so they are not corruptions and
+						-- must not be repaired away. Keep in sync with the
+						-- guards in crdb_internal.repair_catalog_corruption and
+						-- nstree.Catalog.ValidateNamespaceEntry.
+						AND NOT (
+							parent_id != 0
+							AND parent_schema_id = 0
+							AND name LIKE 'pg\_temp\_%'
+						)
+					THEN 'namespace'
 					WHEN updated_descriptor != repaired_descriptor THEN 'descriptor'
 					ELSE NULL
 					END

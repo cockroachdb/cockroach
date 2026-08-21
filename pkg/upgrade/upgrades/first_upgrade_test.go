@@ -228,6 +228,30 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	fnDesc := desctestutils.TestingGetFunctionDescriptor(kvDB, keys.SystemSQLCodec, "test", "bar", "bar")
 	nonCorruptDescs := []catalog.Descriptor{dbDesc, tblDesc, schemaDesc, typDesc, fnDesc}
 
+	// A temporary schema is a namespace entry with no descriptor, the same shape
+	// as a dangling entry. The repair loop must leave it alone.
+	//
+	// The connection stays open for the rest of the test; session-exit cleanup
+	// would drop the schema before the upgrade runs. It comes from its own pool
+	// because tdb relies on sqlDB handing out the one session that ran "USE
+	// test".
+	tempConn, err := testServer.ApplicationLayer().SQLConn(t).Conn(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tempConn.Close() }()
+	for _, stmt := range []string{
+		"USE test",
+		"SET experimental_enable_temp_tables = true",
+		"CREATE TEMP TABLE temp_tbl (i INT PRIMARY KEY)",
+	} {
+		_, err := tempConn.ExecContext(ctx, stmt)
+		require.NoError(t, err)
+	}
+	var tempSchemaID descpb.ID
+	var tempSchemaName string
+	tdb.QueryRow(t,
+		`SELECT id, name FROM system.namespace WHERE "parentSchemaID" = 0 AND name LIKE 'pg\_temp\_%'`,
+	).Scan(&tempSchemaID, &tempSchemaName)
+
 	// Corrupt FK back references in the test table descriptor, foo.
 	codec := keys.SystemSQLCodec
 	fooTbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "foo")
@@ -344,6 +368,9 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	tdb.Exec(t, qUpgrade)
 	tdb.CheckQueryResults(t, qDetectCorruption, [][]string{{"0"}})
 	tdb.CheckQueryResults(t, qDetectRepairableCorruption, [][]string{{"0"}})
+	tdb.CheckQueryResults(t,
+		fmt.Sprintf(`SELECT name FROM system.namespace WHERE id = %d`, tempSchemaID),
+		[][]string{{tempSchemaName}})
 	close(upgradeCompleted)
 	require.NoError(t, grp.Wait())
 	expectedVersionBump := 1
