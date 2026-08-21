@@ -1930,3 +1930,65 @@ func TestSupportedCRDBInternalTablesNotChanged(t *testing.T) {
 		}
 	}
 }
+
+// TestTableIndexesVirtualIndexSkipsDroppedTable is a regression test for
+// #173660. The crdb_internal.table_indexes virtual table exposes a lookup path
+// on descriptor_id (used, e.g., by the SHOW PARTITIONS delegate query).
+//
+// Dropping a database with CASCADE deletes the database and schema descriptors
+// immediately, while the child table descriptors linger in the DROP state until
+// GC. Querying table_indexes by the descriptor_id of such a lingering table
+// previously resolved its (now-deleted) parent schema and failed the entire
+// query with an "unknown schema [id]" error. The lookup path must instead skip
+// non-visible (dropped) descriptors, mirroring the full-table scan populate.
+func TestTableIndexesVirtualIndexSkipsDroppedTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
+
+	sqlDB.Exec(t, `CREATE DATABASE testdb`)
+	sqlDB.Exec(t, `CREATE TABLE testdb.t (a INT PRIMARY KEY, b INT, INDEX (b))`)
+
+	// Capture the table ID while the table is still public; it cannot be
+	// resolved by name once its database is gone.
+	var tableID int
+	sqlDB.QueryRow(t,
+		`SELECT table_id FROM crdb_internal.tables WHERE name = 't' AND database_name = 'testdb'`,
+	).Scan(&tableID)
+
+	// Dropping the database with CASCADE deletes the database and schema
+	// descriptors while the table descriptor lingers in the DROP state until
+	// GC. This reproduces the state that broke the descriptor_id lookup into
+	// table_indexes.
+	sqlDB.Exec(t, `DROP DATABASE testdb CASCADE`)
+
+	// Confirm the problematic state: the table is still present in the DROP
+	// state and its parent schema descriptor is gone (rendered as "[<id>]").
+	testutils.SucceedsSoon(t, func() error {
+		var schemaName, state string
+		row := sqlDB.DB.QueryRowContext(ctx,
+			`SELECT schema_name, state FROM crdb_internal.tables WHERE table_id = $1`, tableID)
+		if err := row.Scan(&schemaName, &state); err != nil {
+			return err
+		}
+		if state != "DROP" {
+			return errors.Newf("expected table in DROP state, got %q", state)
+		}
+		if !strings.HasPrefix(schemaName, "[") {
+			return errors.Newf(
+				"expected parent schema descriptor to be deleted, got schema_name %q", schemaName)
+		}
+		return nil
+	})
+
+	// The descriptor_id lookup path must not error on a dropped table whose
+	// parent schema descriptor has been deleted; it should return no rows.
+	rows := sqlDB.QueryStr(t,
+		`SELECT descriptor_id FROM crdb_internal.table_indexes WHERE descriptor_id = $1`, tableID)
+	require.Empty(t, rows)
+}

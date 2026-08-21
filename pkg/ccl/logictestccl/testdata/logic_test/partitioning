@@ -1240,6 +1240,56 @@ SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.sho
 ----
 sql.show.partitions
 
+# SHOW PARTITIONS FROM TABLE must disambiguate same-named tables in different
+# schemas of the same database; it filters on schema_name, not just table and
+# database name.
+statement ok
+CREATE SCHEMA sa
+
+statement ok
+CREATE SCHEMA sb
+
+statement ok
+CREATE TABLE sa.dup (id INT PRIMARY KEY) PARTITION BY LIST (id) (PARTITION a VALUES IN (1))
+
+statement ok
+CREATE TABLE sb.dup (id INT PRIMARY KEY) PARTITION BY LIST (id) (PARTITION b VALUES IN (2))
+
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE sa.dup]
+----
+a
+
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE sb.dup]
+----
+b
+
+# The partition_lookup zone join must also disambiguate on schema_name.
+# Same-named tables in different schemas have identically named
+# auto-generated indexes and can share a partition name, so without the
+# schema_name predicate one table's partition would pick up the other's
+# zone config. Give sb.z's partition p a zone config and leave sa.z's
+# without one; sa.z must report no zone config.
+statement ok
+CREATE TABLE sa.z (id INT PRIMARY KEY) PARTITION BY LIST (id) (PARTITION p VALUES IN (1))
+
+statement ok
+CREATE TABLE sb.z (id INT PRIMARY KEY) PARTITION BY LIST (id) (PARTITION p VALUES IN (1))
+
+statement ok
+ALTER PARTITION p OF TABLE sb.z CONFIGURE ZONE USING num_replicas = 5
+
+query TT
+SELECT partition_name, zone_config FROM [SHOW PARTITIONS FROM TABLE sa.z]
+----
+p  NULL
+
+query TT
+SELECT partition_name, zone_config FROM [SHOW PARTITIONS FROM TABLE sb.z]
+----
+p  num_replicas = 5
+
 # Testing show partitions with inherited constraints.
 statement ok
 CREATE TABLE t_inherit (x INT PRIMARY KEY)

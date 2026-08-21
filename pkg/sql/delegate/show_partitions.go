@@ -49,18 +49,22 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 					AND partitions.subzone_id = zones.subzone_id
 			LEFT JOIN %[3]s.crdb_internal.zones AS partition_lookup ON
 				partition_lookup.database_name = tables.database_name
+				AND partition_lookup.schema_name = tables.schema_name
 				AND partition_lookup.table_name = tables.name
 				AND partition_lookup.index_name = table_indexes.index_name
 				AND partition_lookup.partition_name = partitions.name
 		WHERE
-			tables.name = %[1]s AND tables.database_name = %[2]s
+			tables.name = %[1]s
+			AND tables.database_name = %[2]s
+			AND tables.schema_name = %[4]s
 		ORDER BY
 			1, 2, 3, 4, 5, 6, 7, 8, 9;
 		`
 		return d.parse(fmt.Sprintf(showTablePartitionsQuery,
 			lexbase.EscapeSQLString(resName.Table()),
 			lexbase.EscapeSQLString(resName.Catalog()),
-			resName.CatalogName.String()))
+			resName.CatalogName.String(),
+			lexbase.EscapeSQLString(resName.Schema())))
 	} else if n.IsDB {
 		const showDatabasePartitionsQuery = `
 		SELECT
@@ -84,6 +88,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 					AND partitions.subzone_id = zones.subzone_id
 			LEFT JOIN %[1]s.crdb_internal.zones AS partition_lookup ON
 				partition_lookup.database_name = tables.database_name
+				AND partition_lookup.schema_name = tables.schema_name
 				AND partition_lookup.table_name = tables.name
 				AND partition_lookup.index_name = table_indexes.index_name
 				AND partition_lookup.partition_name = partitions.name
@@ -132,6 +137,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 			AND partitions.subzone_id = zones.subzone_id
 		LEFT JOIN %[5]s.crdb_internal.zones AS partition_lookup ON
 			partition_lookup.database_name = tables.database_name
+			AND partition_lookup.schema_name = tables.schema_name
 			AND partition_lookup.table_name = tables.name
 			AND partition_lookup.index_name = table_indexes.index_name
 			AND partition_lookup.partition_name = partitions.name
