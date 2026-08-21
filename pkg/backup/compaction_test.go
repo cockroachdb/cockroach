@@ -541,6 +541,135 @@ func TestScheduledBackupCompaction(t *testing.T) {
 	require.Equal(t, 5, numBackups)
 }
 
+// TestScheduledBackupCompactionKMSExternalConnection verifies that requiring
+// USAGE on external connections does not disturb the compaction a scheduled
+// backup triggers for itself. That compaction continues a backup that was
+// already authorized when it was planned, so it is not gated on the schedule
+// owner's grants.
+func TestScheduledBackupCompactionKMSExternalConnection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// The revoke has to land after the backup that triggers the compaction has
+	// planned, but before the compaction that backup starts.
+	var pendingRevoke atomic.Pointer[func() error]
+	revoked := make(chan error, 1)
+	th, cleanup := newTestHelper(t, func(testKnobs *base.TestingKnobs) {
+		testKnobs.BackupRestore = &sql.BackupRestoreTestingKnobs{
+			RunAfterBackupFlow: func() error {
+				if revoke := pendingRevoke.Swap(nil); revoke != nil {
+					revoked <- (*revoke)()
+				}
+				return nil
+			},
+		}
+	})
+	defer cleanup()
+
+	th.setOverrideAsOfClauseKnob(t)
+	// Set to a time such that full backups do not unexpectedly run based on test
+	// time.
+	th.env.SetTime(time.Date(2025, 05, 01, 1, 0, 0, 0, time.UTC))
+
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 4")
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 3")
+	th.sqlDB.Exec(t,
+		"SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true")
+
+	th.sqlDB.Exec(t, "CREATE DATABASE testdb")
+	th.sqlDB.Exec(t, "CREATE TABLE testdb.foo (a INT PRIMARY KEY)")
+	th.sqlDB.Exec(t, "INSERT INTO testdb.foo VALUES (1)")
+
+	th.sqlDB.Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION kmskey AS '%s'",
+		constructMockKMSURIsWithKeyID([]string{"scheduled-compaction-key"})[0]))
+
+	th.sqlDB.Exec(t, "CREATE USER testuser")
+	th.sqlDB.Exec(t, "GRANT BACKUP ON DATABASE testdb TO testuser")
+	th.sqlDB.Exec(t, "GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO testuser")
+	th.sqlDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION kmskey TO testuser`)
+	schedules, err := th.createBackupScheduleOverConn(
+		t, th.server.SQLConn(t, serverutils.User("testuser")),
+		"CREATE SCHEDULE FOR BACKUP DATABASE testdb INTO $1 WITH kms = 'external://kmskey' "+
+			"RECURRING '@hourly'",
+		"nodelocal://1/backup",
+	)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(schedules))
+
+	full, inc := schedules[0], schedules[1]
+	if full.IsPaused() {
+		full, inc = inc, full
+	}
+
+	runSchedule := func(sj *jobs.ScheduledJob) {
+		t.Helper()
+		th.env.SetTime(sj.NextRun().Add(time.Second))
+		require.NoError(t, th.executeSchedules())
+		th.waitForSuccessfulScheduledJob(t, sj.ScheduleID())
+	}
+
+	runSchedule(full)
+	var backupPath string
+	th.sqlDB.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
+
+	for i := range 3 {
+		inc, err = jobs.ScheduledJobDB(th.internalDB()).Load(ctx, th.env, inc.ScheduleID())
+		require.NoError(t, err)
+		if i == 2 {
+			// This run takes the chain to the compaction threshold, so it is the
+			// one that triggers a compaction.
+			revoke := func() error {
+				_, err := th.sqlDB.DB.ExecContext(
+					ctx, "REVOKE USAGE ON EXTERNAL CONNECTION kmskey FROM testuser",
+				)
+				return err
+			}
+			pendingRevoke.Store(&revoke)
+		}
+		runSchedule(inc)
+	}
+	require.Nil(t, pendingRevoke.Load(), "backup that triggers compaction never ran")
+	require.NoError(t, <-revoked)
+
+	// Guard against the rest of the test passing vacuously: the schedule owner
+	// really has lost USAGE, so a backup it plans for itself is rejected.
+	_, err = th.server.SQLConn(t, serverutils.User("testuser")).ExecContext(
+		ctx, "BACKUP DATABASE testdb INTO 'nodelocal://1/rejected' WITH kms = 'external://kmskey'",
+	)
+	require.ErrorContains(
+		t, err, "user testuser does not have USAGE privilege on external_connection kmskey",
+	)
+
+	var jobID jobspb.JobID
+	require.NoError(
+		t, th.sqlDB.DB.QueryRowContext(
+			ctx,
+			`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+		).Scan(&jobID),
+	)
+
+	testutils.SucceedsSoon(t, func() error {
+		th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+		var unused int64
+		return th.sqlDB.DB.QueryRowContext(
+			ctx,
+			"SELECT job_id FROM [SHOW JOBS] WHERE job_id = $1 AND status = $2",
+			jobID, jobs.StateSucceeded,
+		).Scan(&unused)
+	})
+
+	var numBackups int
+	th.sqlDB.QueryRow(
+		t,
+		fmt.Sprintf("SELECT count(DISTINCT (start_time, end_time)) FROM "+
+			"[SHOW BACKUP FROM '%s' IN 'nodelocal://1/backup' WITH kms = 'external://kmskey']",
+			backupPath),
+	).Scan(&numBackups)
+	require.Equal(t, 5, numBackups)
+}
+
 func TestCompactionTriggeringCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1419,21 +1548,21 @@ func TestBackupCompactionPrivileges(t *testing.T) {
 	// newCompactor creates user and writes a compactable chain of backups into
 	// the collection as root. It returns a function that plans a compaction of
 	// that chain as user and waits for the resulting job to succeed.
-	newCompactor := func(t *testing.T, user string, collectionURI string) func() error {
+	newCompactor := func(t *testing.T, user string, collectionURI string, opts string) func() error {
 		db.Exec(t, fmt.Sprintf("CREATE USER %s", user))
 		conn := tc.Server(0).ApplicationLayer().SQLConn(t, serverutils.User(user))
 
 		uris := []string{collectionURI}
 		start := getTime()
-		db.Exec(t, fullBackupQuery(fullCluster, uris, start, noOpts))
+		db.Exec(t, fullBackupQuery(fullCluster, uris, start, opts))
 		for i := range 3 {
 			db.Exec(t, "INSERT INTO foo VALUES ($1, $1)", i+2)
-			db.Exec(t, incBackupQuery(fullCluster, uris, noAOST, noOpts))
+			db.Exec(t, incBackupQuery(fullCluster, uris, noAOST, opts))
 		}
 		end := getTime()
-		db.Exec(t, incBackupQuery(fullCluster, uris, end, noOpts))
+		db.Exec(t, incBackupQuery(fullCluster, uris, end, opts))
 		fullPath := getLatestFullDir(t, db, uris[0])
-		backupStmt := fullBackupQuery(fullCluster, uris, noAOST, noOpts)
+		backupStmt := fullBackupQuery(fullCluster, uris, noAOST, opts)
 
 		return func() error {
 			var jobID jobspb.JobID
@@ -1449,7 +1578,7 @@ func TestBackupCompactionPrivileges(t *testing.T) {
 	}
 
 	t.Run("implicit auth destination", func(t *testing.T) {
-		compact := newCompactor(t, "testuser", "nodelocal://1/backup/implicit")
+		compact := newCompactor(t, "testuser", "nodelocal://1/backup/implicit", noOpts)
 
 		require.ErrorContains(t, compact(),
 			"only users with the admin role or the BACKUP system privilege are allowed to compact backups")
@@ -1465,7 +1594,7 @@ func TestBackupCompactionPrivileges(t *testing.T) {
 
 	t.Run("external connection destination", func(t *testing.T) {
 		db.Exec(t, "CREATE EXTERNAL CONNECTION backups AS 'nodelocal://1/backup/extconn'")
-		compact := newCompactor(t, "testuser2", "external://backups")
+		compact := newCompactor(t, "testuser2", "external://backups", noOpts)
 
 		require.ErrorContains(t, compact(),
 			"only users with the admin role or the BACKUP system privilege are allowed to compact backups")
@@ -1475,6 +1604,24 @@ func TestBackupCompactionPrivileges(t *testing.T) {
 			"user testuser2 does not have USAGE privilege on external_connection backups")
 
 		db.Exec(t, "GRANT USAGE ON EXTERNAL CONNECTION backups TO testuser2")
+		require.NoError(t, compact())
+	})
+
+	t.Run("requires usage on kms external connection", func(t *testing.T) {
+		db.Exec(t, "SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true")
+		db.Exec(t, "CREATE EXTERNAL CONNECTION kmsbackups AS 'nodelocal://1/backup/kms'")
+		db.Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION kmskey AS '%s'",
+			constructMockKMSURIsWithKeyID([]string{"compaction-privileges-key"})[0]))
+		compact := newCompactor(
+			t, "testuser3", "external://kmsbackups", "WITH kms = 'external://kmskey'",
+		)
+
+		db.Exec(t, "GRANT SYSTEM BACKUP TO testuser3")
+		db.Exec(t, "GRANT USAGE ON EXTERNAL CONNECTION kmsbackups TO testuser3")
+		require.ErrorContains(t, compact(),
+			"user testuser3 does not have USAGE privilege on external_connection kmskey")
+
+		db.Exec(t, "GRANT USAGE ON EXTERNAL CONNECTION kmskey TO testuser3")
 		require.NoError(t, compact())
 	})
 }

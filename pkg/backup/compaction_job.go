@@ -191,9 +191,11 @@ func maybeStartCompactionJob(
 }
 
 // checkCompactionPrivileges verifies that the user is allowed to compact the
-// backup chain in the given collection.
+// backup chain in the given collection, and that they may use the keys held at
+// kmsURIs. kmsURIs is whatever the compaction statement named, and is empty if
+// it named nothing. Whether the chain itself is encrypted is not known here.
 func checkCompactionPrivileges(
-	ctx context.Context, p sql.PlanHookState, collectionURIs []string,
+	ctx context.Context, p sql.PlanHookState, collectionURIs []string, kmsURIs []string,
 ) error {
 	hasAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
@@ -211,7 +213,10 @@ func checkCompactionPrivileges(
 			"only users with the admin role or the BACKUP system privilege are allowed to compact backups",
 		)
 	}
-	return sql.CheckDestinationPrivileges(ctx, p, collectionURIs)
+	if err := sql.CheckDestinationPrivileges(ctx, p, collectionURIs); err != nil {
+		return err
+	}
+	return sql.MaybeCheckDestinationPrivileges(ctx, p, kmsURIs)
 }
 
 // StartCompactionJob kicks off an asynchronous job to compact the backups at
@@ -233,7 +238,8 @@ func StartCompactionJob(
 		return 0, errors.New("missing job execution context")
 	}
 
-	if err := checkCompactionPrivileges(ctx, planHook, collectionURIs); err != nil {
+	kmsURIs := builtins.ExprSliceToStrSlice(options.EncryptionKMSURI)
+	if err := checkCompactionPrivileges(ctx, planHook, collectionURIs, kmsURIs); err != nil {
 		return 0, err
 	}
 
@@ -271,7 +277,7 @@ func StartCompactionJob(
 			return 0, errors.Newf("only one encryption mode can be specified")
 		}
 		encryption.Mode = jobspb.EncryptionMode_KMS
-		encryption.RawKmsUris = builtins.ExprSliceToStrSlice(options.EncryptionKMSURI)
+		encryption.RawKmsUris = kmsURIs
 	}
 
 	details := jobspb.BackupDetails{
