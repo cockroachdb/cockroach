@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -72,7 +73,15 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 	if value.Failed {
 		// StatementError shouldn't be nil if Failed is true, but let's check to be cautious.
 		if value.StatementError != nil {
-			stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
+			if sqlstats.IsSecretError(value.StatementError) {
+				// The error of a failed secret-carrying statement can quote
+				// the secret, and last_error is collected raw by unredacted
+				// debug zips; keep only its redaction-safe parts.
+				stats.mu.data.SensitiveInfo.LastErr =
+					string(redact.Sprint(value.StatementError).Redact())
+			} else {
+				stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
+			}
 			stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
 		}
 		stats.mu.data.FailureCount++

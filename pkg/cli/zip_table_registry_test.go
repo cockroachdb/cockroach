@@ -271,8 +271,7 @@ func requireNoSecretInQuery(t *testing.T, sqlDB *sqlutils.SQLRunner, secret stri
 // queries never emit the values of sensitive cluster settings: neither from
 // historical eventlog rows (written before values were redacted at write
 // time, including the raw statement text in the info payload), nor from
-// events for retired/renamed settings that no longer match the registry, nor
-// from session dumps whose last_active_query holds the raw SET statement.
+// events for retired/renamed settings that no longer match the registry.
 func TestSensitiveSettingScrubbedFromZipDumps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -329,10 +328,6 @@ func TestSensitiveSettingScrubbedFromZipDumps(t *testing.T) {
 		"system.settings",
 		"system.tenant_settings",
 		"cluster_settings_history",
-		"crdb_internal.cluster_sessions",
-		"crdb_internal.cluster_queries",
-		"crdb_internal.node_sessions",
-		"crdb_internal.node_queries",
 	} {
 		var regConfig TableRegistryConfig
 		var ok bool

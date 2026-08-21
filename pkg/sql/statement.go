@@ -22,6 +22,10 @@ type Statement struct {
 	StmtSummary     string
 	QueryID         clusterunique.ID
 
+	// NoSecret indicates that the statement is known not to carry a secret
+	// (see stmtMayHaveSecret). The zero value is the conservative one.
+	NoSecret bool
+
 	ExpectedTypes colinfo.ResultColumns
 
 	// Prepared is non-nil during the PREPARE phase, as well as during EXECUTE of
@@ -58,6 +62,7 @@ func makeStatement(
 		StmtSummary:     formatStatementSummary(parserStmt.AST, fmtFlags),
 		QueryID:         queryID,
 		QueryTags:       tags,
+		NoSecret:        !stmtMayHaveSecret(parserStmt.AST),
 	}
 }
 
@@ -77,6 +82,7 @@ func makeStatementFromPrepared(prepared *prep.Statement, queryID clusterunique.I
 		ExpectedTypes:   prepared.Columns,
 		StmtNoConstants: prepared.StatementNoConstants,
 		StmtSummary:     prepared.StatementSummary,
+		NoSecret:        prepared.NoSecret,
 		QueryID:         queryID,
 		QueryTags:       tags,
 	}

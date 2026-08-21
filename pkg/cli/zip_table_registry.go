@@ -131,120 +131,6 @@ func (r DebugZipTableRegistry) GetTables() []string {
 	return tables
 }
 
-// queriesTableQueryUnredacted and sessionsTableQueryUnredacted are the
-// unredacted zip queries for the query/session introspection tables
-// (parameterized by table name). They dump all columns raw, except that
-// statement text mentioning a sensitive cluster setting has its constants
-// hidden: `SET CLUSTER SETTING <sensitive> = '<secret>'` typed in a session
-// would otherwise land in the zip with the secret intact - including via
-// last_active_query, which lingers on an idle session until its next
-// statement runs.
-//
-// Each has a *Fallback twin, run when the primary query fails. A fallback
-// must not itself depend on `cluster_settings.sensitive`, since the most
-// common reason to reach it is a server predating that column; it must also
-// stay cheap, since the next most common reason is the primary query hitting
-// the zip's statement timeout on a busy cluster. Both properties follow from
-// dropping the per-row lookup and hiding constants unconditionally, at the
-// cost of also hiding them in statements that mention no sensitive setting.
-// The fallbacks project only long-standing columns, so that a server old
-// enough to lack the newer ones still yields rows.
-const queriesTableQueryUnredacted = `SELECT
-	query_id,
-	txn_id,
-	node_id,
-	session_id,
-	user_name,
-	start,
-	CASE
-		WHEN EXISTS (
-			SELECT 1 FROM crdb_internal.cluster_settings cs
-			WHERE cs.sensitive AND q.query LIKE '%%' || cs.variable || '%%'
-		)
-		THEN crdb_internal.hide_sql_constants(q.query)
-		ELSE q.query
-	END AS query,
-	client_address,
-	application_name,
-	distributed,
-	phase,
-	full_scan,
-	plan_gist,
-	"database",
-	isolation_level,
-	num_txn_retries,
-	num_txn_auto_retries
-FROM crdb_internal.%[1]s q`
-
-const sessionsTableQueryUnredacted = `SELECT
-	node_id,
-	session_id,
-	user_name,
-	client_address,
-	application_name,
-	CASE
-		WHEN EXISTS (
-			SELECT 1 FROM crdb_internal.cluster_settings cs
-			WHERE cs.sensitive AND s.active_queries LIKE '%%' || cs.variable || '%%'
-		)
-		THEN crdb_internal.hide_sql_constants(s.active_queries)
-		ELSE s.active_queries
-	END AS active_queries,
-	CASE
-		WHEN EXISTS (
-			SELECT 1 FROM crdb_internal.cluster_settings cs
-			WHERE cs.sensitive AND s.last_active_query LIKE '%%' || cs.variable || '%%'
-		)
-		THEN crdb_internal.hide_sql_constants(s.last_active_query)
-		ELSE s.last_active_query
-	END AS last_active_query,
-	num_txns_executed,
-	session_start,
-	active_query_start,
-	kv_txn,
-	alloc_bytes,
-	max_alloc_bytes,
-	status,
-	session_end,
-	pg_backend_pid,
-	trace_id,
-	goroutine_id,
-	authentication_method,
-	isolation_level
-FROM crdb_internal.%[1]s s`
-
-const queriesTableQueryUnredactedFallback = `SELECT
-	query_id,
-	txn_id,
-	node_id,
-	session_id,
-	user_name,
-	start,
-	crdb_internal.hide_sql_constants(query) AS query,
-	client_address,
-	application_name,
-	distributed,
-	phase,
-	full_scan
-FROM crdb_internal.%[1]s`
-
-const sessionsTableQueryUnredactedFallback = `SELECT
-	node_id,
-	session_id,
-	user_name,
-	client_address,
-	application_name,
-	crdb_internal.hide_sql_constants(active_queries) AS active_queries,
-	crdb_internal.hide_sql_constants(last_active_query) AS last_active_query,
-	session_start,
-	active_query_start,
-	kv_txn,
-	alloc_bytes,
-	max_alloc_bytes,
-	status,
-	session_end
-FROM crdb_internal.%[1]s`
-
 var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	"crdb_internal.cluster_contention_events": {
 		// `key` column contains the contended key, which may contain sensitive
@@ -310,8 +196,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_queries": {
-		customQueryUnredacted:         fmt.Sprintf(queriesTableQueryUnredacted, "cluster_queries"),
-		customQueryUnredactedFallback: fmt.Sprintf(queriesTableQueryUnredactedFallback, "cluster_queries"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"query_id",
@@ -330,8 +214,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_sessions": {
-		customQueryUnredacted:         fmt.Sprintf(sessionsTableQueryUnredacted, "cluster_sessions"),
-		customQueryUnredactedFallback: fmt.Sprintf(sessionsTableQueryUnredactedFallback, "cluster_sessions"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",
@@ -1038,8 +920,6 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.node_queries": {
-		customQueryUnredacted:         fmt.Sprintf(queriesTableQueryUnredacted, "node_queries"),
-		customQueryUnredactedFallback: fmt.Sprintf(queriesTableQueryUnredactedFallback, "node_queries"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"query_id",
@@ -1078,8 +958,6 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
       ) ORDER BY node_id`,
 	},
 	"crdb_internal.node_sessions": {
-		customQueryUnredacted:         fmt.Sprintf(sessionsTableQueryUnredacted, "node_sessions"),
-		customQueryUnredactedFallback: fmt.Sprintf(sessionsTableQueryUnredactedFallback, "node_sessions"),
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",
