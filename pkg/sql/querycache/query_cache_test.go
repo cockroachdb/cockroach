@@ -201,8 +201,12 @@ func TestSynchronization(t *testing.T) {
 					// 10% of the time, purge an entry.
 					c.Purge(sql)
 				case r <= 35:
-					// 25% of the time, add an entry.
-					c.Add(&s, data(sql, &memo.Memo{}, int64(299+rng.Intn(10*avgCachedSize))))
+					// 25% of the time, add an entry. The requested size must be at
+					// least the entry's own base memory estimate, which varies with
+					// the size of the structs involved.
+					mem := &memo.Memo{}
+					minSize := (&CachedData{SQL: sql, Memo: mem, Metadata: &prep.Metadata{}}).memoryEstimate()
+					c.Add(&s, data(sql, mem, minSize+int64(rng.Intn(10*avgCachedSize))))
 				default:
 					// The rest of the time, find an entry.
 					_, _ = c.Find(&s, sql)
