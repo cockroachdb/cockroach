@@ -1059,6 +1059,14 @@ func (mb *mutationBuilder) buildUpsert(returning *tree.ReturningExprs) {
 
 	mb.buildRowLevelAfterTriggers(opt.InsertOp)
 
+	// Under weak isolation, force writes to unmodified column families that are
+	// read to maintain a secondary index on the conflict (update) path, to prevent
+	// index corruption (issue #173610). This is only relevant when existing rows
+	// are fetched; a blind upsert reads nothing to protect.
+	if mb.needExistingRows() {
+		mb.maybeForceIndexConflictWrites()
+	}
+
 	private := mb.makeMutationPrivate(returning != nil, false /* vectorInsert */)
 	mb.outScope.expr = mb.b.factory.ConstructUpsert(
 		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
