@@ -262,6 +262,7 @@ func (ex *connExecutor) prepare(
 		prepared.Statement.NumPlaceholders = origNumPlaceholders
 		prepared.StatementNoConstants = stmt.StmtNoConstants
 		prepared.StatementSummary = stmt.StmtSummary
+		prepared.NoSecret = stmt.NoSecret
 
 		// Point to the prepared state, which can be further populated during query
 		// preparation.

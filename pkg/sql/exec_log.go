@@ -205,6 +205,14 @@ func (p *planner) maybeLogStatementInternal(
 	var execErrStr redact.RedactableString
 	if err != nil {
 		execErrStr = redact.Sprint(err)
+		if !p.stmt.NoSecret || sqlstats.IsSecretError(err) {
+			// The error of a failed secret-carrying statement can quote the
+			// secret; keep only its redaction-safe parts. The mark check
+			// covers errors marked earlier during execution, such as by a
+			// routine body statement, where the outer statement is not
+			// itself classified.
+			execErrStr = execErrStr.Redact()
+		}
 	}
 	// The type of execution context (execute/prepare).
 	lbl := execType.logLabel()
@@ -447,6 +455,13 @@ func (p *planner) logTransaction(
 	sqlErrState := ""
 	if txnStats.TxnErr != nil {
 		execErrStr = redact.Sprint(txnStats.TxnErr)
+		if sqlstats.IsSecretError(txnStats.TxnErr) {
+			// A transaction failed by a secret-carrying statement carries that
+			// statement's error, which can quote the secret; this event is
+			// collected with its redaction markers intact by unredacted debug
+			// zips, so keep only its redaction-safe parts.
+			execErrStr = execErrStr.Redact()
+		}
 		sqlErrState = pgerror.GetPGCode(txnStats.TxnErr).String()
 	}
 

@@ -4,6 +4,7 @@ go_library(
     name = "sqlstats",
     srcs = [
         "cluster_settings.go",
+        "secret_errors.go",
         "ssprovider.go",
         "test_utils.go",
     ],
@@ -20,5 +21,6 @@ go_library(
         "//pkg/sql/sqlstats/insights",
         "//pkg/util/stop",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

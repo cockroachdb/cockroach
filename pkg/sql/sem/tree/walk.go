@@ -14,24 +14,78 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Visitor defines methods that are called for nodes during an expression or statement walk.
+// Visitor defines methods that are called for Expr nodes during an expression
+// or statement walk.
+//
+// For historical reasons, Visitor does not actually visit every node in the
+// AST. New code should consider using ExtendedVisitor which does attempt to
+// visit every node.
 type Visitor interface {
-	// VisitPre is called for each node before recursing into that subtree. Upon return, if recurse
-	// is false, the visit will not recurse into the subtree (and VisitPost will not be called for
-	// this node).
+	// VisitPre is called for each Expr node before recursing into that
+	// subtree. Upon return, if recurse is false, the visit will not recurse into
+	// the subtree (and VisitPost will not be called for this Expr node).
 	//
-	// The returned Expr replaces the visited expression and can be used for rewriting expressions.
-	// The function should NOT modify nodes in-place; it should make copies of nodes. The Walk
-	// infrastructure will automatically make copies of parents as needed.
+	// The returned Expr replaces the visited expression and can be used for
+	// rewriting expressions. The function should NOT modify nodes in-place; it
+	// should make copies of nodes. The Walk infrastructure will automatically
+	// make copies of parents as needed.
+	//
+	// VisitPre visits Exprs but not TableExprs. For TableExprs, VisitTablePre
+	// must be used.
 	VisitPre(expr Expr) (recurse bool, newExpr Expr)
 
-	// VisitPost is called for each node after recursing into the subtree. The returned Expr
-	// replaces the visited expression and can be used for rewriting expressions.
+	// VisitPost is called for each Expr node after recursing into the
+	// subtree. The returned Expr replaces the visited expression and can be used
+	// for rewriting expressions.
 	//
-	// The returned Expr replaces the visited expression and can be used for rewriting expressions.
-	// The function should NOT modify nodes in-place; it should make and return copies of nodes. The
-	// Walk infrastructure will automatically make copies of parents as needed.
-	VisitPost(expr Expr) (newNode Expr)
+	// The returned Expr replaces the visited expression and can be used for
+	// rewriting expressions. The function should NOT modify nodes in-place; it
+	// should make and return copies of nodes. The Walk infrastructure will
+	// automatically make copies of parents as needed.
+	//
+	// VisitPost visits Exprs but not TableExprs. For TableExprs, VisitTablePost
+	// must be used.
+	VisitPost(expr Expr) (newExpr Expr)
+}
+
+// ExtendedVisitor extends Visitor with methods that are called for TableExpr
+// nodes and Statement nodes during an expression or statement walk.
+//
+// Unlike Visitor, which does not visit some parts of the AST for historical
+// reasons, ExtendedVisitor is intended to visit every node in the tree. (If a
+// node is missing, please add it.)
+type ExtendedVisitor interface {
+	Visitor
+
+	// VisitTablePre is called for each TableExpr node before recursing into that
+	// subtree. Upon return, if recurse if false, the visit will not recurse into
+	// the subtree (and VisitTablePost will node be called for this TableExpr
+	// node).
+	//
+	// VisitTablePre is identical to VisitPre but handles TableExpr nodes.
+	VisitTablePre(expr TableExpr) (recurse bool, newExpr TableExpr)
+
+	// VisitTablePost is called for each TableExpr node after recursing into the
+	// subtree. The returned TableExpr replaces the visited expression and can be
+	// used for rewriting expressions.
+	//
+	// VisitTablePost is identical to VisitPost but handles TableExpr nodes.
+	VisitTablePost(expr TableExpr) (newExpr TableExpr)
+
+	// VisitStatementPre is called for each Statement node before recursing into
+	// that subtree. Upon return, if recurse if false, the visit will not recurse
+	// into the subtree (and VisitStatementPost will node be called for this
+	// Statement node).
+	//
+	// VisitStatementPre is identical to VisitPre but handles Statement nodes.
+	VisitStatementPre(expr Statement) (recurse bool, newExpr Statement)
+
+	// VisitStatementPost is called for each Statement node after recursing into
+	// the subtree. The returned Statement replaces the visited expression and can
+	// be used for rewriting expressions.
+	//
+	// VisitStatementPost is identical to VisitPost but handles Statement nodes.
+	VisitStatementPost(expr Statement) (newExpr Statement)
 }
 
 // Walk implements the Expr interface.
@@ -311,7 +365,17 @@ func (expr *FuncExpr) Walk(v Visitor) Expr {
 			ret.Filter = e
 		}
 	}
-
+	if _, ok := v.(ExtendedVisitor); ok {
+		if expr.WindowDef != nil {
+			w, changed := walkWindowDef(v, expr.WindowDef)
+			if changed {
+				if ret == expr {
+					ret = expr.copyNode()
+				}
+				ret.WindowDef = w
+			}
+		}
+	}
 	if expr.OrderBy != nil {
 		order, changed := walkOrderBy(v, expr.OrderBy)
 		if changed {
@@ -507,7 +571,7 @@ func (expr *RangeCond) Walk(v Visitor) Expr {
 
 // Walk implements the Expr interface.
 func (expr *Subquery) Walk(v Visitor) Expr {
-	sel, changed := walkStmt(v, expr.Select)
+	sel, changed := WalkStmt(v, expr.Select)
 	if changed {
 		exprCopy := *expr
 		exprCopy.Select = sel.(SelectStatement)
@@ -518,7 +582,7 @@ func (expr *Subquery) Walk(v Visitor) Expr {
 
 // WalkTableExpr implements the TableExpr interface.
 func (expr *Subquery) WalkTableExpr(v Visitor) TableExpr {
-	sel, changed := walkStmt(v, expr.Select)
+	sel, changed := WalkStmt(v, expr.Select)
 	if changed {
 		exprCopy := *expr
 		exprCopy.Select = sel.(SelectStatement)
@@ -553,10 +617,20 @@ func (expr *ParenTableExpr) WalkTableExpr(v Visitor) TableExpr {
 func (expr *JoinTableExpr) WalkTableExpr(v Visitor) TableExpr {
 	left, changedL := walkTableExpr(v, expr.Left)
 	right, changedR := walkTableExpr(v, expr.Right)
-	if changedL || changedR {
+	cond, changedCond := expr.Cond, false
+	if _, ok := v.(ExtendedVisitor); ok {
+		if j, ok := expr.Cond.(*OnJoinCond); ok {
+			if onExpr, changed := WalkExpr(v, j.Expr); changed {
+				cond = &OnJoinCond{onExpr}
+				changedCond = true
+			}
+		}
+	}
+	if changedL || changedR || changedCond {
 		exprCopy := *expr
 		exprCopy.Left = left
 		exprCopy.Right = right
+		exprCopy.Cond = cond
 		return &exprCopy
 	}
 	return expr
@@ -585,7 +659,7 @@ func (expr *RowsFromExpr) WalkTableExpr(v Visitor) TableExpr {
 
 // WalkTableExpr implements the TableExpr interface.
 func (expr *StatementSource) WalkTableExpr(v Visitor) TableExpr {
-	s, changed := walkStmt(v, expr.Statement)
+	s, changed := WalkStmt(v, expr.Statement)
 	if changed {
 		exprCopy := *expr
 		exprCopy.Statement = s
@@ -821,10 +895,10 @@ func (expr *DOidWrapper) Walk(_ Visitor) Expr { return expr }
 
 // WalkExpr traverses the nodes in an expression.
 //
-// NOTE: Do not count on the walkStmt/WalkExpr machinery to visit all
+// NOTE: Do not count on the WalkStmt/WalkExpr machinery to visit all
 // expressions contained in a query. Only a sub-set of all expressions are
-// found by walkStmt and subsequently traversed. See the comment below on
-// walkStmt for details.
+// found by WalkStmt and subsequently traversed. See the comment below on
+// WalkStmt for details.
 func WalkExpr(v Visitor, expr Expr) (newExpr Expr, changed bool) {
 	recurse, newExpr := v.VisitPre(expr)
 
@@ -837,8 +911,16 @@ func WalkExpr(v Visitor, expr Expr) (newExpr Expr, changed bool) {
 	return newExpr, (reflect.ValueOf(expr) != reflect.ValueOf(newExpr))
 }
 
-func walkTableExpr(v Visitor, expr TableExpr) (newExpr TableExpr, changed bool) {
-	newExpr = expr.WalkTableExpr(v)
+func walkTableExpr(v Visitor, expr TableExpr) (TableExpr, bool) {
+	if ev, ok := v.(ExtendedVisitor); ok {
+		recurse, newExpr := ev.VisitTablePre(expr)
+		if recurse {
+			newExpr = newExpr.WalkTableExpr(v)
+			newExpr = ev.VisitTablePost(newExpr)
+		}
+		return newExpr, (reflect.ValueOf(expr) != reflect.ValueOf(newExpr))
+	}
+	newExpr := expr.WalkTableExpr(v)
 	return newExpr, (reflect.ValueOf(expr) != reflect.ValueOf(newExpr))
 }
 
@@ -852,7 +934,7 @@ func WalkExprConst(v Visitor, expr Expr) {
 }
 
 // walkableStmt is implemented by statements that can appear inside an expression (selects) or
-// we want to start a walk from (using walkStmt).
+// we want to start a walk from (using WalkStmt).
 type walkableStmt interface {
 	Statement
 	walkStmt(Visitor) Statement
@@ -907,7 +989,7 @@ func (n *ShowTenantClusterSetting) copyNode() *ShowTenantClusterSetting {
 // walkStmt is part of the walkableStmt interface.
 func (n *ShowTenantClusterSetting) walkStmt(v Visitor) Statement {
 	ret := n
-	sc, changed := walkStmt(v, n.ShowClusterSetting)
+	sc, changed := WalkStmt(v, n.ShowClusterSetting)
 	if changed {
 		ret = n.copyNode()
 		ret.ShowClusterSetting = sc.(*ShowClusterSetting)
@@ -931,7 +1013,7 @@ func (n *ShowTenantClusterSettingList) copyNode() *ShowTenantClusterSettingList 
 // walkStmt is part of the walkableStmt interface.
 func (n *ShowTenantClusterSettingList) walkStmt(v Visitor) Statement {
 	ret := n
-	sc, changed := walkStmt(v, n.ShowClusterSettingList)
+	sc, changed := WalkStmt(v, n.ShowClusterSettingList)
 	if changed {
 		ret = n.copyNode()
 		ret.ShowClusterSettingList = sc.(*ShowClusterSettingList)
@@ -1373,20 +1455,73 @@ func (stmt *Backup) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Delete) copyNode() *Delete {
 	stmtCopy := *stmt
+	// Copying of With, OrderBy, and Limit is handled by walkWith, walkOrderBy,
+	// and walkLimit, respectively.
 	if stmt.Where != nil {
 		wCopy := *stmt.Where
 		stmtCopy.Where = &wCopy
 	}
+	stmtCopy.Using = append(TableExprs(nil), stmt.Using...)
 	return &stmtCopy
 }
 
 // walkStmt is part of the walkableStmt interface.
 func (stmt *Delete) walkStmt(v Visitor) Statement {
 	ret := stmt
+
+	if _, ok := v.(ExtendedVisitor); ok {
+		// TODO(michae2): investigate whether some of these sub-walks should also be
+		// performed by Visitor.
+
+		with, changed := walkWith(v, stmt.With)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.With = with
+		}
+
+		t, changed := walkTableExpr(v, stmt.Table)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Table = t
+		}
+
+		for i := range stmt.Using {
+			t, changed = walkTableExpr(v, stmt.Using[i])
+			if changed {
+				if ret == stmt {
+					ret = stmt.copyNode()
+				}
+				ret.Using[i] = t
+			}
+		}
+
+		order, changed := walkOrderBy(v, stmt.OrderBy)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.OrderBy = order
+		}
+
+		limit, changed := walkLimit(v, stmt.Limit)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Limit = limit
+		}
+	}
+
 	if stmt.Where != nil {
 		e, changed := WalkExpr(v, stmt.Where.Expr)
 		if changed {
-			ret = stmt.copyNode()
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
 			ret.Where.Expr = e
 		}
 	}
@@ -1408,7 +1543,7 @@ func (stmt *Explain) copyNode() *Explain {
 
 // walkStmt is part of the walkableStmt interface.
 func (stmt *Explain) walkStmt(v Visitor) Statement {
-	s, changed := walkStmt(v, stmt.Statement)
+	s, changed := WalkStmt(v, stmt.Statement)
 	if changed {
 		stmt = stmt.copyNode()
 		stmt.Statement = s
@@ -1424,7 +1559,7 @@ func (stmt *ExplainAnalyze) copyNode() *ExplainAnalyze {
 
 // walkStmt is part of the walkableStmt interface.
 func (stmt *ExplainAnalyze) walkStmt(v Visitor) Statement {
-	s, changed := walkStmt(v, stmt.Statement)
+	s, changed := WalkStmt(v, stmt.Statement)
 	if changed {
 		stmt = stmt.copyNode()
 		stmt.Statement = s
@@ -1435,16 +1570,89 @@ func (stmt *ExplainAnalyze) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Insert) copyNode() *Insert {
 	stmtCopy := *stmt
+	// Copying of With is handled by walkWith.
+	// We only need to copy OnConflict for ON CONFLICT DO UPDATE, which has
+	// expressions/predicates/WHERE to walk. ON CONFLICT DO NOTHING has none.
+	if stmt.OnConflict != nil && !stmt.OnConflict.IsUpsertAlias() && !stmt.OnConflict.DoNothing {
+		onConflictCopy := *stmt.OnConflict
+		stmtCopy.OnConflict = &onConflictCopy
+		exprs := make([]UpdateExpr, len(stmt.OnConflict.Exprs))
+		stmtCopy.OnConflict.Exprs = make(UpdateExprs, len(stmt.OnConflict.Exprs))
+		for i, e := range stmt.OnConflict.Exprs {
+			exprs[i] = *e
+			stmtCopy.OnConflict.Exprs[i] = &exprs[i]
+		}
+		if stmt.OnConflict.Where != nil {
+			wCopy := *stmt.OnConflict.Where
+			stmtCopy.OnConflict.Where = &wCopy
+		}
+	}
 	return &stmtCopy
 }
 
 // walkStmt is part of the walkableStmt interface.
 func (stmt *Insert) walkStmt(v Visitor) Statement {
 	ret := stmt
-	if stmt.Rows != nil {
-		rows, changed := walkStmt(v, stmt.Rows)
+
+	if _, ok := v.(ExtendedVisitor); ok {
+		// TODO(michae2): investigate whether some of these sub-walks should also be
+		// performed by Visitor.
+
+		with, changed := walkWith(v, stmt.With)
 		if changed {
-			ret = stmt.copyNode()
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.With = with
+		}
+
+		t, changed := walkTableExpr(v, stmt.Table)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Table = t
+		}
+
+		if stmt.OnConflict != nil && !stmt.OnConflict.IsUpsertAlias() && !stmt.OnConflict.DoNothing {
+			if stmt.OnConflict.ArbiterPredicate != nil {
+				e, changed := WalkExpr(v, stmt.OnConflict.ArbiterPredicate)
+				if changed {
+					if ret == stmt {
+						ret = stmt.copyNode()
+					}
+					ret.OnConflict.ArbiterPredicate = e
+				}
+			}
+
+			for i, expr := range stmt.OnConflict.Exprs {
+				e, changed := WalkExpr(v, expr.Expr)
+				if changed {
+					if ret == stmt {
+						ret = stmt.copyNode()
+					}
+					ret.OnConflict.Exprs[i].Expr = e
+				}
+			}
+
+			if stmt.OnConflict.Where != nil {
+				e, changed := WalkExpr(v, stmt.OnConflict.Where.Expr)
+				if changed {
+					if ret == stmt {
+						ret = stmt.copyNode()
+					}
+					ret.OnConflict.Where.Expr = e
+				}
+			}
+		}
+	}
+
+	if stmt.Rows != nil {
+		rows, changed := WalkStmt(v, stmt.Rows)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
 			ret.Rows = rows.(*Select)
 		}
 	}
@@ -1455,8 +1663,6 @@ func (stmt *Insert) walkStmt(v Visitor) Statement {
 		}
 		ret.Returning = returning
 	}
-	// TODO(dan): Walk OnConflict once the ON CONFLICT DO UPDATE form of upsert is
-	// implemented.
 	return ret
 }
 
@@ -1470,7 +1676,7 @@ func (stmt *CreateTable) copyNode() *CreateTable {
 func (stmt *CreateTable) walkStmt(v Visitor) Statement {
 	ret := stmt
 	if stmt.AsSource != nil {
-		rows, changed := walkStmt(v, stmt.AsSource)
+		rows, changed := WalkStmt(v, stmt.AsSource)
 		if changed {
 			ret = stmt.copyNode()
 			ret.AsSource = rows.(*Select)
@@ -1487,7 +1693,7 @@ func (stmt *CancelQueries) copyNode() *CancelQueries {
 
 // walkStmt is part of the walkableStmt interface.
 func (stmt *CancelQueries) walkStmt(v Visitor) Statement {
-	sel, changed := walkStmt(v, stmt.Queries)
+	sel, changed := WalkStmt(v, stmt.Queries)
 	if changed {
 		stmt = stmt.copyNode()
 		stmt.Queries = sel.(*Select)
@@ -1503,7 +1709,7 @@ func (stmt *CancelSessions) copyNode() *CancelSessions {
 
 // walkStmt is part of the walkableStmt interface.
 func (stmt *CancelSessions) walkStmt(v Visitor) Statement {
-	sel, changed := walkStmt(v, stmt.Sessions)
+	sel, changed := WalkStmt(v, stmt.Sessions)
 	if changed {
 		stmt = stmt.copyNode()
 		stmt.Sessions = sel.(*Select)
@@ -1519,7 +1725,7 @@ func (stmt *ControlJobs) copyNode() *ControlJobs {
 
 // walkStmt is part of the walkableStmt interface.
 func (stmt *ControlJobs) walkStmt(v Visitor) Statement {
-	sel, changed := walkStmt(v, stmt.Jobs)
+	sel, changed := WalkStmt(v, stmt.Jobs)
 	if changed {
 		stmt = stmt.copyNode()
 		stmt.Jobs = sel.(*Select)
@@ -1535,7 +1741,7 @@ func (n *ControlSchedules) copyNode() *ControlSchedules {
 
 // walkStmt is part of the walkableStmt interface.
 func (n *ControlSchedules) walkStmt(v Visitor) Statement {
-	sel, changed := walkStmt(v, n.Schedules)
+	sel, changed := WalkStmt(v, n.Schedules)
 	if changed {
 		n = n.copyNode()
 		n.Schedules = sel.(*Select)
@@ -1577,7 +1783,7 @@ func (stmt *Import) walkStmt(v Visitor) Statement {
 
 // walkStmt is part of the walkableStmt interface.
 func (stmt *ParenSelect) walkStmt(v Visitor) Statement {
-	sel, changed := walkStmt(v, stmt.Select)
+	sel, changed := WalkStmt(v, stmt.Select)
 	if changed {
 		return &ParenSelect{sel.(*Select)}
 	}
@@ -1674,28 +1880,72 @@ func walkOrderBy(v Visitor, order OrderBy) (OrderBy, bool) {
 	return order, copied
 }
 
+func walkWith(v Visitor, w *With) (*With, bool) {
+	ret := w
+	if w == nil {
+		return ret, false
+	}
+	for i := range w.CTEList {
+		if w.CTEList[i] != nil {
+			withStmt, changed := WalkStmt(v, w.CTEList[i].Stmt)
+			if changed {
+				if ret == w {
+					withCopy := *w
+					ret = &withCopy
+					cteList := make([]CTE, len(w.CTEList))
+					ret.CTEList = make([]*CTE, len(w.CTEList))
+					for j, cte := range w.CTEList {
+						if w.CTEList[j] != nil {
+							cteList[j] = *cte
+							ret.CTEList[j] = &cteList[j]
+						}
+					}
+				}
+				ret.CTEList[i].Stmt = withStmt
+			}
+		}
+	}
+	return ret, ret != w
+}
+
+func walkLimit(v Visitor, l *Limit) (*Limit, bool) {
+	ret := l
+	if l == nil {
+		return ret, false
+	}
+	if l.Offset != nil {
+		e, changed := WalkExpr(v, l.Offset)
+		if changed {
+			if ret == l {
+				lCopy := *l
+				ret = &lCopy
+			}
+			ret.Offset = e
+		}
+	}
+	if l.Count != nil {
+		e, changed := WalkExpr(v, l.Count)
+		if changed {
+			if ret == l {
+				lCopy := *l
+				ret = &lCopy
+			}
+			ret.Count = e
+		}
+	}
+	return ret, ret != l
+}
+
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Select) copyNode() *Select {
 	stmtCopy := *stmt
-	if stmt.Limit != nil {
-		lCopy := *stmt.Limit
-		stmtCopy.Limit = &lCopy
-	}
-	if stmt.With != nil {
-		withCopy := *stmt.With
-		stmtCopy.With = &withCopy
-		cteList := make([]CTE, len(stmt.With.CTEList))
-		stmtCopy.With.CTEList = make([]*CTE, len(stmt.With.CTEList))
-		for i, cte := range stmt.With.CTEList {
-			cteList[i] = *cte
-			stmtCopy.With.CTEList[i] = &cteList[i]
-		}
-	}
+	// Copying of With, OrderBy, and Limit is handled by walkWith, walkOrderBy,
+	// and walkLimit, respectively.
 	return &stmtCopy
 }
 
 func (n *CopyTo) walkStmt(v Visitor) Statement {
-	if newStmt, changed := walkStmt(v, n.Statement); changed {
+	if newStmt, changed := WalkStmt(v, n.Statement); changed {
 		// Make a copy of the CopyTo statement.
 		stmtCopy := *n
 		ret := &(stmtCopy)
@@ -1707,7 +1957,7 @@ func (n *CopyTo) walkStmt(v Visitor) Statement {
 // walkStmt is part of the walkableStmt interface.
 func (stmt *Select) walkStmt(v Visitor) Statement {
 	ret := stmt
-	sel, changed := walkStmt(v, stmt.Select)
+	sel, changed := WalkStmt(v, stmt.Select)
 	if changed {
 		ret = stmt.copyNode()
 		ret.Select = sel.(SelectStatement)
@@ -1719,40 +1969,20 @@ func (stmt *Select) walkStmt(v Visitor) Statement {
 		}
 		ret.OrderBy = order
 	}
-	if stmt.Limit != nil {
-		if stmt.Limit.Offset != nil {
-			e, changed := WalkExpr(v, stmt.Limit.Offset)
-			if changed {
-				if ret == stmt {
-					ret = stmt.copyNode()
-				}
-				ret.Limit.Offset = e
-			}
+	limit, changed := walkLimit(v, stmt.Limit)
+	if changed {
+		if ret == stmt {
+			ret = stmt.copyNode()
 		}
-		if stmt.Limit.Count != nil {
-			e, changed := WalkExpr(v, stmt.Limit.Count)
-			if changed {
-				if ret == stmt {
-					ret = stmt.copyNode()
-				}
-				ret.Limit.Count = e
-			}
-		}
+		ret.Limit = limit
 	}
-	if stmt.With != nil {
-		for i := range stmt.With.CTEList {
-			if stmt.With.CTEList[i] != nil {
-				withStmt, changed := walkStmt(v, stmt.With.CTEList[i].Stmt)
-				if changed {
-					if ret == stmt {
-						ret = stmt.copyNode()
-					}
-					ret.With.CTEList[i].Stmt = withStmt
-				}
-			}
+	with, changed := walkWith(v, stmt.With)
+	if changed {
+		if ret == stmt {
+			ret = stmt.copyNode()
 		}
+		ret.With = with
 	}
-
 	return ret
 }
 
@@ -1866,8 +2096,8 @@ func (stmt *SelectClause) walkStmt(v Visitor) Statement {
 }
 
 func (stmt *UnionClause) walkStmt(v Visitor) Statement {
-	left, changedL := walkStmt(v, stmt.Left)
-	right, changedR := walkStmt(v, stmt.Right)
+	left, changedL := WalkStmt(v, stmt.Left)
+	right, changedR := WalkStmt(v, stmt.Right)
 	if changedL || changedR {
 		stmtCopy := *stmt
 		stmtCopy.Left = left.(*Select)
@@ -1967,12 +2197,15 @@ func (stmt *SetClusterSetting) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Update) copyNode() *Update {
 	stmtCopy := *stmt
+	// Copying of With, OrderBy, and Limit is handled by walkWith, walkOrderBy,
+	// and walkLimit, respectively.
 	exprs := make([]UpdateExpr, len(stmt.Exprs))
 	stmtCopy.Exprs = make(UpdateExprs, len(stmt.Exprs))
 	for i, e := range stmt.Exprs {
 		exprs[i] = *e
 		stmtCopy.Exprs[i] = &exprs[i]
 	}
+	stmtCopy.From = append(TableExprs(nil), stmt.From...)
 	if stmt.Where != nil {
 		wCopy := *stmt.Where
 		stmtCopy.Where = &wCopy
@@ -1983,6 +2216,54 @@ func (stmt *Update) copyNode() *Update {
 // walkStmt is part of the walkableStmt interface.
 func (stmt *Update) walkStmt(v Visitor) Statement {
 	ret := stmt
+
+	if _, ok := v.(ExtendedVisitor); ok {
+		// TODO(michae2): investigate whether some of these sub-walks should also be
+		// performed by Visitor.
+
+		with, changed := walkWith(v, stmt.With)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.With = with
+		}
+
+		t, changed := walkTableExpr(v, stmt.Table)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Table = t
+		}
+
+		for i := range stmt.From {
+			t, changed = walkTableExpr(v, stmt.From[i])
+			if changed {
+				if ret == stmt {
+					ret = stmt.copyNode()
+				}
+				ret.From[i] = t
+			}
+		}
+
+		order, changed := walkOrderBy(v, stmt.OrderBy)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.OrderBy = order
+		}
+
+		limit, changed := walkLimit(v, stmt.Limit)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Limit = limit
+		}
+	}
+
 	for i, expr := range stmt.Exprs {
 		e, changed := WalkExpr(v, expr.Expr)
 		if changed {
@@ -2080,20 +2361,29 @@ var _ walkableStmt = &UnionClause{}
 var _ walkableStmt = &Update{}
 var _ walkableStmt = &ValuesClause{}
 
-// walkStmt walks the entire parsed stmt calling WalkExpr on each
+// WalkStmt walks the entire parsed stmt calling WalkExpr on each
 // expression, and replacing each expression with the one returned
 // by WalkExpr.
 //
-// NOTE: Beware that walkStmt does not necessarily traverse all parts of a
-// statement by itself. For example, it will not walk into Subquery nodes
-// within a FROM clause or into a JoinCond. Walk's logic is pretty
-// interdependent with the logic for constructing a query plan.
-func walkStmt(v Visitor, stmt Statement) (newStmt Statement, changed bool) {
+// NOTE: Beware that WalkStmt does not necessarily traverse all parts of a
+// statement by itself. For example, it will not walk into Subquery nodes within
+// a FROM clause or into a JoinCond (unless using an ExtendedVisitor). Walk's
+// logic is pretty interdependent with the logic for constructing a query plan.
+func WalkStmt(v Visitor, stmt Statement) (Statement, bool) {
+	if ev, ok := v.(ExtendedVisitor); ok {
+		recurse, newStmt := ev.VisitStatementPre(stmt)
+		if walkable, ok := newStmt.(walkableStmt); recurse && ok {
+			newStmt = walkable.walkStmt(v)
+			newStmt = ev.VisitStatementPost(newStmt)
+		}
+		return newStmt, (stmt != newStmt)
+	}
+
 	walkable, ok := stmt.(walkableStmt)
 	if !ok {
 		return stmt, false
 	}
-	newStmt = walkable.walkStmt(v)
+	newStmt := walkable.walkStmt(v)
 	return newStmt, (stmt != newStmt)
 }
 
@@ -2117,14 +2407,14 @@ func (v *simpleVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 
 func (*simpleVisitor) VisitPost(expr Expr) Expr { return expr }
 
-// SimpleVisitFn is a function that is run for every node in the VisitPre stage;
-// see SimpleVisit.
+// SimpleVisitFn is a function that is run for every Expr node in the VisitPre
+// stage; see SimpleVisit.
 type SimpleVisitFn func(expr Expr) (recurse bool, newExpr Expr, err error)
 
 // SimpleVisit is a convenience wrapper for visitors that only have VisitPre
 // code and don't return any results except an error. The given function is
-// called in VisitPre for every node. The visitor stops as soon as an error is
-// returned.
+// called in VisitPre for every Expr node. The visitor stops as soon as an error
+// is returned.
 func SimpleVisit(expr Expr, preFn SimpleVisitFn) (Expr, error) {
 	v := simpleVisitor{fn: preFn}
 	newExpr, _ := WalkExpr(&v, expr)
@@ -2134,15 +2424,105 @@ func SimpleVisit(expr Expr, preFn SimpleVisitFn) (Expr, error) {
 	return newExpr, nil
 }
 
-// SimpleStmtVisit is a convenience wrapper for visitors that want to visit
-// all part of a statement, only have VisitPre code and don't return
-// any results except an error. The given function is called in VisitPre
-// for every node. The visitor stops as soon as an error is returned.
+// SimpleStmtVisit is a convenience wrapper for visitors that want to visit all
+// part of a statement, only have VisitPre code, and don't return any results
+// except an error. The given function is called in VisitPre for every Expr
+// node. The visitor stops as soon as an error is returned.
 func SimpleStmtVisit(stmt Statement, preFn SimpleVisitFn) (Statement, error) {
 	v := simpleVisitor{fn: preFn}
-	newStmt, changed := walkStmt(&v, stmt)
+	newStmt, changed := WalkStmt(&v, stmt)
 	if v.err != nil {
 		return nil, v.err
+	}
+	if changed {
+		return newStmt, nil
+	}
+	return stmt, nil
+}
+
+type extendedSimpleVisitor struct {
+	simpleVisitor
+	preTableFn ExtendedSimpleVisitTableFn
+	preStmtFn  ExtendedSimpleVisitStmtFn
+}
+
+var _ ExtendedVisitor = &extendedSimpleVisitor{}
+
+func (ev *extendedSimpleVisitor) VisitTablePre(expr TableExpr) (recurse bool, newExpr TableExpr) {
+	if ev.err != nil {
+		return false, expr
+	}
+	recurse, newExpr, ev.err = ev.preTableFn(expr)
+	if ev.err != nil {
+		return false, expr
+	}
+	return recurse, newExpr
+}
+
+func (ev *extendedSimpleVisitor) VisitTablePost(expr TableExpr) (newExpr TableExpr) { return expr }
+
+func (ev *extendedSimpleVisitor) VisitStatementPre(
+	expr Statement,
+) (recurse bool, newExpr Statement) {
+	if ev.err != nil {
+		return false, expr
+	}
+	recurse, newExpr, ev.err = ev.preStmtFn(expr)
+	if ev.err != nil {
+		return false, expr
+	}
+	return recurse, newExpr
+}
+
+func (ev *extendedSimpleVisitor) VisitStatementPost(expr Statement) (newExpr Statement) {
+	return expr
+}
+
+// ExtendedSimpleVisitFn and ExtendedSimpleVisitStmtFn are functions that are
+// run for every TableExpr and Statement node, respectively; see
+// ExtendedSimpleVisit.
+type ExtendedSimpleVisitTableFn func(expr TableExpr) (recurse bool, newExpr TableExpr, err error)
+type ExtendedSimpleVisitStmtFn func(expr Statement) (recurse bool, newExpr Statement, err error)
+
+// ExtendedSimpleVisit is a convenience wrapper for extended visitors that only
+// have VisitPre, VisitTablePre, and VisitStatementPre code, and don't return
+// any results except an error. The given functions are called in VisitPre for
+// every Expr node, VisitTablePre for every TableExpr node, and
+// VisitStatementPre for every Statement node. The visitor stops as soon as an
+// error is returned.
+//
+// ExtendedSimpleVisit is identical to SimpleVisit but also handles TableExpr
+// and Statement nodes.
+func ExtendedSimpleVisit(
+	expr Expr,
+	preFn SimpleVisitFn,
+	preTableFn ExtendedSimpleVisitTableFn,
+	preStmtFn ExtendedSimpleVisitStmtFn,
+) (Expr, error) {
+	ev := extendedSimpleVisitor{simpleVisitor{fn: preFn}, preTableFn, preStmtFn}
+	newExpr, _ := WalkExpr(&ev, expr)
+	if ev.err != nil {
+		return nil, ev.err
+	}
+	return newExpr, nil
+}
+
+// ExtendedSimpleStmtVisit is a convenience wrapper for visitors that want to
+// visit all part of a statement, only have VisitPre, VisitTablePre, and
+// VisitStatementPre code, and don't return any results except an error. The
+// given functions are called in VisitPre for every Expr node, VisitTablePre for
+// every TableExpr node, and VisitStatementPre for every Statement node. The
+// visitor stops as soon as an error is returned.
+func ExtendedSimpleStmtVisit(
+	stmt Statement,
+	preFn SimpleVisitFn,
+	preTableFn ExtendedSimpleVisitTableFn,
+	preStmtFn ExtendedSimpleVisitStmtFn,
+) (Statement, error) {
+	ev := extendedSimpleVisitor{simpleVisitor{fn: preFn}, preTableFn, preStmtFn}
+	newStmt, changed := WalkStmt(&ev, stmt)
+	if ev.err != nil {
+		return nil, ev.err
 	}
 	if changed {
 		return newStmt, nil
@@ -2155,7 +2535,7 @@ type debugVisitor struct {
 	level int
 }
 
-var _ Visitor = &debugVisitor{}
+var _ ExtendedVisitor = &debugVisitor{}
 
 func (v *debugVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	v.level++
@@ -2172,6 +2552,36 @@ func (v *debugVisitor) VisitPost(expr Expr) Expr {
 	return expr
 }
 
+func (v *debugVisitor) VisitTablePre(expr TableExpr) (recurse bool, newExpr TableExpr) {
+	v.level++
+	fmt.Fprintf(&v.buf, "%*s", 2*v.level, " ")
+	str := fmt.Sprintf("%#v\n", expr)
+	// Remove "parser." to make the string more compact.
+	str = strings.Replace(str, "parser.", "", -1)
+	v.buf.WriteString(str)
+	return true, expr
+}
+
+func (v *debugVisitor) VisitTablePost(expr TableExpr) TableExpr {
+	v.level--
+	return expr
+}
+
+func (v *debugVisitor) VisitStatementPre(expr Statement) (recurse bool, newExpr Statement) {
+	v.level++
+	fmt.Fprintf(&v.buf, "%*s", 2*v.level, " ")
+	str := fmt.Sprintf("%#v\n", expr)
+	// Remove "parser." to make the string more compact.
+	str = strings.Replace(str, "parser.", "", -1)
+	v.buf.WriteString(str)
+	return true, expr
+}
+
+func (v *debugVisitor) VisitStatementPost(expr Statement) Statement {
+	v.level--
+	return expr
+}
+
 // ExprDebugString generates a multi-line debug string with one node per line in
 // Go format.
 func ExprDebugString(expr Expr) string {
@@ -2184,7 +2594,7 @@ func ExprDebugString(expr Expr) string {
 // expressions that are part of the given statement.
 func StmtDebugString(stmt Statement) string {
 	v := debugVisitor{}
-	walkStmt(&v, stmt)
+	WalkStmt(&v, stmt)
 	return v.buf.String()
 }
 
