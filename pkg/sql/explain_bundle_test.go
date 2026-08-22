@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
@@ -148,6 +149,64 @@ GRANT ALL ON abc TO testuser;`)
 			t, fmt.Sprint(rows), "", contentCheck, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt",
 		)
+	})
+
+	// A bundle collected FOR a sensitive SET CLUSTER SETTING (rather than one
+	// collected while such a setting is set) is treated as a redacted bundle
+	// regardless of the requested mode: the value, execution trace, and errors
+	// can all carry the secret. statement.sql is redacted, and the trace -
+	// which captures the storage-layer KV write of the raw value - is omitted.
+	t.Run("sensitive setting as bundle statement", func(t *testing.T) {
+		const secret = "hunter2-bundle-stmt"
+		defer r.Exec(t, "RESET CLUSTER SETTING server.oidc_authentication.client_secret")
+		rows := r.QueryStr(t, fmt.Sprintf(
+			"EXPLAIN ANALYZE (DEBUG) SET CLUSTER SETTING server.oidc_authentication.client_secret = '%s'",
+			secret))
+		url := getBundleDownloadURL(t, fmt.Sprint(rows))
+		unzip := downloadAndUnzipBundle(t, url)
+		var foundStatement bool
+		for _, f := range unzip.File {
+			contents := readUnzippedFile(t, f)
+			if strings.Contains(contents, secret) {
+				t.Errorf("%s contains the sensitive setting value:\n%s", f.Name, contents)
+			}
+			switch f.Name {
+			case "statement.sql":
+				foundStatement = true
+			case "trace.txt", "trace.json", "trace-jaeger.json", "trace-jaeger.txt":
+				t.Errorf("unexpected %s in a sensitive setting bundle", f.Name)
+			}
+		}
+		require.True(t, foundStatement, "bundle missing statement.sql")
+	})
+
+	// A failed sensitive SET CLUSTER SETTING can echo the attempted value in
+	// its error message (setting validation errors quote offending input). The
+	// bundle is treated as redacted, so errors.txt is omitted entirely rather
+	// than scrubbed.
+	t.Run("failed sensitive setting as bundle statement", func(t *testing.T) {
+		const secret = "hunter2-hba-secret-token"
+		_, err := r.DB.ExecContext(context.Background(), fmt.Sprintf(
+			"EXPLAIN ANALYZE (DEBUG) SET CLUSTER SETTING "+
+				"server.host_based_authentication.configuration = 'host all all all ldap %s'",
+			secret))
+		require.Error(t, err)
+		// The client-visible error quotes the value - that is the leak vector
+		// under test.
+		require.ErrorContains(t, err, secret)
+		var pqErr *pq.Error
+		require.True(t, errors.As(err, &pqErr))
+		url := getBundleDownloadURL(t, pqErr.Detail)
+		unzip := downloadAndUnzipBundle(t, url)
+		for _, f := range unzip.File {
+			contents := readUnzippedFile(t, f)
+			if strings.Contains(contents, secret) {
+				t.Errorf("%s contains the sensitive setting value:\n%s", f.Name, contents)
+			}
+			if f.Name == "errors.txt" {
+				t.Errorf("unexpected errors.txt in a sensitive setting bundle:\n%s", contents)
+			}
+		}
 	})
 
 	// Check that we get separate diagrams for subqueries.
@@ -1066,6 +1125,38 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	//		)
 	//	}
 	//})
+}
+
+// TestExplainBundleRawSQLFallback verifies that when the bundle builder falls
+// back to the raw client SQL (no AST available due to an early error), a
+// sensitive SET CLUSTER SETTING is still rendered with its value substituted.
+func TestExplainBundleRawSQLFallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	mkBuilder := func(stmtRawSQL string) stmtBundleBuilder {
+		b, err := makeStmtBundleBuilder(
+			explain.Flags{}, nil /* db */, nil /* p */, nil, /* ie */
+			"" /* requesterUsername */, stmtRawSQL, &planTop{}, nil, /* trace */
+			nil /* placeholders */, nil, /* sv */
+		)
+		require.NoError(t, err)
+		return b
+	}
+
+	const secret = "hunter2-raw-sql"
+	b := mkBuilder(fmt.Sprintf(
+		"SET CLUSTER SETTING server.oidc_authentication.client_secret = '%s'", secret))
+	// A bundle targeting a sensitive SET is forced to redact, so the raw-SQL
+	// fallback elides the whole statement, not just the value.
+	require.NotContains(t, b.stmt, secret)
+	require.NotContains(t, b.stmt, "server.oidc_authentication.client_secret")
+	require.True(t, b.flags.RedactValues)
+
+	// A non-sensitive statement keeps the raw SQL and is not forced to redact.
+	b = mkBuilder("SELECT 'abc'")
+	require.Equal(t, "SELECT 'abc'", b.stmt)
+	require.False(t, b.flags.RedactValues)
 }
 
 func getBundleDownloadURL(t *testing.T, text string) string {
