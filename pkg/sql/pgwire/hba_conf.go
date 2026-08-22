@@ -82,6 +82,8 @@ var connAuthConf = settings.RegisterStringSetting(
 	"",
 	settings.WithValidateString(checkHBASyntaxBeforeUpdatingSetting),
 	settings.WithPublic,
+	settings.WithReportable(false),
+	settings.Sensitive,
 )
 
 // loadLocalHBAConfigUponRemoteSettingChange initializes the local

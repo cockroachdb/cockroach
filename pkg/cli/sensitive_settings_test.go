@@ -33,6 +33,8 @@ func TestSensitiveSettingsRegistry(t *testing.T) {
 		"cloudstorage.http.custom_ca",
 		"cluster.secret",
 		"enterprise.license",
+		"server.host_based_authentication.configuration",
+		"server.identity_map.configuration",
 	}
 	var actual []string
 	for _, k := range settings.Keys(true /* forSystemTenant */) {
