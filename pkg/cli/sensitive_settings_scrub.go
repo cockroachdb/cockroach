@@ -95,7 +95,10 @@ func roleEventWithRawBinds(msg string) bool {
 		return false
 	}
 	binds, ok := placeholderValues(msg)
-	return ok && !strings.Contains(binds, tree.PasswordSubstitution)
+	// Substituted entries carry one of two markers, depending on the version
+	// of the node that wrote them: '*****' or the current <redacted>.
+	return ok && !strings.Contains(binds, tree.PasswordSubstitution) &&
+		!strings.Contains(binds, tree.RedactedValueSubstitution)
 }
 
 // placeholderValues returns the text of the message's PlaceholderValues JSON

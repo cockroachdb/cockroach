@@ -419,7 +419,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			defer st.mu.Unlock()
 			st.mu.stmtCount++
 		}(&ex.state)
-		ex.addActiveQuery(parserStmt, pinfo, queryID, cancelQuery)
+		ex.addActiveQuery(parserStmt, stmt.NoSecret, pinfo, queryID, cancelQuery)
 	}
 
 	// For pausable portal, the active query needs to be set up only when
@@ -571,7 +571,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	// before setting up the instrumentation helper.
 	if e, ok := ast.(*tree.Execute); ok {
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
-		// continue execution.
+		// continue execution. The raw client text is captured first: stmt is
+		// about to be overwritten with the prepared statement, and the text is
+		// needed to un-redact the active query below.
+		origSQL := stmt.SQL
 		name := e.Name.String()
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 		if !ok {
@@ -588,6 +591,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// TODO(radu): what about .SQL, .NumAnnotations, .NumPlaceholders?
 		stmt.Statement = ps.Statement
 		stmt.Prepared = ps
+		stmt.NoSecret = ps.NoSecret
 		stmt.ExpectedTypes = ps.Columns
 		stmt.StmtNoConstants = ps.StatementNoConstants
 		stmt.StmtSummary = ps.StatementSummary
@@ -597,6 +601,13 @@ func (ex *connExecutor) execStmtInOpenState(
 			ih.SetDiscardRows()
 		}
 		ast = stmt.Statement.AST
+		// The active query was registered with the EXECUTE p(...) text
+		// constants-hidden, in case its argument was a secret. The resolved
+		// prepared statement is now known, so restore the raw text if its
+		// stored classification proved it secret-free.
+		if ps.NoSecret {
+			ex.restoreActiveQueryText(queryID, origSQL)
+		}
 	}
 
 	// For pausable portal, the instrumentation helper needs to be set up only
@@ -3137,11 +3148,19 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 // addActiveQuery adds a running query to the list of running queries.
 func (ex *connExecutor) addActiveQuery(
 	stmt statements.Statement[tree.Statement],
+	noSecret bool,
 	placeholders *tree.PlaceholderInfo,
 	queryID clusterunique.ID,
 	cancelQuery context.CancelFunc,
 ) {
 	_, hidden := stmt.AST.(tree.HiddenFromShowQueries)
+	// A query that may carry a secret is registered with its text
+	// constants-hidden, so the raw secret never sits in the registry. Once
+	// resolution proves an EXECUTE's target secret-free, the raw text is
+	// restored (see restoreActiveQueryText).
+	if !noSecret {
+		stmt.SQL = formatStatementHideConstants(stmt.AST)
+	}
 	qm := &queryMeta{
 		txnID:         ex.state.mu.txn.ID(),
 		start:         ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived),
@@ -3152,21 +3171,40 @@ func (ex *connExecutor) addActiveQuery(
 		isFullScan:    false,
 		cancelQuery:   cancelQuery,
 		hidden:        hidden,
+		noSecret:      noSecret,
 	}
 	ex.mu.Lock()
-	defer ex.mu.Unlock()
 	ex.mu.ActiveQueries[queryID] = qm
+	ex.mu.Unlock()
+	if knob := ex.server.cfg.TestingKnobs.AfterActiveQueryAdded; knob != nil {
+		knob(stmt.SQL)
+	}
+}
+
+// restoreActiveQueryText restores the raw text of an active query that
+// addActiveQuery registered in constants-hidden form, and marks the query
+// secret-free. Called once an EXECUTE has resolved and its prepared statement
+// is known to carry no secret. It is a no-op if the query is no longer
+// registered.
+func (ex *connExecutor) restoreActiveQueryText(queryID clusterunique.ID, sql string) {
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
+	if qm, ok := ex.mu.ActiveQueries[queryID]; ok {
+		qm.stmt.SQL = sql
+		qm.noSecret = true
+	}
 }
 
 func (ex *connExecutor) removeActiveQuery(queryID clusterunique.ID, ast tree.Statement) {
 	ex.mu.Lock()
 	defer ex.mu.Unlock()
-	_, ok := ex.mu.ActiveQueries[queryID]
+	qm, ok := ex.mu.ActiveQueries[queryID]
 	if !ok {
 		panic(errors.AssertionFailedf("query %d missing from ActiveQueries", queryID))
 	}
 	delete(ex.mu.ActiveQueries, queryID)
 	ex.mu.LastActiveQuery = ast
+	ex.mu.LastActiveQueryNoSecret = qm.noSecret
 }
 
 // handleAutoCommit commits the KV transaction if it hasn't been committed
