@@ -518,7 +518,7 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 			)
 			prefixConstraint, filters, ok = idxconstraint.ConstrainIndexPrefixCols(
 				c.e.ctx, c.e.evalCtx, c.e.f, prefixColumns, notNullCols, filters,
-				optionalFilters, sp.Table, index, c.checkCancellation,
+				optionalFilters, sp.Table, index, c.optimizerSpanLimit(), c.checkCancellation,
 			)
 			if !ok {
 				return

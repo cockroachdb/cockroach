@@ -1199,6 +1199,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			tab,
 			md.Table(tab).Index(tc.indexOrd),
 			nil,       /* computedColumns */
+			0,         /* spanLimit */
 			func() {}, /* checkCancellation */
 		)
 		if tc.ok != ok {

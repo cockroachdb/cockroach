@@ -168,7 +168,7 @@ func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr
 }
 
 func (c *CustomFuncs) initIdxConstraintForIndex(
-	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int, spanLimit int,
+	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
 ) (ic *idxconstraint.Instance) {
 	ic = &idxconstraint.Instance{}
 
@@ -200,7 +200,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 		columns, notNullCols, tabMeta.ComputedCols,
 		tabMeta.ColsInComputedColsExpressions,
 		true /* consolidate */, c.e.evalCtx, c.e.f, ps,
-		spanLimit,
+		c.optimizerSpanLimit(),
 		c.checkCancellation,
 	)
 	return ic
@@ -658,6 +658,12 @@ func (c *CustomFuncs) makeNewScanPrivate(
 	return newScanPrivate
 }
 
+// optimizerSpanLimit returns the value of the optimizer_span_limit session
+// setting.
+func (c *CustomFuncs) optimizerSpanLimit() int {
+	return int(c.e.evalCtx.SessionData().OptimizerSpanLimit)
+}
+
 // getKnownScanConstraint returns a Constraint that is known to hold true for
 // the output of the Scan operator with the given ScanPrivate. If the
 // ScanPrivate has a Constraint, the scan Constraint is returned. Otherwise, an
@@ -674,13 +680,11 @@ func (c *CustomFuncs) getKnownScanConstraint(
 	// Build a constraint set with the check constraints of the underlying
 	// table.
 	filters := c.checkConstraintFilters(sp.Table)
-	spanLimit := int(c.e.evalCtx.SessionData().OptimizerSpanLimit)
 	instance := c.initIdxConstraintForIndex(
 		nil, /* requiredFilters */
 		filters,
 		sp.Table,
 		sp.Index,
-		spanLimit,
 	)
 	var cons constraint.Constraint
 	instance.Constraint(&cons)
