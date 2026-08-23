@@ -141,13 +141,13 @@ test  t1  p3  NULL  x  t1@t1_pkey  (3)         constraints = '[+dc=dc3]'  range_
                                                                           num_replicas = 3,
                                                                           constraints = '[+dc=dc3]',
                                                                           lease_preferences = '[]'
-test  t2  p1  NULL  x  t2@t2_pkey  (1) TO (2)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test  t2  p1  NULL  x  t2@t2_pkey  [(1), (2))  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
                                                                           range_max_bytes = 536870912,
                                                                           gc.ttlseconds = 14400,
                                                                           num_replicas = 3,
                                                                           constraints = '[+dc=dc1]',
                                                                           lease_preferences = '[]'
-test  t2  p2  NULL  x  t2@t2_pkey  (2) TO (3)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test  t2  p2  NULL  x  t2@t2_pkey  [(2), (3))  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
                                                                           range_max_bytes = 536870912,
                                                                           gc.ttlseconds = 14400,
                                                                           num_replicas = 3,
@@ -157,13 +157,13 @@ test  t2  p2  NULL  x  t2@t2_pkey  (2) TO (3)  constraints = '[+dc=dc2]'  range_
 query TTTTTTTTT
 SELECT * FROM [SHOW PARTITIONS FROM TABLE t2] ORDER BY partition_name
 ----
-test  t2  p1  NULL  x  t2@t2_pkey  (1) TO (2)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test  t2  p1  NULL  x  t2@t2_pkey  [(1), (2))  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
                                                                           range_max_bytes = 536870912,
                                                                           gc.ttlseconds = 14400,
                                                                           num_replicas = 3,
                                                                           constraints = '[+dc=dc1]',
                                                                           lease_preferences = '[]'
-test  t2  p2  NULL  x  t2@t2_pkey  (2) TO (3)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test  t2  p2  NULL  x  t2@t2_pkey  [(2), (3))  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
                                                                           range_max_bytes = 536870912,
                                                                           gc.ttlseconds = 14400,
                                                                           num_replicas = 3,
@@ -173,13 +173,13 @@ test  t2  p2  NULL  x  t2@t2_pkey  (2) TO (3)  constraints = '[+dc=dc2]'  range_
 query TTTTTTTTT
 SELECT * FROM [SHOW PARTITIONS FROM INDEX t2@t2_pkey] ORDER BY partition_name
 ----
-test  t2  p1  NULL  x  t2@t2_pkey  (1) TO (2)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test  t2  p1  NULL  x  t2@t2_pkey  [(1), (2))  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
                                                                           range_max_bytes = 536870912,
                                                                           gc.ttlseconds = 14400,
                                                                           num_replicas = 3,
                                                                           constraints = '[+dc=dc1]',
                                                                           lease_preferences = '[]'
-test  t2  p2  NULL  x  t2@t2_pkey  (2) TO (3)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test  t2  p2  NULL  x  t2@t2_pkey  [(2), (3))  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
                                                                           range_max_bytes = 536870912,
                                                                           gc.ttlseconds = 14400,
                                                                           num_replicas = 3,
