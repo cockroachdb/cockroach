@@ -50,6 +50,16 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 	"sql.query_cache.enabled", "enable the query cache", true,
 )
 
+// intTableStorageParams is the set of ALTER/CREATE TABLE storage parameter
+// keys whose value is always an integer (see table_storage_param.go, where
+// each of these is parsed via paramparse.DatumAsInt).
+var intTableStorageParams = map[string]bool{
+	`ttl_select_batch_size`: true,
+	`ttl_delete_batch_size`: true,
+	`ttl_select_rate_limit`: true,
+	`ttl_delete_rate_limit`: true,
+}
+
 // prepareUsingOptimizer builds a memo for a prepared statement and populates
 // the following stmt.Prepared fields:
 //   - Columns
@@ -95,7 +105,48 @@ func (p *planner) prepareUsingOptimizerInternal(
 	}
 
 	switch t := stmt.AST.(type) {
-	case *tree.AlterIndex, *tree.AlterIndexVisible, *tree.AlterTable, *tree.AlterSequence,
+	case *tree.AlterTable:
+		// ALTER TABLE has no result columns, so there's normally nothing to do
+		// during prepare (see the bulk case below). However, unlike most of the
+		// statements in that bucket, ALTER TABLE ... SET (...) can take a
+		// placeholder as the value for an integer-typed storage parameter (e.g.
+		// SET (ttl_select_batch_size = $1)); startExec, which actually type
+		// checks and evaluates storage parameter values via storageparam.Set,
+		// only runs at real EXECUTE time. Without this, such a placeholder
+		// would never get a type recorded during PREPARE, and EXECUTE would
+		// fail with "no type for placeholder". Type check it here as an int
+		// (discarding the result) purely for that side effect; the real
+		// evaluation still happens later in startExec.
+		for _, cmd := range t.Cmds {
+			setStorageParams, ok := cmd.(*tree.AlterTableSetStorageParams)
+			if !ok {
+				continue
+			}
+			for _, sp := range setStorageParams.StorageParams {
+				if !intTableStorageParams[sp.Key] {
+					continue
+				}
+				if _, ok := sp.Value.(*tree.Placeholder); !ok {
+					continue
+				}
+				if _, err := p.analyzeExpr(
+					ctx, sp.Value,
+					tree.IndexedVarHelper{},
+					types.Int, true, /* requireType */
+					"table storage parameters",
+				); err != nil {
+					return 0, nil, err
+				}
+			}
+		}
+		// Persist the type(s) just recorded above (and any client-supplied
+		// hints) onto the prepared statement, mirroring what the general
+		// (non-early-return) path below does at the end of this function.
+		p.semaCtx.Placeholders.MaybeExtendTypes()
+		stmt.Prepared.Types = p.semaCtx.Placeholders.Types
+		return opc.flags, nil, nil
+
+	case *tree.AlterIndex, *tree.AlterIndexVisible, *tree.AlterSequence,
 		*tree.Analyze,
 		*tree.BeginTransaction,
 		*tree.CommentOnColumn, *tree.CommentOnConstraint, *tree.CommentOnDatabase, *tree.CommentOnIndex, *tree.CommentOnTable, *tree.CommentOnSchema,
