@@ -5,6 +5,13 @@
 
 package raft
 
+import (
+	"fmt"
+	"strings"
+
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+)
+
 // termCache is a compressed representation of entryIDs of a raft log suffix.
 // It may cover entries in both stable and unstable parts of the log.
 //
@@ -136,4 +143,61 @@ func (tc *termCache) first() entryID {
 func (tc *termCache) reset(last entryID) {
 	// NB: any previous copy of the term cache is unmodified.
 	tc.cache = append(tc.cache[len(tc.cache):], last)
+}
+
+func convertEntryIDs(src []pb.EntryID) []entryID {
+	dst := make([]entryID, len(src))
+	for i, e := range src {
+		dst[i] = entryID{
+			term:  e.Term,
+			index: e.Index,
+		}
+	}
+	return dst
+}
+
+// prepareProtoTcEntryIDs returns an array of term cache
+// entries higher than the compacted.
+func (tc *termCache) prepareProtoTcEntryIDs(compacted uint64, hintIndex uint64) []pb.EntryID {
+	ret := make([]pb.EntryID, len(tc.cache))
+	for j := 0; j < len(tc.cache); j++ {
+		ret[j].Index = tc.cache[j].index
+		ret[j].Term = tc.cache[j].term
+	}
+
+	first := compacted + 1
+
+	for i := len(ret) - 1; i >= 0; i-- {
+		if hintIndex >= ret[i].Index {
+			ret = ret[:i+1]
+			break
+		}
+	}
+
+	if first >= ret[0].Index {
+		for i := len(ret) - 1; i >= 0; i-- {
+			if first >= ret[i].Index {
+				ret = ret[i:]
+				ret[0].Index = first
+				return ret
+			}
+		}
+	}
+	return ret
+}
+
+func prettyPrintLogTermCacheContents(cache []entryID) string {
+	if len(cache) == 0 {
+		return "[]"
+	}
+	var b strings.Builder
+	b.WriteByte('[')
+	for i, e := range cache {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(&b, "t%d/%d", e.term, e.index)
+	}
+	b.WriteByte(']')
+	return b.String()
 }
