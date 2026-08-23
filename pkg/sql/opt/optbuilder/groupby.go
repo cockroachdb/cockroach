@@ -534,8 +534,44 @@ func (b *Builder) buildGroupingList(
 func (b *Builder) buildGrouping(
 	groupBy tree.Expr, selects tree.SelectExprs, projectionsScope, fromScope, aggInScope *scope,
 ) {
-	// Unwrap parenthesized expressions like "((a))" to "a".
-	groupBy = tree.StripParens(groupBy)
+	// A parenthesized list in GROUP BY position is a row constructor, and
+	// PostgreSQL flattens it into its individual elements before resolving
+	// each one (e.g. as a select-list ordinal or column name) rather than
+	// resolving the tuple as a whole. Flatten first so that ordinals and
+	// names nested inside a multi-element tuple, like the "1" in
+	// "GROUP BY (1, x)", are resolved the same way a bare "GROUP BY 1"
+	// would be.
+	for _, e := range flattenGroupByExpr(groupBy) {
+		b.buildGroupingItem(e, selects, projectionsScope, fromScope, aggInScope)
+	}
+}
+
+// flattenGroupByExpr strips parentheses and recursively flattens nested
+// tuples (row constructors) in a GROUP BY item into its leaf expressions.
+// "GROUP BY (a, (b, c))" and "GROUP BY a, b, c" are equivalent, and each
+// leaf must be resolved independently: a bare integer leaf like the "1" in
+// "GROUP BY (1, x)" refers to select-list position 1, exactly as it would
+// if written as a top-level "GROUP BY 1".
+func flattenGroupByExpr(e tree.Expr) []tree.Expr {
+	e = tree.StripParens(e)
+	t, ok := e.(*tree.Tuple)
+	if !ok {
+		return []tree.Expr{e}
+	}
+	exprs := make([]tree.Expr, 0, len(t.Exprs))
+	for _, sub := range t.Exprs {
+		exprs = append(exprs, flattenGroupByExpr(sub)...)
+	}
+	return exprs
+}
+
+// buildGroupingItem builds a single, already-flattened GROUP BY leaf
+// expression: resolving select-list ordinals and target-list aliases,
+// then building the resulting scalar expression(s) into aggInScope. See
+// buildGrouping for the flattening step that produces these leaves.
+func (b *Builder) buildGroupingItem(
+	groupBy tree.Expr, selects tree.SelectExprs, projectionsScope, fromScope, aggInScope *scope,
+) {
 	alias := ""
 
 	// Comment below pasted from PostgreSQL (findTargetListEntrySQL92 in
