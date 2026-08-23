@@ -59,6 +59,28 @@ func TestSetTxn(t *testing.T) {
 	}
 }
 
+// TestSetTxnRestartableNotFinalized exercises checkTxnStatusValid's
+// restartable-but-not-yet-finalized path: a detail that can restart the
+// transaction (unlike TestSetTxn's TransactionAbortedError, which returns
+// early) paired with a non-finalized txn (unlike TestErrorTxn's plain
+// error, which never reaches the restart check). This is the one branch
+// that actually reaches both the detail check and the restart check on the
+// same decoded error.
+func TestSetTxnRestartableNotFinalized(t *testing.T) {
+	e := NewError(&TransactionRetryError{Reason: RETRY_SERIALIZABLE})
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), isolation.Serializable, 1, hlc.Timestamp{}, 0, 99, 0, false /* omitInRangefeeds */)
+	// txn defaults to PENDING (not finalized), so this must not fatal.
+	e.SetTxn(&txn)
+
+	detail := e.GetDetail()
+	if _, ok := detail.(*TransactionRetryError); !ok {
+		t.Fatalf("expected *TransactionRetryError, got %T", detail)
+	}
+	if got := e.TransactionRestart(); got != TransactionRestart_IMMEDIATE {
+		t.Fatalf("expected TransactionRestart_IMMEDIATE, got %v", got)
+	}
+}
+
 func TestErrPriority(t *testing.T) {
 	unhandledAbort := &UnhandledRetryableError{
 		PErr: *NewError(&TransactionAbortedError{}),
