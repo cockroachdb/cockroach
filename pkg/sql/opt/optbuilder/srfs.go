@@ -71,6 +71,18 @@ func (s *srf) Eval(_ context.Context, _ tree.ExprEvaluator) (tree.Datum, error) 
 var _ tree.Expr = &srf{}
 var _ tree.TypedExpr = &srf{}
 
+// hasOutRoutineParam returns true if the overload has at least one OUT or
+// INOUT parameter, i.e. it was declared with RETURNS TABLE(...) or explicit
+// OUT parameters and so has explicitly named output column(s).
+func hasOutRoutineParam(overload *tree.Overload) bool {
+	for i := range overload.RoutineParams {
+		if overload.RoutineParams[i].IsOutParam() {
+			return true
+		}
+	}
+	return false
+}
+
 // buildZip builds a set of memo groups which represent a functional zip over
 // the given expressions.
 //
@@ -94,6 +106,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	// Build each of the provided expressions.
 	zip := make(memo.ZipExpr, 0, len(exprs))
 	var outCols opt.ColSet
+	var hasDeclaredOutputUDF bool
 	for _, expr := range exprs {
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
@@ -120,6 +133,16 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 
 		isRecordReturningUDF := def != nil && funcExpr.ResolvedOverload().Type == tree.UDFRoutine &&
 			texpr.ResolvedType().Family() == types.TupleFamily && b.insideDataSource
+		// A UDF declared with RETURNS TABLE(...) or OUT parameters has
+		// explicitly named output column(s), even when there's only one (in
+		// which case its return type decays to that column's own type,
+		// rather than a labeled tuple type, so isRecordReturningUDF above
+		// doesn't catch it). Track this so the single-SRF-column aliasing
+		// special case below doesn't override the declared name.
+		isUDF := def != nil && funcExpr.ResolvedOverload().Type == tree.UDFRoutine && b.insideDataSource
+		if isRecordReturningUDF || (isUDF && hasOutRoutineParam(funcExpr.ResolvedOverload())) {
+			hasDeclaredOutputUDF = true
+		}
 		var scalar opt.ScalarExpr
 		_, isScopedColumn := texpr.(*scopeColumn)
 
@@ -196,7 +219,13 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	// Construct the zip as a ProjectSet with empty input.
 	input := b.factory.ConstructNoColsRow()
 	outScope.expr = b.factory.ConstructProjectSet(input, zip)
-	if len(outScope.cols) == 1 {
+	// Do not apply the single-SRF-column aliasing special case (see
+	// renameSource) to a record-returning UDF's column: unlike an anonymous
+	// SRF column (e.g. generate_series's), it already has a real, explicitly
+	// declared name (from RETURNS TABLE(...) or an OUT parameter), and
+	// Postgres only lets a bare table alias rename the relation in that case,
+	// not the column.
+	if len(outScope.cols) == 1 && !hasDeclaredOutputUDF {
 		outScope.singleSRFColumn = true
 	}
 	return outScope
