@@ -1471,7 +1471,10 @@ func IndexPrefixCols(
 // required for building spans for scanning multi-column inverted/vector indexes
 // (see span.Builder.SpansFromInvertedSpans).
 //
-// TODO(michae2): Accept and use optimizer_span_limit.
+// spanLimit bounds the number of prefix spans that will be generated (see
+// Instance.Init). When the limit is exceeded, the constraint builder stops
+// extending the prefix, which leaves the prefix under-constrained and causes
+// this function to return ok=false rather than retaining an unbounded span set.
 func ConstrainIndexPrefixCols(
 	ctx context.Context,
 	evalCtx *eval.Context,
@@ -1482,6 +1485,7 @@ func ConstrainIndexPrefixCols(
 	optionalFilters memo.FiltersExpr,
 	tabID opt.TableID,
 	index cat.Index,
+	spanLimit int,
 	checkCancellation func(),
 ) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	tabMeta := factory.Metadata().TableMeta(tabID)
@@ -1512,7 +1516,7 @@ func ConstrainIndexPrefixCols(
 		tabMeta.ColsInComputedColsExpressions,
 		false, /* consolidate */
 		evalCtx, factory, ps,
-		0, /* spanLimit */
+		spanLimit,
 		checkCancellation,
 	)
 	var c constraint.Constraint

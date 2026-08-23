@@ -111,6 +111,7 @@ func TestTryFilterTrigram(t *testing.T) {
 			tab,
 			md.Table(tab).Index(trigramOrd),
 			nil,       /* computedColumns */
+			0,         /* spanLimit */
 			func() {}, /* checkCancellation */
 		)
 		if tc.ok != ok {

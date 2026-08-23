@@ -183,7 +183,6 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 	explicitFilters memo.FiltersExpr,
 	optionalFilters memo.FiltersExpr,
 	filterColumns opt.ColSet,
-	spanLimit int,
 ) (
 	partitionFilters memo.FiltersExpr,
 	remainingFilters memo.FiltersExpr,
@@ -299,7 +298,6 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 		append(optionalFilters, partitionFilters...),
 		scanPrivate.Table,
 		index.Ordinal(),
-		spanLimit,
 	)
 	if !ok {
 		return nil, nil, nil, false
@@ -311,7 +309,6 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 			append(optionalFilters, inBetweenFilters...),
 			scanPrivate.Table,
 			index.Ordinal(),
-			spanLimit,
 		)
 		if !ok {
 			// If there are multiple partitioning columns on the index with different
@@ -470,8 +467,6 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// local to the gateway region.
 		prefixSorter := tabMeta.IndexPartitionLocality(index.Ordinal())
 
-		spanLimit := int(c.e.evalCtx.SessionData().OptimizerSpanLimit)
-
 		// Include the partial index predicate in the set of optional filters,
 		// if this is a partial index.
 		indexOptionalFilters := c.optionalFiltersWithPartialIndexPredicate(
@@ -483,7 +478,6 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 			c.MakeCombinedFiltersConstraint(
 				tabMeta, index, scanPrivate, prefixSorter,
 				filters, indexOptionalFilters, filterColumns,
-				spanLimit,
 			); !ok {
 			return
 		}
@@ -520,7 +514,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 				tabMeta.PartialIndexPredicate(index.Ordinal()); isPartialIndex {
 				pred := *predScalar.(*memo.FiltersExpr)
 				if predConstraint, _, predOK := c.tryConstrainIndex(
-					pred, nil /* optionalFilters */, scanPrivate.Table, index.Ordinal(), spanLimit,
+					pred, nil /* optionalFilters */, scanPrivate.Table, index.Ordinal(),
 				); predOK && combinedConstraint.Contains(c.e.ctx, c.e.evalCtx, predConstraint) {
 					return
 				}
@@ -967,7 +961,7 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 		// Check whether the filter can constrain the index.
 		spanExpr, con, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
 			c.e.ctx, c.e.evalCtx, c.e.f, filters, indexOptionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
-			c.checkCancellation,
+			c.optimizerSpanLimit(), c.checkCancellation,
 		)
 		if !ok {
 			// A span expression to constrain the inverted index could not be
@@ -1214,7 +1208,7 @@ func (c *CustomFuncs) GenerateTrigramSimilarityInvertedIndexScans(
 		// Try to constrain the index.
 		con, remainingFilters, ok := invertedidx.TryFilterInvertedIndexBySimilarity(
 			c.e.ctx, c.e.evalCtx, c.e.f, filters, indexOptionalFilters,
-			tabID, index, tabMeta.ComputedCols, c.checkCancellation,
+			tabID, index, tabMeta.ComputedCols, c.optimizerSpanLimit(), c.checkCancellation,
 		)
 		if !ok {
 			// A span expression to constrain the inverted index could not be
@@ -1261,7 +1255,7 @@ func (c *CustomFuncs) GenerateTrigramSimilarityInvertedIndexScans(
 // filter remaining after extracting the constraint. If no constraint can be
 // derived, then tryConstrainIndex returns ok = false.
 func (c *CustomFuncs) tryConstrainIndex(
-	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int, spanLimit int,
+	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
 ) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	// Start with fast check to rule out indexes that cannot be constrained.
 	if !c.canMaybeConstrainNonInvertedIndex(requiredFilters, tabID, indexOrd) &&
@@ -1269,7 +1263,7 @@ func (c *CustomFuncs) tryConstrainIndex(
 		return nil, nil, false
 	}
 
-	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd, spanLimit)
+	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd)
 	var cons constraint.Constraint
 	ic.Constraint(&cons)
 	if cons.IsUnconstrained() {
@@ -1774,6 +1768,9 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			scanPrivate.Table,
 			index,
 			nil, /* computedColumns */
+			// Note that here the span limit doesn't matter given that we
+			// short-circuit above when any prefix columns are present.
+			c.optimizerSpanLimit(),
 			c.checkCancellation,
 		)
 		if !ok {

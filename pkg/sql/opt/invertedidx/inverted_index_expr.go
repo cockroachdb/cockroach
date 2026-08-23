@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/errors"
 )
@@ -72,8 +73,8 @@ func NewBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, inter
 //   - pre-filterer state that can be used by the invertedFilterer operator to
 //     reduce the number of false positives returned by the span expression.
 //
-// TODO(michae2): Pass optimizer_span_limit to constrain prefix columns of
-// multi-column inverted indexes.
+// spanLimit bounds the number of prefix spans generated for multi-column
+// inverted indexes; see ConstrainIndexPrefixCols.
 func TryFilterInvertedIndex(
 	ctx context.Context,
 	evalCtx *eval.Context,
@@ -83,6 +84,7 @@ func TryFilterInvertedIndex(
 	tabID opt.TableID,
 	index cat.Index,
 	computedColumns map[opt.ColumnID]opt.ScalarExpr,
+	spanLimit int,
 	checkCancellation func(),
 ) (
 	spanExpr *inverted.SpanExpression,
@@ -97,7 +99,7 @@ func TryFilterInvertedIndex(
 	if len(columns) > 0 {
 		constraint, filters, ok = idxconstraint.ConstrainIndexPrefixCols(
 			ctx, evalCtx, factory, columns, notNullCols, filters,
-			optionalFilters, tabID, index, checkCancellation,
+			optionalFilters, tabID, index, spanLimit, checkCancellation,
 		)
 		if !ok {
 			return nil, nil, nil, nil, false
@@ -196,6 +198,9 @@ func TryFilterInvertedIndex(
 // a and b that must match in order to satisfy the similarity filter. This
 // optimization allows us to avoid scanning over some trigrams of the constant
 // string. See similarityTrigramsToScan for more details.
+//
+// spanLimit bounds the number of prefix spans generated for multi-column
+// inverted indexes; see ConstrainIndexPrefixCols.
 func TryFilterInvertedIndexBySimilarity(
 	ctx context.Context,
 	evalCtx *eval.Context,
@@ -205,6 +210,7 @@ func TryFilterInvertedIndexBySimilarity(
 	tabID opt.TableID,
 	index cat.Index,
 	computedColumns map[opt.ColumnID]opt.ScalarExpr,
+	spanLimit int,
 	checkCancellation func(),
 ) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	md := f.Metadata()
@@ -304,9 +310,18 @@ func TryFilterInvertedIndexBySimilarity(
 	var prefixConstraint *constraint.Constraint
 	prefixConstraint, remainingFilters, ok = idxconstraint.ConstrainIndexPrefixCols(
 		ctx, evalCtx, f, cols, notNullCols, filters,
-		optionalFilters, tabID, index, checkCancellation,
+		optionalFilters, tabID, index, spanLimit, checkCancellation,
 	)
 	if !ok {
+		return nil, nil, false
+	}
+	// Combining the prefix spans with the trigram spans produces their
+	// cross-product. Bail if that would exceed the span limit.
+	if spanLimit > 0 && prefixConstraint.Spans.Count()*con.Spans.Count() > spanLimit {
+		log.VEventf(ctx, 2,
+			"not combining %d prefix spans with %d trigram spans: exceeds optimizer_span_limit of %d",
+			prefixConstraint.Spans.Count(), con.Spans.Count(), spanLimit,
+		)
 		return nil, nil, false
 	}
 	prefixConstraint.Combine(ctx, evalCtx, con, checkCancellation)
