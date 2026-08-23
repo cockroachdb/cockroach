@@ -1,0 +1,68 @@
+echo
+----
+"" : /
+  "\x01" : Local
+    "i" [VarInt] : RangeID
+      "r" : Replicated
+        "abc-" -> [custom] : AbortSpan
+        "rsl-" -> [custom] : SharedLocks
+        "fzn-" -> [custom] : FrozenStatus
+        "lgc-" -> [custom] : GCThreshold
+        "rask" -> [custom] : AppliedState
+        "rffk" -> [custom] : ForceFlush
+        "rgch" -> [custom] : GCHint
+        "rll-" -> [custom] : Lease
+        "rprs" -> [custom] : PriorReadSummary
+        "rver" -> [custom] : RangeVersion
+        "stat" -> [custom] : Stats
+        "tst-" -> [custom] : TxnSpanGCThreshold
+      "u" : Unreplicated
+        "rftb" -> [custom] : RangeTombstone
+        "rfth" -> [custom] : RaftHardState
+        "rfti" -> [custom] : RaftLastIndex
+        "rftl" [UInt64] -> [custom] : RaftLog
+        "rftr" -> [custom] : RaftReplicaID
+        "rftt" -> [custom] : RaftTruncatedState
+    "k" : Range
+      "prbe" -> [custom] : Probe
+      "qlpt" -> [custom] : QueueLastProcessing
+      "rdsc" -> [custom] : RangeDescriptor
+      "txn-" -> [custom] : Transaction
+    "s" : Store
+      "cver" -> [custom] : ClusterVersion
+      "goss" -> [custom] : Gossip
+      "hlcu" -> [custom] : HLCUpperBound
+      "iden" -> [custom] : StoreIdent
+      "loqr" : LossOfQuorumRecovery
+        "applied" -> [custom] : Applied
+        "status" -> [custom] : Status
+        "cleanup" -> [custom] : CleanupActions
+      "ntmb" -> [custom] : NodeTombstone
+      "stng" -> [custom] : CachedSettings
+      "uptm" -> [custom] : LastUp
+      "slrm" -> [custom] : StoreLivenessRequesterMeta
+      "slsm" -> [custom] : StoreLivenessSupporterMeta
+      "slsf" -> [custom] : StoreLivenessSupportFor
+      "dlre" -> [custom] : LeakedRaftEntries
+    "z" : LockTable
+      "k" -> [custom] : SingleKey
+  "\x02" : Meta1
+  "\x03" : Meta2
+  "\x04" : System
+    "\x00liveness-" -> [custom] : NodeLiveness
+    "bootstrap-version" -> [custom] : BootstrapVersion
+    "lic-gpi-ts" : ClusterInitGracePeriodTimestamp
+    "lic-tle" -> [custom] : TrialLicenseExpiry
+    "node-idgen" -> [custom] : NodeIDGenerator
+    "range-idgen" -> [custom] : RangeIDGenerator
+    "store-idgen" -> [custom] : StoreIDGenerator
+    "status-" -> [custom] : Status
+    "status-node-" -> [custom] : StatusNode
+    "system-version/" -> [custom] : StartupMigration
+    "tsd" -> [custom] : Timeseries
+    "\xffsys-scfg" : SpanConfig
+      "host/all" -> [custom] : EntireKeyspace
+      "host/ten/" -> [custom] : HostOnTenant
+      "ten/" -> [custom] : SecondaryTenantOnEntireKeyspace
+  "\x88" : TableData
+  "\xfe" [VarUInt] : Tenant
