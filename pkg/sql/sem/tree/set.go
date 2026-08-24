@@ -14,6 +14,12 @@
 
 package tree
 
+import (
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/settings"
+)
+
 // SetVar represents a SET or RESET statement.
 type SetVar struct {
 	Name     string
@@ -76,6 +82,23 @@ func (node *SetClusterSetting) Format(ctx *FmtCtx) {
 	})
 
 	ctx.WriteString(" = ")
+
+	// If the setting is sensitive, never render its value unless the caller
+	// explicitly asked to reveal secrets (FmtShowPasswords), mirroring how
+	// passwords are handled in CREATE/ALTER ROLE. Writing the substitution
+	// literal here instead of formatting node.Value also preempts the
+	// FmtPlaceholderFormat interpolation callback, so a placeholder-bound
+	// sensitive SET (e.g. rendered back into query text by formatActiveQuery)
+	// cannot leak the bound value. The substitution is a parsable string
+	// literal, and every sensitive setting is string-typed, so re-parsing the
+	// formatted statement stays type-valid. Resets (RESET CLUSTER SETTING /
+	// SET ... = DEFAULT) carry no secret and are left untouched.
+	if _, isDefault := node.Value.(DefaultVal); !isDefault &&
+		!ctx.flags.HasFlags(FmtShowPasswords) &&
+		settings.IsSensitiveByName(settings.SettingName(strings.ToLower(node.Name))) {
+		ctx.WriteString(PasswordSubstitution)
+		return
+	}
 
 	switch v := node.Value.(type) {
 	case *DBool, *DInt:

@@ -291,6 +291,7 @@ func (ex *connExecutor) prepare(
 		prepared.Statement.NumPlaceholders = origNumPlaceholders
 		prepared.StatementNoConstants = stmt.StmtNoConstants
 		prepared.StatementSummary = stmt.StmtSummary
+		prepared.NoSecret = stmt.NoSecret
 		prepared.Hints = stmt.Hints
 		prepared.HintIDs = stmt.HintIDs
 		prepared.HintsGeneration = stmt.HintsGeneration
