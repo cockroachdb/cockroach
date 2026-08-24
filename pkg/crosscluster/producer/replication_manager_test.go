@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -428,6 +430,77 @@ func TestAuthorizeViaJob(t *testing.T) {
 		})
 	}
 
+}
+
+// TestAuthorizeViaJobOwnerCheckVersionGate verifies that checkJobOwnership does
+// not reference the system.jobs owner column before V25_2 is active. On a direct
+// 24.3->25.2 upgrade the column does not exist yet, so the query must omit it and
+// the ownership check must be skipped rather than failing.
+func TestAuthorizeViaJobOwnerCheckVersionGate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	// Start at 24.3, before the 25.1 migration that adds the owner column.
+	params.Knobs.Server = &server.TestingKnobs{
+		ClusterVersionOverride:         clusterversion.MinSupported.Version(),
+		DisableAutomaticVersionUpgrade: make(chan struct{}),
+	}
+	// A separate-process tenant cannot start against a MinSupported active
+	// version because its binary is too new, so run on the system tenant.
+	params.DefaultTestTenant = base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
+	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	tDB.Exec(t, "CREATE USER alice")
+	tDB.Exec(t, "CREATE USER bob")
+
+	aliceUsername := username.MakeSQLUsernameFromPreNormalizedString("alice")
+	registry := s.JobRegistry().(*jobs.Registry)
+	jr := makeProducerJobRecordForLogicalReplication(
+		registry, time.Hour, aliceUsername, uuid.MakeV4(),
+		nil /* spans */, []uint32{100}, "test")
+	require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn)
+		return err
+	}))
+	aliceStreamID := streampb.StreamID(jr.JobID)
+
+	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "test")
+
+	// Run in a subtest so the internal planner's monitor is cleaned up before the
+	// server stopper checks for leaks.
+	authorizeBob := func(t *testing.T) error {
+		txn := kvDB.NewTxn(ctx, "test")
+		p, cleanup := sql.NewInternalPlanner("test", txn,
+			username.MakeSQLUsernameFromPreNormalizedString("bob"),
+			&sql.MemoryMetrics{}, &execCfg, sd)
+		t.Cleanup(cleanup)
+		pi := p.(interface {
+			EvalContext() *eval.Context
+			InternalSQLTxn() descs.Txn
+		})
+		mgr, err := newReplicationStreamManager(ctx, pi.EvalContext(),
+			p.(resolver.SchemaResolver), pi.InternalSQLTxn(), clusterunique.ID{})
+		require.NoError(t, err)
+		return mgr.AuthorizeViaJob(ctx, aliceStreamID)
+	}
+
+	// Before V25_2 the owner check is skipped, so the query must not reference the
+	// missing column and a non-owner is not rejected on ownership grounds.
+	t.Run("non-owner tolerated pre-V25_2", func(t *testing.T) {
+		require.NoError(t, authorizeBob(t))
+	})
+
+	// Once V25_2 is active, the owner check is enforced: a non-owner is rejected.
+	tDB.Exec(t, "SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
+	t.Run("non-owner rejected once V25_2 active", func(t *testing.T) {
+		require.ErrorContains(t, authorizeBob(t), "does not own stream")
+	})
 }
 
 func TestReplicationBuiltinsRejectAOST(t *testing.T) {
