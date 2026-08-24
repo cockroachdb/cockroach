@@ -1863,3 +1863,28 @@ statement ok
 RESET CLUSTER SETTING jobs.scheduler.enabled
 
 subtest end
+
+# Regression test for #171241: EXECUTE of a PREPAREd ALTER TABLE ... SET
+# storage parameter with a placeholder value used to fail with "no type for
+# placeholder $1", because the placeholder was only type checked when the SET
+# was actually evaluated (at EXECUTE/startExec time), not during PREPARE.
+subtest placeholder_in_set_storage_param
+
+statement ok
+CREATE TABLE tbl_placeholder_storage_param (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 minutes')
+
+statement ok
+PREPARE p AS ALTER TABLE tbl_placeholder_storage_param SET (ttl_select_batch_size = $1)
+
+statement ok
+EXECUTE p(100)
+
+query T
+SELECT regexp_extract(create_statement, 'ttl_select_batch_size = \d+') FROM [SHOW CREATE TABLE tbl_placeholder_storage_param]
+----
+ttl_select_batch_size = 100
+
+statement ok
+DEALLOCATE p
+
+subtest end
