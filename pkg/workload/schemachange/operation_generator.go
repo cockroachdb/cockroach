@@ -5246,6 +5246,7 @@ func (og *operationGenerator) alterPolicy(ctx context.Context, tx pgx.Tx) (*opSt
 	sqlStatement.WriteString(fmt.Sprintf("ALTER POLICY %s ON %s", policyWithInfo.policyName, &policyWithInfo.table))
 
 	usesDummyRole := false
+	referencesRealRole := false
 	includeUsing := false
 	includeWithCheck := false
 
@@ -5264,6 +5265,7 @@ func (og *operationGenerator) alterPolicy(ctx context.Context, tx pgx.Tx) (*opSt
 			if err != nil {
 				return nil, err
 			}
+			referencesRealRole = true
 		} else if og.randIntn(4) == 0 {
 			// Fall back to two options: 25% chance for PUBLIC or a 75% for generated dummy role
 			roles = "PUBLIC"
@@ -5317,6 +5319,12 @@ func (og *operationGenerator) alterPolicy(ctx context.Context, tx pgx.Tx) (*opSt
 	opStmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedObject, condition: !policyExists || usesDummyRole},
 		{code: pgcode.UndefinedTable, condition: !tableExists},
+	})
+	// A real user read from [SHOW USERS] may be dropped or expire before the
+	// grant executes (the round-trip workloads churn users), so it may fail even
+	// though the user existed at generation time.
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedObject, condition: referencesRealRole},
 	})
 
 	return opStmt, nil
