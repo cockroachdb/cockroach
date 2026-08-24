@@ -187,6 +187,11 @@ func (ex *connExecutor) recordStatementSummary(
 	execOverheadSec := svcLatSec - processingLatSec
 
 	stmt := &planner.stmt
+	if stmtErr != nil && !stmt.NoSecret {
+		// The statement-stats fork of the error is taken before makeErrEvent
+		// can mark it (see MarkSecretError).
+		stmtErr = sqlstats.MarkSecretError(stmtErr)
+	}
 	flags := planner.curPlan.flags
 	ex.recordStatementLatencyMetrics(
 		stmt, flags, automaticRetryTxnCount+automaticRetryStmtCount, runLatRaw, svcLatRaw,
