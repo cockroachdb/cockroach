@@ -804,3 +804,137 @@ statement ok
 SET ROLE root
 
 subtest end
+
+subtest alter_requires_function_ownership
+
+statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled = true
+
+statement ok
+CREATE USER alter_schema_owner;
+CREATE USER alter_func_creator;
+GRANT alter_schema_owner, alter_func_creator TO testuser;
+CREATE SCHEMA test_alter_schema;
+ALTER SCHEMA test_alter_schema OWNER TO alter_schema_owner;
+CREATE SCHEMA test_alter_target_schema;
+GRANT CREATE ON SCHEMA test_alter_schema TO alter_func_creator;
+GRANT USAGE ON SCHEMA test_alter_schema TO alter_func_creator;
+GRANT USAGE ON SCHEMA test_alter_schema TO alter_schema_owner;
+
+# alter_func_creator creates a function and a procedure in the schema.
+user testuser
+
+statement ok
+SET ROLE alter_func_creator
+
+statement ok
+CREATE FUNCTION test_alter_schema.my_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+skipif config local-mixed-23.1
+statement ok
+CREATE PROCEDURE test_alter_schema.my_proc() LANGUAGE SQL AS $$ SELECT 1 $$;
+
+# The schema owner does not own the routines, so every ALTER variant must be
+# rejected, preventing the schema owner from tampering with routines owned by
+# others in their schema.
+statement ok
+SET ROLE alter_schema_owner
+
+statement error pgcode 42501 must be owner of function my_func
+ALTER FUNCTION test_alter_schema.my_func() IMMUTABLE;
+
+statement error pgcode 42501 must be owner of function my_func
+ALTER FUNCTION test_alter_schema.my_func() RENAME TO my_func_renamed;
+
+statement error pgcode 42501 must be owner of function my_func
+ALTER FUNCTION test_alter_schema.my_func() SET SCHEMA test_alter_target_schema;
+
+statement error pgcode 42501 must be owner of function my_func
+ALTER FUNCTION test_alter_schema.my_func() OWNER TO alter_schema_owner;
+
+skipif config local-mixed-23.1
+statement error pgcode 42501 must be owner of function my_proc
+ALTER PROCEDURE test_alter_schema.my_proc() RENAME TO my_proc_renamed;
+
+# The function owner can still alter the routines, including the RENAME path
+# (which also requires CREATE on the schema) that the schema owner was denied.
+statement ok
+SET ROLE alter_func_creator
+
+statement ok
+ALTER FUNCTION test_alter_schema.my_func() IMMUTABLE;
+
+statement ok
+ALTER FUNCTION test_alter_schema.my_func() RENAME TO my_func_renamed;
+
+statement ok
+ALTER FUNCTION test_alter_schema.my_func_renamed() RENAME TO my_func;
+
+# admin (root) can alter routines it does not own.
+user root
+
+statement ok
+ALTER FUNCTION test_alter_schema.my_func() STABLE;
+
+# Clean up.
+statement ok
+DROP SCHEMA test_alter_schema CASCADE;
+DROP SCHEMA test_alter_target_schema;
+REVOKE alter_schema_owner, alter_func_creator FROM testuser;
+DROP USER alter_schema_owner;
+DROP USER alter_func_creator;
+
+statement ok
+RESET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled
+
+subtest end
+
+# When sql.auth.postgres_compatible_ownership_checks.enabled is off (the
+# default), ALTER falls back to the DROP privilege check, so a schema owner can
+# alter routines in their schema that they do not own.
+subtest alter_schema_owner_can_alter_when_disabled
+
+statement ok
+CREATE USER alter_schema_owner;
+CREATE USER alter_func_creator;
+GRANT alter_schema_owner, alter_func_creator TO testuser;
+CREATE SCHEMA test_alter_schema;
+ALTER SCHEMA test_alter_schema OWNER TO alter_schema_owner;
+GRANT CREATE ON SCHEMA test_alter_schema TO alter_func_creator;
+GRANT USAGE ON SCHEMA test_alter_schema TO alter_func_creator;
+GRANT USAGE ON SCHEMA test_alter_schema TO alter_schema_owner;
+
+user testuser
+
+statement ok
+SET ROLE alter_func_creator
+
+statement ok
+CREATE FUNCTION test_alter_schema.my_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+skipif config local-mixed-23.1
+statement ok
+CREATE PROCEDURE test_alter_schema.my_proc() LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+SET ROLE alter_schema_owner
+
+statement ok
+ALTER FUNCTION test_alter_schema.my_func() IMMUTABLE;
+
+statement ok
+ALTER FUNCTION test_alter_schema.my_func() RENAME TO my_func_renamed;
+
+skipif config local-mixed-23.1
+statement ok
+ALTER PROCEDURE test_alter_schema.my_proc() RENAME TO my_proc_renamed;
+
+user root
+
+statement ok
+DROP SCHEMA test_alter_schema CASCADE;
+REVOKE alter_schema_owner, alter_func_creator FROM testuser;
+DROP USER alter_schema_owner;
+DROP USER alter_func_creator;
+
+subtest end
