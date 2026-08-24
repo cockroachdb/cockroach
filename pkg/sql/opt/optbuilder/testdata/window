@@ -685,6 +685,25 @@ project
       └── windows
            └── row-number [as=row_number:10]
 
+# ROW(...) is a row constructor, not shorthand for a parenthesized list, so
+# unlike "PARTITION BY (k, v)" above it is not flattened: it partitions by
+# the composite value as a single key.
+build
+SELECT k, row_number() OVER (PARTITION BY ROW(k, v)) FROM kv
+----
+project
+ ├── columns: k:1!null row_number:10
+ └── window partition=(11)
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10 row_number_1_partition_1:11
+      ├── project
+      │    ├── columns: row_number_1_partition_1:11 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── projections
+      │         └── (k:1, v:2) [as=row_number_1_partition_1:11]
+      └── windows
+           └── row-number [as=row_number:10]
+
 build
 SELECT k, row_number() OVER (PARTITION BY kv.*) FROM kv
 ----

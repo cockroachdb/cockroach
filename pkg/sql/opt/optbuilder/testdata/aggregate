@@ -349,6 +349,64 @@ SELECT count(w) FROM kv GROUP BY 1
 ----
 error (42803): count(): aggregate functions are not allowed in GROUP BY
 
+# ROW(...) is a row constructor, not shorthand for a parenthesized list, so
+# unlike "GROUP BY (k, v)" it is not flattened: it groups by the composite
+# value as a single scalar grouping column, so k and v individually remain
+# unavailable to the select list.
+build
+SELECT k, v FROM kv GROUP BY ROW(k, v)
+----
+error (42803): column "k" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT count(*) FROM kv GROUP BY ROW(k, v)
+----
+project
+ ├── columns: count:7!null
+ └── group-by (hash)
+      ├── columns: count_rows:7!null column8:8
+      ├── grouping columns: column8:8
+      ├── project
+      │    ├── columns: column8:8
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    └── projections
+      │         └── (k:1, v:2) [as=column8:8]
+      └── aggregations
+           └── count-rows [as=count_rows:7]
+
+# Unlike "GROUP BY ()" (the true empty grouping set, which is a special case
+# that always produces exactly one output row, even for empty input),
+# "GROUP BY ROW()" groups by a constant composite scalar: a single, real
+# grouping column, so it produces zero output rows for empty input.
+build
+SELECT count(*) FROM kv GROUP BY ROW()
+----
+project
+ ├── columns: count:7!null
+ └── group-by (hash)
+      ├── columns: count_rows:7!null column8:8!null
+      ├── grouping columns: column8:8!null
+      ├── project
+      │    ├── columns: column8:8!null
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    └── projections
+      │         └── () [as=column8:8]
+      └── aggregations
+           └── count-rows [as=count_rows:7]
+
+build
+SELECT count(*) FROM kv GROUP BY ()
+----
+scalar-group-by
+ ├── columns: count:7!null
+ ├── project
+ │    └── scan kv
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ └── aggregations
+      └── count-rows [as=count_rows:7]
+
 build
 SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v)
 ----

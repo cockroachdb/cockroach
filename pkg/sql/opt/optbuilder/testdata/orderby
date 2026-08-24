@@ -234,6 +234,22 @@ sort
       └── scan t
            └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
 
+# ROW(...) is a row constructor, not shorthand for a parenthesized list, so
+# unlike "ORDER BY (b, a)" it is not flattened into separate sort keys: it
+# orders by the composite value as a whole.
+build
+SELECT * FROM t ORDER BY ROW(b, a), c
+----
+sort
+ ├── columns: a:1!null b:2 c:3  [hidden: column6:6]
+ ├── ordering: +6,+3
+ └── project
+      ├── columns: column6:6 a:1!null b:2 c:3
+      ├── scan t
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── projections
+           └── (b:2, a:1) [as=column6:6]
+
 build
 SELECT * FROM t ORDER BY b, (a, c)
 ----

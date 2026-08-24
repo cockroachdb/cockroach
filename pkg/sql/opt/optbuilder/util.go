@@ -388,12 +388,19 @@ func makeBackfillError(name tree.Name) error {
 		"column %q is being backfilled", tree.ErrString(&name))
 }
 
-// flattenTuples extracts the members of tuples into a list of columns.
+// flattenTuples extracts the members of syntactic parenthesized-list tuples
+// (e.g. "(a, b)") into a list of columns. A tuple built with the explicit ROW
+// keyword (e.g. "ROW(a, b)") is a row constructor, not shorthand for listing
+// its members separately, and is left as a single, opaque scalar expression
+// (Tuple.Row distinguishes the two; see its doc comment). This matches
+// Postgres: a parenthesized list in a position like GROUP BY, ORDER BY, or
+// PARTITION BY is flattened, but ROW(...) there groups/orders/partitions by
+// the composite value as a whole.
 func flattenTuples(exprs []tree.TypedExpr) []tree.TypedExpr {
 	// We want to avoid allocating new slices unless strictly necessary.
 	var newExprs []tree.TypedExpr
 	for i, e := range exprs {
-		if t, ok := e.(*tree.Tuple); ok {
+		if t, ok := e.(*tree.Tuple); ok && !t.Row {
 			if newExprs == nil {
 				// All right, it was necessary to allocate the slices after all.
 				newExprs = make([]tree.TypedExpr, i, len(exprs))
@@ -412,10 +419,11 @@ func flattenTuples(exprs []tree.TypedExpr) []tree.TypedExpr {
 }
 
 // flattenTuple recursively extracts the members of a tuple into a list of
-// expressions.
+// expressions. A member built with the explicit ROW keyword is kept as a
+// single, unflattened expression; see flattenTuples.
 func flattenTuple(t *tree.Tuple, exprs []tree.TypedExpr) []tree.TypedExpr {
 	for _, e := range t.Exprs {
-		if eT, ok := e.(*tree.Tuple); ok {
+		if eT, ok := e.(*tree.Tuple); ok && !eT.Row {
 			exprs = flattenTuple(eT, exprs)
 		} else {
 			expr := e.(tree.TypedExpr)

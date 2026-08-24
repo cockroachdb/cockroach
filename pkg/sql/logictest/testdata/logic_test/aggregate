@@ -4034,3 +4034,37 @@ query R
 SELECT percentile_cont(ARRAY[.4::FLOAT]) WITHIN GROUP (ORDER BY i::FLOAT4) FROM t90519;
 ----
 {2.2}
+
+# Regression test for GROUP BY ROW(...) being incorrectly flattened like a
+# parenthesized list, including GROUP BY ROW() wrongly behaving like the true
+# empty grouping set GROUP BY () (#173264).
+statement ok
+CREATE TABLE t173264 (a INT, b INT);
+INSERT INTO t173264 VALUES (1, 10), (1, 20), (2, 30);
+
+# GROUP BY ROW() groups by a constant scalar, so (unlike GROUP BY (), the
+# true empty grouping set) it produces zero rows when the input is empty.
+query I
+SELECT count(*) FROM t173264 WHERE a > 100 GROUP BY ROW();
+----
+
+query I
+SELECT count(*) FROM t173264 WHERE a > 100 GROUP BY ();
+----
+0
+
+# ROW(a, b) is not flattened, so a and b remain unavailable to the select
+# list individually.
+query error pgcode 42803 column "a" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT a FROM t173264 GROUP BY ROW(a, b)
+
+query error pgcode 42803 column "a" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT a FROM t173264 GROUP BY ROW(a)
+
+# A parenthesized list (not ROW(...)) still flattens as before.
+query I rowsort
+SELECT a FROM t173264 GROUP BY (a, b)
+----
+1
+1
+2
