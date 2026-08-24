@@ -2093,8 +2093,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					duration := timeutil.Since(start).Microseconds()
 
 					if transferStatus != allocator.TransferOK {
-						const failFormat = "failed to transfer lease %s for range %s when draining: %v"
-						const durationFailFormat = "blocked for %d microseconds on transfer attempt"
+						const failFormat = "failed to transfer lease %s for range %s when draining: %v (blocked for %d µs)"
 
 						infoArgs := []interface{}{
 							drainingLeaseStatus.Lease,
@@ -2105,13 +2104,12 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 						} else {
 							infoArgs = append(infoArgs, transferStatus)
 						}
+						infoArgs = append(infoArgs, duration)
 
-						if verbose {
+						if verbose || log.V(1) {
 							log.KvDistribution.Infof(ctx, failFormat, infoArgs...)
-							log.KvDistribution.Infof(ctx, durationFailFormat, duration)
 						} else {
 							log.VErrEventf(ctx, 1 /* level */, failFormat, infoArgs...)
-							log.VErrEventf(ctx, 1 /* level */, durationFailFormat, duration)
 						}
 					}
 				}); err != nil {
