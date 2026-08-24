@@ -104,6 +104,12 @@ func FormatEntryAsJSON(entry logpb.Entry) (string, error) {
 	return printJSONMap(jsonMap)
 }
 
+func FromLogEntry[T any](entry logpb.Entry) (T, error) {
+	var payload T
+	err := json.Unmarshal([]byte(entry.Message[entry.StructuredStart:entry.StructuredEnd]), &payload)
+	return payload, err
+}
+
 // StructuredLogSpy is a test utility that intercepts structured log entries
 // and stores them in memory. It can be used to verify the contents of log
 // entries in tests.

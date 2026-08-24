@@ -29,6 +29,14 @@ func makeTxnInsight(value *sqlstats.RecordedTxnStats) *Transaction {
 	if value.TxnErr != nil {
 		errorCode = pgerror.GetPGCode(value.TxnErr).String()
 		errorMsg = redact.Sprint(value.TxnErr)
+		if sqlstats.IsSecretError(value.TxnErr) {
+			// A transaction failed by a secret-carrying statement carries
+			// that statement's error, which can quote the secret, and the
+			// insight's error message is collected with its redaction markers
+			// intact by unredacted debug zips; keep only its redaction-safe
+			// parts.
+			errorMsg = errorMsg.Redact()
+		}
 	}
 
 	status := Transaction_Failed
@@ -77,6 +85,13 @@ func makeStmtInsight(value *sqlstats.RecordedStmtStats) *Statement {
 	if value.StatementError != nil {
 		errorCode = pgerror.GetPGCode(value.StatementError).String()
 		errorMsg = redact.Sprint(value.StatementError)
+		if sqlstats.IsSecretError(value.StatementError) {
+			// The error of a failed secret-carrying statement can quote the
+			// secret, and the insight's error message is collected with its
+			// redaction markers intact by unredacted debug zips; keep only
+			// its redaction-safe parts.
+			errorMsg = errorMsg.Redact()
+		}
 	}
 
 	insight := &Statement{
