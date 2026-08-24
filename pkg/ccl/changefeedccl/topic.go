@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
 )
@@ -130,9 +131,69 @@ func MakeTopicNamer(targets changefeedbase.Targets, opts ...TopicNameOption) (*T
 		tn.DisplayNames[t] = name
 		return nil
 	})
-
 	return tn, err
+}
 
+// ResolveTopicNames returns the deduplicated list of fully-resolved topic
+// names a changefeed with the given targets and naming options would emit to.
+// This helper expands such targets into one name per column family.
+func ResolveTopicNames(
+	targets changefeedbase.Targets, tableDescs []catalog.TableDescriptor, opts ...TopicNameOption,
+) ([]string, error) {
+	tn := &TopicNamer{join: '.'}
+	for _, opt := range opts {
+		opt.set(tn)
+	}
+
+	if tn.singleName != "" {
+		return []string{tn.nameFromComponents("")}, nil
+	}
+	seen := make(map[string]struct{})
+	topics := make([]string, 0, targets.Size)
+	addTopic := func(topic string) {
+		if _, ok := seen[topic]; ok {
+			return
+		}
+		seen[topic] = struct{}{}
+		topics = append(topics, topic)
+	}
+	// Resolve every target whose name is fully known from the
+	// spec, and queue EACH_FAMILY targets for descriptor-based expansion.
+	var familyTargets []changefeedbase.Target
+	if err := targets.EachTarget(func(t changefeedbase.Target) error {
+		switch t.Type {
+		case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
+			addTopic(tn.nameFromComponents(t.StatementTimeName))
+		case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+			addTopic(tn.nameFromComponents(t.StatementTimeName, t.FamilyName))
+		case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
+			familyTargets = append(familyTargets, t)
+		default:
+			return errors.AssertionFailedf("unrecognized target type %s", t.Type)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if len(familyTargets) == 0 {
+		return topics, nil
+	}
+	descByID := make(map[descpb.ID]catalog.TableDescriptor, len(tableDescs))
+	for _, d := range tableDescs {
+		descByID[d.GetID()] = d
+	}
+	for _, t := range familyTargets {
+		d, ok := descByID[t.DescID]
+		if !ok {
+			return nil, errors.AssertionFailedf(
+				"missing table descriptor %d while expanding topics", t.DescID)
+		}
+		for _, family := range d.GetFamilies() {
+			addTopic(tn.nameFromComponents(t.StatementTimeName, family.Name))
+		}
+	}
+	return topics, nil
 }
 
 const familyPlaceholder = "{family}"
