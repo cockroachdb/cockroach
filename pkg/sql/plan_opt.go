@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,16 +50,6 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.query_cache.enabled", "enable the query cache", true,
 )
-
-// intTableStorageParams is the set of ALTER/CREATE TABLE storage parameter
-// keys whose value is always an integer (see table_storage_param.go, where
-// each of these is parsed via paramparse.DatumAsInt).
-var intTableStorageParams = map[string]bool{
-	`ttl_select_batch_size`: true,
-	`ttl_delete_batch_size`: true,
-	`ttl_select_rate_limit`: true,
-	`ttl_delete_rate_limit`: true,
-}
 
 // prepareUsingOptimizer builds a memo for a prepared statement and populates
 // the following stmt.Prepared fields:
@@ -109,30 +100,32 @@ func (p *planner) prepareUsingOptimizerInternal(
 		// ALTER TABLE has no result columns, so there's normally nothing to do
 		// during prepare (see the bulk case below). However, unlike most of the
 		// statements in that bucket, ALTER TABLE ... SET (...) can take a
-		// placeholder as the value for an integer-typed storage parameter (e.g.
-		// SET (ttl_select_batch_size = $1)); startExec, which actually type
-		// checks and evaluates storage parameter values via storageparam.Set,
-		// only runs at real EXECUTE time. Without this, such a placeholder
-		// would never get a type recorded during PREPARE, and EXECUTE would
-		// fail with "no type for placeholder". Type check it here as an int
-		// (discarding the result) purely for that side effect; the real
-		// evaluation still happens later in startExec.
+		// placeholder as a storage parameter's value (e.g. SET
+		// (ttl_select_batch_size = $1)); startExec, which actually type checks
+		// and evaluates storage parameter values via storageparam.Set, only
+		// runs at real EXECUTE time. Without this, such a placeholder would
+		// never get a type recorded during PREPARE, and EXECUTE would fail
+		// with "no type for placeholder". Type check it here for any
+		// parameter with a statically-known value type (discarding the
+		// result) purely for that side effect; the real evaluation still
+		// happens later in startExec.
 		for _, cmd := range t.Cmds {
 			setStorageParams, ok := cmd.(*tree.AlterTableSetStorageParams)
 			if !ok {
 				continue
 			}
 			for _, sp := range setStorageParams.StorageParams {
-				if !intTableStorageParams[sp.Key] {
+				if _, ok := sp.Value.(*tree.Placeholder); !ok {
 					continue
 				}
-				if _, ok := sp.Value.(*tree.Placeholder); !ok {
+				typ, ok := tablestorageparam.ExpectedType(sp.Key)
+				if !ok {
 					continue
 				}
 				if _, err := p.analyzeExpr(
 					ctx, sp.Value,
 					tree.IndexedVarHelper{},
-					types.Int, true, /* requireType */
+					typ, true, /* requireType */
 					"table storage parameters",
 				); err != nil {
 					return 0, nil, err
