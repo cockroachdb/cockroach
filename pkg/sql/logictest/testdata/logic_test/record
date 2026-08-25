@@ -200,3 +200,79 @@ SELECT '()'::record
 
 statement error pgcode 0A000 cannot parse anonymous record type
 SELECT '(1,4)'::record
+
+subtest qualified_self_reference
+
+statement ok
+CREATE TABLE t1(f1 INT);
+INSERT INTO t1 VALUES(1);
+CREATE TABLE t2(g1 INT);
+INSERT INTO t2 VALUES(9)
+
+# An unqualified name can refer to the whole row of a data source.
+query T
+SELECT t1 FROM t1
+----
+(1)
+
+query T
+SELECT row_to_json(t1) FROM t1
+----
+{"f1": 1}
+
+query I
+SELECT (t1).f1 FROM t1
+----
+1
+
+query I
+SELECT t1.f1 FROM t1
+----
+1
+
+query I
+SELECT t1.* FROM t1
+----
+1
+
+# A qualified name never refers to the whole row. The prefix names the data
+# source, so t1.t1 asks source t1 for a column t1, which does not exist.
+statement error pgcode 42703 column "t1.t1" does not exist
+SELECT t1.t1 FROM t1
+
+statement error pgcode 42703 column "t1.t1" does not exist
+SELECT * FROM t1 WHERE t1.t1 IS NULL
+
+statement error pgcode 42703 column "t1.t1" does not exist
+SELECT row_to_json(t1.t1) FROM t1
+
+statement error pgcode 42703 column "t1.t1" does not exist
+SELECT (t1.t1).f1 FROM t1
+
+# The prefix is reported as the resolved source name, matching Postgres.
+statement error pgcode 42703 column "t1.t1" does not exist
+SELECT public.t1.t1 FROM t1
+
+# The same holds when the data source is aliased.
+statement error pgcode 42703 column "u.u" does not exist
+SELECT u.u FROM t1 AS u
+
+# The prefix must not be ignored: asking t2 for a column t1 must not return the
+# whole row of t1.
+statement error pgcode 42703 column "t2.t1" does not exist
+SELECT t2.t1 FROM t1, t2
+
+statement error pgcode 42703 column "t1.t2" does not exist
+SELECT t1.t2 FROM t1, t2
+
+# ... including through a correlated subquery.
+statement error pgcode 42703 column "t2.t1" does not exist
+SELECT (SELECT t2.t1 FROM t2) FROM t1
+
+# An unknown column with a known prefix keeps its existing error.
+statement error pgcode 42703 column "t1.nope" does not exist
+SELECT t1.nope FROM t1
+
+# An unknown prefix keeps its existing error.
+statement error pgcode 42P01 no data source matches prefix: nosuch
+SELECT nosuch.t1 FROM t1
