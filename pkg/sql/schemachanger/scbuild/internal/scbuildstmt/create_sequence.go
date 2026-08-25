@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -215,7 +216,10 @@ func maybeAssignSequenceOwner(b BuildCtx, sequence *scpb.Namespace, owner *tree.
 	}
 	// OWNED BY mutates the target table's descriptor, so require ownership of
 	// it as PostgreSQL does.
-	tableElts := b.ResolveTable(owner.TableName, ResolveParams{RequireOwnership: true})
+	requireOwnership := sqlclustersettings.PostgresCompatibleOwnershipChecks.Get(
+		&b.ClusterSettings().SV,
+	)
+	tableElts := b.ResolveTable(owner.TableName, ResolveParams{RequireOwnership: requireOwnership})
 	_, _, tbl := scpb.FindTable(tableElts)
 	_, _, tblNamespace := scpb.FindNamespace(tableElts)
 	if tblNamespace.DatabaseID != sequence.DatabaseID {
