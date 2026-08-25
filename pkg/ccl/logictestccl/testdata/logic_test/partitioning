@@ -1240,6 +1240,96 @@ SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.sho
 ----
 sql.show.partitions
 
+# SHOW PARTITIONS FROM TABLE must disambiguate same-named tables in different
+# schemas of the same database; it filters on schema_name, not just table and
+# database name.
+statement ok
+CREATE SCHEMA sa
+
+statement ok
+CREATE SCHEMA sb
+
+statement ok
+CREATE TABLE sa.dup (id INT PRIMARY KEY) PARTITION BY LIST (id) (PARTITION a VALUES IN (1))
+
+statement ok
+CREATE TABLE sb.dup (id INT PRIMARY KEY) PARTITION BY LIST (id) (PARTITION b VALUES IN (2))
+
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE sa.dup]
+----
+a
+
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE sb.dup]
+----
+b
+
+# The partition_lookup zone join must also disambiguate on schema_name.
+# Same-named tables in different schemas have identically named
+# auto-generated indexes and can share a partition name, so without the
+# schema_name predicate one table's partition would pick up the other's
+# zone config. Give sb.z's partition p a zone config and leave sa.z's
+# without one; sa.z must report no zone config.
+statement ok
+CREATE TABLE sa.z (id INT PRIMARY KEY) PARTITION BY LIST (id) (PARTITION p VALUES IN (1))
+
+statement ok
+CREATE TABLE sb.z (id INT PRIMARY KEY) PARTITION BY LIST (id) (PARTITION p VALUES IN (1))
+
+statement ok
+ALTER PARTITION p OF TABLE sb.z CONFIGURE ZONE USING num_replicas = 5
+
+query TT
+SELECT partition_name, zone_config FROM [SHOW PARTITIONS FROM TABLE sa.z]
+----
+p  NULL
+
+query TT
+SELECT partition_name, zone_config FROM [SHOW PARTITIONS FROM TABLE sb.z]
+----
+p  num_replicas = 5
+
+# SHOW PARTITIONS FROM INDEX must likewise disambiguate same-named tables in
+# different schemas. The (index_name, table_name) pair is not unique across
+# schemas, so the query must also filter on schema_name and database_name.
+# Reuse sa.dup and sb.dup from above, whose auto-generated primary indexes are
+# both named dup_pkey.
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM INDEX sa.dup@dup_pkey]
+----
+a
+
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM INDEX sb.dup@dup_pkey]
+----
+b
+
+# Use schema names with mixed case, spaces, and an embedded single quote to
+# confirm the schema_name predicate is a properly escaped string literal
+# (lexbase.EscapeSQLString) rather than a naively interpolated identifier.
+statement ok
+CREATE SCHEMA "Weird Sch'A"
+
+statement ok
+CREATE SCHEMA "Weird Sch'B"
+
+statement ok
+CREATE TABLE "Weird Sch'A".dupe (id INT PRIMARY KEY) PARTITION BY LIST (id) (PARTITION wa VALUES IN (1))
+
+statement ok
+CREATE TABLE "Weird Sch'B".dupe (id INT PRIMARY KEY) PARTITION BY LIST (id) (PARTITION wb VALUES IN (2))
+
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM INDEX "Weird Sch'A".dupe@dupe_pkey]
+----
+wa
+
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM INDEX "Weird Sch'B".dupe@dupe_pkey]
+----
+wb
+
 # Testing show partitions with inherited constraints.
 statement ok
 CREATE TABLE t_inherit (x INT PRIMARY KEY)

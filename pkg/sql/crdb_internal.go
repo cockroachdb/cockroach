@@ -3969,6 +3969,17 @@ CREATE TABLE crdb_internal.table_indexes (
 					// If the descriptor is not a table, return no match.
 					return false, nil
 				}
+				// Match the visibility filtering of the full-table populate path
+				// above (forEachTableDesc with allowAdding=true), which surfaces
+				// only public and adding tables. A dropped table lingers in the
+				// DROP state until GC, but its parent schema descriptor may
+				// already have been deleted (e.g. after DROP SCHEMA), so the
+				// Schema lookup below would fail the whole query with an
+				// "unknown schema [id]" error. Such tables must not surface via
+				// the descriptor_id lookup join either.
+				if !descriptorIsVisible(table, true /* allowAdding */, false /* includeDropped */) {
+					return false, nil
+				}
 				sc, err := p.byIDGetterBuilder().Get().Schema(ctx, table.GetParentSchemaID())
 				if err != nil {
 					return false, err
