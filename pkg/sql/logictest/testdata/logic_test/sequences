@@ -2578,8 +2578,8 @@ subtest end
 subtest owned_by_privilege
 
 # CREATE/ALTER SEQUENCE ... OWNED BY mutates the target table's descriptor, so it
-# requires ownership of that table (matching PostgreSQL). A non-owner must be
-# rejected. victim_table is owned by root.
+# requires ownership of that table (matching PostgreSQL). This is gated behind
+# sql.auth.postgres_compatible_ownership_checks.enabled, which is off by default.
 
 statement ok
 CREATE TABLE victim_table (id INT PRIMARY KEY, data STRING)
@@ -2587,6 +2587,28 @@ CREATE TABLE victim_table (id INT PRIMARY KEY, data STRING)
 statement ok
 GRANT CREATE ON SCHEMA public TO testuser
 
+# With the setting off (the default), a non-owner can still attach a sequence to
+# a table it does not own, preserving pre-fix behavior.
+user testuser
+
+statement ok
+CREATE SEQUENCE legacy_ok_seq OWNED BY victim_table.id
+
+statement ok
+CREATE SEQUENCE legacy_ok_seq2
+
+statement ok
+ALTER SEQUENCE legacy_ok_seq2 OWNED BY victim_table.id
+
+statement ok
+DROP SEQUENCE legacy_ok_seq, legacy_ok_seq2
+
+user root
+
+statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled = true
+
+# With the setting on, a non-owner must be rejected. victim_table is owned by root.
 user testuser
 
 statement ok
@@ -2631,5 +2653,8 @@ DROP TABLE victim_table, testuser_tbl
 
 statement ok
 REVOKE CREATE ON SCHEMA public FROM testuser
+
+statement ok
+RESET CLUSTER SETTING sql.auth.postgres_compatible_ownership_checks.enabled
 
 subtest end

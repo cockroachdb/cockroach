@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -482,13 +483,15 @@ func assignSequenceOwner(
 					// OWNED BY mutates the target table's descriptor, so require
 					// ownership of it as PostgreSQL does. Check before detaching any
 					// existing owner to minimize what must be rolled back on failure.
-					hasOwnership, err := p.HasOwnership(ctx, tableDesc)
-					if err != nil {
-						return err
-					}
-					if !hasOwnership {
-						return pgerror.Newf(pgcode.InsufficientPrivilege,
-							"must be owner of relation %s", tree.Name(tableDesc.GetName()))
+					if sqlclustersettings.PostgresCompatibleOwnershipChecks.Get(&p.ExecCfg().Settings.SV) {
+						hasOwnership, err := p.HasOwnership(ctx, tableDesc)
+						if err != nil {
+							return err
+						}
+						if !hasOwnership {
+							return pgerror.Newf(pgcode.InsufficientPrivilege,
+								"must be owner of relation %s", tree.Name(tableDesc.GetName()))
+						}
 					}
 					if err := removeSequenceOwnerIfExists(ctx, p, sequenceID, opts); err != nil {
 						return err
