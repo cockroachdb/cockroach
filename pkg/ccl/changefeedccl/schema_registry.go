@@ -327,7 +327,7 @@ func (r *confluentSchemaRegistry) getVersion(
 ) (confluentSchemaVersionMetadata, error) {
 	u := r.urlForPath(fmt.Sprintf("subjects/%s/versions/%s", subject, version))
 	if log.V(1) {
-		log.Changefeed.Infof(ctx, "looking up avro schema id %s", u)
+		log.Infof(ctx, "looking up avro schema id %s", u)
 	}
 	var meta confluentSchemaVersionMetadata
 	err := r.doWithRetry(ctx, func() error {
@@ -360,7 +360,7 @@ func (r *confluentSchemaRegistry) lookUpAllVersions(
 ) ([]int32, error) {
 	u := r.urlForPath(fmt.Sprintf("subjects/%s/versions", subject))
 	if log.V(1) {
-		log.Changefeed.Infof(ctx, "listing avro schema versions %s", u)
+		log.Infof(ctx, "listing avro schema versions %s", u)
 	}
 	var versions []int32
 	err := r.doWithRetry(ctx, func() error {
@@ -407,7 +407,7 @@ func (r *confluentSchemaRegistry) lookupLatestCompatibleSchema(
 		if err := accept(meta.Schema); err != nil {
 			rejectionReasons = append(rejectionReasons,
 				fmt.Sprintf("version %d: %v", version, err))
-			log.Changefeed.VInfof(ctx, 1,
+			log.VInfof(ctx, 1,
 				"subject %q version %d is not avro-compatible with the generated schema: %v",
 				subject, version, err)
 			continue

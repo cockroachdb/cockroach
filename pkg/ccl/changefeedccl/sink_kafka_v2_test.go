@@ -461,7 +461,7 @@ func TestResolveTopicNames(t *testing.T) {
 			sinkURI: "kafka://localhost:9092",
 			targets: makeTargets(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-				DescID:            fooDesc.GetID(),
+				TableID:           fooDesc.GetID(),
 				StatementTimeName: changefeedbase.StatementTimeName(fooDesc.GetName()),
 			}),
 			expected: []string{"foo"},
@@ -471,7 +471,7 @@ func TestResolveTopicNames(t *testing.T) {
 			sinkURI: "kafka://localhost:9092?topic_prefix=pre-",
 			targets: makeTargets(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
-				DescID:            fooDesc.GetID(),
+				TableID:           fooDesc.GetID(),
 				FamilyName:        "f2",
 				StatementTimeName: changefeedbase.StatementTimeName(fooDesc.GetName()),
 			}),
@@ -482,7 +482,7 @@ func TestResolveTopicNames(t *testing.T) {
 			sinkURI: "kafka://localhost:9092?topic_prefix=pre-",
 			targets: makeTargets(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-				DescID:            fooDesc.GetID(),
+				TableID:           fooDesc.GetID(),
 				StatementTimeName: changefeedbase.StatementTimeName(fooDesc.GetName()),
 			}),
 			expected: []string{"pre-foo.f1", "pre-foo.f2"},
@@ -492,7 +492,7 @@ func TestResolveTopicNames(t *testing.T) {
 			sinkURI: "kafka://localhost:9092?topic_prefix=pre-&topic_name=all",
 			targets: makeTargets(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-				DescID:            fooDesc.GetID(),
+				TableID:           fooDesc.GetID(),
 				StatementTimeName: changefeedbase.StatementTimeName(fooDesc.GetName()),
 			}),
 			expected: []string{"pre-all"},
@@ -503,12 +503,12 @@ func TestResolveTopicNames(t *testing.T) {
 			targets: makeTargets(
 				changefeedbase.Target{
 					Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-					DescID:            fooDesc.GetID(),
+					TableID:           fooDesc.GetID(),
 					StatementTimeName: changefeedbase.StatementTimeName(fooDesc.GetName()),
 				},
 				changefeedbase.Target{
 					Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-					DescID:            barDesc.GetID(),
+					TableID:           barDesc.GetID(),
 					StatementTimeName: changefeedbase.StatementTimeName(barDesc.GetName()),
 				},
 			),

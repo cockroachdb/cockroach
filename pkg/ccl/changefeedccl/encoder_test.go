@@ -461,7 +461,7 @@ func TestAvroEncoderReadOnlyMode(t *testing.T) {
 	targets := changefeedbase.Targets{}
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		DescID:            tableDesc.GetID(),
+		TableID:           tableDesc.GetID(),
 		StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 	})
 
@@ -545,7 +545,7 @@ func TestAvroEncoderSubjectOverrides(t *testing.T) {
 	targets := changefeedbase.Targets{}
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		DescID:            tableDesc.GetID(),
+		TableID:           tableDesc.GetID(),
 		StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 	})
 
@@ -761,7 +761,7 @@ func TestAvroEncoderReadModeSchemaMismatch(t *testing.T) {
 	targets := changefeedbase.Targets{}
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		DescID:            fooDesc.GetID(),
+		TableID:           fooDesc.GetID(),
 		StatementTimeName: changefeedbase.StatementTimeName(fooDesc.GetName()),
 	})
 

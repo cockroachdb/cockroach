@@ -184,10 +184,10 @@ func ResolveTopicNames(
 		descByID[d.GetID()] = d
 	}
 	for _, t := range familyTargets {
-		d, ok := descByID[t.DescID]
+		d, ok := descByID[t.TableID]
 		if !ok {
 			return nil, errors.AssertionFailedf(
-				"missing table descriptor %d while expanding topics", t.DescID)
+				"missing table descriptor %d while expanding topics", t.TableID)
 		}
 		for _, family := range d.GetFamilies() {
 			addTopic(tn.nameFromComponents(t.StatementTimeName, family.Name))
