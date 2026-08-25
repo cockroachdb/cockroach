@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
 go_library(
@@ -60,6 +60,17 @@ go_library(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//:pq",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "sctest_test",
+    srcs = ["framework_test.go"],
+    embed = [":sctest"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
         "@com_github_stretchr_testify//require",
     ],
 )
