@@ -117,7 +117,8 @@ func FindAllIncrementalPaths(
 
 // LegacyFindPriorBackups finds "appended" incremental backups via the legacy
 // path prior to the backup index. It searches for subdirectories matchingl the
-// naming pattern (e.g. YYMMDD/HHmmss.ss) by delimiting on the `data/` dir.
+// naming pattern (e.g. YYMMDD/HHmmss.ss), eliding each layer's data files via
+// backupbase.ListingDelimDataSlash.
 // Backup paths are returned in ascending end time order.
 //
 // Note: store should be rooted at the directory containing the incremental
