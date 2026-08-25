@@ -542,10 +542,17 @@ type mockSink struct {
 
 var _ bulksst.BulkSink = (*mockSink)(nil)
 
-func (m *mockSink) Add(context.Context, roachpb.Key, []byte) error { return nil }
-func (m *mockSink) Close(context.Context)                          {}
-func (m *mockSink) Flush(context.Context) error                    { return nil }
-func (m *mockSink) IsEmpty() bool                                  { return m.empty }
+func (m *mockSink) Close(context.Context)       {}
+func (m *mockSink) Flush(context.Context) error { return nil }
+func (m *mockSink) IsEmpty() bool               { return m.empty }
+
+// Add mirrors a real sink by buffering the KV, which makes the sink non-empty.
+// Like the real sinks, it does so without synchronization: the field is owned
+// by the caller's goroutine.
+func (m *mockSink) Add(context.Context, roachpb.Key, []byte) error {
+	m.empty = false
+	return nil
+}
 
 func (m *mockSink) SetOnFlush(fn func(kvpb.BulkOpSummary)) { m.onFlush = fn }
 
@@ -592,15 +599,15 @@ func TestImportProgressTracker(t *testing.T) {
 	require.Equal(t, int64(0), prog.ResumePos[5])
 	require.Equal(t, base.SQLInstanceID(7), prog.NodeID)
 
-	// Record some KV batches.
+	// Record some KV batches. Both sinks have buffered data (empty=false), and
+	// that state is sampled as each batch is recorded.
 	tracker.recordKVBatch(row.KVBatch{Source: 2, LastRow: 100, Progress: 0.5})
 	tracker.recordKVBatch(row.KVBatch{Source: 5, LastRow: 200, Progress: 0.8})
 
 	// Simulate the PK sink flushing (copies unflushedRows into its slot).
-	// The index sink has not flushed but has buffered data (empty=false),
-	// so it holds back the resume position.
+	// The index sink has not flushed but has buffered data, so it holds back
+	// the resume position.
 	pkSink.empty = true
-	idxSink.empty = false
 	pkSink.simulateFlush(kvpb.BulkOpSummary{DataSize: 1000})
 
 	prog, err = tracker.formatProgress()
@@ -612,15 +619,17 @@ func TestImportProgressTracker(t *testing.T) {
 	require.Equal(t, int64(1000), prog.BulkSummary.DataSize)
 
 	// If the index sink is empty (no buffered data), it should not hold
-	// back the resume position.
+	// back the resume position. Replay the batch to resample the sinks.
 	idxSink.empty = true
+	tracker.recordKVBatch(row.KVBatch{Source: 5, LastRow: 200, Progress: 0.8})
 	prog, err = tracker.formatProgress()
 	require.NoError(t, err)
 	require.Equal(t, int64(100), prog.ResumePos[2], "empty index sink does not hold back")
 	require.Equal(t, int64(200), prog.ResumePos[5], "empty index sink does not hold back")
 
-	// Now the index sink flushes too.
+	// Now the index sink buffers data of its own and flushes it.
 	idxSink.empty = false
+	tracker.recordKVBatch(row.KVBatch{Source: 5, LastRow: 200, Progress: 0.8})
 	idxSink.simulateFlush(kvpb.BulkOpSummary{DataSize: 500})
 
 	// Both sinks have flushed, so resume position should be the row
@@ -636,6 +645,62 @@ func TestImportProgressTracker(t *testing.T) {
 	// totalSummary accumulates across all flushes.
 	total := tracker.fetchSummary()
 	require.Equal(t, int64(1500), total.DataSize)
+}
+
+// TestImportProgressTrackerConcurrentSinks reproduces the goroutine split in
+// ingestKvs: one goroutine feeds the sinks while another reports progress.
+// Sinks are owned by the feeding goroutine and are not safe for concurrent
+// use, so progress reporting must not touch their state. Only meaningful
+// under the race detector.
+func TestImportProgressTrackerConcurrentSinks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	nodeIDContainer := &base.NodeIDContainer{}
+	nodeIDContainer.Set(ctx, 7)
+
+	spec := &execinfrapb.ReadImportDataSpec{Uri: map[int32]string{0: "file-a.csv"}}
+	flowCtx := &execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{NodeID: base.NewSQLIDContainerForNode(nodeIDContainer)},
+	}
+
+	tracker := newImportProgressTracker(flowCtx, spec)
+	sink := &mockSink{empty: true}
+	tracker.registerSink(sink)
+
+	const batches, kvsPerBatch = 200, 50
+
+	// stopProgress is closed once the ingest goroutine is done, mirroring
+	// ingestKvs.
+	stopProgress := make(chan struct{})
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(stopProgress)
+		for i := 0; i < batches; i++ {
+			for j := 0; j < kvsPerBatch; j++ {
+				if err := sink.Add(ctx, roachpb.Key("a"), nil); err != nil {
+					return err
+				}
+			}
+			tracker.recordKVBatch(row.KVBatch{Source: 0, LastRow: int64(i), Progress: 1})
+			sink.simulateFlush(kvpb.BulkOpSummary{DataSize: 1})
+		}
+		return nil
+	})
+	g.GoCtx(func(ctx context.Context) error {
+		for {
+			select {
+			case <-stopProgress:
+				return nil
+			default:
+			}
+			if _, err := tracker.formatProgress(); err != nil {
+				return err
+			}
+		}
+	})
+	require.NoError(t, g.Wait())
 }
 
 // syncBarrier allows 2 threads (a controller and a worker) to
