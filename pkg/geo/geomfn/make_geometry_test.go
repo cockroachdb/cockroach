@@ -348,6 +348,13 @@ func TestMakePolygonFromMultiLineString(t *testing.T) {
 			"",
 			errors.Newf("Multistring needs to have closed linestrings"),
 		},
+		{
+			"Empty MULTILINESTRING",
+			"MULTILINESTRING EMPTY",
+			geopb.SRID(4326),
+			"",
+			errors.Newf("polygon shell must not be empty"),
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

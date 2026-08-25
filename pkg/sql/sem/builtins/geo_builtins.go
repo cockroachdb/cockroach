@@ -7682,6 +7682,31 @@ func init() {
 	}
 }
 
+// validGeometryShapeNames is the set of shape names accepted by
+// addgeometrycolumn's shape argument, keyed by upper-case form.
+var validGeometryShapeNames = func() map[string]string {
+	m := make(map[string]string, len(geopb.ShapeType_value))
+	for name := range geopb.ShapeType_value {
+		upper := strings.ToUpper(name)
+		m[upper] = upper
+	}
+	delete(m, strings.ToUpper(geopb.ShapeType_Unset.String())) // Skip the proto zero value.
+
+	return m
+}()
+
+// canonicalGeometryShape validates a caller-supplied shape name against the set
+// of shapes accepted inside GEOMETRY(...) and returns its canonical form.
+func canonicalGeometryShape(shape string) (string, error) {
+	if canon, ok := validGeometryShapeNames[strings.ToUpper(shape)]; ok {
+		return canon, nil
+	}
+	return "", pgerror.Newf(
+		pgcode.InvalidParameterValue,
+		"invalid geometry shape %q", shape,
+	)
+}
+
 // addGeometryColumnSQL returns the SQL statement that should be executed to
 // add a geometry column.
 func addGeometryColumnSQL(
@@ -7707,12 +7732,17 @@ func addGeometryColumnSQL(
 			"useTypmod=false is currently not supported with AddGeometryColumn",
 		)
 	}
+	canonShape, err := canonicalGeometryShape(shape)
+	if err != nil {
+		return "", err
+	}
 
 	tn := makeTableName(catalogName, schemaName, tableName)
+	col := tree.Name(columnName)
 	stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s GEOMETRY(%s,%d)",
 		tn.String(),
-		columnName,
-		shape,
+		col.String(),
+		canonShape,
 		srid,
 	)
 	return stmt, nil
