@@ -45,6 +45,9 @@ type TestServerFactory interface {
 	// will be the minimum supported binary version.
 	WithMixedVersion() TestServerFactory
 
+	// IsMixedVersion reports whether WithMixedVersion has been applied.
+	IsMixedVersion() bool
+
 	// WithSchemaLockDisabled prevents new objects from having
 	// schema locked set.
 	WithSchemaLockDisabled() TestServerFactory
@@ -90,6 +93,11 @@ func (f SingleNodeTestClusterFactory) WithMixedVersion() TestServerFactory {
 	return f
 }
 
+// IsMixedVersion implements the TestServerFactory interface.
+func (f SingleNodeTestClusterFactory) IsMixedVersion() bool {
+	return f.server != nil && f.server.ClusterVersionOverride.Major != 0
+}
+
 // WithSchemaLockDisabled implements the sctest.TestServerFactory interface.
 func (f SingleNodeTestClusterFactory) WithSchemaLockDisabled() TestServerFactory {
 	f.schemaLockedDisabled = true
@@ -127,7 +135,7 @@ func (f SingleNodeTestClusterFactory) Start(ctx context.Context, t *testing.T) T
 	}
 	// Always run this test with schema_locked by default.
 	args.Settings = cluster.MakeTestingClusterSettings()
-	if f.server != nil && f.server.ClusterVersionOverride.Major != 0 {
+	if f.IsMixedVersion() {
 		args.Settings = cluster.MakeClusterSettingsWithVersions(clusterversion.Latest.Version(), f.server.ClusterVersionOverride)
 	}
 	sql.CreateTableWithSchemaLocked.Override(ctx, &args.Settings.SV, !f.schemaLockedDisabled)

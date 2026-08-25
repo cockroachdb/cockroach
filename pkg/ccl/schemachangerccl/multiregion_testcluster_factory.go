@@ -50,6 +50,11 @@ func (f MultiRegionTestClusterFactory) WithMixedVersion() sctest.TestServerFacto
 	return f
 }
 
+// IsMixedVersion implements the sctest.TestServerFactory interface.
+func (f MultiRegionTestClusterFactory) IsMixedVersion() bool {
+	return f.server != nil && f.server.ClusterVersionOverride.Major != 0
+}
+
 // WithSchemaLockDisabled implements the sctest.TestServerFactory interface.
 func (f MultiRegionTestClusterFactory) WithSchemaLockDisabled() sctest.TestServerFactory {
 	f.schemaLockedDisabled = true
