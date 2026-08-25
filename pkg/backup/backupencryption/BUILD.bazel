@@ -6,7 +6,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/backup/backupencryption",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/backup/backupbase",
         "//pkg/base",
         "//pkg/cloud",
         "//pkg/jobs/jobspb",
