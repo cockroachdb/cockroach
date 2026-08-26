@@ -481,7 +481,14 @@ func isJobTerminalOrTerminating(state jobs.State) bool {
 func (r *replicationStreamManagerImpl) checkJobOwnership(
 	ctx context.Context, planHook sql.PlanHookState, streamID streampb.StreamID,
 ) (jobs.State, error) {
-	const query = "SELECT owner, status, job_type FROM system.jobs WHERE id = $1"
+	// The owner column is added by a 25.1 migration. A cluster upgrading directly
+	// from 24.3 runs the 25.2 binary while the active version is still below 25.1,
+	// where the column does not exist yet, so only select it once V25_2 is active.
+	checkOwner := r.evalCtx.Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_2.Version())
+	query := "SELECT NULL, status, job_type FROM system.jobs WHERE id = $1"
+	if checkOwner {
+		query = "SELECT owner, status, job_type FROM system.jobs WHERE id = $1"
+	}
 	var row tree.Datums
 	var err error
 	if r.evalCtx.AsOfSystemTime != nil {
@@ -503,15 +510,20 @@ func (r *replicationStreamManagerImpl) checkJobOwnership(
 	if row == nil {
 		return "", jobs.NewJobNotFoundError(jobspb.JobID(streamID))
 	}
-	caller := planHook.User()
-	notOwned := pgerror.Newf(pgcode.InsufficientPrivilege,
-		"user %s does not own stream %d", caller, streamID)
-	if row[0] == tree.DNull {
-		return "", notOwned
-	}
-	owner := username.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(row[0])))
-	if caller != owner {
-		return "", notOwned
+	// The owner column is only reliably populated once the 25.1 jobs backfill has
+	// finalized, so only enforce the ownership check once V25_2 is active to avoid
+	// rejecting legitimate streams during a mixed-version upgrade.
+	if checkOwner {
+		caller := planHook.User()
+		notOwned := pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s does not own stream %d", caller, streamID)
+		if row[0] == tree.DNull {
+			return "", notOwned
+		}
+		owner := username.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(row[0])))
+		if caller != owner {
+			return "", notOwned
+		}
 	}
 	if row[2] == tree.DNull {
 		return "", notAReplicationJobError(jobspb.JobID(streamID))

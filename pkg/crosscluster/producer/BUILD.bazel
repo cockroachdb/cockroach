@@ -96,6 +96,7 @@ go_test(
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/storageccl",
         "//pkg/cloud/impl:cloudimpl",
+        "//pkg/clusterversion",
         "//pkg/crosscluster",
         "//pkg/crosscluster/replicationtestutils",
         "//pkg/jobs",
