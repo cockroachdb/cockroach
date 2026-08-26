@@ -282,8 +282,18 @@ func (ds *ServerImpl) setupFlow(
 		}
 		// The flow will run in a LeafTxn because we do not want each distributed
 		// Txn to heartbeat the transaction.
-		nodeID := roachpb.NodeID(req.Flow.Gateway)
-		leafTxn := kv.NewLeafTxn(ctx, ds.DB.KV(), nodeID, tis, &req.LeafTxnAdmissionHeader)
+		//
+		// The gateway's SQL instance ID doubles as its KV node ID for the system
+		// tenant and shared-process tenants, and is what Txn.Send stamps into
+		// BatchRequest.GatewayNodeID. On a separate-process tenant pod the
+		// instance ID is a per-tenant counter with no relation to KV node IDs,
+		// so pass zero: the KV node receiving the batch backfills its own ID
+		// (see Node.Batch), exactly as it does for this pod's root-txn batches.
+		var gatewayNodeID roachpb.NodeID
+		if _, isKVNode := ds.ServerConfig.NodeID.OptionalNodeID(); isKVNode {
+			gatewayNodeID = roachpb.NodeID(req.Flow.Gateway)
+		}
+		leafTxn := kv.NewLeafTxn(ctx, ds.DB.KV(), gatewayNodeID, tis, &req.LeafTxnAdmissionHeader)
 		leafTxn.SetWorkloadInfo(
 			req.EvalContext.WorkloadID,
 			req.EvalContext.AppNameID,

@@ -513,12 +513,20 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// We're going to distribute a table and then read it, and we'll expect all
-	// the ScanRequests (produced by the different nodes) to identify the one and
-	// only gateway.
+	// We're going to distribute a table and then read it, and check the gateway
+	// stamped on the resulting ScanRequests. When the SQL gateway is a KV node
+	// (system tenant and shared-process tenants), every scan identifies that one
+	// gateway. On a separate-process (external) tenant the gateway's SQL instance
+	// ID is not a KV node ID, so leaf txns leave GatewayNodeID unset and each
+	// receiving KV node backfills its own ID (see Node.Batch); we then expect
+	// each scan to carry the ID of the node that evaluated it.
 
 	var foundReq int64 // written atomically
 	var expectedGateway roachpb.NodeID
+	// externalMode and storeToNode are populated once the cluster is up (see
+	// below) and read by the eval filter during the final read.
+	var externalMode bool
+	storeToNode := make(map[roachpb.StoreID]roachpb.NodeID)
 
 	var tableID atomic.Value
 	tc := serverutils.StartCluster(t, 3, /* numNodes */
@@ -541,10 +549,16 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 							}
 
 							atomic.StoreInt64(&foundReq, 1)
-							if gw := filterArgs.Hdr.GatewayNodeID; gw != expectedGateway {
+							wantGateway := expectedGateway
+							if externalMode {
+								// The gateway pod couldn't stamp a KV node ID, so this
+								// node backfilled its own ID (see Node.Batch).
+								wantGateway = storeToNode[filterArgs.Sid]
+							}
+							if gw := filterArgs.Hdr.GatewayNodeID; gw != wantGateway {
 								return kvpb.NewErrorf(
-									"expected all scans to have gateway 3, found: %d",
-									gw)
+									"expected scan on s%d to have gateway %d, found: %d",
+									filterArgs.Sid, wantGateway, gw)
 							}
 							return nil
 						},
@@ -578,6 +592,10 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	}
 
 	expectedGateway = tc.Server(2).NodeID()
+	externalMode = tc.DefaultTenantDeploymentMode().IsExternal()
+	for i := range 3 {
+		storeToNode[tc.Server(i).GetFirstStoreID()] = tc.Server(i).NodeID()
+	}
 	if _, err := tc.ServerConn(2).Exec("SELECT * FROM t"); err != nil {
 		t.Fatal(err)
 	}

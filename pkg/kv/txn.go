@@ -77,10 +77,14 @@ type Txn struct {
 	// typ indicates the type of transaction.
 	typ TxnType
 
-	// gatewayNodeID, if != 0, is the ID of the node on whose behalf this
-	// transaction is running. Normally this is the current node, but in the case
-	// of Txns created on remote nodes by DistSQL this will be the gateway.
-	// It will be attached to all requests sent through this transaction.
+	// gatewayNodeID, if != 0, is the KV node ID on whose behalf this transaction
+	// is running. It is stamped into BatchRequest.GatewayNodeID (see Txn.Send),
+	// which KV uses as a proxy for the origin locality of the request (e.g. for
+	// load-based rebalancing). Normally this is the current node; for leaf txns
+	// created on remote nodes by DistSQL it is the gateway's node ID. It must be
+	// a genuine KV node ID: on a separate-process SQL pod the gateway's SQL
+	// instance ID is not one, so this is left 0 and the receiving KV node
+	// backfills its own ID (see Node.Batch).
 	gatewayNodeID roachpb.NodeID
 
 	// appNameID, if != 0, is the hash of the application name for
@@ -1377,7 +1381,11 @@ func (txn *Txn) checkRetryErrorTxnIDLocked(
 func (txn *Txn) Send(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
-	// Fill in the GatewayNodeID on the batch if the txn knows it.
+	// Fill in the GatewayNodeID on the batch if the txn knows it. A zero
+	// gatewayNodeID is left as-is on purpose: DistSender and, ultimately, the
+	// receiving KV node backfill a local KV node ID (see
+	// DistSender.initAndVerifyBatch and Node.Batch). Separate-process SQL pods
+	// rely on this, as their gateway has no KV node ID to stamp here.
 	// NOTE(andrei): It seems a bit ugly that we're filling in the batches here as
 	// opposed to the point where the requests are being created, but
 	// unfortunately requests are being created in many ways and this was the best

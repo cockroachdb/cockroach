@@ -17,15 +17,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -227,11 +232,22 @@ func TestWorkloadIDPropagation(t *testing.T) {
 	t.Run("distsql_remote", func(t *testing.T) {
 		var clusterMu syncutil.Mutex
 		clusterSeenIDs := make(map[uint64]struct{})
+		// Per workload ID: (GatewayNodeID, target replica node ID) pairs seen
+		// on BR.Headers carrying that workload ID. Batches from tenant pods
+		// must reach KV with a zero GatewayNodeID so that Node.Batch backfills
+		// the receiving node's own ID, making the two components equal.
+		gatewayReplicaPairs := make(map[uint64]map[[2]roachpb.NodeID]struct{})
 
 		clusterFilter := func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 			if ba.Header.WorkloadID != 0 {
 				clusterMu.Lock()
 				clusterSeenIDs[ba.Header.WorkloadID] = struct{}{}
+				if gatewayReplicaPairs[ba.Header.WorkloadID] == nil {
+					gatewayReplicaPairs[ba.Header.WorkloadID] = make(map[[2]roachpb.NodeID]struct{})
+				}
+				gatewayReplicaPairs[ba.Header.WorkloadID][[2]roachpb.NodeID{
+					ba.Header.GatewayNodeID, ba.Header.Replica.NodeID,
+				}] = struct{}{}
 				clusterMu.Unlock()
 			}
 			return nil
@@ -240,6 +256,11 @@ func TestWorkloadIDPropagation(t *testing.T) {
 		tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				// The separate-process pod subtest below starts tenants
+				// explicitly (one per node), so keep the cluster system-tenant
+				// only rather than letting a default test tenant claim the
+				// tenant ID out from under it.
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						TestingRequestFilter: clusterFilter,
@@ -252,12 +273,10 @@ func TestWorkloadIDPropagation(t *testing.T) {
 		})
 		defer tc.Stopper().Stop(ctx)
 
-		if tc.DefaultTenantDeploymentMode().IsExternal() {
-			tc.GrantTenantCapabilities(ctx, t, serverutils.TestTenantID(),
-				map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
-		}
-
 		clusterDB := tc.ServerConn(0)
+		// Pin to a single connection so the SET statements below (e.g.
+		// application_name, distsql) apply to the same session the queries run on.
+		clusterDB.SetMaxOpenConns(1)
 		clusterRunner := sqlutils.MakeSQLRunner(clusterDB)
 
 		const clusterAppName = "workload_id_test_distsql"
@@ -282,6 +301,7 @@ func TestWorkloadIDPropagation(t *testing.T) {
 
 		clusterMu.Lock()
 		clusterSeenIDs = make(map[uint64]struct{})
+		gatewayReplicaPairs = make(map[uint64]map[[2]roachpb.NodeID]struct{})
 		clusterMu.Unlock()
 
 		clusterRunner.Exec(t, "SELECT * FROM td WHERE v > 0")
@@ -293,6 +313,137 @@ func TestWorkloadIDPropagation(t *testing.T) {
 
 		assertWorkloadIDMatch(t, clusterRunner, clusterAppName,
 			"SELECT * FROM td WHERE v", captured)
+
+		// Verify the separate-process contract on the same cluster: a tenant
+		// pod's remote-flow leaf-txn batches must reach KV with a zero
+		// GatewayNodeID (backfilled by the receiving node, see Node.Batch)
+		// rather than the pod's SQL instance ID masquerading as a KV node ID.
+		// The instance ID is a per-tenant counter unrelated to KV node IDs, so
+		// a nonzero stamp both mis-routes the ASH sampler's enrichment RPCs and
+		// feeds a bogus gateway locality into the store's load-based
+		// rebalancing stats (replica_send.go's RecordBatchRequests).
+		t.Run("external_tenant_gateway_node_id", func(t *testing.T) {
+			const podApp = "workload_id_test_distsql_tenant"
+
+			// Per workload ID: the pod instances that ran a remote flow for
+			// this test's statements. SetupFlowCb only fires in the SetupFlow
+			// RPC handler, so an entry proves a flow ran on a non-gateway pod.
+			var flowMu syncutil.Mutex
+			remoteFlowInstances := make(map[uint64]map[base.SQLInstanceID]struct{})
+
+			// One pod per KV node, all serving the same tenant.
+			var podRunner *sqlutils.SQLRunner
+			for i := range 3 {
+				_, podDB := serverutils.StartTenant(t, tc.Server(i), base.TestTenantArgs{
+					TenantID:            serverutils.TestTenantID(),
+					DisableCreateTenant: i > 0,
+					TestingKnobs: base.TestingKnobs{
+						SQLStatsKnobs: &sqlstats.TestingKnobs{
+							SynchronousSQLStats: true,
+						},
+						DistSQL: &execinfra.TestingKnobs{
+							SetupFlowCb: func(
+								_ context.Context,
+								instanceID base.SQLInstanceID,
+								req *execinfrapb.SetupFlowRequest,
+							) error {
+								if req.EvalContext.SessionData.ApplicationName != podApp {
+									return nil
+								}
+								flowMu.Lock()
+								defer flowMu.Unlock()
+								wid := req.EvalContext.WorkloadID
+								if remoteFlowInstances[wid] == nil {
+									remoteFlowInstances[wid] = make(map[base.SQLInstanceID]struct{})
+								}
+								remoteFlowInstances[wid][instanceID] = struct{}{}
+								return nil
+							},
+						},
+					},
+				})
+				defer podDB.Close()
+				if i == 0 {
+					// Pin to a single connection so the SET statements below (e.g.
+					// application_name, distsql) apply to the same session the queries
+					// run on.
+					podDB.SetMaxOpenConns(1)
+					podRunner = sqlutils.MakeSQLRunner(podDB)
+				}
+			}
+
+			// The SPLIT AT / EXPERIMENTAL_RELOCATE below run as the tenant.
+			tc.GrantTenantCapabilities(ctx, t, serverutils.TestTenantID(),
+				map[tenantcapabilitiespb.ID]string{
+					tenantcapabilitiespb.CanAdminSplit:         "true",
+					tenantcapabilitiespb.CanAdminRelocateRange: "true",
+				})
+
+			podRunner.Exec(t, "SET application_name = $1", podApp)
+			podRunner.Exec(t, "CREATE TABLE ttd (id INT PRIMARY KEY, v INT)")
+			podRunner.Exec(t, "INSERT INTO ttd SELECT generate_series(1, 30), generate_series(1, 30)")
+
+			// Spread the table across all three KV nodes: under a regression
+			// that stamps a pod SQL instance ID into GatewayNodeID, batches
+			// then provably reach nodes whose IDs differ from the stamp, which
+			// the pair assertion below catches.
+			podRunner.Exec(t, "ALTER TABLE ttd SPLIT AT VALUES (10), (20)")
+			podRunner.ExecSucceedsSoon(t, fmt.Sprintf(
+				"ALTER TABLE ttd EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1), (ARRAY[%d], 10), (ARRAY[%d], 20)",
+				tc.Server(0).GetFirstStoreID(),
+				tc.Server(1).GetFirstStoreID(),
+				tc.Server(2).GetFirstStoreID(),
+			))
+
+			podRunner.Exec(t, "SET distsql = always")
+
+			// Span partitioning on pods round-robins over the instances in the
+			// gateway pod's rangefeed-backed instance cache, which may lag the
+			// other pods' startup; retry until the plan actually reached a
+			// remote pod.
+			testutils.SucceedsSoon(t, func() error {
+				clusterMu.Lock()
+				gatewayReplicaPairs = make(map[uint64]map[[2]roachpb.NodeID]struct{})
+				clusterMu.Unlock()
+				flowMu.Lock()
+				remoteFlowInstances = make(map[uint64]map[base.SQLInstanceID]struct{})
+				flowMu.Unlock()
+
+				if _, err := podRunner.DB.ExecContext(ctx, "SELECT * FROM ttd WHERE v > 0"); err != nil {
+					return err
+				}
+				flowMu.Lock()
+				defer flowMu.Unlock()
+				if len(remoteFlowInstances) == 0 {
+					return errors.New("no remote flow set up on another pod yet")
+				}
+				return nil
+			})
+
+			clusterMu.Lock()
+			defer clusterMu.Unlock()
+			flowMu.Lock()
+			defer flowMu.Unlock()
+			checkedPair := false
+			for wid := range remoteFlowInstances {
+				// Pod batches must arrive with a zero GatewayNodeID and have
+				// the receiving node's ID backfilled. Node.Batch only
+				// backfills zero, so a pod SQL instance ID stamped by the
+				// client would survive verbatim and show up as a mismatch
+				// against the receiving node.
+				for pair := range gatewayReplicaPairs[wid] {
+					checkedPair = true
+					require.Equal(t, pair[1], pair[0],
+						"batch for workload ID %d reached node %d carrying "+
+							"GatewayNodeID %d; pod batches must arrive with zero "+
+							"and get the receiving node's ID backfilled",
+						wid, pair[1], pair[0])
+				}
+			}
+			require.True(t, checkedPair,
+				"no BR.Header captured for a remote-flow workload ID; the pod "+
+					"plan did not exercise the leaf-txn KV path")
+		})
 	})
 }
 
