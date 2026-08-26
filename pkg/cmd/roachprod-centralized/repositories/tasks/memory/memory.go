@@ -9,7 +9,6 @@ import (
 	"context"
 	"log/slog"
 	"reflect"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -32,14 +31,14 @@ type MemTasksRepo struct {
 	lock  syncutil.Mutex
 
 	_fireEvents               atomic.Bool
-	_tasksQueuedForProcessing chan uuid.UUID
+	_tasksQueuedForProcessing chan tasks.ITask
 }
 
 // NewTasksRepository creates a new in-memory tasks repository.
 func NewTasksRepository() *MemTasksRepo {
 	return &MemTasksRepo{
 		tasks:                     make(map[uuid.UUID]tasks.ITask),
-		_tasksQueuedForProcessing: make(chan uuid.UUID),
+		_tasksQueuedForProcessing: make(chan tasks.ITask),
 	}
 }
 
@@ -102,17 +101,25 @@ func (s *MemTasksRepo) GetTask(
 }
 
 // CreateTask creates a task in the in-memory tasks map.
-// If the task is created in state pending, it is also queued for processing
-// in an unbuffered channel. As this is an in-memory implementation the data is
-// not persisted and the unbuffered channel is not a concern.
+// If the task is created in state pending after processing has started, it is
+// also queued for processing.
 func (s *MemTasksRepo) CreateTask(ctx context.Context, l *logger.Logger, task tasks.ITask) error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.tasks[task.GetID()] = task
+	enqueue := s.storeTask(task)
 
-	s.maybeEnqueueTaskForProcessing(task)
+	if enqueue {
+		s._tasksQueuedForProcessing <- task
+	}
 
 	return nil
+}
+
+// storeTask stores a task and reports whether it should be queued for processing.
+func (s *MemTasksRepo) storeTask(task tasks.ITask) bool {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	s.tasks[task.GetID()] = task
+	return s._fireEvents.Load() && task.GetState() == tasks.TaskStatePending
 }
 
 // UpdateState updates the state of a task in the in-memory tasks map.
@@ -197,37 +204,44 @@ func (s *MemTasksRepo) PurgeTasks(
 func (s *MemTasksRepo) GetTasksForProcessing(
 	ctx context.Context, l *logger.Logger, taskChan chan<- tasks.ITask, instanceID string,
 ) error {
+	for _, task := range s.startEventDelivery() {
+		select {
+		case <-ctx.Done():
+			return nil
+		case taskChan <- task:
+		}
+	}
 
-	s._fireEvents.Store(true)
-
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-
-	go func() {
-		for {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case task := <-s._tasksQueuedForProcessing:
 			select {
 			case <-ctx.Done():
-				wg.Done()
-				return
-			case taskID := <-s._tasksQueuedForProcessing:
-				taskChan <- s.tasks[taskID]
+				return nil
+			case taskChan <- task:
 			}
 		}
-	}()
-
-	s.enqueueExistingTasksForProcessing()
-
-	wg.Wait()
-	return nil
+	}
 }
 
-// enqueueExistingTasksForProcessing queues all pending tasks for processing.
-func (s *MemTasksRepo) enqueueExistingTasksForProcessing() {
+// startEventDelivery enables event delivery and returns the pending tasks that
+// were created before delivery started.
+func (s *MemTasksRepo) startEventDelivery() []tasks.ITask {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+
+	var pending []tasks.ITask
 	for _, task := range s.tasks {
-		s.maybeEnqueueTaskForProcessing(task)
+		if task.GetState() == tasks.TaskStatePending {
+			pending = append(pending, task)
+		}
 	}
+	// CreateTask uses the same lock when deciding whether to enqueue a task, so
+	// a concurrent creation is returned here or sent to the queue, never both.
+	s._fireEvents.Store(true)
+	return pending
 }
 
 // GetMostRecentCompletedTaskOfType returns the most recently completed task of the given type.
@@ -250,16 +264,4 @@ func (s *MemTasksRepo) GetMostRecentCompletedTaskOfType(
 	}
 
 	return mostRecent, nil
-}
-
-// maybeEnqueueTaskForProcessing queues a task for processing if it is pending
-// and the _fireEvents flag is set (aka GetTasksForProcessing() was called).
-func (s *MemTasksRepo) maybeEnqueueTaskForProcessing(task tasks.ITask) {
-	if !s._fireEvents.Load() {
-		return
-	}
-	if task.GetState() != tasks.TaskStatePending {
-		return
-	}
-	s._tasksQueuedForProcessing <- task.GetID()
 }

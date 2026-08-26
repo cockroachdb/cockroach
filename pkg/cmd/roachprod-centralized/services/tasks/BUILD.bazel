@@ -59,6 +59,7 @@ go_test(
         "//pkg/cmd/roachprod-centralized/utils/filters",
         "//pkg/cmd/roachprod-centralized/utils/filters/types",
         "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/testutils",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",

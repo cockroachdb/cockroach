@@ -47,7 +47,7 @@ func createTestService(
 func TestService_Shutdown(t *testing.T) {
 	tests := []struct {
 		name        string
-		setupFunc   func(*Service)
+		setupFunc   func(*testing.T, *Service)
 		ctxTimeout  time.Duration
 		wantErr     error
 		wantTimeout bool
@@ -58,14 +58,11 @@ func TestService_Shutdown(t *testing.T) {
 		},
 		{
 			name: "shutdown timeout",
-			setupFunc: func(s *Service) {
+			setupFunc: func(t *testing.T, s *Service) {
 				s.backgroundJobsWg.Add(1)
-				go func() {
-					time.Sleep(50 * time.Millisecond)
-					s.backgroundJobsWg.Done()
-				}()
+				t.Cleanup(s.backgroundJobsWg.Done)
 			},
-			ctxTimeout: 5 * time.Millisecond,
+			ctxTimeout: 0,
 			wantErr:    types.ErrShutdownTimeout,
 		},
 	}
@@ -78,7 +75,7 @@ func TestService_Shutdown(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.setupFunc != nil {
-				tt.setupFunc(s)
+				tt.setupFunc(t, s)
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), tt.ctxTimeout)

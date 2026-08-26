@@ -7,6 +7,8 @@ package memory
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	rtasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
@@ -117,9 +120,11 @@ func TestGetTasksForProcessing(t *testing.T) {
 	defer cancel()
 
 	taskChan := make(chan tasks.ITask)
+	consumerDone := make(chan error, 1)
 	go func() {
-		err := repo.GetTasksForProcessing(ctx, logger.DefaultLogger, taskChan, "test-instance")
-		assert.NoError(t, err)
+		consumerDone <- repo.GetTasksForProcessing(
+			ctx, logger.DefaultLogger, taskChan, "test-instance",
+		)
 	}()
 
 	id := uuid.MakeV4()
@@ -127,13 +132,10 @@ func TestGetTasksForProcessing(t *testing.T) {
 	err := repo.CreateTask(ctx, logger.DefaultLogger, task)
 	assert.NoError(t, err)
 
-	select {
-	case <-time.After(50 * time.Millisecond):
-		t.Fatalf("timed out waiting for task %s", id)
-	case tsk := <-taskChan:
-		t.Logf("Received task with ID %v", tsk.GetID())
-		assert.Equal(t, id, tsk.GetID(), "expected task with ID %v, got %v", id, tsk.GetID())
-	}
+	tsk := receiveTask(t, taskChan, id)
+	assert.Equal(t, id, tsk.GetID(), "expected task with ID %v, got %v", id, tsk.GetID())
+	cancel()
+	requireTaskConsumerStopped(t, consumerDone)
 }
 
 func TestGetTasksForProcessingEnqueuesPreviousTasks(t *testing.T) {
@@ -147,18 +149,113 @@ func TestGetTasksForProcessingEnqueuesPreviousTasks(t *testing.T) {
 	assert.NoError(t, err)
 
 	taskChan := make(chan tasks.ITask)
+	consumerDone := make(chan error, 1)
 	go func() {
-		err := repo.GetTasksForProcessing(ctx, logger.DefaultLogger, taskChan, "test-instance")
+		consumerDone <- repo.GetTasksForProcessing(
+			ctx, logger.DefaultLogger, taskChan, "test-instance",
+		)
+	}()
+
+	tsk := receiveTask(t, taskChan, id)
+	assert.Equal(t, id, tsk.GetID(), "expected task with ID %v, got %v", id, tsk.GetID())
+	cancel()
+	requireTaskConsumerStopped(t, consumerDone)
+}
+
+func TestGetTasksForProcessingConcurrentCreates(t *testing.T) {
+	const taskCount = 100
+
+	repo := NewTasksRepository()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Buffer every expected task so CreateTask can finish before this test
+	// starts draining the channel.
+	taskChan := make(chan tasks.ITask, taskCount)
+	consumerDone := make(chan error, 1)
+	go func() {
+		consumerDone <- repo.GetTasksForProcessing(
+			ctx, logger.DefaultLogger, taskChan, "test-instance",
+		)
+	}()
+	requireTaskConsumerStarted(t, repo)
+
+	ids := make(map[uuid.UUID]struct{}, taskCount)
+	start := make(chan struct{})
+	createErrs := make(chan error, taskCount)
+	var createWG sync.WaitGroup
+	for i := 0; i < taskCount; i++ {
+		id := uuid.MakeV4()
+		ids[id] = struct{}{}
+		createWG.Add(1)
+		go func() {
+			defer createWG.Done()
+			<-start
+			createErrs <- repo.CreateTask(
+				ctx, logger.DefaultLogger, newMockTask(id, tasks.TaskStatePending),
+			)
+		}()
+	}
+	close(start)
+	createWG.Wait()
+	close(createErrs)
+	for err := range createErrs {
 		assert.NoError(t, err)
+	}
+
+	for i := 0; i < taskCount; i++ {
+		task := receiveTask(t, taskChan, uuid.Nil)
+		_, expected := ids[task.GetID()]
+		assert.True(t, expected, "unexpected or duplicate task %s", task.GetID())
+		delete(ids, task.GetID())
+	}
+	assert.Empty(t, ids)
+
+	cancel()
+	requireTaskConsumerStopped(t, consumerDone)
+}
+
+func TestGetTasksForProcessingBackpressure(t *testing.T) {
+	repo := NewTasksRepository()
+	for i := 0; i < 3; i++ {
+		task := newMockTask(uuid.MakeV4(), tasks.TaskStatePending)
+		if err := repo.CreateTask(
+			context.Background(), logger.DefaultLogger, task,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Production also uses an unbuffered task channel.
+	taskChan := make(chan tasks.ITask)
+	consumerDone := make(chan error, 1)
+	go func() {
+		consumerDone <- repo.GetTasksForProcessing(
+			ctx, logger.DefaultLogger, taskChan, "test",
+		)
+	}()
+
+	// Model the first action of a single worker. The repository must not hold
+	// its lock while it waits for the worker to accept later tasks.
+	workerDone := make(chan error, 1)
+	go func() {
+		task := <-taskChan
+		workerDone <- repo.UpdateState(
+			ctx, logger.DefaultLogger, task.GetID(), tasks.TaskStateRunning,
+		)
 	}()
 
 	select {
-	case <-time.After(50 * time.Millisecond):
-		t.Fatalf("timed out waiting for task %s", id)
-	case tsk := <-taskChan:
-		t.Logf("Received task with ID %v", tsk.GetID())
-		assert.Equal(t, id, tsk.GetID(), "expected task with ID %v, got %v", id, tsk.GetID())
+	case err := <-workerDone:
+		assert.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("worker deadlocked updating the first task")
 	}
+	cancel()
+	requireTaskConsumerStopped(t, consumerDone)
 }
 
 func TestCreateTaskNonPendingState(t *testing.T) {
@@ -208,9 +305,11 @@ func TestGetTasksForProcessingNonPendingTask(t *testing.T) {
 	defer cancel()
 
 	taskChan := make(chan tasks.ITask)
+	consumerDone := make(chan error, 1)
 	go func() {
-		err := repo.GetTasksForProcessing(ctx, logger.DefaultLogger, taskChan, "test-instance")
-		assert.NoError(t, err)
+		consumerDone <- repo.GetTasksForProcessing(
+			ctx, logger.DefaultLogger, taskChan, "test-instance",
+		)
 	}()
 
 	id := uuid.MakeV4()
@@ -224,4 +323,42 @@ func TestGetTasksForProcessingNonPendingTask(t *testing.T) {
 	case <-time.After(10 * time.Millisecond):
 		// No task should be received
 	}
+	cancel()
+	requireTaskConsumerStopped(t, consumerDone)
+}
+
+func receiveTask(t *testing.T, taskChan <-chan tasks.ITask, id uuid.UUID) tasks.ITask {
+	t.Helper()
+	timer := time.NewTimer(testutils.SucceedsSoonDuration())
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		t.Fatalf("timed out waiting for task %s", id)
+		return nil
+	case task := <-taskChan:
+		t.Logf("received task with ID %v", task.GetID())
+		return task
+	}
+}
+
+func requireTaskConsumerStopped(t *testing.T, consumerDone <-chan error) {
+	t.Helper()
+	timer := time.NewTimer(testutils.SucceedsSoonDuration())
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		t.Fatal("timed out waiting for task consumer to stop")
+	case err := <-consumerDone:
+		assert.NoError(t, err)
+	}
+}
+
+func requireTaskConsumerStarted(t *testing.T, repo *MemTasksRepo) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		if !repo._fireEvents.Load() {
+			return errors.New("task consumer has not started")
+		}
+		return nil
+	})
 }
