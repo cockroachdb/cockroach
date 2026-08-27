@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1959,12 +1958,11 @@ func maybeUpgradePreProductionReadyExpression(
 		tree.AsString(oldExpression), tree.AsString(newExpression))
 }
 
-// checkSinkFileBasedCredentialGates enforces the cluster-version and
-// privilege preconditions for using a file-based OAuth client assertion in
-// parsedSink. If parsedSink is external://<name>, the referenced external
-// connection is resolved first so the underlying URI is the one inspected.
-// Returns nil if parsedSink does not reference the file-based assertion at
-// all.
+// checkSinkFileBasedCredentialGates enforces the privilege precondition for
+// using a file-based OAuth client assertion in parsedSink. If parsedSink is
+// external://<name>, the referenced external connection is resolved first so
+// the underlying URI is the one inspected. Returns nil if parsedSink does not
+// reference the file-based assertion at all.
 func checkSinkFileBasedCredentialGates(
 	ctx context.Context, p sql.PlanHookState, parsedSink *url.URL,
 ) error {
@@ -1980,11 +1978,6 @@ func checkSinkFileBasedCredentialGates(
 	}
 	if uri.Query().Get(changefeedbase.SinkParamSASLProprietaryClientAssertionLocation) == "" {
 		return nil
-	}
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_3_Start) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"%s requires the cluster to be fully upgraded to v26.3",
-			changefeedbase.SinkParamSASLProprietaryClientAssertionLocation)
 	}
 
 	ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject,

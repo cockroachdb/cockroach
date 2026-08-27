@@ -15,10 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/externalcreds"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -104,52 +101,5 @@ func TestChangefeedFileBasedCredentialPrivilege(t *testing.T) {
 		require.Error(t, err)
 		require.NotEqual(t, pgcode.InsufficientPrivilege.String(), pgErrCode(err),
 			"unexpected privilege error after grant for %q: %v", uri, err)
-	}
-}
-
-func TestChangefeedFileBasedCredentialVersionGate(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	secretDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(secretDir, "jwt"), []byte("dummy"), 0o600))
-
-	ecDir, err := externalcreds.NewDir(secretDir)
-	require.NoError(t, err)
-
-	// Pin the cluster below V26_3_Start so the version gate fires.
-	preGateVersion := clusterversion.V26_2.Version()
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.Latest.Version(),
-		clusterversion.MinSupported.Version(),
-		false, /* initializeVersion: the server initializes it via the override below */
-	)
-
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		Settings:               settings,
-		ExternalCredentialsDir: ecDir,
-		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				ClusterVersionOverride:         preGateVersion,
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-			},
-		},
-	})
-	defer srv.Stopper().Stop(ctx)
-
-	sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t)).Exec(
-		t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	app := srv.ApplicationLayer()
-	rootDB := sqlutils.MakeSQLRunner(app.SQLConn(t))
-	rootDB.Exec(t, `CREATE TABLE t (x INT PRIMARY KEY)`)
-
-	sinkURI := fileBasedClientAssertionSinkURI(t, "jwt")
-	rootDB.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION ec AS '%s'`, sinkURI))
-
-	for _, uri := range []string{sinkURI, "external://ec"} {
-		_, err = app.SQLConn(t).ExecContext(ctx, `CREATE CHANGEFEED FOR t INTO $1`, uri)
-		require.Equal(t, pgcode.FeatureNotSupported.String(), pgErrCode(err),
-			"expected feature-not-supported for %q, got: %v", uri, err)
 	}
 }
