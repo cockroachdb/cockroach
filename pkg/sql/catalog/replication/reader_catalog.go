@@ -7,6 +7,7 @@ package replication
 
 import (
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -54,6 +55,7 @@ func SetupOrAdvanceStandbyReaderCatalog(
 			// replicating).
 			descriptorsUpdated := catalog.DescriptorIDSet{}
 			descriptorsRenamed := catalog.DescriptorIDSet{}
+			matViewIDs := catalog.DescriptorIDSet{}
 			allExistingDescs, err := txn.Descriptors().GetAll(ctx, txn.KV())
 			if err != nil {
 				return err
@@ -122,10 +124,18 @@ func SetupOrAdvanceStandbyReaderCatalog(
 						descriptorsRenamed.Add(existingDesc.GetID())
 					}
 				}
+				if tbl, ok := fromDesc.(catalog.TableDescriptor); ok && tbl.MaterializedView() {
+					matViewIDs.Add(fromDesc.GetID())
+				}
 				descriptorsToWrite = append(descriptorsToWrite, mut)
 				return nil
 			}); err != nil {
 				return err
+			}
+			if !matViewIDs.Empty() {
+				for _, mut := range descriptorsToWrite {
+					clearMatViewBackReferences(mut, matViewIDs)
+				}
 			}
 			// Write all the descriptors into a single batch, we previously would write
 			// them in the loop above. But that interferes with mutable descriptor
@@ -234,7 +244,12 @@ func replicateDescriptorForReader(
 		// Note: Materialized views will be converted, but their
 		// view definition will be wiped.
 		if mutTbl.IsPhysicalTable() {
-			mutTbl.ViewQuery = ""
+			if mutTbl.MaterializedView() {
+				mutTbl.ViewQuery = ""
+				mutTbl.DependsOn = nil
+				mutTbl.DependsOnTypes = nil
+				mutTbl.DependsOnFunctions = nil
+			}
 			mutTbl.SetExternalRowData(&descpb.ExternalRowData{TenantID: fromID, TableID: fromDesc.GetID(), AsOf: asOf})
 		}
 	case *descpb.Descriptor_Database:
@@ -297,6 +312,23 @@ func replicateDescriptorForReader(
 		return nil, errors.AssertionFailedf("unknown descriptor type: %T", t)
 	}
 	return mut, nil
+}
+
+func clearMatViewBackReferences(mut catalog.MutableDescriptor, matViewIDs catalog.DescriptorIDSet) {
+	switch t := mut.(type) {
+	case *tabledesc.Mutable:
+		t.DependedOnBy = slices.DeleteFunc(t.DependedOnBy, func(ref descpb.TableDescriptor_Reference) bool {
+			return matViewIDs.Contains(ref.ID)
+		})
+	case *typedesc.Mutable:
+		t.ReferencingDescriptorIDs = slices.DeleteFunc(t.ReferencingDescriptorIDs, func(id descpb.ID) bool {
+			return matViewIDs.Contains(id)
+		})
+	case *funcdesc.Mutable:
+		t.DependedOnBy = slices.DeleteFunc(t.DependedOnBy, func(ref descpb.FunctionDescriptor_Reference) bool {
+			return matViewIDs.Contains(ref.ID)
+		})
+	}
 }
 
 // shouldSetupForReader determines if a descriptor should be setup
