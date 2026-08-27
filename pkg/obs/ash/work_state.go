@@ -172,6 +172,24 @@ func pushWorkState(shard *workStateMapShard, gid int64, state *WorkState) {
 	shard.m[gid] = state
 }
 
+// HasWorkEvent returns true if the current goroutine is already registered with
+// the specified work event.
+func HasWorkEvent(event string) bool {
+	if !enabled.Load() {
+		return false
+	}
+	gid := goid.Get()
+	shard := workStateShard(gid)
+	shard.Lock()
+	defer shard.Unlock()
+	for s := shard.m[gid]; s != nil; s = s.prev {
+		if s.WorkEvent == event {
+			return true
+		}
+	}
+	return false
+}
+
 // noop is a pre-allocated no-op function returned when ASH is disabled.
 var noop = func() {}
 
