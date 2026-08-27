@@ -19,10 +19,10 @@
   - 23.1.0
   predecessor: "22.2"
 "23.2":
-  latest: 23.2.30
+  latest: 23.2.31
   predecessor: "23.1"
 "24.1":
-  latest: 24.1.29
+  latest: 24.1.31
   predecessor: "23.2"
 "24.2":
   latest: 24.2.10
@@ -30,23 +30,23 @@
   - 24.2.1
   predecessor: "24.1"
 "24.3":
-  latest: 24.3.33
+  latest: 24.3.34
   predecessor: "24.2"
 "25.1":
   latest: 25.1.10
   predecessor: "24.3"
 "25.2":
-  latest: 25.2.18
+  latest: 25.2.20
   predecessor: "25.1"
 "25.3":
   latest: 25.3.7
   predecessor: "25.2"
 "25.4":
-  latest: 25.4.10
+  latest: 25.4.12
   predecessor: "25.3"
 "26.1":
-  latest: 26.1.4
+  latest: 26.1.6
   predecessor: "25.4"
 "26.2":
-  latest: 26.2.1
+  latest: 26.2.3
   predecessor: "26.1"
