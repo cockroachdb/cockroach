@@ -49,12 +49,12 @@ func (node *CreateLogicalReplicationStream) Format(ctx *FmtCtx) {
 		ctx.WriteString(" FROM ")
 		ctx.FormatNode(&node.From)
 		ctx.WriteString(" ON ")
-		ctx.FormatNode(node.PGURL)
+		ctx.FormatURI(node.PGURL)
 	} else {
 		ctx.WriteString("CREATE LOGICAL REPLICATION STREAM FROM ")
 		ctx.FormatNode(&node.From)
 		ctx.WriteString(" ON ")
-		ctx.FormatNode(node.PGURL)
+		ctx.FormatURI(node.PGURL)
 		ctx.WriteString(" INTO ")
 		ctx.FormatNode(&node.Into)
 	}
@@ -159,7 +159,7 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 	if lro.BidirectionalURI != nil {
 		maybeAddSep()
 		ctx.WriteString("BIDIRECTIONAL ON ")
-		ctx.FormatNode(lro.BidirectionalURI)
+		ctx.FormatURI(lro.BidirectionalURI)
 	}
 	if lro.ParentID != nil {
 		maybeAddSep()
