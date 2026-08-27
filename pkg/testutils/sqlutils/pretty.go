@@ -76,6 +76,9 @@ func verifyStatementPrettyRoundTrip(
 	cfg := tree.DefaultPrettyCfg()
 	// Be careful to not simplify otherwise the tests won't round trip.
 	cfg.Simplify = false
+	// Exercise the real-URI/password rendering path (rather than the redacting
+	// default) so this round-trip check covers URI-bearing statements faithfully.
+	cfg.ShowPasswords = true
 	prettyStmt, err := cfg.Pretty(origStmt)
 	if err != nil {
 		t.Fatalf("%s: %s", err, prettyStmt)

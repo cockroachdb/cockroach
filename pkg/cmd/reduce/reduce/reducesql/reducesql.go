@@ -437,6 +437,9 @@ func joinASTs(stmts []tree.NodeFormatter) string {
 			Align:     tree.PrettyAlignAndDeindent,
 			UseTabs:   false,
 			Simplify:  true,
+			// reduce re-emits and re-executes the reduced SQL, so it must
+			// reproduce URIs/passwords faithfully rather than redact them.
+			ShowPasswords: true,
 		}
 		p, err := cfg.Pretty(stmt)
 		if err != nil {
