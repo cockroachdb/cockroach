@@ -13,8 +13,10 @@ import (
 )
 
 // This file houses the classifier that decides whether a statement may carry
-// a secret: a sensitive cluster setting value (see settings.Sensitive) or a
-// role password. Observability surfaces that record statement text,
+// a secret: a sensitive cluster setting value (see settings.Sensitive), a role
+// password, or an external URI, KMS URI, connection string, or encryption
+// passphrase (which can embed credentials) referenced by a bulk-I/O or
+// replication statement. Observability surfaces that record statement text,
 // placeholder values, or errors - the active-query registry, SQL event
 // details, statement logs and statistics, and statement bundles - consult it
 // to keep such secrets out of diagnostics artifacts, while privileged
@@ -22,12 +24,8 @@ import (
 
 // stmtMayHaveSecret reports whether ast may carry a secret in its raw text,
 // bound placeholder values, or errors. That is the case when the statement
-// contains, anywhere in statement position, either:
-//
-//   - a secret-carrying form (see secretVisitor); or
-//   - an EXECUTE, whose target's secrets are unknowable until the prepared
-//     statement is resolved, and whose argument list may be the secret itself
-//     with nothing in the statement text to key redaction on.
+// contains, anywhere in statement position, a secret-carrying form (see
+// secretVisitor for the full set).
 //
 // The entire AST is walked because a secret-carrying statement can be nested
 // where it plans without executing - a CTE body, a [...] statement source, or
@@ -83,15 +81,55 @@ func hasRolePasswordOption(stmt tree.Statement) bool {
 	return false
 }
 
-// secretVisitor implements stmtMayHaveSecret's walk, short-circuiting once a
-// secret-carrying form is found. The forms it recognizes are:
+// statementNodeMayHaveSecret reports whether the bare stmt node - ignoring any
+// nested statements, which the walk visits on their own - may carry a secret.
 //
-//   - a SET CLUSTER SETTING (or ALTER VIRTUAL CLUSTER ... SET CLUSTER
-//     SETTING) targeting a sensitive setting: the value is the secret;
-//   - a CREATE ROLE / ALTER ROLE with a password option: the password is the
-//     secret;
-//   - an EXECUTE: its argument list may be a secret, depending on the
-//     prepared statement it resolves to at execution time.
+// The bulk-I/O and replication statements below are recognized by type: each
+// always (or, for the conservatively-flagged variants, may) reference an
+// external URI, KMS URI, connection string, or encryption passphrase that can
+// embed credentials, and the redaction that keeps those out of formatted text
+// (see FormatURI and PasswordSubstitution in pkg/sql/sem/tree) does not reach
+// the raw-text, placeholder, and error surfaces this classifier gates. Matching
+// by type rather than by the specific secret-bearing field keeps the set easy to
+// audit; over-flagging a secret-free variant of a rare statement only hides its
+// constants on those surfaces, which is harmless.
+func statementNodeMayHaveSecret(stmt tree.Statement) bool {
+	switch t := stmt.(type) {
+	case *tree.Execute:
+		// EXECUTE's argument list may itself be the secret, and its target's
+		// secrets are unknowable until the prepared statement is resolved.
+		return true
+
+	case *tree.CopyFrom:
+		// COPY names an external URI only in the WITH (destination = ...)
+		// file-upload form; COPY ... FROM STDIN carries its data out of band and
+		// is the common bulk-ingest path, so it is not flagged.
+		return t.Options.Destination != nil
+	case *tree.CopyTo:
+		return t.Options.Destination != nil
+
+	case *tree.AlterTenantReplication:
+		// Only the START REPLICATION form names a source connection URI; the
+		// COMPLETE / PAUSE / RESUME failover forms do not.
+		return t.ReplicationSourceConnUri != nil
+
+	case *tree.Backup, *tree.Restore, *tree.ShowBackup, *tree.AlterBackup,
+		*tree.ScheduledBackup, *tree.AlterBackupSchedule,
+		*tree.Import, *tree.Export,
+		*tree.CreateChangefeed, *tree.AlterChangefeed, *tree.ScheduledChangefeed,
+		*tree.CreateExternalConnection,
+		*tree.CheckExternalConnection,
+		*tree.CreateTenantFromReplication,
+		*tree.CreateLogicalReplicationStream:
+		return true
+	}
+
+	return isSensitiveClusterSettingNode(stmt) || hasRolePasswordOption(stmt)
+}
+
+// secretVisitor implements stmtMayHaveSecret's walk, short-circuiting once a
+// secret-carrying form is found. Each node is classified by
+// statementNodeMayHaveSecret (see it for the recognized forms).
 //
 // It must be a tree.ExtendedVisitor (rather than a plain tree.Visitor) for
 // the walk to reach statements in table-expression position, such as a [...]
@@ -117,11 +155,8 @@ func (v *secretVisitor) VisitTablePost(expr tree.TableExpr) tree.TableExpr { ret
 func (v *secretVisitor) VisitStatementPre(
 	stmt tree.Statement,
 ) (recurse bool, newStmt tree.Statement) {
-	if !v.mayHaveSecret {
-		if _, isExecute := stmt.(*tree.Execute); isExecute ||
-			isSensitiveClusterSettingNode(stmt) || hasRolePasswordOption(stmt) {
-			v.mayHaveSecret = true
-		}
+	if !v.mayHaveSecret && statementNodeMayHaveSecret(stmt) {
+		v.mayHaveSecret = true
 	}
 	if p, ok := stmt.(*tree.Prepare); ok && !v.mayHaveSecret {
 		// PREPARE does not implement the statement walk, so descend into its
