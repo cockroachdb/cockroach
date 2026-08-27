@@ -141,6 +141,9 @@ func ShowCreateView(
 	cfg.UseTabs = true
 	cfg.LineWidth = 100 - cfg.TabWidth
 	cfg.ValueRedaction = redactableValues
+	// SHOW CREATE reproduces the object faithfully, so reveal passwords and URIs
+	// unless this is the redactable variant.
+	cfg.ShowPasswords = !redactableValues
 	q, err := formatViewQueryForDisplay(ctx, evalCtx, semaCtx, sessionData, desc, cfg)
 	if err != nil {
 		return "", err

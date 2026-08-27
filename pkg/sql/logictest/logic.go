@@ -740,6 +740,9 @@ func (ls *logicStatement) readSQL(
 				pcfg.LineWidth = *sqlfmtLen
 				pcfg.Simplify = false
 				pcfg.UseTabs = false
+				// -rewrite-sql reformats the test file's own SQL in place, so it
+				// must reproduce URIs/passwords faithfully rather than redact them.
+				pcfg.ShowPasswords = true
 				for i := range stmtList {
 					if i > 0 {
 						fmt.Fprintln(&newSyntax, ";")

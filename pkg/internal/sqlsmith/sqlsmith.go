@@ -188,6 +188,9 @@ var prettyCfg = func() tree.PrettyCfg {
 	cfg := tree.DefaultPrettyCfg()
 	cfg.LineWidth = 120
 	cfg.Simplify = false
+	// sqlsmith generates and executes statements with real URIs (e.g. BACKUP);
+	// the pretty output must reproduce them faithfully.
+	cfg.ShowPasswords = true
 	return cfg
 }()
 

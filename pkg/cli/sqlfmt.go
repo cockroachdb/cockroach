@@ -60,6 +60,9 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 	}
 
 	cfg := tree.DefaultPrettyCfg()
+	// sqlfmt reformats the user's own SQL; it must reproduce it faithfully,
+	// including passwords and URIs.
+	cfg.ShowPasswords = true
 	cfg.UseTabs = !sqlfmtCtx.useSpaces
 	cfg.LineWidth = sqlfmtCtx.len
 	cfg.TabWidth = sqlfmtCtx.tabWidth
