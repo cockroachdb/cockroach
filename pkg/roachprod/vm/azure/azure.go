@@ -1022,7 +1022,7 @@ func (p *Provider) createVM(
 					Publisher: to.StringPtr("Canonical"),
 					Offer:     to.StringPtr("0001-com-ubuntu-server-jammy"),
 					Sku:       to.StringPtr(imageSKU(opts.Arch, providerOpts.MachineType)),
-					Version:   to.StringPtr("22.04.202312060"),
+					Version:   to.StringPtr("22.04.202608060"),
 				},
 				OsDisk: &compute.OSDisk{
 					CreateOption: compute.DiskCreateOptionTypesFromImage,
