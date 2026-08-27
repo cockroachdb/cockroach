@@ -599,6 +599,31 @@ func TestReaderCatalogAutoStatsDisabled(t *testing.T) {
 	r.destRunner.ExpectErr(t, "cannot create statistics in read-only tenant", "CREATE STATISTICS test_stats FROM t1")
 }
 
+func TestReaderCatalogMaterializedView(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDuress(t)
+
+	ctx := context.Background()
+	r, cleanup := newReaderCatalogTest(t, ctx, base.TestingKnobs{}, nil)
+	defer cleanup()
+
+	r.srcRunner.Exec(t, `
+CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
+CREATE TABLE t1(n INT PRIMARY KEY, val status);
+INSERT INTO t1 VALUES (1, 'open'), (2, 'closed'), (3, 'inactive');
+CREATE FUNCTION add_one(x INT) RETURNS INT LANGUAGE SQL AS 'SELECT x + 1';
+CREATE MATERIALIZED VIEW mv_base AS (SELECT n FROM t1);
+CREATE MATERIALIZED VIEW mv_deps AS (SELECT n, val, add_one(n) AS np FROM t1);
+CREATE MATERIALIZED VIEW mv_chain AS (SELECT n FROM mv_base);
+`)
+	require.NoError(t, r.advanceTS(ctx, r.ts.Clock().Now(), true))
+
+	r.compareEqual(t, "SELECT * FROM t1 ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM mv_base ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM mv_deps ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM mv_chain ORDER BY n")
+}
+
 func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
