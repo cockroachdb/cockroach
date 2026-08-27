@@ -5544,25 +5544,24 @@ func addPartitioningRows(
 		return err
 	}
 
-	// This produces the range_value column.
+	// This produces the range_value column. The bounds are rendered in
+	// interval notation ("[from, to)") to make it unambiguous that the
+	// lower bound is inclusive and the upper bound is exclusive, matching
+	// the actual range-partition semantics.
 	err = partitioning.ForEachRange(func(name string, from, to []byte) error {
-		var buf bytes.Buffer
 		fromTuple, _, err := rowenc.DecodePartitionTuple(
 			&datumAlloc, p.ExecCfg().Codec, table, index, partitioning, from, fakePrefixDatums,
 		)
 		if err != nil {
 			return err
 		}
-		buf.WriteString(fromTuple.String())
-		buf.WriteString(" TO ")
 		toTuple, _, err := rowenc.DecodePartitionTuple(
 			&datumAlloc, p.ExecCfg().Codec, table, index, partitioning, to, fakePrefixDatums,
 		)
 		if err != nil {
 			return err
 		}
-		buf.WriteString(toTuple.String())
-		partitionRange := tree.NewDString(buf.String())
+		partitionRange := tree.NewDString(fmt.Sprintf("[%s, %s)", fromTuple, toTuple))
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := zoneconfig.GetInTxn(
