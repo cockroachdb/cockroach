@@ -276,7 +276,6 @@ go_test(
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/impl:cloudimpl",
-        "//pkg/clusterversion",
         "//pkg/geo",
         "//pkg/geo/geopb",
         "//pkg/internal/sqlsmith",
