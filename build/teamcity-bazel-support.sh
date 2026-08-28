@@ -40,10 +40,26 @@ run_bazel() {
     # git objects.
     teamcity_alternates="/home/agent/system/git"
     vols="--volume ${teamcity_alternates}:${teamcity_alternates}:ro"
+    # --config=ci pins --test_tmpdir=/artifacts/tmp, and /artifacts is this bind
+    # mount, so the test servers' stores and log files -- the fsync-heavy path
+    # the disk-stall detector trips on -- live here. Back it with local NVMe when
+    # available, keeping the TeamCity-visible path ($root/artifacts, the artifact
+    # publishing root) intact via a symlink so artifact collection is unchanged.
     artifacts_dir=$root/artifacts
-    mkdir -p "$artifacts_dir"
+    if [ -n "${CRDB_BAZEL_SCRATCH:-}" ]; then
+        rm -rf "$artifacts_dir" "${CRDB_BAZEL_SCRATCH}/artifacts"
+        mkdir -p "${CRDB_BAZEL_SCRATCH}/artifacts"
+        ln -sfn "${CRDB_BAZEL_SCRATCH}/artifacts" "$artifacts_dir"
+    else
+        mkdir -p "$artifacts_dir"
+    fi
     vols="${vols} --volume ${artifacts_dir}:/artifacts"
-    cache=/home/agent/.bzlhome
+    # Bazel's cache/output base (this dir is the container's $HOME, holding the
+    # compilation cache, sandboxes, execroot, and runfiles). On agents that
+    # expose local instance-store NVMe as scratch (via CRDB_BAZEL_SCRATCH), keep
+    # it off the network-attached EBS root; elsewhere it stays under /home/agent
+    # unchanged. (The per-test TEST_TMPDIR lives under /artifacts, handled above.)
+    cache=${CRDB_BAZEL_SCRATCH:-/home/agent}/.bzlhome
     mkdir -p $cache
     vols="${vols} --volume ${root}:/go/src/github.com/cockroachdb/cockroach"
     vols="${vols} --volume ${cache}:/home/roach"
