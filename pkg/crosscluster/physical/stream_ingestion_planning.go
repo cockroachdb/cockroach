@@ -58,7 +58,11 @@ func streamIngestionJobDescription(
 		Options:                     streamIngestion.Options,
 	}
 	ann := p.ExtendedEvalContext().Annotations
-	return tree.AsStringWithFQNames(redactedCreateStmt, ann), nil
+	// The URI in this copy is pre-sanitized above, so render it in full rather
+	// than letting the formatter collapse it to '*****'.
+	return tree.AsStringWithFlags(
+		redactedCreateStmt, tree.FmtAlwaysQualifyNames|tree.FmtShowFullURIs, tree.FmtAnnotations(ann),
+	), nil
 }
 
 func ingestionTypeCheck(
