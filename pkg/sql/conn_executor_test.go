@@ -865,6 +865,78 @@ func TestStatementCancelRollback(t *testing.T) {
 	}
 }
 
+// TestStatementTimeoutRollbackToSavepoint verifies that when a statement times
+// out inside an explicit transaction, the client can still recover the
+// transaction via ROLLBACK TO SAVEPOINT, matching PostgreSQL's behavior.
+//
+// This is a regression test for #173874: the statement timeout used to cancel
+// the transaction's context unconditionally, which poisoned the underlying
+// kv.Txn and left the transaction permanently aborted so that ROLLBACK TO
+// SAVEPOINT could not recover it. The context cancellation must be limited to
+// implicit transactions (see #124987).
+func TestStatementTimeoutRollbackToSavepoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The test relies on particular timing, so we run it only under normal
+	// config to avoid flakiness.
+	skip.UnderDuress(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	// Use a single connection so that the session's statement_timeout and
+	// transaction state are preserved across statements.
+	conn, err := s.SQLConn(t).Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `SET statement_timeout = '200ms'`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	require.NoError(t, err)
+	// This INSERT happens before the savepoint, so it must survive the rollback
+	// to the savepoint below.
+	_, err = conn.ExecContext(ctx, `INSERT INTO t VALUES (1)`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `SAVEPOINT s1`)
+	require.NoError(t, err)
+
+	// This statement exceeds the statement timeout and is canceled.
+	_, err = conn.ExecContext(ctx, `SELECT pg_sleep(1)`)
+	require.ErrorContains(t, err, "query execution canceled due to statement timeout")
+
+	// The transaction is now aborted, but the client should be able to recover
+	// it by rolling back to the savepoint.
+	_, err = conn.ExecContext(ctx, `ROLLBACK TO SAVEPOINT s1`)
+	require.NoError(t, err)
+
+	// After recovering, the transaction should be open again and accept new
+	// statements.
+	var status string
+	err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&status)
+	require.NoError(t, err)
+	require.Equal(t, "Open", status)
+
+	// The row inserted before the savepoint must be visible.
+	var id int
+	err = conn.QueryRowContext(ctx, `SELECT id FROM t`).Scan(&id)
+	require.NoError(t, err)
+	require.Equal(t, 1, id)
+
+	_, err = conn.ExecContext(ctx, `COMMIT`)
+	require.NoError(t, err)
+
+	// The row inserted before the savepoint must be committed.
+	err = conn.QueryRowContext(ctx, `SELECT id FROM t`).Scan(&id)
+	require.NoError(t, err)
+	require.Equal(t, 1, id)
+}
+
 // TestRetryableErrorDuringUpgradedTransaction ensures that a retryable error
 // that happens during a transaction that was upgraded from an implicit
 // transaction into an explicit transaction does not cause the BEGIN to be

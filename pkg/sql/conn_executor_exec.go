@@ -744,9 +744,6 @@ func (ex *connExecutor) execStmtInOpenState(
 			timerDuration,
 			func() {
 				cancelQuery()
-				// Also cancel the transactions context, so that there is no danger
-				// getting stuck rolling back.
-				ex.state.txnCancelFn()
 				queryTimedOut = true
 				queryDoneAfterFunc <- struct{}{}
 			})
@@ -909,6 +906,15 @@ func (ex *connExecutor) execStmtInOpenState(
 			res.SetError(sqlerrors.QueryTimeoutError)
 			retPayload = eventNonRetryableErrPayload{err: sqlerrors.QueryTimeoutError}
 			logErr = sqlerrors.QueryTimeoutError
+			// If we are inside an implicit txn, also cancel the txn's context
+			// so that we don't get stuck waiting for a synchronous rollback
+			// (see #124987). We must NOT do this for explicit txns: cancelling
+			// the txn context poisons the kv.Txn for the remainder of the
+			// transaction and prevents the client from recovering it via
+			// ROLLBACK TO SAVEPOINT (see #173874).
+			if ex.implicitTxn() && ex.state.txnCancelFn != nil {
+				ex.state.txnCancelFn()
+			}
 		} else if txnTimedOut {
 			retEv = eventNonRetryableErr{
 				IsCommit: fsm.FromBool(isCommit(ast)),
@@ -1666,9 +1672,6 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			timerDuration,
 			func() {
 				vars.cancelQuery()
-				// Also cancel the transactions context, so that there is no danger
-				// getting stuck rolling back.
-				ex.state.txnCancelFn()
 				queryTimedOut = true
 				queryDoneAfterFunc <- struct{}{}
 			})
@@ -1879,6 +1882,15 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			res.SetError(sqlerrors.QueryTimeoutError)
 			retPayload = eventNonRetryableErrPayload{err: sqlerrors.QueryTimeoutError}
 			vars.logErr = sqlerrors.QueryTimeoutError
+			// If we are inside an implicit txn, also cancel the txn's context
+			// so that we don't get stuck waiting for a synchronous rollback
+			// (see #124987). We must NOT do this for explicit txns: cancelling
+			// the txn context poisons the kv.Txn for the remainder of the
+			// transaction and prevents the client from recovering it via
+			// ROLLBACK TO SAVEPOINT (see #173874).
+			if ex.implicitTxn() && ex.state.txnCancelFn != nil {
+				ex.state.txnCancelFn()
+			}
 		} else if txnTimedOut {
 			retEv = eventNonRetryableErr{
 				IsCommit: fsm.FromBool(isCommit(vars.ast)),
