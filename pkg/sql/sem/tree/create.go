@@ -2256,14 +2256,7 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 		ctx.WriteString(" FROM REPLICATION OF ")
 		ctx.FormatNode(node.ReplicationSourceTenantName)
 		ctx.WriteString(" ON ")
-		_, canOmitParentheses := node.ReplicationSourceConnUri.(alreadyDelimitedAsSyntacticDExpr)
-		if !canOmitParentheses {
-			ctx.WriteByte('(')
-		}
-		ctx.FormatNode(node.ReplicationSourceConnUri)
-		if !canOmitParentheses {
-			ctx.WriteByte(')')
-		}
+		ctx.formatURIExpr(node.ReplicationSourceConnUri)
 
 	}
 	if !node.Options.IsDefault() {
