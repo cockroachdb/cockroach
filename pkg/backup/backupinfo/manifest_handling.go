@@ -1331,19 +1331,18 @@ func CheckForPreviousBackup(
 	}
 
 	// Check for the presence of a BACKUP-LOCK file with a job ID different from
-	// that of our job.
-	if err := defaultStore.List(ctx, "", backupbase.ListingDelimDataSlash, func(s string) error {
-		s = strings.TrimPrefix(s, "/")
-		if strings.HasPrefix(s, BackupLockFilePrefix) {
-			jobIDSuffix := strings.TrimPrefix(s, BackupLockFilePrefix)
-			if len(jobIDSuffix) == 0 {
-				return errors.AssertionFailedf("malformed BACKUP-LOCK file %s, expected a job ID suffix", s)
-			}
-			if jobIDSuffix != strconv.FormatInt(int64(jobID), 10) {
-				return pgerror.Newf(pgcode.FileAlreadyExists,
-					"%s already contains a `BACKUP-LOCK` file written by job %s",
-					redactedURI, jobIDSuffix)
-			}
+	// that of our job. Lock files sit at the top level of the backup directory,
+	// so listing with their name as the prefix yields only lock files; the
+	// callback receives the job ID each was suffixed with.
+	if err := defaultStore.List(ctx, BackupLockFilePrefix, "", func(jobIDSuffix string) error {
+		if len(jobIDSuffix) == 0 {
+			return errors.AssertionFailedf(
+				"malformed %s file, expected a job ID suffix", BackupLockFilePrefix)
+		}
+		if jobIDSuffix != strconv.FormatInt(int64(jobID), 10) {
+			return pgerror.Newf(pgcode.FileAlreadyExists,
+				"%s already contains a `BACKUP-LOCK` file written by job %s",
+				redactedURI, jobIDSuffix)
 		}
 		return nil
 	}); err != nil {

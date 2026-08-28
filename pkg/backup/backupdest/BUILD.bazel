@@ -57,6 +57,7 @@ go_test(
     }),
     deps = [
         "//pkg/backup/backupbase",
+        "//pkg/backup/backupinfo",
         "//pkg/backup/backuppb",
         "//pkg/backup/backuptestutils",
         "//pkg/backup/backuputils",
@@ -67,6 +68,7 @@ go_test(
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/clusterversion",
+        "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
