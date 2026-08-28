@@ -1497,6 +1497,62 @@ FROM [SHOW VIRTUAL CLUSTER '%s' WITH REPLICATION STATUS]
 	require.Equal(t, "ready", status)
 }
 
+// TestReaderTenantMaterializedView is an end-to-end regression test that a
+// reader tenant comes up and serves queries when the replicated source contains
+// materialized views. The reader-catalog setup runs as a permanent upgrade at
+// reader-tenant startup, and previously left the matview's depends-on
+// references set after wiping ViewQuery, which failed descriptor validation with
+// "has depends-on references despite not being a view" and prevented the reader
+// tenant's SQL server from starting.
+func TestReaderTenantMaterializedView(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "too slow")
+	skip.UnderRace(t, "too slow")
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.EnableReaderTenant = true
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	c.SrcTenantSQL.Exec(t, `
+CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
+CREATE TABLE mvt(n INT PRIMARY KEY, val status);
+INSERT INTO mvt VALUES (1, 'open'), (2, 'closed'), (3, 'inactive');
+CREATE FUNCTION add_one(x INT) RETURNS INT LANGUAGE SQL AS 'SELECT x + 1';
+CREATE MATERIALIZED VIEW mv_base AS (SELECT n FROM mvt);
+CREATE MATERIALIZED VIEW mv_deps AS (SELECT n, val, add_one(n) AS np FROM mvt);
+CREATE MATERIALIZED VIEW mv_chain AS (SELECT n FROM mv_base);
+`)
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	stats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+	require.NotNil(t, stats.IngestionDetails.ReadTenantID)
+	readerTenantID := stats.IngestionDetails.ReadTenantID
+
+	readerTenantName := fmt.Sprintf("%s-readonly", args.DestTenantName)
+	c.ConnectToReaderTenant(ctx, readerTenantID, readerTenantName)
+
+	for _, query := range []string{
+		"SELECT * FROM mvt ORDER BY n",
+		"SELECT * FROM mv_base ORDER BY n",
+		"SELECT * FROM mv_deps ORDER BY n",
+		"SELECT * FROM mv_chain ORDER BY n",
+	} {
+		expected := c.SrcTenantSQL.QueryStr(t, query)
+		c.ReaderTenantSQL.CheckQueryResults(t, query, expected)
+	}
+}
+
 // TestReaderTenantUpgrade ensures the reader tenant cannot upgrade itself or
 // via the system tenant, rather the user needs to upgrade the host cluster, and
 // then recreate the reader tenant.
