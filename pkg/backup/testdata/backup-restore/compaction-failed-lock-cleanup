@@ -1,0 +1,90 @@
+# Test that when a compaction job is cancelled/fails, its BACKUP-LOCK file is
+# cleaned up, allowing subsequent compactions to proceed without being blocked.
+# See: https://github.com/cockroachdb/cockroach/issues/172889
+
+reset test-nodelocal
+----
+
+new-cluster name=s1 disable-tenant
+----
+
+# The BACKUP-LOCK cleanup in OnFailOrCancel is a besteffort operation, which is
+# randomly skipped in test builds. Forbid skipping it so the cancelled
+# compaction below deterministically removes its lock and the subsequent
+# compaction can proceed.
+besteffort-forbid-skip op=delete-compaction-backup-lock
+----
+
+# 1. Setup: create a table and take a full backup followed by two incrementals,
+# saving timestamps to use as compaction start/end boundaries.
+exec-sql
+CREATE DATABASE orig;
+USE orig;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foo VALUES (1, 'a'), (2, 'b');
+----
+
+save-cluster-ts tag=start
+----
+
+backup aost=start
+BACKUP INTO 'nodelocal://1/test-root/' AS OF SYSTEM TIME start;
+----
+
+exec-sql
+INSERT INTO orig.foo VALUES (3, 'c');
+----
+
+backup
+BACKUP INTO LATEST IN 'nodelocal://1/test-root/';
+----
+
+exec-sql
+INSERT INTO orig.foo VALUES (4, 'd');
+----
+
+save-cluster-ts tag=end
+----
+
+backup aost=end
+BACKUP INTO LATEST IN 'nodelocal://1/test-root/' AS OF SYSTEM TIME end;
+----
+
+let $backup_path
+SHOW BACKUPS IN 'nodelocal://1/test-root/';
+----
+
+# 2. Set a pausepoint so the compaction pauses right after it writes the
+# BACKUP-LOCK, letting us cancel it while the lock is still present. The
+# crdb_internal.backup_compaction builtin starts the job asynchronously, so the
+# call returns immediately with the job ID; we wait for the job to pause
+# separately rather than expecting a synchronous pausepoint error.
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint';
+----
+
+compact start=start end=end tag=comp1
+SELECT crdb_internal.backup_compaction(0, 'BACKUP INTO LATEST IN ''nodelocal://1/test-root/''', '$backup_path', start, end);
+----
+
+job tag=comp1 wait-for-state=paused
+----
+
+# 3. Cancel the paused compaction to trigger OnFailOrCancel, which cleans up the
+# BACKUP-LOCK file.
+job cancel=comp1
+----
+
+# 4. Clear pausepoints so the next compaction can run to completion.
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+# 5. Run a new compaction over the same range. If the stale BACKUP-LOCK from the
+# cancelled job was not cleaned up, this would fail with FileAlreadyExists.
+compact start=start end=end tag=comp2
+SELECT crdb_internal.backup_compaction(0, 'BACKUP INTO LATEST IN ''nodelocal://1/test-root/''', '$backup_path', start, end);
+----
+
+job tag=comp2 wait-for-state=succeeded
+----
