@@ -536,100 +536,160 @@ func TestCompactionTriggeringCompaction(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	th, cleanup := newTestHelper(t)
-	defer cleanup()
-	th.setOverrideAsOfClauseKnob(t)
-	// Set to a time such that full backups do not unexpectedly run based on test
-	// time.
-	th.env.SetTime(time.Date(2025, 05, 01, 1, 0, 0, 0, time.UTC))
-	// First disable compactions so that we can create a sufficiently long chain
-	// to require multiple compactions.
-	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 0")
-	schedules, err := th.createBackupSchedule(
-		t, "CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly'", "nodelocal://1/backup",
-	)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(schedules))
 
-	full, inc := schedules[0], schedules[1]
-	if full.IsPaused() {
-		full, inc = inc, full
-	}
-
-	th.env.SetTime(full.NextRun().Add(time.Second))
-	require.NoError(t, th.executeSchedules())
-	th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
-
-	executeIncremental := func() {
-		t.Helper()
-		inc, err = jobs.ScheduledJobDB(th.internalDB()).Load(ctx, th.env, inc.ScheduleID())
+	// setupChain spins up a fresh test helper, creates a backup schedule with
+	// compactions disabled, and builds an incremental chain long enough that a
+	// compaction fires once compactions are re-enabled. It returns the helper, a
+	// cleanup func, the incremental schedule, and a closure that runs one more
+	// incremental backup.
+	setupChain := func(t *testing.T) (*testHelper, func(), *jobs.ScheduledJob, func()) {
+		th, cleanup := newTestHelper(t)
+		th.setOverrideAsOfClauseKnob(t)
+		// Set to a time such that full backups do not unexpectedly run based on
+		// test time.
+		th.env.SetTime(time.Date(2025, 05, 01, 1, 0, 0, 0, time.UTC))
+		// First disable compactions so that we can create a sufficiently long
+		// chain to require multiple compactions.
+		th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 0")
+		schedules, err := th.createBackupSchedule(
+			t, "CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly'", "nodelocal://1/backup",
+		)
 		require.NoError(t, err)
-		th.env.SetTime(inc.NextRun().Add(time.Second))
+		require.Equal(t, 2, len(schedules))
+
+		full, inc := schedules[0], schedules[1]
+		if full.IsPaused() {
+			full, inc = inc, full
+		}
+
+		th.env.SetTime(full.NextRun().Add(time.Second))
 		require.NoError(t, th.executeSchedules())
-		th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
+		th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
+
+		executeIncremental := func() {
+			t.Helper()
+			inc, err = jobs.ScheduledJobDB(th.internalDB()).Load(ctx, th.env, inc.ScheduleID())
+			require.NoError(t, err)
+			th.env.SetTime(inc.NextRun().Add(time.Second))
+			require.NoError(t, th.executeSchedules())
+			th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
+		}
+
+		for range 5 {
+			executeIncremental()
+		}
+		return th, cleanup, inc, executeIncremental
 	}
 
-	for range 5 {
-		executeIncremental()
-	}
-
-	// Now enable compactions such that the next incremental will trigger a
-	// compaction, which should then trigger more compactions until the chain is
-	// shorter than the threshold.
-	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 4")
-	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 3")
-	executeIncremental()
-
-	// Validate that a compaction job was created.
-	var unused jobspb.JobID
-	require.NoError(
-		t,
-		th.sqlDB.DB.QueryRowContext(
-			ctx,
-			`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
-		).Scan(&unused),
-	)
-
-	// Poll until there are no more compaction jobs running.
-	testutils.SucceedsSoon(t, func() error {
-		th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-		var numCompactions int
+	countCompactions := func(t *testing.T, th *testHelper) int {
+		t.Helper()
+		var n int
 		require.NoError(
 			t,
 			th.sqlDB.DB.QueryRowContext(
 				ctx,
-				`SELECT count(*) FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP' AND status = $1`,
-				jobs.StateRunning,
-			).Scan(&numCompactions),
+				`SELECT count(*) FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+			).Scan(&n),
 		)
-		if numCompactions == 0 {
-			return nil
-		}
-		return fmt.Errorf("waiting for compactions to complete, %d still running", numCompactions)
+		return n
+	}
+
+	t.Run("success cascade", func(t *testing.T) {
+		th, cleanup, _, executeIncremental := setupChain(t)
+		defer cleanup()
+
+		// Now enable compactions such that the next incremental will trigger a
+		// compaction, which should then trigger more compactions until the chain
+		// is shorter than the threshold.
+		th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 4")
+		th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 3")
+		executeIncremental()
+
+		// Validate that a compaction job was created.
+		var unused jobspb.JobID
+		require.NoError(
+			t,
+			th.sqlDB.DB.QueryRowContext(
+				ctx,
+				`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+			).Scan(&unused),
+		)
+
+		// Poll until there are no more compaction jobs running.
+		testutils.SucceedsSoon(t, func() error {
+			th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+			var numCompactions int
+			require.NoError(
+				t,
+				th.sqlDB.DB.QueryRowContext(
+					ctx,
+					`SELECT count(*) FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP' AND status = $1`,
+					jobs.StateRunning,
+				).Scan(&numCompactions),
+			)
+			if numCompactions == 0 {
+				return nil
+			}
+			return fmt.Errorf("waiting for compactions to complete, %d still running", numCompactions)
+		})
+
+		// Validate that all compaction jobs succeeded.
+		var numNotSucceeded int
+		require.NoError(
+			t,
+			th.sqlDB.DB.QueryRowContext(
+				ctx,
+				`SELECT count(*) FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP' AND status != $1`,
+				jobs.StateSucceeded,
+			).Scan(&numNotSucceeded),
+		)
+		require.Equal(t, 0, numNotSucceeded)
+
+		// Validate that multiple compactions were indeed run.
+		require.Greater(t, countCompactions(t, th), 1)
 	})
 
-	// Validate that all compaction jobs succeeded.
-	var numNotSucceeded int
-	require.NoError(
-		t,
-		th.sqlDB.DB.QueryRowContext(
-			ctx,
-			`SELECT count(*) FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP' AND status != $1`,
-			jobs.StateSucceeded,
-		).Scan(&numNotSucceeded),
-	)
-	require.Equal(t, 0, numNotSucceeded)
+	t.Run("failed compaction does not trigger follow-up", func(t *testing.T) {
+		th, cleanup, inc, executeIncremental := setupChain(t)
+		defer cleanup()
 
-	// Validate that multiple compactions were indeed run.
-	var numCompactions int
-	require.NoError(
-		t,
-		th.sqlDB.DB.QueryRowContext(
-			ctx,
-			`SELECT count(*) FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
-		).Scan(&numCompactions),
-	)
-	require.Greater(t, numCompactions, 1)
+		// Pause the compaction at its first checkpoint so that we can cancel it,
+		// driving it through OnFailOrCancel.
+		th.sqlDB.Exec(t,
+			"SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
+		defer th.sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 4")
+		th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 3")
+		executeIncremental()
+
+		// Wait for the triggered compaction to appear and pause, then cancel it.
+		var compactionJobID jobspb.JobID
+		testutils.SucceedsSoon(t, func() error {
+			th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+			return th.sqlDB.DB.QueryRowContext(
+				ctx,
+				`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+			).Scan(&compactionJobID)
+		})
+		jobutils.WaitForJobToPause(t, th.sqlDB, compactionJobID)
+		th.sqlDB.Exec(t, "CANCEL JOB $1", compactionJobID)
+		jobutils.WaitForJobToCancel(t, th.sqlDB, compactionJobID)
+
+		// A failed compaction must not trigger a follow-up compaction: the only
+		// compaction job should remain the one we canceled. By the time the job
+		// reaches the canceled state, OnFailOrCancel (which is where a follow-up
+		// would be spawned) has already run to completion.
+		th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+		require.Equal(t, 1, countCompactions(t, th))
+
+		// The compaction lock must still be released on failure, otherwise future
+		// compactions on this schedule would be blocked forever.
+		_, args, err := getScheduledBackupExecutionArgsFromSchedule(
+			ctx, th.env, jobs.ScheduledJobDB(th.internalDB()), inc.ScheduleID(),
+		)
+		require.NoError(t, err)
+		require.Equal(t, jobspb.JobID(0), args.CompactionJobID)
+	})
 }
 
 func TestBlockConcurrentScheduledCompactions(t *testing.T) {

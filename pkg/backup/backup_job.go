@@ -1911,7 +1911,7 @@ func (b *backupResumer) processScheduledBackupCompletion(
 	}
 
 	if details.Compact {
-		return b.processCompactionCompletion(ctx, execCtx, env, details)
+		return b.processCompactionCompletion(ctx, jobState, execCtx, env, details)
 	}
 
 	var scheduleID jobspb.ScheduleID
