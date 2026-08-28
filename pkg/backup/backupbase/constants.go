@@ -58,10 +58,28 @@ const (
 	// incremental backups will be written.
 	DefaultIncrementalsSubdir = "incrementals"
 
-	// ListingDelimDataSlash is used when listing to find backups/backup metadata
-	// and groups all the data sst files in each backup, which start with "data/",
-	// into a single result that can be skipped over quickly.
-	ListingDelimDataSlash = "data/"
+	// ListingDelimDataSlash is used when listing to find backups/backup metadata.
+	// Listing groups every name sharing a prefix up to the first occurrence of
+	// the delimiter into one result, so the delimiter has to appear in the names
+	// we want to skip -- the data SSTs, the only files whose count grows with the
+	// size of the data backed up -- and in none of the names we need to see:
+	//
+	//	2026/08/24-120000.00/BACKUP_MANIFEST          intact, matched
+	//	2026/08/24-120000.00/BACKUP_METADATA          intact, ignored
+	//	2026/08/24-120000.00/data/<id>.sst            elided to ".../d"
+	//	2026/08/24-120000.00/descriptorslist.sst      elided to ".../d"
+	//	metadata/index/<chain>/<backup>_metadata.pb   elided to "metad"
+	//	incrementals/<full>/<inc>/BACKUP_MANIFEST     intact, ignored
+	//
+	// "d" satisfies that because backup subdirectories are built from digits and
+	// "-./" (see backuputils.NormalizeSubdir) and the names we match are upper
+	// case, so lower case letters occur only in names we are content to collapse.
+	// One "<backup>/d" result then stands in for the whole of that backup's
+	// data/ directory however many files it holds.
+	//
+	// The delimiter must stay a single character: several S3-compatible stores
+	// reject longer ones (Alibaba OSS: "The length of delimiter must be 1").
+	ListingDelimDataSlash = "d"
 
 	// BackupIndexDirectoryName is the path from the root of the backup collection
 	// to the directory containing the index files for the backup collection.

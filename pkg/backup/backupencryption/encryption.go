@@ -12,9 +12,7 @@ import (
 	cryptorand "crypto/rand"
 	"fmt"
 	"net/url"
-	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -480,17 +478,13 @@ func ReadEncryptionOptions(
 // GetEncryptionInfoFiles reads the ENCRYPTION-INFO files from external storage.
 func GetEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]string, error) {
 	var files []string
-	// Look for all files in dest that start with "/ENCRYPTION-INFO"
-	// and return them.
+	// ENCRYPTION-INFO files sit at the top level of dest, so listing with their
+	// name as the prefix yields only those files; the callback receives the
+	// version suffix each was written with (empty for the first one).
 	err := dest.List(
-		ctx, "", cloud.ListOptions{Delimiter: backupbase.ListingDelimDataSlash},
-		func(p string) error {
-			paths := strings.Split(p, "/")
-			p = paths[len(paths)-1]
-			if match := strings.HasPrefix(p, backupEncryptionInfoFile); match {
-				files = append(files, p)
-			}
-
+		ctx, backupEncryptionInfoFile, cloud.ListOptions{},
+		func(versionSuffix string) error {
+			files = append(files, backupEncryptionInfoFile+versionSuffix)
 			return nil
 		},
 	)

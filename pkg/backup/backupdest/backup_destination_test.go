@@ -10,6 +10,9 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -31,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -564,4 +569,116 @@ func writeBackupIndexFromManifest(
 		nil, /* kmsEnv */
 	)
 	require.NoError(t, err)
+}
+
+// TestCollectionListingDelimiter checks what the single List call that backup
+// discovery makes at the root of a collection -- prefix "", delimited on
+// backupbase.ListingDelimDataSlash -- returns for a collection holding two full
+// backups, an incremental, and a backup that was interrupted after writing its
+// data files but before its manifest.
+func TestCollectionListingDelimiter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "takes four backups of a bank table")
+
+	ctx := context.Background()
+
+	// interruptBackup, once armed, pauses a backup after every data file has
+	// been written but before WriteBackupMetadata writes its manifest.
+	var interruptBackup atomic.Bool
+	const interruptMsg = "interrupted before writing manifest"
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs.BackupRestore = &sql.BackupRestoreTestingKnobs{
+		RunAfterBackupFlow: func() error {
+			if !interruptBackup.Load() {
+				return nil
+			}
+			return jobs.MarkPauseRequestError(errors.New(interruptMsg))
+		},
+	}
+
+	tc, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(
+		t, backuptestutils.SingleNode,
+		backuptestutils.WithParams(params), backuptestutils.WithBank(1000),
+	)
+	defer cleanupFn()
+
+	const collectionURI = "nodelocal://1/collection"
+
+	// Checkpoint often, so each backup leaves several checkpoints to collapse.
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.checkpoint_interval = '10ms'")
+	sqlDB.Exec(t, "BACKUP INTO $1", collectionURI)
+	sqlDB.Exec(t, "UPDATE data.bank SET payload = 'changed' WHERE id % 3 = 0")
+	sqlDB.Exec(t, "BACKUP INTO LATEST IN $1", collectionURI)
+	sqlDB.Exec(t, "BACKUP INTO $1", collectionURI)
+
+	interruptBackup.Store(true)
+	sqlDB.ExpectErr(t, interruptMsg, "BACKUP INTO $1", collectionURI)
+
+	execCfg := tc.Server(0).ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(
+		ctx, collectionURI, username.RootUserName(),
+	)
+	require.NoError(t, err)
+	defer store.Close()
+
+	list := func(opts cloud.ListOptions) []string {
+		var res []string
+		require.NoError(t, store.List(ctx, "", opts, func(f string) error {
+			res = append(res, f)
+			return nil
+		}))
+		return res
+	}
+	// everything is the same listing undelimited: the objects actually in the
+	// collection, and so the oracle for telling an object returned whole from a
+	// prefix that a group of objects collapsed into.
+	everything := list(cloud.ListOptions{})
+	discovered := list(cloud.ListOptions{Delimiter: backupbase.ListingDelimDataSlash})
+	t.Logf("%d objects listed as %d results:\n%s",
+		len(everything), len(discovered), strings.Join(discovered, "\n"))
+
+	filter := func(in []string, match func(string) bool) []string {
+		var res []string
+		for _, f := range in {
+			if match(f) {
+				res = append(res, f)
+			}
+		}
+		return res
+	}
+	isManifest := func(f string) bool {
+		return strings.HasSuffix(f, "/"+backupbase.DeprecatedBackupManifestName)
+	}
+	isDataSST := func(f string) bool {
+		return strings.Contains(f, "/data/") && strings.HasSuffix(f, ".sst")
+	}
+	isCheckpoint := func(f string) bool {
+		return strings.Contains(f, backupinfo.BackupProgressDirectory+"/"+
+			backupinfo.BackupManifestCheckpointName)
+	}
+
+	// Every manifest the collection holds -- one per backup that got that far --
+	// comes back intact.
+	manifests := filter(everything, isManifest)
+	require.Len(t, manifests, 3)
+	require.Equal(t, manifests, filter(discovered, isManifest))
+
+	// No data file does, though the collection is full of them.
+	require.NotEmpty(t, filter(everything, isDataSST))
+	require.Empty(t, filter(discovered, isDataSST))
+
+	// Neither does any individual checkpoint.
+	//
+	// TODO(dt): this test will become flaky in the year 3000;
+	// NewTimestampedCheckpointFileName hex-encodes
+	// EncodeStringDescending(<time>.String()), which leads with the 0x13
+	// descending-bytes marker and the complement of the year's first digit, so
+	// while that digit is '2' every checkpoint name collapses at the 'd' of the
+	// fixed "13cd" prefix rather than wherever one falls in the rest of the hex.
+	require.NotEmpty(t, filter(everything, isCheckpoint))
+	require.Empty(t, filter(discovered, func(f string) bool {
+		return isCheckpoint(f) && slices.Contains(everything, f)
+	}))
 }
