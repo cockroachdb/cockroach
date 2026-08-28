@@ -9,6 +9,7 @@ import (
 	"context"
 	"net/url"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/errors"
 )
@@ -72,6 +73,10 @@ func Materialize(ec ExternalConnection, uri *url.URL) (*url.URL, error) {
 		}
 		materialized.RawQuery = query.Encode()
 
+		if _, err := cloud.SanitizedJoin(materialized.Path, uri.Path); err != nil {
+			return nil, errors.Wrap(err,
+				"the subdirectory in the external:// URI escapes the external connection's base directory")
+		}
 		materialized = materialized.JoinPath(uri.Path)
 	}
 
