@@ -1653,16 +1653,20 @@ func applyZoneConfigForMultiRegionTable(
 
 	if regionConfig.HasSecondaryRegion() {
 		var newLeasePreferences []zonepb.LeasePreference
-		localityRBR := b.QueryByID(tableID).Filter(publicTargetFilter).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
-		switch {
-		case localityRBR != nil:
-			region := b.QueryByID(tableID).FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
-			if region != nil {
-				newLeasePreferences = regions.SynthesizeLeasePreferences(region.RegionName, regionConfig.SecondaryRegion())
-			} else {
-				newLeasePreferences = regions.SynthesizeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig.SecondaryRegion())
+		// The TableLocalitySecondaryRegion records a REGIONAL BY TABLE table's
+		// explicit home region (the "IN <region>" clause). When present,
+		// lease from that home region and use the database secondary region
+		// (i.e., regionConfig.SecondaryRegion()) only as a fallback,
+		// dropping it when it lies outside the home region's super region.
+		tblHomeRegion := b.QueryByID(tableID).Filter(publicTargetFilter).
+			FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
+		if tblHomeRegion != nil {
+			dbSecondaryRegion := regionConfig.SecondaryRegion()
+			if regions.SecondaryRegionOutsideSuperRegion(tblHomeRegion.RegionName, regionConfig) {
+				dbSecondaryRegion = ""
 			}
-		default:
+			newLeasePreferences = regions.SynthesizeLeasePreferences(tblHomeRegion.RegionName, dbSecondaryRegion)
+		} else {
 			newLeasePreferences = regions.SynthesizeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig.SecondaryRegion())
 		}
 		newZoneConfig.LeasePreferences = newLeasePreferences
