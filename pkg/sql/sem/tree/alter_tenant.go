@@ -44,14 +44,7 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 		ctx.WriteString("START REPLICATION OF ")
 		ctx.FormatNode(n.ReplicationSourceTenantName)
 		ctx.WriteString(" ON ")
-		_, canOmitParentheses := n.ReplicationSourceConnUri.(alreadyDelimitedAsSyntacticDExpr)
-		if !canOmitParentheses {
-			ctx.WriteByte('(')
-		}
-		ctx.FormatNode(n.ReplicationSourceConnUri)
-		if !canOmitParentheses {
-			ctx.WriteByte(')')
-		}
+		ctx.formatURIExpr(n.ReplicationSourceConnUri)
 
 		if !n.Options.IsDefault() {
 			ctx.WriteString(" WITH ")

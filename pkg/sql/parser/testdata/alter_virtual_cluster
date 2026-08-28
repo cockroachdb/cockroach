@@ -256,10 +256,11 @@ ALTER VIRTUAL CLUSTER 'foo' SET REPLICATION RETENTION = '-2h' -- identifiers rem
 parse
 ALTER TENANT 'foo' START REPLICATION OF 'bar' ON 'baz' WITH RETENTION = '-1h'
 ----
-ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON 'baz' WITH RETENTION = '-1h' -- normalized!
-ALTER VIRTUAL CLUSTER ('foo') START REPLICATION OF ('bar') ON ('baz') WITH RETENTION = ('-1h') -- fully parenthesized
+ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON '*****' WITH RETENTION = '-1h' -- normalized!
+ALTER VIRTUAL CLUSTER ('foo') START REPLICATION OF ('bar') ON ('*****') WITH RETENTION = ('-1h') -- fully parenthesized
 ALTER VIRTUAL CLUSTER '_' START REPLICATION OF '_' ON '_' WITH RETENTION = '_' -- literals removed
-ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON 'baz' WITH RETENTION = '-1h' -- identifiers removed
+ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON '*****' WITH RETENTION = '-1h' -- identifiers removed
+ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON 'baz' WITH RETENTION = '-1h' -- passwords exposed
 
 parse
 ALTER VIRTUAL CLUSTER 'foo' SET REPLICATION SOURCE EXPIRATION WINDOW = '2h'
@@ -446,3 +447,20 @@ ALTER VIRTUAL CLUSTER 'foo' STOP SERVICE -- normalized!
 ALTER VIRTUAL CLUSTER ('foo') STOP SERVICE -- fully parenthesized
 ALTER VIRTUAL CLUSTER '_' STOP SERVICE -- literals removed
 ALTER VIRTUAL CLUSTER 'foo' STOP SERVICE -- identifiers removed
+
+parse
+ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON $1
+----
+ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON $1
+ALTER VIRTUAL CLUSTER ('foo') START REPLICATION OF ('bar') ON ($1) -- fully parenthesized
+ALTER VIRTUAL CLUSTER '_' START REPLICATION OF '_' ON $1 -- literals removed
+ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON $1 -- identifiers removed
+
+parse
+ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON concat('pg', 'url')
+----
+ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON '*****' -- normalized!
+ALTER VIRTUAL CLUSTER ('foo') START REPLICATION OF ('bar') ON ('*****') -- fully parenthesized
+ALTER VIRTUAL CLUSTER '_' START REPLICATION OF '_' ON '_' -- literals removed
+ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON '*****' -- identifiers removed
+ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON (concat('pg', 'url')) -- passwords exposed
