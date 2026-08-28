@@ -2283,6 +2283,115 @@ func TestChangefeedProjectionDelete(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
 
+// TestChangefeedRBRPhantomDeletes checks that tombstones written into other
+// regions' partitions of a REGIONAL BY ROW primary index do not reach the
+// sink. They would otherwise surface as deletes with both images null, since
+// no row has ever existed at those keys. Deletes of rows that really did exist
+// must still be emitted.
+func TestChangefeedRBRPhantomDeletes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cluster, db, cleanup := startTestCluster(t)
+	defer cleanup()
+
+	f := makeKafkaFeedFactory(t, cluster, db)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.suppress_empty_deletes.enabled = true`)
+	sqlDB.Exec(t, `ALTER DATABASE d ADD REGION "us-east2"`)
+	sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY) WITH (schema_locked = false)`)
+	waitForSchemaChange(t, sqlDB, `ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW`)
+
+	rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr WITH diff`)
+	defer closeFeed(t, rbr)
+
+	tests := []struct {
+		isolation        string
+		key              int
+		expectedPayloads []string
+	}{
+		{
+			isolation: "serializable",
+			key:       1,
+			expectedPayloads: []string{
+				`rbr: ["us-east1", 1]->{"after": {"a": 1, "crdb_region": "us-east1"}, "before": null}`,
+				`rbr: ["us-east1", 1]->{"after": null, "before": {"a": 1, "crdb_region": "us-east1"}}`,
+			},
+		},
+		{
+			isolation: "read committed",
+			key:       2,
+			expectedPayloads: []string{
+				`rbr: ["us-east1", 2]->{"after": {"a": 2, "crdb_region": "us-east1"}, "before": null}`,
+				// This is a regression test for a case where changefeeds on RBR
+				// tables with read committed isolation would emit "phantom
+				// deletes". To ensure the same key isn't added to two regions at
+				// the same time, we wrote tombstones to the other regions which
+				// showed up as payloads where before and after were both null.
+				`rbr: ["us-east1", 2]->{"after": null, "before": {"a": 2, "crdb_region": "us-east1"}}`,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.isolation, func(t *testing.T) {
+			sqlDB.Exec(t, fmt.Sprintf(`SET default_transaction_isolation = '%s'`, tc.isolation))
+			sqlDB.Exec(t, `INSERT INTO rbr VALUES ($1)`, tc.key)
+			sqlDB.Exec(t, `DELETE FROM rbr WHERE a = $1`, tc.key)
+			assertPayloads(t, rbr, tc.expectedPayloads)
+		})
+	}
+}
+
+// TestChangefeedFastPathPhantomDeletes checks that the delete fast path does
+// not produce phantom deletes either. Deleting a single key from a table with
+// no secondary index skips reading the row first and tombstones the key
+// blindly, so the tombstone lands whether or not a row was there.
+func TestChangefeedFastPathPhantomDeletes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, suppress := range []bool{true, false} {
+		name := "suppressed"
+		if !suppress {
+			name = "emitted"
+		}
+		t.Run(name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				changefeedbase.SuppressEmptyDeletes.Override(
+					context.Background(), &s.Server.ClusterSettings().SV, suppress)
+
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+				// Seed a row for the initial scan to emit. A sinkless feed does
+				// not finish starting until it produces its first message, and
+				// this test writes nothing until feed creation returns.
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
+				foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH diff`)
+				defer closeFeed(t, foo)
+				assertPayloads(t, foo, []string{
+					`foo: [0]->{"after": {"a": 0}, "before": null}`,
+				})
+
+				// Nothing has ever been written at a = 1, so this tombstones a
+				// key that never held a row.
+				sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+				if !suppress {
+					assertPayloads(t, foo, []string{
+						`foo: [1]->{"after": null, "before": null}`,
+					})
+				}
+
+				// Make sure that an unexpected payload for key 1 didn't
+				// come through.
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+				assertPayloads(t, foo, []string{`foo: [1]->{"after": {"a": 1}, "before": null}`})
+			}
+			cdcTest(t, testFn)
+		})
+	}
+}
+
 // Regression test for https://github.com/cockroachdb/cockroach/issues/106358
 // Ensure that changefeeds upgraded from the version that did not set job record
 // cluster ID continue functioning.
