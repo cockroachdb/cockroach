@@ -2001,7 +2001,8 @@ subtest end
 
 # Regression test for VULM-535: a CREATEROLE-only user must not be able to grant
 # sensitive role options it does not itself hold (or have the equivalent system
-# privilege for). Admins/root are exempt.
+# privilege for). Admins/root are exempt. The check is gated on
+# sql.auth.postgres_compatible_grant_checks.enabled.
 subtest createrole_option_escalation
 
 user root
@@ -2012,6 +2013,31 @@ CREATE ROLE vulm_target
 # testuser gets CREATEROLE but explicitly none of the sensitive options.
 statement ok
 ALTER ROLE testuser WITH CREATEROLE NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOVIEWCLUSTERSETTING NOMODIFYCLUSTERSETTING NOCONTROLJOB NOCANCELQUERY NOCREATEDB NOBYPASSRLS NOREPLICATION
+
+# With the setting off (the default), the legacy behavior applies: a
+# CREATEROLE-only user may grant a sensitive option it does not hold.
+statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_grant_checks.enabled = false
+
+user testuser
+
+statement ok
+ALTER ROLE vulm_target WITH MODIFYCLUSTERSETTING
+
+statement ok
+CREATE ROLE vulm_legacy WITH MODIFYCLUSTERSETTING
+
+user root
+
+statement ok
+DROP ROLE vulm_legacy
+
+statement ok
+ALTER ROLE vulm_target WITH NOMODIFYCLUSTERSETTING
+
+# Enabling the setting turns on the PostgreSQL-compatible grant checks.
+statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_grant_checks.enabled = true
 
 user testuser
 
@@ -2129,5 +2155,8 @@ REVOKE SYSTEM CANCELQUERY FROM testuser
 
 statement ok
 ALTER ROLE testuser WITH NOCREATEROLE NOVIEWACTIVITY
+
+statement ok
+RESET CLUSTER SETTING sql.auth.postgres_compatible_grant_checks.enabled
 
 subtest end

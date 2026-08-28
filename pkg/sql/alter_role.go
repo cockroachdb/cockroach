@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
@@ -221,6 +222,9 @@ func init() {
 func (p *planner) checkRoleOptionConstraints(
 	ctx context.Context, roleOptions roleoption.List,
 ) error {
+	if !sqlclustersettings.PostgresCompatibleGrantChecks.Get(&p.ExecCfg().Settings.SV) {
+		return nil
+	}
 	for _, ro := range roleOptions {
 		priv, exempt, ok := roleOptionGlobalPrivilege(ro.Option)
 		if exempt {
