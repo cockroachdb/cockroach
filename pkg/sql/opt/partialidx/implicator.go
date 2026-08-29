@@ -533,12 +533,27 @@ func (im *Implicator) atomImpliesAtom(
 
 	// If there are computed columns, try replacing them in e and pred and
 	// re-checking implication.
+	//
+	// Multiple computed columns can share the same expression, for example when
+	// two expression indexes are defined over identical key expressions. In
+	// that case the expression must be mapped to a single, deterministic
+	// column: otherwise the same expression appearing in both e and pred could
+	// be replaced with references to different columns, so that a subsequent
+	// containment check spuriously fails (e.g. "v1 = x" does not contain "v2 IS
+	// NOT NULL"). We resolve the ambiguity of randomized iteration order over
+	// the Go map by always choosing the column with the smallest ID. The
+	// specific column chosen is immaterial; only consistency between e and pred
+	// matters.
 	var replace func(e opt.Expr) opt.Expr
 	replace = func(e opt.Expr) opt.Expr {
+		var replacementCol opt.ColumnID
 		for col, compExpr := range computedCols {
-			if e == compExpr {
-				return im.f.ConstructVariable(col)
+			if e == compExpr && (replacementCol == 0 || col < replacementCol) {
+				replacementCol = col
 			}
+		}
+		if replacementCol != 0 {
+			return im.f.ConstructVariable(replacementCol)
 		}
 		return im.f.Replace(e, replace)
 	}
