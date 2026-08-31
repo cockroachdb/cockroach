@@ -219,6 +219,26 @@ func TestSerializesScheduledChangefeedExecutionArgs(t *testing.T) {
 			},
 		},
 		{
+			name:  "changefeed-with-secret-option",
+			query: "CREATE SCHEDULE FOR CHANGEFEED d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH initial_scan='only', webhook_auth_header='Basic nevershown' RECURRING '@hourly'",
+			es: expectedSchedule{
+				nameRe:         "CHANGEFEED .+",
+				changefeedStmt: "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH OPTIONS (initial_scan = 'only', webhook_auth_header = 'Basic nevershown')",
+				shownStmt:      "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=redacted' WITH OPTIONS (initial_scan = 'only', webhook_auth_header = 'redacted')",
+				period:         time.Hour,
+			},
+		},
+		{
+			name:  "changefeed-with-secret-uri-option",
+			query: "CREATE SCHEDULE FOR CHANGEFEED d.public.foo INTO 'null://' WITH initial_scan='only', confluent_schema_registry='https://user:nevershown@registry:8081' RECURRING '@hourly'",
+			es: expectedSchedule{
+				nameRe:         "CHANGEFEED .+",
+				changefeedStmt: "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'null://' WITH OPTIONS (initial_scan = 'only', confluent_schema_registry = 'https://user:nevershown@registry:8081')",
+				shownStmt:      "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'null://' WITH OPTIONS (initial_scan = 'only', confluent_schema_registry = 'https://redacted@registry:8081')",
+				period:         time.Hour,
+			},
+		},
+		{
 			name: "changefeed-with-options",
 			query: `
 		CREATE SCHEDULE 'foo-changefeed'
