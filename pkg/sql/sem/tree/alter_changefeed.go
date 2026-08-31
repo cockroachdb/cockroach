@@ -63,7 +63,7 @@ func (node *AlterChangefeedAddTarget) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Targets)
 	if node.Options != nil {
 		ctx.WriteString(" WITH ")
-		ctx.FormatNode(&node.Options)
+		node.Options.formatEach(ctx, formatChangefeedOptionValue)
 	}
 }
 
@@ -86,15 +86,7 @@ type AlterChangefeedSetOptions struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterChangefeedSetOptions) Format(ctx *FmtCtx) {
 	ctx.WriteString(" SET ")
-	node.Options.formatEach(ctx, func(n *KVOption, ctx *FmtCtx) {
-		// The "sink" option is a URL. (Use a literal here to avoid pulling in
-		// changefeedbase as a dependency.)
-		if string(n.Key) == "sink" {
-			ctx.FormatURI(n.Value)
-		} else {
-			ctx.FormatNode(n.Value)
-		}
-	})
+	node.Options.formatEach(ctx, formatChangefeedOptionValue)
 }
 
 // AlterChangefeedUnsetOptions represents an UNSET <options> command

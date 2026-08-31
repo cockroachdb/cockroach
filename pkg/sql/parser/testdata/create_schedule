@@ -82,3 +82,12 @@ CREATE SCHEDULE FOR CHANGEFEED TABLE (d.public.foo) INTO ('*****') WITH OPTIONS 
 CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO '_' WITH OPTIONS (initial_scan = '_' ) RECURRING '_' -- literals removed
 CREATE SCHEDULE FOR CHANGEFEED TABLE _._._ INTO '*****' WITH OPTIONS (_ = 'only' ) RECURRING '@hourly' -- identifiers removed
 CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH OPTIONS (initial_scan = 'only' ) RECURRING '@hourly' -- passwords exposed
+
+parse
+CREATE SCHEDULE FOR CHANGEFEED d.public.foo INTO 'sink' WITH webhook_auth_header = 'Basic dXNlcg==', confluent_schema_registry = 'https://user:pass@registry:8081' RECURRING '@hourly'
+----
+CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO '*****' WITH OPTIONS (webhook_auth_header = '*****', confluent_schema_registry = '*****' ) RECURRING '@hourly' -- normalized!
+CREATE SCHEDULE FOR CHANGEFEED TABLE (d.public.foo) INTO ('*****') WITH OPTIONS (webhook_auth_header = ('*****'), confluent_schema_registry = ('*****') ) RECURRING ('@hourly') -- fully parenthesized
+CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO '_' WITH OPTIONS (webhook_auth_header = '_', confluent_schema_registry = '_' ) RECURRING '_' -- literals removed
+CREATE SCHEDULE FOR CHANGEFEED TABLE _._._ INTO '*****' WITH OPTIONS (_ = '*****', _ = '*****' ) RECURRING '@hourly' -- identifiers removed
+CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO 'sink' WITH OPTIONS (webhook_auth_header = 'Basic dXNlcg==', confluent_schema_registry = 'https://user:pass@registry:8081' ) RECURRING '@hourly' -- passwords exposed
