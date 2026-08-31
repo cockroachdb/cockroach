@@ -54,7 +54,7 @@ func (node *CreateChangefeed) formatWithPredicates(ctx *FmtCtx) {
 	ctx.WriteString("CREATE CHANGEFEED")
 	if node.SinkURI != nil {
 		ctx.WriteString(" INTO ")
-		ctx.FormatNode(node.SinkURI)
+		ctx.FormatURI(node.SinkURI)
 	}
 	if node.Options != nil {
 		ctx.WriteString(" WITH OPTIONS (")
