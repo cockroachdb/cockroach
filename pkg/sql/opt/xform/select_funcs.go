@@ -354,6 +354,26 @@ func (c *CustomFuncs) GetOptionalFiltersAndFilterColumns(
 	return optionalFilters, filterColumns
 }
 
+// optionalFiltersWithPartialIndexPredicate returns optionalFilters augmented
+// with the given index's partial index predicate, if it is a partial index.
+// Otherwise, optionalFilters is returned unchanged.
+func (c *CustomFuncs) optionalFiltersWithPartialIndexPredicate(
+	tabMeta *opt.TableMeta, indexOrd cat.IndexOrdinal, optionalFilters memo.FiltersExpr,
+) memo.FiltersExpr {
+	predScalar, isPartialIndex := tabMeta.PartialIndexPredicate(indexOrd)
+	if !isPartialIndex {
+		return optionalFilters
+	}
+	pred := *predScalar.(*memo.FiltersExpr)
+	if len(pred) == 0 {
+		return optionalFilters
+	}
+	combined := make(memo.FiltersExpr, 0, len(optionalFilters)+len(pred))
+	combined = append(combined, optionalFilters...)
+	combined = append(combined, pred...)
+	return combined
+}
+
 // GenerateConstrainedScans enumerates all non-inverted secondary indexes on the
 // Scan operator's table and tries to push the given Select filter into new
 // constrained Scan operators using those indexes. Since this only needs to be
@@ -449,11 +469,17 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		spanLimit := int(c.e.evalCtx.SessionData().OptimizerSpanLimit)
 
+		// Include the partial index predicate in the set of optional filters,
+		// if this is a partial index.
+		indexOptionalFilters := c.optionalFiltersWithPartialIndexPredicate(
+			tabMeta, index.Ordinal(), optionalFilters,
+		)
+
 		// Build Constraints to scan a subset of the table Spans.
 		if partitionFilters, remainingFilters, combinedConstraint, ok =
 			c.MakeCombinedFiltersConstraint(
 				tabMeta, index, scanPrivate, prefixSorter,
-				filters, optionalFilters, filterColumns,
+				filters, indexOptionalFilters, filterColumns,
 				spanLimit,
 			); !ok {
 			return

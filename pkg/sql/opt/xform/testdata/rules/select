@@ -1980,7 +1980,7 @@ project
  ├── fd: ()-->(2,4,5), (1)-->(3)
  ├── scan p@idx,partial
  │    ├── columns: k:1!null f:3!null s:4 b:5!null
- │    ├── constraint: /3/4/1: [/1.0000000000000002 - ]
+ │    ├── constraint: /3/4/1: [/1.0000000000000002/NULL - ]
  │    ├── key: (1)
  │    └── fd: ()-->(4,5), (1)-->(3)
  └── projections
@@ -12288,6 +12288,68 @@ memo (optimized, ~38KB, required=[presentation: a:1] [ordering: +2])
  │         └── cost: 1047.62
  ├── G51: (filters G39)
  └── G52: (scalar-list G48)
+
+# Regression test for #174162: when a partial index's predicate references
+# columns that are also leading key columns of the index, the filters that prove
+# the predicate implication must still constrain the scan.
+exec-ddl
+CREATE TABLE t174162 (
+  r INT NOT NULL,
+  id INT NOT NULL,
+  s INT NOT NULL,
+  v INT NOT NULL,
+  PRIMARY KEY (r, id),
+  INDEX bad (r, s, v) WHERE s = 2,
+  INDEX ctrl_a (r, s, v),
+  INDEX ctrl_b (r, v) WHERE s = 2
+)
+----
+
+# The partial index whose predicate column (s) overlaps leading key columns
+# must produce the tight lookup.
+opt expect=GenerateConstrainedScans
+SELECT r FROM t174162@bad WHERE r = 1 AND s = 2 AND v = 3
+----
+project
+ ├── columns: r:1!null
+ ├── fd: ()-->(1)
+ └── scan t174162@bad,partial
+      ├── columns: r:1!null s:3!null v:4!null
+      ├── constraint: /1/3/4/2: [/1/2/3 - /1/2/3]
+      ├── flags: force-index=bad
+      └── fd: ()-->(1,3,4)
+
+# Control: no predicate, all filter columns are key columns.
+opt expect=GenerateConstrainedScans
+SELECT r FROM t174162@ctrl_a WHERE r = 1 AND s = 2 AND v = 3
+----
+project
+ ├── columns: r:1!null
+ ├── fd: ()-->(1)
+ └── scan t174162@ctrl_a
+      ├── columns: r:1!null s:3!null v:4!null
+      ├── constraint: /1/3/4/2: [/1/2/3 - /1/2/3]
+      ├── flags: force-index=ctrl_a
+      └── fd: ()-->(1,3,4)
+
+# Control: the predicate column excluded from the key, so only the proving
+# filters stay available for span building.
+opt expect=GenerateConstrainedScans
+SELECT r FROM t174162@ctrl_b WHERE r = 1 AND s = 2 AND v = 3
+----
+project
+ ├── columns: r:1!null
+ ├── fd: ()-->(1)
+ └── project
+      ├── columns: s:3!null r:1!null v:4!null
+      ├── fd: ()-->(1,3,4)
+      ├── scan t174162@ctrl_b,partial
+      │    ├── columns: r:1!null v:4!null
+      │    ├── constraint: /1/4/2: [/1/3 - /1/3]
+      │    ├── flags: force-index=ctrl_b
+      │    └── fd: ()-->(1,4)
+      └── projections
+           └── 2 [as=s:3]
 
 # --------------------------------------------------
 # SplitDisjunctionAddKey
