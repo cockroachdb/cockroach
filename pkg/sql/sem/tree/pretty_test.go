@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -36,6 +37,9 @@ var (
 	testPrettyCfg   = func() tree.PrettyCfg {
 		cfg := tree.DefaultPrettyCfg()
 		cfg.JSONFmt = true
+		// Show URIs/passwords so the pretty golden files exercise faithful
+		// rendering of URI-bearing statements (BACKUP/RESTORE/EXPORT/...).
+		cfg.ShowPasswords = true
 		return cfg
 	}()
 )
@@ -267,5 +271,76 @@ func TestPrettyExprs(t *testing.T) {
 		if pretty != got {
 			t.Fatalf("got: %s\nexpected: %s", got, pretty)
 		}
+	}
+}
+
+// TestPrettyShowPasswords verifies that the pretty-printer elides passwords
+// unless PrettyCfg.ShowPasswords is set, and that setting it reproduces them
+// faithfully.
+func TestPrettyShowPasswords(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// A sentinel that cannot appear in the pretty output for any other reason.
+	const secret = "s3kr1t-do-not-leak"
+
+	testCases := []struct {
+		name string
+		stmt string
+	}{
+		{
+			name: "create role password",
+			stmt: `CREATE ROLE foo WITH PASSWORD '` + secret + `'`,
+		},
+		{
+			name: "alter role password",
+			stmt: `ALTER ROLE foo WITH PASSWORD '` + secret + `'`,
+		},
+		{
+			name: "backup encryption_passphrase",
+			stmt: `BACKUP INTO 's3://bucket/path' WITH encryption_passphrase = '` + secret + `'`,
+		},
+		{
+			name: "restore encryption_passphrase",
+			stmt: `RESTORE FROM LATEST IN 's3://bucket/path' WITH encryption_passphrase = '` + secret + `'`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := parser.ParseOne(tc.stmt)
+			require.NoError(t, err)
+
+			cfg := tree.DefaultPrettyCfg()
+			out, err := cfg.Pretty(stmt.AST)
+			require.NoError(t, err)
+			require.NotContainsf(t, out, secret,
+				"password must be elided by default:\n%s", out)
+
+			// ShowPasswords reproduces the password faithfully, and the output
+			// still reparses.
+			cfg.ShowPasswords = true
+			out, err = cfg.Pretty(stmt.AST)
+			require.NoError(t, err)
+			require.Containsf(t, out, secret,
+				"ShowPasswords must reproduce the password:\n%s", out)
+			_, err = parser.ParseOne(out)
+			require.NoErrorf(t, err, "pretty-printed output must reparse:\n%s", out)
+
+			// ShowPasswords is honored even when explicit FmtFlags are
+			// configured, which would otherwise replace the pretty-printer's
+			// default flags wholesale.
+			cfg = tree.DefaultPrettyCfg()
+			cfg.FmtFlags = tree.FmtParsable
+			out, err = cfg.Pretty(stmt.AST)
+			require.NoError(t, err)
+			require.NotContainsf(t, out, secret,
+				"explicit FmtFlags must not re-enable passwords:\n%s", out)
+			cfg.ShowPasswords = true
+			out, err = cfg.Pretty(stmt.AST)
+			require.NoError(t, err)
+			require.Containsf(t, out, secret,
+				"explicit FmtFlags must not suppress ShowPasswords:\n%s", out)
+		})
 	}
 }

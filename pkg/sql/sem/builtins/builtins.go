@@ -351,7 +351,11 @@ var regularBuiltins = map[string]builtinDefinition{
 	"prettify_statement": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
-				formattedStmt, err := prettyStatement(tree.DefaultPrettyCfg(), s)
+				cfg := tree.DefaultPrettyCfg()
+				// prettify_statement reformats user-provided SQL and must
+				// reproduce it faithfully, including passwords and URIs.
+				cfg.ShowPasswords = true
+				formattedStmt, err := prettyStatement(cfg, s)
 				if err != nil {
 					return nil, err
 				}
@@ -12014,6 +12018,9 @@ func prettyStatementCustomConfig(
 	stmt string, lineWidth int, alignMode int, caseSetting int,
 ) (string, error) {
 	cfg := tree.DefaultPrettyCfg()
+	// prettify_statement reformats user-provided SQL and must reproduce it
+	// faithfully, including passwords and URIs.
+	cfg.ShowPasswords = true
 	cfg.LineWidth = lineWidth
 	cfg.Align = tree.PrettyAlignMode(alignMode)
 	caseMode := tree.CaseMode(caseSetting)
