@@ -124,10 +124,11 @@ CREATE CHANGEFEED WITH OPTIONS (_ = 'val') AS SELECT * FROM _ WHERE _ > _ -- ide
 parse
 CREATE CHANGEFEED INTO 'null://' WITH opt='val' AS SELECT * FROM foo WHERE a  > b
 ----
-CREATE CHANGEFEED INTO 'null://' WITH OPTIONS (opt = 'val') AS SELECT * FROM foo WHERE a > b -- normalized!
-CREATE CHANGEFEED INTO ('null://') WITH OPTIONS (opt = ('val')) AS SELECT (*) FROM foo WHERE ((a) > (b)) -- fully parenthesized
+CREATE CHANGEFEED INTO '*****' WITH OPTIONS (opt = 'val') AS SELECT * FROM foo WHERE a > b -- normalized!
+CREATE CHANGEFEED INTO ('*****') WITH OPTIONS (opt = ('val')) AS SELECT (*) FROM foo WHERE ((a) > (b)) -- fully parenthesized
 CREATE CHANGEFEED INTO '_' WITH OPTIONS (opt = '_') AS SELECT * FROM foo WHERE a > b -- literals removed
-CREATE CHANGEFEED INTO 'null://' WITH OPTIONS (_ = 'val') AS SELECT * FROM _ WHERE _ > _ -- identifiers removed
+CREATE CHANGEFEED INTO '*****' WITH OPTIONS (_ = 'val') AS SELECT * FROM _ WHERE _ > _ -- identifiers removed
+CREATE CHANGEFEED INTO 'null://' WITH OPTIONS (opt = 'val') AS SELECT * FROM foo WHERE a > b -- passwords exposed
 
 parse
 CREATE CHANGEFEED WITH OPTIONS ( BUCKET_COUNT = PLACEHOLDER ) AS SELECT * , * FROM FAMILY AS DECIMAL
