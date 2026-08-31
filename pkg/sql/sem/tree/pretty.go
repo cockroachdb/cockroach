@@ -58,6 +58,12 @@ type PrettyCfg struct {
 	JSONFmt bool
 	// ValueRedaction, when set, surrounds literal values with redaction markers.
 	ValueRedaction bool
+	// ShowPasswords, when set, disables redaction of passwords and URIs (it adds
+	// FmtShowPasswords to the effective flags). The zero value redacts, so
+	// credential-bearing URIs (e.g. in BACKUP/EXPORT) and inline passwords are
+	// elided by default. Callers that need faithful, re-parseable output (SQL
+	// formatters, round-trip test infrastructure) must set this explicitly.
+	ShowPasswords bool
 	// FmtFlags specifies FmtFlags to use when formatting expressions.
 	FmtFlags FmtFlags
 }
@@ -179,16 +185,25 @@ func (p *PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
 	return pretty.Text(strings.TrimSpace(txt))
 }
 
+// fmtFlags returns the effective FmtFlags for this configuration, applying the
+// default (FmtParsable) when no explicit flags are set. The ValueRedaction and
+// ShowPasswords settings are applied on top of either, so that a caller
+// configuring explicit FmtFlags (e.g. sqlsmith) does not silently lose
+// redaction.
 func (p *PrettyCfg) fmtFlags() FmtFlags {
+	var flags FmtFlags
 	if p.FmtFlags != FmtFlags(0) {
-		return p.FmtFlags
+		flags = p.FmtFlags
+	} else {
+		flags = FmtParsable
 	}
-
-	prettyFlags := FmtShowPasswords | FmtParsable
 	if p.ValueRedaction {
-		prettyFlags |= FmtMarkRedactionNode | FmtOmitNameRedaction
+		flags |= FmtMarkRedactionNode | FmtOmitNameRedaction
 	}
-	return prettyFlags
+	if p.ShowPasswords {
+		flags |= FmtShowPasswords
+	}
+	return flags
 }
 
 func (p *PrettyCfg) nestUnder(a, b pretty.Doc) pretty.Doc {
