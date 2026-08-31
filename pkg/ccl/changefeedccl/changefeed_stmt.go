@@ -43,10 +43,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -657,6 +659,10 @@ func createChangefeedJobRecord(
 		p.BufferClientNotice(ctx, pgnotice.Newf(`%[1]s is no longer experimental, use %[1]s://`,
 			newScheme),
 		)
+	}
+
+	if err := checkSinkFileBasedCredentialGates(ctx, p, parsedSink); err != nil {
+		return nil, err
 	}
 
 	if err = validateDetailsAndOptions(details, opts, p.ExecCfg().Settings); err != nil {
@@ -1950,4 +1956,40 @@ func maybeUpgradePreProductionReadyExpression(
 		"Existing changefeed needs to be recreated using new syntax. "+
 		"Please see CDC documentation on the use of new cdc_prev tuple.",
 		tree.AsString(oldExpression), tree.AsString(newExpression))
+}
+
+// checkSinkFileBasedCredentialGates enforces the privilege precondition for
+// using a file-based OAuth client assertion in parsedSink. If parsedSink is
+// external://<name>, the referenced external connection is resolved first so
+// the underlying URI is the one inspected. Returns nil if parsedSink does not
+// reference the file-based assertion at all.
+func checkSinkFileBasedCredentialGates(
+	ctx context.Context, p sql.PlanHookState, parsedSink *url.URL,
+) error {
+	uri := parsedSink
+	if parsedSink.Scheme == "external" {
+		resolved, err := makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB).lookup(parsedSink.Host)
+		if err != nil {
+			return errors.Wrap(err, "resolving external connection for sink")
+		}
+		if uri, err = url.Parse(resolved); err != nil {
+			return errors.Wrap(err, "parsing resolved external connection URI")
+		}
+	}
+	if uri.Query().Get(changefeedbase.SinkParamSASLProprietaryClientAssertionLocation) == "" {
+		return nil
+	}
+
+	ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject,
+		privilege.EXTERNALIOIMPLICITACCESS, p.User())
+	if err != nil {
+		return errors.Wrap(err, "checking EXTERNALIOIMPLICITACCESS privilege")
+	}
+	if !ok {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"only users with the admin role or the EXTERNALIOIMPLICITACCESS "+
+				"system privilege may use %s",
+			changefeedbase.SinkParamSASLProprietaryClientAssertionLocation)
+	}
+	return nil
 }

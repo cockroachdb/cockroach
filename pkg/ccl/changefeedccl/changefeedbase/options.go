@@ -244,6 +244,14 @@ const (
 	SinkParamSASLProprietaryResource            = `sasl_proprietary_resource`
 	SinkParamSASLProprietaryClientAssertionType = `sasl_proprietary_client_assertion_type`
 	SinkParamSASLProprietaryClientAssertion     = `sasl_proprietary_client_assertion`
+	// SinkParamSASLProprietaryClientAssertionLocation names a file on disk
+	// containing the OAuth client assertion. The path is interpreted relative
+	// to each node's --external-credentials-dir.
+	// Every node that may run a changefeed aggregator must have
+	// --external-credentials-dir configured to a directory containing the file
+	// at the same relative path. It is the operator's responsibility to ensure
+	// that the file is present at all times the changefeed is running.
+	SinkParamSASLProprietaryClientAssertionLocation = `sasl_proprietary_client_assertion_location`
 
 	SinkSchemeConfluentKafka    = `confluent-cloud`
 	SinkParamConfluentAPIKey    = `api_key`

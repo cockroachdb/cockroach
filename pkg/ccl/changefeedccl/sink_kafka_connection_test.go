@@ -14,6 +14,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kafkaauth"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -479,7 +480,7 @@ func TestAzureKafkaDefaults(t *testing.T) {
 			u := &changefeedbase.SinkURL{URL: url}
 
 			t.Run(tc.name, func(t *testing.T) {
-				cfg, err := buildKafkaConfig(ctx, u, `{}`, nil, nil)
+				cfg, err := buildKafkaConfig(ctx, u, `{}`, nil, nil, kafkaauth.SASLConfig{})
 				require.NoError(t, err)
 				assertExpectedSaramaCfg(tc.expected, cfg)
 			})
@@ -493,7 +494,7 @@ func TestAzureKafkaDefaults(t *testing.T) {
 			u := &changefeedbase.SinkURL{URL: url}
 
 			t.Run(tc.name, func(t *testing.T) {
-				opts, err := buildKgoConfig(ctx, u, `{}`, nil)
+				opts, err := buildKgoConfig(ctx, u, `{}`, nil, kafkaauth.SASLConfig{})
 				require.NoError(t, err)
 				assertExpectedKgoOpts(tc.expected, opts)
 			})

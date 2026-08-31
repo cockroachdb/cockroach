@@ -123,6 +123,45 @@ func TestExternalIODirSpec(t *testing.T) {
 	}
 }
 
+func TestExternalCredentialsDirSpec(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer func(save server.Config) { serverCfg = save }(serverCfg)
+	defer initCLIDefaults()
+
+	f := startCmd.Flags()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		args     []string
+		expected string
+	}{
+		{[]string{}, ``},
+		{[]string{`--external-credentials-dir=`}, ``},
+		{[]string{`--external-credentials-dir=secrets`}, filepath.Join(cwd, "secrets")},
+		{[]string{`--external-credentials-dir=/etc/cockroach/secrets`}, `/etc/cockroach/secrets`},
+	}
+	for i, c := range testCases {
+		initCLIDefaults()
+		if err := f.Parse(c.args); err != nil {
+			t.Error(err)
+			continue
+		}
+		if err := extraStoreFlagInit(startCmd); err != nil {
+			t.Error(err)
+			continue
+		}
+		if startCtx.externalCredentialsDir != c.expected {
+			t.Errorf("%d: expected:\n%q\ngot:\n%s", i, c.expected, startCtx.externalCredentialsDir)
+		}
+	}
+}
+
 func TestStartArgChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
