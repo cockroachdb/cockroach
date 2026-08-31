@@ -93,6 +93,51 @@ func TestStmtMayHaveSecret(t *testing.T) {
 		{"SELECT * FROM [EXPLAIN EXECUTE p('x')]", true},
 		{"PREPARE pw AS WITH x AS (EXPLAIN EXECUTE p('x')) SELECT * FROM x", true},
 
+		// Bulk-I/O and replication statements reference an external URI, KMS
+		// URI, connection string, or encryption passphrase that may embed
+		// credentials. They are recognized by statement type (see
+		// statementNodeMayHaveSecret).
+		{"BACKUP INTO 'x'", true},
+		{"BACKUP TABLE foo INTO 'x'", true},
+		{"RESTORE TABLE foo FROM 'abc' IN 'x'", true},
+		{"SHOW BACKUPS IN 'x'", true},
+		{"SHOW BACKUP LATEST IN 'x' WITH ENCRYPTION_PASSPHRASE = 'secret'", true},
+		{"ALTER BACKUP 'foo' ADD NEW_KMS = 'a' WITH OLD_KMS = 'b'", true},
+		{"CREATE SCHEDULE FOR BACKUP TABLE foo INTO 'x' RECURRING '@hourly'", true},
+		{"ALTER BACKUP SCHEDULE 123 SET RECURRING '@daily'", true},
+		{"IMPORT INTO foo(id) CSV DATA ('x')", true},
+		{"EXPORT INTO CSV 'x' FROM TABLE a", true},
+		{"CREATE CHANGEFEED FOR TABLE foo INTO 'sink'", true},
+		{"CREATE CHANGEFEED INTO 'sink' AS SELECT * FROM foo", true},
+		{"ALTER CHANGEFEED 123 SET sink = 'x'", true},
+		{"CREATE SCHEDULE FOR CHANGEFEED TABLE foo INTO 'sink' RECURRING '@hourly'", true},
+		{"CREATE EXTERNAL CONNECTION 'foo' AS 'bar'", true},
+		{"ALTER EXTERNAL CONNECTION 'foo' AS 'bar'", true},
+		{"CHECK EXTERNAL CONNECTION 'foo'", true},
+		{"CREATE VIRTUAL CLUSTER destination FROM REPLICATION OF source ON 'pgurl'", true},
+		{"ALTER VIRTUAL CLUSTER 'foo' START REPLICATION OF 'bar' ON 'baz'", true},
+		{"CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON 'uri' INTO TABLE foo", true},
+		{"CREATE LOGICALLY REPLICATED TABLE foo FROM TABLE foo ON 'uri'", true},
+
+		// Wrapped and nested bulk-I/O forms are classified via the same walk.
+		{"EXPLAIN BACKUP TABLE foo INTO 'x'", true},
+		{"PREPARE p AS BACKUP TABLE foo INTO 'x'", true},
+		{"SELECT * FROM [SHOW BACKUPS IN 'x']", true},
+
+		// COPY carries a secret only in the WITH (destination = ...) file-upload
+		// form; COPY ... FROM STDIN / TO STDOUT does not.
+		{"COPY t (a, b, c) FROM STDIN WITH CSV destination = 'filename'", true},
+		{"COPY t FROM STDIN", false},
+		{"COPY t (a, b) FROM STDIN", false},
+		{"COPY t TO STDOUT", false},
+		{"COPY (SELECT * FROM t) TO STDOUT", false},
+
+		// Failover forms of ALTER VIRTUAL CLUSTER ... REPLICATION name no source
+		// URI and are not classified; plain virtual cluster statements carry no
+		// secret either.
+		{"ALTER VIRTUAL CLUSTER 'foo' COMPLETE REPLICATION TO LATEST", false},
+		{"CREATE VIRTUAL CLUSTER bar", false},
+
 		// Non-sensitive settings and unrelated statements are not classified.
 		{"SELECT 1", false},
 		{"PREPARE p AS SELECT $1::INT", false},

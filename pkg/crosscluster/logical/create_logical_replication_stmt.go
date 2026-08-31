@@ -296,7 +296,10 @@ func createLogicalReplicationStreamPlanHook(
 			reverseStmt.Options.ParentID = tree.NewStrVal(jobID.String())
 			reverseStmt.PGURL = tree.NewStrVal(options.BidirectionalURI())
 			reverseStmt.Options.Cursor = &tree.Placeholder{Idx: 0}
-			reverseStreamCmd = reverseStmt.String()
+			// This command is re-parsed and executed to start the reverse stream
+			// (see resume_create_table.go), so it must retain the source URI in
+			// full; FmtShowPasswords keeps FormatURI from redacting it.
+			reverseStreamCmd = tree.AsStringWithFlags(&reverseStmt, tree.FmtShowPasswords)
 		}
 
 		jr := jobs.Record{
@@ -317,8 +320,11 @@ func createLogicalReplicationStreamPlanHook(
 				CreateTable:               stmt.CreateTable,
 				ReverseStreamCommand:      reverseStreamCmd,
 				ParentID:                  int64(options.ParentID),
-				Command:                   stmt.String(),
-				SkipSchemaCheck:           options.SkipSchemaCheck(),
+				// Command is the faithful record of the statement that created the
+				// job; FmtShowPasswords keeps FormatURI from redacting the source
+				// URI so it is retained verbatim.
+				Command:         tree.AsStringWithFlags(stmt, tree.FmtShowPasswords),
+				SkipSchemaCheck: options.SkipSchemaCheck(),
 			},
 			Progress: progress,
 		}

@@ -77,7 +77,8 @@ CREATE SCHEDULE IF NOT EXISTS 'baz' FOR BACKUP INTO 'bar' WITH revision_history 
 parse
 CREATE SCHEDULE FOR CHANGEFEED d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH initial_scan='only' RECURRING '@hourly'
 ----
-CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH OPTIONS (initial_scan = 'only' ) RECURRING '@hourly' -- normalized!
-CREATE SCHEDULE FOR CHANGEFEED TABLE (d.public.foo) INTO ('webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown') WITH OPTIONS (initial_scan = ('only') ) RECURRING ('@hourly') -- fully parenthesized
+CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO '*****' WITH OPTIONS (initial_scan = 'only' ) RECURRING '@hourly' -- normalized!
+CREATE SCHEDULE FOR CHANGEFEED TABLE (d.public.foo) INTO ('*****') WITH OPTIONS (initial_scan = ('only') ) RECURRING ('@hourly') -- fully parenthesized
 CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO '_' WITH OPTIONS (initial_scan = '_' ) RECURRING '_' -- literals removed
-CREATE SCHEDULE FOR CHANGEFEED TABLE _._._ INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH OPTIONS (_ = 'only' ) RECURRING '@hourly' -- identifiers removed
+CREATE SCHEDULE FOR CHANGEFEED TABLE _._._ INTO '*****' WITH OPTIONS (_ = 'only' ) RECURRING '@hourly' -- identifiers removed
+CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH OPTIONS (initial_scan = 'only' ) RECURRING '@hourly' -- passwords exposed

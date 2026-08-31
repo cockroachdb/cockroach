@@ -122,7 +122,7 @@ func (node *ScheduledChangefeed) Format(ctx *FmtCtx) {
 	}
 
 	ctx.WriteString(" INTO ")
-	ctx.FormatNode(node.SinkURI)
+	ctx.FormatURI(node.SinkURI)
 
 	if node.Options != nil {
 		ctx.WriteString(" WITH OPTIONS (")
