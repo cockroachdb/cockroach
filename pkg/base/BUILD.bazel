@@ -22,6 +22,7 @@ go_library(
     deps = [
         "//pkg/cli/cliflags",
         "//pkg/roachpb",
+        "//pkg/security/externalcreds",
         "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/storage/storageconfig",

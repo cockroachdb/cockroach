@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kafkaauth"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -265,12 +266,16 @@ func getSink(
 				if err != nil {
 					return nil, err
 				}
+				cfg := kafkaauth.SASLConfig{
+					ExternalCredentialsDir: serverCfg.ExternalCredentialsDir,
+					SQLInstanceID:          serverCfg.NodeID.SQLInstanceID(),
+				}
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
 					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts,
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{})
+						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{}, cfg)
 				} else {
-					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts, serverCfg.Settings, metricsBuilder)
+					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts, serverCfg.Settings, metricsBuilder, cfg)
 				}
 			})
 		case isPulsarSink(u):

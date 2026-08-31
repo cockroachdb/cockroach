@@ -42,6 +42,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/rpc/rpcbase",
+        "//pkg/security/externalcreds",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",

@@ -1303,6 +1303,21 @@ directory.
 The value "disabled" will disable all local file I/O.
 `,
 	}
+	// NB: keep in sync with consumers of externalcreds.Dir.Resolve.
+	ExternalCredentialsDir = FlagInfo{
+		Name: "external-credentials-dir",
+		Description: `
+The local directory under which sink credential files (e.g. the JWT client
+assertion referenced by a changefeed via
+sasl_proprietary_client_assertion_location) may be read. Paths in sink
+parameters must be relative to this directory; absolute paths and paths
+that escape via ".." are rejected. Following symlinks is allowed, so
+operators may extend the directory to other mount points (e.g. a
+Kubernetes projected volume) by placing symlinks inside it. If left empty,
+sink parameters that reference credential files are rejected with a clear
+error.
+`,
+	}
 
 	URL = FlagInfo{
 		Name:   "url",
