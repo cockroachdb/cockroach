@@ -16,6 +16,7 @@ import (
 	tasksrepomock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks/mocks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -30,19 +31,23 @@ func TestProcessTaskRoutine_Success(t *testing.T) {
 	defer cancel()
 
 	// Mock channel push
+	getTasksCalled := make(chan struct{})
 	mockRepo.On(
 		"GetTasksForProcessing", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-	).Return(nil).Once()
+	).Run(func(mock.Arguments) {
+		close(getTasksCalled)
+	}).Return(nil).Once()
 
 	errChan := make(chan error)
 
 	err := taskService.processTaskRoutine(ctx, logger.DefaultLogger, errChan)
 	assert.Nil(t, err)
 	select {
-	case <-time.After(2 * time.Millisecond):
-		break
+	case <-getTasksCalled:
 	case err := <-errChan:
 		t.Fatalf("unexpected error received: %s", err)
+	case <-time.After(testutils.SucceedsSoonDuration()):
+		t.Fatal("timeout waiting for task retrieval to start")
 	}
 	mockRepo.AssertExpectations(t)
 }
@@ -64,7 +69,7 @@ func TestProcessTaskRoutine_GetTasksError(t *testing.T) {
 	err := taskService.processTaskRoutine(ctx, logger.DefaultLogger, errChan)
 	assert.Nil(t, err)
 	select {
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(testutils.SucceedsSoonDuration()):
 		t.Fatalf("timeout while waiting for expected error")
 	case err := <-errChan:
 		assert.ErrorAs(t, err, &mockErr)
@@ -100,7 +105,7 @@ func TestProcessTaskRoutine_GetTask(t *testing.T) {
 	err = taskService.processTaskRoutine(ctx, logger.DefaultLogger, errChan)
 	assert.Nil(t, err)
 	select {
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(testutils.SucceedsSoonDuration()):
 		t.Fatalf("timeout while waiting for expected error")
 	case err := <-errChan:
 		assert.ErrorAs(t, err, &mockErr)
