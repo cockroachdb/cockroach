@@ -223,3 +223,21 @@ CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES foo, bar INTO ('*****') -- full
 CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES foo, bar INTO '_' -- literals removed
 CREATE CHANGEFEED FOR DATABASE _ INCLUDE TABLES _, _ INTO '*****' -- identifiers removed
 CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES foo, bar INTO 'foo' -- passwords exposed
+
+parse
+CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH webhook_auth_header = 'Basic dXNlcg==', extra_headers = '{"X-Custom": "v"}', confluent_schema_registry = 'https://user:pass@registry:8081', format = 'avro'
+----
+CREATE CHANGEFEED FOR TABLE foo INTO '*****' WITH OPTIONS (webhook_auth_header = '*****', extra_headers = '*****', confluent_schema_registry = '*****', format = 'avro') -- normalized!
+CREATE CHANGEFEED FOR TABLE (foo) INTO ('*****') WITH OPTIONS (webhook_auth_header = ('*****'), extra_headers = ('*****'), confluent_schema_registry = ('*****'), format = ('avro')) -- fully parenthesized
+CREATE CHANGEFEED FOR TABLE foo INTO '_' WITH OPTIONS (webhook_auth_header = '_', extra_headers = '_', confluent_schema_registry = '_', format = '_') -- literals removed
+CREATE CHANGEFEED FOR TABLE _ INTO '*****' WITH OPTIONS (_ = '*****', _ = '*****', _ = '*****', _ = 'avro') -- identifiers removed
+CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH OPTIONS (webhook_auth_header = 'Basic dXNlcg==', extra_headers = '{"X-Custom": "v"}', confluent_schema_registry = 'https://user:pass@registry:8081', format = 'avro') -- passwords exposed
+
+parse
+CREATE CHANGEFEED INTO 'sink' WITH webhook_auth_header = 'Basic dXNlcg==' AS SELECT a FROM foo
+----
+CREATE CHANGEFEED INTO '*****' WITH OPTIONS (webhook_auth_header = '*****') AS SELECT a FROM foo -- normalized!
+CREATE CHANGEFEED INTO ('*****') WITH OPTIONS (webhook_auth_header = ('*****')) AS SELECT (a) FROM foo -- fully parenthesized
+CREATE CHANGEFEED INTO '_' WITH OPTIONS (webhook_auth_header = '_') AS SELECT a FROM foo -- literals removed
+CREATE CHANGEFEED INTO '*****' WITH OPTIONS (_ = '*****') AS SELECT _ FROM _ -- identifiers removed
+CREATE CHANGEFEED INTO 'sink' WITH OPTIONS (webhook_auth_header = 'Basic dXNlcg==') AS SELECT a FROM foo -- passwords exposed

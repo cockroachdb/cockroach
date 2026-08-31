@@ -126,7 +126,7 @@ func (node *ScheduledChangefeed) Format(ctx *FmtCtx) {
 
 	if node.Options != nil {
 		ctx.WriteString(" WITH OPTIONS (")
-		ctx.FormatNode(&node.Options)
+		node.Options.formatEach(ctx, formatChangefeedOptionValue)
 		ctx.WriteString(" )")
 	}
 
