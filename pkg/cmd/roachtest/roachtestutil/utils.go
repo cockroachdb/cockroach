@@ -238,7 +238,9 @@ func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) st
 	logFile := fmt.Sprintf(
 		"run_%s_n%s_%s",
 		t.Format(`150405.000000000`),
-		nodes.String()[1:],
+		// NodeListOption.String prefixes the list with ':', and yields "" for an
+		// empty list, so trim rather than slice.
+		strings.TrimPrefix(nodes.String(), ":"),
 		install.GenFilenameFromArgs(20, args...),
 	)
 	return logFile

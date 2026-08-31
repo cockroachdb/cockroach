@@ -26,4 +26,11 @@ func TestCmdLogFileName(t *testing.T) {
 		exp,
 		cmdLogFileName(ts, nodes, "./cockroach bla --foo bar"),
 	)
+
+	// A zero-node cluster spec yields an empty node list, which must still
+	// produce a name rather than panicking.
+	assert.Equal(t,
+		`run_150412.000000000_n_cockroach-bla-foo-ba`,
+		cmdLogFileName(ts, option.NodeListOption{}, "./cockroach", "bla", "--foo", "bar"),
+	)
 }
