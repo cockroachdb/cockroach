@@ -386,8 +386,9 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	}
 
 	// Get prev value, if necessary.
+	withDiff := c.details.Opts.GetFilters().WithDiff
 	prevRow, prevStatus, err := func() (cdcevent.Row, cdcevent.DecodeStatus, error) {
-		if !c.details.Opts.GetFilters().WithDiff {
+		if !withDiff {
 			return cdcevent.Row{}, cdcevent.DecodeOK, nil
 		}
 		return c.decoder.DecodeKV(ctx, ev.PrevKeyValue(), cdcevent.PrevRow, prevSchemaTimestamp, keyOnly)
@@ -402,6 +403,15 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		// events for each one even if we're not watching them all.
 		// Release the event's allocation since we're skipping this event.
 		// Note: We only release on skip conditions (non-OK status), not on errors.
+		a := ev.DetachAlloc()
+		a.Release(ctx)
+		return nil
+	}
+
+	// A tombstone laid over a key that never held a row carries no information:
+	// the encoders render both its after and its before image as null.
+	if withDiff && updatedRow.IsDeleted() && prevRow.IsDeleted() &&
+		changefeedbase.SuppressEmptyDeletes.Get(c.sv) {
 		a := ev.DetachAlloc()
 		a.Release(ctx)
 		return nil
