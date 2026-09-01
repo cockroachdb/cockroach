@@ -2123,7 +2123,6 @@ type alterDatabaseDropSecondaryRegion struct {
 func (p *planner) AlterDatabaseDropSecondaryRegion(
 	ctx context.Context, n *tree.AlterDatabaseDropSecondaryRegion,
 ) (planNode, error) {
-
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -2136,9 +2135,11 @@ func (p *planner) AlterDatabaseDropSecondaryRegion(
 	if err != nil {
 		return nil, err
 	}
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
 
 	return &alterDatabaseDropSecondaryRegion{n: n, desc: dbDesc}, nil
-
 }
 
 func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
