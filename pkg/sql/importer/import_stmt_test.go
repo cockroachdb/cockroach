@@ -5524,6 +5524,21 @@ func TestImportAvro(t *testing.T) {
 		sqlDB.QueryRow(t, `SELECT count(*) FROM myschema.simple`).Scan(&numRows)
 		require.True(t, numRows > 0)
 	})
+
+	t.Run("schema-uri-sanitized-in-job-description", func(t *testing.T) {
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS simple CASCADE`)
+		sqlDB.Exec(t, `CREATE TABLE simple (i INT8, s text, b bytea)`)
+		sqlDB.Exec(t, `IMPORT INTO simple AVRO DATA ($1) WITH data_as_json_records, schema_uri = $2`,
+			simpleJSON, simpleSchemaURI+"?AWS_SESSION_TOKEN=secrets")
+		var desc string
+		// Read from crdb_internal.jobs since SHOW JOBS abbreviates long
+		// descriptions.
+		sqlDB.QueryRow(t,
+			`SELECT description FROM crdb_internal.jobs WHERE job_type = 'IMPORT' ORDER BY created DESC LIMIT 1`,
+		).Scan(&desc)
+		require.Contains(t, desc, `schema_uri = '`+simpleSchemaURI+`?AWS_SESSION_TOKEN=redacted'`)
+		require.NotContains(t, desc, "secrets")
+	})
 }
 
 // TestImportClientDisconnect ensures that an import job can complete even if
