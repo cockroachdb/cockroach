@@ -237,7 +237,7 @@ var RequireUsagePrivilegeOnExternalConnections = settings.RegisterBoolSetting(
 	"determines whether the USAGE privilege checks added in v26.4 are enforced on "+
 		"external connections; checks that predate v26.4, including those on BACKUP, "+
 		"RESTORE, and IMPORT, apply regardless",
-	true,
+	false,
 )
 
 // PostgresCompatibleOwnershipChecks gates the security-audit fixes that require

@@ -93,6 +93,9 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 	)
 
 	rootDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	// The requirement ships off on this branch; the tests opt in.
+	rootDB.Exec(t,
+		`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
 	withUser := func(t *testing.T, user string, fn func(*sqlutils.SQLRunner)) {
 		password := `password`
 		rootDB.Exec(t, fmt.Sprintf(`ALTER USER %s WITH PASSWORD '%s'`, user, password))
