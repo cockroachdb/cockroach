@@ -10,9 +10,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"math/rand/v2"
+	"net/http"
 	"net/url"
 	"path"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	gcs "cloud.google.com/go/storage"
@@ -73,6 +76,63 @@ var gcsChunkRetryTimeout = settings.RegisterDurationSetting(
 	60*time.Second,
 	settings.WithName("cloudstorage.gs.chunking.per_chunk_retry.timeout"),
 )
+
+// gcsTransportShardCount controls the number of HTTP transports across which
+// reads from Google Cloud Storage are sharded.
+var gcsTransportShardCount = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"cloudstorage.gs.transport_shard_count",
+	"number of HTTP transports to shard GCS reads across to increase connections "+
+		"and throughput; 0 or 1 uses a single transport",
+	0, /* default */
+	settings.NonNegativeInt,
+)
+
+// shardedRoundTripper spreads requests across multiple HTTP transports so that
+// reads use more than one TCP connection, increasing connections and throughput.
+type shardedRoundTripper struct {
+	shards      []http.RoundTripper
+	outstanding atomic.Int64
+}
+
+func (s *shardedRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	n := s.outstanding.Add(1)
+	window := int(n)
+	if window > len(s.shards) {
+		window = len(s.shards)
+	}
+	resp, err := s.shards[rand.IntN(window)].RoundTrip(req)
+	if err != nil {
+		s.outstanding.Add(-1)
+		return nil, err
+	}
+	resp.Body = &decOnClose{ReadCloser: resp.Body, outstanding: &s.outstanding}
+	return resp, nil
+}
+
+// CloseIdleConnections forwards to each shard so wrapping the transports does
+// not hide their CloseIdleConnections from callers that use it.
+func (s *shardedRoundTripper) CloseIdleConnections() {
+	for _, shard := range s.shards {
+		if c, ok := shard.(interface{ CloseIdleConnections() }); ok {
+			c.CloseIdleConnections()
+		}
+	}
+}
+
+type decOnClose struct {
+	io.ReadCloser
+	outstanding *atomic.Int64
+	closed      bool
+}
+
+func (d *decOnClose) Close() error {
+	if !d.closed {
+		d.closed = true
+		d.outstanding.Add(-1)
+	}
+	return d.ReadCloser.Close()
+}
 
 func parseGSURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	gsURL := cloud.ConsumeURL{URL: uri}
@@ -201,7 +261,26 @@ func makeGCSStorage(
 		return nil, errors.Wrap(err, "failed to create http transport")
 	}
 
-	t, err := gtransport.NewTransport(ctx, baseTransport, opts...)
+	var base http.RoundTripper = baseTransport
+	if shards := int(gcsTransportShardCount.Get(&args.Settings.SV)); shards > 1 {
+		rts := make([]http.RoundTripper, shards)
+		rts[0] = baseTransport
+		for i := 1; i < shards; i++ {
+			t, err := cloud.MakeTransport(args.Settings, args.MetricsRecorder, cloud.HTTPClientConfig{
+				Bucket:         conf.Bucket,
+				Client:         clientName,
+				Cloud:          "gcs",
+				HttpMiddleware: args.HttpMiddleware,
+			})
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to create http transport")
+			}
+			rts[i] = t
+		}
+		base = &shardedRoundTripper{shards: rts}
+	}
+
+	t, err := gtransport.NewTransport(ctx, base, opts...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create gcs http transport")
 	}
