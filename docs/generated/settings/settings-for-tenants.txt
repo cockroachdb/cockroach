@@ -123,7 +123,7 @@ obs.tablemetadata.automatic_updates.enabled	boolean	false	enables automatic upda
 obs.tablemetadata.data_valid_duration	duration	20m0s	the duration for which the data in system.table_metadata is considered valid	application
 restore.wait_for_span_config_conformance.enabled	boolean	false	if enabled, RESTORE will ensure span config conformance before ingestion	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
-security.client_cert.san_required.enabled	boolean	false	mandates a requirement for client certs to contain SAN	system-visible
+security.client_cert.san_required.enabled	boolean	false	mandates that client certs contain a SAN and that non-privileged users bind via an identity map or exact subject DN (no CN fallback)	system-visible
 security.client_cert.subject_required.enabled	boolean	false	mandates a requirement for subject role to be set for db user	system-visible
 security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	application
 security.ocsp.timeout	duration	3s	timeout before considering the OCSP server unreachable	application

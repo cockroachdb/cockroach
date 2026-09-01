@@ -182,13 +182,12 @@ eexpect "(1 row)"
 eexpect $prompt
 end_test
 
-# Verify that a regular user (non-root/node) without HBA identity mapping can
-# still authenticate when san_required is true. SAN validation is only enforced
-# for root and node users; regular users bypass SAN checks.
-start_test "regular user authenticates when san_required=true without HBA map"
+# With san_required and no identity map, a regular user has no cert-to-user
+# binding, so authentication must fail closed even though the CN matches.
+start_test "regular user is rejected when san_required=true without HBA map"
 create_cert_no_san testuser Cockroach
 send "$argv sql --certs-dir=$certs_dir --user=testuser -e 'select 1'\r"
-eexpect "(1 row)"
+eexpect "SAN-based authentication requires an identity map"
 eexpect $prompt
 end_test
 
@@ -385,6 +384,75 @@ create_cert_with_dns_san goofus Cockroach "goofus.example.com"
 set auth_url "postgresql://impostor@localhost:26257?sslcert=$certs_dir/client.goofus.crt&sslkey=$certs_dir/client.goofus.key&sslrootcert=$certs_dir/ca.crt&sslmode=verify-full"
 send "$argv sql --url=\"$auth_url\" -e 'select 1'\r"
 eexpect "does not correspond to any mapping"
+eexpect $prompt
+end_test
+
+# Impersonation case: goofus's valid cert connecting as testuser matches only
+# the catch-all "hostssl all all all cert" rule (no map), so in SAN mode it must
+# fail closed rather than authenticate as testuser.
+start_test "cert without HBA map cannot impersonate an arbitrary user"
+send "rm -f $certs_dir/client.goofus.crt $certs_dir/client.goofus.key\r"
+eexpect $prompt
+create_cert_with_dns_san goofus Cockroach "goofus.example.com"
+set auth_url "postgresql://testuser@localhost:26257?sslcert=$certs_dir/client.goofus.crt&sslkey=$certs_dir/client.goofus.key&sslrootcert=$certs_dir/ca.crt&sslmode=verify-full"
+send "$argv sql --url=\"$auth_url\" -e 'select 1'\r"
+eexpect "SAN-based authentication requires an identity map"
+eexpect $prompt
+end_test
+
+# The cert-password method delegates to certificate validation when the client
+# presents a cert, so the same fail-closed guard must apply. Switch the catch-all
+# rule to cert-password and confirm goofus's cert still cannot become testuser.
+start_test "cert-password without HBA map cannot impersonate an arbitrary user"
+send "$argv sql --certs-dir=$certs_dir --user=root -e \"SET CLUSTER SETTING server.host_based_authentication.configuration='hostssl all all all cert-password'\"\r"
+eexpect "SET CLUSTER SETTING"
+eexpect $prompt
+send "rm -f $certs_dir/client.goofus.crt $certs_dir/client.goofus.key\r"
+eexpect $prompt
+create_cert_with_dns_san goofus Cockroach "goofus.example.com"
+set auth_url "postgresql://testuser@localhost:26257?sslcert=$certs_dir/client.goofus.crt&sslkey=$certs_dir/client.goofus.key&sslrootcert=$certs_dir/ca.crt&sslmode=verify-full"
+send "$argv sql --url=\"$auth_url\" -e 'select 1'\r"
+eexpect "SAN-based authentication requires an identity map"
+eexpect $prompt
+end_test
+
+# cert-scram-sha-256 uses the cert path when a cert is presented and the SCRAM
+# path otherwise. Verify the map option (now permitted on this method) works on
+# both branches.
+send "$argv sql --certs-dir=$certs_dir --user=root -e \"SET CLUSTER SETTING server.host_based_authentication.configuration='hostssl all gallant all cert-scram-sha-256 map=crdb\nhostssl all all all cert-scram-sha-256 map=crdb'\"\r"
+eexpect "SET CLUSTER SETTING"
+eexpect $prompt
+
+# Cert path: goofus's SAN maps to gallant, so its cert authenticates as gallant.
+start_test "cert-scram-sha-256 cert path honours the SAN identity map"
+send "rm -f $certs_dir/client.goofus.crt $certs_dir/client.goofus.key\r"
+eexpect $prompt
+create_cert_with_dns_san goofus Cockroach "goofus.example.com"
+set auth_url "postgresql://gallant@localhost:26257?sslcert=$certs_dir/client.goofus.crt&sslkey=$certs_dir/client.goofus.key&sslrootcert=$certs_dir/ca.crt&sslmode=verify-full"
+send "$argv sql --url=\"$auth_url\" -e 'select 1'\r"
+eexpect "(1 row)"
+eexpect $prompt
+end_test
+
+# Cert path stays map-bound: goofus's cert cannot connect as testuser.
+start_test "cert-scram-sha-256 cert cannot impersonate a user the SAN does not map to"
+set auth_url "postgresql://testuser@localhost:26257?sslcert=$certs_dir/client.goofus.crt&sslkey=$certs_dir/client.goofus.key&sslrootcert=$certs_dir/ca.crt&sslmode=verify-full"
+send "$argv sql --url=\"$auth_url\" -e 'select 1'\r"
+eexpect "does not correspond to any mapping"
+eexpect $prompt
+end_test
+
+# SCRAM path: with no client cert, cert-scram-sha-256 falls back to SCRAM and the map is ignored.
+start_test "cert-scram-sha-256 falls back to SCRAM when no cert is presented"
+send "$argv sql --certs-dir=$certs_dir --user=root -e \"SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256'\"\r"
+eexpect "SET CLUSTER SETTING"
+eexpect $prompt
+send "$argv sql --certs-dir=$certs_dir --user=root -e \"ALTER USER gallant WITH PASSWORD 'secret42'\"\r"
+eexpect "ALTER ROLE"
+eexpect $prompt
+set auth_url "postgresql://gallant:secret42@localhost:26257/defaultdb?sslmode=verify-ca&sslrootcert=$certs_dir/ca.crt"
+send "$argv sql --url=\"$auth_url\" -e 'select 1'\r"
+eexpect "(1 row)"
 eexpect $prompt
 end_test
 

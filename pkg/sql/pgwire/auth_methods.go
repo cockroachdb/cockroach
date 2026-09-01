@@ -76,7 +76,8 @@ func loadDefaultMethods() {
 
 	// The "cert-scram-sha-256" method is alike to "cert-password":
 	// it allows either a client certificate, or a valid 5-way SCRAM handshake.
-	RegisterAuthMethod("cert-scram-sha-256", authCertScram, hba.ConnAny, NoOptionsAllowed)
+	// Options are allowed (like cert-password) so the cert path can take a "map".
+	RegisterAuthMethod("cert-scram-sha-256", authCertScram, hba.ConnAny, nil)
 
 	// The "reject" method rejects any connection attempt that matches
 	// the current rule.
@@ -435,9 +436,11 @@ func authCert(
 	identMap *identmap.Conf,
 ) (*AuthBehaviors, error) {
 	clientCertSANRequired := security.ClientCertSANRequired.Get(&execCfg.Settings.SV)
+	// In SAN mode the identity map is what binds a cert's SANs to a SQL user.
+	mapConfigured := hbaEntry.GetOption("map") != ""
 	b := &AuthBehaviors{}
 	// Choose the appropriate mapper based on whether we have a map option
-	if hbaEntry.GetOption("map") != "" && clientCertSANRequired {
+	if mapConfigured && clientCertSANRequired {
 		// Use enhanced mapper for SAN auth with mapping
 		b.SetEnhancedRoleMapper(HbaEnhancedMapper(hbaEntry, identMap))
 	} else {
@@ -479,13 +482,14 @@ func authCert(
 			roleSubject,
 			security.ClientCertSubjectRequired.Get(&execCfg.Settings.SV),
 			clientCertSANRequired,
+			mapConfigured,
 		)
 		if err != nil {
 			return err
 		}
 		return hook(ctx, systemIdentity, clientConnection)
 	})
-	if len(tlsState.PeerCertificates) > 0 && hbaEntry.GetOption("map") != "" {
+	if len(tlsState.PeerCertificates) > 0 && mapConfigured {
 		if clientCertSANRequired {
 			identityList := security.ExtractSANsFromCertificate(tlsState.PeerCertificates[0])
 			if len(identityList) == 0 {

@@ -33,7 +33,8 @@ var ClientCertSubjectRequired = settings.RegisterBoolSetting(
 var ClientCertSANRequired = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	ClientCertSANRequiredSettingName,
-	"mandates a requirement for client certs to contain SAN",
+	"mandates that client certs contain a SAN and that non-privileged users bind "+
+		"via an identity map or exact subject DN (no CN fallback)",
 	false,
 	settings.WithPublic,
 	settings.WithReportable(true),

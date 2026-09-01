@@ -561,6 +561,13 @@ func Contains(sl []string, s string) bool {
 
 // UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
+//
+// sanIdentityMapConfigured tells the hook whether the HBA rule has an identity
+// map. In SAN mode a non-privileged user binds via that map or an exact subject
+// DN; with neither, the hook has nothing to verify the client-requested user
+// against and fails closed (CN is not a fallback). Root/node/debug are exempt:
+// root/node are validated against the *-cert-san flags, debug against the
+// certificate user scope.
 func UserAuthCertHook(
 	insecureMode bool,
 	tlsState *tls.ConnectionState,
@@ -570,6 +577,7 @@ func UserAuthCertHook(
 	roleSubject *ldap.DN,
 	subjectRequired bool,
 	clientCertSANRequired bool,
+	sanIdentityMapConfigured bool,
 ) (UserAuthHook, error) {
 	var certUserScope []CertificateUserScope
 	if !insecureMode {
@@ -611,20 +619,26 @@ func UserAuthCertHook(
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
+		// recordCertExpiration surfaces the cert's expiry in the client-cert
+		// metrics. Best-effort: the cert manager may be absent.
+		recordCertExpiration := func() {
+			if certManager != nil {
+				certManager.MaybeUpsertClientExpiration(
+					ctx,
+					systemIdentity,
+					peerCert.SerialNumber.String(),
+					peerCert.NotAfter.Unix(),
+				)
+			}
+		}
+
 		certSANs := ExtractSANsFromCertificate(peerCert)
-		if clientCertSANRequired {
-			// Try SAN validation for root and node users. For now, other users
-			// SAN mapping is done using the HBA identity map regex and not exact match.
-			sanMatches := validateSANMatchForUser(certSANs, systemIdentity)
-			if sanMatches {
-				// For root/node/debug users, additionally verify certificate user scope
-				// to ensure the cert is scoped for the correct user and tenant.
-				// For non-root/node/debug users (including HBA-mapped identities),
-				// skip scope validation — identity was verified via SAN identity
-				// mapping, and ValidateUserScope does CN-based matching which is
-				// intentionally bypassed when SAN auth is enabled.
-				if isRootNodeOrDebugUser(systemIdentity) &&
-					!ValidateUserScope(certUserScope, systemIdentity, tenantID, tenantName) {
+		// validateSANMatchForUser checks the cert SANs against the *-cert-san
+		// flags for root/node and is a no-op (true) for everyone else.
+		if clientCertSANRequired && validateSANMatchForUser(certSANs, systemIdentity) {
+			switch {
+			case isRootNodeOrDebugUser(systemIdentity):
+				if !ValidateUserScope(certUserScope, systemIdentity, tenantID, tenantName) {
 					return errors.WithDetailf(
 						errors.Errorf(
 							"certificate authentication failed for user %q (SANs: %q)",
@@ -634,16 +648,25 @@ func UserAuthCertHook(
 						"The client certificate (SANs: %q) is valid for %s.",
 						certSANs, FormatUserScopes(certUserScope))
 				}
-				if certManager != nil {
-					certManager.MaybeUpsertClientExpiration(
-						ctx,
-						systemIdentity,
-						peerCert.SerialNumber.String(),
-						peerCert.NotAfter.Unix(),
-					)
-				}
+				recordCertExpiration()
 				return nil
+			case sanIdentityMapConfigured:
+				// The map already resolved this identity upstream.
+				recordCertExpiration()
+				return nil
+			case roleSubject == nil:
+				// Nothing binds the cert to the requested user; CN is
+				// deliberately not a fallback in SAN mode, so fail closed.
+				return errors.WithDetailf(
+					errors.Errorf(
+						"certificate authentication failed for user %q: SAN-based "+
+							"authentication requires an identity map",
+						systemIdentity),
+					"Configure server.identity_map.configuration and add a `map` option "+
+						"to the certificate HBA rule to bind certificate SANs to SQL users.")
 			}
+			// A subject DN is configured but no map: fall through to the exact-DN
+			// check below, which is a valid alternative binding under SAN mode.
 		}
 
 		roleSubject = applyRootOrNodeDNFlag(roleSubject, systemIdentity)
@@ -670,6 +693,9 @@ func UserAuthCertHook(
 					),
 					"The client certificate (DN: %s) is valid for %s.", certSubject, FormatUserScopes(certUserScope))
 			}
+			// An exact DN match is a valid binding, including as the alternative
+			// to the identity map under SAN mode.
+			recordCertExpiration()
 			return nil
 		}
 
@@ -682,14 +708,7 @@ func UserAuthCertHook(
 		}
 
 		if ValidateUserScope(certUserScope, systemIdentity, tenantID, tenantName) {
-			if certManager != nil {
-				certManager.MaybeUpsertClientExpiration(
-					ctx,
-					systemIdentity,
-					peerCert.SerialNumber.String(),
-					peerCert.NotAfter.Unix(),
-				)
-			}
+			recordCertExpiration()
 			return nil
 		}
 
