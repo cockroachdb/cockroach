@@ -517,5 +517,5 @@ var SuppressEmptyDeletes = settings.RegisterBoolSetting(
 	"changefeed.suppress_empty_deletes.enabled",
 	"if true, changefeeds created with the WITH diff option do not emit delete "+
 		"messages whose before and after images are both null",
-	false,
+	metamorphic.ConstantWithTestBool("changefeed.suppress_empty_deletes.enabled", false),
 )
