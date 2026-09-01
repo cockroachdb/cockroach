@@ -19,39 +19,22 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// authorize reconciles SQL role memberships for the given user after a
-// successful OIDC login.
-//
-// Called as a method on *oidcAuthenticationServer, it relies on the server’s
-// configuration (`conf`) and execCfg to:
-//
-//   - Discover which OIDC authorization sources are enabled.
-//   - Collect a "groups" claim from the ID token, the access token, or,
-//     when configured: the provider's /userinfo endpoint.
-//   - Convert the union of all group names into SQL roles and call
-//     sql.EnsureUserOnlyBelongsToRoles so the user’s memberships reflect
-//     the IdP state.
-//
-// Inputs:
-//
-//	ctx            – request context used for logging and database ops
-//	rawIDToken     – verified ID token string
-//	rawAccessToken – access token string (may be opaque)
-//	username       – SQL username extracted from the ID token
-//
-// Return value:
-//
-//	nil   – roles synced and authorization succeeded
-//	error – login must be denied; message explains whether no groups claim
-//	        was found, the list was empty, or a database/error occurred.
-//
-// The function is a no-op (returns nil) when
-// server.oidc_authentication.authorization.enabled is false, preserving the
-// legacy "authentication-only" behavior.
+// authorize reconciles username's SQL role memberships against the IdP's groups
+// after a successful OIDC login. conf and manager are a caller-supplied snapshot
+// (see configSnapshot) so the call, including the /userinfo lookup via manager,
+// runs lock-free. It collects the "groups" claim from the ID token, the access
+// token, or the provider's /userinfo endpoint, then calls
+// sql.EnsureUserOnlyBelongsToRoles. A non-nil error means the login must be
+// denied; it is a no-op returning nil when authZEnabled is false.
 func (oidcAuthentication *oidcAuthenticationServer) authorize(
-	ctx context.Context, rawIDToken string, rawAccessToken string, username string,
+	ctx context.Context,
+	conf oidcAuthenticationConf,
+	manager IOIDCManager,
+	rawIDToken string,
+	rawAccessToken string,
+	username string,
 ) error {
-	if !oidcAuthentication.conf.authZEnabled {
+	if !conf.authZEnabled {
 		return nil
 	}
 
@@ -77,7 +60,7 @@ func (oidcAuthentication *oidcAuthenticationServer) authorize(
 		if tok, parseErr := jwt.ParseInsecure([]byte(ts.raw)); parseErr == nil {
 			claimGroups, err := jwthelper.ParseGroupsClaim(
 				tok,
-				oidcAuthentication.conf.groupClaim,
+				conf.groupClaim,
 			)
 			if err != nil {
 				// A malformed claim is a warning, but we can still fall back to
@@ -102,29 +85,29 @@ func (oidcAuthentication *oidcAuthenticationServer) authorize(
 	})
 
 	// If no groups in ID or access tokens, fall back to the userinfo endpoint
-	if groups == nil && oidcAuthentication.conf.userinfoGroupKey != "" {
+	if groups == nil && conf.userinfoGroupKey != "" {
 		// Re-create a minimal oauth2.Token for the UserInfo call.
 		oauthTok := &oauth2.Token{AccessToken: rawAccessToken}
-		userinfo, err := oidcAuthentication.manager.UserInfo(ctx, oauth2.StaticTokenSource(oauthTok))
+		userinfo, err := manager.UserInfo(ctx, oauth2.StaticTokenSource(oauthTok))
 		if err != nil {
 			log.Dev.VErrorf(ctx, 1, "OIDC: failed to get userinfo for authorization: %v", err)
 		} else {
 			var userinfoJSON map[string]any
 			if err := userinfo.Claims(&userinfoJSON); err == nil {
-				if raw, ok := userinfoJSON[oidcAuthentication.conf.userinfoGroupKey]; ok {
+				if raw, ok := userinfoJSON[conf.userinfoGroupKey]; ok {
 					synthetic := jwt.New()
-					if err := synthetic.Set(oidcAuthentication.conf.userinfoGroupKey, raw); err != nil {
+					if err := synthetic.Set(conf.userinfoGroupKey, raw); err != nil {
 						log.Dev.VErrorf(ctx, 1, "OIDC: failed to set synthetic claim for authorization: %v", err)
 					}
 					groups, err = jwthelper.ParseGroupsClaim(
 						synthetic,
-						oidcAuthentication.conf.userinfoGroupKey,
+						conf.userinfoGroupKey,
 					)
 					if err != nil {
 						log.Ops.VWarningf(ctx, 1, "OIDC: failed to parse groups claim from userinfo: %v", err)
 					}
 				} else {
-					log.Ops.VWarningf(ctx, 1, "OIDC: userinfo response did not contain group key: %s", oidcAuthentication.conf.userinfoGroupKey)
+					log.Ops.VWarningf(ctx, 1, "OIDC: userinfo response did not contain group key: %s", conf.userinfoGroupKey)
 				}
 			} else {
 				log.Ops.VWarningf(ctx, 1, "OIDC: failed to parse userinfo claims: %v", err)
