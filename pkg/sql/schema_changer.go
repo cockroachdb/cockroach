@@ -337,6 +337,30 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			}
 		}
 	}()
+	// Resolve the backfilled object's parent database so the internal planner runs
+	// with that database as current. Definer-semantics backfills (REFRESH
+	// MATERIALIZED VIEW) run as the view owner and must resolve schema-qualified
+	// references (e.g. public.f) in the view's own database, not the caller's.
+	// Read at the backfill's fixed timestamp so the name matches the data read.
+	var parentDBName string
+	if err := sc.execCfg.InternalDB.DescsTxn(ctx, func(
+		ctx context.Context, dbTxn descs.Txn,
+	) error {
+		if err := dbTxn.KV().SetFixedTimestamp(ctx, ts); err != nil {
+			return err
+		}
+		dbDesc, err := dbTxn.Descriptors().ByIDWithoutLeased(dbTxn.KV()).
+			WithoutNonPublic().Get().Database(ctx, table.GetParentID())
+		if err != nil {
+			return err
+		}
+		parentDBName = dbDesc.GetName()
+		return nil
+	}, isql.WithPriority(admissionpb.BulkNormalPri)); err != nil {
+		return errors.Wrapf(err,
+			"resolving parent database of %q for backfill", table.GetName())
+	}
+
 	err = sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		defer func() {
 			isTxnRetry = true
@@ -348,6 +372,9 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 		sd := NewInternalSessionData(ctx, sc.execCfg.Settings, "backfillQueryIntoTable")
 		sd.SessionData = *sc.sessionData
+		// Run the planner with the backfilled object's own database as current
+		// (see comment above), overriding the caller's inherited database.
+		sd.SessionData.Database = parentDBName
 		// Create an internal planner as the planner used to serve the user query
 		// would have committed by this point.
 		//
