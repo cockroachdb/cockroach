@@ -4176,6 +4176,9 @@ func TestCoreChangefeedRequiresUsageOnSchemaRegistry(t *testing.T) {
 		rootDB.Exec(t, `INSERT INTO table_a VALUES (0)`)
 		rootDB.Exec(t, `GRANT SELECT ON table_a TO user1`)
 		rootDB.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION registry AS '%s'`, schemaReg.URL()))
+		// The requirement ships off on this branch; the tests opt in.
+		rootDB.Exec(t,
+			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
 
 		const create = `CREATE CHANGEFEED FOR table_a ` +
 			`WITH format = avro, confluent_schema_registry = 'external://registry'`
@@ -4206,7 +4209,7 @@ func TestCoreChangefeedRequiresUsageOnSchemaRegistry(t *testing.T) {
 			`SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true`,
 		)
 		defer rootDB.ExecMultiple(t,
-			`RESET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled`,
+			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`,
 			`RESET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled`,
 		)
 		expectSuccess()
@@ -4285,6 +4288,9 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 	enableEnterprise := utilccl.TestingDisableEnterprise()
 	enableEnterprise()
 
+	// The requirement ships off on this branch; the tests opt in.
+	rootDB.Exec(t,
+		`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
 	withUser := func(t *testing.T, user string, fn func(*sqlutils.SQLRunner)) {
 		password := `password`
 		rootDB.Exec(t, fmt.Sprintf(`ALTER USER %s WITH PASSWORD '%s'`, user, password))

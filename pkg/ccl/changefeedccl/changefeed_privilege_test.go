@@ -57,6 +57,8 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 		`INSERT INTO foo VALUES (0, 'dog')`,
 		`CREATE USER testuser`,
 		`GRANT CHANGEFEED ON TABLE foo TO testuser`,
+		// The requirement ships off on this branch; the tests opt in.
+		`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`,
 	)
 
 	userDB := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.User(username.TestUser)))
@@ -142,7 +144,7 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 		rootDB.Exec(t,
 			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
 		defer rootDB.Exec(t,
-			`RESET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled`)
+			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
 		userDB.Exec(t, alter)
 		userDB.Exec(t, `CANCEL JOB $1`, jobID)
 	})
@@ -180,7 +182,7 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 		rootDB.Exec(t,
 			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
 		defer rootDB.Exec(t,
-			`RESET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled`)
+			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
 		rootDB.Exec(t, `REVOKE USAGE ON EXTERNAL CONNECTION cc_sink FROM ccuser`)
 		ccDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO 'external://cc_sink'`).Scan(&jobID)
 		ccDB.Exec(t, `CANCEL JOB $1`, jobID)
@@ -207,7 +209,7 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 		rootDB.Exec(t,
 			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
 		defer rootDB.Exec(t,
-			`RESET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled`)
+			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
 		userDB.Exec(t, alter)
 		userDB.Exec(t, `CANCEL JOB $1`, jobID)
 	})
@@ -218,7 +220,7 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 		rootDB.Exec(t,
 			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
 		defer rootDB.Exec(t,
-			`RESET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled`)
+			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
 
 		rootDB.Exec(t, `CREATE EXTERNAL CONNECTION ungranted_sink AS 'kafka://nope'`)
 		var jobID jobspb.JobID
