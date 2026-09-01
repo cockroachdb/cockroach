@@ -83,7 +83,7 @@ const (
 	// If we are importing avro records (binary or JSON), we must specify schema
 	// as either an inline JSON schema, or an external schema URI.
 	avroSchema    = "schema"
-	avroSchemaURI = "schema_uri"
+	avroSchemaURI = tree.ImportOptionSchemaURI
 )
 
 var importOptionExpectValues = map[string]exprutil.KVStringOptValidate{
@@ -203,6 +203,15 @@ func importJobDescription(
 		val := importOptionExpectValues[k] == exprutil.KVStringOptRequireValue
 		val = val || (importOptionExpectValues[k] == exprutil.KVStringOptAny && len(v) > 0)
 		if val {
+			// The schema URI points at external storage, so it can carry
+			// credentials just like the data files; sanitize it the same way.
+			if k == avroSchemaURI {
+				clean, err := cloud.SanitizeExternalStorageURI(v, nil /* extraParams */)
+				if err != nil {
+					return "", err
+				}
+				v = clean
+			}
 			opt.Value = tree.NewDString(v)
 		}
 		stmt.Options = append(stmt.Options, opt)
