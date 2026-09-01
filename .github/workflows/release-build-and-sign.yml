@@ -31,7 +31,7 @@
 #           |               the signed darwin archive exists; non-blocking, not
 #           |               in notify)
 #           +---> ibm-signing (needs IBM linux builds)
-#           +---> sentry-panic (needs build-linux)
+#           +---> sentry-panic (needs build-linux; non-blocking, not in notify)
 #
 #   notify (always, needs all above)
 
@@ -838,9 +838,23 @@ jobs:
   # --------------------------------------------------------------------------
   # Stage 2d: Sentry panic (needs linux-amd64 build)
   # --------------------------------------------------------------------------
+  # Triggers a synthetic panic so the new version shows up in Sentry with a
+  # symbolizable event. This is release *hygiene*, not a release gate: nothing
+  # about the artifacts we ship depends on it, and it talks to a third-party
+  # API (plus a Bazel build in Docker) that has proven flaky.
+  #
+  # Non-blocking by design: like bincheck and build-docker-ubuntu it is a leaf
+  # (nothing needs: it and it is excluded from the notify job) and
+  # continue-on-error keeps the workflow green even on failure — a failure
+  # surfaces only as a ::warning:: annotation. Keeping the run green matters
+  # because the publish workflow's validate-build job refuses to publish a SHA
+  # without a *successful* build-and-sign run, so a flaky Sentry call used to
+  # block the release (or force skip_jobs=validate-build). Re-run the panic
+  # after the fact with skip_jobs set to everything else if it failed.
   sentry-panic:
     name: Generate Sentry panic
     needs: [build-linux, detect-version]
+    continue-on-error: true
     if: >-
       ${{ !cancelled() &&
         (needs.build-linux.result == 'success' ||
@@ -887,7 +901,10 @@ jobs:
           TC_BUILD_BRANCH: ${{ github.ref_name }}
           BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
         run: |
-          build/github/release-sentry-panic.sh
+          if ! build/github/release-sentry-panic.sh; then
+            echo "::warning title=Sentry panic failed::Could not trigger the Sentry panic for this release (non-blocking). The release is unaffected; re-run this job on its own to retry."
+            exit 1
+          fi
 
   # --------------------------------------------------------------------------
   # Stage 3: Publish cloud-only candidate (needs Docker images)
@@ -1020,6 +1037,10 @@ jobs:
   # --------------------------------------------------------------------------
   # Notification (always runs)
   # --------------------------------------------------------------------------
+  # The non-blocking jobs (bincheck, build-docker-ubuntu, sentry-panic) are
+  # deliberately absent from needs: below — their failures must not color the
+  # Slack summary red, since they do not affect whether the release can be
+  # published. They report via ::warning:: annotations in the run summary.
   notify:
     name: Slack notification
     if: >-
@@ -1039,7 +1060,6 @@ jobs:
       - build-docker-ibm
       - macos-signing
       - ibm-signing
-      - sentry-panic
       - generate-sbom
       - publish-cloud-only
       - cloud-rollout
