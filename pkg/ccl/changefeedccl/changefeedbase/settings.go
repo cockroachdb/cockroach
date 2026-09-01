@@ -486,3 +486,15 @@ var FrontierPersistenceInterval = settings.RegisterDurationSettingWithExplicitUn
 	settings.DurationInRange(5*time.Second, 10*time.Minute),
 	settings.WithPublic,
 )
+
+// SuppressEmptyDeletes gates the suppression of delete messages whose before
+// and after images are both null. Such messages come from tombstones written
+// over keys that never held a row, so they tell a consumer nothing. Turning
+// this off restores the older behavior of forwarding them to the sink.
+var SuppressEmptyDeletes = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.suppress_empty_deletes.enabled",
+	"if true, changefeeds created with the WITH diff option do not emit delete "+
+		"messages whose before and after images are both null",
+	false,
+)
