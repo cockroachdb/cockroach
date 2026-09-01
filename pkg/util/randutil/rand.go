@@ -7,9 +7,11 @@ package randutil
 
 import (
 	crypto_rand "crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"log" // Don't bring cockroach/util/log into this low-level package.
+	"math"
 	"math/rand"
 	"runtime"
 	"strings"
@@ -277,6 +279,35 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 		buf.WriteRune(runes[rng.Intn(len(runes))])
 	}
 	return buf.String()
+}
+
+// DeterministicChoice returns true deterministically with probability p for the given key and salt.
+// Choose 'key' to be whatever you want determinism over (e.g., fingerprint,
+// tenant ID, range ID, CLI flag).
+func DeterministicChoice(p float64, key []byte, salt uint64) bool {
+	if math.IsNaN(p) || p <= 0 {
+		return false
+	}
+	if p >= 1 {
+		return true
+	}
+	// Hash key || salt (use little-endian since the actual byte order is immaterial)
+	buf := make([]byte, len(key)+8)
+	copy(buf, key)
+	binary.LittleEndian.PutUint64(buf[len(key):], salt)
+	sum := sha256.Sum256(buf)
+
+	// Take 53 uniformly random bits from the hash.
+	v := binary.LittleEndian.Uint64(sum[:8]) >> 11
+
+	// N.B. 2^53 fits in float64 with no rounding.
+	threshold := uint64(p * (1 << 53))
+	return v < threshold
+}
+
+func Salt(s string) uint64 {
+	sum := sha256.Sum256([]byte(s))
+	return binary.LittleEndian.Uint64(sum[:8])
 }
 
 // SeedForTests seeds the random number generator and prints the seed
