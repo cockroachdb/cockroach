@@ -1998,3 +1998,165 @@ statement ok
 USE defaultdb;
 
 subtest end
+
+# Regression test for VULM-535: a CREATEROLE-only user must not be able to grant
+# sensitive role options it does not itself hold (or have the equivalent system
+# privilege for). Admins/root are exempt. The check is gated on
+# sql.auth.postgres_compatible_grant_checks.enabled.
+subtest createrole_option_escalation
+
+user root
+
+statement ok
+CREATE ROLE vulm_target
+
+# testuser gets CREATEROLE but explicitly none of the sensitive options.
+statement ok
+ALTER ROLE testuser WITH CREATEROLE NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOVIEWCLUSTERSETTING NOMODIFYCLUSTERSETTING NOCONTROLJOB NOCANCELQUERY NOCREATEDB NOBYPASSRLS NOREPLICATION
+
+# With the setting off (the default), the legacy behavior applies: a
+# CREATEROLE-only user may grant a sensitive option it does not hold.
+statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_grant_checks.enabled = false
+
+user testuser
+
+statement ok
+ALTER ROLE vulm_target WITH MODIFYCLUSTERSETTING
+
+statement ok
+CREATE ROLE vulm_legacy WITH MODIFYCLUSTERSETTING
+
+user root
+
+statement ok
+DROP ROLE vulm_legacy
+
+statement ok
+ALTER ROLE vulm_target WITH NOMODIFYCLUSTERSETTING
+
+# Enabling the setting turns on the PostgreSQL-compatible grant checks.
+statement ok
+SET CLUSTER SETTING sql.auth.postgres_compatible_grant_checks.enabled = true
+
+user testuser
+
+# CREATEROLE alone must not allow granting a sensitive option, whether via CREATE
+# ROLE or ALTER ROLE, and whether the target is another role or testuser itself.
+statement error user testuser does not have MODIFYCLUSTERSETTING privilege
+CREATE ROLE vulm_escalate WITH MODIFYCLUSTERSETTING
+
+statement error user testuser does not have VIEWACTIVITY privilege
+ALTER ROLE vulm_target WITH VIEWACTIVITY
+
+statement error user testuser does not have CONTROLJOB privilege
+ALTER ROLE testuser WITH CONTROLJOB
+
+# Assert each sensitive option is gated individually. Because
+# nonSensitiveRoleOptions is an exempt set, only adding an option to it can
+# reopen the hole; asserting each option here catches such a regression.
+statement error user testuser does not have BYPASSRLS privilege
+ALTER ROLE vulm_target WITH BYPASSRLS
+
+statement error user testuser does not have REPLICATION privilege
+ALTER ROLE vulm_target WITH REPLICATION
+
+statement error user testuser does not have VIEWACTIVITYREDACTED privilege
+ALTER ROLE vulm_target WITH VIEWACTIVITYREDACTED
+
+statement error user testuser does not have VIEWCLUSTERSETTING privilege
+ALTER ROLE vulm_target WITH VIEWCLUSTERSETTING
+
+statement error user testuser does not have CREATEDB privilege
+ALTER ROLE vulm_target WITH CREATEDB
+
+# A grant of several sensitive options at once is rejected on the first one the
+# user lacks. Options are checked in WITH-clause order, so VIEWACTIVITY (listed
+# first) is the one reported.
+statement error user testuser does not have VIEWACTIVITY privilege
+CREATE ROLE vulm_multi WITH VIEWACTIVITY CONTROLJOB
+
+# CREATELOGIN is exempt here but still gated by checkPasswordOptionConstraints.
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE vulm_createlogin WITH CREATELOGIN
+
+# Revoking a sensitive option is always permitted: NO* cannot escalate.
+statement ok
+ALTER ROLE vulm_target WITH NOVIEWACTIVITY
+
+# A positive (non-NO*) exempt option is grantable by a CREATEROLE-only user.
+statement ok
+ALTER ROLE vulm_target WITH SQLLOGIN
+
+user root
+
+# Once testuser actually holds an option, it may grant that same option.
+statement ok
+ALTER ROLE testuser WITH VIEWACTIVITY
+
+user testuser
+
+statement ok
+ALTER ROLE vulm_target WITH VIEWACTIVITY
+
+statement ok
+CREATE ROLE vulm_escalate WITH VIEWACTIVITY
+
+# An option testuser still lacks remains denied.
+statement error user testuser does not have CANCELQUERY privilege
+ALTER ROLE vulm_target WITH CANCELQUERY
+
+user root
+
+# The equivalent system privilege also authorizes the grant.
+statement ok
+GRANT SYSTEM CANCELQUERY TO testuser
+
+user testuser
+
+statement ok
+ALTER ROLE vulm_target WITH CANCELQUERY
+
+# The system-privilege path also authorizes CREATE ROLE (a separate call site).
+statement ok
+CREATE ROLE vulm_sys_create WITH CANCELQUERY
+
+user root
+
+# Admin/root can still grant every option (no regression).
+statement ok
+ALTER ROLE vulm_target WITH MODIFYCLUSTERSETTING BYPASSRLS CONTROLJOB CANCELQUERY VIEWACTIVITY
+
+# A non-root admin is also exempt: this isolates the admin bypass from root's
+# blanket exemption, since testuser holds none of these options directly.
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement ok
+ALTER ROLE vulm_target WITH REPLICATION
+
+# The admin exemption also applies to CREATE ROLE (a separate call site).
+statement ok
+CREATE ROLE vulm_admin_create WITH REPLICATION
+
+user root
+
+statement ok
+REVOKE admin FROM testuser
+
+# Cleanup.
+statement ok
+DROP ROLE vulm_target, vulm_escalate, vulm_sys_create, vulm_admin_create
+
+statement ok
+REVOKE SYSTEM CANCELQUERY FROM testuser
+
+statement ok
+ALTER ROLE testuser WITH NOCREATEROLE NOVIEWACTIVITY
+
+statement ok
+RESET CLUSTER SETTING sql.auth.postgres_compatible_grant_checks.enabled
+
+subtest end
