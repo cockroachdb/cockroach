@@ -206,6 +206,51 @@ ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
 statement ok
 ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
 
+subtest alter_database_secondary_region_privileges
+
+user root
+
+statement ok
+CREATE DATABASE secondary_region_privs PRIMARY REGION "ca-central-1" REGIONS "us-east-1";
+
+statement ok
+ALTER DATABASE secondary_region_privs SET SECONDARY REGION "us-east-1";
+
+user testuser
+
+statement error user testuser must be owner of secondary_region_privs or have CREATE privilege on database secondary_region_privs
+ALTER DATABASE secondary_region_privs SET SECONDARY REGION "us-east-1"
+
+statement error user testuser must be owner of secondary_region_privs or have CREATE privilege on database secondary_region_privs
+ALTER DATABASE secondary_region_privs DROP SECONDARY REGION
+
+# The IF EXISTS variant is gated too: it only tolerates a missing secondary
+# region, not a missing privilege.
+statement error user testuser must be owner of secondary_region_privs or have CREATE privilege on database secondary_region_privs
+ALTER DATABASE secondary_region_privs DROP SECONDARY REGION IF EXISTS
+
+query TB rowsort
+SELECT region, "secondary" FROM [SHOW REGIONS FROM DATABASE secondary_region_privs]
+----
+ca-central-1  false
+us-east-1     true
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE secondary_region_privs TO testuser;
+
+user testuser
+
+statement ok
+ALTER DATABASE secondary_region_privs DROP SECONDARY REGION;
+
+query TB rowsort
+SELECT region, "secondary" FROM [SHOW REGIONS FROM DATABASE secondary_region_privs]
+----
+ca-central-1  false
+us-east-1     false
+
 subtest add_drop_region_repartitioning_privs
 
 user root
