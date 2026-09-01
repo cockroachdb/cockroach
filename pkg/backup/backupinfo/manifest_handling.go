@@ -541,6 +541,37 @@ func WriteBackupLock(
 	return cloud.WriteFile(ctx, defaultStore, lockFileName, bytes.NewReader([]byte("lock")))
 }
 
+// DeleteBackupLock removes the backup lock file for the given jobID from the
+// default backup destination. This is used to clean up lock files from failed
+// compaction jobs so that subsequent compaction attempts to the same destination
+// are not blocked.
+func DeleteBackupLock(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	defaultURI string,
+	jobID jobspb.JobID,
+	user username.SQLUsername,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.DeleteBackupLock")
+	defer sp.Finish()
+
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
+	if err != nil {
+		return err
+	}
+	defer defaultStore.Close()
+
+	lockFileName := fmt.Sprintf("%s%s", BackupLockFilePrefix, strconv.FormatInt(int64(jobID), 10))
+	if err := defaultStore.Delete(ctx, lockFileName); err != nil {
+		// If the lock file does not exist, there is nothing to clean up.
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 // WriteMetadataWithExternalSSTs writes a "slim" version of manifest to
 // `exportStore`. This version has the alloc heavy `Files`, `Descriptors`, and
 // `DescriptorChanges` repeated fields nil'ed out, and written to an

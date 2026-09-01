@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -489,6 +490,11 @@ func (d *datadrivenTestState) getSQLDBForVC(
 //   - "sleep ms=TIME"
 //     Sleep for TIME milliseconds.
 //
+//   - "besteffort-forbid-skip op=OP"
+//     Forbids the besteffort operation named OP from being randomly skipped in
+//     test builds for the remainder of the test, so its side effects run
+//     deterministically. See pkg/util/besteffort.
+//
 //lint:ignore U1000 unused
 func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 	// TODO(at): data driven tests will need some tweaks to work with OR metamorphic, which will
@@ -518,6 +524,16 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 	var lastCreatedCluster string
 	ds := newDatadrivenTestState()
 	defer ds.cleanup(ctx, t)
+
+	// The "besteffort-forbid-skip" command registers cleanups that must remain
+	// in effect for the remainder of the test; run them once it finishes.
+	var besteffortCleanups []func()
+	defer func() {
+		for _, cleanup := range besteffortCleanups {
+			cleanup()
+		}
+	}()
+
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 		execWithTagAndPausePoint := func(jobType jobspb.Type) string {
 			ds.noticeBuffer = nil
@@ -574,6 +590,12 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 
 		case "skip-under-duress":
 			skip.UnderDuress(t)
+			return ""
+
+		case "besteffort-forbid-skip":
+			var op string
+			d.ScanArgs(t, "op", &op)
+			besteffortCleanups = append(besteffortCleanups, besteffort.TestForbidSkip(op))
 			return ""
 
 		case "reset":

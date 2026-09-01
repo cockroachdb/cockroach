@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -1953,6 +1954,10 @@ func (b *backupResumer) processScheduledBackupCompletion(
 	return nil
 }
 
+// compactionBackupLockCleanupOp is the besteffort operation name used when
+// removing the BACKUP-LOCK file left behind by a failed compaction job.
+const compactionBackupLockCleanupOp = "delete-compaction-backup-lock"
+
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (b *backupResumer) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, jobErr error,
@@ -1967,6 +1972,37 @@ func (b *backupResumer) OnFailOrCancel(
 	details := b.job.Details().(jobspb.BackupDetails)
 
 	b.deleteCheckpoint(ctx, cfg, p.User())
+
+	// For compaction jobs, clean up the BACKUP-LOCK file from the backup
+	// destination to unblock subsequent compaction attempts that may target
+	// the same location. A failed compaction does not produce a valid backup at
+	// the destination, so the lock serves no purpose and only blocks future
+	// compactions.
+	if details.Compact {
+		besteffort.Warning(ctx, compactionBackupLockCleanupOp, func(ctx context.Context) error {
+			defaultURI := details.URI
+			if defaultURI == "" {
+				// The compaction failed after the BACKUP-LOCK was written but before
+				// the resolved destination was persisted to the job payload. Re-run
+				// the same destination resolution the resume path performed so we can
+				// locate and remove the lock.
+				kmsEnv := backupencryption.MakeBackupKMSEnv(
+					cfg.Settings, &cfg.ExternalIODirConfig, cfg.InternalDB, p.User(),
+				)
+				resolved, err := backupdest.ResolveDest(
+					ctx, p.User(), details.Destination,
+					details.StartTime, details.EndTime,
+					cfg, details.EncryptionOptions, &kmsEnv,
+				)
+				if err != nil {
+					return err
+				}
+				defaultURI = resolved.DefaultURI
+			}
+			return backupinfo.DeleteBackupLock(ctx, cfg, defaultURI, b.job.ID(), p.User())
+		})
+	}
+
 	if err := cfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		pts := cfg.ProtectedTimestampProvider.WithTxn(txn)
 		return releaseProtectedTimestamp(ctx, pts, details.ProtectedTimestampRecord)
