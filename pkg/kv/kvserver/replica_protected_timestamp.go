@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/repro"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -146,6 +147,9 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	}
 
 	gcTimestamp = read.readAt
+	if !repro.S.GCSent.IsDone() {
+		log.KvExec.Infof(ctx, "thresholds pts: %v", read)
+	}
 	if !read.earliestProtectionTimestamp.IsEmpty() {
 		// NB: we want to allow GC up to the timestamp preceding the earliest valid
 		// protection timestamp.
@@ -155,6 +159,9 @@ func (r *Replica) checkProtectedTimestampsForGC(
 		}
 	}
 
+	if !repro.S.GCSent.IsDone() {
+		log.KvExec.Infof(context.Background(), "thresholds TTL: %v %v", gcTimestamp, gcTTL)
+	}
 	newThreshold = gc.CalculateThreshold(gcTimestamp, gcTTL)
 
 	return true, gcTimestamp, oldThreshold, newThreshold, nil
