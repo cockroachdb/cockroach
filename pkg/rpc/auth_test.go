@@ -595,6 +595,12 @@ func TestTenantAuthRequest(t *testing.T) {
 		}
 	}
 
+	makeDownloadSpanReq := func(span roachpb.Span) *serverpb.DownloadSpanRequest {
+		return &serverpb.DownloadSpanRequest{
+			Spans: []roachpb.Span{span},
+		}
+	}
+
 	tenantThree := roachpb.MustMakeTenantID(3)
 	makeTimeseriesQueryReq := func(tenantID *roachpb.TenantID) *tspb.TimeSeriesQueryRequest {
 		req := &tspb.TimeSeriesQueryRequest{
@@ -1141,6 +1147,20 @@ func TestTenantAuthRequest(t *testing.T) {
 			{
 				req:    makeGetRangeDescriptorsReq(makeSpan(prefix(10, "a"), prefix(20, "b"))),
 				expErr: `requested key span /Tenant/{10a-20b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+		},
+		"/cockroach.server.serverpb.Status/DownloadSpan": {
+			{
+				req:    makeDownloadSpanReq(makeSpan(prefix(10, "a"), prefix(10, "b"))),
+				expErr: noError,
+			},
+			{
+				req:    makeDownloadSpanReq(makeSpan("a", "b")),
+				expErr: `requested key span {a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeDownloadSpanReq(makeSpan(prefix(50, "a"), prefix(50, "b"))),
+				expErr: `requested key span /Tenant/50{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 		},
 		"/cockroach.ts.tspb.TimeSeries/Query": {

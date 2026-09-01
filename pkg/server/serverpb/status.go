@@ -99,6 +99,14 @@ type TenantStatusServer interface {
 	EngineStats(context.Context, *EngineStatsRequest) (*EngineStatsResponse, error)
 }
 
+// GetSpans returns the spans targeted by the request.
+func (m *DownloadSpanRequest) GetSpans() []roachpb.Span {
+	if m == nil {
+		return nil
+	}
+	return m.Spans
+}
+
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is
 // available. If it is not, an error referring to the optionally supplied issues
 // is returned.

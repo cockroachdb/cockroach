@@ -254,11 +254,11 @@ func setTestClusterDefaults(params *base.TestClusterArgs, dataDir string, useDat
 		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
 	}
 
-	// TODO(at): remove once LinkExternalSSTable is enabled for secondary tenants.
+	// Online restore requires a SQL server colocated with the KV layer.
 	if FastRestore {
 		var tenantzero base.DefaultTestTenantOptions
 		if params.ServerArgs.DefaultTestTenant == tenantzero {
-			params.ServerArgs.DefaultTestTenant = base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
+			params.ServerArgs.DefaultTestTenant = base.TestSkipForExternalProcessMode()
 		}
 	}
 

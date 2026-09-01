@@ -138,6 +138,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/SpanStats":
 		return a.authSpanStats(ctx, tenID, req.(*roachpb.SpanStatsRequest))
 
+	case "/cockroach.server.serverpb.Status/DownloadSpan":
+		return a.authDownloadSpan(ctx, tenID, req.(downloadSpanRequest))
+
 	case "/cockroach.roachpb.Internal/GetSpanConfigs",
 		"/cockroach.roachpb.TenantSpanConfig/GetSpanConfigs":
 		return a.authGetSpanConfigs(ctx, tenID, req.(*roachpb.GetSpanConfigsRequest))
@@ -270,6 +273,24 @@ func (a tenantAuthorizer) authSpanStats(
 	for _, span := range args.Spans {
 		err := validateSpan(ctx, tenID, span, true, a)
 		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// downloadSpanRequest is the subset of serverpb.DownloadSpanRequest that the
+// tenant authorizer inspects. It is declared here rather than importing serverpb
+// directly, which would create an import cycle.
+type downloadSpanRequest interface {
+	GetSpans() []roachpb.Span
+}
+
+func (a tenantAuthorizer) authDownloadSpan(
+	ctx context.Context, tenID roachpb.TenantID, args downloadSpanRequest,
+) error {
+	for _, span := range args.GetSpans() {
+		if err := validateSpan(ctx, tenID, span, false /* isRead */, a); err != nil {
 			return err
 		}
 	}
