@@ -14,12 +14,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -253,4 +255,71 @@ WHERE dump.variable IS NULL OR dump2.variable IS NULL OR dump.variable != dump2.
 			return "unexpected"
 		})
 	})
+}
+
+// TestDeserializeSessionRejectsCraftedIsSuperuser verifies that a non-admin
+// caller cannot use crdb_internal.deserialize_session to smuggle an
+// IsSuperuser=true bit into their session. IsSuperuser lives in
+// LocalOnlySessionData, which is copied wholesale from the payload; unlike
+// UserProto/SessionUserProto (guarded by the session_user match and
+// checkCanBecomeUser), IsSuperuser has no SET path and is consulted directly
+// by privilege checks such as COMMIT PREPARED's owner check in
+// two_phase_commit.go. deserialize_session must recompute it from sd.User()
+// instead of trusting the payload.
+func TestDeserializeSessionRejectsCraftedIsSuperuser(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	rootDB := sqlutils.MakeSQLRunner(s.SQLConn(t))
+	rootDB.Exec(t, "CREATE USER testuser")
+
+	pgURL, cleanup := s.PGUrl(
+		t,
+		serverutils.CertsDirPrefix("StartServer"),
+		serverutils.User("testuser"),
+	)
+	defer cleanup()
+	pgURL.Path = "defaultdb"
+
+	config, err := pgx.ParseConfig(pgURL.String())
+	require.NoError(t, err)
+	config.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+	conn, err := pgx.ConnectConfig(ctx, config)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close(ctx) }()
+
+	// Sanity check: testuser is not a superuser.
+	var isSuperuser string
+	require.NoError(t, conn.QueryRow(ctx, "SHOW is_superuser").Scan(&isSuperuser))
+	require.Equal(t, "off", isSuperuser)
+
+	// Get testuser's own session bytes as a valid starting point, then flip
+	// IsSuperuser=true in the LocalOnlySessionData before re-marshaling. All
+	// identity fields (session_user, user) remain "testuser", so the
+	// session_user match and checkCanBecomeUser both pass.
+	var rawState []byte
+	require.NoError(t, conn.QueryRow(ctx, "SELECT crdb_internal.serialize_session()").Scan(&rawState))
+
+	var m sessiondatapb.MigratableSession
+	require.NoError(t, protoutil.Unmarshal(rawState, &m))
+	require.False(t, m.LocalOnlySessionData.IsSuperuser, "precondition: baseline payload should not have IsSuperuser")
+	m.LocalOnlySessionData.IsSuperuser = true
+	craftedState, err := protoutil.Marshal(&m)
+	require.NoError(t, err)
+
+	var ok bool
+	require.NoError(t, conn.QueryRow(ctx, "SELECT crdb_internal.deserialize_session($1)", craftedState).Scan(&ok))
+	require.True(t, ok)
+
+	// The fix: IsSuperuser is recomputed from sd.User() (which is testuser,
+	// a non-admin), so it must be false regardless of what the payload
+	// claimed. Without the fix, this returns "on".
+	require.NoError(t, conn.QueryRow(ctx, "SHOW is_superuser").Scan(&isSuperuser))
+	require.Equalf(t, "off", isSuperuser,
+		"crafted IsSuperuser=true in deserialize_session payload leaked into session")
 }

@@ -143,6 +143,15 @@ func (p *planner) DeserializeSessionState(
 	if err := p.checkCanBecomeUser(ctx, sd.User()); err != nil {
 		return nil, err
 	}
+	// Recompute privilege-carrying fields for the session.
+	willBeSuperuser, err := p.UserHasAdminRole(ctx, sd.User())
+	if err != nil {
+		return nil, err
+	}
+	sd.IsSuperuser = willBeSuperuser
+	sd.SystemIdentityProto = evalCtx.SessionData().SystemIdentityProto
+	sd.Internal = false
+	sd.AllowUnsafeInternals = false
 
 	// Apply the migrated session data before re-preparing the statements below,
 	// so that they resolve names under the origin session's search_path and
