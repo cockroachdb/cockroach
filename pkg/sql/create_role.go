@@ -96,6 +96,10 @@ func (p *planner) CreateRoleNode(
 		return nil, err
 	}
 
+	if err := p.checkRoleOptionConstraints(ctx, roleOptions); err != nil {
+		return nil, err
+	}
+
 	roleName, err := decodeusername.FromRoleSpec(
 		p.SessionData(), username.PurposeCreation, roleSpec,
 	)
