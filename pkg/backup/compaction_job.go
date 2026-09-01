@@ -471,6 +471,7 @@ func (b *backupResumer) ResumeCompaction(
 
 func (b *backupResumer) processCompactionCompletion(
 	ctx context.Context,
+	jobState jobs.State,
 	execCtx sql.JobExecContext,
 	env scheduledjobs.JobSchedulerEnv,
 	details jobspb.BackupDetails,
@@ -497,6 +498,10 @@ func (b *backupResumer) processCompactionCompletion(
 		return scheduledJob.Update(ctx, backupSchedule)
 	}); err != nil {
 		return errors.Wrapf(err, "failed to clear compaction job ID from schedule %d", details.ScheduleID)
+	}
+
+	if jobState != jobs.StateSucceeded {
+		return nil
 	}
 
 	if err := b.maybeTriggerFollowupCompaction(ctx, execCtx, details); err != nil {
