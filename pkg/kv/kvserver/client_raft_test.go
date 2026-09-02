@@ -1897,6 +1897,10 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 				// this test doesn't expect. See DisablePreCampaignStoreLivenessCheck,
 				// which counteracts this knob's effect on leader leases.
 				RaftElectionTimeoutTicks: 1000000,
+				// Prevent the lease from expiring. Once we lose quorum in this test,
+				// the lease can't be reacquired, so the write would return NLHE instead
+				// of the expected blocking.
+				RangeLeaseDuration: time.Hour,
 				// Reduce the max uncommitted entry size.
 				RaftMaxUncommittedEntriesSize: 64 << 10, // 64 KB
 				// RaftProposalQuota cannot exceed RaftMaxUncommittedEntriesSize.
