@@ -103,11 +103,14 @@ func CheckRegisteredSchemaCompat(localSchemaJSON, registeredSchemaJSON string) e
 
 // NewEnvelopeRecordWithRegisteredSchema creates an envelope record that
 // encodes with registeredSchemaJSON, provided that schema can represent every
-// value local produces (see CheckRegisteredSchemaCompat).
+// value local produces (see CheckRegisteredSchemaCompat). alreadyValidated
+// skips the compatibility check when the schema pair was previously accepted.
 func NewEnvelopeRecordWithRegisteredSchema(
-	local *EnvelopeRecord, registeredSchemaJSON string,
+	local *EnvelopeRecord, registeredSchemaJSON string, alreadyValidated bool,
 ) (*EnvelopeRecord, error) {
-	registeredCodec, err := registeredCodecFor(local.codec.Schema(), registeredSchemaJSON)
+	registeredCodec, err := registeredCodecFor(
+		local.codec.Schema(), registeredSchemaJSON, alreadyValidated,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -119,9 +122,11 @@ func NewEnvelopeRecordWithRegisteredSchema(
 // NewDataRecordWithRegisteredSchema is NewEnvelopeRecordWithRegisteredSchema
 // for the key record.
 func NewDataRecordWithRegisteredSchema(
-	local *DataRecord, registeredSchemaJSON string,
+	local *DataRecord, registeredSchemaJSON string, alreadyValidated bool,
 ) (*DataRecord, error) {
-	registeredCodec, err := registeredCodecFor(local.codec.Schema(), registeredSchemaJSON)
+	registeredCodec, err := registeredCodecFor(
+		local.codec.Schema(), registeredSchemaJSON, alreadyValidated,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -132,12 +137,16 @@ func NewDataRecordWithRegisteredSchema(
 
 // registeredCodecFor checks registeredSchemaJSON against localSchemaJSON and
 // returns a codec built from the registered schema verbatim.
-func registeredCodecFor(localSchemaJSON, registeredSchemaJSON string) (*goavro.Codec, error) {
-	if err := CheckRegisteredSchemaCompat(localSchemaJSON, registeredSchemaJSON); err != nil {
-		return nil, err
+func registeredCodecFor(
+	localSchemaJSON, registeredSchemaJSON string, alreadyValidated bool,
+) (*goavro.Codec, error) {
+	if !alreadyValidated {
+		if err := CheckRegisteredSchemaCompat(localSchemaJSON, registeredSchemaJSON); err != nil {
+			return nil, err
+		}
 	}
-	// The check validated the registered schema, so building its codec can
-	// only fail on a code bug.
+	// Either this call or the schema-registry cache validated the registered
+	// schema, so building its codec can only fail on a code bug.
 	codec, err := goavro.NewCodec(registeredSchemaJSON)
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(

@@ -47,13 +47,14 @@ type schemaRegistry interface {
 	// LookupSchemaIDForSubject resolves a schema ID for subject using strategy
 	// without modifying the registry. Each candidate version is offered to
 	// accept, which rejects it by returning an error; under latest_compatible,
-	// rejected versions are skipped until one is accepted.
+	// rejected versions are skipped until one is accepted. alreadyValidated is
+	// true when the exact schema pair was previously accepted and cached.
 	LookupSchemaIDForSubject(
 		ctx context.Context,
 		subject string,
 		localSchema string,
 		strategy changefeedbase.AvroVersionStrategy,
-		accept func(registeredSchema string) error,
+		accept func(registeredSchema string, alreadyValidated bool) error,
 	) (int32, error)
 }
 
@@ -298,7 +299,7 @@ func (r *confluentSchemaRegistry) LookupSchemaIDForSubject(
 	subject string,
 	localSchema string,
 	strategy changefeedbase.AvroVersionStrategy,
-	accept func(registeredSchema string) error,
+	accept func(registeredSchema string, alreadyValidated bool) error,
 ) (int32, error) {
 	if strategy.Kind == changefeedbase.AvroVersionLatestCompatible {
 		return r.lookupLatestCompatibleSchema(ctx, subject, accept)
@@ -311,7 +312,7 @@ func (r *confluentSchemaRegistry) LookupSchemaIDForSubject(
 	if err != nil {
 		return 0, err
 	}
-	if err := accept(meta.Schema); err != nil {
+	if err := accept(meta.Schema, false /* alreadyValidated */); err != nil {
 		return 0, err
 	}
 	return meta.ID, nil
@@ -390,7 +391,9 @@ func (r *confluentSchemaRegistry) lookUpAllVersions(
 // version of the subject that accept approves, walking versions newest to
 // oldest.
 func (r *confluentSchemaRegistry) lookupLatestCompatibleSchema(
-	ctx context.Context, subject string, accept func(registeredSchema string) error,
+	ctx context.Context,
+	subject string,
+	accept func(registeredSchema string, alreadyValidated bool) error,
 ) (int32, error) {
 	versions, err := r.lookUpAllVersions(ctx, subject)
 	if err != nil {
@@ -404,7 +407,7 @@ func (r *confluentSchemaRegistry) lookupLatestCompatibleSchema(
 		if err != nil {
 			return 0, err
 		}
-		if err := accept(meta.Schema); err != nil {
+		if err := accept(meta.Schema, false /* alreadyValidated */); err != nil {
 			rejectionReasons = append(rejectionReasons,
 				fmt.Sprintf("version %d: %v", version, err))
 			log.VInfof(ctx, 1,
@@ -542,7 +545,7 @@ func (csr *schemaRegistryWithCache) LookupSchemaIDForSubject(
 	subject string,
 	schema string,
 	strategy changefeedbase.AvroVersionStrategy,
-	accept func(registeredSchema string) error,
+	accept func(registeredSchema string, alreadyValidated bool) error,
 ) (int32, error) {
 	cacheKey := schemaRegistryCacheKey{
 		subject: subject, schema: schema, strategy: strategy.String(),
@@ -550,16 +553,16 @@ func (csr *schemaRegistryWithCache) LookupSchemaIDForSubject(
 	csr.cache.mu.Lock()
 	defer csr.cache.mu.Unlock()
 	if entry, ok := csr.cache.Get(cacheKey); ok {
-		if err := accept(entry.registeredSchema); err != nil {
+		if err := accept(entry.registeredSchema, true /* alreadyValidated */); err != nil {
 			return 0, err
 		}
 		return entry.id, nil
 	}
 	var accepted string
 	id, err := csr.base.LookupSchemaIDForSubject(ctx, subject, schema, strategy,
-		func(registeredSchema string) error {
+		func(registeredSchema string, alreadyValidated bool) error {
 			accepted = registeredSchema
-			return accept(registeredSchema)
+			return accept(registeredSchema, alreadyValidated)
 		})
 	if err == nil {
 		csr.cache.Add(cacheKey, schemaRegistryCacheEntry{id: id, registeredSchema: accepted})

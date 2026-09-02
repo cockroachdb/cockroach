@@ -414,7 +414,7 @@ func resolveSchema[T schemaRecord](
 	subject string,
 	local T,
 	strategy changefeedbase.AvroVersionStrategy,
-	adopt func(local T, registeredSchema string) (T, error),
+	adopt func(local T, registeredSchema string, alreadyValidated bool) (T, error),
 ) (resolvedSchema[T], error) {
 	if e.avroMode != changefeedbase.OptAvroModeRead {
 		id, err := e.schemaRegistry.RegisterSchemaForSubject(ctx, subject, local.Schema())
@@ -426,8 +426,8 @@ func resolveSchema[T schemaRecord](
 
 	adopted := local
 	id, err := e.schemaRegistry.LookupSchemaIDForSubject(ctx, subject, local.Schema(), strategy,
-		func(registeredSchema string) error {
-			candidate, err := adopt(local, registeredSchema)
+		func(registeredSchema string, alreadyValidated bool) error {
+			candidate, err := adopt(local, registeredSchema, alreadyValidated)
 			if err != nil {
 				return errors.Wrapf(err, "subject %q", subject)
 			}

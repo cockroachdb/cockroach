@@ -75,7 +75,7 @@ func newWrappedEnvelope(
 		return nil, err
 	}
 	if registeredSchemaJSON != "" {
-		return NewEnvelopeRecordWithRegisteredSchema(env, registeredSchemaJSON)
+		return NewEnvelopeRecordWithRegisteredSchema(env, registeredSchemaJSON, false /* alreadyValidated */)
 	}
 	return env, nil
 }
@@ -260,7 +260,7 @@ func TestNewEnvelopeRecordWithRegisteredSchema(t *testing.T) {
 		local := wrappedEnvelope(t, narrowDesc, EnvelopeOpts{AfterField: true})
 		localSchema := local.Schema()
 
-		envelope, err := NewEnvelopeRecordWithRegisteredSchema(local, registered)
+		envelope, err := NewEnvelopeRecordWithRegisteredSchema(local, registered, false /* alreadyValidated */)
 		require.NoError(t, err)
 		require.NotSame(t, local, envelope)
 		require.Equal(t, localSchema, local.Schema())
@@ -550,7 +550,7 @@ func TestNewDataRecordWithRegisteredSchema(t *testing.T) {
 		local := keySchema(t, desc, `foo`)
 		require.NotEqual(t, local.Schema(), registered)
 
-		adopted, err := NewDataRecordWithRegisteredSchema(local, registered)
+		adopted, err := NewDataRecordWithRegisteredSchema(local, registered, false /* alreadyValidated */)
 		require.NoError(t, err)
 		require.Equal(t, registered, adopted.Schema())
 
@@ -569,7 +569,7 @@ func TestNewDataRecordWithRegisteredSchema(t *testing.T) {
 	t.Run("errors when the registered key has an extra column", func(t *testing.T) {
 		registered := keySchema(t, desc, `foo`).Schema()
 
-		_, err := NewDataRecordWithRegisteredSchema(keySchema(t, narrowDesc, `foo`), registered)
+		_, err := NewDataRecordWithRegisteredSchema(keySchema(t, narrowDesc, `foo`), registered, false /* alreadyValidated */)
 		requireRetryable(t, err)
 		require.Contains(t, err.Error(), `top-level field "b"`)
 	})
@@ -577,7 +577,7 @@ func TestNewDataRecordWithRegisteredSchema(t *testing.T) {
 	t.Run("errors when the registered key drops a column", func(t *testing.T) {
 		registered := keySchema(t, narrowDesc, `foo`).Schema()
 
-		_, err := NewDataRecordWithRegisteredSchema(keySchema(t, desc, `foo`), registered)
+		_, err := NewDataRecordWithRegisteredSchema(keySchema(t, desc, `foo`), registered, false /* alreadyValidated */)
 		requireRetryable(t, err)
 		require.Contains(t, err.Error(), `missing top-level field "b"`)
 	})
