@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -143,6 +144,68 @@ func TestBatchBasics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	testBatchBasics(t, false /* writeOnly */, func(e Engine, b WriteBatch) error {
 		return b.Commit(false /* sync */)
+	})
+}
+
+// TestCommitEmptyBatchDoesNotSync locks in a Pebble contract that logstore
+// works around for raft log durability (see #172785): committing an empty batch
+// is a no-op even when sync is true, so it does not persist a prior unsynced
+// write. A non-empty batch (here forced with LogData) does sync.
+//
+// If Pebble makes an empty Commit(true) sync the WAL, the forceNonEmpty=false
+// case will survive the crash and fail this test, flagging that the workarounds
+// can be revisited.
+func TestCommitEmptyBatchDoesNotSync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	key := roachpb.Key("durable-key")
+	val := []byte("value")
+
+	openEngine := func(t *testing.T, fsys vfs.FS, settings *cluster.Settings) Engine {
+		env, err := fs.InitEnv(ctx, fsys, "", fs.EnvConfig{Version: settings.Version}, nil /* statsCollector */)
+		require.NoError(t, err)
+		eng, err := Open(ctx, env, settings)
+		require.NoError(t, err)
+		return eng
+	}
+
+	// forceNonEmpty toggles whether the sync=true "barrier" batch carries a WAL
+	// record; only a non-empty batch actually syncs.
+	testutils.RunTrueAndFalse(t, "forceNonEmpty", func(t *testing.T, forceNonEmpty bool) {
+		memFS := vfs.NewCrashableMem()
+		settings := cluster.MakeTestingClusterSettings()
+		eng := openEngine(t, memFS, settings)
+
+		// Write a key without syncing. Commit(false) rather than CommitNoSyncWait
+		// keeps the test deterministic (no racing background sync).
+		b1 := eng.NewWriteBatch()
+		require.NoError(t, b1.PutUnversioned(key, val))
+		require.NoError(t, b1.Commit(false /* sync */))
+		b1.Close()
+
+		// Commit a sync=true barrier batch. Empty is a no-op; non-empty syncs the
+		// WAL including b1's record.
+		b2 := eng.NewWriteBatch()
+		if forceNonEmpty {
+			require.NoError(t, b2.LogData(nil))
+		}
+		require.NoError(t, b2.Commit(true /* sync */))
+		b2.Close()
+
+		// Snapshot the last synced state (emulating a crash), then restart on it.
+		crashFS := memFS.CrashClone(vfs.CrashCloneCfg{})
+		eng.Close()
+		eng = openEngine(t, crashFS, settings)
+		defer eng.Close()
+
+		got := mvccGetRaw(t, eng, mvccKey(key))
+		if forceNonEmpty {
+			require.Equal(t, val, got, "non-empty sync batch must persist the earlier write")
+		} else {
+			require.Nil(t, got, "empty sync batch should not persist the earlier write")
+		}
 	})
 }
 
