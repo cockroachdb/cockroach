@@ -5563,3 +5563,84 @@ func TestStoreMergeGCHint(t *testing.T) {
 		})
 	}
 }
+
+// TestMergeQueueEnqueuesFollowerUnderLeaderLeases checks which stores accept a
+// replica into their merge queue when the range is healthy and the lease is a
+// leader lease held elsewhere.
+func TestMergeQueueEnqueuesFollowerUnderLeaderLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+
+	const fortificationGracePeriod = 3 * time.Second
+
+	manualClock := hlc.NewHybridManualClock()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			RaftConfig: base.RaftConfig{
+				// A leader lease's minimum expiration is its start plus the
+				// fortification grace period. Since we will be advancing the manual
+				// clock by `fortificationGracePeriod`, Store liveness support has to
+				// outlast that jump, or the leader loses fortification and the lease
+				// reads EXPIRED.
+				FortificationGracePeriod:     fortificationGracePeriod,
+				StoreLivenessSupportDuration: 3 * fortificationGracePeriod,
+			},
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{WallClock: manualClock},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
+
+	leaseholder := tc.GetFirstStoreFromServer(t, 0)
+	follower := tc.GetFirstStoreFromServer(t, 1)
+	scratchRKey := roachpb.RKey(scratchKey)
+	leaseholderRepl := leaseholder.LookupReplica(scratchRKey)
+	followerRepl := follower.LookupReplica(scratchRKey)
+
+	// Wait until we have a valid leader lease.
+	var leaseStatus kvserverpb.LeaseStatus
+	testutils.SucceedsSoon(t, func() error {
+		leaseStatus = leaseholderRepl.CurrentLeaseStatus(ctx)
+		if !leaseStatus.IsValid() || !leaseStatus.OwnedBy(leaseholder.StoreID()) {
+			return errors.Newf("store 1 does not own a valid lease: %v", leaseStatus)
+		}
+		if typ := leaseStatus.Lease.Type(); typ != roachpb.LeaseLeader {
+			return errors.Newf("lease is %s, want a leader lease", typ)
+		}
+		return nil
+	})
+
+	// Bumping the manual clock above MinExpiration causes followers to not be
+	// certain on their lease status.
+	manualClock.Forward(leaseStatus.Lease.MinExpiration.WallTime + 1)
+
+	require.True(t, leaseholderRepl.OwnsValidLease(ctx, leaseholder.Clock().NowAsClockTimestamp()),
+		"leaseholder lost its lease to the clock jump")
+	require.Equal(t, kvserverpb.LeaseState_ERROR, followerRepl.CurrentLeaseStatus(ctx).State,
+		"follower can still evaluate the remote lease")
+
+	require.NoError(t, leaseholder.MergeQueueReplicaCanBeProcessed(
+		ctx, leaseholderRepl, false /* acquireLeaseIfNeeded */),
+		"leaseholder declined a replica it owns the lease for")
+
+	// This is the bug: the follower accepts a replica it can never act on.
+	require.NoError(t, follower.MergeQueueReplicaCanBeProcessed(
+		ctx, followerRepl, false /* acquireLeaseIfNeeded */),
+		"follower declined the replica")
+
+	// At pop time, we try to acquire the lease, but we will fail anyway.
+	require.ErrorContains(t, follower.MergeQueueReplicaCanBeProcessed(
+		ctx, followerRepl, true /* acquireLeaseIfNeeded */),
+		"lease can't be acquired")
+}
