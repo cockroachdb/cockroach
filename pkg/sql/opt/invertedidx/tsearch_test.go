@@ -44,9 +44,12 @@ func TestTryFilterTSVector(t *testing.T) {
 	// remainingFilters contains some or all of the original filters.
 	testCases := []struct {
 		filters string
-		ok      bool
-		tight   bool
-		unique  bool
+		// spanLimit is passed as the spanLimit argument to
+		// TryFilterInvertedIndex for the case.
+		spanLimit int32
+		ok        bool
+		tight     bool
+		unique    bool
 	}{
 		{filters: "t @@ 'a'", ok: true, tight: true, unique: true},
 		{filters: "t @@ '!a'", ok: false, tight: false, unique: false},
@@ -83,6 +86,17 @@ func TestTryFilterTSVector(t *testing.T) {
 		{filters: "t @@ '(a & !b) | c'", ok: true, tight: false, unique: false},
 		{filters: "t @@ '(a & b) | c'", ok: true, tight: true, unique: true},
 		{filters: "t @@ '(a & b) <-> !(c | d)'", ok: true, tight: false, unique: true},
+
+		// optimizer_span_limit bounds the cumulative span count charged while
+		// folding the lexeme leaves. Folding n single-span leaves in a linear
+		// tree charges the size of each intermediate union, i.e. 2+3+...+n =
+		// n*(n+1)/2 - 1 spans (one leaf's span is never charged), so 'a & b & c'
+		// (which parses right-leaning into 3 leaves) charges 2+3 = 5 spans.
+		{filters: "t @@ 'a & b & c'", spanLimit: 4, ok: false},
+		{filters: "t @@ 'a & b & c'", spanLimit: 5, ok: true, tight: true, unique: true},
+		// A single-lexeme query charges no spans (nothing is folded) and is never
+		// bounded out by a positive limit.
+		{filters: "t @@ 'a'", spanLimit: 1, ok: true, tight: true, unique: true},
 	}
 
 	for _, tc := range testCases {
@@ -101,9 +115,9 @@ func TestTryFilterTSVector(t *testing.T) {
 			nil, /* optionalFilters */
 			tab,
 			md.Table(tab).Index(tsvectorOrd),
-			nil,       /* computedColumns */
-			0,         /* spanLimit */
-			func() {}, /* checkCancellation */
+			nil,               /* computedColumns */
+			int(tc.spanLimit), /* spanLimit */
+			func() {},         /* checkCancellation */
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)

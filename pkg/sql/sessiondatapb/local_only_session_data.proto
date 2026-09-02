@@ -808,8 +808,9 @@ message LocalOnlySessionData {
   // BufferedWritesImplicitTxnsEnabled, if set, will make it so that the
   // buffered writes feature is used for implicit txns.
   bool buffered_writes_implicit_txns_enabled = 205;
-  // OptimizerSpanLimit sets the maximum number of constraint spans allowed in
-  // a scan during query optimization. 0 means no limit. Default: 131072.
+  // OptimizerSpanLimit sets the maximum number of constraint spans allowed in a
+  // scan during query optimization. This limit also bounds the index spans
+  // expanded from an inverted-index filter. 0 means no limit. Default: 131072.
   int32 optimizer_span_limit = 207;
   // OptimizerInlinePlaceholderEqualities, when true, allows the
   // InlineConstVar normalization rule to inline placeholder expressions

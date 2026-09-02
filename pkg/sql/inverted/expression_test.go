@@ -85,9 +85,9 @@ func (u *UnknownExpression) Copy() Expression {
 	return &UnknownExpression{tight: u.tight}
 }
 
-// Makes a (shallow) copy of the root node of the expression identified
-// by name, since calls to And() and Or() can modify that root node, and
-// the test wants to preserve the unmodified expression for later use.
+// Makes a (shallow) copy of the root node of the expression identified by name,
+// since calls to SpanBudget.And() and SpanBudget.Or() can modify that root
+// node, and the test wants to preserve the unmodified expression for later use.
 func getExprCopy(
 	t *testing.T, d *datadriven.TestData, name string, exprsByName map[string]Expression,
 ) Expression {
@@ -165,14 +165,14 @@ func TestExpression(t *testing.T) {
 			var name string
 			d.ScanArgs(t, "result", &name)
 			left, right := getLeftAndRightExpr(t, d, exprsByName)
-			expr := And(left, right)
+			expr := (*SpanBudget)(nil).And(left, right)
 			exprsByName[name] = expr
 			return toString(expr)
 		case "or":
 			var name string
 			d.ScanArgs(t, "result", &name)
 			left, right := getLeftAndRightExpr(t, d, exprsByName)
-			expr := Or(left, right)
+			expr := (*SpanBudget)(nil).Or(left, right)
 			exprsByName[name] = expr
 			return toString(expr)
 		case "to-proto":
@@ -333,6 +333,8 @@ type spanExprForTest struct {
 // makeSpanExpression converts a spanExprForTest to a SpanExpression.
 func (expr spanExprForTest) makeSpanExpression() *SpanExpression {
 	var invertedExpr Expression
+	// Tests fold without a span budget; a nil *SpanBudget means no limit.
+	var budget *SpanBudget
 
 	for i := range expr.unionSpans {
 		spanExpr := ExprForSpan(Span{
@@ -342,7 +344,7 @@ func (expr spanExprForTest) makeSpanExpression() *SpanExpression {
 		if invertedExpr == nil {
 			invertedExpr = spanExpr
 		} else {
-			invertedExpr = Or(invertedExpr, spanExpr)
+			invertedExpr = budget.Or(invertedExpr, spanExpr)
 		}
 	}
 
@@ -353,9 +355,9 @@ func (expr spanExprForTest) makeSpanExpression() *SpanExpression {
 		} else {
 			switch expr.operator {
 			case SetIntersection:
-				invertedExpr = And(invertedExpr, child)
+				invertedExpr = budget.And(invertedExpr, child)
 			case SetUnion:
-				invertedExpr = Or(invertedExpr, child)
+				invertedExpr = budget.Or(invertedExpr, child)
 			default:
 				panic(fmt.Sprintf("invalid operator %v", expr.operator))
 			}

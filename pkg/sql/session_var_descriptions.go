@@ -153,7 +153,7 @@ var sessionVarDescriptions = map[string]string{
 	"optimizer_prove_implication_with_virtual_computed_columns":       "Controls whether the optimizer should use virtual computed columns to prove partial index implication.",
 	"optimizer_push_limit_into_project_filtered_scan":                 "Controls whether the optimizer should push limit expressions into projects of filtered scans.",
 	"optimizer_push_offset_into_index_join":                           "Controls whether the optimizer should push offset expressions into index joins.",
-	"optimizer_span_limit":                                            "Sets the maximum number of constraint spans allowed in a scan during query optimization. 0 means no limit.",
+	"optimizer_span_limit":                                            "Sets the maximum number of constraint spans allowed in a scan during query optimization. This limit also bounds the index spans expanded from an inverted-index filter. 0 means no limit.",
 	"optimizer_use_conditional_hoist_fix":                             "Prevents the optimizer from hoisting volatile expressions that are conditionally executed by CASE, COALESCE, or IFERR expressions.",
 	"optimizer_use_delete_range_fast_path":                            "Controls whether the optimizer uses the fast path for DELETE operations using range deletions.",
 	"optimizer_use_exists_filter_hoist_rule":                          "Controls whether the optimizer hoists filters out of EXISTS subqueries.",
