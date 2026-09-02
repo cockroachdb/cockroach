@@ -614,6 +614,44 @@ func (ctx *FmtCtx) FormatURI(uri Expr) {
 	}
 }
 
+// formatURIExpr formats an expression in a URI position that the grammar
+// accepts as a general d_expr rather than restricting it to a string literal
+// or placeholder (e.g. the replication source URI in CREATE VIRTUAL CLUSTER
+// ... FROM REPLICATION). String literals and placeholders are delegated to
+// FormatURI. Any other expression is replaced wholesale with the substitution
+// literal unless the caller asked for full URIs: a secret could hide inside a
+// compound expression (e.g. a string literal nested in a function call), so
+// eliding the entire expression can over-redact but never leak. The
+// substitution literal is itself formatted through FormatURI so that
+// constant-hiding formats render it as '_' and stay reparse-stable.
+//
+// Since the redacted forms replace the expression with a self-delimiting
+// literal, this handles the parentheses a non-delimited d_expr needs; callers
+// must not add their own.
+//
+// TODO(#174325): Once the grammar restricts these positions to
+// string_or_placeholder, callers can use FormatURI directly and this
+// helper can be removed.
+func (ctx *FmtCtx) formatURIExpr(uri Expr) {
+	switch uri.(type) {
+	case *StrVal, *DString, *Placeholder:
+		ctx.FormatURI(uri)
+	default:
+		if ctx.HasAnyFlags(FmtShowPasswords | FmtShowFullURIs) {
+			_, canOmitParentheses := uri.(alreadyDelimitedAsSyntacticDExpr)
+			if !canOmitParentheses {
+				ctx.WriteByte('(')
+			}
+			ctx.FormatNode(uri)
+			if !canOmitParentheses {
+				ctx.WriteByte(')')
+			}
+			return
+		}
+		ctx.FormatURI(NewStrVal(strings.Trim(PasswordSubstitution, "'")))
+	}
+}
+
 // FormatNode recurses into a node for pretty-printing.
 // Flag-driven special cases can hook into this.
 func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
