@@ -71,6 +71,23 @@ IMPORT PGDUMP '*****' WITH OPTIONS (_ = 'path/to/temp') -- identifiers removed
 IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH OPTIONS (temp = 'path/to/temp') -- passwords exposed
 
 parse
+IMPORT INTO simple AVRO DATA ('nodelocal://1/data.avro') WITH data_as_json_records, schema_uri = 'nodelocal://1/schema.json'
+----
+IMPORT INTO simple AVRO DATA ('*****') WITH OPTIONS (data_as_json_records, schema_uri = '*****') -- normalized!
+IMPORT INTO simple AVRO DATA (('*****')) WITH OPTIONS (data_as_json_records, schema_uri = ('*****')) -- fully parenthesized
+IMPORT INTO simple AVRO DATA ('_') WITH OPTIONS (data_as_json_records, schema_uri = '_') -- literals removed
+IMPORT INTO _ AVRO DATA ('*****') WITH OPTIONS (_, _ = '*****') -- identifiers removed
+IMPORT INTO simple AVRO DATA ('nodelocal://1/data.avro') WITH OPTIONS (data_as_json_records, schema_uri = 'nodelocal://1/schema.json') -- passwords exposed
+
+parse
+IMPORT INTO simple AVRO DATA ($1) WITH schema_uri = $2
+----
+IMPORT INTO simple AVRO DATA ($1) WITH OPTIONS (schema_uri = $2) -- normalized!
+IMPORT INTO simple AVRO DATA (($1)) WITH OPTIONS (schema_uri = ($2)) -- fully parenthesized
+IMPORT INTO simple AVRO DATA ($1) WITH OPTIONS (schema_uri = $1) -- literals removed
+IMPORT INTO _ AVRO DATA ($1) WITH OPTIONS (_ = $2) -- identifiers removed
+
+parse
 EXPORT INTO CSV 'a' FROM TABLE a
 ----
 EXPORT INTO CSV '*****' FROM TABLE a -- normalized!
