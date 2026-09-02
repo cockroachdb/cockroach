@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -207,6 +208,16 @@ func alterDatabaseChangefeed(
 		ByIDWithLeased(txn.KV()).Get().
 		Database(ctx, targetSpec.DescID)
 	if err != nil {
+		return err
+	}
+
+	hasSelect, hasChangefeed, err := checkPrivilegesForDescriptor(ctx, p, databaseDescriptor)
+	if err != nil {
+		return err
+	}
+	if err := authorizeUserToCreateChangefeed(
+		ctx, p, newSinkURI, hasSelect, hasChangefeed,
+		tree.ChangefeedLevelDatabase, newOptions.GetConfluentSchemaRegistry()); err != nil {
 		return err
 	}
 
@@ -893,8 +904,18 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 		hasSelectPrivOnAllTables = hasSelectPrivOnAllTables && hasSelect
 		hasChangefeedPrivOnAllTables = hasChangefeedPrivOnAllTables && hasChangefeed
 	}
+	// Before v26.4, require_external_connection_sink did not require non-sink
+	// URIs on ALTER to be external connections. This preserves that when the
+	// USAGE requirement is off.
+	//
+	// TODO(CRDB-66647): drop this along with the setting.
+	var otherExternalURIs []string
+	if sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(&p.ExecCfg().Settings.SV) {
+		otherExternalURIs = append(otherExternalURIs, opts.GetConfluentSchemaRegistry())
+	}
 	if err := authorizeUserToCreateChangefeed(
-		ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables, tree.ChangefeedLevelTable); err != nil {
+		ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables,
+		tree.ChangefeedLevelTable, otherExternalURIs...); err != nil {
 		return nil, nil, nil, nil, err
 	}
 

@@ -225,6 +225,21 @@ var SkipBypassRLSRoleOptionCheck = settings.RegisterBoolSetting(
 		"BYPASSRLS privilege (GRANT SYSTEM BYPASSRLS) exempts a user from RLS",
 	false)
 
+// RequireUsagePrivilegeOnExternalConnections exists to revert the external
+// connection USAGE checks added in v26.4. Turning it off does not remove the
+// checks that were already in place. It is only a failsafe: nothing depends on
+// the setting existing.
+//
+// TODO(CRDB-66647): remove in v27.1 if no one has had to turn it off.
+var RequireUsagePrivilegeOnExternalConnections = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.external_connection.require_usage_privilege.enabled",
+	"determines whether the USAGE privilege checks added in v26.4 are enforced on "+
+		"external connections; checks that predate v26.4, including those on BACKUP, "+
+		"RESTORE, and IMPORT, apply regardless",
+	false,
+)
+
 // PostgresCompatibleOwnershipChecks gates the security-audit fixes that require
 // object ownership to modify or drop an object, aligning authorization with
 // PostgreSQL. It defaults to false so existing deployments opt in.

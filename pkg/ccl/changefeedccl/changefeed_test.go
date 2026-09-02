@@ -4416,6 +4416,67 @@ func TestCoreChangefeedRequiresSelectPrivilege(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("sinkless"))
 }
 
+// TestCoreChangefeedRequiresUsageOnSchemaRegistry asserts that a core changefeed,
+// which has no sink, still requires USAGE on its schema registry connection, and
+// that turning sqlclustersettings.RequireUsagePrivilegeOnExternalConnections off
+// lifts the requirement rather than converting it into the sink-shaped check that
+// changefeedbase.RequireExternalConnectionSink imposes on enterprise feeds.
+func TestCoreChangefeedRequiresUsageOnSchemaRegistry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		schemaReg := cdctest.StartTestSchemaRegistry()
+		defer schemaReg.Close()
+
+		rootDB := sqlutils.MakeSQLRunner(s.DB)
+		rootDB.Exec(t, `CREATE USER user1`)
+		rootDB.Exec(t, `CREATE TABLE table_a (id INT PRIMARY KEY)`)
+		rootDB.Exec(t, `INSERT INTO table_a VALUES (0)`)
+		rootDB.Exec(t, `GRANT SELECT ON table_a TO user1`)
+		rootDB.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION registry AS '%s'`, schemaReg.URL()))
+		// The requirement ships off on this branch; the tests opt in.
+		rootDB.Exec(t,
+			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
+
+		const create = `CREATE CHANGEFEED FOR table_a ` +
+			`WITH format = avro, confluent_schema_registry = 'external://registry'`
+
+		expectSuccess := func() {
+			asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+				coreFeed := feed(t, f, create)
+				defer closeFeed(t, coreFeed)
+				_, err := coreFeed.Next()
+				require.NoError(t, err)
+			})
+		}
+
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectErrCreatingFeed(t, f, create,
+				`user user1 does not have USAGE privilege on external_connection registry`)
+		})
+
+		rootDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION registry TO user1`)
+		expectSuccess()
+
+		// A core changefeed has no sink for require_external_connection_sink to
+		// constrain, so with the requirement off it reaches the registry with no
+		// privilege on it at all.
+		rootDB.Exec(t, `REVOKE USAGE ON EXTERNAL CONNECTION registry FROM user1`)
+		rootDB.ExecMultiple(t,
+			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`,
+			`SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true`,
+		)
+		defer rootDB.ExecMultiple(t,
+			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`,
+			`RESET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled`,
+		)
+		expectSuccess()
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
+}
+
 // TODO(#94757): remove CONTROLCHANGEFEED entirely
 func TestControlChangefeedRoleOption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -4483,6 +4544,9 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 	rootDB.Exec(t, `CREATE TABLE table_b (id int, type type_a)`)
 	rootDB.Exec(t, `INSERT INTO table_a(id) values (0)`)
 	rootDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	// The requirement ships off on this branch; the tests opt in.
+	rootDB.Exec(t,
+		`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
 	withUser := func(t *testing.T, user string, fn func(*sqlutils.SQLRunner)) {
 		password := `password`
 		rootDB.Exec(t, fmt.Sprintf(`ALTER USER %s WITH PASSWORD '%s'`, user, password))
@@ -4520,21 +4584,24 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 	})
 	rootDB.Exec(t, "GRANT CHANGEFEED ON table_b TO user1")
 	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
+		userDB.ExpectErr(t,
+			"user user1 does not have USAGE privilege on external_connection nope",
+			"CREATE CHANGEFEED FOR table_a, table_b INTO 'external://nope'",
+		)
+	})
+	rootDB.Exec(t, "GRANT USAGE ON EXTERNAL CONNECTION nope to user1")
+	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 		userDB.Exec(t,
 			"CREATE CHANGEFEED FOR table_a, table_b INTO 'external://nope'",
 		)
 	})
 
-	// With require_external_connection_sink enabled, the user requires USAGE on the external connection.
 	rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true")
 	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 		userDB.ExpectErr(t,
 			"pq: the CHANGEFEED privilege on all target tables can only be used with external connection sinks",
 			"CREATE CHANGEFEED FOR table_a, table_b INTO 'kafka://nope'",
 		)
-	})
-	rootDB.Exec(t, "GRANT USAGE ON EXTERNAL CONNECTION nope to user1")
-	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 		userDB.Exec(t,
 			"CREATE CHANGEFEED FOR table_a, table_b INTO 'external://nope'",
 		)
