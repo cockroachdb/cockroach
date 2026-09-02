@@ -8,6 +8,7 @@ package changefeedccl
 import (
 	"context"
 	"net/url"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
@@ -54,8 +56,10 @@ func checkPrivilegesForDescriptor(
 //     can use any sink.
 //   - To create a core changefeed, a user requires privilege.SELECT on all targeted tables.
 //   - To create an enterprise changefeed, the user requires privilege.CHANGEFEED on all tables.
-//     If changefeedbase.RequireExternalConnectionSink is enabled, then the changefeed
-//     must be used with an external connection and the user requires privilege.USAGE on it.
+//     If changefeedbase.RequireExternalConnectionSink is enabled, every URI it names must
+//     be an external connection.
+//   - Every external connection the changefeed names, as its sink or otherwise, requires
+//     privilege.USAGE on it, CONTROLCHANGEFEED users included.
 func authorizeUserToCreateChangefeed(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -76,7 +80,10 @@ func authorizeUserToCreateChangefeed(
 	if err != nil {
 		return err
 	}
-	if hasControlChangefeed {
+
+	isCore := sinkURI == ""
+	switch {
+	case hasControlChangefeed:
 		if !hasSelectPrivOnAllTables {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"user %s with %s role option requires the %s privilege on all target tables to be able to run an enterprise changefeed",
@@ -84,52 +91,51 @@ func authorizeUserToCreateChangefeed(
 		}
 		p.BufferClientNotice(ctx, pgnotice.Newf("You are creating a changefeed as a user with the %s role option. %s",
 			roleoption.CONTROLCHANGEFEED, roleoption.ControlChangefeedDeprecationNoticeMsg))
-		return nil
-	}
-
-	if sinkURI == "" {
+	case isCore:
 		if !hasSelectPrivOnAllTables {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				`user %s requires the %s privilege on all target tables to be able to run a core changefeed`,
 				p.User(), privilege.SELECT)
 		}
+	default:
+		if !hasChangefeedPrivOnAllTables {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				`user %s requires the %s privilege on all target tables to be able to run an enterprise changefeed`,
+				p.User(), privilege.CHANGEFEED)
+		}
+	}
+
+	// RequireExternalConnectionSink constrains where an enterprise changefeed may
+	// send data. It has nothing to say about a core changefeed, nor about a
+	// CONTROLCHANGEFEED user, who may use any sink.
+	requireExternalConnectionSink := !isCore && !hasControlChangefeed &&
+		changefeedbase.RequireExternalConnectionSink.Get(&p.ExecCfg().Settings.SV)
+
+	// Confining a changefeed to external connection sinks carries a USAGE
+	// requirement on the connections it names, so either setting turns the
+	// check on. This preserves the pre-v26.4 behavior, where a changefeed
+	// confined to external connection sinks always required USAGE on them.
+	requireUsage := requireExternalConnectionSink ||
+		sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(&p.ExecCfg().Settings.SV)
+
+	// TODO(CRDB-66647): drop this early return along with the setting, at which
+	// point USAGE is required unconditionally.
+	if !requireUsage {
 		return nil
 	}
 
-	if !hasChangefeedPrivOnAllTables {
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			`user %s requires the %s privilege on all target tables to be able to run an enterprise changefeed`,
-			p.User(), privilege.CHANGEFEED)
-	}
-
-	enforceExternalConnections := changefeedbase.RequireExternalConnectionSink.Get(&p.ExecCfg().Settings.SV)
-	if enforceExternalConnections {
-		for _, uriString := range append(otherExternalURIs, sinkURI) {
-			if uriString == "" {
-				continue
-			}
-			uri, err := url.Parse(uriString)
-			if err != nil {
-				return errors.Newf("failed to parse url %s", uriString)
-			}
-			if uri.Scheme == changefeedbase.SinkSchemeExternalConnection {
-				ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, p.InternalSQLTxn())
-				if err != nil {
-					return errors.Wrap(err, "failed to load external connection object")
-				}
-				ecPriv := &syntheticprivilege.ExternalConnectionPrivilege{
-					ConnectionName: ec.ConnectionName(),
-				}
-				if err := p.CheckPrivilege(ctx, ecPriv, privilege.USAGE); err != nil {
-					return err
-				}
-			} else {
-				return pgerror.Newf(
-					pgcode.InsufficientPrivilege,
-					`the %s privilege on all tables can only be used with external connection sinks. see cluster setting %s`,
-					privilege.CHANGEFEED, changefeedbase.RequireExternalConnectionSink.Name(),
-				)
-			}
+	for _, uriString := range slices.Concat(otherExternalURIs, []string{sinkURI}) {
+		if uriString == "" {
+			continue
+		}
+		isExternalConnection, err := checkExternalConnectionUsage(ctx, p, uriString)
+		if err != nil {
+			return err
+		}
+		if !isExternalConnection && requireExternalConnectionSink {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				`the %s privilege on all tables can only be used with external connection sinks. see cluster setting %s`,
+				privilege.CHANGEFEED, changefeedbase.RequireExternalConnectionSink.Name())
 		}
 	}
 
@@ -176,4 +182,27 @@ func AuthorizeChangefeedJobAccess(
 
 func init() {
 	jobsauth.RegisterAuthorizer(jobspb.TypeChangefeed, AuthorizeChangefeedJobAccess)
+}
+
+// checkExternalConnectionUsage requires privilege.USAGE on the external
+// connection uriString names, and reports whether it named one at all.
+func checkExternalConnectionUsage(
+	ctx context.Context, p sql.PlanHookState, uriString string,
+) (isExternalConnection bool, _ error) {
+	uri, err := url.Parse(uriString)
+	if err != nil {
+		return false, errors.Newf("failed to parse url %s", uriString)
+	}
+	if uri.Scheme != changefeedbase.SinkSchemeExternalConnection {
+		return false, nil
+	}
+
+	ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, p.InternalSQLTxn())
+	if err != nil {
+		return true, errors.Wrap(err, "failed to load external connection object")
+	}
+	ecPriv := &syntheticprivilege.ExternalConnectionPrivilege{
+		ConnectionName: ec.ConnectionName(),
+	}
+	return true, p.CheckPrivilege(ctx, ecPriv, privilege.USAGE)
 }

@@ -166,6 +166,7 @@ go_test(
         "//pkg/ccl",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
+        "//pkg/cloud/externalconn/providers",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/cloud/nodelocal",
         "//pkg/cloud/userfile",

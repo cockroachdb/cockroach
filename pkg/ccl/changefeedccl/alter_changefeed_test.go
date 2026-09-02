@@ -93,6 +93,9 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 	enableEnterprise := utilccl.TestingDisableEnterprise()
 	enableEnterprise()
 
+	// The requirement ships off on this branch; the tests opt in.
+	rootDB.Exec(t,
+		`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
 	withUser := func(t *testing.T, user string, fn func(*sqlutils.SQLRunner)) {
 		password := `password`
 		rootDB.Exec(t, fmt.Sprintf(`ALTER USER %s WITH PASSWORD '%s'`, user, password))
@@ -140,14 +143,9 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 			)
 		})
 		rootDB.Exec(t, `GRANT CHANGEFEED ON table_c TO user1`)
-		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
-			userDB.Exec(t,
-				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
-			)
-		})
 
-		// With require_external_connection_sink enabled, the user requires USAGE on the external connection.
-		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true")
+		// Permission to alter the changefeed is not permission to retarget it at
+		// any connection.
 		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t,
 				"user user1 does not have USAGE privilege on external_connection second",
@@ -160,7 +158,6 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
 			)
 		})
-		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = false")
 	})
 
 	// TODO(#94757): remove CONTROLCHANGEFEED entirely
