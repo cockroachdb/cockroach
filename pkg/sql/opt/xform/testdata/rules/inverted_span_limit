@@ -1,0 +1,290 @@
+# Tests that optimizer_span_limit bounds the number of index spans materialized
+# while building an inverted expression, and that inverted-index acceleration is
+# abandoned (a non-inverted scan is planned) once the limit is exceeded. This
+# guards against the planning-time OOM in cockroachdb/cockroach#173721.
+#
+# The charge is the cumulative size of every intermediate span slice
+# materialized during the fold, so it depends on the operand's encoding and the
+# fold shape, not just the leaf count:
+#   - An AND fold (intersection) charges each intermediate SpansToRead union.
+#     Folding n leaves left-associatively charges 2+3+...+n (the first leaf's
+#     span is not charged).
+#   - An OR fold (union) additionally charges FactoredUnionSpans, so it charges
+#     roughly twice per step.
+#   - Contiguous keys collapse in unionSpans and lower the charge.
+
+exec-ddl
+CREATE TABLE j_tab (
+  k INT PRIMARY KEY,
+  j JSONB,
+  INVERTED INDEX j_inv (j)
+)
+----
+
+exec-ddl
+CREATE TABLE arr_tab (
+  k INT PRIMARY KEY,
+  a INT[],
+  INVERTED INDEX a_inv (a)
+)
+----
+
+exec-ddl
+CREATE TABLE s_tab (
+  k INT PRIMARY KEY,
+  s STRING,
+  INVERTED INDEX s_inv (s gin_trgm_ops)
+)
+----
+
+exec-ddl
+CREATE TABLE t_tab (
+  k INT PRIMARY KEY,
+  v TSVECTOR,
+  INVERTED INDEX v_inv (v)
+)
+----
+
+# JSON array containment. Each of the 3 scalar element leaves is built as an OR
+# of the empty expression with the element's single span, and an OR fold charges
+# both SpansToRead and FactoredUnionSpans, so each leaf costs 2 (6 total). The
+# elements are then AND-folded, charging 2+3 = 5. Total: 11.
+opt expect-not=GenerateInvertedIndexScans set=(optimizer_span_limit=10)
+SELECT k FROM j_tab WHERE j @> '[1, 2, 3]'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null j:2!null
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan j_tab
+      │    ├── columns: k:1!null j:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── j:2 @> '[1, 2, 3]' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+opt expect=GenerateInvertedIndexScans set=(optimizer_span_limit=11)
+SELECT k FROM j_tab WHERE j @> '[1, 2, 3]'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    ├── union spans: empty
+      │         │    └── INTERSECTION
+      │         │         ├── span expression
+      │         │         │    ├── tight: true, unique: true
+      │         │         │    └── union spans: [Arr/1, Arr/1]
+      │         │         └── span expression
+      │         │              ├── tight: true, unique: true
+      │         │              └── union spans: [Arr/2, Arr/2]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: [Arr/3, Arr/3]
+      ├── key: (1)
+      └── scan j_tab@j_inv,inverted
+           ├── columns: k:1!null j_inverted_key:5!null
+           └── inverted constraint: /5/1
+                └── spans
+                     ├── [Arr/1, Arr/1]
+                     ├── [Arr/2, Arr/2]
+                     └── [Arr/3, Arr/3]
+
+# INT[] array containment, for contrast with the JSON case above. INT[] leaves
+# are plain single-span expressions (not the Or-with-empty JSON uses), so they
+# add nothing; here the 3 elements are non-contiguous, so their spans do not
+# collapse in unionSpans and the AND fold charges 2+3 = 5. (Contiguous elements
+# like {1,2,3} would collapse to a single span and charge only 1+1 = 2.)
+opt expect-not=GenerateInvertedIndexScans set=(optimizer_span_limit=4)
+SELECT k FROM arr_tab WHERE a @> '{10, 20, 30}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null a:2!null
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan arr_tab
+      │    ├── columns: k:1!null a:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── a:2 @> ARRAY[10,20,30] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+opt expect=GenerateInvertedIndexScans set=(optimizer_span_limit=5)
+SELECT k FROM arr_tab WHERE a @> '{10, 20, 30}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    ├── union spans: empty
+      │         │    └── INTERSECTION
+      │         │         ├── span expression
+      │         │         │    ├── tight: true, unique: true
+      │         │         │    └── union spans: [10, 10]
+      │         │         └── span expression
+      │         │              ├── tight: true, unique: true
+      │         │              └── union spans: [20, 20]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: [30, 30]
+      ├── key: (1)
+      └── scan arr_tab@a_inv,inverted
+           ├── columns: k:1!null a_inverted_key:5!null
+           └── inverted constraint: /5/1
+                └── spans
+                     ├── [10, 10]
+                     ├── [20, 20]
+                     └── [30, 30]
+
+# Trigram LIKE. "foobar" yields 4 trigrams (foo, oob, oba, bar) which are
+# AND-folded (allMustMatch); each intersect step charges its SpansToRead union,
+# so 2+3+4 = 9.
+opt expect-not=GenerateInvertedIndexScans set=(optimizer_span_limit=8)
+SELECT k FROM s_tab WHERE s LIKE '%foobar%'
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null s:2!null
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan s_tab
+      │    ├── columns: k:1!null s:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── s:2 LIKE '%foobar%' [outer=(2), constraints=(/2: (/NULL - ])]
+
+opt expect=GenerateInvertedIndexScans set=(optimizer_span_limit=9)
+SELECT k FROM s_tab WHERE s LIKE '%foobar%'
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null s:2!null
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── index-join s_tab
+      │    ├── columns: k:1!null s:2
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── inverted-filter
+      │         ├── columns: k:1!null
+      │         ├── inverted expression: /5
+      │         │    ├── tight: false, unique: false
+      │         │    ├── union spans: empty
+      │         │    └── INTERSECTION
+      │         │         ├── span expression
+      │         │         │    ├── tight: false, unique: false
+      │         │         │    ├── union spans: empty
+      │         │         │    └── INTERSECTION
+      │         │         │         ├── span expression
+      │         │         │         │    ├── tight: false, unique: false
+      │         │         │         │    ├── union spans: empty
+      │         │         │         │    └── INTERSECTION
+      │         │         │         │         ├── span expression
+      │         │         │         │         │    ├── tight: false, unique: true
+      │         │         │         │         │    └── union spans: ["bar", "bar"]
+      │         │         │         │         └── span expression
+      │         │         │         │              ├── tight: false, unique: false
+      │         │         │         │              └── union spans: ["foo", "foo"]
+      │         │         │         └── span expression
+      │         │         │              ├── tight: false, unique: false
+      │         │         │              └── union spans: ["oba", "oba"]
+      │         │         └── span expression
+      │         │              ├── tight: false, unique: false
+      │         │              └── union spans: ["oob", "oob"]
+      │         ├── key: (1)
+      │         └── scan s_tab@s_inv,inverted
+      │              ├── columns: k:1!null s_inverted_key:5!null
+      │              └── inverted constraint: /5/1
+      │                   └── spans
+      │                        ├── ["bar", "bar"]
+      │                        ├── ["foo", "foo"]
+      │                        ├── ["oba", "oba"]
+      │                        └── ["oob", "oob"]
+      └── filters
+           └── s:2 LIKE '%foobar%' [outer=(2), constraints=(/2: (/NULL - ])]
+
+# tsquery AND-chain. 3 lexeme leaves are AND-folded, charging 2+3 = 5.
+opt expect-not=GenerateInvertedIndexScans set=(optimizer_span_limit=4)
+SELECT k FROM t_tab WHERE v @@ 'a & b & c'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null v:2
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan t_tab
+      │    ├── columns: k:1!null v:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── v:2 @@ '''a'' & ''b'' & ''c''' [outer=(2), immutable]
+
+opt expect=GenerateInvertedIndexScans set=(optimizer_span_limit=5)
+SELECT k FROM t_tab WHERE v @@ 'a & b & c'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /5
+      │    ├── tight: true, unique: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    └── union spans: ["a", "a"]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              ├── union spans: empty
+      │              └── INTERSECTION
+      │                   ├── span expression
+      │                   │    ├── tight: true, unique: true
+      │                   │    └── union spans: ["b", "b"]
+      │                   └── span expression
+      │                        ├── tight: true, unique: true
+      │                        └── union spans: ["c", "c"]
+      ├── key: (1)
+      └── scan t_tab@v_inv,inverted
+           ├── columns: k:1!null v_inverted_key:5!null
+           └── inverted constraint: /5/1
+                └── spans
+                     ├── ["a", "a"]
+                     ├── ["b", "b"]
+                     └── ["c", "c"]

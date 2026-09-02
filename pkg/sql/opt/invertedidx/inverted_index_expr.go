@@ -74,7 +74,9 @@ func NewBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, inter
 //     reduce the number of false positives returned by the span expression.
 //
 // spanLimit bounds the number of prefix spans generated for multi-column
-// inverted indexes; see ConstrainIndexPrefixCols.
+// inverted indexes (see ConstrainIndexPrefixCols) and the number of index
+// spans materialized while folding the filters into a span expression (see
+// inverted.SpanBudget).
 func TryFilterInvertedIndex(
 	ctx context.Context,
 	evalCtx *eval.Context,
@@ -152,17 +154,21 @@ func TryFilterInvertedIndex(
 		}
 	}
 
+	// budget bounds the spans that folding the filters may materialize. Note
+	// that for simplicity we give a full limit here even if some of it has been
+	// used up for the prefix columns' constraints.
+	budget := inverted.NewSpanBudget(int64(spanLimit))
 	var invertedExpr inverted.Expression
 	var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
 	for i := range filters {
 		invertedExprLocal, remFiltersLocal, pfStateLocal := extractInvertedFilterCondition(
-			ctx, evalCtx, factory, filters[i].Condition, filterPlanner,
+			ctx, evalCtx, factory, budget, filters[i].Condition, filterPlanner,
 		)
 		if invertedExpr == nil {
 			invertedExpr = invertedExprLocal
 			pfState = pfStateLocal
 		} else {
-			invertedExpr = inverted.And(invertedExpr, invertedExprLocal)
+			invertedExpr = budget.And(invertedExpr, invertedExprLocal)
 			// Do pre-filtering using the first of the conjuncts that provided
 			// non-nil pre-filtering state.
 			if pfState == nil {
@@ -171,6 +177,9 @@ func TryFilterInvertedIndex(
 		}
 		if remFiltersLocal != nil {
 			remainingFilters = append(remainingFilters, factory.ConstructFiltersItem(remFiltersLocal))
+		}
+		if budget.Exceeded() {
+			return nil, nil, nil, nil, false
 		}
 	}
 
@@ -613,29 +622,31 @@ func getInvertedExpr(
 // expressions, and returns the resulting inverted.Expression. Delegates
 // evaluation of leaf expressions to the given evalInvertedExprLeaf function.
 func evalInvertedExpr(
-	expr tree.TypedExpr, evalInvertedExprLeaf func(expr tree.TypedExpr) (inverted.Expression, error),
+	expr tree.TypedExpr,
+	evalInvertedExprLeaf func(expr tree.TypedExpr) (inverted.Expression, error),
+	budget *inverted.SpanBudget,
 ) (inverted.Expression, error) {
 	switch t := expr.(type) {
 	case *tree.AndExpr:
-		leftExpr, err := evalInvertedExpr(t.TypedLeft(), evalInvertedExprLeaf)
+		leftExpr, err := evalInvertedExpr(t.TypedLeft(), evalInvertedExprLeaf, budget)
 		if err != nil {
 			return nil, err
 		}
-		rightExpr, err := evalInvertedExpr(t.TypedRight(), evalInvertedExprLeaf)
+		rightExpr, err := evalInvertedExpr(t.TypedRight(), evalInvertedExprLeaf, budget)
 		if err != nil {
 			return nil, err
 		}
 		if leftExpr == nil || rightExpr == nil {
 			return nil, nil
 		}
-		return inverted.And(leftExpr, rightExpr), nil
+		return budget.And(leftExpr, rightExpr), nil
 
 	case *tree.OrExpr:
-		leftExpr, err := evalInvertedExpr(t.TypedLeft(), evalInvertedExprLeaf)
+		leftExpr, err := evalInvertedExpr(t.TypedLeft(), evalInvertedExprLeaf, budget)
 		if err != nil {
 			return nil, err
 		}
-		rightExpr, err := evalInvertedExpr(t.TypedRight(), evalInvertedExprLeaf)
+		rightExpr, err := evalInvertedExpr(t.TypedRight(), evalInvertedExprLeaf, budget)
 		if err != nil {
 			return nil, err
 		}
@@ -645,7 +656,7 @@ func evalInvertedExpr(
 		if rightExpr == nil {
 			return leftExpr, nil
 		}
-		return inverted.Or(leftExpr, rightExpr), nil
+		return budget.Or(leftExpr, rightExpr), nil
 
 	default:
 		return evalInvertedExprLeaf(expr)
@@ -663,7 +674,9 @@ type invertedFilterPlanner interface {
 	// - remaining filters that must be applied if the inverted expression is not
 	//   tight, and
 	// - pre-filterer state that can be used to reduce false positives.
-	extractInvertedFilterConditionFromLeaf(ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr) (
+	extractInvertedFilterConditionFromLeaf(
+		ctx context.Context, evalCtx *eval.Context, budget *inverted.SpanBudget, expr opt.ScalarExpr,
+	) (
 		invertedExpr inverted.Expression,
 		remainingFilters opt.ScalarExpr,
 		_ *invertedexpr.PreFiltererStateForInvertedFilterer,
@@ -688,6 +701,7 @@ func extractInvertedFilterCondition(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	factory *norm.Factory,
+	budget *inverted.SpanBudget,
 	filterCond opt.ScalarExpr,
 	filterPlanner invertedFilterPlanner,
 ) (
@@ -697,8 +711,8 @@ func extractInvertedFilterCondition(
 ) {
 	switch t := filterCond.(type) {
 	case *memo.AndExpr:
-		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Left, filterPlanner)
-		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Right, filterPlanner)
+		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, budget, t.Left, filterPlanner)
+		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, budget, t.Right, filterPlanner)
 		if remLeft == nil {
 			remainingFilters = remRight
 		} else if remRight == nil {
@@ -706,21 +720,21 @@ func extractInvertedFilterCondition(
 		} else {
 			remainingFilters = factory.ConstructAnd(remLeft, remRight)
 		}
-		return inverted.And(l, r), remainingFilters, nil
+		return budget.And(l, r), remainingFilters, nil
 
 	case *memo.OrExpr:
-		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Left, filterPlanner)
-		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Right, filterPlanner)
+		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, budget, t.Left, filterPlanner)
+		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, budget, t.Right, filterPlanner)
 		if remLeft != nil || remRight != nil {
 			// If either child has remaining filters, we must return the original
 			// condition as the remaining filter. It would be incorrect to return
 			// only part of the original condition.
 			remainingFilters = filterCond
 		}
-		return inverted.Or(l, r), remainingFilters, nil
+		return budget.Or(l, r), remainingFilters, nil
 
 	default:
-		return filterPlanner.extractInvertedFilterConditionFromLeaf(ctx, evalCtx, filterCond)
+		return filterPlanner.extractInvertedFilterConditionFromLeaf(ctx, evalCtx, budget, filterCond)
 	}
 }
 

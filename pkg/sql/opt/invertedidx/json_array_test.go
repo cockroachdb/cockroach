@@ -240,8 +240,11 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 	jsonOrd, arrayOrd := 1, 2
 
 	testCases := []struct {
-		filters          string
-		indexOrd         int
+		filters  string
+		indexOrd int
+		// spanLimit is passed as the spanLimit argument to
+		// TryFilterInvertedIndex for the case.
+		spanLimit        int32
 		ok               bool
 		tight            bool
 		unique           bool
@@ -1180,6 +1183,68 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			ok:       true,
 			tight:    true,
 		},
+
+		// optimizer_span_limit bounds the cumulative number of index spans a
+		// fold may materialize before it abandons acceleration. The precise
+		// charge depends on the operand's encoding, not just the number of
+		// leaves: contiguous keys collapse in unionSpans, and an OR fold
+		// charges roughly twice an AND fold since each union step retains both
+		// SpansToRead and FactoredUnionSpans. The boundaries below are the
+		// exact observed charge for each fold; a limit one below the charge
+		// bails while a limit at the charge accelerates.
+		{
+			// Array containment (AND fold) of {1,2,3} charges 2 spans; over the
+			// limit it falls back to a scan.
+			filters:   "a @> '{1, 2, 3}'",
+			indexOrd:  arrayOrd,
+			spanLimit: 1,
+			ok:        false,
+		},
+		{
+			// The same filter is accelerated when the limit accommodates it.
+			filters:   "a @> '{1, 2, 3}'",
+			indexOrd:  arrayOrd,
+			spanLimit: 2,
+			ok:        true,
+			tight:     true,
+			unique:    true,
+		},
+		{
+			// Array overlaps (OR fold) of {1,2,3} charges 4 spans.
+			filters:   "a && '{1, 2, 3}'",
+			indexOrd:  arrayOrd,
+			spanLimit: 3,
+			ok:        false,
+		},
+		{
+			// The same overlaps filter is accelerated at the exact charge.
+			filters:   "a && '{1, 2, 3}'",
+			indexOrd:  arrayOrd,
+			spanLimit: 4,
+			ok:        true,
+			tight:     true,
+			unique:    false,
+		},
+		{
+			// JSON array containment charges 11: each of the 3 scalar leaves is
+			// built as an OR with the empty expression (charging both SpansToRead
+			// and FactoredUnionSpans, so 2 per leaf = 6), then the elements are
+			// AND-folded over non-collapsing keys (2+3 = 5).
+			filters:   "j @> '[1, 2, 3]'",
+			indexOrd:  jsonOrd,
+			spanLimit: 10,
+			ok:        false,
+		},
+		{
+			// A single-element operand materializes one span with no fold and is
+			// never bounded out by a positive limit.
+			filters:   "a @> '{1}'",
+			indexOrd:  arrayOrd,
+			spanLimit: 1,
+			ok:        true,
+			tight:     true,
+			unique:    true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1198,9 +1263,9 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			nil, /* optionalFilters */
 			tab,
 			md.Table(tab).Index(tc.indexOrd),
-			nil,       /* computedColumns */
-			0,         /* spanLimit */
-			func() {}, /* checkCancellation */
+			nil,               /* computedColumns */
+			int(tc.spanLimit), /* spanLimit */
+			func() {},         /* checkCancellation */
 		)
 		if tc.ok != ok {
 			t.Fatalf("[%s]: expected %v, got %v", tc.filters, tc.ok, ok)

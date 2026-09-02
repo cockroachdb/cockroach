@@ -768,8 +768,9 @@ message LocalOnlySessionData {
   // OptimizerUseMinRowCountAntiJoinFix, when true, causes the
   // optimizer_min_row_count setting to be applied correctly to anti-joins.
   bool optimizer_use_min_row_count_anti_join_fix = 203;
-  // OptimizerSpanLimit sets the maximum number of constraint spans allowed in
-  // a scan during query optimization. 0 means no limit. Default: 131072.
+  // OptimizerSpanLimit sets the maximum number of constraint spans allowed in a
+  // scan during query optimization. This limit also bounds the index spans
+  // expanded from an inverted-index filter. 0 means no limit. Default: 131072.
   int32 optimizer_span_limit = 207;
   // OptimizerUseHistogramsForWithScans, when true, allows the optimizer to
   // propagate histograms from a CTE's bound expression to the WithScan

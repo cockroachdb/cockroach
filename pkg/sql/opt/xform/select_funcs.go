@@ -1768,8 +1768,6 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			scanPrivate.Table,
 			index,
 			nil, /* computedColumns */
-			// Note that here the span limit doesn't matter given that we
-			// short-circuit above when any prefix columns are present.
 			c.optimizerSpanLimit(),
 			c.checkCancellation,
 		)

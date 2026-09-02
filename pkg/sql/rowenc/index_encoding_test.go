@@ -518,7 +518,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexTableKeys(left, nil, descpb.LatestIndexDescriptorVersion)
 		require.NoError(t, err)
 
-		invertedExpr, err := EncodeContainingInvertedIndexSpans(context.Background(), &evalCtx, right)
+		invertedExpr, err := EncodeContainingInvertedIndexSpans(context.Background(), &evalCtx, nil /* budget */, right)
 		require.NoError(t, err)
 
 		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
@@ -658,7 +658,7 @@ func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexTableKeys(indexedValue, nil, descpb.LatestIndexDescriptorVersion)
 		require.NoError(t, err)
 
-		invertedExpr, err := EncodeContainedInvertedIndexSpans(context.Background(), &evalCtx, value)
+		invertedExpr, err := EncodeContainedInvertedIndexSpans(context.Background(), &evalCtx, nil /* budget */, value)
 		require.NoError(t, err)
 
 		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
@@ -909,7 +909,7 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexTableKeys(indexedValue, nil, descpb.PrimaryIndexWithStoredColumnsVersion)
 		require.NoError(t, err)
 
-		invertedExpr, err := EncodeOverlapsInvertedIndexSpans(context.Background(), &evalCtx, value)
+		invertedExpr, err := EncodeOverlapsInvertedIndexSpans(context.Background(), &evalCtx, nil /* budget */, value)
 		require.NoError(t, err)
 
 		spanExpr, conversionOk := invertedExpr.(*inverted.SpanExpression)
@@ -1081,7 +1081,7 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 		require.NoError(t, err)
 
 		typedExpr := makeTrigramBinOp(t, indexedValue, value, searchType)
-		invertedExpr, err := EncodeTrigramSpans(value, searchType != similar)
+		invertedExpr, err := EncodeTrigramSpans(value, searchType != similar, nil /* budget */)
 		require.NoError(t, err)
 
 		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
@@ -1173,7 +1173,7 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 			valid := nTrigrams > 0
 			unique := nTrigrams == 1
 			if !valid {
-				_, err := EncodeTrigramSpans(right, searchType != similar /* allMustMatch */)
+				_, err := EncodeTrigramSpans(right, searchType != similar /* allMustMatch */, nil /* budget */)
 				require.Error(t, err)
 				continue
 			}
@@ -1223,13 +1223,13 @@ func TestEncodeTrigramInvertedIndexSpansError(t *testing.T) {
 		{"#$(*)", true, true},
 	}
 	for _, tc := range testCases {
-		_, err := EncodeTrigramSpans(tc.input, true /* allMustMatch */)
+		_, err := EncodeTrigramSpans(tc.input, true /* allMustMatch */, nil /* budget */)
 		if tc.allMustMatchErr {
 			require.Error(t, err)
 		} else {
 			require.NoError(t, err)
 		}
-		_, err = EncodeTrigramSpans(tc.input, false /* allMustMatch */)
+		_, err = EncodeTrigramSpans(tc.input, false /* allMustMatch */, nil /* budget */)
 		if tc.anyMustMatchErr {
 			require.Error(t, err)
 		} else {

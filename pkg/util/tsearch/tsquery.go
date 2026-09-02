@@ -190,11 +190,17 @@ func (q TSQuery) String() string {
 
 // GetInvertedExpr returns the inverted expression that can be used to search
 // an index.
-func (q TSQuery) GetInvertedExpr() (expr inverted.Expression, err error) {
-	return q.root.getInvertedExpr()
+//
+// budget (nil for no limit) bounds the spans that folding the query's lexeme
+// leaves may materialize; see inverted.SpanBudget. When exceeded, a
+// NonInvertedColExpression is returned.
+func (q TSQuery) GetInvertedExpr(
+	budget *inverted.SpanBudget,
+) (expr inverted.Expression, err error) {
+	return q.root.getInvertedExpr(budget)
 }
 
-func (n *tsNode) getInvertedExpr() (inverted.Expression, error) {
+func (n *tsNode) getInvertedExpr(budget *inverted.SpanBudget) (inverted.Expression, error) {
 	switch n.op {
 	case invalid:
 		// We're looking at a lexeme match.
@@ -239,8 +245,8 @@ func (n *tsNode) getInvertedExpr() (inverted.Expression, error) {
 	case followedby:
 		fallthrough
 	case and:
-		l, lErr := n.l.getInvertedExpr()
-		r, rErr := n.r.getInvertedExpr()
+		l, lErr := n.l.getInvertedExpr(budget)
+		r, rErr := n.r.getInvertedExpr(budget)
 		if lErr != nil && rErr != nil {
 			// We need a positive match on at least one side.
 			return nil, lErr
@@ -256,7 +262,7 @@ func (n *tsNode) getInvertedExpr() (inverted.Expression, error) {
 			//nolint:returnerrcheck
 			return l, nil
 		}
-		expr := inverted.And(l, r)
+		expr := budget.And(l, r)
 		if n.op == followedby {
 			// If we have a followedby match, we have to re-check the results of the
 			// match after we get them from the inverted index - just because both
@@ -266,8 +272,8 @@ func (n *tsNode) getInvertedExpr() (inverted.Expression, error) {
 		}
 		return expr, nil
 	case or:
-		l, lErr := n.l.getInvertedExpr()
-		r, rErr := n.r.getInvertedExpr()
+		l, lErr := n.l.getInvertedExpr(budget)
+		r, rErr := n.r.getInvertedExpr(budget)
 		if lErr != nil {
 			// We need a positive match on both sides, so we return an error here.
 			// For example, searching for a | !b would require a full scan, since some
@@ -276,7 +282,7 @@ func (n *tsNode) getInvertedExpr() (inverted.Expression, error) {
 		} else if rErr != nil {
 			return nil, rErr
 		}
-		return inverted.Or(l, r), nil
+		return budget.Or(l, r), nil
 	case not:
 		// A not would require more advanced machinery than we have, so for now
 		// we'll just assume we can't perform an inverted expression search on a

@@ -90,7 +90,7 @@ func (a arrayIntersectionExpr) Convert(
 	d1Span := inverted.MakeSingleValSpan(intToEncodedInvertedVal(d / 10))
 	d2Span := inverted.MakeSingleValSpan(intToEncodedInvertedVal(d % 10))
 	// The tightness only affects the optimizer, so arbitrarily use true.
-	expr := inverted.And(inverted.ExprForSpan(d1Span, true),
+	expr := (*inverted.SpanBudget)(nil).And(inverted.ExprForSpan(d1Span, true),
 		inverted.ExprForSpan(d2Span, true))
 	return expr.(*inverted.SpanExpression).ToProto(), d, nil
 }
@@ -141,7 +141,7 @@ func (jsonIntersectionExpr) Convert(
 	d1Span := inverted.MakeSingleValSpan(keys[0])
 	d2Span := inverted.MakeSingleValSpan(keys[1])
 	// The tightness only affects the optimizer, so arbitrarily use false.
-	expr := inverted.And(inverted.ExprForSpan(d1Span, false),
+	expr := (*inverted.SpanBudget)(nil).And(inverted.ExprForSpan(d1Span, false),
 		inverted.ExprForSpan(d2Span, false))
 	return expr.(*inverted.SpanExpression).ToProto(), nil, nil
 }
@@ -181,7 +181,7 @@ func (jsonUnionExpr) Convert(
 	d1Span := inverted.MakeSingleValSpan(keys[0])
 	d2Span := inverted.MakeSingleValSpan(keys[1])
 	// The tightness only affects the optimizer, so arbitrarily use true.
-	expr := inverted.Or(inverted.ExprForSpan(d1Span, true),
+	expr := (*inverted.SpanBudget)(nil).Or(inverted.ExprForSpan(d1Span, true),
 		inverted.ExprForSpan(d2Span, true))
 	return expr.(*inverted.SpanExpression).ToProto(), nil, nil
 }

@@ -30,7 +30,7 @@ var _ invertedFilterPlanner = &tsqueryFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf implements the invertedFilterPlanner
 // interface.
 func (t *tsqueryFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	_ context.Context, _ *eval.Context, expr opt.ScalarExpr,
+	_ context.Context, evalCtx *eval.Context, budget *inverted.SpanBudget, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,
@@ -67,7 +67,7 @@ func (t *tsqueryFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	}
 	q := d.(*tree.DTSQuery).TSQuery
 	var err error
-	invertedExpr, err = q.GetInvertedExpr()
+	invertedExpr, err = q.GetInvertedExpr(budget)
 	if err != nil {
 		// An inverted expression could not be extracted.
 		return inverted.NonInvertedColExpression{}, expr, nil
