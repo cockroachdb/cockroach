@@ -15,7 +15,7 @@ import (
 
 // ParseGroupsClaim returns a deduplicated, lowercased list of groups
 // taken from tok[claimName]. The claim may be a JSON array or a
-// comma/space-separated string.
+// comma-separated string.
 func ParseGroupsClaim(token jwt.Token, claim string) ([]string, error) {
 	raw, ok := token.Get(claim)
 	if !ok {
@@ -63,12 +63,12 @@ func normalize(rawGroups any) ([]string, error) {
 		for _, evaluatedGroup := range evaluatedGroups {
 			groups = appendGroup(groups, fmt.Sprint(evaluatedGroup))
 		}
-	case string: // comma- or space-separated string, e.g "A, B" or "A B"
-		separator := ","
-		if !strings.Contains(evaluatedGroups, ",") {
-			separator = " "
-		}
-		for _, evaluatedGroup := range strings.Split(evaluatedGroups, separator) {
+	case string: // comma-separated string, e.g. "A, B"
+		// Only commas separate groups. Splitting on spaces would break a single
+		// group whose name contains a space (e.g. "admin readers") into multiple
+		// groups, which can grant unintended SQL role memberships. IdPs that
+		// return multiple groups should encode them as a JSON array.
+		for evaluatedGroup := range strings.SplitSeq(evaluatedGroups, ",") {
 			groups = appendGroup(groups, evaluatedGroup)
 		}
 	default:

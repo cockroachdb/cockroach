@@ -63,7 +63,10 @@ func TestAuthorizationJWT_ExtractGroups(t *testing.T) {
 		// groups already present in the token ­– no user-info call.
 		{"json_array", []any{"OwnerS", " userS "}, nil, []string{"owners", "users"}, ""},
 		{"comma_separated", "A,  b ,a", nil, []string{"a", "b"}, ""},
-		{"space_separated", "Foo Bar baz", nil, []string{"bar", "baz", "foo"}, ""},
+		// A space-containing group name is a single group, never split on spaces:
+		// splitting would let "admin readers" grant the admin role.
+		{"space_in_name", "admin readers", nil, []string{"admin readers"}, ""},
+		{"comma_wins_over_space", "admin readers,other", nil, []string{"admin readers", "other"}, ""},
 
 		// claim missing or malformed – fall back to user-info.
 		{"userinfo_success", nil, []string{"team1"}, []string{"team1"}, ""},
