@@ -161,7 +161,7 @@ func TestConfluentSchemaRegistryLookup(t *testing.T) {
 		reg schemaRegistry, subject string, wantSchema string, strategy changefeedbase.AvroVersionStrategy,
 	) (int32, error) {
 		return reg.LookupSchemaIDForSubject(ctx, subject, wantSchema, strategy,
-			func(registeredSchema string) error {
+			func(registeredSchema string, _ bool) error {
 				if registeredSchema != wantSchema {
 					return errors.New(rejected)
 				}
@@ -227,8 +227,12 @@ func TestConfluentSchemaRegistryLookup(t *testing.T) {
 		require.NoError(t, err)
 
 		var seen []string
-		record := func(registeredSchema string) error {
+		var validations int
+		record := func(registeredSchema string, alreadyValidated bool) error {
 			seen = append(seen, registeredSchema)
+			if !alreadyValidated {
+				validations++
+			}
 			return nil
 		}
 		wantID, err := reg.LookupSchemaIDForSubject(ctx, "subject1", schemaA, latest, record)
@@ -241,11 +245,15 @@ func TestConfluentSchemaRegistryLookup(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, wantID, id)
 		require.Equal(t, []string{schemaA, schemaA}, seen)
+		require.Equal(t, 1, validations)
 
-		// A hit that accept rejects fails the lookup rather than handing back
-		// the cached id.
+		// A hit can still fail while rebuilding caller-local state from the
+		// cached schema, even though compatibility has already been validated.
 		_, err = reg.LookupSchemaIDForSubject(ctx, "subject1", schemaA, latest,
-			func(string) error { return errors.New(rejected) })
+			func(_ string, alreadyValidated bool) error {
+				require.True(t, alreadyValidated)
+				return errors.New(rejected)
+			})
 		require.ErrorContains(t, err, rejected)
 
 		// A different strategy is a distinct entry, so it has to go back to
@@ -312,7 +320,8 @@ func TestConfluentSchemaRegistryLookup(t *testing.T) {
 
 		var seen []string
 		id, err := reg.LookupSchemaIDForSubject(ctx, "subject1", schemaA, latestCompatible,
-			func(registeredSchema string) error {
+			func(registeredSchema string, alreadyValidated bool) error {
+				require.False(t, alreadyValidated)
 				seen = append(seen, registeredSchema)
 				if registeredSchema != schemaA {
 					return errors.New(rejected)
