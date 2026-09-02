@@ -787,8 +787,11 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutEngineKey(key EngineKey, value []byte) error
 
-	// LogData adds the specified data to the RocksDB WAL. The data is
-	// uninterpreted by RocksDB (i.e. not added to the memtable or sstables).
+	// LogData adds the specified data to the Pebble WAL. The data is
+	// uninterpreted by Pebble (i.e. not added to the memtable or sstables) and
+	// does not count towards Count(): a batch of only LogData records reports
+	// Empty() == true, but is non-empty for commit purposes and thus forces a
+	// sync of an otherwise empty batch (see Commit).
 	//
 	// It is safe to modify the contents of the arguments after LogData returns.
 	LogData(data []byte) error
@@ -1174,11 +1177,17 @@ type WriteBatch interface {
 	// OS, and it may be lost if the process terminates.
 	//
 	// This is a noop unless the batch was created via NewBatch().
+	//
+	// Committing an empty batch is a no-op even when sync is true: it does not
+	// touch the WAL, and is not a durability barrier for prior unsynced writes.
+	// To sync an otherwise empty batch, add a LogData(nil) record.
 	Commit(sync bool) error
 	// CommitNoSyncWait atomically applies any batched updates to the underlying
 	// engine and initiates a disk write, but does not wait for that write to
 	// complete. The caller must call SyncWait to wait for the fsync to complete.
 	// The caller must not Close the Batch without first calling SyncWait.
+	//
+	// As with Commit, an empty batch is a no-op with no write to wait on.
 	CommitNoSyncWait() error
 	// SyncWait waits for the disk write initiated by a call to CommitNoSyncWait
 	// to complete.
@@ -1584,12 +1593,28 @@ func ScanLocks(
 	return locks, nil
 }
 
+// EnsureBatchSyncs makes batch non-empty if it is empty, so that a subsequent
+// Commit(true) actually syncs the WAL. Committing an empty batch is a no-op
+// that skips the WAL even when sync is requested (see WriteBatch.Commit), so an
+// empty batch's sync would not be a durability barrier. The added LogData
+// record writes to the WAL only, leaving Count() (and thus Empty()) and the key
+// space untouched.
+//
+// This works around the engine's current commit contract; if an empty
+// Commit(true) ever syncs, remove this helper and its callers.
+func EnsureBatchSyncs(batch WriteBatch) error {
+	if !batch.Empty() {
+		return nil
+	}
+	return batch.LogData(nil)
+}
+
 // WriteSyncNoop carries out a synchronous no-op write to the engine.
 func WriteSyncNoop(eng Engine) error {
 	batch := eng.NewBatch()
 	defer batch.Close()
 
-	if err := batch.LogData(nil); err != nil {
+	if err := EnsureBatchSyncs(batch); err != nil {
 		return err
 	}
 
