@@ -199,6 +199,15 @@ func (s *Store) SetMergeQueueActive(active bool) {
 	s.testingSetMergeQueueActive(active)
 }
 
+// MergeQueueReplicaCanBeProcessed runs the merge queue's
+// replicaCanBeProcessed()
+func (s *Store) MergeQueueReplicaCanBeProcessed(
+	ctx context.Context, repl *Replica, acquireLeaseIfNeeded bool,
+) error {
+	_, err := s.mergeQueue.replicaCanBeProcessed(ctx, repl, acquireLeaseIfNeeded)
+	return err
+}
+
 // SetRaftSnapshotQueueActive enables or disables the raft snapshot queue.
 func (s *Store) SetRaftSnapshotQueueActive(active bool) {
 	s.testingSetRaftSnapshotQueueActive(active)
