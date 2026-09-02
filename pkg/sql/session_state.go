@@ -152,6 +152,23 @@ func (p *planner) DeserializeSessionState(
 	if err := p.checkCanBecomeUser(ctx, sd.User()); err != nil {
 		return nil, err
 	}
+	// Recompute privilege-carrying fields for the session.
+	//
+	// Note: the original commit (#1863) also set
+	// sd.AllowUnsafeInternals = false here. That line is intentionally
+	// omitted on this branch because the 25.4-only mitigation above
+	// (CRDB-57952) forces AllowUnsafeInternals = true during
+	// deserialization to keep mixed-version migrated sessions from losing
+	// internal-table access. Setting it false here would reintroduce that
+	// breakage; the AllowUnsafeInternals hardening is not part of the
+	// VULM-377 fix (which is the IsSuperuser recompute below).
+	willBeSuperuser, err := p.UserHasAdminRole(ctx, sd.User())
+	if err != nil {
+		return nil, err
+	}
+	sd.IsSuperuser = willBeSuperuser
+	sd.SystemIdentityProto = evalCtx.SessionData().SystemIdentityProto
+	sd.Internal = false
 
 	for _, prepStmt := range m.PreparedStatements {
 		stmts, err := parser.ParseWithOptions(
