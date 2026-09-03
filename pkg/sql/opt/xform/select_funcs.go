@@ -508,6 +508,20 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 					}
 				}
 			}
+
+			// Similarly, avoid generating a constrained scan over a partial
+			// index when the constraint is implied by the partial index
+			// predicate. The equivalent full scan is generated separately by
+			// GeneratePartialIndexScans.
+			if predScalar, isPartialIndex :=
+				tabMeta.PartialIndexPredicate(index.Ordinal()); isPartialIndex {
+				pred := *predScalar.(*memo.FiltersExpr)
+				if predConstraint, _, predOK := c.tryConstrainIndex(
+					pred, nil /* optionalFilters */, scanPrivate.Table, index.Ordinal(), spanLimit,
+				); predOK && combinedConstraint.Contains(c.e.ctx, c.e.evalCtx, predConstraint) {
+					return
+				}
+			}
 		}
 
 		// Construct new constrained ScanPrivate.
