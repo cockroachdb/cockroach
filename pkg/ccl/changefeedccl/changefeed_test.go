@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -5255,6 +5256,210 @@ func TestChangefeedExternalConnectionSchemaRegistry(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+// TestChangefeedAvroWriteMode covers what the default avro mode puts in the
+// registry: a subject per key and per value, under the names avro_schemas
+// overrides them to.
+func TestChangefeedAvroWriteMode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB.Exec(t, `CREATE TABLE plain (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE renamed (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO plain VALUES (1, 'one')`)
+		sqlDB.Exec(t, `INSERT INTO renamed VALUES (1, 'one')`)
+
+		// A version strategy is only accepted in read mode, so subject_name is
+		// the only avro_schemas setting write mode can carry.
+		writeFeed := feed(t, f, fmt.Sprintf(
+			`CREATE CHANGEFEED FOR plain, renamed WITH format=avro, `+
+				`confluent_schema_registry='%s', avro_schemas='{`+
+				`"renamed-key": {"subject_name": "acme.renamed.key"}, `+
+				`"renamed-value": {"subject_name": "acme.renamed"}}'`, reg.URL()))
+		defer closeFeed(t, writeFeed)
+
+		require.Equal(t, []string{
+			`plain: {"a":{"long":1}}->{"after":{"plain":{"a":{"long":1},"b":{"string":"one"}}}}`,
+			`renamed: {"a":{"long":1}}->{"after":{"renamed":{"a":{"long":1},"b":{"string":"one"}}}}`,
+		}, readAvroPayloads(t, reg, writeFeed, 2))
+
+		assertRegisteredSubjects(t, reg, []string{
+			`plain-key`, `plain-value`,
+			`acme.renamed.key`, `acme.renamed`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
+}
+
+// TestChangefeedAvroReadMode runs avro_mode=read end to end over several
+// tables watched by one changefeed, each configured differently through
+// avro_schemas. Configuration is per subject, so the tables exercise one
+// feature apiece:
+//
+//	widened   no entry: default subjects, latest version
+//	renamed   a subject_name override on both the key and the value
+//	pinned    a pinned value version, with a newer one registered over it
+//	compat    latest_compatible, with an incompatible newest version
+//
+// Every subject is registered up front, standing in for an operator who
+// registered them out of band. Read mode never writes to the registry,
+// which the unchanged registration count asserts at the end.
+func TestChangefeedAvroReadMode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB.Exec(t, `CREATE TABLE widened (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE renamed (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE pinned (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE compat (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO widened VALUES (1, 'one')`)
+		sqlDB.Exec(t, `INSERT INTO renamed VALUES (1, 'one')`)
+		sqlDB.Exec(t, `INSERT INTO pinned VALUES (1, 'one')`)
+		sqlDB.Exec(t, `INSERT INTO compat VALUES (1, 'one')`)
+
+		// widened's registered schema carries a column the table does not have.
+		// That is accepted only because the field has a default value, and
+		// TableToAvroSchema gives every column an explicit "default": null, so a
+		// schema generated from a wider table supplies one for free. An operator
+		// registering a schema has to add the default themselves; without one
+		// the changefeed has no value to encode for the field and rejects the
+		// version.
+		registerAvroKeySubject(t, reg, `widened-key`,
+			`CREATE TABLE widened (a INT PRIMARY KEY, b STRING)`)
+		registerAvroValueSubject(t, reg, `widened-value`,
+			`CREATE TABLE widened (a INT PRIMARY KEY, b STRING, c STRING)`)
+
+		registerAvroKeySubject(t, reg, `acme.renamed.key`,
+			`CREATE TABLE renamed (a INT PRIMARY KEY, b STRING)`)
+		registerAvroValueSubject(t, reg, `acme.renamed`,
+			`CREATE TABLE renamed (a INT PRIMARY KEY, b STRING)`)
+
+		// pinned's version 1 matches the table and version 2 adds a column, so
+		// the pin is observably different from taking the latest.
+		registerAvroKeySubject(t, reg, `pinned-key`,
+			`CREATE TABLE pinned (a INT PRIMARY KEY, b STRING)`)
+		registerAvroValueSubject(t, reg, `pinned-value`,
+			`CREATE TABLE pinned (a INT PRIMARY KEY, b STRING)`)
+		registerAvroValueSubject(t, reg, `pinned-value`,
+			`CREATE TABLE pinned (a INT PRIMARY KEY, b STRING, c STRING)`)
+
+		// compat's newest version types column b as a long, which no resolution
+		// rule accepts, so latest_compatible has to walk back to version 1.
+		registerAvroKeySubject(t, reg, `compat-key`,
+			`CREATE TABLE compat (a INT PRIMARY KEY, b STRING)`)
+		registerAvroValueSubject(t, reg, `compat-value`,
+			`CREATE TABLE compat (a INT PRIMARY KEY, b STRING)`)
+		registerAvroValueSubject(t, reg, `compat-value`,
+			`CREATE TABLE compat (a INT PRIMARY KEY, b INT)`)
+
+		seeded := reg.RegistrationCount()
+		readFeed := feed(t, f, fmt.Sprintf(
+			`CREATE CHANGEFEED FOR widened, renamed, pinned, compat `+
+				`WITH format=avro, avro_mode=read, confluent_schema_registry='%s', `+
+				`schema_change_policy=nobackfill, avro_schemas='{`+
+				`"renamed-key": {"subject_name": "acme.renamed.key"}, `+
+				`"renamed-value": {"subject_name": "acme.renamed"}, `+
+				`"pinned-value": {"version": "pin(1)"}, `+
+				`"compat-value": {"version": "latest_compatible"}}'`, reg.URL()))
+		defer closeFeed(t, readFeed)
+
+		// Every message decodes under the schema id the sink stamped on it, so
+		// these assertions also pin which registered version each subject
+		// resolved to.
+		require.Equal(t, []string{
+			// latest_compatible walked past the incompatible newest version: b
+			// decodes as a string, which only version 1 declares.
+			`compat: {"a":{"long":1}}->{"after":{"compat":{"a":{"long":1},"b":{"string":"one"}}}}`,
+			// Version 2 carries a column the table does not have, so pinning to
+			// version 1 is what leaves c out.
+			`pinned: {"a":{"long":1}}->{"after":{"pinned":{"a":{"long":1},"b":{"string":"one"}}}}`,
+			`renamed: {"a":{"long":1}}->{"after":{"renamed":{"a":{"long":1},"b":{"string":"one"}}}}`,
+			// The registered schema's extra column is filled from its default.
+			`widened: {"a":{"long":1}}->{"after":{"widened":{"a":{"long":1},"b":{"string":"one"},"c":null}}}`,
+		}, readAvroPayloads(t, reg, readFeed, 4))
+
+		// A schema change mid-feed bumps the descriptor version, which
+		// re-resolves the subject rather than reusing the cached id.
+		sqlDB.Exec(t, `ALTER TABLE widened DROP COLUMN b`)
+		sqlDB.Exec(t, `INSERT INTO widened VALUES (2)`)
+		require.Equal(t, []string{
+			`widened: {"a":{"long":2}}->{"after":{"widened":{"a":{"long":2},"b":null,"c":null}}}`,
+		}, readAvroPayloads(t, reg, readFeed, 1))
+
+		require.Equal(t, seeded, reg.RegistrationCount())
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
+}
+
+func TestChangefeedAvroResolvedSubject(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		t.Run("write mode", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE write_resolved (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO write_resolved VALUES (1)`)
+			writeFeed := feed(t, f, fmt.Sprintf(
+				`CREATE CHANGEFEED FOR write_resolved WITH format=avro, resolved, `+
+					`avro_resolved_subject='acme.write.resolved', confluent_schema_registry='%s'`,
+				reg.URL()))
+			defer closeFeed(t, writeFeed)
+
+			require.Equal(t, []string{
+				`write_resolved: {"a":{"long":1}}->{"after":{"write_resolved":{"a":{"long":1}}}}`,
+			}, readAvroPayloads(t, reg, writeFeed, 1))
+			expectResolvedTimestampAvroWithRegistry(t, reg, writeFeed)
+			assertRegisteredSubjects(t, reg, []string{
+				`write_resolved-key`, `write_resolved-value`, `acme.write.resolved`,
+			})
+		})
+
+		t.Run("read mode", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE read_resolved (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO read_resolved VALUES (1)`)
+			registerAvroKeySubject(t, reg, `read_resolved-key`,
+				`CREATE TABLE read_resolved (a INT PRIMARY KEY)`)
+			registerAvroValueSubject(t, reg, `read_resolved-value`,
+				`CREATE TABLE read_resolved (a INT PRIMARY KEY)`)
+			resolvedSchema, err := avro.NewEnvelopeRecord(
+				avroResolvedSchemaName, avro.EnvelopeOpts{ResolvedField: true},
+				nil, nil, nil, nil, "")
+			require.NoError(t, err)
+			reg.RegisterSchema(`acme.read.resolved`, resolvedSchema.Schema())
+			seeded := reg.RegistrationCount()
+
+			readFeed := feed(t, f, fmt.Sprintf(
+				`CREATE CHANGEFEED FOR read_resolved WITH format=avro, avro_mode=read, resolved, `+
+					`avro_resolved_subject='acme.read.resolved', confluent_schema_registry='%s'`,
+				reg.URL()))
+			defer closeFeed(t, readFeed)
+
+			require.Equal(t, []string{
+				`read_resolved: {"a":{"long":1}}->{"after":{"read_resolved":{"a":{"long":1}}}}`,
+			}, readAvroPayloads(t, reg, readFeed, 1))
+			expectResolvedTimestampAvroWithRegistry(t, reg, readFeed)
+			require.Equal(t, seeded, reg.RegistrationCount())
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
+}
+
 func TestChangefeedAvroNotice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -5270,6 +5475,10 @@ func TestChangefeedAvroNotice(t *testing.T) {
 
 	sql := fmt.Sprintf("CREATE CHANGEFEED FOR d.foo INTO 'null://' WITH format=experimental_avro, confluent_schema_registry='%s'", schemaReg.URL())
 	expectNotice(t, s.Server, sql, `avro is no longer experimental, use format=avro`)
+
+	sql = fmt.Sprintf("CREATE CHANGEFEED FOR d.foo INTO 'null://' WITH format=avro, resolved='1s', confluent_schema_registry='%s'", schemaReg.URL())
+	expectNotice(t, s.Server, sql,
+		`resolved Avro schemas will use the value subject; set avro_resolved_subject to use a separate subject`)
 }
 
 func TestChangefeedResolvedNotice(t *testing.T) {
@@ -7217,6 +7426,36 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `failed to parse certificate data`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
 		`kafka://nope`, `https://schemareg-nope/?ca_cert=Zm9v`,
+	)
+
+	// Every avro_schemas key names a subject of a watched table.
+	sqlDB.ExpectErrWithTimeout(
+		t, `avro_schemas key "foo-(key|value)" does not match a watched table`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', confluent_schema_registry=$2, `+
+			`avro_schema_prefix='super', avro_schemas=$3`,
+		`kafka://nope`, schemaReg.URL(), `{"foo-key": {"subject_name": "acme.foo.key"}}`,
+	)
+
+	// Overrides are also checked against subjects that use their default name.
+	sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+	sqlDB.ExpectErrWithTimeout(
+		t, `resolve to the same registry subject "bar-value"`,
+		`CREATE CHANGEFEED FOR foo, bar INTO $1 WITH format='avro', `+
+			`confluent_schema_registry=$2, avro_schemas=$3`,
+		`kafka://nope`, schemaReg.URL(),
+		`{"foo-value": {"subject_name": "bar-value"}}`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `avro_resolved_subject "foo-value" conflicts with key/value subject "foo-value"`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', avro_mode='read', resolved, `+
+			`avro_resolved_subject='foo-value', confluent_schema_registry=$2`,
+		`kafka://nope`, schemaReg.URL(),
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `avro_resolved_subject cannot be empty`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', resolved, `+
+			`avro_resolved_subject='', confluent_schema_registry=$2`,
+		`kafka://nope`, schemaReg.URL(),
 	)
 
 	// Sanity check webhook sink options.

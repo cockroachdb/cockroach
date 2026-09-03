@@ -675,6 +675,11 @@ func createChangefeedJobRecord(
 	if err != nil {
 		return nil, err
 	}
+	if err := validateAvroSchemasMatchTargets(
+		encodingOpts, specs, targetDescs,
+	); err != nil {
+		return nil, err
+	}
 	sourceProvider, err := newEnrichedSourceProvider(encodingOpts, enrichedSourceData{})
 	if err != nil {
 		return nil, err

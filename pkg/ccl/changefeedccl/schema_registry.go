@@ -7,12 +7,17 @@ package changefeedccl
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"path"
+	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -38,6 +43,19 @@ type schemaRegistry interface {
 	// be used in Avro wire messages or in other calls to the
 	// schema registry.
 	RegisterSchemaForSubject(ctx context.Context, subject string, schema string) (int32, error)
+
+	// LookupSchemaIDForSubject resolves a schema ID for subject using strategy
+	// without modifying the registry. Each candidate version is offered to
+	// accept, which rejects it by returning an error; under latest_compatible,
+	// rejected versions are skipped until one is accepted. alreadyValidated is
+	// true when the exact schema pair was previously accepted and cached.
+	LookupSchemaIDForSubject(
+		ctx context.Context,
+		subject string,
+		localSchema string,
+		strategy changefeedbase.AvroVersionStrategy,
+		accept func(registeredSchema string, alreadyValidated bool) error,
+	) (int32, error)
 }
 
 type confluentSchemaVersionRequest struct {
@@ -46,6 +64,15 @@ type confluentSchemaVersionRequest struct {
 
 type confluentSchemaVersionResponse struct {
 	ID int32 `json:"id"`
+}
+
+// confluentSchemaVersionMetadata is the response returned against a
+// registered subject version.
+type confluentSchemaVersionMetadata struct {
+	Subject string `json:"subject"`
+	Version int32  `json:"version"`
+	ID      int32  `json:"id"`
+	Schema  string `json:"schema"`
 }
 
 type confluentSchemaRegistry struct {
@@ -244,7 +271,7 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 			return errors.Wrap(err, "contacting confluent schema registry")
 		}
 		defer gracefulClose(ctx, resp.Body)
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
 			return errors.Errorf("registering schema to %s %s: %s", u, resp.Status, body)
 		}
@@ -262,6 +289,141 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 		r.sliMetrics.SchemaRegistrations.Inc(1)
 	}
 	return id, nil
+}
+
+// LookupSchemaIDForSubject implements the schemaRegistry interface. It fetches
+// registered versions of the subject over HTTP and selects one according to
+// strategy, validating each candidate through accept.
+func (r *confluentSchemaRegistry) LookupSchemaIDForSubject(
+	ctx context.Context,
+	subject string,
+	localSchema string,
+	strategy changefeedbase.AvroVersionStrategy,
+	accept func(registeredSchema string, alreadyValidated bool) error,
+) (int32, error) {
+	if strategy.Kind == changefeedbase.AvroVersionLatestCompatible {
+		return r.lookupLatestCompatibleSchema(ctx, subject, accept)
+	}
+	version := "latest"
+	if strategy.Kind == changefeedbase.AvroVersionPin {
+		version = strconv.Itoa(int(strategy.PinnedVersion))
+	}
+	meta, err := r.getVersion(ctx, subject, version)
+	if err != nil {
+		return 0, err
+	}
+	if err := accept(meta.Schema, false /* alreadyValidated */); err != nil {
+		return 0, err
+	}
+	return meta.ID, nil
+}
+
+// getVersion fetches the metadata, including schema ID and schema text, for a
+// single registered version. version is either a 1-based version integer or the
+// literal "latest".
+//
+// See: https://docs.confluent.io/platform/current/schema-registry/develop/api.html#get--subjects-(string-%20subject)-versions-(versionId-%20version)
+func (r *confluentSchemaRegistry) getVersion(
+	ctx context.Context, subject string, version string,
+) (confluentSchemaVersionMetadata, error) {
+	u := r.urlForPath(fmt.Sprintf("subjects/%s/versions/%s", subject, version))
+	if log.V(1) {
+		log.Infof(ctx, "looking up avro schema id %s", u)
+	}
+	var meta confluentSchemaVersionMetadata
+	err := r.doWithRetry(ctx, func() error {
+		resp, err := r.client.Get(ctx, u)
+		if err != nil {
+			return errors.Wrap(err, "contacting confluent schema registry")
+		}
+		defer gracefulClose(ctx, resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return errors.Errorf("looking up schema id for subject %q version %q at %s: %s: %s",
+				subject, version, u, resp.Status, body)
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
+			return errors.Wrap(err, "decoding confluent schema registry reply")
+		}
+		return nil
+	})
+	if err != nil {
+		return confluentSchemaVersionMetadata{}, err
+	}
+	return meta, nil
+}
+
+// lookUpAllVersions returns the registered version integers for subject.
+//
+// See: https://docs.confluent.io/platform/current/schema-registry/develop/api.html#get--subjects-(string-%20subject)-versions
+func (r *confluentSchemaRegistry) lookUpAllVersions(
+	ctx context.Context, subject string,
+) ([]int32, error) {
+	u := r.urlForPath(fmt.Sprintf("subjects/%s/versions", subject))
+	if log.V(1) {
+		log.Infof(ctx, "listing avro schema versions %s", u)
+	}
+	var versions []int32
+	err := r.doWithRetry(ctx, func() error {
+		resp, err := r.client.Get(ctx, u)
+		if err != nil {
+			return errors.Wrap(err, "contacting confluent schema registry")
+		}
+		defer gracefulClose(ctx, resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return errors.Errorf("listing versions for subject %q at %s: %s: %s",
+				subject, u, resp.Status, body)
+		}
+		versions = nil
+		if err := json.NewDecoder(resp.Body).Decode(&versions); err != nil {
+			return errors.Wrap(err, "decoding confluent schema registry reply")
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return versions, nil
+}
+
+// lookupLatestCompatibleSchema resolves the ID of the newest registered
+// version of the subject that accept approves, walking versions newest to
+// oldest.
+func (r *confluentSchemaRegistry) lookupLatestCompatibleSchema(
+	ctx context.Context,
+	subject string,
+	accept func(registeredSchema string, alreadyValidated bool) error,
+) (int32, error) {
+	versions, err := r.lookUpAllVersions(ctx, subject)
+	if err != nil {
+		return 0, err
+	}
+	slices.SortFunc(versions, func(a, b int32) int { return cmp.Compare(b, a) })
+
+	var rejectionReasons []string
+	for _, version := range versions {
+		meta, err := r.getVersion(ctx, subject, strconv.Itoa(int(version)))
+		if err != nil {
+			return 0, err
+		}
+		if err := accept(meta.Schema, false /* alreadyValidated */); err != nil {
+			rejectionReasons = append(rejectionReasons,
+				fmt.Sprintf("version %d: %v", version, err))
+			log.VInfof(ctx, 1,
+				"subject %q version %d is not avro-compatible with the generated schema: %v",
+				subject, version, err)
+			continue
+		}
+		return meta.ID, nil
+	}
+
+	return 0, errors.Newf(
+		"no compatible registered avro schema version found for subject %q using strategy %s; "+
+			"rejections: %s",
+		subject, changefeedbase.AvroVersionStrategy{
+			Kind: changefeedbase.AvroVersionLatestCompatible,
+		}.String(), strings.Join(rejectionReasons, "; "))
 }
 
 func (r *confluentSchemaRegistry) doWithRetry(ctx context.Context, fn func() error) error {
@@ -313,29 +475,36 @@ func (r *confluentSchemaRegistry) urlForPath(relPath string) string {
 }
 
 type schemaRegistryCacheKey struct {
-	subject string
-	schema  string
+	subject  string
+	schema   string
+	strategy string
+}
+
+// schemaRegistryCacheEntry is a cached schema resolution.
+type schemaRegistryCacheEntry struct {
+	id               int32
+	registeredSchema string
 }
 
 type schemaRegistryCache struct {
 	mu syncutil.Mutex
-	// cache[schemaRegistryCacheKey]registeredSchemaID
+	// entries maps schemaRegistryCacheKey to schemaRegistryCacheEntry.
 	entries *cache.UnorderedCache
 }
 
-// Get returns the already-registered id for this key if present, and
-// a bool indicating a hit or miss.
-func (src *schemaRegistryCache) Get(key schemaRegistryCacheKey) (int32, bool) {
+// Get returns the cached resolution for this key if present, and a bool
+// indicating a hit or miss.
+func (src *schemaRegistryCache) Get(key schemaRegistryCacheKey) (schemaRegistryCacheEntry, bool) {
 	v, ok := src.entries.Get(key)
 	if ok {
-		return v.(int32), true
+		return v.(schemaRegistryCacheEntry), true
 	}
-	return 0, false
+	return schemaRegistryCacheEntry{}, false
 }
 
-// Add caches a registered schema id.
-func (src *schemaRegistryCache) Add(key schemaRegistryCacheKey, id int32) {
-	src.entries.Add(key, id)
+// Add caches a schema resolution.
+func (src *schemaRegistryCache) Add(key schemaRegistryCacheKey, entry schemaRegistryCacheEntry) {
+	src.entries.Add(key, entry)
 }
 
 type schemaRegistryWithCache struct {
@@ -357,13 +526,46 @@ func (csr *schemaRegistryWithCache) RegisterSchemaForSubject(
 	}
 	csr.cache.mu.Lock()
 	defer csr.cache.mu.Unlock()
-	id, ok := csr.cache.Get(cacheKey)
-	if ok {
-		return id, nil
+	if entry, ok := csr.cache.Get(cacheKey); ok {
+		return entry.id, nil
 	}
 	id, err := csr.base.RegisterSchemaForSubject(ctx, subject, schema)
 	if err == nil {
-		csr.cache.Add(cacheKey, id)
+		csr.cache.Add(cacheKey, schemaRegistryCacheEntry{id: id})
+	}
+	return id, err
+}
+
+// LookupSchemaIDForSubject implements the schemaRegistry interface. The cache is
+// keyed on {subject, schema, strategy}; keying on the local schema is what
+// causes a table schema change to re-resolve the ID rather than reuse a stale
+// one, and keying on strategy keeps version selections independent.
+func (csr *schemaRegistryWithCache) LookupSchemaIDForSubject(
+	ctx context.Context,
+	subject string,
+	schema string,
+	strategy changefeedbase.AvroVersionStrategy,
+	accept func(registeredSchema string, alreadyValidated bool) error,
+) (int32, error) {
+	cacheKey := schemaRegistryCacheKey{
+		subject: subject, schema: schema, strategy: strategy.String(),
+	}
+	csr.cache.mu.Lock()
+	defer csr.cache.mu.Unlock()
+	if entry, ok := csr.cache.Get(cacheKey); ok {
+		if err := accept(entry.registeredSchema, true /* alreadyValidated */); err != nil {
+			return 0, err
+		}
+		return entry.id, nil
+	}
+	var accepted string
+	id, err := csr.base.LookupSchemaIDForSubject(ctx, subject, schema, strategy,
+		func(registeredSchema string, alreadyValidated bool) error {
+			accepted = registeredSchema
+			return accept(registeredSchema, alreadyValidated)
+		})
+	if err == nil {
+		csr.cache.Add(cacheKey, schemaRegistryCacheEntry{id: id, registeredSchema: accepted})
 	}
 	return id, err
 }
