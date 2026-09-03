@@ -16,19 +16,19 @@ import (
 
 type saslPlainBuilder struct{}
 
-// name implements authMechanismBuilder.
+// name implements saslMechanismBuilder.
 func (s saslPlainBuilder) name() string {
 	return sarama.SASLTypePlaintext
 }
 
-// validateParams implements authMechanismBuilder.
+// validateParams implements saslMechanismBuilder.
 func (s saslPlainBuilder) validateParams(u *changefeedbase.SinkURL) error {
 	requiredParams := []string{changefeedbase.SinkParamSASLUser, changefeedbase.SinkParamSASLPassword}
 	return peekAndRequireParams(sarama.SASLTypePlaintext, u, requiredParams)
 }
 
-// build implements authMechanismBuilder.
-func (s saslPlainBuilder) build(u *changefeedbase.SinkURL) (SASLMechanism, error) {
+// build implements saslMechanismBuilder.
+func (s saslPlainBuilder) build(u *changefeedbase.SinkURL, _ SASLConfig) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ type saslPlain struct {
 	handshake bool
 }
 
-// ApplySarama implements AuthMechanism.
+// ApplySarama implements SASLMechanism.
 func (s *saslPlain) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
 	applySaramaCommon(cfg, sarama.SASLTypePlaintext, s.handshake)
 	cfg.Net.SASL.User = s.user
@@ -56,7 +56,7 @@ func (s *saslPlain) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
 	return nil
 }
 
-// KgoOpts implements AuthMechanism.
+// KgoOpts implements SASLMechanism.
 func (s *saslPlain) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 	mech := kgosaslplain.Plain(func(ctc context.Context) (kgosaslplain.Auth, error) {
 		return kgosaslplain.Auth{

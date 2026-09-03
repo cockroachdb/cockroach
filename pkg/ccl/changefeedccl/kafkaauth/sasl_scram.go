@@ -18,19 +18,21 @@ import (
 
 type saslSCRAMSHA256Builder struct{}
 
-// name implements authMechanismBuilder.
+// name implements saslMechanismBuilder.
 func (s saslSCRAMSHA256Builder) name() string {
 	return sarama.SASLTypeSCRAMSHA256
 }
 
-// validateParams implements authMechanismBuilder.
+// validateParams implements saslMechanismBuilder.
 func (s saslSCRAMSHA256Builder) validateParams(u *changefeedbase.SinkURL) error {
 	requiredParams := []string{changefeedbase.SinkParamSASLUser, changefeedbase.SinkParamSASLPassword}
 	return peekAndRequireParams(s.name(), u, requiredParams)
 }
 
-// build implements authMechanismBuilder.
-func (s saslSCRAMSHA256Builder) build(u *changefeedbase.SinkURL) (SASLMechanism, error) {
+// build implements saslMechanismBuilder.
+func (s saslSCRAMSHA256Builder) build(
+	u *changefeedbase.SinkURL, _ SASLConfig,
+) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
 	if err != nil {
 		return nil, err
@@ -47,19 +49,21 @@ var _ saslMechanismBuilder = saslSCRAMSHA256Builder{}
 
 type saslSCRAMSHA512Builder struct{}
 
-// name implements authMechanismBuilder.
+// name implements saslMechanismBuilder.
 func (s saslSCRAMSHA512Builder) name() string {
 	return sarama.SASLTypeSCRAMSHA512
 }
 
-// validateParams implements authMechanismBuilder.
+// validateParams implements saslMechanismBuilder.
 func (s saslSCRAMSHA512Builder) validateParams(u *changefeedbase.SinkURL) error {
 	requiredParams := []string{changefeedbase.SinkParamSASLUser, changefeedbase.SinkParamSASLPassword}
 	return peekAndRequireParams(s.name(), u, requiredParams)
 }
 
-// build implements authMechanismBuilder.
-func (s saslSCRAMSHA512Builder) build(u *changefeedbase.SinkURL) (SASLMechanism, error) {
+// build implements saslMechanismBuilder.
+func (s saslSCRAMSHA512Builder) build(
+	u *changefeedbase.SinkURL, _ SASLConfig,
+) (SASLMechanism, error) {
 	handshake, err := consumeHandshake(u)
 	if err != nil {
 		return nil, err
@@ -88,7 +92,7 @@ type saslSCRAMSHA struct {
 	handshake bool
 }
 
-// ApplySarama implements AuthMechanism.
+// ApplySarama implements SASLMechanism.
 func (s *saslSCRAMSHA) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
 	var mechName sarama.SASLMechanism
 	switch s.depth {
@@ -107,7 +111,7 @@ func (s *saslSCRAMSHA) ApplySarama(ctx context.Context, cfg *sarama.Config) erro
 	return nil
 }
 
-// KgoOpts implements AuthMechanism.
+// KgoOpts implements SASLMechanism.
 func (s *saslSCRAMSHA) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 	var mechFn func(func(ctx context.Context) (kgosaslscram.Auth, error)) sasl.Mechanism
 	switch s.depth {

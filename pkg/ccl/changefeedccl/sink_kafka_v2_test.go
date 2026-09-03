@@ -18,6 +18,7 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kafkaauth"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -910,7 +911,12 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	}
 	u.RawQuery = q.Encode()
 
-	bs, err := makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, changefeedbase.KafkaSinkOptions{JSONConfig: fx.sinkJSONConfig}, 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, knobs)
+	bs, err := makeKafkaSinkV2(
+		ctx, &changefeedbase.SinkURL{URL: u}, targets,
+		changefeedbase.KafkaSinkOptions{JSONConfig: fx.sinkJSONConfig},
+		1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings,
+		nilMetricsRecorderBuilder, knobs, kafkaauth.SASLConfig{},
+	)
 	if err != nil && fx.createClientErrorCb != nil {
 		fx.createClientErrorCb(err)
 		return fx
