@@ -4822,6 +4822,35 @@ left-join (lookup c101844@c_p_id_id_key [as=c])
  │         └── 1234 [as="lookup_join_const_col_@7":10]
  └── filters (true)
 
+# Regression test for #174162: when a partial index's predicate references
+# columns that are also leading key columns of the lookup index, the filters
+# that prove the predicate implication must still constrain the lookup.
+exec-ddl
+CREATE TABLE lookup_partial_pred (
+  a INT, b INT, c INT, d INT,
+  INDEX bad (a, b, c) STORING (d) WHERE b = 2
+)
+----
+
+opt expect=GenerateLookupJoinsWithFilter
+SELECT d FROM small INNER LOOKUP JOIN lookup_partial_pred@bad ON a = m AND c = n WHERE b = 2
+----
+project
+ ├── columns: d:9
+ └── inner-join (lookup lookup_partial_pred@bad,partial)
+      ├── columns: m:1!null n:2!null a:6!null b:7!null c:8!null d:9
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1 13 2] = [6 7 8]
+      ├── fd: ()-->(7), (1)==(6), (6)==(1), (2)==(8), (8)==(2)
+      ├── project
+      │    ├── columns: "lookup_join_const_col_@7":13!null m:1 n:2
+      │    ├── fd: ()-->(13)
+      │    ├── scan small
+      │    │    └── columns: m:1 n:2
+      │    └── projections
+      │         └── 2 [as="lookup_join_const_col_@7":13]
+      └── filters (true)
+
 
 # --------------------------------------------------
 # GenerateLookupJoinsWithVirtualCols
@@ -10058,6 +10087,55 @@ project
            │    └── b:2
            └── const-agg [as=c:3, outer=(3)]
                 └── c:3
+
+# Regression test for #174162: when a partial index's predicate references
+# columns that are also leading key columns of the inverted index, the filters
+# that prove the predicate implication must still constrain the inverted index
+# join.
+exec-ddl
+CREATE TABLE inv_join_left (x INT, j JSONB)
+----
+
+exec-ddl
+CREATE TABLE inv_join_right (
+  k INT PRIMARY KEY, a INT, b INT, j JSONB,
+  INVERTED INDEX bad (a, b, j) WHERE b = 2
+)
+----
+
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT ir.k FROM inv_join_left AS il
+INNER INVERTED JOIN inv_join_right@bad AS ir
+ON ir.j @> il.j AND ir.a = il.x
+WHERE ir.b = 2
+----
+project
+ ├── columns: k:6!null
+ ├── immutable
+ └── inner-join (lookup inv_join_right [as=ir])
+      ├── columns: x:1!null il.j:2 k:6!null a:7!null b:8!null ir.j:9
+      ├── key columns: [14] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: ()-->(8), (6)-->(7,9), (1)==(7), (7)==(1)
+      ├── inner-join (inverted inv_join_right@bad,inverted,partial [as=ir])
+      │    ├── columns: x:1!null il.j:2 k:14!null a:15!null b:16!null
+      │    ├── flags: force inverted join (into right side)
+      │    ├── prefix key columns: [1 13] = [15 16]
+      │    ├── inverted-expr
+      │    │    └── ir.j:17 @> il.j:2
+      │    ├── fd: ()-->(16), (14)-->(15), (1)==(15), (15)==(1)
+      │    ├── project
+      │    │    ├── columns: "inverted_join_const_col_@8":13!null x:1 il.j:2
+      │    │    ├── fd: ()-->(13)
+      │    │    ├── scan inv_join_left [as=il]
+      │    │    │    └── columns: x:1 il.j:2
+      │    │    └── projections
+      │    │         └── 2 [as="inverted_join_const_col_@8":13]
+      │    └── filters (true)
+      └── filters
+           └── ir.j:9 @> il.j:2 [outer=(2,9), immutable]
+
 
 # --------------------------------------------------
 # PushJoinIntoIndexJoin
