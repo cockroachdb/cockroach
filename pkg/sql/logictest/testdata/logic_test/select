@@ -760,13 +760,11 @@ SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_partial,NO_FULL_SCAN} WHERE a > 0 
 
 # Forced partial index scan whose constraint is derived solely from the partial
 # index predicate. Such a scan is physically a full scan of the partial index
-# and must not satisfy the NO_FULL_SCAN hint, even though it carries a
-# constraint.
+# and must not satisfy the NO_FULL_SCAN hint.
 statement ok
 CREATE TABLE t_partial_pred_scan (id INT PRIMARY KEY, b INT, INDEX idx (b) WHERE b > 0)
 
-# TODO(yuzefovich): this should return an error.
-statement ok
+statement error pq: could not produce a query plan conforming to the NO_FULL_SCAN hint
 SELECT * FROM t_partial_pred_scan@{FORCE_INDEX=idx,NO_FULL_SCAN} WHERE b > 0
 
 # A genuinely narrowing filter over the partial index does not scan the whole

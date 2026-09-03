@@ -12376,6 +12376,41 @@ project
       └── projections
            └── 2 [as=s:3]
 
+# When a partial index's predicate columns are the leading key columns and no
+# other filters narrow the scan, the constraint derived from the predicate spans
+# the entire index. Such a scan must be represented as an unconstrained (full)
+# partial index scan rather than a constrained scan, so that full-scan
+# detection treats it as a full scan.
+exec-ddl
+CREATE TABLE t_pred_full (id INT PRIMARY KEY, b INT, INDEX idx (b) WHERE b > 0)
+----
+
+# The predicate b > 0 alone covers the whole index, so no constrained scan is
+# generated for it; the forced index scan is a full (unconstrained) scan.
+opt
+SELECT b FROM t_pred_full@{FORCE_INDEX=idx} WHERE b > 0
+----
+scan t_pred_full@idx,partial
+ ├── columns: b:2!null
+ └── flags: force-index=idx
+
+# A genuinely narrowing filter still produces a constrained scan.
+opt expect=GenerateConstrainedScans
+SELECT b FROM t_pred_full@{FORCE_INDEX=idx} WHERE b > 5
+----
+scan t_pred_full@idx,partial
+ ├── columns: b:2!null
+ ├── constraint: /2/1: [/6 - ]
+ └── flags: force-index=idx
+
+# Without any hint, the (unconstrained) partial index scan is still preferred
+# over scanning the primary index and applying the predicate on top.
+opt
+SELECT b FROM t_pred_full WHERE b > 0
+----
+scan t_pred_full@idx,partial
+ └── columns: b:2!null
+
 # --------------------------------------------------
 # SplitDisjunctionAddKey
 # --------------------------------------------------
