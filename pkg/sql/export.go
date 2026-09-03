@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -22,10 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
@@ -168,30 +166,16 @@ func buildExportPlanningInfo(
 	if !ok {
 		return nil, errors.Errorf("expected string value for the file location")
 	}
-	admin, err := planner.HasAdminRole(ctx)
-	if err != nil {
-		panic(err)
-	}
-	// TODO(adityamaru): Ideally we'd use
-	// `sql.CheckDestinationPrivileges privileges here, but because of
-	// a ciruclar dependancy with `pkg/sql` this is not possible. Consider moving
-	// this file into `pkg/sql/importer` to get around this.
-	hasExternalIOImplicitAccess := planner.CheckPrivilege(
-		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS,
-	) == nil
-	if !admin &&
-		!planner.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound &&
-		!hasExternalIOImplicitAccess {
-		conf, err := cloud.ExternalStorageConfFromURI(string(*destination), planner.User())
-		if err != nil {
-			return nil, err
-		}
-		if !conf.AccessIsWithExplicitAuth() {
-			panic(pgerror.Newf(
-				pgcode.InsufficientPrivilege,
-				"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege "+
-					"are allowed to access the specified %s URI", conf.Provider.String()))
-		}
+	// TODO(aerfrei): once the cluster setting is gone, enforce USAGE
+	// unconditionally by calling CheckDestinationPrivileges here.
+	if err := checkDestinationPrivileges(
+		ctx, planner, []string{string(*destination)}, destinationPrivilegeOptions{
+			enforceImplicitAccess: true,
+			enforceUsage: sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(
+				&planner.ExecCfg().Settings.SV),
+		},
+	); err != nil {
+		return nil, err
 	}
 	exprEval := planner.ExprEvaluator("EXPORT")
 	treeOptions := make(tree.KVOptions, len(options))
