@@ -8628,6 +8628,31 @@ project
  └── projections
       └── 1 [as="?column?":7]
 
+# Regression test for #174162: when a partial index's predicate references
+# columns that are also leading key columns of the inverted index, the filters
+# that prove the predicate implication must still constrain the scan.
+exec-ddl
+CREATE TABLE inv_scan_pred (
+  k INT PRIMARY KEY, a INT, b INT, j JSONB,
+  INVERTED INDEX bad (a, b, j) WHERE b = 2
+)
+----
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM inv_scan_pred@bad WHERE a = 1 AND b = 2 AND j @> '{"x": 1}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan inv_scan_pred@bad,inverted,partial
+      ├── columns: k:1!null
+      ├── constraint: /2/3: [/1/2 - /1/2]
+      ├── inverted constraint: /7/1
+      │    └── spans: ["x"/1, "x"/1]
+      ├── flags: force-index=bad
+      └── key: (1)
+
 
 # --------------------------------------------------
 # GenerateMinimalInvertedIndexScans
