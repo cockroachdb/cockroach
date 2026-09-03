@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/base64"
+	"encoding/binary"
 	gojson "encoding/json"
 	"fmt"
 	"math/rand"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -438,6 +440,388 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			require.Regexp(t, `contacting confluent schema registry.*: x509`, err)
 		})
 	}
+}
+
+// TestAvroEncoderReadOnlyMode verifies that with avro_mode='read' the encoder
+// resolves schema IDs of already-registered subjects and never registers
+// a schema, failing with an actionable error when a subject is missing.
+func TestAvroEncoderReadOnlyMode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tableDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	require.NoError(t, err)
+	row := rowenc.EncDatumRow{
+		rowenc.EncDatum{Datum: tree.NewDInt(1)},
+		rowenc.EncDatum{Datum: tree.NewDString(`bar`)},
+	}
+	ts := hlc.Timestamp{WallTime: 1, Logical: 2}
+
+	targets := changefeedbase.Targets{}
+	targets.Add(changefeedbase.Target{
+		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+		DescID:            tableDesc.GetID(),
+		StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
+	})
+
+	rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
+	var prevRow cdcevent.Row
+	evCtx := eventContext{updated: ts}
+
+	reg := cdctest.StartTestSchemaRegistry()
+	defer reg.Close()
+
+	writeOpts := changefeedbase.EncodingOptions{
+		Format:            changefeedbase.OptFormatAvro,
+		Envelope:          changefeedbase.OptEnvelopeWrapped,
+		SchemaRegistryURI: reg.URL(),
+	}
+
+	// Seed the registry by encoding once in the default (write) mode. This
+	// registers the key and value schemas, standing in for an
+	// operator's out-of-band registration.
+	writeEnc, err := getEncoder(ctx, writeOpts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, writeOpts))
+	require.NoError(t, err)
+	wantKey, err := writeEnc.EncodeKey(ctx, rowInsert)
+	require.NoError(t, err)
+	wantKey = append([]byte(nil), wantKey...)
+	wantValue, err := writeEnc.EncodeValue(ctx, evCtx, rowInsert, prevRow)
+	require.NoError(t, err)
+	wantValue = append([]byte(nil), wantValue...)
+	require.Equal(t, 2, reg.RegistrationCount())
+
+	// Drop the shared client-side cache.
+	TestingClearSchemaRegistrySingleton()
+
+	readOpts := writeOpts
+	readOpts.AvroMode = changefeedbase.OptAvroModeRead
+	readEnc, err := getEncoder(ctx, readOpts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, readOpts))
+	require.NoError(t, err)
+	gotKey, err := readEnc.EncodeKey(ctx, rowInsert)
+	require.NoError(t, err)
+	gotKey = append([]byte(nil), gotKey...)
+	gotValue, err := readEnc.EncodeValue(ctx, evCtx, rowInsert, prevRow)
+	require.NoError(t, err)
+
+	// Read mode resolves the same IDs and produces identical wire bytes,
+	// without issuing any registrations.
+	require.Equal(t, wantKey, gotKey)
+	require.Equal(t, wantValue, gotValue)
+	require.Equal(t, 2, reg.RegistrationCount())
+
+	// A subject that was never registered fails with an actionable error
+	// naming the subject, and still performs no writes.
+	TestingClearSchemaRegistrySingleton()
+	emptyReg := cdctest.StartTestSchemaRegistry()
+	defer emptyReg.Close()
+	readOpts.SchemaRegistryURI = emptyReg.URL()
+	failEnc, err := getEncoder(ctx, readOpts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, readOpts))
+	require.NoError(t, err)
+	_, err = failEnc.EncodeKey(ctx, rowInsert)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "foo-key")
+	require.Equal(t, 0, emptyReg.RegistrationCount())
+}
+
+// TestAvroEncoderSubjectOverrides verifies the avro_schemas per-subject
+// configuration: subject-name overrides apply to registration (write mode)
+// and lookup (read mode), and per-subject version strategies pick the
+// registered version in read mode.
+func TestAvroEncoderSubjectOverrides(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tableDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	require.NoError(t, err)
+	rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, rowenc.EncDatumRow{
+		rowenc.EncDatum{Datum: tree.NewDInt(1)},
+		rowenc.EncDatum{Datum: tree.NewDString(`bar`)},
+	}, false)
+	var prevRow cdcevent.Row
+	evCtx := eventContext{updated: hlc.Timestamp{WallTime: 1, Logical: 2}}
+
+	targets := changefeedbase.Targets{}
+	targets.Add(changefeedbase.Target{
+		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+		DescID:            tableDesc.GetID(),
+		StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
+	})
+
+	makeOpts := func(reg *cdctest.SchemaRegistry, overrides changefeedbase.AvroSchemaOverrides) changefeedbase.EncodingOptions {
+		return changefeedbase.EncodingOptions{
+			Format:            changefeedbase.OptFormatAvro,
+			Envelope:          changefeedbase.OptEnvelopeWrapped,
+			SchemaRegistryURI: reg.URL(),
+			AvroSchemas:       overrides,
+		}
+	}
+	makeEncoder := func(t *testing.T, opts changefeedbase.EncodingOptions) Encoder {
+		t.Helper()
+		enc, err := getEncoder(ctx, opts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, opts))
+		require.NoError(t, err)
+		return enc
+	}
+
+	renamed := changefeedbase.AvroSchemaOverrides{
+		"foo-key":   {SubjectName: "acme.foo.key"},
+		"foo-value": {SubjectName: "acme.foo"},
+	}
+
+	t.Run("write mode registers under the overridden subjects", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		enc := makeEncoder(t, makeOpts(reg, renamed))
+		_, err := enc.EncodeKey(ctx, rowInsert)
+		require.NoError(t, err)
+		_, err = enc.EncodeValue(ctx, evCtx, rowInsert, prevRow)
+		require.NoError(t, err)
+		require.ElementsMatch(t, []string{"acme.foo.key", "acme.foo"}, reg.Subjects())
+	})
+
+	t.Run("read mode resolves the overridden subjects", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		// Seed the overridden subjects with a write-mode encoder, standing in
+		// for an operator's out-of-band registration.
+		writeEnc := makeEncoder(t, makeOpts(reg, renamed))
+		wantKey, err := writeEnc.EncodeKey(ctx, rowInsert)
+		require.NoError(t, err)
+		wantKey = append([]byte(nil), wantKey...)
+		wantValue, err := writeEnc.EncodeValue(ctx, evCtx, rowInsert, prevRow)
+		require.NoError(t, err)
+		wantValue = append([]byte(nil), wantValue...)
+		TestingClearSchemaRegistrySingleton()
+
+		readOpts := makeOpts(reg, renamed)
+		readOpts.AvroMode = changefeedbase.OptAvroModeRead
+		readEnc := makeEncoder(t, readOpts)
+		gotKey, err := readEnc.EncodeKey(ctx, rowInsert)
+		require.NoError(t, err)
+		gotKey = append([]byte(nil), gotKey...)
+		gotValue, err := readEnc.EncodeValue(ctx, evCtx, rowInsert, prevRow)
+		require.NoError(t, err)
+		require.Equal(t, wantKey, gotKey)
+		require.Equal(t, wantValue, gotValue)
+		require.Equal(t, 2, reg.RegistrationCount())
+		require.ElementsMatch(t, []string{"acme.foo.key", "acme.foo"}, reg.Subjects())
+	})
+
+	t.Run("per-subject version strategies apply in read mode", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		// Seed v1 of foo-key and foo-value with a write-mode encoder, then
+		// register a v2 of foo-value that is incompatible with the generated
+		// schema: column b has a different type, which no resolution rule
+		// accepts.
+		writeEnc := makeEncoder(t, makeOpts(reg, nil))
+		_, err := writeEnc.EncodeKey(ctx, rowInsert)
+		require.NoError(t, err)
+		wantValue, err := writeEnc.EncodeValue(ctx, evCtx, rowInsert, prevRow)
+		require.NoError(t, err)
+		wantValue = append([]byte(nil), wantValue...)
+		TestingClearSchemaRegistrySingleton()
+
+		mismatchedColDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b INT)`)
+		require.NoError(t, err)
+		after, err := avro.TableToAvroSchema(
+			cdcevent.TestingMakeEventRow(mismatchedColDesc, 0, nil, false), avro.SchemaNoSuffix, "", "")
+		require.NoError(t, err)
+		incompatibleEnv, err := avro.NewEnvelopeRecord(
+			"foo", avro.EnvelopeOpts{AfterField: true}, nil, after, nil, nil, "")
+		require.NoError(t, err)
+		reg.RegisterSchema("foo-value", incompatibleEnv.Schema())
+
+		for _, strategy := range []changefeedbase.AvroVersionStrategy{
+			{Kind: changefeedbase.AvroVersionLatestCompatible},
+			{Kind: changefeedbase.AvroVersionPin, PinnedVersion: 1},
+		} {
+			t.Run(strategy.String(), func(t *testing.T) {
+				defer TestingClearSchemaRegistrySingleton()
+				readOpts := makeOpts(reg, changefeedbase.AvroSchemaOverrides{
+					"foo-key":   {},
+					"foo-value": {Version: strategy},
+				})
+				readOpts.AvroMode = changefeedbase.OptAvroModeRead
+				readEnc := makeEncoder(t, readOpts)
+				gotValue, err := readEnc.EncodeValue(ctx, evCtx, rowInsert, prevRow)
+				require.NoError(t, err)
+				require.Equal(t, wantValue, gotValue)
+			})
+		}
+
+		t.Run("latest", func(t *testing.T) {
+			defer TestingClearSchemaRegistrySingleton()
+			readOpts := makeOpts(reg, nil)
+			readOpts.AvroMode = changefeedbase.OptAvroModeRead
+			readEnc := makeEncoder(t, readOpts)
+			_, err := readEnc.EncodeValue(ctx, evCtx, rowInsert, prevRow)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "does not match")
+		})
+	})
+
+	t.Run("legacy resolved timestamps use the value subject override", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		enc := makeEncoder(t, makeOpts(reg, changefeedbase.AvroSchemaOverrides{
+			"foo-value": {SubjectName: "acme.foo"},
+		}))
+		_, err := enc.EncodeResolvedTimestamp(ctx, "foo", hlc.Timestamp{WallTime: 1})
+		require.NoError(t, err)
+		require.Equal(t, []string{"acme.foo"}, reg.Subjects())
+	})
+
+	t.Run("dedicated resolved subject is shared across topics", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		opts := makeOpts(reg, nil)
+		opts.AvroResolvedSubject = "acme.resolved"
+		enc := makeEncoder(t, opts)
+		_, err := enc.EncodeResolvedTimestamp(ctx, "foo", hlc.Timestamp{WallTime: 1})
+		require.NoError(t, err)
+		_, err = enc.EncodeResolvedTimestamp(ctx, "bar", hlc.Timestamp{WallTime: 2})
+		require.NoError(t, err)
+		require.Equal(t, []string{"acme.resolved"}, reg.Subjects())
+		require.Equal(t, 1, reg.RegistrationCount())
+	})
+
+	t.Run("read mode uses latest resolved subject version", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		const subject = "acme.resolved"
+		v1, err := avro.NewEnvelopeRecord(
+			avroResolvedSchemaName, avro.EnvelopeOpts{ResolvedField: true}, nil, nil, nil, nil, "")
+		require.NoError(t, err)
+		reg.RegisterSchema(subject, v1.Schema())
+		latestID := reg.RegisterSchema(subject, v1.Schema())
+		seeded := reg.RegistrationCount()
+
+		opts := makeOpts(reg, nil)
+		opts.AvroMode = changefeedbase.OptAvroModeRead
+		opts.AvroResolvedSubject = subject
+		enc := makeEncoder(t, opts)
+		encoded, err := enc.EncodeResolvedTimestamp(ctx, "foo", hlc.Timestamp{WallTime: 1})
+		require.NoError(t, err)
+		require.Equal(t, uint32(latestID), binary.BigEndian.Uint32(encoded[1:5]))
+
+		var decoded map[string]interface{}
+		require.NoError(t, gojson.Unmarshal(avroToJSON(t, reg, encoded), &decoded))
+		require.Contains(t, decoded, "resolved")
+		require.Equal(t, seeded, reg.RegistrationCount())
+	})
+
+	t.Run("read mode rejects a missing resolved subject in registry", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		opts := makeOpts(reg, nil)
+		opts.AvroMode = changefeedbase.OptAvroModeRead
+		opts.AvroResolvedSubject = "missing.resolved"
+		enc := makeEncoder(t, opts)
+		_, err := enc.EncodeResolvedTimestamp(ctx, "foo", hlc.Timestamp{WallTime: 1})
+		require.ErrorContains(t, err, "missing.resolved")
+		require.Equal(t, 0, reg.RegistrationCount())
+	})
+}
+
+// TestAvroEncoderReadModeSchemaMismatch covers how the encoder routes a
+// registered schema that differs from the one it generates: both keys and
+// values go through the structural compatibility check, which accepts the
+// extra column on the value and rejects the extra key column.
+func TestAvroEncoderReadModeSchemaMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer TestingClearSchemaRegistrySingleton()
+
+	ctx := context.Background()
+	fooDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	require.NoError(t, err)
+	rowInsert := cdcevent.TestingMakeEventRow(fooDesc, 0, rowenc.EncDatumRow{
+		rowenc.EncDatum{Datum: tree.NewDInt(1)},
+		rowenc.EncDatum{Datum: tree.NewDString(`bar`)},
+	}, false)
+	var prevRow cdcevent.Row
+	evCtx := eventContext{updated: hlc.Timestamp{WallTime: 1, Logical: 2}}
+
+	targets := changefeedbase.Targets{}
+	targets.Add(changefeedbase.Target{
+		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+		DescID:            fooDesc.GetID(),
+		StatementTimeName: changefeedbase.StatementTimeName(fooDesc.GetName()),
+	})
+
+	reg := cdctest.StartTestSchemaRegistry()
+	defer reg.Close()
+
+	// Register a value schema carrying a column the changefeed does not
+	// produce, and a key schema carrying a field it does not produce: the same
+	// shape of difference on both sides. Read mode never registers, so both
+	// subjects have to exist up front.
+	//
+	// The generator gives column c an explicit "default":null, as it does every
+	// column (avro.SchemaField.Default has no omitempty). A registered-only
+	// field is accepted only when it has a default, and that default is what
+	// goavro encodes for c.
+	wideDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING)`)
+	require.NoError(t, err)
+	wideAfter, err := avro.TableToAvroSchema(
+		cdcevent.TestingMakeEventRow(wideDesc, 0, nil, false), avro.SchemaNoSuffix, "", "")
+	require.NoError(t, err)
+	wideEnv, err := avro.NewEnvelopeRecord(
+		`foo`, avro.EnvelopeOpts{AfterField: true}, nil, wideAfter, nil, nil, "")
+	require.NoError(t, err)
+	reg.RegisterSchema(`foo-value`, wideEnv.Schema())
+
+	compositeKeyDesc, err := parseTableDesc(`CREATE TABLE foo (a INT, b STRING, PRIMARY KEY (a, b))`)
+	require.NoError(t, err)
+	wideKey, err := avro.PrimaryIndexToAvroSchema(
+		cdcevent.TestingMakeEventRow(compositeKeyDesc, 0, nil, false), `foo`, "")
+	require.NoError(t, err)
+	reg.RegisterSchema(`foo-key`, wideKey.Schema())
+	seeded := reg.RegistrationCount()
+
+	opts := changefeedbase.EncodingOptions{
+		Format:            changefeedbase.OptFormatAvro,
+		Envelope:          changefeedbase.OptEnvelopeWrapped,
+		SchemaRegistryURI: reg.URL(),
+		AvroMode:          changefeedbase.OptAvroModeRead,
+	}
+	enc, err := getEncoder(ctx, opts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, opts))
+	require.NoError(t, err)
+
+	// The value adopts the registered schema, so the message decodes under the
+	// schema whose id is stamped on it, with the extra column filled from its
+	// default.
+	encoded, err := enc.EncodeValue(ctx, evCtx, rowInsert, prevRow)
+	require.NoError(t, err)
+	native, err := reg.EncodedAvroToNative(encoded)
+	require.NoError(t, err)
+	after := native.(map[string]interface{})[`after`].(map[string]interface{})[`foo`].(map[string]interface{})
+	require.Equal(t, map[string]interface{}{"long": int64(1)}, after["a"])
+	require.Equal(t, map[string]interface{}{"string": "bar"}, after["b"])
+	require.Contains(t, after, "c")
+	require.Nil(t, after["c"])
+
+	_, err = enc.EncodeKey(ctx, rowInsert)
+	require.ErrorContains(t, err, `top-level field "b"`)
+	require.ErrorContains(t, err, "foo-key")
+
+	require.Equal(t, seeded, reg.RegistrationCount())
 }
 
 func TestAvroArray(t *testing.T) {

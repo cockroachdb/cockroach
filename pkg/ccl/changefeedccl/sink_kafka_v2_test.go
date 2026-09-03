@@ -16,11 +16,15 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kafkaauth"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -421,6 +425,114 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 			if c.expectedBatchingSinkMinFreq != 0 {
 				assert.Equal(t, c.expectedBatchingSinkMinFreq, fx.bs.minFlushFrequency)
 			}
+		})
+	}
+}
+
+func TestResolveTopicNames(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, cleanup := makeServer(t)
+	defer cleanup()
+
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY f1 (a, b), FAMILY f2 (c))`)
+	sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+
+	execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+	fooDesc := cdctest.GetHydratedTableDescriptor(t, execCfg, "d", "foo")
+	barDesc := cdctest.GetHydratedTableDescriptor(t, execCfg, "d", "bar")
+	makeTargets := func(targets ...changefeedbase.Target) changefeedbase.Targets {
+		res := changefeedbase.Targets{}
+		for _, target := range targets {
+			res.Add(target)
+		}
+		return res
+	}
+	for _, tc := range []struct {
+		name     string
+		sinkURI  string
+		targets  changefeedbase.Targets
+		expected []string
+	}{
+		{
+			name:    "primary family only",
+			sinkURI: "kafka://localhost:9092",
+			targets: makeTargets(changefeedbase.Target{
+				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+				DescID:            fooDesc.GetID(),
+				StatementTimeName: changefeedbase.StatementTimeName(fooDesc.GetName()),
+			}),
+			expected: []string{"foo"},
+		},
+		{
+			name:    "column family",
+			sinkURI: "kafka://localhost:9092?topic_prefix=pre-",
+			targets: makeTargets(changefeedbase.Target{
+				Type:              jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
+				DescID:            fooDesc.GetID(),
+				FamilyName:        "f2",
+				StatementTimeName: changefeedbase.StatementTimeName(fooDesc.GetName()),
+			}),
+			expected: []string{"pre-foo.f2"},
+		},
+		{
+			name:    "each family",
+			sinkURI: "kafka://localhost:9092?topic_prefix=pre-",
+			targets: makeTargets(changefeedbase.Target{
+				Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
+				DescID:            fooDesc.GetID(),
+				StatementTimeName: changefeedbase.StatementTimeName(fooDesc.GetName()),
+			}),
+			expected: []string{"pre-foo.f1", "pre-foo.f2"},
+		},
+		{
+			name:    "single topic override",
+			sinkURI: "kafka://localhost:9092?topic_prefix=pre-&topic_name=all",
+			targets: makeTargets(changefeedbase.Target{
+				Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
+				DescID:            fooDesc.GetID(),
+				StatementTimeName: changefeedbase.StatementTimeName(fooDesc.GetName()),
+			}),
+			expected: []string{"pre-all"},
+		},
+		{
+			name:    "multiple tables",
+			sinkURI: "kafka://localhost:9092",
+			targets: makeTargets(
+				changefeedbase.Target{
+					Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
+					DescID:            fooDesc.GetID(),
+					StatementTimeName: changefeedbase.StatementTimeName(fooDesc.GetName()),
+				},
+				changefeedbase.Target{
+					Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+					DescID:            barDesc.GetID(),
+					StatementTimeName: changefeedbase.StatementTimeName(barDesc.GetName()),
+				},
+			),
+			expected: []string{"foo.f1", "foo.f2", "bar"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parsedURL, err := url.Parse(tc.sinkURI)
+			require.NoError(t, err)
+			sinkURL := &changefeedbase.SinkURL{URL: parsedURL}
+			prefix := sinkURL.ConsumeParam(changefeedbase.SinkParamTopicPrefix)
+			singleName := sinkURL.ConsumeParam(changefeedbase.SinkParamTopicName)
+			tableDescs, err := fetchTableDescriptors(ctx, &execCfg, tc.targets, s.Server.Clock().Now())
+			require.NoError(t, err)
+			topics, err := ResolveTopicNames(
+				tc.targets,
+				tableDescs,
+				WithPrefix(prefix),
+				WithSingleName(singleName),
+				WithSanitizeFn(changefeedbase.SQLNameToKafkaName),
+			)
+			require.NoError(t, err)
+			require.ElementsMatch(t, tc.expected, topics)
 		})
 	}
 }

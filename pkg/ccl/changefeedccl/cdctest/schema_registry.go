@@ -9,9 +9,11 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -28,7 +30,7 @@ type SchemaRegistry struct {
 		syncutil.Mutex
 		idAlloc  int32
 		schemas  map[int32]string
-		subjects map[string]int32
+		subjects map[string][]int32
 	}
 }
 
@@ -70,7 +72,7 @@ func StartTestSchemaRegistryWithTLS(
 func makeTestSchemaRegistry() *SchemaRegistry {
 	r := &SchemaRegistry{}
 	r.mu.schemas = make(map[int32]string)
-	r.mu.subjects = make(map[string]int32)
+	r.mu.subjects = make(map[string][]int32)
 	r.server = httptest.NewUnstartedServer(http.HandlerFunc(r.requestHandler))
 	return r
 }
@@ -99,17 +101,22 @@ func (r *SchemaRegistry) Subjects() (subjects []string) {
 func (r *SchemaRegistry) SchemaForSubject(subject string) string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.schemas[r.mu.subjects[subject]]
+	ids := r.mu.subjects[subject]
+	if len(ids) == 0 {
+		return ""
+	}
+	return r.mu.schemas[ids[len(ids)-1]]
 }
 
-func (r *SchemaRegistry) registerSchema(subject string, schema string) int32 {
+// RegisterSchema registers schema as a new version under subject.
+func (r *SchemaRegistry) RegisterSchema(subject string, schema string) int32 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	id := r.mu.idAlloc
 	r.mu.idAlloc++
 	r.mu.schemas[id] = schema
-	r.mu.subjects[subject] = id
+	r.mu.subjects[subject] = append(r.mu.subjects[subject], id)
 	return id
 }
 
@@ -123,7 +130,9 @@ func (r *SchemaRegistry) RegistrationCount() int {
 var (
 	// We are slightly stricter than confluent here as they allow
 	// a trailing slash.
-	subjectVersionsRegexp = regexp.MustCompile("^/subjects/[^/]+/versions$")
+	subjectVersionsRegexp      = regexp.MustCompile("^/subjects/[^/]+/versions$")
+	subjectVersionLatestRegexp = regexp.MustCompile("^/subjects/[^/]+/versions/latest$")
+	subjectVersionNumRegexp    = regexp.MustCompile(`^/subjects/[^/]+/versions/\d+$`)
 )
 
 // requestHandler routes requests based on the Method and Path of the request.
@@ -140,6 +149,12 @@ func (r *SchemaRegistry) requestHandler(hw http.ResponseWriter, hr *http.Request
 	switch {
 	case method == http.MethodPost && subjectVersionsRegexp.MatchString(path):
 		err = r.register(hw, hr)
+	case method == http.MethodGet && subjectVersionsRegexp.MatchString(path):
+		err = r.lookUpAllVersions(hw, hr)
+	case method == http.MethodGet && subjectVersionLatestRegexp.MatchString(path):
+		err = r.lookUpVersion(hw, hr, "latest")
+	case method == http.MethodGet && subjectVersionNumRegexp.MatchString(path):
+		err = r.lookUpVersion(hw, hr, strings.Split(path, "/")[4])
 	case method == http.MethodGet && path == "/mode":
 		err = r.mode(hw, hr)
 	default:
@@ -169,12 +184,85 @@ func (r *SchemaRegistry) register(hw http.ResponseWriter, hr *http.Request) (err
 		return err
 	}
 	subject := strings.Split(hr.URL.Path, "/")[2]
-	id := r.registerSchema(subject, req.Schema)
+	id := r.RegisterSchema(subject, req.Schema)
 	res, err := json.Marshal(confluentSchemaVersionResponse{ID: id})
 	if err != nil {
 		return err
 	}
 
+	hw.Header().Set(`Content-type`, `application/json`)
+	_, err = hw.Write(res)
+	return err
+}
+
+// lookUpAllVersions is an http handler that fetches all available versions.
+func (r *SchemaRegistry) lookUpAllVersions(hw http.ResponseWriter, hr *http.Request) error {
+	subject := strings.Split(hr.URL.Path, "/")[2]
+	var numVersions int
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		numVersions = len(r.mu.subjects[subject])
+	}()
+	if numVersions == 0 {
+		http.Error(hw, fmt.Sprintf("Subject %q not found.", subject), http.StatusNotFound)
+		return nil
+	}
+	versions := make([]int32, numVersions)
+	for i := range versions {
+		versions[i] = int32(i + 1)
+	}
+	res, err := json.Marshal(versions)
+	if err != nil {
+		return err
+	}
+	hw.Header().Set(`Content-type`, `application/json`)
+	_, err = hw.Write(res)
+	return err
+}
+
+// lookUpVersion is an http handler that fetches a subject version.
+func (r *SchemaRegistry) lookUpVersion(
+	hw http.ResponseWriter, hr *http.Request, version string,
+) error {
+	type confluentSchemaVersionMetadata struct {
+		Subject string `json:"subject"`
+		Version int32  `json:"version"`
+		ID      int32  `json:"id"`
+		Schema  string `json:"schema"`
+	}
+
+	subject := strings.Split(hr.URL.Path, "/")[2]
+	var ids []int32
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		ids = append([]int32(nil), r.mu.subjects[subject]...)
+	}()
+	if len(ids) == 0 {
+		http.Error(hw, fmt.Sprintf("Subject %q not found.", subject), http.StatusNotFound)
+		return nil
+	}
+	versionNum := len(ids)
+	if version != "latest" {
+		n, _ := strconv.Atoi(version)
+		if n < 1 || n > len(ids) {
+			http.Error(hw, fmt.Sprintf("Version %q not found.", version), http.StatusNotFound)
+			return nil
+		}
+		versionNum = n
+	}
+	id := ids[versionNum-1]
+	r.mu.Lock()
+	schema := r.mu.schemas[id]
+	r.mu.Unlock()
+
+	res, err := json.Marshal(confluentSchemaVersionMetadata{
+		Subject: subject, Version: int32(versionNum), ID: id, Schema: schema,
+	})
+	if err != nil {
+		return err
+	}
 	hw.Header().Set(`Content-type`, `application/json`)
 	_, err = hw.Write(res)
 	return err
