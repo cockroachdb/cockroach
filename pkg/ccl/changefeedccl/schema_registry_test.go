@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -135,6 +136,221 @@ func TestConfluentSchemaRegistrySharedCache(t *testing.T) {
 	wg.Wait()
 	require.Equal(t, 11, regServer.RegistrationCount())
 
+}
+
+func TestConfluentSchemaRegistryLookup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	latest := changefeedbase.AvroVersionStrategy{Kind: changefeedbase.AvroVersionLatest}
+	latestCompatible := changefeedbase.AvroVersionStrategy{
+		Kind: changefeedbase.AvroVersionLatestCompatible,
+	}
+	pin := func(n int32) changefeedbase.AvroVersionStrategy {
+		return changefeedbase.AvroVersionStrategy{
+			Kind: changefeedbase.AvroVersionPin, PinnedVersion: n,
+		}
+	}
+	const schemaA = `{"type":"record","name":"r","fields":[{"name":"a","type":"long"}]}`
+	const schemaB = `{"type":"record","name":"r","fields":[{"name":"b","type":"string"}]}`
+	const schemaC = `{"type":"record","name":"r","fields":[{"name":"c","type":"boolean"}]}`
+	const rejected = `stand-in accept rejected the schema`
+	lookup := func(
+		reg schemaRegistry, subject string, wantSchema string, strategy changefeedbase.AvroVersionStrategy,
+	) (int32, error) {
+		return reg.LookupSchemaIDForSubject(ctx, subject, wantSchema, strategy,
+			func(registeredSchema string, _ bool) error {
+				if registeredSchema != wantSchema {
+					return errors.New(rejected)
+				}
+				return nil
+			})
+	}
+
+	t.Run("latest resolves the newest registered schema id via GET", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+		// Register the schemas as an out-of-band operator.
+		regServer.RegisterSchema("subject1", schemaA)
+		wantID := regServer.RegisterSchema("subject1", schemaB)
+
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		id, err := lookup(reg, "subject1", schemaB, latest)
+		require.NoError(t, err)
+		require.Equal(t, wantID, id)
+		require.Equal(t, 2, regServer.RegistrationCount())
+	})
+
+	t.Run("errors on a subject with no registered version", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		_, err = lookup(reg, "missing-value", schemaA, latest)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "missing-value")
+	})
+
+	t.Run("rejects a mismatched schema and does not cache the rejection", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+
+		regServer.RegisterSchema("subject1", schemaA)
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		_, err = lookup(reg, "subject1", schemaB, latest)
+		require.ErrorContains(t, err, rejected)
+
+		wantID := regServer.RegisterSchema("subject1", schemaB)
+		id, err := lookup(reg, "subject1", schemaB, latest)
+		require.NoError(t, err)
+		require.Equal(t, wantID, id)
+	})
+
+	t.Run("caches by subject, schema, and strategy", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+
+		regServer.RegisterSchema("subject1", schemaA)
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		var seen []string
+		var validations int
+		record := func(registeredSchema string, alreadyValidated bool) error {
+			seen = append(seen, registeredSchema)
+			if !alreadyValidated {
+				validations++
+			}
+			return nil
+		}
+		wantID, err := reg.LookupSchemaIDForSubject(ctx, "subject1", schemaA, latest, record)
+		require.NoError(t, err)
+
+		// Closing the server asserts the second lookup of the same
+		// {subject, schema, strategy} is served from the cache.
+		regServer.Close()
+		id, err := reg.LookupSchemaIDForSubject(ctx, "subject1", schemaA, latest, record)
+		require.NoError(t, err)
+		require.Equal(t, wantID, id)
+		require.Equal(t, []string{schemaA, schemaA}, seen)
+		require.Equal(t, 1, validations)
+
+		// A hit can still fail while rebuilding caller-local state from the
+		// cached schema, even though compatibility has already been validated.
+		_, err = reg.LookupSchemaIDForSubject(ctx, "subject1", schemaA, latest,
+			func(_ string, alreadyValidated bool) error {
+				require.True(t, alreadyValidated)
+				return errors.New(rejected)
+			})
+		require.ErrorContains(t, err, rejected)
+
+		// A different strategy is a distinct entry, so it has to go back to
+		// the server, which is no longer listening.
+		_, err = lookup(reg, "subject1", schemaA, pin(1))
+		require.Error(t, err)
+	})
+
+	t.Run("pin resolves the requested version", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+
+		wantID := regServer.RegisterSchema("subject1", schemaA)
+		regServer.RegisterSchema("subject1", schemaB)
+
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		id, err := lookup(reg, "subject1", schemaA, pin(1))
+		require.NoError(t, err)
+		require.Equal(t, wantID, id)
+	})
+
+	t.Run("pin on a missing version fails", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+
+		regServer.RegisterSchema("subject1", schemaA)
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		_, err = lookup(reg, "subject1", schemaA, pin(5))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "subject1")
+		require.Contains(t, err.Error(), "5")
+	})
+
+	t.Run("pin rejects a mismatched schema", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+
+		regServer.RegisterSchema("subject1", schemaA)
+		regServer.RegisterSchema("subject1", schemaB)
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		_, err = lookup(reg, "subject1", schemaB, pin(1))
+		require.ErrorContains(t, err, rejected)
+	})
+
+	t.Run("latest compatible walks versions newest to oldest", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+
+		wantID := regServer.RegisterSchema("subject1", schemaA)
+		regServer.RegisterSchema("subject1", schemaB)
+		regServer.RegisterSchema("subject1", schemaC)
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		var seen []string
+		id, err := reg.LookupSchemaIDForSubject(ctx, "subject1", schemaA, latestCompatible,
+			func(registeredSchema string, alreadyValidated bool) error {
+				require.False(t, alreadyValidated)
+				seen = append(seen, registeredSchema)
+				if registeredSchema != schemaA {
+					return errors.New(rejected)
+				}
+				return nil
+			})
+		require.NoError(t, err)
+		require.Equal(t, wantID, id)
+		require.Equal(t, []string{schemaC, schemaB, schemaA}, seen)
+	})
+
+	t.Run("latest compatible fails when no version matches", func(t *testing.T) {
+		defer TestingClearSchemaRegistrySingleton()
+		regServer := cdctest.StartTestSchemaRegistry()
+		defer regServer.Close()
+
+		regServer.RegisterSchema("subject1", schemaB)
+		regServer.RegisterSchema("subject1", schemaC)
+		reg, err := newConfluentSchemaRegistry(regServer.URL(), nil, nil)
+		require.NoError(t, err)
+
+		_, err = lookup(reg, "subject1", schemaA, latestCompatible)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no compatible registered avro schema version")
+		require.Contains(t, err.Error(), "subject1")
+		// Every version that was passed over is reported, newest first.
+		require.Regexp(t, fmt.Sprintf(`(?s)version 2: %s.*version 1: %s`, rejected, rejected),
+			err.Error())
+	})
 }
 
 func TestConfluentSchemaRegistryPing(t *testing.T) {

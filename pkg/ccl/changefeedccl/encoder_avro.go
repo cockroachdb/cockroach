@@ -8,11 +8,15 @@ package changefeedccl
 import (
 	"context"
 	"encoding/binary"
+	"slices"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -22,6 +26,7 @@ import (
 const (
 	confluentSubjectSuffixKey   = `-key`
 	confluentSubjectSuffixValue = `-value`
+	avroResolvedSchemaName      = `resolved`
 )
 
 // confluentAvroEncoder encodes changefeed entries as Avro's binary or textual
@@ -37,6 +42,9 @@ type confluentAvroEncoder struct {
 	envelopeType                           changefeedbase.EnvelopeType
 	customKeyColumn                        string
 	headersJSONColumnName                  string
+	avroMode                               changefeedbase.AvroModeType
+	avroResolvedSubject                    string
+	avroSchemas                            changefeedbase.AvroSchemaOverrides
 
 	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
@@ -96,6 +104,9 @@ func newConfluentAvroEncoder(
 	e.headersJSONColumnName = opts.HeadersJSONColName
 	e.mvccTimestampField = opts.MVCCTimestamps
 	e.enrichedSourceProvider = enrichedSourceProvider
+	e.avroMode = opts.AvroMode
+	e.avroResolvedSubject = opts.AvroResolvedSubject
+	e.avroSchemas = opts.AvroSchemas
 
 	// TODO: Implement this.
 	if opts.KeyInValue {
@@ -143,6 +154,9 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 		if err != nil {
 			return nil, err
 		}
+		// NB: This uses the kafka name escaper because it has to match the name
+		// of the kafka topic.
+		kafkaName := changefeedbase.SQLNameToKafkaName(tableName)
 		if e.customKeyColumn == "" {
 			registered.schema, err = avro.PrimaryIndexToAvroSchema(row, tableName, e.schemaPrefix)
 			if err != nil {
@@ -159,13 +173,14 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 			}
 		}
 
-		// NB: This uses the kafka name escaper because it has to match the name
-		// of the kafka topic.
-		subject := changefeedbase.SQLNameToKafkaName(tableName) + confluentSubjectSuffixKey
-		registered.registryID, err = e.register(ctx, &registered.schema.Record, subject)
+		defaultSubject := kafkaName + confluentSubjectSuffixKey
+		subject := e.resolveSubject(defaultSubject)
+		resolved, err := resolveSchema(ctx, e, subject, registered.schema,
+			e.versionStrategy(defaultSubject), avro.NewDataRecordWithRegisteredSchema)
 		if err != nil {
 			return nil, err
 		}
+		registered.registryID, registered.schema = resolved.id, resolved.record
 		e.keyCache.Add(cacheKey, registered)
 	}
 
@@ -277,11 +292,14 @@ func (e *confluentAvroEncoder) EncodeValue(
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := changefeedbase.SQLNameToKafkaName(name) + confluentSubjectSuffixValue
-		registered.registryID, err = e.register(ctx, &registered.schema.Record, subject)
+		defaultSubject := changefeedbase.SQLNameToKafkaName(name) + confluentSubjectSuffixValue
+		subject := e.resolveSubject(defaultSubject)
+		resolved, err := resolveSchema(ctx, e, subject, registered.schema,
+			e.versionStrategy(defaultSubject), avro.NewEnvelopeRecordWithRegisteredSchema)
 		if err != nil {
 			return nil, err
 		}
+		registered.registryID, registered.schema = resolved.id, resolved.record
 		e.valueCache.Add(cacheKey, registered)
 	}
 
@@ -312,24 +330,49 @@ func (e *confluentAvroEncoder) EncodeValue(
 func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 	ctx context.Context, topic string, resolved hlc.Timestamp,
 ) ([]byte, error) {
-	registered, ok := e.resolvedCache[topic]
+	cacheKey := topic
+	schemaName := topic
+	if e.avroResolvedSubject != "" {
+		// A configured resolved subject is shared by every output topic. Give it
+		// a fixed record name so that its schema is stable for multi-topic feeds
+		// and independent of the registry subject name.
+		cacheKey = e.avroResolvedSubject
+		schemaName = avroResolvedSchemaName
+	}
+	registered, ok := e.resolvedCache[cacheKey]
 	if !ok {
 		opts := avro.EnvelopeOpts{ResolvedField: true}
 		var err error
-		registered.schema, err = avro.NewEnvelopeRecord(topic, opts, nil /* before */, nil /* after */, nil /* record */, nil /* source */, e.schemaPrefix /* namespace */)
+		registered.schema, err = avro.NewEnvelopeRecord(schemaName, opts, nil /* before */, nil /* after */, nil /* record */, nil /* source */, e.schemaPrefix /* namespace */)
 		if err != nil {
 			return nil, err
 		}
 
-		// NB: This uses the kafka name escaper because it has to match the name
-		// of the kafka topic.
-		subject := changefeedbase.SQLNameToKafkaName(topic) + confluentSubjectSuffixValue
-		registered.registryID, err = e.register(ctx, &registered.schema.Record, subject)
+		var subject string
+		var strategy changefeedbase.AvroVersionStrategy
+		if e.avroResolvedSubject != "" {
+			subject = e.avroResolvedSubject
+			// Resolved schemas have a fixed shape, so read mode always uses the
+			// latest registered version of the configured subject.
+			strategy = changefeedbase.AvroVersionStrategy{Kind: changefeedbase.AvroVersionLatest}
+		} else {
+			// Preserve the legacy path, including avro_schemas value-subject
+			// overrides, when no dedicated resolved subject is configured.
+			//
+			// NB: This uses the kafka name escaper because it has to match the name
+			// of the kafka topic.
+			defaultSubject := changefeedbase.SQLNameToKafkaName(topic) + confluentSubjectSuffixValue
+			subject = e.resolveSubject(defaultSubject)
+			strategy = e.versionStrategy(defaultSubject)
+		}
+		resolved, err := resolveSchema(ctx, e, subject, registered.schema,
+			strategy, avro.NewEnvelopeRecordWithRegisteredSchema)
 		if err != nil {
 			return nil, err
 		}
+		registered.registryID, registered.schema = resolved.id, resolved.record
 
-		e.resolvedCache[topic] = registered
+		e.resolvedCache[cacheKey] = registered
 	}
 	var meta avro.Metadata
 	if registered.schema.Opts.ResolvedField {
@@ -347,8 +390,130 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 	return registered.schema.BinaryFromRow(header, meta, nilRow, nilRow, nilRow, "")
 }
 
-func (e *confluentAvroEncoder) register(
-	ctx context.Context, schema *avro.Record, subject string,
-) (int32, error) {
-	return e.schemaRegistry.RegisterSchemaForSubject(ctx, subject, schema.Schema())
+// schemaRecord is an avro record the encoder resolves a registry ID for.
+type schemaRecord interface {
+	Schema() string
+}
+
+// resolvedSchema pairs the registry ID to stamp onto a subject's messages with
+// the record to encode them with.
+type resolvedSchema[T schemaRecord] struct {
+	id     int32
+	record T
+}
+
+// resolveSchema resolves the registry ID for subject. In the default write mode
+// it registers local's schema and encoding continues with local. In read mode it
+// selects an already-registered version, never writing to the registry, and
+// encoding continues with the record adopt builds from that version; adopt also
+// decides whether a candidate version is usable at all, so the latest_compatible
+// walk runs it once per version until one is accepted.
+func resolveSchema[T schemaRecord](
+	ctx context.Context,
+	e *confluentAvroEncoder,
+	subject string,
+	local T,
+	strategy changefeedbase.AvroVersionStrategy,
+	adopt func(local T, registeredSchema string, alreadyValidated bool) (T, error),
+) (resolvedSchema[T], error) {
+	if e.avroMode != changefeedbase.OptAvroModeRead {
+		id, err := e.schemaRegistry.RegisterSchemaForSubject(ctx, subject, local.Schema())
+		if err != nil {
+			return resolvedSchema[T]{}, err
+		}
+		return resolvedSchema[T]{id: id, record: local}, nil
+	}
+
+	adopted := local
+	id, err := e.schemaRegistry.LookupSchemaIDForSubject(ctx, subject, local.Schema(), strategy,
+		func(registeredSchema string, alreadyValidated bool) error {
+			candidate, err := adopt(local, registeredSchema, alreadyValidated)
+			if err != nil {
+				return errors.Wrapf(err, "subject %q", subject)
+			}
+			adopted = candidate
+			return nil
+		})
+	if err != nil {
+		return resolvedSchema[T]{}, err
+	}
+	return resolvedSchema[T]{id: id, record: adopted}, nil
+}
+
+// resolveSubject returns the registry subject to use for the given default
+// subject name, applying any avro_schemas subject-name override.
+func (e *confluentAvroEncoder) resolveSubject(defaultSubject string) string {
+	if o, ok := e.avroSchemas[defaultSubject]; ok && o.SubjectName != "" {
+		return o.SubjectName
+	}
+	return defaultSubject
+}
+
+// versionStrategy returns the version-selection strategy used to resolve the
+// given default subject in read mode. Subjects without a configured strategy
+// use the default, the latest registered version.
+func (e *confluentAvroEncoder) versionStrategy(
+	defaultSubject string,
+) changefeedbase.AvroVersionStrategy {
+	return e.avroSchemas[defaultSubject].Version
+}
+
+// validateAvroSchemasMatchTargets checks that every avro_schemas entry refers
+// to a watched table and that overrides do not collide with another topic's
+// explicitly configured or default subject.
+func validateAvroSchemasMatchTargets(
+	encodingOpts changefeedbase.EncodingOptions,
+	targets changefeedbase.Targets,
+	tableNameToDescriptor map[tree.TablePattern]catalog.Descriptor,
+) error {
+	if len(encodingOpts.AvroSchemas) == 0 && encodingOpts.AvroResolvedSubject == "" {
+		return nil
+	}
+	tableDescs := make([]catalog.TableDescriptor, 0, len(tableNameToDescriptor))
+	for _, desc := range tableNameToDescriptor {
+		if table, isTable := desc.(catalog.TableDescriptor); isTable {
+			tableDescs = append(tableDescs, table)
+		}
+	}
+	topics, err := ResolveTopicNames(targets, tableDescs,
+		WithPrefix(encodingOpts.AvroSchemaPrefix),
+		WithSanitizeFn(changefeedbase.SQLNameToKafkaName))
+	if err != nil {
+		return err
+	}
+	for key := range encodingOpts.AvroSchemas {
+		base, ok := strings.CutSuffix(key, confluentSubjectSuffixValue)
+		if !ok {
+			base, _ = strings.CutSuffix(key, confluentSubjectSuffixKey)
+		}
+		if !slices.Contains(topics, base) {
+			return errors.Newf("%s key %q does not match a watched table",
+				changefeedbase.OptAvroSchemas, key)
+		}
+	}
+
+	effectiveSubjects := make(map[string]string, len(topics)*2)
+	for _, topic := range topics {
+		for _, suffix := range []string{confluentSubjectSuffixKey, confluentSubjectSuffixValue} {
+			defaultSubject := topic + suffix
+			effectiveSubject := defaultSubject
+			if override, ok := encodingOpts.AvroSchemas[defaultSubject]; ok && override.SubjectName != "" {
+				effectiveSubject = override.SubjectName
+			}
+			if other, ok := effectiveSubjects[effectiveSubject]; ok {
+				return errors.Newf(
+					`%s subjects %q and %q resolve to the same registry subject %q`,
+					changefeedbase.OptAvroSchemas, other, defaultSubject, effectiveSubject)
+			}
+			effectiveSubjects[effectiveSubject] = defaultSubject
+		}
+	}
+	if encodingOpts.AvroResolvedSubject != "" {
+		if other, ok := effectiveSubjects[encodingOpts.AvroResolvedSubject]; ok {
+			return errors.Newf(
+				`%s %q conflicts with key/value subject %q`, changefeedbase.OptAvroResolvedSubject,
+				encodingOpts.AvroResolvedSubject, other)
+		}
+	}
+	return nil
 }

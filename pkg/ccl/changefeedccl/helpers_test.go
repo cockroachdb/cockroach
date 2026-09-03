@@ -28,6 +28,8 @@ import (
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
@@ -631,6 +633,31 @@ func expectResolvedTimestampAvro(t testing.TB, f cdctest.TestFeed) hlc.Timestamp
 	var resolvedNative interface{}
 	err = gojson.Unmarshal(m.Resolved, &resolvedNative)
 	if err != nil {
+		t.Fatal(err)
+	}
+	resolved := resolvedNative.(map[string]interface{})[`resolved`]
+	return parseTimeToHLC(t, resolved.(map[string]interface{})[`string`].(string))
+}
+
+func expectResolvedTimestampAvroWithRegistry(
+	t testing.TB, reg *cdctest.SchemaRegistry, f cdctest.TestFeed,
+) hlc.Timestamp {
+	t.Helper()
+	m, err := f.Next()
+	if err != nil {
+		t.Fatal(err)
+	} else if m == nil {
+		t.Fatal(`expected message`)
+	}
+	if m.Key != nil {
+		t.Fatalf(`unexpected row %s: %s -> %s`, m.Topic, m.Key, m.Value)
+	}
+	if m.Resolved == nil {
+		t.Fatal(`expected a resolved timestamp notification`)
+	}
+
+	var resolvedNative interface{}
+	if err := gojson.Unmarshal(avroToJSON(t, reg, m.Resolved), &resolvedNative); err != nil {
 		t.Fatal(err)
 	}
 	resolved := resolvedNative.(map[string]interface{})[`resolved`]
@@ -1690,6 +1717,54 @@ func cdcTestNamedWithSystem(
 
 		testFn(t, testServer, feedFactory)
 	})
+}
+
+func readAvroPayloads(
+	t *testing.T, reg *cdctest.SchemaRegistry, tf cdctest.TestFeed, n int,
+) []string {
+	t.Helper()
+	msgs, err := readNextMessages(context.Background(), tf, n)
+	require.NoError(t, err)
+	payloads := make([]string, len(msgs))
+	for i, m := range msgs {
+		key := m.Key
+		if len(key) > 0 && key[0] == changefeedbase.ConfluentAvroWireFormatMagic {
+			key = avroToJSON(t, reg, key)
+		}
+		payloads[i] = fmt.Sprintf(`%s: %s->%s`, m.Topic, key, avroToJSON(t, reg, m.Value))
+	}
+	sort.Strings(payloads)
+	return payloads
+}
+
+// registerAvroValueSubject registers under subject the wrapped-envelope value
+// schema a write-mode changefeed would generate for createStmt. Read-mode tests
+// use it to stand in for an operator who registered schemas out of band.
+func registerAvroValueSubject(
+	t *testing.T, reg *cdctest.SchemaRegistry, subject, createStmt string,
+) {
+	t.Helper()
+	desc, err := parseTableDesc(createStmt)
+	require.NoError(t, err)
+	after, err := avro.TableToAvroSchema(
+		cdcevent.TestingMakeEventRow(desc, 0, nil, false), avro.SchemaNoSuffix, "", "")
+	require.NoError(t, err)
+	env, err := avro.NewEnvelopeRecord(
+		desc.GetName(), avro.EnvelopeOpts{AfterField: true}, nil, after, nil, nil, "")
+	require.NoError(t, err)
+	reg.RegisterSchema(subject, env.Schema())
+}
+
+// registerAvroKeySubject is registerAvroValueSubject for the primary-index key
+// schema.
+func registerAvroKeySubject(t *testing.T, reg *cdctest.SchemaRegistry, subject, createStmt string) {
+	t.Helper()
+	desc, err := parseTableDesc(createStmt)
+	require.NoError(t, err)
+	key, err := avro.PrimaryIndexToAvroSchema(
+		cdcevent.TestingMakeEventRow(desc, 0, nil, false), desc.GetName(), "")
+	require.NoError(t, err)
+	reg.RegisterSchema(subject, key.Schema())
 }
 
 // TODO (zinger): These sometimes error when using external connections,

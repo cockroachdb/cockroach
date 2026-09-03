@@ -37,6 +37,12 @@ func TestOptionsValidations(t *testing.T) {
 		{map[string]string{"initial_scan_only": "", "resolved": ""}, true, "cannot specify both initial_scan='only'"},
 		{map[string]string{"initial_scan_only": "", "resolved": ""}, true, "cannot specify both initial_scan='only'"},
 		{map[string]string{"key_column": "b"}, false, "requires the unordered option"},
+		{map[string]string{"format": "avro", "avro_mode": "read", "resolved": "10s"}, false,
+			"resolved with avro_mode=read requires avro_resolved_subject"},
+		{map[string]string{"format": "avro", "avro_mode": "read", "resolved": "10s",
+			"avro_resolved_subject": "acme.resolved"}, false, ""},
+		{map[string]string{"format": "avro", "avro_mode": "write", "resolved": "10s"}, false, ""},
+		{map[string]string{"format": "avro", "avro_mode": "read"}, false, ""},
 	}
 
 	for _, test := range tests {
@@ -66,6 +72,14 @@ func TestEncodingOptionsValidations(t *testing.T) {
 		{EncodingOptions{Format: OptFormatAvro, Envelope: OptEnvelopeBare, UpdatedTimestamps: true}, "is only usable with envelope=wrapped"},
 		{EncodingOptions{Format: OptFormatAvro, Envelope: OptEnvelopeBare, MVCCTimestamps: true}, "is only usable with envelope=wrapped"},
 		{EncodingOptions{Format: OptFormatAvro, Envelope: OptEnvelopeBare, Diff: true}, "is only usable with envelope=wrapped"},
+		{EncodingOptions{Format: OptFormatAvro, AvroMode: OptAvroModeRead}, ""},
+		{EncodingOptions{Format: OptFormatJSON, AvroMode: OptAvroModeRead}, "avro_mode is only usable with format=avro"},
+		{EncodingOptions{Format: OptFormatAvro, AvroMode: OptAvroModeWrite}, ""},
+		{EncodingOptions{Format: OptFormatJSON, AvroMode: OptAvroModeWrite}, "avro_mode is only usable with format=avro"},
+		{EncodingOptions{Format: OptFormatAvro, AvroResolvedSubject: "acme.resolved"}, ""},
+		{EncodingOptions{Format: OptFormatJSON, AvroResolvedSubject: "acme.resolved"},
+			"avro_resolved_subject is only usable with format=avro"},
+		{EncodingOptions{Format: OptFormatJSON}, ""},
 	}
 
 	for _, c := range cases {
@@ -78,4 +92,83 @@ func TestEncodingOptionsValidations(t *testing.T) {
 		}
 	}
 
+}
+
+func TestAvroSchemasOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		name      string
+		opts      map[string]string
+		expectErr string
+	}{
+		{name: "rename and strategies in read mode",
+			opts: map[string]string{"format": "avro", "avro_mode": "read",
+				"avro_schemas": `{"foo-value": {"version": "latest_compatible"}, "foo-key": {"version": "pin(3)", "subject_name": "acme.foo.key"}}`}},
+		{name: "key version without value entry in read mode",
+			opts: map[string]string{"format": "avro", "avro_mode": "read",
+				"avro_schemas": `{"foo-key": {"version": "pin(3)", "subject_name": "acme.foo.key"}}`}},
+		{name: "version is not allowed in write mode",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {"version": "latest"}}`},
+			expectErr: "version is only usable with avro_mode=read"},
+		{name: "invalid JSON",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{`},
+			expectErr: "parsing avro_schemas"},
+		{name: "not an object",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `[]`},
+			expectErr: "must be a JSON object"},
+		{name: "key without a subject suffix",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo": {}}`},
+			expectErr: `ending in "-key" or "-value"`},
+		{name: "entry not an object",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": "acme.foo"}`},
+			expectErr: `entry "foo-value" must be a JSON object`},
+		{name: "unknown entry field",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {"subject": "x"}}`},
+			expectErr: "unknown field"},
+		{name: "empty subject_name",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {"subject_name": ""}}`},
+			expectErr: "empty subject_name"},
+		{name: "unknown version strategy",
+			opts:      map[string]string{"format": "avro", "avro_mode": "read", "avro_schemas": `{"foo-value": {"version": "newest"}}`},
+			expectErr: "invalid avro version strategy"},
+		{name: "pin without a version",
+			opts:      map[string]string{"format": "avro", "avro_mode": "read", "avro_schemas": `{"foo-value": {"version": "pin()"}}`},
+			expectErr: "invalid pinned version"},
+		{name: "pin with a non-numeric version",
+			opts:      map[string]string{"format": "avro", "avro_mode": "read", "avro_schemas": `{"foo-value": {"version": "pin(abc)"}}`},
+			expectErr: "invalid pinned version"},
+		{name: "pin zero",
+			opts:      map[string]string{"format": "avro", "avro_mode": "read", "avro_schemas": `{"foo-value": {"version": "pin(0)"}}`},
+			expectErr: "invalid pinned version"},
+		{name: "empty key entry",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-key": {}}`},
+			expectErr: `entry "foo-key" must specify at least one of "subject_name" or "version"`},
+		{name: "empty value entry",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {}}`},
+			expectErr: `entry "foo-value" must specify at least one of "subject_name" or "version"`},
+		{name: "requires avro format",
+			opts:      map[string]string{"avro_schemas": `{"foo-key": {"subject_name": "acme.foo.key"}}`},
+			expectErr: "avro_schemas is only usable with format=avro"},
+		{name: "empty object allowed with avro format",
+			opts: map[string]string{"format": "avro", "avro_schemas": `{}`}},
+		{name: "pin requires read mode",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {"version": "pin(2)"}}`},
+			expectErr: "only usable with avro_mode=read"},
+		{name: "latest_compatible requires read mode",
+			opts:      map[string]string{"format": "avro", "avro_schemas": `{"foo-value": {"version": "latest_compatible"}}`},
+			expectErr: "only usable with avro_mode=read"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := MakeStatementOptions(tc.opts).GetEncodingOptions()
+			if tc.expectErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tc.expectErr)
+			}
+		})
+	}
 }
