@@ -90,6 +90,9 @@ func alterBackupPlanHook(
 	}
 
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+		if err := sql.MaybeCheckDestinationPrivileges(ctx, p, []string{backup}); err != nil {
+			return err
+		}
 
 		if subdir != "" {
 			if strings.EqualFold(subdir, "LATEST") {

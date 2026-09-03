@@ -494,6 +494,26 @@ func TestExportPrivileges(t *testing.T) {
 	require.True(t, testutils.IsError(err,
 		"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI"))
 
+	sqlDB.Exec(t,
+		`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
+
+	sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION privs_ec AS 'nodelocal://1/privs'`)
+	_, err = testuser.Exec(`EXPORT INTO CSV 'external://privs_ec' FROM TABLE privs`)
+	require.True(t, testutils.IsError(err,
+		"user testuser does not have USAGE privilege on external_connection privs_ec"))
+
+	sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION privs_ec_no_usage AS 'nodelocal://1/privs_no_usage'`)
+	sqlDB.Exec(t,
+		`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
+	_, err = testuser.Exec(`EXPORT INTO CSV 'external://privs_ec_no_usage' FROM TABLE privs`)
+	require.NoError(t, err)
+	sqlDB.Exec(t,
+		`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
+
+	sqlDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION privs_ec TO testuser`)
+	_, err = testuser.Exec(`EXPORT INTO CSV 'external://privs_ec' FROM TABLE privs`)
+	require.NoError(t, err)
+
 	sqlDB.Exec(t, `GRANT ADMIN TO testuser`)
 
 	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
