@@ -941,9 +941,15 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 			return
 		}
 
+		// Include the partial index predicate in the set of optional filters,
+		// if this is a partial index.
+		indexOptionalFilters := c.optionalFiltersWithPartialIndexPredicate(
+			tabMeta, index.Ordinal(), optionalFilters,
+		)
+
 		// Check whether the filter can constrain the index.
 		spanExpr, con, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
-			c.e.ctx, c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
+			c.e.ctx, c.e.evalCtx, c.e.f, filters, indexOptionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
 			c.checkCancellation,
 		)
 		if !ok {
@@ -1183,9 +1189,14 @@ func (c *CustomFuncs) GenerateTrigramSimilarityInvertedIndexScans(
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
+		// Include the partial index predicate in the set of optional filters,
+		// if this is a partial index.
+		indexOptionalFilters := c.optionalFiltersWithPartialIndexPredicate(
+			tabMeta, index.Ordinal(), optionalFilters,
+		)
 		// Try to constrain the index.
 		con, remainingFilters, ok := invertedidx.TryFilterInvertedIndexBySimilarity(
-			c.e.ctx, c.e.evalCtx, c.e.f, filters, optionalFilters,
+			c.e.ctx, c.e.evalCtx, c.e.f, filters, indexOptionalFilters,
 			tabID, index, tabMeta.ComputedCols, c.checkCancellation,
 		)
 		if !ok {
