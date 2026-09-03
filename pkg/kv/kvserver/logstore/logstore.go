@@ -238,9 +238,19 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// outdated. Raft invariants are in the responsibility of the layer above
 	// (Replica), so this comment might need to move.
 	stats.PebbleBegin = crtime.NowMono()
-	stats.PebbleBytes = int64(batch.Len())
 	wantsSync := m.MustSync()
 	willSync := wantsSync && !DisableSyncRaftLog.Get(&s.Settings.SV)
+
+	// Some StorageAppends only carry Responses (e.g. re-acking existing entries)
+	// and have nothing to write, yet still require a sync before the Responses
+	// are delivered. Committing the resulting empty batch would not sync, so make
+	// it non-empty. See storage.EnsureBatchSyncs and #172785.
+	if willSync {
+		if err := storage.EnsureBatchSyncs(batch); err != nil {
+			return RaftState{}, errors.Wrap(err, "while forcing a non-empty raft log sync")
+		}
+	}
+	stats.PebbleBytes = int64(batch.Len())
 	// Use the non-blocking log sync path if we are performing a log sync ...
 	nonBlockingSync := willSync &&
 		// and the cluster setting is enabled ...
