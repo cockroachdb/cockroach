@@ -178,6 +178,7 @@ var sessionVarDescriptions = map[string]string{
 	"optimizer_use_min_row_count_anti_join_fix":                       "Controls whether the optimizer uses a fix for minimum row count estimation in anti-join operations.",
 	"optimizer_use_multicol_stats":                                    "Controls whether the optimizer should use multi-column statistics for cardinality estimation.",
 	"optimizer_use_not_visible_indexes":                               "Controls whether the optimizer can still choose to use not visible indexes for query plans.",
+	"optimizer_use_partial_index_predicate_optional_filters":          "Controls whether the optimizer supplies a partial index's predicate as an optional filter when constraining a scan over that index, tightening the scan's spans.",
 	"optimizer_use_polymorphic_parameter_fix":                         "Controls whether the optimizer validates routine polymorphic parameters during overload resolution and type-checking.",
 	"optimizer_use_provided_ordering_fix":                             "Controls whether the optimizer reconciles provided orderings with required ordering choices to prevent internal errors.",
 	"optimizer_use_trigram_similarity_optimization":                   "Controls whether the optimizer should generate improved plans for queries with trigram similarity filters.",

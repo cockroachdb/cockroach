@@ -941,6 +941,10 @@ func (m *SessionDataMutator) SetOptimizerUseHistogramsForWithScans(val bool) {
 	m.Data.OptimizerUseHistogramsForWithScans = val
 }
 
+func (m *SessionDataMutator) SetOptimizerUsePartialIndexPredicateOptionalFilters(val bool) {
+	m.Data.OptimizerUsePartialIndexPredicateOptionalFilters = val
+}
+
 func (m *SessionDataMutator) SetOptimizerUseProvidedOrderingFix(val bool) {
 	m.Data.OptimizerUseProvidedOrderingFix = val
 }

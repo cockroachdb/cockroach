@@ -195,6 +195,7 @@ optimizer_use_merged_partial_statistics                          on             
 optimizer_use_min_row_count_anti_join_fix                        on                  Controls whether the optimizer uses a fix for minimum row count estimation in anti-join operations.
 optimizer_use_multicol_stats                                     on                  Controls whether the optimizer should use multi-column statistics for cardinality estimation.
 optimizer_use_not_visible_indexes                                off                 Controls whether the optimizer can still choose to use not visible indexes for query plans.
+optimizer_use_partial_index_predicate_optional_filters           on                  Controls whether the optimizer supplies a partial index's predicate as an optional filter when constraining a scan over that index, tightening the scan's spans.
 optimizer_use_polymorphic_parameter_fix                          on                  Controls whether the optimizer validates routine polymorphic parameters during overload resolution and type-checking.
 optimizer_use_provided_ordering_fix                              on                  Controls whether the optimizer reconciles provided orderings with required ordering choices to prevent internal errors.
 optimizer_use_trigram_similarity_optimization                    on                  Controls whether the optimizer should generate improved plans for queries with trigram similarity filters.
