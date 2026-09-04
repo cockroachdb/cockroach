@@ -821,9 +821,9 @@ type Tuple struct {
 	Exprs  Exprs
 	Labels []string
 
-	// Row indicates whether `ROW` was used in the input syntax. This is
-	// used solely to generate column names automatically, see
-	// col_name.go.
+	// Row indicates whether `ROW` was used in the input syntax. It distinguishes
+	// explicit row constructors from syntactic parenthesized lists during clause
+	// expansion and is used to generate column names automatically.
 	Row bool
 
 	typ *types.T
