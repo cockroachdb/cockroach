@@ -90,39 +90,39 @@ const (
 # ensure any failure fails the entire script.
 set -e;
 # Setting default filter policy
-sudo iptables -P INPUT ACCEPT;
-sudo iptables -P OUTPUT ACCEPT;
+sudo iptables -w 60 -P INPUT ACCEPT;
+sudo iptables -w 60 -P OUTPUT ACCEPT;
 %s
 sudo iptables-save
 `
 
 	// Drop all incoming and outgoing traffic to the ip address.
 	bidirectionalPartitionCmd = `
-sudo iptables %[1]s INPUT  -s {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s OUTPUT -d {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s INPUT  -s {ip:%[2]d} -p tcp --sport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s OUTPUT -d {ip:%[2]d} -p tcp --sport {pgport:%[2]d} -j DROP;
+sudo iptables -w 60 %[1]s INPUT  -s {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
+sudo iptables -w 60 %[1]s OUTPUT -d {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
+sudo iptables -w 60 %[1]s INPUT  -s {ip:%[2]d} -p tcp --sport {pgport:%[2]d} -j DROP;
+sudo iptables -w 60 %[1]s OUTPUT -d {ip:%[2]d} -p tcp --sport {pgport:%[2]d} -j DROP;
 `
 	bidirectionalPublicPartitionCmd = `
-sudo iptables %[1]s INPUT  -s {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s OUTPUT -d {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s INPUT  -s {ip:%[2]d:public} -p tcp --sport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s OUTPUT -d {ip:%[2]d:public} -p tcp --sport {pgport:%[2]d} -j DROP;
+sudo iptables -w 60 %[1]s INPUT  -s {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
+sudo iptables -w 60 %[1]s OUTPUT -d {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
+sudo iptables -w 60 %[1]s INPUT  -s {ip:%[2]d:public} -p tcp --sport {pgport:%[2]d} -j DROP;
+sudo iptables -w 60 %[1]s OUTPUT -d {ip:%[2]d:public} -p tcp --sport {pgport:%[2]d} -j DROP;
 `
 	// Drop all incoming traffic from the ip address.
 	asymmetricInputPartitionCmd = `
-sudo iptables %[1]s INPUT -s {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
+sudo iptables -w 60 %[1]s INPUT -s {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
 `
 	asymmetricPublicInputPartitionCmd = `
-sudo iptables %[1]s INPUT -s {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
+sudo iptables -w 60 %[1]s INPUT -s {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
 `
 
 	// Drop all outgoing traffic to the ip address.
 	asymmetricOutputPartitionCmd = `
-sudo iptables %[1]s OUTPUT -d {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
+sudo iptables -w 60 %[1]s OUTPUT -d {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
 `
 	asymmetricPublicOutputPartitionCmd = `
-sudo iptables %[1]s OUTPUT -d {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
+sudo iptables -w 60 %[1]s OUTPUT -d {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
 `
 )
 

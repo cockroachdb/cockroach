@@ -263,12 +263,12 @@ SELECT $1::INT = ALL (
 set -e;
 
 # Setting default filter policy
-sudo iptables -P INPUT ACCEPT;
-sudo iptables -P OUTPUT ACCEPT;
+sudo iptables -w 60 -P INPUT ACCEPT;
+sudo iptables -w 60 -P OUTPUT ACCEPT;
 
 # Drop any node-to-node crdb traffic.
-sudo iptables -A INPUT -p tcp --dport {pgport%s} -j DROP;
-sudo iptables -A OUTPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -w 60 -A INPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -w 60 -A OUTPUT -p tcp --dport {pgport%s} -j DROP;
 
 sudo iptables-save
 `,
@@ -291,8 +291,8 @@ sudo iptables-save
 			// can be investigated afterwards.
 			restoreNet := fmt.Sprintf(`
 set -e;
-sudo iptables -D INPUT -p tcp --dport {pgport%s} -j DROP;
-sudo iptables -D OUTPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -w 60 -D INPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -w 60 -D OUTPUT -p tcp --dport {pgport%s} -j DROP;
 sudo iptables-save
 `,
 				c.Node(expectedLeaseholder), c.Node(expectedLeaseholder))
@@ -368,12 +368,12 @@ func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c clust
 set -e;
 
 # Setting default filter policy
-sudo iptables -P INPUT ACCEPT;
-sudo iptables -P OUTPUT ACCEPT;
+sudo iptables -w 60 -P INPUT ACCEPT;
+sudo iptables -w 60 -P OUTPUT ACCEPT;
 
 # Drop any client traffic to CRDB.
-sudo iptables -A INPUT -p tcp --sport {pgport%s} -j DROP;
-sudo iptables -A OUTPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -w 60 -A INPUT -p tcp --sport {pgport%s} -j DROP;
+sudo iptables -w 60 -A OUTPUT -p tcp --dport {pgport%s} -j DROP;
 `,
 		c.Node(1), c.Node(1))
 	t.L().Printf("blocking networking on client; config cmd:\n%s", netConfigCmd)
@@ -385,8 +385,8 @@ sudo iptables -A OUTPUT -p tcp --dport {pgport%s} -j DROP;
 	defer func() {
 		const restoreNet = `
 set -e;
-sudo iptables -F INPUT;
-sudo iptables -F OUTPUT;
+sudo iptables -w 60 -F INPUT;
+sudo iptables -w 60 -F OUTPUT;
 `
 		t.L().Printf("restoring iptables; config cmd:\n%s", restoreNet)
 		require.NoError(t, c.RunE(ctx, option.WithNodes(clientNode), restoreNet))
@@ -448,7 +448,7 @@ func iptablesPacketsDropped(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, node option.NodeListOption,
 ) (int, error) {
 	// Filter for only rules on the SQL port as roachprod adds firewall rules for node_exporter.
-	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(node), fmt.Sprintf("sudo iptables -L -x -v -n | grep {pgport%s}", node))
+	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(node), fmt.Sprintf("sudo iptables -w 60 -L -x -v -n | grep {pgport%s}", node))
 	if err != nil {
 		return 0, err
 	}
