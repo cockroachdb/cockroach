@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // commitOnReleaseSavepointName is the name of the savepoint with special
@@ -97,10 +99,11 @@ func (ex *connExecutor) execSavepointInOpenState(
 	}
 
 	sp := savepoint{
-		name:            s.Name,
-		commitOnRelease: commitOnRelease,
-		kvToken:         token,
-		numDDL:          ex.extraTxnState.numDDL,
+		name:               s.Name,
+		commitOnRelease:    commitOnRelease,
+		kvToken:            token,
+		numDDL:             ex.extraTxnState.numDDL,
+		cursorCreationTime: timeutil.Now(),
 	}
 	savepoints.push(sp)
 	ex.sessionDataStack.PushTopClone()
@@ -231,8 +234,14 @@ func (ex *connExecutor) execRollbackToSavepointInOpenState(
 			return ex.makeErrEvent(err, s)
 		}
 	}
+	if err := ex.extraTxnState.sqlCursors.closeCursorsCreatedAfter(
+		entry.cursorCreationTime,
+	); err != nil {
+		return ex.makeErrEvent(err, s)
+	}
 
 	if entry.kvToken.Initial() {
+		ex.extraTxnState.preserveCursorsOnTxnRestart = true
 		return eventTxnRestart{}, nil
 	}
 
@@ -318,8 +327,14 @@ func (ex *connExecutor) execRollbackToSavepointInAbortedState(
 			return ex.makeErrEvent(err, s)
 		}
 	}
+	if err := ex.extraTxnState.sqlCursors.closeCursorsCreatedAfter(
+		entry.cursorCreationTime,
+	); err != nil {
+		return ex.makeErrEvent(err, s)
+	}
 
 	if entry.kvToken.Initial() {
+		ex.extraTxnState.preserveCursorsOnTxnRestart = true
 		return eventTxnRestart{}, nil
 	}
 	return eventSavepointRollback{}, nil
@@ -382,6 +397,10 @@ type savepoint struct {
 	// more DDL statements were executed since the savepoint's creation.
 	// TODO(knz): support partial DDL cancellation in pending txns.
 	numDDL int
+
+	// cursorCreationTime identifies cursors opened after the savepoint. Those
+	// cursors are closed when the savepoint is rolled back.
+	cursorCreationTime time.Time
 }
 
 type savepointStack []savepoint

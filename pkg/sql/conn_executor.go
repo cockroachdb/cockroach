@@ -1769,6 +1769,12 @@ type connExecutor struct {
 		// and are destroyed when the transaction finishes.
 		sqlCursors cursorMap
 
+		// preserveCursorsOnTxnRestart is set when rolling back to an initial SQL
+		// savepoint. Cursors created after the savepoint have already been closed,
+		// so resetExtraTxnState must preserve the remaining cursors during the
+		// resulting transaction restart.
+		preserveCursorsOnTxnRestart bool
+
 		// shouldExecuteOnTxnFinish indicates that ex.onTxnFinish will be called
 		// when txn is finished (either committed or aborted). It is true when
 		// txn is started but can remain false when txn is executed within
@@ -2282,6 +2288,8 @@ func (ns *prepStmtNamespace) rewind(
 // The payload error is included for statistics recording.
 // (e.g. onTxnFinish() and onTxnRestart()).
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, payloadErr error) {
+	preserveCursors := ev.eventType == txnRestart && ex.extraTxnState.preserveCursorsOnTxnRestart
+	ex.extraTxnState.preserveCursorsOnTxnRestart = false
 	ex.extraTxnState.numDDL = 0
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.upgradedToSerializable = false
@@ -2330,8 +2338,10 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 	default:
 		closeReason = cursorCloseForTxnRollback
 	}
-	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, closeReason); err != nil {
-		log.Dev.Warningf(ctx, "error closing cursors: %v", err)
+	if !preserveCursors {
+		if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, closeReason); err != nil {
+			log.Dev.Warningf(ctx, "error closing cursors: %v", err)
+		}
 	}
 
 	switch ev.eventType {
