@@ -386,6 +386,7 @@ sql.stats.error_on_concurrent_create_stats.enabled	boolean	false	set to true to 
 sql.stats.flush.enabled	boolean	true	if set, SQL execution statistics are periodically flushed to disk	application
 sql.stats.flush.interval	duration	10m0s	the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to 1 hour	application
 sql.stats.forecasts.enabled	boolean	true	when true, enables generation of statistics forecasts by default for all tables	application
+sql.stats.forecasts.independent_histograms.enabled	boolean	false	when true, forecast a histogram based on its own goodness of fit even when row counts do not follow a linear trend, using the latest observed row count to scale the forecasted histogram	application
 sql.stats.forecasts.max_decrease	float	0.3333333333333333	the most a prediction is allowed to decrease, expressed as the minimum ratio of the prediction to the lowest prior observation	application
 sql.stats.forecasts.min_goodness_of_fit	float	0.95	the minimum R² (goodness of fit) measurement required from all predictive models to use a forecast	application
 sql.stats.forecasts.min_observations	integer	3	the mimimum number of observed statistics required to produce a statistics forecast	application
