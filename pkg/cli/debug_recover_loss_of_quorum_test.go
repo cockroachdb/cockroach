@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -168,6 +169,9 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDuress(t, "slow test")
+	if runtime.GOARCH == "s390x" {
+		skip.IgnoreLint(t, "flaky on s390x, see #174367")
+	}
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
@@ -453,6 +457,9 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 
 	skip.UnderDeadlock(t, "slow under deadlock")
 	skip.UnderStress(t, "fails under stress and leader leases")
+	if runtime.GOARCH == "s390x" {
+		skip.IgnoreLint(t, "flaky on s390x, see #173885")
+	}
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
