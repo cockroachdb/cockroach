@@ -788,6 +788,12 @@ message LocalOnlySessionData {
   // conjuncts that the SplitDisjunction exploration rule will split. 0 value
   // means using the default.
   int32 optimizer_max_disjunction_split_count = 218;
+  // OptimizerUsePartialIndexPredicateOptionalFilters, when true, causes the
+  // optimizer to supply a partial index's predicate as an optional filter when
+  // constraining a scan over that index. Because the predicate holds for every
+  // row in the index, it can tighten the scan's spans without being re-applied
+  // afterward.
+  bool optimizer_use_partial_index_predicate_optional_filters = 219;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

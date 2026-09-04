@@ -3130,6 +3130,7 @@ optimizer_use_merged_partial_statistics                          on             
 optimizer_use_min_row_count_anti_join_fix                        off                 NULL      NULL        NULL        string
 optimizer_use_multicol_stats                                     on                  NULL      NULL        NULL        string
 optimizer_use_not_visible_indexes                                off                 NULL      NULL        NULL        string
+optimizer_use_partial_index_predicate_optional_filters           on                  NULL      NULL        NULL        string
 optimizer_use_polymorphic_parameter_fix                          on                  NULL      NULL        NULL        string
 optimizer_use_provided_ordering_fix                              on                  NULL      NULL        NULL        string
 optimizer_use_trigram_similarity_optimization                    on                  NULL      NULL        NULL        string
@@ -3386,6 +3387,7 @@ optimizer_use_merged_partial_statistics                          on             
 optimizer_use_min_row_count_anti_join_fix                        off                 NULL  user     NULL      off                 off
 optimizer_use_multicol_stats                                     on                  NULL  user     NULL      on                  on
 optimizer_use_not_visible_indexes                                off                 NULL  user     NULL      off                 off
+optimizer_use_partial_index_predicate_optional_filters           on                  NULL  user     NULL      on                  on
 optimizer_use_polymorphic_parameter_fix                          on                  NULL  user     NULL      on                  on
 optimizer_use_provided_ordering_fix                              on                  NULL  user     NULL      on                  on
 optimizer_use_trigram_similarity_optimization                    on                  NULL  user     NULL      on                  on
@@ -3633,6 +3635,7 @@ optimizer_use_merged_partial_statistics                          NULL    NULL   
 optimizer_use_min_row_count_anti_join_fix                        NULL    NULL     NULL     NULL        NULL
 optimizer_use_multicol_stats                                     NULL    NULL     NULL     NULL        NULL
 optimizer_use_not_visible_indexes                                NULL    NULL     NULL     NULL        NULL
+optimizer_use_partial_index_predicate_optional_filters           NULL    NULL     NULL     NULL        NULL
 optimizer_use_polymorphic_parameter_fix                          NULL    NULL     NULL     NULL        NULL
 optimizer_use_provided_ordering_fix                              NULL    NULL     NULL     NULL        NULL
 optimizer_use_trigram_similarity_optimization                    NULL    NULL     NULL     NULL        NULL
