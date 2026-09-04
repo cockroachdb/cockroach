@@ -4034,3 +4034,37 @@ query R
 SELECT percentile_cont(ARRAY[.4::FLOAT]) WITHIN GROUP (ORDER BY i::FLOAT4) FROM t90519;
 ----
 {2.2}
+
+subtest regression_173065
+
+statement ok
+SET distsql = always;
+SET vectorize = off;
+CREATE TABLE t173065 (
+  i INT PRIMARY KEY,
+  d DECIMAL NOT NULL
+);
+INSERT INTO t173065 VALUES (1, 99999999999999999999.9999999999);
+
+query R
+SELECT sqrdiff(d) FROM t173065;
+----
+0
+
+statement ok
+INSERT INTO t173065
+SELECT i, 99999999999999999999.9999999999::DECIMAL
+FROM generate_series(2, 10) AS g(i);
+
+query R
+SELECT sqrdiff(d) FROM t173065;
+----
+0
+
+statement ok
+INSERT INTO t173065 VALUES (11, 99999999999999997999.9999999999);
+
+query R
+SELECT round(sqrdiff(d), 12) FROM t173065;
+----
+3636363.636363636364
