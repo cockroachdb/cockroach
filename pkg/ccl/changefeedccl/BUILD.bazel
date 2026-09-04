@@ -65,6 +65,7 @@ go_library(
         "//pkg/ccl/kvccl/kvfollowerreadsccl",
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/cloud/gcp",
@@ -196,6 +197,7 @@ go_test(
     srcs = [
         "alter_changefeed_test.go",
         "changefeed_dist_test.go",
+        "changefeed_external_io_privilege_test.go",
         "changefeed_memory_test.go",
         "changefeed_privilege_test.go",
         "changefeed_processors_test.go",

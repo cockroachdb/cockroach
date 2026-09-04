@@ -585,7 +585,15 @@ func createChangefeedJobRecord(
 		}
 	}
 	if checkPrivs {
-		if err := authorizeUserToCreateChangefeed(ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables, opts.GetConfluentSchemaRegistry()); err != nil {
+		if err := authorizeUserToCreateChangefeed(
+			ctx,
+			p,
+			sinkURI,
+			hasSelectPrivOnAllTables,
+			hasChangefeedPrivOnAllTables,
+			opts.GetConfluentSchemaRegistry(),
+			false, /* permitLegacyCSRSecurityOptOut */
+		); err != nil {
 			return nil, err
 		}
 	}
