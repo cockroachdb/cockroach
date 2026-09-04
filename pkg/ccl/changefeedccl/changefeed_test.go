@@ -13555,6 +13555,7 @@ func TestCreateTableLevelChangefeedWithDBPrivilege(t *testing.T) {
 		}
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE USER user1`)
+		sqlDB.Exec(t, `GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO user1`)
 		sqlDB.Exec(t, `CREATE TABLE d.bar (id INT PRIMARY KEY);`)
 		sqlDB.Exec(t, `INSERT INTO d.bar VALUES (1);`)
 		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {

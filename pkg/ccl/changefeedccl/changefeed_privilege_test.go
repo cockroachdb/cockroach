@@ -66,11 +66,23 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 		`INSERT INTO foo VALUES (0, 'dog')`,
 		`CREATE USER testuser`,
 		`GRANT CHANGEFEED ON TABLE foo TO testuser`,
-		// The requirement ships off on this branch; the tests opt in.
-		`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`,
 	)
 
 	userDB := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.User(username.TestUser)))
+
+	// The USAGE requirement ships off on this release branch (the cluster setting
+	// defaults to false), so a subtest that relies on it enforces the opt-in
+	// itself and restores the default when it ends. Keeping the opt-in
+	// subtest-local avoids depending on the order subtests run in or on another
+	// subtest's cleanup.
+	requireUsagePrivilege := func(t *testing.T) {
+		rootDB.Exec(t,
+			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
+		t.Cleanup(func() {
+			rootDB.Exec(t,
+				`RESET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled`)
+		})
+	}
 
 	usageErr := func(connection string) string {
 		return fmt.Sprintf(
@@ -81,6 +93,7 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 		"can only be used with external connection sinks"
 
 	t.Run("create-sink", func(t *testing.T) {
+		requireUsagePrivilege(t)
 		rootDB.Exec(t, `CREATE EXTERNAL CONNECTION create_sink AS 'kafka://nope'`)
 
 		userDB.ExpectErr(t, usageErr("create_sink"),
@@ -94,6 +107,7 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 	})
 
 	t.Run("schema-registry", func(t *testing.T) {
+		requireUsagePrivilege(t)
 		schemaReg := cdctest.StartTestSchemaRegistry()
 		defer schemaReg.Close()
 
@@ -128,11 +142,15 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 	// CREATE, and turning the USAGE requirement off must not make it stricter
 	// than it was without one.
 	t.Run("alter-registry-must-be-external-connection", func(t *testing.T) {
+		requireUsagePrivilege(t)
 		schemaReg := cdctest.StartTestSchemaRegistry()
 		defer schemaReg.Close()
 
 		rootDB.Exec(t, `CREATE EXTERNAL CONNECTION alter_reg_sink AS 'kafka://nope'`)
 		rootDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION alter_reg_sink TO testuser`)
+
+		rootDB.Exec(t, `GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO testuser`)
+		defer rootDB.Exec(t, `REVOKE SYSTEM EXTERNALIOIMPLICITACCESS FROM testuser`)
 
 		var jobID jobspb.JobID
 		userDB.QueryRow(t, fmt.Sprintf(
@@ -152,8 +170,37 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 
 		rootDB.Exec(t,
 			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
+		userDB.Exec(t, alter)
+		userDB.Exec(t, `CANCEL JOB $1`, jobID)
+	})
+
+	t.Run("alter-registry-requires-implicit-access", func(t *testing.T) {
+		schemaReg := cdctest.StartTestSchemaRegistry()
+		defer schemaReg.Close()
+
+		rootDB.Exec(t, `CREATE EXTERNAL CONNECTION impl_reg_sink AS 'kafka://nope'`)
+		rootDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION impl_reg_sink TO testuser`)
+		rootDB.Exec(t, fmt.Sprintf(
+			`CREATE EXTERNAL CONNECTION impl_reg AS '%s'`, schemaReg.URL()))
+		rootDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION impl_reg TO testuser`)
+
+		var jobID jobspb.JobID
+		userDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO 'external://impl_reg_sink' `+
+			`WITH format = avro, confluent_schema_registry = 'external://impl_reg'`).Scan(&jobID)
+		userDB.Exec(t, `PAUSE JOB $1`, jobID)
+		waitForJobState(userDB, t, jobID, `paused`)
+
+		rootDB.Exec(t,
+			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
 		defer rootDB.Exec(t,
-			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
+			`RESET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled`)
+
+		alter := fmt.Sprintf(
+			`ALTER CHANGEFEED %d SET confluent_schema_registry = '%s'`, jobID, schemaReg.URL())
+		userDB.ExpectErr(t, "EXTERNALIOIMPLICITACCESS", alter)
+
+		rootDB.Exec(t, `GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO testuser`)
+		defer rootDB.Exec(t, `REVOKE SYSTEM EXTERNALIOIMPLICITACCESS FROM testuser`)
 		userDB.Exec(t, alter)
 		userDB.Exec(t, `CANCEL JOB $1`, jobID)
 	})
@@ -162,6 +209,7 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 	// privilege on the target tables. It says nothing about the credentials a
 	// connection holds, so USAGE still applies.
 	t.Run("controlchangefeed-role-option", func(t *testing.T) {
+		requireUsagePrivilege(t)
 		rootDB.ExecMultiple(t,
 			`CREATE USER ccuser WITH PASSWORD 'pw' CONTROLCHANGEFEED`,
 			`GRANT SELECT ON TABLE foo TO ccuser`,
@@ -181,6 +229,7 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 
 		// The role option still permits any sink, so the restriction
 		// require_external_connection_sink imposes does not reach it.
+		rootDB.Exec(t, `GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO ccuser`)
 		rootDB.Exec(t,
 			`SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true`)
 		defer rootDB.Exec(t,
@@ -190,8 +239,6 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 
 		rootDB.Exec(t,
 			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
-		defer rootDB.Exec(t,
-			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
 		rootDB.Exec(t, `REVOKE USAGE ON EXTERNAL CONNECTION cc_sink FROM ccuser`)
 		ccDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO 'external://cc_sink'`).Scan(&jobID)
 		ccDB.Exec(t, `CANCEL JOB $1`, jobID)
@@ -202,6 +249,7 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 	// re-authorizes the whole feed, so it is rejected even when the statement
 	// leaves the sink alone.
 	t.Run("existing-feed-without-usage", func(t *testing.T) {
+		requireUsagePrivilege(t)
 		rootDB.Exec(t, `CREATE EXTERNAL CONNECTION legacy_sink AS 'kafka://nope'`)
 		rootDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION legacy_sink TO testuser`)
 
@@ -217,8 +265,6 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 
 		rootDB.Exec(t,
 			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
-		defer rootDB.Exec(t,
-			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
 		userDB.Exec(t, alter)
 		userDB.Exec(t, `CANCEL JOB $1`, jobID)
 	})
@@ -229,7 +275,7 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 		rootDB.Exec(t,
 			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
 		defer rootDB.Exec(t,
-			`SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
+			`RESET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled`)
 
 		rootDB.Exec(t, `CREATE EXTERNAL CONNECTION ungranted_sink AS 'kafka://nope'`)
 		var jobID jobspb.JobID
@@ -320,11 +366,12 @@ func TestChangefeedFileBasedCredentialPrivilege(t *testing.T) {
 	_, err = testuser.ExecContext(ctx, `CREATE CHANGEFEED FOR t INTO $1`, sinkURI)
 	require.Equal(t, pgcode.InsufficientPrivilege.String(), pgErrCode(err),
 		"expected privilege error on direct URI, got: %v", err)
-	require.ErrorContains(t, err, changefeedbase.SinkParamSASLProprietaryClientAssertionLocation)
+	require.ErrorContains(t, err, `EXTERNALIOIMPLICITACCESS`)
 
 	_, err = testuser.ExecContext(ctx, `CREATE CHANGEFEED FOR t INTO $1`, ecURI)
 	require.Equal(t, pgcode.InsufficientPrivilege.String(), pgErrCode(err),
 		"expected privilege error on external connection, got: %v", err)
+	require.ErrorContains(t, err, changefeedbase.SinkParamSASLProprietaryClientAssertionLocation)
 
 	// After the grant, the sink dials 127.0.0.1:1 so an error is still
 	// expected; what matters is that the privilege gate is no longer the
