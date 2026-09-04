@@ -2755,7 +2755,7 @@ func getPausablePortalInfo(p *planner) *portalPauseInfo {
 // directly.
 func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 	ctx context.Context, p *planner, res RestrictedCommandResult,
-) error {
+) (retErr error) {
 	if ex.executorType == executorTypeInternal {
 		// Because we step the read timestamp below, this is not safe to call within
 		// internal executor.
@@ -2768,6 +2768,13 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		p.autoRetryStmtReason = ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtReason
 		p.autoRetryStmtCounter = ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtCounter
 	}
+	cursorSnapshot, err := ex.extraTxnState.sqlCursors.snapshot()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		retErr = errors.CombineErrors(retErr, cursorSnapshot.close())
+	}()
 
 	readCommittedSavePointToken, err := ex.state.mu.txn.CreateSavepoint(ctx)
 	if err != nil {
@@ -2834,6 +2841,12 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 			))
 			break
 		}
+		if !cursorSnapshot.canRewind() {
+			res.SetError(errors.Wrap(
+				maybeRetryableErr, "cannot automatically retry a cursor operation that could not be rewound",
+			))
+			break
+		}
 
 		// In order to retry the statement, we need to clear any results and
 		// errors that were buffered, rollback to the savepoint, then prepare the
@@ -2856,6 +2869,9 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 			return err
 		}
 		if err := ex.state.mu.txn.PrepareForPartialRetry(ctx); err != nil {
+			return err
+		}
+		if err := ex.extraTxnState.sqlCursors.rewind(&cursorSnapshot); err != nil {
 			return err
 		}
 		p.autoRetryStmtCounter++

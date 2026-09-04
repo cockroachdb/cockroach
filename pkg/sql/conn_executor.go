@@ -1833,6 +1833,7 @@ type connExecutor struct {
 			savepoints       savepointStack
 			sessionDataStack *sessiondata.Stack
 			advisoryRewind   advisorylock.RewindSnapshot
+			sqlCursors       sqlCursorSnapshot
 		}
 		// transactionStatementFingerprintIDs tracks all statement IDs that make up the current
 		// transaction. It's length is bound by the TxnStatsNumStmtFingerprintIDsToRecord
@@ -2332,6 +2333,11 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 	}
 	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, closeReason); err != nil {
 		log.Dev.Warningf(ctx, "error closing cursors: %v", err)
+	}
+	if ev.eventType != txnRestart {
+		if err := ex.extraTxnState.rewindPosSnapshot.sqlCursors.close(); err != nil {
+			log.Dev.Warningf(ctx, "error closing cursor retry snapshot: %v", err)
+		}
 	}
 
 	switch ev.eventType {
@@ -2910,6 +2916,11 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		if err := ex.rewindPrepStmtNamespace(ctx); err != nil {
 			return err
 		}
+		if err := ex.extraTxnState.sqlCursors.rewind(
+			&ex.extraTxnState.rewindPosSnapshot.sqlCursors,
+		); err != nil {
+			return err
+		}
 		ex.extraTxnState.savepoints = ex.extraTxnState.rewindPosSnapshot.savepoints
 		// Note we use the Replace function instead of reassigning, as there are
 		// copies of the ex.sessionDataStack in the iterators and extendedEvalContext.
@@ -3085,6 +3096,10 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 // All statements with lower position in stmtBuf (if any) are removed, as we
 // won't ever need them again.
 func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) error {
+	cursorSnapshot, err := ex.extraTxnState.sqlCursors.snapshot()
+	if err != nil {
+		return err
+	}
 	if pos < ex.extraTxnState.txnRewindPos {
 		panic(errors.AssertionFailedf("can only move the  txnRewindPos forward. "+
 			"Was: %d; new value: %d", ex.extraTxnState.txnRewindPos, pos))
@@ -3098,13 +3113,26 @@ func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) error {
 	} else {
 		ex.extraTxnState.rewindPosSnapshot.advisoryRewind = advisorylock.RewindSnapshot{}
 	}
-	return ex.commitPrepStmtNamespace(ctx)
+	if err := ex.commitPrepStmtNamespace(ctx); err != nil {
+		_ = cursorSnapshot.close()
+		return err
+	}
+	closeErr := ex.extraTxnState.rewindPosSnapshot.sqlCursors.close()
+	ex.extraTxnState.rewindPosSnapshot.sqlCursors = cursorSnapshot
+	return closeErr
 }
 
 // stmtDoesntNeedRetry returns true if the given statement does not need to be
 // retried when performing automatic retries. This means that the results of the
 // statement do not change with retries.
 func (ex *connExecutor) stmtDoesntNeedRetry(ast tree.Statement) bool {
+	// Keep the rewind point before a lazy cursor's DECLARE; replaying the
+	// declaration is the only exact way to rebuild its query snapshot.
+	for _, cursor := range ex.extraTxnState.sqlCursors.cursors {
+		if !cursor.persisted {
+			return false
+		}
+	}
 	return isSavepoint(ast) || isSetTransaction(ast)
 }
 
