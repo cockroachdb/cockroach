@@ -6,6 +6,7 @@
 package stats
 
 import (
+	"cmp"
 	"context"
 	"math"
 	"slices"
@@ -78,6 +79,22 @@ var maxDecrease = settings.RegisterFloatSetting(
 
 // TODO(michae2): Consider whether we need a corresponding maxIncrease.
 
+// independentHistogramForecasts controls whether we allow the histogram
+// forecasting decision to stand independently of the row count forecasting
+// decision. When true, we will forecast a histogram based on its own goodness
+// of fit even when row counts (and the other scalar statistics) do not follow a
+// linear trend, scaling the forecasted histogram to the latest observed row
+// count.
+var independentHistogramForecasts = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.stats.forecasts.independent_histograms.enabled",
+	"when true, forecast a histogram based on its own goodness of fit even when "+
+		"row counts do not follow a linear trend, using the latest observed row "+
+		"count to scale the forecasted histogram",
+	false,
+	settings.WithPublic,
+)
+
 // ForecastTableStatistics produces zero or more statistics forecasts based on
 // the given observed statistics. The observed statistics must be ordered by
 // collection time descending, with the latest observed statistics first. The
@@ -86,6 +103,10 @@ var maxDecrease = settings.RegisterFloatSetting(
 //
 // Whether a forecast is produced for a set of columns depends on how well the
 // observed statistics for that set of columns fit a linear regression model.
+// The scalar statistics (row count, null count, distinct count, average row
+// size) and the histogram are considered separately: with
+// sql.stats.forecasts.independent_histograms.enabled a forecast can be produced
+// from a good histogram fit alone, using the latest observed scalar statistics.
 // This means a forecast will not necessarily be produced for every set of
 // columns in the table. Any forecasts produced will not necessarily have the
 // same CreatedAt time (and could be in the past, present, or future relative to
@@ -165,11 +186,32 @@ func ForecastTableStatistics(
 //
 // To create a forecast, we construct a linear regression model over time for
 // each statistic (row count, null count, distinct count, average row size, and
-// histogram). If all models are good fits (i.e. have R² >= minRequiredFit) then
-// we use them to predict the value of each statistic at the given time. If any
-// model except the histogram model is a poor fit (i.e. has R² < minRequiredFit)
-// then we return an error instead of a forecast. If the histogram model is a
-// poor fit we adjust the latest observed histogram to match predicted values.
+// histogram). We make two independent decisions:
+//
+//   - Scalar statistics (row count, null count, distinct count, average row
+//     size) are forecast as a group: if all of their models are good fits (i.e.
+//     have R² >= minRequiredFit) we use them to predict values at the given
+//     time. If any scalar model is a poor fit we do not forecast the scalar
+//     statistics, and fall back to the latest observed values instead.
+//
+//   - The histogram is forecast based only on the goodness of fit of its own
+//     (quantile function) model.
+//
+// If the histogram model is a poor fit but the scalar statistics are a good fit,
+// we adjust the latest observed histogram to match the predicted scalar values.
+//
+// We return an error instead of a forecast when there is nothing worth
+// forecasting:
+//
+//   - If the scalar statistics are a poor fit and
+//     sql.stats.forecasts.independent_histograms.enabled is false, we return an
+//     error regardless of the histogram fit (the conservative default).
+//
+//   - If the scalar statistics are a poor fit and independent histogram
+//     forecasts are enabled, we produce a forecast only if the histogram is a
+//     good fit and the latest observed table has at least one non-null row (so
+//     that we have a meaningful row count to scale the forecasted histogram by).
+//     Otherwise we return an error.
 //
 // forecastColumnStatistics is deterministic: given the same observations and
 // forecast time, it will return the same forecast.
@@ -243,24 +285,31 @@ func forecastColumnStatistics(
 		return math.Round(yₙ), nil
 	}
 
-	rowCount, err := predict("RowCount", rowCounts, createdAts)
-	if err != nil {
-		return nil, err
-	}
-	nullCount, err := predict("NullCount", nullCounts, createdAts)
-	if err != nil {
-		return nil, err
-	}
+	// Predict the scalar statistics as a group. We tolerate a poor fit only if
+	// independent histogram forecasts are enabled, in which case we fall back to
+	// the latest observed scalar values and rely on the histogram fit to justify
+	// the forecast.
+	independentHistogram := independentHistogramForecasts.Get(&st.SV)
+	rowCount, rowErr := predict("RowCount", rowCounts, createdAts)
+	nullCount, nullErr := predict("NullCount", nullCounts, createdAts)
 	var distinctCount, avgSize float64
+	var distinctErr, avgSizeErr error
 	if len(nonEmptyCreatedAts) > 0 {
-		distinctCount, err = predict("DistinctCount", distinctCounts, nonEmptyCreatedAts)
-		if err != nil {
-			return nil, err
+		distinctCount, distinctErr = predict("DistinctCount", distinctCounts, nonEmptyCreatedAts)
+		avgSize, avgSizeErr = predict("AvgSize", avgSizes, nonEmptyCreatedAts)
+	}
+	// scalarErr is the first poor fit, in the same order we predicted them.
+	scalarErr := cmp.Or(rowErr, nullErr, distinctErr, avgSizeErr)
+	scalarsForecastable := scalarErr == nil
+	if !scalarsForecastable {
+		if !independentHistogram {
+			return nil, scalarErr
 		}
-		avgSize, err = predict("AvgSize", avgSizes, nonEmptyCreatedAts)
-		if err != nil {
-			return nil, err
-		}
+		// Fall back to the latest observed scalar values.
+		rowCount = float64(observed[0].RowCount)
+		nullCount = float64(observed[0].NullCount)
+		distinctCount = float64(observed[0].DistinctCount)
+		avgSize = float64(observed[0].AvgSize)
 	}
 
 	// Adjust predicted statistics for consistency.
@@ -289,6 +338,24 @@ func forecastColumnStatistics(
 		nonNullDistinctCount--
 	}
 
+	if !scalarsForecastable {
+		// We fell back to the latest observed scalar values, so a forecast is only
+		// justified if we can forecast a good-fit histogram.
+		if observed[0].HistogramData == nil || observed[0].HistogramData.ColumnType == nil {
+			return nil, errors.Wrap(
+				scalarErr, "scalar statistics are a poor fit and there is no histogram to forecast",
+			)
+		}
+		// A histogram forecast is a shape that we scale to a row count. If the
+		// latest observed table has no non-null rows, that scale would be zero and
+		// the forecasted histogram meaningless, so decline to forecast.
+		if nonNullRowCount < 1 {
+			return nil, errors.Wrap(
+				scalarErr, "scalar statistics are a poor fit and latest observed table has no non-null rows",
+			)
+		}
+	}
+
 	forecast = &TableStatistic{
 		TableStatisticProto: TableStatisticProto{
 			TableID:       tableID,
@@ -310,6 +377,13 @@ func forecastColumnStatistics(
 	if observed[0].HistogramData != nil && observed[0].HistogramData.ColumnType != nil {
 		hist, err := predictHistogram(ctx, st, observed, forecastAt, minRequiredFit, nonNullRowCount)
 		if err != nil {
+			if !scalarsForecastable {
+				// The histogram is the only thing justifying this forecast, so a poor
+				// histogram fit means there is nothing worth forecasting. Falling back
+				// to the latest observed histogram here would merely duplicate the
+				// latest observed statistics.
+				return nil, err
+			}
 			// If we did not successfully predict a histogram then copy the latest
 			// histogram so we can adjust it.
 			log.VEventf(
