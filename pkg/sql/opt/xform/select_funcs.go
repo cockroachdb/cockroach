@@ -360,6 +360,9 @@ func (c *CustomFuncs) GetOptionalFiltersAndFilterColumns(
 func (c *CustomFuncs) optionalFiltersWithPartialIndexPredicate(
 	tabMeta *opt.TableMeta, indexOrd cat.IndexOrdinal, optionalFilters memo.FiltersExpr,
 ) memo.FiltersExpr {
+	if !c.e.evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters {
+		return optionalFilters
+	}
 	predScalar, isPartialIndex := tabMeta.PartialIndexPredicate(indexOrd)
 	if !isPartialIndex {
 		return optionalFilters

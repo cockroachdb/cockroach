@@ -12344,6 +12344,26 @@ project
       ├── flags: force-index=bad
       └── fd: ()-->(1,3,4)
 
+# With optimizer_use_partial_index_predicate_optional_filters disabled, the
+# predicate is not supplied as an optional filter, so span building degrades to
+# the truncated prefix before the first predicate column.
+opt expect=GenerateConstrainedScans set=optimizer_use_partial_index_predicate_optional_filters=false
+SELECT r FROM t174162@bad WHERE r = 1 AND s = 2 AND v = 3
+----
+project
+ ├── columns: r:1!null
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: r:1!null s:3!null v:4!null
+      ├── fd: ()-->(1,3,4)
+      ├── scan t174162@bad,partial
+      │    ├── columns: r:1!null s:3!null v:4!null
+      │    ├── constraint: /1/3/4/2: [/1 - /1]
+      │    ├── flags: force-index=bad
+      │    └── fd: ()-->(1,3)
+      └── filters
+           └── v:4 = 3 [outer=(4), constraints=(/4: [/3 - /3]; tight), fd=()-->(4)]
+
 # Control: no predicate, all filter columns are key columns.
 opt expect=GenerateConstrainedScans
 SELECT r FROM t174162@ctrl_a WHERE r = 1 AND s = 2 AND v = 3

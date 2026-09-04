@@ -650,6 +650,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns = false
 	notStale()
 
+	// Stale optimizer_use_partial_index_predicate_optional_filters.
+	evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters = true
+	stale()
+	evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters = false
+	notStale()
+
 	// Stale skip_underlying_view_privilege_checks.
 	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, false)
 	stale()
