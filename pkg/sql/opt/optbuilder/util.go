@@ -388,12 +388,13 @@ func makeBackfillError(name tree.Name) error {
 		"column %q is being backfilled", tree.ErrString(&name))
 }
 
-// flattenTuples extracts the members of tuples into a list of columns.
+// flattenTuples extracts the members of syntactic parenthesized lists into a
+// list of columns. Explicit ROW constructors remain scalar expressions.
 func flattenTuples(exprs []tree.TypedExpr) []tree.TypedExpr {
 	// We want to avoid allocating new slices unless strictly necessary.
 	var newExprs []tree.TypedExpr
 	for i, e := range exprs {
-		if t, ok := e.(*tree.Tuple); ok {
+		if t, ok := e.(*tree.Tuple); ok && !t.Row {
 			if newExprs == nil {
 				// All right, it was necessary to allocate the slices after all.
 				newExprs = make([]tree.TypedExpr, i, len(exprs))
@@ -411,11 +412,11 @@ func flattenTuples(exprs []tree.TypedExpr) []tree.TypedExpr {
 	return exprs
 }
 
-// flattenTuple recursively extracts the members of a tuple into a list of
-// expressions.
+// flattenTuple recursively extracts the members of a parenthesized list into
+// a list of expressions, preserving explicit ROW constructors.
 func flattenTuple(t *tree.Tuple, exprs []tree.TypedExpr) []tree.TypedExpr {
 	for _, e := range t.Exprs {
-		if eT, ok := e.(*tree.Tuple); ok {
+		if eT, ok := e.(*tree.Tuple); ok && !eT.Row {
 			exprs = flattenTuple(eT, exprs)
 		} else {
 			expr := e.(tree.TypedExpr)
