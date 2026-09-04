@@ -270,6 +270,69 @@ func TestSqrDiffDecimalResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newDecimalSqrDiffAggregate, makeDecimalTestDatum(10))
 }
 
+func TestDecimalSqrDiffLargeOffset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
+	acc := evalCtx.TestingMon.MakeBoundAccount()
+	defer acc.Close(ctx)
+	evalCtx.SingleDatumAggMemAccount = &acc
+
+	parseDecimal := func(t *testing.T, s string) tree.Datum {
+		t.Helper()
+		d, err := tree.ParseDDecimal(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	run := func(
+		t *testing.T,
+		constructor func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
+		inputs [][]tree.Datum,
+		expected string,
+	) {
+		t.Helper()
+		agg := constructor(nil, evalCtx, nil)
+		defer agg.Close(ctx)
+		for _, input := range inputs {
+			if err := agg.Add(ctx, input[0], input[1:]...); err != nil {
+				t.Fatal(err)
+			}
+		}
+		result, err := agg.Result()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if actual := result.String(); actual != expected {
+			t.Fatalf("expected %s, got %s", expected, actual)
+		}
+	}
+
+	const value = "99999999999999999999.9999999999"
+	t.Run("local singleton", func(t *testing.T) {
+		run(t, newDecimalSqrDiffAggregate, [][]tree.Datum{{parseDecimal(t, value)}}, "0")
+	})
+	t.Run("local nonzero", func(t *testing.T) {
+		inputs := make([][]tree.Datum, 0, 11)
+		for i := 0; i < 10; i++ {
+			inputs = append(inputs, []tree.Datum{parseDecimal(t, value)})
+		}
+		inputs = append(inputs, []tree.Datum{
+			parseDecimal(t, "99999999999999997999.9999999999"),
+		})
+		run(t, newDecimalSqrDiffAggregate, inputs, "3636363.6363636363636")
+	})
+	t.Run("final", func(t *testing.T) {
+		inputs := [][]tree.Datum{
+			{parseDecimal(t, "0"), parseDecimal(t, value), tree.NewDInt(1)},
+			{parseDecimal(t, "0"), parseDecimal(t, "99999999999999999999.9999999998"), tree.NewDInt(1)},
+		}
+		run(t, newDecimalFinalSqrdiffAggregate, inputs, "5E-21")
+	})
+}
+
 func TestVarPopIntResultDeepCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newIntVarPopAggregate, makeIntTestDatum(10))
