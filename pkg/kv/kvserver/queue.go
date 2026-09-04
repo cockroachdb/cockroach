@@ -60,6 +60,17 @@ func defaultProcessTimeoutFunc(cs *cluster.Settings, _ replicaInQueue) time.Dura
 	return queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
 }
 
+// QueueSkipUnverifiedRemoteLeases controls whether queues that require the
+// range lease decline to enqueue a replica whose lease is held by another
+// store but whose validity cannot be verified locally (LeaseState_ERROR).
+var QueueSkipUnverifiedRemoteLeases = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.queue.skip_unverified_remote_leases.enabled",
+	"if set, replica queues that require the range lease do not enqueue replicas "+
+		"whose lease is held by another store and cannot be verified locally",
+	true,
+)
+
 // The queues which traverse through the data in the range (i.e. send a snapshot
 // or calculate a range checksum) while processing should have a timeout which
 // is a function of the size of the range and the maximum allowed rate of data
@@ -1344,9 +1355,23 @@ func (bq *baseQueue) replicaCanBeProcessed(
 				return nil, pErr.GoError()
 			}
 		} else {
-			// Don't process if we don't own the lease.
+			// We always enqueue if we own the lease, since process time extends or
+			// re-acquires it if needed. However, we also enqueue if another store's
+			// lease has expired, because process time will try to acquire it.
+			// Quiesced epoch-lease ranges whose leaseholder died rely on this:
+			// Replica.tick skips quiesced replicas, so the queue is the only thing
+			// that acquires their lease.
+			//
+			// If we can't determine whether another store's lease is valid (ERROR),
+			// we skip it when QueueSkipUnverifiedRemoteLeases is set. Process time
+			// would return NLHE without acquiring the lease anyway. Under leader
+			// leases every follower sees ERROR once MinExpiration passes, so
+			// enqueueing these filled the queues with replicas that were popped and
+			// dropped.
 			st := repl.CurrentLeaseStatus(ctx)
-			if st.IsValid() && !st.OwnedBy(repl.StoreID()) {
+			skippable := st.State == kvserverpb.LeaseState_ERROR &&
+				QueueSkipUnverifiedRemoteLeases.Get(&bq.store.cfg.Settings.SV)
+			if (st.IsValid() || skippable) && !st.OwnedBy(repl.StoreID()) {
 				log.VEventf(ctx, 1, "needs lease; not adding: %v", st.Lease)
 				// NB: this is an expected error, so make sure it doesn't get
 				// logged loudly.
