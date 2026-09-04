@@ -4034,3 +4034,35 @@ query R
 SELECT percentile_cont(ARRAY[.4::FLOAT]) WITHIN GROUP (ORDER BY i::FLOAT4) FROM t90519;
 ----
 {2.2}
+
+subtest regression_173063
+
+statement ok
+SET distsql = always;
+SET vectorize = on;
+CREATE TABLE t173063 (
+  i INT PRIMARY KEY,
+  d DECIMAL
+);
+INSERT INTO t173063
+SELECT i,
+       CASE WHEN i <= 2 THEN NULL ELSE 99999999999999999999.9999999999::DECIMAL END
+FROM generate_series(1, 12) AS g(i);
+
+query R
+SELECT variance(d) FROM t173063;
+----
+0
+
+query R
+SELECT variance(d - 99999999999999999999.9999999999::DECIMAL) FROM t173063;
+----
+0
+
+statement ok
+INSERT INTO t173063 VALUES (13, 99999999999999997999.9999999999);
+
+query R
+SELECT round(variance(d), 12) FROM t173063;
+----
+363636.363636363636
