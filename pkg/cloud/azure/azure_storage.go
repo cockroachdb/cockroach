@@ -418,6 +418,21 @@ func isNotFoundErr(err error) bool {
 	return errors.As(err, &azerr) && azerr.ErrorCode == "BlobNotFound"
 }
 
+// blobReadRange computes the byte range for a blob download that begins at pos,
+// given the caller's requested offset and length hint. A zero lengthHint means
+// "read to the end of the blob", producing an unbounded range (Count == 0).
+func blobReadRange(offset, lengthHint, pos int64) (azblob.HTTPRange, error) {
+	r := azblob.HTTPRange{Offset: pos}
+	if lengthHint == 0 {
+		return r, nil
+	}
+	r.Count = offset + lengthHint - pos
+	if r.Count <= 0 {
+		return azblob.HTTPRange{}, io.EOF
+	}
+	return r, nil
+}
+
 func (s *azureStorage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
 ) (_ ioctx.ReadCloserCtx, fileSize int64, _ error) {
@@ -429,8 +444,12 @@ func (s *azureStorage) ReadFile(
 
 	r := cloud.NewResumingReader(ctx,
 		func(ctx context.Context, pos int64) (io.ReadCloser, int64, error) {
+			httpRange, err := blobReadRange(opts.Offset, opts.LengthHint, pos)
+			if err != nil {
+				return nil, 0, err
+			}
 			resp, err := s.getBlob(basename).DownloadStream(ctx, &azblob.DownloadStreamOptions{
-				Range: azblob.HTTPRange{Offset: pos},
+				Range: httpRange,
 			})
 			if err != nil {
 				return nil, 0, err

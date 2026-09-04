@@ -9,12 +9,14 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path"
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -193,6 +195,82 @@ func TestAzureFaultInjection(t *testing.T) {
 	defer storage.Close()
 
 	cloudtestutils.RunCloudNemesisTest(t, storage)
+}
+
+// TestAzureBlobReadRange verifies that blobReadRange bounds the download to the
+// caller's LengthHint and signals io.EOF once a resumed read has advanced past
+// the requested end.
+func TestAzureBlobReadRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, tc := range []struct {
+		name          string
+		offset        int64
+		lengthHint    int64
+		pos           int64
+		expectedRange azblob.HTTPRange
+		expectedEOF   bool
+	}{
+		{
+			name:          "no hint reads to end of blob",
+			offset:        0,
+			lengthHint:    0,
+			pos:           0,
+			expectedRange: azblob.HTTPRange{Offset: 0, Count: 0},
+		},
+		{
+			name:          "no hint with resumed position",
+			offset:        0,
+			lengthHint:    0,
+			pos:           100,
+			expectedRange: azblob.HTTPRange{Offset: 100, Count: 0},
+		},
+		{
+			name:          "hint bounds initial read",
+			offset:        0,
+			lengthHint:    10,
+			pos:           0,
+			expectedRange: azblob.HTTPRange{Offset: 0, Count: 10},
+		},
+		{
+			name:          "hint with offset bounds initial read",
+			offset:        5,
+			lengthHint:    10,
+			pos:           5,
+			expectedRange: azblob.HTTPRange{Offset: 5, Count: 10},
+		},
+		{
+			name:          "resumed read shrinks remaining count",
+			offset:        5,
+			lengthHint:    10,
+			pos:           8,
+			expectedRange: azblob.HTTPRange{Offset: 8, Count: 7},
+		},
+		{
+			name:        "resumed read at end returns EOF",
+			offset:      5,
+			lengthHint:  10,
+			pos:         15,
+			expectedEOF: true,
+		},
+		{
+			name:        "resumed read past end returns EOF",
+			offset:      5,
+			lengthHint:  10,
+			pos:         20,
+			expectedEOF: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, err := blobReadRange(tc.offset, tc.lengthHint, tc.pos)
+			if tc.expectedEOF {
+				require.ErrorIs(t, err, io.EOF)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedRange, r)
+		})
+	}
 }
 
 func TestAntagonisticAzureRead(t *testing.T) {
