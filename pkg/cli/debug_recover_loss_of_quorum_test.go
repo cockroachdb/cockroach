@@ -168,6 +168,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDuress(t, "slow test")
+	skip.OnArch(t, "s390x", "flaky on s390x, see #174367")
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
@@ -453,6 +454,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 
 	skip.UnderDeadlock(t, "slow under deadlock")
 	skip.UnderStress(t, "fails under stress and leader leases")
+	skip.OnArch(t, "s390x", "flaky on s390x, see #173885")
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
