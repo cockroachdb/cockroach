@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -305,9 +306,12 @@ type Refresher struct {
 	// have yet to be processed by the refresher.
 	mutationCounts map[descpb.ID]int64
 
-	// settingOverrides holds any autostats cluster setting overrides for each
-	// table.
-	settingOverrides map[descpb.ID]catpb.AutoStatsSettings
+	mu struct {
+		syncutil.RWMutex
+		// settingOverrides holds any autostats cluster setting overrides for each
+		// table.
+		settingOverrides map[descpb.ID]catpb.AutoStatsSettings
+	}
 
 	// numTablesEnsured is an internal counter for testing ensureAllTables.
 	numTablesEnsured int
@@ -368,22 +372,23 @@ func MakeRefresher(
 	knobs *TableStatsTestingKnobs,
 	readOnlyTenant bool,
 ) *Refresher {
-	return &Refresher{
-		AmbientContext:   ambientCtx,
-		st:               st,
-		internalDB:       internalDB,
-		cache:            cache,
-		knobs:            knobs,
-		readOnlyTenant:   readOnlyTenant,
-		rng:              rand.New(rand.NewSource(rand.Int63())),
-		mutations:        make(chan mutation, mutationsChanBufferLen),
-		settings:         make(chan settingOverride, settingsChanBufferLen),
-		asOfTime:         asOfTime,
-		extraTime:        time.Duration(rand.Int63n(int64(time.Hour))),
-		mutationCounts:   make(map[descpb.ID]int64, 16),
-		settingOverrides: make(map[descpb.ID]catpb.AutoStatsSettings),
-		drainAutoStats:   make(chan struct{}),
+	r := &Refresher{
+		AmbientContext: ambientCtx,
+		st:             st,
+		internalDB:     internalDB,
+		cache:          cache,
+		knobs:          knobs,
+		readOnlyTenant: readOnlyTenant,
+		rng:            rand.New(rand.NewSource(rand.Int63())),
+		mutations:      make(chan mutation, mutationsChanBufferLen),
+		settings:       make(chan settingOverride, settingsChanBufferLen),
+		asOfTime:       asOfTime,
+		extraTime:      time.Duration(rand.Int63n(int64(time.Hour))),
+		mutationCounts: make(map[descpb.ID]int64, 16),
+		drainAutoStats: make(chan struct{}),
 	}
+	r.mu.settingOverrides = make(map[descpb.ID]catpb.AutoStatsSettings)
+	return r
 }
 
 func (r *Refresher) getNumTablesEnsured() int {
@@ -588,18 +593,22 @@ func (r *Refresher) Start(
 
 				var settingOverrides map[descpb.ID]catpb.AutoStatsSettings
 				// For each mutation count, look up auto stats setting overrides using
-				// the associated table ID. r.settingOverrides is never rebuilt. It is
+				// the associated table ID. r.mu.settingOverrides is never rebuilt. It is
 				// always added to or deleted from. We could just copy the entire hash
 				// map here, but maybe it is quicker and causes less memory pressure to
 				// just create a map with entries for the tables we're processing.
-				for tableID := range mutationCounts {
-					if settings, ok := r.settingOverrides[tableID]; ok {
-						if settingOverrides == nil {
-							settingOverrides = make(map[descpb.ID]catpb.AutoStatsSettings)
+				func() {
+					r.mu.RLock()
+					defer r.mu.RUnlock()
+					for tableID := range mutationCounts {
+						if settings, ok := r.mu.settingOverrides[tableID]; ok {
+							if settingOverrides == nil {
+								settingOverrides = make(map[descpb.ID]catpb.AutoStatsSettings)
+							}
+							settingOverrides[tableID] = settings
 						}
-						settingOverrides[tableID] = settings
 					}
-				}
+				}()
 
 				r.startedTasksWG.Add(1)
 				if err := stopper.RunAsyncTask(
@@ -698,11 +707,19 @@ func (r *Refresher) Start(
 				// overrides when none exist (so that we don't have to pass two messages
 				// when nothing is overridden).
 				if mut.removeSettingOverrides {
-					delete(r.settingOverrides, mut.tableID)
+					func() {
+						r.mu.Lock()
+						defer r.mu.Unlock()
+						delete(r.mu.settingOverrides, mut.tableID)
+					}()
 				}
 
 			case clusterSettingOverride := <-r.settings:
-				r.settingOverrides[clusterSettingOverride.tableID] = clusterSettingOverride.settings
+				func() {
+					r.mu.Lock()
+					defer r.mu.Unlock()
+					r.mu.settingOverrides[clusterSettingOverride.tableID] = clusterSettingOverride.settings
+				}()
 
 			case <-r.drainAutoStats:
 				log.Dev.Infof(ctx, "draining auto stats refresher")
@@ -975,9 +992,13 @@ func (r *Refresher) EstimateStaleness(
 	}
 
 	var explicitSettings *catpb.AutoStatsSettings
-	if s, ok := r.settingOverrides[tableDesc.GetID()]; ok {
-		explicitSettings = &s
-	}
+	func() {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		if s, ok := r.mu.settingOverrides[tableDesc.GetID()]; ok {
+			explicitSettings = &s
+		}
+	}()
 	staleTargetFraction := r.autoStatsFractionStaleRows(explicitSettings)
 
 	avgRefreshTime := avgFullRefreshTime(tableStats)
