@@ -8,6 +8,7 @@ package tests_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -23,7 +24,15 @@ func TestSplitAtTableBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	// The span-config split notification can be lost if the range transfers its
+	// lease concurrently (#173741), leaving the split to the periodic scanner
+	// (default 10m, longer than our deadline). Shorten the scan interval so the
+	// backstop fires in time. Revert once #173741 is fixed.
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			ScanInterval: time.Second,
+		},
+	})
 	defer tc.Stopper().Stop(context.Background())
 	s := tc.ApplicationLayer(0)
 
