@@ -317,6 +317,21 @@ var RequireExternalConnectionSink = settings.RegisterBoolSetting(
 	settings.WithName("changefeed.permissions.require_external_connection_sink.enabled"),
 )
 
+// RequireExternalIOImplicitAccess gates the EXTERNALIOIMPLICITACCESS
+// requirement on changefeed destinations. Disable to allow changefeeds
+// to use external changefeed destinations without EXTERNALIOIMPLICITACCESS.
+//
+// TODO(CRDB-66647): remove this when we don't need backwards compatibility anymore.
+var RequireExternalIOImplicitAccess = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.permissions.require_external_io_implicit_access",
+	"if enabled, a changefeed to a destination that the node authenticates to"+
+		" with implicit credentials requires the EXTERNALIOIMPLICITACCESS"+
+		" system privilege",
+	true,
+	settings.WithName("changefeed.permissions.require_external_io_implicit_access.enabled"),
+)
+
 // SinkIOWorkers controls the number of IO workers used by sinks that use
 // parallelIO to be able to send multiple requests in parallel.
 var SinkIOWorkers = settings.RegisterIntSetting(

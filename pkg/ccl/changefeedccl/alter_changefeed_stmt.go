@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -217,7 +216,8 @@ func alterDatabaseChangefeed(
 	}
 	if err := authorizeUserToCreateChangefeed(
 		ctx, p, newSinkURI, hasSelect, hasChangefeed,
-		tree.ChangefeedLevelDatabase, newOptions.GetConfluentSchemaRegistry()); err != nil {
+		tree.ChangefeedLevelDatabase, newOptions.GetConfluentSchemaRegistry(),
+		false /* permitLegacyCSRSecurityOptOut */); err != nil {
 		return err
 	}
 
@@ -909,13 +909,10 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 	// USAGE requirement is off.
 	//
 	// TODO(CRDB-66647): drop this along with the setting.
-	var otherExternalURIs []string
-	if sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(&p.ExecCfg().Settings.SV) {
-		otherExternalURIs = append(otherExternalURIs, opts.GetConfluentSchemaRegistry())
-	}
 	if err := authorizeUserToCreateChangefeed(
 		ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables,
-		tree.ChangefeedLevelTable, otherExternalURIs...); err != nil {
+		tree.ChangefeedLevelTable, opts.GetConfluentSchemaRegistry(),
+		true /* permitLegacyCSRSecurityOptOut */); err != nil {
 		return nil, nil, nil, nil, err
 	}
 

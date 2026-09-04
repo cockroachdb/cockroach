@@ -8,10 +8,12 @@ package changefeedccl
 import (
 	"context"
 	"net/url"
-	"slices"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -21,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
 
@@ -68,6 +69,8 @@ func checkPrivilegesForDescriptor(
 //     be an external connection.
 //   - Every external connection the changefeed names, as its sink or otherwise, requires
 //     privilege.USAGE on it, CONTROLCHANGEFEED users included.
+//   - A sink the node authenticates to implicitly (rather than with credentials the
+//     statement supplied) requires privilege.EXTERNALIOIMPLICITACCESS.
 func authorizeUserToCreateChangefeed(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -75,7 +78,8 @@ func authorizeUserToCreateChangefeed(
 	hasSelectPrivOnAllTables bool,
 	hasChangefeedPrivOnAllTables bool,
 	changefeedLevel tree.ChangefeedLevel,
-	otherExternalURIs ...string,
+	confluentSchemaRegistryURI string,
+	permitLegacyCSRSecurityOptOut bool,
 ) error {
 	isAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
@@ -129,53 +133,110 @@ func authorizeUserToCreateChangefeed(
 	// requirement on the connections it names, so either setting turns the
 	// check on. This preserves the pre-v26.4 behavior, where a changefeed
 	// confined to external connection sinks always required USAGE on them.
-	requireUsage := requireExternalConnectionSink ||
+	requireUsagePrivilege :=
 		sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(&p.ExecCfg().Settings.SV)
+	requireUsage := requireExternalConnectionSink || requireUsagePrivilege
+
+	// applyExternalConnectionSinkToRegistry decides whether the
+	// require_external_connection_sink cluster setting (which forces a URI to
+	// be an external connection) also covers the schema registry URI.
+	// Only ALTER CHANGEFEED does not enforce it there (it sets
+	// permitLegacyCSRSecurityOptOut) unless RequireUsagePrivilegeOnExternalConnections
+	// is on, which restores uniform treatment. CREATE CHANGEFEED can never opt out.
+	applyExternalConnectionSinkToRegistry := !permitLegacyCSRSecurityOptOut || requireUsagePrivilege
+
+	requireImplicitAccess := changefeedbase.RequireExternalIOImplicitAccess.Get(&p.ExecCfg().Settings.SV) &&
+		!p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound
 
 	// TODO(CRDB-66647): drop this early return along with the setting, at which
 	// point USAGE is required unconditionally.
-	if !requireUsage {
+	if !requireUsage && !requireImplicitAccess {
 		return nil
 	}
 
-	for _, uriString := range slices.Concat(otherExternalURIs, []string{sinkURI}) {
+	checkURI := func(uriString string, applyExternalConnectionSink bool) error {
 		if uriString == "" {
-			continue
+			return nil
 		}
-		isExternalConnection, err := checkExternalConnectionUsage(ctx, p, uriString)
+		uri, err := url.Parse(uriString)
 		if err != nil {
-			return err
+			return errors.Newf("failed to parse url %s", uriString)
 		}
-		if !isExternalConnection && requireExternalConnectionSink {
+
+		if uri.Scheme == changefeedbase.SinkSchemeExternalConnection {
+			if requireUsage {
+				return sql.CheckDestinationPrivilegesWithOptions(ctx, p, []string{uriString},
+					sql.DestinationPrivilegeOptions{EnforceUsage: true})
+			}
+			return nil
+		}
+
+		if applyExternalConnectionSink && requireExternalConnectionSink {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				`the %s privilege on %s can only be used with external connection sinks. see cluster setting %s`,
 				privilege.CHANGEFEED, requiredPrivilegeTarget,
 				changefeedbase.RequireExternalConnectionSink.Name())
 		}
+
+		if requireImplicitAccess {
+			return sql.CheckDestinationPrivilegesWithOptions(ctx, p, []string{uriString},
+				sql.DestinationPrivilegeOptions{
+					EnforceImplicitAccess: true,
+					Resolver:              resolveSinkDestination,
+				})
+		}
+		return nil
 	}
 
-	return nil
+	if err := checkURI(confluentSchemaRegistryURI, applyExternalConnectionSinkToRegistry); err != nil {
+		return err
+	}
+	return checkURI(sinkURI, true /* applyExternalConnectionSink */)
 }
 
-// checkExternalConnectionUsage requires privilege.USAGE on the external
-// connection uriString names, and reports whether it named one at all.
-func checkExternalConnectionUsage(
-	ctx context.Context, p sql.PlanHookState, uriString string,
-) (isExternalConnection bool, _ error) {
+// externalSink is the ExternalDestination for a changefeed-native sink scheme
+// (e.g. kafka://, pulsar://, webhook-*://, ...) that has no ExternalStorage
+// representation.
+type externalSink struct {
+	scheme string
+}
+
+func (s externalSink) AccessIsWithExplicitAuth() bool { return false }
+func (s externalSink) Kind() string                   { return s.scheme }
+
+var _ cloudpb.ExternalDestination = externalSink{}
+
+// resolveSinkDestination maps a changefeed sink URI to the ExternalDestination
+// whose auth posture the implicit-access check reasons about.
+// NB: All externalSinks (changefeed-only destinations) will always be considered
+// to be using implicit-access.
+func resolveSinkDestination(
+	uriString string, user username.SQLUsername,
+) (cloudpb.ExternalDestination, error) {
 	uri, err := url.Parse(uriString)
 	if err != nil {
-		return false, errors.Newf("failed to parse url %s", uriString)
-	}
-	if uri.Scheme != changefeedbase.SinkSchemeExternalConnection {
-		return false, nil
+		return nil, errors.Newf("failed to parse url %s", uriString)
 	}
 
-	ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, p.InternalSQLTxn())
-	if err != nil {
-		return true, errors.Wrap(err, "failed to load external connection object")
+	if uri.Scheme == changefeedbase.SinkSchemeNull {
+		return &cloudpb.ExternalStorage{Provider: cloudpb.ExternalStorageProvider_null}, nil
 	}
-	ecPriv := &syntheticprivilege.ExternalConnectionPrivilege{
-		ConnectionName: ec.ConnectionName(),
+
+	normalized := *uri
+	normalized.Scheme = strings.TrimPrefix(normalized.Scheme, `experimental-`)
+	normalized.Scheme = strings.TrimPrefix(normalized.Scheme, `file-`)
+	if isCloudStorageSink(&normalized) {
+		query := normalized.Query()
+		query.Del(changefeedbase.SinkParamFileSize)
+		query.Del(changefeedbase.SinkParamPartitionFormat)
+		normalized.RawQuery = query.Encode()
+
+		conf, err := cloud.ExternalStorageConfFromURI(normalized.String(), user)
+		if err != nil {
+			return nil, errors.Wrap(err, "resolving cloud storage sink destination")
+		}
+		return &conf, nil
 	}
-	return true, p.CheckPrivilege(ctx, ecPriv, privilege.USAGE)
+
+	return externalSink{scheme: uri.Scheme}, nil
 }
