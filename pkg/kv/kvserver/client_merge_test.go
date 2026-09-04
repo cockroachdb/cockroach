@@ -5573,6 +5573,9 @@ func TestMergeQueueEnqueuesFollowerUnderLeaderLeases(t *testing.T) {
 		if typ := leaseStatus.Lease.Type(); typ != roachpb.LeaseLeader {
 			return errors.Newf("lease is %s, want a leader lease", typ)
 		}
+		if followerLease, _ := followerRepl.GetLease(); !followerLease.Equal(leaseStatus.Lease) {
+			return errors.Newf("follower still has %v, want %v", followerLease, leaseStatus.Lease)
+		}
 		return nil
 	})
 
@@ -5589,13 +5592,19 @@ func TestMergeQueueEnqueuesFollowerUnderLeaderLeases(t *testing.T) {
 		ctx, leaseholderRepl, false /* acquireLeaseIfNeeded */),
 		"leaseholder declined a replica it owns the lease for")
 
-	// This is the bug: the follower accepts a replica it can never act on.
-	require.NoError(t, follower.MergeQueueReplicaCanBeProcessed(
+	require.ErrorContains(t, follower.MergeQueueReplicaCanBeProcessed(
 		ctx, followerRepl, false /* acquireLeaseIfNeeded */),
-		"follower declined the replica")
+		"needs lease, not adding")
 
 	// At pop time, we try to acquire the lease, but we will fail anyway.
 	require.ErrorContains(t, follower.MergeQueueReplicaCanBeProcessed(
 		ctx, followerRepl, true /* acquireLeaseIfNeeded */),
 		"lease can't be acquired")
+
+	// Clearing the setting restores the behavior of only rejecting a remote
+	// lease that is verifiably valid.
+	kvserver.QueueSkipUnverifiedRemoteLeases.Override(ctx, &follower.ClusterSettings().SV, false)
+	require.NoError(t, follower.MergeQueueReplicaCanBeProcessed(
+		ctx, followerRepl, false /* acquireLeaseIfNeeded */),
+		"follower declined the replica")
 }
