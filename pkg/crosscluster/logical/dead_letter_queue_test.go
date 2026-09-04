@@ -551,11 +551,14 @@ func testEndToEndDLQ(t *testing.T, mode string) {
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	// Run the stream as a non-admin user so the job owner is scoped down. The
-	// user holds only REPLICATIONDEST (enough to create the stream); it has no
-	// grants on the node-owned DLQ tables, so the DLQ writes exercise the
-	// DescriptorOverride the writer attaches rather than relying on admin.
+	// user holds REPLICATIONDEST plus USAGE on the source connection (enough to
+	// create the stream); it has no grants on the node-owned DLQ tables, so the
+	// DLQ writes exercise the DescriptorOverride the writer attaches rather than
+	// relying on admin.
 	dbA.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
 	dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser))
+	dbA.Exec(t, fmt.Sprintf(`GRANT USAGE ON EXTERNAL CONNECTION "%s" TO %s`,
+		dbBURL.Host, username.TestUser))
 	dbAOwner := sqlutils.MakeSQLRunner(
 		s.SQLConn(t, serverutils.User(username.TestUser), serverutils.DBName("a")))
 
