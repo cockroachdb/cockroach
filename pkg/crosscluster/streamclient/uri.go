@@ -78,6 +78,16 @@ func (c *ConfigUri) IsExternalOrTestScheme() bool {
 	return c.uri.Scheme == "external" || c.uri.Scheme == "randomgen" && buildutil.CrdbTestBuild
 }
 
+// ExternalConnectionName returns the connection name and true if the URI names
+// an external connection (external:// scheme), else "", false. The name lets
+// callers check privileges before the connection is resolved to its URI.
+func (c *ConfigUri) ExternalConnectionName() (string, bool) {
+	if c.uri.Scheme != "external" {
+		return "", false
+	}
+	return c.uri.Host, true
+}
+
 // ClusterUri is a connection uri for a crdb cluster.
 type ClusterUri struct {
 	uri url.URL

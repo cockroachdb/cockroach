@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -90,7 +91,7 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	if err := maybeAuthorizeReverseStream(ctx, r, req); err != nil {
 		return streampb.ReplicationProducerSpec{}, errors.Wrap(err, "uri requires REPLICATIONDEST privilege for bidirectional replication")
 	}
-	if err := maybeValidateReverseURI(ctx, req.UnvalidatedReverseStreamURI, r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).InternalDB); err != nil {
+	if err := maybeValidateReverseURI(ctx, r, req.UnvalidatedReverseStreamURI); err != nil {
 		return streampb.ReplicationProducerSpec{}, errors.Wrap(err, "reverse stream uri failed validation")
 	}
 
@@ -176,7 +177,9 @@ func maybeAuthorizeReverseStream(
 	return nil
 }
 
-func maybeValidateReverseURI(ctx context.Context, reverseURI string, db *sql.InternalDB) error {
+func maybeValidateReverseURI(
+	ctx context.Context, r *replicationStreamManagerImpl, reverseURI string,
+) error {
 	if reverseURI == "" {
 		return nil
 	}
@@ -187,7 +190,17 @@ func maybeValidateReverseURI(ctx context.Context, reverseURI string, db *sql.Int
 	if !configUri.IsExternalOrTestScheme() {
 		return errors.New("uri must be an external connection")
 	}
+	// The reverse URI only gained this check in v26.4, so it is gated on
+	// RequireUsagePrivilegeOnExternalConnections.
+	name, hasName := configUri.ExternalConnectionName()
+	if hasName && sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(&r.evalCtx.Settings.SV) {
+		ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{ConnectionName: name}
+		if err := r.evalCtx.SessionAccessor.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE); err != nil {
+			return err
+		}
+	}
 
+	db := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).InternalDB
 	clusterUri, err := configUri.AsClusterUri(ctx, db)
 	if err != nil {
 		return err
