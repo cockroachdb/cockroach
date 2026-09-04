@@ -1596,6 +1596,25 @@ func TestInjectRetryErrors(t *testing.T) {
 
 	_, err := db.Exec("SET inject_retry_errors_enabled = 'true'")
 	require.NoError(t, err)
+	queryInts := func(t *testing.T, conn *gosql.Conn, query string) []int {
+		t.Helper()
+		rows, err := conn.QueryContext(ctx, query)
+		require.NoError(t, err)
+		defer rows.Close()
+		var values []int
+		for {
+			for rows.Next() {
+				var value int
+				require.NoError(t, rows.Scan(&value))
+				values = append(values, value)
+			}
+			if !rows.NextResultSet() {
+				break
+			}
+		}
+		require.NoError(t, rows.Err())
+		return values
+	}
 
 	t.Run("with_savepoints", func(t *testing.T) {
 		// The crdb.ExecuteTx wrapper uses SAVEPOINTs to retry the transaction,
@@ -1673,6 +1692,118 @@ func TestInjectRetryErrors(t *testing.T) {
 		require.NoError(t, tx.Commit())
 		require.Equal(t, 3, txRes)
 		require.Equal(t, int64(3), readCommittedStmtRetries.Load())
+	})
+
+	t.Run("cursor_txn_rewind", func(t *testing.T) {
+		conn, err := db.Conn(ctx)
+		require.NoError(t, err)
+		defer conn.Close()
+		defer func() {
+			_, err := conn.ExecContext(ctx, `SET inject_retry_errors_enabled = true`)
+			require.NoError(t, err)
+		}()
+
+		_, err = conn.ExecContext(ctx, `SET inject_retry_errors_enabled = false`)
+		require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `SET allow_unsafe_internals = true;
+BEGIN;
+DECLARE held_control CURSOR WITH HOLD FOR SELECT * FROM (VALUES (1), (2), (3), (4), (5), (6), (7), (8));
+DECLARE held_retry CURSOR WITH HOLD FOR SELECT * FROM (VALUES (1), (2), (3), (4), (5), (6), (7), (8));
+COMMIT;
+`)
+		require.NoError(t, err)
+
+		control := queryInts(t, conn, `
+BEGIN;
+FETCH 2 FROM held_control;
+SELECT crdb_internal.force_retry(0);
+COMMIT;
+`)
+		require.Equal(t, []int{1, 2, 0}, control)
+		retried := queryInts(t, conn, `
+BEGIN;
+FETCH 2 FROM held_retry;
+SELECT crdb_internal.force_retry(3);
+COMMIT;
+`)
+		require.Equal(t, control, retried)
+		retried = queryInts(t, conn, `
+BEGIN;
+FETCH 2 FROM held_retry;
+SELECT crdb_internal.force_retry(3);
+COMMIT;
+`)
+		require.Equal(t, []int{3, 4, 0}, retried)
+
+		saved := queryInts(t, conn, `
+BEGIN;
+DECLARE saved CURSOR FOR SELECT * FROM (VALUES (1), (2), (3), (4), (5), (6), (7), (8));
+SAVEPOINT s;
+FETCH 2 FROM saved;
+SELECT crdb_internal.force_retry(3);
+COMMIT;
+`)
+		require.Equal(t, []int{1, 2, 0}, saved)
+	})
+
+	t.Run("cursor_close_txn_rewind", func(t *testing.T) {
+		conn, err := db.Conn(ctx)
+		require.NoError(t, err)
+		defer conn.Close()
+		defer func() {
+			_, err := conn.ExecContext(ctx, `SET inject_retry_errors_enabled = true`)
+			require.NoError(t, err)
+		}()
+
+		_, err = conn.ExecContext(ctx, `SET inject_retry_errors_enabled = false`)
+		require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `SET allow_unsafe_internals = true;
+BEGIN;
+DECLARE held_close CURSOR WITH HOLD FOR SELECT 1;
+COMMIT;
+`)
+		require.NoError(t, err)
+		closed := queryInts(t, conn, `
+BEGIN;
+CLOSE held_close;
+SELECT crdb_internal.force_retry(3);
+COMMIT;
+`)
+		require.Equal(t, []int{0}, closed)
+	})
+
+	t.Run("read_committed_cursor", func(t *testing.T) {
+		readCommittedStmtRetries.Store(0)
+		conn, err := db.Conn(ctx)
+		require.NoError(t, err)
+		defer conn.Close()
+		defer func() {
+			_, err := conn.ExecContext(ctx, `SET inject_retry_errors_enabled = true`)
+			require.NoError(t, err)
+		}()
+
+		_, err = conn.ExecContext(ctx, `SET inject_retry_errors_enabled = false`)
+		require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `BEGIN ISOLATION LEVEL READ COMMITTED;
+DECLARE control CURSOR FOR SELECT * FROM (VALUES (1), (2), (3), (4), (5), (6), (7), (8));
+DECLARE retried CURSOR FOR SELECT * FROM (VALUES (1), (2), (3), (4), (5), (6), (7), (8));
+`)
+		require.NoError(t, err)
+		control := queryInts(t, conn, `FETCH 2 FROM control`)
+		require.Equal(t, []int{1, 2}, control)
+
+		_, err = conn.ExecContext(ctx, `SET inject_retry_errors_enabled = true`)
+		require.NoError(t, err)
+		retried := queryInts(t, conn, `FETCH 2 FROM retried`)
+		require.Equal(t, control, retried)
+		require.Equal(t, int64(3), readCommittedStmtRetries.Load())
+
+		_, err = conn.ExecContext(ctx, `
+SET inject_retry_errors_enabled = false;
+CLOSE ALL;
+COMMIT;
+`)
+		require.NoError(t, err)
 	})
 
 	t.Run("read_committed_txn_retries_exceeded", func(t *testing.T) {
