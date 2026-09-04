@@ -20,6 +20,20 @@ const (
 	ExternalStorageAuthSpecified = "specified"
 )
 
+// ExternalDestination describes a target of external I/O for the purpose of
+// privilege checks, without requiring the target to be an external storage. It
+// lets the destination privilege check reason uniformly about external storage
+// (e.g. S3) and about destinations that have no ExternalStorage representation
+// at all (e.g. kafka changefeed sinks).
+type ExternalDestination interface {
+	// AccessIsWithExplicitAuth reports whether access to the destination uses
+	// credentials the statement supplied, what EXTERNALIOIMPLICITACCESS gates.
+	AccessIsWithExplicitAuth() bool
+	// Kind names the destination for user-facing error messages.
+	// It is a label, not a stable identifier, and callers must not switch on it.
+	Kind() string
+}
+
 // AccessIsWithExplicitAuth returns true if the external storage config carries
 // its own explicit credentials to use for access (or does not require them), as
 // opposed to using something about the node to gain implicit access, such as a
@@ -58,6 +72,13 @@ func (m *ExternalStorage) AccessIsWithExplicitAuth() bool {
 		return false
 	}
 }
+
+// Kind implements the ExternalDestination interface.
+func (m *ExternalStorage) Kind() string {
+	return m.Provider.String()
+}
+
+var _ ExternalDestination = (*ExternalStorage)(nil)
 
 const assumeRoleProviderExternalIDParam = "external_id"
 
