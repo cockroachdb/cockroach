@@ -389,7 +389,7 @@ func (expr *NumVal) ResolveAsType(
 						"could not evaluate denominator %v as Datum type DDecimal from string %q",
 						expr, den)
 				}
-				if cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, &denDec.Decimal); err != nil {
+				if cond, err := DecimalQuo(&dd.Decimal, &dd.Decimal, &denDec.Decimal); err != nil {
 					if cond.DivisionByZero() {
 						return nil, ErrDivByZero
 					}
