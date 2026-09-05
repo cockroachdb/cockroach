@@ -560,13 +560,22 @@ type Volume struct {
 	Size               int
 }
 
+// AttachedVolume pairs a volume with the device path it is reachable at on the
+// VM it is attached to.
+type AttachedVolume struct {
+	Volume     Volume
+	DevicePath string
+}
+
 // VolumeCreateOpts groups input callers can provide when creating volumes.
 type VolumeCreateOpts struct {
 	Name string
 	// N.B. Customer managed encryption is not supported at this time
-	Encrypted        bool
-	Architecture     string
-	IOPS             int
+	Encrypted    bool
+	Architecture string
+	IOPS         int
+	// Size of the volume in GB. Leave it zero to inherit the size of
+	// SourceSnapshotID; providers reject a zero size without one.
 	Size             int
 	Type             string
 	SourceSnapshotID string

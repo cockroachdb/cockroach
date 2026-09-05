@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -2753,6 +2754,122 @@ func ApplySnapshots(
 			}
 			return res, nil
 		})
+}
+
+// AttachVolumeFromSnapshot creates a volume from snap in the zone of the given
+// node and attaches it to that node. opts supplies the name and type; zone,
+// source snapshot and the roachprod GC labels are filled in here.
+//
+// Unlike ApplySnapshots this is additive: volumes already attached to the node
+// are left alone, so the caller owns the volume's lifetime and must pair this
+// with DetachAndDeleteVolume.
+//
+// The volume is deliberately absent from the cluster cache. Persisting it would
+// rewrite the whole cluster file on every call, which loses updates when
+// callers run in parallel across nodes.
+func AttachVolumeFromSnapshot(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	node int,
+	snap vm.VolumeSnapshot,
+	opts vm.VolumeCreateOpts,
+) (vm.AttachedVolume, error) {
+	cVM, err := clusterVM(l, clusterName, node)
+	if err != nil {
+		return vm.AttachedVolume{}, err
+	}
+
+	opts.Zone = cVM.Zone
+	opts.SourceSnapshotID = snap.ID
+
+	// Copy before adding ours. Without the GC labels a volume that outlives its
+	// caller is never reclaimed.
+	labels := make(map[string]string, len(opts.Labels)+4)
+	maps.Copy(labels, opts.Labels)
+	labels[vm.TagCluster] = clusterName
+	labels[vm.TagLifetime] = cVM.Lifetime.String()
+	labels[vm.TagRoachprod] = "true"
+	labels[vm.TagCreated] = strings.ToLower(
+		strings.ReplaceAll(timeutil.Now().Format(time.RFC3339), ":", "_"))
+	opts.Labels = labels
+
+	var volume vm.Volume
+	if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
+		var err error
+		volume, err = provider.CreateVolume(l, opts)
+		return err
+	}); err != nil {
+		return vm.AttachedVolume{}, err
+	}
+	l.Printf("created volume %s from snapshot %s", volume.ProviderResourceID, snap.Name)
+
+	attached, err := attachVolume(l, cVM, volume)
+	if err != nil {
+		return vm.AttachedVolume{}, errors.Wrapf(err,
+			"attaching volume %s (now unattached, left for GC)", volume.ProviderResourceID)
+	}
+	return attached, nil
+}
+
+// AttachVolume attaches an existing volume to the given node. Like
+// AttachVolumeFromSnapshot, the attachment is not recorded in the cluster cache.
+func AttachVolume(
+	ctx context.Context, l *logger.Logger, clusterName string, node int, volume vm.Volume,
+) (vm.AttachedVolume, error) {
+	cVM, err := clusterVM(l, clusterName, node)
+	if err != nil {
+		return vm.AttachedVolume{}, err
+	}
+	return attachVolume(l, cVM, volume)
+}
+
+// DetachAndDeleteVolume detaches volume from the given node and deletes it. It
+// is the counterpart to AttachVolumeFromSnapshot.
+func DetachAndDeleteVolume(
+	ctx context.Context, l *logger.Logger, clusterName string, node int, volume vm.Volume,
+) error {
+	cVM, err := clusterVM(l, clusterName, node)
+	if err != nil {
+		return err
+	}
+	if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
+		return provider.DeleteVolume(l, volume, cVM)
+	}); err != nil {
+		return err
+	}
+	l.Printf("detached and deleted volume %s from %s", volume.ProviderResourceID, cVM.Name)
+	return nil
+}
+
+// attachVolume goes through vm.VM.AttachVolume rather than the provider method
+// so that providers deriving a device index from the VM's attached-volume count
+// observe it.
+func attachVolume(l *logger.Logger, cVM *vm.VM, volume vm.Volume) (vm.AttachedVolume, error) {
+	// Backfill the zone for callers that reconstructed the volume without one; a
+	// volume only attaches within its VM's zone.
+	if volume.Zone == "" {
+		volume.Zone = cVM.Zone
+	}
+	device, err := cVM.AttachVolume(l, volume)
+	if err != nil {
+		return vm.AttachedVolume{}, err
+	}
+	l.Printf("attached volume %s to %s at %s", volume.ProviderResourceID, cVM.Name, device)
+	return vm.AttachedVolume{Volume: volume, DevicePath: device}, nil
+}
+
+// clusterVM returns the cached VM backing the given 1-indexed node.
+func clusterVM(l *logger.Logger, clusterName string, node int) (*vm.VM, error) {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return nil, err
+	}
+	if node < 1 || node > len(c.VMs) {
+		return nil, errors.Errorf(
+			"node %d out of range for cluster %s with %d nodes", node, clusterName, len(c.VMs))
+	}
+	return &c.VMs[node-1], nil
 }
 
 func genMountCommands(devicePath, mountDir string) string {
