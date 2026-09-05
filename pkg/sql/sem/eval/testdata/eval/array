@@ -23,7 +23,7 @@ ARRAY['a','b','c']
 eval
 ARRAY[ARRAY[1, 2], ARRAY[2, 3]]
 ----
-ARRAY[ARRAY[1,2],ARRAY[2,3]]
+unimplemented: arrays of int[] not allowed
 
 eval
 ARRAY[1, NULL]
@@ -60,17 +60,17 @@ NULL
 eval
 array_length(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 1)
 ----
-2
+unimplemented: arrays of int[] not allowed
 
 eval
 array_length(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 2)
 ----
-3
+unimplemented: arrays of int[] not allowed
 
 eval
 array_length(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 3)
 ----
-NULL
+unimplemented: arrays of int[] not allowed
 
 eval
 array_lower(ARRAY[1, 2, 3], 1)
@@ -95,17 +95,17 @@ NULL
 eval
 array_lower(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 1)
 ----
-1
+unimplemented: arrays of int[] not allowed
 
 eval
 array_lower(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 2)
 ----
-1
+unimplemented: arrays of int[] not allowed
 
 eval
 array_lower(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 3)
 ----
-NULL
+unimplemented: arrays of int[] not allowed
 
 eval
 array_upper(ARRAY[1, 2, 3], 1)
@@ -130,17 +130,17 @@ NULL
 eval
 array_upper(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 1)
 ----
-2
+unimplemented: arrays of int[] not allowed
 
 eval
 array_upper(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 2)
 ----
-3
+unimplemented: arrays of int[] not allowed
 
 eval
 array_upper(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 3)
 ----
-NULL
+unimplemented: arrays of int[] not allowed
 
 # overlap, contains, contained by (&&, @>, <@)
 
