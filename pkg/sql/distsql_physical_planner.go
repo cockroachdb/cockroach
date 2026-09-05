@@ -2333,6 +2333,11 @@ func (dsp *DistSQLPlanner) planAggregators(
 			for _, colIdx := range e.ColIdx {
 				distinctColumnsSet.Add(int(colIdx))
 			}
+			if e.FilterColIdx != nil {
+				// Preserve rows with the same arguments but different filter
+				// results so that each aggregate can apply its own filter.
+				distinctColumnsSet.Add(int(*e.FilterColIdx))
+			}
 		}
 		if distinctColumnsSet.Len() > 0 {
 			// We only need to plan distinct processors if we have non-empty
