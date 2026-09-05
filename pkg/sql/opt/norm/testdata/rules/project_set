@@ -166,15 +166,15 @@ values
  ├── key: ()
  └── fd: ()-->(1)
 
-# unnest case with array of arrays.
+# unnest case with array of tuples containing arrays.
 norm expect=ConvertZipArraysToValues
-SELECT unnest(ARRAY[[1,2,3],[4,5]])
+SELECT unnest(ARRAY[ROW(ARRAY[1,2,3]), ROW(ARRAY[4,5])])
 ----
 values
  ├── columns: unnest:1!null
  ├── cardinality: [2 - 2]
- ├── (ARRAY[1,2,3],)
- └── (ARRAY[4,5],)
+ ├── ((ARRAY[1,2,3],),)
+ └── ((ARRAY[4,5],),)
 
 # json_array_elements case with array of arrays.
 norm expect=ConvertZipArraysToValues
@@ -211,10 +211,10 @@ project
       └── filters (true)
 
 # No-op case - ConvertZipArraysToValues fires the first time but not the
-# second because the outer zip is over a variable of an array instead of the
-# array itself.
+# second because the outer zip is over an array-valued tuple field instead of
+# a static array.
 norm expect=ConvertZipArraysToValues
-SELECT unnest(x) FROM unnest(ARRAY[[1,2,3],[4,5],[6]]) AS x
+SELECT unnest((x).@1) FROM unnest(ARRAY[ROW(ARRAY[1,2,3]), ROW(ARRAY[4,5]), ROW(ARRAY[6])]) AS t(x)
 ----
 project
  ├── columns: unnest:2
@@ -225,11 +225,11 @@ project
       ├── values
       │    ├── columns: unnest:1!null
       │    ├── cardinality: [3 - 3]
-      │    ├── (ARRAY[1,2,3],)
-      │    ├── (ARRAY[4,5],)
-      │    └── (ARRAY[6],)
+      │    ├── ((ARRAY[1,2,3],),)
+      │    ├── ((ARRAY[4,5],),)
+      │    └── ((ARRAY[6],),)
       └── zip
-           └── unnest(unnest:1) [outer=(1), immutable]
+           └── unnest((unnest:1).@1) [outer=(1), immutable]
 
 # No-op case - an unnest with multiple inputs is not matched.
 norm expect-not=ConvertZipArraysToValues

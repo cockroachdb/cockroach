@@ -989,15 +989,7 @@ project
 build
 SELECT ARRAY(VALUES (ARRAY[1]))
 ----
-project
- ├── columns: array:2
- ├── values
- │    └── ()
- └── projections
-      └── array-flatten [as=array:2]
-           └── values
-                ├── columns: column1:1
-                └── (ARRAY[1],)
+error (0A000): unimplemented: arrays of int[] not allowed
 
 build
 SELECT ARRAY(SELECT (1, 2))
@@ -1279,21 +1271,7 @@ project
 build
 SELECT ARRAY(SELECT y FROM u ORDER BY x) FROM v
 ----
-project
- ├── columns: array:10
- ├── scan v
- │    └── columns: v.y:1 v.rowid:2!null v.crdb_internal_mvcc_timestamp:3 v.tableoid:4
- └── projections
-      └── array-flatten col=9 [as=array:10]
-           └── sort
-                ├── columns: y:9  [hidden: x:5]
-                ├── ordering: +5
-                └── project
-                     ├── columns: y:9 x:5
-                     ├── scan u
-                     │    └── columns: x:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-                     └── projections
-                          └── v.y:1 [as=y:9]
+error (0A000): unimplemented: arrays of int[] not allowed
 
 build-scalar
 ISERROR(1/0)

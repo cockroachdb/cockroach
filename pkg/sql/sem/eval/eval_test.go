@@ -294,9 +294,9 @@ func TestEvalError(t *testing.T) {
 		{`'1- 2:3:4 9'::interval`,
 			`could not parse "1- 2:3:4 9" as type interval: invalid input syntax for type interval 1- 2:3:4 9`},
 		{`e'\\xdedf0d36174'::BYTES`, `could not parse "\\xdedf0d36174" as type bytes: encoding/hex: odd length hex string`},
-		{`ARRAY[NULL, ARRAY[1, 2]]`, `multidimensional arrays must have array expressions with matching dimensions`},
-		{`ARRAY[ARRAY[1, 2], NULL]`, `multidimensional arrays must have array expressions with matching dimensions`},
-		{`ARRAY[ARRAY[1, 2], ARRAY[1]]`, `multidimensional arrays must have array expressions with matching dimensions`},
+		{`ARRAY[NULL, ARRAY[1, 2]]`, `unimplemented: arrays of int[] not allowed`},
+		{`ARRAY[ARRAY[1, 2], NULL]`, `unimplemented: arrays of int[] not allowed`},
+		{`ARRAY[ARRAY[1, 2], ARRAY[1]]`, `unimplemented: arrays of int[] not allowed`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`},
 		{`9223372036854775807::int + 1::int`, `integer out of range`},

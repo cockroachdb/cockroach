@@ -936,19 +936,19 @@ project
 
 # No-op case because the single column in Values is not of type tuple.
 norm expect-not=FoldTupleAccessIntoValues
-SELECT col[1], col[2] FROM unnest(ARRAY[[1,2],[3,4]]) AS col
+SELECT col[1], col[2] FROM (VALUES (ARRAY[1,2]), (ARRAY[3,4])) AS v(col)
 ----
 project
  ├── columns: col:2 col:3
  ├── cardinality: [2 - 2]
  ├── values
- │    ├── columns: unnest:1!null
+ │    ├── columns: column1:1!null
  │    ├── cardinality: [2 - 2]
  │    ├── (ARRAY[1,2],)
  │    └── (ARRAY[3,4],)
  └── projections
-      ├── unnest:1[1] [as=col:2, outer=(1)]
-      └── unnest:1[2] [as=col:3, outer=(1)]
+      ├── column1:1[1] [as=col:2, outer=(1)]
+      └── column1:1[2] [as=col:3, outer=(1)]
 
 # No-op case because one of the tuple rows in Values can only be determined at
 # run-time. Put dynamic tuple expression at end of list to ensure that all rows
