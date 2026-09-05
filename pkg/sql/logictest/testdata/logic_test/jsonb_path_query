@@ -2111,3 +2111,46 @@ SELECT jsonb_path_query('{"LIKE_REGEx": 1}'::JSONB, '$.LIKE_REGEx'::JSONPATH);
 query T
 SELECT jsonb_path_query('{"LIKE_REGEx": 1}'::JSONB, '$.LIKE_REGEX'::JSONPATH);
 ----
+
+subtest regression_145399
+
+# Empty comparison operands produce false, whose type is boolean. Genuine
+# unknown comparisons must still produce JSON null and report type null.
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '($[*].a > 3).type()');
+----
+"boolean"
+
+query ITTT
+WITH inputs(id, doc) AS (VALUES
+  (1, '[1,2,3]'), (2, '[{},{}]'), (3, '[]'),
+  (4, '[{"a":2}]'), (5, '[{"a":5}]'), (6, '[{"a":"x"}]'),
+  (7, '[{"a":null}]'), (8, '[{"a":"x"},{"a":5}]')
+)
+SELECT id,
+  jsonb_path_query(doc::JSONB, '$[*].a > 3'),
+  jsonb_path_query(doc::JSONB, '($[*].a > 3).type()'),
+  jsonb_path_query(doc::JSONB, '($[*].a > 3) is unknown')
+FROM inputs ORDER BY id;
+----
+1  false  "boolean"  false
+2  false  "boolean"  false
+3  false  "boolean"  false
+4  false  "boolean"  false
+5  true   "boolean"  false
+6  null   "null"     true
+7  false  "boolean"  false
+8  true   "boolean"  false
+
+query T
+SELECT jsonb_path_query('[1,2,3]', '(3 < $[*].a).type()');
+----
+"boolean"
+
+query TTT
+SELECT
+  jsonb_path_query('{}', 'strict ($.missing > 3).type()', '{}', true),
+  jsonb_path_query('{}', '(1 / 0 > 3).type()', '{}', true),
+  jsonb_path_query('null', '$.type()');
+----
+"null"  "null"  "null"
