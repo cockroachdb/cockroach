@@ -680,20 +680,26 @@ func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *sco
 // not found in the current scope, ancestor scopes are successively searched.
 // If no matching function argument column is found, nil is returned.
 func (s *scope) findFuncArgCol(ord int) *scopeColumn {
+	col, _ := s.findFuncArgColWithValidity(ord)
+	return col
+}
+
+// findFuncArgColWithValidity is like findFuncArgCol, but it also reports
+// whether the ordinal exceeds the maximum routine parameter ordinal.
+func (s *scope) findFuncArgColWithValidity(ord int) (_ *scopeColumn, outOfRange bool) {
 	for ; s != nil; s = s.parent {
-		if s.checkMaxParamOrd && ord > (s.maxParamOrd-1) {
-			// Referencing this function parameter by ordinal is not allowed. Subtract
-			// 1 from maxParamOrd to convert it to a 0-based ordinal.
-			return nil
+		if s.checkMaxParamOrd && ord >= s.maxParamOrd {
+			// Referencing this function parameter by ordinal is not allowed.
+			return nil, true
 		}
 		for i := range s.cols {
 			col := &s.cols[i]
 			if col.funcParamReferencedBy(ord) {
-				return col
+				return col, false
 			}
 		}
 	}
-	return nil
+	return nil, false
 }
 
 // startAggFunc is called when the builder starts building an aggregate
@@ -1142,8 +1148,10 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		// NOTE: This likely won't work if we want to allow PREPARE statements
 		// within user-defined function bodies. We'll need to avoid replacing
 		// placeholders that are prepared statement parameters.
-		if col := s.findFuncArgCol(int(t.Idx)); col != nil {
+		if col, outOfRange := s.findFuncArgColWithValidity(int(t.Idx)); col != nil {
 			return false, col
+		} else if outOfRange {
+			panic(tree.NewNoValueProvidedForPlaceholderErr(t.Idx))
 		}
 
 	case *tree.FuncExpr:
