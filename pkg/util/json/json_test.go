@@ -2840,6 +2840,96 @@ func TestJSONRemovePath(t *testing.T) {
 	}
 }
 
+func TestJSONNonFiniteAsText(t *testing.T) {
+	testCases := []struct {
+		input, text, formatted string
+		legacyDecimalTag       byte
+	}{
+		{"NaN", "NaN", `"NaN"`, 0x18},
+		{"+Infinity", "Infinity", `"Infinity"`, 0x35},
+		{"-Infinity", "-Infinity", `"-Infinity"`, 0x19},
+		{"0", "0", "0", 0},
+		{"1.2300", "1.2300", "1.2300", 0},
+		{"-12.50", "-12.50", "-12.50", 0},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			dec, _, err := apd.NewFromString(tc.input)
+			require.NoError(t, err)
+			j := FromDecimal(*dec)
+			encoded, err := EncodeJSON(nil, j)
+			require.NoError(t, err)
+			if tc.legacyDecimalTag != 0 {
+				// Keep the numeric scalar encoding readable by existing versions.
+				// Only text extraction changes; neither the type tag nor the stored
+				// non-finite decimal becomes a JSON string.
+				legacy := []byte{0x20, 0, 0, 0, 0x20, 0, 0, 2, 1, tc.legacyDecimalTag}
+				require.Equal(t, legacy, encoded)
+				encoded = legacy
+			}
+			check := func(t *testing.T, value JSON) {
+				text, err := value.AsText()
+				require.NoError(t, err)
+				require.NotNil(t, text)
+				require.Equal(t, tc.text, *text)
+				require.Equal(t, NumberJSONType, value.Type())
+				actualDecimal, ok := value.AsDecimal()
+				require.True(t, ok)
+				require.Equal(t, dec.Form, actualDecimal.Form)
+				require.Equal(t, dec.Negative, actualDecimal.Negative)
+				require.Equal(t, dec.Exponent, actualDecimal.Exponent)
+				require.Zero(t, dec.Coeff.Cmp(&actualDecimal.Coeff))
+				require.Equal(t, tc.formatted, value.String())
+				var buf bytes.Buffer
+				value.Format(&buf)
+				require.Equal(t, tc.formatted, buf.String())
+				require.True(t, json.Valid(buf.Bytes()))
+
+				// Check the cached decode path as well as the initial extraction.
+				text, err = value.AsText()
+				require.NoError(t, err)
+				require.NotNil(t, text)
+				require.Equal(t, tc.text, *text)
+				after, err := EncodeJSON(nil, value)
+				require.NoError(t, err)
+				require.Equal(t, encoded, after, "text extraction must not change storage")
+			}
+			runDecodedAndEncoded(t, "decimal", j, check)
+			t.Run("fully decoded", func(t *testing.T) {
+				rest, decoded, err := DecodeJSON(encoded)
+				require.NoError(t, err)
+				require.Empty(t, rest)
+				check(t, decoded)
+			})
+			if tc.legacyDecimalTag != 0 {
+				f, err := strconv.ParseFloat(tc.input, 64)
+				require.NoError(t, err)
+				fromFloat, err := FromFloat64(f)
+				require.NoError(t, err)
+				runDecodedAndEncoded(t, "float", fromFloat, check)
+			}
+
+			array := NewArrayBuilder(1)
+			array.Add(j)
+			object := NewObjectBuilder(1)
+			object.Add("value", array.Build())
+			nested := object.Build()
+			runDecodedAndEncoded(t, "nested", nested, func(t *testing.T, value JSON) {
+				leaf, err := FetchPath(value, []string{"value", "0"})
+				require.NoError(t, err)
+				require.NotNil(t, leaf)
+				check(t, leaf)
+				// Extracting a container still returns JSON, including the quotes
+				// around its non-finite numeric leaves.
+				text, err := value.AsText()
+				require.NoError(t, err)
+				require.NotNil(t, text)
+				require.Equal(t, fmt.Sprintf(`{"value": [%s]}`, tc.formatted), *text)
+			})
+		})
+	}
+}
+
 func TestToDecimal(t *testing.T) {
 	numericCases := []string{
 		"1",
