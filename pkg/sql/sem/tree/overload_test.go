@@ -336,6 +336,58 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	}
 }
 
+func TestTypeCheckHomogeneousExprsWithMixedIntWidths(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	intConst := func(s string) Expr {
+		return NewNumVal(constant.MakeFromLiteral(s, token.INT, 0), s, false /* negative */)
+	}
+	homogeneousFn := &Overload{
+		Types:      HomogeneousType{},
+		ReturnType: FirstNonNullReturnType(),
+	}
+	testCases := []struct {
+		name  string
+		types []*types.T
+		exprs func(IndexedVarHelper) []Expr
+	}{
+		{
+			name:  "columns",
+			types: []*types.T{types.Int2, types.Int4},
+			exprs: func(h IndexedVarHelper) []Expr {
+				return []Expr{h.IndexedVar(0), h.IndexedVar(1)}
+			},
+		},
+		{
+			name:  "constant-and-column",
+			types: []*types.T{types.Int4},
+			exprs: func(h IndexedVarHelper) []Expr {
+				return []Expr{intConst("0"), h.IndexedVar(0)}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			semaCtx := MakeSemaContext(nil /* resolver */)
+			ivarHelper := MakeIndexedVarHelperWithTypes(tc.types)
+			semaCtx.IVarContainer = ivarHelper.Container()
+			s := getOverloadTypeChecker(overloadImpls{homogeneousFn}, tc.exprs(ivarHelper)...)
+			defer s.release()
+
+			require.NoError(t, s.typeCheckOverloadedExprs(
+				context.Background(), &semaCtx, types.AnyElement, false, /* inBinOp */
+			))
+			require.Len(t, s.typedExprs, 2)
+			for i := range s.typedExprs {
+				require.Truef(t, s.typedExprs[i].ResolvedType().Identical(types.Int4),
+					"argument %d has type %s", i, s.typedExprs[i].ResolvedType())
+			}
+		})
+	}
+}
+
 func TestGetMostSignificantOverload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

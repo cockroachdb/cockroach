@@ -1843,6 +1843,54 @@ SELECT least(NULL, NULL, NULL, a, -1) FROM foo
 ----
 -1
 
+subtest regression_159153
+
+statement ok
+CREATE TABLE t159153 (c1 INT2, c2 INT4)
+
+statement ok
+INSERT INTO t159153 VALUES
+  (-9551, -1347373370),
+  (9551, 1347373370),
+  (NULL, -1234567890)
+
+# LEAST is commutative, and explicitly promoting the narrow argument must not
+# change the result.
+query III
+SELECT least(c1, least(0, c2)),
+       least(least(0, c2), c1),
+       least(c1::INT4, least(0, c2))
+FROM t159153 WHERE c1 = -9551
+----
+-1347373370 -1347373370 -1347373370
+
+# GREATEST uses the same homogeneous overload and must preserve a selected
+# value that does not fit in the first argument's width.
+query III
+SELECT greatest(c1, greatest(0, c2)),
+       greatest(greatest(0, c2), c1),
+       greatest(c1::INT4, greatest(0, c2))
+FROM t159153 WHERE c1 = 9551
+----
+1347373370 1347373370 1347373370
+
+# NULL arguments are ignored by LEAST, so the wide inner value is still the
+# expected result when the narrow outer argument is NULL.
+query I
+SELECT least(c1, least(0, c2)) FROM t159153 WHERE c1 IS NULL
+----
+-1234567890
+
+# Flat mixed-width calls exercise the control path without nested return-type
+# propagation.
+query II
+SELECT least(c1, c2), greatest(c1, c2)
+FROM t159153 WHERE c1 = -9551
+----
+-1347373370 -9551
+
+subtest end
+
 # Test float and int comparison.
 
 query BBBB
