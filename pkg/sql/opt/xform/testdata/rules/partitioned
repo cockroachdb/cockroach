@@ -165,6 +165,10 @@ select
  ├── fd: ()-->(3)
  ├── scan t63733_nulls@idx
  │    ├── columns: a:1 b:2 c:3
+ │    ├── constraint: /1/2/3/4
+ │    │    ├── [/NULL - /9]
+ │    │    ├── [/10/NULL/1 - /10/NULL/1]
+ │    │    └── (/10/NULL - ]
  │    └── flags: force-index=idx
  └── filters
       └── c:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
