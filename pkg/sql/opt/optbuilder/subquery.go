@@ -216,6 +216,9 @@ func (s *subquery) buildSubquery(desiredTypes []*types.T) {
 	defer func() { s.scope.builder.subquery = outer }()
 	s.scope.builder.subquery = s
 
+	s.scope.builder.subqueryDepth++
+	defer func() { s.scope.builder.subqueryDepth-- }()
+
 	// We must push() here so that the columns in s.scope are correctly identified
 	// as outer columns.
 	outScope := s.scope.builder.buildStmt(s.Subquery.Select, desiredTypes, s.scope.push())

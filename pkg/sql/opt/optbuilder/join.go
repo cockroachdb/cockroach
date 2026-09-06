@@ -34,8 +34,13 @@ func (b *Builder) buildJoin(
 	if joinType == descpb.RightOuterJoin || joinType == descpb.FullOuterJoin {
 		leftLockCtx.isNullExtended = true
 	}
+	if joinType == descpb.RightOuterJoin || joinType == descpb.FullOuterJoin {
+		b.outerJoinNullExtendedDepth++
+	}
 	leftScope := b.buildDataSource(join.Left, nil /* indexFlags */, leftLockCtx, inScope)
-
+	if joinType == descpb.RightOuterJoin || joinType == descpb.FullOuterJoin {
+		b.outerJoinNullExtendedDepth--
+	}
 	inScopeRight := inScope
 	isLateral := b.exprIsLateral(join.Right)
 	if isLateral {
@@ -51,8 +56,13 @@ func (b *Builder) buildJoin(
 	if joinType == descpb.LeftOuterJoin || joinType == descpb.FullOuterJoin {
 		rightLockCtx.isNullExtended = true
 	}
+	if joinType == descpb.LeftOuterJoin || joinType == descpb.FullOuterJoin {
+		b.outerJoinNullExtendedDepth++
+	}
 	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, rightLockCtx, inScopeRight)
-
+	if joinType == descpb.LeftOuterJoin || joinType == descpb.FullOuterJoin {
+		b.outerJoinNullExtendedDepth--
+	}
 	// Check that the same table name is not used on both sides.
 	b.validateJoinTableNames(leftScope, rightScope)
 

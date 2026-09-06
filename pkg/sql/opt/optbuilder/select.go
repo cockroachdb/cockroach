@@ -194,7 +194,12 @@ func (b *Builder) buildDataSource(
 		// Postgres does, because then the AliasedTableExpr case would handle this.
 		lockCtx.withoutTargets()
 
-		outScope = b.buildSelectStmt(source.Select, lockCtx, nil /* desiredTypes */, inScope)
+		func() {
+			b.subqueryDepth++
+			defer func() { b.subqueryDepth-- }()
+
+			outScope = b.buildSelectStmt(source.Select, lockCtx, nil /* desiredTypes */, inScope)
+		}()
 
 		// Treat the subquery result as an anonymous data source (i.e. column names
 		// are not qualified). Remove hidden columns, as they are not accessible

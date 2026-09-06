@@ -111,6 +111,10 @@ type Builder struct {
 	// Together, they form a directed acyclic graph.
 	cteRefMap map[opt.WithID]cteSources
 
+	// outerJoinNullExtendedDepth tracks the number of null-extended outer-join
+	// sides currently being built.
+	outerJoinNullExtendedDepth int
+
 	// If set, the planner will skip checking for the SELECT privilege when
 	// resolving data sources (tables, views, etc). This is used when compiling
 	// views and the view SELECT privilege has already been checked. This should
@@ -128,6 +132,10 @@ type Builder struct {
 	// subquery contains a pointer to the subquery which is currently being built
 	// (if any).
 	subquery *subquery
+
+	// subqueryDepth is the number of nested expression and FROM subqueries
+	// currently being built.
+	subqueryDepth int
 
 	// If set, we are processing a view definition; in this case, catalog caches
 	// are disabled and certain statements (like mutations) are disallowed.
