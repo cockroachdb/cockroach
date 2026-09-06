@@ -1,0 +1,136 @@
+# Regression for issue 115150: row constructors expand immediate star fields.
+
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+
+# simple_row_star
+build
+SELECT ROW(xy.*) AS r FROM xy
+----
+project
+ ├── columns: r:5
+ ├── scan xy
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── (x:1, y:2) [as=r:5]
+
+# mixed_scalar_prefix_suffix
+build
+SELECT ROW(1, xy.*, NULL) AS r FROM xy
+----
+project
+ ├── columns: r:5
+ ├── scan xy
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── (1, x:1, y:2, NULL) [as=r:5]
+
+# repeated_star
+build
+SELECT ROW(xy.*, xy.*) AS r FROM xy
+----
+project
+ ├── columns: r:5
+ ├── scan xy
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── (x:1, y:2, x:1, y:2) [as=r:5]
+
+# nested_row_wrapper
+build
+SELECT ROW(ROW(xy.*), 1) AS r FROM xy
+----
+project
+ ├── columns: r:5
+ ├── scan xy
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── ((x:1, y:2), 1) [as=r:5]
+
+# tuple_star_expression
+build
+SELECT ROW((ROW(x, y)).*) AS r FROM xy
+----
+project
+ ├── columns: r:5
+ ├── scan xy
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── (x:1, y:2) [as=r:5]
+
+# table_alias_star
+build
+SELECT ROW(a.*) AS r FROM xy AS a
+----
+project
+ ├── columns: r:5
+ ├── scan xy [as=a]
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── (x:1, y:2) [as=r:5]
+
+# control_bare_whole_row
+build
+SELECT ROW(xy) AS r FROM xy
+----
+project
+ ├── columns: r:5
+ ├── scan xy
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── (((x:1, y:2) AS x, y),) [as=r:5]
+
+# control_deliberate_nested_tuple
+build
+SELECT ROW(ROW(x, y)) AS r FROM xy
+----
+project
+ ├── columns: r:5
+ ├── scan xy
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── ((x:1, y:2),) [as=r:5]
+
+# star_then_explicit_columns
+build
+SELECT ROW(xy.*, xy.x, xy.y) AS r FROM xy
+----
+project
+ ├── columns: r:5
+ ├── scan xy
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── (x:1, y:2, x:1, y:2) [as=r:5]
+
+# control_alias_whole_row
+build
+SELECT ROW(a) AS r FROM xy AS a
+----
+project
+ ├── columns: r:5
+ ├── scan xy [as=a]
+ │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ └── projections
+      └── (((x:1, y:2) AS x, y),) [as=r:5]
+
+# ordered_array_agg
+build
+SELECT array_agg(ROW(xy.*) ORDER BY x) AS a FROM xy
+----
+scalar-group-by
+ ├── columns: a:6
+ ├── window partition=() ordering=+1
+ │    ├── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4 column5:5 array_agg:6
+ │    ├── project
+ │    │    ├── columns: column5:5 x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    │    ├── scan xy
+ │    │    │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    │    └── projections
+ │    │         └── (x:1, y:2) [as=column5:5]
+ │    └── windows
+ │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
+ │              └── column5:5
+ └── aggregations
+      └── const-agg [as=array_agg:6]
+           └── array_agg:6

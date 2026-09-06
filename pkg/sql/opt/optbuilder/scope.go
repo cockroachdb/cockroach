@@ -1041,6 +1041,53 @@ func makeUntypedTuple(labels []string, texprs []tree.TypedExpr) *tree.Tuple {
 // sql/subquery.go.
 func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	switch t := expr.(type) {
+	case *tree.Tuple:
+		// Expand immediate star children so they flatten into the row
+		// constructor fields, while deliberate nested tuples remain intact.
+		needExpand := false
+		for _, e := range t.Exprs {
+			if un, ok := e.(*tree.UnresolvedName); ok {
+				vn, err := un.NormalizeVarName()
+				if err != nil {
+					panic(err)
+				}
+				e = vn
+			}
+			if _, ok := e.(*tree.AllColumnsSelector); ok {
+				needExpand = true
+				break
+			}
+			if _, ok := e.(*tree.TupleStar); ok {
+				needExpand = true
+				break
+			}
+		}
+		if !needExpand {
+			return true, t
+		}
+		newExprs := make(tree.Exprs, 0, len(t.Exprs))
+		for _, child := range t.Exprs {
+			e := child
+			if un, ok := e.(*tree.UnresolvedName); ok {
+				vn, err := un.NormalizeVarName()
+				if err != nil {
+					panic(err)
+				}
+				e = vn
+			}
+			switch star := e.(type) {
+			case *tree.AllColumnsSelector, *tree.TupleStar:
+				_, starExprs := s.builder.expandStar(star, s)
+				for _, starExpr := range starExprs {
+					newExprs = append(newExprs, starExpr)
+				}
+			default:
+				newExprs = append(newExprs, child)
+			}
+		}
+		tupleCopy := *t
+		tupleCopy.Exprs = newExprs
+		return true, &tupleCopy
 	case *tree.AllColumnsSelector, *tree.TupleStar:
 		// AllColumnsSelectors and TupleStars at the top level of a SELECT clause
 		// are replaced when the select's renders are prepared. If we
