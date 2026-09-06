@@ -2319,10 +2319,12 @@ func (dsp *DistSQLPlanner) planAggregators(
 	}
 
 	// We can have a local stage of distinct processors if all aggregation
-	// functions are distinct.
+	// functions are distinct and none have a filter. The distinct key contains
+	// only the aggregate argument columns, so rows with the same arguments but
+	// different filter values must not be deduplicated before aggregation.
 	allDistinct := true
 	for _, e := range info.aggregations {
-		if !e.Distinct {
+		if !e.Distinct || e.FilterColIdx != nil {
 			allDistinct = false
 			break
 		}
