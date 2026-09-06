@@ -285,8 +285,11 @@ func filtersMatchAllLeftRows(mem *Memo, left, right RelExpr, filters FiltersExpr
 	if !ok {
 		return false
 	}
-	if checkSelfJoinCase(mem.Metadata(), filters) {
-		// Case 2a.
+	if checkSelfJoinCase(mem.Metadata(), filters) &&
+		!left.Relational().CanMutate && !right.Relational().CanMutate {
+		// Case 2a. The self-join guarantee assumes both inputs are scans of the
+		// same table; a mutation's output columns may reference table columns
+		// without representing rows present in a scan of that table.
 		return true
 	}
 	// Case 2b.

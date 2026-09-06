@@ -21,3 +21,41 @@ query II
 DELETE FROM a AS alias RETURNING alias.a, alias.b
 ----
 1 1
+
+
+# Issue #105640: INSERT .. ON CONFLICT .. RETURNING with a correlated
+# subquery must not be simplified to an inner join.
+
+statement ok
+CREATE TABLE kv_issue105640 (k INT PRIMARY KEY, v INT)
+
+query IIT
+INSERT INTO kv_issue105640 VALUES (1, 10)
+ON CONFLICT (k) DO UPDATE SET v = 10
+RETURNING k, v, (SELECT (k, v) FROM kv_issue105640 foo WHERE foo.k = kv_issue105640.k)
+----
+1 10 NULL
+
+query II
+SELECT k, v FROM kv_issue105640 ORDER BY k
+----
+1 10
+
+statement ok
+CREATE TABLE kv_issue105640_conflict (k INT PRIMARY KEY, v INT)
+
+statement ok
+INSERT INTO kv_issue105640_conflict VALUES (1, 77), (2, 20)
+
+query IIT
+INSERT INTO kv_issue105640_conflict VALUES (1, 10)
+ON CONFLICT (k) DO UPDATE SET v = 10
+RETURNING k, v, (SELECT (k, v) FROM kv_issue105640_conflict foo WHERE foo.k = kv_issue105640_conflict.k)
+----
+1 10 (1,77)
+
+query II
+SELECT k, v FROM kv_issue105640_conflict ORDER BY k
+----
+1 10
+2 20
