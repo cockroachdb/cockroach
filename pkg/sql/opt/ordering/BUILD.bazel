@@ -50,6 +50,7 @@ go_test(
         "project_test.go",
         "row_number_test.go",
         "scan_test.go",
+        "set_test.go",
     ],
     embed = [":ordering"],
     deps = [
