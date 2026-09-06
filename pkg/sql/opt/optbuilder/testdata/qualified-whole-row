@@ -1,0 +1,42 @@
+exec-ddl
+CREATE TABLE t1(f1 INT)
+----
+
+exec-ddl
+CREATE TABLE t2(f1 INT)
+----
+
+build
+SELECT t1.t1 FROM t1
+----
+error (42703): column "t1.t1" does not exist
+
+build
+SELECT a.a FROM t1 AS a
+----
+error (42703): column "a.a" does not exist
+
+build
+SELECT * FROM t1 WHERE t1.t2 = 1
+----
+error (42703): column "t1.t2" does not exist
+
+build
+SELECT t1.t2 FROM t1, t2
+----
+error (42703): column "t1.t2" does not exist
+
+build
+WITH c AS (SELECT 1 AS x) SELECT c.y FROM c
+----
+error (42703): column "c.y" does not exist
+
+build
+SELECT d.y FROM (SELECT 1 AS x) AS d
+----
+error (42703): column "d.y" does not exist
+
+build
+SELECT (SELECT o.t2 FROM t1) FROM t1 AS o
+----
+error (42703): column "o.t2" does not exist
