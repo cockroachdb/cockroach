@@ -290,11 +290,27 @@ func (b *Builder) buildCTE(
 
 	// We want to check if the recursive query is actually recursive. This is for
 	// annoying cases like `SELECT 1 UNION ALL SELECT 2`.
+	outerSubquery := b.subquery
+	outerJoinNullExtendedDepth := b.outerJoinNullExtendedDepth
+
 	numRefs := 0
 	cteSrc.onRef = func() {
+		if b.subquery != outerSubquery {
+			panic(pgerror.Newf(
+				pgcode.Syntax,
+				"recursive reference to query %q must not appear within a subquery",
+				cte.Name.Alias,
+			))
+		}
+		if b.outerJoinNullExtendedDepth > outerJoinNullExtendedDepth {
+			panic(pgerror.Newf(
+				pgcode.Syntax,
+				"recursive reference to query %q must not appear within an outer join",
+				cte.Name.Alias,
+			))
+		}
 		numRefs++
 	}
-
 	recursiveScope := b.buildStmt(recursive, initialTypes /* desiredTypes */, cteScope)
 	if numRefs == 0 {
 		// Build this as a non-recursive CTE.
