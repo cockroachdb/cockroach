@@ -257,9 +257,26 @@ func (mq *mergeQueue) process(
 	if err != nil {
 		return false, err
 	}
-	if rhsStats.Total() >= minBytes {
-		log.VEventf(ctx, 2, "skipping merge: RHS meets minimum size threshold %d with %d bytes",
-			minBytes, rhsStats.Total())
+
+	mergedStats := lhsStats
+	mergedStats.Add(rhsStats)
+
+	// A merge only helps if it eliminates a range that is beneath the
+	// minimum size threshold. The LHS is already known to be undersized (it
+	// was checked above). If the RHS is also undersized, the merge is
+	// unconditionally worth pursuing. If the RHS already meets the
+	// threshold, the merge is still worth pursuing as long as the combined
+	// range stays comfortably below the threshold -- below twice minBytes,
+	// the same bound already implied above when both sides are individually
+	// undersized. This preserves the anti-thrashing property (an undersized
+	// range is never merged into a neighbor that's already close to its max
+	// size) while still letting a range wedged between two adequately-sized
+	// neighbors merge away, instead of persisting forever (see #100443).
+	if rhsStats.Total() >= minBytes && mergedStats.Total() >= 2*minBytes {
+		log.VEventf(ctx, 2,
+			"skipping merge: RHS meets minimum size threshold %d with %d bytes, and "+
+				"combined size %d would not stay comfortably below it",
+			minBytes, rhsStats.Total(), mergedStats.Total())
 		return false, nil
 	}
 
@@ -276,8 +293,6 @@ func (mq *mergeQueue) process(
 		StartKey: lhsDesc.StartKey,
 		EndKey:   rhsDesc.EndKey,
 	}
-	mergedStats := lhsStats
-	mergedStats.Add(rhsStats)
 
 	lhsLoadSplitSnap := lhsRepl.loadBasedSplitter.Snapshot(ctx, mq.store.Clock().PhysicalTime())
 	var loadMergeReason redact.RedactableString
