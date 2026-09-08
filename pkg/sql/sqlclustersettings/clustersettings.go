@@ -189,6 +189,26 @@ var RequireUsagePrivilegeOnExternalConnections = settings.RegisterBoolSetting(
 	false,
 )
 
+// EnforceExternalIOImplicitAccess when set enforces the requirement that
+// users who specify the following URIs, not via external connection, must
+// have the EXTERNALIOIMPLICITACCESS permission:
+// - KMS URIs in Backup/Restore (including SHOW BACKUP, ALTER BACKUP)
+// - collection URIs in ALTER BACKUP
+// - IMPORT schema_uri
+// - PCR replication source
+//
+// TODO(aerfrei): remove this when we don't need backwards compatibility anymore.
+var EnforceExternalIOImplicitAccess = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"security.external_io.enforce_external_io_implicit_access.enabled",
+	"if enabled, statements accessing a destination that the node "+
+		"authenticates to with implicit credentials require the "+
+		"EXTERNALIOIMPLICITACCESS system privilege in backup KMS URIs, "+
+		"IMPORT schema_uri, PCR replication source and ALTER BACKUP "+
+		"collection URIs",
+	false,
+)
+
 // RangeTopologyRequiresRepairCluster gates the security-audit fix that requires
 // the REPAIRCLUSTER system privilege to run ALTER TABLE/INDEX SPLIT, UNSPLIT,
 // RELOCATE and SCATTER, which manipulate cluster range topology. It defaults to

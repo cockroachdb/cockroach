@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net/url"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -281,60 +282,105 @@ func CheckDestinationPrivileges(ctx context.Context, p PlanHookState, to []strin
 	// that breaking change behind a cluster setting.
 	//
 	// TODO(aerfrei): remove the cluster setting, and these options with it.
-	return checkDestinationPrivileges(ctx, p, to, DestinationPrivilegeOptions{
+	return checkDestinationPrivileges(ctx, p, to, destinationPrivilegeOptions{
 		EnforceImplicitAccess: true,
 		EnforceUsage:          true,
 	})
 }
 
-// MaybeCheckDestinationPrivileges checks only the external connection USAGE
-// privilege on each destination, and only when
-// sql.auth.external_connection.require_usage_privilege.enabled is set. It is
-// for statements that reached a connection's credentials without asking for
-// USAGE, so that a backport can ship without the new requirement.
+// MaybeCheckDestinationPrivileges checks the destination privileges on each
+// destination that were historically skipped: the External Connection USAGE
+// privilege and EXTERNALIOIMPLICITACCESS.
 func MaybeCheckDestinationPrivileges(ctx context.Context, p PlanHookState, to []string) error {
-	// TODO(aerfrei): enforce implicit access for these statements as well. The
-	// cluster setting above only covers USAGE, so that half needs a gate of its
-	// own.
-	return checkDestinationPrivileges(ctx, p, to, DestinationPrivilegeOptions{
+	return checkDestinationPrivileges(ctx, p, to, destinationPrivilegeOptions{
+		EnforceImplicitAccess: sqlclustersettings.EnforceExternalIOImplicitAccess.Get(
+			&p.ExecCfg().Settings.SV),
 		EnforceUsage: sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(
 			&p.ExecCfg().Settings.SV),
 	})
 }
 
-// CheckDestinationPrivilegesWithOptions checks the destination privileges the
-// caller selects via opts.
-func CheckDestinationPrivilegesWithOptions(
-	ctx context.Context, p PlanHookState, to []string, opts DestinationPrivilegeOptions,
-) error {
-	return checkDestinationPrivileges(ctx, p, to, opts)
+// MaybeCheckKMSPrivileges is the KMS counterpart to
+// MaybeCheckDestinationPrivileges. KMS URIs need their own resolution because
+// most KMS schemes have no ExternalStorage representation, and some schemes
+// (notably "gs") are registered as both a storage and a KMS scheme.
+func MaybeCheckKMSPrivileges(ctx context.Context, p PlanHookState, kmsURIs []string) error {
+	return checkDestinationPrivileges(ctx, p, kmsURIs, destinationPrivilegeOptions{
+		EnforceImplicitAccess: sqlclustersettings.EnforceExternalIOImplicitAccess.Get(
+			&p.ExecCfg().Settings.SV),
+		EnforceUsage: sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(
+			&p.ExecCfg().Settings.SV),
+		KMS: true,
+	})
 }
 
-// ExternalDestinationResolver maps a destination URI to the ExternalDestination
-// whose auth posture the implicit-access check should reason about. It lets a
-// caller override the default resolution (via cloud.ExternalStorageConfFromURI)
-// for schemes that have no ExternalStorage representation.
-type ExternalDestinationResolver func(
-	uri string, user username.SQLUsername,
-) (cloudpb.ExternalDestination, error)
+// CheckDestinationImplicitAccess checks if the specified ExternalDestination
+// uses implicit auth and the user is able to make use of implicit auth. If
+// the user lacks permissions, it returns an error.
+func CheckDestinationImplicitAccess(
+	ctx context.Context, p PlanHookState, dest cloudpb.ExternalDestination,
+) error {
+	return checkImplicitAccessPrivilege(ctx, p, dest)
+}
 
-// DestinationPrivilegeOptions selects which of the destination privilege checks
-// to enforce and, optionally, how destinations are resolved.
-type DestinationPrivilegeOptions struct {
+// CheckExternalConnectionUsage requires the user to have USAGE on external
+// connections specified in the destinations and errors otherwise.
+func CheckExternalConnectionUsage(ctx context.Context, p PlanHookState, to []string) error {
+	return checkDestinationPrivileges(ctx, p, to, destinationPrivilegeOptions{EnforceUsage: true})
+}
+
+// destinationPrivilegeOptions selects which of the destination privilege checks
+// to enforce.
+type destinationPrivilegeOptions struct {
 	EnforceImplicitAccess bool
 	EnforceUsage          bool
-	// Resolver customizes how a URI is mapped to an ExternalDestination for the
-	// implicit-access check. Leaving it nil falls back to resolving via
-	// cloud.ExternalStorageConfFromURI.
-	Resolver ExternalDestinationResolver
+	// KMS indicates the URIs are KMS URIs rather than storage destinations, which
+	// changes how each URI is resolved to a destination. See
+	// resolveExternalDestinationAsImplicitAuth.
+	KMS bool
 }
 
-func (opts DestinationPrivilegeOptions) resolve(
-	uri string, user username.SQLUsername,
-) (cloudpb.ExternalDestination, error) {
-	if opts.Resolver != nil {
-		return opts.Resolver(uri, user)
+// checkImplicitAccessPrivilege returns an error if dest is an implicit auth
+// destination and the user lacks EXTERNALIOIMPLICITACCESS. Admins satisfy the
+// check because HasPrivilege reports them as holding the privilege.
+func checkImplicitAccessPrivilege(
+	ctx context.Context, p PlanHookState, dest cloudpb.ExternalDestination,
+) error {
+	requiresImplicitAccess := !dest.AccessIsWithExplicitAuth() &&
+		!p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound
+	if !requiresImplicitAccess {
+		return nil
 	}
+	hasImplicitAccessPrivilege, err := p.HasPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS, p.User())
+	if err != nil {
+		return err
+	}
+	if !hasImplicitAccessPrivilege {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified %s URI",
+			dest.Kind())
+	}
+	return nil
+}
+
+func resolveExternalDestinationAsImplicitAuth(
+	uri string, user username.SQLUsername, kms bool,
+) (cloudpb.ExternalDestination, error) {
+	u, err := url.ParseRequestURI(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	if kms && u.Scheme != "external" {
+		return cloudpb.KMSDestination(u.Scheme, u.Query().Get(cloud.AuthParam)), nil
+	}
+
+	if !cloud.SchemeSupported(u.Scheme) {
+		return cloudpb.ImplicitAuthDestination(u.Scheme), nil
+	}
+
 	conf, err := cloud.ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		return nil, err
@@ -343,7 +389,7 @@ func (opts DestinationPrivilegeOptions) resolve(
 }
 
 func checkDestinationPrivileges(
-	ctx context.Context, p PlanHookState, to []string, opts DestinationPrivilegeOptions,
+	ctx context.Context, p PlanHookState, to []string, opts destinationPrivilegeOptions,
 ) error {
 	isAdmin, err := p.UserHasAdminRole(ctx, p.User())
 	if err != nil {
@@ -355,30 +401,13 @@ func checkDestinationPrivileges(
 
 	// Check destination specific privileges.
 	for _, uri := range to {
-		// Check if the destination requires the user to be an admin or have the
-		// `EXTERNALIOIMPLICITACCESS` privilege. Resolving the URI is confined to
-		// this branch because `to` may hold KMS URIs, whose schemes are registered
-		// as KMS rather than as external storage, so ExternalStorageConfFromURI
-		// rejects them.
 		if opts.EnforceImplicitAccess {
-			dest, err := opts.resolve(uri, p.User())
+			dest, err := resolveExternalDestinationAsImplicitAuth(uri, p.User(), opts.KMS)
 			if err != nil {
 				return err
 			}
-			requiresImplicitAccess := !dest.AccessIsWithExplicitAuth() &&
-				!p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound
-			if requiresImplicitAccess {
-				hasImplicitAccessPrivilege, err := p.HasPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS, p.User())
-				if err != nil {
-					return err
-				}
-				if !hasImplicitAccessPrivilege {
-					return pgerror.Newf(
-						pgcode.InsufficientPrivilege,
-						"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified %s URI",
-						dest.Kind())
-				}
+			if err := checkImplicitAccessPrivilege(ctx, p, dest); err != nil {
+				return err
 			}
 		}
 

@@ -607,7 +607,7 @@ func backupPlanHook(
 			return err
 		}
 
-		if err := sql.MaybeCheckDestinationPrivileges(ctx, p, kms); err != nil {
+		if err := sql.MaybeCheckKMSPrivileges(ctx, p, kms); err != nil {
 			return err
 		}
 

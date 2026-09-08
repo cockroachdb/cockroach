@@ -169,7 +169,7 @@ func buildExportPlanningInfo(
 	// TODO(aerfrei): once the cluster setting is gone, enforce USAGE
 	// unconditionally by calling CheckDestinationPrivileges here.
 	if err := checkDestinationPrivileges(
-		ctx, planner, []string{string(*destination)}, DestinationPrivilegeOptions{
+		ctx, planner, []string{string(*destination)}, destinationPrivilegeOptions{
 			EnforceImplicitAccess: true,
 			EnforceUsage: sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(
 				&planner.ExecCfg().Settings.SV),

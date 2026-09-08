@@ -183,6 +183,13 @@ func registerExternalStorageProviderImpls(
 	}
 }
 
+// SchemeSupported returns true for external storage provider schemes
+// that have been registered.
+func SchemeSupported(scheme string) bool {
+	_, ok := confParsers[scheme]
+	return ok
+}
+
 // ExternalStorageConfFromURI generates an ExternalStorage config from a URI string.
 func ExternalStorageConfFromURI(
 	path string, user username.SQLUsername,
