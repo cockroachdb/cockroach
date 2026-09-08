@@ -606,6 +606,14 @@ func (rd *restoreDataProcessor) linkFiles(
 			)
 		}
 
+		// Decide whether to rewrite timestamps to the batch timestamp based on the
+		// backup (source) keyspace, before restoringSubspan is rewritten into the
+		// destination keyspace. Otherwise a secondary tenant restoring non-tenant
+		// data from a system-tenant backup would look like a tenant-span restore
+		// (its destination keys carry a tenant prefix) and wrongly take the
+		// non-MVCC path.
+		writeAtBatchTS := writeAtBatchTS(ctx, restoringSubspan, kr.fromSystemTenant)
+
 		var rewriteErr error
 		restoringSubspan, rewriteErr = rewriteSpan(kr, restoringSubspan.Clone(), entry.ElidedPrefix)
 		if rewriteErr != nil {
@@ -641,7 +649,7 @@ func (rd *restoreDataProcessor) linkFiles(
 		}
 
 		var batchTimestamp hlc.Timestamp
-		if writeAtBatchTS(ctx, restoringSubspan, kr.fromSystemTenant) {
+		if writeAtBatchTS {
 			batchTimestamp = kvDB.Clock().Now()
 		}
 

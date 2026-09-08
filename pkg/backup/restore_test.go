@@ -940,3 +940,49 @@ func verifyPrivilege(t *testing.T, db *sqlutils.SQLRunner, check privilegeCheck)
 		require.Equal(t, check.expectGrantable, isGrantable)
 	}
 }
+
+// TestRestoreSystemTenantBackupIntoAppTenant is a deterministic reproduction of
+// #174603: restoring a system-tenant backup into a secondary (app) tenant
+// performs a non-MVCC restore, leaving the restored keys with their original
+// backup-time MVCC timestamps instead of the restore-time batch timestamp.
+func TestRestoreSystemTenantBackupIntoAppTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The bug lives in the link path (restoreDataProcessor.linkFiles). Fast
+	// restore only links files whose storage supports early boot, which nodelocal
+	// does only once the test setup swaps in its test implementation; force that
+	// here rather than relying on the fast-restore metamorphic constant.
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	const numAccounts = 1000
+	const backupURI = "nodelocal://1/backup"
+
+	tc, sysDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			},
+		})
+	defer cleanupFn()
+
+	sysDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", backupURI))
+
+	_, appConn := serverutils.StartSharedProcessTenant(t, tc.Server(0),
+		base.TestSharedProcessTenantArgs{TenantName: "app"})
+	appDB := sqlutils.MakeSQLRunner(appConn)
+
+	var preRestoreTs float64
+	appDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
+
+	// The app tenant is fresh, so the database can be restored under its
+	// original name.
+	appDB.Exec(t, fmt.Sprintf(
+		"RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL COPY", backupURI))
+
+	var restoreRowCount int
+	appDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
+	require.Equal(t, numAccounts, restoreRowCount)
+
+	assertMVCCOnlineRestore(t, appDB, preRestoreTs)
+}
