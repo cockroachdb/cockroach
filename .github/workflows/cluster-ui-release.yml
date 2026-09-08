@@ -75,6 +75,21 @@ jobs:
       run: echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
       id: branch-name
 
+      # Release-branch publishes normally use the branch name (e.g.
+      # "release-26.2") as the dist-tag. Versions carrying an "-alt." prerelease
+      # identifier instead publish under the dedicated "alt" dist-tag, so an alt
+      # build never lands on a release-series tag.
+    - name: Determine npm dist-tag
+      id: dist-tag
+      shell: bash
+      run: |
+        PACKAGE_VERSION=$(jq -r ".version" ./package.json)
+        if [[ "$PACKAGE_VERSION" == *-alt.* ]]; then
+          echo "tag=alt" >> "$GITHUB_OUTPUT"
+        else
+          echo "tag=${{ steps.branch-name.outputs.branch }}" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Build Cluster UI
       if: steps.version-check.outputs.published == 'no'
       run: |
@@ -97,4 +112,4 @@ jobs:
 
     - name: Publish patch version
       if: steps.version-check.outputs.published == 'no'
-      run: npm publish --access public --tag ${{ steps.branch-name.outputs.branch }} --ignore-scripts
+      run: npm publish --access public --tag ${{ steps.dist-tag.outputs.tag }} --ignore-scripts
