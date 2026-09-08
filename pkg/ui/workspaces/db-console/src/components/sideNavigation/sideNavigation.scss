@@ -5,10 +5,10 @@
 
 @import 'src/components/core/index.scss';
 
-// REBRAND (2026): the left menu adopts the cc-console pill treatment — 36px
-// rows with an 8px radius, selection conveyed by fill + text color only (never
-// weight). Rest text is neutral-700; hover/active fill is the warm-gray
-// "selected" surface and the text darkens to near-black.
+// The left menu uses a pill treatment — 36px rows with an 8px radius, selection
+// conveyed by fill + text color only (never weight). Rest text is neutral-700;
+// hover/active fill is the warm-gray "selected" surface and the text darkens to
+// near-black.
 //
 // Production markup nests the label as `li > span.text > a` (the shared Text
 // wrapper + a react-router Link), so the pill geometry lives on the anchor and
@@ -45,13 +45,13 @@
 
 .side-navigation__navigation-item a:hover {
   background: rgba(237, 236, 229, 0.55); // --surface-selected @ 0.55
-  color: #101913; // neutral-900
+  color: $colors--neutral-9;
 }
 
 .side-navigation__navigation-item--active a,
 .side-navigation__navigation-item--active a:hover {
   background: #edece5; // --surface-selected
-  color: #101913; // neutral-900
+  color: $colors--neutral-9;
 }
 
 .side-navigation__navigation-item--disabled a {

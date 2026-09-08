@@ -26,14 +26,12 @@ function isAegisBannerDismissed(): boolean {
   }
 }
 
-// AegisBanner is the 2026 top-of-overview call to action for Aegis, the cluster
-// ops agent. It ports the design reference's brand black-card treatment: a
-// rounded black card with the brand blob key-art bleeding off the right, a
-// light Geist headline with a bio-green accent, and a purple CTA into Aegis
-// sign-in. It takes the prominent slot the release-notes email banner used to
-// hold (that banner is demoted to the bottom of the overview). Dismissal
-// persists for the browser session via sessionStorage, so it stays dismissed
-// across reloads.
+// AegisBanner is the top-of-overview call to action for Aegis, the cluster ops
+// agent: a rounded black card with the brand blob key-art bleeding off the
+// right, a light Geist headline with a bio-green accent, and a purple CTA to
+// the Aegis product page. It sits in the prominent top slot on the overview,
+// above the demoted release-notes email banner. Dismissal persists via
+// localStorage, so it stays dismissed across reloads and sessions.
 export function AegisBanner(): React.ReactElement | null {
   const [dismissed, setDismissed] = useState(isAegisBannerDismissed);
   if (dismissed) {

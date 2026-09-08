@@ -13,7 +13,6 @@ $divider-spacing-condensed: crl-gutters(1);
   svg[data-icon="left"] {
     font-size: 12px;
     margin-right: crl-gutters(0.5);
-    // REBRAND (2026): rebrand link color, matching .item-link below.
     color: $colors--link;
   }
 }
@@ -32,9 +31,6 @@ $divider-spacing-condensed: crl-gutters(1);
 }
 
 .item-link {
-  // REBRAND (2026): use the rebrand link color ($colors--link = brand blue-700,
-  // #127ea5) instead of the design-tokens $color-base-blue (#0055ff), which the
-  // palette swap didn't cover.
   color: $colors--link;
   font-weight: 600;
 

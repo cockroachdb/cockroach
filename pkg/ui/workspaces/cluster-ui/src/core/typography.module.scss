@@ -9,12 +9,12 @@
 @font-face { font-family: "GeistMono-Regular"; src: url("~src/fonts/GeistMono-Regular.woff2") format("woff2"); font-weight: normal; font-style: normal; }
 @font-face { font-family: "GeistMono-Medium";  src: url("~src/fonts/GeistMono-Medium.woff2")  format("woff2"); font-weight: normal; font-style: normal; }
 
-$font-family--base: Geist-Regular;       // was SourceSansPro-Regular
-$font-family--bold: Geist-Bold;          // was SourceSansPro-Bold
-$font-family--semi-bold: Geist-Medium;   // was SourceSansPro-SemiBold
-$font-family--monospace: GeistMono-Medium; // was RobotoMono-Medium
-$font-family--mono-regular: GeistMono-Regular; // was RobotoMono-Regular
-$font-family--lato-regular: Geist-Regular; // was Lato-Regular
+$font-family--base: Geist-Regular;
+$font-family--bold: Geist-Bold;
+$font-family--semi-bold: Geist-Medium;
+$font-family--monospace: GeistMono-Medium;
+$font-family--mono-regular: GeistMono-Regular;
+$font-family--geist-regular: Geist-Regular;
 
 $font-weight--extra-bold: 900;
 $font-weight--bold: 600;

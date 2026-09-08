@@ -8,24 +8,24 @@
 // Base color palette — 2026 brand (values from _brand.scss).
 // Original prod hexes noted in comments.
 $colors--neutral-0:  $brand--warmgray-0;   // #ffffff
-$colors--neutral-1:  $brand--warmgray-100; // was #F5F7FA
-$colors--neutral-2:  $brand--warmgray-200; // was #e7ecf3
-$colors--neutral-3:  $brand--warmgray-300; // was #d6dbe7
-$colors--neutral-4:  $brand--warmgray-400; // was #c0c6d9
-$colors--neutral-5:  $brand--warmgray-500; // was #7e89a9
-$colors--neutral-6:  $brand--warmgray-600; // was #475872
-$colors--neutral-7:  $brand--warmgray-700; // was #394455
-$colors--neutral-8:  $brand--warmgray-800; // was #242a35
-$colors--neutral-9:  $brand--black-6;      // was #060c12
-$colors--neutral-10: $brand--black-6;      // was #0c1628
-$colors--neutral-11: $brand--warmgray-850; // was #C4C4C4
+$colors--neutral-1:  $brand--warmgray-100;
+$colors--neutral-2:  $brand--warmgray-200;
+$colors--neutral-3:  $brand--warmgray-300;
+$colors--neutral-4:  $brand--warmgray-400;
+$colors--neutral-5:  $brand--warmgray-500;
+$colors--neutral-6:  $brand--warmgray-600;
+$colors--neutral-7:  $brand--warmgray-700;
+$colors--neutral-8:  $brand--warmgray-800;
+$colors--neutral-9:  $brand--black-6;
+$colors--neutral-10: $brand--black-6;
+$colors--neutral-11: $brand--warmgray-850;
 
-$colors--primary-blue-1: $brand--blue-100; // was #e0eefb
-$colors--primary-blue-2: $brand--blue-300; // was #74bdfd
-$colors--primary-blue-3: $brand--blue-700; // was #0055FF — control/link/active/info
-$colors--primary-blue-4: $brand--blue-750; // was #005fb3 — hover
-$colors--primary-blue-5: $brand--blue-800; // was #00294d — headings
-$colors--primary-blue-6: $brand--blue-300; // was #89b0ff
+$colors--primary-blue-1: $brand--blue-100;
+$colors--primary-blue-2: $brand--blue-300;
+$colors--primary-blue-3: $brand--blue-700;
+$colors--primary-blue-4: $brand--blue-750;
+$colors--primary-blue-5: $brand--blue-800;
+$colors--primary-blue-6: $brand--blue-300;
 
 // Green ramp — prod, unchanged in pass 1
 $colors--primary-green-0: #daf8d4;
@@ -35,16 +35,16 @@ $colors--primary-green-3: #37a806;
 $colors--primary-green-4: #237300;
 $colors--primary-green-5: #123d00;
 
-$colors--primary-purple-2: $brand--purple-300; // was #CBBCFC
-$colors--primary-purple-3: $brand--purple-500; // was #6933FF — CTA/brand
+$colors--primary-purple-2: $brand--purple-300;
+$colors--primary-purple-3: $brand--purple-500;
 
-$colors--info-4: $brand--purple-800; // was #0037a5
+$colors--info-4: $brand--purple-800;
 
-$colors--functional-purple-1: $brand--purple-100; // was #cec0f2
-$colors--functional-purple-2: $brand--purple-500; // was #8c6be1
-$colors--functional-purple-3: $brand--purple-500; // was #8c6be1
-$colors--functional-purple-4: $brand--purple-500; // was #8c6be1
-$colors--functional-purple-5: $brand--purple-deep; // was #190033
+$colors--functional-purple-1: $brand--purple-100;
+$colors--functional-purple-2: $brand--purple-500;
+$colors--functional-purple-3: $brand--purple-500;
+$colors--functional-purple-4: $brand--purple-500;
+$colors--functional-purple-5: $brand--purple-deep;
 
 // Red / yellow / orange ramps — prod, unchanged in pass 1
 $colors--functional-red-1: #ffe5e8;

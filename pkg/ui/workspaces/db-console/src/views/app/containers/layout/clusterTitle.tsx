@@ -16,10 +16,8 @@ interface ClusterTitleProps {
   prefix?: string;
 }
 
-// ClusterTitle renders the cluster identity in the navigation bar. REBRAND
-// (2026): matches the design reference's page-header treatment — a light Geist
-// label with the UUID fallback set in Geist Mono, rather than the previous
-// faux-bold Heading2 (Geist-Medium synthesized to 600). When a cluster name is
+// ClusterTitle renders the cluster identity in the navigation bar: a light
+// Geist label with the UUID fallback set in Geist Mono. When a cluster name is
 // present it renders in place of the "Cluster id: <uuid>" fallback.
 export function ClusterTitle({
   clusterName,

@@ -14,10 +14,6 @@
   }
 
   &--primary {
-    // REBRAND (2026): primary CTA rides the rebrand purple
-    // ($colors--primary-purple-3 = $brand--purple-500, #9059ff) instead of the
-    // design-tokens $color-base-purple (#6933ff); hover deepens to purple-800,
-    // matching the Aegis banner CTA.
     background-color: $colors--primary-purple-3;
     color: $color-base-white;
     border-width: 1px;
@@ -101,9 +97,6 @@
   }
 
   &--tertiary {
-    // REBRAND (2026): link-style button rides the rebrand link color
-    // ($colors--primary-blue-3 = $brand--blue-700, #127ea5), hover blue-750;
-    // was the design-tokens $color-base-blue (#0055ff) the palette swap missed.
     background-color: transparent;
     color: $colors--primary-blue-3;
     border: 1px;
@@ -143,8 +136,6 @@
   }
 
   &--flat {
-    // REBRAND (2026): link-style button rides the rebrand link color, as
-    // --tertiary above (was the design-tokens $color-base-blue, #0055ff).
     background-color: $color-core-neutral-1;
     color: $colors--primary-blue-3;
     border-width: 1px;
