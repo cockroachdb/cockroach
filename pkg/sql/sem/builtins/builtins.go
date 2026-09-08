@@ -210,7 +210,7 @@ var StartCompactionJob func(
 	ctx context.Context,
 	planner interface{},
 	scheduleID jobspb.ScheduleID,
-	collectionURI []string,
+	collectionURIs []string,
 	fullBackupPath string,
 	options tree.BackupOptions,
 	start, end hlc.Timestamp,
@@ -9642,7 +9642,7 @@ WHERE object_id = table_descriptor_id
 					return nil, err
 				}
 				scheduleID := jobspb.ScheduleID(tree.MustBeDInt(args[0]))
-				collectionURI := ExprSliceToStrSlice(backupAST.To)
+				collectionURIs := ExprSliceToStrSlice(backupAST.To)
 				start := tree.MustBeDDecimal(args[3])
 				startTs, err := hlc.DecimalToHLC(&start.Decimal)
 				if err != nil {
@@ -9661,7 +9661,7 @@ WHERE object_id = table_descriptor_id
 
 				jobID, err := StartCompactionJob(
 					ctx, evalCtx.Planner, scheduleID,
-					collectionURI, fullPath, options,
+					collectionURIs, fullPath, options,
 					startTs, endTs,
 				)
 				return tree.NewDInt(tree.DInt(jobID)), err
