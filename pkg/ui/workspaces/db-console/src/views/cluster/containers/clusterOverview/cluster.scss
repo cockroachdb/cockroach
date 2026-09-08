@@ -30,12 +30,33 @@
   overflow: auto;
 }
 
+// Overview page header, matching the shared 2026 page-title treatment from the
+// reference design (.cd-page-head / .cd-page-title): a Geist 20px / 400 title
+// in a flex row, so the overview leads with a header like every other page.
+.cluster-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-small; // 16px
+  margin-bottom: $spacing-medium-small; // 20px
+}
+
+.cluster-page__title {
+  margin: 0;
+  font-family: $font-family--base; // Geist-Regular
+  font-size: 20px;
+  font-weight: 400;
+  color: $colors--neutral-9; // Black-6 (#101913), the reference --bds-fg
+}
+
 .cluster-overview {
   .cluster-summary {
     background-color: white;
     padding: 24px;
     margin-top: 0;
-    border: 1px solid $table-border-color;
+    // Cards take the darker WG3 rule (--rule-strong) so their edges read a step
+    // stronger than the WG2 chrome dividers (nav / sidebar rules).
+    border: 1px solid $colors--neutral-3;
     border-radius: 8px; // match the 2026 content-card radius (Aegis hero is 14px)
     font-family: $font-family--base;
 

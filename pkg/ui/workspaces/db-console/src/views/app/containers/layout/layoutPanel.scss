@@ -31,7 +31,6 @@ $container-top-offset: 120px;
   min-height: $top-bar-height;
   background-color: #000000;
   color: $colors--white;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
   z-index: 1;
 }
 
@@ -42,6 +41,10 @@ $container-top-offset: 120px;
 .layout-panel__navigation-bar {
   background-color: $colors--white;
   color: $colors--title;
+  // Hairline rule dividing the cluster-id header chrome from the content below.
+  // Kept here (not on the header masthead) so the separation persists even when
+  // the license alert bar — which otherwise sat between the two — is absent.
+  border-bottom: 1px solid $colors--neutral-2;
 }
 
 .layout-panel__navigation-bar > * {
@@ -61,7 +64,15 @@ $container-top-offset: 120px;
 .layout-panel__content {
   width: calc(100% - #{$side-panel-width});
   overflow: auto;
-  margin: $spacing-large 0 0;
+  // Tightened space above the page content (20px, ~sidebar rail inset) so the
+  // content top sits near the sidebar's first pill rather than dropping a wide
+  // gap — most visible once the Aegis callout is dismissed. Padding (not
+  // margin) so the white surface fills the inset instead of leaving a strip.
+  margin: 0;
+  padding-top: $spacing-medium-small;
+  // Left inset that used to come from the sidebar's right-margin gutter; the
+  // rail is now divided from the content by a hairline border instead.
+  padding-left: $spacing-medium;
   // Main workspace pane is the white primary surface; warm gray stays on the
   // rail/sidebar as its distinct tone (2026 brand — white primary surface).
   background-color: $colors--white;
@@ -70,9 +81,11 @@ $container-top-offset: 120px;
 .layout-panel__sidebar {
   min-width: $side-panel-width;
   // Warm-gray rail anchored flush to the left edge and the header's bottom
-  // (not a floating card). Only a right gutter separates it from the white
-  // content pane; the rail is the ONLY warm surface (2026 brand).
-  margin: 0 $spacing-medium 0 0;
+  // (not a floating card). A hairline right border (not a margin gutter)
+  // divides it from the white content pane; the rail is the ONLY warm surface
+  // (2026 brand).
+  margin: 0;
+  border-right: 1px solid $colors--neutral-2;
   background-color: $colors--neutral-1;
   // Tight rail padding (12px / 8px) so the pill rows sit with an even inset
   // from the rail edges (2026 cc-console treatment).

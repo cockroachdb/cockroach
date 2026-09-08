@@ -20,14 +20,14 @@ import TimeWindowManager from "src/views/app/containers/metricsTimeManager";
 import RequireLogin from "src/views/login/requireLogin";
 import { ThrottleNotificationBar } from "src/views/shared/components/alertBar/alertBar";
 
+import TenantDropdown from "../../components/tenantDropdown/tenantDropdown";
+import { LicenseNotification } from "../licenseNotification/licenseNotification";
+
 import { ClusterTitle } from "./clusterTitle";
 import { ConsoleHeaderBrand } from "./consoleHeaderBrand";
 
 import "./layout.scss";
 import "./layoutPanel.scss";
-
-import TenantDropdown from "../../components/tenantDropdown/tenantDropdown";
-import { LicenseNotification } from "../licenseNotification/licenseNotification";
 
 interface LayoutProps {
   children?: React.ReactNode;

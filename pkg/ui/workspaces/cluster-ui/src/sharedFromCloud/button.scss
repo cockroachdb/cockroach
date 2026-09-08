@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 @import "./sharedButtonStyles";
+@import "src/core/index.module";
 
 .crl-button {
   @include button-styles;
@@ -13,32 +14,36 @@
   }
 
   &--primary {
-    background-color: $color-base-purple;
+    // REBRAND (2026): primary CTA rides the rebrand purple
+    // ($colors--primary-purple-3 = $brand--purple-500, #9059ff) instead of the
+    // design-tokens $color-base-purple (#6933ff); hover deepens to purple-800,
+    // matching the Aegis banner CTA.
+    background-color: $colors--primary-purple-3;
     color: $color-base-white;
     border-width: 1px;
     border-style: solid;
-    border-color: $color-base-purple;
+    border-color: $colors--primary-purple-3;
 
     &:hover {
-      background-color: $color-core-purple-4;
+      background-color: $brand--purple-800;
       color: $color-base-white;
     }
 
     &:active {
-      background-color: $color-core-purple-4;
+      background-color: $brand--purple-800;
       border-width: 1px;
-      border-color: mix($color-core-neutral-9, $color-core-purple-4, 10%);
+      border-color: mix($color-core-neutral-9, $brand--purple-800, 10%);
     }
 
     &:focus {
       border-width: 1px;
-      border-color: mix($color-core-neutral-9, $color-core-purple-4, 20%);
-      @include crl-box-shadow(0, 0, 0, 3px, rgba($color-base-purple, 0.4));
+      border-color: mix($color-core-neutral-9, $brand--purple-800, 20%);
+      @include crl-box-shadow(0, 0, 0, 3px, rgba($colors--primary-purple-3, 0.4));
     }
 
     &:disabled {
-      background-color: $color-core-purple-2;
-      border-color: $color-core-purple-2;
+      background-color: $colors--primary-purple-2;
+      border-color: $colors--primary-purple-2;
 
       &:hover {
         cursor: not-allowed;
@@ -96,27 +101,30 @@
   }
 
   &--tertiary {
+    // REBRAND (2026): link-style button rides the rebrand link color
+    // ($colors--primary-blue-3 = $brand--blue-700, #127ea5), hover blue-750;
+    // was the design-tokens $color-base-blue (#0055ff) the palette swap missed.
     background-color: transparent;
-    color: $color-base-blue;
+    color: $colors--primary-blue-3;
     border: 1px;
     border-style: solid;
     border-color: transparent;
 
     &:hover {
-      color: $color-core-blue-4;
+      color: $colors--primary-blue-4;
 
       svg {
-        fill: $color-core-blue-4;
+        fill: $colors--primary-blue-4;
       }
     }
 
     &:active {
-      border-color: rgba($color-base-blue, 0.4);
+      border-color: rgba($colors--primary-blue-3, 0.4);
     }
 
     &:focus {
-      border-color: $color-base-blue;
-      @include crl-box-shadow(0, 0, 0, 3px, rgba($color-base-blue, 0.4));
+      border-color: $colors--primary-blue-3;
+      @include crl-box-shadow(0, 0, 0, 3px, rgba($colors--primary-blue-3, 0.4));
     }
 
     &:disabled {
@@ -130,32 +138,34 @@
     }
 
     svg {
-      fill: $color-base-blue;
+      fill: $colors--primary-blue-3;
     }
   }
 
   &--flat {
+    // REBRAND (2026): link-style button rides the rebrand link color, as
+    // --tertiary above (was the design-tokens $color-base-blue, #0055ff).
     background-color: $color-core-neutral-1;
-    color: $color-base-blue;
+    color: $colors--primary-blue-3;
     border-width: 1px;
     border-style: solid;
     border-color: transparent;
 
     &:hover {
-      color: $color-core-blue-4;
+      color: $colors--primary-blue-4;
 
       svg {
-        fill: $color-core-blue-4;
+        fill: $colors--primary-blue-4;
       }
     }
 
     &:active {
-      border-color: $color-core-blue-1;
+      border-color: $colors--primary-blue-1;
     }
 
     &:focus {
-      border-color: $color-base-blue;
-      @include crl-box-shadow(0, 0, 0, 3px, rgba($color-core-blue-2, 0.15));
+      border-color: $colors--primary-blue-3;
+      @include crl-box-shadow(0, 0, 0, 3px, rgba($colors--primary-blue-2, 0.15));
     }
 
     &:disabled {
@@ -169,7 +179,7 @@
     }
 
     svg {
-      fill: $color-base-blue;
+      fill: $colors--primary-blue-3;
     }
   }
 

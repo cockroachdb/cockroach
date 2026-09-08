@@ -220,6 +220,11 @@ export default function ClusterOverview({
   return (
     <div className="cluster-page">
       <Helmet title="Cluster Overview" />
+      {/* Page header, so the overview leads with a title like every other
+          console page. Styled to the shared 2026 page-title treatment. */}
+      <div className="cluster-page__header">
+        <h3 className="cluster-page__title">Overview</h3>
+      </div>
       <AegisBanner />
       <OverviewListAlerts />
       <section className="section cluster-overview">

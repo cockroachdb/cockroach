@@ -21,8 +21,12 @@
   align-items: center; // Allows the text to center vertically.
   margin-bottom: 0;
   gap: crl-gutters(2);
-  color: $colors--neutral-7;
-  font-family: $font-family--semi-bold;
+  // REBRAND (2026): shared page title — Geist-Regular 20px / 400 in Black-6,
+  // matching the reference page-title spec (was semi-bold, h3-default 700, in
+  // neutral-7).
+  color: $colors--neutral-9;
+  font-family: $font-family--base;
+  font-weight: 400;
   font-style: normal;
   font-stretch: normal;
   font-size: $font-size--large;
