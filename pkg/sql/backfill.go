@@ -1178,13 +1178,15 @@ func (sc *SchemaChanger) distIndexBackfill(
 	// updateJobDetails at a time to avoid a data race in
 	// SetResumeSpansInJob. This mutex should be uncontended when
 	// sc.testingKnobs.AlwaysUpdateIndexBackfillDetails is false.
+	// The lock is acquired around the entire sc.db.Txn call, not inside the txn,
+	// to avoid deadlocks if the txn runs into a retryable error.
 	var updateJobMu syncutil.Mutex
 	updateJobDetails = func() error {
 		updatedTodoSpans := getTodoSpansForUpdate()
 		manifestDirty := manifestBuf.Dirty()
+		updateJobMu.Lock()
+		defer updateJobMu.Unlock()
 		return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			updateJobMu.Lock()
-			defer updateJobMu.Unlock()
 			// No processor has returned completed spans yet and no new manifests.
 			if updatedTodoSpans == nil && !manifestDirty {
 				return nil
