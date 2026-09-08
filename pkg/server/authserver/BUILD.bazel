@@ -55,6 +55,7 @@ go_test(
     name = "authserver_test",
     srcs = [
         "authentication_test.go",
+        "cookie_test.go",
         "main_test.go",
     ],
     deps = [
