@@ -491,7 +491,7 @@ func (s *authenticationServer) userLogout(
 
 	// Send back a header which will cause the browser to destroy the cookie.
 	// See https://tools.ietf.org/search/rfc6265, page 7.
-	cookie := CreateSessionCookie("", false /* forHTTPSOnly */)
+	cookie := CreateSessionCookie("", !s.cfg.DisableTLSForHTTP /* forHTTPSOnly */)
 	cookie.MaxAge = -1
 
 	return cookie, nil
