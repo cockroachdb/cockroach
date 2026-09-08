@@ -663,6 +663,7 @@ go_test(
         "check_external_connection_test.go",
         "check_test.go",
         "closed_session_cache_test.go",
+        "cloud_check_processor_test.go",
         "comment_on_column_test.go",
         "comment_on_constraint_test.go",
         "comment_on_database_test.go",

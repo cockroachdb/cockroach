@@ -149,6 +149,13 @@ subtest end
 
 subtest alter-backup-privileges
 
+# This subtest exercises USAGE enforcement with direct (non-external-connection)
+# KMS URIs. To simplify the tests and avoid unrelated implicit access restrictions,
+# disable that cluster setting.
+exec-sql
+SET CLUSTER SETTING security.external_io.enforce_external_io_implicit_access.enabled = false;
+----
+
 exec-sql
 CREATE EXTERNAL CONNECTION "alter-backup-ec" AS 'nodelocal://1/alter-backup';
 ----
@@ -188,6 +195,10 @@ GRANT USAGE ON EXTERNAL CONNECTION "alter-backup-ec" TO testuser;
 
 exec-sql user=testuser
 ALTER BACKUP LATEST IN 'external://alter-backup-ec' ADD NEW_KMS='testkms:///alter-newer?AUTH=implicit' WITH OLD_KMS='testkms:///alter-old?AUTH=implicit';
+----
+
+exec-sql
+SET CLUSTER SETTING security.external_io.enforce_external_io_implicit_access.enabled = true;
 ----
 
 subtest end
@@ -344,5 +355,68 @@ exec-sql user=testuser
 ALTER BACKUP LATEST IN 'external://alter-dest-ec' ADD NEW_KMS='external:///' WITH OLD_KMS='external://alter-old-kms-ec';
 ----
 pq: host component of an external URI must refer to an existing External Connection object: external:///
+
+subtest end
+
+subtest external-io-implicit-access
+
+exec-sql
+SET CLUSTER SETTING security.external_io.enforce_external_io_implicit_access.enabled = true;
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION "eioia-dest-ec" AS 'nodelocal://1/eioia-dest';
+GRANT USAGE ON EXTERNAL CONNECTION "eioia-dest-ec" TO testuser;
+CREATE EXTERNAL CONNECTION "eioia-old-kms-ec" AS 'testkms:///eioia-key?AUTH=implicit';
+GRANT USAGE ON EXTERNAL CONNECTION "eioia-old-kms-ec" TO testuser;
+CREATE EXTERNAL CONNECTION "eioia-new-kms-ec" AS 'testkms:///eioia-new?AUTH=implicit';
+GRANT USAGE ON EXTERNAL CONNECTION "eioia-new-kms-ec" TO testuser;
+GRANT BACKUP ON TABLE foo TO testuser;
+CREATE DATABASE eioiadb;
+GRANT RESTORE ON DATABASE eioiadb TO testuser;
+----
+
+exec-sql
+BACKUP TABLE foo INTO 'external://eioia-dest-ec' WITH kms='testkms:///eioia-key?AUTH=implicit';
+----
+
+exec-sql user=testuser
+ALTER BACKUP LATEST IN 'nodelocal://1/eioia-collection' ADD NEW_KMS='external://eioia-new-kms-ec' WITH OLD_KMS='external://eioia-old-kms-ec';
+----
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI
+
+exec-sql user=testuser
+BACKUP TABLE foo INTO 'external://eioia-dest-ec' WITH kms='testkms:///eioia-key?AUTH=implicit';
+----
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified testkms URI
+
+exec-sql user=testuser
+SHOW BACKUP LATEST IN 'external://eioia-dest-ec' WITH kms='testkms:///eioia-key?AUTH=implicit';
+----
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified testkms URI
+
+exec-sql user=testuser
+RESTORE TABLE foo FROM LATEST IN 'external://eioia-dest-ec' WITH into_db=eioiadb, kms='testkms:///eioia-key?AUTH=implicit';
+----
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified testkms URI
+
+exec-sql user=testuser
+ALTER BACKUP LATEST IN 'external://eioia-dest-ec' ADD NEW_KMS='testkms:///eioia-new?AUTH=implicit' WITH OLD_KMS='testkms:///eioia-key?AUTH=implicit';
+----
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified testkms URI
+
+# A direct KMS URI with AUTH=specified is not gated by EXTERNALIOIMPLICITACCESS.
+exec-sql user=testuser
+BACKUP TABLE foo INTO 'external://eioia-dest-ec' WITH kms='testkms:///eioia-key?AUTH=specified';
+----
+
+exec-sql user=testuser
+BACKUP TABLE foo INTO 'external://eioia-dest-ec' WITH kms='external://eioia-new-kms-ec';
+----
+
+exec-sql user=testuser
+BACKUP TABLE foo INTO 'external://eioia-dest-ec' WITH kms='gs://bucket/key?AUTH=implicit';
+----
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified gs URI
 
 subtest end
