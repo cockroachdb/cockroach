@@ -672,7 +672,21 @@ func TestLogoutClearsCookies(t *testing.T) {
 		cookies := resp.Cookies()
 		cNames := make([]string, len(cookies))
 		for i, c := range cookies {
-			require.Equal(t, "", c.Value)
+			require.Equal(t, "", c.Value, "cleared cookie %q must have an empty value", c.Name)
+			require.True(t, c.Secure, "cleared cookie %q must have Secure=true on a TLS-enabled server", c.Name)
+			require.Equal(t, http.SameSiteLaxMode, c.SameSite, "cleared cookie %q must have SameSite=Lax", c.Name)
+			// A cleared cookie must instruct the browser to delete it, via either a
+			// negative Max-Age or an expiry in the past.
+			require.True(t, c.MaxAge < 0 || (!c.Expires.IsZero() && c.Expires.Before(timeutil.Now())),
+				"cleared cookie %q must be expired (MaxAge=%d, Expires=%s)", c.Name, c.MaxAge, c.Expires)
+			// The session cookie is HttpOnly; the tenant-select cookie is not,
+			// because client-side JS reads it to render the tenant selector.
+			switch c.Name {
+			case authserver.SessionCookieName:
+				require.True(t, c.HttpOnly, "session cookie %q must be HttpOnly", c.Name)
+			case authserver.TenantSelectCookieName:
+				require.False(t, c.HttpOnly, "tenant select cookie %q must not be HttpOnly", c.Name)
+			}
 			cNames[i] = c.Name
 		}
 		expected := []string{authserver.SessionCookieName}
