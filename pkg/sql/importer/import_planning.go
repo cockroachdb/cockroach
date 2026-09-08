@@ -373,6 +373,12 @@ func importPlanHook(
 		}
 	}
 
+	if schemaURI, ok := opts[avroSchemaURI]; ok {
+		if err := sql.MaybeCheckDestinationPrivileges(ctx, p, []string{schemaURI}); err != nil {
+			return nil, nil, false, err
+		}
+	}
+
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
