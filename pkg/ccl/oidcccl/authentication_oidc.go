@@ -124,6 +124,11 @@ var (
 //     manner, bypassing any password validation requirements, and redirect them to `/` so they can
 //     enjoy a logged-in experience in the Admin UI.
 type oidcAuthenticationServer struct {
+	// initMu serializes provider (re)builds so the slow IdP discovery call they
+	// make runs off the data mutex, leaving it free for concurrent readers taking
+	// a config snapshot. Acquire initMu before mutex to avoid deadlock.
+	initMu syncutil.Mutex
+
 	mutex   syncutil.RWMutex
 	conf    oidcAuthenticationConf
 	manager IOIDCManager
@@ -164,6 +169,8 @@ type oidcAuthenticationConf struct {
 // configuration at run-time for embedding into the DB Console in order
 // to manage the login experience the UI provides.
 func (s *oidcAuthenticationServer) GetOIDCConf() ui.OIDCUIConf {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
 	return ui.OIDCUIConf{
 		ButtonText: s.conf.buttonText,
 		Enabled:    s.enabled,
@@ -173,20 +180,56 @@ func (s *oidcAuthenticationServer) GetOIDCConf() ui.OIDCUIConf {
 	}
 }
 
-// maybeInitializeLocked intializes the OIDC authentication server
-// if not already initialized using the parameters passed in the arguments.
-// It assumes oidcAuthenticationServer struct to be in locked state.
-func (s *oidcAuthenticationServer) maybeInitializeLocked(
+// configSnapshot copies the mutex-guarded config and provider manager so a
+// handler can do its network and database work without holding the lock.
+// conf/manager are only valid when enabled is true and err is nil, in which case
+// manager is non-nil.
+func (s *oidcAuthenticationServer) configSnapshot(
 	ctx context.Context, locality roachpb.Locality, st *cluster.Settings,
-) error {
-	if s.enabled && !s.initialized {
-		reloadConfigLocked(ctx, s, locality, st)
-		if !s.initialized {
-			return errors.New("OIDC: auth server could not be initialized")
-		}
+) (conf oidcAuthenticationConf, manager IOIDCManager, enabled bool, err error) {
+	s.mutex.RLock()
+	enabled, initialized := s.enabled, s.initialized
+	conf, manager = s.conf, s.manager
+	s.mutex.RUnlock()
+
+	// Enabled but not yet initialized (e.g. the IdP was down at the last reload):
+	// rebuild the provider.
+	if enabled && !initialized {
+		conf, manager, enabled, initialized = s.ensureInitialized(ctx, locality, st)
 	}
 
-	return nil
+	if enabled && !initialized {
+		return conf, manager, enabled, errors.New("OIDC: auth server could not be initialized")
+	}
+	return conf, manager, enabled, nil
+}
+
+// ensureInitialized rebuilds the provider when OIDC is enabled but not yet
+// initialized (e.g. the IdP was down at the last reload) and returns a snapshot
+// of the guarded fields. It reloads from cluster settings, so a setting changed
+// while the server was in the failed state (which may not have its own
+// SetOnChange hook) still takes effect on recovery. initMu serializes it with
+// reloadConfig and with concurrent recoveries; the re-check under initMu keeps
+// them from each rebuilding once one succeeds.
+func (s *oidcAuthenticationServer) ensureInitialized(
+	ctx context.Context, locality roachpb.Locality, st *cluster.Settings,
+) (conf oidcAuthenticationConf, manager IOIDCManager, enabled, initialized bool) {
+	s.initMu.Lock()
+	defer s.initMu.Unlock()
+
+	// Re-check under initMu: a concurrent reload or recovery may have already
+	// initialized (or disabled) the server while we waited for initMu.
+	s.mutex.RLock()
+	needsBuild := s.enabled && !s.initialized
+	s.mutex.RUnlock()
+
+	if needsBuild {
+		s.reloadUnderInitMu(ctx, locality, st)
+	}
+
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	return s.conf, s.manager, s.enabled, s.initialized
 }
 
 type oidcManager struct {
@@ -383,20 +426,64 @@ func reloadConfig(
 	locality roachpb.Locality,
 	st *cluster.Settings,
 ) {
-	server.mutex.Lock()
-	defer server.mutex.Unlock()
-	reloadConfigLocked(ctx, server, locality, st)
+	server.initMu.Lock()
+	defer server.initMu.Unlock()
+	server.reloadUnderInitMu(ctx, locality, st)
 }
 
-func reloadConfigLocked(
-	ctx context.Context,
-	oidcAuthServer *oidcAuthenticationServer,
-	locality roachpb.Locality,
-	st *cluster.Settings,
+// reloadUnderInitMu recomputes the cached config from cluster settings and, if
+// OIDC is enabled, rebuilds the provider manager. The caller must hold initMu
+// (which serializes builds and orders concurrent reloads) and must not hold
+// mutex.
+func (s *oidcAuthenticationServer) reloadUnderInitMu(
+	ctx context.Context, locality roachpb.Locality, st *cluster.Settings,
 ) {
-	clientTimeout := OIDCAuthClientTimeout.Get(&st.SV)
+	conf := readOIDCConf(st)
+	s.installConf(conf)
+	if !conf.enabled {
+		return
+	}
+	s.buildAndPublish(ctx, conf, locality)
+}
 
-	conf := oidcAuthenticationConf{
+// installConf installs a freshly-read config and resets initialized so the
+// provider is (re)built by the subsequent buildAndPublish. It releases the data
+// mutex before that build, so callers must hold initMu to keep a concurrent
+// reload from installing over this one mid-build.
+func (s *oidcAuthenticationServer) installConf(conf oidcAuthenticationConf) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if !s.conf.enabled && conf.enabled {
+		telemetry.Inc(enableUseCounter)
+	}
+	s.conf = conf
+	s.enabled = conf.enabled
+	s.initialized = false
+}
+
+// buildAndPublish builds the provider and, on success, publishes it. The caller
+// must hold initMu, which keeps this publish from racing a concurrent reload's
+// install so the published manager matches the installed conf. On failure the
+// server is left enabled-but-uninitialized so a later handler retries.
+func (s *oidcAuthenticationServer) buildAndPublish(
+	ctx context.Context, conf oidcAuthenticationConf, locality roachpb.Locality,
+) {
+	manager, ok := buildManager(ctx, conf, locality)
+	if !ok {
+		return
+	}
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.manager = manager
+	s.initialized = true
+	log.Dev.Infof(ctx, "initialized OIDC server")
+}
+
+// readOIDCConf snapshots the OIDC-related cluster settings into a conf value. It
+// performs no network I/O and touches no server state, so it needs no lock.
+func readOIDCConf(st *cluster.Settings) oidcAuthenticationConf {
+	clientTimeout := OIDCAuthClientTimeout.Get(&st.SV)
+	return oidcAuthenticationConf{
 		clientID:        OIDCClientID.Get(&st.SV),
 		clientSecret:    OIDCClientSecret.Get(&st.SV),
 		redirectURLConf: mustParseOIDCRedirectURL(OIDCRedirectURL.Get(&st.SV)),
@@ -424,50 +511,37 @@ func reloadConfigLocked(
 		groupClaim:       OIDCAuthGroupClaim.Get(&st.SV),
 		userinfoGroupKey: OIDCAuthUserinfoGroupKey.Get(&st.SV),
 	}
+}
 
-	if !oidcAuthServer.conf.enabled && conf.enabled {
-		telemetry.Inc(enableUseCounter)
-	}
-
-	oidcAuthServer.initialized = false
-	oidcAuthServer.conf = conf
-	if oidcAuthServer.conf.enabled {
-		// `enabled` stores the configuration state and records the operator's _intent_ that the feature
-		// be enabled. Since the call to `NewProvider` below makes an HTTP request and could fail for
-		// many reasons, we record the successful configuration of a provider using the `initialized`
-		// flag which is set at the bottom of this function.
-		// If `enabled` is true and `initialized` is false, the HTTP handlers for OIDC will attempt
-		// to initialize the OIDC provider.
-		oidcAuthServer.enabled = true
-	} else {
-		oidcAuthServer.enabled = false
-		return
-	}
-
+// buildManager constructs the provider manager, including the synchronous IdP
+// discovery HTTPS fetch performed by NewOIDCManager. It reads only its conf
+// argument and holds no lock, so callers run it without the data mutex held. ok
+// is false (and the cause logged) when the redirect URL can't be resolved or
+// discovery fails.
+func buildManager(
+	ctx context.Context, conf oidcAuthenticationConf, locality roachpb.Locality,
+) (manager IOIDCManager, ok bool) {
 	// Validation of the scope setting will require that we have the `openid` scope.
-	scopesForOauth := strings.Split(oidcAuthServer.conf.scopes, " ")
+	scopesForOauth := strings.Split(conf.scopes, " ")
 
-	redirectURL, err := getRegionSpecificRedirectURL(locality, oidcAuthServer.conf.redirectURLConf)
+	redirectURL, err := getRegionSpecificRedirectURL(locality, conf.redirectURLConf)
 	if err != nil {
 		log.Dev.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
 			log.Dev.Infof(ctx, "check redirect URL OIDC cluster setting: "+OIDCRedirectURLSettingName)
 		}
-		return
+		return nil, false
 	}
 
-	manager, err := NewOIDCManager(ctx, oidcAuthServer.conf, redirectURL, scopesForOauth)
+	manager, err = NewOIDCManager(ctx, conf, redirectURL, scopesForOauth)
 	if err != nil {
 		log.Dev.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
 			log.Dev.Infof(ctx, "check provider URL OIDC cluster setting: "+OIDCProviderURLSettingName)
 		}
-		return
+		return nil, false
 	}
-
-	oidcAuthServer.manager = manager
-	oidcAuthServer.initialized = true
-	log.Dev.Infof(ctx, "initialized OIDC server")
+	return manager, true
 }
 
 // getRegionSpecificRedirectURL will query the localities and see if we have
@@ -519,16 +593,13 @@ var ConfigureOIDC = func(
 	handleHTTP(oidcCallbackPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		// Verify state and errors.
-		oidcAuthentication.mutex.Lock()
-		defer oidcAuthentication.mutex.Unlock()
-
-		if err := oidcAuthentication.maybeInitializeLocked(ctx, locality, st); err != nil {
+		conf, manager, enabled, err := oidcAuthentication.configSnapshot(ctx, locality, st)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		if !oidcAuthentication.enabled {
+		if !enabled {
 			http.Error(w, "OIDC: disabled", http.StatusBadRequest)
 			return
 		}
@@ -582,8 +653,8 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		idTokenClaims, _, rawIDToken, rawAccessToken, err := oidcAuthentication.manager.
-			ExchangeVerifyGetTokenInfo(ctx, r.URL.Query().Get(codeKey), idTokenKey, oidcAuthentication.conf.authZEnabled)
+		idTokenClaims, _, rawIDToken, rawAccessToken, err := manager.
+			ExchangeVerifyGetTokenInfo(ctx, r.URL.Query().Get(codeKey), idTokenKey, conf.authZEnabled)
 
 		if err != nil {
 			log.Dev.Errorf(ctx, "OIDC: failed to get and verify token: %v", err)
@@ -595,13 +666,13 @@ var ConfigureOIDC = func(
 			log.Dev.Infof(
 				ctx,
 				"attempting to extract SQL username from the payload using the claim key %s and regex %s",
-				oidcAuthentication.conf.claimJSONKey,
-				oidcAuthentication.conf.principalRegex,
+				conf.claimJSONKey,
+				conf.principalRegex,
 			)
 		}
 
 		username, err := extractUsernameFromClaims(
-			ctx, idTokenClaims, oidcAuthentication.conf.claimJSONKey, oidcAuthentication.conf.principalRegex,
+			ctx, idTokenClaims, conf.claimJSONKey, conf.principalRegex,
 		)
 		if err != nil {
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
@@ -609,7 +680,7 @@ var ConfigureOIDC = func(
 		}
 
 		// OIDC authorization
-		if err := oidcAuthentication.authorize(ctx, rawIDToken, rawAccessToken, username); err != nil {
+		if err := oidcAuthentication.authorize(ctx, conf, manager, rawIDToken, rawAccessToken, username); err != nil {
 			log.Dev.Errorf(ctx, "OIDC authorization failed with error: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusForbidden)
 			return
@@ -628,7 +699,7 @@ var ConfigureOIDC = func(
 		}
 
 		http.SetCookie(w, cookie)
-		http.Redirect(w, r, oidcAuthentication.conf.successPath, http.StatusTemporaryRedirect)
+		http.Redirect(w, r, conf.successPath, http.StatusTemporaryRedirect)
 
 		telemetry.Inc(loginSuccessUseCounter)
 	}))
@@ -636,21 +707,18 @@ var ConfigureOIDC = func(
 	handleHTTP(oidcJWTPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		// Verify state and errors.
-		oidcAuthentication.mutex.Lock()
-		defer oidcAuthentication.mutex.Unlock()
-
-		if err := oidcAuthentication.maybeInitializeLocked(ctx, locality, st); err != nil {
+		conf, manager, enabled, err := oidcAuthentication.configSnapshot(ctx, locality, st)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		if !oidcAuthentication.enabled {
+		if !enabled {
 			http.Error(w, "OIDC: disabled", http.StatusBadRequest)
 			return
 		}
 
-		if !oidcAuthentication.conf.generateJWTAuthTokenEnabled {
+		if !conf.generateJWTAuthTokenEnabled {
 			http.Error(w, "OIDC: generate JWT auth token disabled", http.StatusBadRequest)
 			return
 		}
@@ -686,7 +754,7 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		credentials, err := oidcAuthentication.manager.Exchange(ctx, r.URL.Query().Get(codeKey))
+		credentials, err := manager.Exchange(ctx, r.URL.Query().Get(codeKey))
 		if err != nil {
 			log.Dev.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
 			log.Dev.Errorf(ctx, "%v", r.URL.Query().Get(codeKey))
@@ -695,7 +763,7 @@ var ConfigureOIDC = func(
 		}
 
 		rawToken := credentials.AccessToken
-		if oidcAuthentication.conf.generateJWTAuthTokenUseToken == useIdToken {
+		if conf.generateJWTAuthTokenUseToken == useIdToken {
 			rawIDToken, ok := credentials.Extra(idTokenKey).(string)
 			if !ok {
 				log.Dev.Error(ctx, "OIDC: failed to extract ID token from the token credentials")
@@ -705,7 +773,7 @@ var ConfigureOIDC = func(
 			rawToken = rawIDToken
 		}
 
-		token, err := oidcAuthentication.manager.Verify(ctx, rawToken)
+		token, err := manager.Verify(ctx, rawToken)
 		if err != nil {
 			log.Dev.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
@@ -827,8 +895,8 @@ var ConfigureOIDC = func(
 		}{
 			Usernames: acceptedUsernames,
 			Password:  rawToken,
-			Host:      oidcAuthentication.conf.generateJWTAuthTokenSQLHost,
-			Port:      oidcAuthentication.conf.generateJWTAuthTokenSQLPort,
+			Host:      conf.generateJWTAuthTokenSQLHost,
+			Port:      conf.generateJWTAuthTokenSQLPort,
 			Expiry:    token.Expiry,
 		}, "", "  ")
 
@@ -848,15 +916,13 @@ var ConfigureOIDC = func(
 	handleHTTP(oidcLoginPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		oidcAuthentication.mutex.Lock()
-		defer oidcAuthentication.mutex.Unlock()
-
-		if err := oidcAuthentication.maybeInitializeLocked(ctx, locality, st); err != nil {
+		_, manager, enabled, err := oidcAuthentication.configSnapshot(ctx, locality, st)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		if !oidcAuthentication.enabled {
+		if !enabled {
 			http.Error(w, "OIDC: disabled", http.StatusBadRequest)
 			return
 		}
@@ -876,7 +942,7 @@ var ConfigureOIDC = func(
 		}
 
 		http.SetCookie(w, kast.secretKeyCookie)
-		http.Redirect(w, r, oidcAuthentication.manager.AuthCodeURL(kast.signedTokenEncoded), http.StatusFound)
+		http.Redirect(w, r, manager.AuthCodeURL(kast.signedTokenEncoded), http.StatusFound)
 	}))
 
 	reloadConfig(serverCtx, oidcAuthentication, locality, st)
