@@ -91,9 +91,10 @@ func alterBackupPlanHook(
 	}
 
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
-		if err := sql.MaybeCheckDestinationPrivileges(
-			ctx, p, slices.Concat([]string{backup}, newKms, oldKms),
-		); err != nil {
+		if err := sql.MaybeCheckDestinationPrivileges(ctx, p, []string{backup}); err != nil {
+			return err
+		}
+		if err := sql.MaybeCheckKMSPrivileges(ctx, p, slices.Concat(newKms, oldKms)); err != nil {
 			return err
 		}
 

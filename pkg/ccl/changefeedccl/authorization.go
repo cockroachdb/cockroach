@@ -165,8 +165,7 @@ func authorizeUserToCreateChangefeed(
 
 		if uri.Scheme == changefeedbase.SinkSchemeExternalConnection {
 			if requireUsage {
-				return sql.CheckDestinationPrivilegesWithOptions(ctx, p, []string{uriString},
-					sql.DestinationPrivilegeOptions{EnforceUsage: true})
+				return sql.CheckExternalConnectionUsage(ctx, p, []string{uriString})
 			}
 			return nil
 		}
@@ -179,11 +178,11 @@ func authorizeUserToCreateChangefeed(
 		}
 
 		if requireImplicitAccess {
-			return sql.CheckDestinationPrivilegesWithOptions(ctx, p, []string{uriString},
-				sql.DestinationPrivilegeOptions{
-					EnforceImplicitAccess: true,
-					Resolver:              resolveSinkDestination,
-				})
+			dest, err := resolveSinkDestination(uriString, p.User())
+			if err != nil {
+				return err
+			}
+			return sql.CheckDestinationImplicitAccess(ctx, p, dest)
 		}
 		return nil
 	}
@@ -193,18 +192,6 @@ func authorizeUserToCreateChangefeed(
 	}
 	return checkURI(sinkURI, true /* applyExternalConnectionSink */)
 }
-
-// externalSink is the ExternalDestination for a changefeed-native sink scheme
-// (e.g. kafka://, pulsar://, webhook-*://, ...) that has no ExternalStorage
-// representation.
-type externalSink struct {
-	scheme string
-}
-
-func (s externalSink) AccessIsWithExplicitAuth() bool { return false }
-func (s externalSink) Kind() string                   { return s.scheme }
-
-var _ cloudpb.ExternalDestination = externalSink{}
 
 // resolveSinkDestination maps a changefeed sink URI to the ExternalDestination
 // whose auth posture the implicit-access check reasons about.
@@ -238,5 +225,5 @@ func resolveSinkDestination(
 		return &conf, nil
 	}
 
-	return externalSink{scheme: uri.Scheme}, nil
+	return cloudpb.ImplicitAuthDestination(uri.Scheme), nil
 }

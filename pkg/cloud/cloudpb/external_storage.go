@@ -34,6 +34,43 @@ type ExternalDestination interface {
 	Kind() string
 }
 
+// ImplicitAuthDestination returns an ExternalDestination for a direct
+// (non-external-connection) target that the node reaches using its own implicit
+// credentials or network context, and therefore always requires
+// EXTERNALIOIMPLICITACCESS. scheme is used only as the user-facing label for
+// error messages.
+func ImplicitAuthDestination(scheme string) ExternalDestination {
+	return implicitAuthDestination{scheme: scheme}
+}
+
+type implicitAuthDestination struct{ scheme string }
+
+func (d implicitAuthDestination) AccessIsWithExplicitAuth() bool { return false }
+func (d implicitAuthDestination) Kind() string                   { return d.scheme }
+
+var _ ExternalDestination = implicitAuthDestination{}
+
+// KMSDestination returns an ExternalDestination for a KMS URI. A KMS URI has no
+// ExternalStorage representation, but access to it still needs to be classified
+// as explicit or implicit for privilege checks.
+func KMSDestination(scheme, auth string) ExternalDestination {
+	return kmsDestination{scheme: scheme, auth: auth}
+}
+
+type kmsDestination struct {
+	// scheme is used only as the user-facing label for error messages.
+	scheme string
+	// auth is the value of the URI's AUTH parameter.
+	auth string
+}
+
+func (d kmsDestination) AccessIsWithExplicitAuth() bool {
+	return d.auth != ExternalStorageAuthImplicit
+}
+func (d kmsDestination) Kind() string { return d.scheme }
+
+var _ ExternalDestination = kmsDestination{}
+
 // AccessIsWithExplicitAuth returns true if the external storage config carries
 // its own explicit credentials to use for access (or does not require them), as
 // opposed to using something about the node to gain implicit access, such as a

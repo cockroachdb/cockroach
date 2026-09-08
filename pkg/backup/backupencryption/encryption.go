@@ -567,7 +567,7 @@ func ResolveEncryptionOptionsFromExpr(
 		if err != nil {
 			return nil, err
 		}
-		if err := sql.MaybeCheckDestinationPrivileges(ctx, p, kms); err != nil {
+		if err := sql.MaybeCheckKMSPrivileges(ctx, p, kms); err != nil {
 			return nil, err
 		}
 		kmsEnv := MakeBackupKMSEnv(

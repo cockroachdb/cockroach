@@ -216,7 +216,7 @@ func checkCompactionPrivileges(
 	if err := sql.CheckDestinationPrivileges(ctx, p, collectionURIs); err != nil {
 		return err
 	}
-	return sql.MaybeCheckDestinationPrivileges(ctx, p, kmsURIs)
+	return sql.MaybeCheckKMSPrivileges(ctx, p, kmsURIs)
 }
 
 // StartCompactionJob kicks off an asynchronous job to compact the backups at
