@@ -57,6 +57,7 @@ go_test(
     size = "large",
     srcs = [
         "authentication_test.go",
+        "cookie_test.go",
         "main_test.go",
     ],
     deps = [
