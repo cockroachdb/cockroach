@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -930,4 +932,87 @@ func TestImportIntoRequiresUsageOnExternalConnection(t *testing.T) {
 
 	rootDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION import_src TO testuser`)
 	userDB.Exec(t, importStmt)
+}
+
+// TestImportAvroSchemaURIRequiresPrivileges tests that the Avro schema_uri
+// option URI is subject to the external IO privilege check. Users cannot specify
+// implicitly-authenticated URIs without EXTERNALIOIMPLICITACCESS and cannot
+// use an external connection without USAGE.
+func TestImportAvroSchemaURIRequiresPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Seed a minimal Avro schema to be able to do a successful import.
+	baseDir := t.TempDir()
+	avroDir := filepath.Join(baseDir, "avro")
+	require.NoError(t, os.MkdirAll(avroDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(avroDir, "schema.json"),
+		[]byte(`{"type":"record","name":"simple","fields":[{"name":"i","type":"int"}]}`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(avroDir, "data.json"),
+		[]byte("{\"i\":1}\n"), 0644))
+
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// nodelocal reads come from the storage layer's external IO directory.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		ExternalIODir:     baseDir,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	rootDB := sqlutils.MakeSQLRunner(srv.SQLConn(t))
+	rootDB.Exec(t, `SET CLUSTER SETTING security.external_io.enforce_external_io_implicit_access.enabled = true`)
+	rootDB.Exec(t, `SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
+	rootDB.Exec(t, `CREATE USER testuser`)
+
+	// Use a granted external connection for the destination so we can only test
+	// the schema_uri.
+	rootDB.Exec(t, `CREATE EXTERNAL CONNECTION avro_data AS 'nodelocal://1/avro'`)
+	rootDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION avro_data TO testuser`)
+
+	// avro_schema is an external connection testuser does NOT have a grant to
+	// for testing.
+	rootDB.Exec(t, `CREATE EXTERNAL CONNECTION avro_schema AS 'nodelocal://1/avro'`)
+
+	userDB := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.User(username.TestUser)))
+
+	for _, tc := range []struct {
+		name string
+		// schemaURI is the uri we will specify as schema_uri in an import.
+		schemaURI string
+		// expectErr is the error we expect to see on that import.
+		expectErr string
+		// grant is the SQL statement that will make the import succeed.
+		grant string
+	}{
+		{
+			name:      "implicit auth requires EXTERNALIOIMPLICITACCESS",
+			schemaURI: "nodelocal://1/avro/schema.json",
+			expectErr: "only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege " +
+				"are allowed to access the specified nodelocal URI",
+			grant: `GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO testuser`,
+		},
+		{
+			name:      "external connection requires USAGE",
+			schemaURI: "external://avro_schema/schema.json",
+			expectErr: "user testuser does not have USAGE privilege on external_connection avro_schema",
+			grant:     `GRANT USAGE ON EXTERNAL CONNECTION avro_schema TO testuser`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rootDB.Exec(t, `DROP TABLE IF EXISTS simple`)
+			rootDB.Exec(t, `CREATE TABLE simple (i INT8 PRIMARY KEY)`)
+			rootDB.Exec(t, `GRANT INSERT, DROP ON TABLE simple TO testuser`)
+
+			importStmt := fmt.Sprintf(
+				`IMPORT INTO simple AVRO DATA ('external://avro_data/data.json') `+
+					`WITH data_as_json_records, schema_uri='%s'`, tc.schemaURI)
+
+			userDB.ExpectErr(t, tc.expectErr, importStmt)
+
+			rootDB.Exec(t, tc.grant)
+			userDB.Exec(t, importStmt)
+			rootDB.CheckQueryResults(t, `SELECT i FROM simple`, [][]string{{"1"}})
+		})
+	}
 }
