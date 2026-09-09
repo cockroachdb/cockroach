@@ -153,6 +153,19 @@ func registerActiveRecord(r registry.Registry) {
 		}
 
 		t.Status("installing gems")
+		// Pin json gem to < 3.0 because json 3.x changed JSON.parse to accept
+		// only keyword arguments, breaking ActiveSupport::JSON.decode.
+		if err := repeatRunE(
+			ctx,
+			t,
+			c,
+			node,
+			"pinning json gem",
+			`echo "gem 'json', '< 3.0'" >> /mnt/data1/activerecord-cockroachdb-adapter/Gemfile`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		if err := repeatRunE(
 			ctx,
 			t,
