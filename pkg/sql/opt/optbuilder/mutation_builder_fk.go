@@ -556,16 +556,22 @@ func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) b
 		// The other table is in the process of being added; ignore the FK relation.
 		return false
 	}
-	// The existence check does not require the mutating user to hold SELECT on
-	// the referenced table; it is authorized by the foreign key itself, whose
-	// creation already required CREATE. This matches PostgreSQL. Record the
-	// dependency so that a cached plan is invalidated if the referenced table
-	// changes, but with a zero privilege so re-validation performs no privilege
-	// check. No BUILTIN_UNSAFE_ALLOWED tagging (as checkPrivilege does in a
-	// builtin context) is needed, since no privilege is recorded to re-check.
-	mb.b.factory.Metadata().AddDependency(
-		opt.DepByID(refID), h.otherTab, 0 /* priv */, mb.b.privilegeDependencyUser(),
-	)
+	if mb.b.legacyFKAndTTLAuthorization() {
+		// Legacy authorization model: the mutating user needs SELECT privileges
+		// on the referenced table for the existence check.
+		mb.b.checkPrivilege(opt.DepByID(refID), h.otherTab, privilege.SELECT)
+	} else {
+		// The existence check does not require the mutating user to hold SELECT on
+		// the referenced table; it is authorized by the foreign key itself, whose
+		// creation already required CREATE. This matches PostgreSQL. Record the
+		// dependency so that a cached plan is invalidated if the referenced table
+		// changes, but with a zero privilege so re-validation performs no privilege
+		// check. No BUILTIN_UNSAFE_ALLOWED tagging (as checkPrivilege does in a
+		// builtin context) is needed, since no privilege is recorded to re-check.
+		mb.b.factory.Metadata().AddDependency(
+			opt.DepByID(refID), h.otherTab, 0 /* priv */, mb.b.privilegeDependencyUser(),
+		)
+	}
 
 	numCols := h.fk.ColumnCount()
 	h.allocOrdinals(numCols)
