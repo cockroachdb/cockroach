@@ -6,7 +6,6 @@
 package backup
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -197,7 +196,7 @@ func writeAtBatchTS(ctx context.Context, span roachpb.Span, fromSystemTenant boo
 	// that span, that depend on the difference in timestamps on restored existing
 	// vs importing keys to rollback.
 	if fromSystemTenant &&
-		(bytes.HasPrefix(span.Key, keys.TenantPrefix) || bytes.HasPrefix(span.EndKey, keys.TenantPrefix)) {
+		(!keys.IsSystemTenantKeyspace(span.Key) || !keys.IsSystemTenantKeyspace(span.EndKey)) {
 		log.Dev.Warningf(ctx, "restoring span %s at its original timestamps because it is a tenant span", span)
 		return false
 	}

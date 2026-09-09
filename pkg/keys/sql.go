@@ -34,6 +34,13 @@ func MakeTenantSpan(tenID roachpb.TenantID) roachpb.Span {
 	}
 }
 
+// IsSystemTenantKeyspace returns true if the key lies in the system tenant's
+// keyspace, i.e. it does not carry a secondary tenant prefix. Keys with a
+// tenant prefix belong to a secondary (application) tenant.
+func IsSystemTenantKeyspace(key roachpb.Key) bool {
+	return !bytes.HasPrefix(key, TenantPrefix)
+}
+
 // DecodeTenantPrefix determines the tenant ID from the key prefix, returning
 // the remainder of the key (with the prefix removed) and the decoded tenant ID.
 func DecodeTenantPrefix(key roachpb.Key) ([]byte, roachpb.TenantID, error) {

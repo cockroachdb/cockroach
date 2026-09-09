@@ -260,7 +260,7 @@ func (kr *KeyRewriter) rewriteKey(
 	// tenant rekey for it, i.e. we're restoring that tenant.
 	// We also enable rekeying if we are restoring a tenant from a replication stream
 	// in which case we are restoring as a system tenant.
-	if kr.fromSystemTenant && bytes.HasPrefix(key, keys.TenantPrefix) {
+	if kr.fromSystemTenant && !keys.IsSystemTenantKeyspace(key) {
 		return kr.rewriteTenant(key, forSpan)
 	}
 

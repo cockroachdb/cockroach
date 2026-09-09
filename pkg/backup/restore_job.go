@@ -201,7 +201,7 @@ func rewriteBackupSpanKey(
 		return nil, errors.AssertionFailedf(
 			"no rewrite for span start key: %s", key)
 	}
-	if bytes.HasPrefix(newKey, keys.TenantPrefix) {
+	if !keys.IsSystemTenantKeyspace(newKey) {
 		return newKey, nil
 	}
 
