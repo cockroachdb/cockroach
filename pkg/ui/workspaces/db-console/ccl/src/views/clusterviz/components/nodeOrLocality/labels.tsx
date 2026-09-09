@@ -17,7 +17,7 @@ export class Labels extends React.Component<LabelsProps> {
   render() {
     return (
       <g
-        fontFamily="Lato-Bold, Lato"
+        fontFamily="Geist-Bold, Geist-Regular"
         fontSize="14"
         fontWeight="bold"
         letterSpacing="1"

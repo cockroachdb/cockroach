@@ -3,28 +3,23 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+// 2026 brand faces — Geist / Geist Mono (SIL OFL, self-hosted woff2 only).
 // partially copied from https://github.com/code42day/stylus-font-face
-// TODO: restrict glyph ranges and inline fonts
-// TODO: possibly include other font types (eg ttf)
 file($name, $ext, $path)
   $path + '/' + $name + '.' + $ext
 
 font-face($family, $style='normal')
   @font-face
     font-family $family
-    src url(file($family, 'woff2', '../fonts')) format('woff2'), url(file($family, 'woff', '../fonts')) format('woff')
+    src url(file($family, 'woff2', '../fonts')) format('woff2')
     font-weight normal
     font-style $style
     text-rendering optimizeLegibility
 
-font-face('Lato-Light')
-font-face('Lato-Bold')
-font-face('Lato-Regular')
-font-face('Lato-Medium')
-font-face('RobotoMono-Bold')
-font-face('RobotoMono-Regular')
-font-face('RobotoMono-Medium')
-font-face('Inconsolata-Regular')
-font-face('SourceSansPro-Bold')
-font-face('SourceSansPro-Regular')
-font-face('SourceSansPro-SemiBold')
+font-face('Geist-Light')
+font-face('Geist-Regular')
+font-face('Geist-Medium')
+font-face('Geist-Bold')
+font-face('GeistMono-Light')
+font-face('GeistMono-Regular')
+font-face('GeistMono-Medium')

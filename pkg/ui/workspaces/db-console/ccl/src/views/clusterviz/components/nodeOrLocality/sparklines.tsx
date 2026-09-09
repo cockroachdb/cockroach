@@ -21,7 +21,7 @@ export class Sparklines extends React.Component<SparklinesProps> {
       <g>
         <text
           fill={DARK_BLUE}
-          fontFamily="Lato-Bold, Lato"
+          fontFamily="Geist-Bold, Geist-Regular"
           fontSize="12"
           fontWeight="bold"
         >
@@ -37,7 +37,7 @@ export class Sparklines extends React.Component<SparklinesProps> {
       <g transform="translate(0 19)">
         <text
           fill={DARK_BLUE}
-          fontFamily="Lato-Bold, Lato"
+          fontFamily="Geist-Bold, Geist-Regular"
           fontSize="12"
           fontWeight="bold"
         >
