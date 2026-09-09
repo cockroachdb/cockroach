@@ -9,15 +9,7 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import {
-  GlobalNavigation,
-  CockroachLabsLockupIcon,
-  Left,
-  Right,
-  PageHeader,
-  Text,
-  TextTypes,
-} from "src/components";
+import { GlobalNavigation, Left, Right, PageHeader } from "src/components";
 import { TimezoneProvider } from "src/contexts/timezoneProvider";
 import {
   clusterIdSelector,
@@ -39,6 +31,9 @@ import "./layoutPanel.styl";
 
 import TenantDropdown from "../../components/tenantDropdown/tenantDropdown";
 import { LicenseNotification } from "../licenseNotification/licenseNotification";
+
+import { ClusterTitle } from "./clusterTitle";
+import { ConsoleHeaderBrand } from "./consoleHeaderBrand";
 
 export interface LayoutProps {
   clusterName: string;
@@ -82,7 +77,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
             <div className="layout-panel__header">
               <GlobalNavigation>
                 <Left>
-                  <CockroachLabsLockupIcon height={26} />
+                  <ConsoleHeaderBrand />
                 </Left>
                 <Right>
                   <LicenseNotification />
@@ -92,12 +87,15 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
             </div>
             <div className="layout-panel__navigation-bar">
               <PageHeader>
-                <Text textType={TextTypes.Heading2} noWrap>
-                  {getDataFromServer().FeatureFlags.is_observability_service
-                    ? "(Obs Service) "
-                    : ""}
-                  {clusterName || `Cluster id: ${clusterId || ""}`}
-                </Text>
+                <ClusterTitle
+                  clusterName={clusterName}
+                  clusterId={clusterId}
+                  prefix={
+                    getDataFromServer().FeatureFlags.is_observability_service
+                      ? "(Obs Service) "
+                      : undefined
+                  }
+                />
                 <Badge text={clusterVersion} />
                 <TenantDropdown />
               </PageHeader>
