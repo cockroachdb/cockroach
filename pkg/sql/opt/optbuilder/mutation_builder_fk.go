@@ -9,11 +9,14 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
@@ -169,7 +172,7 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 				HasBeforeTriggers: hasBeforeTriggers,
 				Builder:           builder,
 				WithID:            mb.withID,
-				ChildOwner:        h.otherTab.Owner(),
+				ChildOwner:        mb.b.cascadeChildOwner(h.otherTab),
 			})
 			continue
 		}
@@ -317,7 +320,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 				HasBeforeTriggers: hasBeforeTriggers,
 				Builder:           builder,
 				WithID:            mb.withID,
-				ChildOwner:        h.otherTab.Owner(),
+				ChildOwner:        mb.b.cascadeChildOwner(h.otherTab),
 			})
 			continue
 		}
@@ -440,7 +443,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 				HasBeforeTriggers: hasBeforeTriggers,
 				Builder:           builder,
 				WithID:            mb.withID,
-				ChildOwner:        h.otherTab.Owner(),
+				ChildOwner:        mb.b.cascadeChildOwner(h.otherTab),
 			})
 			continue
 		}
@@ -593,6 +596,33 @@ func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) b
 	return true
 }
 
+// legacyFKAndTTLAuthorization reports whether the optimizer should apply the
+// legacy foreign-key authorization model: foreign-key checks require the
+// mutating user to hold SELECT on the table on the other side of the foreign
+// key, and cascades run as that user rather than as the referencing table's
+// owner. It reads the sql.auth.legacy_fk_and_ttl_authorization_unsafe.enabled
+// escape hatch.
+//
+// This is consulted only at build time. The identity decision is then carried
+// by the plan itself -- a cascade records a child owner or does not -- so that
+// a change to the setting cannot split the identity used for planning from the
+// one used for execution partway through a statement. memo.IsStale rebuilds a
+// cached plan when the setting changes, since the setting also selects which
+// privilege checks are performed here.
+func (b *Builder) legacyFKAndTTLAuthorization() bool {
+	return sqlclustersettings.LegacyFKAndTTLAuthorization.Get(&b.evalCtx.Settings.SV)
+}
+
+// cascadeChildOwner returns the owner to record on a cascade over the given
+// referencing (child) table, or an undefined username under the legacy
+// authorization model, which leaves the cascade running as the mutating user.
+func (b *Builder) cascadeChildOwner(childTab cat.Table) username.SQLUsername {
+	if b.legacyFKAndTTLAuthorization() {
+		return username.SQLUsername{}
+	}
+	return childTab.Owner()
+}
+
 // initWithInboundFK initializes the helper with an inbound FK constraint.
 //
 // Returns false if the FK relation should be ignored (because the other table
@@ -612,15 +642,21 @@ func (h *fkCheckHelper) initWithInboundFK(mb *mutationBuilder, fkOrdinal int) (o
 	if h.otherTab == nil {
 		return false
 	}
-	// A foreign-key referential action (cascade, set null/default) or existence
-	// check on the referencing table does not require the user issuing the
-	// mutation to hold privileges on that table: the action is authorized by the
-	// foreign key, and any cascade runs as the referencing table's owner, matching
-	// PostgreSQL. Record the dependency (so a cached plan is invalidated if the
-	// table changes) without performing a privilege check.
-	mb.b.factory.Metadata().AddDependency(
-		opt.DepByID(originID), h.otherTab, 0 /* priv */, mb.b.privilegeDependencyUser(),
-	)
+	if mb.b.legacyFKAndTTLAuthorization() {
+		// Legacy authorization model: the cascade runs as the mutating user, so
+		// that user needs SELECT privileges on the origin table.
+		mb.b.checkPrivilege(opt.DepByID(originID), h.otherTab, privilege.SELECT)
+	} else {
+		// A foreign-key referential action (cascade, set null/default) or existence
+		// check on the referencing table does not require the user issuing the
+		// mutation to hold privileges on that table: the action is authorized by the
+		// foreign key, and any cascade runs as the referencing table's owner, matching
+		// PostgreSQL. Record the dependency (so a cached plan is invalidated if the
+		// table changes) without performing a privilege check.
+		mb.b.factory.Metadata().AddDependency(
+			opt.DepByID(originID), h.otherTab, 0 /* priv */, mb.b.privilegeDependencyUser(),
+		)
+	}
 
 	numCols := h.fk.ColumnCount()
 	h.allocOrdinals(numCols)
