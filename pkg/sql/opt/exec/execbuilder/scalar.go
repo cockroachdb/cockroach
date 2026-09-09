@@ -1057,9 +1057,11 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	enableStepping := udf.Def.Volatility == volatility.Volatile
 
 	// A non-zero ResultBufferID indicates that the UDF is a set-returning
-	// function, with sub-routines adding to the result set. In this case, the
+	// function, with sub-routines adding to the result set. SETOF VOID functions
+	// also produce no result from their final body statement. In these cases, the
 	// last body statement does not directly contribute to the result set.
-	discardLastStmtResult := udf.Def.ResultBufferID != 0
+	discardLastStmtResult := udf.Def.ResultBufferID != 0 ||
+		(udf.Def.SetReturning && udf.Typ.Family() == types.VoidFamily)
 
 	// The calling routine, if any, will have already determined whether this
 	// routine is in tail-call position.

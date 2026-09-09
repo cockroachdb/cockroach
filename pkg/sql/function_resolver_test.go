@@ -444,3 +444,36 @@ CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING VOLATILE LANGUAGE SQL AS $$ S
 	})
 	require.NoError(t, err)
 }
+
+// TestSetReturningVoidCardinality checks that discarding a SETOF VOID result
+// does not suppress execution of the body or change scalar VOID functions.
+func TestSetReturningVoidCardinality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	runner := sqlutils.MakeSQLRunner(db)
+	runner.Exec(t, `
+CREATE FUNCTION setof_void() RETURNS SETOF VOID IMMUTABLE LANGUAGE SQL AS $$ SELECT NULL $$;
+CREATE FUNCTION scalar_void() RETURNS VOID IMMUTABLE LANGUAGE SQL AS $$ SELECT NULL $$;
+CREATE FUNCTION setof_int() RETURNS SETOF INT IMMUTABLE LANGUAGE SQL AS $$ VALUES (1), (2) $$;
+CREATE TABLE calls (v INT);
+CREATE FUNCTION setof_void_write() RETURNS SETOF VOID VOLATILE LANGUAGE SQL AS $$
+  INSERT INTO calls VALUES (1);
+  SELECT NULL;
+$$;
+`)
+	for _, query := range []string{
+		"SELECT setof_void()",
+		"SELECT * FROM setof_void()",
+		"SELECT setof_void_write()",
+	} {
+		t.Run(query, func(t *testing.T) {
+			require.Empty(t, runner.QueryStr(t, query))
+		})
+	}
+	runner.CheckQueryResults(t, "SELECT count(*) FROM calls", [][]string{{"1"}})
+	runner.CheckQueryResults(t, "SELECT scalar_void()", [][]string{{"NULL"}})
+	runner.CheckQueryResults(t, "SELECT * FROM setof_int() ORDER BY 1", [][]string{{"1"}, {"2"}})
+}
