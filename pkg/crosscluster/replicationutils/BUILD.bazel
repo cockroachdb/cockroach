@@ -2,14 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "replicationutils",
-    srcs = [
-        "connection_checker.go",
-        "utils.go",
-    ],
+    srcs = ["utils.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/crosscluster/streamclient",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvpb",
@@ -27,8 +23,6 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sqlclustersettings",
-        "//pkg/sql/syntheticprivilege",
         "//pkg/storage",
         "//pkg/storage/mvccencoding",
         "//pkg/testutils/fingerprintutils",
