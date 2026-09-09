@@ -126,7 +126,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 				var tableID int64
 				row := runner.QueryRow(t, fmt.Sprintf("SELECT '%s'::REGCLASS::OID;", tableName))
 				row.Scan(&tableID)
-				info, err := getTableInfo(ctx, db, descpb.ID(tableID))
+				info, err := getTableInfo(ctx, db, descpb.ID(tableID), &s.ClusterSettings().SV)
 				require.NoError(t, err)
 
 				switch strings.ToLower(builder) {

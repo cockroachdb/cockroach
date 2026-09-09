@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -151,9 +153,18 @@ func (b *selectQueryBuilder) BuildQuery() (string, error) {
 //
 // A DescriptorOverride can only grant per-descriptor privileges, never a global
 // privilege such as REPAIRCLUSTER, so these grants do not reopen the escalation.
+//
+// Under the legacy authorization model (the
+// sqlclustersettings.LegacyFKAndTTLAuthorization escape hatch), the statements
+// instead run as the internal node user, which bypasses every privilege check
+// and so needs no overrides. The node user is named explicitly rather than
+// left unset so that callers can continue to rely on a user always being set.
 func ttlSessionOverrides(
-	tbl catalog.TableDescriptor,
+	tbl catalog.TableDescriptor, sv *settings.Values,
 ) (username.SQLUsername, map[uint32]sessiondata.DescriptorOverride, error) {
+	if sqlclustersettings.LegacyFKAndTTLAuthorization.Get(sv) {
+		return username.NodeUserName(), nil, nil
+	}
 	// Every valid descriptor has an owner (catprivilege.MaybeFixPrivileges
 	// backfills one on read), but an undefined owner passed to the internal
 	// executor would silently run the TTL statements as the privilege-bypassing

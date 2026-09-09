@@ -43,6 +43,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/spanutils",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/ttl/ttlbase",
         "//pkg/sql/types",
