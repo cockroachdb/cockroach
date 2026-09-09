@@ -35,6 +35,14 @@ type Team struct {
 	Label string `yaml:"label"`
 	// SilenceMentions is true if @-mentions should be suppressed for this team.
 	SilenceMentions bool `yaml:"silence_mentions"`
+	// FilterRaceRunsToRaceIssues narrows what a race run files for this team to
+	// data races: a race-run failure that reported no data race is dropped
+	// rather than filed. The non-race runs remain the source of truth for
+	// behavioral failures, so a race run that only timed out tells this team
+	// nothing the non-race runs did not. Non-race runs are unaffected; this is
+	// consulted only when the poster runs with
+	// COCKROACH_FILTER_RACE_RUNS_TO_RACE_ISSUES set.
+	FilterRaceRunsToRaceIssues bool `yaml:"filter_race_runs_to_race_issues"`
 }
 
 // Name returns the main Alias of the team.

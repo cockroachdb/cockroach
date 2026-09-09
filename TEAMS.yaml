@@ -52,6 +52,7 @@ cockroachlabs/product-security:
   label: T-product-security
 cockroachlabs/disaster-recovery:
   label: T-disaster-recovery
+  filter_race_runs_to_race_issues: true
 cockroachlabs/cdc:
   aliases:
     cockroachlabs/cdc-prs: other
