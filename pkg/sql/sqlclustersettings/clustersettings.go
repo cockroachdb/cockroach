@@ -249,6 +249,53 @@ var IndexConflictWritesEnabled = settings.RegisterBoolSetting(
 	true,
 	settings.WithUnsafe)
 
+// LegacyFKAndTTLAuthorization restores the authorization model that
+// foreign-key checks, foreign-key cascades, and the row-level TTL job used
+// before foreign keys became self-authorizing and cascades and TTL were
+// changed to run as the relevant table's owner.
+//
+// By default (false):
+//   - a foreign-key existence check does not require the user issuing the
+//     mutation to hold SELECT on the table on the other side of the foreign
+//     key, in either direction; the check is authorized by the foreign key
+//     itself, matching PostgreSQL;
+//   - a foreign-key referential action (cascade, set null/default) runs as
+//     the referencing (child) table's owner, matching PostgreSQL;
+//   - the row-level TTL job issues its statements as the TTL table's owner.
+//
+// When enabled, foreign-key checks require the mutating user to hold SELECT
+// on the table on the other side of the foreign key, referential actions run
+// as the mutating user (which additionally requires that user to hold
+// privileges on the referencing table), and the TTL job runs as the internal
+// node user.
+//
+// This exists only as an escape hatch for a workload that a release would
+// otherwise break, and it is unsafe: running the TTL job as node means
+// user-defined code the TTL delete reaches (DELETE triggers on the TTL table,
+// and the CHECK and computed-column functions re-evaluated by cascades)
+// executes as an internal identity rather than as the table's owner, and so is
+// not constrained by the privileges that owner holds. Prefer granting the
+// table owner whatever privileges its own user-defined code needs, and leave
+// this off.
+//
+// The value is read at plan time for the foreign-key paths (it selects which
+// privilege checks the optimizer performs and whether a cascade records a
+// child owner) and once per job run for TTL, so a change to it never splits
+// behavior within a single statement or job run. Because it changes which
+// privilege checks the optimizer performs, it is recorded on the memo and
+// invalidates a cached plan when it changes; see memo.IsStale.
+var LegacyFKAndTTLAuthorization = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.legacy_fk_and_ttl_authorization_unsafe.enabled",
+	"determines whether foreign-key checks, foreign-key cascades, and the "+
+		"row-level TTL job use the legacy authorization model. When enabled, "+
+		"foreign-key checks require the user performing the mutation to hold "+
+		"SELECT on the table on the other side of the foreign key, cascades run "+
+		"as that user rather than as the referencing table's owner, and the TTL "+
+		"job runs as the node user rather than as the table's owner",
+	false,
+	settings.WithUnsafe)
+
 // RequireUsagePrivilegeOnExternalConnections exists to revert the external
 // connection USAGE checks added in v26.4. Turning it off does not remove the
 // checks that were already in place. It is only a failsafe: nothing depends on

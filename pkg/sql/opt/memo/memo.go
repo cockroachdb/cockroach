@@ -267,6 +267,13 @@ type Memo struct {
 	// memo must be invalidated when it changes.
 	indexConflictWritesEnabled bool
 
+	// legacyFKAndTTLAuthorization is the value of the
+	// LegacyFKAndTTLAuthorization cluster setting when the memo was created.
+	// This setting changes which foreign-key-related privilege checks the
+	// optimizer performs and whether a cascade records the referencing table's
+	// owner, so the memo must be invalidated when it changes.
+	legacyFKAndTTLAuthorization bool
+
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
 
@@ -390,6 +397,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		usePartialIndexPredicateOptionalFilters:    evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters,
 		skipUnderlyingViewPrivilegeChecks:          sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV),
 		indexConflictWritesEnabled:                 sqlclustersettings.IndexConflictWritesEnabled.Get(&evalCtx.Settings.SV),
+		legacyFKAndTTLAuthorization:                sqlclustersettings.LegacyFKAndTTLAuthorization.Get(&evalCtx.Settings.SV),
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 		useBackupsWithIDs:                          evalCtx.SessionData().UseBackupsWithIDs,
 		builtWithStatsRollout:                      evalCtx.StatsRollout,
@@ -585,6 +593,7 @@ func (m *Memo) IsStale(
 		m.usePartialIndexPredicateOptionalFilters != evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters ||
 		m.skipUnderlyingViewPrivilegeChecks != sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV) ||
 		m.indexConflictWritesEnabled != sqlclustersettings.IndexConflictWritesEnabled.Get(&evalCtx.Settings.SV) ||
+		m.legacyFKAndTTLAuthorization != sqlclustersettings.LegacyFKAndTTLAuthorization.Get(&evalCtx.Settings.SV) ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel ||
 		m.useBackupsWithIDs != evalCtx.SessionData().UseBackupsWithIDs {
 		return true, nil
