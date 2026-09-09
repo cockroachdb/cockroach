@@ -3,6 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+@import "src/core/index.module";
 @import "application.module.scss";
 
 $divider-spacing-default: crl-gutters(1.5);
@@ -12,7 +13,7 @@ $divider-spacing-condensed: crl-gutters(1);
   svg[data-icon="left"] {
     font-size: 12px;
     margin-right: crl-gutters(0.5);
-    color: $color-base-blue;
+    color: $colors--link;
   }
 }
 
@@ -30,11 +31,11 @@ $divider-spacing-condensed: crl-gutters(1);
 }
 
 .item-link {
-  color: $color-base-blue;
+  color: $colors--link;
   font-weight: 600;
 
   &:hover {
-    color: $color-core-blue-4;
+    color: $colors--primary-blue-4;
   }
 }
 

@@ -15,9 +15,10 @@
   &__panel
     background $colors--neutral-0
     margin-bottom $spacing-small
-    border 1px solid rgb(237, 237, 237)
-    box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
-    border-radius 3px
+    // Match the summary card: darker WG3 rule and no cool drop-shadow — the old
+    // rgba(67,90,111) halo read blue against the warm 2026 palette.
+    border 1px solid $colors--neutral-3
+    border-radius 8px
 
 .status-column
   &--color-warning

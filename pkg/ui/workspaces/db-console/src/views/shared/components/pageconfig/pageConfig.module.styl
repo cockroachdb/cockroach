@@ -21,7 +21,9 @@
   margin-top -10px
 
   z-index $z-index-page-config
-  background-color $background-color
+  // Sticky page header must match the white content surface (2026 brand);
+  // it stays opaque so scrolled content passes cleanly underneath.
+  background-color $colors--white
 
   &__list
     display flex
