@@ -608,6 +608,12 @@ var ConfigureOIDC = func(
 	handleHTTP(oidcJWTPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
+		// The success response carries a raw bearer token as the SQL password, so
+		// no intermediary (browser, proxy, or CDN) may cache any response from this
+		// endpoint. Set this before any write so it applies on every return path.
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Pragma", "no-cache")
+
 		conf, manager, enabled, err := oidcAuthentication.configSnapshot(ctx, locality, st)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
