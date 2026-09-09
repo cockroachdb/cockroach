@@ -3,6 +3,8 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+@require './brand.styl'
+
 // colors shortcuts
 $colors--title = $colors--neutral-8
 $colors--primary-text = $colors--neutral-7
@@ -14,27 +16,27 @@ $colors--background = $colors--neutral-1
 $colors--warning = $colors--functional-orange-3
 $colors--alert = $colors--functional-red-3
 
-// Neutral colors
-$colors--neutral-0 = #ffffff
-$colors--neutral-1 = #F5F7FA
-$colors--neutral-2 = #e7ecf3
-$colors--neutral-3 = #d6dbe7
-$colors--neutral-4 = #c0c6d9
-$colors--neutral-5 = #7e89a9
-$colors--neutral-6 = #475872
-$colors--neutral-7 = #394455
-$colors--neutral-8 = #242a35
-$colors--neutral-9 = #060c12
-$colors--neutral-10 = #0c1628
-$colors--neutral-11 = #C4C4C4
+// Base color palette — 2026 brand (values from brand.styl).
+$colors--neutral-0 = $brand--warmgray-0
+$colors--neutral-1 = $brand--warmgray-100
+$colors--neutral-2 = $brand--warmgray-200
+$colors--neutral-3 = $brand--warmgray-300
+$colors--neutral-4 = $brand--warmgray-400
+$colors--neutral-5 = $brand--warmgray-500
+$colors--neutral-6 = $brand--warmgray-600
+$colors--neutral-7 = $brand--warmgray-700
+$colors--neutral-8 = $brand--warmgray-800
+$colors--neutral-9 = $brand--black-6
+$colors--neutral-10 = $brand--black-6
+$colors--neutral-11 = $brand--warmgray-850
 
 // Primary and brand colors
-$colors--primary-blue-1 = #e0eefb
-$colors--primary-blue-2 = #74bdfd
-$colors--primary-blue-3 = #0055FF
-$colors--primary-blue-4 = #005fb3
-$colors--primary-blue-5 = #00294d
-$colors--primary-blue-6 = #89b0ff
+$colors--primary-blue-1 = $brand--blue-100
+$colors--primary-blue-2 = $brand--blue-300
+$colors--primary-blue-3 = $brand--blue-700
+$colors--primary-blue-4 = $brand--blue-750
+$colors--primary-blue-5 = $brand--blue-800
+$colors--primary-blue-6 = $brand--blue-300
 
 $colors--primary-green-0 = #daf8d4
 $colors--primary-green-1 = #b4f1aa
@@ -43,17 +45,17 @@ $colors--primary-green-3 = #37a806
 $colors--primary-green-4 = #237300
 $colors--primary-green-5 = #123d00
 
-$colors--primary-purple-2 = #CBBCFC
-$colors--primary-purple-3 = #6933FF
+$colors--primary-purple-2 = $brand--purple-300
+$colors--primary-purple-3 = $brand--purple-500
 
-$colors--info-4 = #0037a5
+$colors--info-4 = $brand--purple-800
 
 // Functional colors
-$colors--functional-purple-1 = #cec0f2
-$colors--functional-purple-2 = #8c6be1
-$colors--functional-purple-3 = #8c6be1
-$colors--functional-purple-4 = #8c6be1
-$colors--functional-purple-5 = #190033
+$colors--functional-purple-1 = $brand--purple-100
+$colors--functional-purple-2 = $brand--purple-500
+$colors--functional-purple-3 = $brand--purple-500
+$colors--functional-purple-4 = $brand--purple-500
+$colors--functional-purple-5 = $brand--purple-deep
 
 $colors--functional-red-1 = #ffe5e8
 $colors--functional-red-2 = #ff808c
