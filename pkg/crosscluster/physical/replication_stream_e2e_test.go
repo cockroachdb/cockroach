@@ -101,6 +101,42 @@ func TestPCRPrivs(t *testing.T) {
 	srcTime := c.SrcSysServer.Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, ingestionJobID)
 
+	c.DestSysSQL.Exec(t, `SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true`)
+
+	createConn := replicationtestutils.GetExternalConnectionURI(t, c.SrcSysServer, c.DestSysServer)
+	createFromConn := fmt.Sprintf("CREATE TENANT destination2 FROM REPLICATION OF %s ON '%s'",
+		c.Args.SrcTenantName, createConn.String())
+	testuser.ExpectErr(t, fmt.Sprintf(
+		"user testuser does not have USAGE privilege on external_connection %s", createConn.Host),
+		createFromConn)
+
+	c.DestSysSQL.Exec(t, fmt.Sprintf(`GRANT USAGE ON EXTERNAL CONNECTION "%s" TO %s`,
+		createConn.Host, username.TestUser))
+	testuser.Exec(t, createFromConn)
+
+	// Restarting replication also requires USAGE. Complete replication so we can restart it.
+	_, conn2JobID := replicationtestutils.GetStreamJobIds(t, ctx, c.DestSysSQL, "destination2")
+	c.WaitUntilReplicatedTime(c.SrcSysServer.Clock().Now(), jobspb.JobID(conn2JobID))
+	c.DestSysSQL.Exec(t, `ALTER TENANT 'destination2' COMPLETE REPLICATION TO LATEST`)
+	jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(conn2JobID))
+
+	restartConn := replicationtestutils.GetExternalConnectionURI(t, c.SrcSysServer, c.DestSysServer)
+	restart := fmt.Sprintf("ALTER VIRTUAL CLUSTER destination2 START REPLICATION OF %s ON '%s'",
+		c.Args.SrcTenantName, restartConn.String())
+	testuser.ExpectErr(t, fmt.Sprintf(
+		"user testuser does not have USAGE privilege on external_connection %s", restartConn.Host),
+		restart)
+
+	c.DestSysSQL.Exec(t, fmt.Sprintf(`GRANT USAGE ON EXTERNAL CONNECTION "%s" TO %s`,
+		restartConn.Host, username.TestUser))
+	testuser.Exec(t, restart)
+
+	// With the failsafe off, a source connection the user holds no USAGE on is
+	// accepted.
+	c.DestSysSQL.Exec(t, `SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = false`)
+	noUsageConn := replicationtestutils.GetExternalConnectionURI(t, c.SrcSysServer, c.DestSysServer)
+	testuser.Exec(t, fmt.Sprintf("CREATE TENANT destination3 FROM REPLICATION OF %s ON '%s'",
+		c.Args.SrcTenantName, noUsageConn.String()))
 }
 func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
