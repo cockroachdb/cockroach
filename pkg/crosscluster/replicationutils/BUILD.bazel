@@ -27,6 +27,8 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlclustersettings",
+        "//pkg/sql/syntheticprivilege",
         "//pkg/storage",
         "//pkg/storage/mvccencoding",
         "//pkg/testutils/fingerprintutils",

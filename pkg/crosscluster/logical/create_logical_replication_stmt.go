@@ -162,7 +162,7 @@ func createLogicalReplicationStreamPlanHook(
 		if !configUri.IsExternalOrTestScheme() {
 			return errors.New("uri must be an external connection")
 		}
-		if err := checkSourceExternalConnectionUsage(ctx, p, configUri); err != nil {
+		if err := replicationutils.CheckSourceExternalConnectionUsage(ctx, p, configUri); err != nil {
 			return err
 		}
 
@@ -782,26 +782,4 @@ func checkReplicationPrivileges(
 		}
 	}
 	return nil
-}
-
-// checkSourceExternalConnectionUsage requires the caller to hold USAGE on the
-// external connection named as the LDR source. A non-external source has no
-// connection to check and is a no-op.
-//
-// The LDR source only gained this check in v26.4, so it is gated on
-// RequireUsagePrivilegeOnExternalConnections.
-func checkSourceExternalConnectionUsage(
-	ctx context.Context, p sql.PlanHookState, configUri streamclient.ConfigUri,
-) error {
-	if !sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(&p.ExecCfg().Settings.SV) {
-		return nil
-	}
-	name, ok := configUri.ExternalConnectionName()
-	if !ok {
-		return nil
-	}
-	ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
-		ConnectionName: name,
-	}
-	return p.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE)
 }

@@ -382,6 +382,10 @@ func alterTenantRestartReplication(
 		return errors.Wrap(err, "url")
 	}
 
+	if err := replicationutils.CheckSourceExternalConnectionUsage(ctx, p, configUri); err != nil {
+		return err
+	}
+
 	clusterUri, err := configUri.AsClusterUri(ctx, p.ExecCfg().InternalDB)
 	if err != nil {
 		return err
