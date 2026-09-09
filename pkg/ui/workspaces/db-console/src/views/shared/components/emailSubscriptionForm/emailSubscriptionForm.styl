@@ -8,10 +8,21 @@
 .email-subscription-form
   display flex
   flex-direction row
+  align-items center
+  // Space between the email field and the Sign up button. A `gap` on the flex
+  // row is used instead of a margin on the input, whose class lands on an inner
+  // element of TextInput and so produced no visible separation.
+  gap $spacing-smaller
 
   &__input
-    margin-right $spacing-smaller
     width 258px
+
+  // TextInput reserves 16px below the field (external margin) even though its
+  // validation message is positioned absolutely. In this single-row banner
+  // that space makes the field's box taller than the Sign up button and pushes
+  // the two out of vertical alignment, so drop it here.
+  .crl-input__wrapper
+    margin-bottom 0
 
   &__submit-button
     min-width 80px
