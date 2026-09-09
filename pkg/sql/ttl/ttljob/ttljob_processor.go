@@ -89,7 +89,9 @@ type tableInfo struct {
 	descOverrides map[uint32]sessiondata.DescriptorOverride
 }
 
-func getTableInfo(ctx context.Context, db descs.DB, tableID descpb.ID) (info tableInfo, err error) {
+func getTableInfo(
+	ctx context.Context, db descs.DB, tableID descpb.ID, sv *settings.Values,
+) (info tableInfo, err error) {
 	err = db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 		if err != nil {
@@ -129,7 +131,7 @@ func getTableInfo(ctx context.Context, db descs.DB, tableID descpb.ID) (info tab
 
 		info.relationName = tn.FQString() + "@" + lexbase.EscapeSQLIdent(primaryIndexDesc.Name)
 
-		info.owner, info.descOverrides, err = ttlSessionOverrides(desc)
+		info.owner, info.descOverrides, err = ttlSessionOverrides(desc, sv)
 		return err
 	})
 	return info, err
@@ -174,7 +176,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		deleteRateLimit,
 	)
 
-	tableInfo, err := getTableInfo(ctx, db, tableID)
+	tableInfo, err := getTableInfo(ctx, db, tableID, &serverCfg.Settings.SV)
 	if err != nil {
 		return err
 	}

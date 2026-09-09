@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -77,21 +78,44 @@ var _ jobs.Resumer = (*rowLevelTTLResumer)(nil)
 
 // Resume implements the jobs.Resumer interface.
 func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (retErr error) {
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	execCfg := jobExecCtx.ExecCfg()
+	db := execCfg.InternalDB
+
+	settingsValues := execCfg.SV()
+
+	// Whether this run issues its statements as the TTL table's owner rather
+	// than as the node user. Read before the defer below so a privilege error
+	// can point the operator at the escape hatch, and read once here so the
+	// whole run uses one identity.
+	runAsOwner := !sqlclustersettings.LegacyFKAndTTLAuthorization.Get(settingsValues)
+
 	defer func() {
 		if retErr == nil {
 			return
-		} else if joberror.IsPermanentBulkJobError(retErr) && !errors.Is(retErr, sql.ErrPlanChanged) {
+		}
+		// As the node user these statements are not subject to privilege checks,
+		// so a TTL job that worked under the legacy authorization model can start
+		// failing on user-defined code the table owner is not privileged to run.
+		// Say so in the error itself rather than in a hint or detail: the jobs
+		// system records only err.Error() in the payload, so anything else is
+		// dropped before it reaches SHOW JOBS, which is where an operator will
+		// look when rows stop expiring.
+		if runAsOwner && pgerror.GetPGCode(retErr) == pgcode.InsufficientPrivilege {
+			retErr = errors.Wrapf(retErr,
+				"row-level TTL runs as the table's owner; either grant the owner the "+
+					"privileges the table's user-defined code requires, or set the %s "+
+					"cluster setting to true to restore the previous behavior",
+				sqlclustersettings.LegacyFKAndTTLAuthorization.Name(),
+			)
+		}
+		if joberror.IsPermanentBulkJobError(retErr) && !errors.Is(retErr, sql.ErrPlanChanged) {
 			retErr = jobs.MarkAsPermanentJobError(retErr)
 		} else {
 			retErr = jobs.MarkAsRetryJobError(retErr)
 		}
 	}()
 
-	jobExecCtx := execCtx.(sql.JobExecContext)
-	execCfg := jobExecCtx.ExecCfg()
-	db := execCfg.InternalDB
-
-	settingsValues := execCfg.SV()
 	if err := ttlbase.CheckJobEnabled(settingsValues); err != nil {
 		return err
 	}
@@ -150,7 +174,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 
 		entirePKSpan = desc.PrimaryIndexSpan(execCfg.Codec)
 
-		owner, descOverrides, err = ttlSessionOverrides(desc)
+		owner, descOverrides, err = ttlSessionOverrides(desc, settingsValues)
 		return err
 	}); err != nil {
 		return err

@@ -41,6 +41,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/ttl/ttlbase",
         "//pkg/sql/types",
