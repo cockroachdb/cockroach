@@ -729,13 +729,39 @@ subtest end
 
 subtest split_unsplit_relocate_scatter_privilege
 
-# ALTER TABLE SPLIT/UNSPLIT/RELOCATE/SCATTER require the REPAIRCLUSTER system
-# privilege, not INSERT on the table (they manipulate cluster range topology).
+# When range_topology_requires_repaircluster is disabled (the default),
+# INSERT on the table is sufficient for SPLIT/UNSPLIT/RELOCATE/SCATTER.
+# When it is enabled, REPAIRCLUSTER system privilege is required instead.
+
 statement ok
 CREATE TABLE priv_test (k INT PRIMARY KEY)
 
 statement ok
 GRANT INSERT ON TABLE priv_test TO testuser
+
+# ---- Setting OFF (default): INSERT is sufficient ----
+
+user testuser
+
+statement ok
+ALTER TABLE priv_test SPLIT AT VALUES (1)
+
+statement ok
+ALTER TABLE priv_test UNSPLIT AT VALUES (1)
+
+statement ok
+ALTER TABLE priv_test SCATTER
+
+# UNSPLIT ALL is not exercised: beyond INSERT it reads
+# crdb_internal.ranges_no_leases, which separately requires
+# VIEWACTIVITY/ZONECONFIG or admin.
+
+# ---- Setting ON: REPAIRCLUSTER is required ----
+
+user root
+
+statement ok
+SET CLUSTER SETTING sql.auth.range_topology_requires_repaircluster.enabled = true
 
 user testuser
 
@@ -774,9 +800,6 @@ ALTER TABLE priv_test UNSPLIT AT VALUES (1)
 statement ok
 ALTER TABLE priv_test SCATTER
 
-# UNSPLIT ALL is not exercised on the success path: beyond REPAIRCLUSTER it reads
-# crdb_internal.ranges_no_leases, which separately requires VIEWACTIVITY/ZONECONFIG
-# or admin.
 user root
 
 statement ok
@@ -788,7 +811,12 @@ user testuser
 statement error user testuser does not have REPAIRCLUSTER system privilege
 ALTER TABLE priv_test SPLIT AT VALUES (1)
 
+# ---- Restore default setting ----
+
 user root
+
+statement ok
+SET CLUSTER SETTING sql.auth.range_topology_requires_repaircluster.enabled = false
 
 statement ok
 DROP TABLE priv_test

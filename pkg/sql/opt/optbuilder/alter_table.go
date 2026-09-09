@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -31,10 +32,18 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 		panic(err)
 	}
 	table := index.Table()
-	// SPLIT manipulates cluster range topology, so it requires the REPAIRCLUSTER
-	// system privilege rather than a privilege on the table.
-	if err := b.catalog.CheckPrivilege(b.ctx, syntheticprivilege.GlobalPrivilegeObject, b.catalog.GetCurrentUser(), privilege.REPAIRCLUSTER); err != nil {
-		panic(err)
+	if sqlclustersettings.RangeTopologyRequiresRepairCluster.Get(
+		&b.evalCtx.Settings.SV,
+	) {
+		// SPLIT manipulates cluster range topology, so it requires the
+		// REPAIRCLUSTER system privilege rather than a privilege on the table.
+		if err := b.catalog.CheckPrivilege(b.ctx, syntheticprivilege.GlobalPrivilegeObject, b.catalog.GetCurrentUser(), privilege.REPAIRCLUSTER); err != nil {
+			panic(err)
+		}
+	} else {
+		if err := b.catalog.CheckPrivilege(b.ctx, table, b.catalog.GetCurrentUser(), privilege.INSERT); err != nil {
+			panic(err)
+		}
 	}
 
 	b.DisableMemoReuse = true
@@ -97,8 +106,16 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) 
 		panic(err)
 	}
 	table := index.Table()
-	if err := b.catalog.CheckPrivilege(b.ctx, syntheticprivilege.GlobalPrivilegeObject, b.catalog.GetCurrentUser(), privilege.REPAIRCLUSTER); err != nil {
-		panic(err)
+	if sqlclustersettings.RangeTopologyRequiresRepairCluster.Get(
+		&b.evalCtx.Settings.SV,
+	) {
+		if err := b.catalog.CheckPrivilege(b.ctx, syntheticprivilege.GlobalPrivilegeObject, b.catalog.GetCurrentUser(), privilege.REPAIRCLUSTER); err != nil {
+			panic(err)
+		}
+	} else {
+		if err := b.catalog.CheckPrivilege(b.ctx, table, b.catalog.GetCurrentUser(), privilege.INSERT); err != nil {
+			panic(err)
+		}
 	}
 
 	b.DisableMemoReuse = true
@@ -147,8 +164,16 @@ func (b *Builder) buildAlterTableRelocate(
 		panic(err)
 	}
 	table := index.Table()
-	if err := b.catalog.CheckPrivilege(b.ctx, syntheticprivilege.GlobalPrivilegeObject, b.catalog.GetCurrentUser(), privilege.REPAIRCLUSTER); err != nil {
-		panic(err)
+	if sqlclustersettings.RangeTopologyRequiresRepairCluster.Get(
+		&b.evalCtx.Settings.SV,
+	) {
+		if err := b.catalog.CheckPrivilege(b.ctx, syntheticprivilege.GlobalPrivilegeObject, b.catalog.GetCurrentUser(), privilege.REPAIRCLUSTER); err != nil {
+			panic(err)
+		}
+	} else {
+		if err := b.catalog.CheckPrivilege(b.ctx, table, b.catalog.GetCurrentUser(), privilege.INSERT); err != nil {
+			panic(err)
+		}
 	}
 
 	b.DisableMemoReuse = true
