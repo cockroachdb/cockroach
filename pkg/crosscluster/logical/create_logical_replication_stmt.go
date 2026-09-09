@@ -160,7 +160,7 @@ func createLogicalReplicationStreamPlanHook(
 		if !configUri.IsExternalOrTestScheme() {
 			return errors.New("uri must be an external connection")
 		}
-		if err := replicationutils.CheckSourceExternalConnectionUsage(ctx, p, configUri); err != nil {
+		if err := sql.MaybeCheckDestinationPrivileges(ctx, p, []string{configUri.Serialize()}); err != nil {
 			return err
 		}
 

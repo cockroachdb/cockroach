@@ -9,7 +9,6 @@ import (
 	"context"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -152,7 +151,7 @@ func ingestionPlanHook(
 			return err
 		}
 
-		if err := replicationutils.CheckSourceExternalConnectionUsage(ctx, p, configUri); err != nil {
+		if err := sql.MaybeCheckDestinationPrivileges(ctx, p, []string{configUri.Serialize()}); err != nil {
 			return err
 		}
 
