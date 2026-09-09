@@ -356,7 +356,7 @@ func runOneRoundQueryComparison(
 		defer mutatingSmither.Close()
 
 		// Initialize a smither that generates only deterministic SELECT statements.
-		smither, err := sqlsmith.NewSmither(conn, rnd,
+		options := []sqlsmith.SmitherOption{
 			sqlsmith.DisableMutations(), sqlsmith.DisableNondeterministicFns(),
 			sqlsmith.DisableNondeterministicLimits(),
 			sqlsmith.UnlikelyConstantPredicate(), sqlsmith.FavorCommonData(),
@@ -367,7 +367,11 @@ func runOneRoundQueryComparison(
 			sqlsmith.SetScalarComplexity(.1),
 			sqlsmith.SimpleNames(),
 			sqlsmith.SetLogger(t.L().Printf),
-		)
+		}
+		if qct.isMultiRegion {
+			options = append(options, sqlsmith.DisableDoBlocks())
+		}
+		smither, err := sqlsmith.NewSmither(conn, rnd, options...)
 		if err != nil {
 			t.Fatal(err)
 		}
