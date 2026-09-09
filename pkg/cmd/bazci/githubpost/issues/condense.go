@@ -62,9 +62,20 @@ type NodeToIpMappingRoachtest struct {
 	NodeToIpMapping string
 }
 
+// DataRace contains a data race report obtained from a test log.
+type DataRace struct {
+	LastLines, // last log lines preceding the report
+	Report string // the report, starting at the WARNING line
+}
+
 // A CondensedMessage is a test log output garnished with useful helper methods
 // that extract concise information for seamless debugging.
 type CondensedMessage string
+
+// dataRaceRE matches one race detector report. The trailing delimiter is
+// optional: with GORACE halt_on_error=1 the report is the last thing the
+// process prints, and the log may also have been truncated mid-report.
+var dataRaceRE = regexp.MustCompile(`(?ms)^(?:={10,}\n)?(WARNING: DATA RACE\n.*?)(?:^={10,}\n|\z)`)
 
 var panicRE = regexp.MustCompile(`(?ms)^(panic:.*?\n)(goroutine \d+.*?\n)\n`)
 var fatalRE = regexp.MustCompile(`(?ms)(^F\d{6}.*?\n)(goroutine \d+.*?\n)\n`)
@@ -157,17 +168,42 @@ func (s CondensedMessage) NodeToIpMappingRoachtest() (nodeIpMap NodeToIpMappingR
 	return NodeToIpMappingRoachtest{}, false
 }
 
+// HasDataRace reports whether the log contains a race detector report. It is
+// the same test DataRace applies, so callers deciding what to do with a
+// failure and callers rendering it cannot disagree.
+func (s CondensedMessage) HasDataRace() bool {
+	return dataRaceRE.MatchString(string(s))
+}
+
+// DataRace constructs a DataRace from the first race detector report in the
+// log, preceded by up to numPrecedingLines lines of context. If the log holds
+// no report, ok=false is returned.
+func (s CondensedMessage) DataRace(numPrecedingLines int) (dr DataRace, ok bool) {
+	ss := string(s)
+	sl := dataRaceRE.FindStringSubmatchIndex(ss)
+	if sl == nil {
+		return DataRace{}, false
+	}
+	dr.LastLines = lastNlines(ss[:sl[0]], numPrecedingLines)
+	dr.Report = ss[sl[2]:sl[3]]
+	return dr, true
+}
+
 // String calls .Digest(30).
 func (s CondensedMessage) String() string {
 	return s.Digest(30)
 }
 
-// Digest returns the last n lines of the test log. If a panic or fatal error
-// occurred, it instead returns the last n lines preceding that event, the event
-// itself, and the first stack trace. If a crash occurred during a random syntax
+// Digest returns the last n lines of the test log. If a data race was
+// reported, or a panic or fatal error occurred, it instead returns the last n
+// lines preceding that event followed by the event itself: the race report, or
+// the panic or fatal error plus its first stack trace. If a crash occurred during a random syntax
 // test, it returns the error and up to n lines of both the query that caused
 // the crash and the database schema.
 func (s CondensedMessage) Digest(n int) string {
+	if dr, ok := s.DataRace(n); ok {
+		return dr.LastLines + dr.Report
+	}
 	if fop, ok := s.FatalOrPanic(n); ok {
 		return fop.LastLines + fop.Error + fop.FirstStack
 	}

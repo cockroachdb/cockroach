@@ -47,7 +47,13 @@ func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
 	r.Escaped(`:
 
 `)
-	if fop, ok := data.CondensedMessage.FatalOrPanic(50); ok {
+	if dr, ok := data.CondensedMessage.DataRace(50); ok {
+		r.Escaped("Data race:")
+		r.CodeBlock("", dr.Report)
+		r.Collapsed("Log preceding data race", func() {
+			r.CodeBlock("", dr.LastLines)
+		})
+	} else if fop, ok := data.CondensedMessage.FatalOrPanic(50); ok {
 		if fop.Error != "" {
 			r.Escaped("Fatal error:")
 			r.CodeBlock("", fop.Error)
