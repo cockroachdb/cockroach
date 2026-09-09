@@ -12,9 +12,7 @@ import { styledWrapper } from "src/util/decorators";
 import { AlertBar } from "./alertBar";
 
 storiesOf("AlertBar", module)
-  .addDecorator(
-    styledWrapper({ padding: "24px", fontFamily: "Geist-Regular" }),
-  )
+  .addDecorator(styledWrapper({ padding: "24px", fontFamily: "Geist-Regular" }))
   .add(`3.4.1 [pre-license] license key required by <date>`, () => (
     <AlertBar
       license={"None"}
