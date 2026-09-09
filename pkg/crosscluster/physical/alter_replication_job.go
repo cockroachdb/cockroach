@@ -382,7 +382,7 @@ func alterTenantRestartReplication(
 		return errors.Wrap(err, "url")
 	}
 
-	if err := replicationutils.CheckSourceExternalConnectionUsage(ctx, p, configUri); err != nil {
+	if err := sql.MaybeCheckDestinationPrivileges(ctx, p, []string{configUri.Serialize()}); err != nil {
 		return err
 	}
 

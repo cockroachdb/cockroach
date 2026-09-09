@@ -84,6 +84,9 @@ func TestPCRPrivs(t *testing.T) {
 
 	c.DestSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser))
 
+	// A direct source URI requires EXTERNALIOIMPLICITACCESS on the destination.
+	c.DestSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO %s", username.TestUser))
+
 	// Ensure the source user has the REPLICATION privilege.
 	testuser.ExpectErr(t, "user testuser2 does not have REPLICATIONSOURCE system privilege", streamReplStmt)
 	sourcePriv := "REPLICATIONSOURCE"
@@ -139,6 +142,35 @@ func TestPCRPrivs(t *testing.T) {
 	testuser.Exec(t, fmt.Sprintf("CREATE TENANT destination3 FROM REPLICATION OF %s ON '%s'",
 		c.Args.SrcTenantName, noUsageConn.String()))
 }
+
+// TestPCRRequiresExternalIOImplicitAccess verifies that PCR requires the
+// EXTERNALIOIMPLICITACCESS system privilege for a direct (non-external
+// connection) replication source URI.
+func TestPCRRequiresExternalIOImplicitAccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	c.DestSysSQL.Exec(t, `SET CLUSTER SETTING security.external_io.enforce_external_io_implicit_access.enabled = true`)
+	c.DestSysSQL.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
+	c.DestSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM MANAGEVIRTUALCLUSTER TO %s", username.TestUser))
+	c.DestSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser))
+
+	testuser := sqlutils.MakeSQLRunner(c.DestSysServer.SQLConn(t, serverutils.User(username.TestUser)))
+
+	// The EXTERNALIOIMPLICITACCESS check runs before the node dials the source, so
+	// the URI need not point at a real cluster.
+	createStmt := fmt.Sprintf("CREATE TENANT %s FROM REPLICATION OF %s ON 'postgresql://replication-source'",
+		c.Args.DestTenantName, c.Args.SrcTenantName)
+	testuser.ExpectErr(t,
+		"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege",
+		createStmt)
+}
+
 func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
