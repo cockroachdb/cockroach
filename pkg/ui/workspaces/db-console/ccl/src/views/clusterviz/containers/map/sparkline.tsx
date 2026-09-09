@@ -94,7 +94,7 @@ function sparklineChart(config: SparklineConfig) {
       .attr("y", height - margin.bottom)
       .attr("text-anchor", "left")
       .attr("fill", foregroundColor)
-      .attr("font-family", "Lato-Bold, Lato")
+      .attr("font-family", "Geist-Bold, Geist-Regular")
       .attr("font-size", 12)
       .attr("font-weight", 700);
 

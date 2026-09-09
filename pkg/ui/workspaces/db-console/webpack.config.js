@@ -155,12 +155,26 @@ module.exports = (env, argv) => {
           ],
         },
         {
-          test: /\.(png|jpg|gif|svg|eot|ttf|woff|woff2)$/,
+          test: /\.(png|jpg|gif|svg|eot|ttf)$/,
           loader: "url-loader",
           options: {
             limit: 10000,
             // Preserve the original filename instead of using hash
             // in order to play nice with bazel.
+            name: "[name].[ext]",
+          },
+        },
+        {
+          // Always emit web fonts as separate files rather than inlining the
+          // small ones as data URLs. The Geist Mono faces are just under 10kb,
+          // so the shared url-loader threshold above would inline them and they
+          // would never be produced on disk — which breaks the BUILD.bazel
+          // `outs` that declare every Geist woff2 as a mandatory output.
+          test: /\.(woff|woff2)$/,
+          loader: "file-loader",
+          options: {
+            // Preserve the original filename instead of using a hash in order
+            // to play nice with bazel.
             name: "[name].[ext]",
           },
         },

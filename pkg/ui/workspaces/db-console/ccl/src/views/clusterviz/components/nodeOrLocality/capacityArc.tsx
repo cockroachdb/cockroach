@@ -70,7 +70,7 @@ export class CapacityArc extends React.Component<CapacityArcProps> {
         {/* text inside arc */}
         <text
           fill={MAIN_BLUE}
-          fontFamily="Lato-Bold, Lato"
+          fontFamily="Geist-Bold, Geist-Regular"
           fontSize="34"
           fontWeight="bold"
           textAnchor="middle"
@@ -82,7 +82,7 @@ export class CapacityArc extends React.Component<CapacityArcProps> {
         <NodeArcPercentageTooltip {...this.props}>
           <text
             fill={DARK_BLUE}
-            fontFamily="Lato-Bold, Lato"
+            fontFamily="Geist-Bold, Geist-Regular"
             fontSize="12"
             fontWeight="bold"
             letterSpacing="1.333"

@@ -79,7 +79,7 @@ class LocalityView extends React.Component<
             <text
               fill="white"
               textAnchor="middle"
-              fontFamily="Lato-Regular"
+              fontFamily="Geist-Regular"
               fontSize="10px"
               y="3"
             >

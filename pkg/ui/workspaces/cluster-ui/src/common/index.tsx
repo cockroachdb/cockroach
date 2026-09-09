@@ -31,7 +31,7 @@ export const selectCustomStyles = {
   singleValue: (provided: any) => ({
     ...provided,
     color: "#475872",
-    fontFamily: "Lato-Regular",
+    fontFamily: "Geist-Regular",
     fontWeight: 400,
     fontSize: "14px",
     lineHeight: 1.5,
