@@ -8,6 +8,7 @@ package server
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -21,19 +22,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDownloadSpanRetriesFirstNodeFailure is a regression test for a bug in the
-// per-node retry loop of systemStatusServer.DownloadSpan. The loop inspected the
-// cluster-wide error accumulator (resp.Errors) instead of the node's own response
-// (nodeResp.Errors). Because the accumulator is only populated by responseFn
-// after a node's nodeFn returns, the first node to fail saw an empty accumulator,
-// concluded it had succeeded, and broke out of its retry loop after a single
-// attempt — never retrying its own transient failure.
+// TestDownloadSpanFailFast covers two related contracts of the per-node fan-out
+// in systemStatusServer.DownloadSpan:
 //
-// Injecting a download error on exactly one node makes that node's retry loop
-// observe a permanently-empty accumulator, so the bug reproduces deterministically:
-// the victim node attempts the download once (buggy) rather than
-// perNodeMaxDownloadAttempts times (correct).
-func TestDownloadSpanRetriesFirstNodeFailure(t *testing.T) {
+//  1. A node retries its own transient failure perNodeMaxDownloadAttempts times
+//     before giving up.
+//
+//  2. Once a node exhausts its retries, the fan-out fails fast: the coordinator
+//     cancels the remaining nodes' work and returns the error to the caller rather
+//     than letting the other nodes keep running.
+//
+// The test injects a permanent failure on one node (the victim) and blocks a
+// second node (the blocker) until its download context is cancelled. The victim
+// must attempt perNodeMaxDownloadAttempts times, DownloadSpan must return a
+// non-nil error, and the blocker must observe cancellation — proving sibling node
+// work is actually shut down.
+func TestDownloadSpanFailFast(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -42,27 +46,36 @@ func TestDownloadSpanRetriesFirstNodeFailure(t *testing.T) {
 	var mu syncutil.Mutex
 	attempts := make(map[roachpb.NodeID]int)
 
-	// victim is set once the cluster is up; only this node's download fails, so it
-	// is the sole contributor to the shared error accumulator and thus deterministically
-	// the "first" (and only) node to observe an empty accumulator in its retry loop.
-	var victim roachpb.NodeID
+	var victim, blocker roachpb.NodeID
+
+	// blockerCanceled is signaled when the blocker node observes cancellation of
+	// its download context. Buffered so the injected hook never blocks and safe
+	// against a spurious second invocation.
+	blockerCanceled := make(chan struct{}, 1)
 
 	knobs := &TestingKnobs{
-		DownloadSpanLocalError: func(nodeID roachpb.NodeID) error {
-			mu.Lock()
-			attempts[nodeID]++
-			mu.Unlock()
-			if nodeID == victim {
+		DownloadSpanLocalError: func(ctx context.Context, nodeID roachpb.NodeID) error {
+			switch nodeID {
+			case victim:
+				mu.Lock()
+				attempts[nodeID]++
+				mu.Unlock()
 				return errors.Newf("injected transient download error on n%d", nodeID)
+			case blocker:
+				<-ctx.Done()
+				select {
+				case blockerCanceled <- struct{}{}:
+				default:
+				}
+				return ctx.Err()
+			default:
+				return nil
 			}
-			return nil
 		},
 	}
 
 	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// DownloadSpan's fan-out is served by the system status server, so
-			// keep the test on the system tenant.
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			Knobs:             base.TestingKnobs{Server: knobs},
 		},
@@ -70,10 +83,8 @@ func TestDownloadSpanRetriesFirstNodeFailure(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	victim = tc.Server(1).NodeID()
+	blocker = tc.Server(2).NodeID()
 
-	// The span is irrelevant: the victim short-circuits before touching storage,
-	// and the other nodes download an empty span (a no-op). Use a narrow span over
-	// a non-existent table so the healthy nodes have no real work.
 	emptyTable := keys.SystemSQLCodec.TablePrefix(9999)
 	span := roachpb.Span{Key: emptyTable, EndKey: emptyTable.PrefixEnd()}
 
@@ -82,17 +93,20 @@ func TestDownloadSpanRetriesFirstNodeFailure(t *testing.T) {
 	resp, err := tc.Server(0).GetStatusClient(t).DownloadSpan(ctx, &serverpb.DownloadSpanRequest{
 		Spans: []roachpb.Span{span},
 	})
-	require.NoError(t, err)
 
-	// The victim's error must surface to the coordinator.
-	require.Contains(t, resp.Errors, victim)
+	require.Error(t, err)
+	require.Nil(t, resp)
 
-	// The victim should have retried perNodeMaxDownloadAttempts times before giving
-	// up. On buggy code it stops after a single attempt.
 	mu.Lock()
 	victimAttempts := attempts[victim]
 	mu.Unlock()
 	require.Equal(t, perNodeMaxDownloadAttempts, victimAttempts,
 		"victim node n%d should retry %d times, got %d attempts",
 		victim, perNodeMaxDownloadAttempts, victimAttempts)
+
+	select {
+	case <-blockerCanceled:
+	case <-time.After(45 * time.Second):
+		t.Fatalf("blocker node n%d was not cancelled after the victim exhausted retries", blocker)
+	}
 }

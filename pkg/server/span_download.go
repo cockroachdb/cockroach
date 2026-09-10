@@ -104,12 +104,12 @@ func (s *systemStatusServer) DownloadSpan(
 		}
 	}
 
-	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "download spans",
-		noTimeout,
+	if err := iterateNodesExt(ctx, s.serverIterator, s.stopper, "download spans",
 		s.dialNode,
 		nodeFn,
 		responseFn,
 		errorFn,
+		iterateNodesOpts{nodeFnTimeout: noTimeout, stopOnError: true},
 	); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -121,7 +121,7 @@ func (s *systemStatusServer) localDownloadSpan(
 	ctx context.Context, req *serverpb.DownloadSpanRequest,
 ) error {
 	if s.knobs != nil && s.knobs.DownloadSpanLocalError != nil {
-		if err := s.knobs.DownloadSpanLocalError(s.node.Descriptor.NodeID); err != nil {
+		if err := s.knobs.DownloadSpanLocalError(ctx, s.node.Descriptor.NodeID); err != nil {
 			return err
 		}
 	}
