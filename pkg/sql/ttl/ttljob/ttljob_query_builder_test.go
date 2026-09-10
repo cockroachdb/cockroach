@@ -465,11 +465,6 @@ func TestDeleteQueryBuilder(t *testing.T) {
 					DeleteBatchSize: 2,
 					TTLExpr:         ttlColName,
 					DeleteDuration:  testHistogram(),
-					DeleteRateLimiter: quotapool.NewRateLimiter(
-						"",
-						quotapool.Inf(),
-						math.MaxInt64,
-					),
 				},
 				cutoff,
 			)
