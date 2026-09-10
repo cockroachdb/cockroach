@@ -542,9 +542,15 @@ func ingestKvs(
 type importProgressTracker struct {
 	syncutil.Mutex
 
-	// sinks holds references to each registered sink, used to check
-	// IsEmpty() at progress reporting time.
+	// sinks holds references to each registered sink. Manifests are drained
+	// from them at progress reporting time.
 	sinks []bulksst.BulkSink
+
+	// sinkEmpty[sinkIdx] records whether that sink held no buffered data as of
+	// the most recent recordKVBatch call. Sinks are owned by the ingest
+	// goroutine and are not safe for concurrent use, so their buffer state is
+	// sampled there rather than queried while formatting progress.
+	sinkEmpty []bool
 
 	// flushedRows tracks the last flushed row position per file for each
 	// registered sink. flushedRows[sinkIdx][fileOffset] is the row position
@@ -606,6 +612,7 @@ func (ipt *importProgressTracker) registerSink(sink bulksst.BulkSink) {
 	defer ipt.Unlock()
 
 	ipt.sinks = append(ipt.sinks, sink)
+	ipt.sinkEmpty = append(ipt.sinkEmpty, true)
 	thisSinksFlushedRows := make([]int64, len(ipt.unflushedRows))
 	ipt.flushedRows = append(ipt.flushedRows, thisSinksFlushedRows)
 	sink.SetOnFlush(func(summary kvpb.BulkOpSummary) {
@@ -630,9 +637,7 @@ func (ipt *importProgressTracker) formatProgress() (
 	defer ipt.Unlock()
 
 	for file, offset := range ipt.offsets {
-		// Report the resume position of the least advanced sink. If a sink's
-		// buffer is empty, it has no un-flushed data and should not hold back
-		// the resume position, so we use the current unflushedRows instead.
+		// Report the resume position of the least advanced sink.
 		prog.ResumePos[file] = ipt.flushedRowsForSink(0, offset)
 		for s := 1; s < len(ipt.flushedRows); s++ {
 			if pos := ipt.flushedRowsForSink(s, offset); prog.ResumePos[file] > pos {
@@ -670,17 +675,21 @@ func (ipt *importProgressTracker) formatProgress() (
 	return prog, nil
 }
 
-// flushedRowsForSink returns the flushed row position for the given sink and
-// file offset. If the sink's buffer is currently empty, it returns the current
-// unflushedRows position instead, since an empty sink has no un-persisted data
-// that could be lost on retry. Must be called with ipt.Mutex held.
+// flushedRowsForSink returns the row position the given sink has persisted for
+// the given file offset. A sink that was empty when last sampled has flushed
+// everything handed to it, so unflushedRows is persisted for it too: anything
+// it has buffered since is part of a batch that has not yet advanced
+// unflushedRows. Must be called with ipt.Mutex held.
 func (ipt *importProgressTracker) flushedRowsForSink(sinkIdx, offset int) int64 {
-	if ipt.sinks[sinkIdx].IsEmpty() {
+	if ipt.sinkEmpty[sinkIdx] {
 		return ipt.unflushedRows[offset]
 	}
 	return ipt.flushedRows[sinkIdx][offset]
 }
 
+// recordKVBatch records the position reached by a batch whose KVs have all been
+// handed to the sinks. It must be called on the goroutine that owns the sinks,
+// since it samples their buffer state.
 func (ipt *importProgressTracker) recordKVBatch(batch row.KVBatch) {
 	ipt.Lock()
 	defer ipt.Unlock()
@@ -691,6 +700,13 @@ func (ipt *importProgressTracker) recordKVBatch(batch row.KVBatch) {
 	}
 	ipt.unflushedRows[offset] = batch.LastRow
 	ipt.unflushedFraction[offset] = batch.Progress
+
+	// A sink that received any of this batch's KVs is non-empty here: the
+	// auto-flush inside Add runs before the KV is buffered, never after. So a
+	// sink that samples as empty has persisted every row up to unflushedRows.
+	for i, s := range ipt.sinks {
+		ipt.sinkEmpty[i] = s.IsEmpty()
+	}
 }
 
 func (ipt *importProgressTracker) fetchSummary() kvpb.BulkOpSummary {
