@@ -288,4 +288,71 @@ func TestEnsureUserOnlyBelongsToRoles(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, getRoles(testUser))
 	})
+
+	t.Run("indirectly-held role is preserved when only the child is desired", func(t *testing.T) {
+		// A user who is a direct member of a parent role that inherits a child
+		// role must not lose the child when the identity source lists only the
+		// child. The sync reconciles direct memberships: it revokes the unwanted
+		// parent and grants the child directly, rather than revoking the parent
+		// and stripping the indirectly-held child along with it.
+		tdb.Exec(t, `
+			CREATE USER inherit_user;
+			CREATE ROLE parent_role;
+			CREATE ROLE child_role;
+			GRANT child_role TO parent_role;
+			GRANT parent_role TO inherit_user;
+		`)
+		u := makeRole("inherit_user")
+		childRole := makeRole("child_role")
+
+		// The user is only a direct member of parent_role.
+		require.Equal(t, []string{"parent_role"}, getRoles(u))
+
+		err := sql.EnsureUserOnlyBelongsToRoles(ctx, &execCfg, u, []username.SQLUsername{childRole})
+		require.NoError(t, err)
+
+		// parent_role is revoked and child_role is now held directly.
+		require.Equal(t, []string{"child_role"}, getRoles(u))
+
+		// The user still effectively has child_role.
+		var hasRole bool
+		tdb.QueryRow(t, "SELECT pg_has_role('inherit_user', 'child_role', 'MEMBER')").Scan(&hasRole)
+		require.True(t, hasRole)
+	})
+
+	t.Run("nonexistent user is rejected", func(t *testing.T) {
+		// Syncing roles for a user that does not exist must fail rather than
+		// silently succeed as a no-op: directRoleMemberships returns an empty set
+		// for both an unknown user and a user with no memberships.
+		err := sql.EnsureUserOnlyBelongsToRoles(
+			ctx, &execCfg, makeRole("no_such_user"), []username.SQLUsername{role1})
+		require.Error(t, err)
+		require.ErrorContains(t, err, "does not exist")
+	})
+
+	t.Run("membership in a parent role confers transitive access to its child", func(t *testing.T) {
+		// Granting only the parent role via sync still gives the user access to the
+		// child role it inherits: reconciliation manages direct memberships, while
+		// privilege inheritance remains transitive. The child is therefore not
+		// granted directly and need not be.
+		tdb.Exec(t, `
+			CREATE USER parent_sync_user;
+			CREATE ROLE outer_role;
+			CREATE ROLE inner_role;
+			GRANT inner_role TO outer_role;
+		`)
+		u := makeRole("parent_sync_user")
+		outerRole := makeRole("outer_role")
+
+		err := sql.EnsureUserOnlyBelongsToRoles(ctx, &execCfg, u, []username.SQLUsername{outerRole})
+		require.NoError(t, err)
+
+		// Only outer_role is held directly; inner_role is not a direct membership.
+		require.Equal(t, []string{"outer_role"}, getRoles(u))
+
+		// The user nonetheless has transitive access to inner_role via outer_role.
+		var hasRole bool
+		tdb.QueryRow(t, "SELECT pg_has_role('parent_sync_user', 'inner_role', 'MEMBER')").Scan(&hasRole)
+		require.True(t, hasRole)
+	})
 }

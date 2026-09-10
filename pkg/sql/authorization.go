@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -564,10 +565,36 @@ func MemberOfWithAdminOption(
 	return execCfg.RoleMemberCache.GetRolesForMember(ctx, txn, member)
 }
 
-// EnsureUserOnlyBelongsToRoles grants all the roles in `roles` to `user` and,
-// revokes all other roles. This is intended to be used when there is an
-// external source of truth for role membership (e.g. an LDAP server), and we
-// need to keep role memberships in sync with that source of truth.
+// directRoleMemberships returns the set of roles of which `member` is a direct
+// member, i.e. those with a row in system.role_members. Unlike
+// MemberOfWithAdminOption, it excludes roles held only indirectly through the
+// role hierarchy.
+func directRoleMemberships(
+	ctx context.Context, txn isql.Txn, member username.SQLUsername,
+) (map[username.SQLUsername]struct{}, error) {
+	rows, err := txn.QueryBufferedEx(
+		ctx, "read-direct-role-memberships", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		`SELECT "role" FROM system.role_members WHERE "member" = $1`,
+		member.Normalized(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	memberships := make(map[username.SQLUsername]struct{}, len(rows))
+	for _, row := range rows {
+		// Names in system.role_members are already normalized.
+		role := tree.MustBeDString(row[0])
+		memberships[username.MakeSQLUsernameFromPreNormalizedString(string(role))] = struct{}{}
+	}
+	return memberships, nil
+}
+
+// EnsureUserOnlyBelongsToRoles grants all the roles in `roles` to `user` and
+// revokes every other role `user` is a direct member of. It keeps direct role
+// memberships in sync with an external source of truth for role membership (e.g.
+// an LDAP server). Roles held only indirectly through the role hierarchy are
+// left untouched.
 func EnsureUserOnlyBelongsToRoles(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
@@ -575,9 +602,28 @@ func EnsureUserOnlyBelongsToRoles(
 	roles []username.SQLUsername,
 ) error {
 	return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		currentRoles, err := MemberOfWithAdminOption(ctx, execCfg, txn, user)
+		// Reconcile against direct memberships only. The transitive closure would
+		// schedule a directly-held parent role for revocation whenever the desired
+		// set names only a child it inherits, stripping the child along with the
+		// parent.
+		currentRoles, err := directRoleMemberships(ctx, txn, user)
 		if err != nil {
 			return err
+		}
+
+		// An empty result is ambiguous: the user may exist with no direct
+		// memberships, or may not exist at all. Reject a non-existent user
+		// explicitly so a sync for an unknown user fails rather than silently
+		// no-ops (directRoleMemberships, unlike MemberOfWithAdminOption, does not
+		// surface this).
+		if len(currentRoles) == 0 {
+			userExists, err := RoleExists(ctx, txn, user)
+			if err != nil {
+				return err
+			}
+			if !userExists {
+				return sqlerrors.NewUndefinedUserError(user)
+			}
 		}
 
 		// Compute the differences between the current roles and the desired roles

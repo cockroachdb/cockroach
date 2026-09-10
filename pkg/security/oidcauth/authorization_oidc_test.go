@@ -407,10 +407,13 @@ func TestOIDCAuthorization_UserinfoPaths(t *testing.T) {
 	jwks := jwk.NewSet()
 	_ = jwks.AddKey(publicKey)
 
-	// Mutable state for /userinfo responses, protected by a mutex.
+	// Mutable state for /token and /userinfo responses, protected by a mutex.
 	var mu syncutil.Mutex
 	var userinfoStatus int
 	var userinfoBody string
+	// idTokenGroups, when non-nil, is added as the ID token "groups" claim so a
+	// test can exercise token-carried group claims alongside the userinfo path.
+	var idTokenGroups any
 
 	// Shared mock OIDC provider for cases with a userinfo endpoint.
 	var ts *httptest.Server
@@ -434,12 +437,18 @@ func TestOIDCAuthorization_UserinfoPaths(t *testing.T) {
 			w.WriteHeader(s)
 			_, _ = io.WriteString(w, b)
 		case "/token":
-			idTok := makeJWT(t, map[string]any{
+			claims := map[string]any{
 				"iss":   ts.URL,
 				"email": testUser + "@example.com",
 				"aud":   "client",
 				"exp":   time.Now().Add(time.Hour).Unix(),
-			}, jwkKey)
+			}
+			mu.Lock()
+			if idTokenGroups != nil {
+				claims["groups"] = idTokenGroups
+			}
+			mu.Unlock()
+			idTok := makeJWT(t, claims, jwkKey)
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprintf(w, `{
 			  "access_token":"dummy-access",
@@ -583,6 +592,45 @@ func TestOIDCAuthorization_UserinfoPaths(t *testing.T) {
 			checkRoles(t, tc.wantRoles)
 		})
 	}
+
+	// A token that carries an explicitly empty groups claim must still fall back
+	// to /userinfo, since some IdPs return an empty array in the token and supply
+	// the real groups only at the userinfo endpoint.
+	t.Run("empty token groups claim falls back to userinfo", func(t *testing.T) {
+		revokeStaleRoles(t)
+		mu.Lock()
+		idTokenGroups = []string{}
+		userinfoStatus = http.StatusOK
+		userinfoBody = fmt.Sprintf(`{"groups":["%s"]}`, roleUsers)
+		mu.Unlock()
+		defer func() {
+			mu.Lock()
+			idTokenGroups = nil
+			mu.Unlock()
+		}()
+
+		cbResp := doLoginCallback(t)
+		require.Equal(t, http.StatusTemporaryRedirect, cbResp.StatusCode)
+		checkRoles(t, []string{roleUsers})
+	})
+
+	// A userinfo 200 that omits the group key means no groups claim was found
+	// from any source. The login is denied, but a pre-existing role must survive:
+	// a missing claim signals a transient failure, not an explicit empty set.
+	t.Run("missing groups claim does not revoke existing roles", func(t *testing.T) {
+		revokeStaleRoles(t)
+		sqlDB.Exec(t, fmt.Sprintf(`GRANT %s TO %s`, roleOwners, testUser))
+
+		mu.Lock()
+		idTokenGroups = nil // no groups claim in the token
+		userinfoStatus = http.StatusOK
+		userinfoBody = `{"email":"test@example.com"}`
+		mu.Unlock()
+
+		cbResp := doLoginCallback(t)
+		require.Equal(t, http.StatusForbidden, cbResp.StatusCode)
+		checkRoles(t, []string{roleOwners})
+	})
 
 	// Special case: discovery document has no userinfo_endpoint. The provider
 	// cannot fall back to userinfo, so the login must be denied.
@@ -874,6 +922,33 @@ func TestOIDCAuthorization_RoleGrantAndRevoke(t *testing.T) {
 		performOIDCLogin(t, &client, claims, http.StatusTemporaryRedirect)
 		// The non-existent role is skipped, should only have roleUsers
 		checkHasRole(t, testUser, roleUsers, true)
+		checkHasRole(t, testUser, roleOwners, false)
+	})
+
+	// NOTE: each subtest performs exactly one performOIDCLogin. The mock manager
+	// is only rebuilt when a cluster setting value changes, and performOIDCLogin
+	// keys OIDCProviderURL on t.Name(); a second login within one subtest would
+	// reuse the previous login's claims. Pre-existing roles are therefore granted
+	// directly via SQL.
+	t.Run("missing groups claim denies login without revoking roles", func(t *testing.T) {
+		sqlDB.Exec(t, fmt.Sprintf("GRANT %s TO %s", roleOwners, testUser))
+		checkHasRole(t, testUser, roleOwners, true)
+
+		// A login whose tokens carry no groups claim (the userinfo fallback also
+		// fails, as it would on a transient IdP error) must be denied and must NOT
+		// revoke the user's existing roles: a missing claim is not an explicit
+		// empty group set.
+		performOIDCLogin(t, &client, map[string]any{}, http.StatusForbidden)
+		checkHasRole(t, testUser, roleOwners, true)
+	})
+
+	t.Run("explicit empty groups claim denies login and revokes roles", func(t *testing.T) {
+		sqlDB.Exec(t, fmt.Sprintf("GRANT %s TO %s", roleOwners, testUser))
+		checkHasRole(t, testUser, roleOwners, true)
+
+		// An explicit empty groups claim is a policy decision that the user has no
+		// roles: the sync revokes all roles and the login is then denied.
+		performOIDCLogin(t, &client, map[string]any{"groups": []string{}}, http.StatusForbidden)
 		checkHasRole(t, testUser, roleOwners, false)
 	})
 }
