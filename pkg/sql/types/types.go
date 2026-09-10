@@ -3049,16 +3049,13 @@ func (t *T) IsNumeric() bool {
 var EnumValueNotFound = errors.New("could not find enum value")
 
 // EnumGetIdxOfPhysical returns the index within the TypeMeta's slice of
-// enum physical representations that matches the input byte slice.
+// enum physical representations that matches the input byte slice. The
+// returned error is expensive to build; callers for which a missing value is
+// expected should use TryEnumGetIdxOfPhysical.
 func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 	t.ensureHydratedEnum()
-	// TODO (rohany): We can either use a map or just binary search here
-	//  since the physical representations are sorted.
-	reps := t.TypeMeta.EnumData.PhysicalRepresentations
-	for i := range reps {
-		if bytes.Equal(phys, reps[i]) {
-			return i, nil
-		}
+	if idx, ok := t.TryEnumGetIdxOfPhysical(phys); ok {
+		return idx, nil
 	}
 	err := errors.Wrapf(EnumValueNotFound,
 		"could not find %v in enum %q representation %s %s",
@@ -3068,6 +3065,25 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 		debugutil.Stack(),
 	)
 	return 0, err
+}
+
+// TryEnumGetIdxOfPhysical returns the index within the TypeMeta's slice of
+// enum physical representations that matches the input byte slice, or false if
+// there is none or the type is not a hydrated enum.
+func (t *T) TryEnumGetIdxOfPhysical(phys []byte) (int, bool) {
+	meta := t.TypeMeta.EnumData
+	if meta == nil {
+		return 0, false
+	}
+	// TODO(drewk): use a map or binary search since the physical
+	// representations are sorted.
+	reps := meta.PhysicalRepresentations
+	for i := range reps {
+		if bytes.Equal(phys, reps[i]) {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // EnumValueNotYetPublicError enum value is not public yet.

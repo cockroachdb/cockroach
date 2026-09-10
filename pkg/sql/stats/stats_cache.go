@@ -8,6 +8,7 @@ package stats
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"sort"
 	"sync"
@@ -51,6 +52,18 @@ var TableStatsCacheSize = settings.RegisterIntSetting(
 		"Each cache entry corresponds to a single table.",
 	256,
 	settings.NonNegativeInt,
+	settings.WithPublic,
+)
+
+// enumRehydrationEnabled gates updating cached enum histograms in place when
+// an enum type's version changes. When disabled, a version change evicts the
+// cached statistics of every table using the type.
+var enumRehydrationEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.stats.enum_type_rehydration.enabled",
+	"re-stamp cached histograms in place when an enum type's version changes, "+
+		"instead of re-reading the table's statistics",
+	true,
 	settings.WithPublic,
 )
 
@@ -121,8 +134,8 @@ type cacheEntry struct {
 	forecast bool
 
 	// userDefinedTypes holds the hydrated user-defined types used in
-	// histograms. A change to one of these types requires evicting the cacheEntry
-	// so that we can re-hydrate them.
+	// histograms. A change to one of these types requires re-hydrating the
+	// histograms, or evicting the cacheEntry if that is not possible.
 	userDefinedTypes map[descpb.ColumnID]*types.T
 
 	stats []*TableStatistic
@@ -534,7 +547,8 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 	defer sc.mu.Unlock()
 
 	if found, e := sc.lookupStatsLocked(ctx, tableID, false /* stealthy */); found {
-		if e.isStale(forecast, udtCols) {
+		typesMatch := sc.maybeRehydrateTypesLocked(ctx, tableID, e, udtCols)
+		if !typesMatch || e.settingsAreStale(forecast) {
 			// Evict the cache entry and build it again.
 			sc.mu.cache.Del(tableID)
 		} else {
@@ -545,28 +559,138 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 	return sc.addCacheEntryLocked(ctx, tableID, forecast != nil && *forecast, typeResolver)
 }
 
-// isStale checks whether we need to evict and re-load the cache entry.
-func (e *cacheEntry) isStale(forecast *bool, udtCols []catalog.Column) bool {
+// settingsAreStale checks whether the entry was built with different forecast
+// settings than the caller's, in which case it must be evicted and re-loaded.
+func (e *cacheEntry) settingsAreStale(forecast *bool) bool {
 	// Check whether forecast settings have changed.
 	if forecast != nil && e.forecast != *forecast {
 		return true
 	}
-	// Check whether user-defined types have changed (this is similar to
-	// UserDefinedTypeColsHaveSameVersion).
+	return false
+}
+
+// maybeRehydrateTypesLocked brings the entry's histograms to the user-defined
+// type versions in udtCols and returns whether they now all match. Only enum
+// histograms can be updated in place: most enum schema changes do not affect
+// existing enum values, so their bounds can be re-stamped rather than re-read.
+// This holds in either direction, so a caller whose type lease lags the cache
+// moves the entry back, and the next caller moves it forward again. If some
+// bound has no representation in its new type, or a type is not an enum, the
+// entry is left untouched and false is returned.
+//
+// Requires: caller must hold sc.mu.
+func (sc *TableStatisticsCache) maybeRehydrateTypesLocked(
+	ctx context.Context, tableID descpb.ID, e *cacheEntry, udtCols []catalog.Column,
+) bool {
+	var newTypes map[descpb.ColumnID]*types.T
 	for _, col := range udtCols {
 		colType := col.GetType()
-		if histType, ok := e.userDefinedTypes[col.GetID()]; ok {
-			if histType.Oid() != colType.Oid() {
-				// This should never be true, but if it is, we'll catch it in
-				// optTableStat.init and ignore the statistic. For now just skip it.
-				continue
-			}
-			if histType.TypeMeta.Version != colType.TypeMeta.Version {
-				return true
+		histType, ok := e.userDefinedTypes[col.GetID()]
+		if !ok || histType.TypeMeta.Version == colType.TypeMeta.Version {
+			continue
+		}
+		if histType.Oid() != colType.Oid() {
+			// This should never be true, but if it is, we'll catch it in
+			// optTableStat.init and ignore the statistic. For now just skip it.
+			continue
+		}
+		if !enumRehydrationEnabled.Get(&sc.settings.SV) || colType.Family() != types.EnumFamily {
+			return false
+		}
+		if newTypes == nil {
+			newTypes = make(map[descpb.ColumnID]*types.T)
+		}
+		newTypes[col.GetID()] = colType
+	}
+	if len(newTypes) == 0 {
+		return true
+	}
+	stats, ok := rehydrateEnumStatsInList(e.stats, newTypes, make(map[*TableStatistic]*TableStatistic))
+	if !ok {
+		return false
+	}
+	maps.Copy(e.userDefinedTypes, newTypes)
+	e.stats = stats
+	sc.adjustEntryMemLocked(ctx, tableID, e)
+	return true
+}
+
+// rehydrateEnumStatsInList returns stats with the histograms of the columns in
+// newTypes updated to those types, or false if some histogram has no
+// representation in its new type. rehydrated memoizes the copies so that
+// pointers shared between lists stay shared. The input is never modified.
+func rehydrateEnumStatsInList(
+	stats []*TableStatistic,
+	newTypes map[descpb.ColumnID]*types.T,
+	rehydrated map[*TableStatistic]*TableStatistic,
+) ([]*TableStatistic, bool) {
+	// res stays nil until the first change; then it holds the copied prefix.
+	var res []*TableStatistic
+	for i, stat := range stats {
+		keep := stat
+		if stat.HistogramData != nil {
+			if newType, ok := newTypes[stat.ColumnIDs[0]]; ok {
+				if keep, ok = rehydrated[stat]; !ok {
+					if keep, ok = stat.rehydrate(newType); !ok {
+						return nil, false
+					}
+					rehydrated[stat] = keep
+				}
 			}
 		}
+		if keep == stat && res == nil {
+			continue
+		}
+		if res == nil {
+			res = make([]*TableStatistic, 0, len(stats))
+			res = append(res, stats[:i]...)
+		}
+		res = append(res, keep)
 	}
-	return false
+	if res == nil {
+		return stats, true
+	}
+	return res, true
+}
+
+// rehydrate returns a copy of the statistic with its histogram bounds updated
+// to newType, another version of the same enum type. It returns false if
+// newType is a different type, or if some bound is neither an enum datum nor
+// NULL, or has no representation in newType.
+func (ts *TableStatistic) rehydrate(newType *types.T) (*TableStatistic, bool) {
+	meta := newType.TypeMeta.EnumData
+	oldType := ts.HistogramData.ColumnType
+	if meta == nil || oldType == nil || oldType.Oid() != newType.Oid() {
+		return nil, false
+	}
+	res := &TableStatistic{TableStatisticProto: ts.TableStatisticProto}
+	histData := *ts.HistogramData
+	histData.ColumnType = newType
+	res.HistogramData = &histData
+	if ts.Histogram == nil {
+		return res, true
+	}
+	res.Histogram = make([]cat.HistogramBucket, len(ts.Histogram))
+	for i, bucket := range ts.Histogram {
+		switch ub := bucket.UpperBound.(type) {
+		case *tree.DEnum:
+			idx, ok := newType.TryEnumGetIdxOfPhysical(ub.PhysicalRep)
+			if !ok {
+				return nil, false
+			}
+			bucket.UpperBound = &tree.DEnum{
+				EnumTyp:     newType,
+				PhysicalRep: meta.PhysicalRepresentations[idx],
+				LogicalRep:  meta.LogicalRepresentations[idx],
+			}
+		default:
+			if bucket.UpperBound != tree.DNull {
+				return nil, false
+			}
+		}
+		res.Histogram[i] = bucket
+	}
+	return res, true
 }
 
 // lookupStatsLocked retrieves any existing stats for the given table.
