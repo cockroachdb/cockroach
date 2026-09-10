@@ -6,6 +6,7 @@
 package sctest
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"flag"
@@ -696,6 +697,60 @@ var runAllCumulative = flag.Bool(
 	"if true, run all cumulative instead of a random subset",
 )
 
+// postCommitStageHeaderRE matches a post-commit stage header as recorded in a
+// *.side_effects fixture by the EndToEndSideEffects family, e.g.
+//
+//	## PostCommitPhase stage 1 of 7 with 5 MutationType ops
+//	## PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
+//
+// Deliberately unanchored. These headers do start a line, but the two errors
+// are not symmetric: matching something that is not a header merely runs a test
+// that would have been skipped, while missing a real header skips a test that
+// should have run. An anchor buys precision this caller does not need and turns
+// a change in header indentation into a silent, suite-wide skip.
+var postCommitStageHeaderRE = regexp.MustCompile(`## PostCommit(NonRevertible)?Phase stage `)
+
+// sideEffectsMarker appears in every *.side_effects fixture, separating the
+// setup block from the statement under test. Its absence means the file is not
+// a fixture in the format postCommitStageHeaderRE was written against, so the
+// absence of a post-commit header says nothing.
+const sideEffectsMarker = "/* test */"
+
+// declaresNoPostCommitStages reports whether this test case's committed
+// side-effects fixture shows the schema change completing without ever
+// entering a post-commit phase. Such a change offers no stage for the
+// pause/rollback families to interrupt, so exercising them proves nothing.
+//
+// This is advisory, not a source of truth. The authoritative stage count still
+// comes from executing the change on a live cluster; this only lets the caller
+// decide not to build that cluster in the first place. It answers false
+// whenever the fixture cannot be trusted to describe the plan the caller is
+// about to run, making the worst case the work the caller would have done
+// anyway:
+//
+//   - under -rewrite, where the fixture is the artifact being regenerated;
+//   - against a mixed-version factory, where the cluster plans at
+//     OldVersionKey while the fixture records planning at the latest version,
+//     so a change with no post-commit stage under one may have one under the
+//     other;
+//   - under -run-all-cumulative, whose purpose is to defeat every such
+//     shortcut;
+//   - when the fixture is absent, unreadable, or not in the expected format.
+func declaresNoPostCommitStages(spec CumulativeTestSpec, factory TestServerFactory) bool {
+	if spec.Rewrite || *runAllCumulative || factory.IsMixedVersion() {
+		return false
+	}
+	fixture := filepath.Join(spec.Path, filepath.Base(spec.Path)+".side_effects")
+	contents, err := os.ReadFile(fixture)
+	if err != nil {
+		return false
+	}
+	if !bytes.Contains(contents, []byte(sideEffectsMarker)) {
+		return false
+	}
+	return !postCommitStageHeaderRE.Match(contents)
+}
+
 // cumulativeTestForEachPostCommitStage invokes `tf` once for each stage in the
 // PostCommitPhase.
 func cumulativeTestForEachPostCommitStage(
@@ -711,6 +766,17 @@ func cumulativeTestForEachPostCommitStage(
 		if err := areStmtsFullySupportedAtClusterVersion(t, spec, factory); err != nil {
 			skip.IgnoreLint(t, "test is skipped because", err.Error())
 		}
+
+		// Consult the committed side-effects fixture before paying for a second
+		// cluster. withPostCommitPlanAfterSchemaChange below discovers the real
+		// stage count, but it does so by starting its own server and running the
+		// schema change to completion; for a statement-phase-only DDL that is
+		// several seconds spent proving there is nothing to test.
+		if declaresNoPostCommitStages(spec, factory) {
+			skip.IgnoreLint(t, "side-effects fixture declares no post-commit stages")
+			return
+		}
+
 		var postCommitCount, postCommitNonRevertibleCount int
 		var after [][]string
 		var dbName string

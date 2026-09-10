@@ -39,6 +39,7 @@ go_test(
         "//conditions:default": {"test.Pool": "large"},
     }),
     shard_count = 48,
+    tags = ["cpu:3"],
     deps = [
         "//pkg/base",
         "//pkg/jobs",
