@@ -1125,7 +1125,7 @@ func performIntToOidCast(
 		// independent of search_path. UDTs fall through to resolveOID for
 		// search-path-aware schema qualification.
 		if typ, ok := types.OidToType[o]; ok {
-			return tree.NewDOidWithTypeAndName(o, t, typ.PGName()), nil
+			return tree.NewDOidWithTypeAndName(o, t, typ.SQLStandardName()), nil
 		}
 	}
 	// resolveOID applies Postgres's search-path-aware schema qualification
