@@ -258,6 +258,12 @@ func TestOIDCAuthorization_TokenPaths(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc // capture loop var
 		t.Run(tc.name, func(t *testing.T) {
+			// These cases share one SQL user. A denied login no longer revokes
+			// roles, so each case must start from a clean slate itself rather
+			// than relying on the previous denial to have emptied it.
+			sqlDB.Exec(t, fmt.Sprintf("REVOKE %s, %s, %s FROM %s",
+				roleOwners, roleUsers, roleAuditors, testUser))
+
 			// Replace the factory so that the server uses our mock manager.
 			origFactory := NewOIDCManager
 			t.Cleanup(func() { NewOIDCManager = origFactory })
@@ -510,6 +516,11 @@ func TestOIDCAuthorization_UserinfoPaths(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			// These cases share one SQL user. A denied login no longer revokes
+			// roles, so each case must start from a clean slate itself rather
+			// than relying on the previous denial to have emptied it.
+			sqlDB.Exec(t, fmt.Sprintf("REVOKE %s, %s, %s FROM %s",
+				roleOwners, roleUsers, roleAuditors, testUser))
 
 			var ts *httptest.Server
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
