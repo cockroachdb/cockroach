@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import { SQLPrivilege } from "../../support/types";
-import { isTextGreaterThanZero } from "../../support/utils";
+import { checkClusterId, isTextGreaterThanZero } from "../../support/utils";
 
 describe("health check: authenticated user", () => {
   it("serves a DB Console overview page", () => {
@@ -14,10 +14,7 @@ describe("health check: authenticated user", () => {
     });
 
     // Ensure the Cluster ID appears
-    cy.findByText(
-      /^Cluster id: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      { timeout: 30_000 },
-    );
+    checkClusterId({ timeout: 30_000 });
 
     // Check (roughly) for "Overview" tab contents
     cy.findByText("Capacity Usage", { selector: "h3>span" });

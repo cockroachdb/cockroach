@@ -3,11 +3,11 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { checkClusterId } from "./utils";
+
 export function commonChecks(): void {
   it("displays cluster ID", () => {
-    cy.findByText(
-      /^Cluster id: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    checkClusterId();
   });
 
   it("displays navigation sidebar", () => {
