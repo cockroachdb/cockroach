@@ -253,7 +253,9 @@ func (b *Builder) shouldCreateDefaultColumn(texpr tree.TypedExpr) bool {
 			// will be one output column. This is necessary because the type of the
 			// single column output by unnest in this case may be a tuple with labels,
 			// which breaks the assumption made below.
-			return len(funcExpr.Exprs) == 1
+			if isSingleColumnBuiltinUnnest(funcExpr) {
+				return true
+			}
 		case "crdb_internal.unary_table":
 			// Special case for crdb_internal.unary_table, which produces no columns.
 			return false
@@ -268,6 +270,23 @@ func (b *Builder) shouldCreateDefaultColumn(texpr tree.TypedExpr) bool {
 	// return type doesn't declare any return labels. This logic assumes that any
 	// SRF that has a labeled tuple as a return type returns multiple columns.
 	return len(texpr.ResolvedType().TupleLabels()) == 0
+}
+
+// isSingleColumnBuiltinUnnest returns true for the built-in unnest overload
+// whose single array argument produces one physical output column. In
+// particular, a UDF named unnest is not this overload.
+func isSingleColumnBuiltinUnnest(funcExpr *tree.FuncExpr) bool {
+	overload := funcExpr.ResolvedOverload()
+	if overload == nil || overload.Type != tree.BuiltinRoutine ||
+		overload.Class != tree.GeneratorClass || len(funcExpr.Exprs) != 1 {
+		return false
+	}
+	def, ok := funcExpr.Func.FunctionReference.(*tree.ResolvedFunctionDefinition)
+	if !ok || def.Name != "unnest" {
+		return false
+	}
+	arg, ok := funcExpr.Exprs[0].(tree.TypedExpr)
+	return ok && arg.ResolvedType().Family() == types.ArrayFamily
 }
 
 func (b *Builder) synthesizeResultColumns(scope *scope, cols colinfo.ResultColumns) {
