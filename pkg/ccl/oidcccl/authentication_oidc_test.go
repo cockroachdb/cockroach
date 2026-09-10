@@ -237,6 +237,61 @@ func TestOIDCEnabled(t *testing.T) {
 	}
 }
 
+// TestOIDCJWTResponseNoStore verifies that the JWT endpoint marks its responses
+// as non-cacheable. A successful response from this endpoint carries a raw
+// bearer token that is used as the SQL password, so no intermediary (browser,
+// proxy, or CDN) may store any response it returns. The handler sets the
+// headers before any write so that they apply on every return path; this test
+// drives one such path — a request without the secret cookie, which the handler
+// rejects before it ever contacts the provider — and asserts the headers are
+// already in place.
+func TestOIDCJWTResponseNoStore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	defer testutils.TestingHook(
+		&NewOIDCManager,
+		func(ctx context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string) (IOIDCManager, error) {
+			c := &oauth2.Config{
+				ClientID:     conf.clientID,
+				ClientSecret: conf.clientSecret,
+				RedirectURL:  redirectURL,
+				Endpoint: oauth2.Endpoint{
+					AuthURL: "https://provider.example.com/endpoint",
+				},
+				Scopes: scopes,
+			}
+			return &mockOidcManager{oauth2Config: c, claimEmail: "test@example.com"}, nil
+		})()
+
+	// Set the minimum settings needed for the JWT endpoint to be reachable.
+	OIDCProviderURL.Override(ctx, &s.ClusterSettings().SV, "providerURL")
+	OIDCClientID.Override(ctx, &s.ClusterSettings().SV, "fake_client_id")
+	OIDCClientSecret.Override(ctx, &s.ClusterSettings().SV, "fake_client_secret")
+	OIDCRedirectURL.Override(ctx, &s.ClusterSettings().SV, "https://cockroachlabs.com/oidc/v1/callback")
+	OIDCClaimJSONKey.Override(ctx, &s.ClusterSettings().SV, "email")
+	OIDCPrincipalRegex.Override(ctx, &s.ClusterSettings().SV, "^([^@]+)@[^@]+$")
+	OIDCGenerateClusterSSOTokenEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	OIDCEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+
+	testCertsContext := s.NewClientRPCContext(ctx, username.TestUserName())
+	client, err := testCertsContext.GetHTTPClient()
+	require.NoError(t, err)
+	client.Timeout = 30 * time.Second
+
+	resp, err := client.Get(s.AdminURL().WithPath("/oidc/v1/jwt").String())
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, "no-store", resp.Header.Get("Cache-Control"))
+	require.Equal(t, "no-cache", resp.Header.Get("Pragma"))
+}
+
 func TestKeyAndSignedTokenIsValid(t *testing.T) {
 	kastValid, err := newKeyAndSignedToken(32, 32, serverpb.OIDCState_MODE_LOG_IN)
 	require.NoError(t, err)
