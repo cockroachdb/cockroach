@@ -1946,6 +1946,9 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int, useFQName boo
 	var buf strings.Builder
 	switch t.Family() {
 	case AnyFamily:
+		if t.Oid() == oid.T_any {
+			return "any"
+		}
 		return "anyelement"
 	case ArrayFamily:
 		switch t.Oid() {
