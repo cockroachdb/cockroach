@@ -4109,10 +4109,12 @@ type decimalSqrDiffAggregate struct {
 	count   apd.Decimal
 	mean    apd.Decimal
 	sqrDiff apd.Decimal
+	offset  apd.Decimal
 
 	// Variables used as scratch space within iterations.
 	delta apd.Decimal
 	tmp   apd.Decimal
+	value apd.Decimal
 }
 
 func newDecimalSqrDiff(evalCtx *eval.Context) decimalSqrDiff {
@@ -4147,22 +4149,32 @@ func (a *decimalSqrDiffAggregate) Add(
 	}
 	d := &datum.(*tree.DDecimal).Decimal
 
+	// Center the inputs around the first value. Variance is invariant under
+	// translation, and centering prevents a large common offset from consuming
+	// the precision needed for differences between the values.
+	if a.count.IsZero() {
+		a.offset.Set(d)
+	}
+	a.ed.Sub(&a.value, d, &a.offset)
+
 	// Uses the Knuth/Welford method for accurately computing squared difference online in a
 	// single pass. Refer to squared difference calculations
 	// in http://www.johndcook.com/blog/standard_deviation/ and
 	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
 	a.ed.Add(&a.count, &a.count, decimalOne)
-	a.ed.Sub(&a.delta, d, &a.mean)
+	a.ed.Sub(&a.delta, &a.value, &a.mean)
 	a.ed.Quo(&a.tmp, &a.delta, &a.count)
 	a.ed.Add(&a.mean, &a.mean, &a.tmp)
-	a.ed.Sub(&a.tmp, d, &a.mean)
+	a.ed.Sub(&a.tmp, &a.value, &a.mean)
 	a.ed.Add(&a.sqrDiff, &a.sqrDiff, a.ed.Mul(&a.delta, &a.delta, &a.tmp))
 
 	size := int64(a.count.Size() +
 		a.mean.Size() +
 		a.sqrDiff.Size() +
+		a.offset.Size() +
 		a.delta.Size() +
-		a.tmp.Size())
+		a.tmp.Size() +
+		a.value.Size())
 	if err := a.updateMemoryUsage(ctx, size); err != nil {
 		return err
 	}
@@ -4192,6 +4204,8 @@ func (a *decimalSqrDiffAggregate) Reset(ctx context.Context) {
 	a.count.SetInt64(0)
 	a.mean.SetInt64(0)
 	a.sqrDiff.SetInt64(0)
+	a.offset.SetInt64(0)
+	a.value.SetInt64(0)
 	a.reset(ctx)
 }
 
@@ -4303,12 +4317,14 @@ type decimalSumSqrDiffsAggregate struct {
 	count   apd.Decimal
 	mean    apd.Decimal
 	sqrDiff apd.Decimal
+	offset  apd.Decimal
 
 	// Variables used as scratch space within iterations.
-	tmpCount apd.Decimal
-	tmpMean  apd.Decimal
-	delta    apd.Decimal
-	tmp      apd.Decimal
+	tmpCount    apd.Decimal
+	tmpMean     apd.Decimal
+	centeredSum apd.Decimal
+	delta       apd.Decimal
+	tmp         apd.Decimal
 }
 
 func newDecimalSumSqrDiffs(evalCtx *eval.Context) decimalSqrDiff {
@@ -4341,7 +4357,21 @@ func (a *decimalSumSqrDiffsAggregate) Add(
 	sum := &sumD.(*tree.DDecimal).Decimal
 	a.tmpCount.SetInt64(int64(*countD.(*tree.DInt)))
 
-	a.ed.Quo(&a.tmpMean, sum, &a.tmpCount)
+	// Use the first partial mean as a common offset, then center every partial
+	// sum before dividing. The exact multiply and subtract preserve differences
+	// that would be lost by subtracting two independently rounded large means.
+	if a.count.IsZero() {
+		if _, err := tree.IntermediateCtx.Quo(&a.offset, sum, &a.tmpCount); err != nil {
+			return err
+		}
+	}
+	if _, err := tree.ExactCtx.Mul(&a.centeredSum, &a.offset, &a.tmpCount); err != nil {
+		return err
+	}
+	if _, err := tree.ExactCtx.Sub(&a.centeredSum, sum, &a.centeredSum); err != nil {
+		return err
+	}
+	a.ed.Quo(&a.tmpMean, &a.centeredSum, &a.tmpCount)
 	a.ed.Sub(&a.delta, &a.tmpMean, &a.mean)
 
 	// Compute the sum of Knuth/Welford sum of squared differences from the
@@ -4377,8 +4407,10 @@ func (a *decimalSumSqrDiffsAggregate) Add(
 	size := int64(a.count.Size() +
 		a.mean.Size() +
 		a.sqrDiff.Size() +
+		a.offset.Size() +
 		a.tmpCount.Size() +
 		a.tmpMean.Size() +
+		a.centeredSum.Size() +
 		a.delta.Size() +
 		a.tmp.Size())
 	if err := a.updateMemoryUsage(ctx, size); err != nil {
@@ -4405,6 +4437,8 @@ func (a *decimalSumSqrDiffsAggregate) Reset(ctx context.Context) {
 	a.count.SetInt64(0)
 	a.mean.SetInt64(0)
 	a.sqrDiff.SetInt64(0)
+	a.offset.SetInt64(0)
+	a.centeredSum.SetInt64(0)
 	a.reset(ctx)
 }
 
