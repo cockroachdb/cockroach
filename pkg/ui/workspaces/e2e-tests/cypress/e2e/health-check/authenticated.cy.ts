@@ -12,8 +12,15 @@ describe("health check: authenticated user", () => {
       cy.login(users[0].username, users[0].password);
     });
 
-    // Ensure the Cluster ID appears
-    cy.findByText(
+    // Ensure the Cluster ID appears.
+    //
+    // The masthead splits "Cluster id: <uuid>" across two DOM nodes: a
+    // "Cluster id: " text node and a nested span holding the UUID (see
+    // clusterTitle.tsx). That rules out findByText, which matches an
+    // element's direct text children only, so neither half matches the
+    // pattern on its own. contains matches an element's full text content
+    // instead, which includes the nested UUID.
+    cy.contains(
       /^Cluster id: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
       { timeout: 30_000 },
     );
