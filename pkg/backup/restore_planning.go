@@ -1762,6 +1762,9 @@ func doRestorePlan(
 			Key:  encryptionKey,
 		}
 	} else if restoreStmt.Options.DecryptionKMSURI != nil {
+		if err := sql.MaybeCheckDestinationPrivileges(ctx, p, kms); err != nil {
+			return err
+		}
 		opts, err := backupencryption.ReadEncryptionOptions(ctx, baseStores[0])
 		if err != nil {
 			return err

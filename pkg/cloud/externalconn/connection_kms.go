@@ -15,6 +15,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// makeExternalConnectionKMS builds the KMS held by the named external
+// connection. USAGE on the connection is checked at planning time, in
+// sql.CheckDestinationPrivileges, and deliberately not here. A job that resumes
+// replays the URIs persisted in its details instead of replanning, so a check
+// on this path would fail a job that was authorized when it was planned.
+// Anything that does replan, such as a scheduled backup, is checked again.
 func makeExternalConnectionKMS(
 	ctx context.Context, uri string, env cloud.KMSEnv,
 ) (cloud.KMS, error) {
@@ -22,14 +28,10 @@ func makeExternalConnectionKMS(
 	if err != nil {
 		return nil, err
 	}
-	if kmsURI.Host == "" {
-		return nil, errors.Newf("host component of an external URI must refer to an "+
-			"existing External Connection object: %s", kmsURI.String())
+	externalConnectionName, err := connectionNameFromURI(kmsURI)
+	if err != nil {
+		return nil, err
 	}
-	externalConnectionName := kmsURI.Host
-
-	// TODO(adityamaru): Use the `user` in `cfg` to perform privilege checks on
-	// the external connection object we are about to retrieve.
 
 	// Retrieve the external connection object from the system table.
 	var ec ExternalConnection

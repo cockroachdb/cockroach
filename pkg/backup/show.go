@@ -273,6 +273,9 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			if err != nil {
 				return err
 			}
+			if err := sql.MaybeCheckDestinationPrivileges(ctx, p, kms); err != nil {
+				return err
+			}
 			opts, err := backupencryption.ReadEncryptionOptions(ctx, encStore)
 			if errors.Is(err, backupencryption.ErrEncryptionInfoRead) {
 				return errors.WithHint(err, showEncErr)

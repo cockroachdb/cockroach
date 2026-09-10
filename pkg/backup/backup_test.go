@@ -48,6 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -119,6 +121,13 @@ import (
 
 func init() {
 	cloud.RegisterKMSFromURIFactory(MakeTestKMS, "testkms")
+
+	// Let tests wrap a KMS in an external connection without a real cloud KMS.
+	// The provider only has to classify the connection as connectionpb.TypeKMS.
+	// aws_kms is an arbitrary pick among the three that do.
+	externalconn.RegisterConnectionDetailsFromURIFactory(
+		"testkms", connectionpb.ConnectionProvider_aws_kms, externalconn.SimpleURIFactory,
+	)
 }
 
 func makeTableSpan(codec keys.SQLCodec, tableID uint32) roachpb.Span {
@@ -4440,6 +4449,70 @@ func constructMockKMSURIsWithKeyID(keyIDs []string) []string {
 	}
 
 	return uris
+}
+
+// TestBackupResumeAfterExternalConnectionRevoke checks that a backup authorized
+// when it was planned still finishes if its USAGE grants are revoked while it is
+// in flight. The job re-resolves both its destination and its KMS external
+// connection every time it resumes, and neither re-checks privileges. Adding a
+// check there would break long-running backups across pauses, node restarts, and
+// internal retries.
+func TestBackupResumeAfterExternalConnectionRevoke(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tempDir, tempDirCleanup := testutils.TempDir(t)
+	defer tempDirCleanup()
+	tc, db, cleanupDB := backupRestoreTestSetupEmpty(
+		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{},
+	)
+	defer cleanupDB()
+
+	db.Exec(t, "SET CLUSTER SETTING sql.auth.external_connection.require_usage_privilege.enabled = true")
+	db.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+	db.Exec(t, "INSERT INTO foo VALUES (1), (2)")
+	db.Exec(t, "CREATE USER testuser")
+	db.Exec(t, "GRANT BACKUP ON TABLE foo TO testuser")
+	testuserDB := sqlutils.MakeSQLRunner(
+		tc.Server(0).ApplicationLayer().SQLConn(t, serverutils.User("testuser")),
+	)
+
+	startPausedBackup := func(t *testing.T, name string) jobspb.JobID {
+		t.Helper()
+		db.Exec(t, fmt.Sprintf(
+			`CREATE EXTERNAL CONNECTION "%s-dest" AS 'nodelocal://1/%s'`, name, name))
+		db.Exec(t, fmt.Sprintf(
+			`CREATE EXTERNAL CONNECTION "%s-kms" AS 'testkms:///%s-key?AUTH=implicit'`, name, name))
+		db.Exec(t, fmt.Sprintf(
+			`GRANT USAGE ON EXTERNAL CONNECTION "%s-dest", "%s-kms" TO testuser`, name, name))
+
+		var jobID jobspb.JobID
+		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before.flow'")
+		defer db.Exec(t, "RESET CLUSTER SETTING jobs.debug.pausepoints")
+		testuserDB.QueryRow(t, fmt.Sprintf(
+			`BACKUP TABLE foo INTO 'external://%s-dest' WITH kms = 'external://%s-kms', DETACHED`,
+			name, name)).Scan(&jobID)
+		jobutils.WaitForJobToPause(t, db, jobID)
+		return jobID
+	}
+
+	t.Run("revoking usage does not fail the resumed job", func(t *testing.T) {
+		jobID := startPausedBackup(t, "revoke")
+		db.Exec(t, `REVOKE USAGE ON EXTERNAL CONNECTION "revoke-dest", "revoke-kms" FROM testuser`)
+		db.Exec(t, "RESUME JOB $1", jobID)
+		jobutils.WaitForJobToSucceed(t, db, jobID)
+	})
+
+	t.Run("dropping the connection does fail the resumed job", func(t *testing.T) {
+		jobID := startPausedBackup(t, "drop")
+		db.Exec(t, `DROP EXTERNAL CONNECTION "drop-kms"`)
+		db.Exec(t, "RESUME JOB $1", jobID)
+		jobutils.WaitForJobToFail(t, db, jobID)
+		var jobErr string
+		db.QueryRow(t,
+			"SELECT error FROM crdb_internal.jobs WHERE job_id = $1", jobID).Scan(&jobErr)
+		require.Contains(t, jobErr, "failed to load external connection object")
+	})
 }
 
 // TestValidateKMSURIsAgainstFullBackup tests validateKMSURIsAgainstFullBackup()

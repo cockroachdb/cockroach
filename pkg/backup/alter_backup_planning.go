@@ -9,6 +9,7 @@ import (
 	"context"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupdest"
@@ -90,7 +91,9 @@ func alterBackupPlanHook(
 	}
 
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
-		if err := sql.MaybeCheckDestinationPrivileges(ctx, p, []string{backup}); err != nil {
+		if err := sql.MaybeCheckDestinationPrivileges(
+			ctx, p, slices.Concat([]string{backup}, newKms, oldKms),
+		); err != nil {
 			return err
 		}
 
