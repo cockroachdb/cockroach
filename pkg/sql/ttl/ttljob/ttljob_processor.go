@@ -264,12 +264,11 @@ func (t *ttlProcessor) work(ctx context.Context, output execinfra.RowReceiver) e
 					)
 					deleteBuilder := MakeDeleteQueryBuilder(
 						DeleteQueryParams{
-							RelationName:      relationName,
-							PKColNames:        pkColNames,
-							DeleteBatchSize:   ttlSpec.DeleteBatchSize,
-							TTLExpr:           ttlExpr,
-							DeleteDuration:    metrics.DeleteDuration,
-							DeleteRateLimiter: deleteRateLimiter,
+							RelationName:    relationName,
+							PKColNames:      pkColNames,
+							DeleteBatchSize: ttlSpec.DeleteBatchSize,
+							TTLExpr:         ttlExpr,
+							DeleteDuration:  metrics.DeleteDuration,
 						},
 						cutoff,
 					)
@@ -278,6 +277,7 @@ func (t *ttlProcessor) work(ctx context.Context, output execinfra.RowReceiver) e
 						metrics,
 						selectBuilder,
 						deleteBuilder,
+						deleteRateLimiter,
 					)
 					// Add to totals even on partial success.
 					t.progressUpdater.OnSpanProcessed(bounds.Span, spanDeletedRowCount)
@@ -348,6 +348,7 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 	metrics rowLevelTTLMetrics,
 	selectBuilder SelectQueryBuilder,
 	deleteBuilder DeleteQueryBuilder,
+	deleteRateLimiter *quotapool.RateLimiter,
 ) (spanRowCount int64, err error) {
 	metrics.NumActiveSpans.Inc(1)
 	defer metrics.NumActiveSpans.Dec(1)
@@ -405,6 +406,18 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 						until = numExpiredRows
 					}
 					deleteBatch := expiredRowsPKs[startRowIdx+processed : until]
+					// Wait for rate limiter tokens before opening the transaction. The
+					// wait can be long (every processor goroutine queues on the same
+					// limiter), and a transaction that is old by the time it issues its
+					// first write is easily aborted: creating its record fails if the
+					// anchor range's timestamp cache low-water mark has moved past the
+					// transaction's MinTimestamp, which any lease transfer or timestamp
+					// cache rotation during the wait would cause.
+					tokens, err := deleteRateLimiter.Acquire(ctx, int64(len(deleteBatch)))
+					if err != nil {
+						return err
+					}
+					defer tokens.Consume()
 					var batchRowCount int64
 					do := func(ctx context.Context, txn descs.Txn) error {
 						txn.KV().SetDebugName("ttljob-delete-batch")

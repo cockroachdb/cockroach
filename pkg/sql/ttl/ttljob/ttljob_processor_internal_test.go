@@ -7,6 +7,7 @@ package ttljob
 
 import (
 	"context"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -28,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -46,10 +49,17 @@ type mockDeleteBuilder struct {
 	batchSize      int
 	callCountIndex int
 	errorsPerCall  []error
+	// onRun, if set, is invoked with the transaction each batch runs in.
+	onRun func(txn isql.Txn)
 }
 
 // mockDeleteBuilder is an implementation of the DeleteBuilder interface.
-func (m *mockDeleteBuilder) Run(_ context.Context, _ isql.Txn, rows []tree.Datums) (int64, error) {
+func (m *mockDeleteBuilder) Run(
+	_ context.Context, txn isql.Txn, rows []tree.Datums,
+) (int64, error) {
+	if m.onRun != nil {
+		m.onRun(txn)
+	}
 	i := m.callCountIndex
 	m.callCountIndex++
 	if i < len(m.errorsPerCall) {
@@ -213,7 +223,7 @@ func TestRetryDeleteBatch(t *testing.T) {
 				batchSize:     batchSize,
 				errorsPerCall: tc.batchErrs,
 			}
-			rowCount, err := mockTTLProc.runTTLOnQueryBounds(ctx, metrics, sb, db)
+			rowCount, err := mockTTLProc.runTTLOnQueryBounds(ctx, metrics, sb, db, unlimitedRateLimiter())
 			if tc.expectedResult != nil {
 				require.Error(t, err)
 				require.True(t, errors.Is(err, tc.expectedResult))
@@ -227,6 +237,107 @@ func TestRetryDeleteBatch(t *testing.T) {
 			// Check the metric to ensure we actually did the expected number of retries.
 			require.Equal(t, tc.expectedRetryCount, metrics.NumDeleteBatchRetries.Value())
 		})
+	}
+}
+
+func unlimitedRateLimiter() *quotapool.RateLimiter {
+	return quotapool.NewRateLimiter("", quotapool.Inf(), math.MaxInt64)
+}
+
+// TestDeleteRateLimiterAcquiredBeforeTxn verifies that a delete batch waits
+// for rate limiter tokens before its transaction is opened. If the wait
+// happened inside the transaction, the transaction would be as old as the wait
+// by the time it issued its first write, and a lease transfer or timestamp
+// cache rotation on the anchor range during the wait would abort it.
+func TestDeleteRateLimiterAcquiredBeforeTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	flowCtx := execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{
+			DB:       s.InternalDB().(descs.DB),
+			Settings: s.ClusterSettings(),
+			Codec:    s.Codec(),
+		},
+		EvalCtx: &eval.Context{
+			Codec:    s.Codec(),
+			Settings: s.ClusterSettings(),
+		},
+	}
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "CREATE TABLE defaultdb.public.ttl_tester ()")
+	var tableDesc catalog.TableDescriptor
+	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
+	) error {
+		db, err := descriptors.ByName(txn.KV()).Get().Database(ctx, "defaultdb")
+		if err != nil {
+			return err
+		}
+		schema, err := descriptors.ByName(txn.KV()).Get().Schema(ctx, db, "public")
+		if err != nil {
+			return err
+		}
+		tableDesc, err = descriptors.ByName(txn.KV()).Get().Table(ctx, db, schema, "ttl_tester")
+		return err
+	}))
+
+	// Three batches of five rows against a limiter that refills two rows per
+	// second with a burst of five: the first batch proceeds immediately and each
+	// of the next two must wait about 2.5 seconds for tokens.
+	const batchSize = 5
+	const numBatches = 3
+	sb := &mockSelectBuilder{}
+	for i := 0; i < batchSize*numBatches; i++ {
+		sb.data = append(sb.data, tree.Datums{tree.NewDInt(tree.DInt(i))})
+	}
+	limiter := quotapool.NewRateLimiter("", quotapool.Limit(2), batchSize)
+
+	// Record how old each batch's transaction is when the DELETE runs. The read
+	// timestamp is assigned when the transaction is created, so this measures
+	// the time between opening the transaction and reaching the DELETE.
+	var txnAges []time.Duration
+	db := &mockDeleteBuilder{
+		batchSize: batchSize,
+		onRun: func(txn isql.Txn) {
+			txnAges = append(txnAges, timeutil.Since(txn.KV().ReadTimestamp().GoTime()))
+		},
+	}
+
+	m := makeRowLevelTTLAggMetrics(time.Second)
+	metrics := m.(*RowLevelTTLAggMetrics).loadMetrics(false /* labelMetrics */, "test" /* relationName */)
+	mockTTLProc := ttlProcessor{
+		ttlSpec: execinfrapb.TTLSpec{
+			RowLevelTTLDetails: jobspb.RowLevelTTLDetails{
+				TableID:      tableDesc.GetID(),
+				TableVersion: tableDesc.GetVersion(),
+			},
+		},
+		ProcessorBase: execinfra.ProcessorBase{
+			ProcessorBaseNoHelper: execinfra.ProcessorBaseNoHelper{
+				FlowCtx: &flowCtx,
+			},
+		},
+	}
+
+	start := timeutil.Now()
+	rowCount, err := mockTTLProc.runTTLOnQueryBounds(ctx, metrics, sb, db, limiter)
+	require.NoError(t, err)
+	require.Equal(t, batchSize*numBatches, int(rowCount))
+	require.Len(t, txnAges, numBatches)
+
+	// The rate limiter must actually have throttled the run; otherwise the
+	// assertion below would pass trivially.
+	require.Greater(t, timeutil.Since(start), 4*time.Second)
+	for i, age := range txnAges {
+		require.Less(t, age, time.Second, "batch %d transaction aged %s before its DELETE", i, age)
 	}
 }
 
