@@ -79,6 +79,7 @@ go_test(
         "automatic_stats_test.go",
         "create_stats_job_test.go",
         "delete_stats_test.go",
+        "export_test.go",
         "forecast_test.go",
         "histogram_test.go",
         "main_test.go",

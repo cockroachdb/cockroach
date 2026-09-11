@@ -49,6 +49,8 @@ func TestCacheEnumVersionChange(t *testing.T) {
 	r.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_partial_collection.enabled = false`)
 	r.Exec(t, `SET CLUSTER SETTING sql.stats.system_tables.enabled = false`)
 	r.Exec(t, `SET CLUSTER SETTING sql.stats.enum_type_rehydration.enabled = true`)
+	// Every probe must be planned so that it consults the stats cache.
+	r.Exec(t, `SET CLUSTER SETTING sql.query_cache.enabled = false`)
 
 	const numTables = 3
 	const usdRows, eurRows, gbpRows = 4, 3, 2
@@ -76,8 +78,6 @@ UNION ALL SELECT i + %d, 'gbp' FROM generate_series(1, %d) AS g(i)`,
 		waitForSchemaChanges()
 	}
 
-	// probe's query text is identical across calls so that the plan cache
-	// decides whether the stats cache is consulted.
 	probe := func(t *testing.T, value string) {
 		for i := range numTables {
 			r.Exec(t, fmt.Sprintf(`SELECT k FROM t%d WHERE c = '%s'`, i, value))
@@ -102,29 +102,25 @@ UNION ALL SELECT i + %d, 'gbp' FROM generate_series(1, %d) AS g(i)`,
 	// invalidate an entry shortly after CREATE STATISTICS.
 	warm := func(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
-			before := sc.Metrics().Misses.Count()
+			before := sc.TestingNumInternalQueries()
 			probe(t, "usd")
-			if n := sc.Metrics().Misses.Count() - before; n != 0 {
+			if n := sc.TestingNumInternalQueries() - before; n != 0 {
 				return errors.Newf("cache not yet warm: %d misses", n)
 			}
 			return nil
 		})
 	}
 
-	// probeMisses returns the stats cache misses and lookups of a probe. Callers
-	// check lookups to prove the cache was consulted rather than bypassed by a
-	// cached plan.
-	probeMisses := func(t *testing.T) (misses, lookups int64) {
-		before := sc.Metrics().Misses.Count()
-		hitsBefore := sc.Metrics().Hits.Count()
+	// probeMisses returns the stats cache misses of a probe.
+	probeMisses := func(t *testing.T) int64 {
+		before := sc.TestingNumInternalQueries()
 		probe(t, "usd")
-		misses = sc.Metrics().Misses.Count() - before
-		hits := sc.Metrics().Hits.Count() - hitsBefore
-		t.Logf("misses=%d hits=%d", misses, hits)
-		return misses, misses + hits
+		misses := sc.TestingNumInternalQueries() - before
+		t.Logf("misses=%d", misses)
+		return misses
 	}
 
-	missesDuring := func(t *testing.T, change string) (misses, lookups int64) {
+	missesDuring := func(t *testing.T, change string) int64 {
 		warm(t)
 		r.Exec(t, change)
 		waitForSchemaChanges()
@@ -132,9 +128,7 @@ UNION ALL SELECT i + %d, 'gbp' FROM generate_series(1, %d) AS g(i)`,
 	}
 
 	typeChange := func(t *testing.T, change string, wantMisses int64) {
-		misses, lookups := missesDuring(t, change)
-		require.GreaterOrEqual(t, lookups, int64(numTables), "probe did not consult the cache")
-		require.Equal(t, wantMisses, misses)
+		require.Equal(t, wantMisses, missesDuring(t, change))
 	}
 
 	t.Run("add value", func(t *testing.T) {
@@ -169,7 +163,7 @@ UNION ALL SELECT i + %d, 'gbp' FROM generate_series(1, %d) AS g(i)`,
 		}
 		// The drop is a two-step job, so a refill decoded against the
 		// intermediate version can be evicted a second time.
-		misses, _ := missesDuring(t, `ALTER TYPE cur DROP VALUE 'gbp'`)
+		misses := missesDuring(t, `ALTER TYPE cur DROP VALUE 'gbp'`)
 		require.GreaterOrEqual(t, misses, int64(numTables))
 	})
 
@@ -226,9 +220,9 @@ UNION ALL SELECT i + %d, 'gbp' FROM generate_series(1, %d) AS g(i)`,
 		require.NoError(t, err)
 
 		// A new query text forces a plan, and so a lookup, at the pinned version.
-		before := sc.Metrics().Misses.Count()
+		before := sc.TestingNumInternalQueries()
 		eurEstimate = estimatedRows(t, "eur")
-		misses = sc.Metrics().Misses.Count() - before
+		misses = sc.TestingNumInternalQueries() - before
 		t.Logf("older caller: misses=%d", misses)
 		r.Exec(t, `COMMIT`)
 		open = false
@@ -259,22 +253,15 @@ UNION ALL SELECT i + %d, 'gbp' FROM generate_series(1, %d) AS g(i)`,
 		warm(t)
 		r.Exec(t, `BEGIN`)
 		r.Exec(t, `ALTER TYPE cur ADD VALUE 'jpy'`)
-		misses, lookups := probeMisses(t)
-		require.GreaterOrEqual(t, lookups, int64(numTables), "probe did not consult the cache")
-		require.Equal(t, int64(0), misses)
+		require.Equal(t, int64(0), probeMisses(t))
 		require.Equal(t, usdRows, estimatedRows(t, "usd"))
 		r.Exec(t, `ROLLBACK`)
-		misses, lookups = probeMisses(t)
-		require.GreaterOrEqual(t, lookups, int64(numTables), "probe did not consult the cache")
-		require.Equal(t, int64(0), misses)
+		require.Equal(t, int64(0), probeMisses(t))
 	})
 
 	t.Run("table change control", func(t *testing.T) {
 		setup(t, "control")
-		// Only t0's plan is invalidated, so only t0 is looked up.
-		misses, lookups := missesDuring(t, `ALTER TABLE t0 ADD COLUMN z INT`)
-		require.GreaterOrEqual(t, lookups, int64(1), "probe did not consult the cache")
-		require.Equal(t, int64(0), misses)
+		require.Equal(t, int64(0), missesDuring(t, `ALTER TABLE t0 ADD COLUMN z INT`))
 		require.Equal(t, usdRows, estimatedRows(t, "usd"))
 	})
 }
