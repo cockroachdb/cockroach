@@ -12,16 +12,22 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 // BenchmarkFlowSetup sets up a flow for a scan that is dominated by the setup
@@ -159,4 +165,32 @@ func BenchmarkFlowRenderSetup(b *testing.B) {
 			})
 		}
 	}
+}
+
+// TestFlowBaseAdmissionInfoTenant verifies that NewFlowBase stamps its
+// admission WorkInfo with the tenant of the flow's eval context.
+func TestFlowBaseAdmissionInfoTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	newFlow := func(evalCtx *eval.Context) *flowinfra.FlowBase {
+		return flowinfra.NewFlowBase(
+			execinfra.FlowCtx{
+				Cfg:     &execinfra.ServerConfig{Settings: st},
+				EvalCtx: evalCtx,
+				NodeID:  base.TestingIDContainer,
+			},
+			nil /* sp */, nil /* flowReg */, nil, /* rowSyncFlowConsumer */
+			nil /* batchSyncFlowConsumer */, nil, /* localProcessors */
+			nil /* localVectorSources */, nil /* onFlowCleanupEnd */, "", /* statementSQL */
+		)
+	}
+
+	// The tenant comes from the eval context.
+	tenantID := roachpb.MustMakeTenantID(10)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(keys.MakeSQLCodec(tenantID), st)
+	defer evalCtx.Stop(ctx)
+	require.Equal(t, tenantID, newFlow(&evalCtx).GetAdmissionInfo().TenantID)
 }
