@@ -8,6 +8,7 @@ package changefeedpb
 import (
 	"encoding/json"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -15,8 +16,8 @@ import (
 	"github.com/gogo/protobuf/jsonpb"
 )
 
-// MarshalJSONPB provides a custom Marshaller for jsonpb that redacts secrets in
-// URI fields.
+// MarshalJSONPB provides a custom Marshaller for jsonpb that redacts secrets
+// in the sink URI and WITH options of the changefeed statement.
 func (m ScheduledChangefeedExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte, error) {
 	stmt, err := parser.ParseOne(m.ChangefeedStatement)
 	if err != nil {
@@ -36,6 +37,22 @@ func (m ScheduledChangefeedExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]
 		return nil, err
 	}
 	export.SinkURI = tree.NewDString(sinkURI)
+
+	for i, opt := range export.Options {
+		redactionFunc, ok := changefeedbase.RedactedOptions[string(opt.Key)]
+		if !ok {
+			continue
+		}
+		rawValue, ok := opt.Value.(*tree.StrVal)
+		if !ok {
+			return nil, errors.Errorf("unexpected %T value for option %s", opt.Value, opt.Key)
+		}
+		redacted, err := redactionFunc(rawValue.RawString())
+		if err != nil {
+			return nil, err
+		}
+		export.Options[i].Value = tree.NewDString(redacted)
+	}
 
 	m.ChangefeedStatement = tree.AsStringWithFlags(export, tree.FmtShowFullURIs)
 	return json.Marshal(m)

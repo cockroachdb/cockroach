@@ -37,9 +37,9 @@ func TestMakeChangefeedDescription(t *testing.T) {
 			expected:   `EXPERIMENTAL CHANGEFEED FOR TABLE t WITH OPTIONS (diff)`,
 		},
 		{
-			createStmt: `CREATE CHANGEFEED FOR t WITH diff, client_cert='a', client_key='b'`,
-			opts:       map[string]string{"diff": "", "client_cert": "a", "client_key": "b"},
-			expected:   `EXPERIMENTAL CHANGEFEED FOR TABLE t WITH OPTIONS (client_cert = 'a', client_key = 'redacted', diff)`,
+			createStmt: `CREATE CHANGEFEED FOR t WITH diff, webhook_auth_header='b'`,
+			opts:       map[string]string{"diff": "", "webhook_auth_header": "b"},
+			expected:   `EXPERIMENTAL CHANGEFEED FOR TABLE t WITH OPTIONS (diff, webhook_auth_header = 'redacted')`,
 		},
 		{
 			createStmt: `CREATE CHANGEFEED FOR t INTO 'null://'`,
@@ -53,10 +53,10 @@ func TestMakeChangefeedDescription(t *testing.T) {
 			expected:   `CREATE CHANGEFEED FOR TABLE t INTO 'null:' WITH OPTIONS (diff)`,
 		},
 		{
-			createStmt: `CREATE CHANGEFEED FOR t INTO 'null://' WITH diff, client_cert='a', client_key='b'`,
+			createStmt: `CREATE CHANGEFEED FOR t INTO 'null://' WITH diff, webhook_auth_header='b'`,
 			sinkURI:    `null://`,
-			opts:       map[string]string{"diff": "", "client_cert": "a", "client_key": "b"},
-			expected:   `CREATE CHANGEFEED FOR TABLE t INTO 'null:' WITH OPTIONS (client_cert = 'a', client_key = 'redacted', diff)`,
+			opts:       map[string]string{"diff": "", "webhook_auth_header": "b"},
+			expected:   `CREATE CHANGEFEED FOR TABLE t INTO 'null:' WITH OPTIONS (diff, webhook_auth_header = 'redacted')`,
 		},
 		{
 			createStmt: `CREATE CHANGEFEED FOR t INTO 'kafka://fake.kafka'`,
@@ -70,10 +70,10 @@ func TestMakeChangefeedDescription(t *testing.T) {
 			expected:   `CREATE CHANGEFEED FOR TABLE t INTO 'kafka://fake.kafka' WITH OPTIONS (diff)`,
 		},
 		{
-			createStmt: `CREATE CHANGEFEED FOR t INTO 'kafka://fake.kafka' WITH diff, client_cert='a', client_key='b'`,
+			createStmt: `CREATE CHANGEFEED FOR t INTO 'kafka://fake.kafka' WITH diff, webhook_auth_header='b'`,
 			sinkURI:    `kafka://fake.kafka`,
-			opts:       map[string]string{"diff": "", "client_cert": "a", "client_key": "b"},
-			expected:   `CREATE CHANGEFEED FOR TABLE t INTO 'kafka://fake.kafka' WITH OPTIONS (client_cert = 'a', client_key = 'redacted', diff)`,
+			opts:       map[string]string{"diff": "", "webhook_auth_header": "b"},
+			expected:   `CREATE CHANGEFEED FOR TABLE t INTO 'kafka://fake.kafka' WITH OPTIONS (diff, webhook_auth_header = 'redacted')`,
 		},
 	} {
 		parsed, err := parser.ParseOne(tc.createStmt)
