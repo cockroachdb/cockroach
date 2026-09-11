@@ -68,7 +68,7 @@ var enumRehydrationEnabled = settings.RegisterBoolSetting(
 	"sql.stats.enum_type_rehydration.enabled",
 	"re-stamp cached histograms in place when an enum type's version changes, "+
 		"instead of re-reading the table's statistics",
-	true,
+	false,
 	settings.WithPublic,
 )
 

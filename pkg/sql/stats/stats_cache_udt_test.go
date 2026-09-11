@@ -48,6 +48,7 @@ func TestCacheEnumVersionChange(t *testing.T) {
 	r.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
 	r.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_partial_collection.enabled = false`)
 	r.Exec(t, `SET CLUSTER SETTING sql.stats.system_tables.enabled = false`)
+	r.Exec(t, `SET CLUSTER SETTING sql.stats.enum_type_rehydration.enabled = true`)
 
 	const numTables = 3
 	const usdRows, eurRows, gbpRows = 4, 3, 2
@@ -175,7 +176,7 @@ UNION ALL SELECT i + %d, 'gbp' FROM generate_series(1, %d) AS g(i)`,
 	t.Run("rehydration disabled", func(t *testing.T) {
 		setup(t, "disabled")
 		r.Exec(t, `SET CLUSTER SETTING sql.stats.enum_type_rehydration.enabled = false`)
-		defer r.Exec(t, `RESET CLUSTER SETTING sql.stats.enum_type_rehydration.enabled`)
+		defer r.Exec(t, `SET CLUSTER SETTING sql.stats.enum_type_rehydration.enabled = true`)
 		typeChange(t, `ALTER TYPE cur ADD VALUE 'jpy'`, numTables)
 		require.Equal(t, usdRows, estimatedRows(t, "usd"))
 	})
@@ -245,7 +246,7 @@ UNION ALL SELECT i + %d, 'gbp' FROM generate_series(1, %d) AS g(i)`,
 
 	t.Run("older caller, rehydration disabled", func(t *testing.T) {
 		r.Exec(t, `SET CLUSTER SETTING sql.stats.enum_type_rehydration.enabled = false`)
-		defer r.Exec(t, `RESET CLUSTER SETTING sql.stats.enum_type_rehydration.enabled`)
+		defer r.Exec(t, `SET CLUSTER SETTING sql.stats.enum_type_rehydration.enabled = true`)
 		misses, eurEstimate := olderCaller(t, "older_caller_disabled")
 		require.GreaterOrEqual(t, misses, int64(1))
 		require.Equal(t, eurRows, eurEstimate)
