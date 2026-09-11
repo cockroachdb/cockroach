@@ -222,6 +222,7 @@ type Memo struct {
 	useMinRowCountAntiJoinFix                  bool
 	useHistogramsForWithScans                  bool
 	useHistogramsForMultiSpanConstColumns      bool
+	usePartialIndexPredicateOptionalFilters    bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -349,6 +350,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useMinRowCountAntiJoinFix:                  evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix,
 		useHistogramsForWithScans:                  evalCtx.SessionData().OptimizerUseHistogramsForWithScans,
 		useHistogramsForMultiSpanConstColumns:      evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns,
+		usePartialIndexPredicateOptionalFilters:    evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters,
 		skipUnderlyingViewPrivilegeChecks:          sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV),
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
@@ -535,6 +537,7 @@ func (m *Memo) IsStale(
 		m.useMinRowCountAntiJoinFix != evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix ||
 		m.useHistogramsForWithScans != evalCtx.SessionData().OptimizerUseHistogramsForWithScans ||
 		m.useHistogramsForMultiSpanConstColumns != evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns ||
+		m.usePartialIndexPredicateOptionalFilters != evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters ||
 		m.skipUnderlyingViewPrivilegeChecks != sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV) ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil

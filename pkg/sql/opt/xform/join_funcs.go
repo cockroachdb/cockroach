@@ -429,7 +429,12 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			derivedfkOnFilters = c.ForeignKeyConstraintFilters(
 				input2, scanPrivate2, indexCols2, onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols)
 		}
-		lookupConstraint, equalityLookupCols := c.cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
+		// Include the partial index predicate in the set of optional filters,
+		// if this is a partial index.
+		indexOptionalFilters := c.optionalFiltersWithPartialIndexPredicate(
+			md.TableMeta(scanPrivate.Table), index.Ordinal(), optionalFilters,
+		)
+		lookupConstraint, equalityLookupCols := c.cb.Build(index, onFilters, indexOptionalFilters, derivedfkOnFilters)
 		if lookupConstraint.IsUnconstrained() {
 			// We couldn't find equality columns or a lookup expression to
 			// perform a lookup join on this index.
@@ -834,10 +839,16 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 				eqColsAndOptionalFiltersCalculated = true
 			}
 
+			// Include the partial index predicate in the set of optional
+			// filters, if this is a partial index.
+			indexOptionalFilters := c.optionalFiltersWithPartialIndexPredicate(
+				c.e.mem.Metadata().TableMeta(scanPrivate.Table), index.Ordinal(), optionalFilters,
+			)
+
 			// Combine the ON filters and optional filters together. This set of
 			// filters will be used to attempt to constrain non-inverted prefix
 			// columns of the multi-column inverted index.
-			allFilters = append(onFilters, optionalFilters...)
+			allFilters = append(onFilters, indexOptionalFilters...)
 		}
 
 		// The non-inverted prefix columns of a multi-column inverted index must

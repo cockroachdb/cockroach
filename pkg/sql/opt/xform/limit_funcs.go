@@ -511,18 +511,11 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 		var prefixConstraint *constraint.Constraint
 		prefixColumns, notNullCols := idxconstraint.IndexPrefixCols(sp.Table, index)
 		if len(prefixColumns) > 0 {
-			optionalFilters := originalOptionalFilters
-			if predScalar, isPartialIdx := tab.PartialIndexPredicate(index.Ordinal()); isPartialIdx {
-				// Include the partial index predicate in the set of optional filters.
-				pred := *predScalar.(*memo.FiltersExpr)
-				if len(optionalFilters) == 0 {
-					optionalFilters = pred
-				} else {
-					optionalFilters = make(memo.FiltersExpr, 0, len(originalOptionalFilters)+len(pred))
-					optionalFilters = append(optionalFilters, originalOptionalFilters...)
-					optionalFilters = append(optionalFilters, pred...)
-				}
-			}
+			// Include the partial index predicate in the set of optional
+			// filters, if this is a partial index.
+			optionalFilters := c.optionalFiltersWithPartialIndexPredicate(
+				tab, index.Ordinal(), originalOptionalFilters,
+			)
 			prefixConstraint, filters, ok = idxconstraint.ConstrainIndexPrefixCols(
 				c.e.ctx, c.e.evalCtx, c.e.f, prefixColumns, notNullCols, filters,
 				optionalFilters, sp.Table, index, c.checkCancellation,

@@ -362,3 +362,46 @@ project
       │                        └── ["oo ", "oo "]
       └── filters
            └── s % 'foo'
+
+# Regression test for #174162: when a partial index's predicate references
+# columns that are also leading key columns of the inverted index, the filters
+# that prove the predicate implication must still constrain the scan.
+exec-ddl
+CREATE TABLE trgm_partial (
+    k INT PRIMARY KEY,
+    i INT,
+    j INT,
+    s STRING,
+    INVERTED INDEX bad (i, j, s gin_trgm_ops) WHERE i = 2
+)
+----
+
+opt expect=GenerateTrigramSimilarityInvertedIndexScans
+SELECT k FROM trgm_partial@bad WHERE i = 2 AND j = 10 AND s % 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── stable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null j:3!null s:4
+      ├── stable
+      ├── key: (1)
+      ├── fd: ()-->(2,3), (1)-->(4)
+      ├── index-join trgm_partial
+      │    ├── columns: k:1!null i:2 j:3 s:4
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    └── distinct-on
+      │         ├── columns: k:1!null
+      │         ├── grouping columns: k:1!null
+      │         ├── key: (1)
+      │         └── scan trgm_partial@bad,inverted,partial
+      │              ├── columns: k:1!null
+      │              ├── constraint: /2/3/7
+      │              │    ├── [/2/10/" fo" - /2/10/" fo"]
+      │              │    ├── [/2/10/"foo" - /2/10/"foo"]
+      │              │    └── [/2/10/"oo " - /2/10/"oo "]
+      │              └── flags: force-index=bad
+      └── filters
+           └── s:4 % 'foo' [outer=(4), stable]
