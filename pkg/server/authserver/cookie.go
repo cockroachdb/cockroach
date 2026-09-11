@@ -182,6 +182,7 @@ func CreateSessionCookie(value string, forHTTPSOnly bool) *http.Cookie {
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   forHTTPSOnly,
+		SameSite: http.SameSiteLaxMode,
 	}
 }
 
@@ -196,6 +197,7 @@ func CreateEmptySessionCookieWithImmediateExpiry(forHTTPSOnly bool) *http.Cookie
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   forHTTPSOnly,
+		SameSite: http.SameSiteLaxMode,
 		Expires:  timeutil.Unix(0, 0),
 	}
 }
@@ -213,6 +215,7 @@ func CreateTenantSelectCookie(value string, forHTTPSOnly bool) *http.Cookie {
 		Path:     "/",
 		HttpOnly: false,
 		Secure:   forHTTPSOnly,
+		SameSite: http.SameSiteLaxMode,
 	}
 }
 
@@ -227,6 +230,7 @@ func CreateEmptyTenantSelectCookieWithImmediateExpiry(forHTTPSOnly bool) *http.C
 		Path:     "/",
 		HttpOnly: false,
 		Secure:   forHTTPSOnly,
+		SameSite: http.SameSiteLaxMode,
 		Expires:  timeutil.Unix(0, 0),
 	}
 }
