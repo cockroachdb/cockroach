@@ -1301,6 +1301,7 @@ func makeTenantSQLServerArgs(
 		Clock:             clock,
 		NodeDescs:         tenantConnect,
 		NodeIDGetter:      deps.nodeIDGetter,
+		TenantID:          sqlCfg.TenantID,
 		RPCRetryOptions:   &rpcRetryOptions,
 		Stopper:           stopper,
 		LatencyFunc:       rpcContext.RemoteClocks.Latency,

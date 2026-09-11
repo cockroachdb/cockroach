@@ -734,6 +734,9 @@ type DistSender struct {
 	// nodeDescs provides information on the KV nodes that DistSender may
 	// consider routing requests to.
 	nodeDescs kvclient.NodeDescStore
+	// tenantID names the tenant this DistSender sends on behalf of; see
+	// DistSenderConfig.TenantID.
+	tenantID roachpb.TenantID
 	// nodeIDGetter provides access to the local KV node ID if it's available
 	// (0 otherwise). The default implementation uses the Gossip network if it's
 	// available, but custom implementation can be provided via
@@ -832,7 +835,13 @@ type DistSenderConfig struct {
 	// NodeIDGetter, if set, provides non-gossip based implementation for
 	// obtaining the local KV node ID. The DistSender uses the node ID to
 	// preferentially route requests to a local replica (if one exists).
-	NodeIDGetter     func() roachpb.NodeID
+	NodeIDGetter func() roachpb.NodeID
+	// TenantID is the tenant this DistSender sends on behalf of: the tenant
+	// whose SQL layer owns it, or the system tenant on a KV node. It attributes
+	// ASH samples covering an in-flight batch when the context carries no inbound
+	// client tenant, as on a SQL server's own sends. Defaults to the system
+	// tenant when unset.
+	TenantID         roachpb.TenantID
 	RPCRetryOptions  *retry.Options
 	TransportFactory TransportFactory
 
@@ -896,12 +905,17 @@ func NewDistSender(ctx context.Context, cfg DistSenderConfig) *DistSender {
 			return g.NodeID.Get()
 		}
 	}
+	tenantID := cfg.TenantID
+	if !tenantID.IsSet() {
+		tenantID = roachpb.SystemTenantID
+	}
 	ds := &DistSender{
 		st:            cfg.Settings,
 		stopper:       cfg.Stopper,
 		clock:         cfg.Clock,
 		nodeDescs:     cfg.NodeDescs,
 		nodeIDGetter:  nodeIDGetter,
+		tenantID:      tenantID,
 		metrics:       MakeDistSenderMetrics(cfg.Locality),
 		kvInterceptor: cfg.KVInterceptor,
 		locality:      cfg.Locality,
@@ -1472,8 +1486,9 @@ func (ds *DistSender) sendProxyRequest(
 
 	// Use the same connection class as we normally use for this request.
 	opts := SendOptions{
-		class:   rpcbase.ConnectionClassForKey(ba.ProxyRangeInfo.Desc.RSpan().Key, ba.ConnectionClass),
-		metrics: &ds.metrics,
+		class:    rpcbase.ConnectionClassForKey(ba.ProxyRangeInfo.Desc.RSpan().Key, ba.ConnectionClass),
+		metrics:  &ds.metrics,
+		tenantID: ds.tenantID,
 	}
 
 	// We construct a replica slice containing only the leaseholder, since we're
@@ -2759,6 +2774,7 @@ func (ds *DistSender) sendToReplicas(
 	opts := SendOptions{
 		class:                  rpcbase.ConnectionClassForKey(desc.RSpan().Key, ba.ConnectionClass),
 		metrics:                &ds.metrics,
+		tenantID:               ds.tenantID,
 		dontConsiderConnHealth: ds.dontConsiderConnHealth,
 	}
 	transport := ds.transportFactory(opts, replicas)

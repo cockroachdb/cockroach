@@ -34,6 +34,8 @@ import (
 type SendOptions struct {
 	class   rpcbase.ConnectionClass
 	metrics *DistSenderMetrics
+	// tenantID is the sending DistSender's tenant; see DistSenderConfig.TenantID.
+	tenantID roachpb.TenantID
 	// dontConsiderConnHealth, if set, makes the transport not take into
 	// consideration the connection health when deciding the ordering for
 	// replicas. When not set, replicas on nodes with unhealthy connections are
@@ -191,6 +193,18 @@ func (gt *grpcTransport) SendNext(
 	return gt.sendBatch(ctx, r.NodeID, iface, ba)
 }
 
+// sendTenantID returns the tenant to attribute this send's ASH work state to.
+// It prefers the inbound RPC's client tenant, which is set when this send is
+// KV-side work serving a tenant's request (e.g. intent resolution) and pins the
+// work to that tenant. A SQL server's own sends carry no inbound client, so
+// those fall back to the DistSender's own tenant.
+func (gt *grpcTransport) sendTenantID(ctx context.Context) roachpb.TenantID {
+	if tenantID, ok := roachpb.ClientTenantFromContext(ctx); ok {
+		return tenantID
+	}
+	return gt.opts.tenantID
+}
+
 // NB: nodeID is unused, but accessible in stack traces.
 func (gt *grpcTransport) sendBatch(
 	ctx context.Context,
@@ -206,7 +220,7 @@ func (gt *grpcTransport) sendBatch(
 	}
 
 	gt.opts.metrics.SentCount.Inc(1)
-	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+	tenantID := gt.sendTenantID(ctx)
 	info := ash.WorkloadInfo{
 		WorkloadID:    ba.WorkloadID,
 		AppNameID:     ba.AppNameID,

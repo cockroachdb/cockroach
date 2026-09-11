@@ -818,6 +818,8 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 		// We construct a bare replica slice without any locality information, since
 		// we're only going to contact this replica.
 		replicas := ReplicaSlice{{ReplicaDescriptor: r.desc}}
+		// Leave tenantID unset so it defaults to the system tenant: this is the
+		// breaker's own liveness probe, belonging to no tenant's workload.
 		opts := SendOptions{
 			class:                  rpcbase.SystemClass,
 			metrics:                &r.d.metrics,

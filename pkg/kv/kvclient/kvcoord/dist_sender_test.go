@@ -237,6 +237,45 @@ func newNodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
 	}
 }
 
+// TestDistSenderTenantID verifies that NewDistSender records the configured
+// tenant, defaulting to the system tenant when the config leaves it unset. This
+// is the tenant a send falls back to when the context carries no inbound client
+// tenant; see grpcTransport.sendTenantID.
+func TestDistSenderTenantID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+
+	baseCfg := DistSenderConfig{
+		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:             clock,
+		NodeDescs:         g,
+		Stopper:           stopper,
+		TransportFactory:  adaptSimpleTransport(stubRPCSendFn),
+		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+		Settings:          cluster.MakeTestingClusterSettings(),
+	}
+
+	t.Run("defaults to system tenant when unset", func(t *testing.T) {
+		ds := NewDistSender(ctx, baseCfg)
+		require.Equal(t, roachpb.SystemTenantID, ds.tenantID)
+	})
+
+	t.Run("records the configured tenant", func(t *testing.T) {
+		cfg := baseCfg
+		cfg.TenantID = roachpb.MustMakeTenantID(5)
+		ds := NewDistSender(ctx, cfg)
+		require.Equal(t, roachpb.MustMakeTenantID(5), ds.tenantID)
+	})
+}
+
 // TestSendRPCOrder verifies that sendRPC correctly takes into account the
 // lease holder, attributes, and routing policy to determine where to send
 // remote requests.

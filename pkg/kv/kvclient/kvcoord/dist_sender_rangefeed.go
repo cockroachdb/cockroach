@@ -627,7 +627,7 @@ func newTransportForRange(
 	}
 	replicas.OptimizeReplicaOrder(ctx, ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
 	log.VEventf(ctx, 2, "replica order for rangefeed transport is: %s", replicas)
-	opts := SendOptions{class: defRangefeedConnClass}
+	opts := SendOptions{class: defRangefeedConnClass, tenantID: ds.tenantID}
 	return ds.transportFactory(opts, replicas), nil
 }
 

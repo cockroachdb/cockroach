@@ -501,6 +501,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		Settings:           st,
 		Clock:              clock,
 		NodeDescs:          g,
+		TenantID:           roachpb.SystemTenantID,
 		Stopper:            stopper,
 		LatencyFunc:        rpcContext.RemoteClocks.Latency,
 		RPCRetryOptions:    &retryOpts,

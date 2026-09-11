@@ -144,6 +144,54 @@ func TestTransportReset(t *testing.T) {
 	require.True(t, gt.IsExhausted())
 }
 
+// TestGRPCTransportSendTenantID verifies which tenant a send's ASH work state is
+// attributed to: the inbound RPC's client tenant when the context carries one
+// (KV-side work serving a tenant's request), otherwise the DistSender's own
+// tenant (a SQL server's own sends, which carry no inbound client).
+func TestGRPCTransportSendTenantID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tenant5 := roachpb.MustMakeTenantID(5)
+	tenant9 := roachpb.MustMakeTenantID(9)
+
+	testCases := []struct {
+		name string
+		// clientTenant, when set, is put on the context as the inbound RPC's
+		// client tenant; unset means the context carries no client tenant.
+		clientTenant   roachpb.TenantID
+		optsTenant     roachpb.TenantID
+		expectedTenant roachpb.TenantID
+	}{
+		{
+			name:           "context client tenant preferred over DistSender tenant",
+			clientTenant:   tenant5,
+			optsTenant:     tenant9,
+			expectedTenant: tenant5,
+		},
+		{
+			name:           "falls back to DistSender tenant when context has none",
+			optsTenant:     tenant9,
+			expectedTenant: tenant9,
+		},
+		{
+			name:           "unset context and DistSender leaves the tenant unset",
+			expectedTenant: roachpb.TenantID{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			if tc.clientTenant.IsSet() {
+				ctx = roachpb.ContextWithClientTenant(ctx, tc.clientTenant)
+			}
+			gt := &grpcTransport{opts: SendOptions{tenantID: tc.optsTenant}}
+			require.Equal(t, tc.expectedTenant, gt.sendTenantID(ctx))
+		})
+	}
+}
+
 // TestSpanImport tests that the gRPC transport ingests trace information that
 // came from gRPC responses (via tracingpb.RecordedSpan on the batch responses).
 func TestSpanImport(t *testing.T) {
