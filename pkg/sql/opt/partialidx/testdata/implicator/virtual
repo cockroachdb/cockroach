@@ -349,6 +349,27 @@ predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int)
 true
 └── remaining filters: (((a->>'x')::INT8 < 1) OR ((a->>'x')::INT8 > 10)) AND ((c < 2) OR (c > 20))
 
+# Two distinct virtual computed columns share the same expression, as happens
+# when two expression indexes are defined over identical key expressions. The
+# filter must imply the predicate deterministically regardless of the order in
+# which the computed columns are considered (regression test for #174320).
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT > 4
+=>
+(a->>'x')::INT IS NOT NULL
+----
+true
+└── remaining filters: (a->>'x')::INT8 > 4
+
+predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'x')::INT) virtual)
+(a->>'x')::INT = 4
+=>
+(a->>'x')::INT IS NOT NULL AND (a->>'x')::INT > 0
+----
+true
+└── remaining filters: (a->>'x')::INT8 = 4
+
 # Complex computed column expressions.
 
 predtest vars=(a jsonb, b int as ((a->>'x')::INT) virtual, c int as ((a->>'y')::INT) virtual)
