@@ -108,7 +108,6 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 
 		if settingName == "multi-region" {
 			setupMultiRegionDatabase(t, conn, rng, logStmt)
-			setting.Options = append(setting.Options, sqlsmith.DisableDoBlocks())
 		}
 
 		const timeout = time.Minute
@@ -120,7 +119,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		}
 		logStmt(setStmtTimeout)
 
-		setting.Options = append(setting.Options, sqlsmith.SimpleNames())
+		setting.Options = append(setting.Options, sqlsmith.SimpleNames(), sqlsmith.DisableDoBlocks())
 		smither, err := sqlsmith.NewSmither(conn, rng, setting.Options...)
 		if err != nil {
 			t.Fatal(err)

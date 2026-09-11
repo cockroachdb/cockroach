@@ -367,9 +367,7 @@ func runOneRoundQueryComparison(
 			sqlsmith.SetScalarComplexity(.1),
 			sqlsmith.SimpleNames(),
 			sqlsmith.SetLogger(t.L().Printf),
-		}
-		if qct.isMultiRegion {
-			options = append(options, sqlsmith.DisableDoBlocks())
+			sqlsmith.DisableDoBlocks(),
 		}
 		smither, err := sqlsmith.NewSmither(conn, rnd, options...)
 		if err != nil {
