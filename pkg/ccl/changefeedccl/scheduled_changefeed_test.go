@@ -219,6 +219,26 @@ func TestSerializesScheduledChangefeedExecutionArgs(t *testing.T) {
 			},
 		},
 		{
+			name:  "changefeed-with-secret-option",
+			query: "CREATE SCHEDULE FOR CHANGEFEED d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH initial_scan='only', webhook_auth_header='Basic nevershown' RECURRING '@hourly'",
+			es: expectedSchedule{
+				nameRe:         "CHANGEFEED .+",
+				changefeedStmt: "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH OPTIONS (initial_scan = 'only', webhook_auth_header = 'Basic nevershown')",
+				shownStmt:      "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=redacted' WITH OPTIONS (initial_scan = 'only', webhook_auth_header = 'redacted')",
+				period:         time.Hour,
+			},
+		},
+		{
+			name:  "changefeed-with-secret-uri-option",
+			query: "CREATE SCHEDULE FOR CHANGEFEED d.public.foo INTO 'null://' WITH initial_scan='only', confluent_schema_registry='https://user:nevershown@registry:8081' RECURRING '@hourly'",
+			es: expectedSchedule{
+				nameRe:         "CHANGEFEED .+",
+				changefeedStmt: "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'null://' WITH OPTIONS (initial_scan = 'only', confluent_schema_registry = 'https://user:nevershown@registry:8081')",
+				shownStmt:      "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'null://' WITH OPTIONS (initial_scan = 'only', confluent_schema_registry = 'https://redacted@registry:8081')",
+				period:         time.Hour,
+			},
+		},
+		{
 			name: "changefeed-with-options",
 			query: `
 		CREATE SCHEDULE 'foo-changefeed'
@@ -736,11 +756,20 @@ func TestShowCreateScheduleStatement(t *testing.T) {
 		name       string
 		query      string
 		recurrence string
+		// secret, if set, is an option value in query that must not appear in
+		// the SHOW CREATE SCHEDULE output.
+		secret string
 	}{
 		{
 			name:       "changefeed",
 			query:      `CREATE SCHEDULE simple FOR CHANGEFEED TABLE t1 INTO '%s' WITH initial_scan = 'only' RECURRING '@hourly'`,
 			recurrence: "@hourly",
+		},
+		{
+			name:       "changefeed-with-secret-option",
+			query:      `CREATE SCHEDULE with_secret FOR CHANGEFEED TABLE t1 INTO '%s' WITH initial_scan = 'only', webhook_auth_header = 'Basic nevershown' RECURRING '@hourly'`,
+			recurrence: "@hourly",
+			secret:     "Basic nevershown",
 		},
 		{
 			name:       "changefeed-with-options",
@@ -770,6 +799,17 @@ func TestShowCreateScheduleStatement(t *testing.T) {
 			expectedScheduleNode, err := constructExpectedScheduledChangefeedNode(t, schedule, tc.recurrence)
 			require.NoError(t, err)
 
+			// The expected node above is rendered by the Format method under test, so
+			// comparing against it cannot detect a redaction regression. Check for the
+			// raw secret directly.
+			requireSecretRedacted := func(t *testing.T, stmt string) {
+				if tc.secret == "" {
+					return
+				}
+				require.NotContains(t, stmt, tc.secret)
+				require.Contains(t, stmt, "'*****'")
+			}
+
 			t.Run("show-create-all-schedules", func(t *testing.T) {
 				rows := th.sqlDB.QueryStr(t, "SELECT * FROM [ SHOW CREATE ALL SCHEDULES ] WHERE create_statement LIKE '%FOR CHANGEFEED%'")
 				cols, err := th.sqlDB.Query(t, "SHOW CREATE ALL SCHEDULES").Columns()
@@ -784,6 +824,7 @@ func TestShowCreateScheduleStatement(t *testing.T) {
 					require.Len(t, row, 2)
 					showCreateScheduleStmt := row[1]
 					require.Equal(t, tree.AsString(expectedScheduleNode), showCreateScheduleStmt)
+					requireSecretRedacted(t, showCreateScheduleStmt)
 				}
 			})
 
@@ -794,6 +835,7 @@ func TestShowCreateScheduleStatement(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, cols, []string{"schedule_id", "create_statement"})
 				require.Equal(t, tree.AsString(expectedScheduleNode), rows[0][1])
+				requireSecretRedacted(t, rows[0][1])
 			})
 
 			th.clearSchedules(t)

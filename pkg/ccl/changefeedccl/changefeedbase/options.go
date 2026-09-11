@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -273,7 +274,7 @@ const (
 	OptAvroMode                           = `avro_mode`
 	OptAvroResolvedSubject                = `avro_resolved_subject`
 	OptAvroSchemas                        = `avro_schemas`
-	OptConfluentSchemaRegistry            = `confluent_schema_registry`
+	OptConfluentSchemaRegistry            = tree.ChangefeedOptConfluentSchemaRegistry
 	OptCursor                             = `cursor`
 	OptCustomKeyColumn                    = `key_column`
 	OptEndTime                            = `end_time`
@@ -293,7 +294,7 @@ const (
 	OptSchemaChangePolicy                 = `schema_change_policy`
 	OptSplitColumnFamilies                = `split_column_families`
 	OptExpirePTSAfter                     = `gc_protect_expires_after`
-	OptWebhookAuthHeader                  = `webhook_auth_header`
+	OptWebhookAuthHeader                  = tree.ChangefeedOptWebhookAuthHeader
 	OptWebhookClientTimeout               = `webhook_client_timeout`
 	OptOnError                            = `on_error`
 	OptMetricsScope                       = `metrics_label`
@@ -307,7 +308,7 @@ const (
 	// TODO(#142273): look into whether we want to add headers to pub/sub, and other
 	// sinks as well (eg cloudstorage, webhook, ..). Currently it's kafka-only.
 	OptHeadersJSONColumnName = `headers_json_column_name`
-	OptExtraHeaders          = `extra_headers`
+	OptExtraHeaders          = tree.ChangefeedOptExtraHeaders
 	OptPartitionAlg          = `partition_alg`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
@@ -398,7 +399,7 @@ const (
 
 	// OptSink allows users to alter the Sink URI of an existing changefeed.
 	// Note that this option is only allowed for alter changefeed statements.
-	OptSink = `sink`
+	OptSink = tree.ChangefeedOptSink
 
 	// Deprecated options.
 	DeprecatedOptProtectDataFromGCOnPause = `protect_data_from_gc_on_pause`
@@ -713,13 +714,24 @@ func RedactUserFromURI(uri string) (string, error) {
 	return u.String(), nil
 }
 
-// RedactedOptions are options whose values should be replaced with "redacted" in job descriptions and errors.
-var RedactedOptions = map[string]redactionFunc{
-	OptWebhookAuthHeader:       redactSimple,
-	OptExtraHeaders:            redactSimple,
-	SinkParamClientKey:         redactSimple,
-	OptConfluentSchemaRegistry: RedactUserFromURI,
-}
+// RedactedOptions maps each secret-bearing option to the function that redacts
+// its value when a changefeed statement is rebuilt for display (job
+// descriptions, SHOW SCHEDULES). The key set comes from sem/tree so that
+// statement formatting and these display paths cannot disagree about which
+// options are secret.
+var RedactedOptions = func() map[string]redactionFunc {
+	m := make(map[string]redactionFunc, len(tree.ChangefeedSecretOptions))
+	for opt := range tree.ChangefeedSecretOptions {
+		// The ALTER-only sink option is diverted to the sink URI before options
+		// reach StatementOptions, and sink URIs are sanitized separately.
+		if opt == OptSink {
+			continue
+		}
+		m[opt] = redactSimple
+	}
+	m[OptConfluentSchemaRegistry] = RedactUserFromURI
+	return m
+}()
 
 // NoLongerExperimental aliases options prefixed with experimental that no longer need to be
 var NoLongerExperimental = map[string]string{

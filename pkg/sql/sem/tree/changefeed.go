@@ -10,6 +10,47 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
+// Changefeed option names whose values carry secrets. They are defined here
+// rather than in ccl/changefeedccl/changefeedbase, which owns changefeed
+// option parsing, because the Format methods must redact these values and
+// cannot depend on that package. changefeedbase aliases these constants and
+// builds its redaction map from ChangefeedSecretOptions, so there is no second
+// list to keep in sync.
+const (
+	// ChangefeedOptSink is the ALTER CHANGEFEED option holding the sink URI.
+	ChangefeedOptSink = `sink`
+	// ChangefeedOptWebhookAuthHeader is the authorization header sent to
+	// webhook sinks.
+	ChangefeedOptWebhookAuthHeader = `webhook_auth_header`
+	// ChangefeedOptExtraHeaders is the set of extra headers sent to Kafka and
+	// webhook sinks.
+	ChangefeedOptExtraHeaders = `extra_headers`
+	// ChangefeedOptConfluentSchemaRegistry is the schema registry URI, which
+	// can embed credentials.
+	ChangefeedOptConfluentSchemaRegistry = `confluent_schema_registry`
+)
+
+// ChangefeedSecretOptions is the set of changefeed option names whose values
+// carry secrets.
+var ChangefeedSecretOptions = map[string]struct{}{
+	ChangefeedOptSink:                    {},
+	ChangefeedOptWebhookAuthHeader:       {},
+	ChangefeedOptExtraHeaders:            {},
+	ChangefeedOptConfluentSchemaRegistry: {},
+}
+
+// formatChangefeedOptionValue formats one changefeed option value, routing
+// secret-bearing values through FormatURI so they redact under default format
+// flags. It is shared by every statement that formats changefeed options
+// (CREATE CHANGEFEED, CREATE SCHEDULE FOR CHANGEFEED, ALTER CHANGEFEED).
+func formatChangefeedOptionValue(n *KVOption, ctx *FmtCtx) {
+	if _, ok := ChangefeedSecretOptions[string(n.Key)]; ok {
+		ctx.FormatURI(n.Value)
+		return
+	}
+	ctx.FormatNode(n.Value)
+}
+
 type ChangefeedLevel int
 
 const (
@@ -91,7 +132,7 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 	}
 	if node.Options != nil {
 		ctx.WriteString(" WITH OPTIONS (")
-		ctx.FormatNode(&node.Options)
+		node.Options.formatEach(ctx, formatChangefeedOptionValue)
 		ctx.WriteString(")")
 	}
 }
@@ -106,7 +147,7 @@ func (node *CreateChangefeed) formatWithPredicates(ctx *FmtCtx) {
 	}
 	if node.Options != nil {
 		ctx.WriteString(" WITH OPTIONS (")
-		ctx.FormatNode(&node.Options)
+		node.Options.formatEach(ctx, formatChangefeedOptionValue)
 		ctx.WriteString(")")
 	}
 	ctx.WriteString(" AS ")

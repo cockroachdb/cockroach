@@ -202,3 +202,21 @@ ALTER CHANGEFEED 123 UNSET EXCLUDE TABLES  -- normalized!
 ALTER CHANGEFEED (123) UNSET EXCLUDE TABLES  -- fully parenthesized
 ALTER CHANGEFEED _ UNSET EXCLUDE TABLES  -- literals removed
 ALTER CHANGEFEED 123 UNSET EXCLUDE TABLES  -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 SET webhook_auth_header = 'Basic dXNlcg==', extra_headers = '{"X-Custom": "v"}', confluent_schema_registry = 'https://user:pass@registry:8081', format = 'avro'
+----
+ALTER CHANGEFEED 123 SET webhook_auth_header = '*****', extra_headers = '*****', confluent_schema_registry = '*****', format = 'avro' -- normalized!
+ALTER CHANGEFEED (123) SET webhook_auth_header = ('*****'), extra_headers = ('*****'), confluent_schema_registry = ('*****'), format = ('avro') -- fully parenthesized
+ALTER CHANGEFEED _ SET webhook_auth_header = '_', extra_headers = '_', confluent_schema_registry = '_', format = '_' -- literals removed
+ALTER CHANGEFEED 123 SET _ = '*****', _ = '*****', _ = '*****', _ = 'avro' -- identifiers removed
+ALTER CHANGEFEED 123 SET webhook_auth_header = 'Basic dXNlcg==', extra_headers = '{"X-Custom": "v"}', confluent_schema_registry = 'https://user:pass@registry:8081', format = 'avro' -- passwords exposed
+
+parse
+ALTER CHANGEFEED 123 ADD foo WITH webhook_auth_header = 'Basic dXNlcg==', format = 'json'
+----
+ALTER CHANGEFEED 123 ADD TABLE foo WITH webhook_auth_header = '*****', format = 'json' -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo) WITH webhook_auth_header = ('*****'), format = ('json') -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo WITH webhook_auth_header = '_', format = '_' -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _ WITH _ = '*****', _ = 'json' -- identifiers removed
+ALTER CHANGEFEED 123 ADD TABLE foo WITH webhook_auth_header = 'Basic dXNlcg==', format = 'json' -- passwords exposed
