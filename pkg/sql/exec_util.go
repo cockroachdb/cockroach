@@ -3911,6 +3911,10 @@ func (m *sessionDataMutator) SetOptimizerUseNotVisibleIndexes(val bool) {
 	m.data.OptimizerUseNotVisibleIndexes = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUsePartialIndexPredicateOptionalFilters(val bool) {
+	m.data.OptimizerUsePartialIndexPredicateOptionalFilters = val
+}
+
 func (m *sessionDataMutator) SetOptimizerMergeJoinsEnabled(val bool) {
 	m.data.OptimizerMergeJoinsEnabled = val
 }

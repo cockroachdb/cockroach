@@ -4228,6 +4228,7 @@ optimizer_use_merged_partial_statistics                          on
 optimizer_use_min_row_count_anti_join_fix                        off
 optimizer_use_multicol_stats                                     on
 optimizer_use_not_visible_indexes                                off
+optimizer_use_partial_index_predicate_optional_filters           on
 optimizer_use_polymorphic_parameter_fix                          on
 optimizer_use_provided_ordering_fix                              on
 optimizer_use_trigram_similarity_optimization                    on

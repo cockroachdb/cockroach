@@ -354,6 +354,29 @@ func (c *CustomFuncs) GetOptionalFiltersAndFilterColumns(
 	return optionalFilters, filterColumns
 }
 
+// optionalFiltersWithPartialIndexPredicate returns optionalFilters augmented
+// with the given index's partial index predicate, if it is a partial index.
+// Otherwise, optionalFilters is returned unchanged.
+func (c *CustomFuncs) optionalFiltersWithPartialIndexPredicate(
+	tabMeta *opt.TableMeta, indexOrd cat.IndexOrdinal, optionalFilters memo.FiltersExpr,
+) memo.FiltersExpr {
+	if !c.e.evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters {
+		return optionalFilters
+	}
+	predScalar, isPartialIndex := tabMeta.PartialIndexPredicate(indexOrd)
+	if !isPartialIndex {
+		return optionalFilters
+	}
+	pred := *predScalar.(*memo.FiltersExpr)
+	if len(pred) == 0 {
+		return optionalFilters
+	}
+	combined := make(memo.FiltersExpr, 0, len(optionalFilters)+len(pred))
+	combined = append(combined, optionalFilters...)
+	combined = append(combined, pred...)
+	return combined
+}
+
 // GenerateConstrainedScans enumerates all non-inverted secondary indexes on the
 // Scan operator's table and tries to push the given Select filter into new
 // constrained Scan operators using those indexes. Since this only needs to be
@@ -449,11 +472,17 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		spanLimit := int(c.e.evalCtx.SessionData().OptimizerSpanLimit)
 
+		// Include the partial index predicate in the set of optional filters,
+		// if this is a partial index.
+		indexOptionalFilters := c.optionalFiltersWithPartialIndexPredicate(
+			tabMeta, index.Ordinal(), optionalFilters,
+		)
+
 		// Build Constraints to scan a subset of the table Spans.
 		if partitionFilters, remainingFilters, combinedConstraint, ok =
 			c.MakeCombinedFiltersConstraint(
 				tabMeta, index, scanPrivate, prefixSorter,
-				filters, optionalFilters, filterColumns,
+				filters, indexOptionalFilters, filterColumns,
 				spanLimit,
 			); !ok {
 			return
@@ -480,6 +509,20 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 					if combinedConstraint.Contains(c.e.ctx, c.e.evalCtx, optionalConstraints.Constraint(j)) {
 						return
 					}
+				}
+			}
+
+			// Similarly, avoid generating a constrained scan over a partial
+			// index when the constraint is implied by the partial index
+			// predicate. The equivalent full scan is generated separately by
+			// GeneratePartialIndexScans.
+			if predScalar, isPartialIndex :=
+				tabMeta.PartialIndexPredicate(index.Ordinal()); isPartialIndex {
+				pred := *predScalar.(*memo.FiltersExpr)
+				if predConstraint, _, predOK := c.tryConstrainIndex(
+					pred, nil /* optionalFilters */, scanPrivate.Table, index.Ordinal(), spanLimit,
+				); predOK && combinedConstraint.Contains(c.e.ctx, c.e.evalCtx, predConstraint) {
+					return
 				}
 			}
 		}
@@ -915,9 +958,15 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 			return
 		}
 
+		// Include the partial index predicate in the set of optional filters,
+		// if this is a partial index.
+		indexOptionalFilters := c.optionalFiltersWithPartialIndexPredicate(
+			tabMeta, index.Ordinal(), optionalFilters,
+		)
+
 		// Check whether the filter can constrain the index.
 		spanExpr, con, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
-			c.e.ctx, c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
+			c.e.ctx, c.e.evalCtx, c.e.f, filters, indexOptionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
 			c.checkCancellation,
 		)
 		if !ok {
@@ -1157,9 +1206,14 @@ func (c *CustomFuncs) GenerateTrigramSimilarityInvertedIndexScans(
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
+		// Include the partial index predicate in the set of optional filters,
+		// if this is a partial index.
+		indexOptionalFilters := c.optionalFiltersWithPartialIndexPredicate(
+			tabMeta, index.Ordinal(), optionalFilters,
+		)
 		// Try to constrain the index.
 		con, remainingFilters, ok := invertedidx.TryFilterInvertedIndexBySimilarity(
-			c.e.ctx, c.e.evalCtx, c.e.f, filters, optionalFilters,
+			c.e.ctx, c.e.evalCtx, c.e.f, filters, indexOptionalFilters,
 			tabID, index, tabMeta.ComputedCols, c.checkCancellation,
 		)
 		if !ok {
