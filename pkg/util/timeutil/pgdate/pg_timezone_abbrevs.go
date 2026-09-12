@@ -5,7 +5,12 @@
 
 package pgdate
 
-import "strings"
+import (
+	"strings"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
 
 // PGTimezoneAbbrev is a row in CockroachDB's mirror of PostgreSQL's
 // pg_timezone_abbrevs view. Abbreviations are fixed-offset names like EST,
@@ -178,6 +183,17 @@ var pgTimezoneAbbrevs = map[string]PGTimezoneAbbrev{
 func LookupPGTimezoneAbbrev(s string) (PGTimezoneAbbrev, bool) {
 	abbrev, ok := pgTimezoneAbbrevs[strings.ToUpper(s)]
 	return abbrev, ok
+}
+
+// TimeZoneStringToLocation resolves PostgreSQL timezone abbreviations before
+// consulting the generic timezone-name resolver.
+func TimeZoneStringToLocation(
+	s string, standard timeutil.TimeZoneStringToLocationStandard,
+) (*time.Location, error) {
+	if abbrev, ok := LookupPGTimezoneAbbrev(s); ok {
+		return time.FixedZone(s, int(abbrev.UTCOffsetSecs)), nil
+	}
+	return timeutil.TimeZoneStringToLocation(s, standard)
 }
 
 // PGTimezoneAbbrevs returns the abbreviation table for use by callers that

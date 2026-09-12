@@ -829,3 +829,62 @@ SELECT '-infinity'::timestamp + '1 second'::interval, '-infinity'::timestamp - '
 -infinity -infinity
 
 subtest end
+
+subtest timezone_abbreviations_94078
+
+statement ok
+SET timezone = 'UTC'
+
+query TT
+SELECT timezone('CET', '2022-10-01 00:00:00+01'::TIMESTAMPTZ)::STRING,
+       timezone('UTC', '2022-10-01 00:00:00+01'::TIMESTAMPTZ)::STRING
+----
+2022-10-01 00:00:00  2022-09-30 23:00:00
+
+# Abbreviations have fixed offsets throughout the year and are case insensitive.
+query TTT
+SELECT timezone('CET', ts)::STRING, timezone('cet', ts)::STRING, timezone('CEST', ts)::STRING
+FROM (VALUES ('2022-01-01 00:00:00+00'::TIMESTAMPTZ),
+             ('2022-07-01 00:00:00+00'::TIMESTAMPTZ)) AS t(ts) ORDER BY ts
+----
+2022-01-01 01:00:00  2022-01-01 01:00:00  2022-01-01 02:00:00
+2022-07-01 01:00:00  2022-07-01 01:00:00  2022-07-01 02:00:00
+
+query BB
+SELECT timezone('CET', '2022-07-01 00:00:00'::TIMESTAMP) = '2022-06-30 23:00:00+00'::TIMESTAMPTZ,
+       ('2022-07-01 00:00:00'::TIMESTAMP AT TIME ZONE 'CET') = '2022-06-30 23:00:00+00'::TIMESTAMPTZ
+----
+true  true
+
+# TIME/TIMETZ use the same abbreviation resolver, including DST abbreviations.
+query TT
+SELECT timezone('CEST', '00:00:00'::TIME)::STRING,
+       timezone('CEST', '00:00:00+00'::TIMETZ)::STRING
+----
+02:00:00+02  02:00:00+02
+
+# Cover the STRING overload as well as timestamp/timestamptz overloads.
+query T
+SELECT timezone('CET', '2022-07-01 00:00:00+00'::STRING)::STRING
+----
+2022-07-01 01:00:00
+
+query BB
+SELECT make_timestamptz(2022, 7, 1, 0, 0, 0, 'CET') = '2022-06-30 23:00:00+00'::TIMESTAMPTZ,
+       date_trunc('day', '2022-07-01 12:00:00+00'::TIMESTAMPTZ, 'CET') = '2022-06-30 23:00:00+00'::TIMESTAMPTZ
+----
+true  true
+
+query TT
+SELECT timezone('Europe/Paris', ts)::STRING, timezone('UTC-1', ts)::STRING
+FROM (VALUES ('2022-01-01 00:00:00+00'::TIMESTAMPTZ),
+             ('2022-07-01 00:00:00+00'::TIMESTAMPTZ)) AS t(ts) ORDER BY ts
+----
+2022-01-01 01:00:00  2022-01-01 01:00:00
+2022-07-01 02:00:00  2022-07-01 01:00:00
+
+query error could not parse .* as time zone
+SELECT timezone('not_a_timezone', '2022-07-01'::TIMESTAMP)
+
+statement ok
+RESET timezone

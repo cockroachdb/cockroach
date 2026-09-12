@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
@@ -295,10 +296,7 @@ func timeZoneVarGetStringVal(
 	switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
 	case *tree.DString:
 		location := string(*v)
-		loc, err = timeutil.TimeZoneStringToLocation(
-			location,
-			timeutil.TimeZoneStringToLocationISO8601Standard,
-		)
+		loc, err = pgdate.TimeZoneStringToLocation(location, timeutil.TimeZoneStringToLocationISO8601Standard)
 		if err != nil {
 			return "", wrapSetVarError(errors.Wrapf(err, "cannot find time zone %q", location), "timezone", values[0].String())
 		}
@@ -337,10 +335,7 @@ func timeZoneVarGetStringVal(
 }
 
 func timeZoneVarSet(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
-	loc, err := timeutil.TimeZoneStringToLocation(
-		s,
-		timeutil.TimeZoneStringToLocationISO8601Standard,
-	)
+	loc, err := pgdate.TimeZoneStringToLocation(s, timeutil.TimeZoneStringToLocationISO8601Standard)
 	if err != nil {
 		return wrapSetVarError(err, "TimeZone", s)
 	}

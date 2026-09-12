@@ -94,10 +94,7 @@ func MarshalNonLocal(sd *SessionData, proto *sessiondatapb.SessionData) {
 // UnmarshalNonLocal returns a new SessionData based on the serialized
 // representation. Note that only non-local session parameters are populated.
 func UnmarshalNonLocal(proto sessiondatapb.SessionData) (*SessionData, error) {
-	location, err := timeutil.TimeZoneStringToLocation(
-		proto.Location,
-		timeutil.TimeZoneStringToLocationISO8601Standard,
-	)
+	location, err := pgdate.TimeZoneStringToLocation(proto.Location, timeutil.TimeZoneStringToLocationISO8601Standard)
 	if err != nil {
 		return nil, err
 	}
