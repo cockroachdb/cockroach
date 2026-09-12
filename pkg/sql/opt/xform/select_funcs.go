@@ -1921,23 +1921,15 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 	})
 }
 
-// SplitDisjunction finds the first disjunction in the filters that can be split
-// into an interesting pair of expressions. It returns the pair of expressions
-// and the Filters item they were a part of. If an "interesting" disjunction is
-// not found, ok=false is returned.
+// checkDisjunctionSplitLimit checks whether the number of ORs in 'filters'
+// doesn't exceed the optimizer_max_disjunction_split_count limit. ok=false is
+// returned when the limit is exceeded.
 //
-// For details on what makes an "interesting" disjunction, see
-// findInterestingDisjunctionPair.
-func (c *CustomFuncs) SplitDisjunction(
-	sp *memo.ScanPrivate, filters memo.FiltersExpr,
-) (left opt.ScalarExpr, right opt.ScalarExpr, itemToReplace *memo.FiltersItem, ok bool) {
-	// Each split rewrites Select(Scan) into a UnionAll of two Selects over
-	// duplicated tables, and both are re-explored (and re-split), so
-	// exploration fans out by a factor of ~2 for every OR-connected conjunct in
-	// filters. When filters is an N-way AND of ORs, this causes memo growth
-	// exponential in N. Bail out entirely once the number of disjunctions
-	// exceeds the configured limit, leaving the unconstrained Scan+Select in
-	// place, to avoid exhausting node memory during planning. See #172644.
+// This check is used by SplitDisjunction* rules where each split results in
+// doubling the memory used, leading to exponential growth in the number of ORs.
+// Bail out entirely once the limit is exceeded without exploring the affected
+// rules.
+func (c *CustomFuncs) checkDisjunctionSplitLimit(filters memo.FiltersExpr) (ok bool) {
 	limit := int(c.e.evalCtx.SessionData().OptimizerMaxDisjunctionSplitCount)
 	if limit <= 0 {
 		limit = opt.DefaultDisjunctionSplitCountLimit
@@ -1948,7 +1940,22 @@ func (c *CustomFuncs) SplitDisjunction(
 			numDisjunctions++
 		}
 	}
-	if numDisjunctions > limit {
+	ok = numDisjunctions <= limit
+	return
+}
+
+// SplitDisjunction finds the first disjunction in the filters that can be split
+// into an interesting pair of expressions. It returns the pair of expressions
+// and the Filters item they were a part of. If an "interesting" disjunction is
+// not found, ok=false is returned.
+//
+// For details on what makes an "interesting" disjunction, see
+// findInterestingDisjunctionPair.
+func (c *CustomFuncs) SplitDisjunction(
+	sp *memo.ScanPrivate, filters memo.FiltersExpr,
+) (left opt.ScalarExpr, right opt.ScalarExpr, itemToReplace *memo.FiltersItem, ok bool) {
+	// Prevent pathological behavior with too many ORs. See #172644.
+	if ok := c.checkDisjunctionSplitLimit(filters); !ok {
 		return nil, nil, nil, false
 	}
 	for i := range filters {

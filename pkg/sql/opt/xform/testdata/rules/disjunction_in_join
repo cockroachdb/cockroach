@@ -4420,3 +4420,174 @@ left-join (cross)
  │    └── key: (13-16)
  └── filters
       └── (t1.a1:7 = t3.a1:13) OR (t2.a2:2 = t3.a2:14) [outer=(2,7,13,14)]
+
+# --------------------------------------------------
+# Fan-out cap (optimizer_max_disjunction_split_count)
+# --------------------------------------------------
+
+# Regression test for #173718. Each split duplicates both scan tables and
+# preserves the other OR conjuncts, so both children re-fire the rule and memo
+# growth is exponential in the number of OR-connected conjuncts. When that count
+# exceeds optimizer_max_disjunction_split_count, the rule bails out and the join
+# is left in place instead of fanning out.
+#
+# With the limit set to 1, an ON clause with two OR conjuncts is not split.
+opt expect-not=SplitDisjunctionOfJoinTerms set=(optimizer_max_disjunction_split_count=1)
+SELECT * FROM a t1, a t2 WHERE (t1.a2 = t2.a2 OR t1.a3 = t2.a3) AND (t1.a1 = t2.a1 OR t1.a4 = t2.a4)
+----
+inner-join (cross)
+ ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null a1:7!null a2:8!null a3:9!null a4:10!null
+ ├── key: (1-4,7-10)
+ ├── scan a [as=t1]
+ │    ├── columns: t1.a1:1!null t1.a2:2!null t1.a3:3!null t1.a4:4!null
+ │    └── key: (1-4)
+ ├── scan a [as=t2]
+ │    ├── columns: t2.a1:7!null t2.a2:8!null t2.a3:9!null t2.a4:10!null
+ │    └── key: (7-10)
+ └── filters
+      ├── (t1.a2:2 = t2.a2:8) OR (t1.a3:3 = t2.a3:9) [outer=(2,3,8,9)]
+      └── (t1.a1:1 = t2.a1:7) OR (t1.a4:4 = t2.a4:10) [outer=(1,4,7,10)]
+
+# With the default limit, the same ON clause is split.
+opt expect=SplitDisjunctionOfJoinTerms
+SELECT * FROM a t1, a t2 WHERE (t1.a2 = t2.a2 OR t1.a3 = t2.a3) AND (t1.a1 = t2.a1 OR t1.a4 = t2.a4)
+----
+project
+ ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null a1:7!null a2:8!null a3:9!null a4:10!null
+ ├── key: (1-4,7-10)
+ └── distinct-on
+      ├── columns: t1.a1:1!null t1.a2:2!null t1.a3:3!null t1.a4:4!null t2.a1:7!null t2.a2:8!null t2.a3:9!null t2.a4:10!null
+      ├── grouping columns: t1.a1:1!null t1.a2:2!null t1.a3:3!null t1.a4:4!null t2.a1:7!null t2.a2:8!null t2.a3:9!null t2.a4:10!null
+      ├── key: (1-4,7-10)
+      └── union-all
+           ├── columns: t1.a1:1!null t1.a2:2!null t1.a3:3!null t1.a4:4!null t2.a1:7!null t2.a2:8!null t2.a3:9!null t2.a4:10!null
+           ├── left columns: t1.a1:13 t1.a2:14 t1.a3:15 t1.a4:16 t2.a1:19 t2.a2:20 t2.a3:21 t2.a4:22
+           ├── right columns: t1.a1:25 t1.a2:26 t1.a3:27 t1.a4:28 t2.a1:31 t2.a2:32 t2.a3:33 t2.a4:34
+           ├── inner-join (hash)
+           │    ├── columns: t1.a1:13!null t1.a2:14!null t1.a3:15!null t1.a4:16!null t2.a1:19!null t2.a2:20!null t2.a3:21!null t2.a4:22!null
+           │    ├── key: (13,15,16,19-22)
+           │    ├── fd: (14)==(20), (20)==(14)
+           │    ├── scan a [as=t1]
+           │    │    ├── columns: t1.a1:13!null t1.a2:14!null t1.a3:15!null t1.a4:16!null
+           │    │    └── key: (13-16)
+           │    ├── scan a [as=t2]
+           │    │    ├── columns: t2.a1:19!null t2.a2:20!null t2.a3:21!null t2.a4:22!null
+           │    │    └── key: (19-22)
+           │    └── filters
+           │         ├── t1.a2:14 = t2.a2:20 [outer=(14,20), constraints=(/14: (/NULL - ]; /20: (/NULL - ]), fd=(14)==(20), (20)==(14)]
+           │         └── (t1.a1:13 = t2.a1:19) OR (t1.a4:16 = t2.a4:22) [outer=(13,16,19,22)]
+           └── inner-join (hash)
+                ├── columns: t1.a1:25!null t1.a2:26!null t1.a3:27!null t1.a4:28!null t2.a1:31!null t2.a2:32!null t2.a3:33!null t2.a4:34!null
+                ├── key: (25,26,28,31-34)
+                ├── fd: (27)==(33), (33)==(27)
+                ├── scan a [as=t1]
+                │    ├── columns: t1.a1:25!null t1.a2:26!null t1.a3:27!null t1.a4:28!null
+                │    └── key: (25-28)
+                ├── scan a [as=t2]
+                │    ├── columns: t2.a1:31!null t2.a2:32!null t2.a3:33!null t2.a4:34!null
+                │    └── key: (31-34)
+                └── filters
+                     ├── t1.a3:27 = t2.a3:33 [outer=(27,33), constraints=(/27: (/NULL - ]; /33: (/NULL - ]), fd=(27)==(33), (33)==(27)]
+                     └── (t1.a1:25 = t2.a1:31) OR (t1.a4:28 = t2.a4:34) [outer=(25,28,31,34)]
+
+# The cap also applies to the anti-join analog. With the limit set to 1, an
+# antijoin ON clause with two OR conjuncts is not split.
+opt expect-not=SplitDisjunctionOfAntiJoinTerms set=(optimizer_max_disjunction_split_count=1)
+SELECT a1,a2,a3 FROM a WHERE NOT EXISTS (SELECT * FROM b WHERE (a2 = b2 OR a3 = b3) AND (a1 = b1 OR a4 = b4))
+----
+project
+ ├── columns: a1:1!null a2:2!null a3:3!null
+ └── anti-join (cross)
+      ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null
+      ├── key: (1-4)
+      ├── scan a
+      │    ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null
+      │    └── key: (1-4)
+      ├── scan b
+      │    └── columns: b1:7 b2:8 b3:9 b4:10
+      └── filters
+           ├── (a2:2 = b2:8) OR (a3:3 = b3:9) [outer=(2,3,8,9)]
+           └── (a1:1 = b1:7) OR (a4:4 = b4:10) [outer=(1,4,7,10)]
+
+# With the default limit, the same antijoin ON clause is split.
+opt expect=SplitDisjunctionOfAntiJoinTerms
+SELECT a1,a2,a3 FROM a WHERE NOT EXISTS (SELECT * FROM b WHERE (a2 = b2 OR a3 = b3) AND (a1 = b1 OR a4 = b4))
+----
+project
+ ├── columns: a1:1!null a2:2!null a3:3!null
+ └── project
+      ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null
+      ├── key: (1-4)
+      └── intersect-all
+           ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null
+           ├── left columns: a1:15 a2:16 a3:17 a4:18
+           ├── right columns: a1:28 a2:29 a3:30 a4:31
+           ├── key: (1-4)
+           ├── anti-join (hash)
+           │    ├── columns: a1:15!null a2:16!null a3:17!null a4:18!null
+           │    ├── key: (15-18)
+           │    ├── scan a
+           │    │    ├── columns: a1:15!null a2:16!null a3:17!null a4:18!null
+           │    │    └── key: (15-18)
+           │    ├── scan b
+           │    │    └── columns: b1:21 b2:22 b4:24
+           │    └── filters
+           │         ├── a2:16 = b2:22 [outer=(16,22), constraints=(/16: (/NULL - ]; /22: (/NULL - ]), fd=(16)==(22), (22)==(16)]
+           │         └── (a1:15 = b1:21) OR (a4:18 = b4:24) [outer=(15,18,21,24)]
+           └── anti-join (hash)
+                ├── columns: a1:28!null a2:29!null a3:30!null a4:31!null
+                ├── key: (28-31)
+                ├── scan a
+                │    ├── columns: a1:28!null a2:29!null a3:30!null a4:31!null
+                │    └── key: (28-31)
+                ├── scan b
+                │    └── columns: b1:34 b3:36 b4:37
+                └── filters
+                     ├── a3:30 = b3:36 [outer=(30,36), constraints=(/30: (/NULL - ]; /36: (/NULL - ]), fd=(30)==(36), (36)==(30)]
+                     └── (a1:28 = b1:34) OR (a4:31 = b4:37) [outer=(28,31,34,37)]
+
+exec-ddl
+CREATE TABLE wide (
+  k INT PRIMARY KEY,
+  c1 INT, c2 INT, c3 INT, c4 INT, c5 INT, c6 INT, c7 INT, c8 INT, c9 INT,
+  c10 INT, c11 INT, c12 INT, c13 INT, c14 INT, c15 INT, c16 INT, c17 INT, c18 INT
+)
+----
+
+# Nine OR conjuncts exceed the default limit of 8, so the rule does not fire and
+# no exponential fan-out occurs, matching the scenario in #173718.
+opt expect-not=SplitDisjunctionOfJoinTerms
+SELECT count(*) FROM wide t1 JOIN wide t2 ON
+  (t1.c1 = t2.c1 OR t1.c2 = t2.c2) AND
+  (t1.c3 = t2.c3 OR t1.c4 = t2.c4) AND
+  (t1.c5 = t2.c5 OR t1.c6 = t2.c6) AND
+  (t1.c7 = t2.c7 OR t1.c8 = t2.c8) AND
+  (t1.c9 = t2.c9 OR t1.c10 = t2.c10) AND
+  (t1.c11 = t2.c11 OR t1.c12 = t2.c12) AND
+  (t1.c13 = t2.c13 OR t1.c14 = t2.c14) AND
+  (t1.c15 = t2.c15 OR t1.c16 = t2.c16) AND
+  (t1.c17 = t2.c17 OR t1.c18 = t2.c18)
+----
+scalar-group-by
+ ├── columns: count:43!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(43)
+ ├── inner-join (cross)
+ │    ├── columns: t1.c1:2 t1.c2:3 t1.c3:4 t1.c4:5 t1.c5:6 t1.c6:7 t1.c7:8 t1.c8:9 t1.c9:10 t1.c10:11 t1.c11:12 t1.c12:13 t1.c13:14 t1.c14:15 t1.c15:16 t1.c16:17 t1.c17:18 t1.c18:19 t2.c1:23 t2.c2:24 t2.c3:25 t2.c4:26 t2.c5:27 t2.c6:28 t2.c7:29 t2.c8:30 t2.c9:31 t2.c10:32 t2.c11:33 t2.c12:34 t2.c13:35 t2.c14:36 t2.c15:37 t2.c16:38 t2.c17:39 t2.c18:40
+ │    ├── scan wide [as=t1]
+ │    │    └── columns: t1.c1:2 t1.c2:3 t1.c3:4 t1.c4:5 t1.c5:6 t1.c6:7 t1.c7:8 t1.c8:9 t1.c9:10 t1.c10:11 t1.c11:12 t1.c12:13 t1.c13:14 t1.c14:15 t1.c15:16 t1.c16:17 t1.c17:18 t1.c18:19
+ │    ├── scan wide [as=t2]
+ │    │    └── columns: t2.c1:23 t2.c2:24 t2.c3:25 t2.c4:26 t2.c5:27 t2.c6:28 t2.c7:29 t2.c8:30 t2.c9:31 t2.c10:32 t2.c11:33 t2.c12:34 t2.c13:35 t2.c14:36 t2.c15:37 t2.c16:38 t2.c17:39 t2.c18:40
+ │    └── filters
+ │         ├── (t1.c1:2 = t2.c1:23) OR (t1.c2:3 = t2.c2:24) [outer=(2,3,23,24)]
+ │         ├── (t1.c3:4 = t2.c3:25) OR (t1.c4:5 = t2.c4:26) [outer=(4,5,25,26)]
+ │         ├── (t1.c5:6 = t2.c5:27) OR (t1.c6:7 = t2.c6:28) [outer=(6,7,27,28)]
+ │         ├── (t1.c7:8 = t2.c7:29) OR (t1.c8:9 = t2.c8:30) [outer=(8,9,29,30)]
+ │         ├── (t1.c9:10 = t2.c9:31) OR (t1.c10:11 = t2.c10:32) [outer=(10,11,31,32)]
+ │         ├── (t1.c11:12 = t2.c11:33) OR (t1.c12:13 = t2.c12:34) [outer=(12,13,33,34)]
+ │         ├── (t1.c13:14 = t2.c13:35) OR (t1.c14:15 = t2.c14:36) [outer=(14,15,35,36)]
+ │         ├── (t1.c15:16 = t2.c15:37) OR (t1.c16:17 = t2.c16:38) [outer=(16,17,37,38)]
+ │         └── (t1.c17:18 = t2.c17:39) OR (t1.c18:19 = t2.c18:40) [outer=(18,19,39,40)]
+ └── aggregations
+      └── count-rows [as=count_rows:43]
