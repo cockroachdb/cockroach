@@ -227,6 +227,7 @@ type Memo struct {
 	useMinRowCountAntiJoinFix                  bool
 	useHistogramsForMultiSpanConstColumns      bool
 	useHistogramsForWithScans                  bool
+	usePartialIndexPredicateOptionalFilters    bool
 	useBackupsWithIDs                          bool
 	// builtWithStatsRollout records the stats rollout mode under which
 	// this memo was built.
@@ -379,6 +380,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useMinRowCountAntiJoinFix:                  evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix,
 		useHistogramsForMultiSpanConstColumns:      evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns,
 		useHistogramsForWithScans:                  evalCtx.SessionData().OptimizerUseHistogramsForWithScans,
+		usePartialIndexPredicateOptionalFilters:    evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters,
 		skipUnderlyingViewPrivilegeChecks:          sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV),
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 		useBackupsWithIDs:                          evalCtx.SessionData().UseBackupsWithIDs,
@@ -572,6 +574,7 @@ func (m *Memo) IsStale(
 		m.useMinRowCountAntiJoinFix != evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix ||
 		m.useHistogramsForMultiSpanConstColumns != evalCtx.SessionData().OptimizerUseHistogramsForMultiSpanConstColumns ||
 		m.useHistogramsForWithScans != evalCtx.SessionData().OptimizerUseHistogramsForWithScans ||
+		m.usePartialIndexPredicateOptionalFilters != evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters ||
 		m.skipUnderlyingViewPrivilegeChecks != sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV) ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel ||
 		m.useBackupsWithIDs != evalCtx.SessionData().UseBackupsWithIDs {

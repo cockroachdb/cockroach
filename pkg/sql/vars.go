@@ -1117,6 +1117,24 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_use_partial_index_predicate_optional_filters`: {
+		Description:  sessionVarDescriptions["optimizer_use_partial_index_predicate_optional_filters"],
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_partial_index_predicate_optional_filters`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_partial_index_predicate_optional_filters", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUsePartialIndexPredicateOptionalFilters(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUsePartialIndexPredicateOptionalFilters), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
 	`optimizer_merge_joins_enabled`: {
 		Description:  sessionVarDescriptions["optimizer_merge_joins_enabled"],
 		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_merge_joins_enabled`),

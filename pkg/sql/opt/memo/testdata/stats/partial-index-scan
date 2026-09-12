@@ -361,7 +361,7 @@ index-join a
  ├── fd: (1)-->(2-4)
  └── scan a@idx,partial
       ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
-      ├── constraint: /2/3/1: [/11 - /19]
+      ├── constraint: /2/3/1: [/11/'bar' - /19/'foo']
       ├── stats: [rows=20.7088, distinct(2)=9, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=20.7088, null(2,3)=0]
       ├── key: (1)
       └── fd: (1)-->(2,3)
@@ -409,7 +409,7 @@ index-join a
  ├── fd: ()-->(3), (1)-->(2,4)
  └── scan a@idx,partial
       ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
-      ├── constraint: /2/3/1: [/11 - /19]
+      ├── constraint: /2/3/1: [/11/'foo' - /19/'foo']
       ├── stats: [rows=1.73571, distinct(2)=1.73571, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1.73571, null(2,3)=0]
       ├── key: (1)
       └── fd: ()-->(3), (1)-->(2)
@@ -748,7 +748,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 130 AND s IN ('banana', 'cherry', 'mang
 ----
 scan hist@idx,partial
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
- ├── constraint: /2/3/1: [/126 - /129]
+ ├── constraint: /2/3/1: [/126/'banana' - /129/'mango']
  ├── stats: [rows=3.02224, distinct(2)=1.27273, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=3.02224, null(2,3)=0]
  │   histogram(2)=  0   0   2.2667 0.75556
  │                <--- 125 --------- 129 -
@@ -798,7 +798,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 130 AND s = 'banana'
 ----
 scan hist@idx,partial
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
- ├── constraint: /2/3/1: [/126 - /129]
+ ├── constraint: /2/3/1: [/126/'banana' - /129/'banana']
  ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
  │   histogram(2)=  0   0   0.75 0.25
  │                <--- 125 ------ 129
