@@ -1,0 +1,29 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@require '~src/components/core/index.styl'
+
+.cluster-title
+  // Light Geist label at the reference's 20px / 28px / weight-300 measure.
+  // Geist-Light is a dedicated 300 face (each Geist weight is its own family),
+  // so font-weight stays normal to render it without synthesis.
+  //
+  // TODO(dhartunian): verify with design that the cluster id title should use
+  // the 300 (Light) weight. This pulls Geist-Light / GeistMono-Light into the
+  // console, stepping outside the rebrand's Regular/Medium/Bold weight ceiling.
+  font-family Geist-Light, sans-serif
+  font-size $font-size--large // 20px
+  line-height 28px
+  font-weight normal
+  color $colors--neutral-8
+  letter-spacing 0
+  white-space nowrap
+
+.cluster-title__id
+  // UUID fallback in monospace, matching the reference's Geist Mono 300.
+  // Dropped 2px so the mono glyphs sit visually level with the sans label.
+  font-family GeistMono-Light, monospace
+  font-size 18px
+  letter-spacing $letter-spacing--medium // 0.02em

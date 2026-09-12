@@ -24,11 +24,9 @@ export interface NavigationItem {
 
 export function NavigationItem(props: NavigationItem) {
   const { children, isActive, disabled } = props;
-  let textType = TextTypes.Body;
-
-  if (isActive) {
-    textType = TextTypes.BodyStrong;
-  }
+  // Selection is conveyed by the pill fill + text color only (never weight), so
+  // the active item keeps the Body weight instead of BodyStrong.
+  const textType = TextTypes.Body;
 
   const classes = cn("side-navigation__navigation-item", {
     "side-navigation__navigation-item--active": isActive,

@@ -68,7 +68,7 @@ const generateSeriesLegend = (
     const value = document.createElement("div");
     value.style.textAlign = "right";
     value.style.flex = "1";
-    value.style.fontFamily = "'Source Sans Pro', sans-serif";
+    value.style.fontFamily = "'Geist-Regular', sans-serif";
     value.textContent =
       series.value instanceof Function && dataValue
         ? getFormattedValue(
