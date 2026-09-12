@@ -145,7 +145,7 @@ var sessionVarDescriptions = map[string]string{
 	"optimizer_hoist_uncorrelated_equality_subqueries":                "Controls whether the optimizer hoists uncorrelated subqueries in equality expressions with columns, potentially producing more efficient plans.",
 	"optimizer_inline_any_unnest_subquery":                            "Controls whether the optimizer inlines subqueries containing ANY expressions combined with UNNEST.",
 	"optimizer_inline_placeholder_equalities":                         "Controls whether the optimizer inlines placeholder equalities in the InlineConstVar normalization rule.",
-	"optimizer_max_disjunction_split_count":                           "Sets the maximum number of OR-connected filter conjuncts that the SplitDisjunction exploration rule will split. 0 value means using the default.",
+	"optimizer_max_disjunction_split_count":                           "Sets the maximum number of OR-connected conjuncts in a filter or join condition that the SplitDisjunction exploration rules will split. 0 value means using the default.",
 	"optimizer_merge_joins_enabled":                                   "Controls whether the optimizer should explore query plans with merge joins.",
 	"optimizer_min_row_count":                                         "Sets a lower bound on row count estimates during query planning, except for expressions with zero cardinality.",
 	"optimizer_plan_lookup_joins_with_reverse_scans":                  "Controls whether the optimizer can plan lookup joins using reverse index scans.",

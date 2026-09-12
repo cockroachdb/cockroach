@@ -1498,6 +1498,10 @@ func (c *CustomFuncs) splitDisjunctionForJoin(
 	itemToReplace *memo.FiltersItem,
 	ok bool,
 ) {
+	// Prevent pathological behavior with too many ORs. See #173718.
+	if ok = c.checkDisjunctionSplitLimit(filters); !ok {
+		return nil, nil, nil, false
+	}
 	for i := range filters {
 		if filters[i].Condition.Op() == opt.OrOp {
 			if leftPreds, rightPreds, ok =
