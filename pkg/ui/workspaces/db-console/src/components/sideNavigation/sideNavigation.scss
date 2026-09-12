@@ -5,33 +5,56 @@
 
 @import 'src/components/core/index.scss';
 
+// The left menu uses a pill treatment — 36px rows with an 8px radius, selection
+// conveyed by fill + text color only (never weight). Rest text is neutral-700;
+// hover/active fill is the warm-gray "selected" surface and the text darkens to
+// near-black.
+//
+// Production markup nests the label as `li > span.text > a` (the shared Text
+// wrapper + a react-router Link), so the pill geometry lives on the anchor and
+// the Text span is promoted to a full-width block to let the anchor fill the
+// row.
+
 .side-navigation--list {
-  margin-bottom: inherit;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .side-navigation__navigation-item {
   list-style-type: none;
-  margin-bottom: $spacing-small;
-  color: $colors--secondary-text;
-
-  & *, 
-  & *:hover, 
-  & *:active {
-    color: inherit;
-    text-decoration: inherit;
-  }
+  margin: 0;
 }
 
-.side-navigation__navigation-item:hover, 
-.side-navigation__navigation-item:active {
-  color: $colors--link;
+.side-navigation__navigation-item > .text {
+  display: block;
 }
 
-.side-navigation__navigation-item--active {
-  color: $colors--link;
+.side-navigation__navigation-item a {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: #4b4841; // neutral-700 (rest)
+  text-decoration: none;
+  transition: background-color 200ms ease, color 200ms ease;
 }
 
-.side-navigation__navigation-item--disabled {
+.side-navigation__navigation-item a:hover {
+  background: rgba(237, 236, 229, 0.55); // --surface-selected @ 0.55
+  color: $colors--neutral-9;
+}
+
+.side-navigation__navigation-item--active a,
+.side-navigation__navigation-item--active a:hover {
+  background: #edece5; // --surface-selected
+  color: $colors--neutral-9;
+}
+
+.side-navigation__navigation-item--disabled a {
   color: $colors--disabled;
   pointer-events: none;
   cursor: default;

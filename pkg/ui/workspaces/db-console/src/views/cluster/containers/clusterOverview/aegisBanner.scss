@@ -1,0 +1,143 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import 'src/components/core/index.scss';
+
+.aegis-banner {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 172px;
+  border-radius: 14px; // hero radius (content cards use 8px)
+  background: #000000;
+  margin-bottom: $spacing-mid-large; // 28px
+}
+
+// Blob key-art container, pinned to the right of the card. The left-edge fade
+// dissolves the art into the black before it reaches the headline.
+.aegis-banner__art {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 40%;
+  overflow: hidden;
+  pointer-events: none;
+  $fade: 260px;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 $fade);
+  mask-image: linear-gradient(to right, transparent 0, #000 $fade);
+}
+
+.aegis-banner__art-zoom {
+  position: absolute;
+  inset: 0;
+  transform-origin: center top;
+  animation: aegis-banner-zoom 15s ease-in-out infinite alternate;
+}
+
+.aegis-banner__art-img {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  width: 570px;
+  // Flip inward and nudge right so the blob's mass sits off the card edge.
+  transform: translateX(-50%) translateX(90px) scaleX(-1);
+  transform-origin: center top;
+}
+
+@keyframes aegis-banner-zoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.18);
+  }
+}
+
+.aegis-banner__dismiss {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+}
+
+.aegis-banner__content {
+  position: absolute;
+  top: 50%;
+  left: 40px;
+  transform: translateY(-50%);
+  z-index: 2;
+  max-width: 520px;
+  text-align: left;
+}
+
+.aegis-banner__headline {
+  margin: 0 0 $spacing-x-small; // 0 0 8px
+  font-family: Geist-Light, sans-serif;
+  font-size: $font-size--x-large; // 24px
+  font-weight: normal;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  color: #ffffff;
+}
+
+.aegis-banner__accent {
+  color: #aede54; // brand bio-green accent
+}
+
+.aegis-banner__body {
+  margin: 0 0 $spacing-small; // 0 0 16px
+  max-width: 440px;
+  font-family: $font-family--base; // Geist-Regular
+  font-size: $font-size--medium; // 14px
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.aegis-banner__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 $spacing-small; // 0 16px
+  border-radius: 9999px; // pill, matching the reference CTA
+  background: $colors--primary-purple-3; // brand purple-500 (#9059ff)
+  // Interactive labels ride Geist Mono, 12px / 0.02em (brand nav-chrome idiom).
+  font-family: GeistMono-Regular, monospace;
+  font-size: $font-size--small; // 12px
+  letter-spacing: $letter-spacing--medium; // 0.02em
+  color: #ffffff;
+  text-decoration: none;
+  transition: background-color 150ms ease;
+
+  &:hover,
+  &:focus {
+    background: $brand--purple-800; // deeper purple on hover
+    color: #ffffff;
+  }
+}
+
+.aegis-banner__cta-arrow {
+  font-size: 14px;
+  line-height: 1;
+}

@@ -20,7 +20,9 @@
   margin-top: -10px;
 
   z-index: 2;
-  background-color: $colors--background;
+  // Sticky page header must match the white content surface (2026 brand);
+  // it stays opaque so scrolled content passes cleanly underneath.
+  background-color: $colors--white;
 
   &__white-background {
     background-color: $colors--white

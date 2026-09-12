@@ -25,7 +25,7 @@
       align-items: center;
       &--title {
         text-transform: uppercase;
-        font-family: SourceSansPro-SemiBold;
+        font-family: Geist-Medium;
         font-size: 12px;
         color: $colors--neutral-6;
         line-height: 1.17;
@@ -88,10 +88,10 @@
       }
     }
     &__bold {
-      font-family: SourceSansPro-SemiBold;
+      font-family: Geist-Medium;
     }
     &__normal {
-      font-family: SourceSansPro-Regular;
+      font-family: Geist-Regular;
     }
   }
   &--item:nth-child(2n) {
