@@ -3,29 +3,18 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-@mixin font-face($name) {
-  @font-face {
-    font-family: $name;
-    src: url("~src/fonts/#{$name}.woff2") format("woff2"),
-      url("~src/fonts/#{$name}.woff") format("woff");
-    font-weight: normal;
-    font-style: normal;
-  }
-}
+@font-face { font-family: "Geist-Regular";    src: url("~src/fonts/Geist-Regular.woff2")    format("woff2"); font-weight: normal; font-style: normal; }
+@font-face { font-family: "Geist-Medium";     src: url("~src/fonts/Geist-Medium.woff2")     format("woff2"); font-weight: normal; font-style: normal; }
+@font-face { font-family: "Geist-Bold";       src: url("~src/fonts/Geist-Bold.woff2")       format("woff2"); font-weight: normal; font-style: normal; }
+@font-face { font-family: "GeistMono-Regular"; src: url("~src/fonts/GeistMono-Regular.woff2") format("woff2"); font-weight: normal; font-style: normal; }
+@font-face { font-family: "GeistMono-Medium";  src: url("~src/fonts/GeistMono-Medium.woff2")  format("woff2"); font-weight: normal; font-style: normal; }
 
-@include font-face("SourceSansPro-Bold");
-@include font-face("SourceSansPro-Regular");
-@include font-face("SourceSansPro-SemiBold");
-@include font-face("RobotoMono-Medium");
-@include font-face("RobotoMono-Regular");
-@include font-face("Lato-Regular");
-
-$font-family--base: SourceSansPro-Regular;
-$font-family--bold: SourceSansPro-Bold;
-$font-family--semi-bold: SourceSansPro-SemiBold;
-$font-family--monospace: RobotoMono-Medium;
-$font-family--mono-regular: RobotoMono-Regular;
-$font-family--lato-regular: Lato-Regular;
+$font-family--base: Geist-Regular;
+$font-family--bold: Geist-Bold;
+$font-family--semi-bold: Geist-Medium;
+$font-family--monospace: GeistMono-Medium;
+$font-family--mono-regular: GeistMono-Regular;
+$font-family--geist-regular: Geist-Regular;
 
 $font-weight--extra-bold: 900;
 $font-weight--bold: 600;

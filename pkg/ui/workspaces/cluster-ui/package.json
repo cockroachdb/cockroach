@@ -1,6 +1,6 @@
 {
   "name": "@cockroachlabs/cluster-ui",
-  "version": "25.4.4",
+  "version": "25.4.4-alt.2",
   "description": "Cluster UI is a library of large features shared between CockroachDB and CockroachCloud",
   "repository": {
     "type": "git",
@@ -10,7 +10,8 @@
   "types": "dist/types/index.d.ts",
   "files": [
     "dist/",
-    "AUTHORS"
+    "AUTHORS",
+    "OFL-geist.txt"
   ],
   "scripts": {
     "build": "npm-run-all -p build:typescript build:bundle",

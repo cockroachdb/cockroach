@@ -69,10 +69,21 @@ jobs:
           echo "✅ Cluster UI package version $PACKAGE_VERSION should be published. ✅"
         fi
 
-    - name: Get Branch name
+    # Publishes from a release branch normally use the branch name (e.g.
+    # "release-25.4") so each release series has its own dist-tag. A version
+    # carrying an "-alt." prerelease identifier instead publishes under the
+    # dedicated "alt" dist-tag, regardless of the branch, so a design-preview
+    # build never lands on the release-series tag (or latest/next).
+    - name: Determine npm dist-tag
+      id: dist-tag
       shell: bash
-      run: echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
-      id: branch-name
+      run: |
+        PACKAGE_VERSION=$(jq -r ".version" ./package.json)
+        if [[ "$PACKAGE_VERSION" == *-alt.* ]]; then
+          echo "tag=alt" >> "$GITHUB_OUTPUT"
+        else
+          echo "tag=${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
+        fi
 
     - name: Build Cluster UI
       if: steps.version-check.outputs.published == 'no'
@@ -92,4 +103,4 @@ jobs:
 
     - name: Publish patch version
       if: steps.version-check.outputs.published == 'no'
-      run: npm publish --access public --tag ${{ steps.branch-name.outputs.branch }} --ignore-scripts
+      run: npm publish --access public --tag ${{ steps.dist-tag.outputs.tag }} --ignore-scripts

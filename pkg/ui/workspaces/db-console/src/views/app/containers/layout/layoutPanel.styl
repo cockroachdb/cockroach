@@ -5,7 +5,7 @@
 
 @require '~src/components/core/index.styl'
 
-$side-panel-width = 140px
+$side-panel-width = 160px
 $top-bar-height = 50px
 $container-top-offset = 120px
 
@@ -23,9 +23,9 @@ $container-top-offset = 120px
 .layout-panel__header
   height $top-bar-height
   min-height $top-bar-height
-  background-color $colors--white
-  box-shadow 0 0 4px 0 #9aa1ab54
-  z-index 0
+  background-color #000000
+  color $colors--white
+  z-index 1
 
 .layout-panel__header > *
   margin 0 $spacing-small
@@ -33,9 +33,15 @@ $container-top-offset = 120px
 .layout-panel__navigation-bar
   background-color $colors--white
   color $colors--title
+  // Hairline rule dividing the cluster-id header from the content, kept here
+  // (not on the masthead) so the separation persists even when the license
+  // alert bar is absent.
+  border-bottom 1px solid $colors--neutral-2
 
 .layout-panel__navigation-bar > *
-  margin 0 $spacing-xx-large
+  // 20px left-aligns the cluster title with the sidebar menu text (rail 8px
+  // padding + nav-row 12px padding).
+  margin 0 $spacing-medium-small
 
 .layout-panel__body
   display flex
@@ -47,8 +53,25 @@ $container-top-offset = 120px
 .layout-panel__content
   width "calc(100% - %s)" % $side-panel-width
   overflow auto
-  margin $spacing-large 0 0
+  // Space above the page content (20px, ~the sidebar rail inset) so the content
+  // top aligns with the sidebar's first pill. Padding (not margin) so the white
+  // surface fills the inset.
+  margin 0
+  padding-top $spacing-medium-small
+  // Left inset for the content pane; the rail is divided from it by a hairline
+  // border (see .layout-panel__sidebar).
+  padding-left $spacing-medium
+  // Main workspace pane is the white primary surface; warm gray stays on the
+  // rail.
+  background-color $colors--white
 
 .layout-panel__sidebar
   min-width $side-panel-width
-  margin $spacing-large $spacing-medium $spacing-large $spacing-xx-large
+  // Warm-gray rail anchored flush to the left edge and the header's bottom,
+  // divided from the white content pane by a hairline right border.
+  margin 0
+  border-right 1px solid $colors--neutral-2
+  background-color $colors--neutral-1
+  // Rail padding (12px / 8px) so the pill rows sit with an even inset from the
+  // rail edges.
+  padding $spacing-smaller $spacing-x-small

@@ -17,17 +17,15 @@
 }
 
 /**
- Source Sans Pro
+ Geist (legacy mixin names preserved for compatibility)
 */
 @mixin source-sans-pro-r {
-  font-family: "Source Sans Pro", sans-serif;
-  font-weight: 400;
+  font-family: "Geist-Regular", sans-serif;
   @include font-props;
 }
 
 @mixin source-sans-pro-m {
-  font-family: "Source Sans Pro", sans-serif;
-  font-weight: 600;
+  font-family: "Geist-Medium", sans-serif;
   @include font-props;
 }
 

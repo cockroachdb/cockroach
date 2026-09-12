@@ -25,12 +25,32 @@
   flex-direction column
   overflow auto
 
+// Overview page header, matching the shared 2026 page-title treatment: a Geist
+// 20px / 400 title in a flex row, so the overview leads with a header like every
+// other page.
+.cluster-page__header
+  display flex
+  align-items center
+  justify-content space-between
+  gap $spacing-small
+  margin-bottom $spacing-medium-small
+
+.cluster-page__title
+  margin 0
+  font-family $font-family--base
+  font-size 20px
+  font-weight 400
+  color $colors--neutral-9
+
 .cluster-overview
   .cluster-summary
     background-color white
     padding 24px
     margin-top 0
-    border 1px solid $table-border-color
+    // Cards take the darker WG3 rule so their edges read a step stronger than
+    // the WG2 chrome dividers (nav / sidebar rules).
+    border 1px solid $colors--neutral-3
+    border-radius 8px
     font-family $font-family--base
 
     display grid
@@ -255,6 +275,7 @@
 
 .cluster-overview--fixed
   flex-grow 1
-  max-width $max-window-width
   position relative
-  padding $spacing-smaller $spacing-medium $spacing-smaller 0
+  // Fill the content width (no fixed cap) so the nodes table expands to the
+  // browser window; insets mirror the summary card so the edges line up.
+  padding $spacing-smaller $spacing-x-large $spacing-smaller 0

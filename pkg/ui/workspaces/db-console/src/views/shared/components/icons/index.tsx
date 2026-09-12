@@ -69,7 +69,7 @@ export const criticalIcon = (
               id="Group-2"
               transform="translate(8.000000, 3.000000)"
               fontSize="14"
-              fontFamily="SourceSansPro-Bold, SourceSansPro-Regular"
+              fontFamily="Geist-Bold, Geist-Regular"
               fill="#FFFFFF"
               fontWeight="bold"
             >
@@ -118,7 +118,7 @@ export const warningIcon = (
             ></circle>
             <text
               id="!"
-              fontFamily="SourceSansPro-Bold, SourceSansPro-Regular"
+              fontFamily="Geist-Bold, Geist-Regular"
               fontSize="14"
               fontWeight="bold"
               fill="#FFFFFF"

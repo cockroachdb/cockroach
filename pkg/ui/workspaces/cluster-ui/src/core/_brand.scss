@@ -1,0 +1,37 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+// 2026 Cockroach Labs brand primitives (pass 1). Raw palette only; mapped onto
+// $colors--* in colors.scss. Source of truth: stratum-demo-rebrand
+// src/styles/tokens-2026.css. Pass 1 uses warm-gray neutrals, blue (control/
+// link/info), and purple (CTA/brand); green/yellow/orange/red keep prod ramps.
+
+// Warm gray neutrals (replace the cool blue-grey ramp)
+$brand--warmgray-0:   #ffffff;
+$brand--warmgray-100: #f9f8f3;
+$brand--warmgray-200: #f2f1ee;
+$brand--warmgray-300: #e5e4dc;
+$brand--warmgray-400: #d7d5ca; // derived
+$brand--warmgray-500: #949187;
+$brand--warmgray-600: #6b685f; // derived
+$brand--warmgray-700: #3a3833; // derived
+$brand--warmgray-800: #1c221c; // derived
+$brand--warmgray-850: #bebbb0; // derived
+$brand--black-6:      #101913;
+
+// Purple — primary CTA + brand mark only
+$brand--purple-100:  #e9deff;
+$brand--purple-300:  #c8acff;
+$brand--purple-500:  #9059ff;
+$brand--purple-800:  #502482;
+$brand--purple-deep: #190033;
+
+// Blue — control / link / info (cyan-leaning)
+$brand--blue-100: #dffbff;
+$brand--blue-300: #aff6ff;
+$brand--blue-500: #60ecff; // fills only
+$brand--blue-700: #127ea5; // control/link/info — AA 4.6:1 on white
+$brand--blue-750: #0f6a8c; // hover
+$brand--blue-800: #144f6b;
