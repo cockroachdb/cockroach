@@ -3302,7 +3302,7 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				fromTSTZ := tree.MustBeDTimestampTZ(args[1])
-				location, err := timeutil.TimeZoneStringToLocation(string(tree.MustBeDString(args[2])), timeutil.TimeZoneStringToLocationPOSIXStandard)
+				location, err := pgdate.TimeZoneStringToLocation(string(tree.MustBeDString(args[2])), timeutil.TimeZoneStringToLocationPOSIXStandard)
 				if err != nil {
 					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 				}
@@ -3367,7 +3367,7 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
-				loc, err := timeutil.TimeZoneStringToLocation(tzArg, timeutil.TimeZoneStringToLocationPOSIXStandard)
+				loc, err := pgdate.TimeZoneStringToLocation(tzArg, timeutil.TimeZoneStringToLocationPOSIXStandard)
 				if err != nil {
 					return nil, err
 				}
@@ -3385,10 +3385,7 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tzStr := string(tree.MustBeDString(args[0]))
 				ts := tree.MustBeDTimestamp(args[1])
-				loc, err := timeutil.TimeZoneStringToLocation(
-					tzStr,
-					timeutil.TimeZoneStringToLocationPOSIXStandard,
-				)
+				loc, err := pgdate.TimeZoneStringToLocation(tzStr, timeutil.TimeZoneStringToLocationPOSIXStandard)
 				if err != nil {
 					return nil, err
 				}
@@ -3406,10 +3403,7 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tzStr := string(tree.MustBeDString(args[0]))
 				ts := tree.MustBeDTimestampTZ(args[1])
-				loc, err := timeutil.TimeZoneStringToLocation(
-					tzStr,
-					timeutil.TimeZoneStringToLocationPOSIXStandard,
-				)
+				loc, err := pgdate.TimeZoneStringToLocation(tzStr, timeutil.TimeZoneStringToLocationPOSIXStandard)
 				if err != nil {
 					return nil, err
 				}
@@ -3427,10 +3421,7 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tzStr := string(tree.MustBeDString(args[0]))
 				tArg := args[1].(*tree.DTime)
-				loc, err := timeutil.TimeZoneStringToLocation(
-					tzStr,
-					timeutil.TimeZoneStringToLocationPOSIXStandard,
-				)
+				loc, err := pgdate.TimeZoneStringToLocation(tzStr, timeutil.TimeZoneStringToLocationPOSIXStandard)
 				if err != nil {
 					return nil, err
 				}
@@ -3455,10 +3446,7 @@ value if you rely on the HLC for accuracy.`,
 				// This one should disappear with implicit casts.
 				tzStr := string(tree.MustBeDString(args[0]))
 				tArg := args[1].(*tree.DTimeTZ)
-				loc, err := timeutil.TimeZoneStringToLocation(
-					tzStr,
-					timeutil.TimeZoneStringToLocationPOSIXStandard,
-				)
+				loc, err := pgdate.TimeZoneStringToLocation(tzStr, timeutil.TimeZoneStringToLocationPOSIXStandard)
 				if err != nil {
 					return nil, err
 				}
@@ -13130,7 +13118,7 @@ func makeTimestampStatementBuiltinOverload(withOutputTZ bool, withInputTZ bool) 
 			location := evalCtx.GetLocation()
 			var err error
 			if withInputTZ && withOutputTZ {
-				location, err = timeutil.TimeZoneStringToLocation(string(tree.MustBeDString(args[6])), timeutil.TimeZoneStringToLocationPOSIXStandard)
+				location, err = pgdate.TimeZoneStringToLocation(string(tree.MustBeDString(args[6])), timeutil.TimeZoneStringToLocationPOSIXStandard)
 				if err != nil {
 					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 				}
