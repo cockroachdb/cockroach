@@ -7,7 +7,9 @@ package pgdate_test
 
 import (
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/stretchr/testify/require"
 )
@@ -50,4 +52,36 @@ func TestPGTimezoneAbbrevsTable(t *testing.T) {
 	// abbreviations. Guard against accidental truncation while leaving room
 	// for future tzdata updates.
 	require.GreaterOrEqual(t, len(abbrevs), 100)
+}
+
+// CET is also an IANA zone name. In conversions it must use the PostgreSQL
+// abbreviation's fixed offset, while full IANA names retain their DST rules.
+func TestTimeZoneStringToLocation(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		standard timeutil.TimeZoneStringToLocationStandard
+		offsets  [2]int
+	}{
+		{"CET", "CET", timeutil.TimeZoneStringToLocationPOSIXStandard, [2]int{3600, 3600}},
+		{"lowercase", "cet", timeutil.TimeZoneStringToLocationPOSIXStandard, [2]int{3600, 3600}},
+		{"CEST", "CEST", timeutil.TimeZoneStringToLocationPOSIXStandard, [2]int{7200, 7200}},
+		{"non-IANA abbreviation", "EAT", timeutil.TimeZoneStringToLocationPOSIXStandard, [2]int{10800, 10800}},
+		{"IANA region", "Europe/Paris", timeutil.TimeZoneStringToLocationPOSIXStandard, [2]int{3600, 7200}},
+		{"UTC-prefixed offset", "UTC+1", timeutil.TimeZoneStringToLocationISO8601Standard, [2]int{-3600, -3600}},
+		{"POSIX offset", "+1", timeutil.TimeZoneStringToLocationPOSIXStandard, [2]int{-3600, -3600}},
+		{"ISO offset", "+1", timeutil.TimeZoneStringToLocationISO8601Standard, [2]int{3600, 3600}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			loc, err := pgdate.TimeZoneStringToLocation(tc.input, tc.standard)
+			require.NoError(t, err)
+			for i, month := range []time.Month{time.January, time.July} {
+				_, offset := time.Date(2022, month, 1, 0, 0, 0, 0, time.UTC).In(loc).Zone()
+				require.Equal(t, tc.offsets[i], offset, "month %s", month)
+			}
+		})
+	}
+	_, err := pgdate.TimeZoneStringToLocation("not_a_timezone", timeutil.TimeZoneStringToLocationPOSIXStandard)
+	require.Error(t, err)
 }
