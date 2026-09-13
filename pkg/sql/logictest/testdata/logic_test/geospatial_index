@@ -135,3 +135,98 @@ CREATE TABLE public.geo_table (
   FAMILY fam_1_geom (geom),
   FAMILY fam_2_id (id)
 ) WITH (schema_locked = true);
+
+subtest geography_dwithin_80374
+
+# This oriented polygon covers the large side of its boundary. Its coordinate
+# bounding box cannot be used to exclude matching geography index entries.
+let $geography_80374_polygon
+SELECT '01060000E0E61000000100000001030000C001000000040000002410B7E16B9D4440F80C9162CE5C2140459E64E4C1D0F2C1A82FC5D8CCBDF241280A013B1F235340F8BF387C28115640D42C81DD911DF7C15068D6DBDEE7CCC10CA4E8AB08844D40125A0D02ADB35440F86FC12B1966DD4104A5183738C5FF412410B7E16B9D4440F80C9162CE5C2140459E64E4C1D0F2C1A82FC5D8CCBDF241'
+
+statement ok
+CREATE TABLE geography_80374 (geo_col GEOGRAPHY, INVERTED INDEX geog_idx (geo_col))
+
+statement ok
+INSERT
+  INTO geography_80374 (geo_col)
+VALUES ('0104000020E610000008000000010100000054A4D87CD5AD4B40E8B73A825C8637C0010100000081A76E24086666C0AC4CF2E3AF584C4001010000001A7FC234D9FA4FC032A6F3C0BE1051C001010000004FCAE361214452C0B8C3171AA0E552400101000000035E7A43C0E352C030FDD4FB3E2B4840010100000021432579E97C65C0CC0DDAAFD6B23940010100000018DD72AEB8FE5E4037CB45DA4A7C47C001010000000CBA9522724E65406CF65B95512053C0');
+
+query I
+SELECT count(*) FROM geography_80374@geography_80374_pkey
+WHERE ST_DWithin('$geography_80374_polygon'::GEOGRAPHY, geo_col, 0.24216150138503956, true)
+----
+1
+
+query I
+SELECT count(*) FROM geography_80374@geography_80374_pkey
+WHERE ST_DWithin(geo_col, '$geography_80374_polygon'::GEOGRAPHY, 0.24216150138503956, true)
+----
+1
+
+query I
+SELECT count(*) FROM geography_80374@geog_idx
+WHERE ST_DWithin('$geography_80374_polygon'::GEOGRAPHY, geo_col, 0.24216150138503956, true)
+----
+1
+
+query I
+SELECT count(*) FROM geography_80374@geog_idx
+WHERE ST_DWithin(geo_col, '$geography_80374_polygon'::GEOGRAPHY, 0.24216150138503956, true)
+----
+1
+
+query I
+SELECT count(*) FROM geography_80374@geography_80374_pkey
+WHERE ST_DWithin('$geography_80374_polygon'::GEOGRAPHY, geo_col, 0.24216150138503956, false)
+----
+1
+
+query I
+SELECT count(*) FROM geography_80374@geography_80374_pkey
+WHERE ST_DWithin(geo_col, '$geography_80374_polygon'::GEOGRAPHY, 0.24216150138503956, false)
+----
+1
+
+query I
+SELECT count(*) FROM geography_80374@geog_idx
+WHERE ST_DWithin('$geography_80374_polygon'::GEOGRAPHY, geo_col, 0.24216150138503956, false)
+----
+1
+
+query I
+SELECT count(*) FROM geography_80374@geog_idx
+WHERE ST_DWithin(geo_col, '$geography_80374_polygon'::GEOGRAPHY, 0.24216150138503956, false)
+----
+1
+
+# Empty and NULL entries must not introduce false positives.
+statement ok
+INSERT INTO geography_80374 VALUES ('POINT EMPTY'::GEOGRAPHY), (NULL)
+
+# Inverted joins construct the spatial filter from each input row at runtime.
+statement ok
+CREATE TABLE geography_80374_probes (id INT PRIMARY KEY, geog GEOGRAPHY)
+
+statement ok
+INSERT INTO geography_80374_probes VALUES
+  (1, '$geography_80374_polygon'::GEOGRAPHY), (2, 'POINT(0 0)'::GEOGRAPHY), (3, NULL)
+
+query I
+SELECT p.id FROM geography_80374_probes AS p
+INNER INVERTED JOIN geography_80374@geog_idx AS g
+ON ST_DWithin(p.geog, g.geo_col, 0.24216150138503956, true)
+----
+1
+
+query I
+SELECT p.id FROM geography_80374_probes AS p
+INNER INVERTED JOIN geography_80374@geog_idx AS g
+ON ST_DWithin(g.geo_col, p.geog, 0.24216150138503956, false)
+----
+1
+
+statement ok
+DROP TABLE geography_80374_probes
+
+statement ok
+DROP TABLE geography_80374
