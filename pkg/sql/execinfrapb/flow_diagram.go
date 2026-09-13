@@ -74,6 +74,27 @@ func colListStr(cols []uint32) string {
 	return buf.String()
 }
 
+// SanitizeURI redacts credentials from an external storage URI before it is
+// rendered into a diagram. pkg/sql injects cloud.SanitizeExternalStorageURI;
+// this package cannot import pkg/cloud directly.
+var SanitizeURI func(uri string) (string, error)
+
+// uriForDiagram returns the display form of uri, hiding it entirely when no
+// sanitizer is injected or the URI cannot be parsed.
+func uriForDiagram(uri string) string {
+	if uri == "" {
+		return ""
+	}
+	if SanitizeURI == nil {
+		return "<redacted>"
+	}
+	s, err := SanitizeURI(uri)
+	if err != nil {
+		return "<redacted>"
+	}
+	return s
+}
+
 // summary implements the diagramCellType interface.
 func (*NoopCoreSpec) summary() (string, []string) {
 	return "No-op", []string{}
@@ -556,7 +577,7 @@ func (c *CloudStorageTestSpec) summary() (string, []string) {
 func (c *ReadImportDataSpec) summary() (string, []string) {
 	ss := make([]string, 0, len(c.Uri))
 	for _, s := range c.Uri {
-		ss = append(ss, s)
+		ss = append(ss, uriForDiagram(s))
 	}
 	return "ReadImportData", ss
 }
@@ -666,7 +687,7 @@ func (s *IndexBackfillMergerSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (s *ExportSpec) summary() (string, []string) {
-	return "Exporter", []string{s.Destination}
+	return "Exporter", []string{uriForDiagram(s.Destination)}
 }
 
 // summary implements the diagramCellType interface.

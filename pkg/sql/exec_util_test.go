@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -106,4 +107,13 @@ func TestSessionDefaultsSafeFormat(t *testing.T) {
 	session["disallow_full_table_scans"] = "true"
 	require.Contains(t, redact.Sprint(session), "database=‹test›")
 	require.Contains(t, redact.Sprint(session).Redact(), "statement_timeout=‹×›")
+}
+
+func TestSanitizeURIHookWired(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	require.NotNil(t, execinfrapb.SanitizeURI)
+	sanitized, err := execinfrapb.SanitizeURI("http://user:hunter2@host/path")
+	require.NoError(t, err)
+	require.Equal(t, "http://user:redacted@host/path", sanitized)
 }

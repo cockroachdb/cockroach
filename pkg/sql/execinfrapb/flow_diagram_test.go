@@ -8,6 +8,7 @@ package execinfrapb
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -993,4 +994,48 @@ func TestChangeAggregatorSpec(t *testing.T) {
 			require.Equal(t, td.expectedWatches, details)
 		})
 	}
+}
+
+func TestURISummariesAreRedacted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const secret = "hunter2-diagram-secret"
+	const uri = "s3://bucket/dir/file.csv?AWS_SECRET_ACCESS_KEY=" + secret
+
+	summaries := func() map[string][]string {
+		_, export := (&ExportSpec{Destination: uri}).summary()
+		_, imp := (&ReadImportDataSpec{Uri: map[int32]string{0: uri}}).summary()
+		return map[string][]string{"export": export, "read import data": imp}
+	}
+
+	t.Run("no sanitizer injected", func(t *testing.T) {
+		defer func(prev func(string) (string, error)) { SanitizeURI = prev }(SanitizeURI)
+		SanitizeURI = nil
+		for name, details := range summaries() {
+			require.Equal(t, []string{"<redacted>"}, details, name)
+		}
+		// An empty URI stays empty rather than becoming "<redacted>".
+		_, details := (&ExportSpec{}).summary()
+		require.Equal(t, []string{""}, details)
+	})
+
+	t.Run("sanitizer injected", func(t *testing.T) {
+		defer func(prev func(string) (string, error)) { SanitizeURI = prev }(SanitizeURI)
+		SanitizeURI = func(uri string) (string, error) {
+			u, err := url.Parse(uri)
+			if err != nil {
+				return "", err
+			}
+			u.RawQuery = "redacted"
+			return u.String(), nil
+		}
+		for name, details := range summaries() {
+			require.Equal(t, []string{"s3://bucket/dir/file.csv?redacted"}, details, name)
+			require.NotContains(t, strings.Join(details, " "), secret, name)
+		}
+		// A sanitizer error (here from an invalid percent escape) hides the whole
+		// URI rather than leaking it.
+		_, details := (&ExportSpec{Destination: "s3://bucket/%zz"}).summary()
+		require.Equal(t, []string{"<redacted>"}, details)
+	})
 }
