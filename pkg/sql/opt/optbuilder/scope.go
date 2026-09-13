@@ -1035,12 +1035,77 @@ func makeUntypedTuple(labels []string, texprs []tree.TypedExpr) *tree.Tuple {
 	return &tree.Tuple{Exprs: exprs, Labels: labels}
 }
 
+// normalizeDirectRowStar normalizes variable names before determining whether
+// they are expanded into the immediately enclosing ROW constructor.
+func normalizeDirectRowStar(expr tree.Expr) (tree.Expr, bool) {
+	if varName, ok := expr.(tree.VarName); ok {
+		normalized, err := varName.NormalizeVarName()
+		if err != nil {
+			panic(err)
+		}
+		expr = normalized
+	}
+	switch expr.(type) {
+	case *tree.AllColumnsSelector, *tree.TupleStar:
+		return expr, true
+	default:
+		return expr, false
+	}
+}
+
+// rebuildTupleAfterStarExpansion replaces a tuple's expressions while
+// preserving its explicit labels. In particular, labels from expandStar must
+// not replace labels explicitly attached to the enclosing tuple. Tuple.TypeCheck
+// validates the preserved labels against the final, expanded expression count.
+func rebuildTupleAfterStarExpansion(t *tree.Tuple, exprs tree.Exprs) *tree.Tuple {
+	tupleCopy := *t
+	tupleCopy.Exprs = exprs
+	if len(t.Labels) > 0 {
+		tupleCopy.Labels = append([]string(nil), t.Labels...)
+	}
+	return &tupleCopy
+}
+
 // VisitPre is part of the Visitor interface.
 //
 // NB: This code is adapted from sql/select_name_resolution.go and
 // sql/subquery.go.
 func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	switch t := expr.(type) {
+	case *tree.Tuple:
+		if !t.Row {
+			return true, expr
+		}
+		// A star that is a direct child of a ROW constructor expands into the
+		// ROW, rather than becoming a single tuple-valued element. Handle that
+		// here, since the expression walker cannot replace one child with
+		// multiple children.
+		hasDirectStar := false
+		for i := range t.Exprs {
+			if _, isStar := normalizeDirectRowStar(t.Exprs[i]); isStar {
+				hasDirectStar = true
+				break
+			}
+		}
+		if !hasDirectStar {
+			return true, expr
+		}
+
+		exprs := make(tree.Exprs, 0, len(t.Exprs))
+		for i := range t.Exprs {
+			normalized, isStar := normalizeDirectRowStar(t.Exprs[i])
+			if isStar {
+				_, expanded := s.builder.expandStar(normalized, s)
+				for _, e := range expanded {
+					exprs = append(exprs, e)
+				}
+				continue
+			}
+			e, _ := tree.WalkExpr(s, normalized)
+			exprs = append(exprs, e)
+		}
+		return false, rebuildTupleAfterStarExpansion(t, exprs)
+
 	case *tree.AllColumnsSelector, *tree.TupleStar:
 		// AllColumnsSelectors and TupleStars at the top level of a SELECT clause
 		// are replaced when the select's renders are prepared. If we
