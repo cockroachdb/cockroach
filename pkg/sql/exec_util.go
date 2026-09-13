@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -147,6 +148,9 @@ func init() {
 	) (eval.InternalRows, error) {
 		ie := evalCtx.JobExecContext.(JobExecContext).ExecCfg().InternalDB.Executor()
 		return ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
+	}
+	execinfrapb.SanitizeURI = func(uri string) (string, error) {
+		return cloud.SanitizeExternalStorageURI(uri, nil /* extraParams */)
 	}
 	DoParserInjection()
 }
