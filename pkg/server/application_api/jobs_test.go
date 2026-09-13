@@ -400,6 +400,7 @@ func TestJobStatusResponse(t *testing.T) {
 
 	ctx := context.Background()
 	jr := ts.JobRegistry().(*jobs.Registry)
+	const secret = "hunter2-job-status-secret"
 	job, err := jr.CreateJobWithTxn(
 		ctx,
 		jobs.Record{
@@ -419,9 +420,11 @@ func TestJobStatusResponse(t *testing.T) {
 						},
 					},
 				},
-				URIs: []string{"a", "b"},
+				URIs: []string{"s3://bucket/path?AWS_SECRET_ACCESS_KEY=" + secret},
 			},
-			Progress:      jobspb.ImportProgress{},
+			Progress: jobspb.ImportProgress{
+				ResumePos: []int64{42},
+			},
 			DescriptorIDs: []descpb.ID{1, 2, 3},
 		},
 		jr.MakeJobID(),
@@ -435,8 +438,18 @@ func TestJobStatusResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 	require.Equal(t, job.ID(), response.Job.Id)
-	require.Equal(t, job.Payload(), *response.Job.Payload)
-	require.Equal(t, job.Progress(), *response.Job.Progress)
+
+	// The details oneofs can embed credentials and are omitted; every other
+	// field is returned as stored.
+	require.Nil(t, response.Job.Payload.Details)
+	require.Nil(t, response.Job.Progress.Details)
+	require.NotContains(t, response.String(), secret)
+	expectedPayload := job.Payload()
+	expectedPayload.Details = nil
+	require.Equal(t, expectedPayload, *response.Job.Payload)
+	expectedProgress := job.Progress()
+	expectedProgress.Details = nil
+	require.Equal(t, expectedProgress, *response.Job.Progress)
 }
 
 func TestJobMessagesAccess(t *testing.T) {

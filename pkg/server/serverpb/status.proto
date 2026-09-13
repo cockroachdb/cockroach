@@ -1983,6 +1983,8 @@ message JobStatusRequest {
 }
 
 message JobStatusResponse {
+  // job omits payload.details and progress.details, which can embed
+  // credentials.
   cockroach.sql.jobs.jobspb.Job job = 1;
 }
 
