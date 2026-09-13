@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -179,4 +180,13 @@ func TestTruncateSQLForActiveQuery(t *testing.T) {
 			require.Equal(t, tc.expected, got)
 		})
 	}
+}
+
+func TestSanitizeURIHookWired(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	require.NotNil(t, execinfrapb.SanitizeURI)
+	sanitized, err := execinfrapb.SanitizeURI("http://user:hunter2@host/path")
+	require.NoError(t, err)
+	require.Equal(t, "http://user:redacted@host/path", sanitized)
 }
