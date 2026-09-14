@@ -134,6 +134,13 @@ type TestingKnobs struct {
 	// invoked by the dialNode method of server.serverIterator.
 	DialNodeCallback func(ctx context.Context, nodeID roachpb.NodeID) error
 
+	// DownloadSpanLocalError, if set, is invoked at the start of a node's
+	// localDownloadSpan. A non-nil return short-circuits the real download and is
+	// reported as that node's download error, letting tests fault-inject per-node
+	// download failures. The passed ctx is the node's download context, so a hook
+	// may block on it to observe fan-out cancellation.
+	DownloadSpanLocalError func(ctx context.Context, nodeID roachpb.NodeID) error
+
 	// DisableSettingsWatcher disables the watcher that monitors updates
 	// to system.settings.
 	DisableSettingsWatcher bool

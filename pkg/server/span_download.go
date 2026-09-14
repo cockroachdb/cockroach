@@ -76,13 +76,15 @@ func (s *systemStatusServer) DownloadSpan(
 			MaxRetries:     perNodeMaxDownloadAttempts - 1,
 		}); r.Next(); {
 			nodeResp, err = status.DownloadSpan(ctx, &remoteRequest)
-			for node, encodedErr := range resp.Errors {
-				err = errors.Wrapf(
-					errors.DecodeError(ctx, encodedErr),
-					"download span request failed with error on node n%d",
-					node,
-				)
-				break
+			if err == nil && nodeResp != nil {
+				for node, encodedErr := range nodeResp.Errors {
+					err = errors.Wrapf(
+						errors.DecodeError(ctx, encodedErr),
+						"download span request failed with error on node n%d",
+						node,
+					)
+					break
+				}
 			}
 			if err == nil {
 				break
@@ -102,12 +104,12 @@ func (s *systemStatusServer) DownloadSpan(
 		}
 	}
 
-	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "download spans",
-		noTimeout,
+	if err := iterateNodesExt(ctx, s.serverIterator, s.stopper, "download spans",
 		s.dialNode,
 		nodeFn,
 		responseFn,
 		errorFn,
+		iterateNodesOpts{nodeFnTimeout: noTimeout, stopOnError: true},
 	); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -118,6 +120,11 @@ func (s *systemStatusServer) DownloadSpan(
 func (s *systemStatusServer) localDownloadSpan(
 	ctx context.Context, req *serverpb.DownloadSpanRequest,
 ) error {
+	if s.knobs != nil && s.knobs.DownloadSpanLocalError != nil {
+		if err := s.knobs.DownloadSpanLocalError(ctx, s.node.Descriptor.NodeID); err != nil {
+			return err
+		}
+	}
 	return s.stores.VisitStores(func(store *kvserver.Store) error {
 		downloadSpansCh := make(chan roachpb.Span)
 		stopDiskMonCh := make(chan struct{})

@@ -3562,6 +3562,12 @@ func iterateNodes[Client, Result any](
 type iterateNodesOpts struct {
 	nodeFnTimeout  time.Duration
 	maxConcurrency uint64
+
+	// stopOnError aborts the fan-out as soon as any node's nodeFn returns an
+	// error: sibling node work is cancelled and the error is returned to the
+	// caller. Defaults false, preserving the record-and-continue contract that
+	// all other callers rely on.
+	stopOnError bool
 }
 
 // iterateNodesExt iterates nodeFn over all non-removed nodes with a max
@@ -3655,6 +3661,12 @@ func iterateNodesExt[Client, Result any](
 		case res := <-responseChan:
 			if res.err != nil {
 				errorFn(res.nodeID, res.err)
+				if opts.stopOnError {
+					// Abort the remaining node work and surface the error to the
+					// caller instead of waiting for the other nodes to finish.
+					cancel()
+					return res.err
+				}
 			} else {
 				responseFn(res.nodeID, res.response)
 			}
