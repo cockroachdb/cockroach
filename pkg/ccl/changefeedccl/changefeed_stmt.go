@@ -949,7 +949,8 @@ func createChangefeedJobRecord(
 		return nil, changefeedbase.Targets{}, err
 	}
 	if _, err := getEncoder(ctx, encodingOpts, targets, details.Select != "",
-		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil, sourceProvider); err != nil {
+		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB, p.ExecCfg().Settings), nil,
+		sourceProvider); err != nil {
 		return nil, changefeedbase.Targets{}, err
 	}
 
@@ -2566,14 +2567,13 @@ func checkSinkFileBasedCredentialGates(
 	ctx context.Context, p sql.PlanHookState, parsedSink *url.URL,
 ) error {
 	uri := parsedSink
-	if parsedSink.Scheme == "external" {
-		resolved, err := makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB).lookup(parsedSink.Host)
+	if parsedSink.Scheme == changefeedbase.SinkSchemeExternalConnection {
+		resolved, err := makeExternalConnectionProvider(
+			ctx, p.ExecCfg().InternalDB, p.ExecCfg().Settings).resolve(parsedSink)
 		if err != nil {
 			return errors.Wrap(err, "resolving external connection for sink")
 		}
-		if uri, err = url.Parse(resolved); err != nil {
-			return errors.Wrap(err, "parsing resolved external connection URI")
-		}
+		uri = resolved
 	}
 	if uri.Query().Get(changefeedbase.SinkParamSASLProprietaryClientAssertionLocation) == "" {
 		return nil
