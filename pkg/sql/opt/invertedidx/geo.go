@@ -1122,7 +1122,19 @@ func (g *geoDatumsToInvertedExpr) Convert(
 			if g.filterer != nil {
 				preFilterState = g.filterer.Bind(d)
 			}
-			return g.getSpanExpr(ctx, d, t.additionalParams, t.relationship, g.indexConfig)
+			invertedExpr, err := g.getSpanExpr(
+				ctx, d, t.additionalParams, t.relationship, g.indexConfig,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if t.relationship == geoindex.DWithin && g.typ.Family() == types.GeographyFamily {
+				// An empty DWithin candidate set has no possible matches for this probe row.
+				if _, ok := invertedExpr.(inverted.NonInvertedColExpression); ok {
+					return nil, nil
+				}
+			}
+			return invertedExpr, nil
 
 		default:
 			return nil, fmt.Errorf("unsupported expression %v", t)
