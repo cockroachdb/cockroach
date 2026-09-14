@@ -4227,6 +4227,11 @@ func TestControlChangefeedRoleOption(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		rootDB := sqlutils.MakeSQLRunner(s.DB)
 		rootDB.Exec(t, `CREATE USER user1 WITH CONTROLCHANGEFEED`)
+		// Reaching the sink requires EXTERNALIOIMPLICITACCESS; this test exercises
+		// the CONTROLCHANGEFEED role option and its SELECT requirements, so grant
+		// the sink privilege up front. The SELECT check runs before the sink is
+		// accessed, so the error cases below still fail on the missing SELECT.
+		rootDB.Exec(t, `GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO user1`)
 		rootDB.Exec(t, `CREATE TYPE type_a as enum ('a')`)
 		rootDB.Exec(t, `CREATE TABLE table_a (id int, type type_a)`)
 		rootDB.Exec(t, `CREATE TABLE table_b (id int, type type_a)`)
