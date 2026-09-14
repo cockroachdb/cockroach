@@ -317,6 +317,7 @@ func (t *descriptorState) removeInactiveVersions(ctx context.Context) []*storedL
 	for _, desc := range append([]*descriptorVersionState(nil), t.mu.active.data...) {
 		if desc.refcount.Load() == 0 && t.removeOnceDereferenced(desc) {
 			t.mu.active.remove(desc)
+			t.m.names.remove(desc)
 			func() {
 				desc.mu.Lock()
 				defer desc.mu.Unlock()
@@ -388,6 +389,7 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 			}
 			if leaseReleased {
 				t.mu.active.remove(s)
+				t.m.names.remove(s)
 				s.t.m.boundAccount.Shrink(ctx, s.getByteSize())
 			}
 			return l

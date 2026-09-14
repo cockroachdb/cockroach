@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -60,7 +61,7 @@ func (l *descriptorSet) remove(s *descriptorVersionState) {
 	if !match {
 		panic(errors.AssertionFailedf("can't find lease to remove: %s", s))
 	}
-	l.data = append(l.data[:i], l.data[i+1:]...)
+	l.data = slices.Delete(l.data, i, i+1)
 }
 
 func (l *descriptorSet) find(version descpb.DescriptorVersion) *descriptorVersionState {

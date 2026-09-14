@@ -132,6 +132,114 @@ func TestTableSet(t *testing.T) {
 	}
 }
 
+// TestDescriptorSetRemoveClearsBackingArray checks that remove nils the vacated
+// tail slots so removed descriptors aren't retained through the backing array.
+func TestDescriptorSetRemoveClearsBackingArray(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	newState := func(version descpb.DescriptorVersion) *descriptorVersionState {
+		return &descriptorVersionState{
+			Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: version}).BuildImmutable(),
+		}
+	}
+
+	set := &descriptorSet{}
+	v1, v2, v3 := newState(1), newState(2), newState(3)
+	set.insert(v1)
+	set.insert(v2)
+	set.insert(v3)
+
+	assertNoRetainedTail := func() {
+		t.Helper()
+		backing := set.data[:cap(set.data)]
+		for i := len(set.data); i < len(backing); i++ {
+			require.Nilf(t, backing[i], "backing array slot %d retains a removed descriptor", i)
+		}
+	}
+
+	set.remove(v2)
+	assertNoRetainedTail()
+	set.remove(v3)
+	assertNoRetainedTail()
+	set.remove(v1)
+	assertNoRetainedTail()
+}
+
+// TestDropTableEvictsNameCache checks that dropping a table evicts its entry
+// from the lease manager's name cache (support#3701).
+func TestDropTableEvictsNameCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	leaseManager := s.LeaseManager().(*Manager)
+
+	if _, err := db.Exec(`CREATE DATABASE t; CREATE TABLE t.staging (k INT PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	id := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "staging").GetID()
+
+	// Lease and release so the descriptor is cached by name.
+	leased, err := leaseManager.Acquire(ctx, TimestampToReadTimestamp(s.Clock().Now()), id)
+	require.NoError(t, err)
+	leased.Release(ctx)
+
+	inNameCache := func() bool {
+		leaseManager.names.mu.RLock()
+		defer leaseManager.names.mu.RUnlock()
+		return leaseManager.names.descriptors.GetByID(id) != nil
+	}
+	require.True(t, inNameCache(), "descriptor should be name-cached after acquire")
+
+	if _, err := db.Exec(`DROP TABLE t.staging`); err != nil {
+		t.Fatal(err)
+	}
+	require.NoError(t, leaseManager.purgeOldVersions(ctx, kvDB, id, true /* dropped */, 0))
+
+	require.False(t, inNameCache(), "descriptor should be evicted from name cache after drop")
+}
+
+// TestDropWhileLeasedEvictsNameCache checks that releasing the last lease on a
+// dropped table evicts its name-cache entry via the release path (support#3701).
+func TestDropWhileLeasedEvictsNameCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	leaseManager := s.LeaseManager().(*Manager)
+
+	if _, err := db.Exec(`CREATE DATABASE t; CREATE TABLE t.staging (k INT PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	id := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "staging").GetID()
+
+	// Hold a lease so the version keeps a live refcount when the table is dropped.
+	leased, err := leaseManager.Acquire(ctx, TimestampToReadTimestamp(s.Clock().Now()), id)
+	require.NoError(t, err)
+
+	inNameCache := func() bool {
+		leaseManager.names.mu.RLock()
+		defer leaseManager.names.mu.RUnlock()
+		return leaseManager.names.descriptors.GetByID(id) != nil
+	}
+
+	// Drive the drop notification directly rather than via DROP TABLE, which would
+	// block until our held lease drains. The still-leased version stays cached
+	// since its refcount is non-zero.
+	require.NoError(t, leaseManager.purgeOldVersions(ctx, kvDB, id, true /* dropped */, 0))
+	require.True(t, inNameCache(), "descriptor should still be name-cached while leased")
+
+	// Releasing the last lease removes the version and evicts its name-cache entry.
+	leased.Release(ctx)
+	require.False(t, inNameCache(), "descriptor should be evicted from name cache after release")
+}
+
 func getNumVersions(ds *descriptorState) int {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
