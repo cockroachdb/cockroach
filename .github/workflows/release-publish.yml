@@ -13,8 +13,9 @@
 #   detect-version     (beta gate; every job consults its is_beta output so
 #                       betas can publish from the plain release-X.Y branch)
 #     └─► validate-build ─► approve-publish ─┬─► update-versions-master
-#                                            └─► publish-staged ─┬─► publish-redhat
-#                                                                └─► create-rafa-prs
+#                                            ├─► publish-staged ─┬─► publish-redhat
+#                                            │                   └─► create-rafa-prs
+#                                            └─► publish-staged-ubuntu (experimental, non-blocking, not in notify)
 #   notify (always, needs all above)
 #
 # approve-publish is the single human-approval gate (release-ops env);
@@ -39,7 +40,7 @@ on:
         type: boolean
         default: false
       skip_jobs:
-        description: 'Comma-separated job IDs to skip (no spaces) when resuming after a partial failure. Validated by the validate-skip-jobs job. Valid IDs: validate-build, update-versions-master, publish-staged, publish-redhat, create-rafa-prs.'
+        description: 'Comma-separated job IDs to skip (no spaces) when resuming after a partial failure. Validated by the validate-skip-jobs job. Valid IDs: validate-build, update-versions-master, publish-staged, publish-staged-ubuntu, publish-redhat, create-rafa-prs.'
         type: string
         default: ''
 
@@ -99,6 +100,7 @@ jobs:
             validate-build
             update-versions-master
             publish-staged
+            publish-staged-ubuntu
             publish-redhat
             create-rafa-prs
           )
@@ -429,6 +431,84 @@ jobs:
           BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
         run: |
           build/github/release-publish-staged.sh
+
+  # EXPERIMENTAL (RE-1123): promote the Ubuntu 24.04 image, in parallel to
+  # publish-staged. Intentionally non-blocking — continue-on-error keeps the
+  # run green if it fails, and it is excluded from the notify/notify-publish
+  # paths, so a failure surfaces only as a ::warning:: annotation. It does NOT
+  # tag git or copy binaries (publish-staged owns those); it only republishes
+  # the Ubuntu Docker image, so running it twice is harmless.
+  #
+  # In practice this job runs from master's copy of this workflow, since
+  # individual-release publishes are dispatched from master. It is carried here
+  # so the branch stays self-consistent if a publish is ever dispatched from
+  # the release branch itself.
+  publish-staged-ubuntu:
+    needs: [approve-publish, detect-version]
+    continue-on-error: true
+    if: >-
+      ${{ !cancelled() &&
+        needs.approve-publish.result == 'success' &&
+        !contains(format(',{0},', inputs.skip_jobs), ',publish-staged-ubuntu,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    name: Publish staged cockroach release (Ubuntu 24.04, experimental)
+    runs-on: [self-hosted, ubuntu_big_ondemand_2404]
+    timeout-minutes: 90
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Set up QEMU for multi-arch builds
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+        with:
+          # See release-build-and-sign.yml: avoids the spurious
+          # "Path Validation Error" cache-save warning on every run.
+          cache-image: false
+
+      - name: Fetch publish secrets
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3
+        with:
+          secrets: |-
+            docker_access_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-dockerhub-access-token
+            docker_id:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-dockerhub-username
+
+      - name: Publish staged Ubuntu release (experimental, non-blocking)
+        env:
+          DOCKER_ACCESS_TOKEN: ${{ steps.secrets.outputs.docker_access_token }}
+          DOCKER_ID: ${{ steps.secrets.outputs.docker_id }}
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          if [[ ! -f build/github/release-publish-staged-ubuntu.sh ]]; then
+            echo "::notice title=Ubuntu 24.04 publish skipped::build/github/release-publish-staged-ubuntu.sh is not present at this revision (release predates RE-1123); skipping."
+            exit 0
+          fi
+          if ! build/github/release-publish-staged-ubuntu.sh; then
+            echo "::warning title=Experimental Ubuntu 24.04 publish failed::Publishing the Ubuntu 24.04 Docker image (RE-1123) failed. This is experimental and does not block the release."
+            exit 1
+          fi
 
   # --------------------------------------------------------------------------
   # Stage 2a: Publish to Red Hat (needs publish-staged)
