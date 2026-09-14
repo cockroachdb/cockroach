@@ -470,7 +470,10 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 			}
 		}
 		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnPushWait")
-		resp, err := m.twq.MaybeWaitForPush(ctx, t, req.WaitPolicy)
+		resp, err := m.twq.MaybeWaitForPush(ctx, t, req.WaitPolicy, txnwait.PushWorkload{
+			ID:   info.WorkloadID,
+			Type: uint32(info.WorkloadType),
+		})
 		cleanup()
 		if err != nil {
 			return nil, err
