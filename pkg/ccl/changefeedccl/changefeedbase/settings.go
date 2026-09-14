@@ -284,6 +284,24 @@ var PerEventElasticCPUControlEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+// ExternalConnectionApplyURIPathAndParams gates applying the path and query
+// parameters of an external:// sink URI to the URI of the connection it names.
+// A feed whose sink URI carries a path wrote to the connection's base URI
+// before this was applied, and turning the setting off
+// keeps it writing there rather than moving to the subdirectory.
+//
+// TODO(#175528): remove the setting in future versions.
+var ExternalConnectionApplyURIPathAndParams = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.external_connection.apply_uri_path_and_params.enabled",
+	"if enabled, the path of an external:// sink URI is applied to the URI of the"+
+		" external connection it names, as are the topic_name and topic_prefix parameters"+
+		" when the connection leaves them unset, and any other parameter is an error;"+
+		" if disabled, the path and parameters are ignored",
+	false,
+	settings.WithPublic,
+)
+
 // RequireExternalConnectionSink is used to restrict non-admins with the CHANGEFEED privilege
 // to create changefeeds to external connections only.
 var RequireExternalConnectionSink = settings.RegisterBoolSetting(
