@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -30,16 +31,35 @@ type scatterNode struct {
 
 // Scatter moves ranges to random stores
 // (`ALTER TABLE/INDEX ... SCATTER ...` statement)
-// Privileges: INSERT on table.
+// Privileges: REPAIRCLUSTER system privilege when
+// range_topology_requires_repaircluster is enabled; INSERT on the table
+// otherwise.
 func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error) {
 
 	if err := sqlclustersettings.RequireSystemTenantOrClusterSetting(p.ExecCfg().Codec, p.ExecCfg().Settings, SecondaryTenantScatterEnabled); err != nil {
 		return nil, err
 	}
 
-	_, tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT, true /* skipCache */)
+	var tablePriv privilege.Kind
+	if sqlclustersettings.RangeTopologyRequiresRepairCluster.Get(
+		&p.ExecCfg().Settings.SV,
+	) {
+		tablePriv = 0
+	} else {
+		tablePriv = privilege.INSERT
+	}
+	_, tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, tablePriv, true /* skipCache */)
 	if err != nil {
 		return nil, err
+	}
+
+	if tablePriv == 0 {
+		// SCATTER redistributes ranges across the cluster, so it requires the
+		// REPAIRCLUSTER system privilege rather than a privilege on the table,
+		// matching ALTER TABLE/INDEX ... SPLIT/UNSPLIT/RELOCATE.
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER); err != nil {
+			return nil, err
+		}
 	}
 
 	var span roachpb.Span
