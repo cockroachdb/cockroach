@@ -221,6 +221,37 @@ func iterColDescriptors(
 	return err
 }
 
+// VisitColumnRefs calls fn once for each column reference in rootExpr, in
+// traversal order and with duplicates. It resolves nothing itself: callers
+// that need a column's ID, type, or ordinal look the name up in whatever
+// catalog they have, which is what lets callers holding a cat.Table rather
+// than a catalog.TableDescriptor share this walk.
+func VisitColumnRefs(rootExpr tree.Expr, fn func(columnName tree.Name) error) error {
+	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		vBase, ok := expr.(tree.VarName)
+		if !ok {
+			// Not a VarName, don't do anything to this node.
+			return true, expr, nil
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return false, nil, err
+		}
+
+		c, ok := v.(*tree.ColumnItem)
+		if !ok {
+			return true, expr, nil
+		}
+
+		if err := fn(c.ColumnName); err != nil {
+			return false, nil, err
+		}
+		return false, expr, nil
+	})
+	return err
+}
+
 // dummyColumn represents a variable column that can type-checked. It is used
 // in validating check constraint and partial index predicate expressions. This
 // validation requires that the expression can be both both typed-checked and

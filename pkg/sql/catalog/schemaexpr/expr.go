@@ -136,32 +136,14 @@ func ExtractColumnIDs(
 	desc catalog.TableDescriptor, rootExpr tree.Expr,
 ) (catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
-
-	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		vBase, ok := expr.(tree.VarName)
-		if !ok {
-			return true, expr, nil
-		}
-
-		v, err := vBase.NormalizeVarName()
+	err := VisitColumnRefs(rootExpr, func(columnName tree.Name) error {
+		col, err := catalog.MustFindColumnByTreeName(desc, columnName)
 		if err != nil {
-			return false, nil, err
+			return err
 		}
-
-		c, ok := v.(*tree.ColumnItem)
-		if !ok {
-			return true, expr, nil
-		}
-
-		col, err := catalog.MustFindColumnByTreeName(desc, c.ColumnName)
-		if err != nil {
-			return false, nil, err
-		}
-
 		colIDs.Add(col.GetID())
-		return false, expr, nil
+		return nil
 	})
-
 	return colIDs, err
 }
 
