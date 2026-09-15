@@ -117,6 +117,7 @@ go_test(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/spanutils",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/sql/ttl/ttlbase",
         "//pkg/sql/types",
         "//pkg/testutils",
