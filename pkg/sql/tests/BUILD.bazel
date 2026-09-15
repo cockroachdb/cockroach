@@ -41,6 +41,7 @@ go_test(
         "enum_test.go",
         "hash_sharded_test.go",
         "impure_builtin_test.go",
+        "index_multifamily_corruption_test.go",
         "inverted_index_test.go",
         "kv_test.go",
         "main_test.go",
