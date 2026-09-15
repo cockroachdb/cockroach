@@ -198,12 +198,11 @@ func (b *selectQueryBuilder) Run(
 }
 
 type DeleteQueryParams struct {
-	RelationName      string
-	PKColNames        []string
-	DeleteBatchSize   int64
-	TTLExpr           catpb.Expression
-	DeleteDuration    *aggmetric.Histogram
-	DeleteRateLimiter *quotapool.RateLimiter
+	RelationName    string
+	PKColNames      []string
+	DeleteBatchSize int64
+	TTLExpr         catpb.Expression
+	DeleteDuration  *aggmetric.Histogram
 }
 
 // DeleteQueryBuilder is responsible for maintaining state around the DELETE
@@ -285,12 +284,6 @@ func (b *deleteQueryBuilder) Run(
 			}
 		}
 	}
-
-	tokens, err := b.DeleteRateLimiter.Acquire(ctx, int64(numRows))
-	if err != nil {
-		return 0, err
-	}
-	defer tokens.Consume()
 
 	start := timeutil.Now()
 	rowCount, err := txn.ExecEx(
