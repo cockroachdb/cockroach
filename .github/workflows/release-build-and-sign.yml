@@ -16,6 +16,7 @@
 #     +-> generate-sbom (SBOM + notices + license-types; independent of builds)
 #           |
 #           +---> build-docker (needs build-linux)
+#           +---> build-docker-ubuntu (needs build-linux; experimental, non-blocking, not in notify)
 #           +---> build-docker-ibm (needs IBM linux builds)
 #           |       |
 #           |       +---> publish-cloud-only (needs build-docker)
@@ -51,7 +52,7 @@ on:
         type: string
         default: ''
       skip_jobs:
-        description: 'Comma-separated job IDs to skip (no spaces) when resuming after a partial failure. Validated by the validate-skip-jobs job. Valid IDs: build-linux, build-nonlinux, build-per-platform-ibm, build-docker, build-docker-ibm, macos-signing, ibm-signing, sentry-panic, generate-sbom, bincheck, publish-cloud-only, cloud-rollout.'
+        description: 'Comma-separated job IDs to skip (no spaces) when resuming after a partial failure. Validated by the validate-skip-jobs job. Valid IDs: build-linux, build-nonlinux, build-per-platform-ibm, build-docker, build-docker-ubuntu, build-docker-ibm, macos-signing, ibm-signing, sentry-panic, generate-sbom, bincheck, publish-cloud-only, cloud-rollout.'
         type: string
         default: ''
 
@@ -138,6 +139,7 @@ jobs:
             build-nonlinux
             build-per-platform-ibm
             build-docker
+            build-docker-ubuntu
             build-docker-ibm
             macos-signing
             ibm-signing
@@ -667,6 +669,70 @@ jobs:
           BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
         run: |
           build/teamcity/internal/release/process/build-cockroach-release-docker.sh
+
+  # EXPERIMENTAL (RE-1123): Ubuntu 24.04 base image, built in parallel to the
+  # UBI image. This job is intentionally non-blocking — it is a leaf (nothing
+  # `needs:` it and it is excluded from the notify job), and continue-on-error
+  # keeps the overall workflow green even if it fails. A failure surfaces only
+  # as a ::warning:: annotation in the run summary so we notice without gating
+  # any release. Unlike master, this branch uses a standalone build script
+  # rather than DOCKER_* knobs on the shared one; see the header comment in
+  # build-cockroach-release-docker-ubuntu.sh for why.
+  build-docker-ubuntu:
+    name: Build Docker images (Ubuntu 24.04, experimental)
+    needs: [build-linux, detect-version]
+    continue-on-error: true
+    if: >-
+      ${{ !cancelled() &&
+        (needs.build-linux.result == 'success' ||
+         (needs.build-linux.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',build-linux,'))) &&
+        !contains(format(',{0},', inputs.skip_jobs), ',build-docker-ubuntu,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         (needs.detect-version.outputs.is_beta == 'true' && startsWith(github.ref, 'refs/heads/release-')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: [self-hosted, ubuntu_big_ondemand_2404]
+    timeout-minutes: 90
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Set up QEMU for multi-arch builds
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+        with:
+          # Disable the binfmt-installer cache: it warns "Path Validation
+          # Error" on every post-step because the action doesn't write to
+          # the cache path it later tries to save. The image is tiny — the
+          # cache wasn't buying us anything anyway.
+          cache-image: false
+
+      - name: Build and push Ubuntu Docker images (experimental, non-blocking)
+        env:
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          if ! build/teamcity/internal/release/process/build-cockroach-release-docker-ubuntu.sh; then
+            echo "::warning title=Experimental Ubuntu 24.04 image build failed::The Ubuntu 24.04 Docker image (RE-1123) failed to build. This is experimental and does not block the release."
+            exit 1
+          fi
 
   build-docker-ibm:
     name: Build Docker images (IBM, no telemetry)
