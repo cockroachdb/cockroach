@@ -138,6 +138,10 @@ func WrapErrFileDoesNotExist(err error, msg string) error {
 	return errors.Wrapf(ErrFileDoesNotExist, "%s: %s", err.Error(), msg)
 }
 
+// ErrNotReady indicates the requested external storage resource is not ready
+// at this time (e.g. if server is still initing).
+var ErrNotReady = errors.New("external storage is not ready")
+
 // ErrListingUnsupported is a marker for indicating listing is unsupported.
 var ErrListingUnsupported = errors.New("listing is not supported")
 
