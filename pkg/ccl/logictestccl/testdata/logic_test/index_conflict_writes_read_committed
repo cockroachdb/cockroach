@@ -50,6 +50,69 @@ SET default_transaction_isolation = 'serializable'
 
 subtest end
 
+subtest delete_writes_all_families
+
+# DELETE needs no forced write, for two independent reasons that both reduce to
+# it writing every key the row could occupy rather than only the keys it changes:
+#
+#   - row.Deleter walks every family in the descriptor and issues a Del per
+#     family key, with no check for whether that family holds a value.
+#   - It encodes the secondary index entries with includeEmpty=true, the opposite
+#     of the row updater, so it deletes index-entry families that hold nothing
+#     too.
+#
+# Either one alone would serialize a concurrent writer. That is the asymmetry
+# with UPDATE, which writes only the families holding updated columns and skips
+# empty index-entry families, and so needs the conflict writes above.
+#
+# Both reasons are properties of row.Deleter, so neither covers the DeleteRange
+# fast path, which bypasses it entirely (see canUseDeleteRange in
+# pkg/sql/opt/exec/execbuilder/mutation.go). That path is reachable only on a
+# table with no secondary indexes, so it cannot corrupt one, but it has not been
+# examined for the analogous anomaly on the primary index and this subtest says
+# nothing about it.
+#
+# The trace below is the DELETE counterpart of
+# full_index_null_family_corruption_173610: w is NULL and alone in its family, so
+# it has neither a primary KV nor an index KV, yet both of its keys are still
+# tombstoned.
+
+statement ok
+CREATE TABLE t173610_del_kv (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  w INT,
+  FAMILY f_x (x),
+  FAMILY f_y (y),
+  FAMILY f_z (z),
+  FAMILY f_w (w),
+  INDEX idx (y) STORING (z, w)
+)
+
+statement ok
+INSERT INTO t173610_del_kv VALUES (1, 2, 3, NULL)
+
+statement ok
+SET default_transaction_isolation = 'read committed'
+
+query T kvtrace
+DELETE FROM t173610_del_kv WHERE x = 1
+----
+Scan /Table/107/1/1/{0-1/2} lock Exclusive (Block, Unreplicated)
+Del /Table/107/2/2/1/0
+Del /Table/107/2/2/1/2/1
+Del /Table/107/2/2/1/3/1
+Del (locking) /Table/107/1/1/0
+Del (locking) /Table/107/1/1/1/1
+Del (locking) /Table/107/1/1/2/1
+Del (locking) /Table/107/1/1/3/1
+
+statement ok
+SET default_transaction_isolation = 'serializable'
+
+subtest end
+
 subtest partial_index_corruption_173610
 
 skip under duress
@@ -570,5 +633,62 @@ query IIII
 SELECT x, y, z, w FROM t173610_full@idx
 ----
 1  20  3  7
+
+subtest end
+
+subtest delete_null_family_no_orphan_173610
+
+skip under duress
+
+# The end-to-end version of the same point, mirroring
+# full_index_null_family_corruption_173610 with TxnA deleting the row rather than
+# moving it within the index. There TxnA wrote no w-family index entry because w
+# was NULL, and TxnB's write of one survived as an orphan. Here TxnA tombstones
+# w's primary family and w's index-entry family regardless of their being empty,
+# so TxnB collides with it and TxnA re-reads.
+
+statement ok
+CREATE TABLE t173610_del (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  w INT,
+  FAMILY f_x (x),
+  FAMILY f_y (y),
+  FAMILY f_z (z),
+  FAMILY f_w (w),
+  INDEX idx (y) STORING (z, w)
+)
+
+statement ok
+INSERT INTO t173610_del VALUES (1, 2, 3, NULL)
+
+statement ok
+GRANT ALL ON TABLE t173610_del TO testuser
+
+user root
+
+statement async txnDel
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL enable_implicit_select_for_update = off; DELETE FROM t173610_del WHERE x = 1 AND pg_sleep(2); COMMIT
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; WITH s AS (SELECT pg_sleep(0.5)) UPDATE t173610_del SET w = 7 WHERE x = 1; COMMIT
+
+user root
+
+awaitstatement txnDel
+
+query I
+SELECT count(*) FROM t173610_del
+----
+0
+
+# No orphan survives in the index: TxnA re-read w = 7 and deleted that entry too.
+query I
+SELECT count(*) FROM t173610_del@idx
+----
+0
 
 subtest end
