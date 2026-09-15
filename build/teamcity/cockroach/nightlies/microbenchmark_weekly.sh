@@ -107,7 +107,7 @@ declare -a build_sha_arr
 build_sha_arr+=("${sha_arr[0]}")
 if check_gcs_path_exists "$baseline_cache_path"; then
   mkdir -p "$output_dir/baseline"
-  gsutil -mq cp -r "$baseline_cache_path/*" "$output_dir/baseline"
+  gcloud storage cp -r "$baseline_cache_path/*" "$output_dir/baseline"
   echo "Baseline cache found for ${name_arr[1]}. Using it for comparison."
 else
   build_sha_arr+=("${sha_arr[1]}")
@@ -183,12 +183,12 @@ done
 
 # Push baseline to cache if we ran both benchmarks
 if [[ ${#build_sha_arr[@]} -gt 1 ]]; then
-  gsutil -mq cp -r "$output_dir/baseline" "$baseline_cache_path"
+  gcloud storage cp -r "$output_dir/baseline" "$baseline_cache_path"
 fi
 
 # Push experiment results to cache
 experiment_cache_path="gs://$BENCH_BUCKET/cache/$GCE_MACHINE_TYPE/$SANITIZED_BENCH_PACKAGE/${sha_arr[0]}"
-gsutil -mq cp -r "$output_dir/experiment" "$experiment_cache_path"
+gcloud storage cp -r "$output_dir/experiment" "$experiment_cache_path"
 
 # Compare the results, if both sets of benchmarks were run.
 # These should exist if the benchmarks were run successfully.

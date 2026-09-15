@@ -480,10 +480,10 @@ func TestCompressedGCS(t *testing.T) {
 
 	testSettings := cluster.MakeTestingClusterSettings()
 
-	// gsutil cp /usr/share/dict/words gs://cockroach-fixtures-us-east1/words-compressed.txt
+	// gcloud storage cp /usr/share/dict/words gs://cockroach-fixtures-us-east1/words.txt
 	gsFile1 := "gs://cockroach-fixtures-us-east1/words.txt?AUTH=implicit"
 
-	// gsutil cp -Z /usr/share/dict/words gs://cockroach-fixtures-us-east1/words-compressed.txt
+	// gcloud storage cp -Z /usr/share/dict/words gs://cockroach-fixtures-us-east1/words-compressed.txt
 	gsFile2 := "gs://cockroach-fixtures-us-east1/words-compressed.txt?AUTH=implicit"
 
 	conf1, err := cloud.ExternalStorageConfFromURI(gsFile1, user)
