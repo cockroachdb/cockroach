@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1662,4 +1663,127 @@ func TestRowLevelTTLRunsAsTableOwner(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRowLevelTTLOwnerPrivilegeFailureNamesEscapeHatch asserts what an
+// operator sees when a TTL job fails because it runs as the table owner:
+// user-defined code the delete reaches is subject to the owner's privileges,
+// so a DELETE trigger that writes somewhere the owner cannot write fails the
+// job and the table stops expiring rows.
+//
+// The failure must be self-describing. The jobs system records only
+// err.Error() in the job payload, so the pointer to the escape hatch has to be
+// in the error message itself -- a hint or detail would never reach SHOW JOBS.
+func TestRowLevelTTLOwnerPrivilegeFailureNamesEscapeHatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+		t,
+		&sql.TTLTestingKnobs{AOSTDuration: &zeroDuration},
+		1,     /* numNodes */
+		false, /* runMinActiveVersion */
+	)
+	defer cleanupFunc()
+
+	sqlDB := th.sqlDB
+	sqlDB.Exec(t, `CREATE USER tbl_owner`)
+	// audit is owned by root and tbl_owner is granted nothing on it, so the
+	// trigger's INSERT is refused once the delete runs as tbl_owner.
+	sqlDB.Exec(t, `CREATE TABLE audit (id SERIAL PRIMARY KEY, usr STRING)`)
+	sqlDB.Exec(t, `CREATE FUNCTION log_delete() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+		BEGIN
+			INSERT INTO audit (usr) VALUES (current_user);
+			RETURN OLD;
+		END
+	$$`)
+	sqlDB.Exec(t, `CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ) `+
+		`WITH (ttl_expiration_expression = 'expire_at')`)
+	sqlDB.Exec(t, `ALTER TABLE tbl OWNER TO tbl_owner`)
+	sqlDB.Exec(t, `GRANT EXECUTE ON FUNCTION log_delete TO tbl_owner`)
+	sqlDB.Exec(t,
+		`CREATE TRIGGER log_del BEFORE DELETE ON tbl FOR EACH ROW EXECUTE FUNCTION log_delete()`)
+	sqlDB.Exec(t, `INSERT INTO tbl VALUES (1, '2020-01-01'), (2, '2020-01-01')`)
+
+	th.waitForScheduledJob(t, jobs.StateFailed, "does not have INSERT privilege")
+
+	// Run the query an operator would reach for when rows stop expiring, so
+	// what SHOW JOBS records is what gets asserted.
+	rows := sqlDB.QueryStr(t,
+		`SELECT status, error FROM [SHOW JOBS] WHERE job_type = 'ROW LEVEL TTL'`)
+	var jobErr string
+	for _, row := range rows {
+		if row[0] == "failed" {
+			jobErr = row[1]
+		}
+	}
+	require.NotEmpty(t, jobErr, "expected a failed row-level TTL job in SHOW JOBS")
+
+	// The recorded error names both the missing privilege and the escape
+	// hatch, so an operator reading SHOW JOBS can act on it without knowing
+	// which authorization model the job runs under.
+	require.Contains(t, jobErr, "does not have INSERT privilege")
+	require.Contains(t, jobErr, "sql.auth.legacy_fk_and_ttl_authorization_unsafe.enabled")
+	require.Contains(t, jobErr, "runs as the table's owner")
+
+	// The rows did not expire.
+	require.Len(t, sqlDB.QueryStr(t, `SELECT id FROM tbl`), 2)
+}
+
+// TestRowLevelTTLLegacyAuthorizationSetting covers the
+// sql.auth.legacy_fk_and_ttl_authorization_unsafe.enabled escape hatch as it
+// applies to the TTL job. With it enabled the job issues its statements as
+// the node user, so a DELETE trigger on the TTL table observes node rather
+// than the table owner, and the owner needs no grants for code the delete
+// reaches.
+//
+// The setting is unsafe, so SET CLUSTER SETTING would require pasting back a
+// per-session interlock key; it is overridden directly instead. That the
+// setting is registered unsafe at all is asserted in
+// TestLegacyFKAndTTLAuthorizationSetting.
+func TestRowLevelTTLLegacyAuthorizationSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+		t,
+		&sql.TTLTestingKnobs{
+			AOSTDuration:     &zeroDuration,
+			ReturnStatsError: true,
+		},
+		1,     /* numNodes */
+		false, /* runMinActiveVersion */
+	)
+	defer cleanupFunc()
+
+	sqlDB := th.sqlDB
+	sqlDB.Exec(t, `CREATE USER tbl_owner`)
+	sqlDB.Exec(t, `CREATE TABLE audit (id SERIAL PRIMARY KEY, usr STRING)`)
+	// Deliberately no grants to tbl_owner on audit or log_delete: under the
+	// legacy model the trigger runs as node, which needs none. This is the
+	// flip side of the "row-level DELETE trigger runs as the table owner" case
+	// in TestRowLevelTTLRunsAsTableOwner, which must grant both.
+	sqlDB.Exec(t, `CREATE FUNCTION log_delete() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+		BEGIN
+			INSERT INTO audit (usr) VALUES (current_user);
+			RETURN OLD;
+		END
+	$$`)
+	sqlDB.Exec(t, `CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ) `+
+		`WITH (ttl_expiration_expression = 'expire_at')`)
+	sqlDB.Exec(t, `ALTER TABLE tbl OWNER TO tbl_owner`)
+	sqlDB.Exec(t,
+		`CREATE TRIGGER log_del BEFORE DELETE ON tbl FOR EACH ROW EXECUTE FUNCTION log_delete()`)
+	sqlDB.Exec(t, `INSERT INTO tbl VALUES (1, '2020-01-01'), (2, '2020-01-01')`)
+
+	sqlclustersettings.LegacyFKAndTTLAuthorization.Override(
+		ctx, &th.server.ClusterSettings().SV, true)
+
+	th.waitForScheduledJob(t, jobs.StateSucceeded, "")
+
+	// The rows still expired, and the trigger observed node rather than the
+	// table owner.
+	require.Empty(t, sqlDB.QueryStr(t, `SELECT * FROM tbl`))
+	sqlDB.CheckQueryResults(t, `SELECT DISTINCT usr FROM audit`, [][]string{{"node"}})
 }
