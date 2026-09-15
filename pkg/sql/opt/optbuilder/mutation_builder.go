@@ -1380,13 +1380,22 @@ func (mb *mutationBuilder) maybeForceIndexConflictWrites() {
 	var forcedCols opt.ColSet
 	for i, n := cat.PrimaryIndex+1, mb.tab.DeletableIndexCount(); i < n; i++ {
 		indexCols := tabMeta.IndexColumnsMapInverted(i)
-		if pred, isPartial := tabMeta.PartialIndexPredicate(i); isPartial {
+		// A temporary backfill index for a partial index is rebuilt from the
+		// fetched row even when the mutation touches none of its columns:
+		// indexNeedsUpdate maintains every partial index unconditionally, and
+		// SimplifyPartialIndexProjections, which would otherwise fold an untouched
+		// partial index's PUT and DEL columns to false, leaves them in place for a
+		// temporary one. Non-partial temporary indexes get no such treatment, so
+		// they follow the ordinary rule below.
+		pred, isPartial := tabMeta.PartialIndexPredicate(i)
+		if isPartial {
 			indexCols.UnionWith(pred.(*memo.FiltersExpr).OuterCols())
 		}
-		// The mutation maintains this index only if it writes one of the columns
-		// read to maintain it; when it does, a concurrent modification of any of
-		// them must conflict.
-		if indexCols.Intersects(updatedCols) {
+		alwaysMaintained := isPartial && cat.IsTemporaryMutationIndex(mb.tab, i)
+		// Otherwise the mutation maintains this index only if it writes one of the
+		// columns read to maintain it; when it does, a concurrent modification of
+		// any of them must conflict.
+		if alwaysMaintained || indexCols.Intersects(updatedCols) {
 			// Drop DeleteOnly columns only after the test above. A DeleteOnly column
 			// carrying an ON UPDATE expression is in the update set, so removing one
 			// first could make an index the mutation really does maintain look
