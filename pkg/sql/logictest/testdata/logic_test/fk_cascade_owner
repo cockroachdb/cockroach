@@ -500,15 +500,18 @@ DROP TABLE parent
 
 subtest rls_under_cascade
 
-# Two row-level-security properties of the cascade identity:
+# Two row-level-security properties of cascades:
 #
 #   1. The cascade's own scan and mutation of the child are exempt from RLS,
 #      even under FORCE ROW LEVEL SECURITY — referential integrity must hold
 #      regardless of policies, matching PostgreSQL (whose internal RI queries
-#      run exempt from row security).
-#   2. User-defined code fired by the cascade is not exempt: a trigger body
-#      reading an RLS-protected table sees the child owner's policy
-#      treatment, not the mutating user's.
+#      run exempt from row security). This exemption is a property of the
+#      cascade machinery itself (cat.PolicyScopeExempt), independent of the
+#      identity the cascade runs as.
+#   2. User-defined code fired by the cascade is not exempt, and there the
+#      identity is what matters: a trigger body reading an RLS-protected
+#      table sees the child owner's policy treatment, not the mutating
+#      user's.
 statement ok
 CREATE TABLE parent (id INT PRIMARY KEY)
 
