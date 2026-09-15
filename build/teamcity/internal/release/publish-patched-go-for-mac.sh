@@ -22,7 +22,7 @@ mkdir artifacts
 publish() {
     archive=$(echo go*.darwin-$1.tar.gz)
     shasum -a 256 $archive
-    gsutil cp $archive gs://public-bazel-artifacts/go/$loc/$archive
+    gcloud storage cp $archive gs://public-bazel-artifacts/go/$loc/$archive
     mv $archive artifacts
 }
 publish arm64

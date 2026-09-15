@@ -68,7 +68,7 @@ func fetchCorpusToTmpDir(
 	}
 	for i, version := range versionsToCheck {
 		err = c.RunE(ctx, option.WithNodes(c.Node(1)),
-			fmt.Sprintf(" gsutil cp gs://%s/corpus-%s/corpus %s",
+			fmt.Sprintf(" gcloud storage cp gs://%s/corpus-%s/corpus %s",
 				gcsBucket("cockroach-corpus"),
 				version,
 				corpusFilePath))

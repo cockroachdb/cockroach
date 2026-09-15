@@ -111,7 +111,7 @@ sha256_hash=$(shasum -a 256 "artifacts/$filename" | awk '{print $1}')
 # Upload to GCS
 google_credentials="$GCS_GOOGLE_CREDENTIALS" log_into_gcloud
 gcs_url="gs://cockroach-profiles/$filename"
-gsutil cp "artifacts/$filename" "$gcs_url"
+gcloud storage cp "artifacts/$filename" "$gcs_url"
 
 # Convert GCS URL to HTTPS URL for WORKSPACE
 https_url="https://storage.googleapis.com/cockroach-profiles/$filename"
