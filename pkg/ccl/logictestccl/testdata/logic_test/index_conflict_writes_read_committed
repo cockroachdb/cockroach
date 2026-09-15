@@ -337,6 +337,122 @@ SELECT a, c FROM t173610_storing@idx WHERE b > 0
 
 subtest end
 
+subtest computed_stored_partial_index_corruption_173610
+
+skip under duress
+
+# The anomaly for a STORED computed column. The index's STORING column c = x + 1
+# lives alone in family f_c; it is computed, so it cannot be self-assigned, and the
+# fix instead force-writes the family of its source column x. TxnB (SERIALIZABLE,
+# so it does not force-write) changes x, which recomputes c — without protecting
+# x's family there would be no conflict.
+
+statement ok
+CREATE TABLE t173610_computed (
+  id INT PRIMARY KEY,
+  a  INT,
+  b  INT,
+  x  INT,
+  c  INT AS (x + 1) STORED,
+  FAMILY f_a (id, a),
+  FAMILY f_b (b),
+  FAMILY f_x (x),
+  FAMILY f_c (c),
+  INDEX idx (a) STORING (c) WHERE b > 0
+)
+
+statement ok
+INSERT INTO t173610_computed (id, a, b, x) VALUES (1, 10, -5, 100)
+
+statement ok
+GRANT ALL ON TABLE t173610_computed TO testuser
+
+user root
+
+statement async txnComputed
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL enable_implicit_select_for_update = off; UPDATE t173610_computed SET b = 5 WHERE id = 1 AND pg_sleep(2); COMMIT
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; WITH s AS (SELECT pg_sleep(0.5)) UPDATE t173610_computed SET x = 200 WHERE id = 1; COMMIT
+
+user root
+
+awaitstatement txnComputed
+
+query I
+SELECT c FROM t173610_computed WHERE id = 1
+----
+201
+
+# The partial index's stored c agrees with the primary index (201, not the stale
+# 101 that TxnA read), because TxnA force-wrote the source column x's family.
+query II
+SELECT a, c FROM t173610_computed@idx WHERE b > 0
+----
+10  201
+
+subtest end
+
+subtest computed_virtual_partial_index_corruption_173610
+
+skip under duress
+
+# The anomaly for a VIRTUAL computed column, reached through the partial index
+# predicate rather than through the index columns. v = x + 1 belongs to no column
+# family, so there is nothing to self-assign and the fix force-writes the family
+# of its source column x instead. TxnA moves the row within the index by changing
+# the key column a, and reads x to evaluate the predicate. TxnB (SERIALIZABLE, so
+# it does not force-write) changes x, flipping the predicate from false to true;
+# without protecting x's family the two would not conflict, and TxnB's entry for
+# the old a would be left behind.
+
+statement ok
+CREATE TABLE t173610_virtual (
+  id INT PRIMARY KEY,
+  a  INT,
+  x  INT,
+  v  INT AS (x + 1) VIRTUAL,
+  FAMILY f_a (id, a),
+  FAMILY f_x (x),
+  INDEX idx (a) WHERE v > 0
+)
+
+statement ok
+INSERT INTO t173610_virtual (id, a, x) VALUES (1, 10, -5)
+
+statement ok
+GRANT ALL ON TABLE t173610_virtual TO testuser
+
+user root
+
+statement async txnVirtual
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL enable_implicit_select_for_update = off; UPDATE t173610_virtual SET a = 5 WHERE id = 1 AND pg_sleep(2); COMMIT
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; WITH s AS (SELECT pg_sleep(0.5)) UPDATE t173610_virtual SET x = 200 WHERE id = 1; COMMIT
+
+user root
+
+awaitstatement txnVirtual
+
+query II
+SELECT a, x FROM t173610_virtual WHERE id = 1
+----
+5  200
+
+# The partial index holds the row under its new key a = 5, not the a = 10 entry
+# TxnB wrote, because TxnA force-wrote x's family and so conflicted with TxnB.
+query I
+SELECT a FROM t173610_virtual@idx WHERE v > 0
+----
+5
+
+subtest end
+
 subtest predicate_flip_partial_index_corruption_173610
 
 skip under duress

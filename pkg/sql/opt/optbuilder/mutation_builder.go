@@ -1548,18 +1548,24 @@ func (mb *mutationBuilder) mutationColumnIDs() opt.ColSet {
 // does not have the NULL case at all: its insert branch maintains every index,
 // so projectVectorIndexColsForUpsert always projects real partition columns.
 //
-// Four kinds of column are left out:
+// Computed index columns are resolved to the columns they are derived from (see
+// resolveComputedCols) rather than written. Two kinds of column are dropped
+// outright:
 //
-//   - Columns the mutation already writes, whose families are covered already.
-//   - Primary key columns: a concurrent change to one rewrites the entire row,
-//     which already conflicts.
-//   - Computed columns: a computed value cannot change unless a concurrent
-//     writer also writes a column it references, and a virtual computed column
-//     belongs to no family and so cannot be written at all.
+//   - Columns the mutation already writes, whose families are covered already,
+//     along with primary key columns: a concurrent change to one of those
+//     rewrites the entire row, which already conflicts.
 //   - DeleteOnly columns, which by definition may only be written by a delete.
-//     This can leave a family unprotected while a column is dropped alongside
-//     an index that references it, but the index is not visible to concurrent
-//     readers during that window.
+//     They are dropped before resolveComputedCols, so a DeleteOnly computed
+//     column does not pull in its source columns either. Both cases can leave a
+//     family unprotected while a column is dropped alongside an index that
+//     references it, but the index is not visible to concurrent readers during
+//     that window.
+//
+// The maintained-index check does not need to resolve computed columns first.
+// addSynthesizedColsForUpdate has already added to the update set every computed
+// column whose expression references an updated column, so an index containing
+// such a column intersects the update set through the computed column itself.
 func (mb *mutationBuilder) maybeForceIndexConflictWrites() {
 	// Only weak isolation levels are affected; SERIALIZABLE is protected by read
 	// refreshes.
@@ -1611,9 +1617,10 @@ func (mb *mutationBuilder) maybeForceIndexConflictWrites() {
 			// Drop DeleteOnly columns only after the test above. A DeleteOnly column
 			// carrying an ON UPDATE expression is in the update set, so removing one
 			// first could make an index the mutation really does maintain look
-			// untouched.
+			// untouched. Dropping them before resolveComputedCols also spares it a
+			// computed column whose source has already been renamed away by a drop.
 			indexCols.DifferenceWith(deleteOnlyCols)
-			forcedCols.UnionWith(indexCols)
+			forcedCols.UnionWith(mb.resolveComputedCols(indexCols))
 		}
 	}
 	forcedCols.DifferenceWith(updatedCols)
@@ -1621,9 +1628,6 @@ func (mb *mutationBuilder) maybeForceIndexConflictWrites() {
 
 	forcedCols.ForEach(func(colID opt.ColumnID) {
 		ord := mb.tabID.ColumnOrdinal(colID)
-		if mb.tab.Column(ord).IsComputed() {
-			return
-		}
 		// A missing fetch column would make the assignment below a silent no-op,
 		// costing the conflict write with no error and no visible plan change. The
 		// mutation input scan includes mutation columns, and the only columns
@@ -1636,6 +1640,56 @@ func (mb *mutationBuilder) maybeForceIndexConflictWrites() {
 		}
 		mb.updateColIDs[ord] = mb.fetchColIDs[ord]
 	})
+}
+
+// resolveComputedCols returns cols with every computed column replaced by the
+// columns its expression references. A computed column holds no value a
+// concurrent transaction can change on its own, so writing it protects nothing;
+// the columns it is derived from are what must be written. A virtual computed
+// column is not even a member of a column family, so writing it would do nothing
+// at all.
+//
+// Resolution is one level deep because a computed column expression may not
+// reference another computed column; schemaexpr.ValidateComputedColumnExpression
+// rejects that at creation time. Were a descriptor predating that restriction to
+// contain such a chain, the inner computed column would be force-written instead
+// of its source, which protects nothing but corrupts nothing either.
+//
+// The referenced columns come from parsing the stored expression rather than
+// from TableMeta.ComputedCols, which omits computed columns under mutation and
+// those whose expressions contain stable or volatile operators. For that map's
+// usual consumers a missing entry costs an optimization; here it would silently
+// cost a conflict write, and with it the protection this function exists to add.
+func (mb *mutationBuilder) resolveComputedCols(cols opt.ColSet) opt.ColSet {
+	var resolved opt.ColSet
+	cols.ForEach(func(colID opt.ColumnID) {
+		col := mb.tab.Column(mb.tabID.ColumnOrdinal(colID))
+		if !col.IsComputed() {
+			resolved.Add(colID)
+			return
+		}
+		// Stored computed expressions contain only unqualified references to the
+		// table's own columns, so matching by name against all table columns
+		// (public or not) finds the source of any name still present in the
+		// descriptor. A name that matches nothing is skipped rather than reported:
+		// dropping a column renames it to a placeholder without rewriting the
+		// expressions that reference it, so an unresolvable name is a routine
+		// mid-schema-change state. Skipping costs a conflict write for an index
+		// that is on its way out; raising would fail the user's statement.
+		err := schemaexpr.VisitColumnRefs(mb.parseComputedExpr(colID), func(name tree.Name) error {
+			for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+				if mb.tab.Column(i).ColName() == name {
+					resolved.Add(mb.tabID.ColumnID(i))
+					return nil
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			panic(err)
+		}
+	})
+	return resolved
 }
 
 // projectPartialIndexPutCols builds a Project that synthesizes boolean PUT

@@ -102,10 +102,10 @@ func (c *CustomFuncs) SimplifiablePartialIndexProjectCols(
 		// temporary indexes to always have values available for writes during index construction,
 		// even if the mutation does not touch those columns.
 		//
-		// Note that we use the set of index columns where the virtual
-		// columns have been mapped to their source columns. Virtual columns
-		// are never part of the updated columns. Updates to source columns
-		// trigger index changes.
+		// Note that inverted index columns are mapped to their source columns. A
+		// virtual computed column is matched directly instead, since
+		// addSynthesizedColsForUpdate puts one in the update set whenever its
+		// expression references an updated column.
 		predFilters := *pred.(*memo.FiltersExpr)
 		indexAndPredCols := tabMeta.IndexColumnsMapInverted(i)
 		indexAndPredCols.UnionWith(predFilters.OuterCols())

@@ -2461,9 +2461,10 @@ CREATE TABLE computed_idx_fam (
 )
 ----
 
-# A computed index column is skipped: it belongs to no column family, so writing
-# it would accomplish nothing. This leaves b's family unprotected even though a
-# concurrent change to b changes v.
+# The STORING column v is virtual, so it belongs to no column family and writing
+# it would accomplish nothing. It resolves to b, the column it is computed from,
+# and b's family is force-written instead: a concurrent transaction can only
+# change v by writing b.
 build isolation=ReadCommitted
 UPDATE computed_idx_fam SET a = 5 WHERE id = 1
 ----
@@ -2471,7 +2472,8 @@ update computed_idx_fam
  ├── columns: <none>
  ├── fetch columns: id:7 a:8 b:9 v:10
  ├── update-mapping:
- │    └── a_new:13 => a:2
+ │    ├── a_new:13 => a:2
+ │    └── b:9 => b:3
  └── project
       ├── columns: v_comp:14 id:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 tableoid:12 a_new:13!null
       ├── project
@@ -2543,6 +2545,355 @@ update vec_idx_fam
       │         └── 5 [as=a_new:13]
       └── projections
            └── NULL::UNKNOWN [as=null1:14]
+
+exec-ddl
+CREATE TABLE part_idx_computed (
+  id INT PRIMARY KEY,
+  a  INT,
+  b  INT,
+  x  INT,
+  c  INT AS (x + 1) STORED,
+  FAMILY f_a (id, a),
+  FAMILY f_b (b),
+  FAMILY f_x (x),
+  FAMILY f_c (c),
+  INDEX idx (a) STORING (c) WHERE b > 0
+)
+----
+
+# Under serializable, no families are force-written.
+build isolation=Serializable
+UPDATE part_idx_computed SET b = 5 WHERE id = 1
+----
+update part_idx_computed
+ ├── columns: <none>
+ ├── fetch columns: id:8 a:9 b:10 x:11 c:12
+ ├── update-mapping:
+ │    └── b_new:15 => b:3
+ ├── partial index put columns: partial_index_put1:17
+ ├── partial index del columns: partial_index_del1:18
+ └── project
+      ├── columns: partial_index_put1:17!null partial_index_del1:18 id:8!null a:9 b:10 x:11 c:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null c_comp:16
+      ├── project
+      │    ├── columns: c_comp:16 id:8!null a:9 b:10 x:11 c:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null
+      │    ├── project
+      │    │    ├── columns: b_new:15!null id:8!null a:9 b:10 x:11 c:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── select
+      │    │    │    ├── columns: id:8!null a:9 b:10 x:11 c:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    ├── scan part_idx_computed
+      │    │    │    │    ├── columns: id:8!null a:9 b:10 x:11 c:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── c:12
+      │    │    │    │    │         └── x:11 + 1
+      │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    └── idx: filters
+      │    │    │    │    │         └── b:10 > 0
+      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── filters
+      │    │    │         └── id:8 = 1
+      │    │    └── projections
+      │    │         └── 5 [as=b_new:15]
+      │    └── projections
+      │         └── x:11 + 1 [as=c_comp:16]
+      └── projections
+           ├── b_new:15 > 0 [as=partial_index_put1:17]
+           └── b:10 > 0 [as=partial_index_del1:18]
+
+# The STORING column c is computed from x; a concurrent transaction can only change
+# c by writing x. Under read committed the fix force-writes the source column x's
+# family (not c's, which has no writable representative).
+build isolation=ReadCommitted
+UPDATE part_idx_computed SET b = 5 WHERE id = 1
+----
+update part_idx_computed
+ ├── columns: <none>
+ ├── fetch columns: id:8 a:9 b:10 x:11 c:12
+ ├── update-mapping:
+ │    ├── a:9 => a:2
+ │    ├── b_new:15 => b:3
+ │    └── x:11 => x:4
+ ├── partial index put columns: partial_index_put1:17
+ ├── partial index del columns: partial_index_del1:18
+ └── project
+      ├── columns: partial_index_put1:17!null partial_index_del1:18 id:8!null a:9 b:10 x:11 c:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null c_comp:16
+      ├── project
+      │    ├── columns: c_comp:16 id:8!null a:9 b:10 x:11 c:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null
+      │    ├── project
+      │    │    ├── columns: b_new:15!null id:8!null a:9 b:10 x:11 c:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── select
+      │    │    │    ├── columns: id:8!null a:9 b:10 x:11 c:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    ├── scan part_idx_computed
+      │    │    │    │    ├── columns: id:8!null a:9 b:10 x:11 c:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── c:12
+      │    │    │    │    │         └── x:11 + 1
+      │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    └── idx: filters
+      │    │    │    │    │         └── b:10 > 0
+      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── filters
+      │    │    │         └── id:8 = 1
+      │    │    └── projections
+      │    │         └── 5 [as=b_new:15]
+      │    └── projections
+      │         └── x:11 + 1 [as=c_comp:16]
+      └── projections
+           ├── b_new:15 > 0 [as=partial_index_put1:17]
+           └── b:10 > 0 [as=partial_index_del1:18]
+
+exec-ddl
+CREATE TABLE part_idx_expr (
+  id INT PRIMARY KEY,
+  b  INT,
+  x  INT,
+  FAMILY f_id (id),
+  FAMILY f_b (b),
+  FAMILY f_x (x),
+  INDEX idx ((x + 1)) WHERE b > 0
+)
+----
+
+# Under serializable, no families are force-written.
+build isolation=Serializable
+UPDATE part_idx_expr SET b = 5 WHERE id = 1
+----
+update part_idx_expr
+ ├── columns: <none>
+ ├── fetch columns: id:7 b:8 x:9 crdb_internal_idx_expr:12
+ ├── update-mapping:
+ │    └── b_new:13 => b:2
+ ├── partial index put columns: partial_index_put1:15
+ ├── partial index del columns: partial_index_del1:16
+ └── project
+      ├── columns: partial_index_put1:15!null partial_index_del1:16 id:7!null b:8 x:9 crdb_internal_mvcc_timestamp:10 tableoid:11 crdb_internal_idx_expr:12 b_new:13!null crdb_internal_idx_expr_comp:14
+      ├── project
+      │    ├── columns: crdb_internal_idx_expr_comp:14 id:7!null b:8 x:9 crdb_internal_mvcc_timestamp:10 tableoid:11 crdb_internal_idx_expr:12 b_new:13!null
+      │    ├── project
+      │    │    ├── columns: b_new:13!null id:7!null b:8 x:9 crdb_internal_mvcc_timestamp:10 tableoid:11 crdb_internal_idx_expr:12
+      │    │    ├── select
+      │    │    │    ├── columns: id:7!null b:8 x:9 crdb_internal_mvcc_timestamp:10 tableoid:11 crdb_internal_idx_expr:12
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: crdb_internal_idx_expr:12 id:7!null b:8 x:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    │    │    ├── scan part_idx_expr
+      │    │    │    │    │    ├── columns: id:7!null b:8 x:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    └── crdb_internal_idx_expr:12
+      │    │    │    │    │    │         └── x:9 + 1
+      │    │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    │    └── idx: filters
+      │    │    │    │    │    │         └── b:8 > 0
+      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── projections
+      │    │    │    │         └── x:9 + 1 [as=crdb_internal_idx_expr:12]
+      │    │    │    └── filters
+      │    │    │         └── id:7 = 1
+      │    │    └── projections
+      │    │         └── 5 [as=b_new:13]
+      │    └── projections
+      │         └── x:9 + 1 [as=crdb_internal_idx_expr_comp:14]
+      └── projections
+           ├── b_new:13 > 0 [as=partial_index_put1:15]
+           └── b:8 > 0 [as=partial_index_del1:16]
+
+# The index key is a virtual computed expression (x + 1) with no storage of its
+# own; the fix resolves it to the source column x and force-writes x's family.
+build isolation=ReadCommitted
+UPDATE part_idx_expr SET b = 5 WHERE id = 1
+----
+update part_idx_expr
+ ├── columns: <none>
+ ├── fetch columns: id:7 b:8 x:9 crdb_internal_idx_expr:12
+ ├── update-mapping:
+ │    ├── b_new:13 => b:2
+ │    └── x:9 => x:3
+ ├── partial index put columns: partial_index_put1:15
+ ├── partial index del columns: partial_index_del1:16
+ └── project
+      ├── columns: partial_index_put1:15!null partial_index_del1:16 id:7!null b:8 x:9 crdb_internal_mvcc_timestamp:10 tableoid:11 crdb_internal_idx_expr:12 b_new:13!null crdb_internal_idx_expr_comp:14
+      ├── project
+      │    ├── columns: crdb_internal_idx_expr_comp:14 id:7!null b:8 x:9 crdb_internal_mvcc_timestamp:10 tableoid:11 crdb_internal_idx_expr:12 b_new:13!null
+      │    ├── project
+      │    │    ├── columns: b_new:13!null id:7!null b:8 x:9 crdb_internal_mvcc_timestamp:10 tableoid:11 crdb_internal_idx_expr:12
+      │    │    ├── select
+      │    │    │    ├── columns: id:7!null b:8 x:9 crdb_internal_mvcc_timestamp:10 tableoid:11 crdb_internal_idx_expr:12
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: crdb_internal_idx_expr:12 id:7!null b:8 x:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    │    │    ├── scan part_idx_expr
+      │    │    │    │    │    ├── columns: id:7!null b:8 x:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    └── crdb_internal_idx_expr:12
+      │    │    │    │    │    │         └── x:9 + 1
+      │    │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    │    └── idx: filters
+      │    │    │    │    │    │         └── b:8 > 0
+      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── projections
+      │    │    │    │         └── x:9 + 1 [as=crdb_internal_idx_expr:12]
+      │    │    │    └── filters
+      │    │    │         └── id:7 = 1
+      │    │    └── projections
+      │    │         └── 5 [as=b_new:13]
+      │    └── projections
+      │         └── x:9 + 1 [as=crdb_internal_idx_expr_comp:14]
+      └── projections
+           ├── b_new:13 > 0 [as=partial_index_put1:15]
+           └── b:8 > 0 [as=partial_index_del1:16]
+
+exec-ddl
+CREATE TABLE part_idx_stable (
+  id INT PRIMARY KEY,
+  a  INT,
+  b  INT,
+  t  TIMESTAMPTZ,
+  s  STRING AS (t::STRING) STORED,
+  FAMILY f_a (id, a),
+  FAMILY f_b (b),
+  FAMILY f_t (t),
+  FAMILY f_s (s),
+  INDEX idx (a) STORING (s) WHERE b > 0
+)
+----
+
+# The STORING column s is computed with a stable cast (legacy descriptors can
+# contain such expressions). The cast keeps s out of the scan's computed column
+# expressions, but the fix still resolves s to its source column t by parsing
+# the stored expression, and force-writes t's family.
+build isolation=ReadCommitted
+UPDATE part_idx_stable SET b = 5 WHERE id = 1
+----
+update part_idx_stable
+ ├── columns: <none>
+ ├── fetch columns: id:8 a:9 b:10 t:11 s:12
+ ├── update-mapping:
+ │    ├── a:9 => a:2
+ │    ├── b_new:15 => b:3
+ │    └── t:11 => t:4
+ ├── partial index put columns: partial_index_put1:17
+ ├── partial index del columns: partial_index_del1:18
+ └── project
+      ├── columns: partial_index_put1:17!null partial_index_del1:18 id:8!null a:9 b:10 t:11 s:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null s_comp:16
+      ├── project
+      │    ├── columns: s_comp:16 id:8!null a:9 b:10 t:11 s:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null
+      │    ├── project
+      │    │    ├── columns: b_new:15!null id:8!null a:9 b:10 t:11 s:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── select
+      │    │    │    ├── columns: id:8!null a:9 b:10 t:11 s:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    ├── scan part_idx_stable
+      │    │    │    │    ├── columns: id:8!null a:9 b:10 t:11 s:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    └── idx: filters
+      │    │    │    │    │         └── b:10 > 0
+      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── filters
+      │    │    │         └── id:8 = 1
+      │    │    └── projections
+      │    │         └── 5 [as=b_new:15]
+      │    └── projections
+      │         └── t:11::STRING [as=s_comp:16]
+      └── projections
+           ├── b_new:15 > 0 [as=partial_index_put1:17]
+           └── b:10 > 0 [as=partial_index_del1:18]
+
+exec-ddl
+CREATE TABLE part_idx_virtual (
+  id INT PRIMARY KEY,
+  a  INT,
+  b  INT,
+  x  INT,
+  v  INT AS (x + 1) VIRTUAL,
+  FAMILY f_a (id, a),
+  FAMILY f_b (b),
+  FAMILY f_x (x),
+  INDEX idx (a) WHERE v > 0
+)
+----
+
+# A virtual computed column reached through the partial index predicate rather
+# than through the index columns. v belongs to no family, so the write is forced
+# on its source x instead; a concurrent change to x is what moves the row in or
+# out of the index.
+build isolation=ReadCommitted
+UPDATE part_idx_virtual SET a = 5 WHERE id = 1
+----
+update part_idx_virtual
+ ├── columns: <none>
+ ├── fetch columns: id:8 a:9 b:10 x:11 v:12
+ ├── update-mapping:
+ │    ├── a_new:15 => a:2
+ │    └── x:11 => x:4
+ ├── partial index put columns: partial_index_put1:17
+ ├── partial index del columns: partial_index_put1:17
+ └── project
+      ├── columns: partial_index_put1:17 id:8!null a:9 b:10 x:11 v:12 crdb_internal_mvcc_timestamp:13 tableoid:14 a_new:15!null v_comp:16
+      ├── project
+      │    ├── columns: v_comp:16 id:8!null a:9 b:10 x:11 v:12 crdb_internal_mvcc_timestamp:13 tableoid:14 a_new:15!null
+      │    ├── project
+      │    │    ├── columns: a_new:15!null id:8!null a:9 b:10 x:11 v:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── select
+      │    │    │    ├── columns: id:8!null a:9 b:10 x:11 v:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: v:12 id:8!null a:9 b:10 x:11 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    ├── scan part_idx_virtual
+      │    │    │    │    │    ├── columns: id:8!null a:9 b:10 x:11 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    └── v:12
+      │    │    │    │    │    │         └── x:11 + 1
+      │    │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    │    └── idx: filters
+      │    │    │    │    │    │         └── (x:11 + 1) > 0
+      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── projections
+      │    │    │    │         └── x:11 + 1 [as=v:12]
+      │    │    │    └── filters
+      │    │    │         └── id:8 = 1
+      │    │    └── projections
+      │    │         └── 5 [as=a_new:15]
+      │    └── projections
+      │         └── x:11 + 1 [as=v_comp:16]
+      └── projections
+           └── v:12 > 0 [as=partial_index_put1:17]
+
+exec-ddl
+CREATE TABLE drop_col (
+  k INT PRIMARY KEY,
+  a INT,
+  "x:delete-only" INT,
+  FAMILY f_a (k, a),
+  FAMILY f_x (x),
+  INDEX "idx:delete-only" (x) WHERE a > 0
+)
+----
+
+# A column being dropped along with the partial index that references it: both
+# are in the delete-only state. The index's key column x is not updatable and
+# may be alone in its family, so there is no self-assignable representative;
+# the family is left unprotected (the index is not visible to concurrent
+# readers) instead of failing the mutation. No x_conflict column appears.
+build isolation=ReadCommitted
+UPDATE drop_col SET a = 1
+----
+update drop_col
+ ├── columns: <none>
+ ├── fetch columns: k:6 a:7 x:8
+ ├── update-mapping:
+ │    └── a_new:11 => a:2
+ ├── partial index put columns: partial_index_put1:12
+ ├── partial index del columns: partial_index_del1:13
+ └── project
+      ├── columns: partial_index_put1:12!null partial_index_del1:13 k:6!null a:7 x:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      ├── project
+      │    ├── columns: a_new:11!null k:6!null a:7 x:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── scan drop_col
+      │    │    ├── columns: k:6!null a:7 x:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    ├── partial index predicates
+      │    │    │    └── idx: filters
+      │    │    │         └── a:7 > 0
+      │    │    └── flags: avoid-full-scan
+      │    └── projections
+      │         └── 1 [as=a_new:11]
+      └── projections
+           ├── a_new:11 > 0 [as=partial_index_put1:12]
+           └── a:7 > 0 [as=partial_index_del1:13]
 
 # ------------------------------------------------------------------------------
 # Test assignment casts.
