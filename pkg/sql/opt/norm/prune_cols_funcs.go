@@ -184,10 +184,10 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 			// to the index because they now satisfy the partial index
 			// predicate, requiring the index columns to be fetched.
 			//
-			// Note that we use the set of index columns where the virtual
-			// columns have been mapped to their source columns. Virtual columns
-			// are never part of the updated columns. Updates to source columns
-			// trigger index changes.
+			// Note that inverted index columns are mapped to their source
+			// columns. A virtual computed column is matched directly instead,
+			// since addSynthesizedColsForUpdate puts one in the update set
+			// whenever its expression references an updated column.
 			indexCols := tabMeta.IndexColumnsMapInverted(i)
 			pred, isPartialIndex := tabMeta.PartialIndexPredicate(i)
 			indexAndPredCols := indexCols.Copy()
