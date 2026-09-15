@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -510,6 +511,12 @@ func TestLeaseQueueRaceReplicateQueue(t *testing.T) {
 	}
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		// Manual replication disables the lease queue, so that the enqueues below
+		// are the only processing of the scratch range. An enqueue that races with
+		// the lease queue's own processing of the same replica is demoted to a
+		// requeue, which shouldQueue then rejects for good on a single-replica
+		// range, and BlockTransferTarget is never reached.
+		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -526,15 +533,27 @@ func TestLeaseQueueRaceReplicateQueue(t *testing.T) {
 
 	repl := tc.GetRaftLeader(t, roachpb.RKey(scratchKey))
 	atomic.StoreInt32(&blockRangeID, int32(repl.Desc().RangeID))
+
+	// Ensure that the enqueue finishes after we unblock it.
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	block.Lock()
 	defer block.Unlock()
 
-	// Process the replica in the lease queue async, then attempt to process the
-	// replica in the replicate queue synchronously. The lease queue processing
+	// Process the replica in the lease queue on another goroutine, then attempt
+	// to process the replica in the replicate queue. The lease queue processing
 	// should block on the block mutex above, causing the replicate queue to
-	// return a AllocatorTokenErr trying to process the replica.
-	_, _ = repl.Store().Enqueue(ctx, "lease", repl, true /* skipShouldQueue */, true /* async */)
-	<-blocked
+	// return a AllocatorTokenErr trying to process the replica. Both enqueues
+	// are synchronous, which runs the queue's process method directly rather
+	// than going through the queue itself, which is disabled.
+	wg.Go(func() {
+		_, _ = repl.Store().Enqueue(ctx, "lease", repl, true /* skipShouldQueue */, false /* async */)
+	})
+	select {
+	case <-blocked:
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		t.Fatal("timed out waiting for the lease queue to reach TransferLeaseTarget")
+	}
 	processErr, _ := repl.Store().Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
 	require.ErrorIs(t, processErr, plan.NewErrAllocatorToken("lease"))
 }
