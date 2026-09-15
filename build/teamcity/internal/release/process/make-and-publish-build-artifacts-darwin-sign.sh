@@ -76,7 +76,7 @@ cd "$workdir"
 for product in cockroach cockroach-sql; do
   # In case we want to sign darwin-10.9-amd64, we can add it here.
   for platform in darwin-11.0-arm64; do
-    gsutil cp "gs://$gcs_bucket/$product-$build_name.$platform.unsigned.tgz" "$product-$build_name.$platform.unsigned.tgz"
+    gcloud storage cp "gs://$gcs_bucket/$product-$build_name.$platform.unsigned.tgz" "$product-$build_name.$platform.unsigned.tgz"
     tar -xzf "$product-$build_name.$platform.unsigned.tgz"
     mv "$product-$build_name.$platform.unsigned" "$product-$build_name.$platform"
     rcodesign sign \
@@ -87,8 +87,8 @@ for product in cockroach cockroach-sql; do
     retry rcodesign notary-submit --api-key-file "$secrets_dir/api_key.json" --wait crl.zip
     tar -czf "$product-$build_name.$platform.tgz" "$product-$build_name.$platform"
     shasum --algorithm 256 "$product-$build_name.$platform.tgz" > "$product-$build_name.$platform.tgz.sha256sum"
-    gsutil cp "$product-$build_name.$platform.tgz" "gs://$gcs_bucket/$product-$build_name.$platform.tgz"
-    gsutil cp "$product-$build_name.$platform.tgz.sha256sum" "gs://$gcs_bucket/$product-$build_name.$platform.tgz.sha256sum"
+    gcloud storage cp "$product-$build_name.$platform.tgz" "gs://$gcs_bucket/$product-$build_name.$platform.tgz"
+    gcloud storage cp "$product-$build_name.$platform.tgz.sha256sum" "gs://$gcs_bucket/$product-$build_name.$platform.tgz.sha256sum"
     rm -rf "$product-$build_name.$platform" \
       "$product-$build_name.$platform.tgz" \
       "$product-$build_name.$platform.tgz.sha256sum" \

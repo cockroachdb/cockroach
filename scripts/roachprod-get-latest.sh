@@ -8,7 +8,7 @@
 
 # Downloads the _latest_ roachprod binary (on master) from GCS to the specified directory
 # or the current directory if none is specified.
-# Assumes that you have gsutil installed and authenticated; see [1] for those details.
+# Assumes that you have gcloud installed and authenticated; see [1] for those details.
 #
 # The specified directory, release branch, OS and CPU architecture are optional arguments. They can be overridden by
 # simultaneously specifying _all_ in the described order.
@@ -52,7 +52,7 @@ prompt_to_overwrite() {
 
 BUILD=$(build_for_plat)
 URL_PREFIX="gs://$BUCKET/binaries/$BRANCH/$BUILD"
-LATEST_SHA=$(gsutil cat "${URL_PREFIX}/latest_sha")
+LATEST_SHA=$(gcloud storage cat "${URL_PREFIX}/latest_sha")
 
 # error out if LASTEST_SHA is empty
 if [ -z "$LATEST_SHA" ]; then
@@ -64,12 +64,12 @@ URL="${URL_PREFIX}/roachprod.$LATEST_SHA"
 echo "Found latest SHA: $LATEST_SHA"
 
 echo "Download URL: $URL"
-if command -v gsutil &> /dev/null; then
+if command -v gcloud &> /dev/null; then
   if [[ ! -f "$DEST_FILE" ]] || prompt_to_overwrite; then
-    gsutil cp "$URL" "$DEST_FILE"
+    gcloud storage cp "$URL" "$DEST_FILE"
     chmod +x "$DEST_FILE"
   fi
 else
-  echo "gsutil is not installed. Consult the wiki: https://cockroachlabs.atlassian.net/wiki/spaces/TE/pages/144408811/Roachprod+Tutorial"
+  echo "gcloud is not installed. Consult the wiki: https://cockroachlabs.atlassian.net/wiki/spaces/TE/pages/144408811/Roachprod+Tutorial"
   exit 1
 fi

@@ -116,10 +116,10 @@ function upload_binaries {
       arch=$(get_host_arch)
       os=linux
       sha=${BUILD_VCS_NUMBER}
-      gsutil cp bin/roachprod gs://$bucket/binaries/$branch/$os/$arch/roachprod.$sha
-      gsutil cp bin/roachtest gs://$bucket/binaries/$branch/$os/$arch/roachtest.$sha
+      gcloud storage cp bin/roachprod gs://$bucket/binaries/$branch/$os/$arch/roachprod.$sha
+      gcloud storage cp bin/roachtest gs://$bucket/binaries/$branch/$os/$arch/roachtest.$sha
       # N.B. both binaries are built from the same SHA, so one blob will suffice.
-      echo "$sha" | gsutil cp - gs://$bucket/binaries/$branch/$os/$arch/latest_sha
+      echo "$sha" | gcloud storage cp - gs://$bucket/binaries/$branch/$os/$arch/latest_sha
   fi
 }
 

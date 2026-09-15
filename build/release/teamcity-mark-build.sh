@@ -61,6 +61,6 @@ EOF
   # Run jq to pretty print and validate JSON
   jq . "$metadata_file"
   log_into_gcloud
-  gsutil cp "$metadata_file" "gs://$gcs_bucket/release-qualification/$BUILD_VCS_NUMBER.json"
+  gcloud storage cp "$metadata_file" "gs://$gcs_bucket/release-qualification/$BUILD_VCS_NUMBER.json"
   tc_end_block "Metadata"
 }
