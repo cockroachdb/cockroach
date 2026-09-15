@@ -202,6 +202,17 @@ var RequireUsagePrivilegeOnExternalConnections = settings.RegisterBoolSetting(
 	false,
 )
 
+// RangeTopologyRequiresRepairCluster gates the security-audit fix that requires
+// the REPAIRCLUSTER system privilege to run ALTER TABLE/INDEX SPLIT, UNSPLIT,
+// RELOCATE and SCATTER, which manipulate cluster range topology. It defaults to
+// false so existing deployments opt in.
+var RangeTopologyRequiresRepairCluster = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.range_topology_requires_repaircluster.enabled",
+	"if enabled, the REPAIRCLUSTER system privilege is required to run ALTER "+
+		"TABLE/INDEX SPLIT, UNSPLIT, RELOCATE and SCATTER",
+	false)
+
 // PostgresCompatibleOwnershipChecks gates the security-audit fixes that require
 // object ownership to modify or drop an object, aligning authorization with
 // PostgreSQL. It defaults to false so existing deployments opt in.
