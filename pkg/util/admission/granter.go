@@ -1126,6 +1126,15 @@ var (
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
+	kvBypassedRequests = metric.Metadata{
+		Name: "admission.granter.bypassed_requests.kv",
+		Help: "Total number of requests that bypassed admission control (for example, " +
+			"below-raft writes that were not subject to replication admission control). A " +
+			"growing value indicates replication writes from nodes that do not have " +
+			"replication admission control enabled, which can overload the cluster.",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
 	kvIOTokensAvailable = metric.Metadata{
 		Name:        "admission.granter.io_tokens_available.kv",
 		Help:        "Number of tokens available",
