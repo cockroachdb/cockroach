@@ -114,34 +114,34 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 			pb.ConfState{Voters: []pb.PeerID{1}, VotersOutgoing: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
 			&pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
 		},
-		// Ditto, but with implicit transition (the harness checks this).
+		// Ditto, but with explicit transition.
 		{
 			pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
 				{Type: pb.ConfChangeAddLearnerNode, NodeID: 2},
 			},
-				Transition: pb.ConfChangeTransitionJointImplicit,
+				Transition: pb.ConfChangeTransitionJointExplicit,
 			},
 			pb.ConfState{
 				Voters: []pb.PeerID{1}, VotersOutgoing: []pb.PeerID{1}, Learners: []pb.PeerID{2},
-				AutoLeave: true,
 			},
 			&pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
 		},
 		// Add a new node and demote n1. This exercises the interesting case in
 		// which we really need joint config changes and also need LearnersNext.
 		{
-			pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
-				{NodeID: 2, Type: pb.ConfChangeAddNode},
-				{NodeID: 1, Type: pb.ConfChangeAddLearnerNode},
-				{NodeID: 3, Type: pb.ConfChangeAddLearnerNode},
-			},
+			pb.ConfChangeV2{
+				Changes: []pb.ConfChangeSingle{
+					{NodeID: 2, Type: pb.ConfChangeAddNode},
+					{NodeID: 1, Type: pb.ConfChangeAddLearnerNode},
+					{NodeID: 3, Type: pb.ConfChangeAddLearnerNode},
+				},
+				Transition: pb.ConfChangeTransitionJointExplicit,
 			},
 			pb.ConfState{
 				Voters:         []pb.PeerID{2},
 				VotersOutgoing: []pb.PeerID{1},
 				Learners:       []pb.PeerID{3},
 				LearnersNext:   []pb.PeerID{1},
-				AutoLeave:      true,
 			},
 			&pb.ConfState{Voters: []pb.PeerID{2}, Learners: []pb.PeerID{1, 3}},
 		},
@@ -162,7 +162,7 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 			},
 			&pb.ConfState{Voters: []pb.PeerID{2}, Learners: []pb.PeerID{1, 3}},
 		},
-		// Ditto implicit.
+		// Ditto, explicit with different ordering.
 		{
 			pb.ConfChangeV2{
 				Changes: []pb.ConfChangeSingle{
@@ -170,14 +170,13 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 					{NodeID: 1, Type: pb.ConfChangeAddLearnerNode},
 					{NodeID: 3, Type: pb.ConfChangeAddLearnerNode},
 				},
-				Transition: pb.ConfChangeTransitionJointImplicit,
+				Transition: pb.ConfChangeTransitionJointExplicit,
 			},
 			pb.ConfState{
 				Voters:         []pb.PeerID{2},
 				VotersOutgoing: []pb.PeerID{1},
 				Learners:       []pb.PeerID{3},
 				LearnersNext:   []pb.PeerID{1},
-				AutoLeave:      true,
 			},
 			&pb.ConfState{Voters: []pb.PeerID{2}, Learners: []pb.PeerID{1, 3}},
 		},
@@ -278,36 +277,23 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 
 			require.Equal(t, &tc.exp, cs)
 
-			var maybePlusOne uint64
-			if autoLeave, ok := tc.cc.AsV2().EnterJoint(); ok && autoLeave {
-				// If this is an auto-leaving joint conf change, it will have
-				// appended the entry that auto-leaves, so add one to the last
-				// index that forms the basis of our expectations on
-				// pendingConfIndex. (Recall that lastIndex was taken from stable
-				// storage, but this auto-leaving entry isn't on stable storage
-				// yet).
-				maybePlusOne = 1
-			}
-			require.Equal(t, lastIndex+maybePlusOne, rawNode.raft.pendingConfIndex)
+			require.Equal(t, lastIndex, rawNode.raft.pendingConfIndex)
 
 			// Move the RawNode along. If the ConfChange was simple, nothing else
-			// should happen. Otherwise, we're in a joint state, which is either
-			// left automatically or not. If not, we add the proposal that leaves
-			// it manually.
+			// should happen. Otherwise, we're in a joint state, and we add the
+			// proposal that leaves it manually.
 			rd := rawNode.Ready()
 			var context []byte
-			if !tc.exp.AutoLeave {
-				require.Empty(t, rd.Entries)
-				rawNode.AckAppend(rd.Ack())
-				rawNode.AckApplied(committedEntries(t, rawNode, rd))
-				if tc.exp2 == nil {
-					return
-				}
-				context = []byte("manual")
-				t.Log("leaving joint state manually")
-				require.NoError(t, rawNode.ProposeConfChange(pb.ConfChangeV2{Context: context}))
-				rd = rawNode.Ready()
+			require.Empty(t, rd.Entries)
+			rawNode.AckAppend(rd.Ack())
+			rawNode.AckApplied(committedEntries(t, rawNode, rd))
+			if tc.exp2 == nil {
+				return
 			}
+			context = []byte("manual")
+			t.Log("leaving joint state manually")
+			require.NoError(t, rawNode.ProposeConfChange(pb.ConfChangeV2{Context: context}))
+			rd = rawNode.Ready()
 
 			// Check that the right ConfChange comes out.
 			require.Len(t, rd.Entries, 1)
@@ -325,147 +311,6 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 			rawNode.AckApplied(committedEntries(t, rawNode, rd))
 		})
 	}
-}
-
-// TestRawNodeJointAutoLeave tests the configuration change auto leave even leader
-// lost leadership.
-func TestRawNodeJointAutoLeave(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testRawNodeJointAutoLeave(t, storeLivenessEnabled)
-		})
-}
-
-func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
-	testCc := pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
-		{Type: pb.ConfChangeAddLearnerNode, NodeID: 2},
-	},
-		Transition: pb.ConfChangeTransitionJointImplicit,
-	}
-	expCs := pb.ConfState{
-		Voters: []pb.PeerID{1}, VotersOutgoing: []pb.PeerID{1}, Learners: []pb.PeerID{2},
-		AutoLeave: true,
-	}
-	exp2Cs := pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}}
-
-	s := newTestMemoryStorage(withPeers(1))
-
-	var fabric *raftstoreliveness.LivenessFabric
-	var rawNode *RawNode
-	var err error
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		rawNode, err = NewRawNode(newTestConfig(1, 10, 1, s,
-			withStoreLiveness(fabric.GetStoreLiveness(1))))
-	} else {
-		rawNode, err = NewRawNode(newTestConfig(1, 10, 1, s,
-			withStoreLiveness(raftstoreliveness.Disabled{})))
-	}
-
-	require.NoError(t, err)
-
-	rawNode.Campaign()
-	proposed := false
-	var (
-		lastIndex uint64
-		ccdata    []byte
-	)
-	// Propose the ConfChange, wait until it applies, save the resulting
-	// ConfState.
-	var cs *pb.ConfState
-	for cs == nil {
-		rd := rawNode.Ready()
-		s.Append(rd.Entries)
-		apply := committedEntries(t, rawNode, rd)
-		for _, ent := range apply {
-			var cc pb.ConfChangeI
-			if ent.Type == pb.EntryConfChangeV2 {
-				var ccc pb.ConfChangeV2
-				require.NoError(t, ccc.Unmarshal(ent.Data))
-				cc = &ccc
-			}
-			if cc != nil {
-				// Force it to step down.
-				rawNode.Step(pb.Message{Type: pb.MsgHeartbeatResp, From: 1, Term: rawNode.raft.Term + 1})
-
-				if storeLivenessEnabled {
-					// At this point, the leader is attempting to step down, and it will
-					// need to wait until the support has expired.
-					fabric.SetSupportExpired(rawNode.raft.id, true)
-					rawNode.Tick()
-				}
-
-				require.Equal(t, pb.StateFollower, rawNode.raft.state)
-				if storeLivenessEnabled {
-					// We can now restore the support so that the test can proceed as
-					// expected.
-					fabric.SetSupportExpired(rawNode.raft.id, false)
-
-					// And also wait for defortification.
-					for range rawNode.raft.heartbeatTimeout {
-						rawNode.Tick()
-					}
-				}
-				cs = rawNode.ApplyConfChange(cc)
-			}
-		}
-		rawNode.AckAppend(rd.Ack())
-		rawNode.AckApplied(apply)
-		// Once we are the leader, propose a command and a ConfChange.
-		if !proposed && rawNode.raft.state == pb.StateLeader {
-			require.NoError(t, rawNode.Propose([]byte("somedata")))
-			ccdata, err = testCc.Marshal()
-			require.NoError(t, err)
-			require.NoError(t, rawNode.ProposeConfChange(testCc))
-			proposed = true
-		}
-	}
-
-	// Check that the last index is exactly the conf change we put in,
-	// down to the bits. Note that this comes from the Storage, which
-	// will not reflect any unstable entries that we'll only be presented
-	// with in the next Ready.
-	lastIndex = s.LastIndex()
-	entries, err := s.Entries(lastIndex-1, lastIndex+1, noLimit)
-	require.NoError(t, err)
-	require.Len(t, entries, 2)
-	assert.Equal(t, []byte("somedata"), entries[0].Data)
-	require.Equal(t, pb.EntryConfChangeV2, entries[1].Type)
-	assert.Equal(t, ccdata, entries[1].Data)
-
-	require.Equal(t, &expCs, cs)
-
-	require.Zero(t, rawNode.raft.pendingConfIndex)
-
-	// Move the RawNode along. It should not leave joint because it's follower.
-	rd := rawNode.Ready()
-	t.Log(DescribeReady(rd, nil))
-	require.Empty(t, rd.Entries)
-	rawNode.AckAppend(rd.Ack())
-	rawNode.AckApplied(committedEntries(t, rawNode, rd))
-
-	// Make it leader again. It should leave joint automatically after moving apply index.
-	rawNode.Campaign()
-	for i := 0; i < 3; i++ {
-		rd = rawNode.Ready()
-		t.Log(DescribeReady(rd, nil))
-		s.Append(rd.Entries)
-		rawNode.AckAppend(rd.Ack())
-		rawNode.AckApplied(committedEntries(t, rawNode, rd))
-	}
-	rd = rawNode.Ready()
-	t.Log(DescribeReady(rd, nil))
-	s.Append(rd.Entries)
-	// Check that the right ConfChange comes out.
-	require.Len(t, rd.Entries, 1)
-	require.Equal(t, pb.EntryConfChangeV2, rd.Entries[0].Type)
-	var cc pb.ConfChangeV2
-	require.NoError(t, cc.Unmarshal(rd.Entries[0].Data))
-	require.Equal(t, pb.ConfChangeV2{Context: nil}, cc)
-	// Lie and pretend the ConfChange applied. It won't do so because now
-	// we require the joint quorum and we're only running one node.
-	cs = rawNode.ApplyConfChange(cc)
-	require.Equal(t, exp2Cs, *cs)
 }
 
 // TestRawNodeProposeAddDuplicateNode ensures that two proposals to add the same

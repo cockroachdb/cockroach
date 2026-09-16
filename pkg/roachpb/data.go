@@ -1872,7 +1872,7 @@ func (crt ChangeReplicasTrigger) SafeFormat(w redact.SafePrinter, _ rune) {
 			// TODO(tbg): could list the replicas that will actually leave the
 			// voter set.
 			w.SafeString("LEAVE_JOINT")
-		} else if _, ok := ccv2.EnterJoint(); ok {
+		} else if ccv2.EnterJoint() {
 			w.Printf("ENTER_JOINT(%s) ", confChangesToRedactableString(ccv2.Changes))
 		} else {
 			w.Printf("SIMPLE(%s) ", confChangesToRedactableString(ccv2.Changes))

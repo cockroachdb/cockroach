@@ -55,7 +55,7 @@ type Changer struct {
 //
 // [1]: https://github.com/ongardie/dissertation/blob/master/online-trim.pdf
 func (c Changer) EnterJoint(
-	autoLeave bool, ccs ...pb.ConfChangeSingle,
+	ccs ...pb.ConfChangeSingle,
 ) (quorum.Config, tracker.ProgressMap, error) {
 	cfg, trk, err := c.checkAndCopy()
 	if err != nil {
@@ -81,7 +81,6 @@ func (c Changer) EnterJoint(
 	if err := c.apply(&cfg, trk, ccs...); err != nil {
 		return c.err(err)
 	}
-	cfg.AutoLeave = autoLeave
 	return checkAndReturn(cfg, trk)
 }
 
@@ -123,7 +122,6 @@ func (c Changer) LeaveJoint() (quorum.Config, tracker.ProgressMap, error) {
 		}
 	}
 	*outgoingPtr(&cfg.Voters) = nil
-	cfg.AutoLeave = false
 
 	return checkAndReturn(cfg, trk)
 }
@@ -335,9 +333,6 @@ func checkInvariants(cfg quorum.Config, trk tracker.ProgressMap) error {
 		}
 		if cfg.LearnersNext != nil {
 			return fmt.Errorf("cfg.LearnersNext must be nil when not joint")
-		}
-		if cfg.AutoLeave {
-			return fmt.Errorf("AutoLeave must be false when not joint")
 		}
 	}
 
