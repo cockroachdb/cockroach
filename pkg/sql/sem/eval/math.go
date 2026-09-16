@@ -118,6 +118,37 @@ func DecimalCbrt(x *apd.Decimal) (*tree.DDecimal, error) {
 	return dd, err
 }
 
+// FloatExp computes e^x for float64 arguments, returning errors for cases
+// that PostgreSQL rejects rather than returning Inf or 0.
+func FloatExp(x float64) (*tree.DFloat, error) {
+	result := math.Exp(x)
+	// Check for overflow and underflow, matching PostgreSQL behavior. If
+	// the input is not Inf or NaN, an Inf result means overflow and a zero
+	// result means underflow.
+	if !math.IsInf(x, 0) && !math.IsNaN(x) {
+		if math.IsInf(result, 0) {
+			return nil, errFloatOverflow
+		}
+		if result == 0 {
+			return nil, errFloatUnderflow
+		}
+	}
+	return tree.NewDFloat(tree.DFloat(result)), nil
+}
+
+// FloatDegrees converts x from radians to degrees, returning an error when
+// the conversion overflows rather than returning Inf, matching PostgreSQL
+// behavior.
+func FloatDegrees(x float64) (*tree.DFloat, error) {
+	result := (180.0 / math.Pi) * x
+	// Check for overflow, matching PostgreSQL behavior. If the input is not
+	// Inf or NaN, an Inf result means overflow.
+	if !math.IsInf(x, 0) && !math.IsNaN(x) && math.IsInf(result, 0) {
+		return nil, errFloatOverflow
+	}
+	return tree.NewDFloat(tree.DFloat(result)), nil
+}
+
 func isOne(d *apd.Decimal) bool {
 	return d.Cmp(one) == 0
 }

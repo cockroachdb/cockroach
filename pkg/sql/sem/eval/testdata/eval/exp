@@ -1,0 +1,71 @@
+# Float exp/degrees overflow/underflow tests (regression for #173609).
+
+# exp overflow
+eval
+exp(710::FLOAT8)
+----
+value out of range: overflow
+
+# exp underflow
+eval
+exp(-746::FLOAT8)
+----
+value out of range: underflow
+
+# exp normal values
+eval
+exp(0::FLOAT8)
+----
+1.0
+
+eval
+exp(1::FLOAT8)
+----
+2.718281828459045
+
+# exp with +Inf input (should be accepted)
+eval
+exp('Infinity'::FLOAT8)
+----
++Inf
+
+# exp with -Inf input (should be accepted)
+eval
+exp('-Infinity'::FLOAT8)
+----
+0.0
+
+# exp with NaN input
+eval
+exp('NaN'::FLOAT8)
+----
+NaN
+
+# degrees overflow
+eval
+degrees(1e308::FLOAT8)
+----
+value out of range: overflow
+
+# degrees normal values
+eval
+degrees(0::FLOAT8)
+----
+0.0
+
+eval
+degrees(3.141592653589793::FLOAT8)
+----
+180.0
+
+# degrees with +Inf input (should be accepted)
+eval
+degrees('Infinity'::FLOAT8)
+----
++Inf
+
+# degrees with NaN input
+eval
+degrees('NaN'::FLOAT8)
+----
+NaN

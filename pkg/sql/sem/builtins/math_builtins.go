@@ -214,7 +214,7 @@ var mathBuiltins = map[string]builtinDefinition{
 
 	"degrees": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
-			return tree.NewDFloat(tree.DFloat(radToDeg * x)), nil
+			return eval.FloatDegrees(x)
 		}, "Converts `val` as a radian value to a degree value.", volatility.Immutable),
 	),
 
@@ -260,7 +260,7 @@ var mathBuiltins = map[string]builtinDefinition{
 
 	"exp": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
-			return tree.NewDFloat(tree.DFloat(math.Exp(x))), nil
+			return eval.FloatExp(x)
 		}, "Calculates *e* ^ `val`.", volatility.Immutable),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
 			dd := &tree.DDecimal{}
