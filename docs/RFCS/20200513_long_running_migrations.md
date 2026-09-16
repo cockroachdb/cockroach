@@ -519,7 +519,7 @@ This basically "pretends" that we start the version bump earlier than we
 actually do, and all tenants receive it before any nodes in the KV layer do.
 ```
 
-There's no new machinery being relied on in this kind of of upgrade procedure,
+There's no new machinery being relied on in this kind of upgrade procedure,
 and there's nothing presented in the rest of the infrastructure here that would
 prevent the kind of upgrade procedure described above (we'd have to expose the
 KV version APIs and such to SQL pods, but that's a minor lift).
