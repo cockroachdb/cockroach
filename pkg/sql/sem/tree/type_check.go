@@ -1466,6 +1466,9 @@ func (expr *FuncExpr) TypeCheck(
 		if expr.Type == DistinctFuncType {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "DISTINCT is not implemented for window functions")
 		}
+		if len(expr.OrderBy) > 0 {
+			return nil, pgerror.New(pgcode.FeatureNotSupported, "aggregate ORDER BY is not implemented for window functions")
+		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
 		if !expr.InCall && funcCls == WindowClass {

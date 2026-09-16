@@ -4397,3 +4397,37 @@ NULL  4  4
 
 statement ok
 RESET null_ordered_last
+
+subtest aggregate_order_by_43133
+
+# ORDER BY inside an aggregate must not be silently ignored for window calls.
+query error pgcode 0A000 aggregate ORDER BY is not implemented for window functions
+SELECT array_agg(x ORDER BY y DESC) OVER () FROM (VALUES (1, 2), (2, 1)) AS t(x, y)
+
+query error pgcode 0A000 aggregate ORDER BY is not implemented for window functions
+SELECT string_agg(x::STRING, ',' ORDER BY y) OVER () FROM (VALUES (1, 2), (2, 1)) AS t(x, y)
+
+query error pgcode 0A000 aggregate ORDER BY is not implemented for window functions
+SELECT sum(x ORDER BY y) OVER (PARTITION BY y) FROM (VALUES (1, 2), (2, 1)) AS t(x, y)
+
+query error pgcode 0A000 aggregate ORDER BY is not implemented for window functions
+SELECT array_agg(x ORDER BY y) FILTER (WHERE x > 0) OVER () FROM (VALUES (1, 2), (2, 1)) AS t(x, y)
+
+# Ordinary aggregate ordering and ordering in OVER remain supported.
+query T
+SELECT array_agg(x ORDER BY y) FROM (VALUES (1, 2), (2, 1)) AS t(x, y)
+----
+{2,1}
+
+query IT
+SELECT x, array_agg(x) OVER (ORDER BY y ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+FROM (VALUES (1, 2), (2, 1)) AS t(x, y) ORDER BY y
+----
+2  {2}
+1  {2,1}
+
+query IR
+SELECT x, sum(x) OVER () FROM (VALUES (1), (2)) AS t(x) ORDER BY x
+----
+1  3
+2  3
