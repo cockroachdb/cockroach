@@ -366,3 +366,86 @@ SELECT DISTINCT checked_index(info)
 FROM [EXPLAIN INSERT INTO t2 VALUES (3, 30, 300, 'us-east-1'), (4, 40, 400, 'us-east-1')]
 WHERE info ~ 'table:';
 ----
+
+# ===========================================================================
+# Test that duplicate rows in indexes with skip_unique_checks produce
+# user-facing errors instead of internal assertion failures.
+# ===========================================================================
+
+subtest duplicate_rows_user_facing_error
+
+# Create a parent table with a unique secondary index (skip_unique_checks)
+# and a child table with a FK referencing it, to test lookup join via FK check.
+statement ok
+CREATE TABLE t_parent (
+  id INT PRIMARY KEY,
+  val INT,
+  UNIQUE INDEX idx_val (val)
+) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER INDEX t_parent@idx_val SET (skip_unique_checks = true)
+
+# Insert duplicate val across regions. Because skip_unique_checks is true,
+# the INSERT succeeds even though uniqueness of val is violated.
+statement ok
+INSERT INTO t_parent (id, val, crdb_region) VALUES (1, 42, 'us-east-1')
+
+statement ok
+INSERT INTO t_parent (id, val, crdb_region) VALUES (2, 42, 'ca-central-1')
+
+statement ok
+CREATE TABLE t_child (
+  id INT PRIMARY KEY,
+  parent_val INT REFERENCES t_parent(val)
+) LOCALITY REGIONAL BY ROW
+
+# The FK lookup join hits the unique index with duplicates. Without the fix,
+# this produces an internal assertion error (pgcode XX000). With the fix, it
+# produces a user-facing UniqueViolation error with a helpful hint.
+statement error pgcode 23505 pq: index "idx_val" of table "t_parent" contains duplicate keys\nHINT:.*skip_unique_checks
+INSERT INTO t_child (id, parent_val) VALUES (1, 42)
+
+# Test a direct lookup join against a unique index with duplicates.
+statement ok
+CREATE TABLE t_probe (
+  x INT PRIMARY KEY
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO t_probe VALUES (42)
+
+# An explicit lookup join against the unique index with duplicate values.
+# Without the fix, this produces an internal assertion error (pgcode XX000).
+statement error pgcode 23505 pq: index "idx_val" of table "t_parent" contains duplicate keys\nHINT:.*skip_unique_checks
+SELECT * FROM t_probe INNER LOOKUP JOIN t_parent ON t_probe.x = t_parent.val
+
+# Test the row-based execution engine path (joinReader.assertBatchRowCounts).
+statement ok
+SET vectorize = off
+
+statement error pgcode 23505 pq: index "idx_val" of table "t_parent" contains duplicate keys\nHINT:.*skip_unique_checks
+INSERT INTO t_child (id, parent_val) VALUES (1, 42)
+
+statement error pgcode 23505 pq: index "idx_val" of table "t_parent" contains duplicate keys\nHINT:.*skip_unique_checks
+SELECT * FROM t_probe INNER LOOKUP JOIN t_parent ON t_probe.x = t_parent.val
+
+statement ok
+RESET vectorize
+
+# Verify that the user can recover by deleting the duplicate row. After removing
+# one of the duplicates, queries that previously hit the assertion should work.
+statement count 1
+DELETE FROM t_parent WHERE id = 2
+
+# The FK insert should now succeed since val=42 is unique.
+statement ok
+INSERT INTO t_child (id, parent_val) VALUES (1, 42)
+
+# The lookup join should now return exactly one row.
+query III
+SELECT * FROM t_probe INNER LOOKUP JOIN t_parent ON t_probe.x = t_parent.val
+----
+42  1  42
+
+subtest end

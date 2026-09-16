@@ -149,5 +149,14 @@ message IndexFetchSpec {
   // it is stored outside the span of the object.
   optional ExternalRowData external  = 17 [(gogoproto.nullable) = true];
 
-  // NEXT ID 18.
+  // HasSkipUniqueChecks is true if the index has the skip_unique_checks storage
+  // parameter set. This is used to produce a user-facing error instead of an
+  // internal assertion failure when duplicate rows are encountered during index
+  // joins or lookup joins.
+  //
+  // This field is only populated on v26.3+. On older nodes the field will be
+  // false, causing the original internal assertion error to be returned instead.
+  optional bool has_skip_unique_checks = 18 [(gogoproto.nullable) = false];
+
+  // NEXT ID 19.
 }
