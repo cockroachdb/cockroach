@@ -2563,7 +2563,9 @@ func (j jsonFalse) AsText() (*string, error) {
 	return &s, nil
 }
 func (j jsonNumber) AsText() (*string, error) {
-	s := j.String()
+	// JSON formatting quotes non-finite numbers, but text extraction must not.
+	dec := apd.Decimal(j)
+	s := dec.String()
 	return &s, nil
 }
 func (j jsonArray) AsText() (*string, error) {

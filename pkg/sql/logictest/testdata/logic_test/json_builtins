@@ -1549,3 +1549,58 @@ SELECT jsonb_object_agg('k', 'v') OVER (PARTITION BY cte.col) FROM cte;
 ----
 {"k": "v"}
 {"k": "v"}
+
+subtest regression_144837
+
+# Text extraction must not reuse the JSON quoting of non-finite numbers.
+query TTT
+SELECT to_json('NaN'::FLOAT8) ->> 0,
+       to_json('Infinity'::FLOAT8) ->> 0,
+       to_json('-Infinity'::FLOAT8) ->> 0;
+----
+NaN  Infinity  -Infinity
+
+query TTT
+SELECT to_jsonb('NaN'::DECIMAL) ->> -1,
+       to_jsonb('Infinity'::DECIMAL) ->> -1,
+       to_jsonb('-Infinity'::DECIMAL) ->> -1;
+----
+NaN  Infinity  -Infinity
+
+statement ok
+CREATE TABLE t144837 (i INT PRIMARY KEY, f FLOAT8, j JSONB);
+INSERT INTO t144837
+SELECT i, 'NaN'::FLOAT8, to_json('NaN'::FLOAT8) FROM (VALUES (-2), (-1), (0), (1)) AS v(i);
+
+# Both runtime construction and existing binary numeric JSON use the same
+# extraction behavior; scalar indices outside 0 and -1 still return NULL.
+query ITT rowsort
+SELECT i, to_json(f) ->> i, j ->> i FROM t144837;
+----
+-2  NULL  NULL
+-1  NaN   NaN
+0   NaN   NaN
+1   NULL  NULL
+
+query TTT
+SELECT jsonb_build_object('n', 'NaN'::DECIMAL) ->> 'n',
+       jsonb_build_array('Infinity'::FLOAT8) ->> 0,
+       jsonb_build_object('a', jsonb_build_array('-Infinity'::FLOAT8)) #>> '{a,0}';
+----
+NaN  Infinity  -Infinity
+
+# Keep JSON formatting and internal numeric type unchanged. Ordinary finite
+# numbers retain their scale, and text NULL is distinct from SQL NULL.
+query TTT
+SELECT to_json('NaN'::FLOAT8)::STRING,
+       jsonb_typeof(to_json('NaN'::FLOAT8)),
+       to_json(1.2300::DECIMAL) ->> 0;
+----
+"NaN"  number  1.2300
+
+query TTT
+SELECT to_json('null'::STRING) ->> 0,
+       to_json(NULL::FLOAT8) ->> 0,
+       jsonb_build_array('NaN'::FLOAT8)::STRING;
+----
+null  NULL  ["NaN"]
