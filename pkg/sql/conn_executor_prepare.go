@@ -623,7 +623,7 @@ func (ex *connExecutor) execBind(
 					currentCols[i].Typ = colMeta.Type
 				}
 				if !ps.Columns.TypesEqual(currentCols) {
-					return retErr(pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type"))
+					return retErr(RevalidateCachedQuery())
 				}
 			}
 		}

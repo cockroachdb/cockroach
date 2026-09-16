@@ -63,7 +63,10 @@ func WalkWithNewServer(
 // can be used to specify types to ignore. ErrorResponse messages are
 // immediately returned as errors unless they are the expected type, in which
 // case they will marshal to an empty ErrorResponse message since our error
-// detail specifics differ from Postgres.
+// detail specifics differ from Postgres. The keepErrMessage option preserves
+// the error's message fields, and the keepErrRoutine option preserves the
+// error's Routine field (the raising function), for errors where those are
+// part of the wire contract clients depend on.
 //
 // "receive": Like "until", but only output matching messages instead of all
 // messages.
@@ -208,9 +211,12 @@ var issueRE = regexp.MustCompile(`(https://go.crdb.dev/issue-v/\d+/)[^/]+`)
 func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestData) string {
 	ignore := map[string]bool{}
 	errs := map[string]string{}
+	keepErrRoutine := false
 	for _, arg := range args.CmdArgs {
 		switch arg.Key {
 		case "keepErrMessage":
+		case "keepErrRoutine":
+			keepErrRoutine = true
 		case "crdb_only":
 		case "noncrdb_only":
 		case "ignore_table_oids":
@@ -267,6 +273,10 @@ func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 			// Sanitize the error hint to remove the binary version from the
 			// issue link.
 			errHintSanitized := issueRE.ReplaceAllString(errmsg.Hint, "$1...")
+			routine := ""
+			if keepErrRoutine {
+				routine = errmsg.Routine
+			}
 			if err := enc.Encode(struct {
 				Type           string
 				Code           string
@@ -274,6 +284,7 @@ func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 				ConstraintName string `json:",omitempty"`
 				Detail         string `json:",omitempty"`
 				Hint           string `json:",omitempty"`
+				Routine        string `json:",omitempty"`
 			}{
 				Type:           "ErrorResponse",
 				Code:           code,
@@ -281,6 +292,7 @@ func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 				ConstraintName: errmsg.ConstraintName,
 				Detail:         errmsg.Detail,
 				Hint:           errHintSanitized,
+				Routine:        routine,
 			}); err != nil {
 				panic(err)
 			}
