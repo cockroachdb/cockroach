@@ -691,33 +691,35 @@ project
 
 # Don't push down select if it depends on computed column that can't be inlined.
 norm expect-not=PushSelectIntoProject
-SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE div=2
+SELECT * FROM (SELECT i, i&1 b_and, f FROM a) a WHERE b_and=0
 ----
 select
- ├── columns: i:2 div:8!null f:3
+ ├── columns: i:2 b_and:8!null f:3
  ├── immutable
  ├── fd: ()-->(8)
  ├── project
- │    ├── columns: div:8 i:2 f:3
+ │    ├── columns: b_and:8 i:2 f:3
+ │    ├── immutable
  │    ├── fd: (2)-->(8)
  │    ├── scan a
  │    │    └── columns: i:2 f:3
  │    └── projections
- │         └── i:2 / 2 [as=div:8, outer=(2)]
+ │         └── i:2 & 1 [as=b_and:8, outer=(2), immutable]
  └── filters
-      └── div:8 = 2 [outer=(8), immutable, constraints=(/8: [/2 - /2]; tight), fd=()-->(8)]
+      └── b_and:8 = 0 [outer=(8), constraints=(/8: [/0 - /0]; tight), fd=()-->(8)]
 
 # Push down some conjuncts, but not others.
 norm expect=PushSelectIntoProject
-SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE 10.0=f AND 2=div AND i=1
+SELECT * FROM (SELECT i, i/2 div, i&1 b_and, f FROM a) a WHERE 10.0=f AND 2=div AND 1=b_and AND i=1
 ----
 select
- ├── columns: i:2!null div:8!null f:3!null
+ ├── columns: i:2!null div:8!null b_and:9!null f:3!null
  ├── immutable
- ├── fd: ()-->(2,3,8)
+ ├── fd: ()-->(2,3,8,9)
  ├── project
- │    ├── columns: div:8!null i:2!null f:3!null
- │    ├── fd: ()-->(2,3,8)
+ │    ├── columns: div:8!null b_and:9!null i:2!null f:3!null
+ │    ├── immutable
+ │    ├── fd: ()-->(2,3,8,9)
  │    ├── select
  │    │    ├── columns: i:2!null f:3!null
  │    │    ├── fd: ()-->(2,3)
@@ -727,9 +729,11 @@ select
  │    │         ├── f:3 = 10.0 [outer=(3), constraints=(/3: [/10.0 - /10.0]; tight), fd=()-->(3)]
  │    │         └── i:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  │    └── projections
- │         └── i:2 / 2 [as=div:8, outer=(2)]
+ │         ├── i:2 / 2 [as=div:8, outer=(2)]
+ │         └── i:2 & 1 [as=b_and:9, outer=(2), immutable]
  └── filters
-      └── div:8 = 2 [outer=(8), immutable, constraints=(/8: [/2 - /2]; tight), fd=()-->(8)]
+      ├── div:8 = 2 [outer=(8), immutable, constraints=(/8: [/2 - /2]; tight), fd=()-->(8)]
+      └── b_and:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
 
 # Detect PushSelectIntoProject and FilterUnusedSelectCols dependency cycle.
 norm

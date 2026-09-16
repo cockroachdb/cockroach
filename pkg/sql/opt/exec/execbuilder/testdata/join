@@ -605,7 +605,7 @@ vectorized: true
 # Query similar to the one above, but the filter refers to a rendered
 # expression and can't "break through".
 query T
-EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a * b / 2 AS div, n, sq FROM pairs, square) WHERE div = sq
+EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a & 1 AS b_and, n, sq FROM pairs, square) WHERE b_and = sq
 ----
 distribution: local
 vectorized: true
@@ -614,13 +614,13 @@ vectorized: true
 │ columns: (a, b, n, sq)
 │
 └── • filter
-    │ columns: (div, a, b, n, sq)
-    │ estimated row count: 990 (missing stats)
-    │ filter: div = sq
+    │ columns: (b_and, a, b, n, sq)
+    │ estimated row count: 9,900 (missing stats)
+    │ filter: b_and = sq
     │
     └── • render
-        │ columns: (div, a, b, n, sq)
-        │ render div: (a * b) / 2
+        │ columns: (b_and, a, b, n, sq)
+        │ render b_and: a & 1
         │ render a: a
         │ render b: b
         │ render n: n
