@@ -827,6 +827,103 @@ DROP TABLE t
 
 subtest end
 
+# Regression test for cursors not participating in SQL savepoint rollback
+# (#173449).
+subtest regression_173449
+
+statement ok
+CREATE TABLE savepoint_cursor (x INT PRIMARY KEY);
+INSERT INTO savepoint_cursor VALUES (0);
+
+# A non-initial savepoint should close a cursor declared after it, so that the
+# cursor cannot expose writes that were rolled back. A cursor declared before
+# the savepoint should remain open at its current position.
+statement ok
+BEGIN;
+DECLARE before_savepoint CURSOR FOR SELECT * FROM generate_series(1, 4);
+
+query I nosort
+FETCH 2 FROM before_savepoint;
+----
+1
+2
+
+query I nosort
+SELECT count(*) FROM savepoint_cursor;
+----
+1
+
+statement ok
+SAVEPOINT s;
+INSERT INTO savepoint_cursor VALUES (1);
+DECLARE after_savepoint CURSOR FOR SELECT x FROM savepoint_cursor ORDER BY x;
+
+statement ok
+ROLLBACK TO SAVEPOINT s;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+before_savepoint
+
+query I
+SELECT x FROM savepoint_cursor ORDER BY x;
+----
+0
+
+query I nosort
+FETCH ALL FROM before_savepoint;
+----
+3
+4
+
+statement error pgcode 34000 pq: cursor "after_savepoint" does not exist
+FETCH ALL FROM after_savepoint;
+
+statement ok
+ROLLBACK;
+
+# Rolling back to an initial savepoint restarts the KV transaction internally,
+# but should not close a cursor that was declared before the savepoint.
+statement ok
+BEGIN;
+DECLARE before_initial_savepoint CURSOR FOR SELECT * FROM generate_series(1, 4);
+
+query I nosort
+FETCH 2 FROM before_initial_savepoint;
+----
+1
+2
+
+statement ok
+SAVEPOINT initial_s;
+DECLARE after_initial_savepoint CURSOR FOR SELECT * FROM generate_series(1, 2);
+
+statement ok
+ROLLBACK TO SAVEPOINT initial_s;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+before_initial_savepoint
+
+query I nosort
+FETCH 2 FROM before_initial_savepoint;
+----
+3
+4
+
+statement error pgcode 34000 pq: cursor "after_initial_savepoint" does not exist
+FETCH ALL FROM after_initial_savepoint;
+
+statement ok
+ROLLBACK;
+
+statement ok
+DROP TABLE savepoint_cursor;
+
+subtest end
+
 subtest regression
 
 # Regression test for using a SQL cursor that buffers a notice.

@@ -574,6 +574,16 @@ func (c *cursorMap) closeCursor(s tree.Name) error {
 	return err
 }
 
+func (c *cursorMap) closeCursorsCreatedAfter(created time.Time) error {
+	var retErr error
+	for name, cursor := range c.cursors {
+		if cursor.created.After(created) {
+			retErr = errors.CombineErrors(retErr, c.closeCursor(name))
+		}
+	}
+	return retErr
+}
+
 func (c *cursorMap) getCursor(s tree.Name) *sqlCursor {
 	return c.cursors[s]
 }
