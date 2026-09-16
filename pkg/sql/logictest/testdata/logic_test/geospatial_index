@@ -135,3 +135,40 @@ CREATE TABLE public.geo_table (
   FAMILY fam_1_geom (geom),
   FAMILY fam_2_id (id)
 ) WITH (schema_locked = true);
+
+subtest empty_geography_inverted_join
+
+statement ok
+CREATE TABLE empty_geography_probe (
+  id INT PRIMARY KEY,
+  geog GEOGRAPHY
+)
+
+statement ok
+CREATE TABLE empty_geography_indexed (
+  id INT PRIMARY KEY,
+  geog GEOGRAPHY,
+  INVERTED INDEX idx (geog)
+)
+
+statement ok
+INSERT INTO empty_geography_probe VALUES (1, 'POINT EMPTY')
+
+statement ok
+INSERT INTO empty_geography_indexed VALUES (1, 'POINT(0 0)')
+
+query I
+SELECT count(*)
+FROM empty_geography_probe AS p
+INNER HASH JOIN empty_geography_indexed@empty_geography_indexed_pkey AS g
+  ON ST_DWithin(p.geog, g.geog, 1.0, true)
+----
+0
+
+query I
+SELECT count(*)
+FROM empty_geography_probe AS p
+INNER INVERTED JOIN empty_geography_indexed@idx AS g
+  ON ST_DWithin(p.geog, g.geog, 1.0, true)
+----
+0
