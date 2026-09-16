@@ -87,6 +87,40 @@ func (j *txnJobsCollection) forEachToCreate(fn func(jobRecord *jobs.Record) erro
 	return nil
 }
 
+// CreatePendingJobs writes the records of the jobs queued so far by statements
+// in this transaction, so that they land atomically with the catalog changes
+// that queued them.
+//
+// The connExecutor calls this while committing every transaction, which covers
+// ordinary statements. A plan hook that commits the planner's transaction
+// itself -- RESTORE does, so that it can start its job -- runs before that
+// point and must call this first; otherwise it commits catalog changes that
+// depend on a job which is then dropped along with the rest of the pending
+// records.
+//
+// The records stay in place once created; reset() discards them when the
+// transaction finishes. Calling this twice in one transaction would insert the
+// same job IDs twice.
+func (p *planner) CreatePendingJobs(ctx context.Context) error {
+	jc := p.extendedEvalCtx.jobs
+	if jc == nil || !jc.hasAnyToCreate() {
+		return nil
+	}
+	records := make([]*jobs.Record, 0, jc.numToCreate())
+	if err := jc.forEachToCreate(func(record *jobs.Record) error {
+		records = append(records, record)
+		return nil
+	}); err != nil {
+		return err
+	}
+	jobIDs, err := p.ExecCfg().JobRegistry.CreateJobsWithTxn(ctx, p.InternalSQLTxn(), records)
+	if err != nil {
+		return err
+	}
+	jc.addCreatedJobID(jobIDs...)
+	return nil
+}
+
 func (p *planner) ForEachSessionPendingJob(fn func(job jobspb.PendingJob) error) error {
 	if p.extendedEvalCtx.jobs == nil {
 		return nil
