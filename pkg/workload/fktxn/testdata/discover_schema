@@ -1,0 +1,113 @@
+# Simple chain: A <- B <- C
+discover
+CREATE TABLE a (id INT PRIMARY KEY, val STRING);
+CREATE TABLE b (id INT PRIMARY KEY, a_id INT NOT NULL REFERENCES a(id));
+CREATE TABLE c (id INT PRIMARY KEY, b_id INT NOT NULL REFERENCES b(id))
+----
+----
+table a
+  columns: [id (not null), val]
+  primary: a_pkey [id]
+  referenced by: b_a_id_fkey b(a_id)
+
+table b
+  columns: [id (not null), a_id (not null)]
+  primary: b_pkey [id]
+  fk: b_a_id_fkey b(a_id) -> a(id)
+  referenced by: c_b_id_fkey c(b_id)
+
+table c
+  columns: [id (not null), b_id (not null)]
+  primary: c_pkey [id]
+  fk: c_b_id_fkey c(b_id) -> b(id)
+----
+----
+
+# Composite FK
+discover
+CREATE TABLE regions (country STRING, region STRING, PRIMARY KEY (country, region));
+CREATE TABLE stores (id INT PRIMARY KEY, country STRING NOT NULL, region STRING NOT NULL, FOREIGN KEY (country, region) REFERENCES regions(country, region))
+----
+----
+table regions
+  columns: [country (not null), region (not null)]
+  primary: regions_pkey [country, region]
+  referenced by: stores_country_region_fkey stores(country, region)
+
+table stores
+  columns: [id (not null), country (not null), region (not null)]
+  primary: stores_pkey [id]
+  fk: stores_country_region_fkey stores(country, region) -> regions(country, region)
+----
+----
+
+# Self-referencing FK
+discover
+CREATE TABLE employees (id INT PRIMARY KEY, manager_id INT REFERENCES employees(id))
+----
+table employees
+  columns: [id (not null), manager_id]
+  primary: employees_pkey [id]
+  fk: employees_manager_id_fkey employees(manager_id) -> employees(id) (nullable)
+  referenced by: employees_manager_id_fkey employees(manager_id)
+
+# Nullable vs non-null FK columns
+discover
+CREATE TABLE parent (id INT PRIMARY KEY);
+CREATE TABLE child_nullable (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id));
+CREATE TABLE child_not_null (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id))
+----
+----
+table child_not_null
+  columns: [id (not null), parent_id (not null)]
+  primary: child_not_null_pkey [id]
+  fk: child_not_null_parent_id_fkey child_not_null(parent_id) -> parent(id)
+
+table child_nullable
+  columns: [id (not null), parent_id]
+  primary: child_nullable_pkey [id]
+  fk: child_nullable_parent_id_fkey child_nullable(parent_id) -> parent(id) (nullable)
+
+table parent
+  columns: [id (not null)]
+  primary: parent_pkey [id]
+  referenced by: child_not_null_parent_id_fkey child_not_null(parent_id)
+  referenced by: child_nullable_parent_id_fkey child_nullable(parent_id)
+----
+----
+
+# FK referencing non-PK unique constraint
+discover
+CREATE TABLE products (id INT PRIMARY KEY, sku STRING UNIQUE NOT NULL);
+CREATE TABLE order_items (id INT PRIMARY KEY, product_sku STRING NOT NULL REFERENCES products(sku))
+----
+----
+table order_items
+  columns: [id (not null), product_sku (not null)]
+  primary: order_items_pkey [id]
+  fk: order_items_product_sku_fkey order_items(product_sku) -> products(sku)
+
+table products
+  columns: [id (not null), sku (not null)]
+  primary: products_pkey [id]
+  unique: products_sku_key [sku]
+  referenced by: order_items_product_sku_fkey order_items(product_sku)
+----
+----
+
+# No FKs
+discover
+CREATE TABLE standalone1 (id INT PRIMARY KEY, val STRING);
+CREATE TABLE standalone2 (id INT PRIMARY KEY, num INT UNIQUE)
+----
+----
+table standalone1
+  columns: [id (not null), val]
+  primary: standalone1_pkey [id]
+
+table standalone2
+  columns: [id (not null), num]
+  unique: standalone2_num_key [num]
+  primary: standalone2_pkey [id]
+----
+----

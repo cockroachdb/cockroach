@@ -12,6 +12,7 @@ go_library(
         "//pkg/workload/connectionlatency",
         "//pkg/workload/debug",
         "//pkg/workload/examples",
+        "//pkg/workload/fktxn",
         "//pkg/workload/geospatial",
         "//pkg/workload/indexes",
         "//pkg/workload/insights",
