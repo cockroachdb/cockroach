@@ -8,6 +8,7 @@ package opt
 import (
 	"context"
 	"math/rand"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -79,6 +80,11 @@ func (t TableID) firstColID() ColumnID {
 // that TableID 0 can be be reserved to mean "unknown table".
 func (t TableID) index() int {
 	return int((t>>32)&tableIDMask) - 1
+}
+
+// Pretty returns a pretty string representation of the TableID.
+func (t TableID) Pretty() string {
+	return strconv.FormatUint(uint64((t>>32)&tableIDMask), 10)
 }
 
 // TableAnnID uniquely identifies an annotation on an instance of table
