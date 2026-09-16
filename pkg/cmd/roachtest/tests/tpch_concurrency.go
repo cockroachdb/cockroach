@@ -49,7 +49,9 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 	restartCluster := func(ctx context.Context, c cluster.Cluster, t test.Test) {
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.CRDBNodes())
-		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())
+		startOpts := option.NewStartOpts(option.NoBackupSchedule)
+		startOpts.RoachprodOpts.IsRestart = true
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
 	}
 
 	// checkConcurrency returns an error if at least one node of the cluster

@@ -139,7 +139,9 @@ func runReplicaGCChangedPeers(
 		// do that within the store dead interval (5m, i.e. too long for this
 		// test).
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(4, 6))
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(4, 6))
+		restartOpts := option.DefaultStartOpts()
+		restartOpts.RoachprodOpts.IsRestart = true
+		c.Start(ctx, t.L(), restartOpts, settings, c.Range(4, 6))
 	}
 
 	// Restart n3. We have to manually tell it where to find a new node or it
@@ -159,7 +161,9 @@ func runReplicaGCChangedPeers(
 	h.waitForZeroReplicas(ctx, 3)
 
 	// Restart the remaining nodes to satisfy the dead node detector.
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 2))
+	recoverOpts := option.DefaultStartOpts()
+	recoverOpts.RoachprodOpts.IsRestart = true
+	c.Start(ctx, t.L(), recoverOpts, install.MakeClusterSettings(), c.Range(1, 2))
 }
 
 type replicagcTestHelper struct {

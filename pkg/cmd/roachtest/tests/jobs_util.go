@@ -163,7 +163,9 @@ func executeNodeShutdown(
 	t.Status(fmt.Sprintf("restarting %s (node restart test is done)\n", target))
 	// Don't begin another backup schedule, as the parent test driver has already
 	// set or disallowed the automatic backup schedule.
-	if err := c.StartE(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule),
+	startOpts := option.NewStartOpts(option.NoBackupSchedule)
+	startOpts.RoachprodOpts.IsRestart = true
+	if err := c.StartE(ctx, t.L(), startOpts,
 		install.MakeClusterSettings(cfg.restartSettings...), target); err != nil {
 		return errors.Wrapf(err, "could not restart node %s", target)
 	}
