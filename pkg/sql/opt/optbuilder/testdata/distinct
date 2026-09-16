@@ -317,3 +317,35 @@ sort
            │    └── columns: a:1!null b:2!null c:3!null d:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
            └── projections
                 └── 1 [as=x:7]
+
+# Regression test for #168317. Under null_ordered_last, a SELECT DISTINCT whose
+# ORDER BY references select-list columns synthesizes (col IS NULL) ordering
+# columns (to implement non-default NULLS ordering). These synthesized columns
+# must not trigger a spurious "ORDER BY expressions must appear in select list"
+# error, mirroring the DISTINCT ON handling (case 3 in buildDistinctOn).
+build set=null_ordered_last=true
+SELECT DISTINCT y, z FROM xyz ORDER BY y, z
+----
+distinct-on
+ ├── columns: y:2 z:3  [hidden: nulls_ordering_y:6!null nulls_ordering_z:7!null]
+ ├── grouping columns: y:2 z:3 nulls_ordering_y:6!null nulls_ordering_z:7!null
+ ├── ordering: +6,+2,+7,+3
+ └── sort
+      ├── columns: y:2 z:3 nulls_ordering_y:6!null nulls_ordering_z:7!null
+      ├── ordering: +6,+2,+7,+3
+      └── project
+           ├── columns: nulls_ordering_y:6!null nulls_ordering_z:7!null y:2 z:3
+           ├── project
+           │    ├── columns: y:2 z:3
+           │    └── scan xyz
+           │         └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           └── projections
+                ├── y:2 IS NULL [as=nulls_ordering_y:6]
+                └── z:3 IS NULL [as=nulls_ordering_z:7]
+
+# A genuinely invalid query (ORDER BY a non-projected column) must still error,
+# even though null_ordered_last synthesizes an IS NULL column for it.
+build set=null_ordered_last=true
+SELECT DISTINCT y FROM xyz ORDER BY z
+----
+error (42P10): for SELECT DISTINCT, ORDER BY expressions must appear in select list
