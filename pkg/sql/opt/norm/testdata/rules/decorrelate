@@ -3006,7 +3006,7 @@ group-by (hash)
            └── y:2
 
 # Right input of SemiJoin is Project.
-norm expect=TryDecorrelateSemiJoin
+norm expect=TryDecorrelateSemiJoin disable=SimplifyCoalesceProject
 SELECT k FROM a
 WHERE EXISTS
 (

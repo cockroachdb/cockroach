@@ -1008,3 +1008,23 @@ func (c *CustomFuncs) HasVolatileProjection(projections memo.ProjectionsExpr) bo
 	}
 	return false
 }
+
+// SimplifyCoalesceInProjections simplifies Coalesce expressions in projections
+// using the given not-null columns. Projections whose element is unchanged are
+// reused as-is to avoid unnecessary memo invalidation.
+func (c *CustomFuncs) SimplifyCoalesceInProjections(
+	projections memo.ProjectionsExpr, notNullCols opt.ColSet,
+) memo.ProjectionsExpr {
+	newProjections := make(memo.ProjectionsExpr, len(projections))
+	for i := range projections {
+		p := &projections[i]
+		simplified := c.SimplifyCoalesceInScalar(p.Element, notNullCols)
+		if simplified == p.Element {
+			// No change; reuse the original ProjectionsItem.
+			newProjections[i] = *p
+		} else {
+			newProjections[i] = c.f.ConstructProjectionsItem(simplified, p.Col)
+		}
+	}
+	return newProjections
+}
