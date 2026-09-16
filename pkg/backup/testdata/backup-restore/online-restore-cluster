@@ -38,3 +38,29 @@ SELECT count(*) FROM [SHOW JOBS] WHERE job_type='RESTORE' and status='succeeded'
 ----
 2
 
+# Online restore cannot rewrite table IDs when the backup strips only tenant prefixes.
+
+reset test-nodelocal
+----
+
+new-cluster name=s3 disable-tenant
+----
+
+exec-sql
+CREATE TABLE tenant_backup_data (id INT PRIMARY KEY, value STRING);
+INSERT INTO tenant_backup_data VALUES (1, 'one'), (2, 'two');
+SELECT crdb_internal.create_tenant(5);
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster-with-tenants/' WITH include_all_virtual_clusters;
+----
+
+new-cluster name=s4 share-io-dir=s3 allow-implicit-access disable-tenant
+----
+
+exec-sql expect-error-regex=(experimental online restore: descriptor rewrites not supported but required)
+RESTORE FROM LATEST IN 'nodelocal://1/cluster-with-tenants/' WITH EXPERIMENTAL DEFERRED COPY;
+----
+regex matches error
+
