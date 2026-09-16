@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -893,9 +894,27 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 				return errors.AssertionFailedf(
 					"only one overload can have HomogeneousType parameters")
 			}
-			typedExprs, _, err := typeCheckSameTypedExprs(ctx, semaCtx, desired, s.exprs...)
+			typedExprs, commonType, err := typeCheckSameTypedExprs(ctx, semaCtx, desired, s.exprs...)
 			if err != nil {
 				return err
+			}
+			// Homogeneous builtins derive their return type from the first non-NULL
+			// argument. Ensure that argument has the common type chosen above. The
+			// types can be equivalent but not identical (for example, INT2 and
+			// INT4), in which case using the narrower argument's type as the return
+			// type can truncate a wider argument selected at execution time.
+			for j, typedExpr := range typedExprs {
+				typ := typedExpr.ResolvedType()
+				if typ.Family() == types.UnknownFamily {
+					continue
+				}
+				if !typ.Identical(commonType) {
+					if !cast.ValidCast(typ, commonType, cast.ContextExplicit) {
+						return unexpectedTypeError(s.exprs[j], commonType, typ)
+					}
+					typedExprs[j] = NewTypedCastExpr(typedExpr, commonType)
+				}
+				break
 			}
 			s.typedExprs = typedExprs
 			s.overloadIdxs = append(s.overloadIdxs[:0], uint8(i))
