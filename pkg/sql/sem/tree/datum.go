@@ -4384,6 +4384,17 @@ func (d *DTuple) Compare(ctx context.Context, cmpCtx CompareContext, other Datum
 		n = len(v.D)
 	}
 	for i := 0; i < n; i++ {
+		// NULL sorts after non-NULL within a tuple. This differs from the
+		// top-level datum ordering, where NULL sorts before non-NULL.
+		if d.D[i] == DNull {
+			if v.D[i] == DNull {
+				continue
+			}
+			return 1, nil
+		}
+		if v.D[i] == DNull {
+			return -1, nil
+		}
 		c, err := d.D[i].Compare(ctx, cmpCtx, v.D[i])
 		if err != nil {
 			return 0, errors.WithDetailf(err, "type mismatch at record column %d", redact.SafeInt(i+1))

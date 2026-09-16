@@ -574,16 +574,7 @@ NULL  6
 4     8
 
 # Using the session variable, we should get results that match Postgres.
-# TODO(#93558): This test case is broken and shows the limit of our
-# approach to using an optimizer-based approach for NULLS LAST.
-# Postgres returns:
-#      x   | y
-#   -------+---
-#    (1,1) | 1
-#    (1,)  | 3
-#    (,)   | 4
-#          | 2
-#
+# Tuple fields sort NULL last; a NULL record is distinct from a row of NULLs.
 query TI
 WITH t (x, y) AS (
   VALUES
@@ -596,10 +587,10 @@ SELECT *
 FROM t
 ORDER BY x;
 ----
-(1,)   3
 (1,1)  1
-NULL   2
+(1,)   3
 (,)    4
+NULL   2
 
 statement ok
 RESET null_ordered_last
@@ -802,3 +793,326 @@ DROP TABLE t_lookup CASCADE
 
 statement ok
 DROP TABLE t_orders CASCADE
+
+subtest tuple_null_ordering_93558
+
+# Exercise ordinary, aggregate, and window ordering with both session defaults.
+
+statement ok
+SET null_ordered_last = true
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY x ASC NULLS LAST
+----
+6
+1
+3
+5
+4
+2
+
+query T
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT array_agg(id ORDER BY x ASC NULLS LAST) FROM tuples
+----
+{6,1,3,5,4,2}
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY row_number() OVER (ORDER BY x ASC NULLS LAST)
+----
+6
+1
+3
+5
+4
+2
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY x ASC NULLS FIRST
+----
+2
+6
+1
+3
+5
+4
+
+query T
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT array_agg(id ORDER BY x ASC NULLS FIRST) FROM tuples
+----
+{2,6,1,3,5,4}
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY row_number() OVER (ORDER BY x ASC NULLS FIRST)
+----
+2
+6
+1
+3
+5
+4
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY x DESC NULLS LAST
+----
+4
+5
+3
+1
+6
+2
+
+query T
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT array_agg(id ORDER BY x DESC NULLS LAST) FROM tuples
+----
+{4,5,3,1,6,2}
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY row_number() OVER (ORDER BY x DESC NULLS LAST)
+----
+4
+5
+3
+1
+6
+2
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY x DESC NULLS FIRST
+----
+2
+4
+5
+3
+1
+6
+
+query T
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT array_agg(id ORDER BY x DESC NULLS FIRST) FROM tuples
+----
+{2,4,5,3,1,6}
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY row_number() OVER (ORDER BY x DESC NULLS FIRST)
+----
+2
+4
+5
+3
+1
+6
+
+query I
+SELECT x FROM (VALUES (1), (NULL::INT), (2)) AS t(x) ORDER BY x NULLS LAST
+----
+1
+2
+NULL
+
+statement ok
+SET null_ordered_last = false
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY x ASC NULLS LAST
+----
+6
+1
+3
+5
+4
+2
+
+query T
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT array_agg(id ORDER BY x ASC NULLS LAST) FROM tuples
+----
+{6,1,3,5,4,2}
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY row_number() OVER (ORDER BY x ASC NULLS LAST)
+----
+6
+1
+3
+5
+4
+2
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY x ASC NULLS FIRST
+----
+2
+6
+1
+3
+5
+4
+
+query T
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT array_agg(id ORDER BY x ASC NULLS FIRST) FROM tuples
+----
+{2,6,1,3,5,4}
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY row_number() OVER (ORDER BY x ASC NULLS FIRST)
+----
+2
+6
+1
+3
+5
+4
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY x DESC NULLS LAST
+----
+4
+5
+3
+1
+6
+2
+
+query T
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT array_agg(id ORDER BY x DESC NULLS LAST) FROM tuples
+----
+{4,5,3,1,6,2}
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY row_number() OVER (ORDER BY x DESC NULLS LAST)
+----
+4
+5
+3
+1
+6
+2
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY x DESC NULLS FIRST
+----
+2
+4
+5
+3
+1
+6
+
+query T
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT array_agg(id ORDER BY x DESC NULLS FIRST) FROM tuples
+----
+{2,4,5,3,1,6}
+
+query I
+WITH tuples(x, id) AS (
+  VALUES ((1, 1), 1), (NULL::RECORD, 2), ((1, NULL::INT), 3),
+         ((NULL::INT, NULL::INT), 4), ((NULL::INT, 1), 5), ((0, 9), 6)
+)
+SELECT id FROM tuples ORDER BY row_number() OVER (ORDER BY x DESC NULLS FIRST)
+----
+2
+4
+5
+3
+1
+6
+
+query I
+SELECT x FROM (VALUES (1), (NULL::INT), (2)) AS t(x) ORDER BY x NULLS LAST
+----
+1
+2
+NULL
+
+statement ok
+RESET null_ordered_last

@@ -738,7 +738,7 @@ func (b *Builder) buildAggregateFunction(
 			nullsDefaultOrder := b.hasDefaultNullsOrder(o)
 			for _, e := range cols {
 				if !nullsDefaultOrder {
-					expr := tree.NewTypedIsNullExpr(e)
+					expr := makeDatumIsNullExpr(e)
 					b.buildAggArg(expr, &info, tempScope, fromScope)
 				}
 				ensureColumnOrderable(e)

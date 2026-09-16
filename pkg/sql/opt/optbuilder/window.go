@@ -442,7 +442,7 @@ func (b *Builder) buildWindowOrdering(
 		}
 		for k, e := range cols {
 			if !nullsDefaultOrder {
-				expr := tree.NewTypedIsNullExpr(e)
+				expr := makeDatumIsNullExpr(e)
 				// TODO(#94032): reusing an existing column for the temporary IS
 				// NULL expression can be incorrect if that column was created
 				// for the previous window function (perhaps it's incorrect only

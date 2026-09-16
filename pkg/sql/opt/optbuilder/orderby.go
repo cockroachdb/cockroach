@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -96,8 +97,10 @@ func (b *Builder) buildOrderBy(inScope, projectionsScope, orderByScope *scope) {
 
 			// For non-default NULLS ordering, create an IS NULL column first.
 			if orderByCol.nonDefaultNullsOrder {
-				// Create the IS NULL expression using the ORDER BY column's expression.
-				isNullExpr := tree.NewTypedIsNullExpr(orderByCol.getExpr())
+				// Create an expression that is true only if the datum itself is NULL.
+				// Tuple IS NULL has special row semantics: it is also true for a
+				// non-NULL tuple containing only NULL fields.
+				isNullExpr := makeDatumIsNullExpr(orderByCol.getExpr())
 
 				// Create the IS NULL column with a descriptive metadata
 				// name derived from the ORDER BY column's metadata alias.
@@ -129,6 +132,18 @@ func (b *Builder) buildOrderBy(inScope, projectionsScope, orderByScope *scope) {
 	}
 
 	projectionsScope.setOrdering(orderByScope.cols, orderByScope.ordering)
+}
+
+// makeDatumIsNullExpr returns an expression that is true only when expr is a
+// NULL datum. Tuple IS NULL has row semantics and is also true for a non-NULL
+// tuple containing only NULL fields, so tuples require a distinct comparison.
+func makeDatumIsNullExpr(expr tree.TypedExpr) tree.TypedExpr {
+	if expr.ResolvedType().Family() == types.TupleFamily {
+		return tree.NewTypedComparisonExpr(
+			treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), expr, tree.DNull,
+		)
+	}
+	return tree.NewTypedIsNullExpr(expr)
 }
 
 // findIndexByName returns an index in the table with the given name. If the
