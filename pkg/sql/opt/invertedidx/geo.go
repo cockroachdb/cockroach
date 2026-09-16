@@ -544,7 +544,7 @@ func (g *geoFilterPlanner) maybeDeriveUsefulInvertedFilterCondition(
 // extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
 // interface.
 func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr,
+	ctx context.Context, evalCtx *eval.Context, _ *inverted.SpanBudget, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,
@@ -1086,7 +1086,10 @@ func (g *geoDatumsToInvertedExpr) Convert(
 		}
 	}
 
-	invertedExpr, err := evalInvertedExpr(g.invertedExpr, evalInvertedExprLeaf)
+	// We're on the execution path: the plan is already chosen, so the fold runs
+	// unbudgeted (nil = no limit).
+	var budget *inverted.SpanBudget
+	invertedExpr, err := evalInvertedExpr(g.invertedExpr, evalInvertedExprLeaf, budget)
 	if err != nil {
 		return nil, nil, err
 	}

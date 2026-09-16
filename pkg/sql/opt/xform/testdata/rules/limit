@@ -3753,6 +3753,88 @@ top-k
       └── projections
            └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
 
+# With optimizer_span_limit=3, the 3-span prefix constraint is exactly within the
+# limit, so the vector index is used.
+opt expect=GenerateVectorSearch set=(optimizer_span_limit=3)
+SELECT id, val, region, vec1 FROM index_tab
+WHERE (data1, data2) IN ((1, 2), (3, 4), (5, 6))
+ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 vec1:9  [hidden: column15:15]
+ ├── internal-ordering: +15
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3,9,15), (9)-->(15)
+ ├── ordering: +15
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 vec1:9
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2,3,9,15), (9)-->(15)
+      ├── inner-join (lookup index_tab)
+      │    ├── columns: id:1!null val:2 region:3 data1:6!null data2:7!null vec1:9
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3,6,7,9)
+      │    ├── vector-search index_tab@index_tab_data1_data2_vec1_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── prefix constraint: /6/7
+      │    │    │    ├── [/1/2 - /1/2]
+      │    │    │    ├── [/3/4 - /3/4]
+      │    │    │    └── [/5/6 - /5/6]
+      │    │    ├── key: (1)
+      │    │    └── '[3,1,2]'
+      │    └── filters (true)
+      └── projections
+           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+
+# With optimizer_span_limit=2, the 3-span prefix constraint exceeds the limit, so
+# the prefix cannot be constrained to single values and the vector index is not
+# used.
+opt expect-not=GenerateVectorSearch set=(optimizer_span_limit=2)
+SELECT id, val, region, vec1 FROM index_tab
+WHERE (data1, data2) IN ((1, 2), (3, 4), (5, 6))
+ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 vec1:9  [hidden: column15:15]
+ ├── internal-ordering: +15
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3,9,15), (9)-->(15)
+ ├── ordering: +15
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 vec1:9
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2,3,9,15), (9)-->(15)
+      ├── select
+      │    ├── columns: id:1!null val:2 region:3 data1:6!null data2:7!null vec1:9
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3,6,7,9)
+      │    ├── scan index_tab
+      │    │    ├── columns: id:1!null val:2 region:3 data1:6!null data2:7!null vec1:9
+      │    │    ├── partial index predicates
+      │    │    │    ├── index_tab_vec1_idx1: filters
+      │    │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
+      │    │    │    ├── index_tab_data2_vec2_idx: filters
+      │    │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+      │    │    │    └── index_tab_longitude_vec3_idx: filters
+      │    │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3,6,7,9)
+      │    └── filters
+      │         └── (data1:6, data2:7) IN ((1, 2), (3, 4), (5, 6)) [outer=(6,7), constraints=(/6/7: [/1/2 - /1/2] [/3/4 - /3/4] [/5/6 - /5/6]; /7: [/2 - /2] [/4 - /4] [/6 - /6]; tight)]
+      └── projections
+           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+
 # Case with Cosine distance operator.
 opt expect=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec1 <=> '[3,1,2]' LIMIT 1;

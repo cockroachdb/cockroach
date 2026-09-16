@@ -695,7 +695,7 @@ func EncodeInvertedIndexTableKeys(
 // set operations that must be applied on the spans read during execution. See
 // comments in the SpanExpression definition for details.
 func EncodeContainingInvertedIndexSpans(
-	ctx context.Context, evalCtx *eval.Context, val tree.Datum,
+	ctx context.Context, evalCtx *eval.Context, budget *inverted.SpanBudget, val tree.Datum,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
@@ -703,9 +703,9 @@ func EncodeContainingInvertedIndexSpans(
 	datum := eval.UnwrapDatum(ctx, evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.JsonFamily:
-		return json.EncodeContainingInvertedIndexSpans(nil /* inKey */, val.(*tree.DJSON).JSON)
+		return json.EncodeContainingInvertedIndexSpans(nil /* inKey */, val.(*tree.DJSON).JSON, budget)
 	case types.ArrayFamily:
-		return encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
+		return encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */, budget)
 	default:
 		return nil, errors.AssertionFailedf(
 			"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
@@ -726,7 +726,7 @@ func EncodeContainingInvertedIndexSpans(
 // span expression returned will never be tight. See comments in the
 // SpanExpression definition for details.
 func EncodeContainedInvertedIndexSpans(
-	ctx context.Context, evalCtx *eval.Context, val tree.Datum,
+	ctx context.Context, evalCtx *eval.Context, budget *inverted.SpanBudget, val tree.Datum,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
@@ -734,9 +734,9 @@ func EncodeContainedInvertedIndexSpans(
 	datum := eval.UnwrapDatum(ctx, evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.ArrayFamily:
-		return encodeContainedArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
+		return encodeContainedArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */, budget)
 	case types.JsonFamily:
-		return json.EncodeContainedInvertedIndexSpans(nil /* inKey */, val.(*tree.DJSON).JSON)
+		return json.EncodeContainedInvertedIndexSpans(nil /* inKey */, val.(*tree.DJSON).JSON, budget)
 	default:
 		return nil, errors.AssertionFailedf(
 			"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
@@ -755,7 +755,7 @@ func EncodeContainedInvertedIndexSpans(
 // The spans are returned in an inverted.SpanExpression, which represents the
 // set operations that must be applied on the spans read during execution.
 func EncodeExistsInvertedIndexSpans(
-	ctx context.Context, evalCtx *eval.Context, val tree.Datum, all bool,
+	ctx context.Context, evalCtx *eval.Context, budget *inverted.SpanBudget, val tree.Datum, all bool,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
@@ -766,7 +766,7 @@ func EncodeExistsInvertedIndexSpans(
 		// val could be a DOidWrapper, so we need to use the unwrapped datum
 		// here.
 		s := string(*datum.(*tree.DString))
-		return json.EncodeExistsInvertedIndexSpans(nil /* inKey */, s)
+		return json.EncodeExistsInvertedIndexSpans(nil /* inKey */, s, budget)
 	case types.ArrayFamily:
 		if val.ResolvedType().ArrayContents().Family() != types.StringFamily {
 			return nil, errors.AssertionFailedf(
@@ -779,16 +779,16 @@ func EncodeExistsInvertedIndexSpans(
 			if !ok {
 				continue
 			}
-			newExpr, err := json.EncodeExistsInvertedIndexSpans(nil /* inKey */, string(ds))
+			newExpr, err := json.EncodeExistsInvertedIndexSpans(nil /* inKey */, string(ds), budget)
 			if err != nil {
 				return nil, err
 			}
 			if expr == nil {
 				expr = newExpr
 			} else if all {
-				expr = inverted.And(expr, newExpr)
+				expr = budget.And(expr, newExpr)
 			} else {
-				expr = inverted.Or(expr, newExpr)
+				expr = budget.Or(expr, newExpr)
 			}
 		}
 		return expr, nil
@@ -811,7 +811,7 @@ func EncodeExistsInvertedIndexSpans(
 // span expression returned will be tight. See comments in the
 // SpanExpression definition for details.
 func EncodeOverlapsInvertedIndexSpans(
-	ctx context.Context, evalCtx *eval.Context, val tree.Datum,
+	ctx context.Context, evalCtx *eval.Context, budget *inverted.SpanBudget, val tree.Datum,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
@@ -819,7 +819,7 @@ func EncodeOverlapsInvertedIndexSpans(
 	datum := eval.UnwrapDatum(ctx, evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.ArrayFamily:
-		return encodeOverlapsArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
+		return encodeOverlapsArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */, budget)
 	default:
 		return nil, errors.AssertionFailedf(
 			"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
@@ -870,7 +870,7 @@ func encodeArrayInvertedIndexTableKeys(
 // the given array, one slice of spans per entry in the array. The input
 // inKey is prefixed to all returned keys.
 func encodeContainingArrayInvertedIndexSpans(
-	val *tree.DArray, inKey []byte,
+	val *tree.DArray, inKey []byte, budget *inverted.SpanBudget,
 ) (invertedExpr inverted.Expression, err error) {
 	if val.Array.Len() == 0 {
 		// All arrays contain the empty array. Return a SpanExpression that
@@ -899,7 +899,7 @@ func encodeContainingArrayInvertedIndexSpans(
 		if invertedExpr == nil {
 			invertedExpr = spanExpr
 		} else {
-			invertedExpr = inverted.And(invertedExpr, spanExpr)
+			invertedExpr = budget.And(invertedExpr, spanExpr)
 		}
 	}
 	return invertedExpr, nil
@@ -910,7 +910,7 @@ func encodeContainingArrayInvertedIndexSpans(
 // the given array, one slice of spans per entry in the array. The input
 // inKey is prefixed to all returned keys.
 func encodeContainedArrayInvertedIndexSpans(
-	val *tree.DArray, inKey []byte,
+	val *tree.DArray, inKey []byte, budget *inverted.SpanBudget,
 ) (invertedExpr inverted.Expression, err error) {
 	// The empty array should always be added to the spans, since it is contained
 	// by everything.
@@ -936,7 +936,7 @@ func encodeContainedArrayInvertedIndexSpans(
 		spanExpr := inverted.ExprForSpan(
 			inverted.MakeSingleValSpan(key), false, /* tight */
 		)
-		invertedExpr = inverted.Or(invertedExpr, spanExpr)
+		invertedExpr = budget.Or(invertedExpr, spanExpr)
 	}
 
 	// The inverted expression produced for <@ will never be tight.
@@ -955,7 +955,7 @@ func encodeContainedArrayInvertedIndexSpans(
 // the given array, one slice of spans per entry in the array. The input
 // inKey is prefixed to all returned keys.
 func encodeOverlapsArrayInvertedIndexSpans(
-	val *tree.DArray, inKey []byte,
+	val *tree.DArray, inKey []byte, budget *inverted.SpanBudget,
 ) (invertedExpr inverted.Expression, err error) {
 	// If the given array is directly empty (i.e. Len == 0),
 	// or contains only NULLs and thus has effective length 0,
@@ -981,7 +981,7 @@ func encodeOverlapsArrayInvertedIndexSpans(
 		if invertedExpr == nil {
 			invertedExpr = spanExpr
 		} else {
-			invertedExpr = inverted.Or(invertedExpr, spanExpr)
+			invertedExpr = budget.Or(invertedExpr, spanExpr)
 		}
 	}
 	return invertedExpr, nil
@@ -991,7 +991,13 @@ func encodeOverlapsArrayInvertedIndexSpans(
 // present in the input string. If allMustMatch is true, the resultant inverted
 // expression must match every trigram in the input. Otherwise, it will match
 // any trigram in the input.
-func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error) {
+//
+// budget (nil for no limit) bounds the spans that folding the trigrams may
+// materialize (see inverted.SpanBudget). When exceeded, a
+// NonInvertedColExpression is returned.
+func EncodeTrigramSpans(
+	s string, allMustMatch bool, budget *inverted.SpanBudget,
+) (inverted.Expression, error) {
 	// We do not pad the trigrams when allMustMatch is true. To see why, observe
 	// the keys that we insert for a string "zfooz":
 	//
@@ -1031,9 +1037,12 @@ func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error
 			// be in the right order within the string to guarantee that just because
 			// both trigrams match, the strings pass the LIKE or % test.
 			if allMustMatch {
-				ret = inverted.And(ret, spanExpr)
+				ret = budget.And(ret, spanExpr)
 			} else {
-				ret = inverted.Or(ret, spanExpr)
+				ret = budget.Or(ret, spanExpr)
+			}
+			if budget.Exceeded() {
+				return inverted.NonInvertedColExpression{}, nil
 			}
 		}
 	}

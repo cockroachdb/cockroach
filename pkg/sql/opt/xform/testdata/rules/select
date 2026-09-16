@@ -14310,11 +14310,11 @@ CREATE TABLE span_limit (
 )
 ----
 
-# With optimizer_span_limit=0 (the default, meaning no limit),
+# With optimizer_span_limit=0 (meaning no limit),
 # GenerateConstrainedScans should fire normally for IN lists.
 # Using non-contiguous values on both columns generates 3 * 3 = 9 individual
 # spans since they cannot be consolidated into ranges.
-opt expect=GenerateConstrainedScans
+opt expect=GenerateConstrainedScans set=(optimizer_span_limit=0)
 SELECT k FROM span_limit WHERE a IN (1, 3, 5) AND b IN (2, 4, 6)
 ----
 project
@@ -14423,3 +14423,64 @@ project
       │    └── [/5 - /5]
       ├── key: (1)
       └── fd: (1)-->(2)
+
+# optimizer_span_limit must also bound the prefix-column cross-product built for
+# multi-column inverted indexes (see #173719).
+exec-ddl
+CREATE TABLE inv_span_limit (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  j JSONB,
+  INVERTED INDEX (a, b, j)
+)
+----
+
+# With optimizer_span_limit=9, the 3*3=9 prefix spans are exactly within the
+# limit, so the inverted index is used.
+opt expect=GenerateInvertedIndexScans set=(optimizer_span_limit=9)
+SELECT k FROM inv_span_limit WHERE a IN (1, 3, 5) AND b IN (2, 4, 6) AND j @> '{"x": 1}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan inv_span_limit@inv_span_limit_a_b_j_idx,inverted
+      ├── columns: k:1!null
+      ├── constraint: /2/3
+      │    ├── [/1/2 - /1/2]
+      │    ├── [/1/4 - /1/4]
+      │    ├── [/1/6 - /1/6]
+      │    ├── [/3/2 - /3/2]
+      │    ├── [/3/4 - /3/4]
+      │    ├── [/3/6 - /3/6]
+      │    ├── [/5/2 - /5/2]
+      │    ├── [/5/4 - /5/4]
+      │    └── [/5/6 - /5/6]
+      ├── inverted constraint: /7/1
+      │    └── spans: ["x"/1, "x"/1]
+      └── key: (1)
+
+# With optimizer_span_limit=8, the 3*3=9 prefix spans exceed the limit by one, so
+# the prefix cannot be constrained to single values and the inverted index is not
+# used.
+opt expect-not=GenerateInvertedIndexScans set=(optimizer_span_limit=8)
+SELECT k FROM inv_span_limit WHERE a IN (1, 3, 5) AND b IN (2, 4, 6) AND j @> '{"x": 1}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null a:2!null b:3!null j:4!null
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── scan inv_span_limit
+      │    ├── columns: k:1!null a:2 b:3 j:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4)
+      └── filters
+           ├── a:2 IN (1, 3, 5) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3] [/5 - /5]; tight)]
+           ├── b:3 IN (2, 4, 6) [outer=(3), constraints=(/3: [/2 - /2] [/4 - /4] [/6 - /6]; tight)]
+           └── j:4 @> '{"x": 1}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
