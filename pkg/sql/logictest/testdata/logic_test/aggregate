@@ -4034,3 +4034,44 @@ query R
 SELECT percentile_cont(ARRAY[.4::FLOAT]) WITHIN GROUP (ORDER BY i::FLOAT4) FROM t90519;
 ----
 {2.2}
+
+subtest regression_173264
+
+statement ok
+CREATE TABLE t173264 (a INT, b INT);
+INSERT INTO t173264 VALUES (1, 10), (1, 20), (2, 30);
+
+# ROW() is a constant composite key, so it produces no group for empty input.
+query I
+SELECT count(*) FROM t173264 WHERE false GROUP BY ROW();
+----
+
+# The empty grouping set has scalar aggregation semantics and always produces
+# one group.
+query I
+SELECT count(*) FROM t173264 WHERE false GROUP BY ();
+----
+0
+
+# An explicit ROW is one composite key, so its fields are not grouped
+# individually, even when it is nested inside a parenthesized grouping list.
+query error pgcode 42803 column "a" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT a FROM t173264 GROUP BY ROW(a, b)
+
+query error pgcode 42803 column "b" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT b FROM t173264 GROUP BY (a, ROW(b))
+
+# Syntactic parenthesized lists continue to flatten recursively.
+query II rowsort
+SELECT a, b FROM t173264 GROUP BY (a, (b))
+----
+1  10
+1  20
+2  30
+
+# Grouping and projecting the complete composite key remains valid.
+query TI rowsort
+SELECT ROW(a), count(*) FROM t173264 GROUP BY ROW(a)
+----
+(1)  2
+(2)  1
