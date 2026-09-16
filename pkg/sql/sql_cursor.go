@@ -129,7 +129,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				// This case shouldn't happen because cursor names are scoped to a session,
 				// and sessions can't have more than one statement running at once. But
 				// let's be diligent and clean up if it somehow does happen anyway.
-				_ = cursor.Close()
+				_ = cursor.Rows.Close()
 				return nil, err
 			}
 			return newZeroNode(nil /* columns */), nil
@@ -175,8 +175,8 @@ type fetchNode struct {
 	fetchMoveNodeBase
 }
 
-func (f *fetchNode) startExec(_ runParams) error {
-	return f.startInternal()
+func (f *fetchNode) startExec(params runParams) error {
+	return f.startInternal(params.p)
 }
 
 func (f *fetchNode) Next(params runParams) (bool, error) {
@@ -197,7 +197,7 @@ type moveNode struct {
 }
 
 func (m *moveNode) startExec(params runParams) error {
-	if err := m.startInternal(); err != nil {
+	if err := m.startInternal(params.p); err != nil {
 		return err
 	}
 	// Execute the move to completion, keeping track of the affected row count.
@@ -261,7 +261,15 @@ func (b *fetchMoveNodeBase) init(p *planner, s *tree.CursorStmt) error {
 	return nil
 }
 
-func (b *fetchMoveNodeBase) startInternal() error {
+func (b *fetchMoveNodeBase) startInternal(p *planner) error {
+	// A checkpointed lazy iterator cannot seek backwards. Materialize it before
+	// advancing so an automatic retry can restore its exact position.
+	if !b.cursor.persisted && b.cursor.refCount > 1 {
+		if err := persistCursor(p, b.cursor); err != nil {
+			b.cursor.retryUnsafe = true
+			return err
+		}
+	}
 	if !b.cursor.persisted {
 		// We need to make sure that we're reading at the same read sequence number
 		// that we had when we created the cursor, to preserve the "sensitivity"
@@ -380,7 +388,7 @@ func (p *planner) PLpgSQLFetchCursor(
 	if err = cursor.init(p, cursorStmt); err != nil {
 		return nil, err
 	}
-	if err = cursor.startInternal(); err != nil {
+	if err = cursor.startInternal(p); err != nil {
 		return nil, err
 	}
 	defer cursor.close(ctx)
@@ -395,6 +403,9 @@ func (p *planner) PLpgSQLFetchCursor(
 
 type sqlCursor struct {
 	isql.Rows
+	// refCount includes the live cursor map and retry snapshots. The underlying
+	// rows are closed only after neither can restore the cursor.
+	refCount int
 	// txn is the transaction object that the internal executor for this cursor
 	// is running with.
 	txn *kv.Txn
@@ -405,6 +416,9 @@ type sqlCursor struct {
 	created    time.Time
 	curRow     int64
 	withHold   bool
+	// retryUnsafe is set if making a lazy cursor rewindable failed after
+	// consuming it. Such an error must be returned instead of retried.
+	retryUnsafe bool
 	// persisted indicates that the cursor's query was executed to completion and
 	// the result stored in a row container. If true, there is no need to set the
 	// transaction sequence number, since the query is no longer active.
@@ -416,6 +430,21 @@ type sqlCursor struct {
 	// WITH HOLD. It is used to ensure that aborting a transaction only closes
 	// cursors that were opened by that transaction.
 	committed bool
+}
+
+func (s *sqlCursor) retain() {
+	s.refCount++
+}
+
+func (s *sqlCursor) release() error {
+	if s.refCount <= 0 {
+		return errors.AssertionFailedf("released SQL cursor without a reference")
+	}
+	s.refCount--
+	if s.refCount == 0 {
+		return s.Rows.Close()
+	}
+	return nil
 }
 
 // Next implements the Rows interface.
@@ -491,6 +520,101 @@ type cursorMap struct {
 	nameCounter int
 }
 
+type sqlCursorSnapshotEntry struct {
+	cursor    *sqlCursor
+	curRow    int64
+	persisted bool
+	position  persistedCursorPosition
+}
+
+// sqlCursorSnapshot retains the cursor resources needed to undo cursor
+// mutations when an automatically retried statement or transaction is replayed.
+type sqlCursorSnapshot struct {
+	cursors     map[tree.Name]sqlCursorSnapshotEntry
+	nameCounter int
+}
+
+func (c *cursorMap) snapshot() (sqlCursorSnapshot, error) {
+	s := sqlCursorSnapshot{
+		cursors:     make(map[tree.Name]sqlCursorSnapshotEntry, len(c.cursors)),
+		nameCounter: c.nameCounter,
+	}
+	for name, cursor := range c.cursors {
+		var position persistedCursorPosition
+		if cursor.persisted {
+			rows, ok := cursor.Rows.(rewindableCursorRows)
+			if !ok {
+				_ = s.close()
+				return sqlCursorSnapshot{}, errors.AssertionFailedf(
+					"cannot checkpoint persisted SQL cursor %q", name,
+				)
+			}
+			position = rows.cursorPosition()
+		}
+		cursor.retain()
+		s.cursors[name] = sqlCursorSnapshotEntry{
+			cursor:    cursor,
+			curRow:    cursor.curRow,
+			persisted: cursor.persisted,
+			position:  position,
+		}
+	}
+	return s, nil
+}
+
+func (s *sqlCursorSnapshot) close() error {
+	var retErr error
+	for _, entry := range s.cursors {
+		retErr = errors.CombineErrors(retErr, entry.cursor.release())
+	}
+	s.cursors = nil
+	return retErr
+}
+
+func (s *sqlCursorSnapshot) canRewind() bool {
+	for _, entry := range s.cursors {
+		if entry.cursor.retryUnsafe ||
+			(!entry.persisted && !entry.cursor.persisted && entry.cursor.curRow != entry.curRow) {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *cursorMap) rewind(s *sqlCursorSnapshot) error {
+	if !s.canRewind() {
+		return errors.AssertionFailedf("cannot rewind a consumed lazy SQL cursor")
+	}
+	for _, entry := range s.cursors {
+		if !entry.persisted && !entry.cursor.persisted {
+			continue
+		}
+		entry.cursor.curRow = entry.curRow
+		position := entry.position
+		if !entry.persisted {
+			position = persistedCursorPosition{}
+		}
+		if err := entry.cursor.Rows.(rewindableCursorRows).rewindCursor(position); err != nil {
+			return err
+		}
+	}
+
+	newCursors := make(map[tree.Name]*sqlCursor, len(s.cursors))
+	for name, entry := range s.cursors {
+		entry.cursor.retain()
+		newCursors[name] = entry.cursor
+	}
+	oldCursors := c.cursors
+	c.cursors = newCursors
+	c.nameCounter = s.nameCounter
+
+	var retErr error
+	for _, cursor := range oldCursors {
+		retErr = errors.CombineErrors(retErr, cursor.release())
+	}
+	return retErr
+}
+
 type cursorCloseReason uint8
 
 const (
@@ -516,7 +640,7 @@ func (c *cursorMap) closeAll(p *planner, reason cursorCloseReason) error {
 	// Close the cursor iterators/containers. Make sure to continue closing even
 	// if one of them fails.
 	var retErr error
-	for _, curs := range c.cursors {
+	for n, curs := range c.cursors {
 		if reason != cursorCloseForExplicitClose && curs.committed {
 			// A holdable cursor from a previously committed transaction should remain
 			// open, except for a session close.
@@ -539,7 +663,10 @@ func (c *cursorMap) closeAll(p *planner, reason cursorCloseReason) error {
 				err,
 			)
 		}
-		retErr = errors.CombineErrors(retErr, curs.Close())
+		retErr = errors.CombineErrors(retErr, curs.release())
+		// Remove the map's ownership immediately so recursive error cleanup does
+		// not release the same reference a second time.
+		delete(c.cursors, n)
 	}
 	if reason == cursorCloseForTxnCommit && retErr != nil {
 		return errors.CombineErrors(retErr, c.closeAll(p, cursorCloseForTxnRollback))
@@ -569,7 +696,7 @@ func (c *cursorMap) closeCursor(s tree.Name) error {
 	if !ok {
 		return pgerror.Newf(pgcode.InvalidCursorName, "cursor %q does not exist", s)
 	}
-	err := cursor.Close()
+	err := cursor.release()
 	delete(c.cursors, s)
 	return err
 }
@@ -585,6 +712,7 @@ func (c *cursorMap) addCursor(s tree.Name, cursor *sqlCursor) error {
 	if _, ok := c.cursors[s]; ok {
 		return pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", s)
 	}
+	cursor.retain()
 	c.cursors[s] = cursor
 	return nil
 }
@@ -653,6 +781,14 @@ func (p *planner) checkNoConflictingCursors(stmt tree.Statement) error {
 // persistCursor runs the given cursor to completion and stores the result in a
 // row container that can outlive the cursor's transaction.
 func persistCursor(p *planner, cursor *sqlCursor) (retErr error) {
+	curRow := cursor.curRow
+	origTxnSeqNum := cursor.txn.GetReadSeqNum()
+	if err := cursor.txn.SetReadSeqNum(cursor.readSeqNum); err != nil {
+		return err
+	}
+	defer func() {
+		retErr = errors.CombineErrors(retErr, cursor.txn.SetReadSeqNum(origTxnSeqNum))
+	}()
 	// Use context.Background() because the cursor can outlive the context in
 	// which it was created.
 	helper := persistedCursorHelper{
@@ -660,9 +796,12 @@ func persistCursor(p *planner, cursor *sqlCursor) (retErr error) {
 		resultCols:   cursor.Types(),
 		rowsAffected: cursor.RowsAffected(),
 	}
-	mon := p.sessionMonitor
-	if mon == nil {
-		return errors.AssertionFailedf("cannot persist cursor without an active session")
+	mon := p.TxnMon()
+	if cursor.withHold {
+		mon = p.sessionMonitor
+		if mon == nil {
+			return errors.AssertionFailedf("cannot persist cursor without an active session")
+		}
 	}
 	helper.container.InitWithParentMon(
 		helper.ctx,
@@ -694,6 +833,7 @@ func persistCursor(p *planner, cursor *sqlCursor) (retErr error) {
 		return err
 	}
 	cursor.Rows = &helper
+	cursor.curRow = curRow
 	cursor.persisted = true
 	return nil
 }
@@ -710,6 +850,17 @@ type persistedCursorHelper struct {
 	resultCols   colinfo.ResultColumns
 	lastRow      tree.Datums
 	rowsAffected int
+	position     int64
+}
+
+type persistedCursorPosition struct {
+	position     int64
+	rowsAffected int
+}
+
+type rewindableCursorRows interface {
+	cursorPosition() persistedCursorPosition
+	rewindCursor(persistedCursorPosition) error
 }
 
 var _ isql.Rows = &persistedCursorHelper{}
@@ -725,7 +876,35 @@ func (h *persistedCursorHelper) Next(_ context.Context) (bool, error) {
 	h.lastRow = make(tree.Datums, len(row))
 	copy(h.lastRow, row)
 	h.rowsAffected++
+	h.position++
 	return true, nil
+}
+
+func (h *persistedCursorHelper) cursorPosition() persistedCursorPosition {
+	return persistedCursorPosition{position: h.position, rowsAffected: h.rowsAffected}
+}
+
+func (h *persistedCursorHelper) rewindCursor(position persistedCursorPosition) error {
+	if h.iter != nil {
+		h.iter.Close()
+	}
+	h.iter = newRowContainerIterator(h.ctx, h.container)
+	h.lastRow = nil
+	h.rowsAffected = 0
+	h.position = 0
+	for h.position < position.position {
+		more, err := h.Next(h.ctx)
+		if err != nil {
+			return err
+		}
+		if !more {
+			return errors.AssertionFailedf(
+				"cannot restore SQL cursor to row %d", position.position,
+			)
+		}
+	}
+	h.rowsAffected = position.rowsAffected
+	return nil
 }
 
 // Cur implements the isql.Rows interface.
