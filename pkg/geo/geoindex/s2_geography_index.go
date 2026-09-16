@@ -172,7 +172,10 @@ func (i *s2GeographyIndex) DWithin(
 	// desire.
 	//
 	// Construct the cell covering for the shape.
-	gCovering := geogCovererWithBBoxFallback{rc: i.rc, g: g}.covering(r)
+	// Do not use the bounding-box fallback here. A geography polygon can represent
+	// the large side of its boundary, which is not contained by the coordinate
+	// bounding box. Expanding such a fallback would omit qualifying index cells.
+	gCovering := simpleCovererImpl{rc: i.rc}.covering(r)
 	// Convert the distanceMeters to an angle, in order to expand the cell covering
 	// on the sphere by the angle.
 	multiplier := 1.0

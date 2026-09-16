@@ -669,6 +669,9 @@ func extractGeoFilterCondition(
 	if err != nil {
 		return inverted.NonInvertedColExpression{}, nil
 	}
+	if !canUseGeoPreFilter(d.ResolvedType(), relationship) {
+		return invExpr, nil
+	}
 	return invExpr,
 		&invertedexpr.PreFiltererStateForInvertedFilterer{
 			Expr: preFilterExpr,
@@ -820,6 +823,13 @@ type PreFilterer struct {
 	additionalPreFilterParams []tree.Datum
 	// Batch allocated for reducing heap allocations.
 	preFilterState []filterState
+}
+
+// canUseGeoPreFilter returns whether bounding boxes are conservative for the
+// given type and relationship. A geography can represent the large side of a
+// polygon boundary, which is not contained by its coordinate bounding box.
+func canUseGeoPreFilter(typ *types.T, relationship geoindex.RelationshipType) bool {
+	return typ.Family() != types.GeographyFamily || relationship != geoindex.DWithin
 }
 
 // NewPreFilterer constructs a PreFilterer
@@ -1090,7 +1100,7 @@ func NewGeoDatumsToInvertedExpr(
 	if err != nil {
 		return nil, err
 	}
-	if funcExprCount == 1 {
+	if funcExprCount == 1 && canUseGeoPreFilter(g.typ, preFilterRelationship) {
 		g.filterer = NewPreFilterer(g.typ, preFilterRelationship, additionalPreFilterParams)
 	}
 	return g, nil
