@@ -134,11 +134,22 @@ func (s *systemStatusServer) spanStatsFanOut(
 			}
 		}
 
+		// When a node is designated the MVCC collector for none of its spans,
+		// we must still tell it to skip MVCC collection entirely. An empty
+		// SpansRequiringMvcc is indistinguishable from "field not set" in
+		// proto3 (both serialize to an empty, non-nil list on the receiving
+		// side), so without SkipMvccStats the node would fall through and
+		// compute MVCC stats for every span it holds -- the opposite of the
+		// SkipApproxTotalStats intent. Setting SkipMvccStats makes the
+		// opt-out unambiguous.
+		skipMvcc := req.SkipApproxTotalStats && len(spansRequiringMvcc) == 0
+
 		resp, err := client.(serverpb.RPCStatusClient).SpanStats(ctx,
 			&roachpb.SpanStatsRequest{
 				NodeID:             nodeID.String(),
 				Spans:              nodeSpans,
 				SpansRequiringMvcc: spansRequiringMvcc,
+				SkipMvccStats:      skipMvcc,
 			})
 		return resp, err
 	}
