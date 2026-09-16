@@ -390,6 +390,11 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 						}
 						tabOrd := fk.OriginColumnOrdinal(cb.childTable, idx)
 						col := mb.outScope.getColumnForTableOrdinal(tabOrd)
+						if col == nil {
+							panic(errors.AssertionFailedf(
+								"FK column (table ordinal %d) not found in child table scan scope", tabOrd,
+							))
+						}
 						return b.factory.ConstructVariable(col.id)
 					}
 					return b.factory.CopyAndReplaceDefault(e, replaceFn)
@@ -405,6 +410,11 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 			for i := range cb.origFKCols {
 				tabOrd := fk.OriginColumnOrdinal(cb.childTable, i)
 				col := mb.outScope.getColumnForTableOrdinal(tabOrd)
+				if col == nil {
+					panic(errors.AssertionFailedf(
+						"FK column (table ordinal %d) not found in child table scan scope", tabOrd,
+					))
+				}
 				if !notNullCols.Contains(col.id) {
 					filters = append(filters, b.factory.ConstructFiltersItem(
 						b.factory.ConstructIsNot(
@@ -673,6 +683,11 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 	for i := range on {
 		tabOrd := fk.OriginColumnOrdinal(childTable, i)
 		col := outScope.getColumnForTableOrdinal(tabOrd)
+		if col == nil {
+			panic(errors.AssertionFailedf(
+				"FK column (table ordinal %d) not found in child table scan scope", tabOrd,
+			))
+		}
 		on[i] = b.factory.ConstructFiltersItem(b.factory.ConstructEq(
 			b.factory.ConstructVariable(col.id),
 			b.factory.ConstructVariable(outCols[i]),
@@ -1023,6 +1038,11 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	for i := range on {
 		tabOrd := fk.OriginColumnOrdinal(childTable, i)
 		col := outScope.getColumnForTableOrdinal(tabOrd)
+		if col == nil {
+			panic(errors.AssertionFailedf(
+				"FK column (table ordinal %d) not found in child table scan scope", tabOrd,
+			))
+		}
 		on[i] = f.ConstructFiltersItem(f.ConstructEq(
 			f.ConstructVariable(col.id),
 			f.ConstructVariable(outColsOld[i]),
