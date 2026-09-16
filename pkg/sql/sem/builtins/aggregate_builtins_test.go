@@ -885,3 +885,67 @@ func runRegressionAggregateBenchmarks(
 		)
 	})
 }
+
+// TestSqrDiffLargeOffset checks permutations of the same multiset through both
+// decimal accumulation paths. The squared deviations are independent of the
+// shared offset, and Reset must not retain the previous group's origin.
+func TestSqrDiffLargeOffset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
+	acc := evalCtx.TestingMon.MakeBoundAccount()
+	defer acc.Close(ctx)
+	evalCtx.SingleDatumAggMemAccount = &acc
+	decimal := func(s string) *tree.DDecimal {
+		d, err := tree.ParseDDecimal(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	orders := [][]int{{0, 0, 1, 1}, {0, 1, 0, 1}, {0, 1, 1, 0},
+		{1, 0, 0, 1}, {1, 0, 1, 0}, {1, 1, 0, 0}}
+	for _, partials := range []bool{false, true} {
+		for _, order := range orders {
+			t.Run(fmt.Sprintf("partials=%t/order=%v", partials, order), func(t *testing.T) {
+				agg := newDecimalSqrDiff(evalCtx)
+				if partials {
+					agg = newDecimalSumSqrDiffs(evalCtx)
+				}
+				defer agg.Close(ctx)
+				for _, values := range [][2]string{
+					{"856809699799498753", "856809699799531521"},
+					{"0", "32768"},
+					{"-856809699799531521", "-856809699799498753"},
+				} {
+					agg.Reset(ctx)
+					if err := agg.Add(ctx, tree.DNull, tree.DNull, tree.DNull); err != nil {
+						t.Fatal(err)
+					}
+					for _, index := range order {
+						var err error
+						if partials {
+							// A singleton partial has zero squared deviation.
+							err = agg.Add(ctx, decimal("0"), decimal(values[index]), tree.NewDInt(1))
+						} else {
+							err = agg.Add(ctx, decimal(values[index]))
+						}
+						if err != nil {
+							t.Fatal(err)
+						}
+					}
+					result, err := agg.Result()
+					if err != nil {
+						t.Fatal(err)
+					}
+					// Four values, two at each endpoint, give (32768)^2.
+					got, ok := result.(*tree.DDecimal)
+					if !ok || got.Decimal.Cmp(&decimal("1073741824").Decimal) != 0 {
+						t.Fatalf("values %v: expected 1073741824, got %s", values, result)
+					}
+				}
+			})
+		}
+	}
+}
