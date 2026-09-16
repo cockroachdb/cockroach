@@ -1569,6 +1569,7 @@ func (ef *execFactory) ConstructUpdate(
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
+	forceSentinelWrite bool,
 ) (exec.Node, error) {
 	// TODO(radu): the execution code has an annoying limitation that the fetch
 	// columns must be a superset of the update columns, even when the "old" value
@@ -1596,6 +1597,7 @@ func (ef *execFactory) ConstructUpdate(
 		ef.planner.SessionData(),
 		&ef.planner.ExecCfg().Settings.SV,
 		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
+		forceSentinelWrite,
 	)
 	if err != nil {
 		return nil, err
@@ -1665,6 +1667,7 @@ func (ef *execFactory) ConstructUpsert(
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
+	forceSentinelWrite bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1699,6 +1702,7 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.SessionData(),
 		&ef.planner.ExecCfg().Settings.SV,
 		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
+		forceSentinelWrite,
 	)
 	if err != nil {
 		return nil, err

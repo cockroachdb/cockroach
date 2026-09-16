@@ -1405,6 +1405,7 @@ func (e *distSQLSpecExecFactory) ConstructUpdate(
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
+	forceSentinelWrite bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: update")
 }
@@ -1423,6 +1424,7 @@ func (e *distSQLSpecExecFactory) ConstructUpsert(
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
+	forceSentinelWrite bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: upsert")
 }

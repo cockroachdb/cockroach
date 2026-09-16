@@ -1831,6 +1831,7 @@ UPDATE multi_col_fam_checks SET a = 5, b = 6
 update multi_col_fam_checks
  ├── columns: <none>
  ├── fetch columns: a:8 b:9 c:10 d:11 e:12
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── a_new:15 => a:1
  │    └── b_new:16 => b:2
@@ -1856,6 +1857,7 @@ UPDATE multi_col_fam_checks SET a = 5, b = 6, e = 3
 update multi_col_fam_checks
  ├── columns: <none>
  ├── fetch columns: a:8 b:9 c:10 d:11 e:12
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── a_new:15 => a:1
  │    ├── b_new:16 => b:2
@@ -1883,6 +1885,7 @@ UPDATE multi_col_fam_checks SET e = 3 WHERE a = 5
 update multi_col_fam_checks
  ├── columns: <none>
  ├── fetch columns: a:8 b:9 c:10 d:11 e:12
+ ├── force sentinel write
  ├── update-mapping:
  │    └── e_new:15 => e:5
  └── project
@@ -1909,6 +1912,7 @@ UPDATE multi_col_fam_checks SET e = 3
 update multi_col_fam_checks
  ├── columns: <none>
  ├── fetch columns: a:8 b:9 c:10 d:11 e:12
+ ├── force sentinel write
  ├── update-mapping:
  │    └── e_new:15 => e:5
  └── project
@@ -2055,6 +2059,7 @@ UPDATE part_idx_fam SET status = 'running', claim = 'x' WHERE id = 1
 update part_idx_fam
  ├── columns: <none>
  ├── fetch columns: id:7 status:8 claim:9 data:10
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── status_new:13 => status:2
  │    └── claim_new:14 => claim:3
@@ -2089,7 +2094,9 @@ UPDATE part_idx_fam SET data = 'x' WHERE id = 1
 update part_idx_fam
  ├── columns: <none>
  ├── fetch columns: id:7 status:8 claim:9 data:10
+ ├── force sentinel write
  ├── update-mapping:
+ │    ├── status:8 => status:2
  │    └── data_new:13 => data:4
  ├── partial index put columns: partial_index_put1:14
  ├── partial index del columns: partial_index_put1:14
@@ -2264,6 +2271,7 @@ UPDATE part_idx_storing SET b = 5 WHERE id = 1
 update part_idx_storing
  ├── columns: <none>
  ├── fetch columns: id:7 a:8 b:9 c:10
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── a:8 => a:2
  │    ├── b_new:13 => b:3
@@ -2381,6 +2389,7 @@ UPDATE full_idx_fam SET a = 5 WHERE id = 1
 update full_idx_fam
  ├── columns: <none>
  ├── fetch columns: id:7 a:8 b:9 c:10
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── a_new:13 => a:2
  │    └── b:9 => b:3
@@ -2403,6 +2412,7 @@ UPDATE full_idx_fam SET c = 5 WHERE id = 1
 update full_idx_fam
  ├── columns: <none>
  ├── fetch columns: id:7 a:8 b:9 c:10
+ ├── force sentinel write
  ├── update-mapping:
  │    └── c_new:13 => c:4
  └── project
@@ -2471,6 +2481,7 @@ UPDATE computed_idx_fam SET a = 5 WHERE id = 1
 update computed_idx_fam
  ├── columns: <none>
  ├── fetch columns: id:7 a:8 b:9 v:10
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── a_new:13 => a:2
  │    └── b:9 => b:3
@@ -2524,6 +2535,7 @@ UPDATE vec_idx_fam SET a = 5 WHERE id = 1
 update vec_idx_fam
  ├── columns: <none>
  ├── fetch columns: id:7 a:8 b:9 v:10
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── a_new:13 => a:2
  │    └── b:9 => b:3
@@ -2608,6 +2620,7 @@ UPDATE part_idx_computed SET b = 5 WHERE id = 1
 update part_idx_computed
  ├── columns: <none>
  ├── fetch columns: id:8 a:9 b:10 x:11 c:12
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── a:9 => a:2
  │    ├── b_new:15 => b:3
@@ -2703,6 +2716,7 @@ UPDATE part_idx_expr SET b = 5 WHERE id = 1
 update part_idx_expr
  ├── columns: <none>
  ├── fetch columns: id:7 b:8 x:9 crdb_internal_idx_expr:12
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── b_new:13 => b:2
  │    └── x:9 => x:3
@@ -2764,6 +2778,7 @@ UPDATE part_idx_stable SET b = 5 WHERE id = 1
 update part_idx_stable
  ├── columns: <none>
  ├── fetch columns: id:8 a:9 b:10 t:11 s:12
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── a:9 => a:2
  │    ├── b_new:15 => b:3
@@ -3786,3 +3801,421 @@ update serial_t
       │    └── flags: avoid-full-scan
       └── projections
            └── unique_rowid() [as=a_new:11]
+
+# Test forced row-sentinel writes that prevent primary index corruption from the
+# DELETE fast path under weak isolation (issue #175530). On a table with
+# multiple column families, a mutation that writes a possibly-absent column
+# family must also write family 0 (the row sentinel), even when the table has a
+# secondary index and so the fast path can't currently be used (see
+# sentinel_fam_secondary). To keep that rewrite value-preserving, family 0's
+# non-primary-key columns are self-assigned. See maybeForceSentinelWrite.
+
+exec-ddl
+CREATE TABLE sentinel_fam (
+  id    INT PRIMARY KEY,
+  a     INT NOT NULL,
+  claim STRING,
+  FAMILY f0 (id, a),
+  FAMILY fclaim (claim)
+)
+----
+
+# Under read committed, updating only the claim family force-writes family 0, so
+# a is self-assigned to preserve its value.
+build isolation=ReadCommitted
+UPDATE sentinel_fam SET claim = 'x' WHERE id = 1
+----
+update sentinel_fam
+ ├── columns: <none>
+ ├── fetch columns: id:6 a:7 claim:8
+ ├── force sentinel write
+ ├── update-mapping:
+ │    ├── a:7 => a:2
+ │    └── claim_new:11 => claim:3
+ └── project
+      ├── columns: claim_new:11!null id:6!null a:7!null claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── select
+      │    ├── columns: id:6!null a:7!null claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── scan sentinel_fam
+      │    │    ├── columns: id:6!null a:7!null claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:6 = 1
+      └── projections
+           └── 'x' [as=claim_new:11]
+
+# Under serializable there is no forced write: the update-mapping has claim only.
+build isolation=Serializable
+UPDATE sentinel_fam SET claim = 'x' WHERE id = 1
+----
+update sentinel_fam
+ ├── columns: <none>
+ ├── fetch columns: id:6 a:7 claim:8
+ ├── update-mapping:
+ │    └── claim_new:11 => claim:3
+ └── project
+      ├── columns: claim_new:11!null id:6!null a:7!null claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── select
+      │    ├── columns: id:6!null a:7!null claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── scan sentinel_fam
+      │    │    ├── columns: id:6!null a:7!null claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:6 = 1
+      └── projections
+           └── 'x' [as=claim_new:11]
+
+exec-ddl
+CREATE TABLE sentinel_fam_multi (
+  id    INT PRIMARY KEY,
+  a     INT NOT NULL,
+  b     INT,
+  claim STRING,
+  FAMILY f0 (id, a, b),
+  FAMILY fclaim (claim)
+)
+----
+
+# Every non-primary-key column of family 0 is self-assigned: both a (NOT NULL)
+# and b (nullable).
+build isolation=ReadCommitted
+UPDATE sentinel_fam_multi SET claim = 'x' WHERE id = 1
+----
+update sentinel_fam_multi
+ ├── columns: <none>
+ ├── fetch columns: id:7 a:8 b:9 claim:10
+ ├── force sentinel write
+ ├── update-mapping:
+ │    ├── a:8 => a:2
+ │    ├── b:9 => b:3
+ │    └── claim_new:13 => claim:4
+ └── project
+      ├── columns: claim_new:13!null id:7!null a:8!null b:9 claim:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      ├── select
+      │    ├── columns: id:7!null a:8!null b:9 claim:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── scan sentinel_fam_multi
+      │    │    ├── columns: id:7!null a:8!null b:9 claim:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:7 = 1
+      └── projections
+           └── 'x' [as=claim_new:13]
+
+exec-ddl
+CREATE TABLE sentinel_fam_onupdate (
+  id    INT PRIMARY KEY,
+  a     INT ON UPDATE 10,
+  claim STRING,
+  FAMILY f0 (id, a),
+  FAMILY fclaim (claim)
+)
+----
+
+# a has an ON UPDATE expression, so it is synthesized into the update set with
+# its recomputed value. It must NOT be self-assigned (which would clobber that
+# value with the fetched one): the update-mapping shows a's synthesized value,
+# not a self-assignment.
+build isolation=ReadCommitted
+UPDATE sentinel_fam_onupdate SET claim = 'x' WHERE id = 1
+----
+update sentinel_fam_onupdate
+ ├── columns: <none>
+ ├── fetch columns: id:6 a:7 claim:8
+ ├── force sentinel write
+ ├── update-mapping:
+ │    ├── a_on_update:12 => a:2
+ │    └── claim_new:11 => claim:3
+ └── project
+      ├── columns: a_on_update:12!null id:6!null a:7 claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10 claim_new:11!null
+      ├── project
+      │    ├── columns: claim_new:11!null id:6!null a:7 claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── select
+      │    │    ├── columns: id:6!null a:7 claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    ├── scan sentinel_fam_onupdate
+      │    │    │    ├── columns: id:6!null a:7 claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── id:6 = 1
+      │    └── projections
+      │         └── 'x' [as=claim_new:11]
+      └── projections
+           └── 10 [as=a_on_update:12]
+
+exec-ddl
+CREATE TABLE sentinel_fam_secondary (
+  id    INT PRIMARY KEY,
+  a     INT NOT NULL,
+  claim STRING,
+  FAMILY f0 (id, a),
+  FAMILY fclaim (claim),
+  INDEX (claim)
+)
+----
+
+# A secondary index takes the DELETE off the fast path, yet due to possible
+# descriptor version skew, this UPDATE cannot reliably predict usage of the fast
+# path, so the sentinel write is forced.
+build isolation=ReadCommitted
+UPDATE sentinel_fam_secondary SET claim = 'x' WHERE id = 1
+----
+update sentinel_fam_secondary
+ ├── columns: <none>
+ ├── fetch columns: id:6 a:7 claim:8
+ ├── force sentinel write
+ ├── update-mapping:
+ │    ├── a:7 => a:2
+ │    └── claim_new:11 => claim:3
+ └── project
+      ├── columns: claim_new:11!null id:6!null a:7!null claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── select
+      │    ├── columns: id:6!null a:7!null claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── scan sentinel_fam_secondary
+      │    │    ├── columns: id:6!null a:7!null claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:6 = 1
+      └── projections
+           └── 'x' [as=claim_new:11]
+
+exec-ddl
+CREATE TABLE sentinel_fam_notnull (
+  id    INT PRIMARY KEY,
+  other INT,
+  v     INT NOT NULL,
+  FAMILY f0 (id, other),
+  FAMILY fv (v)
+)
+----
+
+# The written family fv holds a NOT NULL column, so it is present on every live
+# row and cannot be materialized from absence. No sentinel write is forced: the
+# update-mapping has v only, with no self-assignment of other.
+build isolation=ReadCommitted
+UPDATE sentinel_fam_notnull SET v = 2 WHERE id = 1
+----
+update sentinel_fam_notnull
+ ├── columns: <none>
+ ├── fetch columns: id:6 other:7 v:8
+ ├── update-mapping:
+ │    └── v_new:11 => v:3
+ └── project
+      ├── columns: v_new:11!null id:6!null other:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── select
+      │    ├── columns: id:6!null other:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── scan sentinel_fam_notnull
+      │    │    ├── columns: id:6!null other:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:6 = 1
+      └── projections
+           └── 2 [as=v_new:11]
+
+exec-ddl
+CREATE TABLE sentinel_fam_index_conflict (
+  id INT PRIMARY KEY,
+  y  INT NOT NULL,
+  w  INT,
+  FAMILY f0 (id),
+  FAMILY fy (y),
+  FAMILY fw (w),
+  INDEX (y) STORING (w)
+)
+----
+
+# The only family the UPDATE itself writes, fy, holds a NOT NULL column and
+# cannot be materialized from absence. Maintaining the secondary index forces a
+# self-assignment of w (issue #173610), but that write preserves fw's value -
+# an absent fw is written as a tombstone - so it does not force a sentinel
+# write either.
+build isolation=ReadCommitted
+UPDATE sentinel_fam_index_conflict SET y = 2 WHERE id = 1
+----
+update sentinel_fam_index_conflict
+ ├── columns: <none>
+ ├── fetch columns: id:6 y:7 w:8
+ ├── update-mapping:
+ │    ├── y_new:11 => y:2
+ │    └── w:8 => w:3
+ └── project
+      ├── columns: y_new:11!null id:6!null y:7!null w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── select
+      │    ├── columns: id:6!null y:7!null w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── scan sentinel_fam_index_conflict
+      │    │    ├── columns: id:6!null y:7!null w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:6 = 1
+      └── projections
+           └── 2 [as=y_new:11]
+
+exec-ddl
+CREATE TABLE sentinel_fam_inverted (
+  id    INT PRIMARY KEY,
+  j     JSON,
+  claim STRING,
+  FAMILY f0 (id, j),
+  FAMILY fclaim (claim),
+  INVERTED INDEX (j)
+)
+----
+
+# The test catalog places the inverted index's key column in family 0. It is not
+# stored there and is never fetched, so it is skipped when self-assigning family
+# 0's columns: only j is self-assigned.
+build isolation=ReadCommitted
+UPDATE sentinel_fam_inverted SET claim = 'x' WHERE id = 1
+----
+update sentinel_fam_inverted
+ ├── columns: <none>
+ ├── fetch columns: id:7 j:8 claim:9
+ ├── force sentinel write
+ ├── update-mapping:
+ │    ├── j:8 => j:2
+ │    └── claim_new:13 => claim:3
+ └── project
+      ├── columns: claim_new:13!null id:7!null j:8 claim:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      ├── select
+      │    ├── columns: id:7!null j:8 claim:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    ├── scan sentinel_fam_inverted
+      │    │    ├── columns: id:7!null j:8 claim:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:7 = 1
+      └── projections
+           └── 'x' [as=claim_new:13]
+
+exec-ddl
+CREATE TABLE sentinel_fam_pkonly (
+  id    INT PRIMARY KEY,
+  claim STRING,
+  FAMILY f0 (id),
+  FAMILY fclaim (claim)
+)
+----
+
+# Family 0 holds only the primary key, so there is nothing to self-assign: the
+# forced sentinel write is carried entirely by the "force sentinel write" flag,
+# and the update-mapping is otherwise identical to serializable.
+build isolation=ReadCommitted
+UPDATE sentinel_fam_pkonly SET claim = 'x' WHERE id = 1
+----
+update sentinel_fam_pkonly
+ ├── columns: <none>
+ ├── fetch columns: id:5 claim:6
+ ├── force sentinel write
+ ├── update-mapping:
+ │    └── claim_new:9 => claim:2
+ └── project
+      ├── columns: claim_new:9!null id:5!null claim:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      ├── select
+      │    ├── columns: id:5!null claim:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    ├── scan sentinel_fam_pkonly
+      │    │    ├── columns: id:5!null claim:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:5 = 1
+      └── projections
+           └── 'x' [as=claim_new:9]
+
+exec-ddl
+CREATE TABLE sentinel_fam_pk_in_fam (
+  id    INT PRIMARY KEY,
+  a     INT,
+  claim STRING,
+  FAMILY f0 (a),
+  FAMILY f1 (id, claim)
+)
+----
+
+# The written family f1 holds the primary-key column id, which is NOT NULL but
+# is encoded in the key rather than in f1's value. A row with claim = NULL
+# therefore has no f1 KV, so f1 can be materialized from absence and the
+# sentinel write is forced, self-assigning a.
+build isolation=ReadCommitted
+UPDATE sentinel_fam_pk_in_fam SET claim = 'x' WHERE id = 1
+----
+update sentinel_fam_pk_in_fam
+ ├── columns: <none>
+ ├── fetch columns: id:6 a:7 claim:8
+ ├── force sentinel write
+ ├── update-mapping:
+ │    ├── a:7 => a:2
+ │    └── claim_new:11 => claim:3
+ └── project
+      ├── columns: claim_new:11!null id:6!null a:7 claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── select
+      │    ├── columns: id:6!null a:7 claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── scan sentinel_fam_pk_in_fam
+      │    │    ├── columns: id:6!null a:7 claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:6 = 1
+      └── projections
+           └── 'x' [as=claim_new:11]
+
+exec-ddl
+CREATE TABLE sentinel_fam_composite_pk_in_fam (
+  id    DECIMAL PRIMARY KEY,
+  a     INT,
+  claim STRING,
+  FAMILY f0 (a),
+  FAMILY f1 (id, claim)
+)
+----
+
+# A composite-typed primary-key column is stored in the value only when the
+# datum is actually composite (e.g. 1.0 but not 1), so it cannot keep f1
+# present either, and the sentinel write is forced.
+build isolation=ReadCommitted
+UPDATE sentinel_fam_composite_pk_in_fam SET claim = 'x' WHERE id = 1
+----
+update sentinel_fam_composite_pk_in_fam
+ ├── columns: <none>
+ ├── fetch columns: id:6 a:7 claim:8
+ ├── force sentinel write
+ ├── update-mapping:
+ │    ├── a:7 => a:2
+ │    └── claim_new:11 => claim:3
+ └── project
+      ├── columns: claim_new:11!null id:6!null a:7 claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── select
+      │    ├── columns: id:6!null a:7 claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── scan sentinel_fam_composite_pk_in_fam
+      │    │    ├── columns: id:6!null a:7 claim:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:6 = 1
+      └── projections
+           └── 'x' [as=claim_new:11]
+
+exec-ddl
+CREATE TABLE sentinel_fam_pk_notnull_in_fam (
+  id    INT PRIMARY KEY,
+  a     INT,
+  v     INT NOT NULL,
+  FAMILY f0 (a),
+  FAMILY f1 (id, v)
+)
+----
+
+# Besides the primary-key column, f1 holds the NOT NULL value column v, so it is
+# present on every live row and no sentinel write is forced.
+build isolation=ReadCommitted
+UPDATE sentinel_fam_pk_notnull_in_fam SET v = 2 WHERE id = 1
+----
+update sentinel_fam_pk_notnull_in_fam
+ ├── columns: <none>
+ ├── fetch columns: id:6 a:7 v:8
+ ├── update-mapping:
+ │    └── v_new:11 => v:3
+ └── project
+      ├── columns: v_new:11!null id:6!null a:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── select
+      │    ├── columns: id:6!null a:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── scan sentinel_fam_pk_notnull_in_fam
+      │    │    ├── columns: id:6!null a:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── id:6 = 1
+      └── projections
+           └── 2 [as=v_new:11]

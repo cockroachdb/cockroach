@@ -564,6 +564,10 @@ define Update {
 
     # If set, the operator will commit the transaction as part of its execution.
     AutoCommit bool
+
+    # If set, value-preserving write of column family 0 (the row sentinel) is
+    # forced even if no column in the family is updated.
+    ForceSentinelWrite bool
 }
 
 # Upsert implements an INSERT..ON CONFLICT DO UPDATE or UPSERT statement.
@@ -612,6 +616,10 @@ define Upsert {
     # multiple mutations in a statement, or the output of the mutation is
     # processed through side-effecting expressions.
     AutoCommit bool
+
+    # If set, for the update behavior, value-preserving write of column family 0
+    # (the row sentinel) is forced even if no column in the family is updated.
+    ForceSentinelWrite bool
 }
 
 # Delete implements a DELETE statement. The input contains columns that were

@@ -40,6 +40,10 @@ type Updater struct {
 	UpdateColIDtoRowIndex catalog.TableColMap
 	primaryKeyColChange   bool
 
+	// forceSentinelWrite, if true, makes UpdateRow write family 0 (the row
+	// sentinel) even when the update touches none of its columns.
+	forceSentinelWrite bool
+
 	// primaryLocked, if true, indicates that no lock is needed when modifying
 	// old KVs in the primary index because the caller already acquired it.
 	primaryLocked bool
@@ -96,6 +100,7 @@ func MakeUpdater(
 	sd *sessiondata.SessionData,
 	sv *settings.Values,
 	metrics *rowinfra.Metrics,
+	forceSentinelWrite bool,
 ) (Updater, error) {
 	if requestedCols == nil {
 		return Updater{}, errors.AssertionFailedf("requestedCols is nil in MakeUpdater")
@@ -198,6 +203,7 @@ func MakeUpdater(
 		UpdateCols:            updateCols,
 		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
 		primaryKeyColChange:   primaryKeyColChange,
+		forceSentinelWrite:    forceSentinelWrite,
 		primaryLocked:         primaryLocked,
 		secondaryLocked:       secondaryLocked,
 		oldIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
@@ -422,7 +428,7 @@ func (ru *Updater) UpdateRow(
 	ru.valueBuf, err = prepareInsertOrUpdateBatch(
 		ctx, b, &ru.Helper, primaryIndexKey, ru.FetchCols, ru.newValues, ru.FetchColIDtoRowIndex,
 		ru.UpdateColIDtoRowIndex, &ru.key, &ru.value, ru.valueBuf, oth, oldValues,
-		kvOp, mustValidateOldPKValues, traceKV,
+		kvOp, mustValidateOldPKValues, ru.forceSentinelWrite, traceKV,
 	)
 	if err != nil {
 		return nil, err

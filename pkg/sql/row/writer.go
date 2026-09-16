@@ -98,6 +98,7 @@ func prepareInsertOrUpdateBatch(
 	oldValues []tree.Datum,
 	kvOp KVInsertOp,
 	mustValidateOldPKValues bool,
+	forceSentinelWrite bool,
 	traceKV bool,
 ) ([]byte, error) {
 	families := helper.TableDesc.GetFamilies()
@@ -135,12 +136,15 @@ func prepareInsertOrUpdateBatch(
 				break
 			}
 		}
-		// We can have an empty family.ColumnIDs in the following case:
-		// * A table is created with the primary key not in family 0, and another column in family 0.
-		// * The column in family 0 is dropped, leaving the 0'th family empty.
-		// In this case, we must keep the empty 0'th column family in order to ensure that column family 0
-		// is always encoded as the sentinel k/v for a row.
-		if !update && len(family.ColumnIDs) != 0 {
+		// Skip families none of whose columns are being written, except family
+		// 0, which is still processed in two cases. A family with no columns at
+		// all is never skipped: empty family.ColumnIDs can only happen to
+		// family 0 (PK in a non-zero family, family 0's only column dropped),
+		// which must still emit the row sentinel KV. And when
+		// forceSentinelWrite is set, family 0 is written even if untouched, to
+		// conflict with a concurrent DELETE (see maybeForceSentinelWrite and
+		// issue #175530).
+		if !update && len(family.ColumnIDs) != 0 && !(forceSentinelWrite && family.ID == 0) {
 			continue
 		}
 

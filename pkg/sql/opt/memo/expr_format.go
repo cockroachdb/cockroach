@@ -666,6 +666,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 			f.formatOptionalColList(e, tp, "fetch columns:", t.FetchCols)
 			f.formatOptionalColList(e, tp, "passthrough columns:", opt.OptionalColList(t.PassthroughCols))
+			if t.ForceSentinelWrite {
+				tp.Child("force sentinel write")
+			}
 			f.formatMutationCols(e, tp, "update-mapping:", t.UpdateCols, t.Table)
 			f.formatMutationCols(e, tp, "return-mapping:", t.ReturnCols, t.Table)
 			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
@@ -690,6 +693,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				f.formatRelColList(e, tp, "canary column:", opt.ColList{t.CanaryCol})
 				f.formatOptionalColList(e, tp, "fetch columns:", t.FetchCols)
 				f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
+				if t.ForceSentinelWrite {
+					tp.Child("force sentinel write")
+				}
 				f.formatMutationCols(e, tp, "update-mapping:", t.UpdateCols, t.Table)
 				f.formatMutationCols(e, tp, "return-mapping:", t.ReturnCols, t.Table)
 			} else {

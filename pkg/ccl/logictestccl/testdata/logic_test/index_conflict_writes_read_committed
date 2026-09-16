@@ -68,9 +68,11 @@ subtest delete_writes_all_families
 # Both reasons are properties of row.Deleter, so neither covers the DeleteRange
 # fast path, which bypasses it entirely (see canUseDeleteRange in
 # pkg/sql/opt/exec/execbuilder/mutation.go). That path is reachable only on a
-# table with no secondary indexes, so it cannot corrupt one, but it has not been
-# examined for the analogous anomaly on the primary index and this subtest says
-# nothing about it.
+# table with no secondary indexes, so it cannot corrupt one, but it can corrupt
+# the primary index in the analogous way (issue #175530): it writes no tombstone
+# at an absent family's key, so a concurrent UPDATE materializing that family
+# does not conflict. The forced sentinel write prevents it -- see the
+# fastpath_delete_* subtests below.
 #
 # The trace below is the DELETE counterpart of
 # full_index_null_family_corruption_173610: w is NULL and alone in its family, so
@@ -107,6 +109,226 @@ Del (locking) /Table/107/1/1/0
 Del (locking) /Table/107/1/1/1/1
 Del (locking) /Table/107/1/1/2/1
 Del (locking) /Table/107/1/1/3/1
+
+statement ok
+SET default_transaction_isolation = 'serializable'
+
+subtest end
+
+subtest fastpath_delete_forced_sentinel_write_kvtrace
+
+statement ok
+CREATE TABLE t175530_kv (
+  id    INT PRIMARY KEY,
+  biz   STRING NOT NULL,
+  claim STRING,
+  FAMILY f0 (id),
+  FAMILY fbiz (biz),
+  FAMILY fclaim (claim)
+)
+
+statement ok
+INSERT INTO t175530_kv (id, biz) VALUES (1, 'b1'), (2, 'b2')
+
+# Under serializable there is no forced sentinel write; only the claim family is
+# written.
+query T kvtrace
+UPDATE t175530_kv SET claim = 'c1' WHERE id = 1
+----
+Scan /Table/108/1/1/0, /Table/108/1/1/2/1 lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/108/1/1/2/1 -> /BYTES/c1
+
+# Under read committed the row sentinel (family 0) is force-written, so a
+# concurrent fast-path DELETE of the row (which removes family 0) conflicts.
+statement ok
+SET default_transaction_isolation = 'read committed'
+
+query T kvtrace
+UPDATE t175530_kv SET claim = 'c2' WHERE id = 2
+----
+Scan /Table/108/1/2/0, /Table/108/1/2/2/1 lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/108/1/2/0 -> /TUPLE/
+Put (locking) /Table/108/1/2/2/1 -> /BYTES/c2
+
+statement ok
+SET default_transaction_isolation = 'serializable'
+
+subtest end
+
+subtest fastpath_delete_dropped_family0_column_175530
+
+# The row updater always writes an empty family 0 to emit the row sentinel, so
+# the sentinel -- and the resulting conflict with a concurrent DELETE -- is
+# written on every mutation regardless of isolation, even without the
+# forced-sentinel machinery.
+
+statement ok
+CREATE TABLE t175530_drop (
+  id    INT PRIMARY KEY,
+  a     INT,
+  biz   STRING NOT NULL,
+  claim STRING,
+  FAMILY f0 (a),
+  FAMILY fpk (id),
+  FAMILY fbiz (biz),
+  FAMILY fclaim (claim)
+)
+
+statement ok
+ALTER TABLE t175530_drop DROP COLUMN a
+
+statement ok
+INSERT INTO t175530_drop (id, biz) VALUES (1, 'b1')
+
+query T kvtrace
+UPDATE t175530_drop SET claim = 'c1' WHERE id = 1
+----
+Scan /Table/109/2/1/0, /Table/109/2/1/3/1 lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/109/2/1/0 -> /TUPLE/
+Put (locking) /Table/109/2/1/3/1 -> /BYTES/c1
+
+subtest end
+
+subtest fastpath_delete_family0_value_column_175530
+
+# When family 0 holds a value column that the mutation does not update, the
+# forced sentinel write must still carry a's value.
+
+statement ok
+CREATE TABLE t175530_fam0 (
+  id    INT PRIMARY KEY,
+  a     INT NOT NULL,
+  claim STRING,
+  FAMILY f0 (id, a),
+  FAMILY fclaim (claim)
+)
+
+statement ok
+INSERT INTO t175530_fam0 (id, a) VALUES (1, 2)
+
+statement ok
+SET default_transaction_isolation = 'read committed'
+
+# Each mutation writes only the claim family, force-writing family 0; a must
+# survive.
+statement ok
+UPDATE t175530_fam0 SET claim = 'c1' WHERE id = 1
+
+query IIT
+SELECT id, a, claim FROM t175530_fam0
+----
+1  2  c1
+
+statement ok
+UPSERT INTO t175530_fam0 (id, claim) VALUES (1, 'c2')
+
+query IIT
+SELECT id, a, claim FROM t175530_fam0
+----
+1  2  c2
+
+statement ok
+INSERT INTO t175530_fam0 (id, a) VALUES (1, 2) ON CONFLICT (id) DO UPDATE SET claim = 'c3'
+
+query IIT
+SELECT id, a, claim FROM t175530_fam0
+----
+1  2  c3
+
+# The forced family-0 write carries a's value rather than an empty tuple.
+query T kvtrace
+UPDATE t175530_fam0 SET claim = 'c4' WHERE id = 1
+----
+Scan /Table/110/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/110/1/1/0 -> /TUPLE/2:2:Int/2
+Put (locking) /Table/110/1/1/1/1 -> /BYTES/c4
+
+statement ok
+SET default_transaction_isolation = 'serializable'
+
+subtest end
+
+subtest fastpath_delete_family0_computed_column_175530
+
+# When family 0 holds a STORED computed column whose source columns the mutation
+# does not update, the forced sentinel write must still carry the computed
+# column's value. It is self-assigned from its fetched value, which equals the
+# recomputed value because its inputs are unchanged; skipping it would rewrite
+# family 0 without the column and drop it.
+
+statement ok
+CREATE TABLE t175530_comp (
+  id    INT PRIMARY KEY,
+  a     INT,
+  c     INT AS (a + 1) STORED,
+  claim STRING,
+  FAMILY f0 (id, a, c),
+  FAMILY fclaim (claim)
+)
+
+statement ok
+INSERT INTO t175530_comp (id, a) VALUES (1, 10)
+
+statement ok
+SET default_transaction_isolation = 'read committed'
+
+statement ok
+UPDATE t175530_comp SET claim = 'c1' WHERE id = 1
+
+query IIIT
+SELECT id, a, c, claim FROM t175530_comp
+----
+1  10  11  c1
+
+# The forced family-0 write carries both a and the computed c.
+query T kvtrace
+UPDATE t175530_comp SET claim = 'c2' WHERE id = 1
+----
+Scan /Table/111/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/111/1/1/0 -> /TUPLE/2:2:Int/10/1:3:Int/11
+Put (locking) /Table/111/1/1/1/1 -> /BYTES/c2
+
+statement ok
+SET default_transaction_isolation = 'serializable'
+
+subtest end
+
+subtest fastpath_delete_pk_in_nonzero_family_175530
+
+# A non-zero family that holds a primary-key column alongside nullable columns
+# can still be absent: the primary-key column is encoded in the key rather than
+# in the family's value, so a row whose other fclaim columns are all NULL has no
+# fclaim KV. Materializing fclaim must therefore force the sentinel write, even
+# though id is NOT NULL.
+
+statement ok
+CREATE TABLE t175530_pk_fam (
+  id    INT PRIMARY KEY,
+  a     INT,
+  claim STRING,
+  FAMILY f0 (a),
+  FAMILY fclaim (id, claim)
+)
+
+statement ok
+INSERT INTO t175530_pk_fam (id, a) VALUES (1, 10)
+
+statement ok
+SET default_transaction_isolation = 'read committed'
+
+# The update writes fclaim for the first time and also force-writes family 0,
+# carrying a's value.
+query T kvtrace
+UPDATE t175530_pk_fam SET claim = 'c1' WHERE id = 1
+----
+Scan /Table/112/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/112/1/1/0 -> /TUPLE/2:2:Int/10
+Put (locking) /Table/112/1/1/1/1 -> /TUPLE/3:3:Bytes/c1
+
+query IIT
+SELECT id, a, claim FROM t175530_pk_fam
+----
+1  10  c1
 
 statement ok
 SET default_transaction_isolation = 'serializable'
@@ -690,5 +912,148 @@ query I
 SELECT count(*) FROM t173610_del@idx
 ----
 0
+
+subtest end
+
+subtest fastpath_delete_primary_corruption_175530
+
+skip under duress
+
+# Regression test for #175530: primary-index corruption from a fast-path DELETE,
+# a sibling of the secondary index anomaly above. Under READ COMMITTED, an
+# UPDATE that materializes a previously-absent family on a table with no
+# secondary index holds only a best-effort unreplicated lock (simulated here by
+# disabling implicit FOR UPDATE). A concurrent fast-path DELETE writes no
+# tombstone at the absent family's key, so without the forced sentinel write the
+# UPDATE's claim write would survive the delete, leaving a row with no sentinel
+# and no NOT NULL fbiz family. The forced sentinel write makes the two conflict,
+# so TxnA re-reads and affects no rows.
+
+statement ok
+CREATE TABLE t175530 (
+  id    INT PRIMARY KEY,
+  biz   STRING NOT NULL,
+  claim STRING,
+  FAMILY f0 (id),
+  FAMILY fbiz (biz),
+  FAMILY fclaim (claim)
+)
+
+statement ok
+INSERT INTO t175530 (id, biz) VALUES (1, 'b1')
+
+statement ok
+GRANT ALL ON TABLE t175530 TO testuser
+
+user root
+
+statement async txnDel
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL enable_implicit_select_for_update = off; UPDATE t175530 SET claim = 'c2' WHERE id = 1 AND pg_sleep(2); COMMIT
+
+user testuser
+
+statement ok
+WITH s AS (SELECT pg_sleep(0.5)) DELETE FROM t175530 WHERE id = 1
+
+user root
+
+awaitstatement txnDel
+
+# TxnA's forced sentinel write conflicted with the delete, so it re-read, found
+# the row deleted, and affected no rows. The primary index has no partial row: a
+# full scan neither errors on the missing NOT NULL family nor returns a phantom.
+query ITT
+SELECT id, biz, claim FROM t175530
+----
+
+subtest end
+
+subtest fastpath_delete_primary_corruption_175530_repeatable_read
+
+skip under duress
+
+# The same scenario under REPEATABLE READ (snapshot) isolation, which also does
+# not refresh reads and so is subject to the same anomaly without the forced
+# sentinel write.
+
+statement ok
+CREATE TABLE t175530_rr (
+  id    INT PRIMARY KEY,
+  biz   STRING NOT NULL,
+  claim STRING,
+  FAMILY f0 (id),
+  FAMILY fbiz (biz),
+  FAMILY fclaim (claim)
+)
+
+statement ok
+INSERT INTO t175530_rr (id, biz) VALUES (1, 'b1')
+
+statement ok
+GRANT ALL ON TABLE t175530_rr TO testuser
+
+user root
+
+statement async txnDelRr
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; SET LOCAL enable_implicit_select_for_update = off; UPDATE t175530_rr SET claim = 'c2' WHERE id = 1 AND pg_sleep(2); COMMIT
+
+user testuser
+
+statement ok
+WITH s AS (SELECT pg_sleep(0.5)) DELETE FROM t175530_rr WHERE id = 1
+
+user root
+
+awaitstatement txnDelRr
+
+query ITT
+SELECT id, biz, claim FROM t175530_rr
+----
+
+subtest end
+
+subtest insert_on_conflict_fastpath_delete_corruption_175530
+
+skip under duress
+
+# The same anomaly via INSERT ... ON CONFLICT DO UPDATE (its conflict path also
+# force-writes the sentinel). On the retry after the conflict the row is gone,
+# so the INSERT re-inserts a fresh, complete row (1, 'b1', NULL) rather than
+# leaving a corrupt partial row behind.
+
+statement ok
+CREATE TABLE t175530_ioc (
+  id    INT PRIMARY KEY,
+  biz   STRING NOT NULL,
+  claim STRING,
+  FAMILY f0 (id),
+  FAMILY fbiz (biz),
+  FAMILY fclaim (claim)
+)
+
+statement ok
+INSERT INTO t175530_ioc (id, biz) VALUES (1, 'b1')
+
+statement ok
+GRANT ALL ON TABLE t175530_ioc TO testuser
+
+user root
+
+statement async txnIocDel
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL enable_implicit_select_for_update = off; INSERT INTO t175530_ioc (id, biz) VALUES (1, 'b1') ON CONFLICT (id) DO UPDATE SET claim = 'c2' WHERE pg_sleep(2); COMMIT
+
+user testuser
+
+statement ok
+WITH s AS (SELECT pg_sleep(0.5)) DELETE FROM t175530_ioc WHERE id = 1
+
+user root
+
+awaitstatement txnIocDel
+
+query ITT
+SELECT id, biz, claim FROM t175530_ioc
+----
+1  b1  NULL
 
 subtest end

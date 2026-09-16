@@ -175,17 +175,26 @@ var SkipUnderlyingViewPrivilegeChecks = settings.RegisterBoolSetting(
 	settings.WithPublic)
 
 // IndexConflictWritesEnabled controls whether mutations under weak
-// (non-serializable) isolation force writes to columns that are read—but not
-// otherwise written—to maintain a secondary index. These forced writes
-// materialize the write-write conflicts that prevent index corruption; see
-// maybeForceIndexConflictWrites and issue #173610.
+// (non-serializable) isolation force value-preserving writes that materialize
+// the write-write conflicts needed to prevent index corruption on tables with
+// multiple column families. It covers two kinds of forced writes:
+//   - writes to columns that are read—but not otherwise written—to maintain a
+//     secondary index (see maybeForceIndexConflictWrites and issue #173610);
+//   - a write of the row sentinel (column family 0) when an UPDATE or
+//     INSERT ... ON CONFLICT DO UPDATE may materialize a previously-absent
+//     column family, so that it conflicts with a concurrent DELETE of the row
+//     (see maybeForceSentinelWrite and issue #175530).
 var IndexConflictWritesEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.mutations.index_conflict_writes.unsafe.enabled",
-	"if enabled, mutations under READ COMMITTED or REPEATABLE READ isolation force "+
-		"writes to unmodified column families that are read to maintain a secondary "+
-		"index. Disabling this allows a concurrent modification of such a family to "+
-		"go undetected, corrupting the index.",
+	"if enabled, mutations under READ COMMITTED or REPEATABLE READ isolation on "+
+		"tables with multiple column families force writes to unmodified column "+
+		"families that are read to maintain a secondary index, and force a write "+
+		"of the row sentinel (column family 0) when they may materialize a "+
+		"previously-absent column family. Disabling this allows a concurrent "+
+		"modification of such a family to go undetected, corrupting a secondary "+
+		"index, and allows a concurrent DELETE to leave behind a partial row, "+
+		"corrupting the primary index.",
 	true,
 	settings.WithUnsafe)
 
