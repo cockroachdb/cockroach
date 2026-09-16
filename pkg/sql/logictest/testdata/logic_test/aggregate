@@ -3567,6 +3567,18 @@ SELECT percentile_disc(0.50) FROM osagg
 statement error ordered-set aggregations must have a WITHIN GROUP clause containing one ORDER BY column
 SELECT percentile_cont(0.50) FROM osagg
 
+# Test that WITHIN GROUP is rejected on functions that are not ordered-set
+# aggregates (#171236). Covers non-aggregate scalar builtins and general
+# aggregates.
+statement error pgcode 42809 function concat_ws is not an ordered set aggregate
+SELECT concat_ws(',', 'a', 'b') WITHIN GROUP (ORDER BY 1)
+
+statement error pgcode 42809 function abs is not an ordered set aggregate
+SELECT abs(-5) WITHIN GROUP (ORDER BY 1)
+
+statement error pgcode 42809 function sum is not an ordered set aggregate
+SELECT sum(f) WITHIN GROUP (ORDER BY f) FROM osagg
+
 # Tests for min/max on collated strings.
 statement ok
 CREATE TABLE t_collate (x STRING COLLATE en_us);
