@@ -214,6 +214,12 @@ define MutationPrivate {
 
     # Swap indicates that the mutation is an update swap or delete swap.
     Swap bool
+
+    # ForceSentinelWrite instructs the row updater to always write family 0 (the
+    # row sentinel), even when the mutation touches none of its columns, so a
+    # concurrent DELETE of the row conflicts. See maybeForceSentinelWrite for
+    # more details.
+    ForceSentinelWrite bool
 }
 
 # Update evaluates a relational input expression that fetches existing rows from
