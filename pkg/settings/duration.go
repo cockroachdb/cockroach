@@ -18,7 +18,12 @@ import (
 type DurationSetting struct {
 	common
 	defaultValue time.Duration
-	validateFn   func(time.Duration) error
+	// min and max, when non-nil, record the validation bounds supplied via
+	// options such as DurationInRange, DurationWithMinimum, or
+	// NonNegativeDurationWithMaximum. They are surfaced via Bounds() for
+	// documentation and introspection.
+	min, max   *time.Duration
+	validateFn func(time.Duration) error
 }
 
 // DurationSettingWithExplicitUnit is like DurationSetting except it requires an
@@ -30,6 +35,29 @@ type DurationSettingWithExplicitUnit struct {
 var _ internalSetting = &DurationSetting{}
 
 var _ internalSetting = &DurationSettingWithExplicitUnit{}
+
+// Bounds returns the validation bounds recorded on the setting, if any.
+// Either pointer may be nil, indicating that the corresponding bound is
+// unbounded. The returned pointers are owned by the setting and must not be
+// modified.
+func (d *DurationSetting) Bounds() (min, max *time.Duration) {
+	return d.min, d.max
+}
+
+// setDurationBounds stores the given min/max bounds on a DurationSetting or
+// DurationSettingWithExplicitUnit (which embeds DurationSetting). It panics if
+// applied to any other setting type, since numeric bounds only make sense for
+// numeric settings.
+func setDurationBounds(s Setting, min, max *time.Duration) {
+	switch v := s.(type) {
+	case *DurationSetting:
+		v.min, v.max = min, max
+	case *DurationSettingWithExplicitUnit:
+		v.min, v.max = min, max
+	default:
+		panic(errors.AssertionFailedf("duration bounds applied to non-duration setting: %T", s))
+	}
+}
 
 // ErrorHint returns a hint message to be displayed on error to the user.
 func (d *DurationSettingWithExplicitUnit) ErrorHint() (bool, string) {
@@ -184,6 +212,7 @@ func RegisterDurationSetting(
 	}
 	register(class, key, desc, setting)
 	setting.apply(opts)
+	applyBounds(setting, opts)
 	return setting
 }
 
@@ -225,6 +254,7 @@ func RegisterDurationSettingWithExplicitUnit(
 	}
 	register(class, key, desc, setting)
 	setting.apply(opts)
+	applyBounds(setting, opts)
 	return setting
 }
 
@@ -238,12 +268,18 @@ func nonNegativeDurationInternal(v time.Duration) error {
 // DurationInRange returns a validation option that checks the value
 // is within the given bounds (inclusive).
 func DurationInRange(minVal, maxVal time.Duration) SettingOption {
-	return WithValidateDuration(func(v time.Duration) error {
-		if v < minVal || v > maxVal {
-			return errors.Errorf("expected value in range [%v, %v], got: %v", minVal, maxVal, v)
-		}
-		return nil
-	})
+	min, max := minVal, maxVal
+	return SettingOption{
+		validateDurationFn: func(v time.Duration) error {
+			if v < minVal || v > maxVal {
+				return errors.Errorf("expected value in range [%v, %v], got: %v", minVal, maxVal, v)
+			}
+			return nil
+		},
+		boundsOpt: func(s Setting) {
+			setDurationBounds(s, &min, &max)
+		},
+	}
 }
 
 // NonNegativeDurationWithMaximum returns a validation option that
@@ -257,33 +293,45 @@ func NonNegativeDurationWithMaximum(maxValue time.Duration) SettingOption {
 // duration is greater or equal to the given minimum. It can be passed
 // to RegisterDurationSetting.
 func DurationWithMinimum(minValue time.Duration) SettingOption {
-	return WithValidateDuration(func(v time.Duration) error {
-		if minValue >= 0 {
-			if err := nonNegativeDurationInternal(v); err != nil {
-				return err
+	min := minValue
+	return SettingOption{
+		validateDurationFn: func(v time.Duration) error {
+			if minValue >= 0 {
+				if err := nonNegativeDurationInternal(v); err != nil {
+					return err
+				}
 			}
-		}
-		if v < minValue {
-			return errors.Errorf("cannot be set to a value smaller than %s", minValue)
-		}
-		return nil
-	})
+			if v < minValue {
+				return errors.Errorf("cannot be set to a value smaller than %s", minValue)
+			}
+			return nil
+		},
+		boundsOpt: func(s Setting) {
+			setDurationBounds(s, &min, nil)
+		},
+	}
 }
 
 // DurationWithMinimumOrZeroDisable returns a validation option that
 // checks the value is at least the given minimum, or zero to disable.
 // It can be passed to RegisterDurationSetting.
 func DurationWithMinimumOrZeroDisable(minValue time.Duration) SettingOption {
-	return WithValidateDuration(func(v time.Duration) error {
-		if minValue >= 0 && v < 0 {
-			return errors.Errorf("cannot be set to a negative duration: %s", v)
-		}
-		if v != 0 && v < minValue {
-			return errors.Errorf("cannot be set to a value smaller than %s",
-				minValue)
-		}
-		return nil
-	})
+	min := minValue
+	return SettingOption{
+		validateDurationFn: func(v time.Duration) error {
+			if minValue >= 0 && v < 0 {
+				return errors.Errorf("cannot be set to a negative duration: %s", v)
+			}
+			if v != 0 && v < minValue {
+				return errors.Errorf("cannot be set to a value smaller than %s",
+					minValue)
+			}
+			return nil
+		},
+		boundsOpt: func(s Setting) {
+			setDurationBounds(s, &min, nil)
+		},
+	}
 }
 
 // PositiveDuration checks that the value is strictly positive. It can

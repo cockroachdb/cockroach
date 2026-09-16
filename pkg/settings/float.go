@@ -19,10 +19,34 @@ import (
 type FloatSetting struct {
 	common
 	defaultValue float64
-	validateFn   func(float64) error
+	// min and max, when non-nil, record the validation bounds supplied via
+	// options such as FloatInRange, FloatWithMinimum, or
+	// NonNegativeFloatWithMaximum. They are surfaced via Bounds() for
+	// documentation and introspection.
+	min, max   *float64
+	validateFn func(float64) error
 }
 
 var _ internalSetting = &FloatSetting{}
+
+// Bounds returns the validation bounds recorded on the setting, if any.
+// Either pointer may be nil, indicating that the corresponding bound is
+// unbounded. The returned pointers are owned by the setting and must not be
+// modified.
+func (f *FloatSetting) Bounds() (min, max *float64) {
+	return f.min, f.max
+}
+
+// setFloatBounds stores the given min/max bounds on a FloatSetting. It panics
+// if applied to any other setting type, since numeric bounds only make sense
+// for numeric settings.
+func setFloatBounds(s Setting, min, max *float64) {
+	v, ok := s.(*FloatSetting)
+	if !ok {
+		panic(errors.AssertionFailedf("float bounds applied to non-float setting: %T", s))
+	}
+	v.min, v.max = min, max
+}
 
 // Get retrieves the float value in the setting.
 func (f *FloatSetting) Get(sv *Values) float64 {
@@ -166,6 +190,7 @@ func RegisterFloatSetting(
 	}
 	register(class, key, desc, setting)
 	setting.apply(opts)
+	applyBounds(setting, opts)
 	return setting
 }
 
@@ -177,30 +202,42 @@ var NonNegativeFloat SettingOption = FloatWithMinimum(0)
 // value is at least the given minimum. It can be passed to
 // RegisterFloatSetting.
 func FloatWithMinimum(minVal float64) SettingOption {
-	return WithValidateFloat(func(v float64) error {
-		if minVal >= 0 && v < 0 {
-			return errors.Errorf("cannot set to a negative value: %f", v)
-		}
-		if v < minVal {
-			return errors.Errorf("cannot set to a value lower than %f: %f", minVal, v)
-		}
-		return nil
-	})
+	min := minVal
+	return SettingOption{
+		validateFloat64Fn: func(v float64) error {
+			if minVal >= 0 && v < 0 {
+				return errors.Errorf("cannot set to a negative value: %f", v)
+			}
+			if v < minVal {
+				return errors.Errorf("cannot set to a value lower than %f: %f", minVal, v)
+			}
+			return nil
+		},
+		boundsOpt: func(s Setting) {
+			setFloatBounds(s, &min, nil)
+		},
+	}
 }
 
 // FloatWithMinimumOrZeroDisable returns a validation option that
 // verifies the value is at least the given minimum, or zero to
 // disable. It can be passed to RegisterFloatSetting.
 func FloatWithMinimumOrZeroDisable(minVal float64) SettingOption {
-	return WithValidateFloat(func(v float64) error {
-		if minVal >= 0 && v < 0 {
-			return errors.Errorf("cannot set to a negative value: %f", v)
-		}
-		if v != 0 && v < minVal {
-			return errors.Errorf("cannot set to a value lower than %f: %f", minVal, v)
-		}
-		return nil
-	})
+	min := minVal
+	return SettingOption{
+		validateFloat64Fn: func(v float64) error {
+			if minVal >= 0 && v < 0 {
+				return errors.Errorf("cannot set to a negative value: %f", v)
+			}
+			if v != 0 && v < minVal {
+				return errors.Errorf("cannot set to a value lower than %f: %f", minVal, v)
+			}
+			return nil
+		},
+		boundsOpt: func(s Setting) {
+			setFloatBounds(s, &min, nil)
+		},
+	}
 }
 
 // NonNegativeFloatWithMaximum returns a validation option that checks
@@ -235,12 +272,18 @@ var Fraction SettingOption = FloatInRange(0, 1)
 // FloatInRange returns a validation option that checks the value is
 // within the given bounds (inclusive).
 func FloatInRange(minVal, maxVal float64) SettingOption {
-	return WithValidateFloat(func(v float64) error {
-		if v < minVal || v > maxVal {
-			return errors.Errorf("expected value in range [%f, %f], got: %f", minVal, maxVal, v)
-		}
-		return nil
-	})
+	min, max := minVal, maxVal
+	return SettingOption{
+		validateFloat64Fn: func(v float64) error {
+			if v < minVal || v > maxVal {
+				return errors.Errorf("expected value in range [%f, %f], got: %f", minVal, maxVal, v)
+			}
+			return nil
+		},
+		boundsOpt: func(s Setting) {
+			setFloatBounds(s, &min, &max)
+		},
+	}
 }
 
 // FractionUpperExclusive requires the setting to be in the interval
@@ -251,10 +294,19 @@ var FractionUpperExclusive SettingOption = FloatInRangeUpperExclusive(0, 1)
 // the value is within the given bounds (inclusive lower, exclusive
 // upper).
 func FloatInRangeUpperExclusive(minVal, maxVal float64) SettingOption {
-	return WithValidateFloat(func(v float64) error {
-		if v < minVal || v >= maxVal {
-			return errors.Errorf("expected value in range [%f, %f), got: %f", minVal, maxVal, v)
-		}
-		return nil
-	})
+	min, max := minVal, maxVal
+	return SettingOption{
+		validateFloat64Fn: func(v float64) error {
+			if v < minVal || v >= maxVal {
+				return errors.Errorf("expected value in range [%f, %f), got: %f", minVal, maxVal, v)
+			}
+			return nil
+		},
+		boundsOpt: func(s Setting) {
+			// Bounds are recorded as the inclusive range. Whether the
+			// upper bound is exclusive is a separate concern, currently
+			// not surfaced via Bounds().
+			setFloatBounds(s, &min, &max)
+		},
+	}
 }
