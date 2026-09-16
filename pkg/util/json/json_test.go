@@ -1732,7 +1732,7 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexKeys(nil, left)
 		require.NoError(t, err)
 
-		invertedExpr, err := EncodeContainingInvertedIndexSpans(nil, right)
+		invertedExpr, err := EncodeContainingInvertedIndexSpans(nil, right, nil /* budget */)
 		require.NoError(t, err)
 
 		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
@@ -1913,7 +1913,7 @@ func TestEncodeContainedJSONInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexKeys(nil, indexedValue)
 		require.NoError(t, err)
 
-		invertedExpr, err := EncodeContainedInvertedIndexSpans(nil, value)
+		invertedExpr, err := EncodeContainedInvertedIndexSpans(nil, value, nil /* budget */)
 		require.NoError(t, err)
 
 		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
@@ -2041,7 +2041,7 @@ func TestEncodeExistsJSONInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexKeys(nil, indexedValue)
 		require.NoError(t, err)
 
-		invertedExpr, err := EncodeExistsInvertedIndexSpans(nil, value)
+		invertedExpr, err := EncodeExistsInvertedIndexSpans(nil, value, nil /* budget */)
 		require.NoError(t, err)
 
 		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)

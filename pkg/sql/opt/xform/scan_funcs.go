@@ -429,13 +429,9 @@ func (c *CustomFuncs) buildAllPartitionsConstraint(
 	optionalFilters, filterColumns :=
 		c.GetOptionalFiltersAndFilterColumns(nil /* explicitFilters */, sp)
 
-	// TODO(michae2): We should probably be passing optimizer_span_limit to
-	// MakeCombinedFiltersConstraint, but it doesn't seem too dangerous to assume
-	// the number of partitions will be reasonable.
 	if _, remainingFilters, combinedConstraint, ok = c.MakeCombinedFiltersConstraint(
 		tabMeta, index, sp, ps,
 		nil /* explicitFilters */, optionalFilters, filterColumns,
-		0, /* spanLimit */
 	); !ok {
 		return nil, false
 	}

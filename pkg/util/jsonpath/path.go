@@ -410,7 +410,9 @@ func addSpanToResult(result inverted.Expression, span inverted.Span) inverted.Ex
 	if result == nil {
 		return inverted.ExprForSpan(span, true /* tight */)
 	}
-	return inverted.Or(result, inverted.ExprForSpan(span, true /* tight */))
+	// We have a more comprehensive check via the spanThreshold, so opt out of
+	// the span budget (nil means "no limit").
+	return (*inverted.SpanBudget)(nil).Or(result, inverted.ExprForSpan(span, true /* tight */))
 }
 
 // spanThreshold is a safeguard to avoid generating too many spans. Since

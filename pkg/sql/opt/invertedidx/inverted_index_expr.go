@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/errors"
 )
@@ -72,8 +73,10 @@ func NewBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, inter
 //   - pre-filterer state that can be used by the invertedFilterer operator to
 //     reduce the number of false positives returned by the span expression.
 //
-// TODO(michae2): Pass optimizer_span_limit to constrain prefix columns of
-// multi-column inverted indexes.
+// spanLimit bounds the number of prefix spans generated for multi-column
+// inverted indexes (see ConstrainIndexPrefixCols) and the number of index
+// spans materialized while folding the filters into a span expression (see
+// inverted.SpanBudget).
 func TryFilterInvertedIndex(
 	ctx context.Context,
 	evalCtx *eval.Context,
@@ -83,6 +86,7 @@ func TryFilterInvertedIndex(
 	tabID opt.TableID,
 	index cat.Index,
 	computedColumns map[opt.ColumnID]opt.ScalarExpr,
+	spanLimit int,
 	checkCancellation func(),
 ) (
 	spanExpr *inverted.SpanExpression,
@@ -97,7 +101,7 @@ func TryFilterInvertedIndex(
 	if len(columns) > 0 {
 		constraint, filters, ok = idxconstraint.ConstrainIndexPrefixCols(
 			ctx, evalCtx, factory, columns, notNullCols, filters,
-			optionalFilters, tabID, index, checkCancellation,
+			optionalFilters, tabID, index, spanLimit, checkCancellation,
 		)
 		if !ok {
 			return nil, nil, nil, nil, false
@@ -150,17 +154,21 @@ func TryFilterInvertedIndex(
 		}
 	}
 
+	// budget bounds the spans that folding the filters may materialize. Note
+	// that for simplicity we give a full limit here even if some of it has been
+	// used up for the prefix columns' constraints.
+	budget := inverted.NewSpanBudget(int64(spanLimit))
 	var invertedExpr inverted.Expression
 	var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
 	for i := range filters {
 		invertedExprLocal, remFiltersLocal, pfStateLocal := extractInvertedFilterCondition(
-			ctx, evalCtx, factory, filters[i].Condition, filterPlanner,
+			ctx, evalCtx, factory, budget, filters[i].Condition, filterPlanner,
 		)
 		if invertedExpr == nil {
 			invertedExpr = invertedExprLocal
 			pfState = pfStateLocal
 		} else {
-			invertedExpr = inverted.And(invertedExpr, invertedExprLocal)
+			invertedExpr = budget.And(invertedExpr, invertedExprLocal)
 			// Do pre-filtering using the first of the conjuncts that provided
 			// non-nil pre-filtering state.
 			if pfState == nil {
@@ -169,6 +177,9 @@ func TryFilterInvertedIndex(
 		}
 		if remFiltersLocal != nil {
 			remainingFilters = append(remainingFilters, factory.ConstructFiltersItem(remFiltersLocal))
+		}
+		if budget.Exceeded() {
+			return nil, nil, nil, nil, false
 		}
 	}
 
@@ -196,6 +207,9 @@ func TryFilterInvertedIndex(
 // a and b that must match in order to satisfy the similarity filter. This
 // optimization allows us to avoid scanning over some trigrams of the constant
 // string. See similarityTrigramsToScan for more details.
+//
+// spanLimit bounds the number of prefix spans generated for multi-column
+// inverted indexes; see ConstrainIndexPrefixCols.
 func TryFilterInvertedIndexBySimilarity(
 	ctx context.Context,
 	evalCtx *eval.Context,
@@ -205,6 +219,7 @@ func TryFilterInvertedIndexBySimilarity(
 	tabID opt.TableID,
 	index cat.Index,
 	computedColumns map[opt.ColumnID]opt.ScalarExpr,
+	spanLimit int,
 	checkCancellation func(),
 ) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	md := f.Metadata()
@@ -304,9 +319,18 @@ func TryFilterInvertedIndexBySimilarity(
 	var prefixConstraint *constraint.Constraint
 	prefixConstraint, remainingFilters, ok = idxconstraint.ConstrainIndexPrefixCols(
 		ctx, evalCtx, f, cols, notNullCols, filters,
-		optionalFilters, tabID, index, checkCancellation,
+		optionalFilters, tabID, index, spanLimit, checkCancellation,
 	)
 	if !ok {
+		return nil, nil, false
+	}
+	// Combining the prefix spans with the trigram spans produces their
+	// cross-product. Bail if that would exceed the span limit.
+	if spanLimit > 0 && prefixConstraint.Spans.Count()*con.Spans.Count() > spanLimit {
+		log.VEventf(ctx, 2,
+			"not combining %d prefix spans with %d trigram spans: exceeds optimizer_span_limit of %d",
+			prefixConstraint.Spans.Count(), con.Spans.Count(), spanLimit,
+		)
 		return nil, nil, false
 	}
 	prefixConstraint.Combine(ctx, evalCtx, con, checkCancellation)
@@ -598,29 +622,31 @@ func getInvertedExpr(
 // expressions, and returns the resulting inverted.Expression. Delegates
 // evaluation of leaf expressions to the given evalInvertedExprLeaf function.
 func evalInvertedExpr(
-	expr tree.TypedExpr, evalInvertedExprLeaf func(expr tree.TypedExpr) (inverted.Expression, error),
+	expr tree.TypedExpr,
+	evalInvertedExprLeaf func(expr tree.TypedExpr) (inverted.Expression, error),
+	budget *inverted.SpanBudget,
 ) (inverted.Expression, error) {
 	switch t := expr.(type) {
 	case *tree.AndExpr:
-		leftExpr, err := evalInvertedExpr(t.TypedLeft(), evalInvertedExprLeaf)
+		leftExpr, err := evalInvertedExpr(t.TypedLeft(), evalInvertedExprLeaf, budget)
 		if err != nil {
 			return nil, err
 		}
-		rightExpr, err := evalInvertedExpr(t.TypedRight(), evalInvertedExprLeaf)
+		rightExpr, err := evalInvertedExpr(t.TypedRight(), evalInvertedExprLeaf, budget)
 		if err != nil {
 			return nil, err
 		}
 		if leftExpr == nil || rightExpr == nil {
 			return nil, nil
 		}
-		return inverted.And(leftExpr, rightExpr), nil
+		return budget.And(leftExpr, rightExpr), nil
 
 	case *tree.OrExpr:
-		leftExpr, err := evalInvertedExpr(t.TypedLeft(), evalInvertedExprLeaf)
+		leftExpr, err := evalInvertedExpr(t.TypedLeft(), evalInvertedExprLeaf, budget)
 		if err != nil {
 			return nil, err
 		}
-		rightExpr, err := evalInvertedExpr(t.TypedRight(), evalInvertedExprLeaf)
+		rightExpr, err := evalInvertedExpr(t.TypedRight(), evalInvertedExprLeaf, budget)
 		if err != nil {
 			return nil, err
 		}
@@ -630,7 +656,7 @@ func evalInvertedExpr(
 		if rightExpr == nil {
 			return leftExpr, nil
 		}
-		return inverted.Or(leftExpr, rightExpr), nil
+		return budget.Or(leftExpr, rightExpr), nil
 
 	default:
 		return evalInvertedExprLeaf(expr)
@@ -648,7 +674,9 @@ type invertedFilterPlanner interface {
 	// - remaining filters that must be applied if the inverted expression is not
 	//   tight, and
 	// - pre-filterer state that can be used to reduce false positives.
-	extractInvertedFilterConditionFromLeaf(ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr) (
+	extractInvertedFilterConditionFromLeaf(
+		ctx context.Context, evalCtx *eval.Context, budget *inverted.SpanBudget, expr opt.ScalarExpr,
+	) (
 		invertedExpr inverted.Expression,
 		remainingFilters opt.ScalarExpr,
 		_ *invertedexpr.PreFiltererStateForInvertedFilterer,
@@ -673,6 +701,7 @@ func extractInvertedFilterCondition(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	factory *norm.Factory,
+	budget *inverted.SpanBudget,
 	filterCond opt.ScalarExpr,
 	filterPlanner invertedFilterPlanner,
 ) (
@@ -682,8 +711,8 @@ func extractInvertedFilterCondition(
 ) {
 	switch t := filterCond.(type) {
 	case *memo.AndExpr:
-		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Left, filterPlanner)
-		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Right, filterPlanner)
+		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, budget, t.Left, filterPlanner)
+		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, budget, t.Right, filterPlanner)
 		if remLeft == nil {
 			remainingFilters = remRight
 		} else if remRight == nil {
@@ -691,21 +720,21 @@ func extractInvertedFilterCondition(
 		} else {
 			remainingFilters = factory.ConstructAnd(remLeft, remRight)
 		}
-		return inverted.And(l, r), remainingFilters, nil
+		return budget.And(l, r), remainingFilters, nil
 
 	case *memo.OrExpr:
-		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Left, filterPlanner)
-		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Right, filterPlanner)
+		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, budget, t.Left, filterPlanner)
+		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, budget, t.Right, filterPlanner)
 		if remLeft != nil || remRight != nil {
 			// If either child has remaining filters, we must return the original
 			// condition as the remaining filter. It would be incorrect to return
 			// only part of the original condition.
 			remainingFilters = filterCond
 		}
-		return inverted.Or(l, r), remainingFilters, nil
+		return budget.Or(l, r), remainingFilters, nil
 
 	default:
-		return filterPlanner.extractInvertedFilterConditionFromLeaf(ctx, evalCtx, filterCond)
+		return filterPlanner.extractInvertedFilterConditionFromLeaf(ctx, evalCtx, budget, filterCond)
 	}
 }
 

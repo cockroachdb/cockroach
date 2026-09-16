@@ -30,7 +30,7 @@ var _ invertedFilterPlanner = &trigramFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf implements the invertedFilterPlanner
 // interface.
 func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	_ context.Context, evalCtx *eval.Context, expr opt.ScalarExpr,
+	_ context.Context, evalCtx *eval.Context, budget *inverted.SpanBudget, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,
@@ -109,7 +109,7 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	}
 	s := string(*ds)
 	var err error
-	invertedExpr, err = rowenc.EncodeTrigramSpans(s, allMustMatch)
+	invertedExpr, err = rowenc.EncodeTrigramSpans(s, allMustMatch, budget)
 	if err != nil {
 		// An inverted expression could not be extracted.
 		return inverted.NonInvertedColExpression{}, expr, nil

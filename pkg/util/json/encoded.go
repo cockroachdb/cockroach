@@ -772,23 +772,23 @@ func (j *JSONEncoded) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 }
 
 func (j *JSONEncoded) encodeContainingInvertedIndexSpans(
-	b []byte, isRoot, isObjectValue bool,
+	b []byte, isRoot, isObjectValue bool, budget *inverted.SpanBudget,
 ) (inverted.Expression, error) {
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, err
 	}
-	return decoded.encodeContainingInvertedIndexSpans(b, isRoot, isObjectValue)
+	return decoded.encodeContainingInvertedIndexSpans(b, isRoot, isObjectValue, budget)
 }
 
 func (j *JSONEncoded) encodeContainedInvertedIndexSpans(
-	b []byte, isRoot, isObjectValue bool,
+	b []byte, isRoot, isObjectValue bool, budget *inverted.SpanBudget,
 ) (inverted.Expression, error) {
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, err
 	}
-	return decoded.encodeContainedInvertedIndexSpans(b, isRoot, isObjectValue)
+	return decoded.encodeContainedInvertedIndexSpans(b, isRoot, isObjectValue, budget)
 }
 
 // numInvertedIndexEntries implements the JSON interface.

@@ -45,8 +45,11 @@ func TestTryFilterTrigram(t *testing.T) {
 	// remainingFilters contains some or all of the original filters.
 	testCases := []struct {
 		filters string
-		ok      bool
-		unique  bool
+		// spanLimit is passed as the spanLimit argument to
+		// TryFilterInvertedIndex for the case.
+		spanLimit int32
+		ok        bool
+		unique    bool
 	}{
 		// Test LIKE with percents on both sides.
 		// TODO(jordan): we could make expressions with just a single trigram
@@ -92,6 +95,17 @@ func TestTryFilterTrigram(t *testing.T) {
 		{filters: "s = 'lkjsdlkj'", ok: true, unique: false},
 		{filters: "s = 'lkj'", ok: true, unique: true},
 		{filters: "s = 'lkj' OR s LIKE 'blah'", ok: true, unique: true},
+
+		// optimizer_span_limit bounds the cumulative span count charged while
+		// folding the trigrams. Folding n trigrams left-associatively charges
+		// the size of each intermediate union, i.e. 2+3+...+n = n*(n+1)/2 - 1
+		// spans (the initial trigram span is not charged). "foobar" yields 4
+		// trigrams, so it charges 2+3+4 = 9 spans.
+		{filters: "s LIKE '%foobar%'", spanLimit: 8, ok: false},
+		{filters: "s LIKE '%foobar%'", spanLimit: 9, ok: true, unique: false},
+		// A single-trigram filter charges no spans (nothing is folded) and is
+		// never bounded out by a positive limit.
+		{filters: "s = 'lkj'", spanLimit: 1, ok: true, unique: true},
 	}
 
 	for _, tc := range testCases {
@@ -110,8 +124,9 @@ func TestTryFilterTrigram(t *testing.T) {
 			nil, /* optionalFilters */
 			tab,
 			md.Table(tab).Index(trigramOrd),
-			nil,       /* computedColumns */
-			func() {}, /* checkCancellation */
+			nil,               /* computedColumns */
+			int(tc.spanLimit), /* spanLimit */
+			func() {},         /* checkCancellation */
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)

@@ -120,7 +120,7 @@ func TestEncodeTSQueryInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexKeys(nil, left)
 		assert.NoError(t, err)
 
-		invertedExpr, err := right.GetInvertedExpr()
+		invertedExpr, err := right.GetInvertedExpr(nil /* budget */)
 		assert.NoError(t, err)
 
 		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
@@ -191,7 +191,7 @@ func TestEncodeTSQueryInvertedIndexSpans(t *testing.T) {
 		res, err := EvalTSQuery(query, vector)
 		assert.NoError(t, err)
 
-		invertedExpr, err := query.GetInvertedExpr()
+		invertedExpr, err := query.GetInvertedExpr(nil /* budget */)
 		if err != nil {
 			// We can't generate an inverted expression for this query, so there's
 			// nothing to test here.

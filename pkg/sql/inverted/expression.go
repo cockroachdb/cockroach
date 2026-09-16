@@ -198,8 +198,8 @@ func (is Spans) End(i int) []byte {
 
 // Expression is the interface representing an expression or sub-expression
 // to be evaluated on the inverted index. Any implementation can be used in the
-// builder functions And() and Or(), but in practice there are two useful
-// implementations provided here:
+// builder methods SpanBudget.And() and SpanBudget.Or(), but in practice there
+// are two useful implementations provided here:
 //   - SpanExpression: this is the normal expression representing unions and
 //     intersections over spans of the inverted index. A SpanExpression is the
 //     root of an expression tree containing other SpanExpressions (there is one
@@ -570,14 +570,56 @@ func (s *SpanExpression) ContainsKeys(keys [][]byte) (bool, error) {
 	}
 }
 
-// And of two boolean expressions. This function may modify both the left and
-// right Expressions.
-func And(left, right Expression) Expression {
+// SpanBudget bounds the number of index spans that a fold of And/Or may
+// materialize while building a SpanExpression. The fold is typically a
+// left-leaning tree in which K single-value leaves retain O(K^2) spans, which
+// can OOM the process during query planning.
+//
+// What's tracked is the cumulative count of every span slice the fold
+// materializes, not the instantaneous live set: used never decrements, so
+// slices that later become garbage (e.g. a child's FactoredUnionSpans, nil'd
+// when unioned into its parent) stay counted. It is thus a conservative upper
+// bound on retained heap - the O(K^2) SpansToRead spine is counted exactly and
+// the rest only over-counts, so the budget trips at or before the true peak.
+//
+// A nil *SpanBudget means "no limit".
+type SpanBudget struct {
+	// limit is the maximum cumulative span count. A non-positive limit means
+	// unbounded.
+	limit int64
+	// used is the running total of spans materialized so far.
+	used int64
+	// exceeded is set to true once used exceeds limit; it never resets.
+	exceeded bool
+}
+
+// NewSpanBudget returns a SpanBudget bounding the cumulative materialized span
+// count to limit. A non-positive limit means unbounded.
+func NewSpanBudget(limit int64) *SpanBudget {
+	return &SpanBudget{limit: limit}
+}
+
+// Exceeded returns true if the budget has been exhausted.
+func (b *SpanBudget) Exceeded() bool {
+	return b != nil && b.exceeded
+}
+
+// And of two boolean expressions, charging materialized spans against b.
+// Returns NonInvertedColExpression once b is exceeded, disabling acceleration.
+// May modify both the left and right Expressions.
+func (b *SpanBudget) And(left, right Expression) Expression {
+	if b.Exceeded() {
+		return NonInvertedColExpression{}
+	}
 	switch l := left.(type) {
 	case *SpanExpression:
 		switch r := right.(type) {
 		case *SpanExpression:
-			return intersectSpanExpressions(l, r)
+			expr := intersectSpanExpressions(b, l, r)
+			if b.Exceeded() {
+				return NonInvertedColExpression{}
+			}
+			return expr
 		case NonInvertedColExpression:
 			left.SetNotTight()
 			return left
@@ -605,14 +647,22 @@ func And(left, right Expression) Expression {
 	}
 }
 
-// Or of two boolean expressions. This function may modify both the left and
-// right Expressions.
-func Or(left, right Expression) Expression {
+// Or of two boolean expressions, charging materialized spans against b. Returns
+// NonInvertedColExpression once b is exceeded, disabling acceleration. May
+// modify both the left and right Expressions.
+func (b *SpanBudget) Or(left, right Expression) Expression {
+	if b.Exceeded() {
+		return NonInvertedColExpression{}
+	}
 	switch l := left.(type) {
 	case *SpanExpression:
 		switch r := right.(type) {
 		case *SpanExpression:
-			return unionSpanExpressions(l, r)
+			expr := unionSpanExpressions(b, l, r)
+			if b.Exceeded() {
+				return NonInvertedColExpression{}
+			}
+			return expr
 		case NonInvertedColExpression:
 			return r
 		default:
@@ -663,7 +713,7 @@ func opSpanExpressionAndDefault(
 }
 
 // Intersects two SpanExpressions.
-func intersectSpanExpressions(left, right *SpanExpression) *SpanExpression {
+func intersectSpanExpressions(budget *SpanBudget, left, right *SpanExpression) *SpanExpression {
 	expr := &SpanExpression{
 		Tight:  left.Tight && right.Tight,
 		Unique: left.Unique && right.Unique,
@@ -675,7 +725,7 @@ func intersectSpanExpressions(left, right *SpanExpression) *SpanExpression {
 		// what would be computed if a caller traversed the tree and explicitly
 		// unioned all the FactoredUnionSpans, and no looser, since the execution
 		// code path relies on this property.)
-		SpansToRead:        unionSpans(left.SpansToRead, right.SpansToRead),
+		SpansToRead:        unionSpansWithBudget(budget, left.SpansToRead, right.SpansToRead),
 		FactoredUnionSpans: intersectSpans(left.FactoredUnionSpans, right.FactoredUnionSpans),
 		Operator:           SetIntersection,
 		Left:               left,
@@ -690,14 +740,14 @@ func intersectSpanExpressions(left, right *SpanExpression) *SpanExpression {
 }
 
 // Unions two SpanExpressions.
-func unionSpanExpressions(left, right *SpanExpression) *SpanExpression {
+func unionSpanExpressions(budget *SpanBudget, left, right *SpanExpression) *SpanExpression {
 	expr := &SpanExpression{
 		Tight: left.Tight && right.Tight,
 		// Whenever one side is empty, we keep the Unique property from the
 		// other side.
 		Unique:             (left.Unique && len(right.FactoredUnionSpans) == 0) || (right.Unique && len(left.FactoredUnionSpans) == 0),
-		SpansToRead:        unionSpans(left.SpansToRead, right.SpansToRead),
-		FactoredUnionSpans: unionSpans(left.FactoredUnionSpans, right.FactoredUnionSpans),
+		SpansToRead:        unionSpansWithBudget(budget, left.SpansToRead, right.SpansToRead),
+		FactoredUnionSpans: unionSpansWithBudget(budget, left.FactoredUnionSpans, right.FactoredUnionSpans),
 		Operator:           SetUnion,
 		Left:               left,
 		Right:              right,
@@ -735,6 +785,9 @@ func tryPruneChildren(expr *SpanExpression) {
 			// SpansToRead since it may have contained some spans that were
 			// removed by discarding child.FactoredUnionSpans.
 			if child.FactoredUnionSpans != nil {
+				// We already charged for SpansToRead against the budget, and
+				// here we're overriding SpansToRead probably with a smaller
+				// set, so don't count the latter against the budget.
 				expr.SpansToRead = expr.FactoredUnionSpans
 				if expr.Left != nil {
 					expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Left.(*SpanExpression).SpansToRead)
@@ -765,6 +818,17 @@ func tryPruneChildren(expr *SpanExpression) {
 		expr.Operator = None
 		expr.SpansToRead = expr.FactoredUnionSpans
 	}
+}
+
+func unionSpansWithBudget(budget *SpanBudget, left []Span, right []Span) []Span {
+	spans := unionSpans(left, right)
+	if budget != nil && budget.limit > 0 {
+		budget.used += int64(len(spans))
+		if budget.used > budget.limit {
+			budget.exceeded = true
+		}
+	}
+	return spans
 }
 
 func unionSpans(left []Span, right []Span) []Span {
@@ -827,6 +891,8 @@ func unionSpans(left []Span, right []Span) []Span {
 	return spans
 }
 
+// intersectSpans doesn't introduce growth in the span count, so it doesn't
+// count against the budget.
 func intersectSpans(left []Span, right []Span) []Span {
 	if len(left) == 0 || len(right) == 0 {
 		return nil
@@ -912,6 +978,10 @@ func intersectSpans(left []Span, right []Span) []Span {
 
 // SubtractSpans subtracts right from left, under the assumption that right is a
 // subset of left.
+//
+// It is mostly used to remove the intersection from the children's
+// FactoredUnionSpans, making them smaller, so these don't count against the
+// budget.
 func SubtractSpans(left []Span, right []Span) []Span {
 	if len(right) == 0 {
 		return left
