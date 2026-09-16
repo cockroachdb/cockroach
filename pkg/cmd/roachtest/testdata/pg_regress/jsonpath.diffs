@@ -679,7 +679,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1e" of jsonpath input
 -LINE 1: select '1e'::jsonpath;
 -               ^
-+ERROR:  could not parse "1e" as type jsonpath: lexical error: invalid floating point literal
++ERROR:  could not parse "1e" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1e"
 +DETAIL:  source SQL:
 +1e
 +^
@@ -687,7 +687,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1.e" of jsonpath input
 -LINE 1: select '1.e'::jsonpath;
 -               ^
-+ERROR:  could not parse "1.e" as type jsonpath: lexical error: invalid floating point literal
++ERROR:  could not parse "1.e" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1.e"
 +DETAIL:  source SQL:
 +1.e
 +^
@@ -703,7 +703,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1.2e" of jsonpath input
 -LINE 1: select '1.2e'::jsonpath;
 -               ^
-+ERROR:  could not parse "1.2e" as type jsonpath: lexical error: invalid floating point literal
++ERROR:  could not parse "1.2e" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1.2e"
 +DETAIL:  source SQL:
 +1.2e
 +^
