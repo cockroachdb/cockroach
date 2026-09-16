@@ -123,6 +123,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 
 		nodeSpans := spansPerNode[nodeID]
 		var spansRequiringMvcc []roachpb.Span
+		skipMvcc := false
 
 		// If SkipApproxTotalStats is set, we only need MVCC stats from one node per span.
 		// Build the list of spans that this node should collect MVCC stats for.
@@ -132,6 +133,13 @@ func (s *systemStatusServer) spanStatsFanOut(
 					spansRequiringMvcc = append(spansRequiringMvcc, span)
 				}
 			}
+			// If this node is not the designated MVCC node for any of its spans,
+			// skip MVCC collection entirely. An empty SpansRequiringMvcc is
+			// ambiguous with the "not participating" case (proto3 zero-value).
+			// Disambiguate by setting SkipMvccStats explicitly.
+			if len(spansRequiringMvcc) == 0 {
+				skipMvcc = true
+			}
 		}
 
 		resp, err := client.(serverpb.RPCStatusClient).SpanStats(ctx,
@@ -139,6 +147,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 				NodeID:             nodeID.String(),
 				Spans:              nodeSpans,
 				SpansRequiringMvcc: spansRequiringMvcc,
+				SkipMvccStats:       skipMvcc,
 			})
 		return resp, err
 	}
