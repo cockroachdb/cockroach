@@ -59,7 +59,11 @@ func (l *LocalStorage) prependExternalIODir(path string) (string, error) {
 }
 
 func (l *LocalStorage) ensureContained(realPath, inputPath string) error {
-	if !strings.HasPrefix(realPath, l.externalIODir) {
+	// Compare on path boundaries rather than raw string prefixes: the latter
+	// also accepts siblings of the I/O directory whose name merely starts with
+	// it, e.g. "/data/backups-archive" for an I/O directory of "/data/backups".
+	rel, err := filepath.Rel(l.externalIODir, realPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return errors.Errorf("local file access to paths outside of external-io-dir is not allowed: %s", inputPath)
 	}
 	return nil
