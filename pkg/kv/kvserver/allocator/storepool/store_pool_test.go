@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1004,4 +1005,48 @@ func TestStoreListString(t *testing.T) {
 		"  4: ranges=40 leases=40 disk-usage=4.0 KiB queries-per-second=40.00 store-cpu-per-second=4µs io-overload=0.40(max=4.00)\n"+
 		"  5: ranges=50 leases=50 disk-usage=5.0 KiB queries-per-second=50.00 store-cpu-per-second=5µs io-overload=0.50(max=5.00)\n",
 		MakeStoreList(stores).String())
+}
+
+// BenchmarkGetStoreListFromIDs measures the per-call allocations of
+// getStoreListFromIDs, which runs on the allocator's hot path. Run with
+// -benchmem to observe allocs/op; pre-allocating the result slices to
+// len(storeIDs) keeps it constant rather than growing with the store count.
+func BenchmarkGetStoreListFromIDs(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	const numStores = 50
+	stopper, g, _, sp, mnl, _ := CreateTestStorePool(ctx, st,
+		liveness.TestTimeUntilNodeDead, true, /* deterministic */
+		func() int { return numStores }, /* nodeCount */
+		livenesspb.NodeLivenessStatus_DEAD)
+	defer stopper.Stop(ctx)
+
+	stores := make([]*roachpb.StoreDescriptor, numStores)
+	storeIDs := make(roachpb.StoreIDSlice, numStores)
+	for i := range stores {
+		id := roachpb.StoreID(i + 1)
+		stores[i] = &roachpb.StoreDescriptor{
+			StoreID: id,
+			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)},
+		}
+		storeIDs[i] = id
+	}
+	// Push the stores into gossip and mark every node live so all of them flow
+	// through the append path in getStoreListFromIDs.
+	for i, storeDesc := range stores {
+		if err := g.TestingAddInfoProtoAndWaitForAllCallbacks(
+			gossip.MakeStoreDescKey(storeDesc.StoreID), storeDesc, 0); err != nil {
+			b.Fatal(err)
+		}
+		mnl.SetNodeStatus(roachpb.NodeID(i+1), livenesspb.NodeLivenessStatus_LIVE)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _, _ = sp.GetStoreListFromIDs(storeIDs, StoreFilterNone)
+	}
 }
