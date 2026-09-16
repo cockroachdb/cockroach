@@ -44,4 +44,5 @@ go_test(
         "raft_test.go",
     ],
     embed = [":raftpb"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
