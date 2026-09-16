@@ -677,6 +677,21 @@ func persistCursor(p *planner, cursor *sqlCursor) (retErr error) {
 			helper.container.Close(helper.ctx)
 		}
 	}()
+	// Pin the transaction's read sequence number to the cursor's declared
+	// sequence number while draining the cursor, so the persisted rows reflect
+	// the cursor's declared-time snapshot instead of any writes that have
+	// advanced the transaction's read sequence since the cursor was declared.
+	// This matches the bracket that fetchMoveNodeBase applies during a normal
+	// FETCH on a non-persisted cursor.
+	origReadSeqNum := cursor.txn.GetReadSeqNum()
+	if err := cursor.txn.SetReadSeqNum(cursor.readSeqNum); err != nil {
+		return err
+	}
+	defer func() {
+		if rerr := cursor.txn.SetReadSeqNum(origReadSeqNum); rerr != nil && retErr == nil {
+			retErr = rerr
+		}
+	}()
 	for {
 		ok, err := cursor.Next(helper.ctx)
 		if err != nil {
