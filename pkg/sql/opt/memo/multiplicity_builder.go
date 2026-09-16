@@ -274,6 +274,12 @@ func filtersMatchAllLeftRows(mem *Memo, left, right RelExpr, filters FiltersExpr
 		}
 		// Case 1b. We don't have to check verifyFiltersAreValidEqualities because
 		// there are no filters.
+		if left.Relational().CanMutate || right.Relational().CanMutate {
+			// A mutation's output columns may reference table columns without
+			// representing rows present in a scan of that table, so the
+			// foreign-key guarantee is not valid for mutation outputs.
+			return false
+		}
 		return checkForeignKeyCase(
 			mem.Metadata(),
 			left.Relational().NotNullCols,
@@ -285,9 +291,18 @@ func filtersMatchAllLeftRows(mem *Memo, left, right RelExpr, filters FiltersExpr
 	if !ok {
 		return false
 	}
-	if checkSelfJoinCase(mem.Metadata(), filters) {
-		// Case 2a.
+	if checkSelfJoinCase(mem.Metadata(), filters) &&
+		!left.Relational().CanMutate && !right.Relational().CanMutate {
+		// Case 2a. The self-join guarantee assumes both inputs are scans of the
+		// same table; a mutation's output columns may reference table columns
+		// without representing rows present in a scan of that table.
 		return true
+	}
+	if left.Relational().CanMutate || right.Relational().CanMutate {
+		// Case 2b. A foreign-key guarantee does not hold for mutation outputs:
+		// the mutation's output columns may not be present in a scan of the
+		// referenced table.
+		return false
 	}
 	// Case 2b.
 	return checkForeignKeyCase(

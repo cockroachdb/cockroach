@@ -21,3 +21,91 @@ query II
 DELETE FROM a AS alias RETURNING alias.a, alias.b
 ----
 1 1
+
+
+# Issue #105640: INSERT .. ON CONFLICT .. RETURNING with a correlated
+# subquery must not be simplified to an inner join.
+
+statement ok
+CREATE TABLE kv_issue105640 (k INT PRIMARY KEY, v INT)
+
+query IIT
+INSERT INTO kv_issue105640 VALUES (1, 10)
+ON CONFLICT (k) DO UPDATE SET v = 10
+RETURNING k, v, (SELECT (k, v) FROM kv_issue105640 foo WHERE foo.k = kv_issue105640.k)
+----
+1 10 NULL
+
+query II
+SELECT k, v FROM kv_issue105640 ORDER BY k
+----
+1 10
+
+statement ok
+CREATE TABLE kv_issue105640_conflict (k INT PRIMARY KEY, v INT)
+
+statement ok
+INSERT INTO kv_issue105640_conflict VALUES (1, 77), (2, 20)
+
+query IIT
+INSERT INTO kv_issue105640_conflict VALUES (1, 10)
+ON CONFLICT (k) DO UPDATE SET v = 10
+RETURNING k, v, (SELECT (k, v) FROM kv_issue105640_conflict foo WHERE foo.k = kv_issue105640_conflict.k)
+----
+1 10 (1,77)
+
+query II
+SELECT k, v FROM kv_issue105640_conflict ORDER BY k
+----
+1 10
+2 20
+
+
+# Self-referencing foreign key: the FK guarantee does not hold for a
+# mutation output, whose rows may not be present in the old scan.
+
+statement ok
+CREATE TABLE kv_issue105640_self (k INT PRIMARY KEY REFERENCES kv_issue105640_self(k), v INT)
+
+query IIT
+INSERT INTO kv_issue105640_self VALUES (1, 10)
+ON CONFLICT (k) DO UPDATE SET v = 10
+RETURNING k, v, (SELECT (k, v) FROM kv_issue105640_self foo WHERE foo.k = kv_issue105640_self.k)
+----
+1 10 NULL
+
+query II
+SELECT k, v FROM kv_issue105640_self ORDER BY k
+----
+1 10
+
+# Cross-join foreign-key branch with a mutation output. The self-referencing
+# FK does not imply that the empty scan has a row for the inserted value.
+
+statement ok
+CREATE TABLE kv_issue105640_cross (k INT PRIMARY KEY REFERENCES kv_issue105640_cross(k), v INT)
+
+query III
+INSERT INTO kv_issue105640_cross VALUES (1, 10)
+RETURNING k, v, (SELECT foo.k FROM kv_issue105640_cross foo)
+----
+1 10 NULL
+
+query II
+SELECT k, v FROM kv_issue105640_cross ORDER BY k
+----
+1 10
+
+# Healthy control: an ordinary read self-join must still preserve NULL-extended rows.
+
+statement ok
+CREATE TABLE kv_issue105640_read (k INT PRIMARY KEY, v INT)
+
+statement ok
+INSERT INTO kv_issue105640_read VALUES (1, 77), (2, NULL)
+
+query III
+SELECT a.k, a.v, b.v FROM kv_issue105640_read a LEFT JOIN kv_issue105640_read b ON a.k = b.k ORDER BY a.k
+----
+1 77 77
+2 NULL NULL
