@@ -230,7 +230,10 @@ jobs:
              You MUST run tests and they MUST pass before staging changes.
              If tests fail, fix and re-run. Report FAILED only if you cannot
              make tests pass.
-          6. Stage all changes with git add
+          6. Format any Go file you edited, as CLAUDE.md requires. crlfmt is
+             not on PATH here, so build it once with `./dev build crlfmt` and
+             then run `./bin/crlfmt -w -tab 2 <filename>.go` per file.
+          7. Stage all changes with git add
 
           When formatting commits and PRs, follow the guidelines in CLAUDE.md.
 
@@ -285,7 +288,7 @@ jobs:
               echo "$PROMPT" | claude --print \
                 --model claude-opus-4-8 \
                 --output-format json \
-                --allowedTools "Read,Write,Edit,Grep,Glob,Bash(gh issue view:*),Bash(./dev test:*),Bash(./dev testlogic:*),Bash(./dev build:*),Bash(./dev generate:*),Bash(git add:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)" \
+                --allowedTools "Read,Write,Edit,Grep,Glob,Bash(gh issue view:*),Bash(./dev test:*),Bash(./dev testlogic:*),Bash(./dev build:*),Bash(./dev generate:*),Bash(./bin/crlfmt:*),Bash(crlfmt:*),Bash(git add:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)" \
                 > "$EXECUTION_FILE" 2> "$STDERR_FILE" || CLAUDE_EXIT_CODE=$?
             else
               # Retry - resume existing session with a retry prompt
@@ -294,7 +297,7 @@ jobs:
                 --resume "$SESSION_ID" \
                 --model claude-opus-4-8 \
                 --output-format json \
-                --allowedTools "Read,Write,Edit,Grep,Glob,Bash(gh issue view:*),Bash(./dev test:*),Bash(./dev testlogic:*),Bash(./dev build:*),Bash(./dev generate:*),Bash(git add:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)" \
+                --allowedTools "Read,Write,Edit,Grep,Glob,Bash(gh issue view:*),Bash(./dev test:*),Bash(./dev testlogic:*),Bash(./dev build:*),Bash(./dev generate:*),Bash(./bin/crlfmt:*),Bash(crlfmt:*),Bash(git add:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)" \
                 > "$EXECUTION_FILE" 2> "$STDERR_FILE" || CLAUDE_EXIT_CODE=$?
             fi
 
