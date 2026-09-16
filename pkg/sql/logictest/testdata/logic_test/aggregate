@@ -4034,3 +4034,122 @@ query R
 SELECT percentile_cont(ARRAY[.4::FLOAT]) WITHIN GROUP (ORDER BY i::FLOAT4) FROM t90519;
 ----
 {2.2}
+
+subtest distinct_filter
+
+# Regression tests for #131087. A row that fails one aggregate's FILTER may
+# still contribute to another aggregate. Deduplicating only on the aggregate
+# arguments before evaluating the filters can discard such a row.
+query III
+WITH data AS (
+  SELECT * FROM unnest(
+    ARRAY[1, 2, 3, 4, 1],
+    ARRAY[true, true, true, true, false]
+  ) AS t(id, value)
+)
+SELECT count(DISTINCT id),
+       count(DISTINCT id) FILTER (WHERE value IS TRUE),
+       count(DISTINCT id) FILTER (WHERE value IS FALSE)
+FROM data;
+----
+4  4  1
+
+# Expressing the filters as nullable arguments must produce the same result.
+query III
+WITH data AS (
+  SELECT * FROM unnest(
+    ARRAY[1, 2, 3, 4, 1],
+    ARRAY[true, true, true, true, false]
+  ) AS t(id, value)
+)
+SELECT count(DISTINCT id),
+       count(DISTINCT CASE WHEN value IS TRUE THEN id END),
+       count(DISTINCT CASE WHEN value IS FALSE THEN id END)
+FROM data;
+----
+4  4  1
+
+# Reversing the input must not change which filter sees the duplicate id.
+query III
+WITH data AS (
+  SELECT * FROM unnest(
+    ARRAY[1, 4, 3, 2, 1],
+    ARRAY[false, true, true, true, true]
+  ) AS t(id, value)
+)
+SELECT count(DISTINCT id),
+       count(DISTINCT id) FILTER (WHERE value IS TRUE),
+       count(DISTINCT id) FILTER (WHERE value IS FALSE)
+FROM data;
+----
+4  4  1
+
+# NULL arguments are not counted, and NULL filter values do not contribute.
+query III
+WITH data(id, value) AS (
+  VALUES (1, true), (1, false), (2, NULL),
+         (NULL, true), (NULL, false), (3, true), (3, false)
+)
+SELECT count(DISTINCT id),
+       count(DISTINCT id) FILTER (WHERE value),
+       count(DISTINCT id) FILTER (WHERE NOT value)
+FROM data;
+----
+3  2  2
+
+# Even identical filters on different aggregates must run before deduplication.
+query IR
+WITH data(id, value) AS (
+  VALUES (1, false), (1, true), (2, true), (2, false), (3, NULL)
+)
+SELECT count(DISTINCT id) FILTER (WHERE value),
+       sum(DISTINCT id) FILTER (WHERE value)
+FROM data;
+----
+2  3
+
+# Each aggregate must keep its own filtered set, including different arguments.
+query IIII
+WITH data(x, y, value) AS (
+  VALUES (1, 10, true), (1, 10, false),
+         (2, 10, true), (2, 10, false), (3, 20, NULL)
+)
+SELECT count(DISTINCT x),
+       count(DISTINCT x) FILTER (WHERE NOT value),
+       count(DISTINCT y) FILTER (WHERE value),
+       count(DISTINCT y) FILTER (WHERE NOT value)
+FROM data;
+----
+3  2  1  1
+
+# Exercise table scans and repeated values across input batches. The fakedist
+# configurations also plan scans across multiple nodes.
+statement ok
+CREATE TABLE distinct_filter_test (id INT, value BOOL);
+INSERT INTO distinct_filter_test
+  SELECT i % 17, i % 34 < 17 FROM generate_series(0, 4999) AS g(i);
+
+query III
+SELECT count(DISTINCT id),
+       count(DISTINCT id) FILTER (WHERE value),
+       count(DISTINCT id) FILTER (WHERE NOT value)
+FROM distinct_filter_test;
+----
+17  17  17
+
+# Aggregates without filters and aggregates over empty input remain correct.
+query IR
+SELECT count(DISTINCT id), sum(DISTINCT id) FROM distinct_filter_test;
+----
+17  136
+
+query IIR
+SELECT count(DISTINCT id),
+       count(DISTINCT id) FILTER (WHERE value),
+       sum(DISTINCT id) FILTER (WHERE NOT value)
+FROM distinct_filter_test WHERE id < 0;
+----
+0  0  NULL
+
+statement ok
+DROP TABLE distinct_filter_test;
