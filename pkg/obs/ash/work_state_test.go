@@ -199,3 +199,28 @@ func TestRetiredWorkStatesCapOverflow(t *testing.T) {
 	// Clean up: drain the retired list back to the pool.
 	reclaimRetiredWorkStates()
 }
+
+func TestHasWorkEvent(t *testing.T) {
+	enabled.Store(true)
+	defer enabled.Store(false)
+
+	tenantID := roachpb.MustMakeTenantID(1)
+
+	require.False(t, HasWorkEvent("LockWait"), "should return false when no work state active")
+
+	clear1 := SetWorkState(tenantID, WorkloadInfo{WorkloadID: 10}, WorkLock, "LockWait")
+	require.True(t, HasWorkEvent("LockWait"), "should return true when LockWait is active")
+	require.False(t, HasWorkEvent("TxnPushWait"), "should return false for inactive event")
+
+	// Push nested event on top
+	clear2 := SetWorkState(tenantID, WorkloadInfo{WorkloadID: 20}, WorkLock, "TxnPushWait")
+	require.True(t, HasWorkEvent("LockWait"), "should return true for ancestor work event in stack")
+	require.True(t, HasWorkEvent("TxnPushWait"), "should return true for top work event")
+
+	clear2()
+	require.True(t, HasWorkEvent("LockWait"), "should return true after popping top event")
+	require.False(t, HasWorkEvent("TxnPushWait"), "should return false after popping TxnPushWait")
+
+	clear1()
+	require.False(t, HasWorkEvent("LockWait"), "should return false after clearing all events")
+}
