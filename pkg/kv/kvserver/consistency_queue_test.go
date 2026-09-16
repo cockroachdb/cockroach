@@ -354,7 +354,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// Write some arbitrary data only to store on n2. Inconsistent key "e"!
 	s2 := tc.GetFirstStoreFromServer(t, 1)
-	s2AuxDir := s2.TODOBothEngines().GetAuxiliaryDir()
+	// The death rattle file is written to the log engine's auxiliary dir
+	// (see (*Replica).computeChecksumPostApply in replica_consistency.go).
+	s2LogAuxDir := s2.LogEngine().GetAuxiliaryDir()
 	var val roachpb.Value
 	val.SetInt(42)
 	// Put an inconsistent key "e" to s2, and have s1 and s3 still agree.
@@ -440,7 +442,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// A death rattle should have been written on s2. Note that the VFSes are
 	// zero-indexed whereas store IDs are one-indexed.
-	f, err := stickyVFSRegistry.Get(vfsIDs[1]).Open(base.PreventedStartupFile(s2AuxDir))
+	f, err := stickyVFSRegistry.Get(vfsIDs[1]).Open(base.PreventedStartupFile(s2LogAuxDir))
 	require.NoError(t, err)
 	b, err := io.ReadAll(f)
 	require.NoError(t, err)
