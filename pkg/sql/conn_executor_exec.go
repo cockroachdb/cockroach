@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -2654,27 +2653,9 @@ func (ex *connExecutor) recordDDLTxnTelemetry(failed bool) {
 	}
 }
 
-// createJobs creates jobs for the records cached in schemaChangeJobRecords
-// during this transaction.
+// createJobs creates the records of the jobs queued during this transaction.
 func (ex *connExecutor) createJobs(ctx context.Context) error {
-	if !ex.extraTxnState.jobs.hasAnyToCreate() {
-		return nil
-	}
-	var records []*jobs.Record
-	if err := ex.extraTxnState.jobs.forEachToCreate(func(jobRecord *jobs.Record) error {
-		records = append(records, jobRecord)
-		return nil
-	}); err != nil {
-		return err
-	}
-	jobIDs, err := ex.server.cfg.JobRegistry.CreateJobsWithTxn(
-		ctx, ex.planner.InternalSQLTxn(), records,
-	)
-	if err != nil {
-		return err
-	}
-	ex.planner.extendedEvalCtx.jobs.addCreatedJobID(jobIDs...)
-	return nil
+	return ex.planner.CreatePendingJobs(ctx)
 }
 
 // rollbackSQLTransaction executes a ROLLBACK statement: the KV transaction is
