@@ -6,6 +6,24 @@ labels: 'C-bug'
 assignees: ''
 ---
 
+**Are you reporting a production outage? Read this first.**
+
+If you are having an issue with CockroachDB in a production system, you
+can reach out for support from Cockroach Labs and our community:
+
+- [CockroachDB Support Portal](https://support.cockroachlabs.com/) -
+  Receive professional support from Cockroach Labs.
+- [CockroachDB Community Slack](https://go.crdb.dev/p/slack) - Join
+  our slack to connect with our engineers and other users running
+  CockroachDB.
+- [CockroachDB Forum](https://forum.cockroachlabs.com/) and [Stack
+  Overflow](https://stackoverflow.com/questions/tagged/cockroachdb) -
+  Ask questions, find answers, and help other users.
+
+We use Github issues and conversations to discuss how to improve
+CockroachDB. If you need urgent or more personalized help,
+you may get a faster response with the resources linked above.
+
 **Describe the problem**
 
 Please describe the issue you observed, and any steps we can take to reproduce it:
