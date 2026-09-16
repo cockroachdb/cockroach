@@ -1079,10 +1079,14 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 				}
 				// Attempt to resolve as columnname.*, which allows items
 				// such as SELECT row_to_json(tbl_name) FROM tbl_name to work.
-				return func() (bool, tree.Expr) {
-					defer wrapColTupleStarPanic(resolveErr)
-					return s.VisitPre(columnNameAsTupleStar(string(t.ColumnName)))
-				}()
+				// Qualified column references such as t1.t1 must not fall back to
+				// whole-row tuple expansion; retain the resolver error instead.
+				if t.TableName == nil || t.TableName.Object() == "" {
+					return func() (bool, tree.Expr) {
+						defer wrapColTupleStarPanic(resolveErr)
+						return s.VisitPre(columnNameAsTupleStar(string(t.ColumnName)))
+					}()
+				}
 			}
 			if sqlerrors.IsUndefinedRelationError(resolveErr) && t.TableName.Object() != "" {
 				// If we are inside a PL/pgSQL routine and the prefix names a
