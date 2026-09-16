@@ -7898,6 +7898,7 @@ func init() {
 		{"st_coorddim", "st_ndims"},
 		{"st_geogfromtext", "st_geographyfromtext"},
 		{"st_geomfromtext", "st_geometryfromtext"},
+		{"st_forcerhr", "st_forcepolygoncw"},
 		{"st_numinteriorring", "st_numinteriorrings"},
 		{"st_symmetricdifference", "st_symdifference"},
 		{"st_force3d", "st_force3dz"},
