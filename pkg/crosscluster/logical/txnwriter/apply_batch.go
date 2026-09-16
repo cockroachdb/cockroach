@@ -7,10 +7,12 @@ package txnwriter
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,31 +38,65 @@ func (tw *transactionWriter) ApplyBatch(
 
 	results := make([]ApplyResult, len(transactions))
 
+	batchStart := timeutil.Now()
 	err := tw.session.Txn(ctx, func(ctx context.Context) error {
 		// We clear the results because the Txn may be retried.
 		clear(results)
 		return tw.tryApply(ctx, transactions, results)
 	})
-	if err == nil {
-		return results, nil
-	}
-	if !errors.Is(err, sqlwriter.ErrStalePreviousValue) {
-		return nil, err
-	}
-
-	err = tw.session.Txn(ctx, func(ctx context.Context) error {
-		clear(results)
-		refreshed, err := tw.refresh(ctx, transactions, results)
-		if err != nil {
-			return err
-		}
-		return tw.tryApply(ctx, refreshed, results)
-	})
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, sqlwriter.ErrStalePreviousValue) {
+			return nil, err
+		}
+		err = tw.session.Txn(ctx, func(ctx context.Context) error {
+			clear(results)
+			refreshed, err := tw.refresh(ctx, transactions, results)
+			if err != nil {
+				return err
+			}
+			return tw.tryApply(ctx, refreshed, results)
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
+	tw.recordBatchStats(transactions, results, batchStart, timeutil.Now())
 	return results, nil
+}
+
+// recordBatchStats records throughput and latency metrics for a successfully
+// applied batch.
+func (tw *transactionWriter) recordBatchStats(
+	transactions []ldrdecoder.Transaction,
+	results []ApplyResult,
+	batchStart, batchEnd time.Time,
+) {
+	if tw.metrics == nil {
+		return
+	}
+	totalRows := 0
+	for i, transaction := range transactions {
+		totalRows += len(transaction.WriteSet)
+		if results[i].DlqReason != nil {
+			continue
+		}
+		tw.metrics.AppliedRowUpdates.Inc(int64(results[i].AppliedRows))
+		if tw.metricsLabel != "" {
+			tw.metrics.LabeledEventsIngested.Inc(
+				map[string]string{"label": tw.metricsLabel},
+				int64(results[i].AppliedRows),
+			)
+		}
+		tw.metrics.ReceivedLogicalBytes.Inc(transaction.Bytes)
+		tw.metrics.CommitToCommitLatency.RecordValue(
+			batchEnd.Sub(transaction.TxnID.Timestamp.GoTime()).Nanoseconds())
+	}
+	nanosPerRow := batchEnd.Sub(batchStart).Nanoseconds()
+	if totalRows > 0 {
+		nanosPerRow /= int64(totalRows)
+	}
+	tw.metrics.ApplyBatchNanosHist.RecordValue(nanosPerRow)
 }
 
 func (tw *transactionWriter) tryApply(

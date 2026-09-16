@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/crosscluster/logical/ldrdecoder",
+        "//pkg/crosscluster/logical/metrics",
         "//pkg/crosscluster/logical/sqlwriter",
         "//pkg/keys",
         "//pkg/kv",
@@ -22,6 +23,7 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -38,6 +40,7 @@ go_test(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/crosscluster/logical/ldrdecoder",
+        "//pkg/crosscluster/logical/metrics",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
