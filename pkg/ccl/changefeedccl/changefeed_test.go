@@ -7865,9 +7865,20 @@ func TestChangefeedErrors(t *testing.T) {
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErrWithTimeout(
-		t, `unknown compression: invalid, valid values are 'gzip' and 'zstd'`,
+		t, `unsupported compression algorithm "invalid"`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH compression='invalid'`,
 		`webhook-https://fake-host`,
+	)
+	// Kafka-only codecs are rejected by non-Kafka sinks at creation time.
+	sqlDB.ExpectErrWithTimeout(
+		t, `unsupported compression algorithm "snappy"`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH compression='snappy'`,
+		`webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `unsupported compression algorithm "lz4"`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH compression='lz4'`,
+		`experimental-nodelocal://1/bar`,
 	)
 	sqlDB.ExpectErrWithTimeout(
 		t, `Retry.Max must be either a positive int or 'inf' for infinite retries.`,
@@ -7910,10 +7921,20 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo into $1 WITH on_error='not_valid'`,
 		`kafka://nope`)
 
-	// Sanity check for options compatibility validation.
+	// Sanity check Kafka compression options.
 	sqlDB.ExpectErrWithTimeout(
-		t, `this sink is incompatible with option compression`,
-		`CREATE CHANGEFEED FOR foo into $1 WITH compression='gzip'`,
+		t, `unsupported compression codec "invalid" for Kafka sink`,
+		`CREATE CHANGEFEED FOR foo into $1 WITH compression='invalid'`,
+		`kafka://nope`)
+	sqlDB.ExpectErrWithTimeout(
+		t, `conflicts with kafka_sink_config`,
+		`CREATE CHANGEFEED FOR foo into $1 WITH compression='gzip', kafka_sink_config='{"Compression":"ZSTD"}'`,
+		`kafka://nope`)
+	// An explicit "NONE" in kafka_sink_config conflicts with a top-level
+	// compression option, same as any other mismatched codec.
+	sqlDB.ExpectErrWithTimeout(
+		t, `conflicts with kafka_sink_config`,
+		`CREATE CHANGEFEED FOR foo into $1 WITH compression='gzip', kafka_sink_config='{"Compression":"NONE"}'`,
 		`kafka://nope`)
 
 	sqlDB.ExpectErrWithTimeout(
