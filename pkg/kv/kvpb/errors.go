@@ -230,10 +230,17 @@ func (e *Error) String() string {
 // TransactionRestart returns the TransactionRestart for this Error.
 func (e *Error) TransactionRestart() TransactionRestart {
 	if e.EncodedError.IsSet() {
-		var iface transactionRestartError
-		if errors.As(errors.DecodeError(context.Background(), e.EncodedError), &iface) {
-			return iface.canRestartTransaction()
-		}
+		return transactionRestartFromDecodedError(errors.DecodeError(context.Background(), e.EncodedError))
+	}
+	return TransactionRestart_NONE
+}
+
+// transactionRestartFromDecodedError returns the TransactionRestart for an
+// already-decoded error, without re-decoding it.
+func transactionRestartFromDecodedError(err error) TransactionRestart {
+	var iface transactionRestartError
+	if errors.As(err, &iface) {
+		return iface.canRestartTransaction()
 	}
 	return TransactionRestart_NONE
 }
@@ -394,8 +401,14 @@ func (e *Error) GetDetail() ErrorDetailInterface {
 	if e == nil || !e.EncodedError.IsSet() {
 		return nil
 	}
+	return detailFromDecodedError(errors.DecodeError(context.Background(), e.EncodedError))
+}
+
+// detailFromDecodedError returns the error detail for an already-decoded
+// error, without re-decoding it.
+func detailFromDecodedError(err error) ErrorDetailInterface {
 	var detail ErrorDetailInterface
-	errors.As(errors.DecodeError(context.Background(), e.EncodedError), &detail)
+	errors.As(err, &detail)
 	return detail
 }
 
@@ -424,14 +437,18 @@ func (e *Error) UpdateTxn(o *roachpb.Transaction) {
 // error detail.
 func (e *Error) checkTxnStatusValid() {
 	txn := e.UnexposedTxn
-	err := e.GetDetail()
 	if txn == nil {
 		return
 	}
+	var decoded error
+	if e.EncodedError.IsSet() {
+		decoded = errors.DecodeError(context.Background(), e.EncodedError)
+	}
+	err := detailFromDecodedError(decoded)
 	if errors.HasType(err, (*TransactionAbortedError)(nil)) {
 		return
 	}
-	if e.TransactionRestart() == TransactionRestart_NONE {
+	if transactionRestartFromDecodedError(decoded) == TransactionRestart_NONE {
 		return
 	}
 	if txn.Status.IsFinalized() {
