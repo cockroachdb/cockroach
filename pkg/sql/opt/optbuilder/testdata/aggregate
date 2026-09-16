@@ -349,6 +349,46 @@ SELECT count(w) FROM kv GROUP BY 1
 ----
 error (42803): count(): aggregate functions are not allowed in GROUP BY
 
+# Ordinals nested inside a parenthesized GROUP BY tuple are resolved as
+# select-list positions too, exactly like a bare ordinal (a parenthesized
+# list in GROUP BY position is a row constructor that PostgreSQL flattens
+# before resolving each element).
+build
+SELECT count(w), k FROM kv GROUP BY (1, k)
+----
+error (42803): count(): aggregate functions are not allowed in GROUP BY
+
+build
+SELECT k FROM kv GROUP BY (1, v)
+----
+project
+ ├── columns: k:1!null
+ └── group-by (hash)
+      ├── columns: k:1!null v:2
+      ├── grouping columns: k:1!null v:2
+      └── project
+           ├── columns: k:1!null v:2
+           └── scan kv
+                └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+
+build
+SELECT k, v FROM kv GROUP BY (5, k)
+----
+error (42P10): GROUP BY position 5 is not in select list
+
+build
+SELECT k FROM kv GROUP BY ((1), v)
+----
+project
+ ├── columns: k:1!null
+ └── group-by (hash)
+      ├── columns: k:1!null v:2
+      ├── grouping columns: k:1!null v:2
+      └── project
+           ├── columns: k:1!null v:2
+           └── scan kv
+                └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+
 build
 SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v)
 ----
