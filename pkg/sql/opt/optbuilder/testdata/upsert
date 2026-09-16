@@ -2381,6 +2381,7 @@ upsert multi_col_fam_checks
  │    ├── column2:8 => b:2
  │    ├── c_default:9 => c:3
  │    └── c_default:9 => d:4
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── column2:8 => b:2
  │    ├── c_default:9 => c:3
@@ -2513,6 +2514,7 @@ upsert multi_col_fam_checks
  │    ├── b_default:9 => b:2
  │    ├── b_default:9 => c:3
  │    └── column2:8 => d:4
+ ├── force sentinel write
  ├── update-mapping:
  │    └── column2:8 => d:4
  ├── check columns: check1:19
@@ -2690,6 +2692,7 @@ upsert multi_col_fam_checks
  │    ├── column2:8 => b:2
  │    ├── column3:9 => c:3
  │    └── d_default:10 => d:4
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── upsert_b:20 => b:2
  │    └── upsert_c:21 => c:3
@@ -2749,6 +2752,7 @@ upsert multi_col_fam_checks
  │    ├── b_default:8 => b:2
  │    ├── b_default:8 => c:3
  │    └── b_default:8 => d:4
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── upsert_b:19 => b:2
  │    ├── upsert_c:20 => c:3
@@ -2863,6 +2867,7 @@ upsert multi_col_fam_checks
  │    ├── b_default:8 => b:2
  │    ├── b_default:8 => c:3
  │    └── b_default:8 => d:4
+ ├── force sentinel write
  ├── update-mapping:
  │    └── upsert_d:19 => d:4
  ├── check columns: check1:20
@@ -3179,6 +3184,7 @@ upsert part_idx_storing
  │    ├── a_default:9 => a:2
  │    ├── column2:8 => b:3
  │    └── a_default:9 => c:4
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── a:11 => a:2
  │    ├── upsert_b:19 => b:3
@@ -3321,6 +3327,7 @@ upsert vec_idx_fam_upsert
  │    ├── column2:8 => a:2
  │    ├── b_default:9 => b:3
  │    └── v_default:10 => v:4
+ ├── force sentinel write
  ├── update-mapping:
  │    ├── upsert_a:19 => a:2
  │    └── b:13 => b:3
@@ -5869,3 +5876,238 @@ insert min_arbiters
                 │    └── column1
                 └── first-agg
                      └── rowid_default
+
+# Forced row-sentinel write via INSERT ... ON CONFLICT DO UPDATE under weak
+# isolation (issue #175530). The conflict (update) path force-writes family 0
+# just like a plain UPDATE: the "force sentinel write" flag is set and family
+# 0's value column a is self-assigned into the update-mapping to keep the
+# rewrite value-preserving.
+exec-ddl
+CREATE TABLE sentinel_fam (
+  id    INT PRIMARY KEY,
+  a     INT NOT NULL,
+  claim STRING,
+  FAMILY f0 (id, a),
+  FAMILY fclaim (claim)
+)
+----
+
+build isolation=ReadCommitted
+INSERT INTO sentinel_fam (id, a) VALUES (1, 2) ON CONFLICT (id) DO UPDATE SET claim = 'x'
+----
+upsert sentinel_fam
+ ├── arbiter indexes: sentinel_fam_pkey
+ ├── columns: <none>
+ ├── canary column: id:9
+ ├── fetch columns: id:9 a:10 claim:11
+ ├── insert-mapping:
+ │    ├── column1:6 => id:1
+ │    ├── column2:7 => a:2
+ │    └── claim_default:8 => claim:3
+ ├── force sentinel write
+ ├── update-mapping:
+ │    ├── a:10 => a:2
+ │    └── upsert_claim:17 => claim:3
+ └── project
+      ├── columns: upsert_id:15 upsert_a:16 upsert_claim:17 column1:6!null column2:7!null claim_default:8 id:9 a:10 claim:11 crdb_internal_mvcc_timestamp:12 tableoid:13 claim_new:14!null
+      ├── project
+      │    ├── columns: claim_new:14!null column1:6!null column2:7!null claim_default:8 id:9 a:10 claim:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null claim_default:8 id:9 a:10 claim:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null claim_default:8
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: claim_default:8 column1:6!null column2:7!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    └── (1, 2)
+      │    │    │    │    └── projections
+      │    │    │    │         └── NULL::STRING [as=claim_default:8]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         └── first-agg [as=claim_default:8]
+      │    │    │              └── claim_default:8
+      │    │    ├── scan sentinel_fam
+      │    │    │    ├── columns: id:9!null a:10!null claim:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    └── filters
+      │    │         └── column1:6 = id:9
+      │    └── projections
+      │         └── 'x' [as=claim_new:14]
+      └── projections
+           ├── CASE WHEN id:9 IS NULL THEN column1:6 ELSE id:9 END [as=upsert_id:15]
+           ├── CASE WHEN id:9 IS NULL THEN column2:7 ELSE a:10 END [as=upsert_a:16]
+           └── CASE WHEN id:9 IS NULL THEN claim_default:8 ELSE claim_new:14 END [as=upsert_claim:17]
+
+# Under serializable neither the flag nor the a self-assignment is present.
+build isolation=Serializable
+INSERT INTO sentinel_fam (id, a) VALUES (1, 2) ON CONFLICT (id) DO UPDATE SET claim = 'x'
+----
+upsert sentinel_fam
+ ├── arbiter indexes: sentinel_fam_pkey
+ ├── columns: <none>
+ ├── canary column: id:9
+ ├── fetch columns: id:9 a:10 claim:11
+ ├── insert-mapping:
+ │    ├── column1:6 => id:1
+ │    ├── column2:7 => a:2
+ │    └── claim_default:8 => claim:3
+ ├── update-mapping:
+ │    └── upsert_claim:17 => claim:3
+ └── project
+      ├── columns: upsert_id:15 upsert_a:16 upsert_claim:17 column1:6!null column2:7!null claim_default:8 id:9 a:10 claim:11 crdb_internal_mvcc_timestamp:12 tableoid:13 claim_new:14!null
+      ├── project
+      │    ├── columns: claim_new:14!null column1:6!null column2:7!null claim_default:8 id:9 a:10 claim:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null claim_default:8 id:9 a:10 claim:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null claim_default:8
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: claim_default:8 column1:6!null column2:7!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    └── (1, 2)
+      │    │    │    │    └── projections
+      │    │    │    │         └── NULL::STRING [as=claim_default:8]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         └── first-agg [as=claim_default:8]
+      │    │    │              └── claim_default:8
+      │    │    ├── scan sentinel_fam
+      │    │    │    ├── columns: id:9!null a:10!null claim:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    └── filters
+      │    │         └── column1:6 = id:9
+      │    └── projections
+      │         └── 'x' [as=claim_new:14]
+      └── projections
+           ├── CASE WHEN id:9 IS NULL THEN column1:6 ELSE id:9 END [as=upsert_id:15]
+           ├── CASE WHEN id:9 IS NULL THEN column2:7 ELSE a:10 END [as=upsert_a:16]
+           └── CASE WHEN id:9 IS NULL THEN claim_default:8 ELSE claim_new:14 END [as=upsert_claim:17]
+
+# The conflict path also force-writes family 0 when the written family holds the
+# primary-key column: id is encoded in the key, so fclaim has no KV while claim
+# is NULL.
+exec-ddl
+CREATE TABLE sentinel_fam_pk_in_fam (
+  id    INT PRIMARY KEY,
+  a     INT,
+  claim STRING,
+  FAMILY f0 (a),
+  FAMILY fclaim (id, claim)
+)
+----
+
+build isolation=ReadCommitted
+INSERT INTO sentinel_fam_pk_in_fam (id, a) VALUES (1, 2) ON CONFLICT (id) DO UPDATE SET claim = 'x'
+----
+upsert sentinel_fam_pk_in_fam
+ ├── arbiter indexes: sentinel_fam_pk_in_fam_pkey
+ ├── columns: <none>
+ ├── canary column: id:9
+ ├── fetch columns: id:9 a:10 claim:11
+ ├── insert-mapping:
+ │    ├── column1:6 => id:1
+ │    ├── column2:7 => a:2
+ │    └── claim_default:8 => claim:3
+ ├── force sentinel write
+ ├── update-mapping:
+ │    ├── a:10 => a:2
+ │    └── upsert_claim:17 => claim:3
+ └── project
+      ├── columns: upsert_id:15 upsert_a:16 upsert_claim:17 column1:6!null column2:7!null claim_default:8 id:9 a:10 claim:11 crdb_internal_mvcc_timestamp:12 tableoid:13 claim_new:14!null
+      ├── project
+      │    ├── columns: claim_new:14!null column1:6!null column2:7!null claim_default:8 id:9 a:10 claim:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null claim_default:8 id:9 a:10 claim:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null claim_default:8
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: claim_default:8 column1:6!null column2:7!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    └── (1, 2)
+      │    │    │    │    └── projections
+      │    │    │    │         └── NULL::STRING [as=claim_default:8]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         └── first-agg [as=claim_default:8]
+      │    │    │              └── claim_default:8
+      │    │    ├── scan sentinel_fam_pk_in_fam
+      │    │    │    ├── columns: id:9!null a:10 claim:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    └── filters
+      │    │         └── column1:6 = id:9
+      │    └── projections
+      │         └── 'x' [as=claim_new:14]
+      └── projections
+           ├── CASE WHEN id:9 IS NULL THEN column1:6 ELSE id:9 END [as=upsert_id:15]
+           ├── CASE WHEN id:9 IS NULL THEN column2:7 ELSE a:10 END [as=upsert_a:16]
+           └── CASE WHEN id:9 IS NULL THEN claim_default:8 ELSE claim_new:14 END [as=upsert_claim:17]
+
+# The only family the conflict path itself writes, fy, holds a NOT NULL column
+# and cannot be materialized from absence. Maintaining the secondary index
+# forces a self-assignment of w (issue #173610), but that write preserves fw's
+# value - an absent fw is written as a tombstone - so it does not force a
+# sentinel write either.
+exec-ddl
+CREATE TABLE sentinel_fam_index_conflict (
+  id INT PRIMARY KEY,
+  y  INT NOT NULL,
+  w  INT,
+  FAMILY f0 (id),
+  FAMILY fy (y),
+  FAMILY fw (w),
+  INDEX (y) STORING (w)
+)
+----
+
+build isolation=ReadCommitted
+INSERT INTO sentinel_fam_index_conflict VALUES (1, 2, 3) ON CONFLICT (id) DO UPDATE SET y = 4
+----
+upsert sentinel_fam_index_conflict
+ ├── arbiter indexes: sentinel_fam_index_conflict_pkey
+ ├── columns: <none>
+ ├── canary column: id:9
+ ├── fetch columns: id:9 y:10 w:11
+ ├── insert-mapping:
+ │    ├── column1:6 => id:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => w:3
+ ├── update-mapping:
+ │    ├── upsert_y:16 => y:2
+ │    └── w:11 => w:3
+ └── project
+      ├── columns: upsert_id:15 upsert_y:16!null upsert_w:17 column1:6!null column2:7!null column3:8!null id:9 y:10 w:11 crdb_internal_mvcc_timestamp:12 tableoid:13 y_new:14!null
+      ├── project
+      │    ├── columns: y_new:14!null column1:6!null column2:7!null column3:8!null id:9 y:10 w:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null id:9 y:10 w:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    └── (1, 2, 3)
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         └── first-agg [as=column3:8]
+      │    │    │              └── column3:8
+      │    │    ├── scan sentinel_fam_index_conflict
+      │    │    │    ├── columns: id:9!null y:10!null w:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    └── filters
+      │    │         └── column1:6 = id:9
+      │    └── projections
+      │         └── 4 [as=y_new:14]
+      └── projections
+           ├── CASE WHEN id:9 IS NULL THEN column1:6 ELSE id:9 END [as=upsert_id:15]
+           ├── CASE WHEN id:9 IS NULL THEN column2:7 ELSE y_new:14 END [as=upsert_y:16]
+           └── CASE WHEN id:9 IS NULL THEN column3:8 ELSE w:11 END [as=upsert_w:17]

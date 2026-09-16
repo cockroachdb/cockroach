@@ -201,7 +201,7 @@ func (ri *Inserter) InsertRow(
 	ri.valueBuf, err = prepareInsertOrUpdateBatch(
 		ctx, b, &ri.Helper, primaryIndexKey, ri.InsertCols, values, ri.InsertColIDtoRowIndex,
 		ri.InsertColIDtoRowIndex, &ri.key, &ri.value, ri.valueBuf, oth, nil, /* oldValues */
-		kvOp, false /* mustValidateOldPKValues */, traceKV,
+		kvOp, false /* mustValidateOldPKValues */, false /* forceSentinelWrite */, traceKV,
 	)
 	if err != nil {
 		return err

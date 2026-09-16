@@ -211,6 +211,12 @@ define MutationPrivate {
     # VectorInsert indicates that the mutation is an insert with a specialized
     # vectorized implementation used for Copy statements.
     VectorInsert bool
+
+    # ForceSentinelWrite instructs the row updater to always write family 0 (the
+    # row sentinel), even when the mutation touches none of its columns, so a
+    # concurrent DELETE of the row conflicts. See maybeForceSentinelWrite for
+    # more details.
+    ForceSentinelWrite bool
 }
 
 # Update evaluates a relational input expression that fetches existing rows from

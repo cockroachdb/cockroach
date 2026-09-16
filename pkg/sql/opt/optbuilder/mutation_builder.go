@@ -124,6 +124,11 @@ type mutationBuilder struct {
 	// an Upsert operator.
 	upsertColIDs opt.OptionalColList
 
+	// forceSentinelWrite, if set, forces value-preserving write of column
+	// family 0 (the row sentinel) even if no column in the family is updated.
+	// See maybeForceSentinelWrite.
+	forceSentinelWrite bool
+
 	// checkColIDs lists the input column IDs storing the boolean results of
 	// evaluating check constraint expressions defined on the target table. Its
 	// length is always equal to the number of check constraints on the table
@@ -1485,6 +1490,18 @@ func (mb *mutationBuilder) mutationColumnIDs() opt.ColSet {
 	return cols
 }
 
+// updatedTableCols returns the target table columns the mutation currently
+// writes, i.e. those with an entry in updateColIDs.
+func (mb *mutationBuilder) updatedTableCols() opt.ColSet {
+	var updatedCols opt.ColSet
+	for ord, colID := range mb.updateColIDs {
+		if colID != 0 {
+			updatedCols.Add(mb.tabID.ColumnID(ord))
+		}
+	}
+	return updatedCols
+}
+
 // maybeForceIndexConflictWrites materializes write-write conflicts for
 // secondary index maintenance under weak (non-serializable) isolation.
 //
@@ -1566,7 +1583,10 @@ func (mb *mutationBuilder) mutationColumnIDs() opt.ColSet {
 // addSynthesizedColsForUpdate has already added to the update set every computed
 // column whose expression references an updated column, so an index containing
 // such a column intersects the update set through the computed column itself.
-func (mb *mutationBuilder) maybeForceIndexConflictWrites() {
+//
+// updatedCols must hold the target table columns the mutation writes, as
+// returned by updatedTableCols before any forced writes are added.
+func (mb *mutationBuilder) maybeForceIndexConflictWrites(updatedCols opt.ColSet) {
 	// Only weak isolation levels are affected; SERIALIZABLE is protected by read
 	// refreshes.
 	if mb.b.evalCtx.TxnIsoLevel == isolation.Serializable {
@@ -1581,15 +1601,8 @@ func (mb *mutationBuilder) maybeForceIndexConflictWrites() {
 		return
 	}
 
-	// updatedCols holds the target table columns the mutation writes. Forced
-	// writes are deliberately kept out of it so that they cannot pull further
-	// indexes into the maintained-index check below.
-	var updatedCols opt.ColSet
-	for ord, colID := range mb.updateColIDs {
-		if colID != 0 {
-			updatedCols.Add(mb.tabID.ColumnID(ord))
-		}
-	}
+	// Forced writes are deliberately kept out of updatedCols so that they cannot
+	// pull further indexes into the maintained-index check below.
 	if updatedCols.Empty() {
 		return
 	}
@@ -1649,6 +1662,134 @@ func (mb *mutationBuilder) maybeForceIndexConflictWrites() {
 		}
 		mb.updateColIDs[ord] = mb.fetchColIDs[ord]
 	})
+}
+
+// maybeForceSentinelWrite sets forceSentinelWrite so the row updater performs
+// value-preserving write of family 0 (the row sentinel) even when the mutation
+// touches none of its columns.
+//
+// Under weak isolation, an UPDATE that materializes a previously-absent column
+// family (a family whose columns are all NULL holds no KV) reads the row under
+// only a best-effort unreplicated lock. If that lock is lost to a range split,
+// lease transfer, or merge, a concurrent fast-path DeleteRange writes no
+// tombstone at the absent family's key, so this mutation's write of that family
+// conflicts with nothing and survives the delete, leaving a row with the
+// materialized family but no sentinel — a corrupt primary index. Forcing a
+// write of family 0, which every delete removes, makes the two conflict.
+//
+// updatedCols must hold the target table columns the mutation writes, as
+// returned by updatedTableCols before any forced writes are added.
+func (mb *mutationBuilder) maybeForceSentinelWrite(updatedCols opt.ColSet) {
+	// Only weak isolation levels are affected; SERIALIZABLE is protected by read
+	// refreshes.
+	if mb.b.evalCtx.TxnIsoLevel == isolation.Serializable {
+		return
+	}
+	if !sqlclustersettings.IndexConflictWritesEnabled.Get(&mb.b.evalCtx.Settings.SV) {
+		return
+	}
+	// With a single column family the whole row is one KV, so any concurrent
+	// writer of the row already conflicts with this mutation.
+	if mb.tab.FamilyCount() == 1 {
+		return
+	}
+	// The corrupting DELETE is the fast-path DeleteRange, which
+	// canUseDeleteRange limits to tables with no secondary index. We
+	// intentionally do NOT gate on that here: the DELETE and this UPDATE
+	// resolve on independent descriptor leases and can observe adjacent
+	// versions (e.g. an index mid-add, which makes DeletableIndexCount() > 1 on
+	// one version but not the other), so this mutation cannot reliably predict
+	// whether the racing DELETE takes the fast path. Forcing unconditionally on
+	// multi-family tables closes that skew. When a secondary index does exist
+	// the DELETE uses the row-by-row path, which already tombstones every
+	// family key, so the sentinel write is merely redundant there, not
+	// required.
+
+	if updatedCols.Empty() {
+		return
+	}
+
+	// Force the sentinel write if the mutation writes a non-primary family all
+	// of whose non-primary-key columns are nullable, and which it therefore may
+	// be materializing from a previously-absent state.
+	//
+	// Primary-key columns are ignored when deciding whether the family can be
+	// absent: although they are NOT NULL, they are encoded in the key rather
+	// than the family's value (composite ones only when the datum is actually
+	// composite), so they never keep the family's KV present.
+	tabMeta := mb.md.TableMeta(mb.tabID)
+	pkCols := tabMeta.IndexKeyColumns(cat.PrimaryIndex)
+	force := false
+	// Family 0 is always the primary family (the row sentinel), so start at 1.
+	for i, n := 1, mb.tab.FamilyCount(); i < n && !force; i++ {
+		fam := mb.tab.Family(i)
+		writesFamily, canBeAbsent := false, true
+		for j, m := 0, fam.ColumnCount(); j < m; j++ {
+			famCol := fam.Column(j)
+			colID := mb.tabID.ColumnID(famCol.Ordinal)
+			if updatedCols.Contains(colID) {
+				writesFamily = true
+			}
+			if !famCol.IsNullable() && !pkCols.Contains(colID) {
+				canBeAbsent = false
+			}
+		}
+		force = writesFamily && canBeAbsent
+	}
+	if !force {
+		return
+	}
+
+	mb.forceSentinelWrite = true
+
+	// Self-assign family 0's non-primary-key columns that the mutation does not
+	// already write, which both keeps them fetched and re-writes them with
+	// their current values, mirroring maybeForceIndexConflictWrites. Columns
+	// already in the update set are left alone, so their new values are not
+	// clobbered with the fetched ones.
+	//
+	// The ForceSentinelWrite flag is still required, and is not made redundant
+	// by this: when family 0 holds only primary-key columns there is nothing to
+	// self-assign, and adding a primary-key column to the update set would take
+	// the primary-key-changed path (a full row delete-and-reinsert) rather than
+	// a sentinel write. The flag makes the row updater emit the value-less
+	// sentinel KV directly in that case.
+	primaryFam := mb.tab.Family(0)
+	for j, m := 0, primaryFam.ColumnCount(); j < m; j++ {
+		ord := primaryFam.Column(j).Ordinal
+		col := mb.tab.Column(ord)
+		colID := mb.tabID.ColumnID(ord)
+		// Only Ordinary and WriteOnly columns can hold a value in the family.
+		switch kind := col.Kind(); kind {
+		case cat.Ordinary, cat.WriteOnly:
+		case cat.DeleteOnly:
+			// DeleteOnly columns may only be written by a delete.
+			continue
+		case cat.System, cat.Inverted:
+			// Real table descriptors never place system or inverted columns in
+			// a family, but the test catalog puts every column not assigned to
+			// an explicit family into family 0. Neither is stored nor fetched.
+			continue
+		default:
+			panic(errors.AssertionFailedf("unexpected column kind %d", kind))
+		}
+		// Virtual computed columns are placed in family 0 only by the test
+		// catalog. They are not stored, so self-assigning one would add an
+		// update-mapping entry that writes nothing.
+		if pkCols.Contains(colID) || col.IsVirtualComputed() || mb.updateColIDs[ord] != 0 {
+			continue
+		}
+		// As in maybeForceIndexConflictWrites, a missing fetch column would
+		// make the assignment below a silent no-op. Every mutation input scan
+		// includes mutation columns and leaves out only system and inverted
+		// columns, so a stored value column always has one.
+		if mb.fetchColIDs[ord] == 0 {
+			panic(errors.AssertionFailedf(
+				"no fetch column for forced sentinel write on column %d", ord,
+			))
+		}
+		mb.updateColIDs[ord] = mb.fetchColIDs[ord]
+	}
 }
 
 // resolveComputedCols returns cols with every computed column replaced by the
@@ -2054,6 +2195,7 @@ func (mb *mutationBuilder) makeMutationPrivate(
 		AfterTriggers:                  mb.afterTriggers,
 		UniqueWithTombstoneIndexes:     mb.uniqueWithTombstoneIndexes.Ordered(),
 		VectorInsert:                   vectorInsert,
+		ForceSentinelWrite:             mb.forceSentinelWrite,
 	}
 
 	// If we didn't actually plan any checks, cascades, or triggers, don't buffer

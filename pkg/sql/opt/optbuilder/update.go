@@ -417,7 +417,14 @@ func (mb *mutationBuilder) buildUpdate(
 
 	// Under weak isolation, force writes to unmodified column families read to
 	// maintain a secondary index, to prevent index corruption (issue #173610).
-	mb.maybeForceIndexConflictWrites()
+	// Both functions below see the update set as it was before any forced
+	// writes were added.
+	updatedCols := mb.updatedTableCols()
+	mb.maybeForceIndexConflictWrites(updatedCols)
+
+	// Under weak isolation, force a row-sentinel write to conflict with a
+	// concurrent fast-path DELETE (see maybeForceSentinelWrite).
+	mb.maybeForceSentinelWrite(updatedCols)
 
 	private := mb.makeMutationPrivate(returning != nil, false /* vectorInsert */)
 	for _, col := range mb.extraAccessibleCols {

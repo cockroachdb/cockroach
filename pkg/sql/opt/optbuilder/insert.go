@@ -1064,7 +1064,15 @@ func (mb *mutationBuilder) buildUpsert(returning *tree.ReturningExprs) {
 	// index corruption (issue #173610). This is only relevant when existing rows
 	// are fetched; a blind upsert reads nothing to protect.
 	if mb.needExistingRows() {
-		mb.maybeForceIndexConflictWrites()
+		// Both functions see the update set as it was before any forced writes
+		// were added.
+		updatedCols := mb.updatedTableCols()
+		mb.maybeForceIndexConflictWrites(updatedCols)
+
+		// As above, force a row-sentinel write on the conflict (update) path to
+		// conflict with a concurrent fast-path DELETE. A blind upsert writes
+		// every family already, so it needs no forcing.
+		mb.maybeForceSentinelWrite(updatedCols)
 	}
 
 	private := mb.makeMutationPrivate(returning != nil, false /* vectorInsert */)

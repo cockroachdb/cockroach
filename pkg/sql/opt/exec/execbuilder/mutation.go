@@ -475,6 +475,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 		lockedIndexes,
 		b.allowAutoCommit && len(upd.UniqueChecks) == 0 &&
 			len(upd.FKChecks) == 0 && len(upd.FKCascades) == 0 && upd.AfterTriggers == nil,
+		upd.ForceSentinelWrite,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -555,6 +556,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 		lockedIndexes,
 		b.allowAutoCommit && len(ups.UniqueChecks) == 0 &&
 			len(ups.FKChecks) == 0 && len(ups.FKCascades) == 0 && ups.AfterTriggers == nil,
+		ups.ForceSentinelWrite,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err

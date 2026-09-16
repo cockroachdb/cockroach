@@ -1967,7 +1967,7 @@ type Family struct {
 
 // ID is part of the cat.Family interface.
 func (tf *Family) ID() cat.StableID {
-	return 1 + cat.StableID(tf.Ordinal)
+	return cat.StableID(tf.Ordinal)
 }
 
 // Name is part of the cat.Family interface.

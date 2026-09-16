@@ -315,6 +315,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		cb.evalCtx.SessionData(),
 		&cb.evalCtx.Settings.SV,
 		cb.rowMetrics,
+		false, /* forceSentinelWrite */
 	)
 	if err != nil {
 		return roachpb.Key{}, err

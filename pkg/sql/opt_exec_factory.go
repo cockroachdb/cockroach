@@ -1575,6 +1575,7 @@ func (ef *execFactory) ConstructUpdate(
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
+	forceSentinelWrite bool,
 ) (exec.Node, error) {
 	// TODO(radu): the execution code has an annoying limitation that the fetch
 	// columns must be a superset of the update columns, even when the "old" value
@@ -1606,7 +1607,7 @@ func (ef *execFactory) ConstructUpdate(
 	// Create the table updater, which does the bulk of the work.
 	if err := ef.constructUpdateRun(
 		&upd.run, table, fetchColOrdSet, updateColOrdSet, returnColOrdSet, rowsNeeded, returnCols,
-		checks, passthrough, uniqueWithTombstoneIndexes, lockedIndexes,
+		checks, passthrough, uniqueWithTombstoneIndexes, lockedIndexes, forceSentinelWrite,
 	); err != nil {
 		return nil, err
 	}
@@ -1682,6 +1683,7 @@ func (ef *execFactory) ConstructUpdateSwap(
 		&upd.run, table, fetchColOrdSet, updateColOrdSet, returnColOrdSet, rowsNeeded,
 		returnCols, exec.CheckOrdinalSet{} /* checks */, passthrough,
 		nil /* uniqueWithTombstoneIndexes */, lockedIndexes,
+		false, /* forceSentinelWrite: update swap is disabled on multi-column-family tables */
 	); err != nil {
 		return nil, err
 	}
@@ -1716,6 +1718,7 @@ func (ef *execFactory) constructUpdateRun(
 	passthrough colinfo.ResultColumns,
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	lockedIndexes cat.IndexOrdinals,
+	forceSentinelWrite bool,
 ) error {
 	tabDesc := table.(*optTable).desc
 	fetchCols, updateCols := makeColList2(table, fetchColOrdSet, updateColOrdSet)
@@ -1733,6 +1736,7 @@ func (ef *execFactory) constructUpdateRun(
 		ef.planner.SessionData(),
 		&ef.planner.ExecCfg().Settings.SV,
 		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
+		forceSentinelWrite,
 	)
 	if err != nil {
 		return err
@@ -1774,6 +1778,7 @@ func (ef *execFactory) ConstructUpsert(
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
+	forceSentinelWrite bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1809,6 +1814,7 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.SessionData(),
 		&ef.planner.ExecCfg().Settings.SV,
 		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
+		forceSentinelWrite,
 	)
 	if err != nil {
 		return nil, err
