@@ -19,6 +19,11 @@ enum EntryType {
   EntryConfChangeV2 = 2; // corresponds to pb.ConfChangeV2
 }
 
+message EntryID {
+  optional uint64     Term = 1 [(gogoproto.nullable) = false];
+  optional uint64     Index = 2 [(gogoproto.nullable) = false];
+}
+
 message Entry {
   optional uint64     Term  = 2 [(gogoproto.nullable) = false]; // must be 64-bit aligned for atomic operations
   optional uint64     Index = 3 [(gogoproto.nullable) = false]; // must be 64-bit aligned for atomic operations
@@ -94,6 +99,7 @@ message Message {
   optional Snapshot    snapshot    = 9  [(gogoproto.nullable) = true];
   optional bool        reject      = 10 [(gogoproto.nullable) = false];
   optional uint64      rejectHint  = 11 [(gogoproto.nullable) = false];
+  repeated EntryID     tcEntryIDs  = 18 [(gogoproto.nullable) = false];
   optional bytes       context     = 12 [(gogoproto.nullable) = true];
 
   // match is the log index up to which the follower's log must persistently
