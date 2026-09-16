@@ -4034,3 +4034,36 @@ query R
 SELECT percentile_cont(ARRAY[.4::FLOAT]) WITHIN GROUP (ORDER BY i::FLOAT4) FROM t90519;
 ----
 {2.2}
+
+subtest regression_158770
+
+# Multiple filtered aggregates over the same argument must each read the
+# argument column, even when their filters require a pre-projection that
+# reorders the input stream.
+query II
+SELECT count(DISTINCT a.z) FILTER (WHERE b.x > 1),
+       count(DISTINCT a.z) FILTER (WHERE b.x > 2)
+FROM (VALUES (1, 1), (2, 1), (3, 2), (4, 2)) AS b(x, y)
+JOIN (VALUES (1), (2)) AS a(z) ON a.z = b.y;
+----
+2  1
+
+statement ok
+PREPARE regression_158770 (INT) AS
+SELECT count(DISTINCT a.z) FILTER (WHERE b.x > 1),
+       count(DISTINCT a.z) FILTER (WHERE b.x > $1)
+FROM (VALUES (1, 1), (2, 1), (3, 2), (4, 2)) AS b(x, y)
+JOIN (VALUES (1), (2)) AS a(z) ON a.z = b.y;
+
+query II
+EXECUTE regression_158770(1)
+----
+2  2
+
+query II
+EXECUTE regression_158770(2)
+----
+2  1
+
+statement ok
+DEALLOCATE regression_158770
