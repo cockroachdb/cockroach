@@ -317,3 +317,45 @@ sort
            │    └── columns: a:1!null b:2!null c:3!null d:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
            └── projections
                 └── 1 [as=x:7]
+
+# Regression test for issue #158879: null_ordered_last with DISTINCT
+exec-ddl
+CREATE TABLE nulls_t (
+  k INT PRIMARY KEY,
+  i INT
+)
+----
+
+# Test DISTINCT with null_ordered_last=true
+build set=null_ordered_last=true
+SELECT DISTINCT i FROM nulls_t ORDER BY i
+----
+sort
+ ├── columns: i:2  [hidden: nulls_ordering_i:5!null]
+ ├── ordering: +5,+2
+ └── distinct-on
+      ├── columns: i:2 nulls_ordering_i:5!null
+      ├── grouping columns: i:2 nulls_ordering_i:5!null
+      └── project
+           ├── columns: nulls_ordering_i:5!null i:2
+           ├── scan nulls_t
+           │    └── columns: k:1!null i:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── projections
+                └── i:2 IS NULL [as=nulls_ordering_i:5]
+
+# Test DISTINCT with explicit NULLS LAST
+build
+SELECT DISTINCT i FROM nulls_t ORDER BY i NULLS LAST
+----
+sort
+ ├── columns: i:2  [hidden: nulls_ordering_i:5!null]
+ ├── ordering: +5,+2
+ └── distinct-on
+      ├── columns: i:2 nulls_ordering_i:5!null
+      ├── grouping columns: i:2 nulls_ordering_i:5!null
+      └── project
+           ├── columns: nulls_ordering_i:5!null i:2
+           ├── scan nulls_t
+           │    └── columns: k:1!null i:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── projections
+                └── i:2 IS NULL [as=nulls_ordering_i:5]

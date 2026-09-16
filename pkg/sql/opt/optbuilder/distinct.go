@@ -28,12 +28,39 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 	// This will cause an error for queries like:
 	//   SELECT DISTINCT a FROM t ORDER BY b
 	// Note: this behavior is consistent with PostgreSQL.
+	//
+	// Special case: allow "col IS NULL" expressions that are added for
+	// null_ordered_last handling. These don't affect the DISTINCT semantics
+	// since they're deterministic functions of columns already in the grouping.
 	for _, col := range inScope.ordering {
 		if !private.GroupingCols.Contains(col.ID()) {
-			panic(pgerror.Newf(
-				pgcode.InvalidColumnReference,
-				"for SELECT DISTINCT, ORDER BY expressions must appear in select list",
-			))
+			colIsValid := false
+			scopeCol := inScope.getColumn(col.ID())
+			if scopeCol != nil {
+				// Check if this is a synthetic column added for null ordering.
+				// These columns contain "col IS NULL" expressions where col is
+				// already in the grouping columns. They are safe to include in
+				// DISTINCT grouping because they are deterministic functions of
+				// columns already in the grouping.
+				if isExpr, ok := scopeCol.scalar.(*memo.IsExpr); ok {
+					if _, ok := isExpr.Right.(*memo.NullExpr); ok {
+						if v, ok := isExpr.Left.(*memo.VariableExpr); ok {
+							if private.GroupingCols.Contains(v.Col) {
+								// This is a "col IS NULL" expression where col is already
+								// in the grouping columns. Add it to the grouping.
+								private.GroupingCols.Add(col.ID())
+								colIsValid = true
+							}
+						}
+					}
+				}
+			}
+			if !colIsValid {
+				panic(pgerror.Newf(
+					pgcode.InvalidColumnReference,
+					"for SELECT DISTINCT, ORDER BY expressions must appear in select list",
+				))
+			}
 		}
 	}
 
