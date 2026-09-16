@@ -561,8 +561,8 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 //
 // [ - /1/10), (/1/10 - /2/20), (2/20 - ]
 //
-// TODO(radu,mgartner): technically these filters are not correct with respect
-// to NULL values - we would want the tuple comparisons to treat NULLs as the
+// TODO(radu,mgartner): for NULL-free partition values, these filters are not
+// correct with respect to NULL rows - we want tuple comparisons to treat NULLs as the
 // smallest value. We compensate for this by adding an (a IS NULL) disjunct if
 // column `a` is nullable; in addition, we know that these filters will only be
 // used for span generation, and the span generation currently doesn't exclude
@@ -582,7 +582,7 @@ func (c *CustomFuncs) inBetweenFilters(
 		return partitionValues[i].Compare(c.e.ctx, c.e.evalCtx, partitionValues[j]) < 0
 	})
 
-	// The beginExpr created below will not include NULL values for the first
+	// The beginExpr created below may not include NULL values for the first
 	// column. For example, with an index on (a, b) and partition values of
 	// {'foo', 'bar'}, beginExpr would be (a, b) < ('foo', 'bar') which
 	// evaluates to NULL if a is NULL. The index constraint span generated for
@@ -667,8 +667,10 @@ func (c *CustomFuncs) columnComparison(
 	tabID opt.TableID, index cat.Index, values tree.Datums, comp int,
 ) opt.ScalarExpr {
 	colTypes := make([]*types.T, len(values))
+	hasNull := false
 	for i := range values {
 		colTypes[i] = values[i].ResolvedType()
+		hasNull = hasNull || values[i] == tree.DNull
 	}
 
 	columnVariables := make(memo.ScalarListExpr, len(values))
@@ -678,6 +680,40 @@ func (c *CustomFuncs) columnComparison(
 		colID := tabID.IndexColumnID(index, i)
 		columnVariables[i] = c.e.f.ConstructVariable(colID)
 		scalarValues[i] = c.e.f.ConstructConstVal(val, val.ResolvedType())
+	}
+
+	if hasNull {
+		// These comparisons describe physical partition keys, where NULL sorts
+		// before non-NULL values. SQL tuple comparisons against NULL instead
+		// discard matching prefixes: (a, b) > (1, NULL) only admits a > 1.
+		// Expand lexicographically using null-safe equal prefixes so that both
+		// the partition spans and their complement retain those keys.
+		var result opt.ScalarExpr = c.e.f.ConstructFalse()
+		if comp == 0 {
+			result = c.e.f.ConstructTrue()
+		}
+		for i := len(values) - 1; i >= 0; i-- {
+			variable, value := columnVariables[i], scalarValues[i]
+			result = c.e.f.ConstructAnd(c.e.f.ConstructIs(variable, value), result)
+			if comp == 0 {
+				continue
+			}
+			var strict opt.ScalarExpr = c.e.f.ConstructFalse()
+			if values[i] == tree.DNull {
+				if comp > 0 {
+					strict = c.e.f.ConstructIsNot(variable, memo.NullSingleton)
+				}
+			} else if comp < 0 {
+				strict = c.e.f.ConstructOr(
+					c.e.f.ConstructLt(variable, value),
+					c.e.f.ConstructIs(variable, memo.NullSingleton),
+				)
+			} else {
+				strict = c.e.f.ConstructGt(variable, value)
+			}
+			result = c.e.f.ConstructOr(strict, result)
+		}
+		return result
 	}
 
 	colsTuple := c.e.f.ConstructTuple(columnVariables, types.MakeTuple(colTypes))
