@@ -11,7 +11,7 @@ CREATE TABLE t (
 query T
 EXPLAIN SELECT a, b FROM t ORDER BY b
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +b
@@ -24,7 +24,7 @@ distribution: local
 query T
 EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: -b
@@ -38,7 +38,7 @@ distribution: local
 query T
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • top-k
 │ order: +b
@@ -52,7 +52,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • top-k
@@ -75,7 +75,7 @@ vectorized: true
 query T
 EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • revscan
   missing stats
@@ -86,7 +86,7 @@ distribution: local
 query T
 EXPLAIN SELECT b FROM t ORDER BY a LIMIT 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -97,7 +97,7 @@ distribution: local
 query T
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • revscan
   missing stats
@@ -107,7 +107,7 @@ distribution: local
 query T
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • revscan
   missing stats
@@ -117,7 +117,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, t.*)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -134,7 +134,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, a), c
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -151,7 +151,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY b, (a, c)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -168,7 +168,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, (a, c))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -186,7 +186,7 @@ vectorized: true
 query T
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -196,7 +196,7 @@ distribution: local
 query T
 EXPLAIN SELECT 1, * FROM t ORDER BY 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • render
 │
@@ -208,7 +208,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -219,7 +219,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT b+2 r FROM t ORDER BY b+2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -241,7 +241,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -308,7 +308,7 @@ output row: [4 5]
 query T
 EXPLAIN SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -319,7 +319,7 @@ distribution: local
 query T
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 AND b < 15 ORDER BY b, a, d
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +b,+a,+d
@@ -337,7 +337,7 @@ distribution: local
 query T
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +b,+a,+d
@@ -365,7 +365,7 @@ SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
 query T
 EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -387,7 +387,7 @@ vectorized: true
 query T
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -397,7 +397,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -413,7 +413,7 @@ vectorized: true
 query T
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -423,7 +423,7 @@ distribution: local
 query T
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -474,7 +474,7 @@ output row: [1]
 query T
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • revscan
   missing stats
@@ -484,7 +484,7 @@ distribution: local
 query T
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -494,7 +494,7 @@ distribution: local
 query T
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • revscan
   missing stats
@@ -505,7 +505,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -525,7 +525,7 @@ CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
 query T
 EXPLAIN (VERBOSE) SELECT * FROM bar ORDER BY baz, id
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -553,7 +553,7 @@ CREATE TABLE abcd (
 query T
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -563,7 +563,7 @@ distribution: local
 query T
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -573,7 +573,7 @@ distribution: local
 query T
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -583,7 +583,7 @@ distribution: local
 query T
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -596,7 +596,7 @@ CREATE TABLE nan (id INT PRIMARY KEY, x REAL)
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -609,7 +609,7 @@ vectorized: true
 query T
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
 ----
-distribution: local
+distribution: local (ordinalityProhibited)
 ·
 • ordinality
 │ estimated row count: 3
@@ -620,7 +620,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC
 ----
-distribution: local
+distribution: local (ordinalityProhibited)
 ·
 • sort
 │ estimated row count: 3
@@ -635,7 +635,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
 ----
-distribution: local
+distribution: local (ordinalityProhibited)
 vectorized: true
 ·
 • ordinality
@@ -652,7 +652,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
 ----
-distribution: local
+distribution: local (ordinalityProhibited)
 vectorized: true
 ·
 • ordinality
@@ -675,7 +675,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • project
@@ -694,7 +694,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -716,7 +716,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -760,7 +760,7 @@ CREATE TABLE uvwxyz (
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -789,7 +789,7 @@ CREATE TABLE blocks (
 query T
 EXPLAIN (VERBOSE) SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -812,7 +812,7 @@ SET allow_ordinal_column_references=true
 query T
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -839,7 +839,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -875,7 +875,7 @@ CREATE TABLE a(x, y) AS VALUES (1, 1), (2, 2)
 query T
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY a.*
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -892,7 +892,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY (a.*)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -917,7 +917,7 @@ CREATE TABLE kv(k INT PRIMARY KEY, v INT); CREATE INDEX foo ON kv(v DESC)
 query T
 EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -933,7 +933,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv ASC
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -949,7 +949,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -965,7 +965,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY v, PRIMARY KEY kv, v-2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -985,7 +985,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1001,7 +1001,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1017,7 +1017,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1033,7 +1033,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo, k
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1056,7 +1056,7 @@ query T
 EXPLAIN (VERBOSE)
 SELECT k FROM kv JOIN (VALUES (1,2), (3,4)) AS z(a,b) ON kv.k = z.a ORDER BY INDEX kv@foo
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1087,7 +1087,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1127,7 +1127,7 @@ CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z=1 AND x=y ORDER BY x;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1159,7 +1159,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b NULLS FIRST
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -1176,7 +1176,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b NULLS LAST
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1202,7 +1202,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC NULLS FIRST
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1228,7 +1228,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC NULLS LAST
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -1245,7 +1245,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC NULLS FIRST, c NULLS LAST
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1279,7 +1279,7 @@ CREATE INDEX b_idx ON t(b);
 query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b NULLS LAST
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project

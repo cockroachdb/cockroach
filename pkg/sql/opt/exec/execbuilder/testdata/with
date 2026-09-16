@@ -10,7 +10,7 @@ query T
 EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t JOIN t AS q ON true
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -49,7 +49,7 @@ query T
 EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -66,7 +66,7 @@ query T
 EXPLAIN (VERBOSE)
   WITH t AS (INSERT INTO x VALUES (1) RETURNING a) SELECT * FROM t
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -114,7 +114,7 @@ EXPLAIN (VERBOSE)
   FROM
     w, table39010
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • cross join (inner)
@@ -142,7 +142,7 @@ EXPLAIN (VERBOSE)
   )
   SELECT sum(n) FROM t
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • group (scalar)
@@ -172,7 +172,7 @@ EXPLAIN (VERBOSE)
   )
   SELECT sum(n) FROM t
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • group (scalar)
@@ -202,7 +202,7 @@ EXPLAIN
     SELECT * FROM foo
   ) FROM y
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • render
 │
@@ -233,7 +233,7 @@ EXPLAIN
     (VALUES (1), (2), (10)) AS v(x),
     LATERAL (WITH foo AS MATERIALIZED (SELECT a FROM y WHERE y.a <= x) SELECT * FROM foo)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • apply join
 │
@@ -260,7 +260,7 @@ EXPLAIN WITH RECURSIVE
      (SELECT * FROM x UNION ALL SELECT * FROM x)
  SELECT * FROM y
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -295,7 +295,7 @@ EXPLAIN WITH RECURSIVE
    y(id) AS (SELECT * FROM t93370 UNION ALL SELECT * FROM t93370)
  SELECT * FROM y
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • render
 │

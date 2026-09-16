@@ -108,7 +108,7 @@ onlyif config local
 query T
 EXPLAIN CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • create function
 

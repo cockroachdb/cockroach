@@ -1693,7 +1693,7 @@ onlyif config multiregion-9node-3region-3azs
 query T
 EXPLAIN (VERBOSE) UPSERT INTO child (k) VALUES (4);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root
@@ -1779,7 +1779,7 @@ onlyif config multiregion-9node-3region-3azs
 query T
 EXPLAIN (VERBOSE) UPDATE child SET k = 4 WHERE k = 3;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root
@@ -1899,7 +1899,7 @@ onlyif config multiregion-9node-3region-3azs
 query T
 EXPLAIN (VERBOSE) INSERT INTO child (VALUES (1, 2));
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root
@@ -2029,7 +2029,7 @@ onlyif config multiregion-9node-3region-3azs
 query T
 EXPLAIN (VERBOSE) UPDATE child SET y = x * 10 WHERE y IS NULL
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited, localityOptimizedOpProhibited)
 vectorized: true
 ·
 • root

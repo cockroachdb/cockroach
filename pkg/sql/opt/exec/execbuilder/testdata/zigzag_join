@@ -11,7 +11,7 @@ INSERT INTO t71093 VALUES (0, 1, 2, 3)
 query T
 EXPLAIN SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (scalar)
 │
@@ -27,7 +27,7 @@ distribution: local
 query T
 EXPLAIN SELECT count(*) FROM t71093 WHERE a = 0 AND c = 2 AND d = 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (scalar)
 │
@@ -43,7 +43,7 @@ distribution: local
 query T
 EXPLAIN SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2 AND d = 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (scalar)
 │
@@ -63,7 +63,7 @@ CREATE TABLE t71271(a INT, b INT, c INT, d INT, INDEX (c), INDEX (d))
 query T
 EXPLAIN SELECT d FROM t71271 WHERE c = 3 AND d = 4
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • zigzag join
   pred: (c = 3) AND (d = 4)

@@ -18399,7 +18399,7 @@ SET optimizer_clamp_inequality_selectivity = off;
 query T
 EXPLAIN SELECT c FROM t1401 WHERE c >= '2022-01-25T21:17:27.216095Z'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
@@ -18421,7 +18421,7 @@ ORDER BY
 LIMIT
   100
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • limit
 │ count: 100
@@ -18447,7 +18447,7 @@ RESET optimizer_use_forecasts
 query T
 EXPLAIN SELECT c FROM t1401 WHERE c >= '2022-01-25T21:17:27.216095Z'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 179,489,803 (2.7% of the table; stats collected <hidden> ago; using stats forecast)
@@ -18469,7 +18469,7 @@ ORDER BY
 LIMIT
   100
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • limit
 │ count: 100

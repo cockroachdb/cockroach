@@ -15,7 +15,7 @@ CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p), FAMI
 query T
 EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -53,7 +53,7 @@ SET enable_shared_locking_for_serializable=true
 query T
 EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -113,7 +113,7 @@ CREATE TABLE xy (x INT, y INT)
 query T
 EXPLAIN INSERT INTO child SELECT x,y FROM xy
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -147,7 +147,7 @@ SET enable_implicit_fk_locking_for_serializable = true
 query T
 EXPLAIN INSERT INTO child SELECT x,y FROM xy
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -186,7 +186,7 @@ CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p), INDE
 query T
 EXPLAIN INSERT INTO child_nullable VALUES (100, 1), (200, NULL)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -223,7 +223,7 @@ SET enable_implicit_fk_locking_for_serializable = true
 query T
 EXPLAIN INSERT INTO child_nullable VALUES (100, 1), (200, NULL)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -272,7 +272,7 @@ CREATE TABLE multi_col_child  (
 query T
 EXPLAIN INSERT INTO multi_col_child VALUES (2, NULL, 20, 20), (3, 20, NULL, 20)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -321,7 +321,7 @@ CREATE TABLE multi_ref_child (
 query T
 EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL), (2, 3, 4, 5)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -372,7 +372,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert
 │ into: multi_ref_child(k, a, b, c)
@@ -386,7 +386,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM parent WHERE p = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -432,7 +432,7 @@ SET enable_implicit_fk_locking_for_serializable = true
 query T
 EXPLAIN DELETE FROM parent WHERE p = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -479,7 +479,7 @@ CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other),
 query T
 EXPLAIN DELETE FROM parent WHERE p = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -543,7 +543,7 @@ CREATE TABLE doublechild (
 query T
 EXPLAIN DELETE FROM doubleparent WHERE p1 = 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -575,7 +575,7 @@ distribution: local
 query T
 EXPLAIN UPDATE child SET p = 4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -613,7 +613,7 @@ SET enable_implicit_fk_locking_for_serializable = true
 query T
 EXPLAIN UPDATE child SET p = 4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -676,7 +676,7 @@ RESET enable_implicit_fk_locking_for_serializable
 query T
 EXPLAIN UPDATE child SET p = 4 WHERE c = 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -714,7 +714,7 @@ SET enable_implicit_fk_locking_for_serializable = true
 query T
 EXPLAIN UPDATE child SET p = 4 WHERE c = 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -752,7 +752,7 @@ RESET enable_implicit_fk_locking_for_serializable
 query T
 EXPLAIN UPDATE parent SET p = p+1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -806,7 +806,7 @@ distribution: local
 query T
 EXPLAIN UPDATE parent SET p = p+1 WHERE other = 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -863,7 +863,7 @@ CREATE TABLE grandchild (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
 query T
 EXPLAIN UPDATE child SET c = 4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -916,7 +916,7 @@ SET enable_implicit_fk_locking_for_serializable = true
 query T
 EXPLAIN UPDATE child SET c = 4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -967,7 +967,7 @@ RESET enable_implicit_fk_locking_for_serializable
 query T
 EXPLAIN UPDATE child SET p = 4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1005,7 +1005,7 @@ SET enable_implicit_fk_locking_for_serializable = true
 query T
 EXPLAIN UPDATE child SET p = 4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1043,7 +1043,7 @@ RESET enable_implicit_fk_locking_for_serializable
 query T
 EXPLAIN UPDATE child SET p = p
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1075,7 +1075,7 @@ distribution: local
 query T
 EXPLAIN UPDATE child SET p = p+1, c = c+1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1138,7 +1138,7 @@ SET enable_implicit_fk_locking_for_serializable = true
 query T
 EXPLAIN UPDATE child SET p = p+1, c = c+1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1205,7 +1205,7 @@ CREATE TABLE grandchild2 (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
 query T
 EXPLAIN UPDATE child SET p = 4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1242,7 +1242,7 @@ CREATE TABLE self (x INT PRIMARY KEY, y INT NOT NULL REFERENCES self(x))
 query T
 EXPLAIN UPDATE self SET y = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1280,7 +1280,7 @@ SET enable_implicit_fk_locking_for_serializable = true
 query T
 EXPLAIN UPDATE self SET y = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1318,7 +1318,7 @@ RESET enable_implicit_fk_locking_for_serializable
 query T
 EXPLAIN UPDATE self SET x = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1370,7 +1370,7 @@ SET enable_implicit_fk_locking_for_serializable = true
 query T
 EXPLAIN UPDATE self SET x = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1425,7 +1425,7 @@ SET enable_insert_fast_path = true
 query T
 EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -1447,7 +1447,7 @@ SET enable_implicit_fk_locking_for_serializable = true
 query T
 EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -1532,7 +1532,7 @@ CREATE TABLE nonunique_idx_child (
 query T
 EXPLAIN INSERT INTO nonunique_idx_child VALUES (0, 1, 10)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: nonunique_idx_child(k, ref1, ref2)
@@ -1576,7 +1576,7 @@ CREATE TABLE cascadechild (
 query T
 EXPLAIN (VERBOSE) DELETE FROM cascadeparent WHERE p > 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -1613,7 +1613,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) DELETE FROM cascadeparent WHERE p > 1 AND data > 0
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -1707,7 +1707,7 @@ FROM
 WHERE
   t.z IS NULL
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: z IS NULL
@@ -1742,7 +1742,7 @@ FROM
 WHERE
   t.z IS NULL
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • norows
 
@@ -1775,7 +1775,7 @@ ALTER TABLE c INJECT STATISTICS '[
 query T
 EXPLAIN INSERT INTO c VALUES (1,1), (2,2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: c(c, p)
@@ -1788,7 +1788,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO c VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: c(c, p)
@@ -1799,7 +1799,7 @@ distribution: local
 query T
 EXPLAIN UPDATE c SET p=p+c WHERE c > 0
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1840,7 +1840,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM p WHERE p > 0
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1876,7 +1876,7 @@ SET prefer_lookup_joins_for_fks = true
 query T
 EXPLAIN INSERT INTO c VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: c(c, p)
@@ -1887,7 +1887,7 @@ distribution: local
 query T
 EXPLAIN UPDATE c SET p=p+c WHERE c > 0
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1927,7 +1927,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM p WHERE p > 0
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1981,7 +1981,7 @@ CREATE TABLE large_child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES small_par
 query T
 EXPLAIN INSERT INTO large_child SELECT i, i % 10 + 1 FROM generate_series(1, 10000) AS i
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -2032,7 +2032,7 @@ CREATE TABLE partial_child (
 query T
 EXPLAIN DELETE FROM partial_parent WHERE id = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -2062,7 +2062,7 @@ distribution: local
 query T
 EXPLAIN UPDATE partial_parent SET id = 2 WHERE id = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │

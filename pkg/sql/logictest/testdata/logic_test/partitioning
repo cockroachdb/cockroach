@@ -1456,7 +1456,7 @@ WHERE
 	(NOT ('2012-05-14 07:37:50.000177+00':::TIMESTAMPTZ NOT IN (SELECT col1_6 FROM t104434)))
 ;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • root
 │

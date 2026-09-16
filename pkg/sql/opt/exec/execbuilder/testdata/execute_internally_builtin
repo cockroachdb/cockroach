@@ -41,7 +41,7 @@ SELECT crdb_internal.execute_internally('SELECT k FROM t;', true);
 query T rowsort
 SELECT crdb_internal.execute_internally('EXPLAIN SELECT k FROM t;', 'Database=test');
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -52,7 +52,7 @@ distribution: local
 query T rowsort
 SELECT crdb_internal.execute_internally('EXPLAIN SELECT k FROM t;', 'Database=test,VectorizeMode=off');
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: false
 ·
 • scan
@@ -67,7 +67,7 @@ SET CLUSTER SETTING sql.internal_executor.session_overrides = 'Database=test,Vec
 query T rowsort
 SELECT crdb_internal.execute_internally('EXPLAIN SELECT k FROM t;');
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: false
 ·
 • scan

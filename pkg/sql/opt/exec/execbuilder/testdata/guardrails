@@ -11,7 +11,7 @@ SET transaction_rows_read_err = 1
 query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -24,7 +24,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails LIMIT 50
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -37,7 +37,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails WHERE i = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -49,7 +49,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails WHERE i IN (1, 2)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -63,7 +63,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails WHERE i > 0 AND i <= 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -81,7 +81,7 @@ SET transaction_rows_read_err = 50
 query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -94,7 +94,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails LIMIT 50
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -107,7 +107,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails WHERE i = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -119,7 +119,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails WHERE i > 0 AND i <= 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan

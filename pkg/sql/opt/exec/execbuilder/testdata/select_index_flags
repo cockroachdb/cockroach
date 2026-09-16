@@ -15,7 +15,7 @@ CREATE TABLE abcd (
 query T
 EXPLAIN SELECT * FROM abcd WHERE a >= 20 AND a <= 30
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -26,7 +26,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd WHERE a >= 20 AND a <= 30 ORDER BY a DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • revscan
   missing stats
@@ -37,7 +37,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd@abcd_pkey WHERE a >= 20 AND a <= 30
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -48,7 +48,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=abcd_pkey,DESC} WHERE a >= 20 AND a <= 30
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • revscan
   missing stats
@@ -59,7 +59,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd@abcd_pkey WHERE a >= 20 AND a <= 30 ORDER BY a DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • revscan
   missing stats
@@ -70,7 +70,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=abcd_pkey,ASC} WHERE a >= 20 AND a <= 30 ORDER BY a DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: -a
@@ -84,7 +84,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (a >= 20) AND (a <= 30)
@@ -101,7 +101,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,DESC} WHERE a >= 20 AND a <= 30
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (a >= 20) AND (a <= 30)
@@ -118,7 +118,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd@b ORDER BY b DESC LIMIT 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: abcd@abcd_pkey
@@ -133,7 +133,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,DESC} ORDER BY b DESC LIMIT 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: abcd@abcd_pkey
@@ -149,7 +149,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,ASC} ORDER BY b DESC LIMIT 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: abcd@abcd_pkey
@@ -167,7 +167,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd@cd WHERE a >= 20 AND a <= 30
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (a >= 20) AND (a <= 30)
@@ -184,7 +184,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (a >= 20) AND (a <= 30)
@@ -198,7 +198,7 @@ distribution: local
 query T
 EXPLAIN SELECT b FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (a >= 20) AND (a <= 30)
@@ -212,7 +212,7 @@ distribution: local
 query T
 EXPLAIN SELECT b FROM abcd@b WHERE c >= 20 AND c <= 30
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (c >= 20) AND (c <= 30)
@@ -229,7 +229,7 @@ distribution: local
 query T
 EXPLAIN SELECT c, d FROM abcd WHERE c >= 20 AND c < 40
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -240,7 +240,7 @@ distribution: local
 query T
 EXPLAIN SELECT c, d FROM abcd@abcd_pkey WHERE c >= 20 AND c < 40
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (c >= 20) AND (c < 40)
@@ -254,7 +254,7 @@ distribution: local
 query T
 EXPLAIN SELECT c, d FROM abcd@b WHERE c >= 20 AND c < 40
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (c >= 20) AND (c < 40)
@@ -270,7 +270,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b} WHERE a >= 20 AND a <= 30
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (a >= 20) AND (a <= 30)
@@ -286,7 +286,7 @@ distribution: local
 query T
 EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: abcd@abcd_pkey
@@ -299,7 +299,7 @@ distribution: local
 query T
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: c = 10
@@ -312,7 +312,7 @@ distribution: local
 query T
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd} WHERE c = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: c = 10
@@ -325,7 +325,7 @@ distribution: local
 query T
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=abcd_pkey} WHERE c = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: c = 10

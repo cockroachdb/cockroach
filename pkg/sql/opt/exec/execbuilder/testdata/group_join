@@ -11,7 +11,7 @@ SET experimental_hash_group_join_enabled = true
 query T
 EXPLAIN (DISTSQL) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN data AS data2 ON data1.a = data2.c GROUP BY data1.a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (hash)
 │ group by: a
@@ -38,7 +38,7 @@ RESET experimental_hash_group_join_enabled
 query T
 EXPLAIN (DISTSQL) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN data AS data2 ON data1.a = data2.c GROUP BY data1.a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (hash)
 │ group by: a

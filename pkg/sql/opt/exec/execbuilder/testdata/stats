@@ -30,7 +30,7 @@ set enable_zigzag_join = false
 query T retry
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -64,7 +64,7 @@ ALTER TABLE uv INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -101,7 +101,7 @@ ALTER TABLE uv INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -136,7 +136,7 @@ ALTER TABLE uv INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -536,7 +536,7 @@ FROM
 WHERE
   a = 'a' AND b = 'b' AND c = 'c'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ estimated row count: 9
@@ -649,7 +649,7 @@ FROM
 WHERE
   a = 'a' AND b = 'b' AND c = 'c'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ estimated row count: 9
