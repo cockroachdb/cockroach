@@ -19,24 +19,31 @@ type indexedColumn struct {
 	direction tree.Direction
 }
 
-// index encapsulates the indexed columns and the fingerprints of the that
-// the index was recommended for.
+// index encapsulates the indexed columns, the fingerprints of the that
+// the index was recommended for, and the set of superseded index names.
 type index struct {
-	indexedColumns []indexedColumn
-	fingerprints   []uint64
+	indexedColumns    []indexedColumn
+	fingerprints      []uint64
+	supersededIndexes []string
 }
 
 // TrieNode is an implementation of the node of a IndexTrie-tree.
 //
 // TrieNode stores the indexed columns, storing columns, parent node, the
-// indexed column represented by the node (used to assign storings), and the
-// fingerprintId of the that the index was recommended for.
+// indexed column represented by the node (used to assign storings), the
+// fingerprintId of the that the index was recommended for, and the set of
+// superseded index names collected from replacement recommendations.
 type indexTrieNode struct {
 	children     map[indexedColumn]*indexTrieNode
 	storing      map[string]struct{}
 	fingerprints []uint64
 	parent       *indexTrieNode
 	col          indexedColumn
+
+	// supersededIndexes collects the names of existing indexes that are
+	// superseded by this index, aggregated from all replacement recommendations
+	// that merged into this leaf.
+	supersededIndexes []string
 }
 
 // indexTrie is an implementation of a indexTrie-tree specific for indexes of
@@ -57,8 +64,11 @@ func NewTrie() *indexTrie {
 }
 
 // Insert parses the columns in ci (CreateIndex) and updates the trie.
+// supersededIndexes are the names of existing indexes superseded by this
+// recommendation's index; they are aggregated onto the leaf node so that a
+// merged leaf can carry the full set of indexes it supersedes.
 func (trie *indexTrie) Insert(
-	indexedCols tree.IndexElemList, storingCols tree.NameList, fingerprintId uint64,
+	indexedCols tree.IndexElemList, storingCols tree.NameList, fingerprintId uint64, supersededIndexes []string,
 ) {
 	node := trie.root
 	for _, indexedCol := range indexedCols {
@@ -88,6 +98,9 @@ func (trie *indexTrie) Insert(
 	}
 
 	node.fingerprints = append(node.fingerprints, fingerprintId)
+	if len(supersededIndexes) > 0 {
+		node.supersededIndexes = append(node.supersededIndexes, supersededIndexes...)
+	}
 	if len(storingCols) > 0 {
 		if node.storing == nil {
 			node.storing = make(map[string]struct{})
@@ -259,9 +272,20 @@ func collectAllLeaves(
 		for _, fingerprintId := range fingerprintIds {
 			fingerprintMap[fingerprintId] = struct{}{}
 		}
+		// deduplicate superseded index names
+		superseded := make([]string, 0, len(node.supersededIndexes))
+		supersededSet := make(map[string]struct{})
+		for _, name := range node.supersededIndexes {
+			if _, ok := supersededSet[name]; ok {
+				continue
+			}
+			supersededSet[name] = struct{}{}
+			superseded = append(superseded, name)
+		}
 		*indexes = append(*indexes, index{
-			indexedColumns: curIndexedCols,
-			fingerprints:   slices.Collect(maps.Keys(fingerprintMap)),
+			indexedColumns:    curIndexedCols,
+			fingerprints:      slices.Collect(maps.Keys(fingerprintMap)),
+			supersededIndexes: superseded,
 		})
 		*storingCols = append(*storingCols, curStoringCols)
 		return
