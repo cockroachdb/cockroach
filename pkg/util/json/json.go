@@ -2563,7 +2563,8 @@ func (j jsonFalse) AsText() (*string, error) {
 	return &s, nil
 }
 func (j jsonNumber) AsText() (*string, error) {
-	s := j.String()
+	dec := apd.Decimal(j)
+	s := dec.String()
 	return &s, nil
 }
 func (j jsonArray) AsText() (*string, error) {
