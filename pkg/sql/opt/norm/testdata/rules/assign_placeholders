@@ -116,23 +116,17 @@ SELECT * FROM abcd WHERE (a, b) IN (
 ----
 semi-join (hash)
  ├── columns: a:1!null b:2!null c:3!null d:4
- ├── stable
  ├── key: (1-3)
  ├── fd: (1-3)-->(4)
  ├── scan abcd
  │    ├── columns: a:1!null b:2!null c:3!null d:4
  │    ├── key: (1-3)
  │    └── fd: (1-3)-->(4)
- ├── project-set
- │    ├── columns: unnest:7 unnest:8
- │    ├── stable
- │    ├── values
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── key: ()
- │    │    └── ()
- │    └── zip
- │         ├── unnest(e'{1\\x2c 2}'::INT8[]) [stable]
- │         └── unnest(e'{3\\x2c 4}'::INT8[]) [stable]
+ ├── values
+ │    ├── columns: unnest:7!null unnest:8!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1, 3)
+ │    └── (2, 4)
  └── filters
       ├── unnest:7 = a:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       └── unnest:8 = b:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
@@ -145,28 +139,63 @@ SELECT * FROM abcd WHERE (a, b) IN (
 ----
 project
  ├── columns: a:1!null b:2!null c:3!null d:4
- ├── stable
  ├── key: (1-3)
  ├── fd: (1-3)-->(4)
  └── inner-join (lookup abcd)
       ├── columns: a:1!null b:2!null c:3!null d:4 unnest:7!null unnest:8!null
       ├── key columns: [7 8] = [1 2]
-      ├── stable
-      ├── key: (3,7,8)
       ├── fd: (1-3)-->(4), (1)==(7), (7)==(1), (2)==(8), (8)==(2)
-      ├── distinct-on
-      │    ├── columns: unnest:7 unnest:8
-      │    ├── grouping columns: unnest:7 unnest:8
-      │    ├── stable
-      │    ├── key: (7,8)
-      │    └── project-set
-      │         ├── columns: unnest:7 unnest:8
-      │         ├── stable
-      │         ├── values
-      │         │    ├── cardinality: [1 - 1]
-      │         │    ├── key: ()
-      │         │    └── ()
-      │         └── zip
-      │              ├── unnest(e'{1\\x2c 2}'::INT8[]) [stable]
-      │              └── unnest(e'{3\\x2c 4}'::INT8[]) [stable]
+      ├── values
+      │    ├── columns: unnest:7!null unnest:8!null
+      │    ├── cardinality: [2 - 2]
+      │    ├── (1, 3)
+      │    └── (2, 4)
       └── filters (true)
+
+exec-ddl
+CREATE TABLE arr_test (a INT PRIMARY KEY, b INT, INDEX(b))
+----
+
+# Test that array placeholders using $1:::INT[] syntax work correctly.
+# The array literal '{1,2,3}' should be properly evaluated to a DArray.
+# Note: \x2c is a comma; we can't use a comma directly because of the
+# datadriven parser.
+assign-placeholders-opt query-args=('{1\x2c2\x2c3}')
+SELECT * FROM arr_test WHERE b = ANY($1:::INT[])
+----
+scan arr_test@arr_test_b_idx
+ ├── columns: a:1!null b:2!null
+ ├── constraint: /2/1: [/1 - /3]
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# Test assign-placeholders-norm with array placeholder.
+assign-placeholders-norm query-args=('{1\x2c2\x2c3}')
+SELECT * FROM arr_test WHERE b = ANY($1:::INT[])
+----
+select
+ ├── columns: a:1!null b:2!null
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan arr_test
+ │    ├── columns: a:1!null b:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── b:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+
+# Test with a string placeholder that contains a comma.
+assign-placeholders-opt query-args=('hello\x2c world')
+SELECT * FROM kv WHERE v::STRING = $1:::STRING
+----
+select
+ ├── columns: k:1!null v:2
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan kv
+ │    ├── columns: k:1!null v:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── v:2::STRING = 'hello, world' [outer=(2), immutable]
