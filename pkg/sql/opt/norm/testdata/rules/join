@@ -2713,13 +2713,13 @@ values
 # EliminateJoinNoColsLeft
 # --------------------------------------------------
 norm expect=EliminateJoinNoColsLeft
-SELECT unnest(ARRAY[[1,2,3],[4,5]])
+SELECT unnest(ARRAY[1,2])
 ----
 values
  ├── columns: unnest:1!null
  ├── cardinality: [2 - 2]
- ├── (ARRAY[1,2,3],)
- └── (ARRAY[4,5],)
+ ├── (1,)
+ └── (2,)
 
 # --------------------------------------------------
 # EliminateJoinNoColsRight

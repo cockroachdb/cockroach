@@ -119,16 +119,7 @@ SELECT ARRAY(VALUES (1),(2),(1))
 ----
 {1,2,1}
 
-# This query works in local config but fails in distributed config since the
-# support for nested arrays is incomplete.
-onlyif config #32252 local
-query T
-SELECT ARRAY(VALUES (ARRAY[1]))
-----
-{"{1}"}
-
-onlyif config #32252 fakedist
-query error unimplemented: nested arrays are not fully supported.*\nHINT.*\n.*32552
+query error pgcode 0A000 arrays of int\[\] not allowed.*\nHINT.*\n.*32552
 SELECT ARRAY(VALUES (ARRAY[1]))
 
 query T
@@ -485,16 +476,7 @@ DROP TABLE boundedtable
 statement error .*unimplemented.*\nHINT.*\n.*32552
 CREATE TABLE badtable (b INT[][])
 
-# This query works in local config but fails in distributed config since the
-# support for nested arrays is incomplete.
-onlyif config #32252 local
-query T
-SELECT ARRAY[ARRAY[1,2,3]]
-----
-{"{1,2,3}"}
-
-onlyif config #32552 fakedist
-query error unimplemented: nested arrays are not fully supported.*\nHINT.*\n.*32552
+query error pgcode 0A000 arrays of int\[\] not allowed.*\nHINT.*\n.*32552
 SELECT ARRAY[ARRAY[1,2,3]]
 
 # The postgres-compat aliases should be disallowed.
@@ -2560,3 +2542,52 @@ SELECT width_bucket(true, '{}');
 
 query error pgcode 42804 could not determine polymorphic type because input has type unknown
 SELECT array_to_string('{}', 'foo');
+
+subtest regression_146717
+
+# Multidimensional constructors must reject unsupported array elements before
+# they can be formatted as an array of strings instead of a nested array.
+query error pgcode 0A000 arrays of string\[\] not allowed.*\nHINT.*\n.*32552
+SELECT ARRAY[ARRAY['a']]::TEXT;
+
+query error pgcode 0A000 arrays of string\[\] not allowed
+SELECT ARRAY[['a']]::TEXT;
+
+query error pgcode 0A000 arrays of string\[\] not allowed
+SELECT ARRAY(SELECT ARRAY['a'])::TEXT;
+
+query error pgcode 0A000 arrays of string\[\] not allowed
+SELECT ARRAY(VALUES (ARRAY['a']))::TEXT;
+
+query error pgcode 0A000 arrays of int\[\] not allowed
+SELECT ARRAY[ARRAY[1, 2]];
+
+query error pgcode 0A000 arrays of int\[\] not allowed
+SELECT ARRAY[ARRAY[]::INT[]];
+
+query error pgcode 0A000 arrays of string\[\] not allowed
+SELECT ARRAY[NULL::TEXT[]];
+
+query error pgcode 0A000 arrays of int\[\] not allowed
+SELECT ARRAY(SELECT ARRAY[1] WHERE false);
+
+# Braces in scalar strings and array-valued tuple fields are not dimensions.
+query T
+SELECT ARRAY['{a}']::TEXT;
+----
+{"{a}"}
+
+query T
+SELECT ARRAY[ROW(ARRAY['a'])]::TEXT;
+----
+{"({a})"}
+
+query T
+SELECT ARRAY[]::TEXT[]::TEXT;
+----
+{}
+
+query T
+SELECT ARRAY[NULL::TEXT]::TEXT;
+----
+{NULL}

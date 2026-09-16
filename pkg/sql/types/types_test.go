@@ -20,6 +20,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestArrayElementTypeSupport(t *testing.T) {
+	for _, tc := range []struct {
+		typ   *T
+		issue int
+	}{
+		{String, 0},
+		{Int, 0},
+		{Unknown, 0},
+		{MakeTuple([]*T{StringArray}), 0},
+		{StringArray, 32552},
+		{IntArray, 32552},
+		{MakeArray(StringArray), 32552},
+		{TSQuery, 90886},
+		{TSVector, 90886},
+		{PGVector, 121432},
+	} {
+		t.Run(tc.typ.String(), func(t *testing.T) {
+			valid, issue := IsValidArrayElementType(tc.typ)
+			require.Equal(t, tc.issue == 0, valid)
+			require.Equal(t, tc.issue, issue)
+			if tc.issue == 0 {
+				require.NoError(t, CheckArrayElementType(tc.typ))
+			} else {
+				require.Error(t, CheckArrayElementType(tc.typ))
+			}
+		})
+	}
+}
+
 func TestTypes(t *testing.T) {
 	enCollate := "en"
 

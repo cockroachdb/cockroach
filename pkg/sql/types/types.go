@@ -3039,6 +3039,8 @@ func IsStringType(t *T) bool {
 // the issue number should be included in the error report to inform the user.
 func IsValidArrayElementType(t *T) (valid bool, issueNum int) {
 	switch t.Family() {
+	case ArrayFamily:
+		return false, 32552
 	case TSQueryFamily:
 		return false, 90886
 	case TSVectorFamily:
