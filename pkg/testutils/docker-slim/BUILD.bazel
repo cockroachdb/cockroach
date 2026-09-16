@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+# docker-slim_test exercises the slim CockroachDB Docker image built by
+# build/deploy-slim/Dockerfile. It is the slim-image counterpart to
+# //pkg/testutils/docker:docker_test. Unlike the standard image, the slim
+# image has no cockroach.sh wrapper — no cert auto-generation, no
+# /docker-entrypoint-initdb.d processing, no shell modes — so this test
+# drives the container by starting cockroach directly and polling via SQL.
+#
+# The target name preserves the directory's hyphen to match the convention
+# used by ci-stress (pkg/cmd/ci-stress), which derives Bazel target names
+# from directory names and does not strip hyphens.
+go_test(
+    name = "docker-slim_test",
+    srcs = ["single_node_slim_docker_test.go"],
+    tags = [
+        "integration",
+        "no-remote-exec",
+    ],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/testutils/skip",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_docker_docker//api/types",
+        "@com_github_docker_docker//api/types/container",
+        "@com_github_docker_docker//api/types/filters",
+        "@com_github_docker_docker//client",
+        "@com_github_docker_docker//pkg/stdcopy",
+        "@com_github_docker_go_connections//nat",
+    ],
+)
