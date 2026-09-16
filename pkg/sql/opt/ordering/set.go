@@ -63,7 +63,7 @@ func setOpBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.O
 // operation if the ordering involves all columns.
 func setOpBuildRequired(expr memo.RelExpr, required *props.OrderingChoice) *props.OrderingChoice {
 	private := expr.Private().(*memo.SetPrivate)
-	if required.Any() {
+	if required.Any() && (private.Ordering.Any() || expr.Op() == opt.UnionAllOp) {
 		return &private.Ordering
 	}
 
@@ -78,6 +78,13 @@ func setOpBuildRequired(expr memo.RelExpr, required *props.OrderingChoice) *prop
 		}
 		return &result
 	}
+
+	// Equivalences and optional columns in the output ordering need not hold on
+	// both inputs (for example, INTERSECT can inherit an equivalence from only
+	// one input). Choose a concrete ordering before adding the remaining columns,
+	// so both inputs must satisfy the same ordering used by the execution engine.
+	// setOpBuildChildReqOrdering can then simplify it using each input's own FDs.
+	result.FromOrdering(result.ToOrdering())
 
 	// If required includes some columns but not all, add the remaining columns in
 	// an arbitrary (but deterministic) order.

@@ -799,3 +799,63 @@ TABLE t130591_1 INTERSECT TABLE t130591_1;
 
 statement count 1
 TABLE t130591_1 UNION TABLE t130591_1;
+
+subtest regression_144925
+
+statement ok
+CREATE TABLE t144925 (a INT2, b INT8, INDEX (b, a))
+  WITH (sql_stats_automatic_collection_enabled = false);
+INSERT INTO t144925 VALUES (32, NULL), (-129, -129);
+
+# The two output columns are equivalent only on the left. The right input
+# cannot satisfy a first-column merge ordering by ordering its second column.
+query II rowsort
+SELECT a::INT8, a::INT8 FROM t144925 WHERE a IS NOT NULL
+INTERSECT SELECT DISTINCT a::INT8, b FROM t144925 WHERE a IS NOT NULL
+ORDER BY 1;
+----
+-129  -129
+
+query II rowsort
+SELECT a::INT8, a::INT8 FROM t144925 WHERE a IS NOT NULL
+EXCEPT SELECT DISTINCT a::INT8, b FROM t144925 WHERE a IS NOT NULL
+ORDER BY 1;
+----
+32  32
+
+# An equality filter also establishes output equivalence, without DISTINCT.
+query II rowsort
+SELECT b, c FROM (SELECT a::INT8 AS c, b FROM t144925) WHERE c = b
+INTERSECT SELECT a::INT8, b FROM t144925
+ORDER BY 1;
+----
+-129  -129
+
+# Preserve multiplicities when the left input has duplicate projected rows.
+statement ok
+INSERT INTO t144925 VALUES (-129, -129), (NULL, NULL);
+
+query II rowsort
+SELECT a::INT8, a::INT8 FROM t144925
+INTERSECT ALL SELECT DISTINCT a::INT8, b FROM t144925
+ORDER BY 1;
+----
+NULL  NULL
+-129  -129
+
+query II rowsort
+SELECT a::INT8, a::INT8 FROM t144925
+EXCEPT ALL SELECT DISTINCT a::INT8, b FROM t144925
+ORDER BY 1;
+----
+-129  -129
+32  32
+
+# An ordering on the other equivalent output column is equally valid.
+query II rowsort
+SELECT a::INT8, a::INT8 FROM t144925
+INTERSECT SELECT DISTINCT a::INT8, b FROM t144925
+ORDER BY 2 DESC;
+----
+NULL  NULL
+-129  -129
