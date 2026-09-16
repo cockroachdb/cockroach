@@ -1013,6 +1013,21 @@ func TestSQLStandardName(t *testing.T) {
 	}
 }
 
+func TestSQLStandardNamePseudoTypes(t *testing.T) {
+	for _, tc := range []struct {
+		typ      *T
+		expected string
+	}{
+		{Any, "any"},
+		{AnyElement, "anyelement"},
+		{AnyArray, "anyarray"},
+	} {
+		t.Run(tc.expected, func(t *testing.T) {
+			require.Equal(t, tc.expected, tc.typ.SQLStandardName())
+		})
+	}
+}
+
 func TestWithoutTypeModifiers(t *testing.T) {
 	const userDefinedOID = oidext.CockroachPredefinedOIDMax + 700
 	domain := MakeDomain(MakeString(2), userDefinedOID, userDefinedOID+1)
