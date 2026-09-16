@@ -308,6 +308,86 @@ $$
 
 subtest end
 
+# Regression test for #173710: a bare table alias on a table-returning UDF
+# call with a single declared output column should rename only the relation,
+# not the declared column name (unlike an anonymous single-column SRF, e.g.
+# generate_series(), where Postgres compatibility does rename the column to
+# match the alias).
+subtest regression_173710
+
+query I colnames,rowsort
+SELECT * FROM f_table2()
+----
+x
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+query I colnames,rowsort
+SELECT * FROM f_table2() AS f
+----
+x
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+query I
+SELECT f.x FROM f_table2() AS f WHERE f.x = 3
+----
+3
+
+statement ok
+CREATE FUNCTION f_table2_wrapper() RETURNS TABLE(x INT) AS $$
+  SELECT f.x FROM f_table2() AS f;
+$$ LANGUAGE SQL;
+
+query I rowsort
+SELECT * FROM f_table2_wrapper()
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+# An explicit column-alias list still overrides the declared column name, as
+# it does for any other data source.
+query I colnames,rowsort
+SELECT * FROM f_table2() AS f(y)
+----
+y
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+subtest end
+
 # Do not panic when the column definition list for a generator function does
 # not define types for all columns.
 subtest regression_145414
