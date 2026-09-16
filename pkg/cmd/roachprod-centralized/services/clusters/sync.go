@@ -146,6 +146,12 @@ func (s *Service) Sync(ctx context.Context, l *logger.Logger) (cloudcluster.Clus
 		l.Debug("finished replaying operations", slog.Int("total", totalOpsApplied))
 	}
 
+	// Verify context is still valid before storing clusters.
+	// This prevents leaked goroutines from writing stale data after timeout.
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Wrap(err, "context cancelled before storing clusters")
+	}
+
 	// Atomically store clusters and release the sync lock.
 	l.Debug("storing clusters and releasing sync lock")
 	err = s._store.StoreClustersAndReleaseSyncLock(ctx, l, s.roachprodCloud.Clusters, instanceID)

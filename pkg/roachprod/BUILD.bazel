@@ -19,6 +19,7 @@ go_library(
         "//pkg/roachprod/agents/fluentbit",
         "//pkg/roachprod/agents/opentelemetry",
         "//pkg/roachprod/agents/parca",
+        "//pkg/roachprod/centralizedapi",
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/config",
