@@ -183,7 +183,11 @@ jobs:
           # The checkout is a different repo; point gh at this repo's issues.
           GH_REPO: ${{ github.repository }}
         run: |
-          MAX_RETRIES=10
+          # Each retry after an explicit failure is a fresh session rather than a
+          # resume, so an attempt now costs a full implementation pass (~15min)
+          # instead of the seconds a resumed session took to restate itself.
+          # Three fits comfortably inside the job timeout.
+          MAX_RETRIES=3
           RETRY_COUNT=0
           SESSION_ID=""
           EXECUTION_FILE="/tmp/execution_stage2.json"
@@ -249,12 +253,26 @@ jobs:
 
           Then end your response with a single line containing only:
           - `IMPLEMENTATION_RESULT - SUCCESS` or
-          - `IMPLEMENTATION_RESULT - FAILED`
+          - `IMPLEMENTATION_RESULT - FAILED (reason: CODE)`
+
+          When reporting FAILED, pick exactly one CODE from this list:
+          - `TESTS_FAILING` - changed the code but could not get tests to pass
+          - `BUILD_BROKEN` - the tree would not build, or a build/test never finished
+          - `TOOL_DENIED` - needed a command outside the allowed tool list
+          - `NEEDS_DESIGN` - the fix needs a judgment call you should not make alone
+          - `CANNOT_REPRODUCE` - could not confirm the reported behavior
+          - `OTHER` - none of the above
+
+          Put the bare code on that line and nothing else. This workflow's log
+          is public while the code under repair is not, so the code is the only
+          part of your report that gets recorded; keep all detail in the
+          response body above it.
           </task>
           PROMPTEOF
           )
 
           STDERR_FILE="/tmp/execution_stage2_stderr.log"
+          FAIL_REASON=""
 
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             ATTEMPT=$((RETRY_COUNT + 1))
@@ -297,20 +315,65 @@ jobs:
               echo "Session ID: $SESSION_ID"
             fi
 
+            # Record how the attempt went. Only non-content fields are logged:
+            # this workflow's log is public, while the repo it just operated on
+            # is not, so the agent's own prose must never be echoed here.
+            echo "::group::Attempt $ATTEMPT metadata"
+            # is_error is interpolated without a `//` default because jq treats
+            # false as absent, which would report every clean run as unknown.
+            ATTEMPT_META=$(jq -r 'select(.type == "result")
+                   | "subtype=\(.subtype // "?") is_error=\(.is_error)"
+                     + " num_turns=\(.num_turns // "?")"
+                     + " duration_ms=\(.duration_ms // "?")"
+                     + " cost_usd=\(.total_cost_usd // "?")"
+                     + " denials=\(.permission_denials_count // 0)"' \
+              "$EXECUTION_FILE" 2>/dev/null | head -1 || true)
+            # An empty result here is itself the signal that the turn produced
+            # no result object at all, which is the case worth knowing about.
+            echo "${ATTEMPT_META:-(no result object in execution file)}"
+            # Tool names only; a denied tool's arguments can name repo paths.
+            DENIED_TOOLS=$(jq -r 'select(.type == "result") | .permission_denials // []
+                   | map(.tool_name) | unique | join(", ")' \
+              "$EXECUTION_FILE" 2>/dev/null | head -1 || true)
+            if [ -n "$DENIED_TOOLS" ]; then
+              echo "denied tools: $DENIED_TOOLS"
+            fi
+            echo "::endgroup::"
+
             # Check if implementation succeeded by looking for SUCCESS marker in result
             # Allow flexible formatting: IMPLEMENTATION_RESULT - SUCCESS, IMPLEMENTATION_RESULT: SUCCESS, etc.
             RESULT=$(jq -r 'select(.type == "result") | .result // empty' "$EXECUTION_FILE" 2>/dev/null || true)
             if echo "$RESULT" | grep -qiE 'IMPLEMENTATION_RESULT[[:space:]]*[-:][[:space:]]*SUCCESS'; then
               echo "Implementation succeeded on attempt $ATTEMPT"
               EXIT_CODE=0
+              # Don't let an earlier attempt's reason leak into the outputs.
+              FAIL_REASON=""
               break
             fi
 
-            # Check for explicit failure
+            # Check for explicit failure. Only the fixed-vocabulary reason code
+            # is pulled out of the response, never surrounding prose.
             if echo "$RESULT" | grep -qiE 'IMPLEMENTATION_RESULT[[:space:]]*[-:][[:space:]]*FAILED'; then
-              echo "Implementation explicitly failed on attempt $ATTEMPT, retrying..."
+              FAIL_REASON=$(echo "$RESULT" \
+                | grep -oiE 'FAILED[[:space:]]*\([[:space:]]*reason:[[:space:]]*[A-Za-z_]+' \
+                | grep -oE '[A-Za-z_]+$' | tr '[:lower:]' '[:upper:]' | head -1 || true)
+              # Keep the public surface a closed vocabulary: anything the agent
+              # invents collapses to OTHER rather than being echoed as-is.
+              case "$FAIL_REASON" in
+                TESTS_FAILING|BUILD_BROKEN|TOOL_DENIED|NEEDS_DESIGN|CANNOT_REPRODUCE|OTHER) ;;
+                "") FAIL_REASON="UNSPECIFIED" ;;
+                *) FAIL_REASON="OTHER" ;;
+              esac
+              echo "Implementation explicitly failed on attempt $ATTEMPT (reason: $FAIL_REASON)"
+              # The agent already reasoned its way to a conclusion, so resuming
+              # that session with "try again" mostly just restates it. Drop the
+              # session so the next attempt starts from a clean context.
+              SESSION_ID=""
             else
-              echo "No result marker found, retrying..."
+              # No marker usually means the turn was cut short rather than
+              # concluded, so resuming is worth a shot here.
+              FAIL_REASON="NO_MARKER"
+              echo "No result marker found on attempt $ATTEMPT, retrying..."
             fi
 
             RETRY_COUNT=$((RETRY_COUNT + 1))
@@ -321,11 +384,13 @@ jobs:
           done
 
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "::error::Implementation failed after $MAX_RETRIES attempts"
+            echo "::error::Implementation failed after $MAX_RETRIES attempts (last reason: ${FAIL_REASON:-UNSPECIFIED})"
           fi
 
           # Store execution file path for next step
           echo "execution_file=$EXECUTION_FILE" >> "$GITHUB_OUTPUT"
+          # Reason code is fixed-vocabulary, so it is safe to report publicly.
+          echo "fail_reason=${FAIL_REASON:-UNSPECIFIED}" >> "$GITHUB_OUTPUT"
           exit $EXIT_CODE
 
       - name: Extract Implementation Result
@@ -586,6 +651,8 @@ jobs:
         run: |
           gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body \
             "Auto-solver attempted to fix this issue but was unable to complete the implementation.
+
+          Reported reason: \`${{ steps.implement.outputs.fail_reason || 'UNSPECIFIED' }}\`
 
           This issue may require human intervention.
 
