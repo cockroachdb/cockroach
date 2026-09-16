@@ -2111,3 +2111,49 @@ SELECT jsonb_path_query('{"LIKE_REGEx": 1}'::JSONB, '$.LIKE_REGEx'::JSONPATH);
 query T
 SELECT jsonb_path_query('{"LIKE_REGEx": 1}'::JSONB, '$.LIKE_REGEX'::JSONPATH);
 ----
+
+subtest regression_145270
+
+# JSONPath regex \b means backspace, not a word-boundary constraint.
+query T rowsort
+SELECT jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "a\\b")');
+----
+"a\u0008"
+
+query T
+SELECT jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\b$")');
+----
+"a\u0008"
+
+query T
+SELECT jsonb_path_query('["\b", "b", "\\b"]', '$[*] ? (@ like_regex "^[\\b]$")');
+----
+"\u0008"
+
+# Quoted patterns and escaped backslashes remain literal, including when the
+# same pattern was just compiled without flag q.
+query T
+SELECT jsonb_path_query('["a\b", "a\\b"]', '$[*] ? (@ like_regex "a\\b" flag "q")');
+----
+"a\\b"
+
+query T
+SELECT jsonb_path_query('["a\b", "a\\b"]', '$[*] ? (@ like_regex "a\\\\b")');
+----
+"a\\b"
+
+query T
+SELECT jsonb_path_query('["a\b", "a\\b"]', '$[*] ? (@ like_regex "\\Qa\\b\\E")');
+----
+"a\\b"
+
+query T rowsort
+SELECT jsonb_path_query('["A\b", "a\b", "ab"]', '$[*] ? (@ like_regex "^a\\b$" flag "i")');
+----
+"A\u0008"
+"a\u0008"
+
+query BBB
+SELECT 'a\b' ~ 'a\b', 'a\b' ~ '^a\b$', 'a' || chr(8) ~ '^a\b$';
+----
+true  false  false

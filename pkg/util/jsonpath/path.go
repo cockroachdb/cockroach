@@ -296,7 +296,40 @@ func (r Regex) Validate(nestingLevel int, insideArraySubscript bool) error {
 
 // Pattern implements the tree.RegexpCacheKey interface.
 func (r Regex) Pattern() (string, error) {
-	return r.Regex, nil
+	if r.Flags&syntax.Literal != 0 || !strings.Contains(r.Regex, `\b`) {
+		return r.Regex, nil
+	}
+	// PostgreSQL's \b means backspace, whereas RE2 interprets it as a word
+	// boundary. Translate only unescaped occurrences, leaving the stored
+	// pattern and literal (q) mode unchanged.
+	var pattern strings.Builder
+	pattern.Grow(len(r.Regex))
+	for i := 0; i < len(r.Regex); i++ {
+		if r.Regex[i] != '\\' || i+1 == len(r.Regex) {
+			pattern.WriteByte(r.Regex[i])
+			continue
+		}
+		switch r.Regex[i+1] {
+		case 'b':
+			pattern.WriteString(`\x08`)
+		case 'Q':
+			// Preserve RE2 quoted spans. Their first \E terminates quoting,
+			// even if it is preceded by another backslash.
+			end := strings.Index(r.Regex[i+2:], `\E`)
+			if end == -1 {
+				pattern.WriteString(r.Regex[i:])
+				return pattern.String(), nil
+			}
+			end += i + 4
+			pattern.WriteString(r.Regex[i:end])
+			i = end - 1
+			continue
+		default:
+			pattern.WriteString(r.Regex[i : i+2])
+		}
+		i++
+	}
+	return pattern.String(), nil
 }
 
 type AnyKey struct{}
