@@ -115,8 +115,10 @@ func nodeStatusesToNodeInfos(nodes *serverpb.NodesResponse) []haProxyNodeInfo {
 		// TODO(knz): this logic is horrendously broken and
 		// incorrect. Replace it.
 		for j, arg := range status.Args {
-			if strings.Contains(arg, cliflags.ListenHTTPPort.Name) ||
-				strings.Contains(arg, cliflags.ListenHTTPAddr.Name) {
+			if strings.HasPrefix(arg, "--"+cliflags.ListenHTTPPort.Name) ||
+				strings.HasPrefix(arg, "--"+cliflags.ListenHTTPAddr.Name) ||
+				strings.HasPrefix(arg, "-"+cliflags.ListenHTTPPort.Name) ||
+				strings.HasPrefix(arg, "-"+cliflags.ListenHTTPAddr.Name) {
 				_ = fs.Parse(status.Args[j:])
 				break
 			}
