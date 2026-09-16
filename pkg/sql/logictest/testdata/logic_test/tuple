@@ -1332,3 +1332,58 @@ query B
 SELECT ROW() IS NOT NULL;
 ----
 true
+
+subtest row_star_expansion_26619
+
+# A direct star contributes fields to ROW rather than one tuple-valued field.
+query T
+SELECT ROW((pg_get_keywords()).*) ORDER BY 1 LIMIT 1
+----
+(abort,U,unreserved)
+
+query T
+SELECT ROW((ROW(1, 2)).*)
+----
+(1,2)
+
+query T
+SELECT ROW(0, (ROW(1, 2)).*, 3, (ROW(4, 5)).*)
+----
+(0,1,2,3,4,5)
+
+query T
+SELECT ROW(t.*) FROM (VALUES (1, 'one'), (2, NULL)) AS t(a, b) ORDER BY t.a
+----
+(1,one)
+(2,)
+
+query T
+SELECT ROW(ROW((ROW(1, 2)).*), 3)
+----
+("(1,2)",3)
+
+# Non-star and shorthand tuple children keep their tuple boundary.
+query T
+SELECT ROW(ROW(1, 2), 3)
+----
+("(1,2)",3)
+
+query T
+SELECT ((ROW(1, 2)).*, 3)
+----
+("(1,2)",3)
+
+query T
+SELECT ROW(1, (ROW(2, 3)).*, NULL::INT)
+----
+(1,2,3,)
+
+# Labels belong to the enclosing tuple after expansion.
+query II
+SELECT ((ROW((ROW(1, 2)).*) AS a, b)).a,
+       ((ROW((ROW(1, 2)).*) AS a, b)).b
+----
+1  2
+
+query error mismatch in tuple definition: 2 expressions, 1 labels
+SELECT (ROW((ROW(1, 2)).*) AS a)
