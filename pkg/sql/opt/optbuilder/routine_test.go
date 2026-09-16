@@ -10,11 +10,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -176,4 +179,77 @@ func TestSQLRoutineBodyBuilderLastStmtFinalization(t *testing.T) {
 	first, _, _, err := rb.BuildStmt(h.ctx, &h.semaCtx, &h.evalCtx, h.catalog, h.freshFactory(), 0)
 	require.NoError(t, err)
 	require.Equal(t, uint32(3), first.Relational().Cardinality.Max)
+}
+
+// TestRoutineParamOrdinalIsolation verifies that placeholders belonging to an
+// enclosing prepared statement cannot be resolved as out-of-range routine
+// parameters. The three cases exercise the scope-to-scalar boundary directly:
+// an ordinary placeholder is replaced by its value, a valid routine ordinal is
+// replaced by its parameter column, and an invalid routine ordinal is rejected.
+func TestRoutineParamOrdinalIsolation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCases := []struct {
+		name              string
+		checkMaxParamOrd  bool
+		numRoutineParams  int
+		expectedOp        opt.Operator
+		expectError       bool
+		expectedErrorCode pgcode.Code
+	}{
+		{
+			name:       "ordinary prepared placeholder",
+			expectedOp: opt.ConstOp,
+		},
+		{
+			name:             "valid routine ordinal",
+			checkMaxParamOrd: true,
+			numRoutineParams: 1,
+			expectedOp:       opt.VariableOp,
+		},
+		{
+			name:              "invalid routine ordinal",
+			checkMaxParamOrd:  true,
+			expectError:       true,
+			expectedErrorCode: pgcode.UndefinedParameter,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newRoutineBuilderHarness()
+			h.semaCtx.Placeholders.Init(1, tree.PlaceholderTypes{types.Int})
+			h.semaCtx.Placeholders.Values = tree.QueryArguments{tree.NewDInt(99)}
+			h.evalCtx.Placeholders = &h.semaCtx.Placeholders
+
+			factory := h.freshFactory()
+			for i := 0; i < tc.numRoutineParams; i++ {
+				factory.Metadata().AddColumn("", types.Int)
+			}
+			b := NewScalar(h.ctx, &h.semaCtx, &h.evalCtx, factory)
+			b.scope.checkMaxParamOrd = tc.checkMaxParamOrd
+			b.scope.maxParamOrd = tc.numRoutineParams
+			for i := range b.scope.cols {
+				b.scope.cols[i].setParamOrd(i)
+			}
+
+			expr, err := parser.ParseExpr("$1")
+			require.NoError(t, err)
+			scalar, err := b.Build(expr)
+
+			if tc.expectError {
+				actualPlan := "<none>"
+				if scalar != nil {
+					actualPlan = scalar.Op().String()
+				}
+				if err == nil {
+					t.Fatalf("expected routine ordinal error; built %s instead", actualPlan)
+				}
+				require.Equal(t, tc.expectedErrorCode, pgerror.GetPGCode(err))
+				require.EqualError(t, err, "no value provided for placeholder: $1")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedOp, scalar.Op())
+		})
+	}
 }
