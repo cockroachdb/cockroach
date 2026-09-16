@@ -1215,3 +1215,54 @@ func TestFullClusterRestoreWithUserIDs(t *testing.T) {
 		{"test3", "NULL", "false"},
 	})
 }
+
+// TestFullClusterRestoreCleansUpDefaultDatabases verifies that the defaultdb
+// and postgres databases a full cluster restore drops on its way to restoring
+// the backed up versions are actually deleted, rather than being left in the
+// catalog in the DROP state.
+//
+// Restoring repeatedly into the same cluster is how a standby is kept current,
+// so a descriptor leaked per restore accumulates until the cluster hits
+// sql.schema.approx_max_object_count and refuses to create anything.
+func TestFullClusterRestoreCleansUpDefaultDatabases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The cluster holds no user descriptors, which makes it a legal target for a
+	// full cluster restore of its own backup, over and over.
+	tc, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, singleNode)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
+
+	const numRestores = 3
+	for range numRestores {
+		sqlDB.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
+	}
+
+	// Reading system.descriptor needs allow_unsafe_internals, which is a session
+	// setting, so hold a single connection rather than going through the pool.
+	conn, err := tc.ServerConn(0).Conn(context.Background())
+	require.NoError(t, err)
+	defer func() { require.NoError(t, conn.Close()) }()
+	catalog := sqlutils.MakeSQLRunner(conn)
+	catalog.Exec(t, `SET allow_unsafe_internals = true`)
+
+	// Only databases and schemas are checked. Tables belonging to a dropped
+	// database legitimately sit in the DROP state until their GC TTL expires,
+	// but a database and its public schema are deleted outright.
+	const droppedQuery = `
+SELECT id, coalesce(d->'database'->>'name', d->'schema'->>'name')
+FROM (
+	SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS d
+	FROM system.descriptor
+)
+WHERE d->'database'->>'state' = 'DROP' OR d->'schema'->>'state' = 'DROP'
+ORDER BY id`
+	testutils.SucceedsSoon(t, func() error {
+		if rows := catalog.QueryStr(t, droppedQuery); len(rows) > 0 {
+			return errors.Newf("%d descriptors left behind by %d restores: %v", len(rows), numRestores, rows)
+		}
+		return nil
+	})
+}

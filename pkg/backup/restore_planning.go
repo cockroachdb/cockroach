@@ -2156,6 +2156,15 @@ func doRestorePlan(
 			return err
 		}
 
+		// Create the jobs queued while planning -- the schema changes that finish
+		// dropping defaultdb and postgres, for a full cluster restore -- before
+		// committing. Committing the planner's transaction here skips the
+		// connExecutor commit path that would otherwise create them, and the
+		// catalog changes they are meant to finish are in this same transaction.
+		if err := p.CreatePendingJobs(ctx); err != nil {
+			return err
+		}
+
 		// We commit the transaction here so that the job can be started. This is
 		// safe because we're in an implicit transaction. If we were in an explicit
 		// transaction the job would have to be created with the detached option and
