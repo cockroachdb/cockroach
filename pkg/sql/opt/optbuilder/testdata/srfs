@@ -1008,6 +1008,34 @@ project
       ├── (unnest:6).a [as=a:7]
       └── (unnest:6).b [as=b:8]
 
+# Regression test for #98352: when unnest of a table row is used as a table
+# source, expose the tuple fields as individual columns.
+exec-ddl
+CREATE TABLE t98352(a INT, b INT);
+----
+
+build
+SELECT * FROM t98352, LATERAL (SELECT * FROM unnest(ARRAY[t98352.*])) AS foo;
+----
+project
+ ├── columns: a:1 b:2 a:7 b:8
+ └── inner-join-apply
+      ├── columns: t98352.a:1 t98352.b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5 a:7 b:8
+      ├── scan t98352
+      │    └── columns: t98352.a:1 t98352.b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── project
+      │    ├── columns: a:7 b:8
+      │    ├── project-set
+      │    │    ├── columns: unnest:6
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── zip
+      │    │         └── unnest(ARRAY[((t98352.a:1, t98352.b:2) AS a, b)])
+      │    └── projections
+      │         ├── (unnest:6).a [as=a:7]
+      │         └── (unnest:6).b [as=b:8]
+      └── filters (true)
+
 # Test record-returning SRFs, which need to keep track of the most recently set
 # AS clause above them.
 

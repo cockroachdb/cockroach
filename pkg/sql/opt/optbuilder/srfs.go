@@ -94,6 +94,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	// Build each of the provided expressions.
 	zip := make(memo.ZipExpr, 0, len(exprs))
 	var outCols opt.ColSet
+	var expandSingleUnnestTuple bool
 	for _, expr := range exprs {
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
@@ -113,6 +114,10 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 			); err != nil {
 				panic(err)
 			}
+			tupleLabels := texpr.ResolvedType().TupleLabels()
+			expandSingleUnnestTuple = len(exprs) == 1 && isSingleColumnBuiltinUnnest(funcExpr) &&
+				len(tupleLabels) > 0 &&
+				len(tupleLabels) == len(texpr.ResolvedType().TupleContents())
 		}
 
 		var outCol *scopeColumn
@@ -196,6 +201,32 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	// Construct the zip as a ProjectSet with empty input.
 	input := b.factory.ConstructNoColsRow()
 	outScope.expr = b.factory.ConstructProjectSet(input, zip)
+	if expandSingleUnnestTuple {
+		// A one-argument unnest produces one datum per input array element, even
+		// when that datum is a labeled tuple. Keep that single physical output
+		// column in ProjectSet, but expose its fields as the columns of the table
+		// source.
+		if len(zip) != 1 || len(zip[0].Cols) != 1 || len(outScope.cols) != 1 ||
+			zip[0].Cols[0] != outScope.cols[0].id {
+			panic(errors.AssertionFailedf(
+				"single-column unnest has inconsistent zip and scope output columns",
+			))
+		}
+		tupleCol := outScope.cols[0]
+		tupleTyp := tupleCol.typ
+		expandedScope := outScope.push()
+		for i, elemTyp := range tupleTyp.TupleContents() {
+			variable := b.factory.ConstructVariable(tupleCol.id)
+			field := b.factory.ConstructColumnAccess(variable, memo.TupleOrdinal(i))
+			col := b.synthesizeColumn(
+				expandedScope, scopeColName(tree.Name(tupleTyp.TupleLabels()[i])),
+				elemTyp, nil /* expr */, field,
+			)
+			col.table = tupleCol.table
+		}
+		b.constructProjectForScope(outScope, expandedScope)
+		return expandedScope
+	}
 	if len(outScope.cols) == 1 {
 		outScope.singleSRFColumn = true
 	}
