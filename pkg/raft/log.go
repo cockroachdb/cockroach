@@ -191,19 +191,43 @@ func (l *raftLog) append(a LeadSlice) bool {
 // the s.prev entry doesn't match, or is missing.
 //
 // All the entries up to the returned index are already present in the log, and
-// do not need to be rewritten. The caller can safely fast-forward the appended
+// do not need to be rewritten. The caller can safely fast-forward the appending
 // LeadSlice to this index.
 func (l *raftLog) match(s LeadSlice) (uint64, bool) {
 	if !l.matchTerm(s.prev) {
 		return 0, false
 	}
 
-	// TODO(pav-kv): add a fast-path here using the Log Matching property of raft.
-	// Check the term match at min(s.lastIndex(), l.lastIndex()) entry, and fall
-	// back to conflict search only if it mismatches.
-	// TODO(pav-kv): also, there should be no mismatch if s.term == l.accTerm, so
-	// the fast-path can avoid this one check too.
+	// At this point, a prefix of entryIDs in s with index in
+	// [s.prev.index ... s.lastIndex()] is guaranteed to match a slice of l.
 	//
+	//
+	// Fast path: if the raft leader's term containing the appending
+	// LeadSlice s is the same as accTerm (the term of the newest leader
+	// whose append was accepted into l), then there is no mismatch
+	// between the two logs.
+	//
+	// See comments on LeadSlice.term, raftLog.accTerm(), and section
+	// 5.3 of the Raft paper for more details.
+	//
+	//
+	// It is possible for s.term == l.accTerm() to evaluate to false
+	// even if there is no mismatch between the two logs, this happens
+	// if we have not yet appended the first log entry from the s.term
+	// leader to l. In this case, we can still use the Raft log matching
+	// property to do a fast path optimization: check the term match at
+	// min(s.lastIndex(), l.lastIndex()) entry of LeadSlice s. If the
+	// term matches, there is no mismatch between the two logs.
+	//
+	// In either case, if there is no mismatch, return
+	// min(s.lastIndex(), l.lastIndex()). All entryIDs in s up to and
+	// including this index are guaranteed to match.
+	minLast := min(s.lastIndex(), l.unstable.lastIndex())
+	if s.term == l.accTerm() ||
+		l.matchTerm(entryID{s.termAt(minLast), minLast}) {
+		return minLast, true
+	}
+
 	// TODO(pav-kv): every matchTerm call in the linear scan below can fall back
 	// to fetching an entry from storage. This is inefficient, we can improve it.
 	// Logs that don't match at one index, don't match at all indices above. So we
