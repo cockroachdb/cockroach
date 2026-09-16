@@ -1096,6 +1096,17 @@ func (d *DDecimal) Format(ctx *FmtCtx) {
 	// will take precedence over the negation sign.
 	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
 	parsable := ctx.flags.HasFlags(FmtParsableNumerics)
+	if parsable && d.Negative && d.IsZero() {
+		// SQL decimal literals discard the sign of zero, but arithmetic can
+		// produce negative zero. Reconstruct it without losing its scale when
+		// deserializing an expression. Do not mutate the original datum.
+		zero := d.Decimal
+		zero.Negative = false
+		ctx.WriteByte('(')
+		ctx.WriteString(zero.String())
+		ctx.WriteString(":::DECIMAL * (-1):::DECIMAL)")
+		return
+	}
 	quote := parsable && d.Decimal.Form != apd.Finite
 	needParens := !quote && (disambiguate || parsable) && d.Negative
 	if needParens {

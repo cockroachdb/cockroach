@@ -15,3 +15,48 @@ SELECT c FROM t
 WHERE
 	localtimestamp(7::INT8):::TIMESTAMPTZ
 	IN ('1975-04-24 08:08:35.000071+00:00':::TIMESTAMPTZ, '1980-10-15 12:17:59.000616+00:00':::TIMESTAMPTZ);
+
+subtest regression_148279
+
+# Preserve arithmetic-produced DECIMAL negative zero when shipping expressions.
+statement ok
+CREATE TABLE decimal_zero (k INT PRIMARY KEY, s STRING, num DECIMAL, den INT);
+INSERT INTO decimal_zero VALUES (1, '/a', -61.100, 79);
+
+retry
+statement ok
+ALTER TABLE decimal_zero EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1);
+
+statement ok
+SET distsql = always;
+
+query I
+SELECT count(*) FROM decimal_zero JOIN (SELECT 1) ON NOT(-61.100 // 79 || s <= s);
+----
+0
+
+# Making the implicit text conversion explicit must not affect the result.
+query I
+SELECT count(*) FROM decimal_zero JOIN (SELECT 1) ON NOT((-61.100 // 79)::STRING || s <= s);
+----
+0
+
+# Computing identical operands on the remote node must agree with constant folding.
+query I
+SELECT count(*) FROM decimal_zero JOIN (SELECT 1) ON NOT(num // den || s <= s);
+----
+0
+
+query T
+SELECT (-1::DECIMAL * 0.00::DECIMAL) || s FROM decimal_zero;
+----
+-0.00/a
+
+# This does not change SQL literal parsing or positive zero's representation.
+query TT
+SELECT '-0.00'::DECIMAL::STRING, 0::DECIMAL || s FROM decimal_zero;
+----
+0.00  0/a
+
+statement ok
+RESET distsql;
