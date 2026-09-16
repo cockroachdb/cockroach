@@ -191,6 +191,12 @@ func (f *hookFnNode) startExec(params runParams) error {
 		},
 		func(ctx context.Context) {
 			defer close(f.run.errCh)
+			// TODO(wenyihu): Register this goroutine for CPU accounting. Plan
+			// hooks (BACKUPs, IMPORTs, etc.) run at the gateway, so the
+			// SQLCPUHandle should have atGateway=true. Additionally, each hook
+			// may spawn further goroutines that would also need registration.
+			// Follow up on this once the overall CPU accounting strategy for
+			// plan hooks is clearer.
 			err := f.f(ctx, f.run.resultsCh)
 			select {
 			case <-ctx.Done():
