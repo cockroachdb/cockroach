@@ -43,9 +43,9 @@ SELECT * FROM crdb_internal.partitions ORDER BY table_id, index_id, name
 106  1  p12    p12p3    1  b     (3)        NULL               0  0
 106  1  p12p3  p12p3p8  1  c     (8)        NULL               0  0
 106  1  NULL   p6       1  a     (6)        NULL               0  0
-106  1  p6     p6p7     1  b     NULL       (MINVALUE) TO (7)  0  0
-106  1  p6     p6p8     1  b     NULL       (7) TO (8)         0  0
-106  1  p6     p6px     1  b     NULL       (8) TO (MAXVALUE)  0  0
+106  1  p6     p6p7     1  b     NULL       [(MINVALUE), (7))  0  0
+106  1  p6     p6p8     1  b     NULL       [(7), (8))         0  0
+106  1  p6     p6px     1  b     NULL       [(8), (MAXVALUE))  0  0
 106  1  p12    pd       1  b     (DEFAULT)  NULL               0  0
 106  2  NULL   p00      2  a, b  (0, 0)     NULL               0  0
 107  1  NULL   pfoo     1  a     ('foo')    NULL               0  0
@@ -208,5 +208,30 @@ SELECT * FROM crdb_internal.node_tenant_capabilities_cache WHERE capability_name
 tenant_id  capability_name  capability_value
 1          can_view_node_info  true
 5          can_view_node_info  true
+
+subtest end
+
+# range_value_string_bounds covers a RANGE-partitioned STRING column, which
+# none of the tables above do: string-typed bounds are quoted, unlike the
+# bare integers t1 uses above, so this exercises the interval-notation
+# brackets combined with quoted tuple contents. Filtered by parent_name
+# instead of table_id/index_id, which are allocation-order-dependent on
+# everything else in this file.
+subtest range_value_string_bounds
+
+user root
+
+statement ok
+CREATE TABLE t_range_str (a STRING PRIMARY KEY) PARTITION BY RANGE (a) (
+  PARTITION plo VALUES FROM (MINVALUE) TO ('m'),
+  PARTITION phi VALUES FROM ('m') TO (MAXVALUE)
+)
+
+query TT
+SELECT name, range_value FROM crdb_internal.partitions
+WHERE parent_name IS NULL AND name IN ('plo', 'phi') ORDER BY name
+----
+phi  [('m'), (MAXVALUE))
+plo  [(MINVALUE), ('m'))
 
 subtest end
