@@ -6,6 +6,7 @@
 package issues
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -267,4 +268,35 @@ func TestCondense(t *testing.T) {
 			run(t, tc)
 		})
 	}
+}
+
+// TestElideRepeatedStackFrames checks that the runaway stacks the race
+// detector reconstructs for long-lived goroutines are cut down, that the
+// frames nearest the racing access survive, that an ellipsis marks each gap,
+// and that the line count is reported once per stack.
+func TestElideRepeatedStackFrames(t *testing.T) {
+	frame := func(name string, line int) string {
+		return fmt.Sprintf("  pkg.%s()\n      pkg/f.go:%d +0x1\n", name, line)
+	}
+	top := frame("racingWrite", 1) + frame("caller", 2)
+	// Two call sites in one loop body, stacked on themselves up to the frame cap.
+	cycle := frame("loop", 3) + frame("loop", 4)
+	kept := strings.Repeat(cycle, dataRaceStackMaxFrameCopies)
+	const gap = "  [...]\n"
+	omitted := func(n int) string {
+		return fmt.Sprintf("  [%d repeated lines omitted; see full output]\n", n)
+	}
+	head := "WARNING: DATA RACE\nWrite at 0x0 by goroutine 1:\n"
+	created := "\nGoroutine 1 (running) created at:\n"
+
+	// The second stack resumes with a real frame after its gap, which the first
+	// stack does not, so the two put the count in different places.
+	report := head + top + strings.Repeat(cycle, 127) +
+		created + strings.Repeat(cycle, 4) + frame("start", 5)
+	require.Greater(t, len(strings.Split(report, "\n")), dataRaceReportLineLimit)
+
+	require.Equal(t,
+		head+top+kept+gap+omitted(124*4)+
+			created+kept+gap+frame("start", 5)+omitted(1*4),
+		elideRepeatedStackFrames(report))
 }
