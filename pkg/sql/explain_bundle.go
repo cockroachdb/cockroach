@@ -683,6 +683,8 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	var triggerInfos []triggerInfo
 	var triggerFuncIDs intsets.Fast
 	var triggerDepTypeOIDs intsets.Fast
+	var columnExprSequenceIDs intsets.Fast
+	var columnExprFuncIDs intsets.Fast
 	isProcedure := make(map[oid.Oid]bool)
 	err := b.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Catalog objects can show up multiple times in our lists, so
@@ -862,11 +864,15 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 				include = hasDelete || hasUpdate || hasUpsert
 			},
 		)
-		// Collect trigger information from all referenced tables. For each
-		// trigger, we record its name (for CREATE TRIGGER output later),
-		// the trigger function, and any tables/types/routines it depends on.
-		// We iterate using an index because refTables may grow during
-		// iteration as we discover trigger-dependent tables.
+		// Collect dependencies stored in all referenced table descriptors.
+		// Column expressions are printed by SHOW CREATE TABLE, so their
+		// sequences and functions must be printed first to make schema.sql
+		// recreatable. Identity sequences are created implicitly by the table
+		// definition and must not be printed separately.
+		// For each trigger, we record its name (for CREATE TRIGGER output
+		// later), the trigger function, and any tables/types/routines it
+		// depends on. We iterate using an index because refTables may grow
+		// during iteration as we discover trigger-dependent tables.
 		// TODO(sql-queries): consider skipping trigger collection for SELECT
 		// statements, since triggers only fire on INSERT/UPDATE/DELETE.
 		for i := 0; i < len(refTables); i++ {
@@ -874,6 +880,16 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			desc, err := getDescForDataSource(table)
 			if err != nil {
 				return err
+			}
+			for _, col := range desc.PublicColumns() {
+				if !col.IsGeneratedAsIdentity() {
+					for j := 0; j < col.NumUsesSequences(); j++ {
+						columnExprSequenceIDs.Add(int(col.GetUsesSequenceID(j)))
+					}
+				}
+				for j := 0; j < col.NumUsesFunctions(); j++ {
+					columnExprFuncIDs.Add(int(col.GetUsesFunctionID(j)))
+				}
 			}
 			triggers := desc.GetTriggers()
 			for j := range triggers {
@@ -933,8 +949,22 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		if err != nil {
 			return err
 		}
-		sequences, err = getNames(len(mem.Metadata().AllSequences()), func(i int) cat.DataSource {
-			return mem.Metadata().AllSequences()[i]
+		metadataSequences := mem.Metadata().AllSequences()
+		columnExprSequences := make([]cat.DataSource, 0, columnExprSequenceIDs.Len())
+		for _, id := range columnExprSequenceIDs.Ordered() {
+			ds, _, err := b.plan.catalog.ResolveDataSourceByID(
+				ctx, cat.Flags{}, cat.StableID(id),
+			)
+			if err != nil {
+				return err
+			}
+			columnExprSequences = append(columnExprSequences, ds)
+		}
+		sequences, err = getNames(len(metadataSequences)+len(columnExprSequences), func(i int) cat.DataSource {
+			if i < len(metadataSequences) {
+				return metadataSequences[i]
+			}
+			return columnExprSequences[i-len(metadataSequences)]
 		})
 		if err != nil {
 			return err
@@ -1026,6 +1056,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 				isProcedure[ol.Oid] = ol.Type == tree.ProcedureRoutine
 			})
 		}
+		columnExprFuncIDs.ForEach(func(descID int) {
+			ids.Add(int(catid.FuncIDToOID(descpb.ID(descID))))
+		})
 		// Also include trigger functions and routines they depend on.
 		// Trigger functions (trig.FuncID) are always functions, but
 		// DependsOnRoutines entries may be procedures, so we use

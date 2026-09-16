@@ -826,6 +826,52 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			"distsql.html vec-v.txt vec.txt")
 	})
 
+	t.Run("column default dependencies", func(t *testing.T) {
+		r.Exec(t, "CREATE FUNCTION bundle_default_f(id INT8) RETURNS INT8 LANGUAGE SQL AS 'SELECT id';")
+		r.Exec(t, "CREATE SEQUENCE bundle_default_s;")
+		r.Exec(t, `CREATE TABLE bundle_default_t (
+			id INT8 PRIMARY KEY DEFAULT bundle_default_f(nextval('bundle_default_s'))
+		);`)
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM bundle_default_t;")
+		checkBundle(
+			t, fmt.Sprint(rows), "bundle_default_t", func(name, contents string) error {
+				if name == "schema.sql" {
+					for _, expected := range []string{
+						"CREATE SEQUENCE public.bundle_default_s",
+						"CREATE FUNCTION public.bundle_default_f",
+					} {
+						if !strings.Contains(contents, expected) {
+							return errors.Errorf("could not find %q in schema.sql:\n%s", expected, contents)
+						}
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql.html vec-v.txt vec.txt stats-defaultdb.public.bundle_default_t.sql",
+		)
+	})
+
+	t.Run("identity column dependencies", func(t *testing.T) {
+		r.Exec(t, `CREATE TABLE bundle_identity_t (
+			id INT8 PRIMARY KEY GENERATED ALWAYS AS IDENTITY
+		);`)
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM bundle_identity_t;")
+		checkBundle(
+			t, fmt.Sprint(rows), "bundle_identity_t", func(name, contents string) error {
+				if name == "schema.sql" {
+					if strings.Contains(contents, "CREATE SEQUENCE") {
+						return errors.Errorf("found separately-created identity sequence in schema.sql:\n%s", contents)
+					}
+					if !strings.Contains(contents, "GENERATED ALWAYS AS IDENTITY") {
+						return errors.Errorf("could not find identity definition in schema.sql:\n%s", contents)
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql.html vec-v.txt vec.txt stats-defaultdb.public.bundle_identity_t.sql",
+		)
+	})
+
 	t.Run("procedures", func(t *testing.T) {
 		r.Exec(t, "CREATE PROCEDURE add_proc(a INT, b INT) LANGUAGE SQL AS 'SELECT a + b';")
 		r.Exec(t, "CREATE PROCEDURE subtract_proc(a INT, b INT) LANGUAGE SQL AS 'SELECT a - b';")
