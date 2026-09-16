@@ -39,3 +39,17 @@ eval
 1.1:::decimal / 2:::int
 ----
 0.55000000000000000000
+
+# Decimal division must not round digits to the left of the decimal point.
+# This is the division which caused the non-zero variance result in #168373.
+eval
+5845710769898530048144:::decimal / 44:::int
+----
+132857062952239319276
+
+# Preserve the established 20-significant-digit result when the integer part
+# fits within the default precision.
+eval
+10:::decimal / 3:::decimal
+----
+3.3333333333333333333

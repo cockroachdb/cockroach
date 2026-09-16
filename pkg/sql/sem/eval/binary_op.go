@@ -432,7 +432,7 @@ func (e *evaluator) EvalDivDecimalIntOp(
 	}
 	dd := &tree.DDecimal{}
 	dd.SetInt64(int64(r))
-	_, err := tree.DecimalCtx.Quo(&dd.Decimal, l, &dd.Decimal)
+	_, err := tree.DecimalQuo(&dd.Decimal, l, &dd.Decimal)
 	return dd, err
 }
 
@@ -447,7 +447,7 @@ func (e *evaluator) EvalDivDecimalOp(
 		return tree.DZeroDecimal, nil
 	}
 	dd := &tree.DDecimal{}
-	_, err := tree.DecimalCtx.Quo(&dd.Decimal, l, r)
+	_, err := tree.DecimalQuo(&dd.Decimal, l, r)
 	return dd, err
 }
 
@@ -474,7 +474,7 @@ func (e *evaluator) EvalDivIntDecimalOp(
 	}
 	dd := &tree.DDecimal{}
 	dd.SetInt64(int64(l))
-	_, err := tree.DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, r)
+	_, err := tree.DecimalQuo(&dd.Decimal, &dd.Decimal, r)
 	return dd, err
 }
 
@@ -489,7 +489,7 @@ func (e *evaluator) EvalDivIntOp(
 	div.SetInt64(int64(rInt))
 	dd := &tree.DDecimal{}
 	dd.SetInt64(int64(tree.MustBeDInt(left)))
-	_, err := tree.DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, &div)
+	_, err := tree.DecimalQuo(&dd.Decimal, &dd.Decimal, &div)
 	return dd, err
 }
 

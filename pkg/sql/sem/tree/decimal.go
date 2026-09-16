@@ -47,6 +47,39 @@ var (
 	errScaleOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "scale out of range")
 )
 
+// DecimalQuo divides x by y using DecimalCtx's precision unless that would
+// round digits to the left of the decimal point. In that case, it increases
+// the precision just enough to preserve the quotient's integer portion.
+//
+// PostgreSQL likewise chooses NUMERIC division precision dynamically based on
+// the size of the quotient. Keep CockroachDB's established 20-significant-digit
+// minimum, while avoiding a fixed upper bound on integer digits.
+func DecimalQuo(d, x, y *apd.Decimal) (apd.Condition, error) {
+	// Quo permits the destination to alias either operand. Preserve aliased
+	// operands in case the first, default-precision result needs to be retried.
+	var xCopy, yCopy apd.Decimal
+	if d == x {
+		xCopy.Set(x)
+		x = &xCopy
+	}
+	if d == y {
+		yCopy.Set(y)
+		y = &yCopy
+	}
+
+	ctx := DecimalCtx
+	for {
+		condition, err := ctx.Quo(d, x, y)
+		if err != nil || !condition.Inexact() || d.Form != apd.Finite || d.Exponent <= 0 {
+			return condition, err
+		}
+		// A positive exponent on an inexact result means that the current
+		// significant-digit limit rounded the quotient somewhere in its integer
+		// portion. Each exponent position requires one more digit of precision.
+		ctx = DecimalCtx.WithPrecision(ctx.Precision + uint32(d.Exponent))
+	}
+}
+
 // LimitDecimalWidth limits d's precision (total number of digits) and scale
 // (number of digits after the decimal point). Note that this any limiting will
 // modify the decimal in-place.

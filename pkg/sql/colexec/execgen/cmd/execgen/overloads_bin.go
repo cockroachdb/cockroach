@@ -322,6 +322,7 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 			"Target":           targetElem,
 			"Left":             leftElem,
 			"Right":            rightElem,
+			"IsDiv":            binOp == treebin.Div,
 			"IsPow":            binOp == treebin.Pow,
 		}
 		buf := strings.Builder{}
@@ -332,7 +333,9 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
-				{{if .IsPow -}}
+				{{if .IsDiv -}}
+				_, err := tree.DecimalQuo(&{{.Target}}, &{{.Left}}, &{{.Right}})
+				{{else if .IsPow -}}
 				err := eval.{{.Op}}(tree.{{.Ctx}}, &{{.Target}}, &{{.Left}}, &{{.Right}})
 				{{else -}}
 				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, &{{.Right}})
@@ -489,7 +492,6 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 
 		case treebin.Div:
 			// Note that this is the '/' operator, which has a decimal result.
-			args["Ctx"] = binaryOpDecCtx[binOp]
 			t = template.Must(template.New("").Parse(`
 			{
 				if {{.Right}} == 0 {
@@ -498,7 +500,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 				leftTmpDec.SetInt64(int64({{.Left}}))
 				rightTmpDec.SetInt64(int64({{.Right}}))
-				if _, err := tree.{{.Ctx}}.Quo(&{{.Target}}, &leftTmpDec, &rightTmpDec); err != nil {
+				if _, err := tree.DecimalQuo(&{{.Target}}, &leftTmpDec, &rightTmpDec); err != nil {
 					colexecerror.ExpectedError(err)
 				}
 			}
@@ -564,6 +566,7 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 			"Target":           targetElem,
 			"Left":             leftElem,
 			"Right":            rightElem,
+			"IsDiv":            binOp == treebin.Div,
 			"IsPow":            binOp == treebin.Pow,
 		}
 		buf := strings.Builder{}
@@ -576,7 +579,9 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 				{{end}}
 				var tmpDec apd.Decimal //gcassert:noescape
 				tmpDec.SetInt64(int64({{.Right}}))
-				{{if .IsPow -}}
+				{{if .IsDiv -}}
+				if _, err := tree.DecimalQuo(&{{.Target}}, &{{.Left}}, &tmpDec); err != nil {
+				{{else if .IsPow -}}
 				if err := eval.{{.Op}}(tree.{{.Ctx}}, &{{.Target}}, &{{.Left}}, &tmpDec); err != nil {
 				{{else -}}
 				if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, &tmpDec); err != nil {
@@ -603,6 +608,7 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 			"Target":           targetElem,
 			"Left":             leftElem,
 			"Right":            rightElem,
+			"IsDiv":            binOp == treebin.Div,
 			"IsPow":            binOp == treebin.Pow,
 		}
 		buf := strings.Builder{}
@@ -615,7 +621,9 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 				{{end}}
 				var tmpDec apd.Decimal //gcassert:noescape
 				tmpDec.SetInt64(int64({{.Left}}))
-				{{if .IsPow -}}
+				{{if .IsDiv -}}
+				_, err := tree.DecimalQuo(&{{.Target}}, &tmpDec, &{{.Right}})
+				{{else if .IsPow -}}
 				err := eval.{{.Op}}(tree.{{.Ctx}}, &{{.Target}}, &tmpDec, &{{.Right}})
 				{{else -}}
 				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &tmpDec, &{{.Right}})
