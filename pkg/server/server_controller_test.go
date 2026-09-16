@@ -7,23 +7,159 @@ package server
 
 import (
 	"context"
+	"net"
+	"net/http"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type fakeOnDemandServer struct{}
+
+var _ onDemandServer = fakeOnDemandServer{}
+
+func (fakeOnDemandServer) annotateCtx(ctx context.Context) context.Context { return ctx }
+func (fakeOnDemandServer) preStart(context.Context) error                  { return nil }
+func (fakeOnDemandServer) acceptClients(context.Context) error             { return nil }
+func (fakeOnDemandServer) shutdownRequested() <-chan serverctl.ShutdownRequest {
+	return nil
+}
+func (fakeOnDemandServer) gracefulDrain(
+	context.Context, bool,
+) (uint64, redact.RedactableString, error) {
+	return 0, "", nil
+}
+func (fakeOnDemandServer) getTenantID() roachpb.TenantID                             { return roachpb.SystemTenantID }
+func (fakeOnDemandServer) getInstanceID() base.SQLInstanceID                         { return 1 }
+func (fakeOnDemandServer) getHTTPHandlerFn() http.HandlerFunc                        { return nil }
+func (fakeOnDemandServer) handleCancel(context.Context, pgwirecancel.BackendKeyData) {}
+func (fakeOnDemandServer) serveConn(context.Context, net.Conn, pgwire.PreServeStatus) error {
+	return nil
+}
+func (fakeOnDemandServer) getSQLAddr() string { return "" }
+func (fakeOnDemandServer) getRPCAddr() string { return "" }
+
+func TestServerControllerTenantWaiterAdmission(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	reg := metric.NewRegistry()
+	sc := &serverController{
+		st:             st,
+		metrics:        makeServerControllerMetrics(reg),
+		muxRejectEvery: log.Every(time.Second),
+	}
+
+	multitenant.WaitForClusterStartMaxConcurrent.Override(ctx, &st.SV, 1)
+
+	release, ok := sc.tryAdmitTenantServerWaiter(ctx, "hello")
+	require.True(t, ok)
+	require.Equal(t, int64(1), sc.muxWaiters.Load())
+	require.Equal(t, int64(1), sc.metrics.Waiters.Value())
+	require.Equal(t, int64(1), sc.metrics.Admitted.Count())
+
+	rejectedRelease, ok := sc.tryAdmitTenantServerWaiter(ctx, "hello")
+	require.False(t, ok)
+	require.Nil(t, rejectedRelease)
+	require.Equal(t, int64(1), sc.muxWaiters.Load())
+	require.Equal(t, int64(1), sc.metrics.Rejected.Count())
+
+	release()
+	require.Equal(t, int64(0), sc.muxWaiters.Load())
+	require.Equal(t, int64(0), sc.metrics.Waiters.Value())
+
+	release, ok = sc.tryAdmitTenantServerWaiter(ctx, "hello")
+	require.True(t, ok)
+	release()
+}
+
+func TestServerControllerGetServerRequiresRuntimeReadyServer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	startedOrStoppedCh := make(chan struct{})
+	sc := &serverController{}
+	sc.mu.servers = map[roachpb.TenantName]*serverState{
+		"hello": {
+			nc:                 roachpb.NewTenantNameContainer("hello"),
+			startedOrStoppedCh: startedOrStoppedCh,
+		},
+	}
+	sc.mu.newServerCh = make(chan struct{})
+
+	srv, waitCh, err := sc.getServer(ctx, "hello")
+	require.Nil(t, srv)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, errNoTenantServerRunning))
+	require.Equal(t, (<-chan struct{})(startedOrStoppedCh), waitCh)
+
+	entry := sc.mu.servers["hello"]
+	entry.startedMu.Lock()
+	entry.startedMu.server = fakeOnDemandServer{}
+	entry.startedMu.Unlock()
+
+	srv, _, err = sc.getServer(ctx, "hello")
+	require.NoError(t, err)
+	require.NotNil(t, srv)
+}
+
+func TestServerControllerTenantWaiterTimeoutMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	multitenant.WaitForClusterStartTimeout.Override(ctx, &st.SV, time.Nanosecond)
+	multitenant.WaitForClusterStartMaxConcurrent.Override(ctx, &st.SV, 1)
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	sc := &serverController{
+		st:              st,
+		stopper:         stopper,
+		tenantWaiter:    singleflight.NewGroup("tenant server poller", "poll"),
+		metrics:         makeServerControllerMetrics(metric.NewRegistry()),
+		muxRejectEvery:  log.Every(time.Second),
+		muxTimeoutEvery: log.Every(time.Second),
+	}
+	sc.mu.servers = map[roachpb.TenantName]*serverState{
+		"hello": {
+			nc:                 roachpb.NewTenantNameContainer("hello"),
+			startedOrStoppedCh: make(chan struct{}),
+		},
+	}
+	sc.mu.newServerCh = make(chan struct{})
+
+	srv, err := sc.waitForTenantServer(ctx, "hello")
+	require.Nil(t, srv)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, errTenantServerWaitTimeout))
+	require.Equal(t, int64(1), sc.metrics.Admitted.Count())
+	require.Equal(t, int64(1), sc.metrics.Timeout.Count())
+	require.Equal(t, int64(0), sc.metrics.Waiters.Value())
+	require.Equal(t, int64(0), sc.muxWaiters.Load())
+}
 
 func TestServerController(t *testing.T) {
 	defer leaktest.AfterTest(t)()

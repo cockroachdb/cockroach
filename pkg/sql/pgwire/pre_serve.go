@@ -217,9 +217,9 @@ func (s *PreServeConnHandler) SendRoutingError(
 	ctx context.Context, conn net.Conn, tenantName roachpb.TenantName,
 ) {
 	err := errors.WithHint(
-		pgerror.Newf(pgcode.ConnectionException,
+		pgerror.Newf(pgcode.CannotConnectNow,
 			"service unavailable for target tenant (%v)", tenantName),
-		`Double check your "-ccluster=" connection option or your "cluster:" database name prefix.`)
+		`Double check your "-ccluster=" connection option or your "cluster:" database name prefix. If the target tenant is starting, retry later.`)
 
 	_ = s.sendErr(ctx, s.st, conn, err)
 }
