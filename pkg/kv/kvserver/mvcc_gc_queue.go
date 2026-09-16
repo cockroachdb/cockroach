@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/repro"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -626,6 +627,9 @@ func (r *replicaGCer) GC(
 	if len(keys) == 0 && len(rangeKeys) == 0 && clearRange == nil {
 		return nil
 	}
+	if clearRange != nil {
+		repro.S.FirstClearRange.Once()
+	}
 	req := r.template()
 	req.Keys = keys
 	req.RangeKeys = rangeKeys
@@ -676,6 +680,9 @@ func (mgcq *mvccGCQueue) process(
 	// the timestamp which can be used to calculate the score and updated GC
 	// threshold.
 	canGC, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
+	if !repro.S.GCSent.IsDone() {
+		log.KvExec.Infof(ctx, "thresholds: %v, %v, %v, %v", canGC, gcTimestamp, oldThreshold, newThreshold)
+	}
 	if err != nil {
 		return false, err
 	}
@@ -706,6 +713,7 @@ func (mgcq *mvccGCQueue) process(
 		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})
 	}
 	defer snap.Close()
+	repro.S.GCSnapshotTaken.Once()
 
 	lockAgeThreshold := gc.LockAgeThreshold.Get(&repl.store.ClusterSettings().SV)
 	maxLocksPerCleanupBatch := gc.MaxLocksPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
