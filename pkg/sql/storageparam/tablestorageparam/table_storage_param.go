@@ -150,6 +150,25 @@ type tableParam struct {
 	onSet            func(ctx context.Context, po *Setter, key string, value string) error
 	getResetValue    func(ctx context.Context, evalCtx *eval.Context, key string) (string, error)
 	onReset          func(ctx context.Context, po *Setter, key string, value string) error
+	// valueType is the type of the value this parameter expects, if it's
+	// always a single, statically-known type (e.g. types.Int for a parameter
+	// always parsed via intFromDatum/paramparse.DatumAsInt). Left nil for
+	// parameters whose value type varies or isn't statically known. See
+	// ExpectedType.
+	valueType *types.T
+}
+
+// ExpectedType returns the statically-known type of the value a table
+// storage parameter expects, if there is one. Used to type check a
+// placeholder used as the parameter's value before it's actually evaluated
+// (see prepareUsingOptimizerInternal's *tree.AlterTable case), without
+// duplicating per-key type knowledge outside this file.
+func ExpectedType(key string) (*types.T, bool) {
+	p, ok := tableParams[key]
+	if !ok || p.valueType == nil {
+		return nil, false
+	}
+	return p.valueType, true
 }
 
 var ttlAutomaticColumnNotice = pgnotice.Newf("ttl_automatic_column is no longer used. " +
@@ -309,6 +328,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_select_batch_size`: {
+		valueType: types.Int,
 		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			val, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)
 			if err != nil {
@@ -336,6 +356,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_delete_batch_size`: {
+		valueType: types.Int,
 		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			val, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)
 			if err != nil {
@@ -379,6 +400,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_select_rate_limit`: {
+		valueType: types.Int,
 		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			val, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)
 			if err != nil {
@@ -406,6 +428,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_delete_rate_limit`: {
+		valueType: types.Int,
 		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			val, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)
 			if err != nil {
