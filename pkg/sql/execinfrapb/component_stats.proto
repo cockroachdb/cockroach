@@ -203,6 +203,20 @@ message ExecStats {
   // CPU time spent executing the component.
   optional util.optional.Duration cpu_time = 5 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "CPUTime"];
+
+  // AdaptiveEnabled indicates whether adaptive lookup-join mode was enabled
+  // on this component.
+  optional bool adaptive_enabled = 6 [(gogoproto.nullable) = false];
+
+  // AdaptiveDecision is the runtime adaptive mode decision.
+  optional string adaptive_decision = 7 [(gogoproto.nullable) = false];
+
+  // BytesSeenAtDecision is the observed left-input bytes at the point the
+  // adaptive decision was latched.
+  optional int64 bytes_seen_at_decision = 8 [(gogoproto.nullable) = false];
+
+  // SwitchReason is the reason for the adaptive decision.
+  optional string switch_reason = 9 [(gogoproto.nullable) = false];
 }
 
 // OutputStats contains statistics about the output (results) of a component.
