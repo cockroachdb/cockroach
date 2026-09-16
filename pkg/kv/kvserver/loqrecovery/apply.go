@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -76,6 +77,76 @@ func (r PrepareReplicaReport) StartKey() roachpb.RKey {
 	return r.Descriptor.StartKey
 }
 
+// StoreBatches is the per-store pair of batches that LoQ apply uses:
+// State holds writes to the state machine engine batch, Raft holds writes to
+// the log engine batch. When using a single engine, both batches are the same.
+// TODO(ibrahim): Refactor StoreBatches to consolidate with kvstorage.Batch.
+type StoreBatches struct {
+	State     storage.Batch
+	Raft      storage.Batch
+	separated bool
+}
+
+// NewStoreBatches creates a paired batch for the given store engines, it keeps
+// spanset assertions if they exist. If using a single engines, both batches
+// are the same (just with different spanset assertions if enabled).
+func NewStoreBatches(e kvstorage.Engines) StoreBatches {
+	if e.Separated() {
+		return StoreBatches{
+			State:     e.StateEngine().NewBatch(),
+			Raft:      e.LogEngine().NewBatch(),
+			separated: true,
+		}
+	}
+	// With a single engine, create one batch, and reference it by both pointers.
+	b := e.Engine().NewBatch()
+	if !spanset.EnableAssertions {
+		return StoreBatches{State: b, Raft: b}
+	}
+	// Additionally, if assertions are enabled, enclose the batch into the
+	// corresponding per-engine wrappers. With EnableAssertions, State/LogEngine
+	// are always wrapped, so we don't use conditional type assertions.
+	type batchWrapper interface {
+		WrapBatch(storage.Batch) storage.Batch
+	}
+	return StoreBatches{
+		State: e.StateEngine().(batchWrapper).WrapBatch(b),
+		Raft:  e.LogEngine().(batchWrapper).WrapBatch(b),
+	}
+}
+
+// Close closes the underlying batches.
+func (b StoreBatches) Close() {
+	b.State.Close()
+	if b.separated {
+		b.Raft.Close()
+	}
+}
+
+// empty reports whether neither batch contains pending writes.
+func (b StoreBatches) empty() bool {
+	if !b.separated {
+		return b.State.Empty()
+	}
+	return b.State.Empty() && b.Raft.Empty()
+}
+
+// commit flushes the batches to storage. With separated engines the log engine
+// batch is committed first (sync=true) so that on a crash mid-commit, the
+// partial state on disk (audit record, HardState) is recognized on the next
+// apply and the range is refixed via the idempotent retry path. With a single
+// underlying engine the State and Raft fields share one batch and only State
+// is committed.
+func (b StoreBatches) commit() error {
+	if !b.separated {
+		return b.State.Commit(true /* sync */)
+	}
+	if err := b.Raft.Commit(true /* sync */); err != nil {
+		return err
+	}
+	return b.State.Commit(true /* sync */)
+}
+
 // PrepareUpdateReplicas prepares all changes to be committed to provided stores
 // as a first step of apply stage. This function would write changes to stores
 // using provided batches and return a summary of changes that were done together
@@ -90,7 +161,7 @@ func PrepareUpdateReplicas(
 	uuidGen uuid.Generator,
 	updateTime time.Time,
 	nodeID roachpb.NodeID,
-	batches map[roachpb.StoreID]storage.Batch,
+	batches map[roachpb.StoreID]StoreBatches,
 ) (PrepareStoreReport, error) {
 	var report PrepareStoreReport
 
@@ -101,11 +172,11 @@ func PrepareUpdateReplicas(
 		if nodeID != update.NodeID() {
 			continue
 		}
-		if readWriter, ok := batches[update.StoreID()]; !ok {
+		if b, ok := batches[update.StoreID()]; !ok {
 			missing[update.StoreID()] = struct{}{}
 			continue
 		} else {
-			replicaReport, err := applyReplicaUpdate(ctx, readWriter, update)
+			replicaReport, err := applyReplicaUpdate(ctx, b, update)
 			if err != nil {
 				return PrepareStoreReport{}, errors.Wrapf(
 					err,
@@ -120,7 +191,7 @@ func PrepareUpdateReplicas(
 						"failed to generate uuid to write replica recovery evidence record")
 				}
 				if err := writeReplicaRecoveryStoreRecord(
-					uuid, updateTime.UnixNano(), update, replicaReport, readWriter); err != nil {
+					uuid, updateTime.UnixNano(), update, replicaReport, b.Raft); err != nil {
 					return PrepareStoreReport{}, errors.Wrap(err,
 						"failed writing replica recovery evidence record")
 				}
@@ -137,7 +208,7 @@ func PrepareUpdateReplicas(
 }
 
 func applyReplicaUpdate(
-	ctx context.Context, readWriter storage.ReadWriter, update loqrecoverypb.ReplicaUpdate,
+	ctx context.Context, b StoreBatches, update loqrecoverypb.ReplicaUpdate,
 ) (PrepareReplicaReport, error) {
 	clock := hlc.NewClockForTesting(nil)
 	report := PrepareReplicaReport{
@@ -177,7 +248,7 @@ func applyReplicaUpdate(
 	// versa).
 	key := keys.RangeDescriptorKey(update.StartKey.AsRKey())
 	res, err := storage.MVCCGet(
-		ctx, readWriter, key, clock.Now(), storage.MVCCGetOptions{Inconsistent: true})
+		ctx, b.State, key, clock.Now(), storage.MVCCGetOptions{Inconsistent: true})
 	if !res.Value.Exists() {
 		return PrepareReplicaReport{}, errors.Errorf(
 			"failed to find a range descriptor for range %v", key)
@@ -208,7 +279,7 @@ func applyReplicaUpdate(
 	}
 
 	sl := kvstorage.MakeStateLoader(localDesc.RangeID)
-	ms, err := sl.LoadMVCCStats(ctx, readWriter)
+	ms, err := sl.LoadMVCCStats(ctx, b.State)
 	if err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "loading MVCCStats")
 	}
@@ -260,7 +331,7 @@ func applyReplicaUpdate(
 		// A crude form of the intent resolution process: abort the
 		// transaction by deleting its record.
 		txnKey := keys.TransactionKey(res.Intent.Txn.Key, res.Intent.Txn.ID)
-		if _, _, err := storage.MVCCDelete(ctx, readWriter, txnKey, hlc.Timestamp{}, storage.MVCCWriteOptions{Stats: &ms}); err != nil {
+		if _, _, err := storage.MVCCDelete(ctx, b.State, txnKey, hlc.Timestamp{}, storage.MVCCWriteOptions{Stats: &ms}); err != nil {
 			return PrepareReplicaReport{}, err
 		}
 		update := roachpb.LockUpdate{
@@ -268,7 +339,7 @@ func applyReplicaUpdate(
 			Txn:    res.Intent.Txn,
 			Status: roachpb.ABORTED,
 		}
-		if _, _, _, _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, &ms, update, storage.MVCCResolveWriteIntentOptions{}); err != nil {
+		if _, _, _, _, err := storage.MVCCResolveWriteIntent(ctx, b.State, &ms, update, storage.MVCCResolveWriteIntentOptions{}); err != nil {
 			return PrepareReplicaReport{}, err
 		}
 		report.AbortedTransaction = true
@@ -287,7 +358,7 @@ func applyReplicaUpdate(
 	newDesc.NextReplicaID = update.NextReplicaID
 
 	if err := storage.MVCCPutProto(
-		ctx, readWriter, key, clock.Now(),
+		ctx, b.State, key, clock.Now(),
 		&newDesc, storage.MVCCWriteOptions{Stats: &ms},
 	); err != nil {
 		return PrepareReplicaReport{}, err
@@ -298,27 +369,25 @@ func applyReplicaUpdate(
 		update.NewReplica.NodeID, update.NewReplica.StoreID)
 
 	// Persist the new replica ID.
-	if err := sl.SetRaftReplicaID(ctx, readWriter, update.NewReplica.ReplicaID); err != nil {
+	if err := sl.SetRaftReplicaID(ctx, b.State, update.NewReplica.ReplicaID); err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "setting new replica ID")
 	}
 
 	// Refresh stats
-	if err := sl.SetMVCCStats(ctx, readWriter, &ms); err != nil {
+	if err := sl.SetMVCCStats(ctx, b.State, &ms); err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "updating MVCCStats")
 	}
 
 	// Update the HardState to clear the LeadEpoch, as otherwise we may risk
 	// seeing an epoch regression in raft. See #136908 for more details.
-	hs, err := sl.LoadHardState(ctx, readWriter)
+	hs, err := sl.LoadHardState(ctx, b.Raft)
 	if err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "loading HardState")
 	}
 
 	hs.LeadEpoch = 0
 
-	// TODO(sep-raft-log): when raft and state machine engines are separated, this
-	// update must be written to the raft engine.
-	if err := sl.SetHardState(ctx, readWriter, hs); err != nil {
+	if err := sl.SetHardState(ctx, b.Raft, hs); err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "setting HardState")
 	}
 
@@ -333,18 +402,18 @@ type ApplyUpdateReport struct {
 
 // CommitReplicaChanges saves content storage batches into stores. This is the
 // second step of applying recovery plan.
-func CommitReplicaChanges(batches map[roachpb.StoreID]storage.Batch) (ApplyUpdateReport, error) {
+func CommitReplicaChanges(batches map[roachpb.StoreID]StoreBatches) (ApplyUpdateReport, error) {
 	var report ApplyUpdateReport
 	var updateErrors []string
 	// Commit changes to all stores. Stores could have pending changes if plan
 	// contains replicas belonging to them, or have no changes if no replicas
 	// belong to it or if changes has been applied earlier, and we try to reapply
 	// the same plan twice.
-	for id, batch := range batches {
-		if batch.Empty() {
+	for id, b := range batches {
+		if b.empty() {
 			continue
 		}
-		if err := batch.Commit(true); err != nil {
+		if err := b.commit(); err != nil {
 			// If we fail here, we can only try to run the whole process from scratch
 			// as this store is somehow broken.
 			updateErrors = append(updateErrors, fmt.Sprintf("failed to update store s%d: %v", id, err))
@@ -369,24 +438,39 @@ func CommitReplicaChanges(batches map[roachpb.StoreID]storage.Batch) (ApplyUpdat
 // Regardless of application success or failure, staged plan would be removed.
 func MaybeApplyPendingRecoveryPlan(
 	ctx context.Context, planStore PlanStore, engines []kvstorage.Engines, clock timeutil.TimeSource,
-) error {
+) (PrepareStoreReport, error) {
+	return maybeApplyPendingRecoveryPlan(ctx, planStore, engines, clock,
+		func(_ roachpb.StoreID, e kvstorage.Engines) StoreBatches { return NewStoreBatches(e) })
+}
+
+// maybeApplyPendingRecoveryPlan is the testable form of
+// MaybeApplyPendingRecoveryPlan. It accepts a per-store batch builder so tests
+// can inject Commit failures into the auto-apply path.
+func maybeApplyPendingRecoveryPlan(
+	ctx context.Context,
+	planStore PlanStore,
+	engines []kvstorage.Engines,
+	clock timeutil.TimeSource,
+	makeBatches func(roachpb.StoreID, kvstorage.Engines) StoreBatches,
+) (PrepareStoreReport, error) {
 	if len(engines) < 1 {
-		return nil
+		return PrepareStoreReport{}, nil
 	}
 
+	var report PrepareStoreReport
 	applyPlan := func(nodeID roachpb.NodeID, plan loqrecoverypb.ReplicaUpdatePlan) error {
 		if err := CheckEnginesVersion(ctx, engines, plan, false); err != nil {
 			return errors.Wrap(err, "failed to check cluster version against storage")
 		}
 
 		log.KvExec.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
-		batches := make(map[roachpb.StoreID]storage.Batch)
+		batches := make(map[roachpb.StoreID]StoreBatches)
 		for _, e := range engines {
 			ident, err := kvstorage.ReadStoreIdent(ctx, e.LogEngine())
 			if err != nil {
 				return errors.Wrap(err, "failed to read store ident when trying to apply loss of quorum recovery plan")
 			}
-			b := e.TODOBothEngines().NewBatch()
+			b := makeBatches(ident.StoreID, e)
 			defer b.Close() //nolint:deferloop
 			batches[ident.StoreID] = b
 		}
@@ -394,6 +478,7 @@ func MaybeApplyPendingRecoveryPlan(
 		if err != nil {
 			return err
 		}
+		report = prepRep
 		if len(prepRep.MissingStores) > 0 {
 			log.KvExec.Warningf(ctx, "loss of quorum recovery plan application expected stores on the node %s",
 				strutil.JoinIDs("s", prepRep.MissingStores))
@@ -412,10 +497,10 @@ func MaybeApplyPendingRecoveryPlan(
 	if err != nil {
 		// This is fatal error, we don't write application report since we didn't
 		// check the store yet.
-		return errors.Wrap(err, "failed to check if loss of quorum recovery plan is staged")
+		return PrepareStoreReport{}, errors.Wrap(err, "failed to check if loss of quorum recovery plan is staged")
 	}
 	if !exists {
-		return nil
+		return PrepareStoreReport{}, nil
 	}
 
 	// First read node parameters from the first store.
@@ -426,9 +511,9 @@ func MaybeApplyPendingRecoveryPlan(
 			// node. But we can't write an error here as store init might refuse to
 			// work if there are already some keys in store.
 			log.KvExec.Errorf(ctx, "node is not bootstrapped but it already has a recovery plan staged: %s", err)
-			return nil
+			return PrepareStoreReport{}, nil
 		}
-		return err
+		return PrepareStoreReport{}, err
 	}
 
 	if err := planStore.RemovePlan(); err != nil {
@@ -448,7 +533,7 @@ func MaybeApplyPendingRecoveryPlan(
 		loqrecoverypb.DeferredRecoveryActions{DecommissionedNodeIDs: plan.DecommissionedNodeIDs}); err != nil {
 		log.KvExec.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
 	}
-	return nil
+	return report, nil
 }
 
 func CheckEnginesVersion(
