@@ -302,25 +302,25 @@ SELECT a, jsonb_path_exists(b, '$.lllaaann.dddooo == 123123') FROM json_tab ORDE
 14  true
 15  true
 
-# Result from this query is different from PG, tracked by #154588.
+# Missing lax members produce an empty comparison sequence (regression #154588).
 query IT
 SELECT a, jsonb_path_query(b, '$.lllaaann.dddooo == 123123') as jpq FROM json_tab@primary WHERE jsonb_path_exists(b, '$.lllaaann.dddooo == 123123') ORDER BY a, jpq;
 ----
-1   null
-2   null
-3   null
-4   null
-5   null
-6   null
-7   null
-8   null
-9   null
-10  null
-11  null
-12  null
-13  null
-14  null
-15  null
+1   false
+2   false
+3   false
+4   false
+5   false
+6   false
+7   false
+8   false
+9   false
+10  false
+11  false
+12  false
+13  false
+14  false
+15  false
 
 query IB
 SELECT a, jsonb_path_exists(b, '$.a.b like_regex "hi.*"') FROM json_tab ORDER BY a;
@@ -341,20 +341,20 @@ SELECT a, jsonb_path_exists(b, '$.a.b like_regex "hi.*"') FROM json_tab ORDER BY
 14  true
 15  true
 
-# Result from this query is different from PG, tracked by #154589.
+# Missing lax members have no regex matches (regression #154589).
 query IT
 SELECT a, jsonb_path_query(b, '$.a.b like_regex "hi.*"') as jpq FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a.b like_regex "hi.*"') ORDER BY a, jpq;
 ----
-1   null
-2   null
+1   false
+2   false
 3   false
 4   null
-5   null
+5   false
 6   null
 7   null
 8   false
 9   false
-10  null
+10  false
 11  null
 12  null
 13  null
@@ -368,25 +368,25 @@ SELECT a, jsonb_path_query(b, '$.a.b like_regex "hi.*"') as jpq FROM json_tab@fo
 statement error index "foo_inv" is inverted and cannot be used for this query
 SELECT a, jsonb_path_query(b, '$.lllaaann.dddooo == 123123') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.lllaaann.dddooo == 123123') ORDER BY a, jpq;
 
-# Result from this query is different from PG, tracked by #154588.
+# Missing lax members produce an empty comparison sequence (regression #154588).
 query IT
 SELECT a, jsonb_path_query(b, '$.lllaaann.dddooo == 123123') as jpq FROM json_tab@primary WHERE jsonb_path_exists(b, '$.lllaaann.dddooo == 123123') ORDER BY a, jpq;
 ----
-1   null
-2   null
-3   null
-4   null
-5   null
-6   null
-7   null
-8   null
-9   null
-10  null
-11  null
-12  null
-13  null
-14  null
-15  null
+1   false
+2   false
+3   false
+4   false
+5   false
+6   false
+7   false
+8   false
+9   false
+10  false
+11  false
+12  false
+13  false
+14  false
+15  false
 
 # Without json_path_exists in the filter, hinted inverted index will not work.
 statement error index "foo_inv" is inverted and cannot be used for this query

@@ -147,15 +147,10 @@ func jsonpathQuery(
 // eval evaluates a JSONPath expression against a JSON value and returns a
 // slice of results.
 //
-// Return value semantics are critical for proper JSONPath behavior:
-//   - nil slice: Path evaluation failed or path does not exist (e.g., $.nonexistent)
-//     In comparisons: returns unknown/null in strict mode, false in lax mode
-//   - Empty slice ([]json.JSON{}): Path exists but contains no items (e.g., empty array [])
-//     In comparisons: returns false in lax mode (no items to compare).
-//   - Non-empty slice: Path found one or more matching items.
-//
-// This distinction is essential for JSONPath comparison operations to match
-// PostgreSQL behavior.
+// Empty result sequences may be represented by nil or empty slices. In silent
+// mode, evaluation failures can also yield nil without an error. Callers that
+// need to distinguish empty results from failures must disable silent evaluation
+// and inspect the returned error.
 //
 // Many of jsonpath operations require automatic unwrapping of arrays in lax
 // mode. If the input value is an array the operation is performed not on the

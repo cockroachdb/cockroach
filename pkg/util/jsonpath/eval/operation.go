@@ -265,22 +265,28 @@ func (ctx *jsonpathCtx) evalPredicate(
 	exec func(op jsonpath.Operation, l, r json.JSON) (jsonpathBool, error),
 	evalRight, unwrapRight bool,
 ) (jsonpathBool, error) {
+	// Predicates turn operand errors into unknown, even in silent mode. Keep
+	// those errors distinguishable from a valid empty sequence until we handle
+	// them here. Copy the context so enclosing expressions retain their mode.
+	operandCtx := *ctx
+	operandCtx.silent = false
+
 	// The left argument results are always auto-unwrapped.
-	left, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
+	left, err := operandCtx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
 	if !isIgnorableError(err) {
 		return jsonpathBoolUnknown, err
 	}
-	if err != nil || left == nil {
+	if err != nil {
 		return jsonpathBoolUnknown, nil //nolint:returnerrcheck
 	}
 	var right []json.JSON
 	if evalRight {
 		// The right argument results are conditionally evaluated and unwrapped.
-		right, err = ctx.evalAndUnwrapResult(op.Right, jsonValue, unwrapRight)
+		right, err = operandCtx.evalAndUnwrapResult(op.Right, jsonValue, unwrapRight)
 		if !isIgnorableError(err) {
 			return jsonpathBoolUnknown, err
 		}
-		if err != nil || right == nil {
+		if err != nil {
 			return jsonpathBoolUnknown, nil //nolint:returnerrcheck
 		}
 	} else {
