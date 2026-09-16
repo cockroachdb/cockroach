@@ -91,7 +91,7 @@ func runCDCSessionFiltering(
 		t.Status("creating changefeed")
 		createChangefeedStmt := `CREATE CHANGEFEED FOR TABLE events
 INTO 'nodelocal://1/events'
-WITH updated, resolved, diff, min_checkpoint_frequency='1s'`
+WITH updated, resolved, diff`
 		if ignoreFiltering {
 			createChangefeedStmt += `, ignore_disable_changefeed_replication`
 		}
@@ -256,7 +256,7 @@ func runCDCTTLFiltering(
 		t.Status("creating changefeed")
 		createChangefeedStmt := `CREATE CHANGEFEED FOR TABLE events
 INTO 'nodelocal://1/events'
-WITH updated, resolved, diff, min_checkpoint_frequency='1s'`
+WITH updated, resolved, diff`
 		if ignoreFiltering {
 			createChangefeedStmt += `, ignore_disable_changefeed_replication`
 		}

@@ -122,7 +122,7 @@ func AddChangefeedToQueryLoad(
 		cursorStr,
 	}
 	if resolvedTarget > 0 {
-		opts = append(opts, []string{"resolved=$2", "min_checkpoint_frequency=$2"}...)
+		opts = append(opts, "resolved=$2")
 		args = append(args, resolvedTarget.String())
 	}
 	stmt := fmt.Sprintf(

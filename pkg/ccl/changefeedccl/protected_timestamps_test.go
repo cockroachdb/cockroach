@@ -383,7 +383,7 @@ func TestChangefeedAlterPTS(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
 		f2 := feed(t, f, `CREATE CHANGEFEED FOR table foo with protect_data_from_gc_on_pause,
-			resolved='1s', min_checkpoint_frequency='1s'`,
+			resolved='1s'`,
 			optOutOfMetamorphicDBLevelChangefeed{
 				reason: "db level changefeeds don't support ADD/DROP TARGETS in ALTER CHANGEFEEDs",
 			})
@@ -1041,7 +1041,7 @@ func TestChangefeedProtectedTimestampUpdateForMultipleTables(t *testing.T) {
 		require.Equal(t, int64(0), managePTSErrorCount)
 
 		createStmt := `CREATE CHANGEFEED FOR foo, bar
-WITH resolved='10ms', min_checkpoint_frequency='100ms', initial_scan='no'`
+WITH resolved='10ms', initial_scan='no'`
 		testFeed := feed(t, f, createStmt)
 		defer closeFeed(t, testFeed)
 
@@ -1170,7 +1170,7 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'table3' AND database_name = current_database()`).Scan(&table3ID)
 
 		createStmt := `CREATE CHANGEFEED FOR table1, table2, table3
-		WITH resolved='100ms', min_checkpoint_frequency='100ms'`
+		WITH resolved='100ms'`
 		testFeed := feed(t, f, createStmt)
 		defer closeFeed(t, testFeed)
 
