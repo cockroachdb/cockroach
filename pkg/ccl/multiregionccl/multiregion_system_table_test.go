@@ -527,9 +527,9 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 
 	// Validate that the zone configuration contains the appropriate constraints.q
 	tenSQLDB.CheckQueryResults(t, "SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATIONS] WHERE target LIKE 'PARTITION %lease%' ORDER BY target;", [][]string{
-		{"ALTER PARTITION \"us-east1\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east1]',\n\tlease_preferences = '[[+region=us-east1]]'"},
-		{"ALTER PARTITION \"us-east2\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east2]',\n\tlease_preferences = '[[+region=us-east2]]'"},
-		{"ALTER PARTITION \"us-east3\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east3]',\n\tlease_preferences = '[[+region=us-east3]]'"},
+		{"ALTER PARTITION \"us-east1\" OF INDEX system.public.lease@\"primary\" CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east1]',\n\tlease_preferences = '[[+region=us-east1]]'"},
+		{"ALTER PARTITION \"us-east2\" OF INDEX system.public.lease@\"primary\" CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east2]',\n\tlease_preferences = '[[+region=us-east2]]'"},
+		{"ALTER PARTITION \"us-east3\" OF INDEX system.public.lease@\"primary\" CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east3]',\n\tlease_preferences = '[[+region=us-east3]]'"},
 	})
 }
 
@@ -601,9 +601,9 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 		{"CREATE DATABASE system PRIMARY REGION \"us-east1\" REGIONS = \"us-east1\", \"us-east2\", \"us-east3\" SURVIVE REGION FAILURE"},
 	})
 	tDB.CheckQueryResults(t, "SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATIONS] WHERE target LIKE 'PARTITION %lease%' ORDER BY target;", [][]string{
-		{"ALTER PARTITION \"us-east1\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east1]',\n\tlease_preferences = '[[+region=us-east1]]'"},
-		{"ALTER PARTITION \"us-east2\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east2]',\n\tlease_preferences = '[[+region=us-east2]]'"},
-		{"ALTER PARTITION \"us-east3\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east3]',\n\tlease_preferences = '[[+region=us-east3]]'"},
+		{"ALTER PARTITION \"us-east1\" OF INDEX system.public.lease@\"primary\" CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east1]',\n\tlease_preferences = '[[+region=us-east1]]'"},
+		{"ALTER PARTITION \"us-east2\" OF INDEX system.public.lease@\"primary\" CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east2]',\n\tlease_preferences = '[[+region=us-east2]]'"},
+		{"ALTER PARTITION \"us-east3\" OF INDEX system.public.lease@\"primary\" CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east3]',\n\tlease_preferences = '[[+region=us-east3]]'"},
 	})
 }
 

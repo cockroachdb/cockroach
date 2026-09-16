@@ -140,7 +140,10 @@ func (n *TableIndexName) Format(ctx *FmtCtx) {
 		// The table is specified.
 		ctx.FormatNode(&n.Table)
 		ctx.WriteByte('@')
-		ctx.FormatNode(&n.Index)
+		// Format as a restricted identifier so that reserved keywords are
+		// quoted. The parser has LALR conflicts that prevent reserved keywords
+		// from being accepted as unquoted index names after '@'.
+		ctx.FormatNode((*Name)(&n.Index))
 		return
 	}
 

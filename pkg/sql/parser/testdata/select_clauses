@@ -1381,17 +1381,17 @@ SELECT _ FROM _ ORDER BY INDEX _@_ DESC -- identifiers removed
 parse
 SELECT a FROM t ORDER BY INDEX t@primary
 ----
-SELECT a FROM t ORDER BY INDEX t@primary
-SELECT (a) FROM t ORDER BY INDEX t@primary -- fully parenthesized
-SELECT a FROM t ORDER BY INDEX t@primary -- literals removed
+SELECT a FROM t ORDER BY INDEX t@"primary" -- normalized!
+SELECT (a) FROM t ORDER BY INDEX t@"primary" -- fully parenthesized
+SELECT a FROM t ORDER BY INDEX t@"primary" -- literals removed
 SELECT _ FROM _ ORDER BY INDEX _@_ -- identifiers removed
 
 parse
 SELECT a FROM t ORDER BY INDEX t@like
 ----
-SELECT a FROM t ORDER BY INDEX t@like
-SELECT (a) FROM t ORDER BY INDEX t@like -- fully parenthesized
-SELECT a FROM t ORDER BY INDEX t@like -- literals removed
+SELECT a FROM t ORDER BY INDEX t@"like" -- normalized!
+SELECT (a) FROM t ORDER BY INDEX t@"like" -- fully parenthesized
+SELECT a FROM t ORDER BY INDEX t@"like" -- literals removed
 SELECT _ FROM _ ORDER BY INDEX _@_ -- identifiers removed
 
 parse
