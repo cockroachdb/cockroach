@@ -1222,6 +1222,63 @@ with &2 (cte)
            ├──  "?column?":7 => a:9
            └──  "?column?":8 => b:10
 
+# A recursive CTE inside an enclosing subquery is allowed when the recursive
+# reference itself does not appear inside another subquery.
+build
+SELECT (
+  WITH RECURSIVE cte(a) AS (
+      SELECT 1
+    UNION ALL
+      SELECT a + 1 FROM cte WHERE a < 3
+  )
+  SELECT max(a) FROM cte
+);
+----
+with &2 (cte)
+ ├── columns: max:7
+ ├── recursive-c-t-e
+ │    ├── columns: a:2
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: "?column?":4
+ │    ├── fake-rel
+ │    │    └── columns: a:2
+ │    ├── project
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         └── 1 [as="?column?":1]
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── select
+ │         │    ├── columns: a:3!null
+ │         │    ├── with-scan &1 (cte)
+ │         │    │    ├── columns: a:3
+ │         │    │    └── mapping:
+ │         │    │         └──  a:2 => a:3
+ │         │    └── filters
+ │         │         └── a:3 < 3
+ │         └── projections
+ │              └── a:3 + 1 [as="?column?":4]
+ └── project
+      ├── columns: max:7
+      ├── values
+      │    └── ()
+      └── projections
+           └── subquery [as=max:7]
+                └── max1-row
+                     ├── columns: max:6
+                     └── scalar-group-by
+                          ├── columns: max:6
+                          ├── with-scan &2 (cte)
+                          │    ├── columns: a:5
+                          │    └── mapping:
+                          │         └──  a:2 => a:5
+                          └── aggregations
+                               └── max [as=max:6]
+                                    └── a:5
+
 # Error cases.
 build
 WITH RECURSIVE cte(a, b) AS (
@@ -1247,6 +1304,56 @@ WITH RECURSIVE cte(a, b) AS (
 ) SELECT * FROM cte;
 ----
 error (42601): recursive reference to query "cte" must not appear more than once
+
+# Recursive references inside subqueries are not allowed by PostgreSQL.
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 1, 2
+  UNION ALL
+    SELECT 3, 4
+    WHERE 3 = (SELECT max(a) + 1 FROM cte)
+) SELECT * FROM cte;
+----
+error (42601): recursive reference to query "cte" must not appear within a subquery
+
+# Recursive references on the nullable side of a LEFT JOIN are not allowed by PostgreSQL.
+build
+WITH RECURSIVE cte(a) AS (
+    SELECT 1
+  UNION ALL
+    SELECT cte.a + 1
+    FROM (VALUES (1)) AS v(x)
+    LEFT JOIN cte ON cte.a = v.x
+    WHERE cte.a < 10
+) SELECT * FROM cte;
+----
+error (42601): recursive reference to query "cte" must not appear within an outer join
+
+# Recursive references on the nullable side of a RIGHT JOIN are not allowed by PostgreSQL.
+build
+WITH RECURSIVE cte(a) AS (
+    SELECT 1
+  UNION ALL
+    SELECT cte.a + 1
+    FROM cte
+    RIGHT JOIN (VALUES (1)) AS v(x) ON cte.a = v.x
+    WHERE cte.a < 10
+) SELECT * FROM cte;
+----
+error (42601): recursive reference to query "cte" must not appear within an outer join
+
+# Recursive references on the nullable side of a FULL JOIN are not allowed by PostgreSQL.
+build
+WITH RECURSIVE cte(a) AS (
+    SELECT 1
+  UNION ALL
+    SELECT cte.a + 1
+    FROM cte
+    FULL JOIN (VALUES (1)) AS v(x) ON cte.a = v.x
+    WHERE cte.a < 10
+) SELECT * FROM cte;
+----
+error (42601): recursive reference to query "cte" must not appear within an outer join
 
 # If we really need to reference the working table multiple times, we can use
 # an inner WITH.
