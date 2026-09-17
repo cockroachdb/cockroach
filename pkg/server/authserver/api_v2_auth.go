@@ -22,8 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const (
@@ -204,12 +202,16 @@ type logoutResponse struct {
 //	  schema:
 //	    "$ref": "#/definitions/logoutResponse"
 //	"400":
-//	  description: Bad request, if API session not present in headers, or
-//	    invalid session.
+//	  description: Bad request, if the API session is not present in the
+//	    request headers, or the session no longer exists.
+//	  type: string
+//	"401":
+//	  description: Unauthorized, if the session could not be verified.
 //	  type: string
 func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
 	}
 	session := r.Header.Get(APIV2AuthHeader)
 	if session == "" {
@@ -228,6 +230,16 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	valid, _, err := a.authServer.VerifySession(ctx, &sessionCookie)
+	if err != nil {
+		srverrors.APIV2InternalError(ctx, err, w)
+		return
+	}
+	if !valid {
+		http.Error(w, "invalid session", http.StatusUnauthorized)
+		return
+	}
+
 	// Revoke the session.
 	if n, err := a.sqlServer.InternalExecutor().ExecEx(
 		ctx,
@@ -240,10 +252,10 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	} else if n == 0 {
-		err := status.Errorf(
-			codes.InvalidArgument,
-			"session with id %d nonexistent", sessionCookie.ID)
-		log.Dev.Infof(ctx, "%v", err)
+		// VerifySession confirmed the row existed and was live, so a zero row
+		// count means the session row was purged (system-log GC) between that
+		// check and this UPDATE. Treat it as an invalid session.
+		log.Dev.Infof(ctx, "session %d no longer exists", sessionCookie.ID)
 		http.Error(w, "invalid session", http.StatusBadRequest)
 		return
 	}

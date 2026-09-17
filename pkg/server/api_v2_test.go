@@ -413,6 +413,139 @@ func TestAuthV2LoginExpiredPassword(t *testing.T) {
 	require.NotContains(t, expiredBody, "expired")
 }
 
+// TestAuthV2LogoutRequiresAuth verifies that the v2 logout endpoint requires a
+// verified session and revokes only that session — not an arbitrary ID sourced
+// from the request.
+func TestAuthV2LogoutRequiresAuth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+
+	client, err := ts.GetUnauthenticatedHTTPClient()
+	require.NoError(t, err)
+	logoutURL := ts.AdminURL().WithPath(apiconstants.APIV2Path + "logout/").String()
+	loginURL := ts.AdminURL().WithPath(apiconstants.APIV2Path + "login/").String()
+
+	const testUser = "logout_test_user"
+	const testPassword = "password"
+	_, err = db.Exec(fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", testUser, testPassword))
+	require.NoError(t, err)
+
+	revoked := func(id int64) bool {
+		var n int
+		require.NoError(t, db.QueryRow(
+			`SELECT count(*) FROM system.web_sessions WHERE id = $1 AND "revokedAt" IS NOT NULL`, id,
+		).Scan(&n))
+		return n > 0
+	}
+
+	// newSession mints a fresh session on each call via the login endpoint,
+	// which returns the session in its JSON body. Each subtest therefore gets an
+	// independent session, unlike the cached GetAuthSession helper.
+	newSession := func() (string, int64) {
+		resp, err := client.PostForm(loginURL, url.Values{
+			"username": {testUser},
+			"password": {testPassword},
+		})
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var lr struct {
+			Session string `json:"session"`
+		}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&lr))
+		raw, err := base64.StdEncoding.DecodeString(lr.Session)
+		require.NoError(t, err)
+		var sc serverpb.SessionCookie
+		require.NoError(t, protoutil.Unmarshal(raw, &sc))
+		return lr.Session, sc.ID
+	}
+
+	t.Run("forged session cannot revoke another session", func(t *testing.T) {
+		// An attacker who knows only the victim's session ID (no secret) must
+		// not be able to authenticate, so the victim's session stays live.
+		_, victimID := newSession()
+		forgedBytes, err := protoutil.Marshal(&serverpb.SessionCookie{ID: victimID})
+		require.NoError(t, err)
+		forged := base64.StdEncoding.EncodeToString(forgedBytes)
+
+		req, err := http.NewRequest("POST", logoutURL, nil)
+		require.NoError(t, err)
+		req.Header.Set(authserver.APIV2AuthHeader, forged)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+		require.False(t, revoked(victimID),
+			"forged logout must not revoke session %d", victimID)
+	})
+
+	t.Run("non-POST method is rejected without revoking", func(t *testing.T) {
+		encoded, id := newSession()
+
+		req, err := http.NewRequest("GET", logoutURL, nil)
+		require.NoError(t, err)
+		req.Header.Set(authserver.APIV2AuthHeader, encoded)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		require.Equal(t, http.StatusNotFound, resp.StatusCode)
+		require.False(t, revoked(id),
+			"non-POST logout must not revoke session %d", id)
+	})
+
+	t.Run("missing session header returns 400", func(t *testing.T) {
+		req, err := http.NewRequest("POST", logoutURL, nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("valid session logs itself out", func(t *testing.T) {
+		encoded, id := newSession()
+
+		req, err := http.NewRequest("POST", logoutURL, nil)
+		require.NoError(t, err)
+		req.Header.Set(authserver.APIV2AuthHeader, encoded)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.True(t, revoked(id),
+			"authenticated logout must revoke session %d", id)
+	})
+
+	t.Run("revoked session is rejected", func(t *testing.T) {
+		// A session that fails verification (here, one that has been revoked)
+		// must be rejected with 401, not treated as a valid logout.
+		encoded, id := newSession()
+		_, err := db.Exec(
+			`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`, id,
+		)
+		require.NoError(t, err)
+
+		req, err := http.NewRequest("POST", logoutURL, nil)
+		require.NoError(t, err)
+		req.Header.Set(authserver.APIV2AuthHeader, encoded)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+}
+
 // TestCheckRestartSafe_Criticality tests that we treat raft leader
 // nodes and nodes that aren't draining as critical.
 func TestCheckRestartSafe_Criticality(t *testing.T) {
