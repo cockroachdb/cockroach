@@ -448,6 +448,7 @@ jobs:
         if: env.HAS_API_KEY == 'true'
         uses: cockroachdb/claude-code-action@fa7e2f0a29a126f0b81cdcf360561b36e44cf608 # v1.0.180
         env:
+          CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT: "0"  # 0 selects the full system prompt, not the short one
           # The checkout is a different repo than this one; point the
           # agent's gh commands at this repo's issue tracker.
           GH_REPO: ${{ github.repository }}

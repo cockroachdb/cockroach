@@ -79,6 +79,7 @@ jobs:
         id: assess
         uses: cockroachdb/claude-code-action@fa7e2f0a29a126f0b81cdcf360561b36e44cf608 # v1.0.180
         env:
+          CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT: "0"  # 0 selects the full system prompt, not the short one
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global
           # Pass user-controlled content via env vars to prevent prompt injection
@@ -174,6 +175,7 @@ jobs:
         id: implement
         if: steps.assess_result.outputs.assessment == 'PROCEED'
         env:
+          CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT: "0"  # 0 selects the full system prompt, not the short one
           CLAUDE_CODE_USE_VERTEX: "1"
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global

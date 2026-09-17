@@ -263,6 +263,7 @@ jobs:
         if: always() && steps.backport.outputs.has_conflicts == 'true'
         uses: cockroachdb/claude-code-action@v1
         env:
+          CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT: "0"  # 0 selects the full system prompt, not the short one
           ANTHROPIC_VERTEX_PROJECT_ID: ${{ env.HAS_API_KEY != 'true' && 'vertex-model-runners' || '' }}
           CLOUD_ML_REGION: ${{ env.HAS_API_KEY != 'true' && 'us-east5' || '' }}
         with:

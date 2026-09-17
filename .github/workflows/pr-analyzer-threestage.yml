@@ -78,6 +78,7 @@ jobs:
         if: steps.verify_author.outputs.authorized == 'true'
         uses: cockroachdb/claude-code-action@v1
         env:
+          CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT: "0"  # 0 selects the full system prompt, not the short one
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global
         with:
@@ -130,6 +131,7 @@ jobs:
         if: contains(steps.stage1_result.outputs.result, 'STAGE1_RESULT - POTENTIAL_BUG_DETECTED')
         uses: cockroachdb/claude-code-action@v1
         env:
+          CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT: "0"  # 0 selects the full system prompt, not the short one
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global
         with:
@@ -181,6 +183,7 @@ jobs:
         if: contains(steps.stage2_result.outputs.result, 'STAGE2_RESULT - POTENTIAL_BUG_DETECTED')
         uses: cockroachdb/claude-code-action@v1
         env:
+          CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT: "0"  # 0 selects the full system prompt, not the short one
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global
         with:
@@ -246,6 +249,7 @@ jobs:
         if: always() && steps.verify_author.outputs.authorized == 'true'
         uses: cockroachdb/claude-code-action@v1
         env:
+          CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT: "0"  # 0 selects the full system prompt, not the short one
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global
           PR_NUM: ${{ github.event.pull_request.number }}
