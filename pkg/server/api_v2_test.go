@@ -547,6 +547,63 @@ func TestAuthV2LogoutRequiresAuth(t *testing.T) {
 	})
 }
 
+// TestAuthV2LoginMethodCheck verifies that the v2 login endpoint rejects
+// non-POST methods without running the handler body. A GET to login must not
+// create a session: credentials in the query string would otherwise leak into
+// server logs, browser history, and referrer headers.
+func TestAuthV2LoginMethodCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+
+	const testUser = "methodcheckuser"
+	const testPassword = "password"
+	_, err := db.Exec(fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", testUser, testPassword))
+	require.NoError(t, err)
+
+	client, err := ts.GetUnauthenticatedHTTPClient()
+	require.NoError(t, err)
+	loginURL := ts.AdminURL().WithPath(apiconstants.APIV2Path + "login/").String()
+
+	// Snapshot the count of non-revoked sessions for this user; the fix must
+	// leave it unchanged when the request is a GET.
+	sessionCount := func() int {
+		var n int
+		require.NoError(t, db.QueryRow(
+			`SELECT count(*) FROM system.web_sessions WHERE username = $1 AND "revokedAt" IS NULL`,
+			testUser,
+		).Scan(&n))
+		return n
+	}
+	before := sessionCount()
+
+	vals := url.Values{"username": {testUser}, "password": {testPassword}}
+	req, err := http.NewRequest("GET", loginURL+"?"+vals.Encode(), nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	// A GET must not create a session. v2 login returns the session in the JSON
+	// body rather than an HTTP cookie, so the session-count check is what detects
+	// a fall-through into the login logic.
+	require.Equal(t, before, sessionCount(),
+		"login on GET must not create a session (body was: %q)", string(body))
+
+	// Sanity check: a normal POST login for the same user still succeeds.
+	postResp, err := client.PostForm(loginURL, vals)
+	require.NoError(t, err)
+	require.NoError(t, postResp.Body.Close())
+	require.Equal(t, http.StatusOK, postResp.StatusCode)
+}
+
 // TestCheckRestartSafe_Criticality tests that we treat raft leader
 // nodes and nodes that aren't draining as critical.
 func TestCheckRestartSafe_Criticality(t *testing.T) {
