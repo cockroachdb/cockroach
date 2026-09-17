@@ -219,6 +219,7 @@ jobs:
         if: steps.loop_check.outputs.proceed == 'true'
         uses: cockroachdb/claude-code-action@v1
         env:
+          CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT: "0"  # 0 selects the full system prompt, not the short one
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: us-east5
           CI_FAILURE_DETAILS_FILE: ${{ steps.failures.outputs.details_file }}
