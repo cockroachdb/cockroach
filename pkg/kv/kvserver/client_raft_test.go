@@ -5183,6 +5183,12 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 				base.TestClusterArgs{
 					ReplicationMode: base.ReplicationManual,
 					ServerArgs: base.TestServerArgs{
+						// Apply one committed entry per ready. A non-trivial command
+						// committed ahead of the write in the same ready, such as a lease
+						// request or a range flush command, would suppress the early ack
+						// this test waits for. The size limit always admits at least one
+						// entry, so a single byte yields exactly one entry.
+						RaftConfig: base.RaftConfig{RaftMaxCommittedSizePerReady: 1},
 						Knobs: base.TestingKnobs{
 							Store: &kvserver.StoreTestingKnobs{
 								TestingApplyCalledTwiceFilter: applyFilterFn(blockPreApplication),
