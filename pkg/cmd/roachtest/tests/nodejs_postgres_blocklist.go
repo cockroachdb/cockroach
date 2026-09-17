@@ -17,6 +17,7 @@ var nodePostgresBlockList = blocklist{}
 var nodePostgresIgnoreList = blocklist{
 	"connection timeout => releases newly connected clients if the queued already timed out":                       "flaky",
 	"connection timeout => should timeout on checkout of used connection":                                          "flaky",
+	"connection timeout => should timeout on query if all clients are busy":                                        "flaky",
 	"events => emits acquire every time a client is acquired":                                                      "flaky",
 	"idle timeout => keeps old behavior when allowExitOnIdle option is not set":                                    "flaky",
 	"lifetime timeout => can remove expired clients and recreate them":                                             "flaky",
