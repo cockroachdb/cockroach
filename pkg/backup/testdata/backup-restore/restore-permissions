@@ -176,6 +176,63 @@ REVOKE RESTORE ON DATABASE nonadmin FROM testuser;
 
 subtest end
 
+subtest strict-privilege-mode
+
+# Enabling the strict privilege check makes the RESTORE privilege strictly
+# required; the CREATEDB and CREATE fallbacks no longer suffice.
+exec-sql
+SET CLUSTER SETTING restore.strict_privilege_check.enabled = true;
+----
+
+# Even with CREATEDB, a non-admin cannot run a database restore without the
+# RESTORE system privilege.
+exec-sql
+ALTER USER testuser CREATEDB;
+----
+
+exec-sql user=testuser
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = ddup_strict_fail;
+----
+pq: only users with the admin role or the RESTORE system privilege are allowed to perform a database restore
+
+exec-sql
+ALTER USER testuser NOCREATEDB;
+----
+
+exec-sql
+CREATE DATABASE strictdb;
+----
+
+# Even with CREATE on the parent database, a non-admin cannot run a table
+# restore without the RESTORE privilege on that database.
+exec-sql
+GRANT CREATE ON DATABASE strictdb TO testuser;
+----
+
+exec-sql user=testuser
+RESTORE TABLE d.ds.t FROM LATEST IN 'nodelocal://1/foo' WITH into_db = strictdb;
+----
+pq: user testuser does not have RESTORE privilege on database strictdb
+
+# Granting the RESTORE privilege lets the table restore proceed in strict mode.
+exec-sql
+GRANT RESTORE ON DATABASE strictdb TO testuser;
+----
+
+exec-sql user=testuser
+RESTORE TABLE d.ds.t FROM LATEST IN 'nodelocal://1/foo' WITH into_db = strictdb;
+----
+
+exec-sql
+REVOKE RESTORE ON DATABASE strictdb FROM testuser;
+----
+
+exec-sql
+RESET CLUSTER SETTING restore.strict_privilege_check.enabled;
+----
+
+subtest end
+
 subtest cluster-restore
 new-cluster name=s2 allow-implicit-access share-io-dir=s1
 ----
