@@ -17,8 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -50,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -284,7 +287,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		var rowCountDetails jobspb.ImportDetails
 		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 			var err error
-			rowCountDetails, err = r.detailsWithInitialRowCount(ctx, txn, details)
+			rowCountDetails, err = r.detailsWithInitialRowCount(ctx, p.ExecCfg(), txn, details)
 			if err != nil {
 				return err
 			}
@@ -524,9 +527,26 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 // and returns an updated details. The initial row count is only recorded when
 // row count validation is enabled.
 func (r *importResumer) detailsWithInitialRowCount(
-	ctx context.Context, txn descs.Txn, details jobspb.ImportDetails,
+	ctx context.Context, execCfg *sql.ExecutorConfig, txn descs.Txn, details jobspb.ImportDetails,
 ) (jobspb.ImportDetails, error) {
 	rowCountDetails := details
+
+	// The full count only feeds the post-import validation and can outlive the
+	// table's GC TTL on a large table. When validation is off, only determine
+	// whether the table is empty. Otherwise, protect the read timestamp for the
+	// duration of the scan.
+	countRows := importRowCountValidation.Get(&r.settings.SV) != ImportRowCountValidationOff
+	if countRows {
+		countTS := execCfg.Clock.Now()
+		release, err := protectTableTimestamp(ctx, execCfg, r.job.ID(), details.Table.Desc.ID, countTS)
+		if err != nil {
+			return jobspb.ImportDetails{}, err
+		}
+		defer release()
+		if err := txn.KV().SetFixedTimestamp(ctx, countTS); err != nil {
+			return jobspb.ImportDetails{}, err
+		}
+	}
 
 	// Create an untracked copy for synthetic use.
 	mut, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, details.Table.Desc.ID)
@@ -536,10 +556,8 @@ func (r *importResumer) detailsWithInitialRowCount(
 	synthMut := tabledesc.NewBuilder(mut.TableDesc()).BuildExistingMutableTable()
 	synthMut.SetPublic()
 
-	// The full count only feeds the post-import validation and can outlive the
-	// table's GC TTL on a large table. When validation is off, only determine
-	// whether the table is empty; the subquery keeps the result shape the same.
-	countRows := importRowCountValidation.Get(&r.settings.SV) != ImportRowCountValidationOff
+	// The subquery keeps the result shape the same when only emptiness is
+	// needed.
 	query := fmt.Sprintf(`
 SELECT
   count(*) AS row_count
@@ -590,6 +608,48 @@ FROM (SELECT 1 FROM [%d AS t] LIMIT 1)`,
 	}
 
 	return rowCountDetails, nil
+}
+
+// releasePTSTimeout bounds the detached release below so that a node draining
+// with an interrupted count cannot stall shutdown on it.
+const releasePTSTimeout = 30 * time.Second
+
+// protectTableTimestamp writes a protected timestamp record for the table on
+// behalf of the job and returns a function that releases it. The release runs
+// on a context detached from ctx, so that PAUSE, CANCEL, and drain — which
+// cancel the resumer's context out from under an in-flight count — still give
+// the record back. If the release is missed anyway, for example because the
+// node died, the protected timestamp reconciler removes the record once the
+// job reaches a terminal state.
+func protectTableTimestamp(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	jobID jobspb.JobID,
+	tableID descpb.ID,
+	ts hlc.Timestamp,
+) (release func(), _ error) {
+	recordID := uuid.MakeV4()
+	rec := jobsprotectedts.MakeRecord(
+		recordID, int64(jobID), ts, jobsprotectedts.Jobs,
+		ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableID}),
+	)
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return execCfg.ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, rec)
+	}); err != nil {
+		return nil, errors.Wrapf(err, "protecting timestamp %s for table %d", ts, tableID)
+	}
+	return func() {
+		releaseCtx := context.WithoutCancel(ctx)
+		if err := timeutil.RunWithTimeout(releaseCtx, "release-import-count-pts", releasePTSTimeout,
+			func(ctx context.Context) error {
+				return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					return execCfg.ProtectedTimestampProvider.WithTxn(txn).Release(ctx, recordID)
+				})
+			}); err != nil {
+			log.Dev.Warningf(releaseCtx, "releasing protected timestamp %s for table %d: %v",
+				recordID, tableID, err)
+		}
+	}, nil
 }
 
 // prepareTableForIngestion prepare the table descriptor for the ingestion
