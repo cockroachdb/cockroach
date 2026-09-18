@@ -72,7 +72,7 @@ func (m minioManager) install(ctx context.Context) {
 		fmt.Sprintf(`cp certs/node.crt %[1]s/public.crt; cp certs/node.key  %[1]s/private.key; `,
 			certsDir))
 	m.run(ctx, `installing minio`,
-		fmt.Sprintf(`sudo docker run --name minio -d -p 443:9000 -e "MINIO_ROOT_USER=%s" -e "MINIO_ROOT_PASSWORD=%s" --privileged -v %s:/root/.minio minio/minio server  /data`,
+		fmt.Sprintf(`sudo docker run --name minio -d -p 443:9000 -e "MINIO_ROOT_USER=%s" -e "MINIO_ROOT_PASSWORD=%s" --privileged -v %s:/root/.minio us-central1-docker.pkg.dev/cockroach-testeng-infra/roachtest-support/minio server  /data`,
 			m.key, m.secret, minioDir))
 
 	m.run(ctx, `install s3cmd`, `sudo apt install -y s3cmd`)
