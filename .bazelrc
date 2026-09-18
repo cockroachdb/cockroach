@@ -138,6 +138,25 @@ build:macos --host_action_env=PATH=/opt/homebrew/bin:/opt/local/bin:/usr/local/b
 
 build:macos --linkopt="-Xlinker"
 build:macos --linkopt="-no_warn_duplicate_libraries"
+# Starting with Xcode 27, clang records <SDK>/SDKSettings.json as an input of
+# every compilation. Bazel rejects inputs outside the toolchain's builtin
+# include directories, and its autodetected macOS toolchain only ever trusts
+# the Command Line Tools SDK root, never the one inside Xcode.app. Builds that
+# pick up the Xcode SDK therefore fail with "absolute path inclusion(s) found".
+# SDKROOT is how Apple's clang driver selects an SDK when no -isysroot is
+# given; pointing it at the Command Line Tools SDK for both toolchain
+# autodetection (repo_env) and compile/link actions (action_env) keeps every
+# recorded path under a root Bazel already trusts.
+#
+# If the Command Line Tools SDK is not installed, every compile instead fails
+# with "Failed to open property list '/Library/Developer/CommandLineTools/SDKs/
+# MacOSX.sdk/SDKSettings.plist'" followed by "xcode-select: Failed to locate
+# 'gcc'". In either case, do not try to work around the error with extra
+# flags: run `./dev doctor`, which checks that this SDK is present and tells
+# you how to install it (`xcode-select --install`).
+build:macos --repo_env=SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+build:macos --action_env=SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+build:macos --host_action_env=SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
 
 build:pgo --@io_bazel_rules_go//go/config:pgoprofile=@pgo_profile//:profile.pprof
 

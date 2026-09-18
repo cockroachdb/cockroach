@@ -30,7 +30,7 @@ const (
 	// doctorStatusVersion is the current "version" of the status checks
 	// performed by `dev doctor``. Increasing it will force doctor to be re-run
 	// before other dev commands can be run.
-	doctorStatusVersion = 12
+	doctorStatusVersion = 13
 
 	noCacheFlag     = "no-cache"
 	interactiveFlag = "interactive"
@@ -150,6 +150,14 @@ var allDoctorChecks = []doctorCheck{
 				printStdoutAndErr(stdoutStr, err)
 				return `You must have the XCode command-line tools installed (if not a full installation of XCode) to build with Bazel.
 Please run ` + "`xcode-select --install`."
+			}
+			// .bazelrc pins SDKROOT to the Command Line Tools SDK on macOS
+			// (see the comment there), so it must exist even when a full
+			// Xcode installation is selected via xcode-select.
+			const cltSDK = "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+			if isDir, err := d.os.IsDir(cltSDK); err != nil || !isDir {
+				return fmt.Sprintf(`The macOS SDK from the XCode command-line tools is required to build with Bazel, but %s was not found.
+Please run `+"`xcode-select --install`"+` (this is needed even if you have a full installation of XCode).`, cltSDK)
 			}
 			return ""
 		},
