@@ -1435,16 +1435,22 @@ func TestTxnUpdateFromTxnRecordDoesNotOverwriteFields(t *testing.T) {
 	txn.SetDebugName("txn")
 	require.NoError(t, txn.Put(ctx, keyA, "a"))
 
-	hbRequest := &kvpb.HeartbeatTxnRequest{
-		RequestHeader: kvpb.RequestHeader{Key: keyA},
-		Now:           txn.ReadTimestamp(),
+	// Sharing one request between both batches is legal, but trips the race
+	// transport: the sequence number allocator stamps its header on every send,
+	// and the racer reads a sent batch from a goroutine that is not ordered
+	// against the next send.
+	hbRequest := func() *kvpb.HeartbeatTxnRequest {
+		return &kvpb.HeartbeatTxnRequest{
+			RequestHeader: kvpb.RequestHeader{Key: keyA},
+			Now:           txn.ReadTimestamp(),
+		}
 	}
 
 	// The first txn heartbeat writes the TransactionRecord to disk.
 	// OmitInRangefeeds and AdmissionPriority are not present on the
 	// TransactionRecord proto, so they are not written to disk.
 	b := txn.NewBatch()
-	b.AddRawRequest(hbRequest)
+	b.AddRawRequest(hbRequest())
 	require.NoError(t, txn.Run(ctx, b))
 
 	// The second txn heartbeat reads the TransactionRecord from disk, writes an
@@ -1454,7 +1460,7 @@ func TestTxnUpdateFromTxnRecordDoesNotOverwriteFields(t *testing.T) {
 	// dropped in the process because they can be updated only if they were not
 	// set previously.
 	b = txn.NewBatch()
-	b.AddRawRequest(hbRequest)
+	b.AddRawRequest(hbRequest())
 	require.NoError(t, txn.Run(ctx, b))
 
 	require.NoError(t, txn.Commit(ctx))
