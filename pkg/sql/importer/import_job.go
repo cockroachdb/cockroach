@@ -441,8 +441,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 			tableName = tblDesc.GetName()
 
-			if creationVersion := r.job.Payload().CreationClusterVersion; !details.Table.WasEmpty && creationVersion.Less(clusterversion.V26_2.Version()) {
-				log.Eventf(ctx, "skipping row count on table %q: the table was not empty and the job was started in an unsupported version", tableName)
+			// A non-empty table with no initial row count means the count was
+			// skipped, either because validation was off when the import started
+			// or because the job predates the count.
+			creationVersion := r.job.Payload().CreationClusterVersion
+			noInitialRowCount := details.Table.InitialRowCount == 0 ||
+				creationVersion.Less(clusterversion.V26_2.Version())
+			if !details.Table.WasEmpty && noInitialRowCount {
+				log.Eventf(ctx, "skipping row count on table %q: the table was not empty and no initial row count was recorded", tableName)
 
 				checks, err = inspect.ChecksForTable(ctx, p.ExecCfg(), tblDesc, nil /* expectedRowCount */)
 				return err
@@ -515,7 +521,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 }
 
 // detailsWithInitialRowCount checks if the table being imported into is empty
-// and return an updated details with the initial row count.
+// and returns an updated details. The initial row count is only recorded when
+// row count validation is enabled.
 func (r *importResumer) detailsWithInitialRowCount(
 	ctx context.Context, txn descs.Txn, details jobspb.ImportDetails,
 ) (jobspb.ImportDetails, error) {
@@ -529,12 +536,24 @@ func (r *importResumer) detailsWithInitialRowCount(
 	synthMut := tabledesc.NewBuilder(mut.TableDesc()).BuildExistingMutableTable()
 	synthMut.SetPublic()
 
+	// The full count only feeds the post-import validation and can outlive the
+	// table's GC TTL on a large table. When validation is off, only determine
+	// whether the table is empty; the subquery keeps the result shape the same.
+	countRows := importRowCountValidation.Get(&r.settings.SV) != ImportRowCountValidationOff
 	query := fmt.Sprintf(`
 SELECT
   count(*) AS row_count
 FROM [%d AS t]`,
 		mut.GetID(),
 	)
+	if !countRows {
+		query = fmt.Sprintf(`
+SELECT
+  count(*) AS row_count
+FROM (SELECT 1 FROM [%d AS t] LIMIT 1)`,
+			mut.GetID(),
+		)
+	}
 
 	rowCount := uint64(0)
 	if err := txn.WithSyntheticDescriptors([]catalog.Descriptor{synthMut}, func() error {
@@ -565,8 +584,10 @@ FROM [%d AS t]`,
 
 	rowCountDetails.Table.WasEmpty = rowCount == 0
 	rowCountDetails.Tables[0].WasEmpty = rowCount == 0
-	rowCountDetails.Table.InitialRowCount = rowCount
-	rowCountDetails.Tables[0].InitialRowCount = rowCount
+	if countRows {
+		rowCountDetails.Table.InitialRowCount = rowCount
+		rowCountDetails.Tables[0].InitialRowCount = rowCount
+	}
 
 	return rowCountDetails, nil
 }
