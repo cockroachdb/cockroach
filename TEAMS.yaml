@@ -67,7 +67,9 @@ cockroachlabs/server:
 cockroachlabs/obs-prs:
   # The observability team uses Jira for managing issues. So there is no triage column ID.
   label: T-observability
+  filter_race_runs_to_race_issues: true
 cockroachlabs/obs-india-prs:
+  filter_race_runs_to_race_issues: true
 cockroachlabs/jobs:
   aliases:
     cockroachlabs/jobs-prs: other
