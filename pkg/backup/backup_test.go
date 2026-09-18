@@ -11985,3 +11985,71 @@ func TestBackupSpansRederivationDeterministic(t *testing.T) {
 		})
 	}
 }
+
+// TestRestoreCoarsePreSplit exercises the coarse pre-split pass, which only
+// runs for a linked restore, and checks that the restored table is left in
+// several ranges whose replicas sit on more than one store. It does not check
+// the placement is even: the pass bounds how much contiguous data shares a set
+// of stores, and a restore this small has too few chunks for their spread to
+// mean anything.
+func TestRestoreCoarsePreSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	const numAccounts = 1000
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	// A high splits-per-node target, with a restore span target of zero to keep
+	// the spans from being coalesced, makes even this small restore produce
+	// several pre-splits rather than returning early.
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.restore.coarse_pre_splits_per_node = 4`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING backup.restore_span.target_size = '0B'`)
+	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, localFoo)
+	sqlDB.Exec(t, `CREATE DATABASE restored`)
+	sqlDB.Exec(t,
+		`RESTORE TABLE data.bank FROM LATEST IN $1 WITH EXPERIMENTAL COPY, into_db='restored'`, localFoo)
+
+	sqlDB.CheckQueryResults(t,
+		`SELECT count(*) FROM restored.bank`, [][]string{{strconv.Itoa(numAccounts)}})
+
+	var numRanges, numStores int
+	sqlDB.QueryRow(t, `
+WITH r AS (SELECT unnest(replicas) AS store_id FROM [SHOW RANGES FROM TABLE restored.bank])
+SELECT (SELECT count(*) FROM [SHOW RANGES FROM TABLE restored.bank]), count(DISTINCT store_id) FROM r`,
+	).Scan(&numRanges, &numStores)
+	require.Greater(t, numRanges, 1, "expected the pre-split to leave multiple ranges")
+	require.Greater(t, numStores, 1, "expected the scatter to place replicas on more than one store")
+}
+
+// TestCoarseSplitKeyReservoir checks that the reservoir stays within its
+// capacity, keeps its keys evenly spaced, and keeps enough of them, for stream
+// lengths spanning the halving boundaries.
+func TestCoarseSplitKeyReservoir(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const capacity = 16
+	for _, n := range []int{0, 1, 15, 16, 17, 31, 32, 33, 1000, 9999} {
+		t.Run(strconv.Itoa(n), func(t *testing.T) {
+			r := makeCoarseSplitKeyReservoir(capacity)
+			for i := 1; i <= n; i++ {
+				r.maybeAdd(roachpb.Key(strconv.Itoa(i)))
+			}
+			require.LessOrEqual(t, len(r.keys), capacity)
+			if n >= capacity {
+				// Halving never drops below half, so a stream long enough to fill
+				// the reservoir always leaves a usable number of boundaries.
+				require.Greater(t, len(r.keys), capacity/2-1)
+			}
+			// The kept keys are the stride-th, 2*stride-th, ... of the stream, so
+			// consecutive keys are exactly one stride apart.
+			for i, key := range r.keys {
+				want := strconv.Itoa((i + 1) * r.stride)
+				require.Equal(t, want, string(key), "key %d of %d (stride %d)", i, len(r.keys), r.stride)
+			}
+		})
+	}
+}
