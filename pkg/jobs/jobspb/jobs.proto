@@ -701,10 +701,13 @@ message ImportDetails {
     sqlbase.TableDescriptor desc = 1;
     string name = 18;
     int64 seq_val = 19;
-    // WasEmpty is true if the table was empty at the start of the import. It is
-    // deprecated; use InitialRowCount.
-    // TODO(bghal): remove when v26.1 is past support.
-    bool was_empty = 22 [deprecated = true];
+    // WasEmpty is true if the table was empty at the start of the import. It
+    // decides how a failed import is rolled back.
+    bool was_empty = 22;
+    // InitialRowCount is the number of rows in the table at the start of the
+    // import. It is only computed when row count validation is enabled, since
+    // it only serves to derive the expected row count for that validation. A
+    // non-empty table with InitialRowCount == 0 means the count was skipped.
     uint64 initial_row_count = 23;
     repeated string target_cols = 21;
     reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20;
