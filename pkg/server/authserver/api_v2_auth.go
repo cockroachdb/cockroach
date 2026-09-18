@@ -124,6 +124,7 @@ type loginResponse struct {
 func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
 	}
 	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
