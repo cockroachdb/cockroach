@@ -6,6 +6,7 @@
 package importer_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -306,6 +309,97 @@ func TestImportIntoWithCompetingTransactionCommits(t *testing.T) {
 		{"1", "initial"},
 		{"2", "imported"},
 	})
+}
+
+// TestImportIntoRowCountValidationOffSkipsInitialCount verifies that when row
+// count validation is off, IMPORT INTO a non-empty table does not count the
+// existing rows before ingesting. The initial row count only feeds the
+// post-import validation, and a full scan of a large table can outlive the
+// table's GC TTL. The only pre-ingest read of the table should be the bounded
+// scan that decides whether the table started empty.
+func TestImportIntoRowCountValidationOffSkipsInitialCount(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	var tablePrefix atomic.Pointer[roachpb.Key]
+	var armed atomic.Bool
+	var mu syncutil.Mutex
+	// Key limits of every scan of the table between the table going offline
+	// and the first AddSSTable.
+	var preIngestScanLimits []int64
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+					if !armed.Load() {
+						return nil
+					}
+					prefix := tablePrefix.Load()
+					for _, ru := range ba.Requests {
+						req := ru.GetInner()
+						switch req.Method() {
+						case kvpb.AddSSTable:
+							armed.Store(false)
+							return nil
+						case kvpb.Scan, kvpb.ReverseScan:
+							if bytes.HasPrefix(req.Header().Key, *prefix) {
+								mu.Lock()
+								preIngestScanLimits = append(preIngestScanLimits, ba.MaxSpanRequestKeys)
+								mu.Unlock()
+							}
+						}
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(db)
+	runner.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'`)
+	runner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	runner.Exec(t, `CREATE TABLE foo (k INT PRIMARY KEY, v INT)`)
+	runner.Exec(t, `INSERT INTO foo SELECT i, i*10 FROM generate_series(1, 100) AS g(i)`)
+	runner.Exec(t, `EXPORT INTO CSV 'nodelocal://1/export/' FROM SELECT i, i*10 FROM generate_series(101, 200) AS g(i)`)
+
+	var tableID uint32
+	runner.QueryRow(t, `SELECT 'foo'::REGCLASS::OID`).Scan(&tableID)
+	prefix := s.Codec().TablePrefix(tableID)
+	tablePrefix.Store(&prefix)
+
+	registry := s.JobRegistry().(*jobs.Registry)
+	registry.TestingWrapResumerConstructor(
+		jobspb.TypeImport,
+		func(resumer jobs.Resumer) jobs.Resumer {
+			resumer.(interface {
+				TestingSetBeforeInitialRowCountKnob(fn func() error)
+			}).TestingSetBeforeInitialRowCountKnob(func() error {
+				armed.Store(true)
+				return nil
+			})
+			return resumer
+		})
+
+	runner.Exec(t, `IMPORT INTO foo (k, v) CSV DATA ('nodelocal://1/export/export*-n*.0.csv')`)
+	runner.CheckQueryResults(t, `SELECT count(*) FROM foo`, [][]string{{"200"}})
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotEmpty(t, preIngestScanLimits, "expected the emptiness check to scan the table")
+	for _, limit := range preIngestScanLimits {
+		require.NotZero(t, limit,
+			"expected only bounded scans before ingestion, got scan key limits %v",
+			preIngestScanLimits)
+	}
 }
 
 // TestImportIntoNonEmptyTableRowCountCheck verifies that IMPORT INTO a
