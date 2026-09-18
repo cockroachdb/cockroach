@@ -66,6 +66,14 @@ var featureBackupEnabled = settings.RegisterBoolSetting(
 	featureflag.FeatureFlagEnabledDefault,
 	settings.WithPublic)
 
+var backupStrictPrivilegeCheckEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"backup.strict_privilege_check.enabled",
+	"if true, the BACKUP privilege is strictly required; if false, the "+
+		"deprecated CONNECT/SELECT/USAGE/EXECUTE privilege fallbacks for BACKUP are allowed",
+	false,
+)
+
 func resolveOptionsForBackupJobDescription(
 	opts tree.BackupOptions, kmsURIs []string, incrementalStorage []string,
 ) (tree.BackupOptions, error) {
@@ -331,6 +339,17 @@ func checkPrivilegesForBackup(
 	// move on to checking the destination URIs.
 	if hasRequiredBackupPrivileges {
 		return sql.CheckDestinationPrivileges(ctx, p, to)
+	}
+
+	// When strict privilege checking is enabled, the BACKUP privilege is required
+	// and the deprecated old-style privilege fallbacks below are disabled.
+	if backupStrictPrivilegeCheckEnabled.Get(&p.ExecCfg().Settings.SV) {
+		if backupStmt.Targets.Databases != nil {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"user %s does not have BACKUP privilege on all target databases", p.User())
+		}
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s does not have BACKUP privilege on all target tables", p.User())
 	}
 
 	// The following checks are to maintain compatability with pre-22.2 privilege

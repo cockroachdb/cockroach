@@ -131,6 +131,47 @@ BACKUP TABLE d2.t INTO 'nodelocal://1/d2-table';
 ----
 NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
 
+# Enabling the strict privilege check makes the BACKUP privilege strictly
+# required; the deprecated CONNECT/SELECT/USAGE fallbacks no longer suffice, even
+# though testuser holds all of them.
+exec-sql cluster=s2
+SET CLUSTER SETTING backup.strict_privilege_check.enabled = true;
+----
+
+exec-sql cluster=s2 user=testuser
+BACKUP DATABASE d2 INTO 'nodelocal://1/d2-strict';
+----
+pq: user testuser does not have BACKUP privilege on all target databases
+
+exec-sql cluster=s2 user=testuser
+BACKUP TABLE d2.t INTO 'nodelocal://1/d2-table-strict';
+----
+pq: user testuser does not have BACKUP privilege on all target tables
+
+# Granting the BACKUP privilege lets the backups proceed in strict mode, without
+# the deprecation notice.
+exec-sql cluster=s2
+GRANT BACKUP ON DATABASE d2 TO testuser;
+GRANT BACKUP ON TABLE d2.t TO testuser;
+----
+
+exec-sql cluster=s2 user=testuser
+BACKUP DATABASE d2 INTO 'nodelocal://1/d2-strict';
+----
+
+exec-sql cluster=s2 user=testuser
+BACKUP TABLE d2.t INTO 'nodelocal://1/d2-table-strict';
+----
+
+exec-sql cluster=s2
+REVOKE BACKUP ON DATABASE d2 FROM testuser;
+REVOKE BACKUP ON TABLE d2.t FROM testuser;
+----
+
+exec-sql cluster=s2
+RESET CLUSTER SETTING backup.strict_privilege_check.enabled;
+----
+
 # Test that implicit access is disallowed when the testing knob is not set.
 new-cluster name=s3 share-io-dir=s1
 ----
