@@ -1849,7 +1849,12 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var blockUpdates atomic.Bool
+	var notified atomic.Bool
 	updateCh := make(chan hlc.Timestamp)
+	// updatesDone releases a hook parked on updateCh. It is closed below, after
+	// the stopper defer, so it runs first and unblocks the refresh loop before
+	// the stopper waits on it.
+	updatesDone := make(chan struct{})
 
 	st := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
@@ -1880,16 +1885,21 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 						if id != descpb.ID(tableID.Load()) {
 							return nil
 						}
-						// Skip events for versions we've already seen. The rangefeed
+						// The caller must receive at most one notification per
+						// schema change. Compare versions because the rangefeed
 						// may deliver older versions after blockUpdates is set.
-						if int64(version) < expectedVersion.Load() {
+						if int64(version) < expectedVersion.Load() ||
+							!notified.CompareAndSwap(false, true) {
 							return nil
 						}
 						ts, err := descpb.GetDescriptorModificationTime(descriptor)
 						if err != nil {
 							return err
 						}
-						updateCh <- ts
+						select {
+						case updateCh <- ts:
+						case <-updatesDone:
+						}
 						return nil
 					},
 				},
@@ -1897,6 +1907,7 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 			Settings: st,
 		})
 	defer srv.Stopper().Stop(context.Background())
+	defer close(updatesDone)
 	s := srv.ApplicationLayer()
 
 	r := sqlutils.MakeSQLRunner(db)
@@ -1978,7 +1989,6 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	nextVersion = getDescriptorVersion(ts)
 	require.Equalf(t, initialVersion+1, nextVersion, "new version should be visible now")
 	blockUpdates.Store(false)
-	close(updateCh)
 	releaseTS()
 	require.NoError(t, grp.Wait())
 }
