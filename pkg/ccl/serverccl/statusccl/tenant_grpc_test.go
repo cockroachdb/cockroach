@@ -33,6 +33,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, "test can time out under stress")
+	skip.UnderRace(t, "test can time out under race")
 
 	ctx := context.Background()
 
