@@ -123,6 +123,10 @@ type PlanHookState interface {
 	LookupTenantInfo(ctx context.Context, tenantSpec *tree.TenantSpec, op string) (*mtinfopb.TenantInfo, error)
 	GetAvailableTenantID(ctx context.Context, name roachpb.TenantName) (roachpb.TenantID, error)
 	InternalSQLTxn() descs.Txn
+	// CreatePendingJobs creates the records of the jobs queued so far by this
+	// transaction. Hooks that commit the planner's transaction themselves must
+	// call it before doing so; see the comment on the planner's implementation.
+	CreatePendingJobs(ctx context.Context) error
 }
 
 var _ jobsauth.AuthorizationAccessor = PlanHookState(nil)
