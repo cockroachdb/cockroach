@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -280,9 +281,9 @@ func CheckDestinationPrivileges(ctx context.Context, p PlanHookState, to []strin
 	// that breaking change behind a cluster setting.
 	//
 	// TODO(aerfrei): remove the cluster setting, and these options with it.
-	return checkDestinationPrivileges(ctx, p, to, destinationPrivilegeOptions{
-		enforceImplicitAccess: true,
-		enforceUsage:          true,
+	return checkDestinationPrivileges(ctx, p, to, DestinationPrivilegeOptions{
+		EnforceImplicitAccess: true,
+		EnforceUsage:          true,
 	})
 }
 
@@ -295,22 +296,54 @@ func MaybeCheckDestinationPrivileges(ctx context.Context, p PlanHookState, to []
 	// TODO(aerfrei): enforce implicit access for these statements as well. The
 	// cluster setting above only covers USAGE, so that half needs a gate of its
 	// own.
-	return checkDestinationPrivileges(ctx, p, to, destinationPrivilegeOptions{
-		enforceImplicitAccess: false,
-		enforceUsage: sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(
+	return checkDestinationPrivileges(ctx, p, to, DestinationPrivilegeOptions{
+		EnforceUsage: sqlclustersettings.RequireUsagePrivilegeOnExternalConnections.Get(
 			&p.ExecCfg().Settings.SV),
 	})
 }
 
-// destinationPrivilegeOptions selects which of the destination privilege checks
-// to enforce.
-type destinationPrivilegeOptions struct {
-	enforceImplicitAccess bool
-	enforceUsage          bool
+// CheckDestinationPrivilegesWithOptions checks the destination privileges the
+// caller selects via opts.
+func CheckDestinationPrivilegesWithOptions(
+	ctx context.Context, p PlanHookState, to []string, opts DestinationPrivilegeOptions,
+) error {
+	return checkDestinationPrivileges(ctx, p, to, opts)
+}
+
+// ExternalDestinationResolver maps a destination URI to the ExternalDestination
+// whose auth posture the implicit-access check should reason about. It lets a
+// caller override the default resolution (via cloud.ExternalStorageConfFromURI)
+// for schemes that have no ExternalStorage representation.
+type ExternalDestinationResolver func(
+	uri string, user username.SQLUsername,
+) (cloudpb.ExternalDestination, error)
+
+// DestinationPrivilegeOptions selects which of the destination privilege checks
+// to enforce and, optionally, how destinations are resolved.
+type DestinationPrivilegeOptions struct {
+	EnforceImplicitAccess bool
+	EnforceUsage          bool
+	// Resolver customizes how a URI is mapped to an ExternalDestination for the
+	// implicit-access check. Leaving it nil falls back to resolving via
+	// cloud.ExternalStorageConfFromURI.
+	Resolver ExternalDestinationResolver
+}
+
+func (opts DestinationPrivilegeOptions) resolve(
+	uri string, user username.SQLUsername,
+) (cloudpb.ExternalDestination, error) {
+	if opts.Resolver != nil {
+		return opts.Resolver(uri, user)
+	}
+	conf, err := cloud.ExternalStorageConfFromURI(uri, user)
+	if err != nil {
+		return nil, err
+	}
+	return &conf, nil
 }
 
 func checkDestinationPrivileges(
-	ctx context.Context, p PlanHookState, to []string, opts destinationPrivilegeOptions,
+	ctx context.Context, p PlanHookState, to []string, opts DestinationPrivilegeOptions,
 ) error {
 	isAdmin, err := p.UserHasAdminRole(ctx, p.User())
 	if err != nil {
@@ -327,12 +360,12 @@ func checkDestinationPrivileges(
 		// this branch because `to` may hold KMS URIs, whose schemes are registered
 		// as KMS rather than as external storage, so ExternalStorageConfFromURI
 		// rejects them.
-		if opts.enforceImplicitAccess {
-			conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
+		if opts.EnforceImplicitAccess {
+			dest, err := opts.resolve(uri, p.User())
 			if err != nil {
 				return err
 			}
-			requiresImplicitAccess := !conf.AccessIsWithExplicitAuth() &&
+			requiresImplicitAccess := !dest.AccessIsWithExplicitAuth() &&
 				!p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound
 			if requiresImplicitAccess {
 				hasImplicitAccessPrivilege, err := p.HasPrivilege(
@@ -344,14 +377,14 @@ func checkDestinationPrivileges(
 					return pgerror.Newf(
 						pgcode.InsufficientPrivilege,
 						"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified %s URI",
-						conf.Provider.String())
+						dest.Kind())
 				}
 			}
 		}
 
 		// If the resource being used is an External Connection, check that the user
 		// has adequate privileges.
-		if opts.enforceUsage {
+		if opts.EnforceUsage {
 			name, err := externalconn.ConnectionNameFromURI(uri)
 			if err != nil {
 				return err
