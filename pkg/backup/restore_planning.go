@@ -91,6 +91,14 @@ var featureRestoreEnabled = settings.RegisterBoolSetting(
 	featureflag.FeatureFlagEnabledDefault,
 	settings.WithPublic)
 
+var restoreStrictPrivilegeCheckEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"restore.strict_privilege_check.enabled",
+	"if true, the RESTORE privilege is strictly required; if false, the "+
+		"deprecated CREATE/CREATEDB privilege fallbacks for RESTORE are allowed",
+	false,
+)
+
 var restoreCompactedBackups = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"restore.compacted_backups.enabled",
@@ -1462,6 +1470,12 @@ func checkRestorePrivilegesOnDatabase(
 		return false, nil
 	}
 
+	if restoreStrictPrivilegeCheckEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return false, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s does not have RESTORE privilege on database %s",
+			p.User(), parentDB.GetName())
+	}
+
 	if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
 		notice := fmt.Sprintf("%s RESTORE TABLE, user %s will exclusively require the "+
 			"RESTORE privilege on database %s.", deprecatedPrivilegesRestorePreamble, p.User().Normalized(), parentDB.GetName())
@@ -1539,6 +1553,11 @@ func checkPrivilegesForRestore(
 	//
 	// Database restores require the CREATEDB privileges.
 	if len(restoreStmt.Targets.Databases) > 0 {
+		if restoreStrictPrivilegeCheckEnabled.Get(&p.ExecCfg().Settings.SV) {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role or the RESTORE system privilege are allowed to perform"+
+					" a database restore")
+		}
 		notice := fmt.Sprintf("%s RESTORE DATABASE, user %s will exclusively require the "+
 			"RESTORE system privilege.", deprecatedPrivilegesRestorePreamble, p.User().Normalized())
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s", notice))
