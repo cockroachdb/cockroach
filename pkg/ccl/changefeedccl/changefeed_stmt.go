@@ -846,6 +846,7 @@ func createChangefeedJobRecord(
 			hasChangefeedPrivOnAllTables,
 			changefeedStmt.Level,
 			opts.GetConfluentSchemaRegistry(),
+			false, /* permitLegacyCSRSecurityOptOut */
 		); err != nil {
 			return nil, changefeedbase.Targets{}, err
 		}
