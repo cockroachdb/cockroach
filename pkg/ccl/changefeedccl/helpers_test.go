@@ -1248,7 +1248,8 @@ func getInitialDBForEnterpriseFactory(
 		user := "EnterpriseFeedUser"
 		password := "hunter2"
 		createUserWithDefaultPrivilege(t, rootDB, user, password, "CHANGEFEED", "SELECT")
-		grantUserAdditionalSystemPrivileges(t, rootDB, user, opts.additionalSystemPrivs)
+		grantUserAdditionalSystemPrivileges(t, rootDB, user,
+			append([]string{"EXTERNALIOIMPLICITACCESS"}, opts.additionalSystemPrivs...))
 		pgURL := url.URL{
 			Scheme: "postgres",
 			User:   url.UserPassword(user, password),
@@ -1275,7 +1276,8 @@ func getInitialSinkForSinklessFactory(
 		user := "SinklessFeedUser"
 		password := "hunter2"
 		createUserWithDefaultPrivilege(t, db, user, password, "SELECT")
-		grantUserAdditionalSystemPrivileges(t, db, user, opts.additionalSystemPrivs)
+		grantUserAdditionalSystemPrivileges(t, db, user,
+			append([]string{"EXTERNALIOIMPLICITACCESS"}, opts.additionalSystemPrivs...))
 		return sinkForUser(user, password)
 	}
 	return sinkForUser(username.RootUser)
@@ -1662,6 +1664,8 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 
 		`CREATE USER viewClusterMetadataUser`,
 		`GRANT SYSTEM VIEWCLUSTERMETADATA TO viewClusterMetadataUser`,
+
+		`GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO feedCreator, userWithAllGrants`,
 	)
 }
 

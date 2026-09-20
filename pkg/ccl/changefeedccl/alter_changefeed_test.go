@@ -166,6 +166,9 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 		rootDB.Exec(t, `GRANT CHANGEFEED ON table_a TO user2`)
 		rootDB.Exec(t, `GRANT SELECT ON table_a TO user2`)
 
+		rootDB.Exec(t, `GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO feedCreator, user2`)
+		defer rootDB.Exec(t, `REVOKE SYSTEM EXTERNALIOIMPLICITACCESS FROM feedCreator, user2`)
+
 		var jobID int
 		withUser(t, "feedCreator", func(userDB *sqlutils.SQLRunner) {
 			row := userDB.QueryRow(t, "CREATE CHANGEFEED for table_a INTO 'kafka://foo'")
