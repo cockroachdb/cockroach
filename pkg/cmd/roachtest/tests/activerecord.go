@@ -29,7 +29,7 @@ var railsReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\
 // WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
 // This is used by docs automation to produce a list of supported versions for ORM's.
 var supportedRailsVersion = "8.1.3.1"
-var activerecordAdapterVersion = "v8.1.0"
+var activerecordAdapterVersion = "v8.1.1"
 
 // This test runs activerecord's full test suite against a single cockroach node.
 
