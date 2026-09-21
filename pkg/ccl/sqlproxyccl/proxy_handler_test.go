@@ -2323,26 +2323,36 @@ func TestConnectionMigration(t *testing.T) {
 		defer testutils.TestingHook(&isSafeTransferPointLocked, func(req *processor, res *processor) bool {
 			return true
 		})()
-		// Transfer timeout is 3s, and we'll run pg_sleep for 10s.
+		// Transfer timeout is 3s. Sleep for far longer than that so the
+		// query is all but guaranteed to still be running on the pod when
+		// the transfer times out.
 		defer testutils.TestingHook(&defaultTransferTimeout, 3*time.Second)()
 
 		goCh := make(chan struct{}, 1)
 		errCh := make(chan error, 1)
 		go func() {
 			goCh <- struct{}{}
-			_, err := conn.ExecContext(tCtx, "SELECT pg_sleep(10)")
+			_, err := conn.ExecContext(tCtx, "SELECT pg_sleep(60)")
 			errCh <- err
 		}()
 
-		// Block until goroutine is started. We want to make sure we run the
-		// transfer request *after* sending the query. This doesn't guarantee,
-		// but is the best that we can do. We also added a sleep call here.
-		//
-		// Alternatively, we could open another connection, and query the server
-		// to make sure pg_sleep is running, but that seems unnecessary for just
-		// one test.
+		// The transfer must run while pg_sleep is actually executing on the
+		// SQL pod, otherwise SHOW TRANSFER STATE returns immediately and
+		// the transfer succeeds instead of timing out. Poll the pod
+		// directly until the query shows up as active.
 		<-goCh
-		time.Sleep(2 * time.Second)
+		testutils.SucceedsSoon(t, func() error {
+			var count int
+			if err := tenantDB1.QueryRow(
+				"SELECT count(*) FROM [SHOW CLUSTER QUERIES] WHERE query = 'SELECT pg_sleep(60)'",
+			).Scan(&count); err != nil {
+				return err
+			}
+			if count == 0 {
+				return errors.New("pg_sleep is not running yet")
+			}
+			return nil
+		})
 		// This should be an error because the transfer timed out. Connection
 		// should automatically be closed.
 		require.Error(t, f.TransferConnection(tCtx))
