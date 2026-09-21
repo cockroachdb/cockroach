@@ -870,8 +870,12 @@ func (s *Streamer) Close(ctx context.Context) {
 		s.mu.done = true
 		s.mu.Unlock()
 		s.requestsToServe.close()
-		// Unblock the coordinator in case it is waiting for the budget.
+		// Unblock the coordinator in case it is waiting for the budget. We've
+		// already canceled the coordinator's context above, so it'll exit right
+		// away.
+		s.budget.mu.Lock()
 		s.budget.mu.waitForBudget.Signal()
+		s.budget.mu.Unlock()
 	}
 	s.waitGroup.Wait()
 	if s.results != nil {
@@ -1074,6 +1078,12 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 	w.s.budget.mu.Lock()
 	defer w.s.budget.mu.Unlock()
 	for w.s.budget.limitBytes-w.s.budget.mu.acc.Used() < atLeastBytes {
+		// Check if the Streamer has been canceled or closed while we were
+		// waiting.
+		if ctx.Err() != nil {
+			w.s.results.setError(ctx.Err())
+			return true
+		}
 		// There isn't enough budget at the moment.
 		//
 		// First, ask the results buffer to spill some results to disk in order
@@ -1099,12 +1109,6 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 		}
 		// We have to wait for some budget.release() calls.
 		w.s.budget.mu.waitForBudget.Wait()
-		// Check if the Streamer has been canceled or closed while we were
-		// waiting.
-		if ctx.Err() != nil {
-			w.s.results.setError(ctx.Err())
-			return true
-		}
 	}
 	return false
 }
