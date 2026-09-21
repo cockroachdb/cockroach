@@ -187,7 +187,7 @@ func DefaultOptionsFromEnv() *Options {
 
 	return &Options{
 		Token: maybeEnv(githubAPITokenEnv, ""),
-		Org:   maybeEnv(githubOrgEnv, "cockroachdb"),
+		Org:   maybeEnv(githubOrgEnv, "cockroachlabs"),
 		Repo:  maybeEnv(githubRepoEnv, "cockroach"),
 		// The default value is the very first commit in the repository.
 		// This was chosen simply because it exists and while surprising,
