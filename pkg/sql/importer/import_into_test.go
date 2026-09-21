@@ -6,11 +6,13 @@
 package importer_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,9 +32,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -306,6 +311,266 @@ func TestImportIntoWithCompetingTransactionCommits(t *testing.T) {
 		{"1", "initial"},
 		{"2", "imported"},
 	})
+}
+
+// TestImportIntoRowCountValidationOffSkipsInitialCount verifies that when row
+// count validation is off, IMPORT INTO a non-empty table does not count the
+// existing rows before ingesting. The initial row count only feeds the
+// post-import validation, and a full scan of a large table can outlive the
+// table's GC TTL. The only pre-ingest read of the table should be the bounded
+// scan that decides whether the table started empty.
+func TestImportIntoRowCountValidationOffSkipsInitialCount(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	var tablePrefix atomic.Pointer[roachpb.Key]
+	var armed atomic.Bool
+	var mu syncutil.Mutex
+	// Key limits of every scan of the table between the table going offline
+	// and the first AddSSTable.
+	var preIngestScanLimits []int64
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+					if !armed.Load() {
+						return nil
+					}
+					prefix := tablePrefix.Load()
+					for _, ru := range ba.Requests {
+						req := ru.GetInner()
+						switch req.Method() {
+						case kvpb.AddSSTable:
+							armed.Store(false)
+							return nil
+						case kvpb.Scan, kvpb.ReverseScan:
+							if bytes.HasPrefix(req.Header().Key, *prefix) {
+								mu.Lock()
+								preIngestScanLimits = append(preIngestScanLimits, ba.MaxSpanRequestKeys)
+								mu.Unlock()
+							}
+						}
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(db)
+	runner.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'`)
+	runner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	runner.Exec(t, `CREATE TABLE foo (k INT PRIMARY KEY, v INT)`)
+	runner.Exec(t, `INSERT INTO foo SELECT i, i*10 FROM generate_series(1, 100) AS g(i)`)
+	runner.Exec(t, `EXPORT INTO CSV 'nodelocal://1/export/' FROM SELECT i, i*10 FROM generate_series(101, 200) AS g(i)`)
+
+	var tableID uint32
+	runner.QueryRow(t, `SELECT 'foo'::REGCLASS::OID`).Scan(&tableID)
+	prefix := s.Codec().TablePrefix(tableID)
+	tablePrefix.Store(&prefix)
+
+	registry := s.JobRegistry().(*jobs.Registry)
+	registry.TestingWrapResumerConstructor(
+		jobspb.TypeImport,
+		func(resumer jobs.Resumer) jobs.Resumer {
+			resumer.(interface {
+				TestingSetBeforeInitialRowCountKnob(fn func() error)
+			}).TestingSetBeforeInitialRowCountKnob(func() error {
+				armed.Store(true)
+				return nil
+			})
+			return resumer
+		})
+
+	runner.Exec(t, `IMPORT INTO foo (k, v) CSV DATA ('nodelocal://1/export/export*-n*.0.csv')`)
+	runner.CheckQueryResults(t, `SELECT count(*) FROM foo`, [][]string{{"200"}})
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotEmpty(t, preIngestScanLimits, "expected the emptiness check to scan the table")
+	for _, limit := range preIngestScanLimits {
+		require.NotZero(t, limit,
+			"expected only bounded scans before ingestion, got scan key limits %v",
+			preIngestScanLimits)
+	}
+}
+
+// TestImportIntoInitialRowCountSurvivesGC verifies that when row count
+// validation is on, the pre-ingest count of a non-empty table is protected
+// from GC. The count reads at a fixed timestamp for as long as the scan takes,
+// which on a large table can exceed the table's GC TTL. The test pauses the
+// count's first scan of the table, drives the MVCC GC queue until the GC
+// threshold reaches the count's read timestamp, then releases the scan and
+// expects the import and its validation to succeed.
+func TestImportIntoInitialRowCountSurvivesGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	var tablePrefix atomic.Pointer[roachpb.Key]
+	var armed atomic.Bool
+	var scanOnce sync.Once
+	var scanTS hlc.Timestamp // written before scanSeen is closed
+	scanSeen := make(chan struct{})
+	allowScan := make(chan struct{})
+	releaseScan := sync.OnceFunc(func() { close(allowScan) })
+	defer releaseScan()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+					if !armed.Load() {
+						return nil
+					}
+					prefix := tablePrefix.Load()
+					for _, ru := range ba.Requests {
+						req := ru.GetInner()
+						if req.Method() != kvpb.Scan && req.Method() != kvpb.ReverseScan {
+							continue
+						}
+						if !bytes.HasPrefix(req.Header().Key, *prefix) {
+							continue
+						}
+						scanOnce.Do(func() {
+							scanTS = ba.Timestamp
+							close(scanSeen)
+							select {
+							case <-allowScan:
+							case <-ctx.Done():
+							}
+						})
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(db)
+	runner.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'sync'`)
+	runner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	runner.Exec(t, `CREATE TABLE foo (k INT PRIMARY KEY, v INT)`)
+	runner.Exec(t, `ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 2`)
+	runner.Exec(t, `INSERT INTO foo SELECT i, i*10 FROM generate_series(1, 100) AS g(i)`)
+	runner.Exec(t, `EXPORT INTO CSV 'nodelocal://1/export/' FROM SELECT i, i*10 FROM generate_series(101, 200) AS g(i)`)
+
+	var tableID uint32
+	runner.QueryRow(t, `SELECT 'foo'::REGCLASS::OID`).Scan(&tableID)
+	prefix := s.Codec().TablePrefix(tableID)
+	tablePrefix.Store(&prefix)
+
+	registry := s.JobRegistry().(*jobs.Registry)
+	registry.TestingWrapResumerConstructor(
+		jobspb.TypeImport,
+		func(resumer jobs.Resumer) jobs.Resumer {
+			resumer.(interface {
+				TestingSetBeforeInitialRowCountKnob(fn func() error)
+			}).TestingSetBeforeInitialRowCountKnob(func() error {
+				armed.Store(true)
+				return nil
+			})
+			return resumer
+		})
+
+	importErrCh := make(chan error, 1)
+	go func() {
+		_, err := db.Exec(`IMPORT INTO foo (k, v) CSV DATA ('nodelocal://1/export/export*-n*.0.csv')`)
+		importErrCh <- err
+	}()
+
+	select {
+	case <-scanSeen:
+	case err := <-importErrCh:
+		t.Fatalf("import finished before the initial row count scanned the table: %v", err)
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		t.Fatal("timed out waiting for the initial row count scan")
+	}
+
+	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+	require.NoError(t, err)
+
+	// The count's protected timestamp record reaches the store's protected
+	// timestamp reader asynchronously, by way of the span config reconciler and
+	// the KVSubscriber. Wait for it before running GC: a pass that reads
+	// protected timestamp state predating the record is free to move the
+	// threshold past the count's read timestamp, which is exactly the failure
+	// this test is trying to rule out.
+	ptsReader := store.GetStoreConfig().ProtectedTimestampReader
+	tableSpan := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+	testutils.SucceedsSoon(t, func() error {
+		protections, _, err := ptsReader.GetProtectionTimestamps(ctx, tableSpan)
+		if err != nil {
+			return err
+		}
+		if !slices.Contains(protections, scanTS) {
+			return errors.Newf("waiting for the count's protected timestamp %s, have %v",
+				scanTS, protections)
+		}
+		return nil
+	})
+
+	// Drive the GC queue until the table's TTL has elapsed relative to the
+	// count's read timestamp. The protected timestamp lets the threshold
+	// advance to just below the read timestamp and no further; without one the
+	// threshold moves past it and the paused scan fails when released.
+	//
+	// The table's zone config reaches the store asynchronously, and the range
+	// is only split at the table boundary once it does, so resolve the replica
+	// on every attempt.
+	tableReplica := func() (*kvserver.Replica, error) {
+		repl := store.LookupReplica(roachpb.RKey(prefix))
+		if repl == nil || !repl.Desc().StartKey.Equal(prefix) {
+			return nil, errors.Newf("table %d does not have its own range yet", tableID)
+		}
+		conf, err := repl.LoadSpanConfig(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if conf.TTL() != 2*time.Second {
+			return nil, errors.Newf("waiting for the table's GC TTL to apply, have %s", conf.TTL())
+		}
+		return repl, nil
+	}
+	testutils.SucceedsSoon(t, func() error {
+		repl, err := tableReplica()
+		if err != nil {
+			return err
+		}
+		processErr, enqueueErr := store.Enqueue(ctx, "mvccGC", repl, true /* skipShouldQueue */, false /* async */)
+		if err := errors.CombineErrors(processErr, enqueueErr); err != nil {
+			return err
+		}
+		if threshold := repl.GetGCThreshold(); threshold.Less(scanTS.Prev()) {
+			return errors.Newf("GC threshold %s has not reached %s", threshold, scanTS.Prev())
+		}
+		return nil
+	})
+	repl, err := tableReplica()
+	require.NoError(t, err)
+	threshold := repl.GetGCThreshold()
+	require.Truef(t, threshold.Less(scanTS),
+		"GC threshold %s advanced past the count's read timestamp %s", threshold, scanTS)
+
+	releaseScan()
+	require.NoError(t, <-importErrCh)
+	runner.CheckQueryResults(t, `SELECT count(*) FROM foo`, [][]string{{"200"}})
 }
 
 // TestImportIntoNonEmptyTableRowCountCheck verifies that IMPORT INTO a
