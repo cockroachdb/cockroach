@@ -541,9 +541,35 @@ func restore(
 	// Count number of import spans.
 	var numImportSpans int
 	var countTasks []func(ctx context.Context) error
+	// The count pass already walks every import span in key order, so the coarse
+	// pre-split rides along on it rather than paying for a second pass over the
+	// manifests. See coarsePreSplitAndScatter.
+	//
+	// Only linked restores pre-split for now: they link rather than ingest, so
+	// they reach the end of their data with no later phase in which a scatter
+	// that moved nothing could be corrected.
+	//
+	// The reservoir sizes the pass from the node count and from how many spans
+	// turn up, which is not known until this pass ends.
+	splitsPerNode := int(coarseRestorePreSplitsPerNode.Get(&execCtx.ExecCfg().Settings.SV))
+	var coarseKeys coarseSplitKeyReservoir
+	if splitsPerNode > 0 && details.OnlineImpl() {
+		numNodes := 1
+		if _, instanceIDs, err := execCtx.DistSQLPlanner().SetupAllNodesPlanning(
+			restoreCtx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
+		); err != nil {
+			// Not worth failing the restore over; one node's worth of splits is a
+			// poor target but still better than no pre-split.
+			log.Dev.Warningf(restoreCtx, "coarse pre-split: using 1 node to size splits: %v", err)
+		} else if len(instanceIDs) > 0 {
+			numNodes = len(instanceIDs)
+		}
+		coarseKeys = makeCoarseSplitKeyReservoir(2 * splitsPerNode * numNodes)
+	}
 	spanCountTask := func(ctx context.Context) error {
-		for range countSpansCh {
+		for entry := range countSpansCh {
 			numImportSpans++
+			coarseKeys.maybeAdd(entry.Span.Key)
 		}
 		return nil
 	}
@@ -554,6 +580,8 @@ func restore(
 	if err := ctxgroup.GoAndWait(restoreCtx, countTasks...); err != nil {
 		return emptyRowCount, errors.Wrapf(err, "counting number of import spans")
 	}
+
+	coarsePreSplitAndScatter(restoreCtx, execCtx.ExecCfg(), dataToRestore, backupManifests, coarseKeys.keys)
 
 	// requestFinishedCh is pinged every time restore completes the ingestion of a
 	// restoreSpanEntry. Each ping updates the 'fraction completed' job progress.

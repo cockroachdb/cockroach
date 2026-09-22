@@ -22,6 +22,7 @@ go_library(
         "generative_split_and_scatter_processor.go",
         "key_rewriter.go",
         "restoration_data.go",
+        "restore_coarse_pre_split.go",
         "restore_data_processor.go",
         "restore_job.go",
         "restore_online.go",
