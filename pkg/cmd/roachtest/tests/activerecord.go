@@ -31,6 +31,11 @@ var railsReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\
 var supportedRailsVersion = "8.1.3.1"
 var activerecordAdapterVersion = "v8.1.1"
 
+// minitestSeed fixes the suite's test order. Tests leak committed rows into
+// shared fixtures, so a random order makes failures a coin flip. See
+// cockroachdb/cockroach#175682.
+const minitestSeed = 49012
+
 // This test runs activerecord's full test suite against a single cockroach node.
 
 func registerActiveRecord(r registry.Registry) {
@@ -200,7 +205,8 @@ func registerActiveRecord(r registry.Registry) {
 		result, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			fmt.Sprintf(
 				`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
-					`sudo RAILS_VERSION=%s RUBYOPT="-W0" TESTOPTS="-v" bundle exec rake test`, supportedRailsVersion),
+					`sudo RAILS_VERSION=%s RUBYOPT="-W0" TESTOPTS="-v --seed=%d" bundle exec rake test`,
+				supportedRailsVersion, minitestSeed),
 		)
 
 		// Fatal for a roachprod or transient error. A roachprod error is when result.Err==nil.
