@@ -40,8 +40,9 @@ type ExternalConnection interface {
 	RedactedConnectionURI() string
 }
 
-// Materialize converts a potentially modified external connection uri to the underlying uri with those
-// modifications applied. passing uri == nil will just return the underlying uri with no modifications
+// Materialize resolves an external:// uri to the underlying uri of ec with the
+// sub-path of uri appended. Passing uri == nil returns the underlying uri with
+// no modifications.
 func Materialize(ec ExternalConnection, uri *url.URL) (*url.URL, error) {
 	if uri != nil {
 		if uri.Scheme != Scheme {
@@ -65,14 +66,6 @@ func Materialize(ec ExternalConnection, uri *url.URL) (*url.URL, error) {
 	}
 
 	if uri != nil {
-		query := materialized.Query()
-		for key, vals := range uri.Query() {
-			for _, val := range vals {
-				query.Add(key, val)
-			}
-		}
-		materialized.RawQuery = query.Encode()
-
 		if _, err := cloud.SanitizedJoin(materialized.Path, uri.Path); err != nil {
 			return nil, errors.Wrap(err,
 				"the subdirectory in the external:// URI escapes the external connection's base directory")
