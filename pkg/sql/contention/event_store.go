@@ -338,29 +338,23 @@ func (s *eventStore) upsertBatch(events []contentionpb.ExtendedContentionEvent) 
 	defer s.mu.Unlock()
 
 	for i := range events {
-		blockingTxnID := events[i].BlockingEvent.TxnMeta.ID
-		_, ok := s.mu.store.Get(blockingTxnID)
-		if !ok {
-			atomic.AddInt64(&s.atomic.storageSize, int64(entryBytes(&events[i])))
+		eventHash := events[i].Hash()
+		// Resolution rewrites an existing key with a larger value, and the
+		// cache replaces it in place without invoking OnEvictedEntry, so the
+		// old entry's bytes must be released here.
+		if old, ok := s.mu.store.Get(eventHash); ok {
+			oldEvent := old.(contentionpb.ExtendedContentionEvent)
+			atomic.AddInt64(&s.atomic.storageSize, -int64(entryBytes(&oldEvent)))
 		}
-		s.mu.store.Add(events[i].Hash(), events[i])
+		atomic.AddInt64(&s.atomic.storageSize, int64(entryBytes(&events[i])))
+		s.mu.store.Add(eventHash, events[i])
 	}
 }
 
 // addEventsForTest is a convenience function used by tests to directly add events to
 // the eventStore bypassing the resolver and buffer guard.
 func (s *eventStore) addEventsForTest(events []contentionpb.ExtendedContentionEvent) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for i := range events {
-		blockingTxnID := events[i].BlockingEvent.TxnMeta.ID
-		_, ok := s.mu.store.Get(blockingTxnID)
-		if !ok {
-			atomic.AddInt64(&s.atomic.storageSize, int64(entryBytes(&events[i])))
-		}
-		s.mu.store.Add(events[i].Hash(), events[i])
-	}
+	s.upsertBatch(events)
 }
 
 func (s *eventStore) resolutionIntervalWithJitter() time.Duration {
