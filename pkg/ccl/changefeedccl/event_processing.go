@@ -131,7 +131,7 @@ func newEventConsumer(
 			return nil, err
 		}
 		encoder, err := getEncoder(ctx, encodingOpts, feed.Targets, spec.Select.Expr != "",
-			makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics, esp,
+			makeExternalConnectionProvider(ctx, cfg.DB, cfg.Settings), sliMetrics, esp,
 		)
 		if err != nil {
 			return nil, err

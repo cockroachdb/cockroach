@@ -151,11 +151,11 @@ func newConfluentSchemaRegistry(
 	}
 
 	if u.Scheme == changefeedbase.SinkSchemeExternalConnection {
-		actual, err := p.lookup(u.Host)
+		actual, err := p.resolve(u)
 		if err != nil {
 			return nil, err
 		}
-		return newConfluentSchemaRegistry(actual, p, sliMetrics)
+		return newConfluentSchemaRegistry(actual.String(), p, sliMetrics)
 	}
 
 	if u.Scheme != "http" && u.Scheme != "https" {
