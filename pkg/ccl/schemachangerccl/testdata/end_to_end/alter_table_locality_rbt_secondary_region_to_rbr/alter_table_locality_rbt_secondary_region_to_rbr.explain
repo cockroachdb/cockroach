@@ -474,9 +474,8 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹t› SET
       │    │    ├── DELETE_ONLY → ABSENT              PrimaryIndex:{DescID: 108 (t), IndexID: 1 (t_pkey-), ConstraintID: 2}
       │    │    ├── PUBLIC      → VALIDATED           SecondaryIndex:{DescID: 108 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── PUBLIC      → VALIDATED           SecondaryIndex:{DescID: 108 (t), IndexID: 3 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
-      │    └── 21 Mutation operations
+      │    └── 20 Mutation operations
       │         ├── UnsetTableLocality {"TableID":108}
-      │         ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
       │         ├── MakeIndexAbsent {"IndexID":1,"TableID":108}
       │         ├── MarkRecreatedIndexAsVisible {"IndexID":4,"TableID":108}
       │         ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":108}
