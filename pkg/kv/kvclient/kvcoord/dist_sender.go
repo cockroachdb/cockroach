@@ -1157,7 +1157,10 @@ func (ds *DistSender) getRoutingInfo(
 // initAndVerifyBatch initializes timestamp-related information and
 // verifies batch constraints before splitting.
 func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-	// Attach the local node ID to each request.
+	// Attach this DistSender's local KV node ID, which KV uses as a proxy for the
+	// request's origin locality. On a separate-process SQL pod there is no local
+	// KV node, so nodeIDGetter returns 0 and the batch instead has the receiving
+	// node's ID backfilled server-side (see Node.Batch).
 	if ba.GatewayNodeID == 0 {
 		ba.GatewayNodeID = ds.nodeIDGetter()
 	}
