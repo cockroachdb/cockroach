@@ -228,6 +228,35 @@ func (conf *issuerURLConf) getJWKSURI(issuer string) (jwksURI string, err error)
 	return jwksURI, nil
 }
 
+// equal reports whether two parsed issuer configurations are semantically
+// identical. It is used to detect configuration changes that revoke the trust
+// cached JWKS entries were fetched under.
+func (conf issuerURLConf) equal(other issuerURLConf) bool {
+	if (conf.ijMap == nil) != (other.ijMap == nil) {
+		return false
+	}
+	if conf.ijMap != nil {
+		if len(conf.ijMap.Mappings) != len(other.ijMap.Mappings) {
+			return false
+		}
+		for issuer, jwksURI := range conf.ijMap.Mappings {
+			if other.ijMap.Mappings[issuer] != jwksURI {
+				return false
+			}
+		}
+	}
+	if len(conf.issuers) != len(other.issuers) {
+		return false
+	}
+	// The list form preserves JSON order, but the map form derives its issuer
+	// list from map iteration, so compare the lists order-insensitively.
+	sorted := slices.Clone(conf.issuers)
+	slices.Sort(sorted)
+	otherSorted := slices.Clone(other.issuers)
+	slices.Sort(otherSorted)
+	return slices.Equal(sorted, otherSorted)
+}
+
 // issuerJWKSMap is a struct that defines a valid JSON body for the
 // OIDCRedirectURL cluster setting in multi-region environments.
 type issuerJWKSMap struct {

@@ -7,12 +7,12 @@ package jwtauth
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -96,9 +96,17 @@ type jwtAuthenticator struct {
 		// enabled represents the present state of if this feature is enabled. When combined with the enabled value
 		// of conf, it allows us to detect when this feature becomes enabled.
 		enabled bool
+		// jwksCache caches auto-fetched discovery documents and JWK sets. It
+		// deliberately lives outside conf: reloadConfigLocked rebuilds conf
+		// on every authentication, and the cache must survive that.
+		jwksCache remoteJWKSCache
 	}
 	// clusterUUID is used to check the validity of the enterprise license. It is set once at initialization.
 	clusterUUID uuid.UUID
+	// clock supplies the current time for cache freshness decisions. It is nil
+	// in production, where the system clock is used; tests substitute a manual
+	// clock to make expiry deterministic.
+	clock func() time.Time
 }
 
 // jwtAuthenticatorConf contains all the values to configure JWT authentication. These values are copied from
@@ -143,6 +151,18 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 			httputil.WithDialerTimeout(clientTimeout),
 			httputil.WithCustomCAPEM(JWTAuthIssuerCustomCA.Get(&st.SV)),
 		),
+	}
+
+	// Cached keys were fetched under trust assumptions that may have just
+	// changed, so drop them when a trust-relevant value differs. Values are
+	// compared (not the newly allocated HTTP client pointer), and the ordinary
+	// reload that precedes each authentication preserves the cache.
+	oldConf := authenticator.mu.conf
+	if !oldConf.issuersConf.equal(conf.issuersConf) ||
+		oldConf.issuerCA != conf.issuerCA ||
+		oldConf.jwksAutoFetchEnabled != conf.jwksAutoFetchEnabled ||
+		oldConf.enabled != conf.enabled {
+		authenticator.invalidateJWKSCache()
 	}
 
 	if !authenticator.mu.conf.enabled && conf.enabled {
@@ -222,7 +242,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	var jwkSet jwk.Set
 	// If auto-fetch is enabled, fetch the JWKS remotely from the issuer's well known jwks URI.
 	if authenticator.mu.conf.jwksAutoFetchEnabled {
-		jwkSet, err = authenticator.remoteFetchJWKS(ctx, tokenIssuer)
+		jwkSet, err = authenticator.getJWKS(ctx, tokenIssuer, tokenKeyID(tokenBytes))
 		if err != nil {
 			return redact.Sprintf("unable to fetch jwks: %v", err),
 				errors.Newf("JWT authentication: unable to validate token")
@@ -537,7 +557,7 @@ func (a *jwtAuthenticator) VerifyAndExtractIssuer(
 	// Fetch the JWKS (auto-fetch or static) for that issuer.
 	var set jwk.Set
 	if a.mu.conf.jwksAutoFetchEnabled {
-		set, err = a.remoteFetchJWKS(ctx, issuer)
+		set, err = a.getJWKS(ctx, issuer, tokenKeyID(tokenBytes))
 		if err != nil {
 			return "", redact.Sprintf("JWT authentication: unable to fetch jwks: %v", err),
 				errors.New("JWT authentication: unable to validate token")
@@ -559,59 +579,6 @@ func (a *jwtAuthenticator) VerifyAndExtractIssuer(
 	}
 
 	return issuer, "", nil
-}
-
-// remoteFetchJWKS fetches the JWKS URI from the provided issuer URL.
-func (authenticator *jwtAuthenticator) remoteFetchJWKS(
-	ctx context.Context, issuerURL string,
-) (jwk.Set, error) {
-	var jwksURI string
-	// if JWKS URI is configured in JWTAuthIssuersConfig use that instead of URL
-	// from issuer's well-known endpoint
-	err := authenticator.mu.conf.issuersConf.checkJWKSConfigured()
-	if err != nil {
-		jwksURI, err = authenticator.getJWKSURI(ctx, issuerURL)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		jwksURI, err = authenticator.mu.conf.issuersConf.getJWKSURI(issuerURL)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	body, err := getHttpResponse(ctx, jwksURI, authenticator)
-	if err != nil {
-		return nil, err
-	}
-	jwkSet, err := jwk.Parse(body)
-	if err != nil {
-		return nil, err
-	}
-	return jwkSet, nil
-}
-
-// getJWKSURI returns the JWKS URI from the OpenID configuration endpoint.
-func (authenticator *jwtAuthenticator) getJWKSURI(
-	ctx context.Context, issuerUrl string,
-) (string, error) {
-	type OIDCConfigResponse struct {
-		JWKSUri string `json:"jwks_uri"`
-	}
-	openIdConfigEndpoint := getOpenIdConfigEndpoint(issuerUrl)
-	body, err := getHttpResponse(ctx, openIdConfigEndpoint, authenticator)
-	if err != nil {
-		return "", err
-	}
-	var config OIDCConfigResponse
-	if err = json.Unmarshal(body, &config); err != nil {
-		return "", err
-	}
-	if config.JWKSUri == "" {
-		return "", errors.Newf("no JWKS URI found in OpenID configuration")
-	}
-	return config.JWKSUri, nil
 }
 
 // getOpenIdConfigEndpoint returns the OpenID configuration endpoint by appending standard open-id url.
@@ -666,18 +633,28 @@ var getHttpResponse = func(
 		return nil, err
 	}
 
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		bodySnippet := string(body)
-		if len(bodySnippet) > 200 {
-			bodySnippet = bodySnippet[:200] + "..."
-		}
-		return nil, errors.WithDetailf(
-			errors.Newf("JWT authentication: HTTP request failed"),
-			"GET %s returned %s: %s", url, resp.Status, bodySnippet,
-		)
+	if err := checkHTTPResponseStatus(url, resp, body); err != nil {
+		return nil, err
 	}
 
 	return body, nil
+}
+
+// checkHTTPResponseStatus returns an error for any response outside the 2xx
+// range. The error detail carries a bounded body snippet so that untrusted
+// response content cannot flood the logs.
+func checkHTTPResponseStatus(url string, resp *http.Response, body []byte) error {
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+		return nil
+	}
+	bodySnippet := string(body)
+	if len(bodySnippet) > 200 {
+		bodySnippet = bodySnippet[:200] + "..."
+	}
+	return errors.WithDetailf(
+		errors.Newf("JWT authentication: HTTP request failed"),
+		"GET %s returned %s: %s", url, resp.Status, bodySnippet,
+	)
 }
 
 // ConfigureJWTAuth initializes and returns a jwtAuthenticator. It also sets up
@@ -691,6 +668,7 @@ func ConfigureJWTAuth(
 ) JWTVerifier {
 	authenticator := jwtAuthenticator{}
 	authenticator.clusterUUID = clusterUUID
+	authenticator.mu.jwksCache = newRemoteJWKSCache()
 	authenticator.reloadConfig(serverCtx, st)
 	JWTAuthAudience.SetOnChange(&st.SV, func(ctx context.Context) {
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)

@@ -687,6 +687,19 @@ var mockGetHttpResponseWithLocalFileContent = func(ctx context.Context, url stri
 	return byteValue, nil
 }
 
+// mockFetchRemoteDocument serves discovery and JWKS documents from testdata.
+// The files carry no freshness metadata, so every use is treated as stale and
+// these tests keep exercising the fetch path on each login.
+var mockFetchRemoteDocument = func(
+	ctx context.Context, url string, authenticator *jwtAuthenticator, _ http.Header,
+) (*remoteDocument, error) {
+	body, err := mockGetHttpResponseWithLocalFileContent(ctx, url, authenticator)
+	if err != nil {
+		return nil, err
+	}
+	return &remoteDocument{body: body}, nil
+}
+
 // createJWKSFromFile creates a jwk set from a local file. The file used by this function is expected to contain both
 // private and public keys.
 func createJWKSFromFile(t *testing.T, fileName string) jwk.Set {
@@ -702,8 +715,8 @@ func createJWKSFromFile(t *testing.T, fileName string) jwk.Set {
 // test that jwks URI is used when JWKSAutoFetchEnabled is true.
 func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Intercept the call to getHttpResponse and return the mockGetHttpResponse
-	restoreHook := testutils.TestingHook(&getHttpResponse, mockGetHttpResponseWithLocalFileContent)
+	// Intercept the call to fetchRemoteDocument and return the mock content.
+	restoreHook := testutils.TestingHook(&fetchRemoteDocument, mockFetchRemoteDocument)
 	defer func() {
 		restoreHook()
 	}()
@@ -756,8 +769,8 @@ func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 // test jwks URI is used when JWKSAutoFetchEnabled and static jwks ignored.
 func Test_JWKSFetchWorksWhenEnabledIgnoresTheStaticJWKS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Intercept the call to getHttpResponse and return the mockGetHttpResponse
-	restoreHook := testutils.TestingHook(&getHttpResponse, mockGetHttpResponseWithLocalFileContent)
+	// Intercept the call to fetchRemoteDocument and return the mock content.
+	restoreHook := testutils.TestingHook(&fetchRemoteDocument, mockFetchRemoteDocument)
 	defer func() {
 		restoreHook()
 	}()
@@ -999,30 +1012,35 @@ func TestJWTAuthClientTimeout(t *testing.T) {
 		testServer.Close()
 	}()
 
-	mockGetHttpResponse := func(ctx context.Context, url string, authenticator *jwtAuthenticator, _ ...http.Header) ([]byte, error) {
+	mockTimeoutFetchRemoteDocument := func(
+		ctx context.Context, url string, authenticator *jwtAuthenticator, _ http.Header,
+	) (*remoteDocument, error) {
+		var body []byte
+		var err error
 		if strings.Contains(url, "/.well-known/openid-configuration") {
-			return mockGetHttpResponseWithLocalFileContent(ctx, url, authenticator)
+			body, err = mockGetHttpResponseWithLocalFileContent(ctx, url, authenticator)
 		} else if strings.Contains(url, "/oauth2/v3/certs") {
 			// For fetching JWKS, point to the local test server.
-			resp, err := authenticator.mu.conf.httpClient.Get(
+			var resp *http.Response
+			resp, err = authenticator.mu.conf.httpClient.Get(
 				context.Background(),
 				testServer.URL+"/jwks",
 			)
-			if err != nil {
-				return nil, err
+			if err == nil {
+				defer resp.Body.Close()
+				body, err = io.ReadAll(resp.Body)
 			}
-			defer resp.Body.Close()
-
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			return body, nil
+		} else {
+			err = errors.Newf("unsupported route: %s", url)
 		}
-		return nil, errors.Newf("unsupported route: %s", url)
+		if err != nil {
+			return nil, err
+		}
+		// Local bodies carry no cache metadata; every use is treated as stale.
+		return &remoteDocument{body: body}, nil
 	}
-	getHttpResponseTestHook := testutils.TestingHook(&getHttpResponse, mockGetHttpResponse)
-	defer getHttpResponseTestHook()
+	restoreFetchHook := testutils.TestingHook(&fetchRemoteDocument, mockTimeoutFetchRemoteDocument)
+	defer restoreFetchHook()
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
