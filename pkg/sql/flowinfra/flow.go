@@ -327,11 +327,13 @@ func NewFlowBase(
 	onFlowCleanupEnd func(context.Context),
 	statementSQL string,
 ) *FlowBase {
-	// We are either in a single tenant cluster, or a SQL node in a multi-tenant
-	// cluster, where the SQL node is single tenant. The tenant below is used
-	// within SQL (not KV), so using an arbitrary tenant is ok -- we choose to
-	// use SystemTenantID since it is already defined.
-	admissionInfo := admission.WorkInfo{TenantID: roachpb.SystemTenantID}
+	// This WorkInfo has two consumers, both on the inbound stream paths. The
+	// ASH work states read it and need the flow's actual tenant, which is why
+	// the tenant comes from the eval context's codec. SQLSQLResponseAdmissionQ.Admit
+	// reads it too, but the tenant is immaterial there: that queue is non-nil
+	// only on the system tenant's SQL server, where the flow's tenant is
+	// already the system tenant.
+	admissionInfo := admission.WorkInfo{TenantID: flowCtx.EvalCtx.Codec.TenantID}
 	admissionInfo.WorkloadID = flowCtx.EvalCtx.WorkloadID
 	admissionInfo.AppNameID = flowCtx.EvalCtx.AppNameID
 	admissionInfo.GatewayNodeID = roachpb.NodeID(flowCtx.NodeID.SQLInstanceID())
@@ -450,8 +452,8 @@ func (f *FlowBase) GetLocalVectorSources() map[int32]any {
 	return f.localVectorSources
 }
 
-// GetAdmissionInfo returns the information to use for admission control on
-// responses received from a remote flow.
+// GetAdmissionInfo returns the information used for admission control and ASH
+// work states on responses received from a remote flow.
 func (f *FlowBase) GetAdmissionInfo() admission.WorkInfo {
 	return f.admissionInfo
 }
