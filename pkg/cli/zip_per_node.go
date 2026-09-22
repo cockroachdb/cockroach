@@ -515,9 +515,19 @@ func (zc *debugZipContext) getLogFiles(
 						numScrubbed, file.Name, numTombstoned))
 			}
 		}
-		for _, w := range warnings {
-			fmt.Fprintf(stderr, "WARNING: %s\n", w)
-		}
+		// Hold the reporting mutex while emitting warnings. Progress output from
+		// the concurrently-collected nodes is serialized through this mutex and,
+		// in concurrent mode, each reporter call terminates its own line. These
+		// warnings go straight to stderr, so without the lock one can land in the
+		// middle of another node's in-flight progress line (the zip test merges
+		// stderr into stdout, which is where that interleaving shows up).
+		func() {
+			zipReportingMu.Lock()
+			defer zipReportingMu.Unlock()
+			for _, w := range warnings {
+				fmt.Fprintf(stderr, "WARNING: %s\n", w)
+			}
+		}()
 	}
 	return nil
 }
