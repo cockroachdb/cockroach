@@ -11,6 +11,11 @@ set -xeuo pipefail
 # Usage: testrace_impl.sh PKG1 [PKG2 PKG3 PKG4...]
 # packages are expected to be formatted as go-style, e.g. ./pkg/cmd/bazci.
 
+# Race runs are what report data races; the non-race runs report everything
+# else. Teams that set filter_race_runs_to_race_issues in TEAMS.yaml get
+# issues from this run only for the former.
+export COCKROACH_FILTER_RACE_RUNS_TO_RACE_ISSUES=1
+
 bazel build //pkg/cmd/bazci
 size_to_timeout=("small:1200" "medium:6000" "large:18000" "enormous:72000")
 for pkg in "$@"

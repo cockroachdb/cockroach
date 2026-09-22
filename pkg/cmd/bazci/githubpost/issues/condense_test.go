@@ -6,6 +6,8 @@
 package issues
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -91,11 +93,66 @@ const rsgRepro = `    rsg_test.go:575: To reproduce, use schema:
     rsg_test.go:579: 
 `
 
+const raceDelim = "==================\n"
+
+const dataRace = `WARNING: DATA RACE
+Read at 0x00c0004e2a48 by goroutine 189:
+  github.com/cockroachdb/cockroach/pkg/kv/kvserver.(*Replica).mu()
+      pkg/kv/kvserver/replica.go:411 +0x64
+
+Previous write at 0x00c0004e2a48 by goroutine 214:
+  github.com/cockroachdb/cockroach/pkg/kv/kvserver.(*Store).Send()
+      pkg/kv/kvserver/store_send.go:142 +0x1a4
+
+Goroutine 189 (running) created at:
+  github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTask()
+      pkg/util/stop/stopper.go:494 +0x2c8
+`
+
+// trailingLog stands in for whatever the test binary printed after the race
+// report. Digest used to return this and drop the report entirely.
+const trailingLog = `    --- FAIL: TestFoo (4.20s)
+    	testing.go:1490: race detected during execution of test
+FAIL
+`
+
 const panic5Lines = fiveLines + messagePanic + firstStack + restStack
 const fatal5Lines = fiveLines + messageFatal + firstStack + restStack
 const crashAndRepro = fiveLines + rsgCrash + fiveLines + rsgRepro
 
+var longTail = strings.Repeat("trailing log line\n", 60)
+
 var errorCases = []condenseTestCase{
+	{
+		// The report survives more trailing output than the line window, which
+		// used to crowd it out completely.
+		raceDelim + dataRace + raceDelim + longTail,
+		dataRace,
+		50,
+	},
+	{
+		fiveLines + raceDelim + dataRace + raceDelim + trailingLog,
+		fiveLines + dataRace,
+		100,
+	},
+	{
+		fiveLines + raceDelim + dataRace + raceDelim + trailingLog,
+		dataRace,
+		0,
+	},
+	{
+		// A report truncated by halt_on_error=1 killing the process, or by the
+		// log being cut off, still yields the report.
+		fiveLines + raceDelim + dataRace,
+		fiveLines + dataRace,
+		100,
+	},
+	{
+		// A race outranks a panic that followed it.
+		raceDelim + dataRace + raceDelim + messagePanic + firstStack,
+		dataRace,
+		0,
+	},
 	{
 
 		panic5Lines,
@@ -211,4 +268,35 @@ func TestCondense(t *testing.T) {
 			run(t, tc)
 		})
 	}
+}
+
+// TestElideRepeatedStackFrames checks that the runaway stacks the race
+// detector reconstructs for long-lived goroutines are cut down, that the
+// frames nearest the racing access survive, that an ellipsis marks each gap,
+// and that the line count is reported once per stack.
+func TestElideRepeatedStackFrames(t *testing.T) {
+	frame := func(name string, line int) string {
+		return fmt.Sprintf("  pkg.%s()\n      pkg/f.go:%d +0x1\n", name, line)
+	}
+	top := frame("racingWrite", 1) + frame("caller", 2)
+	// Two call sites in one loop body, stacked on themselves up to the frame cap.
+	cycle := frame("loop", 3) + frame("loop", 4)
+	kept := strings.Repeat(cycle, dataRaceStackMaxFrameCopies)
+	const gap = "  [...]\n"
+	omitted := func(n int) string {
+		return fmt.Sprintf("  [%d repeated lines omitted; see full output]\n", n)
+	}
+	head := "WARNING: DATA RACE\nWrite at 0x0 by goroutine 1:\n"
+	created := "\nGoroutine 1 (running) created at:\n"
+
+	// The second stack resumes with a real frame after its gap, which the first
+	// stack does not, so the two put the count in different places.
+	report := head + top + strings.Repeat(cycle, 127) +
+		created + strings.Repeat(cycle, 4) + frame("start", 5)
+	require.Greater(t, len(strings.Split(report, "\n")), dataRaceReportLineLimit)
+
+	require.Equal(t,
+		head+top+kept+gap+omitted(124*4)+
+			created+kept+gap+frame("start", 5)+omitted(1*4),
+		elideRepeatedStackFrames(report))
 }

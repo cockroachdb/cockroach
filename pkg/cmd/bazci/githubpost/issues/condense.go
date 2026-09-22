@@ -6,6 +6,7 @@
 package issues
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -62,9 +63,20 @@ type NodeToIpMappingRoachtest struct {
 	NodeToIpMapping string
 }
 
+// DataRace contains a data race report obtained from a test log.
+type DataRace struct {
+	LastLines, // last log lines preceding the report
+	Report string // the report, starting at the WARNING line
+}
+
 // A CondensedMessage is a test log output garnished with useful helper methods
 // that extract concise information for seamless debugging.
 type CondensedMessage string
+
+// dataRaceRE matches one race detector report. The trailing delimiter is
+// optional: with GORACE halt_on_error=1 the report is the last thing the
+// process prints, and the log may also have been truncated mid-report.
+var dataRaceRE = regexp.MustCompile(`(?ms)^(?:={10,}\n)?(WARNING: DATA RACE\n.*?)(?:^={10,}\n|\z)`)
 
 var panicRE = regexp.MustCompile(`(?ms)^(panic:.*?\n)(goroutine \d+.*?\n)\n`)
 var fatalRE = regexp.MustCompile(`(?ms)(^F\d{6}.*?\n)(goroutine \d+.*?\n)\n`)
@@ -157,17 +169,118 @@ func (s CondensedMessage) NodeToIpMappingRoachtest() (nodeIpMap NodeToIpMappingR
 	return NodeToIpMappingRoachtest{}, false
 }
 
+// HasDataRace reports whether the log contains a race detector report. It is
+// the same test DataRace applies, so callers deciding what to do with a
+// failure and callers rendering it cannot disagree.
+func (s CondensedMessage) HasDataRace() bool {
+	return dataRaceRE.MatchString(string(s))
+}
+
+// DataRace constructs a DataRace from the first race detector report in the
+// log, preceded by up to numPrecedingLines lines of context. If the log holds
+// no report, ok=false is returned.
+func (s CondensedMessage) DataRace(numPrecedingLines int) (dr DataRace, ok bool) {
+	ss := string(s)
+	sl := dataRaceRE.FindStringSubmatchIndex(ss)
+	if sl == nil {
+		return DataRace{}, false
+	}
+	dr.LastLines = lastNlines(ss[:sl[0]], numPrecedingLines)
+	dr.Report = elideRepeatedStackFrames(ss[sl[2]:sl[3]])
+	return dr, true
+}
+
+// dataRaceReportLineLimit is the report size, in lines, above which
+// elideRepeatedStackFrames kicks in. A race detector stack is capped at 256
+// frames (ThreadSanitizer's kStackTraceMax) and prints two lines per frame, so
+// a longer report has a stack that hit the cap.
+//
+// Such a stack is not a real call chain. TSan reconstructs it by replaying a
+// bounded ring of function entry and exit events; for a goroutine that has
+// been looping since the start of the test the ring has long since wrapped, so
+// exits lose their matching entries and the call sites of the loop body pile
+// up on themselves until the cap. Reports like that run to a thousand lines
+// and crowd the rest of the issue body out past the GitHub length limit.
+const dataRaceReportLineLimit = 512
+
+// dataRaceStackMaxFrameCopies is how many copies of a frame one stack may
+// contribute; past that the frame is omitted.
+const dataRaceStackMaxFrameCopies = 3
+
+// elideRepeatedStackFrames shortens an oversized race detector report, keeping
+// at most dataRaceStackMaxFrameCopies copies of any given frame within a
+// single stack. Each gap left behind is marked with an ellipsis, and the total
+// number of lines dropped is reported once per stack. Blank lines delimit the
+// stacks, so the bookkeeping resets at each one. Reports at or below
+// dataRaceReportLineLimit are returned unchanged.
+//
+// Frames are dropped wherever they recur, not only where they pile up, so one
+// that legitimately appears at several depths -- an interceptor chain wrapper,
+// say -- keeps only its first three. The linked test log has the unabridged
+// report.
+func elideRepeatedStackFrames(report string) string {
+	lines := strings.Split(report, "\n")
+	if len(lines) <= dataRaceReportLineLimit {
+		return report
+	}
+	out := make([]string, 0, len(lines))
+	emitted := make(map[string]int)
+	omitted, skipping := 0, false
+	endStack := func() {
+		if omitted > 0 {
+			out = append(out, fmt.Sprintf("  [%d repeated lines omitted; see full output]", omitted))
+		}
+		omitted, skipping = 0, false
+		clear(emitted)
+	}
+	for i := 0; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "" {
+			endStack()
+			out = append(out, lines[i])
+			continue
+		}
+		// A frame is a function line plus the location line beneath it. The two
+		// are counted together because dropping one would orphan the other: a
+		// function inlined into several call sites prints one identical function
+		// line per site but a distinct location line for each, so the function
+		// line runs out of budget first.
+		frame := lines[i : i+1]
+		if i+1 < len(lines) && strings.HasPrefix(lines[i+1], "      ") {
+			frame = lines[i : i+2]
+			i++
+		}
+		key := strings.Join(frame, "\n")
+		if emitted[key] >= dataRaceStackMaxFrameCopies {
+			if !skipping {
+				out = append(out, "  [...]")
+				skipping = true
+			}
+			omitted += len(frame)
+			continue
+		}
+		skipping = false
+		emitted[key]++
+		out = append(out, frame...)
+	}
+	endStack()
+	return strings.Join(out, "\n")
+}
+
 // String calls .Digest(30).
 func (s CondensedMessage) String() string {
 	return s.Digest(30)
 }
 
-// Digest returns the last n lines of the test log. If a panic or fatal error
-// occurred, it instead returns the last n lines preceding that event, the event
-// itself, and the first stack trace. If a crash occurred during a random syntax
+// Digest returns the last n lines of the test log. If a data race was
+// reported, or a panic or fatal error occurred, it instead returns the last n
+// lines preceding that event followed by the event itself: the race report, or
+// the panic or fatal error plus its first stack trace. If a crash occurred during a random syntax
 // test, it returns the error and up to n lines of both the query that caused
 // the crash and the database schema.
 func (s CondensedMessage) Digest(n int) string {
+	if dr, ok := s.DataRace(n); ok {
+		return dr.LastLines + dr.Report
+	}
 	if fop, ok := s.FatalOrPanic(n); ok {
 		return fop.LastLines + fop.Error + fop.FirstStack
 	}

@@ -120,6 +120,31 @@ goroutine 13:
 			reproCmd: "make stressrace TESTS=TestGossipHandlesReplacedNode PKG=./pkg/storage TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1",
 		},
 		{
+			name:        "data-race",
+			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
+			testName:    "TestReplicaRangefeed",
+			message: `logging something
+==================
+WARNING: DATA RACE
+Read at 0x00c0004e2a48 by goroutine 189:
+  kvserver.(*Replica).mu()
+      pkg/kv/kvserver/replica.go:411 +0x64
+
+Previous write at 0x00c0004e2a48 by goroutine 214:
+  kvserver.(*Store).Send()
+      pkg/kv/kvserver/store_send.go:142 +0x1a4
+
+Goroutine 189 (running) created at:
+  stop.(*Stopper).RunAsyncTask()
+      pkg/util/stop/stopper.go:494 +0x2c8
+==================
+    --- FAIL: TestReplicaRangefeed (4.20s)
+    	testing.go:1490: race detected during execution of test
+FAIL
+`,
+			reproCmd: "./dev test ./pkg/kv/kvserver --race -f TestReplicaRangefeed",
+		},
+		{
 			name:        "with-artifacts",
 			packageName: "github.com/cockroachdb/cockroach/pkg/storage",
 			testName:    "kv/splits/nodes=3/quiesce=true",

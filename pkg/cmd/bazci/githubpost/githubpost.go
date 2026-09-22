@@ -37,6 +37,12 @@ import (
 const (
 	pkgEnv  = "PKG"
 	unknown = "(unknown)"
+
+	// filterRaceRunsEnv marks this poster run as processing a race run, which
+	// is what makes filter_race_runs_to_race_issues apply. Set it on race
+	// builds only: on a non-race build it would discard the very failures that
+	// build exists to report.
+	filterRaceRunsEnv = "COCKROACH_FILTER_RACE_RUNS_TO_RACE_ISSUES"
 )
 
 var (
@@ -169,7 +175,40 @@ func PostFromTestXMLWithFormatterName(
 func PostFromTestXMLWithFailurePoster(
 	ctx context.Context, fileIssue FailurePoster, testXml buildutil.TestSuites,
 ) error {
+	if os.Getenv(filterRaceRunsEnv) != "" {
+		fileIssue = filterRaceRunsToRaceIssues(fileIssue)
+	}
 	return listFailuresFromTestXML(ctx, testXml, fileIssue)
+}
+
+// filterRaceRunsToRaceIssues drops failures that reported no data race, for
+// tests whose owning teams have all set FilterRaceRunsToRaceIssues. A test
+// with any owner that has not opted in is filed as usual, so one team's
+// opt-in cannot silence another team's signal.
+//
+// Suppressed failures are logged under a fixed prefix, so a build log can be
+// counted to see how much noise the opt-in absorbed.
+func filterRaceRunsToRaceIssues(fileIssue FailurePoster) FailurePoster {
+	return func(ctx context.Context, f Failure) error {
+		if issues.CondensedMessage(f.testMessage).HasDataRace() {
+			return fileIssue(ctx, f)
+		}
+		initCo()
+		teams, _ := co.GetTestOwner(f.packageName, f.testName)
+		if len(teams) == 0 {
+			return fileIssue(ctx, f)
+		}
+		names := make([]string, 0, len(teams))
+		for _, tm := range teams {
+			if !tm.FilterRaceRunsToRaceIssues {
+				return fileIssue(ctx, f)
+			}
+			names = append(names, string(tm.Name()))
+		}
+		log.Printf("race-issue-filter: suppressing non-race failure %s.%s (owners: %s)",
+			f.packageName, f.testName, strings.Join(names, ", "))
+		return nil
+	}
 }
 
 type Failure struct {
