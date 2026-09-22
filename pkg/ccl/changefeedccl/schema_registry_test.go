@@ -62,12 +62,17 @@ func TestConfluentSchemaRegistry(t *testing.T) {
 
 type mockExternalConnectionProvider map[string]string
 
-func (m mockExternalConnectionProvider) lookup(name string) (string, error) {
-	v, ok := m[name]
+// resolve models a provider with ExternalConnectionApplyURIPathAndParams on.
+func (m mockExternalConnectionProvider) resolve(u *url.URL) (*url.URL, error) {
+	v, ok := m[u.Host]
 	if !ok {
-		return v, errors.New("not found")
+		return nil, errors.New("not found")
 	}
-	return v, nil
+	resolved, err := url.Parse(v)
+	if err != nil {
+		return nil, err
+	}
+	return resolved.JoinPath(u.Path), nil
 }
 
 func TestConfluentSchemaRegistryExternalConnection(t *testing.T) {

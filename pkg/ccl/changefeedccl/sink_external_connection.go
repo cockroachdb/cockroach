@@ -7,6 +7,10 @@ package changefeedccl
 
 import (
 	"context"
+	"maps"
+	"net/url"
+	"slices"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -14,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
@@ -32,20 +37,13 @@ func makeExternalConnectionSink(
 	m metricsRecorder,
 	targets changefeedbase.Targets,
 ) (Sink, error) {
-	if u.Host == "" {
-		return nil, errors.Newf("host component of an external URI must refer to an "+
-			"existing External Connection object: %s", u.String())
-	}
-
-	externalConnectionName := u.Host
-
-	uri, err := p.lookup(externalConnectionName)
+	uri, err := p.resolve(u.URL)
 	if err != nil {
 		return nil, err
 	}
 	// Replace the external connection URI in the `feedCfg` with the URI of the
 	// underlying resource.
-	feedCfg.SinkURI = uri
+	feedCfg.SinkURI = uri.String()
 	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets)
 }
 
@@ -134,42 +132,100 @@ func init() {
 	))
 }
 
+// externalConnectionURIParams are the query parameters a changefeed may set
+// on an external:// URI, so that one connection can serve feeds writing to
+// different topics. A feed may set one only if the connection leaves it
+// unset.
+var externalConnectionURIParams = []string{
+	changefeedbase.SinkParamTopicName,
+	changefeedbase.SinkParamTopicPrefix,
+}
+
 type externalConnectionProvider interface {
-	lookup(name string) (string, error)
+	// resolve turns an external://<name>/<path>?<params> URI into the URI of the
+	// underlying resource. The path is joined onto the stored URI's path. Each
+	// parameter must be in externalConnectionURIParams and unset on the stored
+	// URI, and is then added to it. If
+	// changefeedbase.ExternalConnectionApplyURIPathAndParams is off, the path
+	// and parameters are ignored.
+	resolve(u *url.URL) (*url.URL, error)
 }
 
 type isqlExternalConnectionProvider struct {
-	ctx context.Context
-	db  isql.DB
+	ctx      context.Context
+	db       isql.DB
+	settings *cluster.Settings
 }
 
-func makeExternalConnectionProvider(ctx context.Context, db isql.DB) externalConnectionProvider {
+func makeExternalConnectionProvider(
+	ctx context.Context, db isql.DB, settings *cluster.Settings,
+) externalConnectionProvider {
 	return &isqlExternalConnectionProvider{
-		ctx: ctx,
-		db:  db,
+		ctx:      ctx,
+		db:       db,
+		settings: settings,
 	}
 }
 
-func (p *isqlExternalConnectionProvider) lookup(name string) (string, error) {
-	if name == "" {
-		return "", errors.Newf("host component of an external URI must refer to an " +
-			"existing External Connection object")
+func (p *isqlExternalConnectionProvider) resolve(u *url.URL) (*url.URL, error) {
+	if u.Host == "" {
+		return nil, errors.Newf("host component of an external URI must refer to an "+
+			"existing External Connection object: %s", u.String())
 	}
 	var ec externalconn.ExternalConnection
 	if err := p.db.Txn(p.ctx, func(ctx context.Context, txn isql.Txn) error {
 		var err error
-		ec, err = externalconn.LoadExternalConnection(ctx, name, txn)
+		ec, err = externalconn.LoadExternalConnection(ctx, u.Host, txn)
 		return err
 	}); err != nil {
-		return "", errors.Wrap(err, "failed to load external connection object")
+		return nil, errors.Wrap(err, "failed to load external connection object")
 	}
 
-	// Construct a Sink handle for the underlying resource represented by the
-	// external connection object.
-	switch d := ec.ConnectionProto().Details.(type) {
-	case *connectionpb.ConnectionDetails_SimpleURI:
-		return d.SimpleURI.URI, nil
-	default:
-		return "", errors.Newf("cannot connect to %T; unsupported resource for a changefeed connection", d)
+	// With the setting off the resolved URI is the stored one. When on, the
+	// overlay carries the requested path; its query is applied below, limited to
+	// the parameters a changefeed may set.
+	var overlay *url.URL
+	if changefeedbase.ExternalConnectionApplyURIPathAndParams.Get(&p.settings.SV) {
+		overlay = &url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}
 	}
+	d, ok := ec.ConnectionProto().Details.(*connectionpb.ConnectionDetails_SimpleURI)
+	if !ok {
+		return nil, errors.Newf(
+			"cannot connect to external connection %s: unsupported resource for a changefeed connection",
+			u.Host)
+	}
+	resolved, err := url.Parse(d.SimpleURI.URI)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot connect to external connection %s", u.Host)
+	}
+	if overlay != nil {
+		if _, err := cloud.SanitizedJoin(resolved.Path, overlay.Path); err != nil {
+			return nil, errors.Wrap(err,
+				"the subdirectory in the external:// URI escapes the external connection's base directory")
+		}
+		resolved = resolved.JoinPath(overlay.Path)
+	}
+	if overlay == nil || u.RawQuery == "" {
+		return resolved, nil
+	}
+
+	params := u.Query()
+	stored := resolved.Query()
+	for _, key := range slices.Sorted(maps.Keys(params)) {
+		if !slices.Contains(externalConnectionURIParams, key) {
+			return nil, errors.WithHintf(errors.Newf("query parameter %s is not allowed in an "+
+				"external URI, the external connection defines it", key),
+				"a changefeed may set %s when the external connection leaves them unset",
+				strings.Join(externalConnectionURIParams, ", "))
+		}
+		if stored.Has(key) {
+			return nil, errors.Newf("query parameter %s is set by external connection %s "+
+				"and cannot be overridden", key, u.Host)
+		}
+		for _, val := range params[key] {
+			stored.Add(key, val)
+		}
+	}
+	resolved.RawQuery = stored.Encode()
+	return resolved, nil
 }

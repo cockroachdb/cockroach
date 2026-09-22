@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/IBM/sarama"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kafkaauth"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
@@ -20,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -373,6 +376,104 @@ func TestChangefeedExternalConnections(t *testing.T) {
 			t, `CREATE CHANGEFEED FOR foo INTO 'external://confluent2/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 		)
 	})
+}
+
+// TestExternalConnectionSinkResolution checks how the path and query parameters
+// of an external:// sink URI are folded into the URI of the connection it
+// names, under both settings of ExternalConnectionApplyURIPathAndParams.
+func TestExternalConnectionSinkResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{ExternalIODir: t.TempDir()})
+	defer s.Stopper().Stop(ctx)
+	app := s.ApplicationLayer()
+
+	const storedKafkaURI = `kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=true&topic_prefix=foo`
+
+	sqlDB := sqlutils.MakeSQLRunner(app.SQLConn(t))
+	sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION storage_conn AS 'nodelocal://1/base'`)
+	sqlDB.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION kafka_conn AS '%s'`, storedKafkaURI))
+
+	p := makeExternalConnectionProvider(ctx, app.InternalDB().(isql.DB), app.ClusterSettings())
+
+	for _, tc := range []struct {
+		name        string
+		uri         string
+		applyPath   bool
+		expected    string
+		expectedErr string
+	}{
+		{
+			name:      "path dropped while the setting is off",
+			uri:       "external://storage_conn/subdir",
+			expected:  "nodelocal://1/base",
+			applyPath: false,
+		},
+		{
+			name:      "parameters dropped unchecked while the setting is off",
+			uri:       "external://kafka_conn?topic_name=bar&insecure_tls_skip_verify=false",
+			expected:  storedKafkaURI,
+			applyPath: false,
+		},
+		{
+			name:      "path joined onto the underlying URI",
+			uri:       "external://storage_conn/subdir",
+			expected:  "nodelocal://1/base/subdir",
+			applyPath: true,
+		},
+		{
+			name:      "allowed parameter the connection leaves unset is added",
+			uri:       "external://kafka_conn?topic_name=bar",
+			expected:  "kafka://nope/?insecure_tls_skip_verify=true&tls_enabled=true&topic_name=bar&topic_prefix=foo",
+			applyPath: true,
+		},
+		{
+			name:        "allowed parameter the connection sets may not be overridden",
+			uri:         "external://kafka_conn?topic_prefix=bar",
+			applyPath:   true,
+			expectedErr: "query parameter topic_prefix is set by external connection kafka_conn and cannot be overridden",
+		},
+		{
+			name:        "parameter outside the allow list is rejected",
+			uri:         "external://kafka_conn?topic_name=bar&insecure_tls_skip_verify=false",
+			applyPath:   true,
+			expectedErr: "query parameter insecure_tls_skip_verify is not allowed in an external URI, the external connection defines it",
+		},
+		{
+			name:        "path may not escape the base directory",
+			uri:         "external://storage_conn/../../etc",
+			applyPath:   true,
+			expectedErr: "escapes the external connection's base directory",
+		},
+		{
+			name:        "missing connection name",
+			uri:         "external://",
+			expectedErr: "host component of an external URI must refer to an existing External Connection object",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			changefeedbase.ExternalConnectionApplyURIPathAndParams.Override(
+				ctx, &app.ClusterSettings().SV, tc.applyPath)
+
+			u, err := url.Parse(tc.uri)
+			require.NoError(t, err)
+			resolved, err := p.resolve(u)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, resolved.String())
+		})
+	}
+
+	// A schema registry URI goes through the same rule, so its TLS parameters
+	// cannot be added at the usage site either.
+	changefeedbase.ExternalConnectionApplyURIPathAndParams.Override(ctx, &app.ClusterSettings().SV, true)
+	_, err := newConfluentSchemaRegistry("external://kafka_conn?ca_cert=abc", p, nil)
+	require.ErrorContains(t, err, "query parameter ca_cert is not allowed in an external URI")
 }
 
 // TestAzureKafkaDefaults verifies that buildAzureKafkaConfig correctly
