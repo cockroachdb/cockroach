@@ -4152,6 +4152,12 @@ func (s *statusServer) JobStatus(
 	// See https://github.com/cockroachdb/cockroach/issues/46049.
 	*res.Payload = j.Payload()
 	*res.Progress = j.Progress()
+	// The details oneofs can embed credentials: backup, restore, and import
+	// destination URIs, and replication source connection strings. This
+	// endpoint's privilege check is not job-scoped, unlike the SQL surfaces
+	// that expose the payload, so omit them.
+	res.Payload.Details = nil
+	res.Progress.Details = nil
 
 	return &serverpb.JobStatusResponse{Job: res}, nil
 }
