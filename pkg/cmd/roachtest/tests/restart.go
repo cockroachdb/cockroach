@@ -64,7 +64,8 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 
 	// Bring it back up and make sure it can serve a query within a reasonable
 	// time limit. For now, less time than it was down for.
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), restartNode)
+	startOpts.RoachprodOpts.IsRestart = true
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), restartNode)
 
 	// Dialing the formerly down node may still be prevented by the circuit breaker
 	// for a short moment (seconds) after n3 restarts. If it happens, the COUNT(*)

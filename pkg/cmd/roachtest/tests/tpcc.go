@@ -2314,6 +2314,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	restart := func(ctx context.Context) {
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), roachNodes)
 		startOpts, settings := b.startOpts()
+		startOpts.RoachprodOpts.IsRestart = true
 		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 	}
 
@@ -2819,7 +2820,9 @@ func runTPCCPublished(
 
 	restart := func(ctx context.Context) {
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), crdbNodes)
-		c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
+		restartOpts := startOpts
+		restartOpts.RoachprodOpts.IsRestart = true
+		c.Start(ctx, t.L(), restartOpts, settings, crdbNodes)
 	}
 
 	precision := int(math.Max(1.0, float64(opts.warehouses/50)))

@@ -417,7 +417,9 @@ func runWideReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Stop the cluster and restart 2/3 of the nodes.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 	tBeginDown := timeutil.Now()
-	c.Start(ctx, t.L(), startOpts, settings, c.Range(1, 6))
+	restartOpts := startOpts
+	restartOpts.RoachprodOpts.IsRestart = true
+	c.Start(ctx, t.L(), restartOpts, settings, c.Range(1, 6))
 
 	waitForUnderReplicated := func(count int) {
 		for start := timeutil.Now(); ; time.Sleep(time.Second) {

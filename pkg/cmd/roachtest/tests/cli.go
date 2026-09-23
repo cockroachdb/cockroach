@@ -129,7 +129,9 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Stop the remaining nodes and restart them. Verify that all five nodes
 	// show up in the node status output.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 3))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 3))
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.IsRestart = true
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, 3))
 
 	waitUntil([]string{
 		"is_available is_live",
