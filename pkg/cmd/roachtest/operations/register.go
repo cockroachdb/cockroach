@@ -40,4 +40,5 @@ func RegisterOperations(r registry.Registry) {
 	registerInspect(r)
 	registerTPCCCheck(r)
 	registerBankCheck(r)
+	registerHoldConnection(r)
 }
