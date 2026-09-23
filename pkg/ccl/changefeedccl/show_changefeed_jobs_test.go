@@ -232,7 +232,7 @@ func TestShowChangefeedJobsShowsHighWaterTimestamp(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo(a INT PRIMARY KEY)`)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved, min_checkpoint_frequency='1s'`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved`)
 
 		defer closeFeed(t, foo)
 
