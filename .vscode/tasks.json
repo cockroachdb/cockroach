@@ -1,0 +1,36 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "build cockroach for launch (short)",
+			"command": "${workspaceFolder}/dev build cockroach short -- -c dbg",
+			"problemMatcher": [
+				"$go"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"type": "shell",
+			"label": "build cockroach binary(s) in debug mode",
+			"command": "${workspaceFolder}/dev build ${input:targets} -- -c dbg",
+			"problemMatcher": [
+				"$go"
+			],
+			"group": {
+				"kind": "build"
+			}
+		}
+	],
+	"inputs": [
+		{
+			"id": "targets",
+			"description": "`dev` build targets, separated by spaces",
+			"default": "",
+			"type": "promptString"
+		}
+	]
+}
