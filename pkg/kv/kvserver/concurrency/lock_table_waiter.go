@@ -739,6 +739,17 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) kvpb.Header {
 		UserPriority: req.NonTxnPriority,
 		WaitPolicy:   req.WaitPolicy,
 	}
+	if req.Batch != nil {
+		// Carry the blocked request's workload identity onto the push so that ASH
+		// attributes the resulting TxnPushWait (and the txnwait queue's follow-up
+		// TxnQueryWait polls) to the workload actually waiting on the lock, rather
+		// than the generic INTENT_RESOLUTION system bucket. The intent resolver
+		// falls back to INTENT_RESOLUTION when no workload is set, so pushes that
+		// don't originate from a waiter (async intent cleanup, the rangefeed
+		// pusher) are unaffected.
+		h.WorkloadID = req.Batch.WorkloadID
+		h.WorkloadType = req.Batch.WorkloadType
+	}
 	if req.Txn != nil {
 		// We are going to hand the header (and thus the transaction proto) to
 		// the RPC framework, after which it must not be changed (since that

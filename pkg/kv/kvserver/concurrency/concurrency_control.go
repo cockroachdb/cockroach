@@ -1144,7 +1144,7 @@ type txnWaitQueue interface {
 	//
 	// If the transaction is successfully pushed while this method is waiting,
 	// the first return value is a non-nil PushTxnResponse object.
-	MaybeWaitForPush(context.Context, *kvpb.PushTxnRequest, lock.WaitPolicy) (*kvpb.PushTxnResponse, *Error)
+	MaybeWaitForPush(context.Context, *kvpb.PushTxnRequest, lock.WaitPolicy, txnwait.PushWorkload) (*kvpb.PushTxnResponse, *Error)
 
 	// MaybeWaitForQuery checks whether there is a queue already established for
 	// transaction being queried. If not, or if the QueryTxn request hasn't

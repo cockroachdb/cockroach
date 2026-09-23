@@ -482,8 +482,33 @@ func (ir *IntentResolver) MaybePushTransactions(
 	b.Header.Timestamp = ir.clock.Now()
 	b.Header.Timestamp.Forward(pushTo)
 	b.Header.WaitPolicy = h.WaitPolicy
-	b.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_INTENT_RESOLUTION)
-	b.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
+	// Attribute the push to the workload that issued it when one is present (e.g.
+	// a lock-table waiter pushing on behalf of a blocked SQL statement), so ASH
+	// samples the TxnPushWait under that workload. Callers with no originating
+	// workload (async intent cleanup, the rangefeed pusher, the range-merge
+	// waiter) leave the header workload unset and fall back to the
+	// INTENT_RESOLUTION system bucket.
+	//
+	// Only the workload id (the statement fingerprint) is attributed here; it
+	// joins directly to crdb_internal.statement_statistics. Enriching these
+	// TxnPushWait/TxnQueryWait samples further (app name and other per-sample
+	// attributes, resolved via AppNameID/EnrichmentID) would additionally require
+	// the sample to carry the SQL gateway's node id, since for a remote push/poll
+	// the serving node lacks the mapping locally and must dial the gateway. Two
+	// options, both deferred:
+	//   - Reuse GatewayNodeID on the header. Simple, but the serving node's
+	//     RecordBatchRequests would then attribute this internal RPC's load to the
+	//     gateway's locality, perturbing load-based rebalancing (one blocked query
+	//     can fan out into many pushes/polls); needs KV/allocator sign-off.
+	//   - Carry a dedicated enrichment-resolver node id that the rebalancer does
+	//     not read. No rebalancing impact, but a proto and ASH-sampler change.
+	if h.WorkloadID != 0 {
+		b.Header.WorkloadID = h.WorkloadID
+		b.Header.WorkloadType = h.WorkloadType
+	} else {
+		b.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_INTENT_RESOLUTION)
+		b.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
+	}
 	for _, pushTxn := range pushTxns {
 		b.AddRawRequest(&kvpb.PushTxnRequest{
 			RequestHeader: kvpb.RequestHeader{

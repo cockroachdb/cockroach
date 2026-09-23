@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -184,12 +185,27 @@ func createPushTxnResponse(txn *roachpb.Transaction) *kvpb.PushTxnResponse {
 	return &kvpb.PushTxnResponse{PusheeTxn: *txn}
 }
 
+// PushWorkload identifies the ASH workload of the batch that issued a PushTxn.
+// The txnwait queue stamps the follow-up QueryTxn polls it issues on the push's
+// behalf with this identity, so those polls are sampled under the same workload
+// as the push rather than a hardcoded system bucket. The zero value means "no
+// originating workload"; the queue then attributes the polls to the
+// INTENT_RESOLUTION system workload.
+type PushWorkload struct {
+	// ID and Type mirror kvpb.Header.WorkloadID and WorkloadType.
+	ID   uint64
+	Type uint32
+}
+
 // A waitingPush represents a PushTxn command that is waiting on the
 // pushee transaction to commit or abort. It maintains a transitive
 // set of all txns which are waiting on this txn in order to detect
 // dependency cycles.
 type waitingPush struct {
 	req *kvpb.PushTxnRequest
+	// workload is the ASH workload attribution of the push's originating batch,
+	// propagated to the QueryTxn polls issued while this push waits.
+	workload PushWorkload
 	// pending channel receives updated, pushed txn or nil if queue is cleared.
 	pending chan *roachpb.Transaction
 	mu      struct {
@@ -572,7 +588,7 @@ func (q *Queue) releaseWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID
 // If the transaction is successfully pushed while this method is waiting,
 // the first return value is a non-nil PushTxnResponse object.
 func (q *Queue) MaybeWaitForPush(
-	ctx context.Context, req *kvpb.PushTxnRequest, wp lock.WaitPolicy,
+	ctx context.Context, req *kvpb.PushTxnRequest, wp lock.WaitPolicy, workload PushWorkload,
 ) (*kvpb.PushTxnResponse, *kvpb.Error) {
 	q.mu.Lock()
 	// If the txn wait queue is not enabled or if the request is not
@@ -601,8 +617,9 @@ func (q *Queue) MaybeWaitForPush(
 	}
 
 	push := &waitingPush{
-		req:     req,
-		pending: make(chan *roachpb.Transaction, 1),
+		req:      req,
+		workload: workload,
+		pending:  make(chan *roachpb.Transaction, 1),
 	}
 	pushElem := pending.waitingPushes.PushBack(push)
 	waitingPushesCount := pending.waitingPushes.Len()
@@ -741,7 +758,7 @@ func (q *Queue) waitForPush(
 			log.VEvent(ctx, 2, "querying pushee")
 			// Periodically check whether the pushee txn has been abandoned.
 			updatedPushee, _, pErr := q.queryTxnStatus(
-				ctx, req.PusheeTxn, false, nil,
+				ctx, req.PusheeTxn, false, nil, push.workload,
 			)
 			if pErr != nil {
 				return nil, pErr
@@ -983,7 +1000,7 @@ func (q *Queue) startQueryPusherTxn(
 				var pErr *kvpb.Error
 				var updatedPusher *roachpb.Transaction
 				updatedPusher, waitingTxns, pErr = q.queryTxnStatus(
-					ctx, pusher.TxnMeta, true, waitingTxns,
+					ctx, pusher.TxnMeta, true, waitingTxns, push.workload,
 				)
 				if pErr != nil {
 					errCh <- pErr
@@ -1044,10 +1061,34 @@ func (q *Queue) startQueryPusherTxn(
 // Returns the updated transaction (or nil if not updated) as well as
 // the list of transactions which are waiting on the updated txn.
 func (q *Queue) queryTxnStatus(
-	ctx context.Context, txnMeta enginepb.TxnMeta, wait bool, dependents []uuid.UUID,
+	ctx context.Context,
+	txnMeta enginepb.TxnMeta,
+	wait bool,
+	dependents []uuid.UUID,
+	workload PushWorkload,
 ) (*roachpb.Transaction, []uuid.UUID, *kvpb.Error) {
 	b := &kv.Batch{}
 	b.Header.Timestamp = q.cfg.Clock.Now()
+	// Attribute the QueryTxn to the same workload as the PushTxn that triggered
+	// this poll, so its ASH "TxnQueryWait" samples match the "TxnPushWait" samples
+	// of that push. These QueryTxn requests are not independent work: the txnwait
+	// queue issues them on behalf of a PushTxn that is currently blocked in the
+	// queue, to poll a transaction's status.
+	//
+	// The push carries its originating workload (a lock-table waiter propagates
+	// the blocked request's workload; see lockTableWaiterImpl.pushHeader), which
+	// is threaded to us via the waiting push. When the push has no originating
+	// workload — async intent cleanup, the rangefeed pusher, and the range-merge
+	// waiter, which build their own PushTxn batches without attribution — we fall
+	// back to the INTENT_RESOLUTION system workload, matching the intent
+	// resolver's own fallback for those pushes.
+	if workload.ID != 0 {
+		b.Header.WorkloadID = workload.ID
+		b.Header.WorkloadType = workload.Type
+	} else {
+		b.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_INTENT_RESOLUTION)
+		b.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
+	}
 	b.AddRawRequest(&kvpb.QueryTxnRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key: txnMeta.Key,

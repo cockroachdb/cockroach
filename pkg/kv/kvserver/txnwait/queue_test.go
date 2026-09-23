@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -567,7 +568,7 @@ func TestMaybeWaitForPushWithContextCancellation(t *testing.T) {
 	waitingRes := make(chan *kvpb.Error)
 	go func() {
 		req := kvpb.PushTxnRequest{PusheeTxn: txn.TxnMeta, PushType: kvpb.PUSH_ABORT}
-		_, err := q.MaybeWaitForPush(ctx, &req, lock.WaitPolicy_Block)
+		_, err := q.MaybeWaitForPush(ctx, &req, lock.WaitPolicy_Block, PushWorkload{})
 		waitingRes <- err
 	}()
 
@@ -584,6 +585,94 @@ func TestMaybeWaitForPushWithContextCancellation(t *testing.T) {
 	require.Equal(t, int64(0), m.PusherWaiting.Value())
 	require.Equal(t, int64(0), m.QueryWaiting.Value())
 	require.Equal(t, int64(0), m.PusherSlow.Value())
+}
+
+// TestQueryTxnPollInheritsPushWorkload verifies that the QueryTxn requests the
+// queue issues while a push waits (to poll pushee status and monitor the pusher
+// for deadlocks) inherit the push's originating workload, so their ASH
+// TxnQueryWait samples match the push's TxnPushWait samples. A push that carries
+// no workload falls back to the INTENT_RESOLUTION system workload, matching the
+// intent resolver's own fallback.
+func TestQueryTxnPollInheritsPushWorkload(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name         string
+		workload     PushWorkload
+		expectedID   uint64
+		expectedType uint32
+	}{
+		{
+			name:         "waiter push propagates its statement workload",
+			workload:     PushWorkload{ID: 0xabc, Type: workloadid.WorkloadTypeStatement.ToUint32()},
+			expectedID:   0xabc,
+			expectedType: workloadid.WorkloadTypeStatement.ToUint32(),
+		},
+		{
+			name:         "unattributed push falls back to intent resolution",
+			workload:     PushWorkload{},
+			expectedID:   uint64(workloadid.WORKLOAD_ID_INTENT_RESOLUTION),
+			expectedType: workloadid.WorkloadTypeSystem.ToUint32(),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.Background())
+
+			// Capture the header of the first QueryTxn poll the queue issues.
+			queryHeaders := make(chan kvpb.Header, 1)
+			cfg := makeConfig(func(
+				ctx context.Context, ba *kvpb.BatchRequest,
+			) (*kvpb.BatchResponse, *kvpb.Error) {
+				if _, ok := ba.GetArg(kvpb.QueryTxn); ok {
+					select {
+					case queryHeaders <- ba.Header:
+					default:
+					}
+				}
+				// Echo the queried txn back as PENDING so the poll loops keep
+				// waiting until the test cancels the push.
+				br := ba.CreateReply()
+				resp := br.Responses[0].GetInner().(*kvpb.QueryTxnResponse)
+				resp.QueriedTxn = roachpb.Transaction{
+					TxnMeta: ba.Requests[0].GetQueryTxn().Txn, Status: roachpb.PENDING,
+				}
+				return br, nil
+			}, stopper)
+			q := NewQueue(cfg)
+			q.Enable(1 /* leaseSeq */)
+
+			// A locking pusher makes the queue monitor the pusher via QueryTxn; an
+			// equal-priority PUSH_ABORT does not push immediately, so the push waits.
+			pushee := roachpb.MakeTransaction("pushee", nil, 0, 0, cfg.Clock.Now(), 0, 0, 0, false)
+			pusher := roachpb.MakeTransaction("pusher", roachpb.Key("a"), 0, 0, cfg.Clock.Now(), 0, 0, 0, false)
+			q.EnqueueTxn(&pushee)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			errCh := make(chan *kvpb.Error, 1)
+			go func() {
+				req := kvpb.PushTxnRequest{
+					PusherTxn: pusher, PusheeTxn: pushee.TxnMeta, PushType: kvpb.PUSH_ABORT,
+				}
+				_, pErr := q.MaybeWaitForPush(ctx, &req, lock.WaitPolicy_Block, tc.workload)
+				errCh <- pErr
+			}()
+
+			select {
+			case h := <-queryHeaders:
+				require.Equal(t, tc.expectedID, h.WorkloadID)
+				require.Equal(t, tc.expectedType, h.WorkloadType)
+			case <-time.After(testutils.DefaultSucceedsSoonDuration):
+				t.Fatal("timed out waiting for the queue to issue a QueryTxn poll")
+			}
+			// Cancelling the push unblocks the waiting goroutine.
+			cancel()
+			require.Regexp(t, context.Canceled.Error(), <-errCh)
+		})
+	}
 }
 
 // TestMaybeWaitForQueryWithContextCancellation adds a new waiting query to the
@@ -671,7 +760,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 			defer wg.Done()
 			ctx := context.Background()
 			req := kvpb.PushTxnRequest{PusheeTxn: txn.TxnMeta, PushType: kvpb.PUSH_ABORT}
-			res, err := q.MaybeWaitForPush(ctx, &req, lock.WaitPolicy_Block)
+			res, err := q.MaybeWaitForPush(ctx, &req, lock.WaitPolicy_Block, PushWorkload{})
 			require.Nil(t, err)
 			require.NotNil(t, res)
 			require.Equal(t, roachpb.ABORTED, res.PusheeTxn.Status)
