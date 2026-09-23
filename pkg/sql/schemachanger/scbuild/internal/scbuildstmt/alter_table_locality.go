@@ -145,7 +145,11 @@ func getDatabasePrimaryRegionName(b BuildCtx, tableID catid.DescID) catpb.Region
 func getCurrentTableLocality(
 	b BuildCtx, tableID catid.DescID, tableName string,
 ) (scpb.Element, *tree.Locality) {
-	tblElts := b.QueryByID(tableID)
+	// An earlier statement in the transaction may already have retargeted the
+	// locality, leaving the old element on its way to ABSENT alongside the new
+	// one on its way to PUBLIC. The table's locality is whichever is headed to
+	// PUBLIC.
+	tblElts := b.QueryByID(tableID).Filter(publicTargetFilter)
 	// Check for GLOBAL
 	if globalElt := tblElts.FilterTableLocalityGlobal().MustGetZeroOrOneElement(); globalElt != nil {
 		return globalElt, &tree.Locality{
