@@ -42,6 +42,13 @@ func (b *ByteSizeSetting) DecodeToString(encoded string) (string, error) {
 	return string(humanizeutil.IBytes(iv)), nil
 }
 
+// Bounds returns the validation bounds recorded on the underlying IntSetting,
+// if any. Either pointer may be nil, indicating that the corresponding bound
+// is unbounded.
+func (b *ByteSizeSetting) Bounds() (min, max *int64) {
+	return b.min, b.max
+}
+
 // RegisterByteSizeSetting defines a new setting with type bytesize and any
 // supplied validation function(s). If no validation functions are given, then
 // the non-negative int validation is performed.
@@ -79,27 +86,40 @@ func RegisterByteSizeSetting(
 	}}
 	register(class, key, desc, setting)
 	setting.apply(opts)
+	applyBounds(setting, opts)
 	return setting
 }
 
 // ByteSizeWithMinimum can be passed to RegisterByteSizeSetting.
 func ByteSizeWithMinimum(minVal int64) SettingOption {
-	return WithValidateInt(func(v int64) error {
-		if v < minVal {
-			return errors.Errorf("cannot be set to a value lower than %v",
-				humanizeutil.IBytes(minVal))
-		}
-		return nil
-	})
+	min := minVal
+	return SettingOption{
+		validateInt64Fn: func(v int64) error {
+			if v < minVal {
+				return errors.Errorf("cannot be set to a value lower than %v",
+					humanizeutil.IBytes(minVal))
+			}
+			return nil
+		},
+		boundsOpt: func(s Setting) {
+			setIntBounds(s, &min, nil)
+		},
+	}
 }
 
 // ByteSizeWithMaximum can be passed to RegisterByteSizeSetting.
 func ByteSizeWithMaximum(maxVal int64) SettingOption {
-	return WithValidateInt(func(v int64) error {
-		if v > maxVal {
-			return errors.Errorf("cannot be set to a value larger than %v",
-				humanizeutil.IBytes(maxVal))
-		}
-		return nil
-	})
+	max := maxVal
+	return SettingOption{
+		validateInt64Fn: func(v int64) error {
+			if v > maxVal {
+				return errors.Errorf("cannot be set to a value larger than %v",
+					humanizeutil.IBytes(maxVal))
+			}
+			return nil
+		},
+		boundsOpt: func(s Setting) {
+			setIntBounds(s, nil, &max)
+		},
+	}
 }

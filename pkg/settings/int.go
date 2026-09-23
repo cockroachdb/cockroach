@@ -18,10 +18,38 @@ import (
 type IntSetting struct {
 	common
 	defaultValue int64
-	validateFn   func(int64) error
+	// min and max, when non-nil, record the validation bounds supplied via
+	// options such as IntInRange, IntWithMinimum, IntInRangeOrZeroDisable,
+	// or NonNegativeIntWithMaximum. They are surfaced via Bounds() for
+	// documentation and introspection.
+	min, max   *int64
+	validateFn func(int64) error
 }
 
 var _ internalSetting = &IntSetting{}
+
+// Bounds returns the validation bounds recorded on the setting, if any.
+// Either pointer may be nil, indicating that the corresponding bound is
+// unbounded. The returned pointers are owned by the setting and must not be
+// modified.
+func (i *IntSetting) Bounds() (min, max *int64) {
+	return i.min, i.max
+}
+
+// setIntBounds stores the given min/max bounds on an IntSetting or
+// ByteSizeSetting (which embeds IntSetting). It panics if applied to any
+// other setting type, since numeric bounds only make sense for numeric
+// settings.
+func setIntBounds(s Setting, min, max *int64) {
+	switch v := s.(type) {
+	case *IntSetting:
+		v.min, v.max = min, max
+	case *ByteSizeSetting:
+		v.min, v.max = min, max
+	default:
+		panic(errors.AssertionFailedf("int bounds applied to non-int setting: %T", s))
+	}
+}
 
 // Get retrieves the int value in the setting.
 func (i *IntSetting) Get(sv *Values) int64 {
@@ -167,6 +195,7 @@ func RegisterIntSetting(
 	}
 	register(class, key, desc, setting)
 	setting.apply(opts)
+	applyBounds(setting, opts)
 	return setting
 }
 
@@ -193,17 +222,23 @@ func nonNegativeIntInternal(v int64) error {
 // that the value is greater or equal to the given minimum. It can be
 // passed to RegisterIntSetting.
 func IntWithMinimum(minVal int64) SettingOption {
-	return WithValidateInt(func(v int64) error {
-		if minVal >= 0 {
-			if err := nonNegativeIntInternal(v); err != nil {
-				return err
+	min := minVal
+	return SettingOption{
+		validateInt64Fn: func(v int64) error {
+			if minVal >= 0 {
+				if err := nonNegativeIntInternal(v); err != nil {
+					return err
+				}
 			}
-		}
-		if v < minVal {
-			return errors.Errorf("cannot be set to a value lower than %d: %d", minVal, v)
-		}
-		return nil
-	})
+			if v < minVal {
+				return errors.Errorf("cannot be set to a value lower than %d: %d", minVal, v)
+			}
+			return nil
+		},
+		boundsOpt: func(s Setting) {
+			setIntBounds(s, &min, nil)
+		},
+	}
 }
 
 // NonNegativeIntWithMaximum returns a validation option that checks
@@ -217,22 +252,34 @@ func NonNegativeIntWithMaximum(maxValue int64) SettingOption {
 // within the given bounds (inclusive). It can be passed to
 // RegisterIntSetting.
 func IntInRange(minVal, maxVal int64) SettingOption {
-	return WithValidateInt(func(v int64) error {
-		if v < minVal || v > maxVal {
-			return errors.Errorf("expected value in range [%d, %d], got: %d", minVal, maxVal, v)
-		}
-		return nil
-	})
+	min, max := minVal, maxVal
+	return SettingOption{
+		validateInt64Fn: func(v int64) error {
+			if v < minVal || v > maxVal {
+				return errors.Errorf("expected value in range [%d, %d], got: %d", minVal, maxVal, v)
+			}
+			return nil
+		},
+		boundsOpt: func(s Setting) {
+			setIntBounds(s, &min, &max)
+		},
+	}
 }
 
 // IntInRangeOrZeroDisable returns a validation option that checks the
 // value is within the given bounds (inclusive) or is zero (disabled).
 // It can be passed to RegisterIntSetting.
 func IntInRangeOrZeroDisable(minVal, maxVal int64) SettingOption {
-	return WithValidateInt(func(v int64) error {
-		if v != 0 && (v < minVal || v > maxVal) {
-			return errors.Errorf("expected value in range [%d, %d] or 0 to disable, got: %d", minVal, maxVal, v)
-		}
-		return nil
-	})
+	min, max := minVal, maxVal
+	return SettingOption{
+		validateInt64Fn: func(v int64) error {
+			if v != 0 && (v < minVal || v > maxVal) {
+				return errors.Errorf("expected value in range [%d, %d] or 0 to disable, got: %d", minVal, maxVal, v)
+			}
+			return nil
+		},
+		boundsOpt: func(s Setting) {
+			setIntBounds(s, &min, &max)
+		},
+	}
 }

@@ -13,7 +13,13 @@ import (
 
 // SettingOption is the type of an option that can be passed to Register.
 type SettingOption struct {
-	commonOpt          func(*common)
+	commonOpt func(*common)
+	// boundsOpt, if non-nil, is invoked after the setting has been registered
+	// and initialized. It is used by numeric validation options (e.g.
+	// IntInRange, FloatWithMinimum) to record the validation bounds on the
+	// concrete setting type so that they can be surfaced via Bounds() for
+	// documentation and introspection.
+	boundsOpt          func(Setting)
 	validateBoolFn     func(*Values, bool) error
 	validateDurationFn func(time.Duration) error
 	validateInt64Fn    func(int64) error
@@ -129,6 +135,18 @@ func (c *common) apply(opts []SettingOption) {
 	for _, opt := range opts {
 		if opt.commonOpt != nil {
 			opt.commonOpt(c)
+		}
+	}
+}
+
+// applyBounds invokes any boundsOpt callback in opts against s. Each numeric
+// Register function calls this after register() and apply() so that bounds
+// expressed via validation options (e.g. IntInRange) are recorded on the
+// concrete setting type.
+func applyBounds(s Setting, opts []SettingOption) {
+	for _, opt := range opts {
+		if opt.boundsOpt != nil {
+			opt.boundsOpt(s)
 		}
 	}
 }
