@@ -322,7 +322,7 @@ func TestIndexTrie(t *testing.T) {
 	for idx, testCase := range testCases {
 		trie := NewTrie()
 		for i, indexedCols := range testCase.indexedColLists {
-			trie.Insert(indexedCols, testCase.storingColLists[i], uint64(i))
+			trie.Insert(indexedCols, testCase.storingColLists[i], uint64(i), nil)
 		}
 
 		if testCase.testType == insertRemoveStoring || testCase.testType == insertRemoveAndAssignStoring {
