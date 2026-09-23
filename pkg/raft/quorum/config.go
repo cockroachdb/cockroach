@@ -17,11 +17,6 @@ import (
 // quorum decisions and perform configuration changes.
 type Config struct {
 	Voters JointConfig
-	// AutoLeave is true if the configuration is joint and a transition to the
-	// incoming configuration should be carried out automatically by Raft when
-	// this is possible. If false, the configuration will be joint until the
-	// application initiates the transition manually.
-	AutoLeave bool
 	// Learners is a set of IDs corresponding to the learners active in the
 	// current configuration.
 	//
@@ -89,9 +84,6 @@ func (c Config) String() string {
 	if c.LearnersNext != nil {
 		fmt.Fprintf(&buf, " learners_next=%s", MajorityConfig(c.LearnersNext).String())
 	}
-	if c.AutoLeave {
-		fmt.Fprint(&buf, " autoleave")
-	}
 	return buf.String()
 }
 
@@ -111,6 +103,5 @@ func (c *Config) ConfState() pb.ConfState {
 		VotersOutgoing: c.Voters[1].Slice(),
 		Learners:       MajorityConfig(c.Learners).Slice(),
 		LearnersNext:   MajorityConfig(c.LearnersNext).Slice(),
-		AutoLeave:      c.AutoLeave,
 	}
 }

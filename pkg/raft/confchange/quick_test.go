@@ -18,7 +18,6 @@
 package confchange
 
 import (
-	"fmt"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -41,37 +40,15 @@ func TestConfChangeQuick(t *testing.T) {
 	const infoCount = 5
 
 	runWithJoint := func(c *Changer, ccs []pb.ConfChangeSingle) error {
-		cfg, progressMap, err := c.EnterJoint(false /* autoLeave */, ccs...)
+		cfg, progressMap, err := c.EnterJoint(ccs...)
 		if err != nil {
 			return err
 		}
-		// Also do this with autoLeave on, just to check that we'd get the same
-		// result.
-		cfg2a, trk2a, err := c.EnterJoint(true /* autoLeave */, ccs...)
-		if err != nil {
-			return err
-		}
-		cfg2a.AutoLeave = false
-		if !reflect.DeepEqual(cfg, cfg2a) || !reflect.DeepEqual(progressMap, trk2a) {
-			return fmt.Errorf("cfg: %+v\ncfg2a: %+v\nprogressMap: %+v\ntrk2a: %+v",
-				cfg, cfg2a, progressMap, trk2a)
-		}
-		c.Config = cfg
-		c.ProgressMap = progressMap
-		cfg2b, trk2b, err := c.LeaveJoint()
-		if err != nil {
-			return err
-		}
-		// Reset back to the main branch with autoLeave=false.
 		c.Config = cfg
 		c.ProgressMap = progressMap
 		cfg, progressMap, err = c.LeaveJoint()
 		if err != nil {
 			return err
-		}
-		if !reflect.DeepEqual(cfg, cfg2b) || !reflect.DeepEqual(progressMap, trk2b) {
-			return fmt.Errorf("cfg: %+v\ncfg2b: %+v\nprogressMap: %+v\ntrk2b: %+v",
-				cfg, cfg2b, progressMap, trk2b)
 		}
 		c.Config = cfg
 		c.ProgressMap = progressMap
