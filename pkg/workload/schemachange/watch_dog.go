@@ -86,7 +86,11 @@ func (w *schemaChangeWatchDog) isConnectionActive(ctx context.Context) bool {
 // watchLoop monitors the connection until either observed work is finished,
 // or a timeout is hit.
 func (w *schemaChangeWatchDog) watchLoop(ctx context.Context) {
-	const maxTimeOutForDump = time.Second * 300
+	// A DDL blocked on the two-version invariant can legitimately stall for
+	// well over sql.catalog.descriptor_lease_duration: it waits for a reader's
+	// lease to expire and then for the periodic sweep to delete the lease row.
+	// Keep this comfortably above that; it is a stall, not a hang.
+	const hangTimeout = 10 * time.Minute
 	var totalTimeWaited time.Duration = 0
 	for {
 		select {
@@ -112,7 +116,7 @@ func (w *schemaChangeWatchDog) watchLoop(ctx context.Context) {
 				totalTimeWaited = 0
 			}
 			totalTimeWaited += time.Second
-			if totalTimeWaited > maxTimeOutForDump {
+			if totalTimeWaited > hangTimeout {
 				w.panicOnHang(ctx)
 			}
 		}
