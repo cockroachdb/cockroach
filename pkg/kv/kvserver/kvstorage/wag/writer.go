@@ -24,7 +24,6 @@ type Writer struct {
 	seq *Seq
 	// events accumulates the lifecycle events for this node. Each event
 	// identifies a replica and the type of lifecycle transition it undergoes.
-	// A given RangeID must appear at most once.
 	events []wagpb.Event
 }
 
@@ -45,8 +44,9 @@ func (w *Writer) Empty() bool {
 }
 
 // AddEvent stages a lifecycle event. Each event identifies a replica and the
-// type of lifecycle transition (create, split, destroy, etc.). A given RangeID
-// must appear at most once across all events in a Writer.
+// type of lifecycle transition (create, split, destroy, etc.). A RangeID may
+// appear in multiple events when one operation encompasses multiple transitions
+// for the same range (e.g. destroying an old replica and creating a new one).
 //
 // The startKey is the range's start key, used during replay to load the range
 // descriptor via a point read. It may be nil for EventCreate (uninitialized

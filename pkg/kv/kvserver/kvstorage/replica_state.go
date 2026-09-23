@@ -109,29 +109,27 @@ func (r LoadedReplicaState) check(storeID roachpb.StoreID) error {
 // Returns kvpb.RaftGroupDeletedError if this replica can not be created
 // because it has been deleted.
 func CreateUninitializedReplica(
-	ctx context.Context,
-	stateRW State,
-	raftRO RaftRO,
-	w *wag.Writer,
-	storeID roachpb.StoreID,
-	id roachpb.FullReplicaID,
+	ctx context.Context, rw ReadWriter, w *wag.Writer, id roachpb.FullReplicaID,
 ) error {
 	sl := MakeStateLoader(id.RangeID)
 	// Before creating the replica, see if there is a tombstone or an existing
 	// replica which would indicate that our ReplicaID is stale and can not come
 	// back to this Store again.
-	if mark, err := sl.LoadReplicaMark(ctx, stateRW.RO); err != nil {
+	if mark, err := sl.LoadReplicaMark(ctx, rw.State.RO); err != nil {
 		return err
 	} else if mark.Destroyed(id.ReplicaID) {
 		return &kvpb.RaftGroupDeletedError{}
 	} else if mark.Is(id.ReplicaID) {
 		return nil // the replica already exists
 	} else if mark.Exists() {
-		// TODO(pav-kv): there is a replica with an older ReplicaID. We must destroy
-		// it, and create a new one. Right now, the code falls through and writes
-		// the new RaftReplicaID, but this replica can already have a non-empty
-		// HardState. This is a bug.
-		_ = 0 // make linter happy
+		// There is a replica with an older ReplicaID. Destroy it before creating
+		// the new one, to clean up all its state (e.g. HardState, raft log).
+		oldID := roachpb.FullReplicaID{RangeID: id.RangeID, ReplicaID: mark.ReplicaID}
+		if err := DestroyReplica(ctx, rw, w, DestroyReplicaInfo{
+			FullReplicaID: oldID,
+		}, id.ReplicaID); err != nil {
+			return err
+		}
 	}
 
 	// Write the RaftReplicaID for this replica. This is the only place in the
@@ -141,12 +139,5 @@ func CreateUninitializedReplica(
 	// non-existent. The only RangeID-specific key that can be present is the
 	// RangeTombstone inspected above.
 	w.AddEvent(wagpb.MakeAddr(id, 0), wagpb.EventCreate, nil /* startKey */)
-	if err := sl.SetRaftReplicaID(ctx, stateRW.WO, id.ReplicaID); err != nil {
-		return err
-	}
-
-	// Make sure that storage invariants for this uninitialized replica hold.
-	uninitDesc := roachpb.RangeDescriptor{RangeID: id.RangeID}
-	_, err := LoadReplicaState(ctx, stateRW.RO, raftRO, storeID, &uninitDesc, id.ReplicaID)
-	return err
+	return sl.SetRaftReplicaID(ctx, rw.State.WO, id.ReplicaID)
 }
