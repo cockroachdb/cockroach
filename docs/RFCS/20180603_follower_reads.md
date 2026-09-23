@@ -45,7 +45,7 @@ written at some timestamp well in the past *should* be servable from all
 replicas (assuming normal operation), as replication typically catches up all
 the followers quickly, and most writes happen at "newer" timestamps. Clearly
 neither of these two properties are guaranteed though, so replicas have to be
-provided with a a way of deciding whether a given read request can be served
+provided with a way of deciding whether a given read request can be served
 consistently.
 
 The closed timestamp mechanism provides between each pair of stores a regular

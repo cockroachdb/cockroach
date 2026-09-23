@@ -148,7 +148,7 @@ No changes required. The existing CockroachDB process, described below, is
 sufficient.
 
 During a temporary removal, `server.time_until_store_dead` could be updated
-to to the length of the downtime to avoid unnecessary movement of ranges.
+to the length of the downtime to avoid unnecessary movement of ranges.
 However, it is difficult to predict the length of downtime. This is an
 optimization which could be implemented later.
 
