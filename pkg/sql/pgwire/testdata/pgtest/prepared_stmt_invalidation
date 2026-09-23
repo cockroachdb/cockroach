@@ -78,16 +78,22 @@ ReadyForQuery
 # Re-bind the same prepared statement. This should fail with
 # "cached plan must not change result type" during Bind (ErrorResponse
 # instead of BindComplete), matching PostgreSQL behavior.
+#
+# The error's Message and Routine fields are asserted because clients
+# (e.g. ActiveRecord and its cockroachdb adapter) key on them to detect a
+# stale prepared statement and recover by re-preparing. Routine must read
+# "RevalidateCachedQuery", the same value PostgreSQL reports, so that
+# detection heuristics written against PostgreSQL work unchanged.
 send
 Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"1"}]}
 Execute {"Portal": "p1"}
 Sync
 ----
 
-until
+until keepErrMessage keepErrRoutine
 ErrorResponse
 ----
-{"Type":"ErrorResponse","Code":"0A000"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"cached plan must not change result type","Routine":"RevalidateCachedQuery"}
 
 until
 ReadyForQuery

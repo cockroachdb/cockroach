@@ -34,6 +34,7 @@ go_library(
         "buffer.go",
         "buffer_util.go",
         "bulk_bridge.go",
+        "cached_plan_error.go",
         "cancel_queries.go",
         "cancel_sessions.go",
         "check.go",

@@ -209,6 +209,7 @@ func (p *PGTest) Until(
 				ConstraintName: errmsg.ConstraintName,
 				Detail:         detail,
 				Hint:           hint,
+				Routine:        errmsg.Routine,
 			})
 			typs = typs[1:]
 			continue
