@@ -3846,6 +3846,10 @@ func TestImportDefault(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
+	// This test runs dozens of IMPORTs serially against a single cluster. Under
+	// the metamorphic 'sync' mode each one blocks on a full INSPECT job, which
+	// pushes the test past its timeout, so pin the mode to 'async'.
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'async'`)
 	var data string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
