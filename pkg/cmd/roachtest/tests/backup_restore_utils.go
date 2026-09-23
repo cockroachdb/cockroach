@@ -756,6 +756,11 @@ func tpccWorkloadCmd(
 	testRNG *rand.Rand,
 	seed int64,
 	numWarehouses int,
+	// activeWarehouses limits how many of the loaded warehouses drive load; if
+	// zero, all of them do. TPCC runs with think times, so its CPU draw scales
+	// with this rather than with numWarehouses: lowering it lightens the
+	// foreground load without shrinking the dataset under test.
+	activeWarehouses int,
 	roachNodes option.NodeListOption,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
 	init = roachtestutil.NewCommand("./cockroach workload init tpcc").
@@ -766,6 +771,7 @@ func tpccWorkloadCmd(
 	run = roachtestutil.NewCommand("./cockroach workload run tpcc").
 		Arg("{pgurl%s}", roachNodes).
 		Flag("warehouses", numWarehouses).
+		MaybeFlag(activeWarehouses != 0, "active-warehouses", activeWarehouses).
 		MaybeFlag(seed != 0, "seed", seed).
 		Option("tolerate-errors")
 	l.Printf("tpcc init: %s", init)
@@ -774,7 +780,16 @@ func tpccWorkloadCmd(
 }
 
 func bankWorkloadCmd(
-	l *logger.Logger, testRNG *rand.Rand, seed int64, roachNodes option.NodeListOption, mock bool,
+	l *logger.Logger,
+	testRNG *rand.Rand,
+	seed int64,
+	roachNodes option.NodeListOption,
+	mock bool,
+	// maxRate caps the workload at this many operations per second; if zero, it
+	// runs unthrottled. Bank has no think time, so without a cap it consumes as
+	// much CPU as its workers can drive, and the MVCC revisions it produces
+	// accumulate as fast as the cluster will take them.
+	maxRate int,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
 	bankRows := bankPossibleRows[testRNG.Intn(len(bankPossibleRows))]
 	possiblePayloads := bankPossiblePayloadBytes
@@ -798,6 +813,7 @@ func bankWorkloadCmd(
 	run = roachtestutil.NewCommand("./cockroach workload run bank").
 		Arg("{pgurl%s}", roachNodes).
 		MaybeFlag(seed != 0, "seed", seed).
+		MaybeFlag(maxRate != 0, "max-rate", maxRate).
 		Option("tolerate-errors")
 	l.Printf("bank init: %s", init)
 	l.Printf("bank run: %s", run)
