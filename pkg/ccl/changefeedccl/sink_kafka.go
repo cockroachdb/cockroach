@@ -176,6 +176,58 @@ func getValidCompressionCodecs() (codecs string) {
 	return codecs
 }
 
+// resolveTopLevelCompression reconciles the top-level compression changefeed
+// option with the Compression field of kafka_sink_config. If only one of the
+// two is set, it wins; if both are set they must agree (an explicit
+// "Compression": "NONE" in the JSON config counts as set), otherwise the
+// configuration is ambiguous and an error is returned. Both the v1 (sarama)
+// and v2 (kgo) Kafka sinks resolve compression through this function.
+func resolveTopLevelCompression(
+	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	jsonCodec sarama.CompressionCodec,
+	topLevelCompression string,
+) (sarama.CompressionCodec, error) {
+	if topLevelCompression == "" {
+		return jsonCodec, nil
+	}
+	topCodec, ok := saramaCompressionCodecOptions[strings.ToUpper(topLevelCompression)]
+	if !ok {
+		return 0, errors.Errorf(
+			`unsupported compression codec %q for Kafka sink; valid options are %s`,
+			topLevelCompression, getValidCompressionCodecs())
+	}
+	jsonSetsCompression, err := jsonConfigSetsCompression(jsonStr)
+	if err != nil {
+		return 0, err
+	}
+	if jsonSetsCompression && jsonCodec != topCodec {
+		return 0, errors.Newf(
+			`compression option %q conflicts with kafka_sink_config Compression %q; `+
+				`remove one or make them match`,
+			topLevelCompression, strings.ToUpper(jsonCodec.String()))
+	}
+	return topCodec, nil
+}
+
+// jsonConfigSetsCompression reports whether the kafka_sink_config JSON object
+// explicitly sets the Compression field. Key matching is case-insensitive to
+// mirror Go's JSON field matching, which getSaramaConfig relies on.
+func jsonConfigSetsCompression(jsonStr changefeedbase.SinkSpecificJSONConfig) (bool, error) {
+	if jsonStr == "" {
+		return false, nil
+	}
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(jsonStr), &keys); err != nil {
+		return false, errors.Wrap(err, "error unmarshalling json")
+	}
+	for k := range keys {
+		if strings.EqualFold(k, "Compression") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (j *compressionCodec) UnmarshalText(b []byte) error {
 	var c sarama.CompressionCodec
 	if err := c.UnmarshalText(bytes.ToLower(b)); err != nil {
@@ -1133,6 +1185,7 @@ func buildKafkaConfig(
 	ctx context.Context,
 	u *changefeedbase.SinkURL,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	topLevelCompression string,
 	kafkaThrottlingMetrics metrics.Histogram,
 	netMetrics *cidr.NetMetrics,
 ) (*sarama.Config, error) {
@@ -1211,6 +1264,13 @@ func buildKafkaConfig(
 		return nil, errors.Wrap(err, "invalid sarama configuration")
 	}
 
+	codec, err := resolveTopLevelCompression(
+		jsonStr, sarama.CompressionCodec(saramaCfg.Compression), topLevelCompression)
+	if err != nil {
+		return nil, err
+	}
+	saramaCfg.Compression = compressionCodec(codec)
+
 	// Apply configures config based on saramaCfg.
 	if err := saramaCfg.Apply(config); err != nil {
 		return nil, errors.Wrap(err, "failed to apply kafka client configuration")
@@ -1245,7 +1305,7 @@ func makeKafkaSink(
 	}
 
 	m := mb(requiresResourceAccounting)
-	config, err := buildKafkaConfig(ctx, u, jsonStr, m.getKafkaThrottlingMetrics(settings), m.netMetrics())
+	config, err := buildKafkaConfig(ctx, u, jsonStr, sinkOpts.Compression, m.getKafkaThrottlingMetrics(settings), m.netMetrics())
 	if err != nil {
 		return nil, err
 	}
