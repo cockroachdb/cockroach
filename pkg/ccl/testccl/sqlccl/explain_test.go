@@ -7,6 +7,7 @@ package sqlccl
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -163,6 +165,7 @@ func TestExplainGist(t *testing.T) {
 		// accumulate all statements for ease of reproduction.
 		var stmts strings.Builder
 		logStmt := func(stmt string, successful bool) {
+			ts := timeutil.Now().UTC().Format("15:04:05.000000")
 			if !successful {
 				// Comment out the canceled stmt since its effects might not
 				// have applied, but we still might need to know it for
@@ -172,6 +175,7 @@ func TestExplainGist(t *testing.T) {
 				// only a single line.
 				stmt = "-- cancelled:\t" + strings.ReplaceAll(stmt, "\n", "\t")
 			}
+			stmts.WriteString(fmt.Sprintf("\n--%s\n", ts))
 			stmts.WriteString(stmt)
 			stmts.WriteString(";\n")
 		}
@@ -193,7 +197,6 @@ func TestExplainGist(t *testing.T) {
 		// Note that we don't include this statement into successfulStmts since
 		// all that are included there must have not timed out.
 		timeoutStmt := "SET statement_timeout = '0.1s';"
-		runner.Exec(t, timeoutStmt)
 
 		checkErr := func(err error, stmt string) {
 			if err != nil && strings.Contains(err.Error(), "internal error") {
@@ -213,110 +216,140 @@ func TestExplainGist(t *testing.T) {
 			}
 		}
 
-		for i := 0; i < numStatements; i++ {
-			stmt := func() string {
-				for {
-					stmt := smither.Generate()
-					switch stmt {
-					case "BEGIN TRANSACTION", "COMMIT TRANSACTION", "ROLLBACK TRANSACTION":
-						// Ignore frequently generated statements that result in
-						// a syntax error with EXPLAIN.
-					default:
-						return stmt
+		for range numStatements {
+			func() {
+				stmt := func() string {
+					for {
+						stmt := smither.Generate()
+						switch stmt {
+						case "BEGIN TRANSACTION", "COMMIT TRANSACTION", "ROLLBACK TRANSACTION":
+							// Ignore frequently generated statements that result in
+							// a syntax error with EXPLAIN.
+						default:
+							return stmt
+						}
 					}
-				}
-			}()
+				}()
 
-			row := sqlDB.QueryRow("EXPLAIN (GIST) " + stmt)
-			if err = row.Err(); err != nil {
-				checkErr(err, stmt)
-				continue
-			}
-			var gist string
-			err = row.Scan(&gist)
-			if err != nil {
-				if !sqltestutils.IsClientSideQueryCanceledErr(err) {
+				// Run this statement on a connection pinned for this iteration,
+				// with the timeout armed by a SET on that same connection.
+				conn, err := sqlDB.Conn(ctx)
+				if err != nil {
 					t.Fatal(err)
 				}
-				// Short statement timeout might exceed planning time. Let's
-				// retry this statement with longer timeout.
-				if ok := func() bool {
-					runner.Exec(t, "SET statement_timeout = '1s'")
-					defer runner.Exec(t, timeoutStmt)
-					row = sqlDB.QueryRow("EXPLAIN (GIST) " + stmt)
-					if err = row.Err(); err != nil {
-						checkErr(err, stmt)
-						return false
+				connUnclosable := false
+				defer func() {
+					// Conn.Close blocks until in-flight operations finish, so if a statement
+					// already times out after 3 mins, we probably wouldn't be able to close the
+					// connection immediately.
+					if !connUnclosable {
+						_ = conn.Close()
 					}
-					err = row.Scan(&gist)
-					if err != nil {
-						t.Fatalf("when re-running EXPLAIN (GIST) with 1s timeout: %+v", err)
-					}
-					return true
-				}(); !ok {
-					continue
+				}()
+				// This can fail if the pool handed us a connection that the
+				// server has since terminated; skip the statement.
+				if _, err := conn.ExecContext(ctx, timeoutStmt); err != nil {
+					checkErr(err, stmt)
+					return
 				}
-			}
-			_, err = sqlDB.Exec("SELECT crdb_internal.decode_plan_gist($1);", gist)
-			if err != nil {
-				// We might be still in the process of cancelling the previous DROP
-				// operation or hit the statement timeout - ignore this particular
-				// error.
-				if !testutils.IsError(err, "descriptor is being dropped") &&
-					!sqltestutils.IsClientSideQueryCanceledErr(err) {
-					t.Fatal(err)
-				}
-				continue
-			}
-			// Store the gist to be run against empty DB.
-			gists = append(gists, gist)
 
-			if shouldSkip := func() bool {
-				// Executing these statements is out of scope for this test
-				// (skipping them makes reproduction easier).
-				for _, toSkipPrefix := range []string{"BACKUP", "EXPORT", "IMPORT", "RESTORE"} {
-					if strings.HasPrefix(stmt, toSkipPrefix) {
+				row := conn.QueryRowContext(ctx, "EXPLAIN (GIST) "+stmt)
+				if err = row.Err(); err != nil {
+					checkErr(err, stmt)
+					return
+				}
+				var gist string
+				err = row.Scan(&gist)
+				if err != nil {
+					if !sqltestutils.IsClientSideQueryCanceledErr(err) {
+						t.Fatal(err)
+					}
+					// Short statement timeout might exceed planning time. Let's
+					// retry this statement with longer timeout.
+					if ok := func() bool {
+						if _, err := conn.ExecContext(ctx, "SET statement_timeout = '1s'"); err != nil {
+							checkErr(err, stmt)
+							return false
+						}
+						defer func() {
+							_, _ = conn.ExecContext(ctx, timeoutStmt)
+						}()
+						row = conn.QueryRowContext(ctx, "EXPLAIN (GIST) "+stmt)
+						if err = row.Err(); err != nil {
+							checkErr(err, stmt)
+							return false
+						}
+						err = row.Scan(&gist)
+						if err != nil {
+							t.Fatalf("when re-running EXPLAIN (GIST) with 1s timeout: %+v", err)
+						}
+						return true
+					}(); !ok {
+						return
+					}
+				}
+				_, err = conn.ExecContext(ctx, "SELECT crdb_internal.decode_plan_gist($1);", gist)
+				if err != nil {
+					// We might be still in the process of cancelling the previous DROP
+					// operation or hit the statement timeout - ignore this particular
+					// error.
+					if !testutils.IsError(err, "descriptor is being dropped") &&
+						!sqltestutils.IsClientSideQueryCanceledErr(err) {
+						t.Fatal(err)
+					}
+					return
+				}
+				// Store the gist to be run against empty DB.
+				gists = append(gists, gist)
+
+				if shouldSkip := func() bool {
+					// Executing these statements is out of scope for this test
+					// (skipping them makes reproduction easier).
+					for _, toSkipPrefix := range []string{"BACKUP", "EXPORT", "IMPORT", "RESTORE"} {
+						if strings.HasPrefix(stmt, toSkipPrefix) {
+							return true
+						}
+					}
+					// ALTER TYPE schema changes wait on descriptor leases without
+					// honoring statement_timeout. In release branches that lack
+					// either the post-commit fix (#160076) or the pre-commit fix
+					// (#169331), the wait can run for the full lease duration,
+					// exhausting the test's three-minute limit.
+					if strings.HasPrefix(stmt, "ALTER TYPE") {
 						return true
 					}
+					return false
+				}(); shouldSkip {
+					return
 				}
-				// ALTER TYPE schema changes wait on descriptor leases without
-				// honoring statement_timeout. In release branches that lack
-				// either the post-commit fix (#160076) or the pre-commit fix
-				// (#169331), the wait can run for the full lease duration,
-				// exhausting the test's three-minute limit.
-				if strings.HasPrefix(stmt, "ALTER TYPE") {
-					return true
-				}
-				return false
-			}(); shouldSkip {
-				continue
-			}
 
-			// Execute the stmt with short timeout so that the table schema is
-			// modified. We do so in a separate goroutine to ensure that we fail
-			// the test if the stmt doesn't respect the timeout (if we didn't
-			// use a separate goroutine, then the main test goroutine would be
-			// blocked until either the stmt is completed or is canceled,
-			// possibly timing out the test run).
-			errCh := make(chan error)
-			go func() {
-				_, err := sqlDB.Exec(stmt)
-				errCh <- err
-			}()
-			select {
-			case err = <-errCh:
-				if err != nil {
-					checkErr(err, stmt)
-					logStmt(stmt, false /* successful */)
-				} else {
-					logStmt(stmt, true /* successful */)
+				// Execute the stmt with short timeout so that the table schema is
+				// modified. We do so in a separate goroutine to ensure that we fail
+				// the test if the stmt doesn't respect the timeout (if we didn't
+				// use a separate goroutine, then the main test goroutine would be
+				// blocked until either the stmt is completed or is canceled,
+				// possibly timing out the test run).
+				errCh := make(chan error)
+				go func() {
+					_, err := conn.ExecContext(ctx, stmt)
+					errCh <- err
+				}()
+				select {
+				case err = <-errCh:
+					if err != nil {
+						checkErr(err, stmt)
+						logStmt(stmt, false /* successful */)
+					} else {
+						logStmt(stmt, true /* successful */)
+					}
+				case <-time.After(3 * time.Minute):
+					t.Log(stmts.String())
+					sl := allstacks.Get()
+					t.Logf("stacks:\n\n%s", sl)
+					connUnclosable = true
+					t.Fatalf("stmt wasn't canceled by statement_timeout of 0.1s - ran at least for 3m: %s", stmt)
 				}
-			case <-time.After(3 * time.Minute):
-				t.Log(stmts.String())
-				sl := allstacks.Get()
-				t.Logf("stacks:\n\n%s", sl)
-				t.Fatalf("stmt wasn't canceled by statement_timeout of 0.1s - ran at least for 3m: %s", stmt)
-			}
+			}()
 		}
 	})
 
