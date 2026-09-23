@@ -39,6 +39,7 @@ func InitIndexFetchSpec(
 		IndexName:           index.GetName(),
 		IsSecondaryIndex:    !index.Primary(),
 		IsUniqueIndex:       index.IsUnique(),
+		HasSkipUniqueChecks: index.SkipUniqueChecks(),
 		EncodingType:        index.GetEncodingType(),
 		NumKeySuffixColumns: uint32(index.NumKeySuffixColumns()),
 		GeoConfig:           index.GetGeoConfig(),

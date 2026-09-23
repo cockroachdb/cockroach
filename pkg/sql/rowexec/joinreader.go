@@ -1120,6 +1120,9 @@ func (jr *joinReader) assertBatchRowCounts() error {
 	nonSkippingIndexJoin := jr.readerType == indexJoinReaderType &&
 		jr.lockingWaitPolicy != descpb.ScanLockingWaitPolicy_SKIP_LOCKED
 	if nonSkippingIndexJoin && jr.curBatchRowsRead != jr.curBatchInputRowCount {
+		if jr.fetchSpec.HasSkipUniqueChecks && jr.curBatchRowsRead > jr.curBatchInputRowCount {
+			return sqlerrors.NewSkipUniqueChecksError(jr.fetchSpec.TableName, jr.fetchSpec.IndexName)
+		}
 		return errors.AssertionFailedf(
 			"expected to fetch %d rows, found %d",
 			jr.curBatchInputRowCount, jr.curBatchRowsRead,
@@ -1131,6 +1134,9 @@ func (jr *joinReader) assertBatchRowCounts() error {
 		jr.lockingWaitPolicy == descpb.ScanLockingWaitPolicy_SKIP_LOCKED
 	if (skippingIndexJoin || jr.lookupColumnsAreKey) &&
 		jr.curBatchRowsRead > jr.curBatchInputRowCount {
+		if jr.fetchSpec.HasSkipUniqueChecks {
+			return sqlerrors.NewSkipUniqueChecksError(jr.fetchSpec.TableName, jr.fetchSpec.IndexName)
+		}
 		return errors.AssertionFailedf(
 			"expected to fetch no more than %d rows, found %d",
 			jr.curBatchInputRowCount, jr.curBatchRowsRead,
