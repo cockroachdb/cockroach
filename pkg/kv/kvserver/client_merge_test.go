@@ -4539,6 +4539,43 @@ func TestMergeQueue(t *testing.T) {
 		verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
 	})
 
+	// These two subtests cover the case where the LHS is undersized but the
+	// RHS individually already meets the minimum size threshold. The merge
+	// queue still merges in this case, as long as the combined size would
+	// stay comfortably below the threshold (below twice the minimum). This
+	// lets an undersized range wedged next to an adequately-sized neighbor
+	// merge away instead of persisting forever, while avoiding merging into
+	// a neighbor that's likely to need to split again soon (see #100443).
+	t.Run("rhs-above-threshold-merges-when-combined-is-small", func(t *testing.T) {
+		reset(t)
+		clearRange(t, lhsStartKey, rhsStartKey)
+
+		conf := conf
+		rhsSize := rhs().GetMVCCStats().Total()
+		// The RHS alone already meets the minimum size threshold...
+		conf.RangeMinBytes = rhsSize * 3 / 4
+		// ...but the combined size (~rhsSize, since the LHS is empty) stays
+		// comfortably below twice that threshold, so the merge should occur.
+		conf.RangeMaxBytes = rhsSize * 10
+		setSpanConfigs(t, conf)
+		verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
+	})
+
+	t.Run("rhs-above-threshold-does-not-merge-when-combined-is-large", func(t *testing.T) {
+		reset(t)
+		clearRange(t, lhsStartKey, rhsStartKey)
+
+		conf := conf
+		rhsSize := rhs().GetMVCCStats().Total()
+		// The RHS alone already meets the minimum size threshold, and the
+		// combined size (~rhsSize) would not stay comfortably below twice
+		// that threshold, so the merge should still be skipped.
+		conf.RangeMinBytes = rhsSize / 3
+		conf.RangeMaxBytes = rhsSize * 10
+		setSpanConfigs(t, conf)
+		verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+	})
+
 	t.Run("non-collocated", func(t *testing.T) {
 		reset(t)
 		verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
