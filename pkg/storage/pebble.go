@@ -1207,6 +1207,17 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 	// Else, already have a LoggerAndTracer. This only occurs in unit tests.
 
+	// Override Pebble's exit function so that invariant violation exits
+	// route through CockroachDB's fatal logging. Without this, Pebble's
+	// direct os.Exit(1) calls (cache invariant checks, memtable
+	// assertions, etc.) bypass all logging, crash reporting, and marker
+	// file writing — the process just vanishes with no indication of why.
+	//
+	// Requires cockroachdb/pebble#5865.
+	cfg.opts.ExitFunc = func(code int) {
+		log.Storage.Fatalf(logCtx, "pebble: invariant violation (exit code %d)", code)
+	}
+
 	// Establish the emergency ballast if we can. If there's not sufficient
 	// disk space, the ballast will be reestablished from Capacity when the
 	// store's capacity is queried periodically.
