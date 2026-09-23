@@ -1,0 +1,174 @@
+# Yaml for creating and configuring the drt-1m-tables and workload-1m-tables clusters in GCE.
+#
+# Purpose: long-running scale test (~1 million descriptors) for the schema
+# foundations team. The high-memory machine type is intentional: with ~1M
+# descriptors the leased descriptor cache, range descriptor cache, and SQL
+# plan/stats caches grow substantially, and 128 GB/node leaves headroom for
+# Pebble block cache and workload connections without OOMs.
+#
+# Topology: 9 crdb nodes across 3 zones in a single region (us-east1), plus
+# 1 workload node colocated in one of those zones.
+#
+# Cost attribution: VMs are labeled `usage=1m_tables`.
+environment:
+  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
+  ROACHPROD_DNS: drt.crdb.io
+  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
+  ROACHPROD_GCE_DNS_ZONE: drt
+  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
+  CLUSTER: drt-1m-tables
+  CLUSTER_NODES: 9
+  WORKLOAD_CLUSTER: workload-1m-tables
+  WORKLOAD_NODES: 1
+  STORE_COUNT: 4
+
+dependent_file_locations:
+  - artifacts/roachprod
+  - artifacts/roachtest
+  - artifacts/drtprod
+  - pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller
+  - pkg/cmd/drtprod/scripts/setup_datadog_cluster
+  - pkg/cmd/drtprod/scripts/setup_datadog_workload
+
+targets:
+  - target_name: $CLUSTER
+    steps:
+      - command: create
+        args:
+          - $CLUSTER
+        flags:
+          clouds: gce
+          gce-managed: true
+          gce-enable-multiple-stores: true
+          gce-zones: "us-east1-d,us-east1-b,us-east1-c"
+          nodes: $CLUSTER_NODES
+          gce-machine-type: n2-highmem-16
+          local-ssd: true
+          gce-local-ssd-count: $STORE_COUNT
+          username: drt
+          lifetime: 8760h
+          gce-image: "ubuntu-2204-jammy-v20240319"
+          label: usage=1m_tables
+        on_rollback:
+          - command: destroy
+            args:
+              - $CLUSTER
+      - command: sync
+        flags:
+          clouds: gce
+      - command: stage
+        args:
+          - $CLUSTER
+          - cockroach
+      - script: "pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller"
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
+      - command: start
+        args:
+          - $CLUSTER
+          - "--binary"
+          - "./cockroach"
+        flags:
+          enable-fluent-sink: true
+          store-count: $STORE_COUNT
+          args: --wal-failover=among-stores
+          restart: false
+          sql-port: 26257
+        on_rollback:
+          - command: stop
+            args:
+              - $CLUSTER
+      # Restart cockroach automatically after VM reboot (e.g. live-migration).
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
+  - target_name: $WORKLOAD_CLUSTER
+    steps:
+      - command: create
+        args:
+          - $WORKLOAD_CLUSTER
+        flags:
+          clouds: gce
+          gce-zones: "us-east1-c"
+          nodes: $WORKLOAD_NODES
+          gce-machine-type: n2-standard-16
+          os-volume-size: 100
+          username: workload
+          lifetime: 8760h
+          label: usage=1m_tables
+        on_rollback:
+          - command: destroy
+            args:
+              - $WORKLOAD_CLUSTER
+      - command: sync
+        flags:
+          clouds: gce
+      - command: stage
+        args:
+          - $WORKLOAD_CLUSTER
+          - cockroach
+      - command: stage
+        args:
+          - $WORKLOAD_CLUSTER
+          - workload
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
+  - target_name: post_tasks
+    dependent_targets:
+      - $CLUSTER
+      - $WORKLOAD_CLUSTER
+    steps:
+      - script: rm
+        args:
+          - -rf
+          - certs-$CLUSTER
+      - command: get
+        args:
+          - $CLUSTER:1
+          - certs
+          - certs-$CLUSTER
+      - command: ssh
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - sudo
+          - rm
+          - -rf
+          - certs
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - certs-$CLUSTER
+          - certs
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachprod
+          - roachprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/drtprod
+          - drtprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachtest
+          - roachtest-operations
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - pkg/cmd/drt/scripts/roachtest_operations_run.sh
+          - roachtest_operations_run.sh
+      - script: pkg/cmd/drtprod/scripts/populate_workload_keys.sh
+      - command: ssh
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - chmod
+          - 600
+          - './certs/*'
+      # NOTE: the schema-foundations 1M-descriptor workload is not initialized
+      # here. Add the appropriate workload init/run scripts (e.g. a dedicated
+      # generate_*_run.sh under pkg/cmd/drtprod/scripts/) once the workload
+      # driver is finalized.
