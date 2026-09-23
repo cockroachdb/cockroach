@@ -155,3 +155,113 @@ func (os *optSteps) Next() error {
 	os.steps++
 	return nil
 }
+
+// optStepsWithPlaceholders is like optSteps but uses a prepared memo with
+// placeholder assignment instead of building from scratch each iteration.
+type optStepsWithPlaceholders struct {
+	tester *OptTester
+
+	// preparedMemo is the memo with placeholders that we assign values to.
+	preparedMemo *memo.Memo
+
+	fo *forcingOptimizer
+
+	// steps is the maximum number of rules that can be applied by the optimizer
+	// during the current iteration.
+	steps int
+
+	// expr is the expression tree produced by the most recent iteration.
+	expr opt.Expr
+
+	// better is true if expr is lower cost than the expression tree produced by
+	// the previous iteration.
+	better bool
+
+	// best is the textual representation of the most recent expression tree that
+	// was an improvement over the previous best tree.
+	best string
+}
+
+func newOptStepsWithPlaceholders(tester *OptTester, preparedMemo *memo.Memo) *optStepsWithPlaceholders {
+	return &optStepsWithPlaceholders{tester: tester, preparedMemo: preparedMemo}
+}
+
+// Root returns the node tree produced by the most recent iteration.
+func (os *optStepsWithPlaceholders) Root() opt.Expr {
+	return os.expr
+}
+
+// LastRuleName returns the name of the rule that was most recently matched by
+// the optimizer.
+func (os *optStepsWithPlaceholders) LastRuleName() opt.RuleName {
+	return os.fo.lastMatched
+}
+
+// IsBetter returns true if root is lower cost than the expression tree
+// produced by the previous iteration.
+func (os *optStepsWithPlaceholders) IsBetter() bool {
+	return os.better
+}
+
+// Done returns true if there are no more rules to apply.
+func (os *optStepsWithPlaceholders) Done() bool {
+	return os.fo != nil && os.fo.remaining != 0
+}
+
+// Next triggers the next iteration. If there is no error, then results of the
+// iteration can be accessed via the Root, LastRuleName, and IsBetter methods.
+func (os *optStepsWithPlaceholders) Next() error {
+	if os.Done() {
+		panic("iteration already complete")
+	}
+
+	fo, err := newForcingOptimizerWithPlaceholders(os.tester, os.preparedMemo, os.steps, false /* ignoreNormRules */)
+	if err != nil {
+		return err
+	}
+
+	os.fo = fo
+	os.expr = fo.Optimize()
+	text := fo.o.Memo().String()
+
+	// If the expression text changes, then it must have gotten better.
+	os.better = text != os.best
+	if os.better {
+		os.best = text
+	} else if !os.Done() {
+		// The expression is not better, so suppress the lowest cost expressions
+		// so that the changed portions of the tree will be part of the output.
+		fo2, err := newForcingOptimizerWithPlaceholders(os.tester, os.preparedMemo, os.steps, false /* ignoreNormRules */)
+		if err != nil {
+			return err
+		}
+
+		if fo.lastAppliedSource == nil {
+			// This was a normalization that created a new memo group.
+			path := fo.LookupPath(fo.lastAppliedTarget)
+			if path == nil {
+				// If the path is nil, skip this step.
+				os.steps++
+				return nil
+			}
+			fo2.RestrictToExpr(path)
+		} else if fo.lastAppliedTarget == nil {
+			// This was an exploration rule that didn't add any expressions to the
+			// group, so only ancestor groups need to be suppressed.
+			path := fo.MustLookupPath(fo.lastAppliedSource)
+			fo2.RestrictToExpr(path[:len(path)-1])
+		} else {
+			// This was an exploration rule that added one or more expressions to
+			// an existing group. Suppress all other members of the group.
+			member := fo.lastAppliedTarget.(memo.RelExpr)
+			for member != nil {
+				fo2.RestrictToExpr(fo.MustLookupPath(member))
+				member = member.NextExpr()
+			}
+		}
+		os.expr = fo2.Optimize()
+	}
+
+	os.steps++
+	return nil
+}
