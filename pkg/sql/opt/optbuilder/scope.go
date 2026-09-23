@@ -1162,6 +1162,17 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			panic(err)
 		}
 
+		// WITHIN GROUP is only valid on ordered-set aggregate functions.
+		if t.AggType == tree.OrderedSetAgg {
+			if _, found := isOrderedSetAggregate(def); !found {
+				panic(pgerror.Newf(
+					pgcode.WrongObjectType,
+					"function %s is not an ordered set aggregate",
+					def.Name,
+				))
+			}
+		}
+
 		if isGenerator(def) && s.replaceSRFs {
 			expr = s.replaceSRF(t, def)
 			break
