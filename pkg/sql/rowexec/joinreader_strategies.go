@@ -57,10 +57,13 @@ type joinReaderStrategy interface {
 	// processLookupRows consumes the rows the joinReader has buffered and returns
 	// the lookup spans.
 	//
+	// singleRowInput, if true, indicates that 'rows' contains a single row that
+	// is the entirety of the input.
+	//
 	// The returned spans are not accounted for, so it is the caller's
 	// responsibility to register the spans memory usage with our memory
 	// accounting system.
-	processLookupRows(rows []rowenc.EncDatumRow) (roachpb.Spans, []int, error)
+	processLookupRows(rows []rowenc.EncDatumRow, singleRowInput bool) (roachpb.Spans, []int, error)
 	// processLookedUpRow processes a looked up row. A joinReaderState is returned
 	// to indicate the next state to transition to. If this next state is
 	// jrFetchingLookupRows, processLookedUpRow will be called again if the looked
@@ -194,12 +197,12 @@ func (s *joinReaderNoOrderingStrategy) generatedRemoteSpans() bool {
 }
 
 func (s *joinReaderNoOrderingStrategy) processLookupRows(
-	rows []rowenc.EncDatumRow,
+	rows []rowenc.EncDatumRow, singleRowInput bool,
 ) (roachpb.Spans, []int, error) {
 	s.inputRows = rows
 	s.remoteSpansGenerated = false
 	s.emitState.unmatchedInputRowIndicesInitialized = false
-	return s.generateSpans(s.Ctx(), s.inputRows)
+	return s.generateSpans(s.Ctx(), s.inputRows, singleRowInput)
 }
 
 func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
@@ -401,10 +404,10 @@ func (s *joinReaderIndexJoinStrategy) generatedRemoteSpans() bool {
 }
 
 func (s *joinReaderIndexJoinStrategy) processLookupRows(
-	rows []rowenc.EncDatumRow,
+	rows []rowenc.EncDatumRow, singleRowInput bool,
 ) (roachpb.Spans, []int, error) {
 	s.inputRows = rows
-	return s.generateSpans(s.Ctx(), s.inputRows)
+	return s.generateSpans(s.Ctx(), s.inputRows, singleRowInput)
 }
 
 func (s *joinReaderIndexJoinStrategy) processLookedUpRow(
@@ -602,7 +605,7 @@ func (s *joinReaderOrderingStrategy) generatedRemoteSpans() bool {
 }
 
 func (s *joinReaderOrderingStrategy) processLookupRows(
-	rows []rowenc.EncDatumRow,
+	rows []rowenc.EncDatumRow, singleRowInput bool,
 ) (roachpb.Spans, []int, error) {
 	// Reset s.inputRowIdxToLookedUpRowIndices. This map will be populated in
 	// processedLookedUpRow(), as lookup results are received (possibly out of
@@ -644,7 +647,7 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 
 	s.inputRows = rows
 	s.remoteSpansGenerated = false
-	return s.generateSpans(s.Ctx(), s.inputRows)
+	return s.generateSpans(s.Ctx(), s.inputRows, singleRowInput)
 }
 
 func (s *joinReaderOrderingStrategy) processLookedUpRow(
