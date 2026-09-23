@@ -281,6 +281,17 @@ func (b *Builder) buildScalar(
 		arg := b.buildScalar(texpr, inScope, nil, nil, colRefs)
 		out = b.factory.ConstructCast(arg, t.ResolvedType())
 
+	case *tree.AnnotateTypeExpr:
+		texpr := t.TypedInnerExpr()
+		if texpr.ResolvedType() == types.Unknown {
+			// If the inner expr is still unknown cast to its type to preserve the the annotation
+			arg := b.buildScalar(texpr, inScope, nil, nil, colRefs)
+			out = b.factory.ConstructCast(arg, t.ResolvedType())
+		} else {
+			// Treat AnnotateTypeExpr as if it wasn't present.
+			return b.buildScalar(texpr, inScope, outScope, outCol, colRefs)
+		}
+
 	case *tree.CoalesceExpr:
 		args := make(memo.ScalarListExpr, len(t.Exprs))
 		typ := t.ResolvedType()
