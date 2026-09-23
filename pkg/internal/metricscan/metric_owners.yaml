@@ -49,6 +49,7 @@ owners:
   admission_elastic_cpu_utilization: cockroachdb/admission-control
   admission_elastic_cpu_utilization_limit: cockroachdb/admission-control
   admission_elastic_cpu_yield_delay_nanos: cockroachdb/admission-control
+  admission_granter_bypassed_requests_kv: cockroachdb/admission-control
   admission_granter_cpu_load_long_period_duration_kv: cockroachdb/admission-control
   admission_granter_cpu_load_short_period_duration_kv: cockroachdb/admission-control
   admission_granter_disk_write_byte_tokens_exhausted_duration_kv: cockroachdb/admission-control
