@@ -232,3 +232,41 @@ query IT
 SELECT x, jsonb_agg(DISTINCT jsonb_build_object('y', y, 'z', z)) FROM (SELECT * FROM t ORDER BY i) GROUP BY x
 ----
 1 [{"y": 2, "z": "hello"}, {"y": 2, "z": "hello there"}]
+
+# Regression test for #168317. Under null_ordered_last, a SELECT DISTINCT whose
+# ORDER BY references select-list columns synthesizes (col IS NULL) ordering
+# columns to implement NULLS LAST. These must not raise a spurious "ORDER BY
+# expressions must appear in select list" error, and NULLs must sort last.
+
+statement ok
+SET null_ordered_last = on
+
+statement ok
+CREATE TABLE distinct_null_order (a INT, b INT)
+
+statement ok
+INSERT INTO distinct_null_order VALUES (1, 1), (1, 1), (2, NULL), (NULL, 3), (NULL, NULL)
+
+query II
+SELECT DISTINCT a, b FROM distinct_null_order ORDER BY a, b
+----
+1     1
+2     NULL
+NULL  3
+NULL  NULL
+
+# A column referenced by ORDER BY but absent from the select list must still
+# error, even though null_ordered_last synthesizes an IS NULL column for it.
+statement error for SELECT DISTINCT, ORDER BY expressions must appear in select list
+SELECT DISTINCT a FROM distinct_null_order ORDER BY b
+
+# The originally reported symptom: DROP USER internally runs a
+# SELECT DISTINCT ... ORDER BY against system.privileges, which hit the bug.
+statement ok
+CREATE USER testuser168317
+
+statement ok
+DROP USER testuser168317
+
+statement ok
+RESET null_ordered_last
