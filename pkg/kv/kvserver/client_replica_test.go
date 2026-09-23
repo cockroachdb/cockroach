@@ -12,6 +12,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"sync"
@@ -1925,6 +1926,14 @@ func TestLeaseExpirationBasedDrainTransferWithProscribed(t *testing.T) {
 
 	var failedOnce sync.Once
 	failedCh := make(chan struct{})
+	// failReacquire, when true, causes the proposal filter to reject the
+	// draining replica's attempts to reacquire a proscribed lease. It is
+	// toggled off later in the test (once the "reacquiring proscribed lease"
+	// diagnostic has been observed) so that subsequent iterations fall
+	// through to the TransferLease path and exercise the "shedding lease"
+	// diagnostic as well.
+	var failReacquire atomic.Bool
+	failReacquire.Store(true)
 	failLeaseTransfers := func(fail bool) {
 		l.filterMu.Lock()
 		defer l.filterMu.Unlock()
@@ -1941,6 +1950,12 @@ func TestLeaseExpirationBasedDrainTransferWithProscribed(t *testing.T) {
 						target, raftutil.ReplicaStateProbe))
 				}
 			}
+			if failReacquire.Load() && filterArgs.Req.IsSingleRequestLeaseRequest() {
+				target := filterArgs.Req.Requests[0].GetRequestLease().Lease.Replica
+				if target == l.replica1Desc {
+					return kvpb.NewErrorf("injected lease reacquisition failure")
+				}
+			}
 			return nil
 		}
 	}
@@ -1949,6 +1964,13 @@ func TestLeaseExpirationBasedDrainTransferWithProscribed(t *testing.T) {
 	// revoked (after evaluation, during raft proposal). In doing so, we leave the
 	// range with a PROSCRIBED lease.
 	failLeaseTransfers(true /* fail */)
+
+	// Capture the drain-start timestamp so the log-scanning assertion below only
+	// sees entries produced by this drain, and capture the target range ID so
+	// the regex doesn't accidentally match a stuck-drain entry from some other
+	// range (e.g. a system range) that happens to log concurrently.
+	drainStart := timeutil.Now().UnixNano()
+	targetRangeID := l.replica1.GetRangeID()
 
 	// Drain node 1.
 	drainedCh := make(chan struct{})
@@ -1966,6 +1988,56 @@ func TestLeaseExpirationBasedDrainTransferWithProscribed(t *testing.T) {
 		t.Fatalf("drain unexpectedly succeeded")
 	case <-time.After(10 * time.Millisecond):
 	}
+
+	// Verify the late-stage per-range diagnostic lines advertised in the
+	// release note for #65659. The first transferAllAway iteration
+	// intentionally discards its stuck list, so this test must observe a
+	// diagnostic produced by a later iteration to prove the retry-loop
+	// path is wired up.
+	awaitLogLines := func(re *regexp.Regexp, minEntries int) {
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			log.FlushFiles()
+			entries, err := log.FetchEntriesFromFiles(drainStart, math.MaxInt64, 1000, re,
+				log.WithFlattenedSensitiveData)
+			if err != nil {
+				return err
+			}
+			if len(entries) < minEntries {
+				return errors.Newf("have %d drain-stuck log entries for %s, want >= %d",
+					len(entries), re, minEntries)
+			}
+			return nil
+		})
+	}
+	// Scope the regex to the target range so a concurrent stuck-drain
+	// entry for another range can't satisfy the assertion.
+	reacquireRE := regexp.MustCompile(fmt.Sprintf(
+		`drain stuck on r%d[:/].*blocked.*reacquiring proscribed lease:`, targetRangeID))
+	sheddingRE := regexp.MustCompile(fmt.Sprintf(
+		`drain stuck on r%d[:/].*blocked.*shedding lease:`, targetRangeID))
+	// Requiring two reacquire entries proves at least one retry iteration
+	// completed after the intentionally-discarded first iteration; a
+	// regression that logged the first iteration's stuck list would
+	// already have surfaced a shedding-lease entry by this point.
+	awaitLogLines(reacquireRE, 2)
+
+	// While reacquisitions are still rejected, every post-first iteration
+	// aborts before reaching the shed-lease path, so no shedding-lease
+	// entry can exist for the target range. This guards against a
+	// regression that logs the discarded first iteration.
+	log.FlushFiles()
+	preSheddingEntries, err := log.FetchEntriesFromFiles(drainStart, math.MaxInt64, 1000, sheddingRE,
+		log.WithFlattenedSensitiveData)
+	require.NoError(t, err)
+	require.Empty(t, preSheddingEntries,
+		"shedding-lease diagnostic emitted before reacquisitions were unblocked; "+
+			"first-iteration stuck list may no longer be discarded")
+
+	// Unblock reacquisitions so subsequent iterations reach the transfer
+	// path and emit "shedding lease:".
+	failReacquire.Store(false)
+	awaitLogLines(sheddingRE, 1)
 
 	// Stop failing lease transfers.
 	failLeaseTransfers(false /* fail */)
