@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -451,4 +453,76 @@ func randomlyGenerateTestData(testSize int, numOfCoordinator int) []testData {
 	}
 
 	return tcs
+}
+
+// TestEventStoreStorageSizeAccounting verifies that the eventStore's byte
+// counter tracks the bytes actually resident in the cache across the
+// insert-then-resolve lifecycle, and returns to zero once everything is
+// evicted. If the counter leaks, the store eventually evicts every new event
+// on arrival while holding nothing.
+func TestEventStoreStorageSizeAccounting(t *testing.T) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	metrics := NewMetrics()
+	statusServer := newFakeStatusServerCluster()
+	now := timeutil.Now()
+	store := newEventStore(st, statusServer.txnIDResolution, func() time.Time {
+		return now
+	}, /* timeSrc */ &metrics)
+
+	residentBytes := func() int64 {
+		store.mu.RLock()
+		defer store.mu.RUnlock()
+		var sum int64
+		store.mu.store.Do(func(entry *cache.Entry) {
+			event := entry.Value.(contentionpb.ExtendedContentionEvent)
+			sum += int64(entryBytes(&event))
+		})
+		return sum
+	}
+	storeLen := func() int {
+		store.mu.RLock()
+		defer store.mu.RUnlock()
+		return store.mu.store.Len()
+	}
+	checkAccounting := func(stage string, wantLen int) {
+		t.Helper()
+		gotLen := storeLen()
+		if gotLen != wantLen {
+			t.Errorf("%s: store holds %d entries, want %d", stage, gotLen, wantLen)
+		}
+		got, want := atomic.LoadInt64(&store.atomic.storageSize), residentBytes()
+		if got != want {
+			t.Errorf("%s: storageSize=%d but resident bytes=%d", stage, got, want)
+		}
+	}
+	freshEvent := func() []contentionpb.ExtendedContentionEvent {
+		input, _ := generateUnresolvedContentionEventsFromTestData(
+			t, randomlyGenerateTestData(1, 1), now)
+		return input
+	}
+
+	const numEvents = 100
+	unresolved, resolved := generateUnresolvedContentionEventsFromTestData(
+		t, randomlyGenerateTestData(numEvents, 3), now)
+	require.Len(t, resolved, numEvents)
+
+	// Insert unresolved events, then overwrite them in place with their
+	// resolved versions, mirroring the intake and resolver goroutines.
+	store.upsertBatch(unresolved)
+	checkAccounting("after insert", numEvents)
+	store.upsertBatch(resolved)
+	checkAccounting("after resolve", numEvents)
+
+	// Force a full eviction by dropping capacity to zero and inserting a new
+	// key. The counter must return to zero along with the cache.
+	StoreCapacity.Override(ctx, &st.SV, 0)
+	store.upsertBatch(freshEvent())
+	checkAccounting("after full eviction", 0)
+
+	// With room for a handful of events, a fresh event must be retained.
+	single := freshEvent()
+	StoreCapacity.Override(ctx, &st.SV, 10*int64(entryBytes(&single[0])))
+	store.upsertBatch(single)
+	checkAccounting("after re-insert", 1)
 }
