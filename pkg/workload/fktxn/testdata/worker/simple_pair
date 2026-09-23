@@ -1,0 +1,43 @@
+# Visualize what a single worker emits over several chains against a
+# simple two-table FK schema. Output shows, per transaction, the FSM
+# state transition, the SQL emitted, and whether the txn committed.
+#
+# Different seeds may trim different tables out of the sub-DAG; try
+# several to see the chain shape vary.
+
+schema simple_pair
+----
+loaded schema "simple_pair": 2 table(s), 1 FK graph(s)
+
+# A small chain that exercises the Gone -> Exists -> Gone -> Exists cycle.
+run seed=42 chains=2 max-events=4 mix=70/30
+----
+chain 1:
+  pkIdx=1 pks: a=[-5921015923409828986]
+  txn 1: state=Unknown event=Delete
+  SELECT 1 FROM a WHERE id = $1 FOR UPDATE  args=[-5921015923409828986]
+    -> committed (state=None)
+  txn 2: state=None event=Upsert
+  UPSERT INTO a (id) VALUES ($1)  args=[-5921015923409828986]
+    -> committed (state=Exists)
+  txn 3: state=Exists event=Upsert
+  UPSERT INTO a (id) VALUES ($1)  args=[-5921015923409828986]
+    -> committed (state=Exists)
+  txn 4: state=Exists event=Upsert
+  UPSERT INTO a (id) VALUES ($1)  args=[-5921015923409828986]
+    -> committed (state=Exists)
+chain 2:
+  pkIdx=1 pks: a=[-5921015923409828986]
+  txn 1: state=Unknown event=Delete
+  SELECT 1 FROM a WHERE id = $1 FOR UPDATE  args=[-5921015923409828986]
+  DELETE FROM a WHERE id = $1  args=[-5921015923409828986]
+    -> committed (state=None)
+  txn 2: state=None event=Upsert
+  UPSERT INTO a (id) VALUES ($1)  args=[-5921015923409828986]
+    -> committed (state=Exists)
+  txn 3: state=Exists event=Upsert
+  UPSERT INTO a (id) VALUES ($1)  args=[-5921015923409828986]
+    -> committed (state=Exists)
+  txn 4: state=Exists event=Upsert
+  UPSERT INTO a (id) VALUES ($1)  args=[-5921015923409828986]
+    -> committed (state=Exists)
