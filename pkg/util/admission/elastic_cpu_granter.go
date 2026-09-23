@@ -230,9 +230,31 @@ func (e *elasticCPUGranter) getUtilizationLimit() float64 {
 	return e.mu.utilizationLimit
 }
 
-// hasWaitingRequests is part of the elasticCPULimiter interface.
+// hasWaitingRequests returns whether the underlying requester currently has
+// any work waiting. It is used internally by tryGrant to decide whether to
+// pull from the queue. External pollers (the scheduler-latency listener)
+// should use hasOrHadRecentWaitingRequests instead.
 func (e *elasticCPUGranter) hasWaitingRequests() bool {
 	hasWaiting, _ := e.requester.hasWaitingRequests()
+	return hasWaiting
+}
+
+// hasOrHadRecentWaitingRequests is part of the elasticCPULimiter interface.
+// The instantaneous hasWaitingRequests signal is unreliable for the
+// scheduler-latency listener because tryGrant drains the requester's queue to
+// empty as soon as tokens refill, so a 1Hz poll typically lands in a window
+// where the queue is empty even under sustained throttling. We OR that signal
+// with the requester's "had recent waiters" sticky bit (set on every Admit
+// enqueue, cleared by this read) so the listener observes any work that was
+// queued between two ticks.
+func (e *elasticCPUGranter) hasOrHadRecentWaitingRequests() bool {
+	hasWaiting, _ := e.requester.hasWaitingRequests()
+	if hadRecent, ok := e.requester.(interface {
+		hadRecentWaitingRequests() bool
+	}); ok {
+		// Always call Swap so the bit is cleared, regardless of hasWaiting.
+		return hadRecent.hadRecentWaitingRequests() || hasWaiting
+	}
 	return hasWaiting
 }
 
