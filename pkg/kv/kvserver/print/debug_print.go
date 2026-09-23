@@ -58,6 +58,10 @@ func SprintEngineKey(key storage.EngineKey) string {
 		if mvccKey, err := key.ToMVCCKey(); err == nil {
 			return SprintMVCCKey(mvccKey)
 		}
+	} else if key.IsLockTableKey() {
+		if lk, err := key.ToLockTableKey(); err == nil {
+			return fmt.Sprintf("%v (%#x): ", lk, key.Encode())
+		}
 	}
 
 	return fmt.Sprintf("%s %x (%#x): ", key.Key, key.Version, key.Encode())
