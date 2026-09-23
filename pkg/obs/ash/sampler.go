@@ -28,11 +28,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Enabled controls whether ASH sampling is active. This is a
-// system-level setting because the sampler is a process-wide
-// singleton.
+// Enabled controls whether ASH sampling is active. This is an
+// application-level setting because ASH sampling is owned by the SQL
+// process rather than the shared KV/storage layer. In shared-process
+// multi-tenancy, the single process-global sampler remains bound to the
+// system tenant's cluster settings.
 var Enabled = settings.RegisterBoolSetting(
-	settings.SystemVisible,
+	settings.ApplicationLevel,
 	"obs.ash.enabled",
 	"enable active session history sampling",
 	false,
@@ -43,11 +45,13 @@ var Enabled = settings.RegisterBoolSetting(
 // that callers of SetWorkState do not need to pass in cluster settings.
 var enabled atomic.Bool
 
-// SampleInterval controls how often ASH samples are taken. This is a
-// system-level setting because the sampler is a process-wide
-// singleton.
+// SampleInterval controls how often ASH samples are taken. This is an
+// application-level setting because ASH sampling is owned by the SQL
+// process rather than the shared KV/storage layer. In shared-process
+// multi-tenancy, the single process-global sampler remains bound to the
+// system tenant's cluster settings.
 var SampleInterval = settings.RegisterDurationSetting(
-	settings.SystemVisible,
+	settings.ApplicationLevel,
 	"obs.ash.sample_interval",
 	"interval between ASH samples",
 	time.Second,
@@ -56,10 +60,12 @@ var SampleInterval = settings.RegisterDurationSetting(
 )
 
 // BufferSize controls the maximum number of ASH samples retained in
-// memory. This is a system-level setting because the sampler is a
-// process-wide singleton.
+// memory. This is an application-level setting because ASH sampling is
+// owned by the SQL process rather than the shared KV/storage layer. In
+// shared-process multi-tenancy, the single process-global sampler
+// remains bound to the system tenant's cluster settings.
 var BufferSize = settings.RegisterIntSetting(
-	settings.SystemVisible,
+	settings.ApplicationLevel,
 	"obs.ash.buffer_size",
 	"number of ASH samples to retain in memory",
 	1_000_000,
@@ -76,7 +82,7 @@ var BufferSize = settings.RegisterIntSetting(
 // profiler when writing reports alongside CPU profiles or goroutine
 // dumps triggered by the env sampler.
 var LogInterval = settings.RegisterDurationSetting(
-	settings.SystemVisible,
+	settings.ApplicationLevel,
 	"obs.ash.log_interval",
 	"interval between periodic ASH top-N workload summary logs; "+
 		"also used as the lookback window for ASH reports written "+
@@ -90,7 +96,7 @@ var LogInterval = settings.RegisterDurationSetting(
 // in each periodic summary. Entries are ranked by sample count
 // (descending), so only the most frequently sampled workloads appear.
 var LogTopN = settings.RegisterIntSetting(
-	settings.SystemVisible,
+	settings.ApplicationLevel,
 	"obs.ash.log_top_n",
 	"maximum number of entries in periodic ASH workload summary, "+
 		"ranked by sample count descending",
