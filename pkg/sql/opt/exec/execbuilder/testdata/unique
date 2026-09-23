@@ -258,7 +258,7 @@ subtest Insert
 query T
 EXPLAIN INSERT INTO uniq VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -310,7 +310,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO uniq VALUES (4, 4, NULL, NULL, 1), (5, 5, NULL, 2, NULL)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -345,7 +345,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -411,7 +411,7 @@ vectorized: true
 query T
 EXPLAIN INSERT INTO uniq SELECT k, v, w, x, y FROM other
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -463,7 +463,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO uniq_overlaps_pk VALUES (1, 1, 1, 1), (2, 2, 2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -528,7 +528,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO uniq_hidden_pk SELECT k, v, x, y FROM other
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -847,7 +847,7 @@ regions: <hidden>
 query T
 EXPLAIN (VERBOSE) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -933,7 +933,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO uniq_enum (s, i) VALUES ('foo', 1), ('bar', 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -1000,7 +1000,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
 ON CONFLICT DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -1050,7 +1050,7 @@ vectorized: true
 query T
 EXPLAIN INSERT INTO uniq_partial VALUES (1, 1, 1), (2, 2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -1115,7 +1115,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO uniq_partial VALUES (1, NULL, 1), (2, NULL, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -1157,7 +1157,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -1224,7 +1224,7 @@ vectorized: true
 query T
 EXPLAIN INSERT INTO uniq_partial SELECT k, v, w FROM other
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -1288,7 +1288,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO uniq_partial_overlaps_pk VALUES (1, 1, 1), (2, 2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: uniq_partial_overlaps_pk(k, a, b)
@@ -1300,7 +1300,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO uniq_partial_hidden_pk SELECT k, v, x FROM other
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -1343,7 +1343,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) INSERT INTO uniq_partial_enum VALUES ('us-west', 1, 1, 'foo'), ('us-east', 2, 2, 'bar')
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -1414,7 +1414,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO uniq_partial_enum VALUES ('us-west', 1, 1, 'foo'), ('us-east', 2, 2, 'bar')
 ON CONFLICT DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -1482,7 +1482,7 @@ vectorized: true
 query T
 EXPLAIN INSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 1.0), (2, 'b', 2.0)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -1524,7 +1524,7 @@ EXPLAIN INSERT INTO uniq_uuid (id1, id2, id3, id4, id5, id6)
 VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac',
   gen_random_uuid()::BYTES, gen_random_uuid(), gen_random_uuid(), gen_random_uuid())
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -1604,7 +1604,7 @@ query T
 EXPLAIN INSERT INTO uniq_uuid (id1, id2, id3, id4, id5, id6)
 VALUES (DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -1677,7 +1677,7 @@ EXPLAIN INSERT INTO uniq_uuid (id1, id2, id3, id4, id5, id6, id7)
 SELECT gen_random_uuid(), u, gen_random_uuid()::BYTES, gen_random_uuid(),
   gen_random_uuid(), gen_random_uuid(), gen_random_uuid() FROM other
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -1748,7 +1748,7 @@ query T
 EXPLAIN INSERT INTO uniq_uuid (id4, id5, id6)
 VALUES (gen_random_uuid()::STRING, gen_random_uuid()::VARCHAR(4), gen_random_uuid()::CHAR)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -1822,7 +1822,7 @@ query T
 EXPLAIN INSERT INTO uniq_uuid (id4, id5, id6)
 VALUES (gen_random_uuid()::VARCHAR(4), gen_random_uuid()::STRING, gen_random_uuid()::STRING)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -1915,7 +1915,7 @@ SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled 
 query T
 EXPLAIN INSERT INTO uniq_uuid (id1, id2) VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac')
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -2065,7 +2065,7 @@ subtest Update
 query T
 EXPLAIN UPDATE uniq SET w = 1, x = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -2121,7 +2121,7 @@ distribution: local
 query T
 EXPLAIN UPDATE uniq SET k = 1, w = 2, x = NULL
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -2160,7 +2160,7 @@ distribution: local
 query T
 EXPLAIN UPDATE uniq SET k = 1, v = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: uniq
@@ -2180,7 +2180,7 @@ distribution: local
 query T
 EXPLAIN UPDATE uniq_overlaps_pk SET a = 1, b = 2, c = 3, d = 4 WHERE a = 5
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -2327,7 +2327,7 @@ onlyif config local
 query T
 EXPLAIN UPDATE uniq_overlaps_pk SET a = 1, b = 2, c = 3, d = 4 WHERE a = 5
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -2398,7 +2398,7 @@ distribution: local
 query T
 EXPLAIN UPDATE uniq_hidden_pk SET a = k FROM other
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -2464,7 +2464,7 @@ distribution: local
 query T
 EXPLAIN UPDATE uniq_fk_parent SET c = c + 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -2771,7 +2771,7 @@ regions: <hidden>
 query T
 EXPLAIN UPDATE uniq_fk_child SET a = 1, b = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -2829,7 +2829,7 @@ distribution: local
 query T
 EXPLAIN UPDATE uniq_fk_child SET b = 1, c = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -2883,7 +2883,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) UPDATE uniq_enum SET r = DEFAULT, s = 'baz', i = 3 WHERE r = 'eu-west' AND i > 10 AND i <= 20
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • root
@@ -2978,7 +2978,7 @@ vectorized: true
 query T
 EXPLAIN UPDATE uniq_partial SET a = 1, b = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -3046,7 +3046,7 @@ distribution: local
 query T
 EXPLAIN UPDATE uniq_partial SET k = 1, a = NULL, b = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -3091,7 +3091,7 @@ distribution: local
 query T
 EXPLAIN UPDATE uniq_partial SET k = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: uniq_partial
@@ -3110,7 +3110,7 @@ distribution: local
 query T
 EXPLAIN UPDATE uniq_partial SET b = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -3177,7 +3177,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) UPDATE uniq_partial_enum SET b = 20 WHERE a = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • root
@@ -3251,7 +3251,7 @@ query T
 EXPLAIN UPDATE uniq_uuid SET id1 = '8597b0eb-7b89-4857-858a-fabf86f6a3ac', id2 = gen_random_uuid(),
 id3 = gen_random_uuid()::BYTES, id4 = gen_random_uuid(), id5 = gen_random_uuid(), id6 = gen_random_uuid()
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -3326,7 +3326,7 @@ query T
 EXPLAIN UPDATE uniq_uuid SET id1 = '8597b0eb-7b89-4857-858a-fabf86f6a3ac', id2 = gen_random_uuid(),
 id3 = gen_random_uuid()::BYTES, id4 = gen_random_uuid(), id5 = gen_random_uuid(), id6 = gen_random_uuid()
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -3452,7 +3452,7 @@ subtest Upsert
 query T
 EXPLAIN UPSERT INTO uniq VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -3511,7 +3511,7 @@ distribution: local
 query T
 EXPLAIN UPSERT INTO uniq (k, v, w) VALUES (1, 1, 1), (2, 2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -3570,7 +3570,7 @@ distribution: local
 query T
 EXPLAIN UPSERT INTO uniq (k, w, x) VALUES (1, NULL, 1), (2, NULL, NULL)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -3630,7 +3630,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO uniq VALUES (100, 1), (200, 1) ON CONFLICT (k) DO UPDATE SET w = excluded.w + 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -3690,7 +3690,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO uniq SELECT k, v FROM other ON CONFLICT (v) DO UPDATE SET w = uniq.k + 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -3762,7 +3762,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO uniq VALUES (100, 10, 1), (200, 20, 2) ON CONFLICT (w) DO UPDATE SET w = 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -3825,7 +3825,7 @@ distribution: local
 query T
 EXPLAIN UPSERT INTO uniq_overlaps_pk SELECT k, v, x FROM other
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -3875,7 +3875,7 @@ distribution: local
 query T
 EXPLAIN UPSERT INTO uniq_hidden_pk SELECT k, v, x, y FROM other
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -3945,7 +3945,7 @@ distribution: local
 query T
 EXPLAIN UPSERT INTO uniq_fk_parent VALUES (1, 1, 1), (2, 2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -4093,7 +4093,7 @@ distribution: local
 query T
 EXPLAIN UPSERT INTO uniq_fk_child VALUES (1, 1, 1), (2, 2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -4161,7 +4161,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) UPSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • root
@@ -4279,7 +4279,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
 ON CONFLICT (s, j) DO UPDATE SET i = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • root
@@ -4373,7 +4373,7 @@ vectorized: true
 query T
 EXPLAIN UPSERT INTO uniq_partial VALUES (1, 1, 1), (2, 2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -4439,7 +4439,7 @@ distribution: local
 query T
 EXPLAIN UPSERT INTO uniq_partial (k, a) VALUES (1, 1), (2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -4509,7 +4509,7 @@ distribution: local
 query T
 EXPLAIN UPSERT INTO uniq_partial (k, a, b) VALUES (1, NULL, 1), (2, NULL, NULL)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -4552,7 +4552,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO uniq_partial (k, a) VALUES (100, 1), (200, 1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = excluded.a + 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -4638,7 +4638,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO uniq_partial SELECT k, v FROM other ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = uniq_partial.k + 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -4724,7 +4724,7 @@ distribution: local
 query T
 EXPLAIN UPSERT INTO uniq_partial_overlaps_pk VALUES (1, 1, 1), (2, 2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • upsert
 │ into: uniq_partial_overlaps_pk(k, a, b)
@@ -4738,7 +4738,7 @@ distribution: local
 query T
 EXPLAIN UPSERT INTO uniq_partial_hidden_pk SELECT k, v, x FROM other
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -4781,7 +4781,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) UPSERT INTO uniq_partial_enum VALUES ('us-west', 1, 1, 'foo'), ('us-east', 2, 2, 'bar')
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • root
@@ -4885,7 +4885,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO uniq_partial_enum VALUES ('us-west', 1, 1, 'foo'), ('us-east', 2, 2, 'bar')
 ON CONFLICT (b) WHERE c IN ('foo', 'bar', 'baz') DO UPDATE SET a = 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -4967,7 +4967,7 @@ VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac',
   gen_random_uuid()::BYTES, gen_random_uuid()::TEXT, gen_random_uuid(),
   gen_random_uuid(), gen_random_uuid())
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -5044,7 +5044,7 @@ VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac',
   gen_random_uuid()::BYTES, gen_random_uuid(), gen_random_uuid(),
   gen_random_uuid(), gen_random_uuid())
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -5207,7 +5207,7 @@ EXPLAIN
 INSERT INTO t1 (pk, pk2, a, b, j) VALUES
    (2, 2, 1, 3, '{"a": "b"}'), (4, 5, 6, 7, '{"a": "b"}');
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -5240,7 +5240,7 @@ EXPLAIN
 INSERT INTO t1 (pk, pk2, a, b, j) VALUES
    (2, 2, 1, 3, '{"a": "b"}');
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: t1(pk, pk2, a, b, j)
@@ -5264,7 +5264,7 @@ query T
 EXPLAIN INSERT INTO users (name, email)
 VALUES ('Craig Roacher', 'craig@cockroachlabs.com')
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -5317,7 +5317,7 @@ query T
 EXPLAIN INSERT INTO multiple_uniq
 VALUES (1,1,1,1), (2,2,2,2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -5377,7 +5377,7 @@ query T
 EXPLAIN INSERT INTO multiple_uniq
 VALUES (1,1,1,1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: multiple_uniq(a, b, c, d, rowid)
@@ -5396,7 +5396,7 @@ query T
 EXPLAIN INSERT INTO multiple_uniq
 VALUES (1,1,1,1), (2,2,2,2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -5469,7 +5469,7 @@ query T
 EXPLAIN INSERT INTO multiple_uniq
 VALUES (1,1,1,1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: multiple_uniq(a, b, c, d, rowid)
@@ -5489,7 +5489,7 @@ VALUES ($1, $1, $1, $1), ($2, $2, $2, $2)
 query T nosort
 EXECUTE e1(1, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -5565,7 +5565,7 @@ VALUES ($1, $1, $1, $1)
 query T nosort
 EXECUTE e2(1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: multiple_uniq(a, b, c, d, rowid)
@@ -5600,7 +5600,7 @@ query T
 EXPLAIN INSERT INTO multiple_uniq_partial
 VALUES (1,1,1,1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: multiple_uniq_partial(a, b, c, d, rowid)
@@ -5617,7 +5617,7 @@ query T
 EXPLAIN INSERT INTO multiple_uniq_partial
 VALUES (0,0,0,0)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -5712,7 +5712,7 @@ query T
 EXPLAIN
 INSERT INTO tt VALUES (2, 'east', 10, 100)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -5765,7 +5765,7 @@ EXPLAIN
 INSERT INTO t11 (pk, pk2, a, b, j) VALUES
    (2, 2, 1, 3, '{"a": "b"}');
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: t11(pk, pk2, a, b, j)

@@ -3,7 +3,7 @@
 query T
 EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE oid = 50
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • virtual table
   table: pg_class@pg_class_oid_idx
@@ -16,7 +16,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM pg_catalog.pg_class@primary WHERE oid = 50
 ----
-distribution: local
+distribution: local (oidProhibited, unsupportedPlanNode)
 ·
 • filter
 │ filter: oid = 50
@@ -27,7 +27,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE relname = 'blah'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • filter
 │ filter: relname = 'blah'
@@ -41,7 +41,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • filter
 │ filter: table_name = 'blah'
@@ -55,7 +55,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM information_schema.tables WHERE table_name > 'blah' ORDER BY table_name
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • sort
 │ order: +table_name
@@ -71,7 +71,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah' AND table_type = 'foo'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • filter
 │ filter: (table_name = 'blah') AND (table_type = 'foo')
@@ -84,7 +84,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM pg_constraint INNER LOOKUP JOIN pg_class on conrelid=pg_class.oid
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • virtual table lookup join
 │ table: pg_class@pg_class_oid_idx
@@ -96,7 +96,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM pg_constraint LEFT LOOKUP JOIN pg_class on conrelid=pg_class.oid
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • virtual table lookup join (left outer)
 │ table: pg_class@pg_class_oid_idx
@@ -135,7 +135,7 @@ WHERE
 ORDER BY
         c.conname
 ----
-distribution: local
+distribution: local (castToOidProhibited, unsupportedPlanNode)
 ·
 • sort
 │ order: +conname
@@ -189,7 +189,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE oid = 50 LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • virtual table
   table: pg_class@pg_class_oid_idx
@@ -204,7 +204,7 @@ CREATE DATABASE t
 query T
 EXPLAIN SHOW GRANTS ON DATABASE t
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -250,7 +250,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM crdb_internal.tables WHERE database_name = 'foo';
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • filter
 │ filter: database_name = 'foo'
@@ -261,7 +261,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM crdb_internal.tables WHERE parent_id = 1;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • filter
 │ filter: parent_id = 1
@@ -273,7 +273,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM crdb_internal.tables WHERE database_name = 'foo' AND drop_time IS NULL;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • virtual table
   table: tables@tables_database_name_idx (partial index)
@@ -282,7 +282,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM crdb_internal.tables WHERE parent_id = 1 AND drop_time IS NULL;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • virtual table
   table: tables@tables_parent_id_idx (partial index)
@@ -293,7 +293,7 @@ distribution: local
 query T
 SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.jobs WHERE status = 'paused'] WHERE info NOT LIKE 'vectorized%'
 ----
-distribution: local
+distribution: local (funcDistSQLBlocklist)
 ·
 • group (scalar)
 │
@@ -325,7 +325,7 @@ distribution: local
 query T
 SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.jobs WHERE job_type = 'CHANGEFEED'] WHERE info NOT LIKE 'vectorized%'
 ----
-distribution: local
+distribution: local (funcDistSQLBlocklist)
 ·
 • group (scalar)
 │
@@ -379,7 +379,7 @@ WHERE
     AND t.relname = 't91012'
     AND a.atttypid IN (SELECT oid FROM pg_type WHERE typname = ANY (ARRAY['int8']));
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • virtual table lookup join
 │ table: pg_class@pg_class_oid_idx
@@ -409,7 +409,7 @@ WHERE
     AND t.relname = 't91012'
     AND NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = ANY (ARRAY['typefoo']) AND a.atttypid = oid);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • virtual table lookup join
 │ table: pg_class@pg_class_oid_idx
@@ -442,7 +442,7 @@ WHERE
     AND NOT EXISTS(SELECT 1 FROM pg_type AS el WHERE el.oid = t.typelem AND el.typarray = t.oid)
     AND t.typname LIKE 'myt%';
 ----
-distribution: local
+distribution: local (oidProhibited, unsupportedPlanNode)
 ·
 • virtual table lookup join (anti)
 │ table: pg_type@pg_type_oid_idx
@@ -466,7 +466,7 @@ WHERE
     AND EXISTS(SELECT 1 FROM pg_type AS el WHERE el.oid = t.typelem AND el.typarray = t.oid)
     AND t.typname LIKE 'myt%';
 ----
-distribution: local
+distribution: local (oidProhibited, unsupportedPlanNode)
 ·
 • virtual table lookup join (semi)
 │ table: pg_type@pg_type_oid_idx
@@ -491,7 +491,7 @@ FROM
 ORDER BY
 	database_name
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • sort
 │ order: +datname
@@ -512,7 +512,7 @@ query T
 EXPLAIN SELECT i.relname, ix.indisprimary FROM pg_class AS t, pg_class AS i, pg_index AS ix
         WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND t.relkind = 'r';
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • hash join
 │ equality: (oid) = (indexrelid)

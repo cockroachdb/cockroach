@@ -15,7 +15,7 @@ SET parallelize_multi_key_lookup_joins_enabled = true;
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyz INNER LOOKUP JOIN uv ON x = u ORDER BY x, y DESC, z, u, v DESC
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • lookup join (inner)

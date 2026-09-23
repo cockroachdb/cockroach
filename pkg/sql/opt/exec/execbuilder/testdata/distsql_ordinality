@@ -35,7 +35,7 @@ start_key           end_key       replicas  lease_holder
 query T
 EXPLAIN (VERBOSE) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY
 ----
-distribution: local
+distribution: local (ordinalityProhibited)
 vectorized: true
 ·
 • ordinality
@@ -51,7 +51,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY
 ----
-distribution: local
+distribution: local (ordinalityProhibited)
 ·
 • ordinality
 │

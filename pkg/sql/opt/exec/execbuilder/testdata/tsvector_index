@@ -12,7 +12,7 @@ CREATE TABLE a (
 query T
 EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: a@a_pkey
@@ -25,7 +25,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'Foo'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: a@a_pkey
@@ -38,7 +38,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo' OR b @@ 'bar'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: a@a_pkey
@@ -55,7 +55,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo | bar'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: a@a_pkey
@@ -72,7 +72,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo | bar' OR b @@ 'baz'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: a@a_pkey
@@ -92,7 +92,7 @@ SET enable_zigzag_join = true
 query T
 EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo & bar'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: a@a_pkey
@@ -110,7 +110,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo <-> bar'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: a@a_pkey
@@ -132,7 +132,7 @@ RESET enable_zigzag_join
 query T
 EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo & !bar'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b @@ '''foo'' & !''bar'''
@@ -149,7 +149,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM a@a_b_idx WHERE b @@ 'ba:*'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • inverted filter
 │ inverted column: b_inverted_key

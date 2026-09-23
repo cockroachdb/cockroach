@@ -180,7 +180,7 @@ CREATE TABLE t1 (k INT PRIMARY KEY, v INT, other INT, INDEX idx_v_visible(v) VIS
 query T
 EXPLAIN SELECT * FROM t1 WHERE v = 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: t1@t1_pkey
@@ -200,7 +200,7 @@ CREATE INDEX idx_v_invisible ON t1(v) NOT VISIBLE
 query T
 EXPLAIN SELECT v FROM t1 WHERE v = 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: v = 2
@@ -214,7 +214,7 @@ distribution: local
 query T
 EXPLAIN SELECT DISTINCT ON (v) t1 FROM t1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: v
@@ -230,7 +230,7 @@ distribution: local
 query T
 EXPLAIN UPDATE t1 SET k = 1 WHERE v > 0
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: t1
@@ -251,7 +251,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM t1 WHERE v > 0
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete
 │ from: t1
@@ -269,7 +269,7 @@ distribution: local
 query T
 EXPLAIN SELECT DISTINCT v FROM t1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: v
@@ -283,7 +283,7 @@ distribution: local
 query T
 EXPLAIN SELECT v FROM t1 ORDER BY v
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +v
@@ -300,7 +300,7 @@ CREATE INDEX idx_hash_invisible ON t1(other) USING HASH WITH (bucket_count=12) N
 query T
 EXPLAIN SELECT * FROM t1 WHERE other > 100 ORDER BY other LIMIT 10;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • top-k
 │ order: +other
@@ -321,7 +321,7 @@ CREATE INDEX idx_plus ON t1((v + other)) NOT VISIBLE
 query T
 EXPLAIN SELECT * FROM t1 WHERE (v + other) = 100
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (v + other) = 100
@@ -344,7 +344,7 @@ DROP INDEX idx_plus
 query T
 EXPLAIN SELECT v FROM t1@idx_v_invisible WHERE v = 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -361,7 +361,7 @@ CREATE INDEX idx_v_invisible ON t1(v) WHERE v > 0 NOT VISIBLE
 query T
 EXPLAIN SELECT * FROM t1 WHERE v > 10;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: v > 10
@@ -375,7 +375,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM t1@{FORCE_INDEX=idx_v_invisible} WHERE v > 10;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: t1@t1_pkey
@@ -412,7 +412,7 @@ CREATE INDEX idx_2_invisible ON t1(col2) NOT VISIBLE
 query T
 EXPLAIN SELECT col1, col2 FROM t1 WHERE col1 = 1 AND col2 = 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (col1 = 1) AND (col2 = 2)
@@ -441,7 +441,7 @@ SELECT * FROM t2 INNER LOOKUP JOIN t1 USING(col1)
 query T
 EXPLAIN SELECT t2.col1 FROM t2 JOIN t1 ON t1.col1 = t2.col1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • hash join
 │ equality: (col1) = (col1)
@@ -461,7 +461,7 @@ distribution: local
 query T
 EXPLAIN SELECT t2.col1 FROM t2 CROSS MERGE JOIN t1 WHERE t1.col1 = t2.col1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • merge join
 │ equality: (col1) = (col1)
@@ -486,7 +486,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM t1 JOIN t2 ON t1.col1 = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • cross join
 │
@@ -507,7 +507,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM t1, LATERAL (SELECT * FROM t2 WHERE col1 > 0) WHERE t1.col1 > 0;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • cross join
 │
@@ -550,7 +550,7 @@ CREATE TABLE t1 (
 query T
 EXPLAIN SELECT * FROM t1 ORDER BY v <-> '[3,1,2]' LIMIT 5;
 ----
-distribution: local
+distribution: local (vectorSearchProhibited)
 ·
 • top-k
 │ order: +column9
@@ -577,7 +577,7 @@ CREATE INDEX idx_vec_invisible ON t1 USING CSPANN (v) NOT VISIBLE;
 query T
 EXPLAIN SELECT * FROM t1 ORDER BY v <-> '[3,1,2]' LIMIT 5;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • top-k
 │ order: +column9
@@ -598,7 +598,7 @@ CREATE VECTOR INDEX idx_partial_invisible ON t1 (a, v) WHERE a > 10 NOT VISIBLE
 query T
 EXPLAIN SELECT * FROM t1 WHERE a IN (10, 20) ORDER BY v <-> '[3,1,2]' LIMIT 5;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • top-k
 │ order: +column9
@@ -621,7 +621,7 @@ ALTER INDEX idx_partial_invisible VISIBLE
 query T
 EXPLAIN SELECT * FROM t1 WHERE a IN (20, 30) ORDER BY v <-> '[3,1,2]' LIMIT 5;
 ----
-distribution: local
+distribution: local (vectorSearchProhibited)
 ·
 • top-k
 │ order: +column9
@@ -657,7 +657,7 @@ CREATE TABLE t1 (
 query T
 EXPLAIN SELECT * FROM t1 WHERE st_covers(geom, 'LINESTRING ( 0 0, 0 2 )'::geometry)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: st_covers(geom, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040')
@@ -684,7 +684,7 @@ CREATE INDEX idx_geom_invisible ON t1 USING GIN (geom) NOT VISIBLE;
 query T
 EXPLAIN SELECT * FROM t1 WHERE st_covers(geom, 'LINESTRING ( 0 0, 0 2 )'::geometry)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: st_covers(geom, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040')
@@ -702,7 +702,7 @@ CREATE INVERTED INDEX idx_data_invisible ON t1(data) WHERE id > 10 NOT VISIBLE
 query T
 EXPLAIN SELECT * FROM t1 WHERE data @> '{"foo": "1"}' AND id > 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (data @> '{"foo": "1"}') AND (id > 10)
@@ -728,7 +728,7 @@ SELECT * FROM t1 INNER INVERTED JOIN t2 ON st_covers(t1.geom, t2.geom2)
 query T
 EXPLAIN SELECT * FROM t1 INNER INVERTED JOIN t2@idx_geom2_invisible ON st_covers(t1.geom, t2.geom2)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: t2@t2_pkey
@@ -763,7 +763,7 @@ CREATE UNIQUE INDEX idx_v_unique_invisible ON t1(v) NOT VISIBLE
 query T
 EXPLAIN SELECT * FROM t1 WHERE v > 0
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: v > 0
@@ -777,7 +777,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO t1 VALUES (1, 2) ON CONFLICT DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert
 │ into: t1(k, v)
@@ -803,7 +803,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO t1 VALUES (1, 2) ON CONFLICT(v) DO UPDATE SET k = t1.v
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • upsert
 │ into: t1(k, v)
@@ -827,7 +827,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO t1 (k, v) SELECT * FROM t1 WHERE v IN (1, 2) ON CONFLICT DO NOTHING;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert
 │ into: t1(k, v)
@@ -857,7 +857,7 @@ distribution: local
 query T
 EXPLAIN UPSERT INTO t1(k, v) VALUES (1, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • upsert
 │ into: t1(k, v)
@@ -899,7 +899,7 @@ CREATE TABLE child (
 query T
 EXPLAIN DELETE FROM child WHERE p = 4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete
 │ from: child
@@ -918,7 +918,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM parent where p = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -950,7 +950,7 @@ distribution: local
 query T
 EXPLAIN UPDATE parent SET p = p+1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1006,7 +1006,7 @@ CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other))
 query T
 EXPLAIN SELECT * FROM parent WHERE other > 0
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: other > 0
@@ -1021,7 +1021,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO child VALUES (200, 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: child(c, p)
@@ -1034,7 +1034,7 @@ distribution: local
 query T
 EXPLAIN UPSERT INTO child VALUES (200, 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -1094,7 +1094,7 @@ CREATE TABLE child_update (
 query T
 EXPLAIN DELETE FROM parent where p = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1139,7 +1139,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM parent WHERE other > 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -1191,7 +1191,7 @@ distribution: local
 query T
 EXPLAIN UPDATE parent SET p = p+1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1384,7 +1384,7 @@ t  t_pkey  other  true
 query T
 EXPLAIN SELECT * FROM t WHERE other > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1407,7 +1407,7 @@ t  t_pkey  other  true
 query T
 EXPLAIN SELECT * FROM t WHERE other > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: other > 2
@@ -1433,7 +1433,7 @@ t  t_pkey  other  true
 query T
 EXPLAIN SELECT * FROM t WHERE other > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1457,7 +1457,7 @@ off
 query T
 EXPLAIN SELECT * FROM t WHERE v = 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: v = 2
@@ -1483,7 +1483,7 @@ t_pkey         v  true
 query T
 EXPLAIN SELECT * FROM t WHERE v = 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1684,7 +1684,7 @@ SET testing_optimizer_random_seed=6320964980407535655
 query T
 EXPLAIN SELECT * FROM t WHERE v = 'foo'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: v = 'foo'
@@ -1700,7 +1700,7 @@ SET testing_optimizer_random_seed=3164997759865821235
 query T
 EXPLAIN SELECT * FROM t WHERE v = 'foo'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: t@t_pkey

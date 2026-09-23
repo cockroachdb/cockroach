@@ -7,7 +7,7 @@ CREATE TABLE t (a INT PRIMARY KEY)
 query T
 SELECT info FROM [EXPLAIN (DISTSQL) SELECT * FROM (SELECT avg(a) OVER () FROM t)] WHERE info NOT LIKE 'vectorized%'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • window
 │
@@ -40,7 +40,7 @@ SELECT info FROM [
   LIMIT 92:::INT8
 ] WHERE info NOT LIKE 'vectorized%'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • render
 │

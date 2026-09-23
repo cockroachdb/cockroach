@@ -5161,6 +5161,7 @@ func maybeMoveSingleFlowToGateway(planCtx *PlanningCtx, plan *PhysicalPlan, rowC
 			planCtx.planner.curPlan.flags.Unset(planFlagFullyDistributed)
 			planCtx.planner.curPlan.flags.Unset(planFlagPartiallyDistributed)
 			plan.Distribution = physicalplan.LocalPlan
+			planCtx.planner.curPlan.distributionReason = "single flow moved to gateway"
 		}
 	}
 }

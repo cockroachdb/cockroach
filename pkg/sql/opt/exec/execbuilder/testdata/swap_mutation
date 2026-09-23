@@ -20,7 +20,7 @@ INSERT INTO k VALUES (1)
 query T
 EXPLAIN UPDATE k SET k = 2 WHERE k = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update swap
 │ table: k
@@ -46,7 +46,7 @@ SELECT * FROM k
 query T
 EXPLAIN DELETE FROM k WHERE k = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete swap
 │ from: k
@@ -83,7 +83,7 @@ INSERT INTO kabc VALUES (1, NULL, '1999-12-31 23:59:59', NULL)
 query T
 EXPLAIN UPDATE kabc SET b = '2000-01-01 00:00:00' WHERE k = 1 AND a IS NULL AND b = '1999-12-31 23:59:59' AND c IS NULL
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update swap
 │ table: kabc
@@ -108,7 +108,7 @@ SELECT * FROM kabc
 query T
 EXPLAIN DELETE FROM kabc WHERE k = 1 AND a IS NULL AND b = '2000-01-01 00:00:00' AND c IS NULL
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete swap
 │ from: kabc
@@ -148,7 +148,7 @@ INSERT INTO abcde (a, b) VALUES (1, 1)
 query T
 EXPLAIN UPDATE abcde SET b = 0 WHERE a = 1 AND b = 1 AND e = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update swap
 │ table: abcde
@@ -176,7 +176,7 @@ SELECT * FROM abcde
 query T
 EXPLAIN DELETE FROM abcde WHERE a = 1 AND b = 1 AND e = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete swap
 │ from: abcde
@@ -216,7 +216,7 @@ INSERT INTO xyz VALUES (1, 2, 3), (4, 5, 6)
 query T
 EXPLAIN UPDATE xyz SET x = 4, y = 7, z = 8 WHERE x = 4 AND y IS NOT DISTINCT FROM 5 AND z IS NOT DISTINCT FROM 6
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update swap
 │ table: xyz
@@ -245,7 +245,7 @@ SELECT * FROM xyz WHERE x = 4
 query T
 EXPLAIN DELETE FROM xyz WHERE x = 1 AND y = 2 AND z = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete swap
 │ from: xyz
@@ -283,7 +283,7 @@ INSERT INTO pq VALUES (0, 1)
 query T
 EXPLAIN UPDATE pq SET q = NULL WHERE p IS NOT DISTINCT FROM 0 AND q IS NOT DISTINCT FROM 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update swap
 │ table: pq
@@ -310,7 +310,7 @@ SELECT * FROM pq
 query T
 EXPLAIN DELETE FROM pq WHERE p IS NOT DISTINCT FROM 0 AND q IS NOT DISTINCT FROM NULL
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete swap
 │ from: pq
@@ -349,7 +349,7 @@ INSERT INTO mno VALUES ('m1', 'n1', 'o'), ('m2', 'n2', NULL), ('m3', 'n3', '')
 query T
 EXPLAIN UPDATE mno SET o = 'o' || o WHERE m = 'm1' AND n = 'n1' AND o = 'o'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update swap
 │ table: mno
@@ -393,7 +393,7 @@ m3
 query T
 EXPLAIN DELETE FROM mno WHERE m = 'm1' AND n = 'n1' AND o = 'oo'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete swap
 │ from: mno
@@ -444,7 +444,7 @@ INSERT INTO uvw VALUES ('a8ebe7c3-7fd9-4a75-a56a-242a1088d295', 'abcde', '{1, 2,
 query T
 EXPLAIN UPDATE uvw SET v = v || 'f', w = w || 4 WHERE u = 'a8ebe7c3-7fd9-4a75-a56a-242a1088d295' AND v = 'abcde' AND w = '{1, 2, 3}'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update swap
 │ table: uvw
@@ -473,7 +473,7 @@ a8ebe7c3-7fd9-4a75-a56a-242a1088d295  abcdef  {1,2,3,4}
 query T
 EXPLAIN DELETE FROM uvw WHERE u = 'a8ebe7c3-7fd9-4a75-a56a-242a1088d295' AND v = 'abcdef' AND w = '{1, 2, 3, 4}'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete swap
 │ from: uvw
@@ -529,7 +529,7 @@ INSERT INTO rstuv VALUES (5, 6, 7, 8, NULL), (15, 16, NULL, 18, 19)
 query T
 EXPLAIN UPDATE rstuv SET t = 27, u = 28, v = 29 WHERE r = 5 AND s = 6 AND t = 7 AND u = 8 AND v IS NULL
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: rstuv
@@ -589,7 +589,7 @@ SELECT * FROM rstuv ORDER BY r, s
 query T
 EXPLAIN DELETE FROM rstuv WHERE r = 5 AND s = 6 AND t = 27 AND u = 28 AND v = 29
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete
 │ from: rstuv
@@ -648,7 +648,7 @@ INSERT INTO rstuv VALUES (5, 6, 7, 8, NULL), (15, 16, NULL, 18, 19)
 query T
 EXPLAIN UPDATE rstuv SET t = 27 WHERE r = 5 AND s = 6 AND t = 7
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: rstuv
@@ -666,7 +666,7 @@ distribution: local
 query T
 EXPLAIN UPDATE rstuv SET t = 27 WHERE r = 5 AND s = 6 AND t = 7 AND u = 8 AND v IS NULL
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: rstuv

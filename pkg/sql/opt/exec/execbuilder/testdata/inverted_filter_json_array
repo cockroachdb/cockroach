@@ -24,7 +24,7 @@ CREATE INVERTED INDEX foo_inv ON array_tab(b)
 query T
 EXPLAIN SELECT a FROM json_tab WHERE b @> '1' ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +a
@@ -38,7 +38,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM json_tab WHERE b @> '[1, 2]' OR b @> '[3, 4]' ORDER BY a
 ----
-distribution: local
+distribution: local (invertedFilterProhibited)
 ·
 • sort
 │ order: +a
@@ -56,7 +56,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM json_tab WHERE b @> '{"a": {}}' ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +a
@@ -74,7 +74,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM json_tab WHERE b @> '{"a": []}' ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +a
@@ -92,7 +92,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM json_tab WHERE b @> '[[1, 2]]' OR b @> '[[3, 4]]' ORDER BY a
 ----
-distribution: local
+distribution: local (invertedFilterProhibited)
 ·
 • filter
 │ filter: (b @> '[[1, 2]]') OR (b @> '[[3, 4]]')
@@ -116,7 +116,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM json_tab@foo_inv WHERE b @> '[1]' OR b @> '[2]' ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +a
@@ -134,7 +134,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM json_tab@foo_inv WHERE b @> '[3]' OR b @> '[[1, 2]]' ORDER BY a
 ----
-distribution: local
+distribution: local (invertedFilterProhibited)
 ·
 • filter
 │ filter: (b @> '[3]') OR (b @> '[[1, 2]]')
@@ -160,7 +160,7 @@ EXPLAIN SELECT a FROM json_tab
 WHERE (b @> '[1]'::json OR b @> '[2]'::json) AND (b @> '3'::json OR b @> '"bar"'::json)
 ORDER BY a
 ----
-distribution: local
+distribution: local (invertedFilterProhibited)
 ·
 • sort
 │ order: +a
@@ -178,7 +178,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM json_tab WHERE b @> '[1]' AND a % 2 = 0 ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +a
@@ -195,7 +195,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM json_tab WHERE b @> '[1]' OR a = 44 ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: a
@@ -226,7 +226,7 @@ EXPLAIN SELECT a FROM json_tab@foo_inv WHERE b @> '[1]' OR sqrt(a::decimal) = 2 
 query T
 EXPLAIN SELECT a FROM json_tab WHERE b @> '[1]' OR sqrt(a::decimal) = 2 ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (b @> '[1]') OR (sqrt(a::DECIMAL) = 2)
@@ -240,7 +240,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM array_tab@foo_inv WHERE b @> '{}' ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +a
@@ -258,7 +258,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM array_tab WHERE b @> '{1}' AND a % 2 = 0 ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +a
@@ -275,7 +275,7 @@ distribution: local
 query T
 EXPLAIN SELECT a FROM array_tab WHERE b @> '{1}' OR a = 1 ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: a
@@ -306,7 +306,7 @@ EXPLAIN SELECT a FROM array_tab@foo_inv WHERE (b @> '{2}' AND a = 3) OR b[0] = a
 query T
 EXPLAIN SELECT a FROM array_tab WHERE (b @> '{2}' AND a = 3) OR b[0] = a ORDER BY a
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: ((b @> ARRAY[2]) AND (a = 3)) OR (a = b[0])

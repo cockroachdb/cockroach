@@ -13,7 +13,7 @@ CREATE MATERIALIZED VIEW v AS SELECT x, y FROM t
 query T
 EXPLAIN SELECT * FROM v
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -27,7 +27,7 @@ CREATE INDEX i ON v (y)
 query T
 EXPLAIN SELECT * FROM v WHERE y = 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: v@v_pkey

@@ -14,7 +14,7 @@ CREATE TABLE geo_table2(
 query T
 EXPLAIN (DISTSQL) SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: st_intersects('010100000000000000000008400000000000000840', geom)
@@ -36,7 +36,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUVFFP2zAQft-vs
 query T
 EXPLAIN (DISTSQL) SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: st_intersects('010100000000000000000008400000000000000840', geom)
@@ -58,7 +58,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUVFFP2zAQft-vs
 query T
 EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: st_intersects('010100000000000000000008400000000000000840', geom)
@@ -78,7 +78,7 @@ distribution: local
 query T
 EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_DFullyWithin('POINT(3.0 3.0)'::geometry, geom, 1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: st_dfullywithin('010100000000000000000008400000000000000840', geom, 1.0)
@@ -102,7 +102,7 @@ SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled 
 query T
 EXPLAIN SELECT k FROM geo_table2 WHERE geom && 'POINT(3.0 3.0)'::geometry
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: geom && '010100000000000000000008400000000000000840'
@@ -122,7 +122,7 @@ distribution: local
 query T
 EXPLAIN SELECT k FROM geo_table2 WHERE 'POINT(3.0 3.0)'::geometry::box2d && geom
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: 'BOX(3 3,3 3)' && geom
@@ -142,7 +142,7 @@ distribution: local
 query T
 EXPLAIN SELECT k FROM geo_table2 WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ~ geom
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: '010200000002000000000000000000F03F000000000000F03F00000000000014400000000000001440' ~ geom
@@ -162,7 +162,7 @@ distribution: local
 query T
 EXPLAIN SELECT k FROM geo_table2 WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: geom ~ 'BOX(1 1,5 5)'

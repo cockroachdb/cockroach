@@ -152,7 +152,7 @@ SET vectorize=on
 query T
 EXPLAIN ALTER INDEX users@bar RENAME TO woo
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • alter index
 

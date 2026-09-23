@@ -11,7 +11,7 @@ CREATE TABLE xyz (
 query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: y, z
@@ -25,7 +25,7 @@ distribution: local
 query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: y, z
@@ -39,7 +39,7 @@ distribution: local
 query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +y
@@ -56,7 +56,7 @@ distribution: local
 query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +y,+z
@@ -73,7 +73,7 @@ distribution: local
 query T
 EXPLAIN SELECT DISTINCT y + z AS r FROM xyz ORDER BY y + z
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: r
@@ -92,7 +92,7 @@ distribution: local
 query T
 EXPLAIN SELECT DISTINCT y AS w, z FROM xyz ORDER BY z
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • distinct
 │ distinct on: y, z
@@ -106,7 +106,7 @@ distribution: local
 query T
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +y
@@ -122,7 +122,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT x FROM xyz
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -134,7 +134,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT x, y, z FROM xyz
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -147,7 +147,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT z FROM (SELECT y, z FROM xyz WHERE y > 1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • distinct
@@ -186,7 +186,7 @@ CREATE TABLE abcd (
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT 1 AS z, d, b FROM abcd ORDER BY d, b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -206,7 +206,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b FROM abcd
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • distinct
@@ -225,7 +225,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b, c FROM abcd
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -237,7 +237,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b, c, d FROM abcd
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -252,7 +252,7 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT, UNIQUE INDEX idx(v))
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • distinct
@@ -272,7 +272,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • distinct
@@ -292,7 +292,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx WHERE v > 0
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -308,7 +308,7 @@ CREATE TABLE kv2 (k INT PRIMARY KEY, v INT NOT NULL, UNIQUE INDEX idx(v))
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv2@idx
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan

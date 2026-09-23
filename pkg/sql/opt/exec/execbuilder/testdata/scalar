@@ -10,7 +10,7 @@ CREATE TABLE t (a INT, b INT, c INT, d INT, j JSONB, s STRING)
 query T
 EXPLAIN (VERBOSE) SELECT 1 + 2 AS r
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -21,7 +21,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT true AS r
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -32,7 +32,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT false AS r
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -43,7 +43,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (1, 2) AS r
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -54,7 +54,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (true, false) AS r
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -65,7 +65,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT 1 + 2 AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -81,7 +81,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a + 2 AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -97,7 +97,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a >= 5 AND b <= 10 AND c < 4 AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -113,7 +113,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a >= 5 OR b <= 10 OR c < 4 AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -129,7 +129,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT NOT (a = 5) AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -145,7 +145,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT NOT (a > 5 AND b >= 10) AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -161,7 +161,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (a >= 5 AND b <= 10) OR (a <= 10 AND c > 5) AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -177,7 +177,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT NOT (a >= 5 OR b <= 10) AND NOT (c >= 10) AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -193,7 +193,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (a, b) = (1, 2)  AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -209,7 +209,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a IN (1, 2) AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -225,7 +225,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (a, b) IN ((1, 2), (3, 4)) AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -241,7 +241,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (a, b + c, 5 + d * 2) = (b+c, 8, a - c)  AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -257,7 +257,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT ((a, b), (c, d)) = ((1, 2), (3, 4))  AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -273,7 +273,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (a, (b, 'a'), (c, 'b', 5)) = (9, (a+c, s), (5, s, a)) AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -289,7 +289,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a IS NULL AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -305,7 +305,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM NULL AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -321,7 +321,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (a, b) IS NULL AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -337,7 +337,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (a, b) IS NOT DISTINCT FROM NULL AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -353,7 +353,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM b AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -369,7 +369,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a IS NOT NULL AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -385,7 +385,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM NULL AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -401,7 +401,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (a, b) IS NOT NULL AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -417,7 +417,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (a, b) IS DISTINCT FROM NULL AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -433,7 +433,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM b AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -449,7 +449,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT +a + (-b) AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -465,7 +465,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -481,7 +481,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 ELSE 2 END AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -497,7 +497,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -514,7 +514,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 END AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -530,7 +530,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 2 THEN 1 END AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -556,7 +556,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT length(s) FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -572,7 +572,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT j @> '{"a": 1}' AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -588,7 +588,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT '{"a": 1}' <@ j AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -604,7 +604,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT j->>'a' AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -620,7 +620,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT j->'a' AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -636,7 +636,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT j ? 'a' AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -652,7 +652,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT j ?| ARRAY['a', 'b', 'c'] AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -668,7 +668,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT j ?& ARRAY['a', 'b', 'c'] AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -684,7 +684,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT j#>ARRAY['a'] AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -700,7 +700,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT j#>>ARRAY['a'] AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -717,7 +717,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT CAST(a AS string), b::float FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -734,7 +734,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT CAST(a + b + c AS string) FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -750,7 +750,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT s::VARCHAR(2) FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -766,7 +766,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -788,7 +788,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b, c) FROM (VALUES (1, 2, 3), (NULL, 4, 5), (NULL, NULL, 6), (NULL, NULL, NULL)) AS v(a, b, c)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -814,7 +814,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a BETWEEN b AND d
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -834,7 +834,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a NOT BETWEEN b AND d
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -854,7 +854,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a BETWEEN SYMMETRIC b AND d AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -870,7 +870,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a NOT BETWEEN SYMMETRIC b AND d AS r FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -886,7 +886,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT ARRAY[]:::int[] FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -902,7 +902,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT ARRAY[1, 2, 3] FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -918,7 +918,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT ARRAY[a + 1, 2, 3] FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -934,7 +934,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT 1 > ANY ARRAY[a + 1, 2, 3] FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -950,7 +950,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT 1 = ANY (1, 2, 3) FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -966,7 +966,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT 1 = ANY () FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -982,7 +982,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT least(NULL, greatest(NULL, least(1, NULL), 2, 3), greatest(5, 6), a) FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -1000,7 +1000,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_attribute WHERE attrelid='t'::regclass
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1012,7 +1012,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_proc WHERE oid = 1::regproc
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1024,7 +1024,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_proc WHERE oid = '12345'::regprocedure
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1037,7 +1037,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) select * from pg_class where oid = 't'::regclass
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1049,7 +1049,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_class WHERE oid = '3'::OID
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1061,7 +1061,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_class WHERE oid = 't'::regclass::oid
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1073,7 +1073,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_class WHERE oid = 101::oid
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1088,7 +1088,7 @@ CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_type WHERE oid = 'status'::regtype
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1100,7 +1100,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_type WHERE oid = 'bool'::regtype
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1112,7 +1112,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_type WHERE oid = 'bool[]'::regtype
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1124,7 +1124,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_type WHERE oid = 1::regtype
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1136,7 +1136,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_type WHERE oid = 1::regtype::oid
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1148,7 +1148,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_namespace WHERE oid = 'public'::regnamespace
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -1160,7 +1160,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT CASE WHEN current_database() = 'test' THEN 42 ELSE 1/3 END
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -1172,7 +1172,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT random(), current_database()
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • values
@@ -1186,7 +1186,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1::FLOAT + length(upper(concat('a', 'b', 'c')))::FLOAT AS r1,
                          1::FLOAT + length(upper(concat('a', 'b', s)))::FLOAT AS r2 FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -1203,7 +1203,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT generate_series(1,10) ORDER BY 1 DESC)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -1235,7 +1235,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT a FROM t ORDER BY b)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -1272,7 +1272,7 @@ CREATE TABLE t0(c0 DECIMAL UNIQUE); INSERT INTO t0(c0) VALUES(0);
 query T
 EXPLAIN (VERBOSE) SELECT t0.c0 FROM t0 WHERE t0.c0 BETWEEN t0.c0 AND INTERVAL '-1'::DECIMAL
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -1291,7 +1291,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t0 WHERE (CASE WHEN (t0.c0) IN (t0.c0) THEN ARRA
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t0 WHERE (CASE WHEN (t0.c0) IN (t0.c0) THEN ARRAY[] ELSE ARRAY[NULL] END) IS NULL
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -1310,7 +1310,7 @@ vectorized: true
 query T
 EXPLAIN SELECT 2-(9223372036854775807+436256318) < (CASE WHEN false THEN -1 END)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • values
   size: 1 column, 1 row
@@ -1318,7 +1318,7 @@ distribution: local
 query T
 EXPLAIN SELECT (9223372036854775807+436256318)-2 < (CASE WHEN false THEN -1 END)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • values
   size: 1 column, 1 row
@@ -1326,7 +1326,7 @@ distribution: local
 query T
 EXPLAIN SELECT (9223372036854775807+436256318)+2 < (CASE WHEN false THEN -1 END)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • values
   size: 1 column, 1 row

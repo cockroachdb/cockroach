@@ -53,7 +53,7 @@ GRANT SELECT ON crdb_internal.tables TO root;
 query T
 EXPLAIN (VERBOSE) SELECT * FROM system.privileges WHERE path = 'vtable/crdb_internal/tables'
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan

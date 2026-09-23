@@ -185,7 +185,7 @@ __forecast__  {a}  1988-08-08 00:00:00 +0000 UTC  12  12  0  1
 query T
 EXPLAIN SELECT * FROM g WHERE a >= 9 AND a < 12
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 3 (25% of the table; stats collected <hidden> ago; using stats forecast)
@@ -413,7 +413,7 @@ WHERE stat->>'name' = '__forecast__'
 query T
 EXPLAIN SELECT * FROM s WHERE b >= 0 AND b < 12
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (100% of the table; stats collected <hidden> ago; using stats forecast)
@@ -592,7 +592,7 @@ __forecast__  {h}  1988-08-08 00:00:00 +0000 UTC  24  24  0  7
 query T
 EXPLAIN SELECT * FROM c WHERE h >= '1988-08-07'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 24 (100% of the table; stats collected <hidden> ago; using stats forecast)
@@ -876,7 +876,7 @@ WHERE stat->>'name' = '__forecast__';
 query T
 EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -905,7 +905,7 @@ SET optimizer_use_forecasts = off
 query T
 EXPLAIN SELECT * FROM g WHERE a > 8
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (11% of the table; stats collected <hidden> ago)
@@ -928,7 +928,7 @@ scan g
 query T
 EXPLAIN SELECT * FROM s WHERE b < 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -952,7 +952,7 @@ scan s
 query T
 EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (4.2% of the table; stats collected <hidden> ago)
@@ -975,7 +975,7 @@ scan c
 query T
 EXPLAIN SELECT * FROM x WHERE a > 16
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (25% of the table; stats collected <hidden> ago)
@@ -998,7 +998,7 @@ scan x
 query T
 EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -1025,7 +1025,7 @@ RESET optimizer_use_forecasts
 query T
 EXPLAIN SELECT * FROM g WHERE a > 8
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 3 (25% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1049,7 +1049,7 @@ scan g
 query T
 EXPLAIN SELECT * FROM s WHERE b < 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (100% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1073,7 +1073,7 @@ scan s
 query T
 EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1097,7 +1097,7 @@ scan c
 query T
 EXPLAIN SELECT * FROM x WHERE a > 16
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 2 (50% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1121,7 +1121,7 @@ scan x
 query T
 EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -1151,7 +1151,7 @@ SET CLUSTER SETTING sql.stats.forecasts.enabled = false
 query T
 EXPLAIN SELECT * FROM g WHERE a > 8
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (11% of the table; stats collected <hidden> ago)
@@ -1161,7 +1161,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM s WHERE b < 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -1171,7 +1171,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (4.2% of the table; stats collected <hidden> ago)
@@ -1181,7 +1181,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM x WHERE a > 16
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (25% of the table; stats collected <hidden> ago)
@@ -1191,7 +1191,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -1207,7 +1207,7 @@ ALTER TABLE c SET (sql_stats_forecasts_enabled = true)
 query T
 EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1223,7 +1223,7 @@ RESET CLUSTER SETTING sql.stats.forecasts.enabled
 query T
 EXPLAIN SELECT * FROM g WHERE a > 8
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 3 (25% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1233,7 +1233,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM s WHERE b < 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 1 (100% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1243,7 +1243,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1253,7 +1253,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM x WHERE a > 16
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 2 (50% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1263,7 +1263,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -1522,7 +1522,7 @@ SET enable_zigzag_join = off
 query T
 EXPLAIN SELECT * FROM t WHERE a = 3 AND b = 13
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ estimated row count: 1
@@ -1564,7 +1564,7 @@ SET optimizer_use_forecasts = off
 query T
 EXPLAIN SELECT * FROM t WHERE a = 3 AND b = 13
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ estimated row count: 1
@@ -1846,7 +1846,7 @@ WHERE stat->>'name' = '__forecast__'
 query T
 EXPLAIN SELECT * FROM t_103958
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   estimated row count: 3,000 (100% of the table; stats collected <hidden> ago)
@@ -2325,7 +2325,7 @@ __forecast__  {t}  2024-04-09 20:00:00 +0000 UTC  100000  10001  8333    12
 query T
 EXPLAIN UPDATE st SET t = '2024-04-09 19:05:00.000000' WHERE s >= 0 AND s < 10 AND t IS NULL
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: st

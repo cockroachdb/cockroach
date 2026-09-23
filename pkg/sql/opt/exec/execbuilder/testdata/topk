@@ -7,7 +7,7 @@ CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY w LIMIT 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • top-k
@@ -26,7 +26,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v LIMIT 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • index join
@@ -49,7 +49,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY w DESC LIMIT 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • top-k
@@ -68,7 +68,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM T ORDER BY w LIMIT 2)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -90,7 +90,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE w >= 1 AND w <= 10 ORDER BY w LIMIT 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • top-k
@@ -114,7 +114,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t@v ORDER BY v, w LIMIT 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • top-k

@@ -9,7 +9,7 @@ CREATE TABLE my_spatial_table (k INT PRIMARY KEY)
 query T
 EXPLAIN (VERBOSE) SELECT AddGeometryColumn ('test','public','my_spatial_table','geom1',4326,'POINT',2)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -160,7 +160,7 @@ EXPLAIN (VERBOSE) SELECT
   AddGeometryColumn ('my_spatial_table','geom8',4326,'POINT',2)
 FROM other_table
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
