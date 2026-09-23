@@ -82,6 +82,9 @@ func validateExternalConnectionSinkURI(
 	if err != nil {
 		return errors.Wrap(err, "invalid changefeed sink URI")
 	}
+	if err := s.Dial(); err != nil {
+		return errors.Wrap(err, "failed to dial canary sink")
+	}
 	if err := s.Close(); err != nil {
 		return errors.Wrap(err, "failed to close canary sink")
 	}
