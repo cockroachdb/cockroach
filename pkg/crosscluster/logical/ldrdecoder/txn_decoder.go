@@ -27,6 +27,7 @@ type TxnID = txnpb.LDRTxnID
 type Transaction struct {
 	TxnID    TxnID
 	WriteSet []DecodedRow
+	Bytes    int64
 }
 
 // TxnEnvelope pairs a decoded Transaction with the raw KV events it was
@@ -73,6 +74,7 @@ func (t *TxnDecoder) DecodeTxn(
 				decoded.RowTimestamp, result.TxnID.Timestamp)
 		}
 		result.WriteSet = append(result.WriteSet, decoded)
+		result.Bytes += int64(event.Size())
 	}
 
 	return result, nil

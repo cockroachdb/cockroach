@@ -104,12 +104,16 @@ func newTxnBatchHandlerFromConfig(
 		return nil, err
 	}
 
+	// Metrics are recorded by the classic LDR processor that wraps this
+	// handler; pass nil to avoid double counting.
 	writer, err := txnwriter.NewTransactionWriter(
 		ctx,
 		flowCtx.Cfg.DB.(isql.DB),
 		flowCtx.Cfg.LeaseManager.(*lease.Manager),
 		flowCtx.Codec(),
 		flowCtx.Cfg.Settings,
+		nil, /* metrics */
+		"",  /* metricsLabel */
 	)
 	if err != nil {
 		return nil, err

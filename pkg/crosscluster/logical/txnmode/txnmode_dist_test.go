@@ -75,7 +75,7 @@ func TestBuildTxnReplicationPlan(t *testing.T) {
 				JobID: 123,
 			}
 
-			err := buildTxnReplicationPlan(ctx, plan, tc.applierInstanceIDs, spec)
+			err := buildTxnReplicationPlan(ctx, plan, tc.applierInstanceIDs, spec, "" /* metricsLabel */)
 			require.NoError(t, err)
 
 			// Count processors by type.
