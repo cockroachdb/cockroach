@@ -98,6 +98,12 @@ func (cb *columnBackfiller) Run(ctx context.Context, output execinfra.RowReceive
 	defer span.Finish()
 	defer output.ProducerDone()
 	defer execinfra.SendTraceData(ctx, cb.flowCtx, output)
+
+	// TODO(wenyihu): Evaluate whether SQLCPUHandle integration is needed here.
+	// All work runs on a single goroutine (row scan + column value computation
+	// + KV write-back at BulkNormalPri), so SQL CPU and bulk write CPU cannot
+	// be separated without refactoring.
+
 	meta := cb.doRun(ctx)
 	output.Push(nil /* row */, meta)
 }
