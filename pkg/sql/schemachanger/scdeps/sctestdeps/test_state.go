@@ -83,6 +83,8 @@ type TestState struct {
 	catalogChanges     catalogChanges
 	refProviderFactory scbuild.ReferenceProviderFactory
 	clusterSettings    *cluster.Settings
+
+	syntheticDescs map[descpb.ID]catalog.Descriptor
 }
 
 type catalogChanges struct {
