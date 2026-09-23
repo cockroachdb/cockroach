@@ -179,7 +179,7 @@ create_and_push_multi_arch_manifest() {
 # passed version is the latest. Supports stable versions only.
 function is_latest() {
   version=$1
-  url="https://get.cockroachdb.com/api/is_latest?version=$version"
+  url="https://releases.crdb.dev/api/is_latest?version=$version"
   maybe_latest="$(curl -fsSL "$url" || echo "")"
   if [[ $maybe_latest == "yes" ]]; then
     return 0
