@@ -864,26 +864,26 @@ func TestSlice(t *testing.T) {
 		{lo: half, hi: last, lim: 0, w: entries(half, half+1)},
 		{lo: half + 1, hi: last, lim: 0, w: entries(half+1, half+2)},
 		// Low limit.
-		{lo: offset, hi: last, lim: uint64(halfe.Size() - 1), w: entries(offset, offset+1)},
-		{lo: half - 1, hi: half + 1, lim: uint64(halfe.Size() - 1), w: entries(half-1, half)},
-		{lo: half, hi: last, lim: uint64(halfe.Size() - 1), w: entries(half, half+1)},
+		{lo: offset, hi: last, lim: halfe.SizeEst() - 1, w: entries(offset, offset+1)},
+		{lo: half - 1, hi: half + 1, lim: halfe.SizeEst() - 1, w: entries(half-1, half)},
+		{lo: half, hi: last, lim: halfe.SizeEst() - 1, w: entries(half, half+1)},
 		// Just enough for one limit.
-		{lo: offset, hi: last, lim: uint64(halfe.Size()), w: entries(offset, offset+1)},
-		{lo: half - 1, hi: half + 1, lim: uint64(halfe.Size()), w: entries(half-1, half)},
-		{lo: half, hi: last, lim: uint64(halfe.Size()), w: entries(half, half+1)},
+		{lo: offset, hi: last, lim: halfe.SizeEst(), w: entries(offset, offset+1)},
+		{lo: half - 1, hi: half + 1, lim: halfe.SizeEst(), w: entries(half-1, half)},
+		{lo: half, hi: last, lim: halfe.SizeEst(), w: entries(half, half+1)},
 		// Not enough for two limit.
-		{lo: offset, hi: last, lim: uint64(halfe.Size() + 1), w: entries(offset, offset+1)},
-		{lo: half - 1, hi: half + 1, lim: uint64(halfe.Size() + 1), w: entries(half-1, half)},
-		{lo: half, hi: last, lim: uint64(halfe.Size() + 1), w: entries(half, half+1)},
+		{lo: offset, hi: last, lim: halfe.SizeEst() + 1, w: entries(offset, offset+1)},
+		{lo: half - 1, hi: half + 1, lim: halfe.SizeEst() + 1, w: entries(half-1, half)},
+		{lo: half, hi: last, lim: halfe.SizeEst() + 1, w: entries(half, half+1)},
 		// Enough for two limit.
-		{lo: offset, hi: last, lim: uint64(halfe.Size() * 2), w: entries(offset, offset+2)},
-		{lo: half - 2, hi: half + 1, lim: uint64(halfe.Size() * 2), w: entries(half-2, half)},
-		{lo: half - 1, hi: half + 1, lim: uint64(halfe.Size() * 2), w: entries(half-1, half+1)},
-		{lo: half, hi: last, lim: uint64(halfe.Size() * 2), w: entries(half, half+2)},
+		{lo: offset, hi: last, lim: halfe.SizeEst() * 2, w: entries(offset, offset+2)},
+		{lo: half - 2, hi: half + 1, lim: halfe.SizeEst() * 2, w: entries(half-2, half)},
+		{lo: half - 1, hi: half + 1, lim: halfe.SizeEst() * 2, w: entries(half-1, half+1)},
+		{lo: half, hi: last, lim: halfe.SizeEst() * 2, w: entries(half, half+2)},
 		// Not enough for three.
-		{lo: half - 2, hi: half + 1, lim: uint64(halfe.Size()*3 - 1), w: entries(half-2, half)},
+		{lo: half - 2, hi: half + 1, lim: halfe.SizeEst()*3 - 1, w: entries(half-2, half)},
 		// Enough for three.
-		{lo: half - 1, hi: half + 2, lim: uint64(halfe.Size() * 3), w: entries(half-1, half+2)},
+		{lo: half - 1, hi: half + 2, lim: halfe.SizeEst() * 3, w: entries(half-1, half+2)},
 	} {
 		t.Run("", func(t *testing.T) {
 			defer func() {
@@ -891,7 +891,7 @@ func TestSlice(t *testing.T) {
 					require.True(t, tt.wpanic)
 				}
 			}()
-			g, err := l.slice(tt.lo, tt.hi, entryEncodingSize(tt.lim))
+			g, err := l.slice(tt.lo, tt.hi, entrySize(tt.lim))
 			require.False(t, tt.lo < offset && err != ErrCompacted)
 			require.False(t, tt.lo >= offset && err != nil)
 			require.Equal(t, tt.w, g)
@@ -907,7 +907,7 @@ func TestScan(t *testing.T) {
 	entries := func(from, to uint64) []pb.Entry {
 		return index(from).terms(intRange(from, to)...)
 	}
-	entrySize := entsSize(entries(half, half+1))
+	eSize := entsSize(entries(half, half+1))
 
 	storage := NewMemoryStorage()
 	require.NoError(t, storage.ApplySnapshot(pb.Snapshot{
@@ -919,7 +919,7 @@ func TestScan(t *testing.T) {
 	l.checkInvariants(t)
 
 	// Test that scan() returns the same entries as slice(), on all inputs.
-	for _, pageSize := range []entryEncodingSize{0, 1, 10, 100, entrySize, entrySize + 1} {
+	for _, pageSize := range []entrySize{0, 1, 10, 100, eSize, eSize + 1} {
 		for lo := offset; lo < last; lo++ {
 			for hi := lo + 1; hi <= last; hi++ {
 				var got []pb.Entry
@@ -948,9 +948,9 @@ func TestScan(t *testing.T) {
 
 	// Test that we max out the limit, and not just always return a single entry.
 	// NB: this test works only because the requested range length is even.
-	require.NoError(t, l.scan(offset+1, offset+11, entrySize*2, func(ents []pb.Entry) error {
+	require.NoError(t, l.scan(offset+1, offset+11, eSize*2, func(ents []pb.Entry) error {
 		require.Len(t, ents, 2)
-		require.Equal(t, entrySize*2, entsSize(ents))
+		require.Equal(t, eSize*2, entsSize(ents))
 		return nil
 	}))
 }

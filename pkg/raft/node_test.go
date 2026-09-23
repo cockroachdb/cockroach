@@ -546,7 +546,7 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 }
 
 func TestAppendPagination(t *testing.T) {
-	const maxSizePerMsg = 2048
+	const maxSizePerMsg = 2 * (raftpb.EntryOverhead + 1000)
 	n := newNetworkWithConfig(func(c *Config) {
 		c.MaxSizePerMsg = maxSizePerMsg
 	}, nil, nil, nil)
@@ -589,7 +589,7 @@ func TestAppendPagination(t *testing.T) {
 }
 
 func TestCommitPagination(t *testing.T) {
-	const maxCommittedSize = 2048
+	const maxCommittedSize = 2 * (raftpb.EntryOverhead + 1000)
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
 	require.NoError(t, rn.Campaign())
@@ -755,7 +755,7 @@ func TestNodeCommitPaginationAfterRestart(t *testing.T) {
 			Data:  []byte("a"),
 		}
 		entries[i] = ent
-		size += uint64(ent.Size())
+		size += ent.SizeEst()
 	}
 	s.ls = LogSlice{entries: entries}
 
@@ -763,7 +763,7 @@ func TestNodeCommitPaginationAfterRestart(t *testing.T) {
 	// Set a MaxSizePerMsg that would suggest to Raft that the last committed entry should
 	// not be included in the initial rd.CommittedEntries. However, our storage will ignore
 	// this and *will* return it (which is how the Commit index ended up being 10 initially).
-	cfg.MaxSizePerMsg = size - uint64(entries[len(entries)-1].Size()) - 1
+	cfg.MaxSizePerMsg = size - entries[len(entries)-1].SizeEst() - 1
 
 	rn, err := NewRawNode(cfg)
 	require.NoError(t, err)
