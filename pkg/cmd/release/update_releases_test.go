@@ -11,15 +11,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 )
 
 func Test_processReleaseData(t *testing.T) {
 	testReleases, err := os.ReadFile("testdata/release_data.yaml")
 	require.NoError(t, err)
 
-	var data []Release
-	require.NoError(t, yaml.Unmarshal(testReleases, &data)) //nolint:yaml
+	data, err := parseReleases(testReleases)
+	require.NoError(t, err)
 
 	expectedReleaseData := map[string]release.Series{
 		"21.2": {
@@ -41,6 +40,36 @@ func Test_processReleaseData(t *testing.T) {
 		},
 	}
 	require.Equal(t, expectedReleaseData, processReleaseData(data))
+}
+
+func Test_parseReleases(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		blob string
+		err  string
+	}{
+		{
+			name: "unknown schema version",
+			blob: "schema_version: 2\nreleases: []\n",
+			err:  "schema_version 2, want 1",
+		},
+		{
+			name: "missing schema version",
+			blob: "releases: []\n",
+			err:  "schema_version 0, want 1",
+		},
+		{
+			// The docs releases.yml is a bare list of releases.
+			name: "docs releases.yml format",
+			blob: "- release_name: v26.3.1\n  major_version: v26.3\n",
+			err:  "failed to YAML parse release data",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseReleases([]byte(tc.blob))
+			require.ErrorContains(t, err, tc.err)
+		})
+	}
 }
 
 func Test_validateReleaseData(t *testing.T) {
