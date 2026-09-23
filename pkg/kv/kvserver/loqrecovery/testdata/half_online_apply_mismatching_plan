@@ -53,7 +53,7 @@ ok
 
 apply-plan stores=(1) restart=true
 ----
-ok
+updated=0 skipped=0 missing=0
 
 dump-events stores=(1) status=true
 ----

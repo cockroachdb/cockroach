@@ -45,7 +45,7 @@ ok
 
 apply-plan stores=(1,2,3)
 ----
-ok
+updated=0 skipped=0 missing=0
 
 dump-store stores=(1,2,3)
 ----
