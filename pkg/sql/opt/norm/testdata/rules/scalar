@@ -3,6 +3,10 @@ CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, arr int[])
 ----
 
 exec-ddl
+CREATE TABLE ij (i INT NOT NULL, j INT)
+----
+
+exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
 
@@ -172,7 +176,9 @@ project
  └── projections
       └── COALESCE(s:4, s:4 || 'foo') [as=coalesce:8, outer=(4), immutable]
 
-# Trailing null can't be removed.
+# Trailing null can't be removed when leading arg is a non-constant (nullable
+# variable): the original SimplifyCoalesce rule only fires when the leading arg
+# is a constant, so no folding happens here.
 norm
 SELECT COALESCE(i, NULL, NULL) FROM a
 ----
@@ -183,6 +189,44 @@ project
  └── projections
       └── COALESCE(i:2, CAST(NULL AS INT8), CAST(NULL AS INT8)) [as=coalesce:8, outer=(2)]
 
+# All-null COALESCE collapses to a single null via SimplifyCoalesce (the scalar
+# rule fires when the leading arg is constant). CanSimplifyCoalesce correctly
+# returns true when the loop exhausts all-null args, matching simplifyCoalesce's
+# behaviour of returning args[last] (unwrapping the COALESCE).
+norm expect=SimplifyCoalesce
+SELECT COALESCE(NULL::INT, NULL::INT) FROM a
+----
+project
+ ├── columns: coalesce:8
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── CAST(NULL AS INT8) [as=coalesce:8]
+
+# --------------------------------------------------
+# SimplifyCoalesceProject
+# --------------------------------------------------
+
+norm expect=SimplifyCoalesceProject
+SELECT COALESCE(i, j) FROM ij
+----
+project
+ ├── columns: coalesce:6!null
+ ├── scan ij
+ │    └── columns: i:1!null
+ └── projections
+      └── i:1 [as=coalesce:6, outer=(1)]
+
+norm expect=SimplifyCoalesceProject
+SELECT COALESCE(i, NULL, NULL) FROM ij
+----
+project
+ ├── columns: coalesce:6!null
+ ├── scan ij
+ │    └── columns: i:1!null
+ └── projections
+      └── i:1 [as=coalesce:6, outer=(1)]
+
 norm expect=SimplifyCoalesce
 SELECT COALESCE((1, 2, 3), (2, 3, 4)) FROM a
 ----
@@ -192,6 +236,69 @@ project
  ├── scan a
  └── projections
       └── (1, 2, 3) [as=coalesce:8]
+
+# Negative test: should not fire when no arg is provably non-null.
+norm expect-not=SimplifyCoalesceProject
+SELECT COALESCE(i, f) FROM a
+----
+project
+ ├── columns: coalesce:8
+ ├── immutable
+ ├── scan a
+ │    └── columns: i:2 f:3
+ └── projections
+      └── COALESCE(i:2::FLOAT8, f:3) [as=coalesce:8, outer=(2,3), immutable]
+
+# Middle argument is provably non-null: leading NULLs are stripped, then the
+# NOT NULL arg is returned directly.
+norm expect=SimplifyCoalesceProject
+SELECT COALESCE(NULL::INT, i, j) FROM ij
+----
+project
+ ├── columns: coalesce:6!null
+ ├── scan ij
+ │    └── columns: i:1!null
+ └── projections
+      └── i:1 [as=coalesce:6, outer=(1)]
+
+# Nested COALESCE: outer is not directly simplifiable, but the inner
+# COALESCE(i, j) can be simplified to i (since i is NOT NULL). The fix
+# ensures the inner Coalesce is not missed.
+norm expect=SimplifyCoalesceProject
+SELECT COALESCE(j, COALESCE(i, j)) FROM ij
+----
+project
+ ├── columns: coalesce:6
+ ├── scan ij
+ │    └── columns: i:1!null j:2
+ └── projections
+      └── COALESCE(j:2, i:1) [as=coalesce:6, outer=(1,2)]
+
+# COALESCE inside an IF expression: the inner nested Coalesce is simplified
+# via SimplifyCoalesceProject even though the outer Coalesce is not itself
+# directly simplifiable.
+norm expect=SimplifyCoalesceProject
+SELECT IF(j > 0, COALESCE(j, COALESCE(i, j)), j) FROM ij
+----
+project
+ ├── columns: if:6
+ ├── scan ij
+ │    └── columns: i:1!null j:2
+ └── projections
+      └── CASE j:2 > 0 WHEN true THEN COALESCE(j:2, i:1) ELSE j:2 END [as=if:6, outer=(1,2)]
+
+# SimplifyCoalesceProject does not fire when the first arg is a non-constant
+# nullable variable: CanSimplifyCoalesce exits early with false because i is
+# not a constant, and no leading nulls were stripped (i > 0 = false).
+norm expect-not=SimplifyCoalesceProject
+SELECT COALESCE(i, NULL, NULL) FROM a
+----
+project
+ ├── columns: coalesce:8
+ ├── scan a
+ │    └── columns: i:2
+ └── projections
+      └── COALESCE(i:2, CAST(NULL AS INT8), CAST(NULL AS INT8)) [as=coalesce:8, outer=(2)]
 
 
 # --------------------------------------------------
