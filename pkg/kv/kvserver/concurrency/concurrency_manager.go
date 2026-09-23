@@ -454,17 +454,20 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 		// If necessary, wait in the txnWaitQueue for the pushee transaction to
 		// expire or to move to a finalized state.
 		t := req.Requests[0].GetPushTxn()
-		tenantID, _ := roachpb.ClientTenantFromContext(ctx)
-		var info ash.WorkloadInfo
-		if req.Batch != nil {
-			info = ash.WorkloadInfo{
-				WorkloadID:    req.Batch.WorkloadID,
-				AppNameID:     req.Batch.AppNameID,
-				GatewayNodeID: req.Batch.GatewayNodeID,
-				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+		cleanup := func() {}
+		if !ash.HasWorkEvent("LockWait") {
+			tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+			var info ash.WorkloadInfo
+			if req.Batch != nil {
+				info = ash.WorkloadInfo{
+					WorkloadID:    req.Batch.WorkloadID,
+					AppNameID:     req.Batch.AppNameID,
+					GatewayNodeID: req.Batch.GatewayNodeID,
+					WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+				}
 			}
+			cleanup = ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnPushWait")
 		}
-		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnPushWait")
 		resp, err := m.twq.MaybeWaitForPush(ctx, t, req.WaitPolicy)
 		cleanup()
 		if err != nil {
@@ -476,17 +479,20 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 		// If necessary, wait in the txnWaitQueue for a transaction state update
 		// or for a dependent transaction to change.
 		t := req.Requests[0].GetQueryTxn()
-		tenantID, _ := roachpb.ClientTenantFromContext(ctx)
-		var info ash.WorkloadInfo
-		if req.Batch != nil {
-			info = ash.WorkloadInfo{
-				WorkloadID:    req.Batch.WorkloadID,
-				AppNameID:     req.Batch.AppNameID,
-				GatewayNodeID: req.Batch.GatewayNodeID,
-				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+		cleanup := func() {}
+		if !ash.HasWorkEvent("LockWait") {
+			tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+			var info ash.WorkloadInfo
+			if req.Batch != nil {
+				info = ash.WorkloadInfo{
+					WorkloadID:    req.Batch.WorkloadID,
+					AppNameID:     req.Batch.AppNameID,
+					GatewayNodeID: req.Batch.GatewayNodeID,
+					WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+				}
 			}
+			cleanup = ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnQueryWait")
 		}
-		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnQueryWait")
 		pErr := m.twq.MaybeWaitForQuery(ctx, t)
 		cleanup()
 		return nil, pErr
