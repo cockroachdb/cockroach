@@ -1127,44 +1127,52 @@ WHERE EXISTS
     SELECT * FROM xy INNER JOIN (SELECT u, u/1.1 AS div FROM uv WHERE i=5) ON x=div
 )
 ----
-distinct-on
+project
  ├── columns: k:1!null
- ├── grouping columns: k:1!null
  ├── key: (1)
  └── select
-      ├── columns: k:1!null x:8!null div:16!null
-      ├── fd: (8)==(16), (16)==(8)
-      ├── project
-      │    ├── columns: div:16!null k:1!null x:8!null
-      │    ├── inner-join (cross)
-      │    │    ├── columns: k:1!null i:2!null x:8!null u:12!null
-      │    │    ├── key: (1,8,12)
-      │    │    ├── fd: ()-->(2)
-      │    │    ├── select
-      │    │    │    ├── columns: k:1!null i:2!null
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: ()-->(2)
-      │    │    │    ├── scan a
-      │    │    │    │    ├── columns: k:1!null i:2
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    └── fd: (1)-->(2)
-      │    │    │    └── filters
-      │    │    │         └── i:2 = 5 [outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-      │    │    ├── inner-join (cross)
-      │    │    │    ├── columns: x:8!null u:12!null
-      │    │    │    ├── key: (8,12)
-      │    │    │    ├── scan xy
-      │    │    │    │    ├── columns: x:8!null
-      │    │    │    │    └── key: (8)
-      │    │    │    ├── scan uv
-      │    │    │    │    ├── columns: u:12!null
-      │    │    │    │    └── key: (12)
-      │    │    │    └── filters (true)
-      │    │    └── filters (true)
-      │    └── projections
-      │         └── u:12 / 1.1 [as=div:16, outer=(12)]
+      ├── columns: k:1!null i:2!null
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
       └── filters
-           └── x:8 = div:16 [outer=(8,16), constraints=(/8: (/NULL - ]; /16: (/NULL - ]), fd=(8)==(16), (16)==(8)]
+           ├── coalesce [subquery]
+           │    ├── subquery
+           │    │    └── project
+           │    │         ├── columns: column19:19!null
+           │    │         ├── cardinality: [0 - 1]
+           │    │         ├── key: ()
+           │    │         ├── fd: ()-->(19)
+           │    │         ├── limit
+           │    │         │    ├── columns: x:8!null column17:17!null
+           │    │         │    ├── cardinality: [0 - 1]
+           │    │         │    ├── key: ()
+           │    │         │    ├── fd: ()-->(8,17), (8)==(17), (17)==(8)
+           │    │         │    ├── inner-join (cross)
+           │    │         │    │    ├── columns: x:8!null column17:17!null
+           │    │         │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+           │    │         │    │    ├── fd: (8)==(17), (17)==(8)
+           │    │         │    │    ├── limit hint: 1.00
+           │    │         │    │    ├── scan xy
+           │    │         │    │    │    ├── columns: x:8!null
+           │    │         │    │    │    └── key: (8)
+           │    │         │    │    ├── project
+           │    │         │    │    │    ├── columns: column17:17!null
+           │    │         │    │    │    ├── scan uv
+           │    │         │    │    │    │    ├── columns: u:12!null
+           │    │         │    │    │    │    └── key: (12)
+           │    │         │    │    │    └── projections
+           │    │         │    │    │         └── u:12 / 1.1 [as=column17:17, outer=(12)]
+           │    │         │    │    └── filters
+           │    │         │    │         └── x:8 = column17:17 [outer=(8,17), constraints=(/8: (/NULL - ]; /17: (/NULL - ]), fd=(8)==(17), (17)==(8)]
+           │    │         │    └── 1
+           │    │         └── projections
+           │    │              └── true [as=column19:19]
+           │    └── false
+           └── i:2 = 5 [outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
 
 # Don't hoist Project operator in right join case.
 norm
