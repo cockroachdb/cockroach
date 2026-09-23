@@ -813,9 +813,10 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	isUnfiltered := scan.IsUnfiltered(c.mem.Metadata())
 
 	// Normally a full scan of a partial index would not be considered a "full
-	// scan" for the purposes of the NO_FULL_SCAN and AVOID_FULL_SCAN hints
-	// (isUnfiltered is false for partial indexes), but if the user has explicitly
-	// forced the partial index, we do consider it a full scan.
+	// scan" for the purposes of the NO_FULL_SCAN hint (isUnfiltered is false for
+	// partial indexes), but if the user has explicitly forced the partial index,
+	// we do consider it a full scan. AVOID_FULL_SCAN always penalizes full scans
+	// of partial indexes; see below.
 	isFullScan := isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan())
 	if scan.Flags.NoFullScan && isFullScan {
 		return hugeCost
@@ -922,10 +923,15 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 
 	if isFullScan {
 		cost.IncrFullScanCount()
-		if scan.Flags.AvoidFullScan {
-			// Apply a penalty for a full scan if needed.
-			cost.Penalties |= memo.FullScanPenalty
-		}
+	}
+	// AVOID_FULL_SCAN (also set on scans beneath mutations by
+	// avoid_full_table_scans_in_mutations) exists to limit the rows a statement
+	// reads and the contention that comes with them. A full scan of a partial
+	// index reads every row matching the predicate, which is often exactly the
+	// set of rows that concurrent transactions are writing, so it is penalized
+	// even though it is not a full table scan.
+	if scan.Flags.AvoidFullScan && (isFullScan || scan.IsFullIndexScan()) {
+		cost.Penalties |= memo.FullScanPenalty
 	}
 
 	return cost
