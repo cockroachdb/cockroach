@@ -398,7 +398,17 @@ func (m *MemBatch) AppendCol(col *Vec) {
 
 // ReplaceCol implements the Batch interface.
 func (m *MemBatch) ReplaceCol(col *Vec, colIdx int) {
-	if m.b[colIdx] != nil && m.b[colIdx].t != nil && !m.b[colIdx].Type().Identical(col.Type()) {
+	// NB: we use Equivalent() rather than Identical() here because
+	// ReplaceCol is a physical-level operation - it swaps column vector
+	// pointers. What matters for correctness is that the replacement
+	// vector has the same physical representation (i.e. the same canonical
+	// type family), not that the logical SQL types are exactly identical.
+	// For example, VARBIT(1) and VARBIT (no width limit) are both backed
+	// by DatumVec and are physically interchangeable, but Identical()
+	// rejects them because they differ in Width. Equivalent() checks type
+	// family compatibility which is the right semantic here.
+	// Fixes: https://github.com/cockroachdb/cockroach/issues/172870
+	if m.b[colIdx] != nil && m.b[colIdx].t != nil && !m.b[colIdx].Type().Equivalent(col.Type()) {
 		panic(fmt.Sprintf("unexpected replacement: original vector is %s "+
 			"whereas the replacement is %s", m.b[colIdx].Type(), col.Type()))
 	}
@@ -409,11 +419,11 @@ func (m *MemBatch) ReplaceCol(col *Vec, colIdx int) {
 func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 	cannotReuse := m == nil || m.Capacity() < length || m.Width() < len(typs)
 	for i := 0; i < len(typs) && !cannotReuse; i++ {
-		// TODO(yuzefovich): change this when DatumVec is introduced.
-		// TODO(yuzefovich): requiring that types are "identical" might be an
-		// overkill - the vectors could have the same physical representation
-		// but non-identical types. Think through this more.
-		if v := m.ColVec(i); !v.Type().Identical(typs[i]) {
+		// NB: we use Equivalent() rather than Identical() to determine batch
+		// reusability. Vectors with the same physical representation but
+		// non-identical logical types (e.g. VARBIT(1) vs VARBIT) should
+		// allow the batch to be reused.
+		if v := m.ColVec(i); !v.Type().Equivalent(typs[i]) {
 			cannotReuse = true
 			break
 		}
