@@ -142,7 +142,7 @@ FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS]
 ORDER BY created_at DESC, row_id DESC;
 ----
 fingerprint                   hint_type             details
-SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS  {"donorSql": "SELECT * FROM xy@primary WHERE y = _"}
+SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS  {"donorSql": "SELECT * FROM xy@\"primary\" WHERE y = _"}
 SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS  {"donorSql": "SELECT * FROM xy@xy_y_idx WHERE y = _"}
 
 # Test that SHOW STATEMENT HINTS works inside a SELECT
