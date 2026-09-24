@@ -131,9 +131,18 @@ func TestProxyHandler_ValidateConnection(t *testing.T) {
 
 	// Directory hasn't started
 	t.Run("directory error", func(t *testing.T) {
-		// Use a new tenant ID here to force GetTenant.
+		// Use a new tenant ID here to force GetTenant. With the directory server
+		// stopped, the lookup fails, and validateConnection surfaces that error
+		// directly rather than masking it as a high-frequency "cluster not found"
+		// error. The exact error is nondeterministic: depending on whether the
+		// gRPC client reuses its cached (now-dead) transport or re-dials, we
+		// either see a transport error ("error reading from server: EOF") or the
+		// dialer's "directory server has not been started". Both are valid, so we
+		// match either.
 		err := s.handler.validateConnection(ctx, roachpb.MustMakeTenantID(100), "")
-		require.Regexp(t, "directory server has not been started", err.Error())
+		require.Regexp(t,
+			"directory server has not been started|error reading from server",
+			err.Error())
 		require.False(t, errors.Is(err, highFreqErrorMarker))
 	})
 }
