@@ -191,9 +191,6 @@ func TestProxyProtocol(t *testing.T) {
 			},
 			DestinationAddr: conn.RemoteAddr(),
 		}
-		if err := conn.SetWriteDeadline(timeutil.Now().Add(timeout)); err != nil {
-			return nil, err
-		}
 		_, err = header.WriteTo(conn)
 		if err != nil {
 			return nil, err
@@ -385,9 +382,6 @@ func TestPrivateEndpointsACL(t *testing.T) {
 		}}); err != nil {
 			return nil, err
 		}
-		if err := conn.SetWriteDeadline(timeutil.Now().Add(timeout)); err != nil {
-			return nil, err
-		}
 		_, err = header.WriteTo(conn)
 		if err != nil {
 			return nil, err
@@ -441,6 +435,19 @@ func TestPrivateEndpointsACL(t *testing.T) {
 				require.Error(t, err)
 				require.Regexp(t, "connection reset by peer|unexpected EOF", err.Error())
 				require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
+
+				// When the proxy forcibly closes the connection, pgx spawns an
+				// asynchronous goroutine that opens a fresh connection to send a
+				// cancel request (with a 15s deadline). Wait for that cleanup to
+				// finish while the proxy is still serving, where it completes
+				// promptly. Otherwise the goroutine can outlive the proxy's
+				// teardown at the end of the test and be reported as a leak by
+				// leaktest, which only waits 5s.
+				select {
+				case <-conn.PgConn().CleanupDone():
+				case <-time.After(10 * time.Second):
+					t.Fatal("timed out waiting for pgx connection cleanup")
+				}
 			},
 		)
 	})
