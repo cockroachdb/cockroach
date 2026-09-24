@@ -2700,6 +2700,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 		}
 
 		defs := make(tree.TableDefs, 0)
+		copiedColumnNames := make(map[string]struct{}, len(td.Columns))
 		// Add user-defined columns.
 		for i := range td.Columns {
 			c := &td.Columns[i]
@@ -2711,6 +2712,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				// Don't add system-created implicit columns.
 				continue
 			}
+			copiedColumnNames[c.Name] = struct{}{}
 			def := tree.ColumnTableDef{
 				Name:   tree.Name(c.Name),
 				Type:   c.Type,
@@ -2721,9 +2723,35 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			} else {
 				def.Nullable.Nullability = tree.NotNull
 			}
+			copyIdentity := opts.Has(tree.LikeTableOptIdentity) && c.GeneratedAsIdentityType != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
+			if copyIdentity {
+				def.GeneratedIdentity.IsGeneratedAsIdentity = true
+				switch c.GeneratedAsIdentityType {
+				case catpb.GeneratedAsIdentityType_GENERATED_ALWAYS:
+					def.GeneratedIdentity.GeneratedAsIdentityType = tree.GeneratedAlways
+				case catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT:
+					def.GeneratedIdentity.GeneratedAsIdentityType = tree.GeneratedByDefault
+				default:
+					return nil, errors.AssertionFailedf("column %s has an invalid generated identity type", c.Name)
+				}
+
+				if c.GeneratedAsIdentitySequenceOption != nil {
+					if seqOpts := strings.TrimSpace(*c.GeneratedAsIdentitySequenceOption); seqOpts != "" {
+						stmt, err := parser.ParseOne("CREATE SEQUENCE _ " + seqOpts)
+						if err != nil {
+							return nil, errors.Wrapf(err, "could not parse identity sequence options for column %s", c.Name)
+						}
+						createSeq, ok := stmt.AST.(*tree.CreateSequence)
+						if !ok {
+							return nil, errors.AssertionFailedf("expected CREATE SEQUENCE while copying identity column %s", c.Name)
+						}
+						def.GeneratedIdentity.SeqOptions = createSeq.Options
+					}
+				}
+			}
 			if c.DefaultExpr != nil {
 				_, shouldCopyColumnDefault := shouldCopyColumnDefaultSet[c.Name]
-				if opts.Has(tree.LikeTableOptDefaults) || shouldCopyColumnDefault {
+				if !copyIdentity && (opts.Has(tree.LikeTableOptDefaults) || shouldCopyColumnDefault) {
 					def.DefaultExpr.Expr, err = parser.ParseExpr(string(*c.DefaultExpr))
 					if err != nil {
 						return nil, err
@@ -2857,6 +2885,24 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					}
 				}
 				defs = append(defs, def)
+			}
+		}
+		if opts.Has(tree.LikeTableOptFamilies) &&
+			(len(td.Families) > 1 || len(td.Families) == 1 && td.Families[0].Name != tabledesc.FamilyPrimaryName) {
+			for i := range td.Families {
+				family := &td.Families[i]
+				familyDef := tree.FamilyTableDef{
+					Name:    tree.Name(family.Name),
+					Columns: make(tree.NameList, 0, len(family.ColumnNames)),
+				}
+				for _, columnName := range family.ColumnNames {
+					if _, ok := copiedColumnNames[columnName]; ok {
+						familyDef.Columns = append(familyDef.Columns, tree.Name(columnName))
+					}
+				}
+				if len(familyDef.Columns) > 0 {
+					defs = append(defs, &familyDef)
+				}
 			}
 		}
 		newDefs = append(newDefs, defs...)

@@ -11969,7 +11969,7 @@ like_table_option:
   COMMENTS			{ return unimplementedWithIssueDetail(sqllex, 47071, "like table in/excluding comments") }
 | CONSTRAINTS		{ $$.val = tree.LikeTableOption{Opt: tree.LikeTableOptConstraints} }
 | DEFAULTS			{ $$.val = tree.LikeTableOption{Opt: tree.LikeTableOptDefaults} }
-| IDENTITY	  	{ return unimplementedWithIssueDetail(sqllex, 47071, "like table in/excluding identity") }
+| IDENTITY			{ $$.val = tree.LikeTableOption{Opt: tree.LikeTableOptIdentity} }
 | GENERATED			{ $$.val = tree.LikeTableOption{Opt: tree.LikeTableOptGenerated} }
 | INDEXES			{ $$.val = tree.LikeTableOption{Opt: tree.LikeTableOptIndexes} }
 | STATISTICS		{ return unimplementedWithIssueDetail(sqllex, 47071, "like table in/excluding statistics") }

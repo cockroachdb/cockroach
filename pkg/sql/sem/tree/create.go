@@ -1940,7 +1940,11 @@ const (
 	LikeTableOptConstraints LikeTableOpt = 1 << iota
 	LikeTableOptDefaults
 	LikeTableOptGenerated
+	LikeTableOptIdentity
 	LikeTableOptIndexes
+	// Column families are a CockroachDB extension included by ALL. There is no
+	// individual INCLUDING FAMILIES option.
+	LikeTableOptFamilies
 
 	// Make sure this field stays last!
 	likeTableOptInvalid
@@ -1962,8 +1966,12 @@ func (o LikeTableOpt) String() string {
 		return "DEFAULTS"
 	case LikeTableOptGenerated:
 		return "GENERATED"
+	case LikeTableOptIdentity:
+		return "IDENTITY"
 	case LikeTableOptIndexes:
 		return "INDEXES"
+	case LikeTableOptFamilies:
+		return "FAMILIES"
 	case LikeTableOptAll:
 		return "ALL"
 	default:

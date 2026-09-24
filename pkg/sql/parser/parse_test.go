@@ -444,7 +444,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b INT8, CHECK (b > 0) DEFERRABLE)`, 31632, `deferrable`, ``},
 
 		{`CREATE TABLE a (LIKE b INCLUDING COMMENTS)`, 47071, `like table`, ``},
-		{`CREATE TABLE a (LIKE b INCLUDING IDENTITY)`, 47071, `like table`, ``},
 		{`CREATE TABLE a (LIKE b INCLUDING STATISTICS)`, 47071, `like table`, ``},
 		{`CREATE TABLE a (LIKE b INCLUDING STORAGE)`, 47071, `like table`, ``},
 
