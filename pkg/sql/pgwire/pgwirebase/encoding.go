@@ -941,19 +941,27 @@ func DecodeDatum(
 		}
 		return da.NewDRefCursor(tree.DString(bs)), nil
 	}
+
+	newDStringMaybeCollated := func(sv string) (tree.Datum, error) {
+		if typ.Family() == types.CollatedStringFamily {
+			return da.NewDCollatedString(sv, typ.Locale())
+		}
+		return da.NewDString(tree.DString(sv)), nil
+	}
+
 	switch id {
 	case oid.T_text, oid.T_varchar, oid.T_unknown:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		return da.NewDString(tree.DString(bs)), nil
+		return newDStringMaybeCollated(bs)
 	case oid.T_bpchar:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
 		// Trim the trailing spaces.
 		sv := strings.TrimRight(bs, " ")
-		return da.NewDString(tree.DString(sv)), nil
+		return newDStringMaybeCollated(sv)
 	case oid.T_char:
 		var sv string
 		if len(b) == 1 {
@@ -970,10 +978,14 @@ func DecodeDatum(
 			}
 			sv = string(r)
 		}
-		return da.NewDString(tree.DString(sv)), nil
+		return newDStringMaybeCollated(sv)
 	case oid.T_name:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
+		}
+		if typ.Family() == types.CollatedStringFamily {
+			// Handle NAME COLLATE as elsewhere.
+			return da.NewDCollatedString(bs, typ.Locale())
 		}
 		return da.NewDName(tree.DString(bs)), nil
 	case oid.T_aclitem:
