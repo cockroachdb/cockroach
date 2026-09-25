@@ -33,7 +33,7 @@ if [[ -z "${DRY_RUN}" ]] ; then
   gcs_staged_bucket="cockroach-release-artifacts-staged-prod"
 fi
 
-# Install gcloud/gsutil
+# Install gcloud
 GOOGLE_SDK_DIR=$(mktemp -d)
 curl https://sdk.cloud.google.com > "$GOOGLE_SDK_DIR/install.sh"
 bash "$GOOGLE_SDK_DIR/install.sh" --disable-prompts --install-dir="$GOOGLE_SDK_DIR"
@@ -53,8 +53,8 @@ for product in cockroach cockroach-sql; do
     unsigned_file=${unsigned_base}.tgz
     target=${base}.tgz
 
-    gsutil cp "gs://$gcs_staged_bucket/$unsigned_file" "$unsigned_file"
-    gsutil cp "gs://$gcs_staged_bucket/$unsigned_file.sha256sum" "$unsigned_file.sha256sum"
+    gcloud storage cp "gs://$gcs_staged_bucket/$unsigned_file" "$unsigned_file"
+    gcloud storage cp "gs://$gcs_staged_bucket/$unsigned_file.sha256sum" "$unsigned_file.sha256sum"
 
     shasum --algorithm 256 --check "$unsigned_file.sha256sum"
 
@@ -74,8 +74,8 @@ for product in cockroach cockroach-sql; do
     rm -rf "$base" "$unsigned_file" "$unsigned_file.sha256sum" crl.zip
 
     shasum --algorithm 256 "$target" > "$target.sha256sum"
-    gsutil cp "$target" "gs://$gcs_staged_bucket/$target"
-    gsutil cp "$target.sha256sum" "gs://$gcs_staged_bucket/$target.sha256sum"
+    gcloud storage cp "$target" "gs://$gcs_staged_bucket/$target"
+    gcloud storage cp "$target.sha256sum" "gs://$gcs_staged_bucket/$target.sha256sum"
 
   done
 done

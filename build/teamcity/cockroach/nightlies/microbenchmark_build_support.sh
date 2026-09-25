@@ -55,7 +55,7 @@ EOF
   out_dir=$(mktemp -d)
   tar -chf - -C "$stage_dir" . | ./bin/roachprod-microbench compress > "$out_dir/$archive_name"
   rm -rf "$stage_dir"
-  gsutil -q -m cp "$out_dir/$archive_name" "gs://$BENCH_BUCKET/builds/$archive_name"
+  gcloud storage cp "$out_dir/$archive_name" "gs://$BENCH_BUCKET/builds/$archive_name"
   rm -rf "$out_dir"
 }
 

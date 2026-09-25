@@ -22,5 +22,5 @@ tc_end_block "Build toolchains"
 tc_start_block "Publish artifacts"
 loc=$(date +%Y%m%d-%H%M%S)
 # NB: $root is set by teamcity-support.sh.
-gsutil cp -r $root/artifacts gs://public-bazel-artifacts/toolchains/crosstool-ng/$(uname -m)/$loc
+gcloud storage cp -r $root/artifacts gs://public-bazel-artifacts/toolchains/crosstool-ng/$(uname -m)/$loc
 tc_end_block "Publish artifacts"

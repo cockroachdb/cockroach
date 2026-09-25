@@ -143,13 +143,13 @@ if [[ "${ROACHTEST_BUILD_CACHE:-}" == "true" ]]; then
   all_cached=true
   for artifact in "${artifacts[@]}"; do
     dst=${artifact#*:}
-    if ! gsutil -q cp "$cache_base/$(basename "$dst")" "$dst" 2>/dev/null; then
+    if ! gcloud storage cp "$cache_base/$(basename "$dst")" "$dst" 2>/dev/null; then
       all_cached=false
       break
     fi
   done
   if $all_cached; then
-    # gsutil cp does not preserve the executable bit; restore it. The +x on
+    # gcloud storage cp does not preserve the executable bit; restore it. The +x on
     # libgeos*.so is harmless.
     for artifact in "${artifacts[@]}"; do
       dst=${artifact#*:}
@@ -180,6 +180,6 @@ if [[ "${ROACHTEST_BUILD_CACHE:-}" == "true" ]]; then
   cache_base="gs://$cache_bucket/build-cache/$cache_sha/$os/$arch"
   for artifact in "${artifacts[@]}"; do
     dst=${artifact#*:}
-    gsutil -q cp "$dst" "$cache_base/$(basename "$dst")" 2>/dev/null || true
+    gcloud storage cp "$dst" "$cache_base/$(basename "$dst")" 2>/dev/null || true
   done
 fi

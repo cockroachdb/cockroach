@@ -22,7 +22,7 @@ source "build/teamcity-support.sh" # for log_into_gcloud
 google_credentials="$GOOGLE_CREDENTIALS"
 log_into_gcloud
 
-gsutil ls gs://$BUCKET/
+gcloud storage ls gs://$BUCKET/
 
 TIMESTAMP=$(date -u '+%Y-%m-%d %H:%MZ')
 
@@ -31,7 +31,7 @@ publish() {
 
   DIR="$TIMESTAMP $(git rev-parse --short=8 HEAD) - $PROFILE"
   echo "Uploading to $DIR.."
-  gsutil -m cp -Z -r "output/html/$PROFILE" "gs://$BUCKET/cockroach/$DIR" > "output/logs/upload-$PROFILE.log" 2>&1
+  gcloud storage cp -Z -r "output/html/$PROFILE" "gs://$BUCKET/cockroach/$DIR" > "output/logs/upload-$PROFILE.log" 2>&1
 }
 
 for dir in $(find output/html -mindepth 1 -maxdepth 1 -type d); do
@@ -43,7 +43,7 @@ INDEX=$(mktemp)
 trap "rm -f $INDEX" EXIT
 
 echo '<title>Cockroach coverage</title><body><h2>Cockroach coverage runs:</h2><ul>' > "$INDEX"
-gsutil ls "gs://$BUCKET/cockroach" |
+gcloud storage ls "gs://$BUCKET/cockroach" |
   sed "s#gs://$BUCKET/cockroach/##" |
   sed 's#/$##' |
   grep -v index.html |
@@ -54,7 +54,7 @@ gsutil ls "gs://$BUCKET/cockroach" |
 
 echo '</ul></body>' >> "$INDEX"
 
-gsutil \
-  -h "Cache-Control:public, max-age=300, no-transform" \
-  -h "Content-Type:text/html" \
-  cp "$INDEX" "gs://$BUCKET/cockroach/index.html"
+gcloud storage cp \
+  --cache-control="public, max-age=300, no-transform" \
+  --content-type="text/html" \
+  "$INDEX" "gs://$BUCKET/cockroach/index.html"
