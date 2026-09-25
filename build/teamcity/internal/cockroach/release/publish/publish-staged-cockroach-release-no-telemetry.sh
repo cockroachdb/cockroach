@@ -38,7 +38,7 @@ tc_start_block "Copy binaries"
 log_into_gcloud
 for platform in linux-amd64 linux-arm64; do
   archive="${cockroach_archive_prefix}-${version}.${platform}.tgz"
-  gsutil cp "gs://$gcs_staged_bucket/$archive" "gs://$gcs_bucket/$archive"
-  gsutil cp "gs://$gcs_staged_bucket/$archive.sha256sum" "gs://$gcs_bucket/$archive.sha256sum"
+  gcloud storage cp "gs://$gcs_staged_bucket/$archive" "gs://$gcs_bucket/$archive"
+  gcloud storage cp "gs://$gcs_staged_bucket/$archive.sha256sum" "gs://$gcs_bucket/$archive.sha256sum"
 done
 tc_end_block "Copy binaries"

@@ -101,7 +101,7 @@ drtprod execute ${config_file} | tee -a "${log_file}"
 # we will generate the json file from the datadog metrics.
 # download metric converter from gcs bucket pua-backup-us-east1.
 mkdir -p datadog-metric-converter
-gsutil -m cp -r gs://pua-backup-us-east1/datadog-metric-converter/** datadog-metric-converter/
+gcloud storage cp -r "gs://pua-backup-us-east1/datadog-metric-converter/*" datadog-metric-converter/
 
 # install pip for python3.8.
 curl -sS https://bootstrap.pypa.io/pip/3.8/get-pip.py -o get-pip.py

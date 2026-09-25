@@ -24,5 +24,5 @@ bazel build //pkg/cmd/run-pgo-build
 _bazel/bin/pkg/cmd/run-pgo-build/run-pgo-build_/run-pgo-build -out "artifacts/$filename"
 shasum -a 256 "artifacts/$filename" | tee artifacts/location.txt
 
-gsutil cp "artifacts/$filename" "gs://cockroach-profiles/$filename"
+gcloud storage cp "artifacts/$filename" "gs://cockroach-profiles/$filename"
 echo "gs://cockroach-profiles/$filename" >> artifacts/location.txt
