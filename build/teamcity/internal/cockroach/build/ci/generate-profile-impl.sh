@@ -24,5 +24,5 @@ bazel build //pkg/cmd/run-pgo-build
 _bazel/bin/pkg/cmd/run-pgo-build/run-pgo-build_/run-pgo-build -out "$filename"
 shasum -a 256 "$filename"
 
-gsutil cp "$filename" "gs://cockroach-profiles/$filename"
+gcloud storage cp "$filename" "gs://cockroach-profiles/$filename"
 rm "$filename"
