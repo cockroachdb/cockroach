@@ -21,8 +21,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -36,7 +39,6 @@ import (
 )
 
 const (
-	testUser     = "test"
 	roleOwners   = "owners"
 	roleUsers    = "users"
 	roleAuditors = "auditors"
@@ -54,32 +56,60 @@ func makeJWT(t *testing.T, claims map[string]any, key jwk.Key) string {
 	return string(raw)
 }
 
-// mockManager implements IOIDCManager.  Each instance returns whatever
-// raw ID token and OAuth2 token we injected when it was built.
+// mockManager is a configurable IOIDCManager used by the HTTP callback path.
+// The tokens it returns from ExchangeVerifyGetTokenInfo are injected via
+// setTokens and read under mu, so a single shared instance can be reconfigured
+// between callback subtests.
 type mockManager struct {
+	mu          syncutil.Mutex
 	cfg         *oauth2.Config
 	rawIDToken  string
 	accessToken string
 	email       string
 }
 
-func (m mockManager) Verify(context.Context, string) (*oidc.IDToken, error) { return nil, nil }
-func (m mockManager) Exchange(
+func (m *mockManager) setConfig(cfg *oauth2.Config) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cfg = cfg
+}
+
+func (m *mockManager) setTokens(rawIDToken, accessToken, email string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.rawIDToken = rawIDToken
+	m.accessToken = accessToken
+	m.email = email
+}
+
+func (*mockManager) Verify(context.Context, string) (*oidc.IDToken, error) {
+	return nil, nil
+}
+
+func (*mockManager) Exchange(
 	context.Context, string, ...oauth2.AuthCodeOption,
 ) (*oauth2.Token, error) {
 	return nil, nil
 }
-func (m mockManager) AuthCodeURL(state string, _ ...oauth2.AuthCodeOption) string {
-	return m.cfg.AuthCodeURL(state)
+
+func (m *mockManager) AuthCodeURL(state string, opts ...oauth2.AuthCodeOption) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.cfg.AuthCodeURL(state, opts...)
 }
 
-func (m mockManager) ExchangeVerifyGetTokenInfo(
+func (m *mockManager) ExchangeVerifyGetTokenInfo(
 	ctx context.Context, _, _ string, _ bool,
 ) (map[string]json.RawMessage, map[string]json.RawMessage, string, string, error) {
-	if m.rawIDToken == "" {
+	m.mu.Lock()
+	rawIDToken, accessToken, email := m.rawIDToken, m.accessToken, m.email
+	m.mu.Unlock()
+
+	if rawIDToken == "" {
 		// The real implementation would fail to extract the ID token from the
 		// credentials and return an error.
-		return nil, nil, "", "", errors.New("OIDC: required id_token not found in credentials")
+		return nil, nil, "", "",
+			errors.New("OIDC: required id_token not found in credentials")
 	}
 
 	var idTokenClaims map[string]json.RawMessage
@@ -87,7 +117,7 @@ func (m mockManager) ExchangeVerifyGetTokenInfo(
 	// For this test, we allow unparseable tokens to test the `authorize` function's
 	// handling of them. We still need to extract claims if possible for the
 	// `extractUsernameFromClaims` call that happens before `authorize`.
-	if tok, err := jwt.ParseInsecure([]byte(m.rawIDToken)); err == nil {
+	if tok, err := jwt.ParseInsecure([]byte(rawIDToken)); err == nil {
 		if claimsMap, err := tok.AsMap(ctx); err == nil {
 			if jsonBytes, err := json.Marshal(claimsMap); err == nil {
 				_ = json.Unmarshal(jsonBytes, &idTokenClaims)
@@ -101,12 +131,12 @@ func (m mockManager) ExchangeVerifyGetTokenInfo(
 		idTokenClaims = make(map[string]json.RawMessage)
 	}
 	if _, ok := idTokenClaims["email"]; !ok {
-		idTokenClaims["email"] = json.RawMessage(`"` + m.email + `"`)
+		idTokenClaims["email"] = json.RawMessage(`"` + email + `"`)
 	}
 
 	var accessTokenClaims map[string]json.RawMessage
-	if m.accessToken != "" {
-		if tok, err := jwt.ParseInsecure([]byte(m.accessToken)); err == nil {
+	if accessToken != "" {
+		if tok, err := jwt.ParseInsecure([]byte(accessToken)); err == nil {
 			if claimsMap, err := tok.AsMap(ctx); err == nil {
 				if jsonBytes, err := json.Marshal(claimsMap); err == nil {
 					_ = json.Unmarshal(jsonBytes, &accessTokenClaims)
@@ -114,11 +144,10 @@ func (m mockManager) ExchangeVerifyGetTokenInfo(
 			}
 		}
 	}
-
-	return idTokenClaims, accessTokenClaims, m.rawIDToken, m.accessToken, nil
+	return idTokenClaims, accessTokenClaims, rawIDToken, accessToken, nil
 }
 
-func (m mockManager) UserInfo(ctx context.Context, ts oauth2.TokenSource) (*oidc.UserInfo, error) {
+func (*mockManager) UserInfo(context.Context, oauth2.TokenSource) (*oidc.UserInfo, error) {
 	// This mock is not intended to handle UserInfo calls. Returning an error
 	// prevents a nil pointer dereference in the calling code.
 	return nil, errors.New("UserInfo not implemented in this mock")
@@ -126,829 +155,504 @@ func (m mockManager) UserInfo(ctx context.Context, ts oauth2.TokenSource) (*oidc
 
 var _ IOIDCManager = (*mockManager)(nil)
 
-// TestOIDCAuthorization_TokenPaths exercises the public OIDC login and callback
-// handlers.  Each table entry spins up a fresh single-node server, injects a
-// different set of token claims, and verifies the resulting SQL role
-// memberships for the test user.
-func TestOIDCAuthorization_TokenPaths(t *testing.T) {
+func TestOIDCAuthorization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
 	// Create an RSA key pair for signing tokens.
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	jwkKey, err := jwk.FromRaw(privateKey)
 	require.NoError(t, err)
-
-	// A helper to generate JWTs for tests that need them.
-	makeToken := func(groups []string) string {
-		claims := map[string]any{}
-		if groups != nil {
-			claims["groups"] = groups
-		}
-		return makeJWT(t, claims, jwkKey)
+	// makeToken signs a JWT carrying the given groups claim. An empty slice
+	// yields a present-but-empty claim, distinct from noGroupsToken below, which
+	// omits the claim entirely.
+	makeToken := func(groups any) string {
+		return makeJWT(t, map[string]any{"groups": groups}, jwkKey)
 	}
+	noGroupsToken := makeJWT(t, map[string]any{}, jwkKey)
 
-	// Start a brand-new in-process node for this sub-test.
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	app := s.ApplicationLayer()
-	sqlDB := sqlutils.MakeSQLRunner(db)
-
-	// Create the user and any roles that might be granted.
-	sqlDB.Exec(t, `CREATE USER `+testUser)
+	sqlDB := sqlutils.MakeSQLRunner(app.SQLConn(t))
+	execCfg := app.ExecutorConfig().(sql.ExecutorConfig)
 	sqlDB.Exec(t, `CREATE ROLE `+roleOwners)
 	sqlDB.Exec(t, `CREATE ROLE `+roleUsers)
 	sqlDB.Exec(t, `CREATE ROLE `+roleAuditors)
 
-	testCases := []struct {
-		name             string
-		idToken          string
-		accessToken      string
-		expectedRoles    []string
-		expectedStatus   int // 0 => default 307
-		wantErrSubstring string
-	}{
-		{
-			name:          "groups in ID token",
-			idToken:       makeToken([]string{roleOwners, roleUsers}),
-			accessToken:   makeToken(nil), // access token has no groups
-			expectedRoles: []string{roleOwners, roleUsers},
-		},
-		{
-			name:          "groups in access token only",
-			idToken:       makeToken(nil), // id token has no groups
-			accessToken:   makeToken([]string{roleOwners}),
-			expectedRoles: []string{roleOwners},
-		},
-		{
-			name:          "groups in both tokens (distinct sets)",
-			idToken:       makeToken([]string{roleOwners, roleAuditors}),
-			accessToken:   makeToken([]string{roleUsers}),
-			expectedRoles: []string{roleOwners, roleUsers, roleAuditors},
-		},
-		{
-			name:          "groups in both tokens (overlap)",
-			idToken:       makeToken([]string{roleOwners, roleUsers}),
-			accessToken:   makeToken([]string{roleUsers, roleAuditors}),
-			expectedRoles: []string{roleOwners, roleUsers, roleAuditors},
-		},
-		{
-			name:             "groups claim absent from both tokens",
-			idToken:          makeToken(nil),
-			accessToken:      makeToken(nil),
-			expectedRoles:    []string{},
-			expectedStatus:   http.StatusForbidden,
-			wantErrSubstring: "OIDC: unable to complete authentication",
-		},
-		{
-			name:             "empty groups list in ID token",
-			idToken:          makeToken([]string{}),
-			accessToken:      makeToken(nil),
-			expectedRoles:    []string{},
-			expectedStatus:   http.StatusForbidden,
-			wantErrSubstring: "OIDC: unable to complete authentication",
-		},
-		{
-			name:             "empty groups list in access token",
-			idToken:          makeToken(nil),
-			accessToken:      makeToken([]string{}),
-			expectedRoles:    []string{},
-			expectedStatus:   http.StatusForbidden,
-			wantErrSubstring: "OIDC: unable to complete authentication",
-		},
-		{
-			name:          "unparseable ID token, groups in access token",
-			idToken:       "this is not a jwt",
-			accessToken:   makeToken([]string{roleUsers}),
-			expectedRoles: []string{roleUsers},
-		},
-		{
-			name:          "groups in ID token, unparseable access token",
-			idToken:       makeToken([]string{roleOwners}),
-			accessToken:   "this is not a jwt either",
-			expectedRoles: []string{roleOwners},
-		},
-		{
-			name:             "unparseable tokens, no groups",
-			idToken:          "foo",
-			accessToken:      "bar",
-			expectedRoles:    []string{},
-			expectedStatus:   http.StatusForbidden,
-			wantErrSubstring: "OIDC: unable to complete authentication",
-		},
-		{
-			name:             "missing ID token",
-			idToken:          "",
-			accessToken:      "does not matter",
-			expectedRoles:    []string{},
-			expectedStatus:   http.StatusInternalServerError,
-			wantErrSubstring: "OIDC: unable to complete authentication",
-		},
-		{
-			name:           "missing access token",
-			idToken:        makeToken([]string{roleOwners}),
-			accessToken:    "",
-			expectedRoles:  []string{},
-			expectedStatus: http.StatusForbidden,
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc // capture loop var
-		t.Run(tc.name, func(t *testing.T) {
-			staleRows := sqlDB.QueryStr(t,
-				`SELECT role FROM system.role_members WHERE member = $1`, testUser)
-			if len(staleRows) > 0 {
-				staleRoles := make([]string, len(staleRows))
-				for i, r := range staleRows {
-					staleRoles[i] = r[0]
-				}
-				sqlDB.Exec(t, fmt.Sprintf(`REVOKE %s FROM %s`, strings.Join(staleRoles, ", "), testUser))
-			}
-
-			// Replace the factory so that the server uses our mock manager.
-			origFactory := NewOIDCManager
-			t.Cleanup(func() { NewOIDCManager = origFactory })
-			NewOIDCManager = func(_ context.Context, conf oidcAuthenticationConf,
-				redirectURL string, scopes []string) (IOIDCManager, error) {
-
-				cfg := &oauth2.Config{
-					ClientID:     conf.clientID,
-					ClientSecret: conf.clientSecret,
-					RedirectURL:  redirectURL,
-					Endpoint:     oauth2.Endpoint{AuthURL: "https://provider.example.com/auth"},
-					Scopes:       scopes,
-				}
-				return &mockManager{
-					cfg:         cfg,
-					rawIDToken:  tc.idToken,
-					accessToken: tc.accessToken,
-					email:       testUser + "@example.com",
-				}, nil
-			}
-
-			// Enable OIDC plus authorization.
-			st := s.ClusterSettings()
-
-			// Make the issuer unique to prevent race conditions in parallel tests
-			uniq := strings.ReplaceAll(tc.name, " ", "_")
-			OIDCProviderURL.Override(ctx, &st.SV,
-				fmt.Sprintf("https://provider.example.com/%s", uniq))
-			OIDCClientID.Override(ctx, &st.SV, "client")
-			OIDCClientSecret.Override(ctx, &st.SV, "secret")
-			OIDCRedirectURL.Override(ctx, &st.SV, "https://cockroachlabs.com/oidc/v1/callback")
-			OIDCClaimJSONKey.Override(ctx, &st.SV, "email")
-			OIDCPrincipalRegex.Override(ctx, &st.SV, "^([^@]+)@[^@]+$")
-			OIDCEnabled.Override(ctx, &st.SV, true)
-			OIDCAuthZEnabled.Override(ctx, &st.SV, true)
-			OIDCAuthGroupClaim.Override(ctx, &st.SV, "groups")
-
-			// Build an HTTP client that trusts the node certificates.
-			rpcCtx := app.NewClientRPCContext(ctx, username.TestUserName())
-			client, err := rpcCtx.GetHTTPClient()
-			require.NoError(t, err)
-			// Prevent automatic redirects so we can capture cookies and headers.
-			client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-
-			// Step 1: hit /oidc/v1/login and capture the state cookie.
-			resp, err := client.Get(app.AdminURL().WithPath("/oidc/v1/login").String())
-			require.NoError(t, err)
-			require.Equal(t, http.StatusFound, resp.StatusCode)
-
-			// Find by name; in shared-process multi-tenant mode the tenant cookie precedes oidc_secret.
-			var stateCookie *http.Cookie
-			for _, c := range resp.Cookies() {
-				if c.Name == secretCookieName {
-					stateCookie = c
-					break
-				}
-			}
-			require.NotNil(t, stateCookie, "expected oidc_secret cookie")
-			loc, err := url.Parse(resp.Header.Get("Location"))
-			require.NoError(t, err)
-			state := loc.Query().Get("state")
-
-			// Step 2: simulate the IdP redirect to /oidc/v1/callback.
-			cbReq, _ := http.NewRequest("GET",
-				app.AdminURL().WithPath("/oidc/v1/callback").String(), nil)
-			cbReq.AddCookie(stateCookie)
-			q := cbReq.URL.Query()
-			q.Set("state", state)
-			q.Set("code", "dummy")
-			cbReq.URL.RawQuery = q.Encode()
-
-			cbResp, err := client.Do(cbReq)
-			require.NoError(t, err)
-
-			expStatus := tc.expectedStatus
-			if expStatus == 0 {
-				expStatus = http.StatusTemporaryRedirect
-			}
-			require.Equal(t, expStatus, cbResp.StatusCode)
-
-			if tc.wantErrSubstring != "" {
-				body, _ := io.ReadAll(cbResp.Body)
-				require.Contains(t, string(body), tc.wantErrSubstring)
-			}
-
-			rows := sqlDB.QueryStr(t,
-				`SELECT role FROM system.role_members WHERE member = $1 ORDER BY role`, testUser)
-			actualRoles := make([]string, len(rows))
-			for i, r := range rows {
-				actualRoles[i] = r[0]
-			}
-			require.ElementsMatch(t, tc.expectedRoles, actualRoles)
-		})
-	}
-}
-
-// TestOIDCAuthorization_UserinfoPaths exercises the fallback that fetches the
-// groups list from the provider's /userinfo endpoint when the ID token and
-// access token contain no usable claim.
-//
-// The test uses a single shared mock OIDC provider for the 5 cases that share
-// the same discovery document (all with a userinfo_endpoint). Between cases,
-// only the /userinfo response body changes — no cluster settings are modified,
-// so no OIDC manager reinitialization occurs. The 2 cases that need different
-// discovery documents (absent endpoint, network error) run separately with
-// their own mock servers.
-func TestOIDCAuthorization_UserinfoPaths(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	app := s.ApplicationLayer()
-	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `CREATE USER `+testUser)
-	sqlDB.Exec(t, `CREATE ROLE `+roleOwners)
-	sqlDB.Exec(t, `CREATE ROLE `+roleUsers)
-	sqlDB.Exec(t, `CREATE ROLE `+roleAuditors)
-
-	rpc := app.NewClientRPCContext(ctx, username.TestUserName())
-	cl, err := rpc.GetHTTPClient()
-	require.NoError(t, err)
-	cl.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-
-	// Create an RSA key pair for signing and verifying tokens.
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	jwkKey, err := jwk.FromRaw(privateKey)
-	require.NoError(t, err)
-	_ = jwkKey.Set(jwk.KeyIDKey, "test-key-id")
-	_ = jwkKey.Set(jwk.AlgorithmKey, jwa.RS256)
-
-	publicKey, err := jwk.PublicKeyOf(jwkKey)
-	require.NoError(t, err)
-	jwks := jwk.NewSet()
-	_ = jwks.AddKey(publicKey)
-
-	// Mutable state for /token and /userinfo responses, protected by a mutex.
-	var mu syncutil.Mutex
-	var userinfoStatus int
-	var userinfoBody string
-	// idTokenGroups, when non-nil, is added as the ID token "groups" claim so a
-	// test can exercise token-carried group claims alongside the userinfo path.
-	var idTokenGroups any
-
-	// Shared mock OIDC provider for cases with a userinfo endpoint.
-	var ts *httptest.Server
-	ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/.well-known/openid-configuration":
-			doc := fmt.Sprintf(`{
-			  "issuer": "%s",
-			  "token_endpoint": "%s/token",
-			  "userinfo_endpoint": "%s/userinfo",
-			  "jwks_uri": "%s/.well-known/jwks.json"
-			}`, ts.URL, ts.URL, ts.URL, ts.URL)
-			_, _ = io.WriteString(w, doc)
-		case "/.well-known/jwks.json":
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(jwks)
-		case "/userinfo":
-			mu.Lock()
-			s, b := userinfoStatus, userinfoBody
-			mu.Unlock()
-			w.WriteHeader(s)
-			_, _ = io.WriteString(w, b)
-		case "/token":
-			claims := map[string]any{
-				"iss":   ts.URL,
-				"email": testUser + "@example.com",
-				"aud":   "client",
-				"exp":   time.Now().Add(time.Hour).Unix(),
-			}
-			mu.Lock()
-			if idTokenGroups != nil {
-				claims["groups"] = idTokenGroups
-			}
-			mu.Unlock()
-			idTok := makeJWT(t, claims, jwkKey)
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{
-			  "access_token":"dummy-access",
-			  "id_token":"%s",
-			  "token_type":"Bearer",
-			  "expires_in":3600
-			}`, idTok)
-		default:
-			http.NotFound(w, r)
+	getRoles := func(t *testing.T, user string) []string {
+		t.Helper()
+		rows := sqlDB.QueryStr(t,
+			`SELECT role FROM system.role_members WHERE member = $1 ORDER BY role`, user)
+		roles := make([]string, len(rows))
+		for i := range rows {
+			roles[i] = rows[i][0]
 		}
-	}))
-	defer ts.Close()
+		return roles
+	}
+	createUser := func(t *testing.T, user string, initialRoles ...string) {
+		t.Helper()
+		sqlDB.Exec(t, `CREATE USER `+user)
+		if len(initialRoles) > 0 {
+			sqlDB.Exec(t, fmt.Sprintf(
+				`GRANT %s TO %s`, strings.Join(initialRoles, ", "), user))
+		}
+	}
+	newAuthServer := func(manager IOIDCManager, userinfoGroupKey string) *oidcAuthenticationServer {
+		return &oidcAuthenticationServer{
+			conf: oidcAuthenticationConf{
+				authZEnabled:     true,
+				groupClaim:       "groups",
+				userinfoGroupKey: userinfoGroupKey,
+			},
+			manager: manager,
+			execCfg: &execCfg,
+		}
+	}
+
+	mock := &mockManager{}
+	realNewOIDCManager := NewOIDCManager
+	defer testutils.TestingHook(
+		&NewOIDCManager,
+		func(_ context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string,
+		) (IOIDCManager, error) {
+			mock.setConfig(&oauth2.Config{
+				ClientID:     conf.clientID,
+				ClientSecret: conf.clientSecret,
+				RedirectURL:  redirectURL,
+				Endpoint: oauth2.Endpoint{
+					AuthURL: "https://provider.example.com/auth",
+				},
+				Scopes: scopes,
+			})
+			return mock, nil
+		},
+	)()
 
 	// Set all cluster settings once. Provider URL and redirect are set first
 	// (while OIDC is disabled, so reloadConfig is a no-op for manager
-	// creation). OIDCEnabled is set last, triggering exactly one successful
-	// provider discovery call.
+	// creation). OIDCEnabled is set last, triggering exactly one manager
+	// creation.
 	st := s.ClusterSettings()
-	OIDCProviderURL.Override(ctx, &st.SV, ts.URL)
-	OIDCRedirectURL.Override(ctx, &st.SV, ts.URL+"/callback")
+	OIDCProviderURL.Override(ctx, &st.SV, "https://provider.example.com")
 	OIDCClientID.Override(ctx, &st.SV, "client")
 	OIDCClientSecret.Override(ctx, &st.SV, "secret")
+	OIDCRedirectURL.Override(ctx, &st.SV, "https://cockroachlabs.com/oidc/v1/callback")
 	OIDCClaimJSONKey.Override(ctx, &st.SV, "email")
-	OIDCPrincipalRegex.Override(ctx, &st.SV, "^([^@]+)@.*$")
+	OIDCPrincipalRegex.Override(ctx, &st.SV, "^([^@]+)@[^@]+$")
 	OIDCAuthZEnabled.Override(ctx, &st.SV, true)
 	OIDCAuthGroupClaim.Override(ctx, &st.SV, "groups")
 	OIDCAuthUserinfoGroupKey.Override(ctx, &st.SV, "groups")
 	OIDCEnabled.Override(ctx, &st.SV, true)
 
-	revokeStaleRoles := func(t *testing.T) {
-		staleRows := sqlDB.QueryStr(t,
-			`SELECT role FROM system.role_members WHERE member = $1`, testUser)
-		if len(staleRows) > 0 {
-			staleRoles := make([]string, len(staleRows))
-			for i, r := range staleRows {
-				staleRoles[i] = r[0]
-			}
-			sqlDB.Exec(t, fmt.Sprintf(
-				`REVOKE %s FROM %s`, strings.Join(staleRoles, ", "), testUser))
+	t.Run("token paths", func(t *testing.T) {
+		authServer := newAuthServer(mock, "groups")
+		testCases := []struct {
+			name          string
+			idToken       string
+			accessToken   string
+			expectedRoles []string
+			expectedError string
+		}{
+			{
+				name:          "groups in ID token",
+				idToken:       makeToken([]string{roleOwners, roleUsers}),
+				accessToken:   noGroupsToken,
+				expectedRoles: []string{roleOwners, roleUsers},
+			},
+			{
+				name:          "groups in access token only",
+				idToken:       noGroupsToken,
+				accessToken:   makeToken([]string{roleOwners}),
+				expectedRoles: []string{roleOwners},
+			},
+			{
+				name:          "groups in both tokens with distinct sets",
+				idToken:       makeToken([]string{roleOwners, roleAuditors}),
+				accessToken:   makeToken([]string{roleUsers}),
+				expectedRoles: []string{roleOwners, roleUsers, roleAuditors},
+			},
+			{
+				name:          "groups in both tokens with overlap",
+				idToken:       makeToken([]string{roleOwners, roleUsers}),
+				accessToken:   makeToken([]string{roleUsers, roleAuditors}),
+				expectedRoles: []string{roleOwners, roleUsers, roleAuditors},
+			},
+			{
+				name:          "groups claim absent from both tokens",
+				idToken:       noGroupsToken,
+				accessToken:   noGroupsToken,
+				expectedError: "no groups claim found",
+			},
+			{
+				name:          "empty groups list in ID token",
+				idToken:       makeToken([]string{}),
+				accessToken:   noGroupsToken,
+				expectedError: "groups list was empty",
+			},
+			{
+				name:          "empty groups list in access token",
+				idToken:       noGroupsToken,
+				accessToken:   makeToken([]string{}),
+				expectedError: "groups list was empty",
+			},
+			{
+				name:          "unparseable ID token with groups in access token",
+				idToken:       "this is not a jwt",
+				accessToken:   makeToken([]string{roleUsers}),
+				expectedRoles: []string{roleUsers},
+			},
+			{
+				name:          "groups in ID token with unparseable access token",
+				idToken:       makeToken([]string{roleOwners}),
+				accessToken:   "this is not a jwt either",
+				expectedRoles: []string{roleOwners},
+			},
+			{
+				name:          "unparseable tokens with no groups",
+				idToken:       "foo",
+				accessToken:   "bar",
+				expectedError: "no groups claim found",
+			},
+			{
+				name:          "missing access token",
+				idToken:       makeToken([]string{roleOwners}),
+				expectedError: "required access_token missing",
+			},
 		}
-	}
 
-	doLoginCallback := func(t *testing.T) *http.Response {
-		resp, err := cl.Get(app.AdminURL().WithPath("/oidc/v1/login").String())
+		for i, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				user := fmt.Sprintf("token_user_%d", i)
+				createUser(t, user)
+				err := authServer.authorize(ctx, authServer.conf, authServer.manager, tc.idToken, tc.accessToken, user)
+				if tc.expectedError == "" {
+					require.NoError(t, err)
+				} else {
+					require.ErrorContains(t, err, tc.expectedError)
+				}
+				require.ElementsMatch(t, tc.expectedRoles, getRoles(t, user))
+			})
+		}
+	})
+
+	var userinfoMu syncutil.Mutex
+	var currentUserinfoBody string
+	newProviderManager := func(
+		t *testing.T, userinfoURL string, serveUserinfo bool,
+	) (IOIDCManager, func()) {
+		t.Helper()
+		var provider *httptest.Server
+		provider = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/.well-known/openid-configuration":
+				doc := map[string]any{
+					"issuer":                 provider.URL,
+					"authorization_endpoint": provider.URL + "/authorize",
+					"token_endpoint":         provider.URL + "/token",
+					"jwks_uri":               provider.URL + "/jwks",
+				}
+				if serveUserinfo {
+					endpoint := userinfoURL
+					if endpoint == "" {
+						endpoint = provider.URL + "/userinfo"
+					}
+					doc["userinfo_endpoint"] = endpoint
+				}
+				_ = json.NewEncoder(w).Encode(doc)
+			case "/userinfo":
+				userinfoMu.Lock()
+				body := currentUserinfoBody
+				userinfoMu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, body)
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		manager, err := realNewOIDCManager(
+			ctx,
+			oidcAuthenticationConf{
+				providerURL: provider.URL,
+				clientID:    "client",
+				httpClient:  httputil.NewClientWithTimeout(5 * time.Second),
+			},
+			"https://cockroachlabs.com/oidc/v1/callback",
+			[]string{"openid"},
+		)
 		require.NoError(t, err)
-		// Find by name; in shared-process multi-tenant mode the tenant
-		// cookie precedes oidc_secret.
-		var cookie *http.Cookie
-		for _, c := range resp.Cookies() {
-			if c.Name == secretCookieName {
-				cookie = c
-				break
-			}
+		return manager, provider.Close
+	}
+
+	t.Run("userinfo paths", func(t *testing.T) {
+		// Shared mock OIDC provider for cases with a userinfo endpoint.
+		manager, closeProvider := newProviderManager(t, "", true)
+		defer closeProvider()
+		authServer := newAuthServer(manager, "groups")
+
+		// Cases that share the mock server — only the /userinfo response varies.
+		testCases := []struct {
+			name          string
+			idToken       string
+			userinfoBody  string
+			initialRoles  []string
+			expectedRoles []string
+			expectedError string
+		}{
+			{
+				name:          "userinfo success",
+				idToken:       noGroupsToken,
+				userinfoBody:  `{"groups":["owners","users"]}`,
+				expectedRoles: []string{roleOwners, roleUsers},
+			},
+			{
+				name:          "userinfo empty groups list",
+				idToken:       noGroupsToken,
+				userinfoBody:  `{"groups":[]}`,
+				expectedError: "groups list was empty",
+			},
+			{
+				name:          "userinfo non-standard body",
+				idToken:       noGroupsToken,
+				userinfoBody:  `this is not json`,
+				expectedError: "no groups claim found",
+			},
+			{
+				name:          "userinfo missing groups claim",
+				idToken:       noGroupsToken,
+				userinfoBody:  `{"email":"test@example.com"}`,
+				expectedError: "no groups claim found",
+			},
+			{
+				name:          "userinfo invalid groups claim",
+				idToken:       noGroupsToken,
+				userinfoBody:  `{"groups":42}`,
+				expectedError: "no groups claim found",
+			},
+			{
+				// A token that carries an explicitly empty groups claim must still fall back
+				// to /userinfo, since some IdPs return an empty array in the token and supply
+				// the real groups only at the userinfo endpoint.
+				name:          "empty token groups claim falls back to userinfo",
+				idToken:       makeToken([]string{}),
+				userinfoBody:  `{"groups":["users"]}`,
+				expectedRoles: []string{roleUsers},
+			},
+			{
+				// A userinfo 200 that omits the group key means no groups claim was found
+				// from any source. The login is denied, but a pre-existing role must survive:
+				// a missing claim signals a transient failure, not an explicit empty set.
+				name:          "missing groups claim does not revoke existing roles",
+				idToken:       noGroupsToken,
+				userinfoBody:  `{"email":"test@example.com"}`,
+				initialRoles:  []string{roleOwners},
+				expectedRoles: []string{roleOwners},
+				expectedError: "no groups claim found",
+			},
 		}
-		require.NotNil(t, cookie, "expected oidc_secret cookie")
-		loc, _ := url.Parse(resp.Header.Get("Location"))
-		state := loc.Query().Get("state")
 
-		cb, _ := http.NewRequest("GET",
-			app.AdminURL().WithPath("/oidc/v1/callback").String(), nil)
-		cb.AddCookie(cookie)
-		q := cb.URL.Query()
-		q.Set("state", state)
-		q.Set("code", "dummy")
-		cb.URL.RawQuery = q.Encode()
-		cbResp, err := cl.Do(cb)
-		require.NoError(t, err)
-		return cbResp
-	}
+		for i, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				user := fmt.Sprintf("userinfo_user_%d", i)
+				createUser(t, user, tc.initialRoles...)
+				userinfoMu.Lock()
+				currentUserinfoBody = tc.userinfoBody
+				userinfoMu.Unlock()
 
-	checkRoles := func(t *testing.T, wantRoles []string) {
-		rows := sqlDB.QueryStr(t, fmt.Sprintf(
-			`SELECT role FROM system.role_members WHERE member = '%s' ORDER BY role`,
-			testUser))
-		var got []string
-		for _, r := range rows {
-			got = append(got, r[0])
+				err := authServer.authorize(ctx, authServer.conf, authServer.manager, tc.idToken, "opaque-access-token", user)
+				if tc.expectedError == "" {
+					require.NoError(t, err)
+				} else {
+					require.ErrorContains(t, err, tc.expectedError)
+				}
+				require.ElementsMatch(t, tc.expectedRoles, getRoles(t, user))
+			})
 		}
-		require.ElementsMatch(t, wantRoles, got)
-	}
 
-	// Cases that share the mock server — only the /userinfo response varies.
-	type tc struct {
-		name           string
-		userinfoStatus int
-		userinfoBody   string
-		wantRoles      []string // nil => expect 403
-		wantErr        bool
-	}
-
-	sharedCases := []tc{
-		{
-			name:           "userinfo success",
-			userinfoStatus: http.StatusOK,
-			userinfoBody:   fmt.Sprintf(`{"groups":["%s","%s"]}`, roleOwners, roleUsers),
-			wantRoles:      []string{roleOwners, roleUsers},
-		},
-		{
-			name:           "userinfo empty groups list",
-			userinfoStatus: http.StatusOK,
-			userinfoBody:   `{"groups":[]}`,
-			wantErr:        true,
-		},
-		{
-			name:           "userinfo non-standard body",
-			userinfoStatus: http.StatusOK,
-			userinfoBody:   `this is not json`,
-			wantErr:        true,
-		},
-		{
-			name:           "userinfo missing groups claim",
-			userinfoStatus: http.StatusOK,
-			userinfoBody:   `{"email":"test@example.com"}`,
-			wantErr:        true,
-		},
-		{
-			name:           "userinfo invalid groups claim",
-			userinfoStatus: http.StatusOK,
-			userinfoBody:   `{"groups":not-a-list}`,
-			wantErr:        true,
-		},
-	}
-
-	for _, tc := range sharedCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			revokeStaleRoles(t)
-
-			mu.Lock()
-			userinfoStatus = tc.userinfoStatus
-			userinfoBody = tc.userinfoBody
-			mu.Unlock()
-
-			cbResp := doLoginCallback(t)
-
-			wantStatus := http.StatusTemporaryRedirect
-			if tc.wantErr {
-				wantStatus = http.StatusForbidden
-			}
-			require.Equal(t, wantStatus, cbResp.StatusCode)
-			checkRoles(t, tc.wantRoles)
+		// Special case: discovery document has no userinfo_endpoint. The provider
+		// cannot fall back to userinfo, so the login must be denied.
+		t.Run("userinfo endpoint absent", func(t *testing.T) {
+			manager, closeProvider := newProviderManager(t, "", false)
+			defer closeProvider()
+			user := "userinfo_endpoint_absent"
+			createUser(t, user)
+			authServer := newAuthServer(manager, "groups")
+			err := authServer.authorize(
+				ctx, authServer.conf, authServer.manager, noGroupsToken, "opaque-access-token", user)
+			require.ErrorContains(t, err, "no groups claim found")
+			require.Empty(t, getRoles(t, user))
 		})
-	}
 
-	// A token that carries an explicitly empty groups claim must still fall back
-	// to /userinfo, since some IdPs return an empty array in the token and supply
-	// the real groups only at the userinfo endpoint.
-	t.Run("empty token groups claim falls back to userinfo", func(t *testing.T) {
-		revokeStaleRoles(t)
-		mu.Lock()
-		idTokenGroups = []string{}
-		userinfoStatus = http.StatusOK
-		userinfoBody = fmt.Sprintf(`{"groups":["%s"]}`, roleUsers)
-		mu.Unlock()
-		defer func() {
-			mu.Lock()
-			idTokenGroups = nil
-			mu.Unlock()
-		}()
-
-		cbResp := doLoginCallback(t)
-		require.Equal(t, http.StatusTemporaryRedirect, cbResp.StatusCode)
-		checkRoles(t, []string{roleUsers})
+		// Special case: discovery document points userinfo_endpoint to an
+		// unreachable address. The network error must be handled gracefully.
+		t.Run("userinfo network error", func(t *testing.T) {
+			manager, closeProvider := newProviderManager(
+				t, "http://127.0.0.1:0/userinfo", true)
+			defer closeProvider()
+			user := "userinfo_network_error"
+			createUser(t, user)
+			authServer := newAuthServer(manager, "groups")
+			err := authServer.authorize(
+				ctx, authServer.conf, authServer.manager, noGroupsToken, "opaque-access-token", user)
+			require.ErrorContains(t, err, "no groups claim found")
+			require.Empty(t, getRoles(t, user))
+		})
 	})
 
-	// A userinfo 200 that omits the group key means no groups claim was found
-	// from any source. The login is denied, but a pre-existing role must survive:
-	// a missing claim signals a transient failure, not an explicit empty set.
-	t.Run("missing groups claim does not revoke existing roles", func(t *testing.T) {
-		revokeStaleRoles(t)
-		sqlDB.Exec(t, fmt.Sprintf(`GRANT %s TO %s`, roleOwners, testUser))
+	t.Run("role synchronization policy", func(t *testing.T) {
+		authServer := newAuthServer(mock, "groups")
 
-		mu.Lock()
-		idTokenGroups = nil // no groups claim in the token
-		userinfoStatus = http.StatusOK
-		userinfoBody = `{"email":"test@example.com"}`
-		mu.Unlock()
+		t.Run("incremental grant and revoke", func(t *testing.T) {
+			const user = "role_incremental"
+			createUser(t, user)
+			require.NoError(t, authServer.authorize(ctx, authServer.conf, authServer.manager,
+				makeToken([]string{roleOwners}), noGroupsToken, user))
+			require.ElementsMatch(t, []string{roleOwners}, getRoles(t, user))
+			require.NoError(t, authServer.authorize(ctx, authServer.conf, authServer.manager,
+				makeToken([]string{roleOwners, roleUsers}), noGroupsToken, user))
+			require.ElementsMatch(t, []string{roleOwners, roleUsers}, getRoles(t, user))
+			require.NoError(t, authServer.authorize(ctx, authServer.conf, authServer.manager,
+				makeToken([]string{roleUsers}), noGroupsToken, user))
+			require.ElementsMatch(t, []string{roleUsers}, getRoles(t, user))
+		})
 
-		cbResp := doLoginCallback(t)
-		require.Equal(t, http.StatusForbidden, cbResp.StatusCode)
-		checkRoles(t, []string{roleOwners})
+		t.Run("nonexistent role is skipped", func(t *testing.T) {
+			const user = "role_nonexistent"
+			createUser(t, user)
+			require.NoError(t, authServer.authorize(ctx, authServer.conf, authServer.manager,
+				makeToken([]string{roleUsers, "non_existent_role"}),
+				noGroupsToken, user))
+			// The non-existent role is skipped, should only have roleUsers
+			require.ElementsMatch(t, []string{roleUsers}, getRoles(t, user))
+		})
+
+		t.Run("missing groups claim denies login without revoking roles", func(t *testing.T) {
+			// A login whose tokens carry no groups claim (the userinfo fallback also
+			// fails, as it would on a transient IdP error) must be denied and must NOT
+			// revoke the user's existing roles: a missing claim is not an explicit
+			// empty group set.
+			const user = "role_missing_claim"
+			createUser(t, user, roleOwners)
+			err := authServer.authorize(ctx, authServer.conf, authServer.manager, noGroupsToken, noGroupsToken, user)
+			require.ErrorContains(t, err, "no groups claim found")
+			require.ElementsMatch(t, []string{roleOwners}, getRoles(t, user))
+		})
+
+		t.Run("explicit empty groups claim denies login and revokes roles", func(t *testing.T) {
+			// An explicit empty groups claim is a policy decision that the user has no
+			// roles: the sync revokes all roles and the login is then denied.
+			const user = "role_empty_claim"
+			createUser(t, user, roleOwners)
+			err := authServer.authorize(
+				ctx, authServer.conf, authServer.manager, makeToken([]string{}), noGroupsToken, user)
+			require.ErrorContains(t, err, "groups list was empty")
+			require.Empty(t, getRoles(t, user))
+		})
 	})
-
-	// Special case: discovery document has no userinfo_endpoint. The provider
-	// cannot fall back to userinfo, so the login must be denied.
-	t.Run("userinfo endpoint absent", func(t *testing.T) {
-		revokeStaleRoles(t)
-
-		var absentTS *httptest.Server
-		absentTS = httptest.NewServer(http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
-				switch r.URL.Path {
-				case "/.well-known/openid-configuration":
-					doc := fmt.Sprintf(`{
-					  "issuer": "%s",
-					  "token_endpoint": "%s/token",
-					  "jwks_uri": "%s/.well-known/jwks.json"
-					}`, absentTS.URL, absentTS.URL, absentTS.URL)
-					_, _ = io.WriteString(w, doc)
-				case "/.well-known/jwks.json":
-					w.Header().Set("Content-Type", "application/json")
-					_ = json.NewEncoder(w).Encode(jwks)
-				case "/token":
-					idTok := makeJWT(t, map[string]any{
-						"iss":   absentTS.URL,
-						"email": testUser + "@example.com",
-						"aud":   "client",
-						"exp":   time.Now().Add(time.Hour).Unix(),
-					}, jwkKey)
-					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprintf(w, `{
-					  "access_token":"dummy-access",
-					  "id_token":"%s",
-					  "token_type":"Bearer",
-					  "expires_in":3600
-					}`, idTok)
-				default:
-					http.NotFound(w, r)
-				}
-			}))
-		defer absentTS.Close()
-
-		OIDCProviderURL.Override(ctx, &st.SV, absentTS.URL)
-		OIDCRedirectURL.Override(ctx, &st.SV, absentTS.URL+"/callback")
-		// Restore the shared server URLs before this subtest returns. Otherwise
-		// the cluster settings would point at absentTS.URL after defer
-		// absentTS.Close() runs, leaving any subsequent reloadConfig() trigger
-		// to perform HTTP discovery against a dead address. Restoring also
-		// avoids prolonging mutex contention on the OIDC manager across
-		// subtests.
-		defer func() {
-			OIDCProviderURL.Override(ctx, &st.SV, ts.URL)
-			OIDCRedirectURL.Override(ctx, &st.SV, ts.URL+"/callback")
-		}()
-
-		cbResp := doLoginCallback(t)
-		require.Equal(t, http.StatusForbidden, cbResp.StatusCode)
-		checkRoles(t, nil)
-	})
-
-	// Special case: discovery document points userinfo_endpoint to an
-	// unreachable address. The network error must be handled gracefully.
-	t.Run("userinfo network error", func(t *testing.T) {
-		revokeStaleRoles(t)
-
-		var netErrTS *httptest.Server
-		netErrTS = httptest.NewServer(http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
-				switch r.URL.Path {
-				case "/.well-known/openid-configuration":
-					doc := fmt.Sprintf(`{
-					  "issuer": "%s",
-					  "token_endpoint": "%s/token",
-					  "userinfo_endpoint": "http://127.0.0.1:0/userinfo",
-					  "jwks_uri": "%s/.well-known/jwks.json"
-					}`, netErrTS.URL, netErrTS.URL, netErrTS.URL)
-					_, _ = io.WriteString(w, doc)
-				case "/.well-known/jwks.json":
-					w.Header().Set("Content-Type", "application/json")
-					_ = json.NewEncoder(w).Encode(jwks)
-				case "/token":
-					idTok := makeJWT(t, map[string]any{
-						"iss":   netErrTS.URL,
-						"email": testUser + "@example.com",
-						"aud":   "client",
-						"exp":   time.Now().Add(time.Hour).Unix(),
-					}, jwkKey)
-					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprintf(w, `{
-					  "access_token":"dummy-access",
-					  "id_token":"%s",
-					  "token_type":"Bearer",
-					  "expires_in":3600
-					}`, idTok)
-				default:
-					http.NotFound(w, r)
-				}
-			}))
-		defer netErrTS.Close()
-
-		OIDCProviderURL.Override(ctx, &st.SV, netErrTS.URL)
-		OIDCRedirectURL.Override(ctx, &st.SV, netErrTS.URL+"/callback")
-		// Restore the shared server URLs before this subtest returns. See the
-		// matching comment in "userinfo endpoint absent" for rationale.
-		defer func() {
-			OIDCProviderURL.Override(ctx, &st.SV, ts.URL)
-			OIDCRedirectURL.Override(ctx, &st.SV, ts.URL+"/callback")
-		}()
-
-		cbResp := doLoginCallback(t)
-		require.Equal(t, http.StatusForbidden, cbResp.StatusCode)
-		checkRoles(t, nil)
-	})
-}
-
-// TestOIDCAuthorization_RoleGrantAndRevoke tests that roles are granted and revoked as expected
-// after a successful OIDC login. This test is modeled after TestLDAPRolesAreGranted.
-func TestOIDCAuthorization_RoleGrantAndRevoke(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	// Create an RSA key pair for signing tokens.
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	jwkKey, err := jwk.FromRaw(privateKey)
-	require.NoError(t, err)
-
-	// Start a brand-new in-process node for this sub-test.
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	app := s.ApplicationLayer()
-	sqlDB := sqlutils.MakeSQLRunner(db)
-
-	// Create the user and any roles that might be granted.
-	sqlDB.Exec(t, `CREATE USER `+testUser)
-	sqlDB.Exec(t, `CREATE ROLE `+roleOwners)
-	sqlDB.Exec(t, `CREATE ROLE `+roleUsers)
-	sqlDB.Exec(t, `CREATE ROLE `+roleAuditors)
-
-	// Replace the factory so that the server uses our mock manager.
-	origFactory := NewOIDCManager
-	t.Cleanup(func() { NewOIDCManager = origFactory })
-
-	// Helper to check role membership.
-	checkHasRole := func(t *testing.T, user, role string, shouldHave bool) {
-		var hasRole bool
-		sqlDB.QueryRow(t, fmt.Sprintf("SELECT pg_has_role('%s', '%s', 'MEMBER')", user, role)).Scan(&hasRole)
-		require.Equal(t, shouldHave, hasRole)
-	}
-
-	// A helper function to simulate an OIDC login and callback.
-	performOIDCLogin := func(t *testing.T, client *http.Client, claims map[string]any, expectedStatus int) {
-		NewOIDCManager = func(_ context.Context, conf oidcAuthenticationConf,
-			redirectURL string, scopes []string) (IOIDCManager, error) {
-
-			cfg := &oauth2.Config{
-				ClientID:     conf.clientID,
-				ClientSecret: conf.clientSecret,
-				RedirectURL:  redirectURL,
-				Endpoint:     oauth2.Endpoint{AuthURL: "https://provider.example.com/auth"},
-				Scopes:       scopes,
-			}
-			return &mockManager{
-				cfg:         cfg,
-				rawIDToken:  makeJWT(t, claims, jwkKey),
-				accessToken: makeJWT(t, nil, jwkKey),
-				email:       testUser + "@example.com",
-			}, nil
-		}
-
-		// Enable OIDC plus authorization.
-		st := s.ClusterSettings()
-		OIDCProviderURL.Override(ctx, &st.SV, fmt.Sprintf("https://provider.example.com/%s", t.Name()))
-		OIDCClientID.Override(ctx, &st.SV, "client")
-		OIDCClientSecret.Override(ctx, &st.SV, "secret")
-		OIDCRedirectURL.Override(ctx, &st.SV, "https://cockroachlabs.com/oidc/v1/callback")
-		OIDCClaimJSONKey.Override(ctx, &st.SV, "email")
-		OIDCPrincipalRegex.Override(ctx, &st.SV, "^([^@]+)@[^@]+$")
-		OIDCEnabled.Override(ctx, &st.SV, true)
-		OIDCAuthZEnabled.Override(ctx, &st.SV, true)
-		OIDCAuthGroupClaim.Override(ctx, &st.SV, "groups")
-
-		// Step 1: hit /oidc/v1/login and capture the state cookie.
-		resp, err := client.Get(app.AdminURL().WithPath("/oidc/v1/login").String())
-		require.NoError(t, err)
-		require.Equal(t, http.StatusFound, resp.StatusCode)
-
-		// Find by name; in shared-process multi-tenant mode the tenant cookie precedes oidc_secret.
-		var stateCookie *http.Cookie
-		for _, c := range resp.Cookies() {
-			if c.Name == secretCookieName {
-				stateCookie = c
-				break
-			}
-		}
-		require.NotNil(t, stateCookie, "expected oidc_secret cookie")
-		loc, err := url.Parse(resp.Header.Get("Location"))
-		require.NoError(t, err)
-		state := loc.Query().Get("state")
-
-		// Step 2: simulate the IdP redirect to /oidc/v1/callback.
-		// Use retry logic to handle transient timing issues during stress tests.
-		cbReq, _ := http.NewRequest("GET",
-			app.AdminURL().WithPath("/oidc/v1/callback").String(), nil)
-		cbReq.AddCookie(stateCookie)
-		q := cbReq.URL.Query()
-		q.Set("state", state)
-		q.Set("code", "dummy")
-		cbReq.URL.RawQuery = q.Encode()
-
-		// Retry the callback request with an exponential backoff to handle timing issues
-		// that can occur during stress runs or with race detection enabled.
-		const maxRetries = 3
-		var cbResp *http.Response
-		var lastErr error
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			if attempt > 0 {
-				// Exponential backoff: 100ms, 200ms
-				backoff := time.Duration(100<<uint(attempt-1)) * time.Millisecond
-				t.Logf("Retrying OIDC callback after %v (attempt %d/%d)", backoff, attempt+1, maxRetries)
-				time.Sleep(backoff)
-			}
-
-			cbResp, err = client.Do(cbReq)
-			if err == nil {
-				// Success
-				break
-			}
-
-			lastErr = err
-			// Check if this is a timeout error that we should retry
-			var urlErr *url.Error
-			if errors.As(err, &urlErr) && (urlErr.Timeout() || urlErr.Temporary()) {
-				t.Logf("OIDC callback timeout/temporary error (attempt %d/%d): %v", attempt+1, maxRetries, err)
-				continue
-			}
-
-			// Non-retriable error, fail fast
-			break
-		}
-
-		if lastErr != nil && err != nil {
-			// All retries exhausted or non-retriable error
-			t.Fatalf("OIDC callback failed after %d attempts: %v\n"+
-				"Note: This timeout does not indicate a security or functional failure. "+
-				"The OIDC authorization logic still properly fails unauthorized requests. "+
-				"This is a test timing issue, likely due to system load during stress testing.",
-				maxRetries, lastErr)
-		}
-
-		require.NoError(t, err, "OIDC callback request should succeed")
-		require.Equal(t, expectedStatus, cbResp.StatusCode)
-	}
 
 	// Build an HTTP client that trusts the node certificates.
 	rpcCtx := app.NewClientRPCContext(ctx, username.TestUserName())
 	client, err := rpcCtx.GetHTTPClient()
 	require.NoError(t, err)
+	// The default 10s timeout is too short under race detection where OIDC
+	// callback processing can take 20s+.
+	client.Timeout = 45 * time.Second
 	// Prevent automatic redirects so we can capture cookies and headers.
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	client.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	doLoginCallback := func(t *testing.T) *http.Response {
+		t.Helper()
+		// Step 1: hit /oidc/v1/login and capture the state cookie.
+		resp, err := client.Get(app.AdminURL().WithPath("/oidc/v1/login").String())
+		require.NoError(t, err)
+		require.Equal(t, http.StatusFound, resp.StatusCode)
+		// Find by name; in shared-process multi-tenant mode the tenant
+		// cookie precedes oidc_secret.
+		stateCookie := findCookie(resp, secretCookieName)
+		require.NotNil(t, stateCookie, "expected oidc_secret cookie")
+		location, err := url.Parse(resp.Header.Get("Location"))
+		require.NoError(t, err)
+		state := location.Query().Get("state")
+		require.NoError(t, resp.Body.Close())
 
-	// Initially, the user should have no roles.
-	checkHasRole(t, testUser, roleOwners, false)
-	checkHasRole(t, testUser, roleUsers, false)
+		// Step 2: simulate the IdP redirect to /oidc/v1/callback.
+		req, err := http.NewRequest(http.MethodGet,
+			app.AdminURL().WithPath("/oidc/v1/callback").String(), nil)
+		require.NoError(t, err)
+		req.AddCookie(stateCookie)
+		query := req.URL.Query()
+		query.Set("state", state)
+		query.Set("code", "dummy")
+		req.URL.RawQuery = query.Encode()
+		callbackResp, err := client.Do(req)
+		require.NoError(t, err)
+		return callbackResp
+	}
 
-	t.Run("grant one role", func(t *testing.T) {
-		claims := map[string]any{"groups": []string{roleOwners}}
-		performOIDCLogin(t, &client, claims, http.StatusTemporaryRedirect)
-		checkHasRole(t, testUser, roleOwners, true)
-		checkHasRole(t, testUser, roleUsers, false)
-	})
+	t.Run("HTTP callback wiring", func(t *testing.T) {
+		testCases := []struct {
+			name           string
+			user           string
+			idToken        string
+			accessToken    string
+			expectedStatus int
+			expectedRoles  []string
+		}{
+			{
+				name:           "ID token success maps to redirect",
+				user:           "http_id_token",
+				idToken:        makeToken([]string{roleOwners}),
+				accessToken:    noGroupsToken,
+				expectedStatus: http.StatusTemporaryRedirect,
+				expectedRoles:  []string{roleOwners},
+			},
+			{
+				name:           "access token success maps to redirect",
+				user:           "http_access_token",
+				idToken:        noGroupsToken,
+				accessToken:    makeToken([]string{roleUsers}),
+				expectedStatus: http.StatusTemporaryRedirect,
+				expectedRoles:  []string{roleUsers},
+			},
+			{
+				name:           "authorization failure maps to forbidden",
+				user:           "http_forbidden",
+				idToken:        noGroupsToken,
+				accessToken:    noGroupsToken,
+				expectedStatus: http.StatusForbidden,
+			},
+			{
+				name:           "missing ID token maps to internal server error",
+				user:           "http_missing_id",
+				accessToken:    noGroupsToken,
+				expectedStatus: http.StatusInternalServerError,
+			},
+			{
+				name:           "missing access token maps to forbidden",
+				user:           "http_missing_access",
+				idToken:        makeToken([]string{roleOwners}),
+				expectedStatus: http.StatusForbidden,
+			},
+		}
 
-	t.Run("grant another role", func(t *testing.T) {
-		claims := map[string]any{"groups": []string{roleOwners, roleUsers}}
-		performOIDCLogin(t, &client, claims, http.StatusTemporaryRedirect)
-		checkHasRole(t, testUser, roleOwners, true)
-		checkHasRole(t, testUser, roleUsers, true)
-	})
-
-	t.Run("revoke one role", func(t *testing.T) {
-		claims := map[string]any{"groups": []string{roleUsers}}
-		performOIDCLogin(t, &client, claims, http.StatusTemporaryRedirect)
-		checkHasRole(t, testUser, roleOwners, false)
-		checkHasRole(t, testUser, roleUsers, true)
-	})
-
-	t.Run("grant non-existent role", func(t *testing.T) {
-		claims := map[string]any{"groups": []string{roleUsers, "non_existent_role"}}
-		performOIDCLogin(t, &client, claims, http.StatusTemporaryRedirect)
-		// The non-existent role is skipped, should only have roleUsers
-		checkHasRole(t, testUser, roleUsers, true)
-		checkHasRole(t, testUser, roleOwners, false)
-	})
-
-	// NOTE: each subtest performs exactly one performOIDCLogin. The mock manager
-	// is only rebuilt when a cluster setting value changes, and performOIDCLogin
-	// keys OIDCProviderURL on t.Name(); a second login within one subtest would
-	// reuse the previous login's claims. Pre-existing roles are therefore granted
-	// directly via SQL.
-	t.Run("missing groups claim denies login without revoking roles", func(t *testing.T) {
-		sqlDB.Exec(t, fmt.Sprintf("GRANT %s TO %s", roleOwners, testUser))
-		checkHasRole(t, testUser, roleOwners, true)
-
-		// A login whose tokens carry no groups claim (the userinfo fallback also
-		// fails, as it would on a transient IdP error) must be denied and must NOT
-		// revoke the user's existing roles: a missing claim is not an explicit
-		// empty group set.
-		performOIDCLogin(t, &client, map[string]any{}, http.StatusForbidden)
-		checkHasRole(t, testUser, roleOwners, true)
-	})
-
-	t.Run("explicit empty groups claim denies login and revokes roles", func(t *testing.T) {
-		sqlDB.Exec(t, fmt.Sprintf("GRANT %s TO %s", roleOwners, testUser))
-		checkHasRole(t, testUser, roleOwners, true)
-
-		// An explicit empty groups claim is a policy decision that the user has no
-		// roles: the sync revokes all roles and the login is then denied.
-		performOIDCLogin(t, &client, map[string]any{"groups": []string{}}, http.StatusForbidden)
-		checkHasRole(t, testUser, roleOwners, false)
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				createUser(t, tc.user)
+				mock.setTokens(tc.idToken, tc.accessToken, tc.user+"@example.com")
+				resp := doLoginCallback(t)
+				defer resp.Body.Close()
+				require.Equal(t, tc.expectedStatus, resp.StatusCode)
+				if tc.expectedStatus != http.StatusTemporaryRedirect {
+					body, err := io.ReadAll(resp.Body)
+					require.NoError(t, err)
+					require.Contains(t, string(body),
+						"OIDC: unable to complete authentication")
+				}
+				require.ElementsMatch(t, tc.expectedRoles, getRoles(t, tc.user))
+			})
+		}
 	})
 }
