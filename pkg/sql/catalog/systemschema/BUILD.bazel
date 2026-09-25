@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "systemschema",
@@ -22,5 +22,20 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/log",
+    ],
+)
+
+go_test(
+    name = "systemschema_test",
+    srcs = ["system_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":systemschema"],
+    deps = [
+        "//pkg/sql/sem/catconstants",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/echotest",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )

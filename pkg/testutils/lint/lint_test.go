@@ -2880,13 +2880,14 @@ func TestLint(t *testing.T) {
 			"**testdata**",
 			"**/*_test.go",
 			":!testutils/lint/lint_test.go", // false-positive: the lint itself.
-			":!sql/logictest/testdata/logic_test/gen_test_objects", // exempt: randomly generated table names.
-			":!sql/tests/testdata/initial_keys",                    // exempt: deliberate test of bootstrap catalog
-			":!sql/catalog/systemschema_test/testdata/bootstrap*",  // exempt: deliberate test of bootstrap catalog.
-			":!sql/catalog/internal/catkv/testdata/",               // TODO(foundations): #137029.
-			":!cli/testdata/doctor/",                               // TODO(foundations): #137030.
-			":!cmd/roachtest/testdata/pg_regress/*",                // TODO(queries): #137026.
-			":!cli/testdata/zip/file-filters/testzip_file_filters", // exempt: deliberate test to fetch all tables in debug zip.
+			":!sql/logictest/testdata/logic_test/gen_test_objects",      // exempt: randomly generated table names.
+			":!sql/tests/testdata/initial_keys",                         // exempt: deliberate test of bootstrap catalog
+			":!sql/catalog/systemschema_test/testdata/bootstrap*",       // exempt: deliberate test of bootstrap catalog.
+			":!sql/catalog/systemschema/testdata/secret_bearing_tables", // exempt: deliberate classification of every system table.
+			":!sql/catalog/internal/catkv/testdata/",                    // TODO(foundations): #137029.
+			":!cli/testdata/doctor/",                                    // TODO(foundations): #137030.
+			":!cmd/roachtest/testdata/pg_regress/*",                     // TODO(queries): #137026.
+			":!cli/testdata/zip/file-filters/testzip_file_filters",      // exempt: deliberate test to fetch all tables in debug zip.
 		)
 		if err != nil {
 			t.Fatal(err)
