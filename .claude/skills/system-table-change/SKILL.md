@@ -74,6 +74,13 @@ These files contain serialized representations of the schema and must be regener
   - Contain SQL schema output and JSON descriptor blobs
   - Test: `./dev test pkg/sql/catalog/systemschema_test -f TestValidateSystemSchemaAfterBootStrap -v --rewrite`
 
+### Secret-bearing tables golden file
+
+- **`pkg/sql/catalog/systemschema/testdata/secret_bearing_tables`**
+  - Lists every system table with its columns and whether it is secret-bearing (see `secretBearingTables` in `pkg/sql/catalog/systemschema/system.go`). Lets the SQL layer treat a statement touching a secret-bearing table as possibly carrying a secret
+  - Before regenerating, decide whether the new table or column can hold a secret (credential, password hash, sensitive setting value, URI with embedded credentials); if so, add the table to `secretBearingTables` first
+  - Test: `./dev test pkg/sql/catalog/systemschema -f TestSecretBearingTables -v --rewrite`
+
 ### Logic test golden files
 
 - **`pkg/sql/logictest/testdata/logic_test/pg_catalog`** — pg_catalog column metadata
