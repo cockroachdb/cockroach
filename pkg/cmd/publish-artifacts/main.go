@@ -106,7 +106,7 @@ func makeReleaseCmd() *cobra.Command {
 	releaseCmd.Flags().StringVar(&buildTagOverride, "build-tag-override", "", "override the version from version.txt")
 	releaseCmd.Flags().StringVar(&thirdPartyNoticesFileOverride, "third-party-notices-file", "", "override the file with third party notices")
 	releaseCmd.Flags().BoolVar(&telemetryDisabled, "telemetry-disabled", false, "disable telemetry")
-	releaseCmd.Flags().StringVar(&cockroachArchivePrefix, "cockroach-archive-prefix", "cockroach", "prefix for the cockroach archive")
+	releaseCmd.Flags().StringVar(&cockroachArchivePrefix, "cockroach-archive-prefix", "cockroach", "prefix for the cockroach archive; may include a directory to upload the archive under (e.g. ibm/cockroach)")
 
 	return releaseCmd
 }

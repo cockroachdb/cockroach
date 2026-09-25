@@ -403,7 +403,12 @@ jobs:
         env:
           PLATFORM: ${{ matrix.platform }}
           TELEMETRY_DISABLED: 'true'
-          COCKROACH_ARCHIVE_PREFIX: cockroach-ibm
+          # Publishes to ibm/cockroach-<version>.<platform>.tgz. The ibm/
+          # directory keeps these apart from the regular tarballs, while the
+          # tarball names and contents match the public ones, as IBM
+          # requires. The docker and signing jobs below must use the same
+          # prefix.
+          COCKROACH_ARCHIVE_PREFIX: ibm/cockroach
           # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
           TC_BUILD_BRANCH: ${{ github.ref_name }}
           TC_BUILDTYPE_ID: release-build-ibm-${{ matrix.platform }}
@@ -781,7 +786,7 @@ jobs:
       - name: Build and push Docker images (no telemetry)
         env:
           TELEMETRY_DISABLED: 'true'
-          COCKROACH_ARCHIVE_PREFIX: cockroach-ibm
+          COCKROACH_ARCHIVE_PREFIX: ibm/cockroach
           # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
           TC_BUILD_BRANCH: ${{ github.ref_name }}
           BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
@@ -894,7 +899,7 @@ jobs:
 
       - name: Sign IBM release artifacts (GPG)
         env:
-          COCKROACH_ARCHIVE_PREFIX: cockroach-ibm
+          COCKROACH_ARCHIVE_PREFIX: ibm/cockroach
           # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
           TC_BUILD_BRANCH: ${{ github.ref_name }}
           BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}

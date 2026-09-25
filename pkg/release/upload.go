@@ -16,6 +16,7 @@ import (
 	"log"
 	"mime"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -30,7 +31,8 @@ type PutReleaseOptions struct {
 	Platform Platform
 	// VersionStr is the version (SHA/branch name) of the release.
 	VersionStr string
-
+	// ArchivePrefix names the archive, and may include a directory that the
+	// archive is uploaded under. See makeArchiveKeys.
 	ArchivePrefix string
 	// OutputDirectory is where to save a copy of the archive
 	OutputDirectory string
@@ -235,6 +237,17 @@ type archiveKeys struct {
 
 // makeArchiveKeys extracts the target archive base and archive
 // name for the given parameters.
+//
+// The archive prefix may contain a directory, which only affects where the
+// archive is stored, not how it is named. This lets builds that must not
+// overwrite the regular release archives (e.g. the telemetry-disabled IBM
+// builds) produce archives that are identical in name and layout to the
+// regular ones. For example, for version v1.2.3 on linux-amd64:
+//
+//	prefix "cockroach":     base "cockroach-v1.2.3.linux-amd64",
+//	                        archive "cockroach-v1.2.3.linux-amd64.tgz"
+//	prefix "ibm/cockroach": base "cockroach-v1.2.3.linux-amd64",
+//	                        archive "ibm/cockroach-v1.2.3.linux-amd64.tgz"
 func makeArchiveKeys(platform Platform, versionStr string, archivePrefix string) archiveKeys {
 	suffix := SuffixFromPlatform(platform)
 	targetSuffix, hasExe := TrimDotExe(suffix)
@@ -242,15 +255,15 @@ func makeArchiveKeys(platform Platform, versionStr string, archivePrefix string)
 		targetSuffix = strings.Replace(targetSuffix, "gnu-", "", -1)
 		targetSuffix = osVersionRe.ReplaceAllLiteralString(targetSuffix, "")
 	}
-	archiveBase := fmt.Sprintf("%s-%s", archivePrefix, versionStr)
-	targetArchiveBase := archiveBase + targetSuffix
+	dir, name := path.Split(archivePrefix)
+	targetArchiveBase := fmt.Sprintf("%s-%s", name, versionStr) + targetSuffix
 	keys := archiveKeys{
 		base: targetArchiveBase,
 	}
 	if hasExe {
-		keys.archive = targetArchiveBase + ".zip"
+		keys.archive = dir + targetArchiveBase + ".zip"
 	} else {
-		keys.archive = targetArchiveBase + ".tgz"
+		keys.archive = dir + targetArchiveBase + ".tgz"
 	}
 	return keys
 }
