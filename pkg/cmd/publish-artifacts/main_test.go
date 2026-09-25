@@ -6,7 +6,9 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
@@ -556,7 +558,7 @@ func TestRelease(t *testing.T) {
 			name: `release no telemetry`,
 			flags: releaseRunFlags{
 				branch:                 `v1.1.1-alpha.1`,
-				cockroachArchivePrefix: "cockroach-telemetry-disabled",
+				cockroachArchivePrefix: "ibm/cockroach",
 				telemetryDisabled:      true,
 			},
 			expectedCmds: []string{
@@ -586,21 +588,21 @@ func TestRelease(t *testing.T) {
 			},
 			expectedGets: nil,
 			expectedPuts: []string{
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-amd64.tgz " +
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.linux-amd64.tgz " +
 					"CONTENTS <binary stuff>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-amd64.tgz.sha256sum CONTENTS <sha256sum>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-amd64-fips.tgz CONTENTS <binary stuff>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-amd64-fips.tgz.sha256sum CONTENTS <sha256sum>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-arm64.tgz CONTENTS <binary stuff>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-arm64.tgz.sha256sum CONTENTS <sha256sum>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-s390x.tgz CONTENTS <binary stuff>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-s390x.tgz.sha256sum CONTENTS <sha256sum>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.darwin-10.9-amd64.tgz CONTENTS <binary stuff>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.darwin-10.9-amd64.tgz.sha256sum CONTENTS <sha256sum>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.darwin-11.0-arm64.unsigned.tgz CONTENTS <binary stuff>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.darwin-11.0-arm64.unsigned.tgz.sha256sum CONTENTS <sha256sum>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.windows-6.2-amd64.zip CONTENTS <binary stuff>",
-				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.windows-6.2-amd64.zip.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.linux-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.linux-amd64-fips.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.linux-amd64-fips.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.linux-arm64.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.linux-arm64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.linux-s390x.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.linux-s390x.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.darwin-10.9-amd64.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.darwin-10.9-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.darwin-11.0-arm64.unsigned.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.darwin-11.0-arm64.unsigned.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.windows-6.2-amd64.zip CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/ibm/cockroach-v1.1.1-alpha.1.windows-6.2-amd64.zip.sha256sum CONTENTS <sha256sum>",
 			},
 			platforms: release.DefaultPlatforms(),
 		},
@@ -651,4 +653,32 @@ func TestRelease(t *testing.T) {
 			require.Equal(t, test.expectedPuts, gcs.puts)
 		})
 	}
+}
+
+// TestCreateArchivePrefixWithDirectory verifies that a directory in the
+// archive prefix only affects where the archive is uploaded: the archive's
+// contents are laid out exactly as for the regular "cockroach" prefix.
+func TestCreateArchivePrefixWithDirectory(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "cockroach")
+	require.NoError(t, os.WriteFile(binary, []byte("binary"), 0755))
+	files := []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(binary, "cockroach")}
+
+	body, err := release.CreateArchive(release.PlatformLinux, "v1.2.3", "ibm/cockroach", files)
+	require.NoError(t, err)
+	gzr, err := gzip.NewReader(&body)
+	require.NoError(t, err)
+	hdr, err := tar.NewReader(gzr).Next()
+	require.NoError(t, err)
+	require.Equal(t, "cockroach-v1.2.3.linux-amd64/cockroach", hdr.Name)
+
+	gcs := &mockGCSProvider{bucket: "bucket"}
+	release.PutRelease(gcs, release.PutReleaseOptions{
+		Platform:      release.PlatformLinux,
+		VersionStr:    "v1.2.3",
+		ArchivePrefix: "ibm/cockroach",
+	}, body)
+	require.Len(t, gcs.puts, 2)
+	require.True(t, strings.HasPrefix(gcs.puts[0], "gs://bucket/ibm/cockroach-v1.2.3.linux-amd64.tgz "), gcs.puts[0])
+	require.True(t, strings.HasPrefix(gcs.puts[1], "gs://bucket/ibm/cockroach-v1.2.3.linux-amd64.tgz.sha256sum "), gcs.puts[1])
 }
