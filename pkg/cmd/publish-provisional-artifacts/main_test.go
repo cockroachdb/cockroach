@@ -6,7 +6,9 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
@@ -863,4 +865,32 @@ func TestBless(t *testing.T) {
 			require.Equal(t, test.expectedPuts, gs.puts)
 		})
 	}
+}
+
+// TestCreateArchivePrefixWithDirectory verifies that a directory in the
+// archive prefix only affects where the archive is uploaded: the archive's
+// contents are laid out exactly as for the regular "cockroach" prefix.
+func TestCreateArchivePrefixWithDirectory(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "cockroach")
+	require.NoError(t, os.WriteFile(binary, []byte("binary"), 0755))
+	files := []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(binary, "cockroach")}
+
+	body, err := release.CreateArchive(release.PlatformLinux, "v1.2.3", "ibm/cockroach", files)
+	require.NoError(t, err)
+	gzr, err := gzip.NewReader(&body)
+	require.NoError(t, err)
+	hdr, err := tar.NewReader(gzr).Next()
+	require.NoError(t, err)
+	require.Equal(t, "cockroach-v1.2.3.linux-amd64/cockroach", hdr.Name)
+
+	storage := &mockStorage{bucket: "bucket"}
+	release.PutRelease(storage, release.PutReleaseOptions{
+		Platform:      release.PlatformLinux,
+		VersionStr:    "v1.2.3",
+		ArchivePrefix: "ibm/cockroach",
+	}, body)
+	require.Len(t, storage.puts, 2)
+	require.True(t, strings.HasPrefix(storage.puts[0], "gs://bucket/ibm/cockroach-v1.2.3.linux-amd64.tgz "), storage.puts[0])
+	require.True(t, strings.HasPrefix(storage.puts[1], "gs://bucket/ibm/cockroach-v1.2.3.linux-amd64.tgz.sha256sum "), storage.puts[1])
 }

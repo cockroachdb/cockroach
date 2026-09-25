@@ -57,11 +57,15 @@ mkdir -p artifacts
 cd artifacts
 
 for platform in linux-amd64 linux-amd64-fips linux-arm64; do
-  tarball=${cockroach_archive_prefix}-${version}.${platform}.tgz
+  # The prefix may include a directory (e.g. "ibm/cockroach"), which is part
+  # of the object key but not of the tarball name. Download into the current
+  # directory under the bare name, which is also what the .sha256sum lists.
+  object=${cockroach_archive_prefix}-${version}.${platform}.tgz
+  tarball=$(basename "$object")
 
-  echo "Downloading $tarball..."
-  gcloud storage cp "gs://$gcs_staged_bucket/$tarball" "$tarball"
-  gcloud storage cp "gs://$gcs_staged_bucket/$tarball.sha256sum" "$tarball.sha256sum"
+  echo "Downloading $object..."
+  gcloud storage cp "gs://$gcs_staged_bucket/$object" "$tarball"
+  gcloud storage cp "gs://$gcs_staged_bucket/$object.sha256sum" "$tarball.sha256sum"
 
   echo "Verifying checksum..."
   shasum --algorithm 256 --check "$tarball.sha256sum"
@@ -72,7 +76,7 @@ for platform in linux-amd64 linux-amd64-fips linux-arm64; do
     --detach-sign --armor "$tarball"
   gpg --homedir "$secrets_dir" --verify "$tarball.asc" "$tarball"
 
-  echo "Uploading $tarball.asc..."
-  gcloud storage cp "$tarball.asc" "gs://$gcs_staged_bucket/$tarball.asc"
+  echo "Uploading $object.asc..."
+  gcloud storage cp "$tarball.asc" "gs://$gcs_staged_bucket/$object.asc"
 done
 echo "IBM GPG signing complete."
