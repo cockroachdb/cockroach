@@ -43,7 +43,17 @@ func init() {
 						TableID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.TableLocalitySecondaryRegion) *scop.RemoveBackReferenceInTypes {
+				// Becoming REGIONAL BY ROW keeps the table dependent on the
+				// multi-region enum through its new crdb_region column, whose
+				// type reference installs the back-reference in an earlier
+				// stage. Removing it here would undo that and leave the enum
+				// droppable out from under the table. The decision is made from
+				// the plan's target state rather than the descriptor, which is
+				// only partially updated at this point.
+				emit(func(this *scpb.TableLocalitySecondaryRegion, md *opGenContext) *scop.RemoveBackReferenceInTypes {
+					if isBecomingRegionalByRow(this.TableID, md) {
+						return nil
+					}
 					return &scop.RemoveBackReferenceInTypes{
 						TypeIDs:                    []catid.DescID{this.RegionEnumTypeID},
 						BackReferencedDescriptorID: this.TableID,

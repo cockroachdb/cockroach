@@ -1265,6 +1265,92 @@ INSERT INTO regional_by_table_in_us_east VALUES (0, 1, 2);
 statement ok
 ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY ROW
 
+# Leaving REGIONAL BY TABLE IN a secondary region drops that locality's implicit
+# dependency on the multi-region enum, but REGIONAL BY ROW replaces it with a
+# crdb_region column of the enum's type, so the back-reference must survive.
+# Without it the enum can be dropped out from under the table.
+query B retry
+SELECT descriptor->'type'->'referencingDescriptorIds'
+       @> to_jsonb('regional_by_table_in_us_east'::REGCLASS::OID::INT)
+FROM crdb_internal.kv_catalog_descriptor
+WHERE descriptor->'type'->>'name' = 'crdb_internal_region'
+  AND (descriptor->'type'->>'parentId')::INT
+      = crdb_internal.get_database_id(current_database())
+----
+true
+
+# The user-visible consequence of that back-reference: with it in place,
+# dropping a region the table has rows in is refused, and the table stays
+# readable. Without it, DROP REGION succeeds and rows homed in the dropped
+# region can no longer be decoded. This runs in its own database so that no
+# other table can be the one refusing the DROP REGION.
+statement ok
+CREATE DATABASE usable_after_rbr_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
+
+statement ok
+USE usable_after_rbr_db
+
+statement ok
+CREATE TABLE usable_after_rbr (pk INT PRIMARY KEY, i INT, FAMILY (pk, i)) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+statement ok
+INSERT INTO usable_after_rbr VALUES (1, 10), (2, 20)
+
+statement ok
+ALTER TABLE usable_after_rbr SET LOCALITY REGIONAL BY ROW
+
+statement ok
+UPDATE usable_after_rbr SET crdb_region = 'us-east-1' WHERE pk = 1
+
+statement ok
+UPDATE usable_after_rbr SET crdb_region = 'ap-southeast-2' WHERE pk = 2
+
+statement error pgcode 2BP01 could not remove enum value "ap-southeast-2" as it is being used by "usable_after_rbr" in row: pk=2, i=20, crdb_region='ap-southeast-2'
+ALTER DATABASE usable_after_rbr_db DROP REGION "ap-southeast-2"
+
+query IIT
+SELECT pk, i, crdb_region::STRING FROM usable_after_rbr ORDER BY pk
+----
+1  10  us-east-1
+2  20  ap-southeast-2
+
+# By contrast, leaving a secondary region for GLOBAL ends the dependency: no
+# column of the enum type remains, so the back-reference goes away and the
+# region can be dropped without affecting the table.
+statement ok
+CREATE TABLE global_after_rbt (pk INT PRIMARY KEY, i INT, FAMILY (pk, i)) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+statement ok
+INSERT INTO global_after_rbt VALUES (3, 30)
+
+statement ok
+ALTER TABLE global_after_rbt SET LOCALITY GLOBAL
+
+query B retry
+SELECT descriptor->'type'->'referencingDescriptorIds' @> to_jsonb('global_after_rbt'::REGCLASS::OID::INT)
+FROM crdb_internal.kv_catalog_descriptor
+WHERE descriptor->'type'->>'name' = 'crdb_internal_region'
+  AND (descriptor->'type'->>'parentId')::INT = crdb_internal.get_database_id(current_database())
+----
+false
+
+statement ok
+DROP TABLE usable_after_rbr
+
+statement ok
+ALTER DATABASE usable_after_rbr_db DROP REGION "ap-southeast-2"
+
+query II
+SELECT pk, i FROM global_after_rbt
+----
+3  30
+
+statement ok
+USE alter_locality_test
+
+statement ok
+DROP DATABASE usable_after_rbr_db CASCADE
+
 query TT
 SHOW CREATE TABLE regional_by_table_in_us_east
 ----

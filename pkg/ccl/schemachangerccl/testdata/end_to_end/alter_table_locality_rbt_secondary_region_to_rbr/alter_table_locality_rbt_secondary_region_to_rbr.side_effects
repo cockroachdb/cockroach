@@ -1684,18 +1684,13 @@ upsert descriptor #108
   +  version: "12"
 persist all catalog changes to storage
 adding table for stats refresh: 108
-update progress of schema change job #1: "Pending: Updating schema metadata (17 operations) — PostCommitNonRevertible phase (stage 2 of 5)."
+update progress of schema change job #1: "Pending: Updating schema metadata (16 operations) — PostCommitNonRevertible phase (stage 2 of 5)."
 set schema change job #1 to non-cancellable
 commit transaction #18
 begin transaction #19
-## PostCommitNonRevertiblePhase stage 2 of 5 with 21 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 5 with 20 MutationType ops
 upsert descriptor #106
   ...
-         withGrantOption: "2"
-       version: 3
-  -  referencingDescriptorIds:
-  -  - 108
-     regionConfig:
        primaryRegion: us-east1
        zoneConfigExtensions: {}
   -  version: "13"

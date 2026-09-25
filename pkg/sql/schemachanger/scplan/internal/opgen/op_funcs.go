@@ -191,6 +191,28 @@ func checkIfDescriptorIsWithoutData(id descpb.ID, md *opGenContext) bool {
 	return !doesDescriptorHaveData
 }
 
+// isBecomingRegionalByRow reports whether this schema change makes the table
+// REGIONAL BY ROW, in which case its dependency on the multi-region enum
+// survives by way of the crdb_region column rather than the locality config.
+func isBecomingRegionalByRow(tableID descpb.ID, md *opGenContext) bool {
+	for _, t := range md.Targets {
+		if t.TargetStatus != scpb.Status_PUBLIC {
+			continue
+		}
+		switch e := t.Element().(type) {
+		case *scpb.TableLocalityRegionalByRow:
+			if e.TableID == tableID {
+				return true
+			}
+		case *scpb.TableLocalityRegionalByRowUsingConstraint:
+			if e.TableID == tableID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // checkIfZoneConfigHasGCDependents will determine if a table/database
 // descriptor has data dependencies it still needs to GC. This allows us to
 // determine when we need to skip certain operations like deleting a zone
