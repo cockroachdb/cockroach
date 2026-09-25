@@ -212,6 +212,44 @@ func PushTxn(
 	if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
 		reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
 		knownHigherEpoch = true
+		// The transaction record we read is from an older epoch, so the
+		// epoch-scoped state it carries does not describe the epoch we just
+		// learned about. Sequence numbers restart at each epoch, so carrying
+		// that state forward alongside a newer epoch is not merely stale, it is
+		// actively wrong: a reader of this proto has no way to tell that the
+		// seqnum-indexed state belongs to a different epoch.
+		//
+		// Concretely, IgnoredSeqNums must be dropped. This proto is handed to
+		// the pusher, which uses it to resolve the intent it was blocked on
+		// (see result.Local.UpdatedTxns below). Intent resolution only applies
+		// ignored seqnum ranges when the epoch of the intent matches the epoch
+		// of the update (see mvccResolveWriteIntent), precisely because ranges
+		// from one epoch are meaningless in another. By bumping Epoch here we
+		// make those epochs match, so without this reset the pusher would apply
+		// epoch-N ranges to an epoch-N+1 intent. Since seqnums restart, the new
+		// intent's seqnum frequently falls inside an old ignored range, and
+		// mvccMaybeRewriteIntentHistory then *removes* the intent even though
+		// the pushee never rolled it back. The pushee later commits, having
+		// silently lost that write. The lock table's handling of unreplicated
+		// locks (see keyLocks.tryUpdateLockLocked) keys off epoch equality in the
+		// same way, and would drop such locks for the same reason.
+		//
+		// The remaining epoch-scoped fields (see Transaction.Restart) are
+		// deliberately left alone:
+		//
+		//   - Sequence: not consulted by intent resolution, and a TxnMeta
+		//     sequence that is too high is inert in the record.
+		//   - LockSpans: needed to clean up the pushee's intents if this push
+		//     aborts it and persists the record below. Dropping them here would
+		//     orphan intents; keeping stale spans is harmless, as resolving a
+		//     span without intents is a no-op.
+		//   - InFlightWrites: only meaningful for a STAGING record, and the
+		//     PUSH_ABORT path below already clears them. Note also that a known
+		//     higher epoch implies pusheeStagingFailed, so we never report this
+		//     proto in an IndeterminateCommitError.
+		//   - ReadTimestampFixed: not part of TransactionRecord, so it is
+		//     already unset here.
+		reply.PusheeTxn.IgnoredSeqNums = nil
 	}
 	reply.PusheeTxn.UpgradePriority(args.PusheeTxn.Priority)
 
