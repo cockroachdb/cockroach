@@ -372,6 +372,86 @@ func TestCopyFromBinary(t *testing.T) {
 	sqlDB.CheckQueryResults(t, "SELECT * FROM t ORDER BY id", expect)
 }
 
+// TestCopyFromBinaryCollatedString is a regression test for binary COPY into
+// collated string columns producing plain (non-collated) strings (#175602).
+func TestCopyFromBinaryCollatedString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	pgURL, cleanupGoDB := s.PGUrl(
+		t, serverutils.CertsDirPrefix("StartServer"), serverutils.User(username.RootUser),
+	)
+	defer cleanupGoDB()
+	conn, err := pgx.Connect(ctx, pgURL.String())
+	require.NoError(t, err)
+	defer func() { _ = conn.Close(ctx) }()
+
+	// All collatable string types are covered since a collated string type
+	// keeps the OID of its underlying string type. Partial index is added since
+	// previously it would hit an internal error.
+	sqlDB.Exec(t, `
+		CREATE TABLE t (
+			id INT8 PRIMARY KEY,
+			s STRING(191) COLLATE und_u_ks_level1,
+			b CHAR(3) COLLATE und_u_ks_level1,
+			c "char" COLLATE und_u_ks_level1,
+			n NAME COLLATE und_u_ks_level1,
+			a STRING[] COLLATE und_u_ks_level1,
+			INDEX t_s_idx (s),
+			INDEX partial_idx (s) WHERE s IS NOT NULL,
+			INDEX t_b_idx (b),
+			INDEX t_c_idx (c),
+			INDEX t_n_idx (n),
+			INDEX t_a_idx (a)
+		)
+	`)
+
+	// pgx always uses binary COPY. Note that Postgres pads CHAR(n) values with
+	// spaces on the wire, and pgx encodes "char" values from integers.
+	_, err = conn.CopyFrom(
+		ctx,
+		pgx.Identifier{"t"},
+		[]string{"id", "s", "b", "c", "n", "a"},
+		pgx.CopyFromRows([][]interface{}{
+			{1, "Hello", "ab ", int8('x'), "Hello", []string{"Hello", "World"}},
+			{2, nil, nil, nil, nil, nil},
+		}),
+	)
+	require.NoError(t, err)
+	sqlDB.Exec(t, `INSERT INTO t VALUES (3, 'World', 'cd', 'y', 'World', ARRAY['World'])`)
+
+	// The secondary indexes must agree with the primary index, and lookups must
+	// use case-insensitive comparisons (as well as ignore the CHAR(n) padding).
+	for _, tc := range []struct {
+		col     string
+		value   string
+		indexes []string
+	}{
+		{col: "s", value: "'hello'", indexes: []string{"t_s_idx", "partial_idx"}},
+		{col: "b", value: "'AB'", indexes: []string{"t_b_idx"}},
+		{col: "c", value: "'X'", indexes: []string{"t_c_idx"}},
+		{col: "n", value: "'HELLO'", indexes: []string{"t_n_idx"}},
+		{col: "a", value: "ARRAY['hello', 'WORLD'] COLLATE und_u_ks_level1", indexes: []string{"t_a_idx"}},
+	} {
+		for _, idx := range append([]string{"t_pkey"}, tc.indexes...) {
+			sqlDB.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT id FROM t@%s WHERE %s = %s`, idx, tc.col, tc.value),
+				[][]string{{"1"}},
+			)
+			sqlDB.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT id FROM t@%s WHERE %s IS NOT NULL ORDER BY %s`, idx, tc.col, tc.col),
+				[][]string{{"1"}, {"3"}},
+			)
+		}
+	}
+}
+
 func TestCopyFromError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
