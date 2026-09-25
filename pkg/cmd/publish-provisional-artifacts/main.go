@@ -46,7 +46,7 @@ func main() {
 	flag.BoolVar(&doProvisional, "provisional", false, "publish provisional binaries")
 	flag.BoolVar(&doBless, "bless", false, "bless provisional binaries")
 	flag.BoolVar(&telemetryDisabled, "telemetry-disabled", false, "disable telemetry")
-	flag.StringVar(&cockroachArchivePrefix, "cockroach-archive-prefix", "cockroach", "prefix for the cockroach archive")
+	flag.StringVar(&cockroachArchivePrefix, "cockroach-archive-prefix", "cockroach", "prefix for the cockroach archive; may include a directory to upload the archive under (e.g. ibm/cockroach)")
 	flag.Parse()
 	if len(platforms) == 0 {
 		platforms = release.DefaultPlatforms()
