@@ -1508,6 +1508,49 @@ var (
 	SystemDB = MakeSystemDatabaseDesc()
 )
 
+// secretBearingTables lists the system tables whose rows can hold secrets,
+// keyed by table name. A statement referencing any of them may carry a secret
+// in its placeholder arguments and in the errors its trace records, so the
+// list lets the SQL layer treat such a statement as possibly carrying a
+// secret.
+//
+// TestSecretBearingTables records the classification of every system table
+// in a golden file, so adding a table requires deciding whether it belongs
+// here.
+var secretBearingTables = map[catconstants.SystemTableName]struct{}{
+	// value holds the raw value of every setting, including sensitive ones.
+	catconstants.SettingsTableName: {},
+	// value holds the raw value of every setting set for a tenant, including
+	// sensitive ones.
+	catconstants.TenantSettingsTableName: {},
+	// value holds job payloads, which for bulk-I/O jobs embed the external
+	// storage URIs with their credentials.
+	catconstants.SystemJobInfoTableName: {},
+	// execution_args holds the scheduled statement formatted with
+	// FmtShowPasswords, since the scheduler needs the credentials to run it.
+	catconstants.ScheduledJobsTableName: {},
+	// connection_details holds the connection URI with its credentials.
+	catconstants.SystemExternalConnectionsTableName: {},
+	// "hashedPassword" holds role password hashes.
+	catconstants.UsersTableName: {},
+	// "hashedSecret" holds DB Console session secret hashes.
+	catconstants.WebSessionsTableName: {},
+	// secret holds join tokens. Nothing writes the table since the join-token
+	// exchange was removed in 24.1, but the column is still there to hold one.
+	catconstants.JoinTokensTableName: {},
+	// value is meant to carry task arguments such as storage URIs. Nothing
+	// writes the table since autoconfig was removed in 24.1, but the column is
+	// still there to hold them.
+	catconstants.TaskPayloadsTableName: {},
+}
+
+// IsSecretBearingTable reports whether the system table with the given name is
+// one of secretBearingTables.
+func IsSecretBearingTable(name catconstants.SystemTableName) bool {
+	_, ok := secretBearingTables[name]
+	return ok
+}
+
 // MakeSystemTables produces a list of all tables in the system database.
 func MakeSystemTables() []SystemTable {
 	return []SystemTable{
