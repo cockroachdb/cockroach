@@ -81,7 +81,7 @@ function upload_stats {
     #     gs://${bucket}/artifacts/${stats_dir}/path/to/test/${stats_file_name}
     #
     # `find` below will expand "{}" as ./path/to/test/${stats_file_name}. We need
-    # to bend over backwards to remove the `./` prefix or gsutil will have
+    # to bend over backwards to remove the `./` prefix or gcloud storage will have
     # a `.` folder in ${stats_dir}, which we don't want.
     (cd "${artifacts}" && \
       while IFS= read -r f; do
@@ -95,7 +95,7 @@ function upload_stats {
           elif [[ "${f}" == *"/cpu_arch=s390x/"* ]]; then
             artifacts_dir="${artifacts_dir}-s390x"
           fi
-          gsutil cp "${f}" "gs://${bucket}/${artifacts_dir}/${stats_dir}/${f}"
+          gcloud storage cp "${f}" "gs://${bucket}/${artifacts_dir}/${stats_dir}/${f}"
         fi
       done <<< "$(find . -name "${stats_file_name}" | sed 's/^\.\///')")
   fi
@@ -111,10 +111,10 @@ function upload_binaries {
       arch=$(get_host_arch)
       os=linux
       sha=${BUILD_VCS_NUMBER}
-      gsutil cp bin/roachprod gs://$bucket/binaries/$branch/$os/$arch/roachprod.$sha
-      gsutil cp bin/roachtest gs://$bucket/binaries/$branch/$os/$arch/roachtest.$sha
+      gcloud storage cp bin/roachprod gs://$bucket/binaries/$branch/$os/$arch/roachprod.$sha
+      gcloud storage cp bin/roachtest gs://$bucket/binaries/$branch/$os/$arch/roachtest.$sha
       # N.B. both binaries are built from the same SHA, so one blob will suffice.
-      echo "$sha" | gsutil cp - gs://$bucket/binaries/$branch/$os/$arch/latest_sha
+      echo "$sha" | gcloud storage cp - gs://$bucket/binaries/$branch/$os/$arch/latest_sha
   fi
 }
 

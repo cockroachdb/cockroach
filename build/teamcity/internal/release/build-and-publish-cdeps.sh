@@ -25,6 +25,6 @@ loc=$(date +%Y%m%d-%H%M%S)
 for FILE in `find $root/artifacts -name '*.tar.gz'`; do
     BASE=$(basename $FILE)
     DEST=${BASE/.tar.gz/".$loc.tar.gz"}
-    gsutil cp $FILE gs://public-bazel-artifacts/c-deps/$loc/$DEST
+    gcloud storage cp $FILE gs://public-bazel-artifacts/c-deps/$loc/$DEST
 done
 tc_end_block "Publish artifacts"

@@ -74,7 +74,7 @@ cp build/deploy/Dockerfile "$context/Dockerfile"
 for platform in linux-amd64 linux-arm64 linux-s390x; do
   arch="${platform#linux-}"
   archive="${cockroach_archive_prefix}-${build_name}.${platform}.tgz"
-  gsutil -o 'GSUtil:num_retries=5' cp "gs://$gcs_bucket/$archive" "$tmpdir/$archive"
+  gcloud storage cp "gs://$gcs_bucket/$archive" "$tmpdir/$archive"
   staging="$tmpdir/staging-${platform}"
   mkdir -p "$staging"
   tar \
@@ -96,7 +96,7 @@ fips_context="$tmpdir/fips-context"
 mkdir -p "$fips_context/amd64"
 cp build/deploy/Dockerfile "$fips_context/Dockerfile"
 fips_archive="${cockroach_archive_prefix}-${build_name}.linux-amd64-fips.tgz"
-gsutil -o 'GSUtil:num_retries=5' cp "gs://$gcs_bucket/$fips_archive" "$tmpdir/$fips_archive"
+gcloud storage cp "gs://$gcs_bucket/$fips_archive" "$tmpdir/$fips_archive"
 fips_staging="$tmpdir/staging-linux-amd64-fips"
 mkdir -p "$fips_staging"
 tar \

@@ -36,5 +36,5 @@ EOF
 # Run jq to pretty print and validate JSON
 jq . "$metadata_file"
 google_credentials=$metadata_google_credentials log_into_gcloud
-gsutil cp "$metadata_file" "gs://$metadata_gcs_bucket/builds/$BUILD_VCS_NUMBER.json"
+gcloud storage cp "$metadata_file" "gs://$metadata_gcs_bucket/builds/$BUILD_VCS_NUMBER.json"
 echo "Published to https://storage.googleapis.com/$metadata_gcs_bucket/builds/$BUILD_VCS_NUMBER.json"

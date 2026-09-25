@@ -65,7 +65,7 @@ func stage(cluster, archivePath, remoteDest string, longRetries bool) (err error
 	// Copy the archive to the remote machine.
 	copyFromGCS := strings.HasPrefix(archivePath, "gs://")
 	if copyFromGCS {
-		if err = RoachprodRun(cluster, l, []string{"gsutil", "-q", "-m", "cp", archivePath, archiveRemotePath}, runOptions); err != nil {
+		if err = RoachprodRun(cluster, l, []string{"gcloud", "storage", "cp", archivePath, archiveRemotePath}, runOptions); err != nil {
 			return errors.Wrapf(err, "copying archive from GCS: %s", archivePath)
 		}
 	} else {

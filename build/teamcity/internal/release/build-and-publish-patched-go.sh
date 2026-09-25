@@ -33,7 +33,7 @@ echo $loc > "${toplevel}"/artifacts/TIMESTAMP.txt
 for FILE in `find $root/artifacts -name '*.tar.gz'`; do
     BASE=$(basename $FILE)
     if [[ "$BASE" != *"darwin"* ]]; then
-        gsutil cp $FILE gs://public-bazel-artifacts/go/$loc/$BASE
+        gcloud storage cp $FILE gs://public-bazel-artifacts/go/$loc/$BASE
     fi
 done
 tc_end_block "Publish artifacts"
