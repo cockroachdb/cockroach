@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -28,10 +29,16 @@ func TestSplitAtTableBoundary(t *testing.T) {
 	// lease concurrently (#173741), leaving the split to the periodic scanner
 	// (default 10m, longer than our deadline). Shorten the scan interval so the
 	// backstop fires in time. Revert once #173741 is fixed.
+	serverArgs := base.TestServerArgs{
+		ScanInterval: time.Second,
+	}
+	// Skip secondary tenants when running under race to avoid flakes.
+	if util.RaceEnabled {
+		serverArgs.DefaultTestTenant = base.TestSkipSecondaryTenantsUnderDuress
+	}
+
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			ScanInterval: time.Second,
-		},
+		ServerArgs: serverArgs,
 	})
 	defer tc.Stopper().Stop(context.Background())
 	s := tc.ApplicationLayer(0)
