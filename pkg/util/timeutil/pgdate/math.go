@@ -72,6 +72,23 @@ type stringChunk struct {
 	Match string
 }
 
+// tDelimiterIndex returns the index of a T (or t) that directly follows the
+// digits at the start of s and is directly followed by another digit, as in
+// 02T03 or 20200102T030405, or -1 if there is none.
+func tDelimiterIndex(s string) int {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= '0' && c <= '9' {
+			continue
+		}
+		if (c == 'T' || c == 't') && i > 0 && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' {
+			return i
+		}
+		return -1
+	}
+	return -1
+}
+
 // chunk filters the runes in a string and populates the buffer with
 // contiguous spans of alphanumeric characters.  The number of
 // chunks will be returned along with any leftover, unmatching text.
@@ -95,18 +112,19 @@ func chunk(s string, buf []stringChunk) (int, string) {
 			notMatch := s[previousMatchEnd:matchStart]
 			match := s[matchStart:matchEnd]
 
-			// Special-case to handle ddThh delimiter
-			if len(match) == 5 && (match[2] == 'T' || match[2] == 't') {
+			// Special-case to handle a T delimiter between a date and a time,
+			// such as ddThh or YYYYMMDDThhmmss.
+			if tIdx := tDelimiterIndex(match); tIdx > 0 {
 				if count+1 > maxIdx {
 					return false
 				}
 				buf[count] = stringChunk{
 					NotMatch: notMatch,
-					Match:    match[:2],
+					Match:    match[:tIdx],
 				}
 				buf[count+1] = stringChunk{
 					NotMatch: "t",
-					Match:    match[3:],
+					Match:    match[tIdx+1:],
 				}
 				count += 2
 			} else {

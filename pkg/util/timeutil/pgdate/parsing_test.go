@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 var db *gosql.DB
@@ -1099,5 +1100,30 @@ func BenchmarkParseDate(b *testing.B) {
 				b.Fatal(err)
 			}
 		}
+	}
+}
+
+// TestParseISO8601Basic checks timestamps that use a T delimiter directly
+// between a date and a time written without separators.
+func TestParseISO8601Basic(t *testing.T) {
+	for _, tc := range []struct {
+		s   string
+		exp time.Time
+	}{
+		{"20200102T030405", time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)},
+		{"20200102T0304", time.Date(2020, 1, 2, 3, 4, 0, 0, time.UTC)},
+		{"20200102t030405z", time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)},
+		{"20200102T030405.5", time.Date(2020, 1, 2, 3, 4, 5, 500000000, time.UTC)},
+		{"20200102T030405+0100", time.Date(2020, 1, 2, 2, 4, 5, 0, time.UTC)},
+		{"20200102T03:04:05", time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)},
+		{"2020-01-02T030405", time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)},
+	} {
+		t.Run(tc.s, func(t *testing.T) {
+			res, _, err := pgdate.ParseTimestamp(
+				time.Time{}, pgdate.DefaultDateStyle(), tc.s, nil, /* h */
+			)
+			require.NoError(t, err)
+			require.Equal(t, tc.exp, res.UTC())
+		})
 	}
 }
