@@ -191,6 +191,15 @@ func findRankMatches(query *tsNode, v TSVector, matches [][]tsPosition) [][]tsPo
 
 // rankOr computes the rank for a query with an OR operator at its root.
 // It takes the same parameters as TSRank.
+// Like Postgres, a lexeme without positions is ranked as if it had a single
+// position with the default weight: at position 0 in rankOr, and at the maximum
+// position in rankAnd, where it is also at the maximum distance from other
+// lexemes without positions. See calc_rank_or and calc_rank_and in tsrank.c.
+var (
+	rankOrNullPositions  = []tsPosition{{}}
+	rankAndNullPositions = []tsPosition{{position: maxTSVectorPosition}}
+)
+
 func rankOr(weights [4]float32, v TSVector, q TSQuery) float32 {
 	queryLeaves := sortAndDistinctQueryTerms(q)
 	var matches = make([][]tsPosition, 0)
@@ -205,6 +214,9 @@ func rankOr(weights [4]float32, v TSVector, q TSQuery) float32 {
 		wjm := float32(-1.0)
 		jm := 0
 		for _, innerMatches := range matches {
+			if len(innerMatches) == 0 {
+				innerMatches = rankOrNullPositions
+			}
 			for j, pos := range innerMatches {
 				termWeight := pos.weight.val()
 				weight := weights[termWeight]
@@ -244,6 +256,9 @@ func rankAnd(weights [4]float32, v TSVector, q TSQuery) float32 {
 		matches = findRankMatches(queryLeaves[i], v, matches)
 		for _, innerMatches := range matches {
 			pos[i] = innerMatches
+			if len(pos[i]) == 0 {
+				pos[i] = rankAndNullPositions
+			}
 			// Loop back through the earlier position matches
 			for k := 0; k < i; k++ {
 				if pos[k] == nil {
@@ -255,6 +270,9 @@ func rankAnd(weights [4]float32, v TSVector, q TSQuery) float32 {
 						dist := int(pos[i][l].position) - int(pos[k][p].position)
 						if dist < 0 {
 							dist = -dist
+						}
+						if dist == 0 && (isRankAndNullPositions(pos[i]) || isRankAndNullPositions(pos[k])) {
+							dist = maxTSVectorPosition + 1
 						}
 						if dist != 0 {
 							curw := float32(math.Sqrt(float64(weights[pos[i][l].weight.val()] * weights[pos[k][p].weight.val()] * wordDistance(dist))))
@@ -270,6 +288,10 @@ func rankAnd(weights [4]float32, v TSVector, q TSQuery) float32 {
 		}
 	}
 	return res
+}
+
+func isRankAndNullPositions(positions []tsPosition) bool {
+	return len(positions) == 1 && &positions[0] == &rankAndNullPositions[0]
 }
 
 // Returns a weight of a word collocation. See Postgres tsrank.c.

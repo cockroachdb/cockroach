@@ -28,6 +28,11 @@ func TestRank(t *testing.T) {
 		{v: "a:1 s:2C d g", q: "a & s", expected: 0.14015312},
 		{v: "a:1 s:2B d g", q: "a & s", expected: 0.19820644},
 		{v: "a:1 s:2 d g", q: "a & s", expected: 0.09910322},
+		// Lexemes without positions are ranked like in Postgres.
+		{v: "a:1 s:2 d g", q: "d", expected: 0.06079271},
+		{v: "a:1 s:2 d g", q: "a | d", expected: 0.06079271},
+		{v: "a:1 s:2 d g", q: "a & d", expected: 1e-16},
+		{v: "a:1 s:2 d g", q: "d & g", expected: 1e-16},
 	}
 	for _, tt := range tests {
 		v, err := ParseTSVector(tt.v)
