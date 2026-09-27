@@ -335,6 +335,11 @@ SELECT index('A.B.C'::LTREE, NULL::LTREE);
 ----
 NULL
 
+query III
+SELECT index('A.B.C'::LTREE, ''::LTREE), index(''::LTREE, 'A'::LTREE), index('A.B.C'::LTREE, ''::LTREE, 2);
+----
+-1  -1  -1
+
 query T
 SELECT text2ltree('foo_bar-baz.baz');
 ----

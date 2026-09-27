@@ -235,6 +235,11 @@ func (lt T) SubPath(offset, length int) (T, error) {
 // starting from offset. If offset is negative, it counts from the end of the ltree.
 // If the sub-ltree is not found, it returns -1.
 func (lt T) IndexOf(other T, offset int) int {
+	// Like PostgreSQL, an empty ltree is never found, nor is anything found in
+	// an empty ltree.
+	if lt.Len() == 0 || other.Len() == 0 {
+		return -1
+	}
 	start := offset
 	if start < 0 {
 		start += lt.Len()

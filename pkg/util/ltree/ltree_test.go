@@ -183,3 +183,39 @@ func TestNextSibling(t *testing.T) {
 		}
 	}
 }
+
+func TestIndexOf(t *testing.T) {
+	// Expected values are the output of PostgreSQL's index().
+	tests := []struct {
+		lt       string
+		other    string
+		offset   int
+		expected int
+	}{
+		{lt: "A.B.B.C.B.C", other: "B.C", offset: 0, expected: 2},
+		{lt: "A.B.B.C.B.C", other: "B.C", offset: -2, expected: 4},
+		{lt: "A.B.C", other: "A.B.C", offset: 0, expected: 0},
+		{lt: "A.B.C", other: "A.B.C.D", offset: 0, expected: -1},
+		{lt: "A.B.C", other: "C", offset: -1, expected: 2},
+		{lt: "A.B.C", other: "C", offset: 3, expected: -1},
+		{lt: "A.B.C", other: "", offset: 0, expected: -1},
+		{lt: "A.B.C", other: "", offset: 2, expected: -1},
+		{lt: "", other: "A", offset: 0, expected: -1},
+		{lt: "", other: "", offset: 0, expected: -1},
+	}
+
+	for _, tc := range tests {
+		lt, err := ParseLTree(tc.lt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		other, err := ParseLTree(tc.other)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := lt.IndexOf(other, tc.offset); got != tc.expected {
+			t.Errorf("IndexOf(%q, %q, %d) = %d, expected %d",
+				tc.lt, tc.other, tc.offset, got, tc.expected)
+		}
+	}
+}
