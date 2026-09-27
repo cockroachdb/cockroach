@@ -140,6 +140,38 @@ func TestMetaphone(t *testing.T) {
 			Source:   "light",
 			Expected: "LFT",
 		},
+		{
+			Source:   "Schwarz",
+			Expected: "XWRS",
+		},
+		{
+			Source:   "School",
+			Expected: "SKL",
+		},
+		{
+			Source:   "Schmidt",
+			Expected: "SKMTT",
+		},
+		{
+			Source:   "Christ",
+			Expected: "KRST",
+		},
+		{
+			Source:   "sign",
+			Expected: "SN",
+		},
+		{
+			Source:   "signed",
+			Expected: "SNT",
+		},
+		{
+			Source:   "Wlodarczyk",
+			Expected: "LTRKSK",
+		},
+		{
+			Source:   "Wright",
+			Expected: "RFT",
+		},
 	}
 
 	// Run some random test cases to make sure we don't panic.

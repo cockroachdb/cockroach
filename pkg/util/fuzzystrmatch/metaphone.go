@@ -146,14 +146,16 @@ func Metaphone(source string, outlen int) string {
 		}
 
 	// WH becomes H, WR becomes R, W becomes W if followed by a vowel
+	// Otherwise the W is handled with the rest of the word
 	case 'W':
 		if nextLetter == 'H' ||
 			nextLetter == 'R' {
 			itrPhoned.phonize(nextLetter)
+			ok = itrSrc.next(2)
 		} else if isVowel(nextLetter) {
 			itrPhoned.phonize('W')
+			ok = itrSrc.next(2)
 		}
-		ok = itrSrc.next(2)
 
 	// X becomes S
 	case 'X':
@@ -193,7 +195,8 @@ func Metaphone(source string, outlen int) string {
 				itrPhoned.phonize('B')
 			}
 
-		// C becomes SH if -CIA- or -CH, but not SCH
+		// C becomes SH if -CIA- or -CH, but K if SCH or CHR
+		// (SCHW is handled in case 'S')
 		// else S if -CE-, -CI- or -CY-
 		// else dropped if SCE-, -SCI-, -SCY- (handled in case 'S')
 		// else K
@@ -210,7 +213,12 @@ func Metaphone(source string, outlen int) string {
 					itrPhoned.phonize('S')
 				}
 			} else if nextLetter == 'H' {
-				itrPhoned.phonize(SH)
+				// Christ, School
+				if itrSrc.compareLetterAt(2, 'R') || prevLetter == 'S' {
+					itrPhoned.phonize('K')
+				} else {
+					itrPhoned.phonize(SH)
+				}
 				numSkipLetters++
 			} else {
 				itrPhoned.phonize('K')
@@ -237,8 +245,13 @@ func Metaphone(source string, outlen int) string {
 					itrPhoned.phonize('F')
 					numSkipLetters++
 				}
-			} else if nextLetter == 'N' && itrSrc.compareLetterAt(2, 'E') && itrSrc.compareLetterAt(3, 'D') {
-				// Dropped
+			} else if nextLetter == 'N' {
+				if !itrSrc.letterAt(2, IsAlpha) ||
+					(itrSrc.compareLetterAt(2, 'E') && itrSrc.compareLetterAt(3, 'D')) {
+					// Dropped
+				} else {
+					itrPhoned.phonize('K')
+				}
 			} else if isEIY(nextLetter) && prevLetter != 'G' {
 				itrPhoned.phonize('J')
 			} else {
@@ -269,7 +282,7 @@ func Metaphone(source string, outlen int) string {
 		case 'Q':
 			itrPhoned.phonize('K')
 
-		// S becomes SH if in -SH-, -SIA- or -SIO-
+		// S becomes SH if in -SH-, -SIA-, -SIO- or -SCHW-
 		// else S
 		case 'S':
 			if nextLetter == 'I' &&
@@ -278,6 +291,10 @@ func Metaphone(source string, outlen int) string {
 			} else if nextLetter == 'H' {
 				itrPhoned.phonize(SH)
 				numSkipLetters++
+			} else if nextLetter == 'C' && itrSrc.compareLetterAt(2, 'H') &&
+				itrSrc.compareLetterAt(3, 'W') {
+				itrPhoned.phonize(SH)
+				numSkipLetters += 2
 			} else {
 				itrPhoned.phonize('S')
 			}
