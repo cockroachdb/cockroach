@@ -147,6 +147,8 @@ func TestParseTSQuery(t *testing.T) {
 		{`\\`, `'\'`},
 
 		{`blah'blah`, `'blah''blah'`},
+		{`'it''s'`, `'it''s'`},
+		{`'it''s' & b`, `'it''s' & 'b'`},
 		{`blah'`, `'blah'''`},
 		{`blah''`, `'blah'''''`},
 		{`b\lah\:`, `'blah:'`},
