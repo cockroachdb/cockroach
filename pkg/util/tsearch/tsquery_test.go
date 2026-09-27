@@ -140,6 +140,14 @@ func TestParseTSQuery(t *testing.T) {
 		{`foo:*`, `'foo':*`},
 		{`foo:cab*cccdba`, `'foo':*ABCD`},
 
+		// An operator or parenthesis can directly follow a weight or prefix.
+		{`(foo:*)`, `'foo':*`},
+		{`(foo:A)`, `'foo':A`},
+		{`foo:*|bar`, `'foo':* | 'bar'`},
+		{`foo:*&bar:B`, `'foo':* & 'bar':B`},
+		{`foo:B<->bar`, `'foo':B <-> 'bar'`},
+		{`(foo:* | bar:*) & baz`, `( 'foo':* | 'bar':* ) & 'baz'`},
+
 		{`\:`, `':'`},
 		{`'\:'`, `':'`},
 		{`'\ '`, `' '`},

@@ -299,6 +299,16 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 				p.state = expectingTerm
 				continue
 			}
+			if p.tsQuery {
+				switch r {
+				case '&', '!', '|', '<', '(', ')':
+					// An operator ends the term, like after a term without weights,
+					// e.g. (foo:*) or foo:A|bar.
+					p.state = expectingTerm
+					p.back()
+					continue
+				}
+			}
 			switch r {
 			case ',':
 				if p.tsQuery {
