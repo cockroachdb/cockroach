@@ -4284,7 +4284,7 @@ value if you rely on the HLC for accuracy.`,
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 						"output length must be > 0")
 				}
-				m := fuzzystrmatch.Metaphone(s, maxDefaultLen)
+				m := fuzzystrmatch.Metaphone(s, maxOutputLen)
 				return tree.NewDString(m), nil
 			},
 			Info:       "Convert a string to its Metaphone code. Maximum input length is 255 characters",

@@ -125,6 +125,11 @@ SELECT metaphone('Night', 4), metaphone('Knight', 4), metaphone('Knives', 4);
 ----
 NFT NFT NFS
 
+query TTTT
+SELECT metaphone('Knight', 2), metaphone('Thompson', 2), metaphone('astronomical', 4), metaphone('GUMBO', 1);
+----
+NF  0M  ASTR  K
+
 # Double Metaphone
 
 query T
