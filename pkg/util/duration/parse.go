@@ -475,6 +475,7 @@ var unitMap = func(
 	"week":        MakeDuration(0, 7, 0),
 	"month":       MakeDuration(0, 0, 1),
 	"year":        MakeDuration(0, 0, 12),
+	"decade":      MakeDuration(0, 0, 10*12),
 }, map[string][]string{
 	// Include PostgreSQL's unit keywords for compatibility; see
 	// https://github.com/postgres/postgres/blob/a01d0fa1d889cc2003e1941e8b98707c4d701ba9/src/backend/utils/adt/datetime.c#L175-L240
@@ -490,7 +491,19 @@ var unitMap = func(
 	"week":        {"w"},
 	"month":       {"mon", "mons"},
 	"year":        {"y", "yr", "yrs"},
+	"decade":      {"dec", "decs"},
 })
+
+func init() {
+	// These units have irregular plurals, so they are not in the aliases
+	// above, which get an "s" appended for the plural.
+	for _, u := range []string{"century", "centuries", "cent", "c"} {
+		unitMap[u] = MakeDuration(0, 0, 100*12)
+	}
+	for _, u := range []string{"millennium", "millennia", "millenniums", "mil", "mils"} {
+		unitMap[u] = MakeDuration(0, 0, 1000*12)
+	}
+}
 
 // parseDuration parses a duration in the "traditional" Postgres
 // format (e.g. '1 day 2 hours', '1 day 03:02:04', etc.) or golang
@@ -660,9 +673,10 @@ func addFrac(d Duration, unit Duration, f float64) (Duration, error) {
 			d.Days += int64(f)
 			f = math.Mod(f, 1) * 24
 			d.SetNanos(d.Nanos() + int64(float64(time.Hour.Nanoseconds())*f))
-		case 12:
-			// Nothing to do: Postgres limits the precision of fractional years to
-			// months. Do not continue to add precision to the interval.
+		case 12, 10 * 12, 100 * 12, 1000 * 12:
+			// Nothing to do: Postgres limits the precision of fractional years
+			// (and decades, centuries and millennia) to months. Do not continue to
+			// add precision to the interval.
 			// See issue #55226 for more details on this.
 		default:
 			return Duration{}, errors.AssertionFailedf("unhandled unit type %v", unit)
