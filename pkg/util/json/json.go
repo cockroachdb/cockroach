@@ -2463,8 +2463,9 @@ func (jsonFalse) RemoveIndex(int) (JSON, bool, error)  { return nil, false, errC
 func (jsonString) RemoveIndex(int) (JSON, bool, error) { return nil, false, errCannotDeleteFromScalar }
 func (jsonNumber) RemoveIndex(int) (JSON, bool, error) { return nil, false, errCannotDeleteFromScalar }
 
-var errInvalidConcat = pgerror.WithCandidateCode(errors.New("invalid concatenation of jsonb objects"), pgcode.InvalidParameterValue)
-
+// scalarConcat concatenates left, which is a scalar or an object, with other.
+// As in Postgres, a scalar or object operand is treated as an array containing
+// it, so the result is always an array.
 func scalarConcat(left, other JSON) (JSON, error) {
 	switch other.Type() {
 	case ArrayJSONType:
@@ -2479,8 +2480,6 @@ func scalarConcat(left, other JSON) (JSON, error) {
 			result[i+1] = right[i]
 		}
 		return result, nil
-	case ObjectJSONType:
-		return nil, errInvalidConcat
 	default:
 		return jsonArray{left, other}, nil
 	}
@@ -2545,7 +2544,7 @@ func (j jsonObject) Concat(other JSON) (JSON, error) {
 		}
 		return result, nil
 	default:
-		return nil, errInvalidConcat
+		return scalarConcat(j, other)
 	}
 }
 

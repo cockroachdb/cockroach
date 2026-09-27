@@ -730,8 +730,15 @@ SELECT '{"a": 1, "b": 2}'::JSON || '{"b": 3, "c": 4}'
 ----
 {"a": 1, "b": 3, "c": 4}
 
-query error pgcode 22023 invalid concatenation of jsonb objects
+query T
 SELECT '{"a": 1, "b": 2}'::JSON || '"c"'
+----
+[{"a": 1, "b": 2}, "c"]
+
+query T
+SELECT '3'::JSON || '{}'::JSON
+----
+[3, {}]
 
 query T
 SELECT json_build_array()
