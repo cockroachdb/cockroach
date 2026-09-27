@@ -140,6 +140,18 @@ func TestMetaphone(t *testing.T) {
 			Source:   "light",
 			Expected: "LFT",
 		},
+		{
+			Source:   "Smith",
+			Expected: "SM0",
+		},
+		{
+			Source:   "Knuth",
+			Expected: "N0",
+		},
+		{
+			Source:   "Boothe",
+			Expected: "B0",
+		},
 	}
 
 	// Run some random test cases to make sure we don't panic.
@@ -157,6 +169,34 @@ func TestMetaphone(t *testing.T) {
 			if tc.Expected != got {
 				t.Fatalf("error convert string to its Metaphone code with source=%q"+
 					" expected %s got %s", tc.Source, tc.Expected, got)
+			}
+		})
+	}
+}
+
+func TestMetaphoneMaxLength(t *testing.T) {
+	tt := []struct {
+		Source   string
+		Length   int
+		Expected string
+	}{
+		// Expected values are the output of PostgreSQL's metaphone().
+		{Source: "Max", Length: 3, Expected: "MKS"},
+		{Source: "Max", Length: 2, Expected: "MK"},
+		{Source: "Fox", Length: 2, Expected: "FK"},
+		{Source: "Alex", Length: 3, Expected: "ALK"},
+		{Source: "Alexa", Length: 4, Expected: "ALKS"},
+		{Source: "Roth", Length: 3, Expected: "R0"},
+		{Source: "Beth", Length: 2, Expected: "B0"},
+		{Source: "Smith", Length: 2, Expected: "SM"},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.Source, func(t *testing.T) {
+			got := Metaphone(tc.Source, tc.Length)
+			if tc.Expected != got {
+				t.Fatalf("error convert string to its Metaphone code with source=%q length=%d"+
+					" expected %s got %s", tc.Source, tc.Length, tc.Expected, got)
 			}
 		})
 	}

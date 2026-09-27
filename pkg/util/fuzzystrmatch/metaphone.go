@@ -309,7 +309,7 @@ func Metaphone(source string, outlen int) string {
 		// X becomes KS
 		case 'X':
 			itrPhoned.phonize('K')
-			if itrPhoned.len() < outlen {
+			if itrPhoned.idx < outlen {
 				itrPhoned.phonize('S')
 			}
 
@@ -334,9 +334,7 @@ func Metaphone(source string, outlen int) string {
 		_ = itrSrc.next(numSkipLetters)
 	}
 
-	result := string(phoned)
-	result = strings.TrimRightFunc(result, func(c rune) bool {
-		return !IsAlpha(c)
-	})
-	return result
+	// Only return the phonemes that were written. Trimming the unused part of
+	// the buffer by character would also drop a trailing TH, which is '0'.
+	return string(phoned[:itrPhoned.idx])
 }
