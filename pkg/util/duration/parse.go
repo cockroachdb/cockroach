@@ -653,17 +653,18 @@ func (l *intervalLexer) parseShortDuration(
 func addFrac(d Duration, unit Duration, f float64) (Duration, error) {
 	if unit.Months > 0 {
 		f = f * float64(unit.Months)
-		d.Months += int64(f)
 		switch unit.Months {
 		case 1:
+			d.Months += int64(f)
 			f = math.Mod(f, 1) * 30
 			d.Days += int64(f)
 			f = math.Mod(f, 1) * 24
 			d.SetNanos(d.Nanos() + int64(float64(time.Hour.Nanoseconds())*f))
 		case 12:
-			// Nothing to do: Postgres limits the precision of fractional years to
-			// months. Do not continue to add precision to the interval.
-			// See issue #55226 for more details on this.
+			// Postgres limits the precision of fractional years to months, and
+			// rounds to the nearest month with rint(). Do not continue to add
+			// precision to the interval. See issue #55226 for more details on this.
+			d.Months += int64(math.RoundToEven(f))
 		default:
 			return Duration{}, errors.AssertionFailedf("unhandled unit type %v", unit)
 		}

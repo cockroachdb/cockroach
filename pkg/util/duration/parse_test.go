@@ -266,6 +266,13 @@ func TestPGIntervalSyntax(t *testing.T) {
 		{input: `10000000000000000000000000000000000 year`, error: `interval: strconv.ParseInt: parsing "10000000000000000000000000000000000": value out of range`},
 
 		{input: `500nanoseconds`, error: `interval: unknown unit "nanoseconds" in duration "500nanoseconds"`},
+
+		// Fractional years are rounded to the nearest month, as in Postgres.
+		{input: `2.9 years`, output: `2 years 11 mons`},
+		{input: `0.99 year`, output: `1 year`},
+		{input: `-2.9 years`, output: `-2 years -11 mons`},
+		{input: `0.125 years`, output: `2 mons`},
+		{input: `0.375 years`, output: `4 mons`},
 		{input: `500ns`, error: `interval: unknown unit "ns" in duration "500ns"`},
 
 		// ns/us boundary
@@ -537,7 +544,7 @@ func TestISO8601IntervalSyntax(t *testing.T) {
 
 		// Mixed formats
 		{`P1Y2M3D`, minuteToSecondITM, `1 year 2 mons 3 days`, ``},
-		{`P1.3Y2.2M3.1D`, minuteToSecondITM, `1 year 5 mons 9 days 02:24:00`, ``},
+		{`P1.3Y2.2M3.1D`, minuteToSecondITM, `1 year 6 mons 9 days 02:24:00`, ``},
 		{`PT4H5M6S`, minuteToSecondITM, `04:05:06`, ``},
 		{`PT4.6H5.5M6.4S`, minuteToSecondITM, `04:41:36.4`, ``},
 		{`P1Y2M3DT4H5M6S`, minuteToSecondITM, `1 year 2 mons 3 days 04:05:06`, ``},
