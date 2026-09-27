@@ -479,11 +479,14 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 		// BUT NOT: "Month DD YYYY"; text month set in first pass
 		return fe.SetChunk(fieldMonth, chunk)
 
-	case fe.Wants(fieldYear) && !fe.Wants(fieldMonth) && !fe.Wants(fieldDay):
+	case fe.Wants(fieldYear) && !fe.Wants(fieldMonth) && !fe.Wants(fieldDay) &&
+		chunk.separator != ':' && nextSep != ':':
 		// Example: "MM DD YY"
 		//                 ^^
 		// Example: "MM DD YYYY"
 		//                 ^^^^
+		// BUT NOT: "Month DD HH:MM:SS YYYY"; values around a colon are part of
+		//                    ^^^^^^^^        the time, and the year comes later.
 		// Handle MDY, DMY formats.
 		if chunk.magnitude <= 2 {
 			fe.tweakYear = true

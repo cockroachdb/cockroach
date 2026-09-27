@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 var db *gosql.DB
@@ -1099,5 +1100,28 @@ func BenchmarkParseDate(b *testing.B) {
 				b.Fatal(err)
 			}
 		}
+	}
+}
+
+// TestParseTimeBeforeYear checks formats that have the time between the day and
+// the year, like the output of the Postgres DateStyle or ctime.
+func TestParseTimeBeforeYear(t *testing.T) {
+	for _, tc := range []struct {
+		s   string
+		exp time.Time
+	}{
+		{"Jan 02 03:04:05 2020", time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)},
+		{"02 Jan 03:04:05 2020", time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)},
+		{"Jan 02 03:04 2020", time.Date(2020, 1, 2, 3, 4, 0, 0, time.UTC)},
+		{"Jan 02 03:04:05.5 2020 UTC", time.Date(2020, 1, 2, 3, 4, 5, 500000000, time.UTC)},
+		{"January 8 04:05:06 1999 PST", time.Date(1999, 1, 8, 12, 5, 6, 0, time.UTC)},
+	} {
+		t.Run(tc.s, func(t *testing.T) {
+			res, _, err := pgdate.ParseTimestamp(
+				time.Time{}, pgdate.DefaultDateStyle(), tc.s, nil, /* h */
+			)
+			require.NoError(t, err)
+			require.Equal(t, tc.exp, res.UTC())
+		})
 	}
 }
