@@ -30,6 +30,12 @@ func TestByteArrayDecoding(t *testing.T) {
 		{`aA`, false, fmtHex, "\xaa", ""},
 		{`AA`, false, fmtHex, "\xaa", ""},
 		{`x0`, false, fmtHex, "", "encoding/hex: invalid byte: U+0078 'x'"},
+		{`de ad be ef`, false, fmtHex, "\xde\xad\xbe\xef", ""},
+		{" de\tad\nbe\ref ", false, fmtHex, "\xde\xad\xbe\xef", ""},
+		{`  `, false, fmtHex, "", ""},
+		{`d e`, false, fmtHex, "", "encoding/hex: invalid byte: U+0020 ' '"},
+		{`de a`, false, fmtHex, "", "encoding/hex: odd length hex string"},
+		{`de x`, false, fmtHex, "", "encoding/hex: invalid byte: U+0078 'x'"},
 		{`a\nbcd`, false, fmtEsc, "", "invalid bytea escape sequence"},
 		{`a\'bcd`, false, fmtEsc, "", "invalid bytea escape sequence"},
 		{`a\00`, false, fmtEsc, "", "bytea encoded value ends with incomplete escape sequence"},
@@ -50,6 +56,8 @@ func TestByteArrayDecoding(t *testing.T) {
 		{`\x`, true, 0, "", ""},
 		{`\xx`, true, 0, "", "encoding/hex: invalid byte: U+0078 'x'"},
 		{`\x6162`, true, 0, "ab", ""},
+		{`\x 61 62 `, true, 0, "ab", ""},
+		{`\x6 162`, true, 0, "", "encoding/hex: invalid byte: U+0020 ' '"},
 		{`\\x6162`, true, 0, "\\x6162", ""},
 	}
 	for _, s := range testData {

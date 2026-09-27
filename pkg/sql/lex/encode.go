@@ -138,6 +138,10 @@ func EncodeByteArrayToRawBytes(data string, be BytesEncodeFormat, skipHexPrefix 
 	}
 }
 
+// hexWhitespace contains the characters that PostgreSQL ignores between the
+// pairs of hex digits of a hex-encoded byte array.
+const hexWhitespace = " \t\n\r"
+
 // DecodeRawBytesToByteArray converts raw bytes to a SQL-level byte array
 // according to the encoding specification in "be".
 // When using the Hex format, the caller is responsible for skipping the
@@ -147,9 +151,32 @@ func EncodeByteArrayToRawBytes(data string, be BytesEncodeFormat, skipHexPrefix 
 func DecodeRawBytesToByteArray(data []byte, be BytesEncodeFormat) ([]byte, error) {
 	switch be {
 	case BytesEncodeHex:
-		res := make([]byte, hex.DecodedLen(len(data)))
-		n, err := hex.Decode(res, data)
-		return res[:n], err
+		if bytes.IndexAny(data, hexWhitespace) < 0 {
+			res := make([]byte, hex.DecodedLen(len(data)))
+			n, err := hex.Decode(res, data)
+			return res[:n], err
+		}
+		// As in PostgreSQL, whitespace is allowed between (but not within)
+		// pairs of hex digits, e.g. '\x de ad be ef'.
+		res := make([]byte, 0, hex.DecodedLen(len(data)))
+		var b [1]byte
+		for i := 0; i < len(data); {
+			if strings.IndexByte(hexWhitespace, data[i]) >= 0 {
+				i++
+				continue
+			}
+			// If only one digit is left, hex.Decode returns an error.
+			end := i + 2
+			if end > len(data) {
+				end = len(data)
+			}
+			if _, err := hex.Decode(b[:], data[i:end]); err != nil {
+				return nil, err
+			}
+			res = append(res, b[0])
+			i += 2
+		}
+		return res, nil
 
 	case BytesEncodeEscape:
 		// PostgreSQL does not allow all the escapes formats recognized by
