@@ -479,7 +479,7 @@ func TestISO8601IntervalSyntax(t *testing.T) {
 		output string
 		error  string
 	}{
-		{`P123`, types.IntervalTypeMetadata{}, ``, `interval: missing unit at position 4: "P123"`},
+		{`P123-`, types.IntervalTypeMetadata{}, ``, `interval: missing number at position 5: "P123-"`},
 		{`P123foo`, types.IntervalTypeMetadata{}, ``, `interval: unknown unit "foo" in ISO-8601 duration "P123foo"`},
 		{`P 1Y`, types.IntervalTypeMetadata{}, ``, `interval: missing number at position 1: "P 1Y"`},
 		{`P1Y `, types.IntervalTypeMetadata{}, ``, `interval: unknown unit "Y " in ISO-8601 duration "P1Y "`},
@@ -542,6 +542,41 @@ func TestISO8601IntervalSyntax(t *testing.T) {
 		{`PT4.6H5.5M6.4S`, minuteToSecondITM, `04:41:36.4`, ``},
 		{`P1Y2M3DT4H5M6S`, minuteToSecondITM, `1 year 2 mons 3 days 04:05:06`, ``},
 		{`P1.6Y2.5M3.4DT4.3H5.2M6.1S`, minuteToSecondITM, `1 year 9 mons 18 days 13:59:18.1`, ``},
+
+		// Alternative format, extended.
+		{`P0001-02-03T04:05:06`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days 04:05:06`, ``},
+		{`P0001-02-03`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days`, ``},
+		{`P0001-02`, types.IntervalTypeMetadata{}, `1 year 2 mons`, ``},
+		{`P123`, types.IntervalTypeMetadata{}, `123 years`, ``},
+		{`P1-2-3T4:5:6`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days 04:05:06`, ``},
+		{`P0001-02-03T04:05`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days 04:05:00`, ``},
+		{`P0001-02-03T04`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days 04:00:00`, ``},
+		{`PT04:05:06`, types.IntervalTypeMetadata{}, `04:05:06`, ``},
+		{`PT04:05:06.789`, types.IntervalTypeMetadata{}, `04:05:06.789`, ``},
+		{`P1.5`, types.IntervalTypeMetadata{}, `1 year 6 mons`, ``},
+		{`P0001-02.5`, types.IntervalTypeMetadata{}, `1 year 2 mons 15 days`, ``},
+		{`P0001-02-03.5`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days 12:00:00`, ``},
+		{`P-0001-02-03`, types.IntervalTypeMetadata{}, `-10 mons +3 days`, ``},
+		{`PT04:-05:06`, types.IntervalTypeMetadata{}, `03:55:06`, ``},
+		{`P0001-02-03T1H`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days 01:00:00`, ``},
+		{`P0001-02-03T`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days`, ``},
+		{`P0001-02-03-04`, types.IntervalTypeMetadata{}, ``, `invalid input syntax for type interval P0001-02-03-04`},
+		{`PT04:05:06:07`, types.IntervalTypeMetadata{}, ``, `invalid input syntax for type interval PT04:05:06:07`},
+		{`P1Y0001-02`, types.IntervalTypeMetadata{}, ``, `interval: missing unit at position 7: "P1Y0001-02"`},
+		{`PT1H04:05`, types.IntervalTypeMetadata{}, ``, `interval: unknown unit ":" in ISO-8601 duration "PT1H04:05"`},
+
+		// Alternative format, basic.
+		{`P00010203T040506`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days 04:05:06`, ``},
+		{`P00010203`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days`, ``},
+		{`P00010203.5`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days 12:00:00`, ``},
+		{`PT040506`, types.IntervalTypeMetadata{}, `04:05:06`, ``},
+		{`P-00010203`, types.IntervalTypeMetadata{}, `-1 years -2 mons -3 days`, ``},
+		{`P0001-02-03T040506`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days 04:05:06`, ``},
+		{`P00010203T04:05:06`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days 04:05:06`, ``},
+
+		// Empty time part.
+		{`P1DT`, types.IntervalTypeMetadata{}, `1 day`, ``},
+		{`PT`, types.IntervalTypeMetadata{}, `00:00:00`, ``},
 
 		// This was 1ns off due to float rounding.
 		{`P50Y6M75DT1572897H25M58.535696141S`, types.IntervalTypeMetadata{}, `50 years 6 mons 75 days 1572897:25:58.535696`, ``},

@@ -401,7 +401,8 @@ func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (Duration, error
 	return d, nil
 }
 
-// Parses an ISO8601 (with designators) string.
+// Parses an ISO8601 string, either in the format with designators (e.g.
+// P1Y2M3DT4H5M6S) or in the alternative format (e.g. P0001-02-03T04:05:06).
 // See the following links for examples:
 //   - http://www.postgresql.org/docs/9.1/static/datatype-datetime.html#DATATYPE-INTERVAL-INPUT-EXAMPLES
 //   - https://en.wikipedia.org/wiki/ISO_8601#Time_intervals
@@ -415,15 +416,37 @@ func iso8601ToDuration(s string) (Duration, error) {
 	// Advance to offset 1, since we don't care about the leading P.
 	l := intervalLexer{str: s, offset: 1, err: nil}
 	unitMap := isoDateUnitMap
+	datePart := true
+	// haveField is whether a field with a designator has been parsed in the
+	// current (date or time) part.
+	haveField := false
 
 	for l.offset < len(s) {
 		// Check if we're in the time part yet.
 		if s[l.offset] == 'T' {
 			unitMap = isoTimeUnitMap
+			datePart = false
+			haveField = false
 			l.offset++
+			// As in PostgreSQL, the time part may be empty (e.g. P1DT).
+			if l.offset == len(s) {
+				break
+			}
 		}
 
+		start := l.offset
 		v, hasDecimal, vp := l.consumeNum()
+		if l.err != nil {
+			return d, l.err
+		}
+		if !haveField && l.atISO8601AlternativeFormat(datePart) {
+			var err error
+			d, err = l.parseISO8601Alternative(d, datePart, start, v, hasDecimal, vp)
+			if err != nil {
+				return d, err
+			}
+			continue
+		}
 		u := l.consumeUnit('T')
 		if l.err != nil {
 			return d, l.err
@@ -443,9 +466,102 @@ func iso8601ToDuration(s string) (Duration, error) {
 				pgcode.InvalidDatetimeFormat,
 				"interval: unknown unit %q in ISO-8601 duration %q", u, s)
 		}
+		haveField = true
 	}
 
 	return d, nil
+}
+
+// atISO8601AlternativeFormat returns whether the number that was just
+// consumed starts the date or time part of an ISO 8601 duration in the
+// alternative format, rather than being followed by a designator. This is
+// the case when it is followed by the end of the input, by a separator
+// ('-' in the date part, ':' in the time part) or, in the date part, by
+// the 'T' that starts the time part.
+func (l *intervalLexer) atISO8601AlternativeFormat(datePart bool) bool {
+	if l.offset == len(l.str) {
+		return true
+	}
+	if datePart {
+		return l.str[l.offset] == '-' || l.str[l.offset] == 'T'
+	}
+	return l.str[l.offset] == ':'
+}
+
+// parseISO8601Alternative parses the date or time part of an ISO 8601
+// duration in the alternative format (section 4.4.3.3), in the same way as
+// PostgreSQL. It accepts the extended format (YYYY-MM-DD and hh:mm:ss, where
+// trailing fields may be omitted) and the basic format (YYYYMMDD and
+// hhmmss). The first number of the part has already been consumed: it
+// started at offset start and v, hasDecimal and vp are its value, as
+// returned by consumeNum.
+func (l *intervalLexer) parseISO8601Alternative(
+	d Duration, datePart bool, start int, v int64, hasDecimal bool, vp float64,
+) (Duration, error) {
+	units := [3]Duration{isoDateUnitMap["Y"], isoDateUnitMap["M"], isoDateUnitMap["D"]}
+	sep := byte('-')
+	basicWidth := 8
+	if !datePart {
+		units = [3]Duration{isoTimeUnitMap["H"], isoTimeUnitMap["M"], isoTimeUnitMap["S"]}
+		sep = ':'
+		basicWidth = 6
+	}
+	add := func(unit Duration, v int64, hasDecimal bool, f float64) error {
+		d = d.Add(unit.Mul(v))
+		if hasDecimal {
+			var err error
+			d, err = addFrac(d, unit, f)
+			return err
+		}
+		return nil
+	}
+	// atEnd returns whether the part ends at the current offset.
+	atEnd := func() bool {
+		return l.offset == len(l.str) || (datePart && l.str[l.offset] == 'T')
+	}
+
+	// Count the digits of the integer part, ignoring the sign.
+	digits := l.str[start:l.offset]
+	if len(digits) > 0 && (digits[0] == '-' || digits[0] == '+') {
+		digits = digits[1:]
+	}
+	if i := strings.IndexByte(digits, '.'); i >= 0 {
+		digits = digits[:i]
+	}
+	if len(digits) == basicWidth && (l.offset == len(l.str) || l.str[l.offset] != sep) {
+		// Basic format: YYYYMMDD or hhmmss. A fraction applies to the last field.
+		if err := add(units[0], v/10000, false, 0); err != nil {
+			return d, err
+		}
+		if err := add(units[1], (v/100)%100, false, 0); err != nil {
+			return d, err
+		}
+		if err := add(units[2], v%100, hasDecimal, vp); err != nil {
+			return d, err
+		}
+		if !atEnd() {
+			return d, newInvalidSQLDurationError(l.str)
+		}
+		return d, nil
+	}
+
+	// Extended format: fields separated by sep.
+	for i := 0; ; i++ {
+		if err := add(units[i], v, hasDecimal, vp); err != nil {
+			return d, err
+		}
+		if atEnd() {
+			return d, nil
+		}
+		if i == len(units)-1 || l.str[l.offset] != sep {
+			return d, newInvalidSQLDurationError(l.str)
+		}
+		l.offset++
+		v, hasDecimal, vp = l.consumeNum()
+		if l.err != nil {
+			return d, l.err
+		}
+	}
 }
 
 // unitMap defines for each unit name what is the time duration for
