@@ -280,6 +280,28 @@ SELECT plainto_tsquery('No hardcoded configuration')
 ----
 'hardcod' & 'configur'
 
+# The input of plainto_tsquery and phraseto_tsquery is plain text, so TSQuery
+# syntax characters are ignored.
+query T
+SELECT plainto_tsquery('english', 'wait!')
+----
+'wait'
+
+query T
+SELECT phraseto_tsquery('english', 'cats | dogs & !birds')
+----
+'cat' <-> 'dog' <-> 'bird'
+
+query T
+SELECT phraseto_tsquery('english', 'hello a deer')
+----
+'hello' <2> 'deer'
+
+query B
+SELECT 'a b c'::TEXT @@ 'b & c'::TEXT
+----
+true
+
 query T
 SELECT to_tsquery('No | hardcoded | configuration')
 ----

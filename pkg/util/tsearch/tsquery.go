@@ -411,28 +411,65 @@ func (p *tsQueryParser) syntaxError() (*tsNode, error) {
 // ToTSQuery implements the to_tsquery builtin, which lexes an input, performs
 // stopwording and normalization on the tokens, and returns a parsed query.
 func ToTSQuery(config string, input string) (TSQuery, error) {
-	return toTSQuery(config, invalid, input)
+	return toTSQuery(config, input)
 }
 
 // PlainToTSQuery implements the plainto_tsquery builtin, which lexes an input,
 // performs stopwording and normalization on the tokens, and returns a parsed
 // query, interposing the & operator between each token.
 func PlainToTSQuery(config string, input string) (TSQuery, error) {
-	return toTSQuery(config, and, input)
+	return plainTextToTSQuery(config, and, input)
 }
 
 // PhraseToTSQuery implements the phraseto_tsquery builtin, which lexes an input,
 // performs stopwording and normalization on the tokens, and returns a parsed
 // query, interposing the <-> operator between each token.
 func PhraseToTSQuery(config string, input string) (TSQuery, error) {
-	return toTSQuery(config, followedby, input)
+	return plainTextToTSQuery(config, followedby, input)
+}
+
+// plainTextToTSQuery implements plainto_tsquery and phraseto_tsquery. Unlike
+// to_tsquery, their input is plain text: as in Postgres, it is split into
+// words like a document, so characters such as &, |, !, parentheses and colons
+// are ignored rather than parsed as TSQuery syntax. The lexemes are connected
+// with the interpose operator. For <->, the distance accounts for removed stop
+// words, so that phraseto_tsquery('hello a deer') returns 'hello' <2> 'deer'.
+func plainTextToTSQuery(config string, interpose tsOperator, input string) (TSQuery, error) {
+	var terms []tsTerm
+	// The number of words since the last lexeme that was added.
+	var distance uint16
+	for _, word := range TSParse(input) {
+		lexeme, stopWord, err := TSLexize(config, word)
+		if err != nil {
+			return TSQuery{}, err
+		}
+		distance++
+		if stopWord {
+			continue
+		}
+		if len(terms) > 0 {
+			term := tsTerm{operator: interpose}
+			if interpose == followedby {
+				term.followedN = distance
+			}
+			terms = append(terms, term)
+		}
+		terms = append(terms, tsTerm{lexeme: lexeme})
+		distance = 0
+	}
+	if len(terms) == 0 {
+		return TSQuery{}, pgerror.Newf(
+			pgcode.Syntax, "text-search query doesn't contain lexemes: %s", input,
+		)
+	}
+	queryParser := tsQueryParser{terms: terms, input: input}
+	return queryParser.parse()
 }
 
 // toTSQuery implements the to_tsquery builtin, which lexes an input,
 // performs stopwording and normalization on the tokens, and returns a parsed
-// query. If the interpose operator is not invalid, it's interposed between each
-// token in the input.
-func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, error) {
+// query.
+func toTSQuery(config string, input string) (TSQuery, error) {
 	vector, err := lexTSQuery(input)
 	if err != nil {
 		return TSQuery{}, err
@@ -450,16 +487,6 @@ func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, erro
 			lexemeTokens = TSParse(tok.lexeme)
 		}
 
-		// If we found an operator or were able to parse lexemes from the token,
-		// add the interpose operator if there is one.
-		if interpose != invalid && i > 0 && (foundOperator || len(lexemeTokens) > 0) {
-			term := tsTerm{operator: interpose}
-			if interpose == followedby {
-				term.followedN = 1
-			}
-			tokens = append(tokens, term)
-		}
-
 		if foundOperator {
 			tokens = append(tokens, tok)
 			continue
@@ -470,29 +497,12 @@ func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, erro
 			continue
 		}
 
-		// When we support more than just the simple configuration, we'll also
-		// want to remove stopwords, which will affect the interposing, but we can
-		// worry about that later.
-		// Additionally, if we're doing phraseto_tsquery, if we remove a stopword,
-		// we need to make sure to increase the "followedN" of the followedby
-		// operator. For example, phraseto_tsquery('hello a deer') will return
-		// 'hello <2> deer', since the a stopword would be removed.
-
-		tokInterpose := interpose
-		if tokInterpose == invalid {
-			tokInterpose = followedby
-		}
 		for j := range lexemeTokens {
 			if j > 0 {
-				// We found more than one lexeme in our token, so we need to add all of them
-				// to the query, connected by our interpose operator.
-				// If we aren't running with an interpose, like in to_tsquery, Postgres
-				// uses the <-> operator to connect multiple lexemes from a single token.
-				term := tsTerm{operator: tokInterpose}
-				if tokInterpose == followedby {
-					term.followedN = 1
-				}
-				tokens = append(tokens, term)
+				// We found more than one lexeme in our token, so we need to add
+				// all of them to the query. Like Postgres, we use the <-> operator
+				// to connect multiple lexemes from a single token.
+				tokens = append(tokens, tsTerm{operator: followedby, followedN: 1})
 			}
 			lexeme, stopWord, err := TSLexize(config, lexemeTokens[j])
 			if err != nil {

@@ -290,3 +290,34 @@ func TestParseTSQueryError(t *testing.T) {
 		assert.Error(t, err)
 	}
 }
+
+func TestPlainTextToTSQuery(t *testing.T) {
+	// The input of plainto_tsquery and phraseto_tsquery is plain text, so
+	// characters that are TSQuery syntax are ignored. Expected values are the
+	// output of PostgreSQL.
+	tcs := []struct {
+		config string
+		input  string
+		plain  string
+		phrase string
+	}{
+		{"english", "wait!", `'wait'`, `'wait'`},
+		{"english", "x & y", `'x' & 'y'`, `'x' <-> 'y'`},
+		{"english", "(test)", `'test'`, `'test'`},
+		{"english", "a:B c", `'b' & 'c'`, `'b' <-> 'c'`},
+		{"english", "cats | dogs & !birds", `'cat' & 'dog' & 'bird'`, `'cat' <-> 'dog' <-> 'bird'`},
+		{"english", "hello a deer", `'hello' & 'deer'`, `'hello' <2> 'deer'`},
+		{"english", "I can't believe it's not butter!", `'believ' & 'butter'`, `'believ' <4> 'butter'`},
+		{"simple", "a:B c", `'a' & 'b' & 'c'`, `'a' <-> 'b' <-> 'c'`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			plain, err := PlainToTSQuery(tc.config, tc.input)
+			require.NoError(t, err)
+			assert.Equal(t, tc.plain, plain.String())
+			phrase, err := PhraseToTSQuery(tc.config, tc.input)
+			require.NoError(t, err)
+			assert.Equal(t, tc.phrase, phrase.String())
+		})
+	}
+}
