@@ -2148,6 +2148,14 @@ func FetchPath(j JSON, path []string) (JSON, error) {
 	return j, nil
 }
 
+// errPathElementNotInteger returns the error for a path element that is used
+// to index into an array but is not an integer.
+func errPathElementNotInteger(elem string) error {
+	// TODO(yuzefovich): give the position of the path element to match psql.
+	err := errors.Newf("a path element is not an integer: %s", elem)
+	return pgerror.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
+}
+
 var errCannotSetPathInScalar = pgerror.WithCandidateCode(errors.New("cannot set path in scalar"), pgcode.InvalidParameterValue)
 
 // setValKeyOrIdx sets a key or index within a JSON object or array. If the
@@ -2172,7 +2180,7 @@ func setValKeyOrIdx(j JSON, key string, to JSON, createMissing bool) (JSON, erro
 	case jsonArray:
 		idx, err := strconv.Atoi(key)
 		if err != nil {
-			return nil, err
+			return nil, errPathElementNotInteger(key)
 		}
 		if idx < 0 {
 			idx = len(v) + idx
@@ -2262,7 +2270,7 @@ func insertValKeyOrIdx(j JSON, key string, newVal JSON, insertAfter bool) (JSON,
 	case jsonArray:
 		idx, err := strconv.Atoi(key)
 		if err != nil {
-			return nil, err
+			return nil, errPathElementNotInteger(key)
 		}
 		if idx < 0 {
 			idx = len(v) + idx
@@ -2798,10 +2806,7 @@ func (j jsonArray) doRemovePath(path []string) (JSON, bool, error) {
 	// from the `-` operator, where strings just never match on arrays).
 	idx, err := strconv.Atoi(path[0])
 	if err != nil {
-		// TODO(yuzefovich): give the position of the path element to match psql.
-		err := errors.Newf("a path element is not an integer: %s", path[0])
-		err = pgerror.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
-		return j, false, err
+		return j, false, errPathElementNotInteger(path[0])
 	}
 	if len(path) == 1 {
 		return j.RemoveIndex(idx)

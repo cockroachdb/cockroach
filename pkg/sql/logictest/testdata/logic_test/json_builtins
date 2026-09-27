@@ -1046,6 +1046,12 @@ SELECT jsonb_set('{"a":1}', '{null,foo}'::STRING[], '2', true)
 statement error path element at position 2 is null
 SELECT jsonb_set('{"a":1}', '{foo,null}'::STRING[], '2', true)
 
+statement error pgcode 22P02 a path element is not an integer: foo
+SELECT jsonb_set('[1, 2]', '{foo}'::STRING[], '3')
+
+statement error pgcode 22P02 a path element is not an integer: foo
+SELECT jsonb_insert('[1, 2]', '{foo}'::STRING[], '3')
+
 query T
 SELECT jsonb_set('{"a":1}', '{b}'::STRING[], '2', true)
 ----

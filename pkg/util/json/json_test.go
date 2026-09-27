@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -2895,6 +2896,26 @@ func TestToDecimal(t *testing.T) {
 			if dec != nil || ok {
 				t.Fatalf("%v should not be a valid decimal", json)
 			}
+		})
+	}
+}
+
+func TestJSONPathElementNotInteger(t *testing.T) {
+	j := parseJSON(t, `[1, {"a": [2]}]`)
+	for _, path := range [][]string{{"x"}, {"1", "a", "x"}} {
+		t.Run(strings.Join(path, ","), func(t *testing.T) {
+			check := func(t *testing.T, err error) {
+				t.Helper()
+				expected := fmt.Sprintf("a path element is not an integer: %s", path[len(path)-1])
+				require.EqualError(t, err, expected)
+				require.Equal(t, pgcode.InvalidTextRepresentation, pgerror.GetPGCode(err))
+			}
+			_, err := DeepSet(j, path, parseJSON(t, `3`), true /* createMissing */)
+			check(t, err)
+			_, err = DeepInsert(j, path, parseJSON(t, `3`), false /* insertAfter */)
+			check(t, err)
+			_, _, err = j.RemovePath(path)
+			check(t, err)
 		})
 	}
 }
