@@ -55,6 +55,14 @@ func TestDaitchMokotoff(t *testing.T) {
 		{"ţamas", []string{"364000", "464000"}},
 		{"țamas", []string{"364000", "464000"}},
 		{"ZĄBEK", []string{"467500", "475000"}},
+
+		// J can be coded as a vowel (1) or as a consonant (4). The letter
+		// before it has to be coded accordingly (PostgreSQL compatibility).
+		{"Hajj", []string{"510000", "540000"}},
+		{"Ohjo", []string{"040000", "050000"}},
+		{"Stahje", []string{"240000", "250000"}},
+		{"Dahjer", []string{"349000", "359000"}},
+		{"Rajjan", []string{"916000", "946000"}},
 	}
 
 	for _, tc := range tt {
@@ -77,7 +85,7 @@ func TestDMApplyCodesDeduplicatesEquivalentBranches(t *testing.T) {
 		{"5", "5", "5"},
 	}
 
-	got := dmApplyCodes(branches, codes, 0)
+	got := dmApplyCodes(branches, codes, []int{0})
 	if len(got) != 1 {
 		t.Fatalf("expected 1 branch after deduplication, got %d", len(got))
 	}

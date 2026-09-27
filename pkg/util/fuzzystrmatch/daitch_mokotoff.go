@@ -36,6 +36,11 @@ type dmBranch struct {
 	code      [dmCodeLen]byte
 	length    int
 	lastDigit byte
+	// nextCodeIndex is the code index (1: before a vowel, 2: any other) that
+	// was used for the last letter, or 0 for the first letter. The next
+	// letter may only use an alternative with a matching sound, see
+	// dmCodeIndexForNext.
+	nextCodeIndex int
 }
 
 // dmISO8859_1ToASCII maps Latin-1 codepoints U+00C0–U+00FF to uppercase
@@ -256,14 +261,18 @@ func dmLookup(input string, pos int) ([]dmCodes, int) {
 	return bestCodes, bestLen
 }
 
-// dmIsVowelCode returns true if the code set represents a vowel-like sound
-// (starts with '0' or '1'). Used to determine the "before a vowel" context.
-func dmIsVowelCode(codes []dmCodes) bool {
-	if len(codes) == 0 {
-		return false
+// dmCodeIndexForNext returns the code index to use for a letter that is
+// followed by a letter coded as next: 1 (before a vowel) if next represents a
+// vowel-like sound (its start code is '0' or '1'), and 2 (any other) if not.
+// The same index describes the sound of next itself, so that the codes chosen
+// for two adjacent letters are consistent. Currently, only J can be coded both
+// as a vowel and as a consonant.
+func dmCodeIndexForNext(next dmCodes) int {
+	c := next[0]
+	if len(c) > 0 && (c[0] == '0' || c[0] == '1') {
+		return 1
 	}
-	c := codes[0][0]
-	return len(c) > 0 && (c[0] == '0' || c[0] == '1')
+	return 2
 }
 
 // DaitchMokotoff computes Daitch-Mokotoff soundex codes for the input string.
@@ -297,18 +306,24 @@ func DaitchMokotoff(source string) []string {
 			nextCodes, _ = dmLookup(input, nextPos)
 		}
 
-		// Determine code column index.
-		var codeIndex int
+		// Determine the code column indexes. If the next letter can be coded
+		// both as a vowel and as a consonant, code this letter for both.
+		var codeIndexes []int
 		if letterNo == 0 {
-			codeIndex = 0 // start of name
-		} else if dmIsVowelCode(nextCodes) {
-			codeIndex = 1 // before a vowel
+			codeIndexes = []int{0} // start of name
+		} else if len(nextCodes) == 0 {
+			codeIndexes = []int{2} // end of name or non-alphabetic character
 		} else {
-			codeIndex = 2 // any other
+			for _, next := range nextCodes {
+				codeIndex := dmCodeIndexForNext(next)
+				if len(codeIndexes) == 0 || codeIndexes[0] != codeIndex {
+					codeIndexes = append(codeIndexes, codeIndex)
+				}
+			}
 		}
 
 		// Apply codes to all branches, possibly creating new branches.
-		branches = dmApplyCodes(branches, codes, codeIndex)
+		branches = dmApplyCodes(branches, codes, codeIndexes)
 
 		pos = nextPos
 		letterNo++
@@ -332,11 +347,12 @@ func DaitchMokotoff(source string) []string {
 // dmApplyCodes processes one letter's codes across all branches.
 // Equivalent branches are deduplicated immediately to avoid multiplicative
 // growth from alternate paths that lead to the same state.
-func dmApplyCodes(branches []dmBranch, codes []dmCodes, codeIndex int) []dmBranch {
+func dmApplyCodes(branches []dmBranch, codes []dmCodes, codeIndexes []int) []dmBranch {
 	result := make([]dmBranch, 0, len(branches))
 	seen := make(map[dmBranch]struct{}, len(branches))
 	for _, b := range branches {
 		if b.length >= dmCodeLen {
+			b.nextCodeIndex = 0
 			if _, ok := seen[b]; !ok {
 				seen[b] = struct{}{}
 				result = append(result, b)
@@ -344,14 +360,22 @@ func dmApplyCodes(branches []dmBranch, codes []dmCodes, codeIndex int) []dmBranc
 			continue
 		}
 		for _, alt := range codes {
-			codeStr := alt[codeIndex]
-			newBranches := dmApplyCodeStr(b, codeStr)
-			for _, newBranch := range newBranches {
-				if _, ok := seen[newBranch]; ok {
-					continue
+			// Skip an alternative whose sound (vowel or consonant) doesn't
+			// match the code index used for the previous letter.
+			if b.nextCodeIndex != 0 && b.nextCodeIndex != dmCodeIndexForNext(alt) {
+				continue
+			}
+			for _, codeIndex := range codeIndexes {
+				codeStr := alt[codeIndex]
+				newBranches := dmApplyCodeStr(b, codeStr)
+				for _, newBranch := range newBranches {
+					newBranch.nextCodeIndex = codeIndex
+					if _, ok := seen[newBranch]; ok {
+						continue
+					}
+					seen[newBranch] = struct{}{}
+					result = append(result, newBranch)
 				}
-				seen[newBranch] = struct{}{}
-				result = append(result, newBranch)
 			}
 		}
 	}
