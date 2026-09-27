@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 var db *gosql.DB
@@ -1100,4 +1101,35 @@ func BenchmarkParseDate(b *testing.B) {
 			}
 		}
 	}
+}
+
+// TestParseDayOfWeek checks that, like in PostgreSQL, the name of the day of
+// the week is accepted and ignored.
+func TestParseDayOfWeek(t *testing.T) {
+	exp := time.Date(2020, 1, 2, 0, 0, 0, 0, time.UTC)
+	for _, s := range []string{
+		"Thu Jan 02 2020",
+		"Thursday, January 2, 2020",
+		"thu, 2 jan 2020",
+		"jan 2 2020 thu",
+		"thur jan 2 2020",
+		"thurs jan 2 2020",
+	} {
+		t.Run(s, func(t *testing.T) {
+			res, _, err := pgdate.ParseTimestamp(time.Time{}, pgdate.DefaultDateStyle(), s, nil /* h */)
+			require.NoError(t, err)
+			require.Equal(t, exp, res)
+		})
+	}
+
+	// RFC 1123, as used in HTTP and email.
+	res, _, err := pgdate.ParseTimestamp(
+		time.Time{}, pgdate.DefaultDateStyle(), "Thu, 02 Jan 2020 03:04:05 GMT", nil, /* h */
+	)
+	require.NoError(t, err)
+	require.Equal(t, time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC), res)
+
+	// The day of the week alone is not a date.
+	_, _, err = pgdate.ParseTimestamp(time.Time{}, pgdate.DefaultDateStyle(), "Thu", nil /* h */)
+	require.Error(t, err)
 }

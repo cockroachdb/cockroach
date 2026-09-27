@@ -143,8 +143,18 @@ func (fe *fieldExtract) Extract(s string) error {
 	// pass. If we see certain sentinel values, we'll pick them out,
 	// but keep going to ensure that the user hasn't written something
 	// like "epoch infinity".
+	// The number of chunks that were skipped because they are the day of the
+	// week, which doesn't count as a field.
+	skippedChunks := 0
+	afterDayOfWeek := false
 	for idx, chunk := range textChunks[:count] {
 		match := strings.ToLower(chunk.Match)
+		if afterDayOfWeek {
+			// A comma after the day of the week, as in "Thu, 02 Jan 2020", is not a
+			// separator of the next field.
+			chunk.NotMatch = strings.Replace(chunk.NotMatch, ",", "", 1)
+			afterDayOfWeek = false
+		}
 
 		switch match {
 		case keywordEpoch:
@@ -174,6 +184,13 @@ func (fe *fieldExtract) Extract(s string) error {
 				continue
 			}
 
+			// Like PostgreSQL, accept and ignore the day of the week.
+			if _, ok := dayOfWeekKeywords[match]; ok {
+				skippedChunks++
+				afterDayOfWeek = true
+				continue
+			}
+
 			// Fan out to other keyword-based extracts.
 			if m, ok := keywordSetters[match]; ok {
 				if err := m(fe, match); err != nil {
@@ -184,7 +201,8 @@ func (fe *fieldExtract) Extract(s string) error {
 				// figure it out if one of those were a four-digit number,
 				// this is consistent with PostgreSQL 10.5 behavior.
 				// We should only ever see a text month in field 0 or 1.
-				if idx == 2 && fe.Wants(fieldYear) && !fe.Wants(fieldMonth) && fe.Wants(fieldDay) {
+				if idx-skippedChunks == 2 &&
+					fe.Wants(fieldYear) && !fe.Wants(fieldMonth) && fe.Wants(fieldDay) {
 					return inputErrorf("no such thing as a YDM or DYM format")
 				}
 				continue

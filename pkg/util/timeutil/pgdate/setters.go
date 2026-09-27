@@ -64,6 +64,19 @@ var keywordSetters = map[string]fieldSetter{
 	keywordZulu:     fieldSetterUTC,
 }
 
+// dayOfWeekKeywords are the names of the days of the week that PostgreSQL
+// accepts, and ignores, in date and time input, such as in
+// "Thu Jan 02 03:04:05 2020" or "Thu, 02 Jan 2020 03:04:05 GMT".
+var dayOfWeekKeywords = map[string]struct{}{
+	"sun": {}, "sunday": {},
+	"mon": {}, "monday": {},
+	"tue": {}, "tues": {}, "tuesday": {},
+	"wed": {}, "wednesday": {},
+	"thu": {}, "thur": {}, "thurs": {}, "thursday": {},
+	"fri": {}, "friday": {},
+	"sat": {}, "saturday": {},
+}
+
 func init() {
 	// Register a setter for every PostgreSQL-known fixed-offset abbreviation
 	// (see pg_timezone_abbrevs.go). Pre-existing entries in keywordSetters
