@@ -363,24 +363,11 @@ func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (Duration, error
 			floatParsed = true
 			if parsedIdx == nothingParsed {
 				// It must be <DurationType> part because nothing has been parsed.
-				switch itm.DurationField.DurationType {
-				case types.IntervalDurationType_YEAR:
-					d = d.Add(MakeDuration(0, 0, 12).MulFloat(value * float64(mult)))
-				case types.IntervalDurationType_MONTH:
-					d = d.Add(MakeDuration(0, 0, 1).MulFloat(value * float64(mult)))
-				case types.IntervalDurationType_DAY:
-					d = d.Add(MakeDuration(0, 1, 0).MulFloat(value * float64(mult)))
-				case types.IntervalDurationType_HOUR:
-					d = d.Add(MakeDuration(time.Hour.Nanoseconds(), 0, 0).MulFloat(value * float64(mult)))
-				case types.IntervalDurationType_MINUTE:
-					d = d.Add(MakeDuration(time.Minute.Nanoseconds(), 0, 0).MulFloat(value * float64(mult)))
-				case types.IntervalDurationType_SECOND, types.IntervalDurationType_UNSET:
-					d = d.Add(MakeDuration(time.Second.Nanoseconds(), 0, 0).MulFloat(value * float64(mult)))
-				case types.IntervalDurationType_MILLISECOND:
-					d = d.Add(MakeDuration(time.Millisecond.Nanoseconds(), 0, 0).MulFloat(value * float64(mult)))
-				default:
-					return d, errors.AssertionFailedf("unhandled DurationField constant %#v", itm.DurationField)
+				unit, err := unitWithoutDesignator(itm)
+				if err != nil {
+					return d, err
 				}
+				d = d.Add(unit.MulFloat(value * float64(mult)))
 				parsedIdx = hmsParsed
 			} else if parsedIdx == hmsParsed {
 				// Day part.
@@ -399,6 +386,32 @@ func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (Duration, error
 		}
 	}
 	return d, nil
+}
+
+// unitWithoutDesignator returns the unit of a number without a unit that is
+// the last field of an interval, such as the 2 in '1 day 2'. As in
+// PostgreSQL, it is the last field of the interval type (e.g. hours for
+// INTERVAL DAY TO HOUR), or seconds if the type has no fields.
+func unitWithoutDesignator(itm types.IntervalTypeMetadata) (Duration, error) {
+	switch itm.DurationField.DurationType {
+	case types.IntervalDurationType_YEAR:
+		return MakeDuration(0, 0, 12), nil
+	case types.IntervalDurationType_MONTH:
+		return MakeDuration(0, 0, 1), nil
+	case types.IntervalDurationType_DAY:
+		return MakeDuration(0, 1, 0), nil
+	case types.IntervalDurationType_HOUR:
+		return MakeDuration(time.Hour.Nanoseconds(), 0, 0), nil
+	case types.IntervalDurationType_MINUTE:
+		return MakeDuration(time.Minute.Nanoseconds(), 0, 0), nil
+	case types.IntervalDurationType_SECOND, types.IntervalDurationType_UNSET:
+		return MakeDuration(time.Second.Nanoseconds(), 0, 0), nil
+	case types.IntervalDurationType_MILLISECOND:
+		return MakeDuration(time.Millisecond.Nanoseconds(), 0, 0), nil
+	default:
+		return Duration{}, errors.AssertionFailedf(
+			"unhandled DurationField constant %#v", itm.DurationField)
+	}
 }
 
 // Parses an ISO8601 (with designators) string.
@@ -532,6 +545,23 @@ func parseDuration(
 				return d, err
 			}
 			d = d.Add(delta)
+			continue
+		}
+
+		if l.err == nil && l.offset == len(l.str) {
+			// A number without a unit at the end of the input, such as the 2 in
+			// '1 day 2'. PostgreSQL treats it as the last field of the interval
+			// type, which is seconds by default.
+			unit, err := unitWithoutDesignator(itm)
+			if err != nil {
+				return d, err
+			}
+			d = d.Add(unit.Mul(v))
+			if hasDecimal {
+				if d, err = addFrac(d, unit, vp); err != nil {
+					return d, err
+				}
+			}
 			continue
 		}
 

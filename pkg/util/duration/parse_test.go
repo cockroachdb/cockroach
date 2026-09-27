@@ -261,7 +261,7 @@ func TestPGIntervalSyntax(t *testing.T) {
 	}{
 		{input: ``, error: `interval: invalid input syntax: ""`},
 		{input: `-`, error: `interval: strconv.ParseInt: parsing "-": invalid syntax`},
-		{input: `123`, error: `interval: missing unit at position 3: "123"`},
+		{input: `123`, output: `00:02:03`},
 		{input: `123blah`, error: `interval: unknown unit "blah" in duration "123blah"`},
 		{input: `10000000000000000000000000000000000 year`, error: `interval: strconv.ParseInt: parsing "10000000000000000000000000000000000": value out of range`},
 
@@ -389,6 +389,20 @@ func TestPGIntervalSyntax(t *testing.T) {
 		{input: `-1.1y`, output: `-1 years -1 mons`},
 		{input: `-1.19y`, output: `-1 years -2 mons`},
 		{input: `-1.11y`, output: `-1 years -1 mons`},
+
+		// A number without a unit at the end is in seconds, or in the last field
+		// of the interval type.
+		{input: `1 mon 2`, output: `1 mon 00:00:02`},
+		{input: `1 day 2`, output: `1 day 00:00:02`},
+		{input: `1 day 2 `, output: `1 day 00:00:02`},
+		{input: `1 year 2 mons 3`, output: `1 year 2 mons 00:00:03`},
+		{input: `1 day 2 hours 3`, output: `1 day 02:00:03`},
+		{input: `1 minute 2.5`, output: `00:01:02.5`},
+		{input: `1 day -2`, output: `1 day -00:00:02`},
+		{input: `-1 day 2`, output: `-1 days +00:00:02`, outputSQLStandard: `-1 days -00:00:02`},
+		{input: `1 day 2`, itm: dayToHourITM, output: `1 day 02:00:00`},
+		{input: `1 day 2`, itm: minuteToSecondITM, output: `1 day 00:00:02`},
+		{input: `1 mon 2 3`, error: `interval: missing unit at position 8: "1 mon 2 3"`},
 
 		// Mixed unit/HH:MM:SS formats
 		{input: `1:2:3`, output: `01:02:03`},
