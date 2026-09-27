@@ -266,6 +266,18 @@ func TestPGIntervalSyntax(t *testing.T) {
 		{input: `10000000000000000000000000000000000 year`, error: `interval: strconv.ParseInt: parsing "10000000000000000000000000000000000": value out of range`},
 
 		{input: `500nanoseconds`, error: `interval: unknown unit "nanoseconds" in duration "500nanoseconds"`},
+
+		// "ago" negates the interval, and a leading @ is ignored, as in the
+		// postgres_verbose IntervalStyle.
+		{input: `1 hour ago`, output: `-01:00:00`},
+		{input: `1 HOUR AGO`, output: `-01:00:00`},
+		{input: `@ 1 hour ago`, output: `-01:00:00`},
+		{input: `@ 1 day 2 hours`, output: `1 day 02:00:00`},
+		{input: `1 day ago 2 hours`, output: `-1 days -02:00:00`},
+		{input: `1:00 ago`, output: `-01:00:00`},
+		{input: `ago`, error: `interval: missing number at position 0: "ago"`},
+		{input: `1 ago`, error: `interval: unknown unit "ago" in duration "1 ago"`},
+		{input: `1 hour agox`, error: `interval: missing number at position 7: "1 hour agox"`},
 		{input: `500ns`, error: `interval: unknown unit "ns" in duration "500ns"`},
 
 		// ns/us boundary

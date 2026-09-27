@@ -137,6 +137,20 @@ func (l *intervalLexer) consumeUnit(skipCharacter byte) string {
 	return l.str[offset:l.offset]
 }
 
+// consumeAgo consumes the word "ago" (in any case) and the spaces after it,
+// if it is next in the input.
+func (l *intervalLexer) consumeAgo() bool {
+	const ago = "ago"
+	end := l.offset + len(ago)
+	if l.err != nil || end > len(l.str) || !strings.EqualFold(l.str[l.offset:end], ago) ||
+		(end < len(l.str) && l.str[end] != ' ') {
+		return false
+	}
+	l.offset = end
+	l.consumeSpaces()
+	return true
+}
+
 // Consumes any number of spaces.
 func (l *intervalLexer) consumeSpaces() {
 	if l.err != nil {
@@ -501,6 +515,12 @@ func parseDuration(
 	var d Duration
 	l := intervalLexer{str: s, offset: 0, err: nil}
 	l.consumeSpaces()
+	// Like PostgreSQL, accept an optional leading @, as in the output of the
+	// postgres_verbose IntervalStyle ("@ 1 hour ago").
+	if l.offset < len(l.str) && l.str[l.offset] == '@' {
+		l.offset++
+		l.consumeSpaces()
+	}
 
 	if l.offset == len(l.str) {
 		return d, pgerror.Newf(
@@ -517,7 +537,14 @@ func parseDuration(
 		l.offset++
 	}
 
+	// Like PostgreSQL, "ago" after a field negates the whole interval.
+	parsedField, ago := false, false
 	for l.offset != len(l.str) {
+		if parsedField && l.consumeAgo() {
+			ago = true
+			continue
+		}
+		parsedField = true
 		// To support -00:XX:XX we record the sign here since -0 doesn't exist
 		// as an int64.
 		sign := l.str[l.offset] == '-'
@@ -561,7 +588,7 @@ func parseDuration(
 		return d, pgerror.Newf(
 			pgcode.InvalidDatetimeFormat, "interval: missing unit at position %d: %q", l.offset, s)
 	}
-	if isSQLStandardNegative {
+	if isSQLStandardNegative != ago {
 		return MakeDuration(
 			-d.Nanos(),
 			-d.Days,
