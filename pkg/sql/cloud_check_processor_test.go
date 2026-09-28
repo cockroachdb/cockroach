@@ -32,6 +32,8 @@ func TestResolveExternalDestination(t *testing.T) {
 		{name: "aws-kms no auth", uri: "aws-kms:///key?REGION=r", kms: true, expectExplicitAuth: true, expectKind: "aws-kms"},
 		{name: "aws-kms specified", uri: "aws-kms:///key?REGION=r&AUTH=specified", kms: true, expectExplicitAuth: true, expectKind: "aws-kms"},
 		{name: "aws-kms implicit", uri: "aws-kms:///key?REGION=r&AUTH=implicit", kms: true, expectExplicitAuth: false, expectKind: "aws-kms"},
+		{name: "aws-kms custom endpoint", uri: "aws-kms:///key?REGION=r&AUTH=specified&AWS_ACCESS_KEY_ID=k&AWS_SECRET_ACCESS_KEY=s&AWS_ENDPOINT=http://evil", kms: true, expectExplicitAuth: false, expectKind: "aws-kms"},
+		{name: "aws (kms alias) custom endpoint", uri: "aws:///key?REGION=r&AWS_ENDPOINT=http://evil", kms: true, expectExplicitAuth: false, expectKind: "aws"},
 		{name: "gcp-kms no auth", uri: "gcp-kms:///key", kms: true, expectExplicitAuth: true, expectKind: "gcp-kms"},
 		{name: "gcp-kms specified", uri: "gcp-kms:///key?AUTH=specified", kms: true, expectExplicitAuth: true, expectKind: "gcp-kms"},
 		{name: "gcp-kms implicit", uri: "gcp-kms:///key?AUTH=implicit", kms: true, expectExplicitAuth: false, expectKind: "gcp-kms"},
