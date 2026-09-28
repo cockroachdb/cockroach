@@ -595,6 +595,19 @@ var tombstoneDenseCompactionThreshold = settings.RegisterIntSetting(
 	10, // 10%
 	settings.IntInRange(0, 100),
 )
+
+// smallTableCompactionMinRunLength controls small-table compactions, which
+// consolidate runs of adjacent small tables within a level (see
+// pebble.Options.SmallTableCompactionMinRunLength).
+var smallTableCompactionMinRunLength = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.small_table_compaction_min_run_length",
+	"minimum number of adjacent small tables in a level that are consolidated "+
+		"into a single table by a small-table compaction (0 = disabled; 4 is a "+
+		"good value)",
+	0,
+	settings.NonNegativeInt,
+)
 var tableFilterModeSetting = settings.RegisterEnumSetting(
 	settings.ApplicationLevel, // used by temp storage as well
 	"storage.table_filters",
@@ -1129,6 +1142,11 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	if cfg.opts.Experimental.UseDeprecatedCompensatedScore == nil {
 		cfg.opts.Experimental.UseDeprecatedCompensatedScore = func() bool {
 			return useDeprecatedCompensatedScore.Get(sv)
+		}
+	}
+	if cfg.opts.SmallTableCompactionMinRunLength == nil {
+		cfg.opts.SmallTableCompactionMinRunLength = func() int {
+			return int(smallTableCompactionMinRunLength.Get(sv))
 		}
 	}
 	if cfg.opts.Experimental.SpanPolicyFunc == nil {
