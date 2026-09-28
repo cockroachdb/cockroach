@@ -52,9 +52,10 @@ var _ ExternalDestination = implicitAuthDestination{}
 
 // KMSDestination returns an ExternalDestination for a KMS URI. A KMS URI has no
 // ExternalStorage representation, but access to it still needs to be classified
-// as explicit or implicit for privilege checks.
-func KMSDestination(scheme, auth string) ExternalDestination {
-	return kmsDestination{scheme: scheme, auth: auth}
+// as explicit or implicit for privilege checks. endpoint is the URI's custom
+// endpoint (e.g. AWS_ENDPOINT for aws-kms), or empty if none was specified.
+func KMSDestination(scheme, auth, endpoint string) ExternalDestination {
+	return kmsDestination{scheme: scheme, auth: auth, endpoint: endpoint}
 }
 
 type kmsDestination struct {
@@ -62,9 +63,17 @@ type kmsDestination struct {
 	scheme string
 	// auth is the value of the URI's AUTH parameter.
 	auth string
+	// endpoint is the URI's custom endpoint, if any.
+	endpoint string
 }
 
 func (d kmsDestination) AccessIsWithExplicitAuth() bool {
+	// As with S3 storage, a custom endpoint could be a network resource only
+	// accessible via this node's network context and thus has an element of
+	// implicit auth, regardless of the credentials supplied.
+	if d.endpoint != "" {
+		return false
+	}
 	return d.auth != ExternalStorageAuthImplicit
 }
 func (d kmsDestination) Kind() string { return d.scheme }

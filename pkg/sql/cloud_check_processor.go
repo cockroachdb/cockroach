@@ -374,7 +374,12 @@ func resolveExternalDestinationAsImplicitAuth(
 	}
 
 	if kms && u.Scheme != externalconn.Scheme {
-		return cloudpb.KMSDestination(u.Scheme, u.Query().Get(cloud.AuthParam)), nil
+		// awsEndpointParam mirrors amazon.AWSEndpointParam, which is not imported
+		// here to avoid pulling the AWS SDK into this package. Only aws-kms
+		// consumes it; other KMS providers reject it as an unknown parameter.
+		const awsEndpointParam = "AWS_ENDPOINT"
+		q := u.Query()
+		return cloudpb.KMSDestination(u.Scheme, q.Get(cloud.AuthParam), q.Get(awsEndpointParam)), nil
 	}
 
 	if !cloud.SchemeSupported(u.Scheme) {
