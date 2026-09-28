@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
-	"github.com/go-openapi/strfmt"
 	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/pflag"
 )
@@ -83,6 +82,10 @@ func init() {
 }
 
 const ttlTableName = "ttl_tbl"
+
+// rfc3339Millis is RFC3339 with millisecond precision, used when logging
+// poll timestamps.
+const rfc3339Millis = "2006-01-02T15:04:05.000Z07:00"
 
 func getExpiredRowCount(db *gosql.DB, now time.Time) (int, error) {
 	var count int
@@ -210,7 +213,7 @@ func waitForDistribution(ctx context.Context, db *gosql.DB) error {
 		log.Dev.Infof(
 			ctx,
 			"pollAt=%s pollCount=%d rangeIDToLeaseholder=\n%s",
-			pollAt.Format(strfmt.RFC3339Millis), pollCount, leaseholderToRangeIDsString,
+			pollAt.Format(rfc3339Millis), pollCount, leaseholderToRangeIDsString,
 		)
 
 		if !reflect.DeepEqual(prevLeaseholderToRangeIDs, leaseholderToRangeIDs) {
@@ -286,7 +289,7 @@ func (t *ttlBench) Hooks() workload.Hooks {
 			log.Dev.Infof(
 				ctx,
 				"TTL set initialExpiredRowCount=%d now=%s\n%s",
-				initialExpiredRowCount, ttlResetTime.Format(strfmt.RFC3339Millis), ttlStatement,
+				initialExpiredRowCount, ttlResetTime.Format(rfc3339Millis), ttlStatement,
 			)
 
 			pollCount := 0
@@ -306,7 +309,7 @@ func (t *ttlBench) Hooks() workload.Hooks {
 			log.Dev.Infof(
 				ctx,
 				"TTL started pollCount=%d expiredRowCount=%d now=%s",
-				pollCount, expiredRowCount, ttlStartTime.Format(strfmt.RFC3339Millis),
+				pollCount, expiredRowCount, ttlStartTime.Format(rfc3339Millis),
 			)
 
 			pollCount = 0
@@ -325,7 +328,7 @@ func (t *ttlBench) Hooks() workload.Hooks {
 				log.Dev.Infof(
 					ctx,
 					"TTL poll pollCount=%d expiredRowCount=%d now=%s",
-					pollCount, expiredRowCount, pollEndTime.Format(strfmt.RFC3339Millis),
+					pollCount, expiredRowCount, pollEndTime.Format(rfc3339Millis),
 				)
 
 				pollDuration := pollEndTime.Sub(pollStartTime)
@@ -338,7 +341,7 @@ func (t *ttlBench) Hooks() workload.Hooks {
 			log.Dev.Infof(
 				ctx,
 				"TTL complete pollCount=%d duration=%dms now=%s",
-				pollCount, ttlEndTime.Sub(ttlStartTime).Milliseconds(), ttlEndTime.Format(strfmt.RFC3339Millis),
+				pollCount, ttlEndTime.Sub(ttlStartTime).Milliseconds(), ttlEndTime.Format(rfc3339Millis),
 			)
 
 			return printJobState(ctx, db)

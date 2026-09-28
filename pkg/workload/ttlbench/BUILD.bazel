@@ -15,7 +15,6 @@ go_library(
         "//pkg/workload",
         "//pkg/workload/histogram",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_go_openapi_strfmt//:strfmt",
         "@com_github_gogo_protobuf//proto",
         "@com_github_spf13_pflag//:pflag",
     ],
