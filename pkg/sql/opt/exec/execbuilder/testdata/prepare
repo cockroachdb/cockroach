@@ -448,3 +448,62 @@ statement error invalid input value for enum enum132105: "konnichiwa"
 EXECUTE p132105enum_range_datum;
 
 subtest end
+
+# Regression test for cockroachdb/cockroach#162487 with a string placeholder
+# type hint. The type of the placeholder is overridden to the enum at PREPARE
+# time.
+subtest prepare-enum-placeholder-string-hint
+
+statement ok
+CREATE TYPE enum162487_hint AS ENUM ('a', 'b', 'c');
+CREATE TABLE t162487_hint (k INT PRIMARY KEY, e enum162487_hint, INDEX (e));
+CREATE TABLE t162487_other (k INT PRIMARY KEY, e enum162487_hint DEFAULT 'a');
+INSERT INTO t162487_hint SELECT i, (ARRAY['a', 'b', 'c'])[1 + i % 3]::enum162487_hint FROM generate_series(1, 30) AS g(i);
+
+statement ok
+ANALYZE t162487_hint
+
+statement ok
+PREPARE p162487_varchar (VARCHAR) AS SELECT count(*) FROM t162487_hint WHERE e IN ($1);
+
+query I
+EXECUTE p162487_varchar('a');
+----
+10
+
+# Changing the default of a column of another table bumps the version of the
+# enum without changing t162487_hint, so the memo built for the prepared
+# statement isn't stale on its own.
+statement ok
+ALTER TABLE t162487_other ALTER COLUMN e DROP DEFAULT
+
+query I
+EXECUTE p162487_varchar('a');
+----
+10
+
+# The first execution after a version bump re-parses the prepared statement;
+# the following ones must keep using the refreshed placeholder types, including
+# after another bump.
+query I
+EXECUTE p162487_varchar('a');
+----
+10
+
+statement ok
+ALTER TABLE t162487_other ALTER COLUMN e SET DEFAULT 'b'
+
+query I
+EXECUTE p162487_varchar('b');
+----
+10
+
+statement ok
+ALTER TYPE enum162487_hint ADD VALUE 'd'
+
+query I
+EXECUTE p162487_varchar('d');
+----
+0
+
+subtest end

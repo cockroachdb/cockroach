@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -225,7 +226,6 @@ func (ex *connExecutor) prepare(
 	}
 
 	var flags planFlags
-	var udts []*types.T
 	prepare := func(ctx context.Context, txn *kv.Txn) (err error) {
 		p := &ex.planner
 		if origin == prep.StatementOriginWire {
@@ -290,6 +290,7 @@ func (ex *connExecutor) prepare(
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
+		var udts []*types.T
 		flags, udts, err = ex.populatePrepared(ctx, txn, placeholderHints, p, origin)
 		// Copy the udts slice to ensure prepared statements and memos
 		// maintain independent references. The reason for the separation is
@@ -298,6 +299,10 @@ func (ex *connExecutor) prepare(
 		// the memo is properly invalidated during plan generation.
 		prepared.UDTs = make([]*types.T, len(udts))
 		copy(prepared.UDTs, udts)
+		// Similarly, make copies of the placeholder types to avoid aliasing
+		// with the query cache if we need to refresh UDTs.
+		prepared.Types = slices.Clone(prepared.Types)
+		prepared.TypeHints = slices.Clone(prepared.TypeHints)
 		return err
 	}
 
