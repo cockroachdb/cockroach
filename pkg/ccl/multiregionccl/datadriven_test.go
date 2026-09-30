@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -183,6 +185,20 @@ func testMultiRegionDataDriven(t *testing.T, testPath string) {
 					// TODO(rafi): use more explicit cluster setting once it's available;
 					// see https://github.com/cockroachdb/cockroach/issues/110740.
 					allocatorimpl.LeaseRebalanceThreshold.Override(ctx, &st.SV, 10.0)
+					// Speed up closing of timestamps, in order to sleep less before we
+					// can use follower_read_timestamp(). follower_read_timestamp() uses
+					// the sum of the following settings.
+					closedts.TargetDuration.Override(ctx, &st.SV, 400*time.Millisecond)
+					closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 100*time.Millisecond)
+					closedts.ClosedTimestampPropagationSlack.Override(ctx, &st.SV, 500*time.Millisecond)
+					closedts.LeadForGlobalReadsAutoTuneEnabled.Override(ctx, &st.SV, false)
+					// Disable all kvserver lease transfers other than those required to
+					// satisfy a lease preference. This prevents the lease shifting
+					// around too quickly, which leads to concurrent replication changes
+					// being proposed by prior leaseholders.
+					kvserverbase.OverrideLoadBasedRebalancingMode(ctx, &st.SV, kvserverbase.LBRebalancingOff)
+					allocatorimpl.EnableLoadBasedLeaseRebalancing.Override(ctx, &st.SV, false)
+					kvserver.MinLeaseTransferInterval.Override(ctx, &st.SV, 5*time.Minute)
 					serverArgs[i] = base.TestServerArgs{
 						Locality: localityCfg,
 						Settings: st,
@@ -205,36 +221,12 @@ func testMultiRegionDataDriven(t *testing.T, testPath string) {
 					}
 				}
 				numServers := len(localityNames)
-				tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
+				ds.tc = testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
 					ServerArgsPerNode: serverArgs,
 					ServerArgs: base.TestServerArgs{
 						DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156305),
 					},
 				})
-				ds.tc = tc
-
-				sysConn := tc.SystemLayer(0).SQLConn(t)
-				// Speed up closing of timestamps, in order to sleep less below before
-				// we can use follower_read_timestamp(). follower_read_timestamp() uses
-				// sum of the following settings. Also, disable all kvserver lease
-				// transfers other than those required to satisfy a lease preference.
-				// This prevents the lease shifting around too quickly, which leads to
-				// concurrent replication changes being proposed by prior leaseholders.
-				for _, stmt := range strings.Split(`
-SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.4s';
-SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s';
-SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s';
-SET CLUSTER SETTING kv.allocator.load_based_rebalancing = 'off';
-SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false;
-SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m';
-SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled = false
-`,
-					";") {
-					_, err := sysConn.Exec(stmt)
-					if err != nil {
-						return err.Error()
-					}
-				}
 
 			case "cleanup-cluster":
 				ds.cleanup(ctx)
