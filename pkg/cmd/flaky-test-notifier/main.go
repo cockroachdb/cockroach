@@ -639,7 +639,7 @@ func postGitHubIssues(ctx context.Context, testsToAlert [][]TestFailure) error {
 
 	opts := &issues.Options{
 		Token:  githubAPIToken,
-		Org:    "cockroachdb",
+		Org:    "cockroachlabs",
 		Repo:   "cockroach",
 		Branch: "master",
 	}

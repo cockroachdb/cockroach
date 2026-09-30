@@ -189,7 +189,7 @@ func DefaultOptionsFromEnv() *Options {
 
 	return &Options{
 		Token: maybeEnv(githubAPITokenEnv, ""),
-		Org:   maybeEnv(githubOrgEnv, "cockroachdb"),
+		Org:   maybeEnv(githubOrgEnv, "cockroachlabs"),
 		Repo:  maybeEnv(githubRepoEnv, "cockroach"),
 		// The default value is the very first commit in the repository.
 		// This was chosen simply because it exists and while surprising,
@@ -220,7 +220,7 @@ func maybeEnv(envKey, defaultValue string) string {
 // a nontrivial value and if the GITHUB_REPOSITORY environment variable is set
 // to an appropriate value.
 func (o *Options) CanPost() bool {
-	const cockroach = "cockroachdb/cockroach"
+	const cockroach = "cockroachlabs/cockroach"
 	// NB: GitHub Actions sets the GITHUB_REPOSITORY environment variable.
 	// We don't want issue posting to run on forks, so this will keep that
 	// from happening. Note we check the GITHUB_REPO env var below, which is
