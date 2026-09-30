@@ -73,3 +73,79 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"t"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression test for cockroachdb/cockroach#162487: the placeholder types
+# determined at Parse time must be refreshed along with the rest of the prepared
+# statement once a UDT they reference changes.
+send
+Query {"String": "DROP TABLE IF EXISTS t162487"}
+Query {"String": "DROP TYPE IF EXISTS te162487"}
+Query {"String": "CREATE TYPE te162487 AS ENUM ('a')"}
+Query {"String": "CREATE TABLE t162487 (k INT PRIMARY KEY, e te162487)"}
+Query {"String": "INSERT INTO t162487 VALUES (1, 'a')"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"DROP TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# The first statement has an enum array placeholder. The second one declares
+# its placeholder as VARCHAR (OID 1043), which is how pgjdbc sends parameters
+# bound via setString(); its type is overridden to the enum during
+# type-checking.
+send crdb_only
+Parse {"Name": "s_array", "Query": "SELECT count(*) FROM t162487 WHERE e = ANY ($1::te162487[])"}
+Parse {"Name": "s_varchar", "Query": "SELECT count(*) FROM t162487 WHERE e IN ($1)", "ParameterOIDs": [1043]}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "ALTER TYPE te162487 ADD VALUE 'b'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Both statements must accept the new value.
+send crdb_only
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s_array", "ParameterFormatCodes": [0], "Parameters": [{"text":"{b}"}]}
+Execute {"Portal": "p1"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s_varchar", "ParameterFormatCodes": [0], "Parameters": [{"text":"b"}]}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
