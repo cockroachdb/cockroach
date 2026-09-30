@@ -339,45 +339,78 @@ func (ex *connExecutor) execPortal(
 	}
 }
 
+// checkUDTStaleness updates the slice in-place with every UDT resolved at its
+// current version. It also returns whether any were actually stale and their
+// type names.
 func (ex *connExecutor) checkUDTStaleness(
-	ctx context.Context, prep *prep.Statement,
+	ctx context.Context, udts []*types.T,
 ) (stale bool, staleEnumNames []string, err error) {
-	if len(prep.UDTs) == 0 {
+	if len(udts) == 0 {
 		return false, nil, nil
 	}
 	staleEnumNames = make([]string, 0)
-	for i, typ := range prep.UDTs {
+	for i, typ := range udts {
 		toCheck, err := ex.planner.ResolveTypeByOID(ctx, typ.Oid())
 		if err != nil {
 			return stale, nil, err
 		}
 		if typ.TypeMeta.Version != toCheck.TypeMeta.Version {
 			stale = true
-			prep.UDTs[i] = toCheck
+			udts[i] = toCheck
 			staleEnumNames = append(staleEnumNames, typ.Name())
 		}
 	}
 	return stale, staleEnumNames, nil
 }
 
+// refreshUDTVersions updates the slice in-place with every UDT resolved at its
+// current version.
+func (ex *connExecutor) refreshUDTVersions(ctx context.Context, typs tree.PlaceholderTypes) error {
+	for i, typ := range typs {
+		if typ == nil || !typ.UserDefined() {
+			continue
+		}
+		current, err := ex.planner.ResolveTypeByOID(ctx, typ.Oid())
+		if err != nil {
+			return err
+		}
+		typs[i] = current
+	}
+	return nil
+}
+
 // maybeReparsePrepStmt is to reparse the prepared statement so that the
 // stored udt datum is up-to-date. The reparse is needed because AST can
 // be modified at type checking, with tree.StrVal component replaced
 // with a versioned tree.DEnum. If the UDT's version changed, this
-// tree.DEnum would be outdated.
+// tree.DEnum would be outdated. The placeholder types determined when the
+// statement was prepared are refreshed for the same reason.
 func (ex *connExecutor) maybeReparsePrepStmt(
 	ctx context.Context, prep *prep.Statement, name string,
 ) error {
-	stale, staleEnumNames, err := ex.checkUDTStaleness(ctx, prep)
+	// Since we made the copies of UDTs, Types, and TypeHints slices, we can
+	// update each in-place.
+	stale, staleEnumNames, err := ex.checkUDTStaleness(ctx, prep.UDTs)
 	if err != nil {
 		return err
 	}
 	if !stale {
 		return nil
 	}
+	if err = ex.refreshUDTVersions(ctx, prep.Types); err != nil {
+		return err
+	}
+	if err = ex.refreshUDTVersions(ctx, prep.TypeHints); err != nil {
+		return err
+	}
 	log.Eventf(ctx, "reparsing prepared statement %q because user-defined types are stale: %s", name, staleEnumNames)
 	newStmt, err := parser.ParseOne(prep.SQL)
 	if err != nil {
+		if buildutil.CrdbTestBuild {
+			// We should always be able to reparse the original SQL of the
+			// prepared statement.
+			return errors.WithAssertionFailure(err)
+		}
 		return err
 	}
 	prep.Statement = newStmt
