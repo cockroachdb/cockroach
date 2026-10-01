@@ -115,6 +115,7 @@ func (authManager *ldapAuthManager) FetchLDAPUserDN(
 // * LDAP authManager is enabled after settings were reloaded.
 // * The hba conf entry options could be parsed to obtain ldap server params.
 // * All ldap server params are valid.
+// * The provided password is non-empty.
 // * LDAPs connection can be established with configured server.
 // * The provided user DN could be used to bind with the password from sql connection string.
 // It returns authError (which is the error sql clients will see in case of
@@ -146,6 +147,18 @@ func (authManager *ldapAuthManager) ValidateLDAPLogin(
 	if err := authManager.setLDAPConfigOptions(entry); err != nil {
 		return redact.Sprintf("error parsing hba conf options for LDAP: %v", err),
 			errors.Newf("LDAP authentication: unable to parse hba conf options")
+	}
+
+	// An empty password makes the bind below an RFC 4513 unauthenticated bind,
+	// which servers may report as success. Reject it here instead of relying on
+	// the LDAP client library to do so.
+	if ldapPwd == "" {
+		return redact.Sprintf("empty password provided for user %s with DN(%s)",
+				user.Normalized(), ldapUserDN,
+			),
+			errors.WithDetailf(
+				errors.Newf("LDAP authentication: empty password not allowed"),
+				"credentials invalid for LDAP server user %s", user.Normalized())
 	}
 
 	// Establish a LDAPs connection with the set LDAP server and port
