@@ -170,6 +170,11 @@ func TestLDAPAuthentication(t *testing.T) {
 			user: "foo", pwd: invalidParam, ldapAuthSuccess: false, expectedErr: "LDAP authentication: unable to bind as LDAP user",
 			expectedErrDetails:     "credentials invalid for LDAP server user foo",
 			expectedDetailedErrMsg: `error when binding as user ‹foo› with DN(‹cn=foo›) in LDAP server: LDAP bind failed: invalid password provided`},
+		{testName: "empty ldap password",
+			user: "foo", pwd: "", ldapAuthSuccess: false,
+			expectedErr:            "LDAP authentication: empty password not allowed",
+			expectedErrDetails:     "credentials invalid for LDAP server user foo",
+			expectedDetailedErrMsg: `empty password provided for user ‹foo› with DN(‹cn=foo›)`},
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d: testName:%v hbConfOpts:%v user:%v password:%v", i, tc.testName, tc.hbaConfLDAPOpts, tc.user, tc.pwd), func(t *testing.T) {
