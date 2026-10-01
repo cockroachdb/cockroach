@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/jwthelper"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
@@ -40,15 +41,14 @@ var (
 // It’s a free function instead of a (*jwtAuthenticator) method so that it
 // remains mock-friendly in tests and also as it is part of the authz flow
 // and not the authn flow.
-// We still pass the authenticator so the code can reuse getHttpResponse
-// (which already wraps authenticator.mu.conf.httpClient
-// and therefore honours custom CAs).
+// The HTTP client is passed in (from a configuration snapshot) so the call
+// reuses getHttpResponse — honouring custom CAs — without holding the lock.
 func getUserinfoEndpoint(
-	ctx context.Context, issuer string, authenticator *jwtAuthenticator,
+	ctx context.Context, issuer string, client *httputil.Client,
 ) (string, error) {
 	cfgURL := getOpenIdConfigEndpoint(issuer)
 
-	body, err := getHttpResponse(ctx, cfgURL, authenticator)
+	body, err := getHttpResponse(ctx, cfgURL, client)
 	if err != nil {
 		return "", errors.Wrapf(err, "discovery fetch failed: GET %s", cfgURL)
 	}
@@ -103,11 +103,10 @@ func (a *jwtAuthenticator) ExtractGroups(
 	ctx context.Context, st *cluster.Settings, tokenBytes []byte,
 ) ([]string, error) {
 	telemetry.Inc(beginAuthorizationUseCounter)
-	//This call grabs a writelock internally and therefore must happen
-	//before we acquire readlock below to avoid deadlocking.
+	// Snapshot the configuration (for the HTTP client) before the userinfo
+	// fetch, so the slow remote call does not hold the authenticator lock.
 	a.reloadConfig(ctx, st)
-	a.mu.RLock()
-	defer a.mu.RUnlock()
+	conf, _ := a.snapshot()
 
 	if !JWTAuthZEnabled.Get(&st.SV) {
 		return nil, nil
@@ -131,7 +130,7 @@ func (a *jwtAuthenticator) ExtractGroups(
 
 	// Fallback to userinfo
 	groups, err = fetchGroupsFromUserinfo(
-		ctx, st, tok.Issuer(), tokenBytes, a)
+		ctx, st, tok.Issuer(), tokenBytes, conf.httpClient)
 	if err != nil {
 		telemetry.Inc(authorizationFailureUseCtr)
 		internalErr := errors.Wrap(err, "JWT authorization: userinfo lookup failed")
@@ -170,11 +169,11 @@ var fetchGroupsFromUserinfo = func(
 	st *cluster.Settings,
 	issuer string,
 	bearer []byte,
-	auth *jwtAuthenticator, // we need this both for HTTP client & custom CA
+	client *httputil.Client, // HTTP client & custom CA, from a config snapshot
 ) ([]string, error) {
 
 	//Discover the user-info endpoint from the OIDC configuration.
-	userinfoEndpoint, err := getUserinfoEndpoint(ctx, issuer, auth)
+	userinfoEndpoint, err := getUserinfoEndpoint(ctx, issuer, client)
 	if err != nil {
 		return nil, errors.Wrapf(err, "userinfo discovery failed")
 	}
@@ -187,7 +186,7 @@ var fetchGroupsFromUserinfo = func(
 	header := http.Header{}
 	header.Set("Authorization", "Bearer "+string(bearer))
 
-	body, err := getHttpResponse(ctx, userinfoEndpoint, auth, header)
+	body, err := getHttpResponse(ctx, userinfoEndpoint, client, header)
 	if err != nil {
 		return nil, errors.Wrapf(err, "userinfo request failed")
 	}
