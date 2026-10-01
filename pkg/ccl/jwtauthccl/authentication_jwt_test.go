@@ -672,7 +672,7 @@ func TestAudienceCheck(t *testing.T) {
 
 // mockGetHttpResponseWithLocalFileContent is a mock function for getHttpResponse. This is used to intercept the call to
 // getHttpResponse and return the content of a local file instead of making a http call.
-var mockGetHttpResponseWithLocalFileContent = func(ctx context.Context, url string, authenticator *jwtAuthenticator, _ ...http.Header) ([]byte, error) {
+var mockGetHttpResponseWithLocalFileContent = func(ctx context.Context, url string, client *httputil.Client, _ ...http.Header) ([]byte, error) {
 	// remove https:// and replace / with _ in the url to get the testdata file name
 	fileName := "testdata/" + strings.ReplaceAll(strings.ReplaceAll(url, "https://", ""), "/", "_")
 	// read content of the file as a byte array
@@ -832,7 +832,7 @@ func TestJWTAuthCanUseHTTPProxy(t *testing.T) {
 	defer authenticator.mu.Unlock()
 	authenticator.mu.conf.httpClient = httputil.NewClientWithTimeout(httputil.StandardHTTPTimeout)
 
-	res, err := getHttpResponse(ctx, "http://my-server/.well-known/openid-configuration", &authenticator)
+	res, err := getHttpResponse(ctx, "http://my-server/.well-known/openid-configuration", authenticator.mu.conf.httpClient)
 	require.NoError(t, err)
 	require.EqualValues(t, "proxied-http://my-server/.well-known/openid-configuration", string(res))
 }
@@ -999,12 +999,12 @@ func TestJWTAuthClientTimeout(t *testing.T) {
 		testServer.Close()
 	}()
 
-	mockGetHttpResponse := func(ctx context.Context, url string, authenticator *jwtAuthenticator, _ ...http.Header) ([]byte, error) {
+	mockGetHttpResponse := func(ctx context.Context, url string, client *httputil.Client, _ ...http.Header) ([]byte, error) {
 		if strings.Contains(url, "/.well-known/openid-configuration") {
-			return mockGetHttpResponseWithLocalFileContent(ctx, url, authenticator)
+			return mockGetHttpResponseWithLocalFileContent(ctx, url, client)
 		} else if strings.Contains(url, "/oauth2/v3/certs") {
 			// For fetching JWKS, point to the local test server.
-			resp, err := authenticator.mu.conf.httpClient.Get(
+			resp, err := client.Get(
 				context.Background(),
 				testServer.URL+"/jwks",
 			)

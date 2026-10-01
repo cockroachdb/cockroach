@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -94,7 +95,7 @@ func TestAuthorizationJWT_ExtractGroups(t *testing.T) {
 
 			// Stub fetchGroupsFromUserinfo as required.
 			restore := testutils.TestingHook(&fetchGroupsFromUserinfo, func(
-				context.Context, *cluster.Settings, string, []byte, *jwtAuthenticator,
+				context.Context, *cluster.Settings, string, []byte, *httputil.Client,
 			) ([]string, error) {
 				if tc.userinfoGroups == nil {
 					// Simulate provider that does not expose a user-info endpoint.
