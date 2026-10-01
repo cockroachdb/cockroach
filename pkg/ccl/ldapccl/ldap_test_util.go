@@ -71,6 +71,9 @@ func (lu *mockLDAPUtil) Bind(ctx context.Context, userDN string, ldapPwd string)
 		return errors.Newf(bindFailureMessage + ": invalid username provided")
 	} else if strings.Contains(ldapPwd, invalidParam) {
 		return errors.Newf(bindFailureMessage + ": invalid password provided")
+	} else if ldapPwd == "" {
+		// Mirrors go-ldap's Conn.Bind, which rejects empty passwords client-side.
+		return errors.Newf(bindFailureMessage + ": empty password not allowed")
 	}
 
 	return nil
