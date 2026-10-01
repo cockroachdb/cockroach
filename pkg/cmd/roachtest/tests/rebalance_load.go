@@ -109,6 +109,12 @@ func registerRebalanceLoad(r registry.Registry) {
 		settings := install.MakeClusterSettings()
 		settings.ClusterSettings["kv.allocator.load_based_rebalancing"] = rebalanceMode
 		settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
+		// Follow-the-workload pulls back the leases the CPU-driven rebalancer
+		// sheds: in a single-locality cluster its score collapses to a lease-count
+		// deadband narrow enough to undo each shed, while the convergence it falls
+		// back to stays quiet here. No-op on v26.3+, where it defaults to false;
+		// delete once no predecessor predates v26.3.
+		settings.ClusterSettings["kv.allocator.load_based_lease_rebalancing.enabled"] = "false"
 
 		// Take a 10s profile every minute.
 		settings.ClusterSettings["server.cpu_profile.duration"] = "10s"
