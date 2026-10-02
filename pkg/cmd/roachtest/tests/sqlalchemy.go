@@ -26,6 +26,11 @@ var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<mino
 
 var supportedSQLAlchemyTag = "2.0.43"
 
+// supportedSQLAlchemyCockroachDBTag pins the sqlalchemy-cockroachdb dialect.
+// Test IDs embed the server version the dialect reports (e.g. "_9_5_0"), so
+// bumping this may require updating the keys in sqlalchemy_blocklist.go.
+var supportedSQLAlchemyCockroachDBTag = "v2.0.4"
+
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
 // node.
 func registerSQLAlchemy(r registry.Registry) {
@@ -103,7 +108,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	if err := repeatGitCloneE(ctx, t, c,
 		"https://github.com/cockroachdb/sqlalchemy-cockroachdb.git", "/mnt/data1/sqlalchemy-cockroachdb",
-		"master", node); err != nil {
+		supportedSQLAlchemyCockroachDBTag, node); err != nil {
 		t.Fatal(err)
 	}
 
