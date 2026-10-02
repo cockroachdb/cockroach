@@ -68,7 +68,7 @@ var QueueSkipUnverifiedRemoteLeases = settings.RegisterBoolSetting(
 	"kv.queue.skip_unverified_remote_leases.enabled",
 	"if set, replica queues that require the range lease do not enqueue replicas "+
 		"whose lease is held by another store and cannot be verified locally",
-	true,
+	false,
 )
 
 // The queues which traverse through the data in the range (i.e. send a snapshot
