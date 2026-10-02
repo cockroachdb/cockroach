@@ -461,3 +461,130 @@ EXECUTE p162487_varchar('d');
 0
 
 subtest end
+
+# Regression tests for a user-defined type that is referenced only as the type
+# of a placeholder. 'a' is type-checked as the enum at PREPARE time, so the
+# prepared statement and the cached memo must be invalidated once the enum
+# changes, including for a new session that hits the query cache.
+subtest prepare-enum-placeholder-only
+
+statement ok
+CREATE TYPE enum_ph AS ENUM ('a');
+
+statement ok
+PREPARE p_ph_eq(enum_ph) AS SELECT $1 = 'a';
+
+statement ok
+PREPARE p_ph_in(enum_ph) AS SELECT $1 IN ('a');
+
+statement ok
+PREPARE p_ph_arr(enum_ph[]) AS SELECT $1 = '{a}';
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+PREPARE p_ph_generic(enum_ph) AS SELECT $1 = 'a';
+
+statement ok
+RESET plan_cache_mode
+
+query B
+EXECUTE p_ph_eq('a');
+----
+true
+
+query B
+EXECUTE p_ph_arr(ARRAY['a']::enum_ph[]);
+----
+true
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+query B
+EXECUTE p_ph_generic('a');
+----
+true
+
+statement ok
+RESET plan_cache_mode
+
+statement ok
+ALTER TYPE enum_ph ADD VALUE 'b'
+
+query B
+EXECUTE p_ph_eq('a');
+----
+true
+
+query B
+EXECUTE p_ph_eq('b');
+----
+false
+
+query B
+EXECUTE p_ph_in('a');
+----
+true
+
+# TODO(cockroachlabs/cockroach#5881): this should return true.
+statement error pgcode XX000 comparison of two different versions of enum
+EXECUTE p_ph_arr(ARRAY['a']::enum_ph[]);
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+query B
+EXECUTE p_ph_generic('a');
+----
+true
+
+statement ok
+RESET plan_cache_mode
+
+# A new session preparing the same statement hits the query cache.
+user root nodeidx=0 newsession
+
+statement ok
+PREPARE p_ph_eq(enum_ph) AS SELECT $1 = 'a';
+
+statement ok
+ALTER TYPE enum_ph ADD VALUE 'c'
+
+statement ok
+PREPARE p_ph_eq2(enum_ph) AS SELECT $1 = 'a';
+
+query B
+EXECUTE p_ph_eq('a');
+----
+true
+
+query B
+EXECUTE p_ph_eq2('c');
+----
+false
+
+user root
+
+# Renaming a value of an enum that is referenced only as the type of a
+# placeholder must also re-parse the prepared statement.
+statement ok
+CREATE TYPE enum_ph_rename AS ENUM ('a', 'b');
+
+statement ok
+PREPARE p_ph_rename(enum_ph_rename) AS SELECT $1 = 'a';
+
+query B
+EXECUTE p_ph_rename('b');
+----
+false
+
+statement ok
+ALTER TYPE enum_ph_rename RENAME VALUE 'a' TO 'z'
+
+# Note that here our behavior is different from pg, which would return false.
+statement error invalid input value for enum enum_ph_rename: "a"
+EXECUTE p_ph_rename('b');
+
+subtest end
