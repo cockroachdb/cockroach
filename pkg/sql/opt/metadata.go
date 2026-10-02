@@ -788,6 +788,8 @@ func (md *Metadata) Schema(schID SchemaID) cat.Schema {
 
 // AddUserDefinedType adds a user defined type to the metadata for this query.
 // If the type was resolved by name, the name will be tracked as well.
+//
+// It is a no-op if typ is not a user defined type.
 func (md *Metadata) AddUserDefinedType(typ *types.T, name *tree.UnresolvedObjectName) {
 	if !typ.UserDefined() {
 		return

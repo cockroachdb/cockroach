@@ -395,6 +395,15 @@ func (ex *connExecutor) refreshUDTVersions(ctx context.Context, typs tree.Placeh
 func (ex *connExecutor) maybeReparsePrepStmt(
 	ctx context.Context, prep *prep.Statement, name string,
 ) error {
+	// We assume that prep.UDTs tracks all user-defined types that can be
+	// mentioned in tree.PlaceholderTypesInfo stored in the prepared statement,
+	// so they aren't checked here. Two exceptions to this assumption aren't
+	// reachable in practice:
+	// - a declared placeholder type the query never uses (it'll never get
+	//   type-checked and be simply ignored)
+	// - statements built opaquely (the only opaque statement that can have UDTs
+	//   as placeholders is DECLARE CURSOR, but it re-plans from scratch).
+	//
 	// Since we made the copies of UDTs, Types, and TypeHints slices, we can
 	// update each in-place.
 	stale, staleEnumNames, err := ex.checkUDTStaleness(ctx, prep.UDTs)

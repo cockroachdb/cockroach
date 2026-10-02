@@ -149,3 +149,65 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"0"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# A placeholder whose enum type comes only from the parameter OID declared at
+# Parse time must also be tracked, so that Bind re-parses the prepared
+# statement once the enum changes.
+send crdb_only
+Query {"String": "CREATE TYPE te_oid162487 AS ENUM ('a')"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+let $te_oid crdb_only
+Query {"String": "SELECT 'te_oid162487'::REGTYPE::OID::INT8"}
+----
+
+send crdb_only
+Parse {"Name": "s_oid", "Query": "SELECT $1 = 'a'", "ParameterOIDs": [$te_oid]}
+Bind {"DestinationPortal": "p_oid1", "PreparedStatement": "s_oid", "ParameterFormatCodes": [0], "Parameters": [{"text":"a"}]}
+Execute {"Portal": "p_oid1"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"t"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "ALTER TYPE te_oid162487 ADD VALUE 'b'"}
+----
+
+until crdb_only ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Bind {"DestinationPortal": "p_oid2", "PreparedStatement": "s_oid", "ParameterFormatCodes": [0], "Parameters": [{"text":"a"}]}
+Execute {"Portal": "p_oid2"}
+Bind {"DestinationPortal": "p_oid3", "PreparedStatement": "s_oid", "ParameterFormatCodes": [0], "Parameters": [{"text":"b"}]}
+Execute {"Portal": "p_oid3"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"t"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"f"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
