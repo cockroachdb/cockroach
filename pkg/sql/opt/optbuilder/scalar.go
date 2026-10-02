@@ -409,6 +409,15 @@ func (b *Builder) buildScalar(
 		return b.buildScalar(t.TypedInnerExpr(), inScope, outScope, outCol, colRefs)
 
 	case *tree.Placeholder:
+		// The type of a placeholder can be a user-defined type that is not
+		// otherwise referenced by the query, e.g. in
+		//
+		//   PREPARE p(typ) AS SELECT $1 = 'a'
+		//
+		// where 'a' is type-checked as typ. The type must still be tracked as a
+		// dependency so that the memo, as well as the prepared statement, are
+		// invalidated when the type changes.
+		b.factory.Metadata().AddUserDefinedType(t.ResolvedType(), nil /* name */)
 		if !b.KeepPlaceholders && b.evalCtx.HasPlaceholders() {
 			b.HadPlaceholders = true
 			// Replace placeholders with their value.
