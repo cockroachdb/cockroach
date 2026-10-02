@@ -44,9 +44,10 @@ type Metadata struct {
 	// identifiers. Used for reporting on Describe.
 	InferredTypes []oid.Oid
 
-	// UDTs contains all user defined types referenced in the prepared
-	// statement. It is used to detect type version change, so the
-	// statement can be reparsed with updated versions.
+	// UDTs contains all user defined types referenced in the prepared statement
+	// or its placeholders. It is used to detect type version change, so the
+	// statement can be reparsed with updated versions. Note that statements
+	// built opaquely don't populate this field.
 	UDTs []*types.T
 }
 
