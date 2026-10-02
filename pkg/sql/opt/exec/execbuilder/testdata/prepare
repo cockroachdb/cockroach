@@ -574,9 +574,10 @@ EXECUTE p_ph_in('a');
 ----
 true
 
-# TODO(cockroachlabs/cockroach#5881): this should return true.
-statement error pgcode XX000 comparison of two different versions of enum
+query B
 EXECUTE p_ph_arr(ARRAY['a']::enum_ph[]);
+----
+true
 
 statement ok
 SET plan_cache_mode = force_generic_plan

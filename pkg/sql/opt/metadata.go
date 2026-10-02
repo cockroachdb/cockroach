@@ -720,12 +720,20 @@ func (md *Metadata) Schema(schID SchemaID) cat.Schema {
 }
 
 // AddUserDefinedType adds a user defined type to the metadata for this query.
-// If the type was resolved by name, the name will be tracked as well.
+// If the type was resolved by name, the name will be tracked as well. If typ is
+// an array of UDTs, then its element type is also added to the metadata
+// (without the element type's name tracked).
 //
 // It is a no-op if typ is not a user defined type.
 func (md *Metadata) AddUserDefinedType(typ *types.T, name *tree.UnresolvedObjectName) {
 	if !typ.UserDefined() {
 		return
+	}
+	// Only look inside arrays as we don't support UDTs inside composite type.
+	// We need to add the element first since some users (e.g. the statement
+	// bundle collection) rely on that.
+	if typ.Family() == types.ArrayFamily {
+		md.AddUserDefinedType(typ.ArrayContents(), nil /* name */)
 	}
 	if md.userDefinedTypes == nil {
 		md.userDefinedTypes = make(map[oid.Oid]struct{})
@@ -796,23 +804,6 @@ func (md *Metadata) AddBuiltin(name *tree.UnresolvedObjectName) {
 	md.builtinRefsByName[*name.ToUnresolvedName()] = struct{}{}
 }
 
-func findUDTRecur(t *types.T) *types.T {
-	if !t.UserDefined() {
-		return nil
-	}
-	switch t.Family() {
-	// Terminal case: if the entry is an enum or a composite type.
-	// We don't recurse inside the tuple since we don't support UDTs
-	// inside composite type.
-	case types.EnumFamily, types.TupleFamily:
-		return t
-	case types.ArrayFamily:
-		return findUDTRecur(t.InternalType.ArrayContents)
-	default:
-		return nil
-	}
-}
-
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table ids (e.g.  in a
 // self-join query). All columns are added to the metadata. If mutation columns
@@ -836,9 +827,7 @@ func (md *Metadata) AddTable(tab cat.Table, alias *tree.TableName) TableID {
 	for i := 0; i < colCount; i++ {
 		col := tab.Column(i)
 		colID := md.AddColumn(string(col.ColName()), col.DatumType())
-		if udt := findUDTRecur(col.DatumType()); udt != nil {
-			md.AddUserDefinedType(udt, nil /* name */)
-		}
+		md.AddUserDefinedType(col.DatumType(), nil /* name */)
 		md.ColumnMeta(colID).Table = tabID
 	}
 
