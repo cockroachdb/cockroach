@@ -5530,6 +5530,7 @@ func TestMergeQueueEnqueuesFollowerUnderLeaderLeases(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+	kvserver.QueueSkipUnverifiedRemoteLeases.Override(ctx, &st.SV, true)
 
 	const rangeLeaseDuration = 3 * time.Second
 
