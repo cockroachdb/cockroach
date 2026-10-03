@@ -695,6 +695,10 @@ func persistCursor(p *planner, cursor *sqlCursor) (retErr error) {
 	}
 	cursor.Rows = &helper
 	cursor.persisted = true
+	// Fresh iterator starts before the first row, so reset the position:
+	// a stale curRow replays a nil row on FETCH FIRST, surfacing as
+	// "decoding unset EncDatum". Positions are relative to the remainder.
+	cursor.curRow = 0
 	return nil
 }
 

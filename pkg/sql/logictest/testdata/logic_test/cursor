@@ -960,3 +960,28 @@ statement ok
 CLOSE foo_first;
 
 subtest end
+
+# Regression test for FETCH FIRST on a persisted single-row WITH HOLD cursor
+# returning an internal error instead of the row: persisting the cursor left
+# a stale row position, so FETCH FIRST replayed a nil current row (#176036).
+subtest regression_176036
+
+statement ok
+BEGIN;
+DECLARE foo_single CURSOR WITH HOLD FOR SELECT * FROM a ORDER BY a LIMIT 1;
+COMMIT;
+
+query II
+FETCH FIRST FROM foo_single;
+----
+1  2
+
+query II
+FETCH FIRST FROM foo_single;
+----
+1  2
+
+statement ok
+CLOSE foo_single;
+
+subtest end
