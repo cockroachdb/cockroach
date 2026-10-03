@@ -179,10 +179,10 @@ func (p *planner) getCommonSQLEventDetails() eventpb.CommonSQLEventDetails {
 		// placeholder would survive in the recorded placeholder values.
 		// Substitute every bound value of such a statement, rather than
 		// tracking which positions are the secret ones.
-		mayHaveSecret := !p.stmt.NoSecret
+		mayCarrySecret := p.stmt.MayCarrySecret
 		commonSQLEventDetails.PlaceholderValues = make([]string, len(pls))
 		for idx, val := range pls {
-			if mayHaveSecret {
+			if mayCarrySecret {
 				commonSQLEventDetails.PlaceholderValues[idx] = tree.RedactedValueSubstitution
 			} else {
 				commonSQLEventDetails.PlaceholderValues[idx] = val.String()

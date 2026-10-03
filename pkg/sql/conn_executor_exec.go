@@ -526,7 +526,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.state.mu.Lock()
 	ex.state.mu.stmtCount++
 	ex.state.mu.Unlock()
-	ex.addActiveQuery(parserStmt, stmt.NoSecret, pinfo, queryID, cancelQuery)
+	ex.addActiveQuery(parserStmt, stmt.MayCarrySecret, pinfo, queryID, cancelQuery)
 	defer func() {
 		if retErr == nil && !payloadHasError(retPayload) {
 			ex.incrementExecutedStmtCounter(ast)
@@ -676,7 +676,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// TODO(radu): what about .SQL, .NumAnnotations, .NumPlaceholders?
 		stmt.Statement = ps.Statement
 		stmt.Prepared = ps
-		stmt.NoSecret = ps.NoSecret
+		stmt.MayCarrySecret = ps.MayCarrySecret
 		stmt.ExpectedTypes = ps.Columns
 		stmt.StmtNoConstants = ps.StatementNoConstants
 		stmt.StmtSummary = ps.StatementSummary
@@ -702,7 +702,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// constants-hidden, in case its argument was a secret. The resolved
 		// prepared statement is now known, so restore the raw text if its
 		// stored classification proved it secret-free.
-		if ps.NoSecret {
+		if !ps.MayCarrySecret {
 			ex.restoreActiveQueryText(queryID, origSQL)
 		}
 	}
@@ -1400,7 +1400,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		ex.state.mu.Lock()
 		ex.state.mu.stmtCount++
 		ex.state.mu.Unlock()
-		ex.addActiveQuery(parserStmt, vars.stmt.NoSecret, pinfo, queryID, vars.cancelQuery)
+		ex.addActiveQuery(parserStmt, vars.stmt.MayCarrySecret, pinfo, queryID, vars.cancelQuery)
 
 		if portal.isPausable() {
 			portal.pauseInfo.execStmtInOpenState.cancelQueryFunc = vars.cancelQuery
@@ -1574,7 +1574,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// TODO(radu): what about .SQL, .NumAnnotations, .NumPlaceholders?
 		vars.stmt.Statement = ps.Statement
 		vars.stmt.Prepared = ps
-		vars.stmt.NoSecret = ps.NoSecret
+		vars.stmt.MayCarrySecret = ps.MayCarrySecret
 		vars.stmt.ExpectedTypes = ps.Columns
 		vars.stmt.StmtNoConstants = ps.StatementNoConstants
 		vars.stmt.StmtSummary = ps.StatementSummary
@@ -1600,7 +1600,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// constants-hidden, in case its argument was a secret. The resolved
 		// prepared statement is now known, so restore the raw text if its
 		// stored classification proved it secret-free.
-		if ps.NoSecret {
+		if !ps.MayCarrySecret {
 			ex.restoreActiveQueryText(queryID, origSQL)
 		}
 	}
@@ -4378,7 +4378,7 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 // addActiveQuery adds a running query to the list of running queries.
 func (ex *connExecutor) addActiveQuery(
 	stmt statements.Statement[tree.Statement],
-	noSecret bool,
+	mayCarrySecret bool,
 	placeholders *tree.PlaceholderInfo,
 	queryID clusterunique.ID,
 	cancelQuery context.CancelFunc,
@@ -4388,20 +4388,20 @@ func (ex *connExecutor) addActiveQuery(
 	// constants-hidden, so the raw secret never sits in the registry. Once
 	// resolution proves an EXECUTE's target secret-free, the raw text is
 	// restored (see restoreActiveQueryText).
-	if !noSecret {
+	if mayCarrySecret {
 		stmt.SQL = tree.FormatStatementHideConstants(stmt.AST)
 	}
 	qm := &queryMeta{
-		txnID:         ex.state.mu.txn.ID(),
-		start:         ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived),
-		stmt:          stmt,
-		placeholders:  placeholders,
-		phase:         preparing,
-		isDistributed: false,
-		isFullScan:    false,
-		cancelQuery:   cancelQuery,
-		hidden:        hidden,
-		noSecret:      noSecret,
+		txnID:          ex.state.mu.txn.ID(),
+		start:          ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived),
+		stmt:           stmt,
+		placeholders:   placeholders,
+		phase:          preparing,
+		isDistributed:  false,
+		isFullScan:     false,
+		cancelQuery:    cancelQuery,
+		hidden:         hidden,
+		mayCarrySecret: mayCarrySecret,
 	}
 	ex.mu.Lock()
 	ex.mu.ActiveQueries[queryID] = qm
@@ -4421,7 +4421,7 @@ func (ex *connExecutor) restoreActiveQueryText(queryID clusterunique.ID, sql str
 	defer ex.mu.Unlock()
 	if qm, ok := ex.mu.ActiveQueries[queryID]; ok {
 		qm.stmt.SQL = sql
-		qm.noSecret = true
+		qm.mayCarrySecret = false
 	}
 }
 
@@ -4434,7 +4434,7 @@ func (ex *connExecutor) removeActiveQuery(queryID clusterunique.ID, ast tree.Sta
 	}
 	delete(ex.mu.ActiveQueries, queryID)
 	ex.mu.LastActiveQuery = ast
-	ex.mu.LastActiveQueryNoSecret = qm.noSecret
+	ex.mu.LastActiveQueryMayCarrySecret = qm.mayCarrySecret
 }
 
 // handleAutoCommit commits the KV transaction if it hasn't been committed

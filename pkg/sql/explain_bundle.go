@@ -312,19 +312,19 @@ func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) error {
 }
 
 // targetMayHaveSecret reports whether the bundle's target statement may
-// carry a secret (see stmtMayHaveSecret). It uses the planned statement's
-// classification when available and otherwise re-parses the raw SQL (the
-// early-error case, where planning did not complete).
+// carry a secret. It uses the planned statement's classification when
+// available and otherwise re-parses the raw SQL (the early-error case, where
+// planning did not complete) and classifies the AST.
 func (b *stmtBundleBuilder) targetMayHaveSecret(stmtRawSQL string) bool {
 	if b.plan.stmt != nil && b.plan.stmt.AST != nil {
-		return !b.plan.stmt.NoSecret
+		return b.plan.stmt.MayCarrySecret
 	}
 	parsed, err := parser.ParseOne(stmtRawSQL)
 	if err != nil {
 		// Text that cannot be parsed cannot be classified; fail closed.
 		return true
 	}
-	return stmtMayHaveSecret(parsed.AST)
+	return astMayCarrySecret(parsed.AST)
 }
 
 // ReplacePlaceholdersWithValuesForBundle takes the contents of statement.sql

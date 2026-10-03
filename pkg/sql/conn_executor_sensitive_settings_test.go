@@ -205,8 +205,8 @@ func TestSensitiveSettingInFlightQueryRedaction(t *testing.T) {
 		// EXPLAIN ANALYZE executes its inner statement, so the sensitive SET is
 		// genuinely in flight and observable. (Plain EXPLAIN does not execute the
 		// inner statement, so it never blocks here; its classification is
-		// covered by TestStmtMayHaveSecret.) EXPLAIN and EXPLAIN ANALYZE
-		// are distinct AST nodes (tree.Explain vs tree.ExplainAnalyze) that both
+		// covered by TestASTMayCarrySecret.) EXPLAIN and EXPLAIN ANALYZE are
+		// distinct AST nodes (tree.Explain vs tree.ExplainAnalyze) that both
 		// must be unwrapped, or serialize falls back to the raw SQL text.
 		query := observeInFlight(t, "explain_direct_set",
 			"EXPLAIN ANALYZE SET CLUSTER SETTING server.oidc_authentication.client_secret = '"+secret+"'")
@@ -447,7 +447,7 @@ func TestSensitiveSettingLastActiveQueryRedaction(t *testing.T) {
 			expectedErr:  "EXPLAIN EXECUTE is not supported",
 			expectedMark: "'_'"},
 		// Nested statement positions are classified by the same AST walk (see
-		// stmtMayHaveSecret), so a sensitive SET or an EXECUTE inside a CTE
+		// astMayCarrySecret), so a sensitive SET or an EXECUTE inside a CTE
 		// keeps the whole statement's text hidden here too. A CTE-nested plain
 		// EXPLAIN SET is the one nested form that plans successfully (planning
 		// an EXPLAIN never executes its inner statement).

@@ -175,7 +175,7 @@ func (ex *connExecutor) recordStatementSummary(
 ) appstatspb.StmtFingerprintID {
 
 	stmt := &planner.stmt
-	if stmtErr != nil && !stmt.NoSecret {
+	if stmtErr != nil && stmt.MayCarrySecret {
 		// The statement-stats fork of the error is taken before makeErrEvent
 		// can mark it (see MarkSecretError).
 		stmtErr = sqlstats.MarkSecretError(stmtErr)
