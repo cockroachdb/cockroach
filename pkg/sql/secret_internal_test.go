@@ -14,13 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStmtMayHaveSecret locks down which statement shapes are classified as
+// TestASTMayCarrySecret locks down which statement shapes are classified as
 // possibly carrying a secret. It covers the wrapper forms (PREPARE, EXPLAIN,
 // EXPLAIN ANALYZE) that the in-flight redaction test cannot reach when the
 // wrapper does not execute its inner statement, using
 // server.oidc_authentication.client_secret (sensitive) and
 // sql.defaults.distsql (not sensitive) as representative real settings.
-func TestStmtMayHaveSecret(t *testing.T) {
+func TestASTMayCarrySecret(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -68,7 +68,7 @@ func TestStmtMayHaveSecret(t *testing.T) {
 		{"PREPARE p AS ALTER ROLE foo WITH PASSWORD $1", true},
 		{"CREATE ROLE foo", false},
 		{"ALTER ROLE foo WITH LOGIN", false},
-		// A statement can embed secret-carrying nodes of different kinds in
+		// A statement can embed secret-bearing nodes of different kinds in
 		// different branches; any one of them classifies it.
 		{"WITH a AS (EXPLAIN SET CLUSTER SETTING sql.defaults.distsql = $1), " +
 			"b AS (EXPLAIN ALTER ROLE foo WITH PASSWORD $2) SELECT * FROM a, b", true},
@@ -96,7 +96,7 @@ func TestStmtMayHaveSecret(t *testing.T) {
 		// Bulk-I/O and replication statements reference an external URI, KMS
 		// URI, connection string, or encryption passphrase that may embed
 		// credentials. They are recognized by statement type (see
-		// statementNodeMayHaveSecret).
+		// isSecretBearingNode).
 		{"BACKUP INTO 'x'", true},
 		{"BACKUP TABLE foo INTO 'x'", true},
 		{"RESTORE TABLE foo FROM 'abc' IN 'x'", true},
@@ -148,17 +148,17 @@ func TestStmtMayHaveSecret(t *testing.T) {
 		t.Run(tc.sql, func(t *testing.T) {
 			stmt, err := parser.ParseOne(tc.sql)
 			require.NoError(t, err)
-			require.Equal(t, tc.want, stmtMayHaveSecret(stmt.AST))
+			require.Equal(t, tc.want, astMayCarrySecret(stmt.AST))
 		})
 	}
 }
 
-// BenchmarkStmtMayHaveSecret measures the AST walk that classifies a
-// statement as possibly carrying a secret. It runs once per statement
-// construction (see makeStatement); executions of a prepared statement reuse
-// the PREPARE-time result. The interesting cases are the secret-free ones,
-// where the walk visits the full AST without short-circuiting.
-func BenchmarkStmtMayHaveSecret(b *testing.B) {
+// BenchmarkASTMayCarrySecret measures the AST walk that classifies a statement
+// as possibly carrying a secret. It runs once per statement construction (see
+// makeStatement); executions of a prepared statement reuse the PREPARE-time
+// result. The interesting cases are the secret-free ones, where the walk
+// visits the full AST without short-circuiting.
+func BenchmarkASTMayCarrySecret(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
@@ -186,7 +186,7 @@ func BenchmarkStmtMayHaveSecret(b *testing.B) {
 			require.NoError(b, err)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = stmtMayHaveSecret(stmt.AST)
+				_ = astMayCarrySecret(stmt.AST)
 			}
 		})
 	}

@@ -1245,9 +1245,9 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 	}
 
 	// The synthetic INSERT contains only the copied datums, so none of the
-	// secret-carrying forms (see stmtMayHaveSecret) can appear in it; setting
-	// NoSecret directly avoids walking the VALUES clause on every batch.
-	c.p.stmt = Statement{NoSecret: true}
+	// secret-bearing forms (see astMayCarrySecret) can appear in it; leaving
+	// MayCarrySecret unset avoids walking the VALUES clause on every batch.
+	c.p.stmt = Statement{}
 	c.p.stmt.AST = &tree.Insert{
 		Table:   c.table,
 		Columns: c.columns,

@@ -28,10 +28,11 @@ type PrepareMetadata struct {
 	// StatementSummary is a summarized version of the query.
 	StatementSummary string
 
-	// NoSecret indicates that the statement is known not to carry a secret -
-	// a sensitive cluster setting value or a role password. Computed once at
-	// PREPARE time; the zero value is the conservative one.
-	NoSecret bool
+	// MayCarrySecret records whether the statement may carry a secret, as
+	// found at parse time and copied from the sql.Statement that was prepared.
+	// Each execution's sql.Statement is rebuilt from here. Once set, it stays
+	// set.
+	MayCarrySecret bool
 
 	// Provides TypeHints and Types fields which contain placeholder typing
 	// information.
