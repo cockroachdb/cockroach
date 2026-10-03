@@ -2707,13 +2707,12 @@ type queryMeta struct {
 	// set based on the statement implementing tree.HiddenFromShowQueries.
 	hidden bool
 
-	// noSecret indicates that the query is known not to carry a secret in
-	// its raw text or bound placeholder values (see stmtMayHaveSecret). Set
-	// at registration by addActiveQuery, and later by
-	// restoreActiveQueryText once an EXECUTE's resolved target proves
-	// secret-free. While unset, serialize redacts the query's placeholder
-	// values.
-	noSecret bool
+	// mayCarrySecret indicates that the query may carry a secret in its raw
+	// text or bound placeholder values (see Statement.MayCarrySecret). Set at
+	// registration by addActiveQuery, and cleared by restoreActiveQueryText
+	// once an EXECUTE's resolved target proves secret-free. While set,
+	// serialize redacts the query's placeholder values.
+	mayCarrySecret bool
 
 	progressAtomic uint64
 

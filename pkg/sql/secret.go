@@ -22,24 +22,23 @@ import (
 // to keep such secrets out of diagnostics artifacts, while privileged
 // interactive readback (e.g. SHOW CLUSTER SETTING) remains unaffected.
 
-// stmtMayHaveSecret reports whether ast may carry a secret in its raw text,
-// bound placeholder values, or errors. That is the case when the statement
-// contains, anywhere in statement position, a secret-carrying form (see
-// secretVisitor for the full set).
+// astMayCarrySecret reports whether ast contains, anywhere in statement
+// position, a statement whose form can carry a secret in its raw text, bound
+// placeholder values, or errors (see isSecretBearingNode for the full set).
 //
 // The entire AST is walked because a secret-carrying statement can be nested
 // where it plans without executing - a CTE body, a [...] statement source, or
 // under a PREPARE / EXPLAIN wrapper - and the enclosing statement's raw text,
 // placeholder values, and errors then carry the secret onto the same surfaces
 // a top-level form would reach.
-func stmtMayHaveSecret(ast tree.Statement) bool {
+func astMayCarrySecret(ast tree.Statement) bool {
 	if ast == nil {
 		// An empty statement carries no secret.
 		return false
 	}
 	var v secretVisitor
 	tree.WalkStmt(&v, ast)
-	return v.mayHaveSecret
+	return v.mayCarrySecret
 }
 
 // isSensitiveClusterSettingNode reports whether stmt is a SET CLUSTER SETTING
@@ -81,8 +80,9 @@ func hasRolePasswordOption(stmt tree.Statement) bool {
 	return false
 }
 
-// statementNodeMayHaveSecret reports whether the bare stmt node - ignoring any
-// nested statements, which the walk visits on their own - may carry a secret.
+// isSecretBearingNode reports whether the bare stmt node - ignoring any
+// nested statements, which the walk visits on their own - has a form that
+// can carry a secret.
 //
 // The bulk-I/O and replication statements below are recognized by type: each
 // always (or, for the conservatively-flagged variants, may) reference an
@@ -93,7 +93,7 @@ func hasRolePasswordOption(stmt tree.Statement) bool {
 // by type rather than by the specific secret-bearing field keeps the set easy to
 // audit; over-flagging a secret-free variant of a rare statement only hides its
 // constants on those surfaces, which is harmless.
-func statementNodeMayHaveSecret(stmt tree.Statement) bool {
+func isSecretBearingNode(stmt tree.Statement) bool {
 	switch t := stmt.(type) {
 	case *tree.Execute:
 		// EXECUTE's argument list may itself be the secret, and its target's
@@ -127,27 +127,27 @@ func statementNodeMayHaveSecret(stmt tree.Statement) bool {
 	return isSensitiveClusterSettingNode(stmt) || hasRolePasswordOption(stmt)
 }
 
-// secretVisitor implements stmtMayHaveSecret's walk, short-circuiting once a
-// secret-carrying form is found. Each node is classified by
-// statementNodeMayHaveSecret (see it for the recognized forms).
+// secretVisitor implements astMayCarrySecret's walk, short-circuiting once a
+// secret-bearing node is found. Each node is classified by isSecretBearingNode
+// (see it for the recognized forms).
 //
 // It must be a tree.ExtendedVisitor (rather than a plain tree.Visitor) for
 // the walk to reach statements in table-expression position, such as a [...]
 // statement source. The walk never modifies the tree.
 type secretVisitor struct {
-	mayHaveSecret bool
+	mayCarrySecret bool
 }
 
 var _ tree.ExtendedVisitor = &secretVisitor{}
 
 func (v *secretVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
-	return !v.mayHaveSecret, expr
+	return !v.mayCarrySecret, expr
 }
 
 func (v *secretVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 func (v *secretVisitor) VisitTablePre(expr tree.TableExpr) (recurse bool, newExpr tree.TableExpr) {
-	return !v.mayHaveSecret, expr
+	return !v.mayCarrySecret, expr
 }
 
 func (v *secretVisitor) VisitTablePost(expr tree.TableExpr) tree.TableExpr { return expr }
@@ -155,15 +155,15 @@ func (v *secretVisitor) VisitTablePost(expr tree.TableExpr) tree.TableExpr { ret
 func (v *secretVisitor) VisitStatementPre(
 	stmt tree.Statement,
 ) (recurse bool, newStmt tree.Statement) {
-	if !v.mayHaveSecret && statementNodeMayHaveSecret(stmt) {
-		v.mayHaveSecret = true
+	if !v.mayCarrySecret && isSecretBearingNode(stmt) {
+		v.mayCarrySecret = true
 	}
-	if p, ok := stmt.(*tree.Prepare); ok && !v.mayHaveSecret {
+	if p, ok := stmt.(*tree.Prepare); ok && !v.mayCarrySecret {
 		// PREPARE does not implement the statement walk, so descend into its
 		// inner statement here.
 		tree.WalkStmt(v, p.Statement)
 	}
-	return !v.mayHaveSecret, stmt
+	return !v.mayCarrySecret, stmt
 }
 
 func (v *secretVisitor) VisitStatementPost(stmt tree.Statement) tree.Statement { return stmt }

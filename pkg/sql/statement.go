@@ -22,9 +22,13 @@ type Statement struct {
 	StmtSummary     string
 	QueryID         clusterunique.ID
 
-	// NoSecret indicates that the statement is known not to carry a secret
-	// (see stmtMayHaveSecret). The zero value is the conservative one.
-	NoSecret bool
+	// MayCarrySecret records what is known before this execution plans:
+	// whether the AST contains a statement of a type that can carry a secret
+	// (see astMayCarrySecret). It is set when the Statement is
+	// built and rewritten only when an EXECUTE is resolved: EXECUTE is flagged
+	// at parse time because its target is unknown, and resolution replaces
+	// that with the target's own finding.
+	MayCarrySecret bool
 
 	ExpectedTypes colinfo.ResultColumns
 
@@ -62,7 +66,7 @@ func makeStatement(
 		StmtSummary:     formatStatementSummary(parserStmt.AST, fmtFlags),
 		QueryID:         queryID,
 		QueryTags:       tags,
-		NoSecret:        !stmtMayHaveSecret(parserStmt.AST),
+		MayCarrySecret:  astMayCarrySecret(parserStmt.AST),
 	}
 }
 
@@ -82,7 +86,7 @@ func makeStatementFromPrepared(prepared *prep.Statement, queryID clusterunique.I
 		ExpectedTypes:   prepared.Columns,
 		StmtNoConstants: prepared.StatementNoConstants,
 		StmtSummary:     prepared.StatementSummary,
-		NoSecret:        prepared.NoSecret,
+		MayCarrySecret:  prepared.MayCarrySecret,
 		QueryID:         queryID,
 		QueryTags:       tags,
 	}

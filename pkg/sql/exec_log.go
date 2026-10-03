@@ -201,7 +201,7 @@ func (p *planner) maybeLogStatementInternal(
 	var execErrStr redact.RedactableString
 	if err != nil {
 		execErrStr = redact.Sprint(err)
-		if !p.stmt.NoSecret || sqlstats.IsSecretError(err) {
+		if p.stmt.MayCarrySecret || sqlstats.IsSecretError(err) {
 			// The error of a failed secret-carrying statement can quote the
 			// secret; keep only its redaction-safe parts. The mark check
 			// covers errors marked earlier during execution, such as by a
