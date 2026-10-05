@@ -433,7 +433,7 @@ func ConstructJSONReport(invocation *InvocationInfo, serverName string) (JsonRep
 func postOptions(res *TestResultWithXml, opts FailurePosterOptions) *issues.Options {
 	return &issues.Options{
 		Token:  opts.GithubApiToken,
-		Org:    "cockroachdb",
+		Org:    "cockroachlabs",
 		Repo:   "cockroach",
 		SHA:    opts.Sha,
 		Branch: getBranch(),
