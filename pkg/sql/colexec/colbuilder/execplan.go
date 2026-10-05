@@ -132,7 +132,7 @@ type opResult struct {
 // vectorized engine (neither natively nor by wrapping the corresponding row
 // execution processor).
 func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
-	err := supportedNatively(&spec.Core)
+	err := supportedNatively(spec)
 	if err != nil {
 		if wrapErr := canWrap(mode, &spec.Core); wrapErr == nil {
 			// We don't support this spec natively, but we can wrap the row
@@ -144,9 +144,10 @@ func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.Process
 }
 
 // supportedNatively checks whether we have a columnar operator equivalent to a
-// processor described by core. Note that it doesn't perform any other checks
+// processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
-func supportedNatively(core *execinfrapb.ProcessorCoreUnion) error {
+func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
+	core := &spec.Core
 	switch {
 	case core.Noop != nil:
 		return nil
@@ -208,6 +209,24 @@ func supportedNatively(core *execinfrapb.ProcessorCoreUnion) error {
 					return errDefaultAggregateWindowFunction
 				}
 			}
+			if len(spec.Input) == 1 {
+				inputTypes := spec.Input[0].ColumnTypes
+				argTypes := make([]*types.T, len(wf.ArgsIdxs))
+				for i, idx := range wf.ArgsIdxs {
+					if int(idx) >= len(inputTypes) {
+						argTypes = nil
+						break
+					}
+					argTypes[i] = inputTypes[idx]
+				}
+				if argTypes != nil {
+					for i, castTo := range colexecwindow.WindowFnArgCasts(wf.Func, argTypes) {
+						if castTo != nil && !colexecbase.IsCastSupported(argTypes[i], castTo) {
+							return errUnsupportedWindowFunctionCast
+						}
+					}
+				}
+			}
 		}
 		return nil
 
@@ -245,6 +264,7 @@ var (
 	errNonInnerMergeJoinWithOnExpr    = errors.New("can't plan vectorized non-inner merge joins with ON expressions")
 	errWindowFunctionFilterClause     = errors.New("window functions with FILTER clause are not supported")
 	errDefaultAggregateWindowFunction = errors.New("default aggregate window functions not supported")
+	errUnsupportedWindowFunctionCast  = errors.New("window function argument cast is not supported")
 	// TODO(yuzefovich): #55758 has been resolved, re-evaluate whether it's
 	// worth unskipping stream ingestion processors from being wrapped.
 	errStreamIngestionWrap = errors.New("core.StreamIngestion{Data,Frontier} is not supported because of #55758")
@@ -817,7 +837,7 @@ func NewColOperator(
 	core := &spec.Core
 	post := &spec.Post
 
-	if err = supportedNatively(core); err != nil {
+	if err = supportedNatively(spec); err != nil {
 		inputTypes := make([][]*types.T, len(spec.Input))
 		for inputIdx, input := range spec.Input {
 			inputTypes[inputIdx] = input.ColumnTypes

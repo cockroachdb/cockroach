@@ -4397,3 +4397,25 @@ NULL  4  4
 
 statement ok
 RESET null_ordered_last
+
+# Regression test for falling back to row execution when a window function
+# argument requires a cast that the vectorized engine does not support (#175855).
+statement ok
+CREATE TABLE t175855 (
+  k INT PRIMARY KEY,
+  p INT,
+  a TIMESTAMPTZ,
+  c TIMESTAMPTZ(3)
+)
+
+statement ok
+INSERT INTO t175855 VALUES
+  (1, 1, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00'),
+  (2, 1, '2026-01-02 00:00:00+00', '2026-01-02 00:00:00+00')
+
+query B rowsort
+SELECT lag(COALESCE(c, a)) OVER (PARTITION BY p ORDER BY k) IS NULL
+FROM t175855
+----
+false
+true

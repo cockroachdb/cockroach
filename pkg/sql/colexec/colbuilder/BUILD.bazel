@@ -81,6 +81,7 @@ go_test(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

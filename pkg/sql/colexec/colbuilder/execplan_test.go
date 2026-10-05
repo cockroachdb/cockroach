@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -33,6 +34,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
+
+func TestWindowerUnsupportedArgumentCast(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	lag := execinfrapb.WindowerSpec_LAG
+	spec := execinfrapb.ProcessorSpec{
+		Input: []execinfrapb.InputSyncSpec{{
+			ColumnTypes: []*types.T{types.TimestampTZ, types.Int, types.MakeTimestampTZ(3)},
+		}},
+		Core: execinfrapb.ProcessorCoreUnion{
+			Windower: &execinfrapb.WindowerSpec{WindowFns: []execinfrapb.WindowerSpec_WindowFn{{
+				Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &lag},
+				ArgsIdxs:     []uint32{0, 1, 2},
+				FilterColIdx: tree.NoColumnIdx,
+			}}},
+		},
+	}
+
+	require.ErrorIs(t, supportedNatively(&spec), errUnsupportedWindowFunctionCast)
+	require.NoError(t, IsSupported(sessiondatapb.VectorizeOn, &spec))
+}
 
 // TestNewColOperatorExpectedTypeSchema ensures that NewColOperator call
 // creates such an operator chain that its output type schema is exactly as the
