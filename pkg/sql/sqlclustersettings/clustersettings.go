@@ -187,6 +187,7 @@ var RequireUsagePrivilegeOnExternalConnections = settings.RegisterBoolSetting(
 		"external connections; checks that predate v26.4, including those on BACKUP, "+
 		"RESTORE, and IMPORT, apply regardless",
 	false,
+	settings.WithPublic,
 )
 
 // EnforceExternalIOImplicitAccess when set enforces the requirement that
@@ -207,6 +208,7 @@ var EnforceExternalIOImplicitAccess = settings.RegisterBoolSetting(
 		"IMPORT schema_uri, PCR replication source and ALTER BACKUP "+
 		"collection URIs",
 	false,
+	settings.WithPublic,
 )
 
 // RangeTopologyRequiresRepairCluster gates the security-audit fix that requires

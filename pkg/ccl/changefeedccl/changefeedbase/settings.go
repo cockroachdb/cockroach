@@ -308,6 +308,7 @@ var RequireExternalIOImplicitAccess = settings.RegisterBoolSetting(
 		" system privilege",
 	true,
 	settings.WithName("changefeed.permissions.require_external_io_implicit_access.enabled"),
+	settings.WithPublic,
 )
 
 // SinkIOWorkers controls the number of IO workers used by sinks that use
