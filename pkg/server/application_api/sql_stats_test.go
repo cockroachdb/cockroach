@@ -51,8 +51,9 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Increase the timeout for the http client if under stress.
-	additionalTimeout := 0 * time.Second
+	// Without flushed stats, combinedstmts fans out to every SQL instance
+	// several times, which can exceed the default 10s timeout on loaded CI.
+	additionalTimeout := 20 * time.Second
 	if skip.Duress() {
 		additionalTimeout = additionalTimeoutUnderDuress
 	}
