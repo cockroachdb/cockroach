@@ -216,6 +216,22 @@ func (unsplittableRangeError) PurgatoryErrorMarker() {}
 
 var _ PurgatoryError = unsplittableRangeError{}
 
+// splitKeyTooLargeError indicates that a split attempt failed because the split
+// key exceeds MaxSplitKeySize. It is a purgatory error so that the split queue
+// does not retry the split in a tight loop.
+type splitKeyTooLargeError struct{ error }
+
+var _ errors.SafeFormatter = splitKeyTooLargeError{}
+
+func (e splitKeyTooLargeError) SafeFormatError(p errors.Printer) (next error) {
+	p.Print(e.error)
+	return nil
+}
+
+func (splitKeyTooLargeError) PurgatoryErrorMarker() {}
+
+var _ PurgatoryError = splitKeyTooLargeError{}
+
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(
 	ctx context.Context, r *Replica, confReader spanconfig.StoreReader, _ float64,

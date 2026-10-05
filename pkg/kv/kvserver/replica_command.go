@@ -77,6 +77,35 @@ var EnableMVCCStatsRecomputationInSplit = settings.RegisterBoolSetting(
 		"to prevent stats estimates from drifting",
 	metamorphic.ConstantWithTestBool("kv.split.mvcc_stats_recomputation.enabled", true))
 
+// MaxSplitKeySize limits the length of the key at which a range can be split.
+// The split key becomes the end key of the LHS and the start key of the RHS, so
+// it is stored in range descriptors (and meta records) and it is embedded in
+// range-local keys (e.g. the range descriptor key and transaction records
+// anchored on the range). Very large keys in these places are costly and can
+// cause problems throughout the system, so it is better to fail the split.
+//
+// The default is intentionally very high, so that it does not cause problems
+// in existing clusters which may have legitimate large keys. It is set at a
+// size beyond which we are likely to hit problems regardless.
+//
+// The limit applies to splits requested with ALTER TABLE/INDEX ... SPLIT AT,
+// which return a "split key too large" error, and to automatic size- and
+// load-based splits. A range that cannot split is placed in the split queue's
+// purgatory and retried every minute. This shows up as a non-zero
+// queue.split.purgatory metric and queue.split.process.failure rate, and
+// "split key too large" warnings in the KV_DISTRIBUTION log channel. If such a
+// range keeps growing past the write backpressure threshold (by default twice
+// the zone's range_max_bytes), writes to it fail with a "split failed while
+// applying backpressure" error.
+var MaxSplitKeySize = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kv.split.max_key_size",
+	"maximum size of a key at which a range can be split; splits at larger "+
+		"keys fail (0 disables the limit)",
+	1024*1024, // 1 MiB
+	settings.NonNegativeInt,
+)
+
 // mergeApplicationTimeout is the timeout when waiting for a merge command to be
 // applied on all range replicas. There doesn't appear to be any strong reason
 // why this value was chosen in particular, but it seems to work.
@@ -465,6 +494,17 @@ func (r *Replica) adminSplitWithDescriptor(
 			return reply, err
 		}
 		return reply, nil
+	}
+	// The check is after the no-op case above, so that a split at an existing
+	// range boundary still succeeds when that boundary predates the limit.
+	if maxSize := MaxSplitKeySize.Get(&r.store.ClusterSettings().SV); maxSize > 0 &&
+		int64(len(splitKey)) > maxSize {
+		err := splitKeyTooLargeError{errors.Newf("split key too large %d > %d, see %s",
+			len(splitKey), maxSize, MaxSplitKeySize.Name())}
+		// The split queue only logs purgatory errors with verbose logging, so we
+		// log the error here. The log tags identify the range.
+		log.KvDistribution.Warningf(ctx, "%v", err)
+		return reply, err
 	}
 	log.Event(ctx, "found split key")
 
