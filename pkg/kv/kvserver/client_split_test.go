@@ -122,6 +122,121 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	}
 }
 
+// TestStoreRangeSplitAtLargeKey verifies that splits at keys larger than
+// kv.split.max_key_size fail, that they succeed once the limit is disabled,
+// and that a split at an existing boundary is a no-op regardless of the limit.
+func TestStoreRangeSplitAtLargeKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableMergeQueue: true,
+				DisableSplitQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	sv := &s.ClusterSettings().SV
+	kvserver.MaxSplitKeySize.Override(ctx, sv, 100)
+
+	prefix, err := s.ScratchRange()
+	require.NoError(t, err)
+	makeKey := func(size int, b byte) roachpb.Key {
+		k := append(prefix[:len(prefix):len(prefix)], bytes.Repeat([]byte{b}, size-len(prefix))...)
+		require.Len(t, k, size)
+		return k
+	}
+
+	// A key at the limit is allowed.
+	sender := s.DB().NonTransactionalSender()
+	_, pErr := kv.SendWrapped(ctx, sender, adminSplitArgs(makeKey(100, 'a')))
+	require.NoError(t, pErr.GoError())
+
+	// A key over the limit is rejected.
+	largeKey := makeKey(101, 'b')
+	_, pErr = kv.SendWrapped(ctx, sender, adminSplitArgs(largeKey))
+	require.True(t, testutils.IsPError(pErr,
+		"split key too large 101 > 100, see kv.split.max_key_size"),
+		"unexpected error %v", pErr)
+
+	// Disabling the limit allows the split.
+	kvserver.MaxSplitKeySize.Override(ctx, sv, 0)
+	_, pErr = kv.SendWrapped(ctx, sender, adminSplitArgs(largeKey))
+	require.NoError(t, pErr.GoError())
+
+	// Re-enabling the limit does not affect a split at the existing boundary,
+	// which is a no-op.
+	kvserver.MaxSplitKeySize.Override(ctx, sv, 100)
+	_, pErr = kv.SendWrapped(ctx, sender, adminSplitArgs(largeKey))
+	require.NoError(t, pErr.GoError())
+}
+
+// TestSplitQueueLargeSplitKey verifies that when the split queue picks a split
+// key larger than kv.split.max_key_size, the range is placed in purgatory, and
+// that the range splits once the limit is lifted.
+func TestSplitQueueLargeSplitKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Set maxBytes to something small so we can exceed it without writing a lot
+	// of data. fillRange writes ~200 KB values, so the range holds a few keys and
+	// the split queue can find a split key between them.
+	defer zonepb.TestingSetMinRangeMaxBytes(64 * 1024)()
+	const maxBytes = 512 * 1024
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.RangeMinBytes = proto.Int64(4 * 1024)
+	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
+	zoneConfig.NumReplicas = proto.Int32(1)
+	purgatoryChan := make(chan time.Time, 1)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DefaultZoneConfigOverride: &zoneConfig,
+			},
+			Store: &kvserver.StoreTestingKnobs{
+				DisableMergeQueue:       true,
+				DisableSplitQueue:       true,
+				SplitQueuePurgatoryChan: purgatoryChan,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+	// fillRange writes keys that are longer than 1000 bytes, so any split key
+	// that the split queue picks is over the limit.
+	sv := &s.ClusterSettings().SV
+	kvserver.MaxSplitKeySize.Override(ctx, sv, 1000)
+
+	startKey, err := s.ScratchRange()
+	require.NoError(t, err)
+	repl := store.LookupReplica(roachpb.RKey(startKey))
+	endKey := repl.Desc().EndKey
+	fillRange(t, store, repl.RangeID, startKey, maxBytes+1, false /* singleKey */)
+
+	store.TestingSetSplitQueueActive(true)
+	require.NoError(t, store.ForceSplitScanAndProcess())
+	if _, ok := store.SplitQueuePurgatory()[repl.RangeID]; !ok {
+		t.Fatalf("expected range %d in split queue purgatory", repl.RangeID)
+	}
+	require.Equal(t, endKey, repl.Desc().EndKey)
+
+	// Lift the limit and signal the purgatory; the range should now split.
+	kvserver.MaxSplitKeySize.Override(ctx, sv, 0)
+	purgatoryChan <- timeutil.Now()
+	testutils.SucceedsSoon(t, func() error {
+		if repl.Desc().EndKey.Equal(endKey) {
+			return errors.Errorf("range %d not split yet", repl.RangeID)
+		}
+		return nil
+	})
+}
+
 // Verify that on a split, only the non-expired abort span records are copied
 // into the right hand side of the split.
 func TestStoreSplitAbortSpan(t *testing.T) {
