@@ -43,17 +43,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// additionalTimeoutUnderDuress is the additional timeout to use for the http
-// client if under stress.
-const additionalTimeoutUnderDuress = 30 * time.Second
+const (
+	// additionalTimeoutForSQLStats allows for status endpoints that fan out to
+	// every SQL instance to complete on loaded CI runners.
+	additionalTimeoutForSQLStats = 20 * time.Second
+	// additionalTimeoutUnderDuress is the additional timeout to use for the http
+	// client if under stress.
+	additionalTimeoutUnderDuress = 30 * time.Second
+)
 
 func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Without flushed stats, combinedstmts fans out to every SQL instance
-	// several times, which can exceed the default 10s timeout on loaded CI.
-	additionalTimeout := 20 * time.Second
+	additionalTimeout := additionalTimeoutForSQLStats
 	if skip.Duress() {
 		additionalTimeout = additionalTimeoutUnderDuress
 	}
@@ -404,8 +407,7 @@ func TestStatusAPIStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Increase the timeout for the http client if under stress.
-	additionalTimeout := 0 * time.Second
+	additionalTimeout := additionalTimeoutForSQLStats
 	if skip.Duress() {
 		additionalTimeout = additionalTimeoutUnderDuress
 	}
@@ -527,8 +529,7 @@ func TestStatusAPICombinedStatementsTotalLatency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "test is too slow to run under race")
-	// Increase the timeout for the http client if under stress.
-	additionalTimeout := 0 * time.Second
+	additionalTimeout := additionalTimeoutForSQLStats
 	if skip.Duress() {
 		additionalTimeout = additionalTimeoutUnderDuress
 	}
@@ -685,8 +686,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Increase the timeout for the http client if under stress.
-	additionalTimeout := 0 * time.Second
+	additionalTimeout := additionalTimeoutForSQLStats
 	if skip.Duress() {
 		additionalTimeout = additionalTimeoutUnderDuress
 	}
