@@ -136,6 +136,15 @@ var maxOpenTransactions = settings.RegisterIntSetting(
 	-1,
 	settings.WithPublic)
 
+var cancelRequestAbortsTxn = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.pgwire.cancel_request.aborts_transaction.enabled",
+	"if enabled, a pgwire cancel request aborts the session's open transaction, "+
+		"even if no statement is running or the running statement completes "+
+		"before observing the cancellation",
+	true,
+)
+
 // maxNumNonRootConnectionsReason is used to supplement the error message for connections that denied due to
 // server.cockroach_cloud.max_client_connections_per_gateway.
 // Note(alyshan): This setting is not public. It is intended to be used by Cockroach Cloud when limiting
@@ -2783,6 +2792,15 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		if ex.idleConn() {
 			return errDrainingComplete
 		}
+	case CancelTxnRequest:
+		_, inOpen := ex.machine.CurState().(stateOpen)
+		if inOpen && ex.extraTxnState.txnCounter.Load() == tcmd.TxnCounter {
+			res = ex.clientComm.CreateErrorResult(pos)
+			ev = eventNonRetryableErr{IsCommit: fsm.False}
+			payload = eventNonRetryableErrPayload{err: cancelchecker.QueryCanceledError}
+		} else {
+			res = ex.clientComm.CreateDrainResult(pos)
+		}
 	case Flush:
 		// Closing the res will flush the connection's buffer.
 		res = ex.clientComm.CreateFlushResult(pos)
@@ -3064,6 +3082,8 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 			case CopyOut:
 				// Can't advance.
 			case DrainRequest:
+				canAdvance = true
+			case CancelTxnRequest:
 				canAdvance = true
 			case Flush:
 				canAdvance = true
@@ -4687,6 +4707,25 @@ func (ex *connExecutor) CancelActiveQueries() bool {
 		canceled = true
 	}
 	return canceled
+}
+
+// CancelActiveTxn is part of the RegistrySession interface.
+func (ex *connExecutor) CancelActiveTxn() bool {
+	if !cancelRequestAbortsTxn.Get(&ex.server.cfg.Settings.SV) {
+		return false
+	}
+	// Holding state.mu while txn is non-nil keeps the txn from finishing, so
+	// txnCounter cannot advance to the next transaction.
+	ex.state.mu.RLock()
+	open := ex.state.mu.txn != nil
+	txnCounter := ex.extraTxnState.txnCounter.Load()
+	ex.state.mu.RUnlock()
+	if !open {
+		return false
+	}
+	// Push fails only if the buffer is closed, in which case the session is
+	// shutting down and will roll the transaction back anyway.
+	return ex.stmtBuf.Push(context.Background(), CancelTxnRequest{TxnCounter: txnCounter}) == nil
 }
 
 // CancelSession is part of the RegistrySession interface.

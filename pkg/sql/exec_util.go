@@ -3125,6 +3125,10 @@ type RegistrySession interface {
 	CancelQuery(queryID clusterunique.ID) bool
 	// CancelActiveQueries cancels all currently active queries.
 	CancelActiveQueries() bool
+	// CancelActiveTxn schedules the abort of the session's open transaction, if
+	// any, once the command in progress finishes. It returns true if an abort
+	// was scheduled.
+	CancelActiveTxn() bool
 	// CancelSession cancels the session.
 	CancelSession()
 	// serialize serializes a Session into a serverpb.Session

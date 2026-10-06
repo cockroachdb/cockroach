@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -195,4 +197,95 @@ func TestCancelCopyTo(t *testing.T) {
 
 	err = g.Wait()
 	require.ErrorContains(t, err, "query execution canceled")
+}
+
+// TestCancelRequestAbortsIdleTxn checks that a pgwire cancel request that
+// arrives while no statement is running still aborts the open transaction and
+// releases its locks, without the client sending another command.
+func TestCancelRequestAbortsIdleTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	pgURL, cleanup := s.PGUrl(
+		t,
+		serverutils.CertsDirPrefix("TestCancelRequestAbortsIdleTxn"),
+		serverutils.User(username.RootUser),
+	)
+	defer cleanup()
+
+	connect := func() *pgx.Conn {
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		require.NoError(t, err)
+		return conn
+	}
+	requireCode := func(t *testing.T, err error, code pgcode.Code) {
+		t.Helper()
+		var pgErr *pgconn.PgError
+		require.ErrorAs(t, err, &pgErr)
+		require.Equal(t, code.String(), pgErr.Code)
+	}
+
+	other := connect()
+	defer func() { _ = other.Close(ctx) }()
+	_, err := other.Exec(ctx, "CREATE TABLE t (k INT PRIMARY KEY, v INT)")
+	require.NoError(t, err)
+	_, err = other.Exec(ctx, "INSERT INTO t VALUES (1, 0)")
+	require.NoError(t, err)
+
+	t.Run("enabled", func(t *testing.T) {
+		conn := connect()
+		defer func() { _ = conn.Close(ctx) }()
+
+		_, err := conn.Exec(ctx, "BEGIN")
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, "UPDATE t SET v = 1 WHERE k = 1")
+		require.NoError(t, err)
+
+		require.NoError(t, conn.PgConn().CancelRequest(ctx))
+
+		// The lock is released without conn sending anything else.
+		writeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		_, err = other.Exec(writeCtx, "UPDATE t SET v = 2 WHERE k = 1")
+		require.NoError(t, err)
+
+		_, err = conn.Exec(ctx, "SELECT 1")
+		requireCode(t, err, pgcode.QueryCanceled)
+		_, err = conn.Exec(ctx, "SELECT 1")
+		requireCode(t, err, pgcode.InFailedSQLTransaction)
+		_, err = conn.Exec(ctx, "ROLLBACK")
+		require.NoError(t, err)
+	})
+
+	t.Run("disabled", func(t *testing.T) {
+		_, err := other.Exec(ctx,
+			"SET CLUSTER SETTING sql.pgwire.cancel_request.aborts_transaction.enabled = false")
+		require.NoError(t, err)
+		defer func() {
+			_, err := other.Exec(ctx,
+				"RESET CLUSTER SETTING sql.pgwire.cancel_request.aborts_transaction.enabled")
+			require.NoError(t, err)
+		}()
+
+		conn := connect()
+		defer func() { _ = conn.Close(ctx) }()
+
+		_, err = conn.Exec(ctx, "BEGIN")
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, "UPDATE t SET v = 3 WHERE k = 1")
+		require.NoError(t, err)
+
+		require.NoError(t, conn.PgConn().CancelRequest(ctx))
+
+		_, err = conn.Exec(ctx, "COMMIT")
+		require.NoError(t, err)
+		var v int
+		require.NoError(t, other.QueryRow(ctx, "SELECT v FROM t WHERE k = 1").Scan(&v))
+		require.Equal(t, 3, v)
+	})
 }

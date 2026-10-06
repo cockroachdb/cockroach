@@ -452,6 +452,29 @@ func (DrainRequest) String() string {
 
 var _ Command = DrainRequest{}
 
+// CancelTxnRequest is pushed when a pgwire cancel request arrives while the
+// session has an open transaction. When processed, it aborts that transaction
+// if it is still open, and is a no-op otherwise. Canceling the active queries
+// alone does not end the transaction when the statement completes before
+// observing the cancellation, or when no statement is running.
+type CancelTxnRequest struct {
+	// TxnCounter is the session's txnCounter for the transaction that was open
+	// when the cancel request arrived.
+	TxnCounter int32
+}
+
+// command implements the Command interface.
+func (CancelTxnRequest) command() string { return "cancel txn" }
+
+// isExtendedProtocolCmd implements the Command interface.
+func (CancelTxnRequest) isExtendedProtocolCmd() bool { return false }
+
+func (c CancelTxnRequest) String() string {
+	return fmt.Sprintf("CancelTxnRequest: txn %d", c.TxnCounter)
+}
+
+var _ Command = CancelTxnRequest{}
+
 // SendError is a command that, upon execution, send a specific error to the
 // client. This is used by pgwire to schedule errors to be sent at an
 // appropriate time.

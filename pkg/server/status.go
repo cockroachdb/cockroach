@@ -4028,6 +4028,9 @@ func (s *statusServer) CancelQueryByKey(
 			}
 
 			isCanceled := session.CancelActiveQueries()
+			if session.CancelActiveTxn() {
+				isCanceled = true
+			}
 			return &serverpb.CancelQueryByKeyResponse{
 				Canceled: isCanceled,
 			}, nil
