@@ -272,7 +272,9 @@ type AllocatorStorePool interface {
 	// live (as indicated by its `NodeLivenessStatus`) and thus a legal candidate
 	// to receive a replica.
 	// See comment on StorePool.IsStoreReadyForRoutineReplicaTransfer(..).
-	IsStoreReadyForRoutineReplicaTransfer(ctx context.Context, targetStoreID roachpb.StoreID) bool
+	IsStoreReadyForRoutineReplicaTransfer(
+		ctx context.Context, targetStoreID roachpb.StoreID, now hlc.Timestamp,
+	) bool
 
 	// Clock returns the store pool's clock.
 	// TODO(sarkesian): If possible, this should be removed.
@@ -817,7 +819,7 @@ func (sp *StorePool) IsDead(storeID roachpb.StoreID) (bool, time.Duration, error
 // liveness or deadness at the moment) or an error if the store is not found in
 // the pool.
 func (sp *StorePool) IsUnknown(storeID roachpb.StoreID) (bool, error) {
-	status, err := sp.storeStatus(storeID, sp.NodeLivenessFn)
+	status, err := sp.storeStatus(storeID, sp.clock.Now(), sp.NodeLivenessFn)
 	if err != nil {
 		return false, err
 	}
@@ -827,7 +829,7 @@ func (sp *StorePool) IsUnknown(storeID roachpb.StoreID) (bool, error) {
 // IsDraining returns true if the given store's status is `storeStatusDraining`
 // or an error if the store is not found in the pool.
 func (sp *StorePool) IsDraining(storeID roachpb.StoreID) (bool, error) {
-	status, err := sp.storeStatus(storeID, sp.NodeLivenessFn)
+	status, err := sp.storeStatus(storeID, sp.clock.Now(), sp.NodeLivenessFn)
 	if err != nil {
 		return false, err
 	}
@@ -837,7 +839,7 @@ func (sp *StorePool) IsDraining(storeID roachpb.StoreID) (bool, error) {
 // IsLive returns true if the node is considered alive by the store pool or an error
 // if the store is not found in the pool.
 func (sp *StorePool) IsLive(storeID roachpb.StoreID) (bool, error) {
-	status, err := sp.storeStatus(storeID, sp.NodeLivenessFn)
+	status, err := sp.storeStatus(storeID, sp.clock.Now(), sp.NodeLivenessFn)
 	if err != nil {
 		return false, err
 	}
@@ -849,7 +851,7 @@ func (sp *StorePool) IsLive(storeID roachpb.StoreID) (bool, error) {
 // follower reads. A healthy store does not imply that replicas can be moved to
 // this store.
 func (sp *StorePool) IsStoreHealthy(storeID roachpb.StoreID) bool {
-	status, err := sp.storeStatus(storeID, sp.NodeLivenessFn)
+	status, err := sp.storeStatus(storeID, sp.clock.Now(), sp.NodeLivenessFn)
 	if err != nil {
 		return false
 	}
@@ -861,16 +863,16 @@ func (sp *StorePool) IsStoreHealthy(storeID roachpb.StoreID) bool {
 	}
 }
 
+// storeStatus returns the status of the given store as of now. Callers should
+// obtain now from clock.Now() instead of clock.PhysicalTime() in order to take
+// clock signals from remote nodes into consideration.
 func (sp *StorePool) storeStatus(
-	storeID roachpb.StoreID, nl NodeLivenessFunc,
+	storeID roachpb.StoreID, now hlc.Timestamp, nl NodeLivenessFunc,
 ) (storeStatus, error) {
 	sd, ok := sp.Details.StoreDetails.Load(storeID)
 	if !ok {
 		return storeStatusUnknown, errors.Errorf("store %d was not found", storeID)
 	}
-	// NB: We use clock.Now() instead of clock.PhysicalTime() is order to
-	// take clock signals from remote nodes into consideration.
-	now := sp.clock.Now()
 	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(&sp.st.SV)
 	timeAfterNodeSuspect := liveness.TimeAfterNodeSuspect.Get(&sp.st.SV)
 	return sd.status(now, timeUntilNodeDead, nl, timeAfterNodeSuspect), nil
@@ -1379,18 +1381,18 @@ func (sp *StorePool) GetNodeLocality(nodeID roachpb.NodeID) roachpb.Locality {
 // `NodeLivenessStatus`), whereas we _actively move replicas off of "dead"
 // nodes_.
 func (sp *StorePool) IsStoreReadyForRoutineReplicaTransfer(
-	ctx context.Context, targetStoreID roachpb.StoreID,
+	ctx context.Context, targetStoreID roachpb.StoreID, now hlc.Timestamp,
 ) bool {
 	if sp.OverrideIsStoreReadyForRoutineReplicaTransferFn != nil {
 		return sp.OverrideIsStoreReadyForRoutineReplicaTransferFn(ctx, targetStoreID)
 	}
-	return sp.isStoreReadyForRoutineReplicaTransferInternal(ctx, targetStoreID, sp.NodeLivenessFn)
+	return sp.isStoreReadyForRoutineReplicaTransferInternal(ctx, targetStoreID, now, sp.NodeLivenessFn)
 }
 
 func (sp *StorePool) isStoreReadyForRoutineReplicaTransferInternal(
-	ctx context.Context, targetStoreID roachpb.StoreID, nl NodeLivenessFunc,
+	ctx context.Context, targetStoreID roachpb.StoreID, now hlc.Timestamp, nl NodeLivenessFunc,
 ) bool {
-	status, err := sp.storeStatus(targetStoreID, nl)
+	status, err := sp.storeStatus(targetStoreID, now, nl)
 	if err != nil {
 		return false
 	}
