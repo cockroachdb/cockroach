@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -27,6 +28,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
+)
+
+// UsePlannedUDTVersionsForStalenessChecks controls whether checks of whether a
+// cached plan is stale compare the current versions of user-defined types
+// against the versions the plan was built with (see Metadata.userDefinedTypes)
+// rather than against the versions in the plan's *types.T objects.
+var UsePlannedUDTVersionsForStalenessChecks = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.opt.use_planned_udt_versions_for_staleness_checks.enabled",
+	"if set, checks of whether a cached plan is stale compare the current "+
+		"versions of user-defined types against the versions the plan was built "+
+		"with rather than against the versions of its type objects, which can be "+
+		"updated in place",
+	true,
 )
 
 // SchemaID uniquely identifies the usage of a schema within the scope of a
@@ -109,11 +124,13 @@ type Metadata struct {
 
 	// userDefinedTypes contains all user defined types present in expressions
 	// in this query.
-	// TODO (rohany): This only contains user defined types present in the query
-	//  because the installation of type metadata in tables doesn't go through
-	//  the type resolver that the optimizer hijacks. However, we could update
-	//  this map when adding a table via metadata.AddTable.
-	userDefinedTypes      map[oid.Oid]struct{}
+	//
+	// The map value is the version of the type this query was planned against
+	// (see RecordPlannedUserDefinedTypeVersions). Staleness checks use it since
+	// the *types.T object can be shared and hydrated in place with a newer
+	// version, which would make a stale memo look up-to-date (see
+	// cockroachlabs/cockroach#12711).
+	userDefinedTypes      map[oid.Oid]uint32
 	userDefinedTypesSlice []*types.T
 
 	// views stores the list of referenced views. This information is only
@@ -273,11 +290,11 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 
 	if len(from.userDefinedTypesSlice) > 0 {
 		if md.userDefinedTypes == nil {
-			md.userDefinedTypes = make(map[oid.Oid]struct{}, len(from.userDefinedTypesSlice))
+			md.userDefinedTypes = make(map[oid.Oid]uint32, len(from.userDefinedTypesSlice))
 		}
 		for i := range from.userDefinedTypesSlice {
 			typ := from.userDefinedTypesSlice[i]
-			md.userDefinedTypes[typ.Oid()] = struct{}{}
+			md.userDefinedTypes[typ.Oid()] = from.userDefinedTypes[typ.Oid()]
 			md.userDefinedTypesSlice = append(md.userDefinedTypesSlice, typ)
 		}
 	}
@@ -407,7 +424,7 @@ func (md *Metadata) dependencyDigestEquals(currentDigest *cat.DependencyDigest) 
 // excessively. Additionally, the metadata version and leased descriptor versions
 // are compared.
 func (md *Metadata) leaseObjectsInMetaData(
-	ctx context.Context, optCatalog cat.Catalog,
+	ctx context.Context, optCatalog cat.Catalog, usePlannedUDTVersions bool,
 ) (leasedVersionMatchesMetadata bool, err error) {
 	for id, ds := range md.dataSourceDeps {
 		ver, err := optCatalog.LeaseByStableID(ctx, id)
@@ -437,7 +454,7 @@ func (md *Metadata) leaseObjectsInMetaData(
 		if err != nil {
 			return false, err
 		}
-		if ver != uint64(typ.TypeMeta.Version) {
+		if ver != uint64(md.udtVersionForStalenessCheck(typ, usePlannedUDTVersions)) {
 			return false, nil
 		}
 	}
@@ -464,6 +481,7 @@ func (md *Metadata) CheckDependencies(
 	// If the query is AOST we must check all the dependencies, since the descriptors
 	// may have been different in the past. Otherwise, the dependency digest
 	// is sufficient.
+	usePlannedUDTVersions := UsePlannedUDTVersionsForStalenessChecks.Get(&evalCtx.Settings.SV)
 	currentDigest := optCatalog.GetDependencyDigest()
 	if evalCtx.SessionData().CatalogDigestStalenessCheckEnabled &&
 		evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_1) &&
@@ -473,7 +491,7 @@ func (md *Metadata) CheckDependencies(
 		// Lease the underlying descriptors for this metadata. If we fail to lease
 		// any descriptors attempt to resolve them by name through the more expensive
 		// code path below.
-		upToDate, err = md.leaseObjectsInMetaData(ctx, optCatalog)
+		upToDate, err = md.leaseObjectsInMetaData(ctx, optCatalog, usePlannedUDTVersions)
 		if err == nil {
 			return upToDate, nil
 		}
@@ -507,13 +525,14 @@ func (md *Metadata) CheckDependencies(
 			for i, n := 0, names.Len(); i < n; i++ {
 				toCheck, err := optCatalog.ResolveType(ctx, names.Get(i))
 				if err != nil || typ.Oid() != toCheck.Oid() ||
-					typ.TypeMeta.Version != toCheck.TypeMeta.Version {
+					md.udtVersionForStalenessCheck(typ, usePlannedUDTVersions) != toCheck.TypeMeta.Version {
 					return false, maybeSwallowMetadataResolveErr(err)
 				}
 			}
 		} else {
 			toCheck, err := optCatalog.ResolveTypeByOID(ctx, typ.Oid())
-			if err != nil || typ.TypeMeta.Version != toCheck.TypeMeta.Version {
+			if err != nil ||
+				md.udtVersionForStalenessCheck(typ, usePlannedUDTVersions) != toCheck.TypeMeta.Version {
 				return false, maybeSwallowMetadataResolveErr(err)
 			}
 		}
@@ -736,10 +755,10 @@ func (md *Metadata) AddUserDefinedType(typ *types.T, name *tree.UnresolvedObject
 		md.AddUserDefinedType(typ.ArrayContents(), nil /* name */)
 	}
 	if md.userDefinedTypes == nil {
-		md.userDefinedTypes = make(map[oid.Oid]struct{})
+		md.userDefinedTypes = make(map[oid.Oid]uint32)
 	}
 	if _, ok := md.userDefinedTypes[typ.Oid()]; !ok {
-		md.userDefinedTypes[typ.Oid()] = struct{}{}
+		md.userDefinedTypes[typ.Oid()] = typ.TypeMeta.Version
 		md.userDefinedTypesSlice = append(md.userDefinedTypesSlice, typ)
 	}
 	if name != nil {
@@ -753,6 +772,46 @@ func (md *Metadata) AddUserDefinedType(typ *types.T, name *tree.UnresolvedObject
 // AllUserDefinedTypes returns all user defined types contained in this query.
 func (md *Metadata) AllUserDefinedTypes() []*types.T {
 	return md.userDefinedTypesSlice
+}
+
+// RecordPlannedUserDefinedTypeVersions records the versions of all
+// user-defined types referenced by the query as the descriptor versions leased
+// by the transaction that planned it. It's called once the query is built,
+// unless the statement disables memo reuse (e.g. DDL).
+//
+// AddUserDefinedType records the version of the given *types.T, which might
+// already be hydrated in place with a newer version than the leased one (e.g.
+// the type of a table column, see cockroachlabs/cockroach#12711). If the type
+// can't be leased (e.g. because the transaction has uncommitted descriptors,
+// in which case memos aren't reused anyway), that version is kept.
+func (md *Metadata) RecordPlannedUserDefinedTypeVersions(
+	ctx context.Context, optCatalog cat.Catalog,
+) {
+	for _, typ := range md.userDefinedTypesSlice {
+		id := typedesc.UserDefinedTypeOIDToID(typ.Oid())
+		if id == catid.InvalidDescID {
+			continue
+		}
+		if ver, err := optCatalog.LeaseByStableID(ctx, cat.StableID(id)); err == nil {
+			md.userDefinedTypes[typ.Oid()] = uint32(ver)
+		}
+	}
+}
+
+// UserDefinedTypeVersion returns the descriptor version of the given
+// user-defined type that this query was planned against. The type must have
+// been added to the metadata.
+func (md *Metadata) UserDefinedTypeVersion(typ *types.T) uint32 {
+	return md.userDefinedTypes[typ.Oid()]
+}
+
+// udtVersionForStalenessCheck returns the version of the given user-defined
+// type that staleness checks compare against its current version.
+func (md *Metadata) udtVersionForStalenessCheck(typ *types.T, usePlanned bool) uint32 {
+	if usePlanned {
+		return md.UserDefinedTypeVersion(typ)
+	}
+	return typ.TypeMeta.Version
 }
 
 // HasUserDefinedRoutines returns true if the query references a UDF or stored

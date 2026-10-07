@@ -290,15 +290,12 @@ func (ex *connExecutor) prepare(
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-		var udts []*types.T
+		var udts []prep.UDT
 		flags, udts, err = ex.populatePrepared(ctx, txn, placeholderHints, p, origin)
-		// Copy the udts slice to ensure prepared statements and memos
-		// maintain independent references. The reason for the separation is
-		// that, when UDT versions change, we update only the prepared
-		// statement's udts while keeping the memo's udts unchanged, so that
-		// the memo is properly invalidated during plan generation.
-		prepared.UDTs = make([]*types.T, len(udts))
-		copy(prepared.UDTs, udts)
+		// Copy the udts slice since it can belong to another prepared statement
+		// (when preparing an EXECUTE), and the UDTs of a prepared statement are
+		// updated in place when their versions change (see checkUDTStaleness).
+		prepared.UDTs = slices.Clone(udts)
 		// Similarly, make copies of the placeholder types to avoid aliasing
 		// with the query cache if we need to refresh UDTs.
 		prepared.Types = slices.Clone(prepared.Types)
@@ -334,7 +331,7 @@ func (ex *connExecutor) populatePrepared(
 	placeholderHints tree.PlaceholderTypes,
 	p *planner,
 	origin prep.StatementOrigin,
-) (planFlags, []*types.T, error) {
+) (planFlags, []prep.UDT, error) {
 	if before := ex.server.cfg.TestingKnobs.BeforePrepare; before != nil {
 		if err := before(ctx, ex.planner.stmt.String(), txn); err != nil {
 			return 0, nil, err

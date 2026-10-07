@@ -305,6 +305,13 @@ func (b *Builder) Build() (err error) {
 
 	physical := outScope.makePhysicalProps()
 	b.factory.Memo().SetRoot(outScope.expr, physical)
+	// Record the planned-against versions of user-defined types, which are
+	// needed by memos that may be reused and by prepared statements. Statements
+	// that disable memo reuse (e.g. DDL) skip this since it can lease types that
+	// they wouldn't otherwise lease.
+	if !b.DisableMemoReuse {
+		b.factory.Metadata().RecordPlannedUserDefinedTypeVersions(b.ctx, b.catalog)
+	}
 	return nil
 }
 
