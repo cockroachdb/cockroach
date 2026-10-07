@@ -62,5 +62,9 @@ var psycopgIgnoreList = blocklist{
 	`tests.test_connection.test_cancel_safe_error`:                                                   "requires insecure mode",
 	`tests.test_connection_async.test_cancel_safe_error[asyncio]`:                                    "requires insecure mode",
 	`tests.test_generators.test_connect_operationalerror_pgconn`:                                     "requires insecure mode",
+	`tests.test_pipeline.test_errors_raised_on_nested_transaction_exit`:                              "upstream pytest.mark.flakey; see cockroachdb/cockroach#176001",
+	`tests.test_pipeline.test_errors_raised_on_transaction_exit`:                                     "upstream pytest.mark.flakey; see cockroachdb/cockroach#176001",
+	`tests.test_pipeline_async.test_errors_raised_on_nested_transaction_exit[asyncio]`:               "upstream pytest.mark.flakey; see cockroachdb/cockroach#176001",
+	`tests.test_pipeline_async.test_errors_raised_on_transaction_exit[asyncio]`:                      "upstream pytest.mark.flakey; see cockroachdb/cockroach#176001",
 	"tests.test_connection.TestConnectionInfo.test_backend_pid":                                      "we return -1 for pg_backend_pid()",
 }
