@@ -98,9 +98,9 @@ func (o *OverrideStorePool) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // IsStoreReadyForRoutineReplicaTransfer implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) IsStoreReadyForRoutineReplicaTransfer(
-	ctx context.Context, targetStoreID roachpb.StoreID,
+	ctx context.Context, targetStoreID roachpb.StoreID, now hlc.Timestamp,
 ) bool {
-	return o.sp.isStoreReadyForRoutineReplicaTransferInternal(ctx, targetStoreID, o.overrideNodeLivenessFn)
+	return o.sp.isStoreReadyForRoutineReplicaTransferInternal(ctx, targetStoreID, now, o.overrideNodeLivenessFn)
 }
 
 // DecommissioningReplicas implements the AllocatorStorePool interface.

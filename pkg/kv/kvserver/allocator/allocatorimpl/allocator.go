@@ -1552,6 +1552,7 @@ func (a *Allocator) allocateTargetFromList(
 	// for either 1 voter or 1 non-voter, we want the voter to be able to displace
 	// the non-voter.
 	existingReplicaSet := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
+	now := storePool.Clock().Now()
 	candidates := rankedCandidateListForAllocation(
 		ctx,
 		candidateStores,
@@ -1559,7 +1560,9 @@ func (a *Allocator) allocateTargetFromList(
 		existingReplicaSet,
 		existingNonVoters,
 		storePool.GetLocalitiesByStore(existingReplicaSet),
-		storePool.IsStoreReadyForRoutineReplicaTransfer,
+		func(ctx context.Context, storeID roachpb.StoreID) bool {
+			return storePool.IsStoreReadyForRoutineReplicaTransfer(ctx, storeID, now)
+		},
 		allowMultipleReplsPerNode,
 		options,
 		targetType,
@@ -1846,6 +1849,7 @@ func (a Allocator) RebalanceTarget(
 	}
 
 	replicaSetForDiversityCalc := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
+	now := storePool.Clock().Now()
 	results := rankedCandidateListForRebalancing(
 		ctx,
 		sl,
@@ -1855,7 +1859,9 @@ func (a Allocator) RebalanceTarget(
 		existingNonVoters,
 		targetType,
 		storePool.GetLocalitiesByStore(replicaSetForDiversityCalc),
-		storePool.IsStoreReadyForRoutineReplicaTransfer,
+		func(ctx context.Context, storeID roachpb.StoreID) bool {
+			return storePool.IsStoreReadyForRoutineReplicaTransfer(ctx, storeID, now)
+		},
 		options,
 		a.Metrics,
 	)
