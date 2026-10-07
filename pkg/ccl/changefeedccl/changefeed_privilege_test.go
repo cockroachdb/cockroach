@@ -80,6 +80,10 @@ func TestChangefeedFileBasedCredentialPrivilege(t *testing.T) {
 	rootDB.Exec(t, `CREATE TABLE t (x INT PRIMARY KEY)`)
 	rootDB.Exec(t, `CREATE USER testuser`)
 	rootDB.Exec(t, `GRANT CHANGEFEED ON TABLE t TO testuser`)
+	// The EXTERNALIOIMPLICITACCESS requirement ships off on this release
+	// branch, so the test opts in.
+	rootDB.Exec(t,
+		`SET CLUSTER SETTING changefeed.permissions.require_external_io_implicit_access.enabled = true`)
 
 	testuser := app.SQLConn(t, serverutils.User("testuser"))
 	sinkURI := fileBasedClientAssertionSinkURI(t, "jwt")
@@ -254,6 +258,11 @@ func TestChangefeedRequiresUsageOnExternalConnection(t *testing.T) {
 	})
 
 	t.Run("alter-registry-requires-implicit-access", func(t *testing.T) {
+		rootDB.Exec(t,
+			`SET CLUSTER SETTING changefeed.permissions.require_external_io_implicit_access.enabled = true`)
+		defer rootDB.Exec(t,
+			`RESET CLUSTER SETTING changefeed.permissions.require_external_io_implicit_access.enabled`)
+
 		schemaReg := cdctest.StartTestSchemaRegistry()
 		defer schemaReg.Close()
 

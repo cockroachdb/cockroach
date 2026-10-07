@@ -346,7 +346,7 @@ var RequireExternalIOImplicitAccess = settings.RegisterBoolSetting(
 	"if enabled, a changefeed to a destination that the node authenticates to"+
 		" with implicit credentials requires the EXTERNALIOIMPLICITACCESS"+
 		" system privilege",
-	true,
+	false,
 	settings.WithName("changefeed.permissions.require_external_io_implicit_access.enabled"),
 )
 
