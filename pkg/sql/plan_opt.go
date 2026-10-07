@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -47,6 +46,20 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 	"sql.query_cache.enabled", "enable the query cache", true,
 )
 
+// preparedUDTs returns the user-defined types referenced by the given memo
+// metadata, along with the versions they were planned against.
+func preparedUDTs(md *opt.Metadata) []prep.UDT {
+	typs := md.AllUserDefinedTypes()
+	if len(typs) == 0 {
+		return nil
+	}
+	udts := make([]prep.UDT, len(typs))
+	for i, typ := range typs {
+		udts[i] = prep.UDT{Type: typ, Version: md.UserDefinedTypeVersion(typ)}
+	}
+	return udts
+}
+
 // prepareUsingOptimizer builds a memo for a prepared statement and populates
 // the following stmt.Prepared fields:
 //   - Columns
@@ -55,7 +68,7 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 //   - BaseMemo (for reuse during exec, if appropriate).
 func (p *planner) prepareUsingOptimizer(
 	ctx context.Context, origin prep.StatementOrigin,
-) (planFlags, []*types.T, error) {
+) (planFlags, []prep.UDT, error) {
 	stmt := &p.stmt
 
 	opc := &p.optPlanningCtx
@@ -133,7 +146,7 @@ func (p *planner) prepareUsingOptimizer(
 		}
 	}
 
-	var udts []*types.T
+	var udts []prep.UDT
 	if opc.useCache {
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, stmt.SQL)
 		if ok && cachedData.Metadata != nil {
@@ -162,7 +175,7 @@ func (p *planner) prepareUsingOptimizer(
 					}
 
 					if md := cachedData.Memo.Metadata(); md != nil {
-						udts = md.AllUserDefinedTypes()
+						udts = preparedUDTs(md)
 					}
 					return opc.flags, udts, nil
 				}
@@ -225,7 +238,7 @@ func (p *planner) prepareUsingOptimizer(
 	}
 
 	if md := memo.Metadata(); md != nil {
-		udts = md.AllUserDefinedTypes()
+		udts = preparedUDTs(md)
 	}
 	stmt.Prepared.Columns = resultCols
 	stmt.Prepared.Types = p.semaCtx.Placeholders.Types

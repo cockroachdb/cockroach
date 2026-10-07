@@ -217,6 +217,93 @@ func TestMetadata(t *testing.T) {
 	}
 }
 
+// TestMetadataUserDefinedTypeUpdatedInPlace verifies that the staleness check
+// detects a change to a user-defined type even if the *types.T object stored
+// in the metadata was hydrated in place with the new version (see
+// cockroachlabs/cockroach#12711), unless that is disabled via the cluster
+// setting.
+func TestMetadataUserDefinedTypeUpdatedInPlace(t *testing.T) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+	testCat := testcat.New()
+	_, err := testCat.ExecuteDDL("CREATE TYPE e AS ENUM ('a', 'b')")
+	require.NoError(t, err)
+	name, err := tree.NewUnresolvedObjectName(1, [3]string{"e"}, tree.NoAnnotation)
+	require.NoError(t, err)
+	typ, err := testCat.ResolveType(ctx, name)
+	require.NoError(t, err)
+
+	var f norm.Factory
+	f.Init(ctx, &evalCtx, testCat)
+	md := f.Metadata()
+	md.AddUserDefinedType(typ, nil /* name */)
+	upToDate, err := md.CheckDependencies(ctx, &evalCtx, testCat)
+	require.NoError(t, err)
+	require.True(t, upToDate)
+
+	// The catalog resolves the same object, so both report the new version.
+	typ.TypeMeta.Version++
+	upToDate, err = md.CheckDependencies(ctx, &evalCtx, testCat)
+	require.NoError(t, err)
+	require.False(t, upToDate)
+
+	opt.UsePlannedUDTVersionsForStalenessChecks.Override(ctx, &st.SV, false)
+	upToDate, err = md.CheckDependencies(ctx, &evalCtx, testCat)
+	require.NoError(t, err)
+	require.True(t, upToDate)
+}
+
+// TestMetadataUserDefinedTypeHydratedAheadOfLease verifies that the memo
+// staleness check uses the type version leased by the planning transaction
+// even if the *types.T added to the metadata, e.g. the type of a table column,
+// was already hydrated in place with a newer version.
+func TestMetadataUserDefinedTypeHydratedAheadOfLease(t *testing.T) {
+	ctx := context.Background()
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	testCat := testcat.New()
+	_, err := testCat.ExecuteDDL("CREATE TYPE e AS ENUM ('a', 'b')")
+	require.NoError(t, err)
+	name, err := tree.NewUnresolvedObjectName(1, [3]string{"e"}, tree.NoAnnotation)
+	require.NoError(t, err)
+	// typ is the version of the type that the planning transaction leases.
+	typ, err := testCat.ResolveType(ctx, name)
+	require.NoError(t, err)
+	// hydratedAhead is a shared object hydrated in place with the next version.
+	hydratedAhead := typ.CopyForHydrate()
+	hydratedAhead.TypeMeta.Version = typ.TypeMeta.Version + 1
+
+	build := func(recordPlannedVersions bool) *opt.Metadata {
+		var f norm.Factory
+		f.Init(ctx, &evalCtx, testCat)
+		md := f.Metadata()
+		md.AddUserDefinedType(hydratedAhead, nil /* name */)
+		if recordPlannedVersions {
+			md.RecordPlannedUserDefinedTypeVersions(ctx, testCat)
+		}
+		return md
+	}
+	md := build(true /* recordPlannedVersions */)
+	// Without the leased versions, the metadata records the newer version.
+	mdWithoutLease := build(false /* recordPlannedVersions */)
+	require.Equal(t, typ.TypeMeta.Version, md.UserDefinedTypeVersion(hydratedAhead))
+	require.Equal(t, hydratedAhead.TypeMeta.Version, mdWithoutLease.UserDefinedTypeVersion(hydratedAhead))
+
+	upToDate, err := md.CheckDependencies(ctx, &evalCtx, testCat)
+	require.NoError(t, err)
+	require.True(t, upToDate)
+
+	// Once the newer version is leased, the memo built against the older one
+	// must be stale, which the version of the *types.T alone doesn't detect.
+	typ.TypeMeta.Version++
+	upToDate, err = md.CheckDependencies(ctx, &evalCtx, testCat)
+	require.NoError(t, err)
+	require.False(t, upToDate)
+	upToDate, err = mdWithoutLease.CheckDependencies(ctx, &evalCtx, testCat)
+	require.NoError(t, err)
+	require.True(t, upToDate)
+}
+
 func TestMetadataSchemas(t *testing.T) {
 	var md opt.Metadata
 

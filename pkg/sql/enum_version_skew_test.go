@@ -23,9 +23,10 @@ import (
 )
 
 // TestEnumVersionSkewFromDistributedGatewayFlow verifies that queries don't
-// fail with "comparison of two different versions of enum" when the gateway
-// flow of a distributed plan updates the plan's *types.T objects in place with
-// a newer version of an enum (see cockroachlabs/cockroach#12711).
+// fail with "comparison of two different versions of enum", and that prepared
+// statements planned against an older enum version are reparsed, when the
+// gateway flow of a distributed plan updates the plan's *types.T objects in
+// place with a newer version of the enum (see cockroachlabs/cockroach#12711).
 //
 // The gateway flow hydrates its specs, which alias the plan's *types.T objects,
 // with a fresh descriptor collection. In a read-committed transaction that
@@ -67,7 +68,9 @@ func TestEnumVersionSkewFromDistributedGatewayFlow(t *testing.T) {
 	// The histogram on e holds the enum values at the version of the memo.
 	sqlDB.Exec(t, "ANALYZE t")
 
-	run := func(t *testing.T, round int, iso gosql.IsolationLevel, distsql string) {
+	run := func(
+		t *testing.T, round int, iso gosql.IsolationLevel, distsql string, expectReparse bool,
+	) {
 		// Use distinct statement text in each round so that it doesn't reuse a
 		// memo cached by an earlier round.
 		query := fmt.Sprintf("SELECT count(*) AS n%d FROM t WHERE e = $1", round)
@@ -130,9 +133,18 @@ func TestEnumVersionSkewFromDistributedGatewayFlow(t *testing.T) {
 		require.NoError(t, poisonerStmt.QueryRowContext(ctx, "a").Scan(&n))
 		require.Equal(t, 10, n)
 
-		// The victim executes at the new version.
+		// The victim executes at the new version. Its prepared statement was
+		// planned against the old version, so it should be reparsed.
+		_, err = victim.ExecContext(ctx, "SET tracing = on")
+		require.NoError(t, err)
 		require.NoError(t, victimStmt.QueryRowContext(ctx, "a").Scan(&n))
 		require.Equal(t, 10, n)
+		_, err = victim.ExecContext(ctx, "SET tracing = off")
+		require.NoError(t, err)
+		var reparsed bool
+		require.NoError(t, victim.QueryRowContext(ctx, `SELECT count(*) > 0 FROM [SHOW TRACE FOR SESSION]
+			WHERE message LIKE 'reparsing prepared statement%'`).Scan(&reparsed))
+		require.Equal(t, expectReparse, reparsed)
 
 		require.NoError(t, tx.Commit())
 		alterWaited = true
@@ -141,17 +153,25 @@ func TestEnumVersionSkewFromDistributedGatewayFlow(t *testing.T) {
 
 	// The read-committed distributed case must run first: once the enum has
 	// changed, the table statistics cache re-stamps its histograms with the
-	// shared column type, which would mask the problem. The other two cases are
-	// controls: a serializable transaction resolves the old version in the
-	// fresh collection too, and a local plan doesn't create one.
+	// shared column type, which would mask the comparison error. The next two
+	// cases are controls: a serializable transaction resolves the old version
+	// in the fresh collection too, and a local plan doesn't create one.
 	t.Run("read_committed/distributed", func(t *testing.T) {
-		run(t, 1, gosql.LevelReadCommitted, "always")
+		run(t, 1, gosql.LevelReadCommitted, "always", true /* expectReparse */)
 	})
 	t.Run("serializable/distributed", func(t *testing.T) {
-		run(t, 2, gosql.LevelSerializable, "always")
+		run(t, 2, gosql.LevelSerializable, "always", true /* expectReparse */)
 	})
 	t.Run("read_committed/local", func(t *testing.T) {
-		run(t, 3, gosql.LevelReadCommitted, "off")
+		run(t, 3, gosql.LevelReadCommitted, "off", true /* expectReparse */)
+	})
+	// Without tracking the planned-against versions, the in-place update makes
+	// the victim's prepared statement look up-to-date.
+	t.Run("read_committed/distributed/planned_versions_disabled", func(t *testing.T) {
+		const setting = "sql.opt.use_planned_udt_versions_for_staleness_checks.enabled"
+		sqlDB.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = false", setting))
+		defer sqlDB.Exec(t, fmt.Sprintf("RESET CLUSTER SETTING %s", setting))
+		run(t, 4, gosql.LevelReadCommitted, "always", false /* expectReparse */)
 	})
 }
 
@@ -190,8 +210,9 @@ func TestEnumVersionSkewWithRenamedValue(t *testing.T) {
 
 	// run swaps the names of 'a' and 'b' of a fresh enum type while the victim
 	// has a prepared statement planned against the old version, and it returns
-	// the result of the victim's statement after the swap.
-	run := func(t *testing.T, round int) (n int, label string, _ error) {
+	// the result of the victim's statement after the swap as well as whether
+	// the statement was reparsed.
+	run := func(t *testing.T, round int) (n int, label string, reparsed bool, _ error) {
 		typ, tab := fmt.Sprintf("te%d", round), fmt.Sprintf("t%d", round)
 		sqlDB.Exec(t, fmt.Sprintf("CREATE TYPE %s AS ENUM ('a', 'b', 'c')", typ))
 		sqlDB.Exec(t, fmt.Sprintf("CREATE TABLE %s (k INT PRIMARY KEY, e %s, e2 %s)", tab, typ, typ))
@@ -286,17 +307,39 @@ func TestEnumVersionSkewWithRenamedValue(t *testing.T) {
 		// flow resolves the new one and updates the shared types in place.
 		require.NoError(t, poisonerStmt.QueryRowContext(ctx, "c").Scan(&n, &label))
 
+		_, err = victim.ExecContext(ctx, "SET tracing = on")
+		require.NoError(t, err)
 		victimErr := victimStmt.QueryRowContext(ctx, "c").Scan(&n, &label)
+		_, err = victim.ExecContext(ctx, "SET tracing = off")
+		require.NoError(t, err)
+		require.NoError(t, victim.QueryRowContext(ctx, `SELECT count(*) > 0 FROM [SHOW TRACE FOR SESSION]
+			WHERE message LIKE 'reparsing prepared statement%'`).Scan(&reparsed))
 
 		require.NoError(t, tx.Commit())
 		alterWaited = true
 		require.NoError(t, <-alterDone)
-		return n, label, victimErr
+		return n, label, reparsed, victimErr
 	}
 
-	// The victim reuses its memo, and the comparison of the placeholder value
-	// against the histogram must fail rather than let the memo return the rows
-	// that are now 'b'.
-	_, _, err := run(t, 1)
-	require.ErrorContains(t, err, "comparison of two different versions of enum")
+	// The victim's prepared statement was planned against the old version, so
+	// it's reparsed and returns the rows that are now 'a'.
+	t.Run("planned_versions_enabled", func(t *testing.T) {
+		n, label, reparsed, err := run(t, 1)
+		require.NoError(t, err)
+		require.True(t, reparsed)
+		require.Equal(t, 20, n)
+		require.Equal(t, "a", label)
+	})
+	// Without tracking the planned-against versions, the in-place update makes
+	// the victim's memo look up-to-date, so it's reused, and the comparison of
+	// the placeholder value against the histogram must fail rather than let
+	// the memo return the rows that are now 'b'.
+	t.Run("planned_versions_disabled", func(t *testing.T) {
+		const setting = "sql.opt.use_planned_udt_versions_for_staleness_checks.enabled"
+		sqlDB.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = false", setting))
+		defer sqlDB.Exec(t, fmt.Sprintf("RESET CLUSTER SETTING %s", setting))
+		_, _, reparsed, err := run(t, 2)
+		require.ErrorContains(t, err, "comparison of two different versions of enum")
+		require.False(t, reparsed)
+	})
 }

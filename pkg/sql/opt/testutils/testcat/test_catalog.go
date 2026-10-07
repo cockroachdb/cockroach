@@ -530,8 +530,15 @@ func (tc *Catalog) GetDependencyDigest() cat.DependencyDigest {
 	}
 }
 
-// LeaseByStableID does not do anything since no leasing is used here.
+// LeaseByStableID does not lease anything since no leasing is used here. It
+// returns the version of the matching user-defined enum type, if any, and 1
+// otherwise.
 func (tc *Catalog) LeaseByStableID(ctx context.Context, id cat.StableID) (uint64, error) {
+	for _, typ := range tc.enumTypes {
+		if typedesc.UserDefinedTypeOIDToID(typ.Oid()) == descpb.ID(id) {
+			return uint64(typ.TypeMeta.Version), nil
+		}
+	}
 	return 1, nil
 }
 

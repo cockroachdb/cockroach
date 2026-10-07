@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -343,21 +344,26 @@ func (ex *connExecutor) execPortal(
 // current version. It also returns whether any were actually stale and their
 // type names.
 func (ex *connExecutor) checkUDTStaleness(
-	ctx context.Context, udts []*types.T,
+	ctx context.Context, udts []prep.UDT,
 ) (stale bool, staleEnumNames []string, err error) {
 	if len(udts) == 0 {
 		return false, nil, nil
 	}
+	usePlanned := opt.UsePlannedUDTVersionsForStalenessChecks.Get(&ex.server.cfg.Settings.SV)
 	staleEnumNames = make([]string, 0)
-	for i, typ := range udts {
-		toCheck, err := ex.planner.ResolveTypeByOID(ctx, typ.Oid())
+	for i, udt := range udts {
+		toCheck, err := ex.planner.ResolveTypeByOID(ctx, udt.Type.Oid())
 		if err != nil {
 			return stale, nil, err
 		}
-		if typ.TypeMeta.Version != toCheck.TypeMeta.Version {
+		version := udt.Version
+		if !usePlanned {
+			version = udt.Type.TypeMeta.Version
+		}
+		if version != toCheck.TypeMeta.Version {
 			stale = true
-			udts[i] = toCheck
-			staleEnumNames = append(staleEnumNames, typ.Name())
+			udts[i] = prep.UDT{Type: toCheck, Version: toCheck.TypeMeta.Version}
+			staleEnumNames = append(staleEnumNames, udt.Type.Name())
 		}
 	}
 	return stale, staleEnumNames, nil
