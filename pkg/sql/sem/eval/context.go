@@ -524,6 +524,11 @@ func (ec *Context) UnwrapDatum(ctx context.Context, d tree.Datum) tree.Datum {
 	return UnwrapDatum(ctx, ec, d)
 }
 
+// AllowEnumVersionSkew is part of the tree.CompareContext interface.
+func (ec *Context) AllowEnumVersionSkew() bool {
+	return ec != nil && ec.Settings != nil && allowEnumVersionSkew.Get(&ec.Settings.SV)
+}
+
 // MustGetPlaceholderValue is part of the tree.CompareContext interface.
 func (ec *Context) MustGetPlaceholderValue(ctx context.Context, p *tree.Placeholder) tree.Datum {
 	e, ok := ec.Placeholders.Value(p.Idx)
