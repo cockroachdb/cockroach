@@ -118,6 +118,11 @@ type CompareContext interface {
 
 	// MustGetPlaceholderValue is used to compare Datum
 	MustGetPlaceholderValue(ctx context.Context, p *Placeholder) Datum
+
+	// AllowEnumVersionSkew returns whether values of an enum type produced with
+	// versions of the type more than one version apart can be compared as long
+	// as the versions are consistent (see DEnum.Compare).
+	AllowEnumVersionSkew() bool
 }
 
 // Datum represents a SQL value.
@@ -5319,14 +5324,20 @@ func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 	// versions are consistent, which we allow for adjacent versions.
 	//
 	// A larger difference indicates stale metadata, which could lead to
-	// incorrect results, so it fails the assertion.
+	// incorrect results beyond the comparison itself (e.g. the older version
+	// might not know about a value present in the data), so it fails the
+	// assertion unless the sql.enum.allow_version_skew_in_comparisons.enabled
+	// escape hatch is enabled, in which case the versions must still be
+	// consistent. Note that a value dropped and re-added between the same
+	// neighbors gets the same physical and logical representations, so it's
+	// indistinguishable from the original and is considered the same value.
 	//
 	// In test builds, any version difference fails the assertion so that bugs
-	// leading to it are surfaced rather than masked by the relaxation above
+	// leading to it are surfaced rather than masked by the relaxations above
 	// (see TestingRelaxEnumVersionSkewAssertion).
 	dv, vv := d.EnumTyp.TypeMeta.Version, v.EnumTyp.TypeMeta.Version
-	if dv != vv && (strictEnumVersionSkewAssertion.Load() ||
-		max(dv, vv)-min(dv, vv) > 1 || !enumValuesAreConsistent(d, v)) {
+	if dv != vv && (strictEnumVersionSkewAssertion.Load() || !enumValuesAreConsistent(d, v) ||
+		(max(dv, vv)-min(dv, vv) > 1 && !cmpCtx.AllowEnumVersionSkew())) {
 		var gist redact.SafeString
 		if PlanGistFromCtx != nil {
 			// Plan gist, by construction, doesn't contain any PII, so it's a

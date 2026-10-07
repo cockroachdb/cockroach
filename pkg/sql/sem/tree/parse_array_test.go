@@ -144,6 +144,8 @@ type noopUnwrapCompareContext struct {
 
 func (noopUnwrapCompareContext) UnwrapDatum(ctx context.Context, d Datum) Datum { return d }
 
+func (noopUnwrapCompareContext) AllowEnumVersionSkew() bool { return false }
+
 const randomArrayIterations = 100
 const randomArrayMaxLength = 10
 const randomStringMaxLength = 1000

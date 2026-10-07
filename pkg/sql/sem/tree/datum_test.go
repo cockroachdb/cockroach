@@ -164,6 +164,10 @@ func (fcc *testTimestampCompareContext) MustGetPlaceholderValue(
 	panic("not implemented")
 }
 
+func (fcc *testTimestampCompareContext) AllowEnumVersionSkew() bool {
+	return false
+}
+
 var _ CompareContext = (*testTimestampCompareContext)(nil)
 
 func (fcc *testTimestampCompareContext) GetRelativeParseTime() time.Time {
