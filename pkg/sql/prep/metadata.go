@@ -66,7 +66,17 @@ type Metadata struct {
 	// or its placeholders. It is used to detect type version change, so the
 	// statement can be reparsed with updated versions. Note that statements
 	// built opaquely don't populate this field.
-	UDTs []*types.T
+	UDTs []UDT
+}
+
+// UDT is a user-defined type referenced by a prepared statement.
+type UDT struct {
+	Type *types.T
+	// Version is the descriptor version of the type that the statement was
+	// planned against. It can differ from the version of Type, since that
+	// object can be shared with other plans and hydrated in place with a newer
+	// version (see cockroachlabs/cockroach#12711).
+	Version uint32
 }
 
 // MemoryEstimate returns an estimation (in bytes) of how much memory is used by
@@ -93,6 +103,6 @@ func (pm *Metadata) MemoryEstimate() int64 {
 		res += pm.Hints[i].Size()
 	}
 	res += int64(len(pm.HintIDs)) * int64(unsafe.Sizeof(int64(0)))
-	res += int64(len(pm.UDTs)) * int64(unsafe.Sizeof((*types.T)(nil)))
+	res += int64(len(pm.UDTs)) * int64(unsafe.Sizeof(UDT{}))
 	return res
 }
