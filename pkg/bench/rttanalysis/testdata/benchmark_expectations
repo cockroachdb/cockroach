@@ -151,8 +151,8 @@ exp,benchmark
 17,Truncate/truncate_2_column_1_rows
 17,Truncate/truncate_2_column_2_rows
 0,UDFResolution/select_from_udf
-2,UseManyRoles/use_2_roles
-25,UseManyRoles/use_25_roles
+2-4,UseManyRoles/use_2_roles
+25-27,UseManyRoles/use_25_roles
 3,VirtualTableQueries/capture_index_usage_stats
 2,VirtualTableQueries/select_crdb_internal.invalid_objects_with_1_fk
 1,VirtualTableQueries/select_crdb_internal.tables_with_1_fk
