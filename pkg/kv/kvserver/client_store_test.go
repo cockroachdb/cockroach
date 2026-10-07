@@ -276,6 +276,6 @@ func BenchmarkStorePoolReadsWithConcurrentUpdates(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		// Check if the store is ready for routine replica transfer. This function
 		// is periodically called from the replicate queue.
-		store.StorePool().IsStoreReadyForRoutineReplicaTransfer(ctx, roachpb.StoreID(1))
+		store.StorePool().IsStoreReadyForRoutineReplicaTransfer(ctx, roachpb.StoreID(1), store.Clock().Now())
 	}
 }

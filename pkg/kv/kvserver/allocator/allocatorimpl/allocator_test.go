@@ -4235,6 +4235,9 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 			}
 			return true
 		}
+		isStoreReady := func(ctx context.Context, storeID roachpb.StoreID) bool {
+			return sp.IsStoreReadyForRoutineReplicaTransfer(ctx, storeID, sp.Clock().Now())
+		}
 
 		t.Run(fmt.Sprintf("%d/allocate", testIdx), func(t *testing.T) {
 			candidates := rankedCandidateListForAllocation(
@@ -4244,7 +4247,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				existingRepls,
 				nil,
 				sp.GetLocalitiesByStore(existingRepls),
-				sp.IsStoreReadyForRoutineReplicaTransfer,
+				isStoreReady,
 				false, /* allowMultipleReplsPerNode */
 				a.ScorerOptions(ctx),
 				VoterTarget,
@@ -4266,7 +4269,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				nil,
 				VoterTarget,
 				sp.GetLocalitiesByStore(existingRepls),
-				sp.IsStoreReadyForRoutineReplicaTransfer,
+				isStoreReady,
 				a.ScorerOptions(ctx),
 				a.Metrics,
 			)
