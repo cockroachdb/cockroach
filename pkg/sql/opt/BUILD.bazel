@@ -28,6 +28,7 @@ go_library(
     deps = [
         "//pkg/security/username",
         "//pkg/server/telemetry",
+        "//pkg/settings",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/colinfo",
