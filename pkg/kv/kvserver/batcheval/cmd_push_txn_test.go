@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -134,7 +133,6 @@ func TestPushTxnAmbiguousAbort(t *testing.T) {
 func TestPushTxnHigherEpochDoesNotLeakIgnoredSeqNums(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 175819)
 
 	ctx := context.Background()
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Now()))
