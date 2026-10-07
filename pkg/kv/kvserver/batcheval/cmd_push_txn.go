@@ -212,6 +212,9 @@ func PushTxn(
 	if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
 		reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
 		knownHigherEpoch = true
+		// The record's ignored seqnums belong to an older epoch. Since seqnums
+		// restart each epoch, they could cover live writes in the new one.
+		reply.PusheeTxn.IgnoredSeqNums = nil
 	}
 	reply.PusheeTxn.UpgradePriority(args.PusheeTxn.Priority)
 
