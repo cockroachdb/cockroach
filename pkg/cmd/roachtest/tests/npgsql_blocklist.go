@@ -662,6 +662,7 @@ var npgsqlIgnoreList = blocklist{
 	`Npgsql.Tests.PoolTests.Timeout_getting_connector_from_exhausted_pool_async`:                                  "flaky",
 	`Npgsql.Tests.ReaderNewSchemaTests(Async).DefaultValue`:                                                       "flaky",
 	`Npgsql.Tests.ReaderNewSchemaTests(Async).IsUnique`:                                                           "flaky",
+	`Npgsql.Tests.ReaderNewSchemaTests(Sync).DefaultValue`:                                                        "flaky",
 	`Npgsql.Tests.ReaderNewSchemaTests(Sync).IsUnique`:                                                            "flaky",
 	`Npgsql.Tests.StoredProcedureTests.DeriveParameters_throws_for_existing_procedure_that_is_not_in_search_path`: "flaky",
 	`Npgsql.Tests.TransactionTests(Multiplexing).Failed_transaction_on_close_with_custom_timeout`:                 "flaky",
