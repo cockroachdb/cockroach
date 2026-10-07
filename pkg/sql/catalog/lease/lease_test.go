@@ -2916,6 +2916,7 @@ CREATE TABLE t1(val int);
 	t.Run("validate-lease-txn-deadline-ext", func(t *testing.T) {
 		conn, err := sqlDB.Conn(ctx)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, conn.Close()) }()
 		descModConn := sqlutils.MakeSQLRunner(sqlDB)
 		waitChan := make(chan error)
 		resumeChan := make(chan struct{})
@@ -2981,6 +2982,7 @@ SELECT * FROM T1;`)
 	t.Run("validate-lease-txn-deadline-ext-blocked", func(t *testing.T) {
 		conn, err := sqlDB.Conn(ctx)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, conn.Close()) }()
 		descModConn := sqlutils.MakeSQLRunner(sqlDB)
 		waitChan := make(chan error)
 		resumeChan := make(chan struct{})
@@ -3022,18 +3024,17 @@ SELECT * FROM t1;
 			for timeutil.Now().Before(end) {
 				_, err = conn.ExecContext(ctx, `INSERT INTO t1 VALUES (1);`)
 				if err != nil {
-					waitChan <- err
-					return
+					break
 				}
 			}
-			_, err = conn.ExecContext(ctx, `
-COMMIT;`,
-			)
-			// The commit deadline can be detected at two layers:
-			//   - RETRY_COMMIT_DEADLINE_EXCEEDED: server-side EndTxn deadline check.
+			if err == nil {
+				_, err = conn.ExecContext(ctx, `COMMIT;`)
+			}
+			// The txn may be rejected on an INSERT or on COMMIT, with either:
+			//   - RETRY_COMMIT_DEADLINE_EXCEEDED: EndTxn deadline check.
 			//   - ABORT_REASON_CLIENT_REJECT: txnCoordSender heartbeat observed the
-			//     txn record was aborted before EndTxn was sent (see #168540).
-			// Both outcomes prove the txn was correctly prevented from committing.
+			//     txn record was aborted before the next request. A KV-level abort
+			//     can win the race against the deadline check, so it is tolerated.
 			if err == nil {
 				err = errors.New("Failing did not get expected error")
 			} else if !testutils.IsError(err, "pq: restart transaction: TransactionRetryWithProtoRefreshError: "+
@@ -3055,7 +3056,9 @@ COMMIT;`,
 ALTER TABLE T1 ALTER COLUMN VAL SET DEFAULT 5;
 SELECT * FROM T1`)
 		resumeChan <- struct{}{}
-		blockTxn <- struct{}{}
+		// Close rather than send: an INSERT may fail before any EndTxn is issued,
+		// so a send could block forever. This must be the last use of blockTxn.
+		close(blockTxn)
 		err = <-waitChan
 		require.NoError(t, err)
 		require.GreaterOrEqualf(t, leasesExpiredGauge.Value(), int64(1), "leases did not expire")
