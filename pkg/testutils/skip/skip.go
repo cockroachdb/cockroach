@@ -28,9 +28,15 @@ type SkippableTest interface {
 }
 
 // WithIssue skips this test, logging the given issue ID as the reason.
+//
+// The issue ID, here and in the other *WithIssue helpers, refers to an issue in
+// the private cockroachlabs/cockroach repo, where new issues are filed. Use
+// WithPublicIssue and the other *WithPublicIssue helpers for legacy issues in
+// the public cockroachdb/cockroach repo. Issue numbers overlap between the two
+// repos, so picking the wrong helper links to an unrelated issue.
 func WithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
 	t.Helper()
-	maybeSkip(t, fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", githubIssueID),
+	maybeSkip(t, fmt.Sprintf("https://github.com/cockroachlabs/cockroach/issues/%d", githubIssueID),
 		args...)
 }
 
@@ -291,7 +297,7 @@ func testConfig() string {
 
 func withIssue(reason string, githubIssueID int) string {
 	return fmt.Sprintf(
-		"%s. issue: https://github.com/cockroachdb/cockroach/issues/%d",
+		"%s. issue: https://github.com/cockroachlabs/cockroach/issues/%d",
 		reason,
 		githubIssueID,
 	)
