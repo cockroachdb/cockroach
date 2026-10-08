@@ -9,12 +9,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -433,6 +435,36 @@ func TestBuildLocalitySetsStrict(t *testing.T) {
 		require.Error(t, err)
 	})
 
+}
+
+func TestSplitAtIntroducedSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := func(wallTime int64) hlc.Timestamp { return hlc.Timestamp{WallTime: wallTime} }
+	frontier, err := createIntroducedSpanFrontier([]backuppb.BackupManifest{
+		{EndTime: ts(1)},
+		{EndTime: ts(2), IntroducedSpans: roachpb.Spans{
+			mockSpan("c", "f"), mockSpan("m", "p"), mockSpan("s", "z"),
+		}},
+		{EndTime: ts(3), IntroducedSpans: roachpb.Spans{mockSpan("n", "o")}},
+	}, hlc.Timestamp{})
+	require.NoError(t, err)
+	defer frontier.Release()
+
+	// [a, f) merges an untracked span with one introduced at 2, [h, i) is
+	// untracked, [l, q) is introduced at 2 in [m, n) and [o, p) and at 3 in
+	// [n, o), and [t, u) and [x, y) both lie inside [s, z), introduced at 2.
+	spans := roachpb.Spans{
+		mockSpan("a", "f"), mockSpan("h", "i"), mockSpan("l", "q"), mockSpan("t", "u"), mockSpan("x", "y"),
+	}
+	require.Equal(t, roachpb.Spans{
+		mockSpan("a", "c"), mockSpan("c", "f"),
+		mockSpan("h", "i"),
+		mockSpan("l", "m"), mockSpan("m", "n"), mockSpan("n", "o"), mockSpan("o", "p"), mockSpan("p", "q"),
+		mockSpan("t", "u"),
+		mockSpan("x", "y"),
+	}, splitAtIntroducedSpans(spans, frontier))
 }
 
 type mockEntry struct {
