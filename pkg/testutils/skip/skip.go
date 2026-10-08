@@ -35,6 +35,14 @@ func WithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
 		args...)
 }
 
+// WithPublicIssue is like WithIssue, but for legacy issues tracked in the
+// public cockroachdb/cockroach repo.
+func WithPublicIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	maybeSkip(t, fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", githubIssueID),
+		args...)
+}
+
 // Unimplemented skips this test case, loggint the given issue ID. It
 // is included in addition to WithIssue to allow the caller to signal
 // that this test is not being skipped because of a bug, but rather
@@ -42,6 +50,13 @@ func WithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
 func Unimplemented(t SkippableTest, githubIssueID int, args ...interface{}) {
 	t.Helper()
 	maybeSkip(t, withIssue("unimplemented", githubIssueID), args...)
+}
+
+// UnimplementedWithPublicIssue is like Unimplemented, but for legacy issues
+// tracked in the public cockroachdb/cockroach repo.
+func UnimplementedWithPublicIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	maybeSkip(t, withPublicIssue("unimplemented", githubIssueID), args...)
 }
 
 // IgnoreLint skips this test, explicitly marking it as not a test that
@@ -79,6 +94,15 @@ func UnderDeadlockWithIssue(t SkippableTest, githubIssueID int, args ...interfac
 	}
 }
 
+// UnderDeadlockWithPublicIssue is like UnderDeadlockWithIssue, but for legacy issues
+// tracked in the public cockroachdb/cockroach repo.
+func UnderDeadlockWithPublicIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	if syncutil.DeadlockEnabled {
+		maybeSkip(t, withPublicIssue("disabled under deadlock detector", githubIssueID), args...)
+	}
+}
+
 // UnderRace skips this test if the race detector is enabled.
 func UnderRace(t SkippableTest, args ...interface{}) {
 	t.Helper()
@@ -101,6 +125,15 @@ func UnderRaceWithIssue(t SkippableTest, githubIssueID int, args ...interface{})
 	t.Helper()
 	if util.RaceEnabled {
 		maybeSkip(t, withIssue("disabled under race", githubIssueID), args...)
+	}
+}
+
+// UnderRaceWithPublicIssue is like UnderRaceWithIssue, but for legacy issues
+// tracked in the public cockroachdb/cockroach repo.
+func UnderRaceWithPublicIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	if util.RaceEnabled {
+		maybeSkip(t, withPublicIssue("disabled under race", githubIssueID), args...)
 	}
 }
 
@@ -141,6 +174,15 @@ func UnderStressWithIssue(t SkippableTest, githubIssueID int, args ...interface{
 	}
 }
 
+// UnderStressWithPublicIssue is like UnderStressWithIssue, but for legacy issues
+// tracked in the public cockroachdb/cockroach repo.
+func UnderStressWithPublicIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	if Stress() {
+		maybeSkip(t, withPublicIssue("disabled under stress", githubIssueID), args...)
+	}
+}
+
 // UnderMetamorphic skips this test during metamorphic runs, which are tests
 // run with the metamorphic build tag.
 func UnderMetamorphic(t SkippableTest, args ...interface{}) {
@@ -157,6 +199,15 @@ func UnderMetamorphicWithIssue(t SkippableTest, githubIssueID int, args ...inter
 	t.Helper()
 	if metamorphicutil.IsMetamorphicBuild {
 		maybeSkip(t, withIssue("disabled under metamorphic", githubIssueID), args...)
+	}
+}
+
+// UnderMetamorphicWithPublicIssue is like UnderMetamorphicWithIssue, but for legacy issues
+// tracked in the public cockroachdb/cockroach repo.
+func UnderMetamorphicWithPublicIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	if metamorphicutil.IsMetamorphicBuild {
+		maybeSkip(t, withPublicIssue("disabled under metamorphic", githubIssueID), args...)
 	}
 }
 
@@ -185,6 +236,16 @@ func UnderDuressWithIssue(t SkippableTest, githubIssueID int, args ...interface{
 	if Duress() {
 		skipReason := fmt.Sprintf("duress (current config %s)", testConfig())
 		maybeSkip(t, withIssue(skipReason, githubIssueID), args...)
+	}
+}
+
+// UnderDuressWithPublicIssue is like UnderDuressWithIssue, but for legacy
+// issues tracked in the public cockroachdb/cockroach repo.
+func UnderDuressWithPublicIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	if Duress() {
+		skipReason := fmt.Sprintf("duress (current config %s)", testConfig())
+		maybeSkip(t, withPublicIssue(skipReason, githubIssueID), args...)
 	}
 }
 
@@ -238,6 +299,14 @@ func testConfig() string {
 }
 
 func withIssue(reason string, githubIssueID int) string {
+	return fmt.Sprintf(
+		"%s. issue: https://github.com/cockroachdb/cockroach/issues/%d",
+		reason,
+		githubIssueID,
+	)
+}
+
+func withPublicIssue(reason string, githubIssueID int) string {
 	return fmt.Sprintf(
 		"%s. issue: https://github.com/cockroachdb/cockroach/issues/%d",
 		reason,
