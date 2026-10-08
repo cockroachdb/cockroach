@@ -8,7 +8,6 @@ package backup
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -17,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 )
 
@@ -78,7 +77,7 @@ func runCompactionPlan(
 	}
 
 	spansToCompact, err := getSpansToCompact(
-		ctx, execCtx, manifest, compactChain.chainToCompact, details, defaultStore, kmsEnv,
+		ctx, execCtx, manifest, introducedSpanFrontier, details, defaultStore, kmsEnv,
 	)
 	if err != nil {
 		return err
@@ -290,45 +289,58 @@ func createCompactionCorePlacements(
 	return corePlacements, nil
 }
 
-// getSpansToCompact returns all remaining spans the backup manifest that
-// need to be compacted.
+// getSpansToCompact returns the spans the compaction job still needs to
+// compact. The compacted backup's manifest copies the Spans of the last backup
+// in the chain, which already decided what the chain covers, so the job
+// compacts exactly those spans, whatever they hold, minus the ones it already
+// completed.
 func getSpansToCompact(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	manifest *backuppb.BackupManifest,
-	backupChain []backuppb.BackupManifest,
+	introducedSpanFrontier spanUtils.Frontier,
 	details jobspb.BackupDetails,
 	defaultStore cloud.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
 ) (roachpb.Spans, error) {
-	var tables []catalog.TableDescriptor
-	for _, desc := range manifest.Descriptors {
-		catDesc := backupinfo.NewDescriptorForManifest(&desc)
-		if table, ok := catDesc.(catalog.TableDescriptor); ok {
-			tables = append(tables, table)
-		}
-	}
-	backupCodec, err := backupinfo.MakeBackupCodec(backupChain)
-	if err != nil {
-		return nil, err
-	}
-	spans, err := spansForAllRestoreTableIndexes(
-		backupCodec,
-		tables,
-		nil,   /* revs */
-		false, /* schemaOnly */
-		false, /* forOnlineRestore */
-	)
-	if err != nil {
-		return nil, err
-	}
 	completedSpans, completedIntroducedSpans, err := getCompletedSpans(
 		ctx, execCtx, manifest, defaultStore, details.EncryptionOptions, kmsEnv,
 	)
 	if err != nil {
 		return nil, err
 	}
-	spans = filterSpans(spans, completedSpans)
+	spans := filterSpans(manifest.Spans, completedSpans)
 	spans = filterSpans(spans, completedIntroducedSpans)
-	return spans, nil
+	// Backup merges adjacent spans in its manifest to keep down the number of
+	// spans it exports and protects, so one span can join keys introduced in
+	// different backups. Restore and compaction skip the backups older than the
+	// one that introduced a span, since that backup exported all of the span's
+	// data. Together, a merged span is treated as introduced all at once, and
+	// its keys that were introduced earlier lose the older backups holding
+	// them. Cutting at the introduced spans' boundaries leaves each span
+	// introduced at a single time, so every key keeps the backups it needs.
+	return splitAtIntroducedSpans(spans, introducedSpanFrontier), nil
+}
+
+// splitAtIntroducedSpans cuts each of spans wherever an entry of
+// introducedSpanFrontier starts or ends, so that each returned span is either
+// untracked by the frontier or covered by a single entry of it.
+func splitAtIntroducedSpans(
+	spans roachpb.Spans, introducedSpanFrontier spanUtils.Frontier,
+) roachpb.Spans {
+	var pieces roachpb.Spans
+	for _, sp := range spans {
+		start := sp.Key
+		for introduced := range introducedSpanFrontier.SpanEntries(sp) {
+			if start.Compare(introduced.Key) < 0 {
+				pieces = append(pieces, roachpb.Span{Key: start, EndKey: introduced.Key})
+			}
+			pieces = append(pieces, introduced)
+			start = introduced.EndKey
+		}
+		if start.Compare(sp.EndKey) < 0 {
+			pieces = append(pieces, roachpb.Span{Key: start, EndKey: sp.EndKey})
+		}
+	}
+	return pieces
 }
