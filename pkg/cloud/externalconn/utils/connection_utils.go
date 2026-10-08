@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
@@ -46,16 +45,17 @@ func CheckExternalStorageConnection(
 		return errors.Wrap(err, "failed to write a sentinel ExternalStorage file")
 	}
 
-	// List the sentinel file.
+	// List the sentinel file, using it as the listing prefix so we don't
+	// enumerate every object under the URI. List strips the listing prefix from
+	// returned names, so the marker itself comes back as "".
 	var foundFile bool
-	if err := es.List(ctx, "", "", func(s string) error {
-		paths := strings.Split(s, "/")
-		s = paths[len(paths)-1]
-		if match := strings.HasPrefix(s, markerFile); match {
+	if err := es.List(ctx, markerFile, "", func(s string) error {
+		if s == "" {
 			foundFile = true
+			return cloud.ErrListingDone
 		}
-		return err
-	}); err != nil {
+		return nil
+	}); err != nil && !errors.Is(err, cloud.ErrListingDone) {
 		return errors.Wrap(err, "failed to list sentinel ExternalStorage file")
 	} else if !foundFile {
 		return errors.Newf("failed to find sentinel ExternalStorage file '%s'", markerFile)
