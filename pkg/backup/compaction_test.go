@@ -28,6 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -39,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/fatih/structs"
 	"github.com/stretchr/testify/require"
 )
@@ -854,6 +858,133 @@ func TestToggleCompactionForRestore(t *testing.T) {
 
 	require.Equal(t, 2, getNumBackupsInRestore(t, db, compRestoreID))
 	require.Equal(t, 3, getNumBackupsInRestore(t, db, classicRestoreID))
+}
+
+// TestBackupCompactionIndexBuild compacts a backup chain around a CREATE INDEX,
+// restores it, and checks that every row can be read through both the primary
+// index and the new index.
+//
+// The chain is a full backup, an incremental I1 holding rows no other backup
+// has, an incremental I2 that is the first backup to include the new index, and
+// one incremental after the compacted window I1..I2. The subtests differ in the
+// state of the new index at the end of the window:
+//   - in-flight-at-end: built but not yet public, so the compacted backup
+//     covers the span of an index that restore at that time would not restore.
+//   - public-at-end: public. Its span is adjacent to the primary index's span
+//     and was introduced by I2, inside the window.
+func TestBackupCompactionIndexBuild(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// pauseBeforePublish, when set, pauses the next declarative schema change
+	// job before the stage that makes the new index public.
+	var pauseBeforePublish atomic.Bool
+	tempDir, tempDirCleanup := testutils.TempDir(t)
+	defer tempDirCleanup()
+	_, db, cleanup := backupRestoreTestSetupEmpty(
+		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+						BeforeStage: func(p scplan.Plan, stageIdx int) error {
+							if publishesSecondaryIndex(p, stageIdx) &&
+								pauseBeforePublish.CompareAndSwap(true, false) {
+								return jobs.MarkPauseRequestError(errors.New("paused before publishing the index"))
+							}
+							return nil
+						},
+					},
+				},
+			},
+		},
+	)
+	defer cleanup()
+
+	for _, tc := range []struct {
+		name          string
+		inFlightAtEnd bool
+	}{
+		{name: "in-flight-at-end", inFlightAtEnd: true},
+		{name: "public-at-end"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dbName := strings.ReplaceAll(tc.name, "-", "_")
+			targets := "DATABASE " + dbName
+			tbl := dbName + ".t"
+			collectionURI := []string{"nodelocal://1/index-build/" + dbName}
+			insert := func(from, to int) {
+				db.Exec(t, "INSERT INTO "+tbl+" SELECT g, g FROM generate_series($1, $2) AS g", from, to)
+			}
+
+			db.Exec(t, "CREATE DATABASE "+dbName)
+			db.Exec(t, "CREATE TABLE "+tbl+" (k INT PRIMARY KEY, v INT)")
+			insert(1, 100)
+			start := getTime()
+			backupStmt := fullBackupQuery(targets, collectionURI, start, noOpts)
+			db.Exec(t, backupStmt)
+
+			insert(101, 110)
+			db.Exec(t, incBackupQuery(targets, collectionURI, noAOST, noOpts))
+
+			createIndex := "CREATE INDEX t_v_idx ON " + tbl + " (v)"
+			var end hlc.Timestamp
+			if tc.inFlightAtEnd {
+				pauseBeforePublish.Store(true)
+				db.ExpectErr(t, "paused before publishing the index", createIndex)
+				end = getTime()
+				var jobID jobspb.JobID
+				db.QueryRow(t,
+					`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'NEW SCHEMA CHANGE' AND status = 'paused'`,
+				).Scan(&jobID)
+				db.Exec(t, "RESUME JOB $1", jobID)
+				jobutils.WaitForJobToSucceed(t, db, jobID)
+			} else {
+				db.Exec(t, createIndex)
+				end = getTime()
+			}
+			db.Exec(t, incBackupQuery(targets, collectionURI, end, noOpts))
+			var compactionJobID jobspb.JobID
+			db.QueryRow(t, compactionQuery(
+				backupStmt, getLatestFullDir(t, db, collectionURI[0]), start, end,
+			)).Scan(&compactionJobID)
+			jobutils.WaitForJobToSucceed(t, db, compactionJobID)
+
+			insert(111, 120)
+			db.Exec(t, incBackupQuery(targets, collectionURI, noAOST, noOpts))
+
+			restoredDB := "restored_" + dbName
+			var restoreJobID jobspb.JobID
+			var unused any
+			db.QueryRow(t, restoreQuery(
+				t, targets, collectionURI, noAOST, fmt.Sprintf("WITH new_db_name = '%s'", restoredDB),
+			)).Scan(&restoreJobID, &unused, &unused, &unused)
+			// The restore reads the full backup, the compacted backup and the last
+			// incremental.
+			require.Equal(t, 3, getNumBackupsInRestore(t, db, restoreJobID))
+			rowsByIndex := make(map[string]int)
+			for _, index := range []string{"t_pkey", "t_v_idx"} {
+				var count int
+				db.QueryRow(t, fmt.Sprintf(
+					"SELECT count(*) FROM %s.t@{FORCE_INDEX=%s}", restoredDB, index,
+				)).Scan(&count)
+				rowsByIndex[index] = count
+			}
+			require.Equal(t, map[string]int{"t_pkey": 120, "t_v_idx": 120}, rowsByIndex)
+		})
+	}
+}
+
+// publishesSecondaryIndex reports whether the stage at stageIdx makes a
+// secondary index public.
+func publishesSecondaryIndex(p scplan.Plan, stageIdx int) bool {
+	stage := p.Stages[stageIdx]
+	for i, target := range p.Targets {
+		if _, ok := target.Element().(*scpb.SecondaryIndex); ok &&
+			stage.Before[i] != scpb.Status_PUBLIC && stage.After[i] == scpb.Status_PUBLIC {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCheckCompactionManifestFields(t *testing.T) {
