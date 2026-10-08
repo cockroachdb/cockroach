@@ -39,14 +39,13 @@ jobs:
       with:
         version: "8.6.10"
 
-      # Publishing authenticates to npm via OIDC trusted publishing, so no
-      # NODE_AUTH_TOKEN is configured here.
+      # This branch's UI toolchain (webpack 4) fails to build on Node 17+, so
+      # install and build run on Node 16. Node is switched to 22 just before
+      # publishing; see "Setup NodeJS for publishing" below.
     - name: Setup NodeJS
       uses: actions/setup-node@v4
       with:
         node-version: 16
-        registry-url: 'https://registry.npmjs.org'
-        always-auth: true
         cache: 'pnpm'
         cache-dependency-path: "${{ github.workspace }}/pkg/ui/pnpm-lock.yaml"
 
@@ -129,11 +128,21 @@ jobs:
           exit 1
         fi
 
-      # npm trusted publishing (OIDC) requires npm >= 11.5.1 and Node >= 22.14;
-      # the runner's bundled npm may be older, so install a compatible version.
-      # The upload uses npm rather than pnpm because the repo's pinned pnpm
-      # (8.6.10) predates pnpm's OIDC trusted-publishing support (added in
-      # pnpm 10).
+      # npm trusted publishing (OIDC) requires npm >= 11.5.1 and Node >= 22.14,
+      # so switch to Node 22 for the upload and install a compatible npm. The
+      # build output in dist/ is already in place and is only packed here.
+      # Publishing authenticates to npm via OIDC trusted publishing, so no
+      # NODE_AUTH_TOKEN is configured. The upload uses npm rather than pnpm
+      # because the branch's pinned pnpm (8.6.10) predates pnpm's OIDC
+      # trusted-publishing support (added in pnpm 10).
+    - name: Setup NodeJS for publishing
+      if: steps.version-check.outputs.published == 'no'
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        registry-url: 'https://registry.npmjs.org'
+        always-auth: true
+
     - name: Upgrade npm for OIDC trusted publishing
       if: steps.version-check.outputs.published == 'no'
       run: npm install -g npm@11.5.1
