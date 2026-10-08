@@ -407,7 +407,9 @@ import (
 //
 //  - skip #ISSUE [args...]
 //    Skips this entire logic test using skip.WithIssue(). Should be near top of
-//    test file. Note that this is different from `skipif`.
+//    test file. Note that this is different from `skipif`. ISSUE refers to an
+//    issue in the private cockroachlabs/cockroach repo, as it does for the
+//    `skip under` variant below.
 //
 //  - skip ignorelint [args...]
 //    Skips this entire logic test using skip.IgnoreLint(). Should be near top
