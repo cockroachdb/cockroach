@@ -19,12 +19,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// NudgeAdoptionQueues nudges the adoption queue of every server's job registry
+// in the cluster. Because jobs are claimed by the node that creates them, a
+// nudge to a single registry only adopts jobs that node owns; nudging all
+// servers ensures whichever node owns a job promptly adopts it.
+func NudgeAdoptionQueues(t testing.TB, tc serverutils.TestClusterInterface) {
+	t.Helper()
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.ApplicationLayer(i).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+	}
+}
 
 // WaitForJobToSucceed waits for the specified job ID to succeed.
 func WaitForJobToSucceed(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
