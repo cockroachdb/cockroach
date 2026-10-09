@@ -5,19 +5,27 @@ go_library(
     srcs = [
         "doc.go",
         "job.go",
+        "settle.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbackup",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/settings",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/isql",
         "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/schemachanger/screl",
+        "//pkg/sql/sem/catid",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -26,9 +34,10 @@ go_test(
     srcs = [
         "job_test.go",
         "main_test.go",
+        "settle_test.go",
     ],
+    embed = [":scbackup"],
     deps = [
-        ":scbackup",
         "//pkg/base",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -40,6 +49,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/isql",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catid",
         "//pkg/testutils/serverutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",

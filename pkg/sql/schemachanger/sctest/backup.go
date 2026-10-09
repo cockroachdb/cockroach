@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbackup"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
@@ -445,10 +446,54 @@ func exerciseBackupRestore(
 				tdb.Exec(t, cs.CreateDatabaseStmt)
 			}
 
+			// Store the highest job ID, so we know which jobs are relevant.
+			tdb.Exec(t, "USE system")
+			jobID := tdb.QueryRow(t, "SELECT COALESCE(max(job_id), 0) FROM [SHOW JOBS]")
+			var maxJobID int64
+			jobID.Scan(&maxJobID)
+
 			// RESTORE.
 			pe.RequestPlan()
 			tdb.Exec(t, rc.stmt)
 			waitForSchemaChangesToFinish(t, tdb)
+
+			// A restored job that depends on index data RESTORE does not bring back
+			// is settled to the state at backup time, which matches neither the
+			// success nor the rollback expectation. A settled job runs as a rollback,
+			// so it must end as failed. A job whose remaining stages hit a permanent
+			// error also ends as failed, but leaves its schema changer state behind
+			// or its descriptors invalid.
+			settledJobs := tdb.QueryStr(t, `
+				SELECT job_id, status, error FROM [SHOW JOBS]
+				WHERE job_type = 'NEW SCHEMA CHANGE' AND job_id > $1 AND strpos(description, $2) = 1`,
+				maxJobID, scbackup.SettledJobDescriptionPrefix)
+			if len(settledJobs) > 0 {
+				for _, j := range settledJobs {
+					require.Equalf(t, "failed", j[1],
+						"settled post-RESTORE schema change job %s did not finish its rollback: %s",
+						j[0], j[2])
+				}
+				require.Empty(t, tdb.QueryStr(t, `
+					WITH db AS (
+						SELECT id FROM system.namespace WHERE "parentID" = 0 AND name = $1
+					)
+					SELECT id FROM (
+						SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS d
+						FROM system.descriptor
+						WHERE id IN (SELECT id FROM db)
+							OR id IN (SELECT id FROM system.namespace WHERE "parentID" = (SELECT id FROM db))
+					)
+					WHERE COALESCE(d->'table', d->'type', d->'schema', d->'database')
+						->'declarativeSchemaChangerState' IS NOT NULL`, cs.DatabaseName),
+					"descriptors still hold schema changer state after a settled restore")
+				tdb.CheckQueryResults(t, fmt.Sprintf(
+					`SELECT count(*) FROM %q.crdb_internal.invalid_objects`, cs.DatabaseName),
+					[][]string{{"0"}})
+				t.Log("post-RESTORE schema change was settled to the state at backup time; " +
+					"skipping comparison")
+				tdb.Exec(t, fmt.Sprintf("DROP DATABASE %q CASCADE", cs.DatabaseName))
+				return
+			}
 
 			// Collect the end state following the post-RESTORE schema change.
 			tdb.Exec(t, fmt.Sprintf("USE %q", cs.DatabaseName))
