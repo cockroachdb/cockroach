@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 	"unsafe"
@@ -5312,8 +5313,20 @@ func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
 
-	// We should never be comparing two different versions of the same enum.
-	if v.EnumTyp.TypeMeta.Version != d.EnumTyp.TypeMeta.Version {
+	// Comparing values produced with different descriptor versions of the same
+	// enum indicates a bug. However, comparing their physical representations
+	// orders them the same way as either version would as long as the two
+	// versions are consistent, which we allow for adjacent versions.
+	//
+	// A larger difference indicates stale metadata, which could lead to
+	// incorrect results, so it fails the assertion.
+	//
+	// In test builds, any version difference fails the assertion so that bugs
+	// leading to it are surfaced rather than masked by the relaxation above
+	// (see TestingRelaxEnumVersionSkewAssertion).
+	dv, vv := d.EnumTyp.TypeMeta.Version, v.EnumTyp.TypeMeta.Version
+	if dv != vv && (strictEnumVersionSkewAssertion.Load() ||
+		max(dv, vv)-min(dv, vv) > 1 || !enumValuesAreConsistent(d, v)) {
 		var gist redact.SafeString
 		if PlanGistFromCtx != nil {
 			// Plan gist, by construction, doesn't contain any PII, so it's a
@@ -5329,6 +5342,153 @@ func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 
 	res := bytes.Compare(d.PhysicalRep, v.PhysicalRep)
 	return res, nil
+}
+
+// strictEnumVersionSkewAssertion, if set, makes DEnum.Compare fail on any
+// difference between the versions of the compared values. It's set in test
+// builds unless overridden via TestingRelaxEnumVersionSkewAssertion.
+var strictEnumVersionSkewAssertion = func() *atomic.Bool {
+	var b atomic.Bool
+	b.Store(buildutil.CrdbTestBuild)
+	return &b
+}()
+
+// TestingRelaxEnumVersionSkewAssertion makes DEnum.Compare allow comparisons
+// of adjacent enum versions in test builds, as it does in production builds,
+// for tests that exercise this relaxation. It returns a function that restores
+// the previous behavior.
+func TestingRelaxEnumVersionSkewAssertion() (cleanup func()) {
+	prev := strictEnumVersionSkewAssertion.Swap(false)
+	return func() { strictEnumVersionSkewAssertion.Store(prev) }
+}
+
+// enumValuesAreConsistent returns whether two values of the same enum type,
+// produced with different descriptor versions of the type, can be compared by
+// their physical representations. This requires the two versions to be
+// consistent (see enumVersionsAreConsistent) and each value, identified by its
+// physical and logical representations, to be a member of at least one of them.
+//
+// The check covers all values of the two versions rather than only the
+// compared ones because a plan built against one version and used with
+// another might contain other values that the comparison doesn't see, and
+// those would silently mean something else if, say, a value was renamed.
+func enumValuesAreConsistent(left, right *DEnum) bool {
+	leftMeta, rightMeta := left.EnumTyp.TypeMeta.EnumData, right.EnumTyp.TypeMeta.EnumData
+	if leftMeta == nil || rightMeta == nil {
+		return false
+	}
+	for _, d := range []*DEnum{left, right} {
+		if !enumValueIsMember(d, leftMeta) && !enumValueIsMember(d, rightMeta) {
+			return false
+		}
+	}
+	return enumVersionsAreConsistent(leftMeta, rightMeta)
+}
+
+// enumValueIsMember returns whether the given enum value, identified by its
+// physical and logical representations, is a member of the given version of
+// the enum type.
+func enumValueIsMember(d *DEnum, meta *types.EnumMetadata) bool {
+	for i := range meta.PhysicalRepresentations {
+		if bytes.Equal(meta.PhysicalRepresentations[i], d.PhysicalRep) &&
+			meta.LogicalRepresentations[i] == d.LogicalRep {
+			return true
+		}
+	}
+	return false
+}
+
+// enumVersionsAreConsistent returns whether two versions of an enum type agree
+// on the meaning of every physical and logical representation they share,
+// i.e. whether each member of one version is either a member of the other or
+// unknown to it by both of its representations. Adding or dropping values
+// keeps the versions consistent, while renaming a value or reusing a physical
+// representation for another value doesn't.
+//
+// Members are sorted by physical representation, so this merges the two
+// versions without allocating. The merge proceeds in groups of members with
+// equal physical representations since there can be several (e.g. the old and
+// the new name of a value renamed by the declarative schema changer).
+func enumVersionsAreConsistent(left, right *types.EnumMetadata) bool {
+	lPhys, rPhys := left.PhysicalRepresentations, right.PhysicalRepresentations
+	// groupEnd returns the end of the group of members starting at i with the
+	// same physical representation.
+	groupEnd := func(phys [][]byte, i int) int {
+		j := i + 1
+		for j < len(phys) && bytes.Equal(phys[j], phys[i]) {
+			j++
+		}
+		return j
+	}
+	var l, r int
+	for l < len(lPhys) || r < len(rPhys) {
+		var cmp int
+		switch {
+		case l == len(lPhys):
+			cmp = 1
+		case r == len(rPhys):
+			cmp = -1
+		default:
+			cmp = bytes.Compare(lPhys[l], rPhys[r])
+		}
+		lEnd, rEnd := l, r
+		if cmp <= 0 {
+			lEnd = groupEnd(lPhys, l)
+		}
+		if cmp >= 0 {
+			rEnd = groupEnd(rPhys, r)
+		}
+		lLogical, rLogical := left.LogicalRepresentations[l:lEnd], right.LogicalRepresentations[r:rEnd]
+		switch {
+		case cmp == 0:
+			// Both versions know the physical representation, so they must use it
+			// for the same logical representations.
+			if !enumLogicalRepsAreSame(lLogical, rLogical) {
+				return false
+			}
+		case cmp < 0:
+			// Only the left version knows the physical representation, so the
+			// right one must not use its logical representations.
+			if enumLogicalRepsAreUsed(lLogical, right.LogicalRepresentations) {
+				return false
+			}
+		default:
+			if enumLogicalRepsAreUsed(rLogical, left.LogicalRepresentations) {
+				return false
+			}
+		}
+		l, r = lEnd, rEnd
+	}
+	return true
+}
+
+// enumLogicalRepsAreSame returns whether the two given groups of logical
+// representations, which belong to the same physical representation in two
+// versions of an enum type, contain the same elements. The groups are tiny, so
+// quadratic lookups are fine.
+func enumLogicalRepsAreSame(left, right []string) bool {
+	for _, l := range left {
+		if !slices.Contains(right, l) {
+			return false
+		}
+	}
+	for _, r := range right {
+		if !slices.Contains(left, r) {
+			return false
+		}
+	}
+	return true
+}
+
+// enumLogicalRepsAreUsed returns whether any of the given logical
+// representations is used by the given version of an enum type.
+func enumLogicalRepsAreUsed(logical []string, version []string) bool {
+	for _, l := range logical {
+		if slices.Contains(version, l) {
+			return true
+		}
+	}
+	return false
 }
 
 // Prev implements the Datum interface.

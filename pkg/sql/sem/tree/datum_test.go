@@ -7,9 +7,12 @@ package tree
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -196,4 +199,162 @@ func BenchmarkDatumCompare(b *testing.B) {
 			}
 		})
 	}
+}
+
+// TestDEnumCompareAcrossVersions verifies that values of an enum produced with
+// adjacent descriptor versions of the type can be compared as long as the
+// versions are consistent, while values of versions further apart cannot.
+func TestDEnumCompareAcrossVersions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// This test exercises the relaxation of the assertion for adjacent enum
+	// versions, which test builds disable by default.
+	defer TestingRelaxEnumVersionSkewAssertion()()
+
+	ctx := context.Background()
+	type member struct {
+		logical  string
+		physical byte
+		readOnly bool
+	}
+	// value describes the value with the given logical representation of an
+	// enum with the given members at the given version.
+	type value struct {
+		version uint32
+		members []member
+		logical string
+	}
+	makeDEnum := func(v value) *DEnum {
+		meta := &types.EnumMetadata{}
+		for _, m := range v.members {
+			meta.LogicalRepresentations = append(meta.LogicalRepresentations, m.logical)
+			meta.PhysicalRepresentations = append(meta.PhysicalRepresentations, []byte{m.physical})
+			meta.IsMemberReadOnly = append(meta.IsMemberReadOnly, m.readOnly)
+		}
+		typ := types.MakeEnum(catid.TypeIDToOID(500), catid.TypeIDToOID(100500))
+		typ.TypeMeta = types.UserDefinedTypeMetadata{
+			Name:     &types.UserDefinedTypeName{Schema: "public", Name: "e"},
+			Version:  v.version,
+			EnumData: meta,
+		}
+		// Construct the value directly since read-only members can't be
+		// constructed from their logical representation.
+		idx := slices.Index(meta.LogicalRepresentations, v.logical)
+		require.NotEqual(t, -1, idx)
+		return &DEnum{EnumTyp: typ, PhysicalRep: meta.PhysicalRepresentations[idx], LogicalRep: v.logical}
+	}
+
+	ab := []member{{logical: "a", physical: 0x40}, {logical: "b", physical: 0x80}}
+	// The declarative schema changer renames a value by first adding the new
+	// name as a read-only member with the same physical representation while
+	// demoting the old one, and it removes the old one in the next version.
+	declarativeRename := []member{
+		{logical: "aa", physical: 0x40, readOnly: true},
+		{logical: "a", physical: 0x40, readOnly: true},
+		{logical: "b", physical: 0x80},
+	}
+	testCases := []struct {
+		name        string
+		left, right value
+		expected    int
+		expectedErr bool
+	}{
+		{name: "same version", left: value{2, ab, "a"}, right: value{2, ab, "b"}, expected: -1},
+		{name: "newer version on the right", left: value{2, ab, "a"}, right: value{3, ab, "b"}, expected: -1},
+		{name: "newer version on the left", left: value{3, ab, "a"}, right: value{2, ab, "b"}, expected: -1},
+		{name: "two versions apart", left: value{2, ab, "a"}, right: value{4, ab, "b"}, expectedErr: true},
+		{name: "two versions apart reversed", left: value{4, ab, "a"}, right: value{2, ab, "b"}, expectedErr: true},
+		{
+			name:     "added value",
+			left:     value{2, ab, "a"},
+			right:    value{3, append(slices.Clone(ab), member{logical: "c", physical: 0xc0, readOnly: true}), "c"},
+			expected: -1,
+		},
+		{
+			name:     "dropped value",
+			left:     value{2, []member{{logical: "a", physical: 0x40}, {logical: "b", physical: 0x80, readOnly: true}}, "b"},
+			right:    value{3, []member{{logical: "a", physical: 0x40}}, "a"},
+			expected: 1,
+		},
+		{
+			// The legacy schema changer renames a value in place.
+			name:        "renamed value/legacy schema changer",
+			left:        value{2, ab, "a"},
+			right:       value{3, []member{{logical: "aa", physical: 0x40}, {logical: "b", physical: 0x80}}, "aa"},
+			expectedErr: true,
+		},
+		{
+			name:        "renamed value/declarative schema changer/new name",
+			left:        value{2, ab, "a"},
+			right:       value{3, declarativeRename, "aa"},
+			expectedErr: true,
+		},
+		{
+			name:        "renamed value/declarative schema changer/old name",
+			left:        value{3, declarativeRename, "a"},
+			right:       value{4, []member{{logical: "aa", physical: 0x40}, {logical: "b", physical: 0x80}}, "aa"},
+			expectedErr: true,
+		},
+		{
+			// The legacy schema changer can swap two names in a single version,
+			// so the same logical representation denotes different values.
+			name:        "swapped names",
+			left:        value{2, ab, "a"},
+			right:       value{3, []member{{logical: "b", physical: 0x40}, {logical: "a", physical: 0x80}}, "a"},
+			expectedErr: true,
+		},
+		// The versions must agree on all values, not only the compared ones,
+		// since a plan built against one version might contain other values
+		// that mean something else in the other version.
+		{
+			name:        "unrelated value/renamed value/legacy schema changer",
+			left:        value{2, ab, "b"},
+			right:       value{3, []member{{logical: "aa", physical: 0x40}, {logical: "b", physical: 0x80}}, "b"},
+			expectedErr: true,
+		},
+		{
+			name:        "unrelated value/renamed value/declarative schema changer",
+			left:        value{2, ab, "b"},
+			right:       value{3, declarativeRename, "b"},
+			expectedErr: true,
+		},
+		{
+			name: "unrelated value/swapped names",
+			left: value{2, append(slices.Clone(ab), member{logical: "c", physical: 0xc0}), "c"},
+			right: value{3, []member{
+				{logical: "b", physical: 0x40}, {logical: "a", physical: 0x80}, {logical: "c", physical: 0xc0},
+			}, "c"},
+			expectedErr: true,
+		},
+		{
+			// A value can't move to another physical representation between
+			// adjacent versions in practice (that takes dropping it and adding it
+			// back), but the check must still detect that the same logical
+			// representation denotes a different value.
+			name:        "unrelated value/moved value",
+			left:        value{2, ab, "a"},
+			right:       value{3, []member{{logical: "a", physical: 0x40}, {logical: "b", physical: 0xe0}}, "a"},
+			expectedErr: true,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := makeDEnum(tc.left).Compare(ctx, noopUnwrapCompareContext{}, makeDEnum(tc.right))
+			if tc.expectedErr {
+				require.ErrorContains(t, err, "comparison of two different versions of enum")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, res)
+		})
+	}
+
+	// A value that is a member of neither version was produced with yet another
+	// version of the type.
+	t.Run("value of neither version", func(t *testing.T) {
+		left := makeDEnum(value{2, ab, "a"})
+		left.PhysicalRep, left.LogicalRep = []byte{0x60}, "x"
+		_, err := left.Compare(ctx, noopUnwrapCompareContext{}, makeDEnum(value{3, ab, "a"}))
+		require.ErrorContains(t, err, "comparison of two different versions of enum")
+	})
 }
