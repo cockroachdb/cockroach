@@ -79,7 +79,9 @@ func TestCreateDeclarativeSchemaChangeJobs(t *testing.T) {
 
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			jobIDs, err := scbackup.CreateDeclarativeSchemaChangeJobs(ctx, execCfg.JobRegistry, txn, mutCatalog.Catalog)
+			jobIDs, err := scbackup.CreateDeclarativeSchemaChangeJobs(
+				ctx, execCfg.JobRegistry, txn, mutCatalog.Catalog, false, /* schemaOnly */
+			)
 			require.NoError(t, err)
 			require.Equal(t, 0, len(jobIDs))
 			require.Nil(t, mutCatalog.LookupDescriptor(1).GetDeclarativeSchemaChangerState())
@@ -122,7 +124,9 @@ func TestCreateDeclarativeSchemaChangeJobs(t *testing.T) {
 
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			jobIDs, err := scbackup.CreateDeclarativeSchemaChangeJobs(ctx, execCfg.JobRegistry, txn, mutCatalog.Catalog)
+			jobIDs, err := scbackup.CreateDeclarativeSchemaChangeJobs(
+				ctx, execCfg.JobRegistry, txn, mutCatalog.Catalog, false, /* schemaOnly */
+			)
 			require.NoError(t, err)
 			require.Equal(t, 1, len(jobIDs))
 			require.Nil(t, mutCatalog.LookupDescriptor(1).GetDeclarativeSchemaChangerState())

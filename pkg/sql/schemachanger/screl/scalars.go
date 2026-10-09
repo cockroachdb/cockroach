@@ -27,6 +27,17 @@ func GetDescID(e scpb.Element) catid.DescID {
 	return id.(catid.DescID)
 }
 
+// IsDescriptor returns true for a descriptor-element, i.e. an element which
+// owns its corresponding descriptor.
+func IsDescriptor(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.Database, *scpb.Schema, *scpb.Table, *scpb.View, *scpb.Sequence,
+		*scpb.AliasType, *scpb.EnumType, *scpb.CompositeType, *scpb.Function:
+		return true
+	}
+	return false
+}
+
 // AllTargetStateDescIDs applies AllTargetDescIDs to the whole target state.
 func AllTargetStateDescIDs(s scpb.TargetState) (ids catalog.DescriptorIDSet) {
 	for i := range s.Targets {

@@ -15,8 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 // CreateDeclarativeSchemaChangeJobs is called during the last phase of a
@@ -25,9 +30,14 @@ import (
 // jobs.
 //
 // It should only be called for backups which do not restore the jobs table
-// directly.
+// directly. schemaOnly reports whether the restore ingests no table data, in
+// which case no restored schema change is settled.
 func CreateDeclarativeSchemaChangeJobs(
-	ctx context.Context, registry *jobs.Registry, txn isql.Txn, allMut nstree.Catalog,
+	ctx context.Context,
+	registry *jobs.Registry,
+	txn isql.Txn,
+	allMut nstree.Catalog,
+	schemaOnly bool,
 ) ([]jobspb.JobID, error) {
 	byJobID := make(map[catpb.JobID][]catalog.MutableDescriptor)
 	_ = allMut.ForEachDescriptor(func(d catalog.Descriptor) error {
@@ -44,10 +54,25 @@ func CreateDeclarativeSchemaChangeJobs(
 		// to happen urgently is sequences. Others shouldn't be possible
 		// at this point.
 		newID := registry.MakeJobID()
+		// Settle the whole job if any of its descriptors depends on index data
+		// RESTORE does not bring back; settling only some would leave an
+		// inconsistent set of targets.
+		settled := false
+		if !schemaOnly && settleRestoredSchemaChanges.Get(&registry.ClusterSettings().SV) {
+			for _, d := range descs {
+				if dependsOnUnrestoredIndexData(d.GetDeclarativeSchemaChangerState(), restoredIndexIDs(d)) {
+					settled = true
+					break
+				}
+			}
+		}
 		var descriptorStates []*scpb.DescriptorState
 		for _, d := range descs {
 			ds := d.GetDeclarativeSchemaChangerState()
 			ds.JobID = newID
+			if settled {
+				settle(ds)
+			}
 			d.SetDeclarativeSchemaChangerState(ds)
 			descriptorStates = append(descriptorStates, ds)
 		}
@@ -81,15 +106,42 @@ func CreateDeclarativeSchemaChangeJobs(
 			}
 		}
 
-		const runningStatus = "restored from backup"
-		records = append(records, scexec.MakeDeclarativeSchemaChangeJobRecord(
+		runningStatus := "restored from backup"
+		if settled {
+			runningStatus = "restored from backup; settling to the state at backup time"
+			// Plan the settled state the way the job will, so that a state the
+			// planner rejects fails the RESTORE instead of leaving a job that can
+			// neither finish nor be canceled.
+			if _, err := scplan.MakePlan(ctx, currentState, scplan.Params{
+				ActiveVersion:              registry.ClusterSettings().Version.ActiveVersion(ctx),
+				InRollback:                 true,
+				ExecutionPhase:             scop.PostCommitNonRevertiblePhase,
+				SchemaChangerJobIDSupplier: func() jobspb.JobID { return newID },
+				SkipPlannerSanityChecks:    true,
+				MemAcc:                     mon.NewStandaloneUnlimitedAccount(),
+			}); err != nil {
+				return nil, errors.WithHintf(
+					errors.Wrapf(err, "settling restored schema change job %d", newID),
+					"setting %s to false restores the schema change without settling it",
+					settleRestoredSchemaChanges.Name(),
+				)
+			}
+		}
+		record := scexec.MakeDeclarativeSchemaChangeJobRecord(
 			newID,
 			currentState.Statements,
 			!currentState.Revertible, /* isNonCancelable */
 			currentState.Authorization,
-			screl.AllTargetStateDescIDs(currentState.TargetState),
+			descsToSchemaChange,
 			runningStatus,
-		))
+		)
+		if settled {
+			record.Description = SettledJobDescriptionPrefix + record.Description
+			log.Warningf(ctx, "settling restored schema change job %d on descriptors %v to the "+
+				"state at backup time: it depends on index data the restore does not bring back",
+				newID, &descsToSchemaChange)
+		}
+		records = append(records, record)
 	}
 	jobIDs, err := registry.CreateJobsWithTxn(ctx, txn, records)
 	return jobIDs, err

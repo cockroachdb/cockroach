@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/security/username",
+        "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
