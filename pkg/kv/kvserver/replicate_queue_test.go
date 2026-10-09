@@ -175,7 +175,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 // rebalances the replicas and leases.
 func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 156293)
+	skip.WithPublicIssue(t, 156293)
 	skip.UnderDuress(t) // eight stores is too much under duress
 	scope := log.Scope(t)
 	defer scope.Close(t)
@@ -393,7 +393,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 // to an odd number.
 func TestReplicateQueueUpReplicateOddVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderRaceWithIssue(t, 57144, "flaky under race")
+	skip.UnderRaceWithPublicIssue(t, 57144, "flaky under race")
 	defer log.Scope(t).Close(t)
 	const replicaCount = 3
 
@@ -650,8 +650,8 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes a long time or times out under race")
-	skip.UnderDeadlockWithIssue(t, 94383)
-	skip.UnderMetamorphicWithIssue(t, 99207)
+	skip.UnderDeadlockWithPublicIssue(t, 94383)
+	skip.UnderMetamorphicWithPublicIssue(t, 99207)
 
 	ctx := context.Background()
 
@@ -1758,7 +1758,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderDuressWithIssue(t, 38565)
+	skip.UnderDuressWithPublicIssue(t, 38565)
 	skip.UnderShort(t, 38565)
 
 	ctx := context.Background()
@@ -1915,7 +1915,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1min under race")
 	skip.UnderDeadlock(t, "takes >1min under deadlock")
-	skip.UnderStressWithIssue(t, 53875)
+	skip.UnderStressWithPublicIssue(t, 53875)
 
 	ctx := context.Background()
 	clusterArgs := base.TestClusterArgs{

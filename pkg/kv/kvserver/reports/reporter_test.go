@@ -120,8 +120,8 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressWithIssue(t, 134948)
-	skip.UnderRaceWithIssue(t, 134948)
+	skip.UnderStressWithPublicIssue(t, 134948)
+	skip.UnderRaceWithPublicIssue(t, 134948)
 	skip.UnderShort(t)
 
 	ctx := context.Background()

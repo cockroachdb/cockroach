@@ -61,7 +61,7 @@ func (d *fakeResumer) CollectProfile(context.Context, interface{}) error {
 func TestShowChangefeedJobsDatabaseLevel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
+	skip.WithPublicIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)

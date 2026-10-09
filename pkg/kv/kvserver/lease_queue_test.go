@@ -566,7 +566,7 @@ func TestLeaseQueueShedsOnIOOverload(t *testing.T) {
 
 	// The SucceedsSoon has been observed to occasionally time out in both
 	// deadlock and race builds.
-	skip.UnderDuressWithIssue(t, 138903)
+	skip.UnderDuressWithPublicIssue(t, 138903)
 
 	ctx := context.Background()
 

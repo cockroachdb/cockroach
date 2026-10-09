@@ -82,7 +82,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	tdb.Exec(t, "SET CLUSTER SETTING kv.lock_table.unreplicated_lock_reliability.split.enabled = true")
 
 	t.Run("reset_sql_stats", func(t *testing.T) {
-		skip.UnderDeadlockWithIssue(t, 99559)
+		skip.UnderDeadlockWithPublicIssue(t, 99559)
 		testResetSQLStatsRPCForTenant(ctx, t, testHelper)
 	})
 
@@ -119,7 +119,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	})
 
 	t.Run("txn_id_resolution", func(t *testing.T) {
-		skip.UnderDeadlockWithIssue(t, 99770)
+		skip.UnderDeadlockWithPublicIssue(t, 99770)
 		testTxnIDResolutionRPC(ctx, t, testHelper)
 	})
 
@@ -415,7 +415,7 @@ func testTenantLogs(ctx context.Context, t *testing.T, helper serverccl.TenantTe
 func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressWithIssue(t, 113984)
+	skip.UnderStressWithPublicIssue(t, 113984)
 
 	ctx := context.Background()
 	sqlStatsKnobs := sqlstats.CreateTestingKnobs()

@@ -735,7 +735,7 @@ func TestReplicateManualSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 135968, "flaky test")
+	skip.WithPublicIssue(t, 135968, "flaky test")
 
 	ctx := context.Background()
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, replicationtestutils.DefaultTenantStreamingClustersArgs)
@@ -966,9 +966,9 @@ func TestStreamingReplanOnLag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderDuressWithIssue(t, 115850, "time to scatter ranges takes too long under duress")
+	skip.UnderDuressWithPublicIssue(t, 115850, "time to scatter ranges takes too long under duress")
 	skip.UnderMetamorphic(t, "time to scatter ranges takes too long under non-default settings")
-	skip.WithIssue(t, 115850)
+	skip.WithPublicIssue(t, 115850)
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs

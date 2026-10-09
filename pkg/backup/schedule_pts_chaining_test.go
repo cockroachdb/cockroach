@@ -105,7 +105,7 @@ func TestScheduleChainingLifecycle(t *testing.T) {
 		// get scheduled before the expected incremental backup, breaking the
 		// invariant the test expects. For this reason, skip the test if it's
 		// running close to midnight #spooky.
-		skip.WithIssue(t, 91640, "test flakes when the machine clock is too close to midnight")
+		skip.WithPublicIssue(t, 91640, "test flakes when the machine clock is too close to midnight")
 	}
 	th.sqlDB.Exec(t, `
 CREATE DATABASE db;

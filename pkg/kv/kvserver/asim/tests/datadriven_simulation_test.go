@@ -187,7 +187,7 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 ./dev test pkg/kv/kvserver/asim/tests --ignore-cache --rewrite -v -f TestDataDriven -- --test_env COCKROACH_RUN_ASIM_TESTS=true --test_env COCKROACH_ALWAYS_KEEP_TEST_LOGS=true
 */
 func TestDataDriven(t *testing.T) {
-	skip.UnderDuressWithIssue(t, 149875)
+	skip.UnderDuressWithPublicIssue(t, 149875)
 	leakTestAfter := leaktest.AfterTest(t)
 
 	// NB: we must use t.Cleanup instead of deferring this

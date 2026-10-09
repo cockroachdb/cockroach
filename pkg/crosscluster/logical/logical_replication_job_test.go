@@ -475,7 +475,7 @@ func TestLogicalReplicationCursorBeforeSchemaChange(t *testing.T) {
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 164290)
+	skip.WithPublicIssue(t, 164290)
 
 	ctx := context.Background()
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
@@ -1219,7 +1219,7 @@ func TestLogicalAutoReplan(t *testing.T) {
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 131184)
+	skip.WithPublicIssue(t, 131184)
 
 	ctx := context.Background()
 
@@ -1314,7 +1314,7 @@ func TestLogicalJobResiliency(t *testing.T) {
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 131184)
+	skip.WithPublicIssue(t, 131184)
 
 	ctx := context.Background()
 
@@ -2028,7 +2028,7 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 129569, "flakey test")
+	skip.WithPublicIssue(t, 129569, "flakey test")
 
 	ctx := context.Background()
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
@@ -2313,7 +2313,7 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 func TestUserPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
-	skip.UnderRaceWithIssue(t, 142992)
+	skip.UnderRaceWithPublicIssue(t, 142992)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()

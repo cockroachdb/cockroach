@@ -560,7 +560,7 @@ func TestRefreshThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testutilsccl.ServerlessOnly(t)
 	defer log.ScopeWithoutShowLogs(t).Close(t)
-	skip.UnderDeadlockWithIssue(t, 71365)
+	skip.UnderDeadlockWithPublicIssue(t, 71365)
 
 	// Create the directory, but with extreme rate limiting so that directory
 	// will never refresh.

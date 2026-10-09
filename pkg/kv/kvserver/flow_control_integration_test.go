@@ -386,7 +386,7 @@ func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 150840)
+	skip.UnderDuressWithPublicIssue(t, 150840)
 	setRACv2DebugVModule(t)
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
@@ -918,7 +918,7 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// And also #148903, #148348, #144546, #141912.
-	skip.UnderDuressWithIssue(t, 149036)
+	skip.UnderDuressWithPublicIssue(t, 149036)
 	setRACv2DebugVModule(t)
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
@@ -1067,7 +1067,7 @@ func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// Under overload, token deductions may not line up as expected, likely due
 	// to dropping streams.
-	skip.UnderDuressWithIssue(t, 148079)
+	skip.UnderDuressWithPublicIssue(t, 148079)
 	setRACv2DebugVModule(t)
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
