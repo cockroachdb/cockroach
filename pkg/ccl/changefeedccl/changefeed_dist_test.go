@@ -484,7 +484,7 @@ func TestChangefeedWithNoDistributionStrategy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 120470)
+	skip.WithPublicIssue(t, 120470)
 
 	// The test is slow and will time out under deadlock/race/stress.
 	skip.UnderShort(t)
@@ -516,7 +516,7 @@ func TestChangefeedWithSimpleDistributionStrategy(t *testing.T) {
 	// The test is slow and will time out under deadlock/race/stress.
 	skip.UnderShort(t)
 	skip.UnderDuress(t)
-	skip.WithIssue(t, 121408)
+	skip.WithPublicIssue(t, 121408)
 
 	noLocality := func(i int) []roachpb.Tier {
 		return make([]roachpb.Tier, 0)

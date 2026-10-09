@@ -508,7 +508,7 @@ func TestUnavailableZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 141565)
+	skip.WithPublicIssue(t, 141565)
 
 	skip.UnderShort(t)
 	// Race builds make the servers so slow that they report spurious

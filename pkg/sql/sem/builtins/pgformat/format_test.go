@@ -138,10 +138,10 @@ func TestFormat(t *testing.T) {
 					switch typ.InternalType.ArrayContents {
 					case types.Geometry, types.Geography, types.Box2D:
 						// Casts from strings to arrays of these types are not currently supported.
-						skip.WithIssue(t, 49203)
+						skip.WithPublicIssue(t, 49203)
 					case types.Float4:
 						// Arrays of float4s are tricky, see issue for details.
-						skip.WithIssue(t, 84326)
+						skip.WithPublicIssue(t, 84326)
 					}
 				}
 				stmts := tdb.Query(t, r(`SELECT rowid, format('%L', c) FROM tablename WHERE c IS NOT NULL`))

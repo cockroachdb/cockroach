@@ -32,8 +32,8 @@ func TestDecommission(t *testing.T) {
 
 	// Five nodes is too much to reliably run under race/deadlock with our
 	// aggressive liveness timings.
-	skip.UnderRaceWithIssue(t, 39807, "#39807 and #37811")
-	skip.UnderDeadlockWithIssue(t, 39807, "#39807 and #37811")
+	skip.UnderRaceWithPublicIssue(t, 39807, "#39807 and #37811")
+	skip.UnderDeadlockWithPublicIssue(t, 39807, "#39807 and #37811")
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{

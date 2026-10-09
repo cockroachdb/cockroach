@@ -29,7 +29,7 @@ import (
 func TestRestoreMidSchemaChangeClusterSchemaOnly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRaceWithIssue(t, 56584)
+	skip.UnderRaceWithPublicIssue(t, 56584)
 
 	runTestRestoreMidSchemaChange(t, true, true)
 }
@@ -37,21 +37,21 @@ func TestRestoreMidSchemaChangeClusterSchemaOnly(t *testing.T) {
 func TestRestoreMidSchemaChangeCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRaceWithIssue(t, 56584)
+	skip.UnderRaceWithPublicIssue(t, 56584)
 
 	runTestRestoreMidSchemaChange(t, false, true)
 }
 func TestRestoreMidSchemaChangeSchemaOnly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRaceWithIssue(t, 56584)
+	skip.UnderRaceWithPublicIssue(t, 56584)
 
 	runTestRestoreMidSchemaChange(t, true, false)
 }
 func TestRestoreMidSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRaceWithIssue(t, 56584)
+	skip.UnderRaceWithPublicIssue(t, 56584)
 
 	runTestRestoreMidSchemaChange(t, false, false)
 }

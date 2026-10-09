@@ -860,7 +860,7 @@ func TestAuthenticationMux(t *testing.T) {
 				// As of this writing, timeseries requests to secondary
 				// tenants are overly restricted. This is a feature gap. See
 				// issue #102378.
-				skip.Unimplemented(t, 102378)
+				skip.UnimplementedWithPublicIssue(t, 102378)
 			}
 
 			// Verify normal client returns 401 Unauthorized.

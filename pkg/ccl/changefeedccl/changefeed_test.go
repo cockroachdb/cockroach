@@ -7638,7 +7638,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 
 	t.Run("sinkless enriched non-json", func(t *testing.T) {
-		skip.WithIssue(t, 130949, "sinkless feed validations are subpar")
+		skip.WithPublicIssue(t, 130949, "sinkless feed validations are subpar")
 		sqlDB.ExpectErrWithTimeout(
 			t, `some error`,
 			`CREATE CHANGEFEED FOR foo WITH envelope=enriched, format=avro, confluent_schema_registry='http://localhost:8888'`,
@@ -7897,7 +7897,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRaceWithIssue(t, 67565)
+	skip.UnderRaceWithPublicIssue(t, 67565)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -8574,7 +8574,7 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 	// This test is flaky on release branches that predate the checkpoint fix in
 	// https://github.com/cockroachdb/cockroach/pull/162546, where a lagging span
 	// causes a checkpoint save per range. That fix was not backported this far.
-	skip.WithIssue(t, 158913)
+	skip.WithPublicIssue(t, 158913)
 
 	// Add verbose logging to help debug future failures.
 	require.NoError(t, log.SetVModule("changefeed_processors=1,replica_rangefeed=2,"+

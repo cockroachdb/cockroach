@@ -4813,7 +4813,7 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 122629)
+	skip.WithPublicIssue(t, 122629)
 
 	ctx := context.Background()
 
