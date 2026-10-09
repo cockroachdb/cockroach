@@ -1245,6 +1245,8 @@ func TestTopLevelQueryStats(t *testing.T) {
 				},
 			},
 		},
+		Insecure:          true,
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(155944),
 	})
 	defer srv.Stopper().Stop(ctx)
 	conn, err := sqlDB.Conn(ctx)
@@ -1362,4 +1364,59 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x); SELECT x'
 			require.Equal(t, tc.expRowsWritten, rowsWritten)
 		})
 	}
+
+	// A routine first invoked after a pausable portal resumes still reports
+	// its statistics to the calling statement.
+	t.Run("routine first invoked after pausable portal resume", func(t *testing.T) {
+		var numRows int64
+		require.NoError(t, sqlDB.QueryRowContext(ctx, "SELECT count(*) FROM t").Scan(&numRows))
+		// Row 1 takes the ELSE branch, so reads() first runs on the second
+		// execution, after the planner has been reset between the two.
+		const query = "SELECT CASE WHEN i > 1 THEN reads() ELSE 0 END FROM generate_series(1, 2) AS g(i)"
+		testQuery.Store(query)
+
+		pg, err := pgtest.NewPGTest(ctx, srv.ApplicationLayer().AdvSQLAddr(), username.RootUser)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, pg.Close()) }()
+		errCh := make(chan error)
+		go func() {
+			defer close(errCh)
+			errCh <- func() error {
+				for _, line := range []string{
+					`Query {"String": "SET multiple_active_portals_enabled = true"}`,
+					`Query {"String": "BEGIN"}`,
+					fmt.Sprintf(`Parse {"Query": "%s"}`, query),
+					`Bind`,
+					`Execute {"MaxRows": 1}`,
+					`Execute {"MaxRows": 1}`,
+					`Sync`,
+					`Query {"String": "COMMIT"}`,
+				} {
+					if err := pg.SendOneLine(line); err != nil {
+						return err
+					}
+				}
+				until := pgtest.ParseMessages(strings.TrimSpace(strings.Repeat("ReadyForQuery\n", 4)))
+				_, err := pg.Until(false /* keepErrMsg */, until...)
+				return err
+			}()
+		}()
+		var rowsRead int64
+	LOOP:
+		for {
+			select {
+			case read := <-rowsReadCh:
+				rowsRead += read
+			case <-rowsWrittenCh:
+			case err := <-errCh:
+				require.NoError(t, err)
+				break LOOP
+			}
+		}
+		// This is the check that the forwarder was used: the rows of t are read
+		// inside reads(), and the routine forwarding its statistics is the only
+		// path by which their count reaches the outer statement's receiver, the
+		// one the knob above observes.
+		require.Equal(t, numRows, rowsRead)
+	})
 }
