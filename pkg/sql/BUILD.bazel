@@ -708,6 +708,7 @@ go_test(
         "drop_function_test.go",
         "drop_helpers_test.go",
         "drop_test.go",
+        "enum_version_skew_test.go",
         "err_count_test.go",
         "event_log_test.go",
         "exec_util_test.go",
