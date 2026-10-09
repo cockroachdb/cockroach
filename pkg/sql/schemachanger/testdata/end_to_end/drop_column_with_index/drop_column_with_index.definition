@@ -1,5 +1,6 @@
 setup
-CREATE TABLE t (i INT PRIMARY KEY, j INT, INDEX (j))
+CREATE TABLE t (i INT PRIMARY KEY, j INT, INDEX (j));
+INSERT INTO t SELECT g, g FROM generate_series(-10, -1) AS g;
 ----
 
 
@@ -11,7 +12,7 @@ INSERT INTO t (i) VALUES($stageKey + 1);
 # Each insert will be injected twice per stage, so we should always,
 # see a count of 2.
 stage-query phase=PostCommitPhase stage=:
-SELECT count(*)=$successfulStageCount*2 FROM t;
+SELECT count(*)=$successfulStageCount*2+10 FROM t;
 ----
 true
 
@@ -24,7 +25,7 @@ INSERT INTO t (i) VALUES($stageKey + 1);
 # Each insert will be injected twice per stage, so we should always,
 # see a count of 2.
 stage-query phase=PostCommitNonRevertiblePhase stage=:
-SELECT count(*)=$successfulStageCount*2 FROM t;
+SELECT count(*)=$successfulStageCount*2+10 FROM t;
 ----
 true
 

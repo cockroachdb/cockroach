@@ -1,5 +1,6 @@
 /* setup */
 create table t (i INT PRIMARY KEY, j INT, INDEX((j+1)));
+INSERT INTO t SELECT g, g FROM generate_series(-10, -1) AS g;
 ----
 ...
 +object {100 101 t} -> 104

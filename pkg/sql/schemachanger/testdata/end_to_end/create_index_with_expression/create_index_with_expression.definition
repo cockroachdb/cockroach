@@ -1,5 +1,8 @@
+# The seeded rows have odd keys, so the UPDATE injected below, which sets
+# v='a' for even keys, leaves them out of the count of 'a' rows.
 setup
 CREATE TABLE t (k INT PRIMARY KEY, v VARCHAR(256));
+INSERT INTO t SELECT g, 'Seed' || g::STRING FROM generate_series(-19, -1, 2) AS g;
 ----
 
 # Intentionally, insert one value for the partial index ('a')

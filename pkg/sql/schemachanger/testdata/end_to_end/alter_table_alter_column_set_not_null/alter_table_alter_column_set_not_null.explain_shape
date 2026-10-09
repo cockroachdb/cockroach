@@ -1,5 +1,6 @@
 /* setup */
 CREATE TABLE t (i INT PRIMARY KEY, j INT);
+INSERT INTO t SELECT g, g FROM generate_series(-10, -1) AS g;
 
 /* test */
 EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER COLUMN j SET NOT NULL;

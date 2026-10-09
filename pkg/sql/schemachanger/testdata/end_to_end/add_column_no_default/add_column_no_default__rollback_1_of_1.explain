@@ -1,6 +1,7 @@
 /* setup */
 CREATE DATABASE db;
 CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+INSERT INTO db.public.tbl SELECT g FROM generate_series(-10, -1) AS g;
 
 /* test */
 ALTER TABLE db.public.tbl ADD COLUMN j INT;

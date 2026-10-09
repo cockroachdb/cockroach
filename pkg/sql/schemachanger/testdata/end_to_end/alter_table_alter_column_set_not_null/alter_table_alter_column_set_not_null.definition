@@ -1,5 +1,6 @@
 setup
 CREATE TABLE t (i INT PRIMARY KEY, j INT);
+INSERT INTO t SELECT g, g FROM generate_series(-10, -1) AS g;
 ----
 
 # NOT NULL enforced via check constraint initially
@@ -24,7 +25,7 @@ UPDATE t SET j = j + 1;
 
 # One row is expected to be added after each stage.
 stage-query phase=PostCommitPhase stage=:
-SELECT count(*)=$successfulStageCount FROM t;
+SELECT count(*)=$successfulStageCount+10 FROM t;
 ----
 true
 

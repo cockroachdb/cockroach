@@ -1,5 +1,6 @@
 /* setup */
 CREATE TABLE t (a INT NOT NULL);
+INSERT INTO t SELECT g FROM generate_series(-10, -1) AS g;
 
 /* test */
 EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);

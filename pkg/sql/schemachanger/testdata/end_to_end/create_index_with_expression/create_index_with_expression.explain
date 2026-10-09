@@ -1,5 +1,6 @@
 /* setup */
 CREATE TABLE t (k INT PRIMARY KEY, v VARCHAR(256));
+INSERT INTO t SELECT g, 'Seed' || g::STRING FROM generate_series(-19, -1, 2) AS g;
 
 /* test */
 EXPLAIN (DDL) CREATE INDEX idx1 ON t (lower(v));

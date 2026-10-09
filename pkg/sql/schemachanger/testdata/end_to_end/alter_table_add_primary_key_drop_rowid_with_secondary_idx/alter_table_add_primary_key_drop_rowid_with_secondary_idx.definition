@@ -2,6 +2,7 @@ setup
 CREATE TABLE t (a INT NOT NULL, b INT NOT NULL);
 CREATE INDEX idx_b ON t(b);
 CREATE INDEX idx_c ON t(b) USING HASH;
+INSERT INTO t SELECT g, g FROM generate_series(-10, -1) AS g;
 ----
 
 stage-exec phase=PostCommitPhase stage=1:
@@ -12,13 +13,13 @@ INSERT INTO t VALUES($stageKey + 1, $stageKey);
 # Each insert will be injected twice per stage, so we should always,
 # see a count of 2.
 stage-query phase=PostCommitPhase stage=:
-SELECT count(*)=$successfulStageCount*2 FROM t;
+SELECT count(*)=$successfulStageCount*2+10 FROM t;
 ----
 true
 
 # Same scan on secondary indexes should keep working.
 stage-query phase=PostCommitPhase stage=:
-SELECT count(*)=$successfulStageCount*2 FROM t@idx_b;
+SELECT count(*)=$successfulStageCount*2+10 FROM t@idx_b;
 ----
 true
 
@@ -37,13 +38,13 @@ INSERT INTO t VALUES($stageKey + 1, $stageKey);
 # Each insert will be injected twice per stage, so we should always,
 # see a count of 2.
 stage-query phase=PostCommitNonRevertiblePhase stage=:
-SELECT count(*)=$successfulStageCount*2 FROM t;
+SELECT count(*)=$successfulStageCount*2+10 FROM t;
 ----
 true
 
 # Same scan on secondary indexes should keep working.
 stage-query phase=PostCommitNonRevertiblePhase stage=:
-SELECT count(*)=$successfulStageCount*2 FROM t@idx_b;
+SELECT count(*)=$successfulStageCount*2+10 FROM t@idx_b;
 ----
 true
 
