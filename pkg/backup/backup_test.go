@@ -11454,7 +11454,7 @@ func TestStrictLocalityAwareBackup(t *testing.T) {
 func TestStrictPartitionedBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithPublicIssue(t, 163998)
+	skip.WithIssue(t, 13542)
 	skip.UnderDuress(t, "takes too long under duress")
 
 	knobs := base.TestingKnobs{
