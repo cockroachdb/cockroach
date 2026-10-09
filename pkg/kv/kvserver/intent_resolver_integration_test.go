@@ -185,7 +185,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithPublicIssue(t, 66895)
+	skip.WithIssue(t, 13536)
 	skip.UnderShort(t) // takes 294s
 	skip.UnderRace(t, "timing-sensitive test")
 	skip.UnderDeadlock(t, "timing-sensitive test")
@@ -634,7 +634,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 						// TODO(erikgrinaker): cleanup does not always work reliably with
 						// context cancellation, so we skip these for now to deflake the test.
 						if finalize == "cancel" || finalize == "cancelAsync" {
-							skip.WithPublicIssue(t, 105615)
+							skip.WithIssue(t, 13537)
 						}
 						if finalize == "cancelAsync" {
 							// cancelAsync can't run together with abort.

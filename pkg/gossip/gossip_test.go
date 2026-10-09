@@ -937,7 +937,7 @@ func TestGossipPropagation(t *testing.T) {
 //     OrigStamp is less than the highwater stamp from n2
 func TestGossipLoopbackInfoPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithPublicIssue(t, 34494)
+	skip.WithIssue(t, 6089)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 

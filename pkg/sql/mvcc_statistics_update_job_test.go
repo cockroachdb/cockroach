@@ -198,7 +198,7 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 	// correct, i.e. sql_aggregated_livebytes in SQL = sum(livebytes in KV).
 	t.Run("external secondary tenants", func(t *testing.T) {
 		// Flaky test.
-		skip.WithPublicIssue(t, 120775)
+		skip.WithIssue(t, 13538)
 
 		// Exact match for non stress tests, and allow values to differ by up to
 		// 5% in stress situations.
@@ -217,7 +217,7 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 	t.Run("internal secondary tenants", func(t *testing.T) {
 		// The test seems to hang when trying to start an in-process tenant.
 		// Skip the for now.
-		skip.WithPublicIssue(t, 120775)
+		skip.WithIssue(t, 13538)
 
 		tenantInternal := makeTenant(t, 20, false /* external */)
 

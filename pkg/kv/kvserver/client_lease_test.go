@@ -1924,7 +1924,7 @@ func TestLeaseStartTimeIsLargerThanPrevLeaseEndTimeAfterRestart(t *testing.T) {
 			if leaseType == roachpb.LeaseEpoch {
 				// Doesn't work for epoch leases since the liveness record might not be
 				// found in cache.
-				skip.WithPublicIssue(t, 59874)
+				skip.WithIssue(t, 6599)
 			}
 			storeReg := fs.NewStickyRegistry()
 			listenerReg := listenerutil.NewListenerRegistry()

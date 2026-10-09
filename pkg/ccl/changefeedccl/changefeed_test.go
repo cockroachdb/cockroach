@@ -7638,7 +7638,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 
 	t.Run("sinkless enriched non-json", func(t *testing.T) {
-		skip.WithPublicIssue(t, 130949, "sinkless feed validations are subpar")
+		skip.WithIssue(t, 9654, "sinkless feed validations are subpar")
 		sqlDB.ExpectErrWithTimeout(
 			t, `some error`,
 			`CREATE CHANGEFEED FOR foo WITH envelope=enriched, format=avro, confluent_schema_registry='http://localhost:8888'`,
