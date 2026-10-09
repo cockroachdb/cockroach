@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math/rand"
 	"net/url"
 	"path"
@@ -40,8 +41,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
 )
@@ -237,8 +241,48 @@ func (d *BackupRestoreTestDriver) verifyBackupCollection(
 	if err := roachtestutil.CheckInvalidDescriptors(ctx, l, db); err != nil {
 		return fmt.Errorf("failed descriptor check: %w", err)
 	}
+	if err := d.validateAfterSchemaChanges(ctx, l, db, bc, restoredTables); err != nil {
+		return errors.Wrapf(err, "backup %s", bc.name)
+	}
 
 	l.Printf("%s: OK", bc.name)
+	return nil
+}
+
+// validateAfterSchemaChanges waits for the restored schemachange database's
+// schema change jobs to finish, then checks that each of its tables has its
+// backup-time row count and that all descriptors are valid. The fingerprint
+// check runs while those jobs may still be in progress, so it misses rows lost
+// when a job completes.
+//
+// It is a no-op if the backup does not include the schemachange database.
+func (d *BackupRestoreTestDriver) validateAfterSchemaChanges(
+	ctx context.Context,
+	l *logger.Logger,
+	db *gosql.DB,
+	bc *backupCollection,
+	restoredTables []string,
+) error {
+	if bc.schemaChangeRowCounts == nil {
+		return nil
+	}
+	j := slices.IndexFunc(bc.tables, isSchemaChangeTable)
+	if j < 0 {
+		return errors.AssertionFailedf("backup has row counts but no %s tables", schemaChangeDB)
+	}
+	restoredDB, _, _ := strings.Cut(restoredTables[j], ".")
+
+	if err := waitForRestoredSchemaChanges(ctx, l, db, restoredDB); err != nil {
+		return err
+	}
+	if err := validateRowCountsAfterJobs(
+		ctx, l, db, restoredDB, bc.schemaChangeRowCounts,
+	); err != nil {
+		return err
+	}
+	if err := roachtestutil.CheckInvalidDescriptors(ctx, l, db); err != nil {
+		return errors.Wrap(err, "failed descriptor check after restored schema changes")
+	}
 	return nil
 }
 
@@ -717,6 +761,13 @@ type CollectionBuilder struct {
 	// etc.
 	backupEndTimes []string
 
+	// excludedSchemaChangeTables holds the IDs of schemachange tables that had
+	// exclude_data_from_backup at the end time of any backup taken, including
+	// backups that compaction later replaces. Restore brings those tables back
+	// without that backup's data, so their row counts can't be checked. Nil if
+	// the driver doesn't load the schemachange database.
+	excludedSchemaChangeTables map[int64]bool
+
 	// incCount tracks the number of incremental backups taken.
 	incCount int
 
@@ -799,6 +850,9 @@ func (cb *CollectionBuilder) TakeFull(ctx context.Context) (jobID int, err error
 	cb.collection = collection
 	cb.backupEndTimes = []string{endTime}
 	cb.lastJobID = jobID
+	if err := cb.recordExcludedSchemaChangeTables(ctx, endTime); err != nil {
+		return jobID, err
+	}
 
 	return jobID, nil
 }
@@ -844,6 +898,9 @@ func (cb *CollectionBuilder) TakeInc(ctx context.Context) (jobID int, err error)
 	cb.incCount = incNum
 	cb.backupEndTimes = append(cb.backupEndTimes, endTime)
 	cb.lastJobID = jobID
+	if err := cb.recordExcludedSchemaChangeTables(ctx, endTime); err != nil {
+		return jobID, err
+	}
 
 	return jobID, nil
 }
@@ -992,7 +1049,21 @@ func (cb *CollectionBuilder) Finalize(ctx context.Context) (*backupCollection, e
 		fingerprintAOST = collection.restoreAOST
 	}
 
-	return cb.driver.saveContents(ctx, cb.l, cb.rng, &collection, fingerprintAOST)
+	saved, err := cb.driver.saveContents(ctx, cb.l, cb.rng, &collection, fingerprintAOST)
+	if err != nil {
+		return nil, err
+	}
+	if slices.ContainsFunc(saved.tables, isSchemaChangeTable) {
+		_, db := cb.driver.testUtils.RandomDB(cb.rng, cb.driver.roachNodes)
+		counts, err := countSchemaChangeTableRows(
+			ctx, cb.l, db, fingerprintAOST, cb.excludedSchemaChangeTables,
+		)
+		if err != nil {
+			return nil, errors.Wrapf(err, "backup %s", saved.name)
+		}
+		saved.schemaChangeRowCounts = counts
+	}
+	return saved, nil
 }
 
 // backupCollectionName creates a backup collection name based on the prefix
@@ -1383,6 +1454,13 @@ type (
 		tables   []string
 		contents []tableContents
 
+		// schemaChangeRowCounts maps each table in the schemachange database,
+		// named as schema.table, to its row count at the fingerprint time. It is
+		// nil if the backup does not include the schemachange database. The
+		// schemachange workload creates its tables after `tables` is loaded, so
+		// `tables` only names the database's placeholder table.
+		schemaChangeRowCounts map[string]int64
+
 		// restoreAOST contains the AOST used in restore, if non-empty. It also
 		// determines the system time used to grab fingerprints.
 		restoreAOST string
@@ -1721,6 +1799,267 @@ func (fc *fingerprintContents) ValidateRestore(
 		return fmt.Errorf("mismatched fingerprints for table %s", fc.table)
 	}
 
+	return nil
+}
+
+// recordExcludedSchemaChangeTables adds the schemachange tables that have
+// exclude_data_from_backup at endTime to excludedSchemaChangeTables.
+func (cb *CollectionBuilder) recordExcludedSchemaChangeTables(
+	ctx context.Context, endTime string,
+) error {
+	if !slices.Contains(cb.driver.dbs, schemaChangeDB) {
+		return nil
+	}
+	if cb.excludedSchemaChangeTables == nil {
+		cb.excludedSchemaChangeTables = make(map[int64]bool)
+	}
+	_, db := cb.driver.testUtils.RandomDB(cb.rng, cb.driver.roachNodes)
+	query := fmt.Sprintf(
+		`SELECT oid::INT8 FROM %s.pg_catalog.pg_class%s
+WHERE reloptions && ARRAY['exclude_data_from_backup=true']`,
+		tree.NameString(schemaChangeDB), aostFor(endTime),
+	)
+	ids, err := queryInt64s(ctx, db, query)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		cb.excludedSchemaChangeTables[id] = true
+	}
+	return nil
+}
+
+func isSchemaChangeTable(table string) bool {
+	return strings.HasPrefix(table, schemaChangeDB+".")
+}
+
+// rowCountUnstableParams lists the reloptions entries of tables whose restored
+// row count can differ from the source's: row-level TTL deletes rows after the
+// restore, and a backup skips the data of a table excluded from backup.
+const rowCountUnstableParams = `ARRAY['ttl=''on''', 'exclude_data_from_backup=true']`
+
+// countSchemaChangeTableRows returns the row count, at timestamp, of each table
+// in the schemachange database, keyed by schema.table. It skips the tables in
+// excluded and those with row-level TTL or exclude_data_from_backup at
+// timestamp.
+func countSchemaChangeTableRows(
+	ctx context.Context, l *logger.Logger, db *gosql.DB, timestamp string, excluded map[int64]bool,
+) (map[string]int64, error) {
+	dbName := tree.NameString(schemaChangeDB)
+	unstable := maps.Clone(excluded)
+	if unstable == nil {
+		unstable = make(map[int64]bool)
+	}
+	query := fmt.Sprintf(
+		`SELECT oid::INT8 FROM %s.pg_catalog.pg_class%s WHERE reloptions && %s`,
+		dbName, aostFor(timestamp), rowCountUnstableParams,
+	)
+	ids, err := queryInt64s(ctx, db, query)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		unstable[id] = true
+	}
+
+	listQuery := fmt.Sprintf(
+		`SELECT n.nspname, c.relname, c.oid::INT8
+FROM %[1]s.information_schema.tables AS t
+JOIN %[1]s.pg_catalog.pg_namespace AS n ON n.nspname = t.table_schema
+JOIN %[1]s.pg_catalog.pg_class AS c
+  ON c.relnamespace = n.oid AND c.relname = t.table_name AND c.relkind = 'r'%[2]s
+WHERE t.table_type = 'BASE TABLE'`,
+		dbName, aostFor(timestamp),
+	)
+	rows, err := db.QueryContext(ctx, listQuery)
+	if err != nil {
+		return nil, errors.Wrapf(err, "running query [%s]", listQuery)
+	}
+	defer rows.Close()
+	type table struct {
+		name string
+		id   int64
+	}
+	var tables []table
+	for rows.Next() {
+		var schema, name string
+		var id int64
+		if err := rows.Scan(&schema, &name, &id); err != nil {
+			return nil, errors.Wrapf(err, "running query [%s]", listQuery)
+		}
+		tables = append(tables, table{
+			name: tree.NameString(schema) + "." + tree.NameString(name),
+			id:   id,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrapf(err, "running query [%s]", listQuery)
+	}
+
+	counts := make(map[string]int64, len(tables))
+	for _, t := range tables {
+		qualified := dbName + "." + t.name
+		if unstable[t.id] {
+			l.Printf("not checking the row count of %s: it has row-level TTL or "+
+				"exclude_data_from_backup during the backup chain", qualified)
+			continue
+		}
+		countQuery := fmt.Sprintf("SELECT count(*) FROM %s%s", qualified, aostFor(timestamp))
+		var n int64
+		if err := db.QueryRowContext(ctx, countQuery).Scan(&n); err != nil {
+			return nil, errors.Wrapf(err, "running query [%s]", countQuery)
+		}
+		counts[t.name] = n
+	}
+	l.Printf("counted rows in %d of %d %s tables", len(counts), len(tables), schemaChangeDB)
+	return counts, nil
+}
+
+func queryInt64s(ctx context.Context, db *gosql.DB, query string) ([]int64, error) {
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, errors.Wrapf(err, "running query [%s]", query)
+	}
+	defer rows.Close()
+	var res []int64
+	for rows.Next() {
+		var v int64
+		if err := rows.Scan(&v); err != nil {
+			return nil, errors.Wrapf(err, "running query [%s]", query)
+		}
+		res = append(res, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrapf(err, "running query [%s]", query)
+	}
+	return res, nil
+}
+
+// waitForRestoredSchemaChanges waits until no schema change job that targets a
+// descriptor in database dbName is in progress. Restored schema change jobs
+// only target restored descriptors, so scoping to the restored database skips
+// the jobs of workloads running against other databases.
+func waitForRestoredSchemaChanges(
+	ctx context.Context, l *logger.Logger, db *gosql.DB, dbName string,
+) error {
+	// The declarative schema changer drops a descriptor from the job's
+	// descriptorIds once that descriptor's targets are done, so a job that still
+	// lists a restored descriptor has pending work on it. Any job that isn't in
+	// a terminal state counts as in progress, including a paused one.
+	const query = `
+WITH db AS (
+  SELECT id FROM system.namespace WHERE "parentID" = 0 AND name = $1
+), restored_ids AS (
+  SELECT id FROM db
+  UNION ALL
+  SELECT id FROM system.namespace WHERE "parentID" = (SELECT id FROM db)
+)
+SELECT count(*) FROM (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) AS p
+  FROM "".crdb_internal.system_jobs
+  WHERE job_type IN ('SCHEMA CHANGE', 'NEW SCHEMA CHANGE')
+    AND status NOT IN ('succeeded', 'failed', 'canceled', 'revert-failed')
+) AS sc_jobs
+WHERE EXISTS (
+  SELECT 1 FROM jsonb_array_elements_text(sc_jobs.p->'descriptorIds') AS d (id)
+  WHERE d.id::INT8 IN (SELECT id FROM restored_ids)
+)`
+	l.Printf("waiting for schema change jobs in database %s", dbName)
+	logThrottler := util.EveryMono(30 * time.Second)
+	// Query errors are retried to ride out transient failures, but a query that
+	// keeps failing is not going to recover within the wait.
+	const maxConsecutiveQueryErrors = 5
+	var lastErr error
+	var queryErrors int
+	for r := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: time.Second,
+		MaxBackoff:     5 * time.Second,
+		MaxDuration:    30 * time.Minute,
+	}); r.Next(); {
+		var inProgress int
+		if err := db.QueryRowContext(ctx, query, dbName).Scan(&inProgress); err != nil {
+			queryErrors++
+			l.Printf("error counting schema change jobs in database %s (%d/%d): %v",
+				dbName, queryErrors, maxConsecutiveQueryErrors, err)
+			if queryErrors >= maxConsecutiveQueryErrors {
+				return errors.Wrapf(err, "counting schema change jobs in database %s", dbName)
+			}
+			lastErr = err
+			continue
+		}
+		queryErrors = 0
+		if inProgress == 0 {
+			l.Printf("schema change jobs in database %s finished", dbName)
+			return nil
+		}
+		lastErr = errors.Newf(
+			"%d schema change jobs in database %s still in progress", inProgress, dbName,
+		)
+		if logThrottler.ShouldProcess(crtime.NowMono()) {
+			l.Printf("%v", lastErr)
+		}
+	}
+	return errors.CombineErrors(
+		errors.Wrapf(lastErr, "waiting for schema change jobs in database %s", dbName),
+		ctx.Err(),
+	)
+}
+
+// validateRowCountsAfterJobs checks that each table in counts, keyed by
+// schema.table, has its expected row count in database dbName. Schema changes
+// never change a table's row count, and nothing writes to the restored tables.
+// It skips tables that a restored schema change gave row-level TTL or
+// exclude_data_from_backup. The count reads the primary index explicitly; a
+// plain count(*) could read a secondary index that kept its rows when the
+// primary index lost them.
+func validateRowCountsAfterJobs(
+	ctx context.Context, l *logger.Logger, db *gosql.DB, dbName string, counts map[string]int64,
+) error {
+	l.Printf("checking row counts of %d tables in database %s", len(counts), dbName)
+	indexQuery := fmt.Sprintf(
+		`SELECT index_name FROM %s.crdb_internal.table_indexes
+WHERE descriptor_id = $1::STRING::REGCLASS::OID::INT8 AND index_type = 'primary'`,
+		tree.NameString(dbName),
+	)
+	unstableQuery := fmt.Sprintf(
+		`SELECT COALESCE(reloptions && %s, false) FROM %s.pg_catalog.pg_class
+WHERE oid = $1::STRING::REGCLASS`,
+		rowCountUnstableParams, tree.NameString(dbName),
+	)
+	var mismatches []string
+	for _, table := range slices.Sorted(maps.Keys(counts)) {
+		qualified := tree.NameString(dbName) + "." + table
+		var unstable bool
+		if err := db.QueryRowContext(ctx, unstableQuery, qualified).Scan(&unstable); err != nil {
+			return errors.Wrapf(err, "reading the storage parameters of %s", qualified)
+		}
+		if unstable {
+			l.Printf("not checking the row count of %s: a restored schema change gave it "+
+				"row-level TTL or exclude_data_from_backup", qualified)
+			continue
+		}
+		var primaryIndex string
+		if err := db.QueryRowContext(ctx, indexQuery, qualified).Scan(&primaryIndex); err != nil {
+			return errors.Wrapf(err, "looking up the primary index of %s", qualified)
+		}
+		countQuery := fmt.Sprintf(
+			"SELECT count(*) FROM %s@{FORCE_INDEX=%s}", qualified, tree.NameString(primaryIndex),
+		)
+		var n int64
+		if err := db.QueryRowContext(ctx, countQuery).Scan(&n); err != nil {
+			return errors.Wrapf(err, "running query [%s]", countQuery)
+		}
+		if n != counts[table] {
+			mismatches = append(mismatches,
+				fmt.Sprintf("%s: %d rows at backup time, %d now", qualified, counts[table], n))
+		}
+	}
+	if len(mismatches) > 0 {
+		return errors.Newf(
+			"restored tables have the wrong row count after their schema change jobs ran:\n%s",
+			strings.Join(mismatches, "\n"),
+		)
+	}
 	return nil
 }
 
