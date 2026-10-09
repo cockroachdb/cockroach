@@ -326,7 +326,14 @@ type portalPauseInfo struct {
 		// We need this as when re-executing the portal, we are reusing the flow
 		// with the new receiver, but not re-generating the physical plan.
 		outputTypes []*types.T
-		cleanup     cleanupFuncQueue
+		// forwardRoutineMetadata saves the decision DistSQLPlanner.Run made on
+		// the first execution: whether routines may report their statistics
+		// straight into the DistSQLReceiver, which is safe only when nothing
+		// else pushes into it concurrently. Resuming the portal reuses the flow
+		// with a new receiver on a reset planner, so it installs the forwarder
+		// again when this is true.
+		forwardRoutineMetadata bool
+		cleanup                cleanupFuncQueue
 	}
 }
 

@@ -350,6 +350,9 @@ func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
 	}
 	recv.discardRows = p.instrumentation.ShouldDiscardRows()
 	recv.outputTypes = p.pausablePortal.pauseInfo.resumableFlow.outputTypes
+	if p.pausablePortal.pauseInfo.resumableFlow.forwardRoutineMetadata {
+		p.routineMetadataForwarder = recv
+	}
 	flow := p.pausablePortal.pauseInfo.resumableFlow.flow
 	finishedSetupFn, cleanup := getFinishedSetupFn(p)
 	finishedSetupFn(flow)

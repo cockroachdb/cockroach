@@ -1060,6 +1060,9 @@ func (dsp *DistSQLPlanner) Run(
 		}
 		if safe {
 			planCtx.planner.routineMetadataForwarder = recv
+			if i := planCtx.getPortalPauseInfo(); i != nil {
+				i.resumableFlow.forwardRoutineMetadata = true
+			}
 		}
 	}
 
