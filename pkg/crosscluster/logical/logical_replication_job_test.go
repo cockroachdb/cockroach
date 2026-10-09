@@ -1098,7 +1098,7 @@ func TestLogicalAutoReplan(t *testing.T) {
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
-	skip.WithPublicIssue(t, 131184)
+	skip.WithIssue(t, 9661)
 
 	ctx := context.Background()
 
@@ -1193,7 +1193,7 @@ func TestLogicalJobResiliency(t *testing.T) {
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
-	skip.WithPublicIssue(t, 131184)
+	skip.WithIssue(t, 9661)
 
 	ctx := context.Background()
 

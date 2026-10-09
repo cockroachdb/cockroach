@@ -137,7 +137,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRaceWithPublicIssue(t, 60710)
+	skip.UnderRaceWithIssue(t, 6611)
 
 	ctx := context.Background()
 
